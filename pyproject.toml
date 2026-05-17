@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "clawcodex"
+name = "clawcodex-dev"
 version = "0.5.0"
 description = "A production-oriented Python rebuild of Claude Code — real architecture, reliable CLI agent"
 readme = "README.md"
@@ -48,6 +48,21 @@ dependencies = [
     # Ch16 Phase 0: SSE consumer for the CCR v2 SSE read transport. ``httpx``
     # itself is transitively available via the ``anthropic`` SDK.
     "httpx-sse>=0.4",
+    # Open source replacement: Pydantic Settings for type-safe config
+    "pydantic-settings>=2.0.0",
+    # Open source replacement: python-frontmatter for parsing SKILL.md / agent files
+    "python-frontmatter>=1.0.0",
+    # Open source replacement: tree-sitter-bash for Bash AST parsing
+    "tree-sitter>=0.25.0",
+    "tree-sitter-bash>=0.25.0",
+    # Open source replacement: GitPython for Git operations
+    "GitPython>=3.1.0",
+    # Open source replacement: LiteLLM for unified Provider layer
+    "litellm>=1.0.0",
+    # Open source replacement: Pluggy for Hook system
+    "pluggy>=1.0.0",
+    # Open source replacement: Outlines for structured output
+    "outlines>=0.0.80",
 ]
 
 [project.optional-dependencies]
@@ -65,7 +80,7 @@ dev = [
 ]
 
 [project.scripts]
-clawcodex = "src.cli:main"
+clawcodex-dev = "src.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/agentforce314/clawcodex"
