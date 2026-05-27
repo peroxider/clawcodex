@@ -233,21 +233,14 @@ def _replay_transcript_to_host(app) -> None:
 def should_use_tui(explicit: bool | None) -> bool:
     """Decide whether to launch the Textual TUI based on flags + environment.
 
-    The default interactive experience is the prompt_toolkit + rich REPL at
-    :mod:`src.repl.core` — it matches the TS Ink reference's terminal-native
-    UX (transcript flows into scrollback, only the prompt + status row are
-    live, native mouse copy works). The Textual TUI is opt-in and reachable
-    via ``--tui`` or ``CLAWCODEX_TUI=1`` for users who prefer the richer
-    in-app experience.
-
-    * ``explicit=True``   -> always TUI when ``textual`` is importable.
-      Also enabled by ``CLAWCODEX_TUI=1``.
-    * ``explicit=False``  -> never TUI. Also forced by
-      ``CLAWCODEX_LEGACY_REPL=1`` (kept for back-compat).
-    * ``explicit=None``   -> default to the REPL. Honor ``CLAWCODEX_TUI=1``
-      from the environment so users can pin the TUI without a flag.
+    The **default** interactive experience is the Textual TUI with
+    BridgeManager integration (mirrors the TypeScript reference REPL).
+    Users who prefer the legacy prompt_toolkit + rich REPL can opt out
+    via ``--no-tui`` / ``--legacy-repl`` or ``CLAWCODEX_LEGACY_REPL=1``.
     """
 
+    if explicit is True:
+        return True
     if explicit is False:
         return False
     if os.environ.get("CLAWCODEX_LEGACY_REPL") == "1":
@@ -255,10 +248,7 @@ def should_use_tui(explicit: bool | None) -> bool:
     if os.environ.get("CLAWCODEX_TUI") == "0":
         return False
 
-    env_tui = os.environ.get("CLAWCODEX_TUI") == "1"
-    if not (explicit is True or env_tui):
-        return False
-
+    # Check textual availability and TTY
     if not _textual_available():
         return False
 
@@ -270,6 +260,8 @@ def should_use_tui(explicit: bool | None) -> bool:
             return False
     except Exception:
         return False
+
+    # Default to TUI; legacy REPL opt-out only
     return True
 
 

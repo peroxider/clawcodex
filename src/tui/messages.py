@@ -196,6 +196,31 @@ class PermissionModeCycleRequested(Message):
 
 
 @dataclass
+class BridgeStatus(Message):
+    """Bridge connection status update.
+
+    Posted when Remote Control connects or disconnects.
+    Mirrors the TS createBridgeStatusMessage pattern.
+    """
+
+    url: str | None = None
+    message: str | None = None
+
+
+@dataclass
+class BridgeInject(Message):
+    """Inbound message injected from remote bridge session.
+
+    Messages from remote sessions (claude.ai, mobile app) are injected
+    here for local processing, appearing as if the user typed them.
+    """
+
+    content: str
+    uuid: str | None = None
+    bridge_origin: bool = True
+
+
+@dataclass
 class PromptPasted(Message):
     """Bracketed-paste landed in the :class:`PromptInput` widget.
 

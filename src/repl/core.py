@@ -2344,18 +2344,15 @@ class ClawcodexREPL:
                 role = getattr(msg, 'role', '')
                 content = getattr(msg, 'content', '')
 
-                # Skip tool_result messages - they're results of agent's tool calls,
-                # not actual user inputs. Displaying them as user messages pollutes
-                # the conversation view.
+                # Skip tool_result messages - they're results of agent's tool calls
                 if role == 'user' and isinstance(content, list):
-                    # Check if this is a tool_result message (user providing tool output)
                     has_tool_result = any(
                         (getattr(c, 'type', None) == 'tool_result') or
                         (isinstance(c, dict) and c.get('type') == 'tool_result')
                         for c in content if content
                     )
                     if has_tool_result:
-                        continue  # Skip tool_result messages
+                        continue
 
                 content_text = self._flatten_message_content(content)
                 if not content_text:
@@ -2364,9 +2361,12 @@ class ClawcodexREPL:
                 if role == 'user':
                     self.console.print(f"[dim]❯ {content_text}[/dim]")
                 elif role == 'assistant' and content_text:
-                    # Truncate long assistant messages for preview
-                    preview = content_text[:300] + '...' if len(content_text) > 300 else content_text
-                    self.console.print(f"[magenta]{preview}[/magenta]")
+                    # Render assistant messages as Markdown for proper formatting
+                    try:
+                        self.console.print(Markdown(content_text))
+                    except Exception:
+                        # Fallback to plain text if Markdown parsing fails
+                        self.console.print(content_text)
             self.console.print("[dim]--- end of history ---\n[/dim]")
 
         while True:

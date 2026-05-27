@@ -46,6 +46,7 @@ class StatusLine(Static):
     is_thinking: reactive[bool] = reactive(False)
     queued: reactive[int] = reactive(0)
     permission_mode: reactive[str] = reactive("")
+    bridge_connected: reactive[bool] = reactive(False)
 
     def __init__(
         self,
@@ -119,6 +120,9 @@ class StatusLine(Static):
     def set_permission_mode(self, mode: str | None) -> None:
         self.permission_mode = mode or ""
 
+    def set_bridge_connected(self, connected: bool) -> None:
+        self.bridge_connected = connected
+
     # ---- render ----
     def watch_is_thinking(self, _: bool) -> None:
         self._redraw()
@@ -130,6 +134,9 @@ class StatusLine(Static):
         self._redraw()
 
     def watch_permission_mode(self, _: str) -> None:
+        self._redraw()
+
+    def watch_bridge_connected(self, _: bool) -> None:
         self._redraw()
 
     def _redraw(self) -> None:
@@ -146,6 +153,9 @@ class StatusLine(Static):
                 elapsed = f" {secs}s"
 
         left_parts = [f"{self._provider} · {self._model}"]
+        # Bridge status indicator — shows when Remote Control is active
+        if self.bridge_connected:
+            left_parts.append("bridge:connected")
         # Permission mode segment — reflects the active permission mode.
         if self.permission_mode:
             left_parts.append(f"mode: {self.permission_mode}")

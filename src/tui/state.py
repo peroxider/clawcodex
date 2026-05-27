@@ -95,6 +95,27 @@ class AppState:
     usage: dict[str, int] = field(default_factory=lambda: {"input_tokens": 0, "output_tokens": 0})
     last_error: str | None = None
 
+    # Bridge state (mirrors AppState bridge fields from useReplBridge.tsx)
+    repl_bridge_enabled: bool = False
+    repl_bridge_connected: bool = False
+    repl_bridge_session_active: bool = False
+    repl_bridge_reconnecting: bool = False
+    repl_bridge_outbound_only: bool = False
+    repl_bridge_error: str | None = None
+    repl_bridge_session_id: str | None = None
+    repl_bridge_environment_id: str | None = None
+    repl_bridge_connect_url: str | None = None
+    repl_bridge_session_url: str | None = None
+    repl_bridge_permission_callbacks: Any = None
+    repl_bridge_initial_name: str | None = None
+
+    # Model override (from bridge or CLI flags)
+    main_loop_model_for_session: str | None = None
+    thinking_enabled: bool = False
+
+    # Permission context (simplified for MVP)
+    tool_permission_context: Any = None
+
     _subscribers: list[Callable[[], None]] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
     _ids: "itertools.count[int]" = field(default_factory=lambda: itertools.count(1), repr=False, compare=False)

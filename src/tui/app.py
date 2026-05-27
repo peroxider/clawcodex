@@ -175,6 +175,9 @@ class ClawCodexTUI(App):
         )
         self._resume_browse = resume_browse
 
+        # Bridge manager for Remote Control integration (mirrors useReplBridge.tsx)
+        self._bridge_manager: Any = None
+
     # The base CSS for the REPL; Phase 1 uses Textual's default theme
     # variables ($primary, $surface, …) — palette overrides sit in
     # ``textual_css_overrides`` and are appended at class build time.
@@ -241,6 +244,101 @@ class ClawCodexTUI(App):
         # browser so the user can pick a session to resume.
         if self._resume_browse:
             self._show_resume_browser()
+
+        # Initialize bridge manager for Remote Control (mirrors useReplBridge.tsx)
+        self._init_bridge_manager()
+
+    def _init_bridge_manager(self) -> None:
+        """Initialize the bridge manager for Remote Control integration.
+
+        This sets up the bridge connection that enables remote sessions
+        to connect and control this REPL. Mirrors the useReplBridge hook.
+        """
+        try:
+            from src.bridge.bridge_manager import BridgeManager
+
+            # Get bootstrap info
+            try:
+                from src.bootstrap.state import get_session_id, get_original_cwd
+                from src.utils.git import get_branch, get_remote_url
+                from src.utils.hostname import get_hostname
+                session_id = get_session_id()
+                cwd = get_original_cwd() or str(self.workspace_root)
+            except Exception:
+                session_id = "unknown"
+                cwd = str(self.workspace_root)
+
+            try:
+                branch = get_branch(cwd) or "main"
+            except Exception:
+                branch = "main"
+
+            try:
+                git_repo_url = get_remote_url(cwd)
+            except Exception:
+                git_repo_url = None
+
+            try:
+                import socket
+                machine_name = socket.gethostname()
+            except Exception:
+                machine_name = "localhost"
+
+            # Create bridge manager
+            self._bridge_manager = BridgeManager(
+                app_state=self.app_state,
+                post_message=self._post_to_screen,
+                get_working_dir=lambda: cwd,
+                get_machine_name=lambda: machine_name,
+                get_branch=lambda: branch,
+                get_git_repo_url=lambda: git_repo_url,
+                get_access_token=self._get_bridge_access_token,
+                get_main_loop_model=lambda: self.model or "default",
+                set_main_loop_model_override=self._set_model_override,
+                is_bridge_enabled=self._is_bridge_enabled,
+                is_outbound_only=lambda: False,
+            )
+
+            # Apply resume state if this is a resumed session
+            if self.session.conversation.messages:
+                self._bridge_manager.apply_resume_state(self.session)
+
+            # Initialize bridge asynchronously
+            messages = [
+                msg.to_dict() if hasattr(msg, 'to_dict') else msg
+                for msg in self.session.conversation.messages
+            ]
+            self.run_worker(
+                self._bridge_manager.init_bridge(messages),
+                exclusive=False,
+                name="bridge-init",
+            )
+
+        except Exception as e:
+            import sys
+            print(f"[DEBUG] Bridge manager init failed: {e}", file=sys.stderr)
+
+    def _get_bridge_access_token(self) -> str | None:
+        """Get OAuth access token for bridge authentication."""
+        try:
+            from src.auth.claude_ai import get_access_token
+            return get_access_token()
+        except Exception:
+            return None
+
+    def _set_model_override(self, model: str | None) -> None:
+        """Set model override from bridge or CLI."""
+        self.model = model or self.model
+        self.app_state.main_loop_model_for_session = model
+
+    def _is_bridge_enabled(self) -> bool:
+        """Check if bridge is enabled via config or environment."""
+        try:
+            from src.config import load_config
+            cfg = load_config() or {}
+            return cfg.get("bridge_enabled", True)
+        except Exception:
+            return True
 
     def on_unmount(self) -> None:
         # Best-effort cleanup so we don't leave stale chrome on the host.

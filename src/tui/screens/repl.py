@@ -156,6 +156,54 @@ class REPLScreen(Screen):
             "Ready. Type a prompt, or '/' for commands. "
             "Ctrl+D, /exit, or /repl to leave the Textual TUI.",
         )
+        # Subscribe to bridge state changes if bridge manager is present
+        if hasattr(app, "_bridge_manager") and app._bridge_manager is not None:
+            app._bridge_manager._app_state.subscribe(self._on_app_state_changed)
+
+    def _on_app_state_changed(self) -> None:
+        """Handle AppState changes (e.g., bridge state updates)."""
+        app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
+        if not hasattr(app, "app_state"):
+            return
+        state = app.app_state
+        # Update status bar with bridge state
+        if state.repl_bridge_connected:
+            self.status_bar.set_bridge_connected(True)
+            if state.repl_bridge_session_url:
+                self._update_bridge_status(state.repl_bridge_session_url)
+        else:
+            self.status_bar.set_bridge_connected(False)
+
+    def _update_bridge_status(self, url: str | None) -> None:
+        """Update bridge status display in transcript."""
+        if url:
+            self.transcript.append_system(
+                f"Remote Control 已连接: {url}", style="info"
+            )
+
+    # ---- bridge message handlers ----
+    def on_bridge_status(self, url: str | None) -> None:
+        """Handle bridge connection status message."""
+        if url:
+            self.transcript.append_system(
+                f"Remote Control 已连接: {url}", style="info"
+            )
+        else:
+            self.transcript.append_system(
+                "Remote Control 已断开连接", style="warning"
+            )
+
+    def on_bridge_inject(self, content: str, uuid: str | None = None, **kwargs) -> None:
+        """Handle inbound message injection from bridge.
+
+        Messages from remote sessions are injected here for local processing.
+        """
+        app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
+        # Enqueue as a prompt for local agent processing
+        if hasattr(app, "submit_to_agent"):
+            # Mark as bridge-origin so skipSlashCommands is set
+            self.transcript.append_user(content, bridge_origin=True)
+            app.submit_to_agent(content, from_bridge=True)
 
     # ---- actions ----
     def action_clear_transcript(self) -> None:
