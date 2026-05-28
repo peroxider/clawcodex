@@ -577,6 +577,10 @@ def start_repl(
 ):
     """Start interactive REPL.
 
+    Uses the Textual TUI with BridgeManager integration by default,
+    mirroring the TypeScript reference REPL. The legacy prompt_toolkit
+    + rich REPL is available via ``--legacy-repl`` / ``--no-tui`` flags.
+
     ``permission_mode`` and ``is_bypass_permissions_mode_available`` are
     resolved by :func:`_resolve_permission_state`. They control whether
     the in-process tool registry will short-circuit permission checks
@@ -585,19 +589,17 @@ def start_repl(
     ``resume_session_id`` optionally loads a previous session by ID,
     so ``clawcodex --resume abc123`` continues that conversation.
     """
-    from src.config import get_default_provider
-    from src.repl import ClawcodexREPL
+    from src.entrypoints.tui import TUIOptions, run_tui
 
-    provider = get_default_provider()
-    repl = ClawcodexREPL(
-        provider_name=provider,
+    options = TUIOptions(
+        provider_name=None,  # Use default provider
         stream=stream,
         permission_mode=permission_mode,
         is_bypass_permissions_mode_available=is_bypass_permissions_mode_available,
         resume_session_id=resume_session_id,
+        resume_browse=False,
     )
-    repl.run()
-    return 0
+    return run_tui(options)
 
 
 if __name__ == '__main__':

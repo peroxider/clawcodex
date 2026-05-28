@@ -44,7 +44,7 @@ from .commands import (
     dispatch_registry_command,
 )
 from .history_store import HistoryStore  # noqa: F401 (re-exported for tests)
-from .messages import AssistantMessage, CancelRequested, ToolEventMessage
+from .messages import AssistantMessage, CancelRequested, ThinkingChunk, ToolEventMessage
 from .screens.cost_threshold import CostThresholdScreen
 from .screens.diff_dialog import DiffDialogScreen, FileDiff
 from .screens.effort_picker import EffortPickerScreen
@@ -96,6 +96,12 @@ def _flatten_message_text(content: Any) -> str:
                     parts.append(f"[tool:{item.get('name') or ''}]")
                 else:
                     parts.append("")
+            elif hasattr(item, "text"):
+                # Dataclass instances (TextBlock, etc.)
+                parts.append(str(item.text or ""))
+            elif hasattr(item, "thinking"):
+                # ThinkingBlock
+                parts.append(str(item.thinking or ""))
         return "\n".join(p for p in parts if p).strip()
     return str(content)
 
@@ -1237,12 +1243,12 @@ class ClawCodexTUI(App):
                             # Replay thinking content from historical session.
                             thinking_text = item.get("thinking", "") or ""
                             if thinking_text:
-                                self.transcript.append_thinking_chunk(thinking_text)
+                                self._post_to_screen(ThinkingChunk(text=thinking_text))
                         elif kind == "redacted_thinking":
                             # Replay redacted thinking with redacted=True.
                             data = item.get("data", "") or ""
                             if data:
-                                self.transcript.append_thinking_chunk(data, redacted=True)
+                                self._post_to_screen(ThinkingChunk(text=data))
 
     def _slash_command_words(self) -> list[str]:
         return build_command_words(self.workspace_root, self.tool_context)
