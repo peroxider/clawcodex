@@ -34,3 +34,7 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli.provider_cmd import commands as _provider_commands  # noqa: F401
     from clawcodex_ext.cli.model_cmd import commands as _model_commands  # noqa: F401
     from clawcodex_ext.cli.pos_cmd import commands as _pos_commands  # noqa: F401
+
+    # F-94-A: ``clawcodex viz`` subcommand for the Multi-Session Visualizer
+    from extensions.visualizer.cli import register_viz_subcommand  # noqa: F401
+    register_viz_subcommand()
