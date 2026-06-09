@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}ClawCodex Visualizer — Sessions{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+    <div class="search-box">
+        <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
+    </div>
+    <div class="toolbar-actions">
+        <button onclick="refreshSessions()" class="btn btn-primary">🔄 Refresh</button>
+    </div>
+</div>
+
+<div class="workspace-tabs" id="workspace-tabs">
+    <!-- Populated by JS -->
+</div>
+
+{# Stats bar for overview #}
+{% set session_id = None %}
+{% include "stats_bar.html" %}
+
+<div class="sessions-grid" id="sessions-grid">
+    <div class="loading">Loading sessions...</div>
+</div>
+
+<!-- Compare Dialog -->
+<div id="compare-dialog" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h3>Compare Sessions</h3>
+        <p>Enter session IDs (comma-separated):</p>
+        <input type="text" id="compare-ids" placeholder="session-id-1,session-id-2" class="input-wide">
+        <div class="modal-actions">
+            <button onclick="doCompare()" class="btn btn-primary">Compare</button>
+            <button onclick="closeCompareDialog()" class="btn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+{# Include status bar #}
+{% include "status_bar.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/app.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        loadWorkspaces();
+        loadSessions();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+"""Tests for OrchestratorLink (F-95)."""
+
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def session_dir(tmp_path):
+    """Create a temporary session directory with sample data."""
+    sd = tmp_path / "sessions" / "test-orch-001"
+    sd.mkdir(parents=True)
+
+    # Create F-38 report
+    (sd / "report.md").write_text("# Test Report\nAll good.", encoding="utf-8")
+
+    # Create F-45 events
+    events = [
+        json.dumps({"event": "tool_call", "tool_name": "Read", "timestamp": time.time()}),
+        json.dumps({"event": "tool_result", "tool_name": "Read", "timestamp": time.time()}),
+    ]
+    (sd / "events.ndjson").write_text("\n".join(events), encoding="utf-8")
+
+    # Create F-54 debug log
+    debug = [
+        json.dumps({"phase": "analysis", "timestamp": time.time()}),
+    ]
+    (sd / "debug.ndjson").write_text("\n".join(debug), encoding="utf-8")
+
+    return sd
+
+
+class TestOrchestratorLink:
+    def test_generate_links(self, session_dir):
+        from extensions.visualizer.orchestrator_link import OrchestratorLink
+
+        link = OrchestratorLink(base_url="http://localhost:8765")
+        result = link.generate_links("test-orch-001", session_dir)
+
+        assert result["session_id"] == "test-orch-001"
+        assert result["available"] is True
+        assert "f38_report" in result
+        assert "f45_events" in result
+        assert "f54_debug" in result
+        assert result["f45_events"]["event_count"] == 2
+        assert result["f54_debug"]["entry_count"] == 1
+
+    def test_generate_links_nonexistent(self, tmp_path):
+        from extensions.visualizer.orchestrator_link import OrchestratorLink
+
+        link = OrchestratorLink()
+        result = link.generate_links("nonexistent", tmp_path / "nope")
+
+        assert result["available"] is False
+
+    def test_generate_share_payload(self):
+        from extensions.visualizer.orchestrator_link import OrchestratorLink
+
+        link = OrchestratorLink()
+        payload = link.generate_share_link("test-session", view_type="comparison")
+
+        assert payload["session_id"] == "test-session"
+        assert payload["view_type"] == "comparison"
+
+    def test_frontend_link(self, session_dir):
+        from extensions.visualizer.orchestrator_link import OrchestratorLink
+
+        link = OrchestratorLink(base_url="http://localhost:8765")
+        result = link.generate_links("test-orch-001", session_dir)
+
+        assert result["frontend"] == "http://localhost:8765/session/test-orch-001"

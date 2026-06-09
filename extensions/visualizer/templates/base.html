@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ClawCodex Visualizer{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/">🖥 ClawCodex Visualizer</a>
+        </div>
+        <div class="nav-links">
+            <a href="/">Sessions</a>
+            <a href="#" onclick="openCompareDialog()">Compare</a>
+        </div>
+    </nav>
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="footer">
+        <span>ClawCodex Visualizer v0.1.0</span>
+        <span id="ws-status">● Disconnected</span>
+    </footer>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/websocket.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

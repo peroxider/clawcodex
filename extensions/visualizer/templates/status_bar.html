@@ -1,0 +1,105 @@
+{# Status Bar — shows connection status and session metadata #}
+<div class="status-bar" id="viz-status-bar">
+    <div class="status-section">
+        <span id="status-ws-indicator" class="status-dot disconnected"></span>
+        <span id="status-ws-label">Disconnected</span>
+    </div>
+    <div class="status-section">
+        <span class="status-label">Sessions:</span>
+        <span id="status-session-count">0</span>
+    </div>
+    <div class="status-section">
+        <span class="status-label">Last Updated:</span>
+        <span id="status-last-update">—</span>
+    </div>
+    <div class="status-section">
+        <span class="status-label">Auto-refresh:</span>
+        <span id="status-auto-refresh">Off</span>
+    </div>
+</div>
+
+<style>
+    .status-bar {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 6px 16px;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+    .status-section {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+    .status-dot.connected { background: var(--success); }
+    .status-dot.disconnected { background: var(--error); }
+    .status-dot.connecting { background: var(--warning); animation: pulse 1s infinite; }
+    .status-label { color: var(--text-secondary); }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+</style>
+
+<script>
+(function() {
+    function updateWsStatus(status) {
+        const dot = document.getElementById('status-ws-indicator');
+        const label = document.getElementById('status-ws-label');
+        if (!dot || !label) return;
+        dot.className = 'status-dot ' + status;
+        const labels = { connected: 'Connected', disconnected: 'Disconnected', connecting: 'Connecting...' };
+        label.textContent = labels[status] || status;
+    }
+
+    function updateSessionCount(count) {
+        const el = document.getElementById('status-session-count');
+        if (el) el.textContent = count;
+    }
+
+    function updateLastUpdated() {
+        const el = document.getElementById('status-last-update');
+        if (el) el.textContent = new Date().toLocaleTimeString();
+    }
+
+    function setAutoRefresh(enabled) {
+        const el = document.getElementById('status-auto-refresh');
+        if (el) el.textContent = enabled ? 'On (3s)' : 'Off';
+    }
+
+    // Listen for WebSocket status changes
+    if (typeof vizWs !== 'undefined') {
+        const origConnect = vizWs.connect.bind(vizWs);
+        vizWs.connect = function(sid) {
+            updateWsStatus('connecting');
+            origConnect(sid);
+        };
+    }
+
+    // Poll WS status from DOM
+    setInterval(function() {
+        const wsEl = document.getElementById('ws-status');
+        if (wsEl) {
+            const connected = wsEl.classList.contains('connected');
+            updateWsStatus(connected ? 'connected' : 'disconnected');
+        }
+    }, 2000);
+
+    // Expose globally
+    window.VizStatusBar = {
+        updateWsStatus,
+        updateSessionCount,
+        updateLastUpdated,
+        setAutoRefresh,
+    };
+})();
+</script>
