@@ -2,13 +2,13 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.0
-> 更新日期: 2026-06-08
+> 版本: v3.1
+> 更新日期: 2026-06-28
 > 上游同步: 58ea488 (dev-decoupling-refactor)
 >
 > **v2.16 变更**：完成 CCB（claude-code-best）全面对标分析，识别 clawcodex 的 8 个重大特性缺口纳入规划管线。新增 F-60 Pipe IPC + LAN 群控（P0）、F-61 Computer Use 屏幕操控（P0）、F-62 Chrome 浏览器控制（P1）、F-63 Channels 频道通知（P1）、F-64 Voice Mode 语音输入（P2）、F-65 Langfuse Agent 可观测性（P1）、F-66 ACP 协议支持（P2）、F-67 Buddy / Proactive 模式（P2）。同时更新 §四 CCB 对标优势特性总表，明确 clawcodex 对比 CCB 的 5 项领先特性（Orchestrator 自动流水线、Verification Gate、SOP 编译器、LiteLLM Provider、Manager/Worker 增强通信）。所有 F-60~F-67 设置为 ⏳ 待开始状态，详见 §四。
 >
-> **v3.0 变更**：基于 FEATURE_PLAN.md v3.0 重构，对齐特性编号与章节体系。新增 F-50、F-69~F-74、F-83~F-88 共 14 个 F-Number 至功能模块表格；F-5/F-6/F-7/F-8 标记为已重定向（→F-64/F-61/F-82/F-66）；章节编号对齐 FEATURE_PLAN（二~七为各系统进度，八=CCB 对标，九=Python 生态，十=死代码）。
+> **v3.1 变更**：新增 Multi-Session 可视化分析平台（F-91~F-95）完整实施跟踪。所有 19 项子特性标记为 ✅ 已完成（32 测试全通过）。新增 `extensions/visualizer/` 完整代码结构与关键设计决策章节。章节重编号：原 §八→§九，§九→§十，§十→§十一。
 >
 > **v2.17 变更**：全面更新 F-48 src/ 核心路径二开修改解耦方案。通过 `diff -w` 逐文件验证，纠正了早前版本"~61 个格式差异"的重大误判——实际仅 4 个文件是纯格式差异，67 个文件均有语义变更。新增 Phase 4-9 覆盖新发现的 57 个未解耦功能修改文件。目标调整：src/ 功能修改文件数从 67 → ~10-20，增加"每文件决策记录"机制。详见 §六 FEATURE_PLAN.md。
 >
@@ -134,6 +134,11 @@
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-88 | Explore/Plan Agent | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-89 | @agent-name 多入口统一支持 | P1 | 📋 设计完成 | 见 FEATURE_PLAN §3.4 |
+| F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 5 模型 / 4 解析器 / 7 构建器 |
+| F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 15 REST 端点 + WebSocket live tail |
+| F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
+| F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
+| F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
 
 ---
 
@@ -1330,7 +1335,61 @@ CronTask due
 
 > F-21、F-23、F-28、F-32 的详细设计见 FEATURE_PLAN 相应章节；会话恢复增强详见本文 §6 详细章节。
 
-## 八、CCB 对标缺口补缺进度
+## 八、Multi-Session 可视化分析平台（F-91~F-95）
+
+> 本节跟踪第 8 章 Multi-Session 可视化分析平台实施进度。
+> 独立 FastAPI app + Jinja2 + ECharts CDN，零 npm 依赖，全进 wheel。
+
+**状态**: ✅ 已完成 | **优先级**: P0 | **测试**: 32/32 通过
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| **F-91** | Visualizer 核心数据管道 | ✅ 已完成 | 3 周 |
+| F-91-A | 5 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats） | ✅ 已完成 | — |
+| F-91-B | 4 个解析器（session / transcript / multi_agent / tool_events） | ✅ 已完成 | — |
+| F-91-C | 7 个构建器（gantt / timeline / comparison / stats / anomaly / export / agent_tree） | ✅ 已完成 | — |
+| **F-92** | Visualizer 后端 API + 实时推送 | ✅ 已完成 | 2 周 |
+| F-92-A | 独立 FastAPI app + /api/viz/ 路由（15 个端点含 import/export/share） | ✅ 已完成 | — |
+| F-92-B | WebSocket live tail（/api/viz/ws/sessions/{sid}） | ✅ 已完成 | — |
+| F-92-C | 条件性导入（--allow-import, SSRF 校验）+ 导出（PNG/SVG/JSON/PDF） | ✅ 已完成 | — |
+| F-92-D | 分享链接管理（POST/GET/DEL /api/viz/share） | ✅ 已完成 | — |
+| **F-93** | Visualizer 前端（Jinja2 + ECharts CDN） | ✅ 已完成 | 2.5 周 |
+| F-93-A | 甘特图主页面（相对/绝对/窗口时间轴三模式） | ✅ 已完成 | — |
+| F-93-B | 搜索/筛选/异常面板/跨 session 对比页面 | ✅ 已完成 | — |
+| F-93-C | 多 Agent 树（简化版） | ✅ 已完成 | — |
+| **F-94** | CLI 集成 + workspace 扫描 | ✅ 已完成 | 1 周 |
+| F-94-A | clawcodex-dev viz 子命令 | ✅ 已完成 | — |
+| F-94-B | workspace 多租户（workspaces.json + 自动扫描） | ✅ 已完成 | — |
+| **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 |
+| F-95-A | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — |
+| F-95-B | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — |
+
+### 代码结构
+
+```
+extensions/visualizer/
+├── server.py                    # 独立 FastAPI app（端口 8765）
+├── ws.py                        # WebSocket live tail
+├── cli.py                       # clawcodex viz 子命令
+├── orchestrator_link.py         # F-38/F-45/F-54 链接生成
+├── import_router.py             # 条件性 session 导入
+├── models/viz_models.py         # 5 个 Pydantic 模型
+├── parsers/                     # 4 个解析器
+├── builders/                    # 7 个构建器
+├── templates/                   # 7 个 Jinja2 模板
+└── static/js/                   # 4 个 JS 文件（零 npm）
+tests/test_visualizer/           # 32 个测试
+```
+
+### 关键设计决策
+
+1. **F-82 路径 B**（独立 FastAPI app，预留 `mount_viz(app)` 供未来合并）
+2. **前端零 npm**：Jinja2 + ECharts CDN，全进 wheel
+3. **增量流式解析**：`transcript_parser.py` 用 `file.seek` + `readlines`
+4. **ECharts progressive: 5000**：大规模 session 降级策略
+5. **分享链接磁盘持久化**：`~/.clawcodex/viz_shares.json`，启动加载，突变保存
+
+## 九、CCB 对标缺口补缺进度
 
 > 本节跟踪 CCB（claude-code-best）对标发现的 clawcodex 特性缺口实施进度。
 > F-60~F-67 均参照 CCB 对应功能设计，以确保功能完整对标为目标。
@@ -1628,7 +1687,7 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 
 ---
 
-## 九、Python 生态特性补缺进度
+## 十、Python 生态特性补缺进度
 
 > 本节跟踪 Python 生态适配角度发现的 clawcodex 特性缺口实施进度。
 > F-68~F-74 均为 Python 标准库或成熟第三方库可实现的特性。
@@ -1784,7 +1843,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ---
 
-## 十、死代码排查记录
+## 十一、死代码排查记录
 
 > 扫描时间: 2026-06-XX | 工具: vulture 2.16 | 对照基线: `src/upstream/58ea488/`
 
