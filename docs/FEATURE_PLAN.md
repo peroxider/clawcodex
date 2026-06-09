@@ -7978,7 +7978,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 八、Multi-Session 可视化分析平台（F-91~F-95）
 
-**状态**: 📋 设计完成（两份设计文档已冻结） | **优先级**: P0 | **代码**: 100% ✅ 全部 32 测试通过
+**状态**: ✅ 开发完成 | **优先级**: P0 | **代码**: 100% ✅ 全部 69 测试通过
 
 ### 8.1 背景
 
@@ -8017,7 +8017,8 @@ extensions/visualizer/
 ├── templates/                   # Jinja2 模板（零 npm）
 │   ├── base.html
 │   ├── index.html               # 甘特图主页面
-│   ├── session_row.html
+│   ├── session_row.html         # 单 Session 详情页
+│   ├── comparison.html          # 跨 Session 对比页面
 │   ├── stats_bar.html
 │   ├── anomaly_panel.html
 │   ├── export_dialog.html

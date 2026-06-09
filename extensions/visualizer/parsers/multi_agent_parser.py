@@ -30,25 +30,24 @@ class MultiAgentParser:
         """Parse agent tree from workspace orchestrator control dir."""
         workspace_path = Path(workspace_path)
         control_dir = workspace_path / ".orchestrator_control" / "runs" / run_id
-        if not control_dir.exists():
-            return []
 
         nodes: list[AgentTreeNode] = []
 
         # Look for agent metadata files
-        agent_meta_path = control_dir / "agent_meta.json"
-        if agent_meta_path.exists():
-            try:
-                data = json.loads(agent_meta_path.read_text(encoding="utf-8"))
-                agents = data.get("agents", [])
-                for agent in agents:
-                    node = self._agent_dict_to_node(agent, run_id)
-                    if node:
-                        nodes.append(node)
-            except Exception as e:
-                logger.debug("Failed to parse agent_meta.json for %s: %s", run_id, e)
+        if control_dir.exists():
+            agent_meta_path = control_dir / "agent_meta.json"
+            if agent_meta_path.exists():
+                try:
+                    data = json.loads(agent_meta_path.read_text(encoding="utf-8"))
+                    agents = data.get("agents", [])
+                    for agent in agents:
+                        node = self._agent_dict_to_node(agent, run_id)
+                        if node:
+                            nodes.append(node)
+                except Exception as e:
+                    logger.debug("Failed to parse agent_meta.json for %s: %s", run_id, e)
 
-        # Fallback: if no agent_meta.json, create a single root node
+        # Fallback: if no control dir or no agent_meta.json, create a single root node
         if not nodes:
             nodes.append(
                 AgentTreeNode(

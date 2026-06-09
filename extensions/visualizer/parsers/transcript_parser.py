@@ -8,12 +8,35 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import BarStatus, BarType, TimelineBar
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_timestamp(value: Any) -> float:
+    """Coerce a transcript timestamp value to a float Unix epoch.
+
+    Accepts:
+      - float / int: returned as-is
+      - ISO 8601 string: parsed via ``datetime.fromisoformat``
+      - None / unparseable: returns 0.0
+    """
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            # ``Z`` suffix is not handled by fromisoformat in Python <3.11
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            logger.debug("Unparseable transcript timestamp: %r", value)
+            return 0.0
+    return 0.0
 
 
 class TranscriptParser:
@@ -47,6 +70,12 @@ class TranscriptParser:
         path = Path(path)
         if not path.exists():
             return []
+        # Reset per-file state so concurrent calls on a shared parser
+        # don't leak bar counters or pending tool pairs across sessions.
+        self._bar_counter = 0
+        self._turn_counter = 0
+        self._last_timestamp = None
+        self._pending_tools = {}
         bars: list[TimelineBar] = []
         with open(path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
@@ -98,14 +127,25 @@ class TranscriptParser:
         role = entry.get("role", "")
         msg_type = entry.get("type", "")
         content = entry.get("content", [])
-        timestamp = entry.get("_timestamp") or entry.get("timestamp")
+        raw_ts = entry.get("_timestamp") or entry.get("timestamp")
 
-        if timestamp is None:
+        if raw_ts is None:
             # Derive timestamp from line number for ordering
             timestamp = self._last_timestamp or 0.0
+        else:
+            timestamp = _coerce_timestamp(raw_ts)
+
+        # Always track the most recent timestamp for next entry
+        self._last_timestamp = timestamp
+
+        # Plain text messages (assistant/user) — exit early before the
+        # tool_use/tool_result branches below, so system-role lines like
+        # ``__background_complete__`` are simply skipped.
+        if role not in ("assistant", "user"):
+            return None
 
         # Handle tool_use blocks (inside assistant messages)
-        if role == "assistant" and isinstance(content, list):
+        if isinstance(content, list):
             bars: list[TimelineBar] = []
             for block in content:
                 if not isinstance(block, dict):
@@ -113,6 +153,10 @@ class TranscriptParser:
                 btype = block.get("type", "")
                 if btype == "tool_use":
                     bar = self._tool_use_bar(block, timestamp)
+                    if bar:
+                        bars.append(bar)
+                elif btype == "tool_result":
+                    bar = self._tool_result_bar(block, timestamp)
                     if bar:
                         bars.append(bar)
                 elif btype == "text":
@@ -123,23 +167,14 @@ class TranscriptParser:
             # Return the first bar or a composite placeholder
             if bars:
                 return bars[0]  # Simplified: first bar per entry
+            return None
 
-        # Handle tool_result blocks
-        if role == "user" and isinstance(content, list):
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                if block.get("type") == "tool_result":
-                    return self._tool_result_bar(block, timestamp)
+        # Plain text messages (assistant/user with string content)
+        text = content if isinstance(content, str) else ""
+        if not text:
+            return None
+        return self._message_bar(role, text, timestamp)
 
-        # Plain text messages (assistant/user)
-        if role in ("assistant", "user"):
-            text = entry.get("content", "")
-            if isinstance(text, str) and text:
-                return self._message_bar(role, text, timestamp)
-
-        self._last_timestamp = timestamp
-        return None
 
     def _tool_use_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
         """Create a bar for a tool_use block."""
