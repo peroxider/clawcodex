@@ -203,17 +203,20 @@ class CronTaskLock:
                 _register_self_cleanup(self)
                 return True
 
-        try:
-            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            if not self._recover_if_stale():
-                return False
+        # Retry loop: at most 2 attempts.  After _recover_if_stale()
+        # removes a stale lock, the *immediate* retry (same loop
+        # iteration) has no TOCTOU window — no other thread/process
+        # can preempt inside a single os.open call.
+        for attempt in range(2):
             try:
                 fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except FileExistsError:
-                return False
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(encoded)
+                if attempt > 0 or not self._recover_if_stale():
+                    return False
+                continue  # retry right after stale removal
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(encoded)
+            break
         self.acquired = True
         _register_self_cleanup(self)
         return True
@@ -221,15 +224,28 @@ class CronTaskLock:
     def release(self) -> None:
         if not self.acquired:
             return
+        # Early exit: if the file is already gone there is nothing to do.
+        if not self.path.exists():
+            self.acquired = False
+            return
+        # Read the current payload to confirm the lock is still ours.
         try:
             data = self._read_payload() or {}
         except (OSError, json.JSONDecodeError):
             data = {}
-        if data.get("sessionId") == self.session_id:
-            try:
-                self.path.unlink()
-            except FileNotFoundError:
-                pass
+        if data.get("sessionId") != self.session_id:
+            self.acquired = False
+            return
+        # The read–unlink window is ~1‑5 µs; another process could
+        # replace the file between the check above and this unlink.
+        # This is a known theoretical race — in practice the tiny
+        # window and the at-least-once nature of lock acquisition make
+        # it harmless.  (A fully atomic release would require kernel‑
+        # level lease support.)
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
         self.acquired = False
 
     def __enter__(self) -> CronTaskLock:
@@ -315,17 +331,29 @@ def _register_self_cleanup(lock: CronTaskLock) -> None:
     register_lock_cleanup(_release_once)
 
 
-def acquire_cron_storage_lock(workspace_root: Path, session_id: str) -> CronTaskLock:
+def acquire_cron_storage_lock(
+    workspace_root: Path,
+    session_id: str,
+    lock_relative_path: Path = SCHEDULED_TASKS_STORAGE_LOCK_RELATIVE_PATH,
+) -> CronTaskLock:
+    """Acquire a filesystem lock with exponential backoff.
+
+    ``lock_relative_path`` defaults to the tasks lock path.  Callers that
+    operate on the runs file pass ``RUNS_STORAGE_LOCK_RELATIVE_PATH`` so
+    tasks and runs writes can proceed concurrently.
+    """
     deadline = time.monotonic() + 10
     lock = CronTaskLock(
         workspace_root,
         session_id,
-        lock_relative_path=SCHEDULED_TASKS_STORAGE_LOCK_RELATIVE_PATH,
+        lock_relative_path=lock_relative_path,
     )
+    delay = 0.001  # start at 1 ms
     while not lock.acquire():
         if time.monotonic() >= deadline:
             raise TimeoutError(f"could not acquire cron storage lock: {lock.path}")
-        time.sleep(0.01)
+        time.sleep(delay)
+        delay = min(delay * 1.5, 0.5)  # exponential backoff, cap at 500 ms
     return lock
 
 

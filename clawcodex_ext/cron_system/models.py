@@ -13,6 +13,7 @@ _log = logging.getLogger(__name__)
 SCHEDULED_TASKS_RELATIVE_PATH = Path(".claude/scheduled_tasks.json")
 SCHEDULED_TASKS_LOCK_RELATIVE_PATH = Path(".claude/scheduled_tasks.lock")
 SCHEDULED_TASKS_STORAGE_LOCK_RELATIVE_PATH = Path(".claude/scheduled_tasks.storage.lock")
+RUNS_STORAGE_LOCK_RELATIVE_PATH = Path(".claude/cron_runs.storage.lock")
 SCHEDULED_TASKS_CONFIG_RELATIVE_PATH = Path(".claude/cron_jitter_config.json")
 
 DEFAULT_RECURRING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000

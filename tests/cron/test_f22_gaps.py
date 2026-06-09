@@ -128,9 +128,10 @@ class TestG2JitterConfig:
     def test_scheduler_hot_reloads_jitter_per_tick(
         self, tmp_path: Path
     ) -> None:
-        # F-22-G2 hot-reload: scheduler must call the loader on every
-        # check_once() so live edits to .claude/cron_jitter_config.json
-        # or CLAWCODEX_CRON_* env vars take effect without restart.
+        # F-22-G2 hot-reload: scheduler reloads the jitter config every
+        # _THROTTLE_INTERVAL ticks (default 60) so live edits to
+        # .claude/cron_jitter_config.json or CLAWCODEX_CRON_* env vars
+        # take effect within ~60 s without restart.
         call_count = {"n": 0}
         base = CronJitterConfig()
         live = CronJitterConfig(recurring_max_age_ms=10_000)
@@ -145,6 +146,15 @@ class TestG2JitterConfig:
             load_jitter_config=loader,
         )
         scheduler.check_once()
+        assert call_count["n"] == 1  # first tick → loader called
+        # Second tick reuses cached config (throttled); hot value is
+        # only picked up on the 60th tick.
+        scheduler.check_once()
+        assert call_count["n"] == 1  # still cached
+
+        # Jump to the 60th tick → loader called again with `live`.
+        for _ in range(60 - 2):
+            scheduler._jitter_tick_counter += 1
         scheduler.check_once()
         assert call_count["n"] == 2
         assert scheduler.get_jitter_config().recurring_max_age_ms == 10_000
