@@ -86,6 +86,9 @@ dependencies = [
     # upstream-sync: CLI framework
     "typer[all]>=0.12.0",
     "jinja2>=3.1.0",
+    # F-91~F-95: Multi-Session Visualizer backend
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
 ]
 
 [project.optional-dependencies]

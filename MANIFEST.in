@@ -7,4 +7,7 @@ recursive-include src *.json
 recursive-include extensions *.md *.txt
 recursive-include extensions *.py
 recursive-include extensions *.json
+recursive-include extensions *.html
+recursive-include extensions *.css
+recursive-include extensions *.js
 prune src/upstream
