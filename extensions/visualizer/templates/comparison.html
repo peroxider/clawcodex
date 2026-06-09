@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Compare Sessions — ClawCodex Visualizer{% endblock %}
+
+{% block content %}
+<div class="compare-header">
+    <div class="compare-title-row">
+        <h2>📊 Cross-Session Comparison</h2>
+        <div class="compare-actions">
+            <button onclick="exportComparison('json')" class="btn">📥 Export JSON</button>
+            <button onclick="exportComparison('pdf')" class="btn">📥 Export PDF</button>
+            <button onclick="window.location.href='/'" class="btn">← Back</button>
+        </div>
+    </div>
+    <div id="compare-meta" class="compare-meta">Loading...</div>
+</div>
+
+<div id="compare-content">
+    <div class="loading">Loading comparison data...</div>
+</div>
+
+<div class="panels-row">
+    <div class="panel" id="compare-detail-panel">
+        <h3>Session Details</h3>
+        <div id="compare-detail-content">Select a session to view details</div>
+    </div>
+    <div class="panel" id="compare-delta-panel" style="display:none;">
+        <h3>📈 Variance</h3>
+        <div id="compare-delta-content"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const SESSION_IDS = (URL_PARAMS.get('sessions') || '').split(',').filter(Boolean);
+
+    async function loadComparison() {
+        const meta = document.getElementById('compare-meta');
+        const content = document.getElementById('compare-content');
+        if (!meta || !content || SESSION_IDS.length === 0) {
+            content.innerHTML = '<div class="empty-state">No session IDs provided. <a href="/">Go back</a></div>';
+            return;
+        }
+
+        try {
+            const data = await VizUtils.apiFetch(`/api/viz/compare?sessions=${encodeURIComponent(SESSION_IDS.join(','))}`);
+
+            meta.innerHTML = `
+                <span>🧮 ${data.common_metrics?.session_count || SESSION_IDS.length} sessions</span>
+                <span>💰 Total cost: $${(data.common_metrics?.total_cost_usd || 0).toFixed(4)}</span>
+                <span>⏱ Total duration: ${VizUtils.formatDuration(data.common_metrics?.total_duration_ms || 0)}</span>
+                <span>🔄 ${data.common_metrics?.total_turns || 0} turns</span>
+                <span>🔧 ${data.common_metrics?.total_tools || 0} tools</span>
+                <span>✅ Success rate: ${data.common_metrics?.success_rate || 0}%</span>
+            `;
+
+            // Render comparison table
+            const sessions = data.sessions || [];
+            const perSession = data.per_session || {};
+            let tableHtml = `
+                <table class="compare-table">
+                    <thead>
+                        <tr>
+                            <th>Session</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Turns</th>
+                            <th>Tools</th>
+                            <th>Avg Duration</th>
+                            <th>Max Concurrent</th>
+                            <th>Tokens</th>
+                            <th>Cost ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            sessions.forEach(sid => {
+                const s = perSession[sid] || {};
+                tableHtml += `
+                    <tr onclick="window.location.href='/session/${sid}'" style="cursor:pointer">
+                        <td><strong>${VizUtils.truncate(sid, 24)}</strong></td>
+                        <td><span class="status-badge ${VizUtils.statusClass(s.status)}">${s.status || '—'}</span></td>
+                        <td>${VizUtils.formatDuration(s.total_duration_ms || s.duration_ms || 0)}</td>
+                        <td>${s.turn_count || '—'}</td>
+                        <td>${s.tool_count || '—'}</td>
+                        <td>${VizUtils.formatDuration(s.avg_duration_ms || 0)}</td>
+                        <td>${s.max_concurrent || 0}</td>
+                        <td>${VizUtils.formatTokens(s.context_tokens || 0)}</td>
+                        <td>$${(s.cost_usd || 0).toFixed(4)}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table>`;
+            content.innerHTML = tableHtml;
+
+            // Render delta panel
+            const delta = data.delta;
+            if (delta && Object.keys(delta).length > 0) {
+                document.getElementById('compare-delta-panel').style.display = 'block';
+                document.getElementById('compare-delta-content').innerHTML = `
+                    <div class="stat-row"><span class="stat-label">Duration Spread</span><span class="stat-value">${VizUtils.formatDuration(delta.duration_spread_ms || 0)}</span></div>
+                    <div class="stat-row"><span class="stat-label">Min Duration</span><span class="stat-value">${VizUtils.formatDuration(delta.min_duration_ms || 0)}</span></div>
+                    <div class="stat-row"><span class="stat-label">Max Duration</span><span class="stat-value">${VizUtils.formatDuration(delta.max_duration_ms || 0)}</span></div>
+                    <div class="stat-row"><span class="stat-label">Cost Spread</span><span class="stat-value">$${(delta.cost_spread_usd || 0).toFixed(4)}</span></div>
+                    <div class="stat-row"><span class="stat-label">Min Cost</span><span class="stat-value">$${(delta.min_cost_usd || 0).toFixed(4)}</span></div>
+                    <div class="stat-row"><span class="stat-label">Max Cost</span><span class="stat-value">$${(delta.max_cost_usd || 0).toFixed(4)}</span></div>
+                `;
+            }
+        } catch (e) {
+            content.innerHTML = `<div class="empty-state">Error loading comparison: ${e.message}</div>`;
+            meta.textContent = 'Error';
+        }
+    }
+
+    async function exportComparison(format) {
+        try {
+            const resp = await fetch(`/api/viz/compare/export?sessions=${encodeURIComponent(SESSION_IDS.join(','))}&format=${format}`);
+            if (!resp.ok) throw new Error(`Export failed: ${resp.status}`);
+            const blob = await resp.blob();
+            const filename = `comparison-${SESSION_IDS[0]}-vs-${SESSION_IDS.length}.${format}`;
+            VizUtils.downloadBlob(blob, filename);
+        } catch (e) {
+            alert(`Export failed: ${e.message}`);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadComparison);
+
+    // Make globally available
+    window.loadComparison = loadComparison;
+    window.exportComparison = exportComparison;
+</script>
+
+<style>
+    .compare-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 13px;
+    }
+    .compare-table th, .compare-table td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .compare-table th {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-weight: 600;
+        position: sticky;
+        top: 0;
+    }
+    .compare-table tr:hover td {
+        background: var(--bg-hover, rgba(255,255,255,0.03));
+    }
+    .compare-table td:first-child { font-weight: 500; }
+    .compare-meta {
+        display: flex;
+        gap: 16px;
+        padding: 8px 0;
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+    .compare-title-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}

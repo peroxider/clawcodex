@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Session {{ session_id }} — ClawCodex Visualizer{% endblock %}
+
+{% block content %}
+<div class="session-header">
+    <div class="session-title-row">
+        <h2 id="session-title">Session: {{ session_id }}</h2>
+        <div class="session-actions">
+            <select id="time-mode" onchange="changeTimeMode(this.value)">
+                <option value="relative">Relative Time</option>
+                <option value="absolute">Absolute Time</option>
+                <option value="window">Window Mode</option>
+            </select>
+            <button onclick="openExportDialog('{{ session_id }}')" class="btn">📥 Export</button>
+            <button onclick="exportSession('json')" class="btn">JSON</button>
+            <button onclick="exportSession('svg')" class="btn">SVG</button>
+        </div>
+    </div>
+    <div class="session-meta" id="session-meta">
+        Loading...
+    </div>
+</div>
+
+{# Include stats bar (container-only, rendered by gantt.js) #}
+{% with include_mode="container" %}
+  {% include "stats_bar.html" %}
+{% endwith %}
+
+<div class="gantt-container" id="gantt-chart" style="width:100%; height:500px;">
+</div>
+
+<div class="panels-row">
+    {# Include anomaly panel (container-only, rendered by gantt.js) #}
+    {% with include_mode="container" %}
+      {% include "anomaly_panel.html" %}
+    {% endwith %}
+    <div class="panel" id="tree-panel" style="display:none;">
+        <h3>🌳 Agent Tree</h3>
+        <div id="tree-content"></div>
+    </div>
+</div>
+
+{# Stats content target used by gantt.js renderStats() #}
+<div id="stats-content" style="display:none;"></div>
+
+{# Include export dialog #}
+{% include "export_dialog.html" %}
+
+{# Include status bar #}
+{% include "status_bar.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gantt.js"></script>
+<script>
+    const SESSION_ID = "{{ session_id }}";
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSessionDetail(SESSION_ID);
+        connectLiveTail(SESSION_ID);
+    });
+</script>
+{% endblock %}

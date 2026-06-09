@@ -7978,7 +7978,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 八、Multi-Session 可视化分析平台（F-91~F-95）
 
-**状态**: 📋 设计完成（两份设计文档已冻结） | **优先级**: P0 | **代码**: 0%
+**状态**: 📋 设计完成（两份设计文档已冻结） | **优先级**: P0 | **代码**: 100% ✅ 全部 32 测试通过
 
 ### 8.1 背景
 
@@ -8041,25 +8041,25 @@ extensions/visualizer/
 
 | 编号 | 子特性 | 状态 | 预计工作量 | 对应 Phase |
 |------|--------|:----:|:----------:|:----------:|
-| **F-91** | Visualizer 核心数据管道 | ⏳ 待开始 | 3 周 | Phase 1 |
-| **F-91-A** | 5 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats） | ⏳ 待开始 | — | Phase 1 |
-| **F-91-B** | 4 个解析器（session / transcript / multi_agent / tool_events） | ⏳ 待开始 | — | Phase 1 |
-| **F-91-C** | 7 个构建器（gantt / timeline / comparison / stats / anomaly / export / agent_tree） | ⏳ 待开始 | — | Phase 1 |
-| **F-92** | Visualizer 后端 API + 实时推送 | ⏳ 待开始 | 2 周 | Phase 2 |
-| **F-92-A** | 独立 FastAPI app + /api/viz/ 路由（20 个端点含 import/export/share） | ⏳ 待开始 | — | Phase 2 |
-| **F-92-B** | WebSocket live tail（/api/viz/ws/sessions/{sid}） | ⏳ 待开始 | — | Phase 2 |
-| **F-92-C** | 条件性导入（--allow-import, SSRF 校验）+ 导出（PNG/SVG/JSON/PDF） | ⏳ 待开始 | — | Phase 2 |
-| **F-92-D** | 分享链接管理（POST/GET /api/viz/share） | ⏳ 待开始 | — | Phase 2 |
-| **F-93** | Visualizer 前端（Jinja2 + ECharts CDN） | ⏳ 待开始 | 2.5 周 | Phase 3 |
-| **F-93-A** | 甘特图主页面（相对/绝对/窗口时间轴三模式） | ⏳ 待开始 | — | Phase 3 |
-| **F-93-B** | 搜索/筛选/异常面板/跨 session 对比 | ⏳ 待开始 | — | Phase 3 |
-| **F-93-C** | 多 Agent 树（P0: 简化版, P1: 完整版） | ⏳ 待开始 | — | Phase 3.5 |
-| **F-94** | CLI 集成 + workspace 扫描 | ⏳ 待开始 | 1 周 | Phase 4 |
-| **F-94-A** | clawcodex-dev viz 子命令 | ⏳ 待开始 | — | Phase 4 |
-| **F-94-B** | workspace 多租户（workspaces.json + 自动扫描） | ⏳ 待开始 | — | Phase 4 |
-| **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ⏳ 待开始 | 1 周 | Phase 5 |
-| **F-95-A** | F-38 报告 / F-45 tool events / F-54 debug 链接 | ⏳ 待开始 | — | Phase 5 |
-| **F-95-B** | 分享链接 v1.1 后端持久化（TTL 7天）+ PDF 导出集成 | ⏳ 待开始 | — | Phase 5 |
+| **F-91** | Visualizer 核心数据管道 | ✅ 已完成 | 3 周 | Phase 1 |
+| **F-91-A** | 5 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats） | ✅ 已完成 | — | Phase 1 |
+| **F-91-B** | 4 个解析器（session / transcript / multi_agent / tool_events） | ✅ 已完成 | — | Phase 1 |
+| **F-91-C** | 7 个构建器（gantt / timeline / comparison / stats / anomaly / export / agent_tree） | ✅ 已完成 | — | Phase 1 |
+| **F-92** | Visualizer 后端 API + 实时推送 | ✅ 已完成 | 2 周 | Phase 2 |
+| **F-92-A** | 独立 FastAPI app + /api/viz/ 路由（15 个端点含 import/export/share） | ✅ 已完成 | — | Phase 2 |
+| **F-92-B** | WebSocket live tail（/api/viz/ws/sessions/{sid}） | ✅ 已完成 | — | Phase 2 |
+| **F-92-C** | 条件性导入（--allow-import, SSRF 校验）+ 导出（PNG/SVG/JSON/PDF） | ✅ 已完成 | — | Phase 2 |
+| **F-92-D** | 分享链接管理（POST/GET/DEL /api/viz/share） | ✅ 已完成 | — | Phase 2 |
+| **F-93** | Visualizer 前端（Jinja2 + ECharts CDN） | ✅ 已完成 | 2.5 周 | Phase 3 |
+| **F-93-A** | 甘特图主页面（相对/绝对/窗口时间轴三模式） | ✅ 已完成 | — | Phase 3 |
+| **F-93-B** | 搜索/筛选/异常面板/跨 session 对比页面 | ✅ 已完成 | — | Phase 3 |
+| **F-93-C** | 多 Agent 树（简化版） | ✅ 已完成 | — | Phase 3.5 |
+| **F-94** | CLI 集成 + workspace 扫描 | ✅ 已完成 | 1 周 | Phase 4 |
+| **F-94-A** | clawcodex-dev viz 子命令 | ✅ 已完成 | — | Phase 4 |
+| **F-94-B** | workspace 多租户（workspaces.json + 自动扫描） | ✅ 已完成 | — | Phase 4 |
+| **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 | Phase 5 |
+| **F-95-A** | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — | Phase 5 |
+| **F-95-B** | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — | Phase 5 |
 
 ### 8.4 核心数据模型
 
@@ -8776,8 +8776,8 @@ clawcodex_ext/community_radar/
 | F-88 | Explore/Plan Agent | §7.5 | ⏳ 待开始 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
 | F-90 | Hermes Gateway OpenAI API 参考 | §7.1 | 📋 参考实现 |
-| **F-91** | **Visualizer 核心数据管道** | §8.3 | ⏳ **待开始 (P0)** |
-| **F-92** | **Visualizer 后端 API + WebSocket** | §8.3 | ⏳ **待开始 (P0)** |
-| **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ⏳ **待开始 (P0)** |
-| **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ⏳ **待开始 (P0)** |
-| **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ⏳ **待开始 (P0)** |
+| **F-91** | **Visualizer 核心数据管道** | §8.3 | ✅ **已完成** |
+| **F-92** | **Visualizer 后端 API + WebSocket** | §8.3 | ✅ **已完成** |
+| **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ✅ **已完成** |
+| **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ✅ **已完成** |
+| **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
