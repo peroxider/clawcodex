@@ -13,6 +13,15 @@ from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
+# Forward references for OperationCategory.color / .label properties
+# ---------------------------------------------------------------------------
+
+# Populated after the enum is defined; see ``OperationCategory`` below.
+_CATEGORY_COLORS: dict = {}
+_CATEGORY_LABELS: dict = {}
+
+
+# ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
@@ -39,6 +48,47 @@ class BarStatus(str, Enum):
     RUNNING = "running"
     PENDING = "pending"
     SKIPPED = "skipped"
+
+
+class OperationCategory(str, Enum):
+    """High-level operation category for the multi-session waterfall view.
+
+    Five buckets mapped 1:1 to the legend in the reference visualization:
+    读取 (read) / 执行 (execute) / 写入 (write) / 编排 (orchestrate) / 其他 (other).
+    """
+
+    READ = "read"
+    EXECUTE = "execute"
+    WRITE = "write"
+    ORCHESTRATE = "orchestrate"
+    OTHER = "other"
+
+    @property
+    def color(self) -> str:
+        """Canonical legend color, aligned with style.css dark theme."""
+        return _CATEGORY_COLORS[self]
+
+    @property
+    def label(self) -> str:
+        """Chinese display label for legend and pills."""
+        return _CATEGORY_LABELS[self]
+
+
+_CATEGORY_COLORS: dict[OperationCategory, str] = {
+    OperationCategory.READ: "#52c41a",
+    OperationCategory.EXECUTE: "#5470c6",
+    OperationCategory.WRITE: "#fac858",
+    OperationCategory.ORCHESTRATE: "#ea7ccc",
+    OperationCategory.OTHER: "#a0a0b0",
+}
+
+_CATEGORY_LABELS: dict[OperationCategory, str] = {
+    OperationCategory.READ: "读取",
+    OperationCategory.EXECUTE: "执行",
+    OperationCategory.WRITE: "写入",
+    OperationCategory.ORCHESTRATE: "编排",
+    OperationCategory.OTHER: "其他",
+}
 
 
 class AnomalyType(str, Enum):
@@ -112,6 +162,11 @@ class TimelineBar(BaseModel):
         default=None,
         description="Optional override color (hex string)",
     )
+    category: OperationCategory | None = Field(
+        default=None,
+        description="High-level operation category (read/execute/write/orchestrate/other). "
+        "Filled by OperationCategorizer; consumed by the multi-session waterfall legend.",
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -166,7 +221,8 @@ class OperationStats(BaseModel):
 class AgentTreeNode(BaseModel):
     """Node in the multi-agent tree.
 
-    9 fields; P0 simplified version (flat list with parent refs).
+    9+5 fields; P0 simplified version (flat list with parent refs),
+    plus layout fields populated by AgentTreeLayout for the waterfall view.
     """
 
     agent_id: str
@@ -178,6 +234,27 @@ class AgentTreeNode(BaseModel):
     depth: int = 0
     stats: OperationStats = Field(default_factory=OperationStats)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # ---- layout (populated by AgentTreeLayout) ----
+    spawn_x: float | None = Field(
+        default=None,
+        description="Relative-time x where this sub-agent was spawned (parent's Agent call).",
+    )
+    join_x: float | None = Field(
+        default=None,
+        description="Relative-time x where this sub-agent joined back to the parent.",
+    )
+    depth_y: int = Field(
+        default=0,
+        description="Y row in the waterfall view (0 = parent agent row, 1+ = sub-agent rows).",
+    )
+    role: str = Field(
+        default="",
+        description="Short role pill label, e.g. '评审' or '核对'.",
+    )
+    role_color: str = Field(
+        default="",
+        description="Hex color for the role pill (matches the parent swimlane accent).",
+    )
 
 
 class SessionVizData(BaseModel):
@@ -229,6 +306,12 @@ class SessionVizData(BaseModel):
     # Session end reason (F-09 / F-40)
     end_reason: str | None = None
     end_summary: str = ""
+
+    # Multi-agent waterfall layout summary (populated by AgentTreeLayout)
+    agent_layout_summary: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Aggregated layout info: spawn_time, join_time, subagent_count, by_role.",
+    )
 
     model_config = {"populate_by_name": True}
 

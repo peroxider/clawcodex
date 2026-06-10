@@ -1,0 +1,146 @@
+/* ClawCodex Visualizer — Multi-Session Waterfall View (F-95) */
+
+:root {
+    --ms-bg: var(--bg-primary);
+    --ms-panel: var(--bg-secondary);
+    --ms-border: var(--border-color);
+    --ms-text: var(--text-primary);
+    --ms-muted: var(--text-secondary);
+    --ms-fork: #ea7ccc;
+    --ms-fork-dim: rgba(234, 124, 204, 0.35);
+    --ms-pill-radius: 999px;
+    --ms-row-h: 36px;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Header
+ * ----------------------------------------------------------------- */
+.multi-session-header {
+    margin-bottom: 12px;
+}
+.multi-session-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.multi-session-title-row h2 { font-size: 18px; }
+.multi-session-actions {
+    display: flex; gap: 8px; align-items: center;
+}
+.multi-session-actions .input-wide {
+    background: var(--ms-panel);
+    border: 1px solid var(--ms-border);
+    color: var(--ms-text);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    width: 360px;
+}
+.multi-session-actions .input-wide:focus {
+    outline: none;
+    border-color: var(--text-accent);
+}
+.ms-context-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--ms-muted);
+}
+.ms-context-hint code {
+    background: var(--ms-panel);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Legend bar (top, color-coded pill capsules with counts)
+ * ----------------------------------------------------------------- */
+.ms-legend-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px 14px 4px;
+    flex-wrap: wrap;
+}
+.ms-legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: var(--ms-panel);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-pill-radius);
+    font-size: 12px;
+    color: var(--ms-text);
+}
+.ms-legend-pill .ms-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+}
+.ms-legend-pill .ms-count {
+    color: var(--ms-muted);
+    font-variant-numeric: tabular-nums;
+    margin-left: 2px;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Chart container
+ * ----------------------------------------------------------------- */
+.ms-chart-container {
+    background: var(--ms-panel);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Edge explainer strip
+ * ----------------------------------------------------------------- */
+.ms-edge-explain {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 4px;
+    font-size: 12px;
+    color: var(--ms-muted);
+}
+.ms-edge-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.ms-edge-line {
+    display: inline-block;
+    width: 32px; height: 2px;
+    background: var(--ms-fork);
+    box-shadow: 0 0 6px var(--ms-fork-dim);
+    border-radius: 2px;
+}
+.ms-tip { color: var(--ms-muted); }
+
+/* ----------------------------------------------------------------- *
+ *  View toggle (waterfall / gantt) used on session_row.html
+ * ----------------------------------------------------------------- */
+.view-toggle {
+    display: inline-flex;
+    background: var(--ms-panel);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-pill-radius);
+    overflow: hidden;
+}
+.view-toggle-btn {
+    padding: 6px 14px;
+    background: transparent;
+    border: none;
+    color: var(--ms-muted);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+.view-toggle-btn:hover { color: var(--ms-text); }
+.view-toggle-btn.active {
+    background: var(--text-accent);
+    color: #fff;
+}

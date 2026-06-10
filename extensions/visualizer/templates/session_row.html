@@ -6,6 +6,12 @@
     <div class="session-title-row">
         <h2 id="session-title">Session: {{ session_id }}</h2>
         <div class="session-actions">
+            <div class="view-toggle" role="tablist">
+                <button class="view-toggle-btn active" data-view="waterfall"
+                        onclick="switchView('waterfall')">🌊 瀑布</button>
+                <button class="view-toggle-btn" data-view="gantt"
+                        onclick="switchView('gantt')">📊 Gantt</button>
+            </div>
             <select id="time-mode" onchange="changeTimeMode(this.value)">
                 <option value="relative">Relative Time</option>
                 <option value="absolute">Absolute Time</option>
@@ -26,7 +32,13 @@
   {% include "stats_bar.html" %}
 {% endwith %}
 
-<div class="gantt-container" id="gantt-chart" style="width:100%; height:500px;">
+{# Waterfall view (default) — wraps the new multi_session_view with 1 session #}
+<div class="ms-chart-container" id="waterfall-chart" style="width:100%; height:560px; margin-bottom:20px;">
+    <div class="empty-state">Loading waterfall view…</div>
+</div>
+
+{# Legacy Gantt view (hidden by default, shown when ?view=gantt) #}
+<div class="gantt-container" id="gantt-chart" style="width:100%; height:500px; display:none;">
 </div>
 
 <div class="panels-row">
@@ -52,10 +64,34 @@
 
 {% block scripts %}
 <script src="/static/js/gantt.js"></script>
+<script src="/static/js/multi_session_view.js"></script>
 <script>
     const SESSION_ID = "{{ session_id }}";
+    // Decide default view from URL ?view=gantt or fallback to waterfall
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialView = urlParams.get('view') === 'gantt' ? 'gantt' : 'waterfall';
+
+    function switchView(view) {
+        document.querySelectorAll('.view-toggle-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.view === view);
+        });
+        const waterfall = document.getElementById('waterfall-chart');
+        const gantt = document.getElementById('gantt-chart');
+        if (view === 'waterfall') {
+            waterfall.style.display = '';
+            gantt.style.display = 'none';
+            if (!window.__waterfallLoaded) {
+                initMultiSessionView([SESSION_ID]);
+                window.__waterfallLoaded = true;
+            }
+        } else {
+            waterfall.style.display = 'none';
+            gantt.style.display = '';
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        loadSessionDetail(SESSION_ID);
+        switchView(initialView);
         connectLiveTail(SESSION_ID);
     });
 </script>

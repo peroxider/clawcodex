@@ -31,6 +31,7 @@ from .builders.gantt_data_builder import GanttDataBuilder
 from .builders.stats_builder import StatsBuilder
 from .builders.anomaly_builder import AnomalyBuilder
 from .builders.timeline_builder import TimelineBuilder
+from .builders.multi_session_view_builder import MultiSessionViewBuilder
 from .import_router import create_import_router
 from .ws import create_ws_router
 
@@ -58,6 +59,7 @@ class _AppState:
         self.export_builder = ExportBuilder()
         self.stats_builder = StatsBuilder()
         self.anomaly_builder = AnomalyBuilder()
+        self.multi_session_builder = MultiSessionViewBuilder()
         self.share_links: dict[str, ShareLink] = {}
         self.import_tasks: dict[str, ImportStatus] = {}
         self._shares_path = Path.home() / ".clawcodex" / "viz_shares.json"
@@ -250,6 +252,36 @@ def create_app(
         builder = GanttDataBuilder(time_mode=TimeMode(time_mode))
         return builder.build(viz)
 
+    @app.get("/api/viz/multi-session", tags=["session"])
+    async def get_multi_session_view(
+        sessions: str = Query(..., description="Comma-separated session IDs (1-5)"),
+    ):
+        """Get the multi-session waterfall view payload (F-95).
+
+        Returns ``{timeRange, legend, sessions, agents, edges}`` consumed by
+        ``static/js/multi_session_view.js``.
+        """
+        ids = [s.strip() for s in sessions.split(",") if s.strip()]
+        if not 1 <= len(ids) <= 5:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide between 1 and 5 session IDs (comma-separated).",
+            )
+        viz_list: list[SessionVizData] = []
+        missing: list[str] = []
+        for sid in ids:
+            v = app.state.viz.timeline_builder.build(sid)
+            if v is not None:
+                viz_list.append(v)
+            else:
+                missing.append(sid)
+        if not viz_list:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No sessions found (missing: {','.join(missing)})",
+            )
+        return app.state.viz.multi_session_builder.build(viz_list)
+
     @app.get("/api/viz/sessions/{session_id}/report", tags=["session"])
     async def get_session_report(session_id: str):
         """Get F-38/F-45/F-54 report links for a session."""
@@ -400,6 +432,16 @@ def create_app(
         return app.state.templates.TemplateResponse(
             request, "comparison.html",
             {"page_title": "Compare Sessions"},
+        )
+
+    @app.get("/multi", response_class=HTMLResponse, tags=["frontend"])
+    async def multi_session_page(request: Request):
+        """Multi-session waterfall view (F-95)."""
+        if app.state.templates is None:
+            return HTMLResponse("<h1>Multi-Session View</h1><p>Templates not found.</p>")
+        return app.state.templates.TemplateResponse(
+            request, "multi_session.html",
+            {"page_title": "Multi-Session Waterfall"},
         )
 
     return app

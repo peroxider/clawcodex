@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import BarStatus, BarType, TimelineBar
+from ..builders.operation_categorizer import OperationCategorizer
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class ToolEventsParser:
 
     def __init__(self) -> None:
         self._bar_counter = 0
+        self._categorizer = OperationCategorizer()
 
     def parse_file(self, path: Path | str) -> list[TimelineBar]:
         """Parse an entire events.ndjson file."""
@@ -51,7 +53,7 @@ class ToolEventsParser:
         self._bar_counter += 1
         status = BarStatus.SUCCESS if approved is True else BarStatus.ERROR if approved is False else BarStatus.WARNING
 
-        return TimelineBar(
+        bar = TimelineBar(
             id=f"tev-{self._bar_counter}",
             type=BarType.TOOL_CALL,
             label=tool,
@@ -67,3 +69,5 @@ class ToolEventsParser:
                 "params": entry.get("params", {}),
             },
         )
+        bar.category = self._categorizer.categorize(bar)
+        return bar

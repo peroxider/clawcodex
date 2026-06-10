@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import BarStatus, BarType, TimelineBar
+from ..builders.operation_categorizer import OperationCategorizer
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class TranscriptParser:
         self._turn_counter = 0
         self._last_timestamp: float | None = None
         self._pending_tools: dict[str, dict[str, Any]] = {}
+        self._categorizer = OperationCategorizer()
 
     def parse_file(self, path: Path | str) -> list[TimelineBar]:
         """Parse an entire transcript.jsonl file into bars."""
@@ -188,7 +190,7 @@ class TranscriptParser:
             "tool_name": tool_name,
             "start_time": ts,
         }
-        return TimelineBar(
+        bar = TimelineBar(
             id=bar_id,
             type=BarType.TOOL_CALL,
             label=tool_name,
@@ -199,6 +201,8 @@ class TranscriptParser:
             detail={"tool_use_id": tool_use_id, "params": block.get("input", {})},
             color=self._TOOL_COLORS.get(tool_name),
         )
+        bar.category = self._categorizer.categorize(bar)
+        return bar
 
     def _tool_result_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
         """Create a bar for a tool_result block."""

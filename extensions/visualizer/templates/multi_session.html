@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Multi-Session Waterfall — ClawCodex Visualizer{% endblock %}
+
+{% block content %}
+<div class="multi-session-header">
+    <div class="multi-session-title-row">
+        <h2>🌐 Multi-Session Waterfall</h2>
+        <div class="multi-session-actions">
+            <input type="text" id="ms-session-ids"
+                   class="input-wide"
+                   placeholder="session-id-1,session-id-2,..."
+                   value="">
+            <button onclick="reloadMultiSession()" class="btn btn-primary">🔄 加载</button>
+            <a href="/" class="btn">← 返回</a>
+        </div>
+    </div>
+    <div class="ms-context-hint" id="ms-context-hint">
+        从 <code>?session_ids=a,b,c</code> 读取，或在输入框粘贴 1-5 个 session ID（逗号分隔）
+    </div>
+</div>
+
+<div class="ms-legend-bar" id="ms-legend-bar">
+    <!-- Populated by multi_session_view.js -->
+</div>
+
+<div class="ms-chart-container" id="ms-chart" style="width:100%; height:680px;">
+</div>
+
+<div class="ms-edge-explain">
+    <span class="ms-edge-legend">
+        <span class="ms-edge-line"></span> 父 agent → 子 agent 派生（fork）/ 汇合（join）
+    </span>
+    <span class="ms-tip">提示：滚轮缩放 / 拖动底部滑块</span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/multi_session_view.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const fromUrl = params.get('session_ids') || '';
+        const input = document.getElementById('ms-session-ids');
+        if (fromUrl) {
+            input.value = fromUrl;
+            initMultiSessionView(fromUrl.split(',').map(s => s.trim()).filter(Boolean));
+        } else {
+            input.value = '';
+            document.getElementById('ms-chart').innerHTML =
+                '<div class="empty-state">在上方输入框填写 1-5 个 session ID 后点击「加载」</div>';
+        }
+    });
+
+    function reloadMultiSession() {
+        const v = document.getElementById('ms-session-ids').value || '';
+        const ids = v.split(',').map(s => s.trim()).filter(Boolean);
+        if (!ids.length) {
+            alert('请至少输入一个 session ID');
+            return;
+        }
+        // Sync URL so the view is shareable
+        const url = new URL(window.location.href);
+        url.searchParams.set('session_ids', ids.join(','));
+        window.history.replaceState({}, '', url);
+        initMultiSessionView(ids);
+    }
+</script>
+{% endblock %}

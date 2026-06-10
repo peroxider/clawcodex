@@ -7,6 +7,8 @@
         <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
     </div>
     <div class="toolbar-actions">
+        <button onclick="openMultiSessionDialog()" class="btn">🌐 Multi-Session View</button>
+        <button onclick="openCompareDialog()" class="btn">📊 Compare</button>
         <button onclick="refreshSessions()" class="btn btn-primary">🔄 Refresh</button>
     </div>
 </div>
@@ -32,6 +34,19 @@
         <div class="modal-actions">
             <button onclick="doCompare()" class="btn btn-primary">Compare</button>
             <button onclick="closeCompareDialog()" class="btn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Multi-Session View Dialog -->
+<div id="multi-session-dialog" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h3>🌐 Multi-Session Waterfall</h3>
+        <p>Enter 1-5 session IDs (comma-separated):</p>
+        <input type="text" id="multi-session-ids" placeholder="session-id-1,session-id-2" class="input-wide">
+        <div class="modal-actions">
+            <button onclick="openMultiSessionPage()" class="btn btn-primary">Open View</button>
+            <button onclick="closeMultiSessionDialog()" class="btn">Cancel</button>
         </div>
     </div>
 </div>

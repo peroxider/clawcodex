@@ -117,6 +117,29 @@ async function doCompare() {
     window.location.href = `/compare?sessions=${encodeURIComponent(ids)}`;
 }
 
+function openMultiSessionDialog() {
+    document.getElementById('multi-session-dialog').style.display = 'flex';
+    // Pre-fill with the first two session cards if any
+    if (allSessions && allSessions.length >= 1) {
+        const ids = allSessions.slice(0, 2).map(s => s.session_id).join(',');
+        document.getElementById('multi-session-ids').value = ids;
+    }
+}
+
+function closeMultiSessionDialog() {
+    document.getElementById('multi-session-dialog').style.display = 'none';
+}
+
+function openMultiSessionPage() {
+    const ids = document.getElementById('multi-session-ids').value.trim();
+    if (!ids) {
+        alert('请输入至少一个 session ID');
+        return;
+    }
+    closeMultiSessionDialog();
+    window.location.href = `/multi?session_ids=${encodeURIComponent(ids)}`;
+}
+
 // Make functions globally available
 window.loadWorkspaces = loadWorkspaces;
 window.loadSessions = loadSessions;
@@ -126,3 +149,6 @@ window.selectWorkspace = selectWorkspace;
 window.openCompareDialog = openCompareDialog;
 window.closeCompareDialog = closeCompareDialog;
 window.doCompare = doCompare;
+window.openMultiSessionDialog = openMultiSessionDialog;
+window.closeMultiSessionDialog = closeMultiSessionDialog;
+window.openMultiSessionPage = openMultiSessionPage;
