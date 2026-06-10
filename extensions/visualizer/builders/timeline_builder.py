@@ -49,9 +49,12 @@ class TimelineBuilder:
         # Sort timeline by start time
         viz.timeline.sort(key=lambda b: b.start_time)
 
-        # Compute stats
+        # Compute stats — pass the pre-enriched ``viz.stats`` as a base so
+        # cost_usd / context_tokens populated by ``_enrich_from_snapshot``
+        # survive the recomputation. Without this, the enrichment is
+        # silently wiped every time.
         from .stats_builder import StatsBuilder
-        viz.stats = StatsBuilder().build(viz.timeline)
+        viz.stats = StatsBuilder().build(viz.timeline, base=viz.stats)
 
         # Detect anomalies
         from .anomaly_builder import AnomalyBuilder

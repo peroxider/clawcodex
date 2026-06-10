@@ -145,23 +145,41 @@ function renderGanttBar(params, api) {
 }
 
 function renderStats(stats) {
-    const el = document.getElementById('stats-content');
-    if (!el || !stats) return;
+    if (!stats) {
+        console.warn('renderStats called with no stats');
+        return;
+    }
 
+    // The visible stats bar (rendered by stats_bar.html container mode)
+    // uses one #stat-* element per field. Populate each in place so the
+    // "—" placeholders get replaced with real numbers.
+    const fields = {
+        'stat-total-ops':     stats.total_ops ?? 0,
+        'stat-avg-duration':  VizUtils.formatDuration(stats.avg_duration_ms ?? 0),
+        'stat-max-concurrent': stats.max_concurrent ?? 0,
+        'stat-total-duration': VizUtils.formatDuration(stats.total_duration_ms ?? 0),
+        'stat-tokens':        VizUtils.formatTokens(stats.context_tokens ?? 0),
+        'stat-cost':          `$${(stats.cost_usd ?? 0).toFixed(4)}`,
+    };
+    for (const [id, value] of Object.entries(fields)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(value);
+    }
+
+    // Optional type breakdown — append to a dedicated element if present,
+    // otherwise show in the hidden #stats-content target for backward compat.
     const byTypeEntries = Object.entries(stats.by_type || {});
-    const typeBreakdown = byTypeEntries.map(([k, v]) =>
-        `<span>${k}: <strong>${v}</strong></span>`
-    ).join(' · ');
-
-    el.innerHTML = `
-        <div class="stat-row"><span class="stat-label">Total Operations</span><span class="stat-value">${stats.total_ops}</span></div>
-        <div class="stat-row"><span class="stat-label">Avg Duration</span><span class="stat-value">${VizUtils.formatDuration(stats.avg_duration_ms)}</span></div>
-        <div class="stat-row"><span class="stat-label">Total Duration</span><span class="stat-value">${VizUtils.formatDuration(stats.total_duration_ms)}</span></div>
-        <div class="stat-row"><span class="stat-label">Max Concurrent</span><span class="stat-value">${stats.max_concurrent}</span></div>
-        <div class="stat-row"><span class="stat-label">Context Tokens</span><span class="stat-value">${VizUtils.formatTokens(stats.context_tokens)}</span></div>
-        ${stats.cost_usd ? `<div class="stat-row"><span class="stat-label">Cost</span><span class="stat-value">$${stats.cost_usd.toFixed(4)}</span></div>` : ''}
-        ${typeBreakdown ? `<div style="margin-top:8px;font-size:12px;color:#a0a0b0">${typeBreakdown}</div>` : ''}
-    `;
+    if (byTypeEntries.length > 0) {
+        const typeBreakdown = byTypeEntries.map(([k, v]) =>
+            `<span>${k}: <strong>${v}</strong></span>`
+        ).join(' · ');
+        const breakdownEl = document.getElementById('stats-type-breakdown')
+            || document.getElementById('stats-content');
+        if (breakdownEl) {
+            breakdownEl.innerHTML =
+                `<div style="margin-top:8px;font-size:12px;color:#a0a0b0">${typeBreakdown}</div>`;
+        }
+    }
 }
 
 function renderAnomalies(anomalies) {

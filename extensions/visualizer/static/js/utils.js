@@ -14,13 +14,21 @@ const VizUtils = {
 
     /**
      * Format duration in ms to human-readable string.
+     *
+     * Precision:
+      *   < 1s     -> one decimal place (e.g. "21.6ms")
+      *   < 1min   -> one decimal place in seconds
+      *   < 1h     -> one decimal place in minutes
+      *   else     -> one decimal place in hours
      */
     formatDuration(ms) {
-        if (!ms || ms === 0) return '0ms';
-        if (ms < 1000) return `${ms}ms`;
-        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-        if (ms < 3600000) return `${(ms / 60000).toFixed(1)}min`;
-        return `${(ms / 3600000).toFixed(1)}h`;
+        if (ms == null || ms === 0) return '0ms';
+        const n = Number(ms);
+        if (!Number.isFinite(n)) return '—';
+        if (Math.abs(n) < 1000) return `${n.toFixed(1)}ms`;
+        if (Math.abs(n) < 60000) return `${(n / 1000).toFixed(1)}s`;
+        if (Math.abs(n) < 3600000) return `${(n / 60000).toFixed(1)}min`;
+        return `${(n / 3600000).toFixed(1)}h`;
     },
 
     /**

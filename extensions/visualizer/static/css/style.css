@@ -138,6 +138,10 @@ body {
 .stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
 .stat-label { color: var(--text-secondary); }
 .stat-value { font-weight: 600; }
+/* Visible stats bar in session detail — label and value as two flex children. */
+.stats-bar { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 10px 14px; }
+.stats-bar .stat-item { display: inline-flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.stats-bar .stat-item .stat-value { color: var(--text-primary); }
 
 /* Anomaly items */
 .anomaly-item {
