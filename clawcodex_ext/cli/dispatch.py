@@ -238,7 +238,20 @@ def run_cli(argv: list[str] | None = None) -> int:
         resume_session_at=_parse_resume_at(getattr(args, 'resume_session_at', None)),
         verbose=getattr(args, 'verbose', False),
     )
-    ctx = RuntimeContext.build(runtime_opts)
+    try:
+        ctx = RuntimeContext.build(runtime_opts)
+    except RuntimeError as exc:
+        # Configuration errors (missing API key, no provider selected, etc.)
+        # are not programmer errors — surface a clean warning instead of a
+        # traceback so the user knows exactly how to recover.
+        message = str(exc).strip() or "Provider configuration is missing."
+        print(f"warning: {message}", file=sys.stderr)
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            print(
+                "hint: run `clawcodex login` to configure credentials interactively.",
+                file=sys.stderr,
+            )
+        return 1
 
     # ---- Agent type resolution: --agent flag or auto-detect ----
     _resolve_startup_agent(args, ctx)
