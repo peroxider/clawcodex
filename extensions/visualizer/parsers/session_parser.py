@@ -27,8 +27,9 @@ _RUNNING_RECENCY_SECONDS = 300
 class SessionMetadataParser:
     """Parse session metadata from SessionStorage directories."""
 
-    def __init__(self, sessions_dir: Path | None = None) -> None:
+    def __init__(self, sessions_dir: Path | None = None, reports_dir: Path | None = None) -> None:
         self.sessions_dir = sessions_dir or (Path.home() / ".clawcodex" / "sessions")
+        self.reports_dir = reports_dir or (self.sessions_dir.parent / ".reports")
 
     def parse(self, session_id: str) -> SessionVizData | None:
         """Parse a single session directory into SessionVizData."""
@@ -54,6 +55,20 @@ class SessionMetadataParser:
         last_updated = meta.get("last_updated", start_time)
         duration_ms = int((last_updated - start_time) * 1000) if last_updated > start_time else 0
 
+        # Backfill start_time from the transcript when metadata is clock-skewed.
+        # Common when the agent loop creates metadata at session start but the
+        # first user message has an earlier wall-clock timestamp (e.g. resume
+        # paths, batch imports, or test fixtures). Without this, the
+        # waterfall's ``rel()`` clamps every bar to x=0, collapsing the
+        # chart onto a single pixel. See git blame for screenshot repro
+        # (session 02cba64e-… : start_time 15:19:31 vs transcript 15:16:48).
+        if transcript_path.exists():
+            transcript_min_ts = self._transcript_min_timestamp(transcript_path)
+            if transcript_min_ts and (start_time <= 0 or transcript_min_ts < start_time):
+                anchor_end = last_updated if last_updated and last_updated > transcript_min_ts else transcript_min_ts
+                duration_ms = max(0, int((anchor_end - transcript_min_ts) * 1000))
+                start_time = transcript_min_ts
+
         viz = SessionVizData(
             session_id=session_id,
             title=meta.get("title", "") or session_id[:8],
@@ -76,6 +91,8 @@ class SessionMetadataParser:
         self._enrich_from_snapshot(viz, snapshot_path)
         # Try to enrich from RunReport JSON in reports dir
         self._enrich_from_report(viz, session_id)
+        # F-96-E: Enrich from orchestrator state journal (issue_id, verification_status)
+        self._enrich_from_state_journal(viz)
 
         return viz
 
@@ -132,11 +149,14 @@ class SessionMetadataParser:
             return "running"
         if not transcript_path.exists():
             return "unknown"
-        start = meta.get("start_time", 0)
-        last = last_updated or start
-        if last > start + 5:  # at least 5 seconds of activity
-            return "completed"
-        return "running"
+        # Stale session with a transcript: the agent is done. Covers
+        # both long sessions and short ones that died fast — neither
+        # should be reported as "running" once the recency window
+        # has passed. (The old "last < start + 5" branch returned
+        # "running" and mis-classified sessions like
+        # run-01-20260608... that hit a 429 rate limit 27 ms after
+        # start, leaving last_updated ≈ start_time.)
+        return "completed"
 
     def _enrich_from_snapshot(self, viz: SessionVizData, snapshot_path: Path) -> None:
         """Enrich viz data from the F-49 .json snapshot."""
@@ -180,3 +200,88 @@ class SessionMetadataParser:
                 viz.end_summary = data.get("session_end_summary", "")
             except Exception as e:
                 logger.debug("Report enrich failed for %s: %s", session_id, e)
+
+    def _enrich_from_state_journal(self, viz: SessionVizData) -> None:
+        """F-96-E: Enrich session viz data from orchestrator state journal.
+
+        Scans ``.reports/run_*/state_journal.ndjson`` for a ``session_ref``
+        event matching this session_id, then pulls the associated
+        ``issue_id`` and ``verification_status``.
+        """
+        if not self.reports_dir.exists():
+            return
+        for run_dir in sorted(self.reports_dir.iterdir()):
+            if not run_dir.is_dir() or not run_dir.name.startswith("run_"):
+                continue
+            journal = run_dir / "state_journal.ndjson"
+            if not journal.exists():
+                continue
+            try:
+                events: list[dict[str, Any]] = []
+                with open(journal, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                events.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
+                # Find session_ref matching this session_id
+                issue_id = ""
+                for ev in events:
+                    if ev.get("type") == "session_ref" and ev.get("session_id") == viz.session_id:
+                        issue_id = ev.get("issue_id", "")
+                        break
+                if issue_id:
+                    viz.issue_id = str(issue_id)
+                    # Look for verification event for this issue
+                    for ev in events:
+                        if ev.get("type") == "verification" and str(ev.get("issue_id", "")) == issue_id:
+                            viz.verification_status = ev.get("verification_status", "")
+                            break
+            except Exception as e:
+                logger.debug("State journal enrich failed for %s: %s", viz.session_id, e)
+
+    @staticmethod
+    def _transcript_min_timestamp(transcript_path: Path) -> float:
+        """Return the smallest parseable timestamp across the transcript.
+
+        Used to backfill ``start_time`` when metadata is clock-skewed.
+        Supports both numeric (``_timestamp`` / ``timestamp``) and ISO 8601
+        string forms; lines without a parseable timestamp are skipped.
+        Returns 0.0 when no usable timestamp is found.
+        """
+        from datetime import datetime
+
+        def _coerce(value: Any) -> float:
+            if value is None:
+                return 0.0
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str) and value:
+                try:
+                    return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    return 0.0
+            return 0.0
+
+        best = float("inf")
+        try:
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if not isinstance(entry, dict):
+                        continue
+                    ts = _coerce(entry.get("_timestamp")) or _coerce(entry.get("timestamp"))
+                    if 0 < ts < best:
+                        best = ts
+        except OSError as e:
+            logger.debug("Could not read transcript %s: %s", transcript_path, e)
+            return 0.0
+        return 0.0 if best == float("inf") else best

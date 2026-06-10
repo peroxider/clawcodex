@@ -25,6 +25,8 @@
     <div class="session-meta" id="session-meta">
         Loading...
     </div>
+    {# F-96-E: Orchestrator issue association (hidden until populated by JS) #}
+    <div class="session-orch-info" id="session-orch-info" style="display:none;"></div>
 </div>
 
 {# Include stats bar (container-only, rendered by gantt.js) #}
@@ -81,7 +83,13 @@
             waterfall.style.display = '';
             gantt.style.display = 'none';
             if (!window.__waterfallLoaded) {
-                initMultiSessionView([SESSION_ID]);
+                // Single-session waterfall: render into the page's own chart div,
+                // skip the dedicated multi-page legend bar (the session page
+                // already shows counts via session-meta + stats_bar).
+                initMultiSessionView([SESSION_ID], {
+                    chartContainerId: 'waterfall-chart',
+                    legendContainerId: null,
+                });
                 window.__waterfallLoaded = true;
             }
         } else {
@@ -92,6 +100,13 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         switchView(initialView);
+        // Fetch stats + anomalies regardless of which view is active.
+        // gantt.js's loadSessionDetail() populates #stats-bar and
+        // #anomaly-content; it doesn't depend on the gantt chart being
+        // visible, so we always call it.
+        if (typeof window.loadSessionDetail === 'function') {
+            window.loadSessionDetail(SESSION_ID);
+        }
         connectLiveTail(SESSION_ID);
     });
 </script>

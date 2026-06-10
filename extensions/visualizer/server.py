@@ -33,7 +33,7 @@ from .builders.anomaly_builder import AnomalyBuilder
 from .builders.timeline_builder import TimelineBuilder
 from .builders.multi_session_view_builder import MultiSessionViewBuilder
 from .import_router import create_import_router
-from .ws import create_ws_router
+from .ws import create_ws_router, create_orch_ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,10 @@ class _AppState:
         self.sessions_dir = sessions_dir or (Path.home() / ".clawcodex" / "sessions")
         self.workspaces_file = workspaces_file or (Path.home() / ".clawcodex" / "workspaces.json")
         self.allow_import = allow_import
-        self.timeline_builder = TimelineBuilder(sessions_dir=self.sessions_dir)
+        self.timeline_builder = TimelineBuilder(
+            sessions_dir=self.sessions_dir,
+            reports_dir=self.sessions_dir.parent / ".reports" if self.sessions_dir else None,
+        )
         self.gantt_builder = GanttDataBuilder()
         self.comparison_builder = ComparisonBuilder()
         self.export_builder = ExportBuilder()
@@ -160,6 +163,7 @@ def create_app(
 
     # Routers
     app.include_router(create_ws_router(), prefix="/api/viz")
+    app.include_router(create_orch_ws_router(), prefix="/api/viz")
     if allow_import:
         app.include_router(create_import_router(), prefix="/api/viz")
 
@@ -399,6 +403,92 @@ def create_app(
         app.state.viz._save_share_links()
         return {"status": "deleted"}
 
+    # --- F-96: Orchestrator Real-time Dashboard API -----------------------
+
+    @app.get("/api/viz/orchestrator/runs", tags=["orchestrator"])
+    async def list_orchestrator_runs():
+        """List all orchestrator runs with state journals (F-96-C)."""
+        from .parsers.orchestrator_state_parser import OrchestratorStateParser
+        parser = OrchestratorStateParser(
+            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
+            if app.state.viz.sessions_dir
+            else None,
+        )
+        return parser.list_runs()
+
+    @app.get("/api/viz/orchestrator/state", tags=["orchestrator"])
+    async def get_orchestrator_state():
+        """Get current orchestrator dashboard snapshot (F-96-C).
+
+        Returns the latest run's aggregated state: all issues,
+        their phases, verification results, and PR links.
+        """
+        from .parsers.orchestrator_state_parser import OrchestratorStateParser
+        parser = OrchestratorStateParser(
+            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
+            if app.state.viz.sessions_dir
+            else None,
+        )
+        return parser.get_current_snapshot()
+
+    @app.get("/api/viz/orchestrator/runs/{run_id}", tags=["orchestrator"])
+    async def get_orchestrator_run(run_id: str):
+        """Get detailed state for a specific orchestrator run (F-96-C)."""
+        from .parsers.orchestrator_state_parser import OrchestratorStateParser
+        parser = OrchestratorStateParser(
+            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
+            if app.state.viz.sessions_dir
+            else None,
+        )
+        state = parser.parse_run(run_id)
+        if state is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return {
+            "run_id": state.run_id,
+            "workflow": state.workflow,
+            "started_at": state.started_at,
+            "event_count": state.event_count,
+            "issues": {
+                iid: {
+                    "issue_id": iss.issue_id,
+                    "status": iss.status,
+                    "current_phase": iss.current_phase,
+                    "progress": iss.progress,
+                    "verification_status": iss.verification_status,
+                    "pr_url": iss.pr_url,
+                    "pr_number": iss.pr_number,
+                    "session_path": iss.session_path,
+                    "error": iss.error,
+                    "started_at": iss.started_at,
+                    "last_updated": iss.last_updated,
+                    "event_count": len(iss.events),
+                }
+                for iid, iss in state.issues.items()
+            },
+        }
+
+    @app.get("/api/viz/orchestrator/runs/{run_id}/issues/{issue_id}/timeline", tags=["orchestrator"])
+    async def get_issue_timeline(run_id: str, issue_id: str):
+        """Get the event timeline for a specific issue in a run (F-96-C)."""
+        from .parsers.orchestrator_state_parser import OrchestratorStateParser
+        parser = OrchestratorStateParser(
+            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
+            if app.state.viz.sessions_dir
+            else None,
+        )
+        return parser.get_issue_timeline(run_id, issue_id)
+
+    @app.get("/viz/orchestrator", response_class=HTMLResponse, tags=["frontend"])
+    async def orchestrator_dashboard(request: Request):
+        """F-96-D: Orchestrator real-time dashboard page."""
+        templates = getattr(app.state, "templates", None)
+        if templates is None:
+            return HTMLResponse("<h1>Templates not found</h1>", status_code=500)
+        return templates.TemplateResponse(
+            "orchestrator_dashboard.html",
+            {"request": request},
+        )
+
     # --- Frontend (Jinja2 SSR) -------------------------------------------
 
     @app.get("/", response_class=HTMLResponse, tags=["frontend"])
@@ -475,31 +565,33 @@ def _list_workspaces(app: FastAPI) -> list[WorkspaceInfo]:
         except Exception:
             logger.debug("Failed to parse workspaces.json", exc_info=True)
 
-    # Fallback: scan sessions_dir for distinct workspace prefixes
-    workspaces: dict[str, WorkspaceInfo] = {}
-    if state.sessions_dir.is_dir():
-        for session_dir in state.sessions_dir.iterdir():
-            if not session_dir.is_dir():
-                continue
-            # Use parent path as workspace identifier
-            ws_name = session_dir.name.split("-")[0] if "-" in session_dir.name else "default"
-            if ws_name not in workspaces:
-                workspaces[ws_name] = WorkspaceInfo(
-                    id=ws_name,
-                    name=ws_name,
-                    path=str(state.sessions_dir),
-                    session_count=0,
-                    last_updated=0.0,
-                )
-            workspaces[ws_name].session_count += 1
-            try:
-                mtime = session_dir.stat().st_mtime
-                if mtime > workspaces[ws_name].last_updated:
-                    workspaces[ws_name].last_updated = mtime
-            except OSError:
-                pass
-
-    return list(workspaces.values())
+    # Fallback: no workspaces.json registered. Aggregate every session
+    # under a single "default" workspace. Previously this code synthesized
+    # one fake workspace per UUID prefix (e.g. "91673dac" from
+    # "91673dac-dead-beef-..."), which produced meaningless tabs in the
+    # UI and could not be filtered because individual sessions don't
+    # carry a workspace_id.
+    if not state.sessions_dir.is_dir():
+        return []
+    total = 0
+    last_updated = 0.0
+    for session_dir in state.sessions_dir.iterdir():
+        if not session_dir.is_dir():
+            continue
+        total += 1
+        try:
+            mtime = session_dir.stat().st_mtime
+            if mtime > last_updated:
+                last_updated = mtime
+        except OSError:
+            pass
+    return [WorkspaceInfo(
+        id="default",
+        name="All sessions",
+        path=str(state.sessions_dir),
+        session_count=total,
+        last_updated=last_updated,
+    )]
 
 
 def _list_sessions_in_workspace(app: FastAPI, workspace_id: str) -> list[SessionVizData]:
@@ -542,6 +634,9 @@ def _session_summary(viz: SessionVizData) -> dict[str, Any]:
         "turn_count": viz.turn_count,
         "tool_count": viz.tool_count,
         "tags": viz.tags,
+        # F-96-E: Orchestrator issue association
+        "issue_id": viz.issue_id or None,
+        "verification_status": viz.verification_status or None,
     }
 
 

@@ -1,0 +1,30 @@
+{% if issue %}
+{% set sid = issue.get('session_id', '') %}
+{% set iid = issue.get('issue_id', '') %}
+<tr class="orch-issue-row"
+    {% if sid %}data-session-id="{{ sid }}"{% endif %}
+    data-issue-id="{{ iid }}"
+    onclick="loadIssueTimeline('{{ iid }}')">
+    <td>
+        <strong>{{ iid }}</strong>
+        {% if sid %}
+        <a href="/session/{{ sid }}" class="session-link" title="View session detail"
+           onclick="event.stopPropagation();">📄</a>
+        {% endif %}
+    </td>
+    <td><span class="badge badge-{{ issue.status or 'unknown' }}">{{ issue.status or 'unknown' }}</span></td>
+    <td>{% if issue.current_phase %}<span class="phase-tag">{{ issue.current_phase }}</span>{% else %}—{% endif %}</td>
+    <td>
+        {% if issue.progress is not none %}
+        {% set pct = (issue.progress * 100) | round %}
+        {% set color = '#22c55e' if pct >= 100 else '#3b82f6' if pct >= 50 else '#f59e0b' %}
+        <span class="progress-bar-wrap"><span class="progress-bar-fill" style="width:{{ pct }}%;background:{{ color }}"></span></span>
+        <span class="progress-label">{{ pct }}%</span>
+        {% else %}—{% endif %}
+    </td>
+    <td>{{ issue.verification_status or '—' }}</td>
+    <td>{% if issue.pr_url %}<a class="pr-link" href="{{ issue.pr_url }}" target="_blank">#{{ issue.pr_number or 'PR' }}</a>{% else %}—{% endif %}</td>
+    <td>{% if issue.error %}<span class="error-msg" title="{{ issue.error }}">{{ issue.error[:60] }}{% if issue.error|length > 60 %}…{% endif %}</span>{% else %}—{% endif %}</td>
+    <td style="font-size:11px;color:var(--text-secondary)">{{ issue.last_updated or '' }}</td>
+</tr>
+{% endif %}

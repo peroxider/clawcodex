@@ -108,7 +108,7 @@ AGENT_INPUT_SCHEMA: dict[str, Any] = {
             ),
         },
     },
-    "required": ["description", "prompt"],
+    "required": ["prompt"],
 }
 
 

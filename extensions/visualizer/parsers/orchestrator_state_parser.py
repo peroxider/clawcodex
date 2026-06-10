@@ -1,0 +1,253 @@
+"""Orchestrator State Journal parser for the Visualizer (F-96-C).
+
+Reads ``{workspace}/.reports/run_*/state_journal.ndjson`` files produced by
+the Orchestrator's :class:`StateJournalWriter` and produces structured
+state snapshots for the dashboard API and WebSocket push.
+
+Design principle: the parser lives in the Visualizer process and has
+zero imports from the orchestrator package.  All data flows through
+NDJSON files on disk — the only shared contract is the event schema.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class IssueState:
+    """Aggregated state of one issue from the journal."""
+
+    issue_id: str = ""
+    status: str = "unknown"
+    current_phase: str = ""
+    progress: float | None = None
+    verification_status: str = ""
+    pr_url: str = ""
+    pr_number: str | None = None
+    session_path: str = ""
+    session_id: str = ""
+    error: str = ""
+    started_at: str = ""
+    last_updated: str = ""
+    events: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class RunState:
+    """Aggregated state of one orchestrator run."""
+
+    run_id: str = ""
+    workflow: str = ""
+    started_at: str = ""
+    issues: dict[str, IssueState] = field(default_factory=dict)
+    event_count: int = 0
+
+
+class OrchestratorStateParser:
+    """Parse state_journal.ndjson files into structured RunState objects.
+
+    Parameters
+    ----------
+    reports_dir:
+        Path to the ``.reports`` directory (e.g. ``{workspace}/.reports``).
+    """
+
+    def __init__(self, reports_dir: Path | None = None) -> None:
+        self.reports_dir = reports_dir or (Path.cwd() / ".reports")
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def list_runs(self) -> list[dict[str, Any]]:
+        """Return a summary list of all runs in the reports directory."""
+        runs: list[dict[str, Any]] = []
+        if not self.reports_dir.exists():
+            return runs
+        for run_dir in sorted(self.reports_dir.iterdir()):
+            if not run_dir.is_dir() or not run_dir.name.startswith("run_"):
+                continue
+            journal = run_dir / "state_journal.ndjson"
+            runs.append({
+                "run_id": run_dir.name,
+                "path": str(run_dir),
+                "journal_exists": journal.exists(),
+                "event_count": self._count_ndjson_lines(journal) if journal.exists() else 0,
+            })
+        return runs
+
+    def parse_run(self, run_id: str) -> RunState | None:
+        """Parse a single run's state journal into a RunState."""
+        run_dir = self.reports_dir / run_id
+        if not run_dir.is_dir():
+            return None
+        journal = run_dir / "state_journal.ndjson"
+        if not journal.exists():
+            return RunState(run_id=run_id)
+
+        state = RunState(run_id=run_id)
+        events = self._read_ndjson(journal)
+        state.event_count = len(events)
+        for event in events:
+            self._apply_event(state, event)
+        return state
+
+    def parse_latest_run(self) -> RunState | None:
+        """Parse the most recent run's state journal."""
+        runs = self.list_runs()
+        if not runs:
+            return None
+        # Sort by name (run_YYYYMMDD_HHMMSS) — latest last
+        latest = runs[-1]
+        return self.parse_run(latest["run_id"])
+
+    def get_issue_timeline(
+        self, run_id: str, issue_id: str
+    ) -> list[dict[str, Any]]:
+        """Return the timeline of events for a specific issue in a run."""
+        run_state = self.parse_run(run_id)
+        if run_state is None:
+            return []
+        issue = run_state.issues.get(issue_id)
+        if issue is None:
+            return []
+        return issue.events
+
+    def get_current_snapshot(self) -> dict[str, Any]:
+        """Return a dashboard-friendly snapshot of the latest run state.
+
+        This is the primary API for the ``/api/viz/orchestrator/state`` endpoint.
+        """
+        run_state = self.parse_latest_run()
+        if run_state is None:
+            return {"status": "no_runs", "issues": [], "run_id": None}
+
+        issues_list = []
+        for issue_id, issue in run_state.issues.items():
+            issues_list.append({
+                "issue_id": issue_id,
+                "status": issue.status,
+                "current_phase": issue.current_phase,
+                "progress": issue.progress,
+                "verification_status": issue.verification_status,
+                "pr_url": issue.pr_url,
+                "pr_number": issue.pr_number,
+                "session_path": issue.session_path,
+                "session_id": issue.session_id,
+                "error": issue.error,
+                "started_at": issue.started_at,
+                "last_updated": issue.last_updated,
+            })
+
+        return {
+            "status": "active",
+            "run_id": run_state.run_id,
+            "workflow": run_state.workflow,
+            "started_at": run_state.started_at,
+            "issue_count": len(run_state.issues),
+            "issues": issues_list,
+        }
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _read_ndjson(path: Path) -> list[dict[str, Any]]:
+        """Read an NDJSON file into a list of dicts."""
+        events: list[dict[str, Any]] = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+        except FileNotFoundError:
+            pass
+        return events
+
+    @staticmethod
+    def _count_ndjson_lines(path: Path) -> int:
+        """Count non-empty lines in an NDJSON file."""
+        try:
+            count = 0
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip():
+                        count += 1
+            return count
+        except Exception:
+            return 0
+
+    @staticmethod
+    def _apply_event(state: RunState, event: dict[str, Any]) -> None:
+        """Fold one NDJSON event into the run state."""
+        event_type = event.get("type", "")
+        issue_id = event.get("issue_id", "")
+        ts = event.get("timestamp", "")
+
+        # Run-level events
+        if event_type == "orchestrator_start":
+            state.workflow = event.get("workflow", "")
+            state.started_at = ts
+            return
+
+        # Issue-level events — ensure the IssueState exists
+        if issue_id and issue_id not in state.issues:
+            state.issues[issue_id] = IssueState(issue_id=issue_id, started_at=ts)
+
+        if issue_id:
+            issue = state.issues[issue_id]
+            issue.last_updated = ts
+            issue.events.append(event)
+
+        if event_type == "issue_status":
+            issue.status = event.get("status", issue.status)
+            issue.started_at = issue.started_at or ts
+
+        elif event_type == "phase":
+            if issue_id:
+                issue.current_phase = event.get("phase", "")
+                if event.get("progress") is not None:
+                    issue.progress = event["progress"]
+
+        elif event_type == "verification":
+            if issue_id:
+                issue.verification_status = event.get("verification_status", "")
+
+        elif event_type == "pr_status":
+            if issue_id:
+                issue.pr_url = event.get("pr_url", "")
+                issue.pr_number = event.get("pr_number")
+
+        elif event_type == "session_ref":
+            if issue_id:
+                issue.session_path = event.get("session_path", "")
+                issue.session_id = event.get("session_id", "")
+
+        elif event_type == "error":
+            if issue_id:
+                issue.error = event.get("error", "")
+                issue.status = "error"
+
+        elif event_type == "complete":
+            if issue_id:
+                overall = event.get("overall_status", "completed")
+                if overall in ("completed", "success"):
+                    issue.status = "completed"
+                elif overall in ("failed", "error"):
+                    issue.status = "failed"
+                else:
+                    issue.status = overall

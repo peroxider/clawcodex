@@ -150,6 +150,15 @@ class Orchestrator:
         # per-session :class:`ToolContextProgressSink` writes into the
         # same ``ToolContext.tasks[id].metadata.progress_stages`` dict.
 
+        # F-96-A: StateJournalWriter for real-time dashboard integration.
+        # Creates ``{workspace}/.reports/run_{run_id}/state_journal.ndjson``
+        # that the Visualizer can consume without importing orchestrator code.
+        # The writer is ``None`` until the first issue launches; it is then
+        # bound to that run's directory.  All concurrent issues within one
+        # orchestrator invocation share the same journal file (distinguished
+        # by the ``issue_id`` / ``run_id`` fields in each NDJSON line).
+        self._state_journal_writer: "StateJournalWriter | None" = None
+
     def _build_session_sink(self, task_id: str) -> Any:
         """Build a fresh :class:`CompositeProgressSink` for one session.
 
@@ -178,7 +187,17 @@ class Orchestrator:
                 self.workflow.agent.fallback_to_phase_step
             ),
         )
-        return CompositeProgressSink([inner])
+        sinks = [inner]
+
+        # F-96-B: attach StateJournalSink so progress events are
+        # automatically written to state_journal.ndjson.
+        if self._state_journal_writer is not None:
+            from .state_journal_sink import StateJournalSink
+            sinks.append(
+                StateJournalSink(writer=self._state_journal_writer, task_id=task_id)
+            )
+
+        return CompositeProgressSink(sinks)
 
     def _validate_workspace_strategy(self) -> None:
         if self.workflow.workspace.strategy != "sequential":
@@ -1089,6 +1108,33 @@ class Orchestrator:
             self._state.claimed.discard(issue.id)
             return
 
+        # F-96-A: lazily initialise the shared StateJournalWriter on first
+        # issue launch.  The run_id is derived from the orchestrator start
+        # time so all issues within one invocation share the same journal.
+        if self._state_journal_writer is None:
+            try:
+                from .state_journal import StateJournalWriter
+                import datetime
+                run_id = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
+                run_dir = self._workspace_root / ".reports" / run_id
+                self._state_journal_writer = StateJournalWriter(
+                    run_dir=run_dir, run_id=run_id,
+                )
+                self._state_journal_writer.write_event({
+                    "type": "orchestrator_start",
+                    "workflow": self._workflow_path,
+                })
+            except Exception as exc:
+                logger.debug("StateJournalWriter init failed: %s", exc)
+
+        # F-96-A: emit issue_status=claimed to the journal
+        if self._state_journal_writer is not None:
+            self._state_journal_writer.write_issue_status(
+                issue_id=issue.id or "",
+                status="claimed",
+                message=f"Claimed issue {issue.identifier or issue.id}",
+            )
+
         # F-39 Sub-B: if the registry carries a RETRY intent for this
         # issue, close the existing remote PR (best-effort) and reset
         # the local record so the new run starts from a clean slate.
@@ -1514,6 +1560,64 @@ class Orchestrator:
                 if workspace_dirty is not None:
                     session.run_workspace_dirty = workspace_dirty
                 self._update_run_diagnostics(session)
+
+                # F-96-A: emit issue_status / verification / pr_status / complete
+                # events to the state journal so the Visualizer can track
+                # the orchestrator's state machine in real time.
+                if self._state_journal_writer is not None:
+                    _jid = session.issue.id or ""
+                    try:
+                        # Terminal issue status
+                        if session.issue.id in self._state.pending_review:
+                            self._state_journal_writer.write_issue_status(
+                                issue_id=_jid, status="pending_review",
+                                message="Awaiting human review",
+                            )
+                        elif session.status == "completed":
+                            self._state_journal_writer.write_issue_status(
+                                issue_id=_jid, status="completed",
+                            )
+                            # Verification
+                            vs = getattr(session, "verification_status", None)
+                            if vs:
+                                self._state_journal_writer.write_verification(
+                                    issue_id=_jid,
+                                    verification_status=vs,
+                                    result=getattr(session, "verification_output", "") or "",
+                                )
+                            # PR status
+                            record = self._registry.get(_jid)
+                            if record and record.pr_url:
+                                self._state_journal_writer.write_pr_status(
+                                    issue_id=_jid,
+                                    pr_url=record.pr_url,
+                                    pr_number=str(record.pr_number) if record.pr_number else None,
+                                )
+                        elif session.status in (
+                            "verification_failed",
+                            "agent_timeout",
+                            "max_turns_exceeded",
+                            "rate_limit_circuit_open",
+                            "stagnation",
+                            "loop_detected",
+                            "cancelled",
+                            "failed",
+                            "before_run_failed",
+                        ):
+                            self._state_journal_writer.write_error(
+                                issue_id=_jid,
+                                error=f"{session.status}: {getattr(session, 'verification_output', '') or getattr(session, 'session_end_summary', '') or ''}",
+                            )
+                        # Session ref (link to transcript)
+                        session_path = getattr(session, "session_path", None) or getattr(session, "workspace", "")
+                        if session_path:
+                            self._state_journal_writer.write_session_ref(
+                                issue_id=_jid,
+                                session_id=getattr(session, "run_id", _jid),
+                                session_path=str(session_path),
+                            )
+                    except Exception:
+                        pass
 
                 if session.issue.id in self._state.running:
                     del self._state.running[session.issue.id]
