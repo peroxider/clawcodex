@@ -1330,12 +1330,12 @@ CronTask due
 
 > F-21、F-23、F-28、F-32 的详细设计见 FEATURE_PLAN 相应章节；会话恢复增强详见本文 §6 详细章节。
 
-## 八、Multi-Session 可视化分析平台（F-91~F-95）
+## 八、Multi-Session 可视化分析平台（F-91~F-96）
 
 > 本节跟踪第 8 章 Multi-Session 可视化分析平台实施进度。
 > 独立 FastAPI app + Jinja2 + ECharts CDN，零 npm 依赖，全进 wheel。
 
-**状态**: ✅ 已完成 | **优先级**: P0 | **测试**: 110/110 通过
+**状态**: ✅ 已完成（F-96: 📋 设计完成） | **优先级**: P0 | **测试**: 110/110 通过
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
@@ -1426,6 +1426,49 @@ tests/test_visualizer/           # 7 个测试文件，110 个测试
 3. **增量流式解析**：`transcript_parser.py` 用 `file.seek` + `readlines`
 4. **ECharts progressive: 5000**：大规模 session 降级策略
 5. **分享链接磁盘持久化**：`~/.clawcodex/viz_shares.json`，启动加载，突变保存
+
+
+
+### F-96: Orchestrator 实时看板接入（State Journal）
+
+**状态**: 📋 设计完成 | **优先级**: P0 | **预计工作量**: 2 周
+
+通过共享 NDJSON 文件（State Journal）打通 orchestrator → visualizer 链路，实现在 visualizer Web UI 上实时查看 orchestrator 处理 issue 的状态、Agent 进度、verification 结果和会话记录。
+
+#### 数据通道
+
+```
+orchestrator 侧                         visualizer 侧
+AgentRunner._run_iteration()
+  └→ StateJournalWriter                ┌→ GET /api/viz/orchestrator/state
+       .write_event()                  │→ WS /api/viz/orchestrator/ws/state
+       ┌→ .reports/run_*/              │→ OrchestratorStateParser
+       │   state_journal.ndjson ───────┘      ↓
+       │                              OrchestratorDashboardData
+       │                              ┌→ 看板前端页面
+       │                              └→ session 详情页增强
+```
+
+**文件位置**: `{workspace}/.reports/run_{run_id}/state_journal.ndjson`
+
+#### 子特性
+
+| 编号 | 子特性 | 状态 |
+|:----:|--------|:----:|
+| F-96-A | StateJournalWriter（orchestrator 写入器） | 📋 设计完成 |
+| F-96-B | StateJournalSink（ProgressSink 桥接） | 📋 设计完成 |
+| F-96-C | Visualizer 后端（OrchestratorStateParser + API + WS） | 📋 设计完成 |
+| F-96-D | Visualizer 看板前端页面 | 📋 设计完成 |
+| F-96-E | 现有 session 详情页增强（issue_id / verification） | 📋 设计完成 |
+| F-96-F | 小修（snapshot 路径修复 + metadata 扩展） | 📋 设计完成 |
+
+#### 关键设计决策
+
+1. **共享文件解耦**：NDJSON 文件而非 IPC。orchestrator 和 visualizer 独立进程，共享文件无需修改 IPC 协议。
+2. **WebSocket 推送**：visualizer 通过 watchdog/inotify 监听 NDJSON 变更，通过 WebSocket 推送给前端。
+3. **无依赖方向**：orchestrator 不 import visualizer，visualizer 不 import orchestrator。唯一共享约定是事件格式。
+4. **不修改 SessionMetadata 模型**：issue_id 和 verification 信息通过 state_journal 关联。
+5. **向后兼容**：无 state_journal.ndjson 时，看板页面显示 "no active orchestrator run"。
 
 ## 九、CCB 对标缺口补缺进度
 
