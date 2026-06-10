@@ -11,6 +11,7 @@ def build_default_registry(
     include_user_tools: bool = True,
     provider: "Any | None" = None,
     get_available_mcp_servers: Callable[[], list[str]] | None = None,
+    load_agent_tools: bool = True,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     for tool in ALL_STATIC_TOOLS:
@@ -32,4 +33,16 @@ def build_default_registry(
         )
     )
     registry.register(make_tool_search_tool(registry))
+
+    # Load persisted agent-created tools on startup.
+    if load_agent_tools:
+        try:
+            from clawcodex_ext.tool_system.tools.create_agent_tool import load_persisted_agent_tools
+            from clawcodex_ext.agent.tool_authoring.registry_ext import list_tools
+            load_persisted_agent_tools()
+            for tool in list_tools():
+                registry.register(tool)
+        except ImportError:
+            pass
+
     return registry

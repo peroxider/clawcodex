@@ -67,7 +67,6 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
         description=spec.description,
         aliases=spec.aliases,
         search_hint=" ".join(spec.tags) if spec.tags else None,
-        source=spec.source,
     )
 
 

@@ -136,6 +136,9 @@ class ToolContext:
     #   old terminal holders remain reachable by raw task_id + auto-
     #   resume (WI-7.4).
     agent_name_registry: AgentNameRegistry = field(default_factory=AgentNameRegistry)
+    # Tool registry reference — allows CreateAgentTool to register new tools
+    # into the active registry. Set by build_default_registry and runtime contexts.
+    tool_registry: Any = None
     # Background Bash commands spawned via ``run_in_background: true``.
     # Kept as a deprecated dict-of-dicts compatibility view during the
     # Chunk-B migration cycle; the bash spawn writer now populates

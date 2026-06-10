@@ -156,6 +156,15 @@ def _create_agent_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
         )
 
     add_tool(tool)
+    
+    # Also register to the active ToolRegistry if available via context
+    registry = getattr(context, "tool_registry", None)
+    if registry is not None:
+        try:
+            registry.register(tool)
+        except Exception as exc:
+            logger.warning("Failed to register tool %s to active registry: %s", name, exc)
+    
     try:
         save_spec(spec)
     except Exception as exc:
@@ -165,9 +174,9 @@ def _create_agent_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
         name=CREATE_AGENT_TOOL_NAME,
         output={
             "status": "created",
-            "name": tool.name,
-            "description": tool.description,
-            "call_type": call_type,
+            "name": spec.name,
+            "description": spec.description,
+            "call_type": spec.call_type,
             "message": f"Tool '{name}' created and registered successfully.",
         },
     )
@@ -183,9 +192,9 @@ that wraps it with validated, parameterised calls.
 
 Call types:
   - bash: Execute a whitelisted CLI command. Allowed commands: git, gh, glab, curl, wget, kubectl, docker, npm, pip.
-    Template uses {param} placeholders, e.g. 'glab project view {project_id}'.
+    Template uses {{param}} placeholders, e.g. 'glab project view {{project_id}}'.
   - http: Make an HTTP request. Allowed methods: GET, POST, PUT, DELETE, PATCH.
-    URL and method use {param} placeholders.
+    URL and method use {{param}} placeholders.
   - python: Call a registered function. Available functions: {available}.
 
 Example - creating a git tool:
@@ -194,11 +203,11 @@ Example - creating a git tool:
   "description": "Show git working tree status in porcelain format",
   "input_schema": {{
     "type": "object",
-    "properties": {{"path": {{"type": "string", "description": "Repo path"}}},
+    "properties": {{"path": {{"type": "string", "description": "Repo path"}}}},
     "required": []
   }},
   "call_type": "bash",
-  "call_impl": "git -C {path} status --porcelain",
+  "call_impl": "git -C {{path}} status --porcelain",
   "tags": ["git", "vcs"],
   "aliases": ["git-status"]
 }}
