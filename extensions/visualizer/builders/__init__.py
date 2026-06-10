@@ -7,6 +7,9 @@ from .stats_builder import StatsBuilder
 from .anomaly_builder import AnomalyBuilder
 from .export_builder import ExportBuilder
 from .agent_tree_builder import AgentTreeBuilder
+from .operation_categorizer import OperationCategorizer
+from .agent_tree_layout import AgentTreeLayout
+from .multi_session_view_builder import MultiSessionViewBuilder
 
 __all__ = [
     "GanttDataBuilder",
@@ -16,4 +19,7 @@ __all__ = [
     "AnomalyBuilder",
     "ExportBuilder",
     "AgentTreeBuilder",
+    "OperationCategorizer",
+    "AgentTreeLayout",
+    "MultiSessionViewBuilder",
 ]
