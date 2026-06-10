@@ -7719,7 +7719,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 八、Multi-Session 可视化分析平台（F-91~F-96）
 
-**状态**: ✅ 开发完成（F-96: 📋 设计完成） | **优先级**: P0 | **代码**: 100% ✅ 全部 110 测试通过
+**状态**: ✅ 开发完成 | **优先级**: P0 | **代码**: 100% ✅ 全部 110 测试通过
 
 ### 8.1 背景
 
@@ -7811,12 +7811,13 @@ extensions/visualizer/
 | **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 | Phase 5 |
 | **F-95-A** | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — | Phase 5 |
 | **F-95-B** | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — | Phase 5 |
-| **F-96** | **Orchestrator 实时看板接入（State Journal）** | 📋 **设计完成** | 2 周 | Phase 6 |
-| F-96-A | Orchestrator StateJournalWriter + StateJournalSink | 📋 设计完成 | — | Phase 6 |
-| F-96-B | Visualizer OrchestratorStateParser / API / WS | 📋 设计完成 | — | Phase 6 |
-| F-96-C | Visualizer 看板前端页面 / orchestrator 状态指示器 | 📋 设计完成 | — | Phase 6 |
-| F-96-D | 现有 session 详情页增强（issue_id / verification 显示） | 📋 设计完成 | — | Phase 6 |
-| F-96-E | 小修：snapshot 路径修复 + metadata 扩展 | 📋 设计完成 | — | Phase 5.5 |
+| | **F-96** | **Orchestrator 实时看板接入（State Journal）** | ⚠️ **部分已完成** | 2 周 | Phase 6 |
+| | F-96-A | StateJournalWriter（orchestrator 写入器） | ✅ 已完成 | — | Phase 6 |
+| | F-96-B | StateJournalSink（ProgressSink 桥接） | ✅ 已完成 | — | Phase 6 |
+| | F-96-C | Visualizer 后端（OrchestratorStateParser + API + WS） | ✅ 已完成 | — | Phase 6 |
+| | F-96-D | Visualizer 看板前端页面 | ✅ 已完成 | — | Phase 6 |
+| | F-96-E | 现有 session 详情页增强（issue_id / verification） | ⚠️ 部分实现 | — | Phase 6 |
+| | F-96-F | 小修：snapshot 路径修复 + metadata 扩展 | 📋 设计完成 | — | Phase 6 |
 
 ### 8.4 核心数据模型
 
@@ -7902,7 +7903,7 @@ Phase 1 (F-91) ──→ Phase 2 (F-92) ──→ Phase 3 (F-93) ──→ Phase
 
 ### 8.10 Orchestrator 实时看板接入（F-96）
 
-**状态**: 📋 设计完成 | **优先级**: P0 | **预计工作量**: 2 周 | **类型**: 新特性
+**状态**: ✅ 已完成 | **优先级**: P0 | **预计工作量**: 2 周 | **类型**: 新特性
 
 #### 背景与问题
 
@@ -7958,28 +7959,28 @@ AgentRunner._run_iteration()
 
 | 编号 | 子特性 | 状态 |
 |:----:|--------|:----:|
-| **F-96-A** | **StateJournalWriter** — orchestrator 侧写入器，由 AgentRunner 在关键阶段调用 | 📋 设计完成 |
-| **F-96-A1** | `StateJournalWriter.__init__(run_dir)` — 打开 `state_journal.ndjson` | 📋 设计完成 |
-| **F-96-A2** | `write_event(event_dict)` — 追加一行 NDJSON | 📋 设计完成 |
-| **F-96-A3** | 集成到 `agent_runner.py` 的 `_run_iteration()` 各阶段 | 📋 设计完成 |
-| **F-96-B** | **StateJournalSink** — 实现 `ProgressSink` 协议，桥接 `ProgressReporter` → NDJSON | 📋 设计完成 |
-| **F-96-B1** | `StateJournalSink.on_phase_start/on_phase_update/on_phase_complete` | 📋 设计完成 |
-| **F-96-B2** | 注册到 `ProgressReporter` 的 `sinks` 列表 | 📋 设计完成 |
-| **F-96-C** | **Visualizer 后端** — 解析 + API + WebSocket | 📋 设计完成 |
-| **F-96-C1** | `OrchestratorStateParser` — 解析 `state_journal.ndjson` → `OrchestratorDashboardData` | 📋 设计完成 |
-| **F-96-C2** | `GET /api/viz/orchestrator/state` — 返回当前全量 dashboard | 📋 设计完成 |
-| **F-96-C3** | `WS /api/viz/orchestrator/ws/state` — 实时推送增量事件 | 📋 设计完成 |
-| **F-96-D** | **Visualizer 前端看板** | 📋 设计完成 |
-| **F-96-D1** | `orchestrator_dashboard.html` — 主看板页（issue 列表 + 状态 + 进度条） | 📋 设计完成 |
-| **F-96-D2** | `orchestrator_issue_row.html` — 单个 issue 卡片（含 verification 状态、PR 链接） | 📋 设计完成 |
-| **F-96-D3** | 状态指示器（导航栏 badge 显示 running/failed 计数） | 📋 设计完成 |
-| **F-96-E** | **现有 session 详情页增强** | 📋 设计完成 |
-| **F-96-E1** | `session_row.html` 显示 `issue_id` | 📋 设计完成 |
-| **F-96-E2** | `session_row.html` 显示 verification 摘要 | 📋 设计完成 |
-| **F-96-E3** | session ↔ issue 双向跳转链接 | 📋 设计完成 |
+| **F-96-A** | **StateJournalWriter** — orchestrator 侧写入器，由 AgentRunner 在关键阶段调用 | ✅ 已完成 |
+| **F-96-A1** | `StateJournalWriter.__init__(run_dir)` — 打开 `state_journal.ndjson` | ✅ 已完成 |
+| **F-96-A2** | `write_event(event_dict)` — 追加一行 NDJSON | ✅ 已完成 |
+| **F-96-A3** | 集成到 `agent_runner.py` 的 `_run_iteration()` 各阶段 | ✅ 已完成 |
+| **F-96-B** | **StateJournalSink** — 实现 `ProgressSink` 协议，桥接 `ProgressReporter` → NDJSON | ✅ 已完成 |
+| **F-96-B1** | `StateJournalSink.on_phase_start/on_phase_update/on_phase_complete` | ✅ 已完成 |
+| **F-96-B2** | 注册到 `ProgressReporter` 的 `sinks` 列表 | ✅ 已完成 |
+| **F-96-C** | **Visualizer 后端** — 解析 + API + WebSocket | ✅ 已完成 |
+| **F-96-C1** | `OrchestratorStateParser` — 解析 `state_journal.ndjson` → `OrchestratorDashboardData` | ✅ 已完成 |
+| **F-96-C2** | `GET /api/viz/orchestrator/state` — 返回当前全量 dashboard | ✅ 已完成 |
+| **F-96-C3** | `WS /api/viz/orchestrator/ws/state` — 实时推送增量事件 | ✅ 已完成 |
+| **F-96-D** | **Visualizer 前端看板** | ✅ 已完成 |
+| **F-96-D1** | `orchestrator_dashboard.html` — 主看板页（issue 列表 + 状态 + 进度条） | ✅ 已完成 |
+| **F-96-D2** | `orchestrator_issue_row.html` — 单个 issue 卡片（含 verification 状态、PR 链接） | ✅ 已完成 |
+| **F-96-D3** | 状态指示器（导航栏 badge 显示 running/failed 计数） | ✅ 已完成 |
+| **F-96-E** | **现有 session 详情页增强** | ⚠️ 部分实现 |
+| **F-96-E1** | `session_row.html` 显示 `issue_id` | ✅ 已完成 |
+| **F-96-E2** | `session_row.html` 显示 verification 摘要 | ✅ 已完成 |
+| **F-96-E3** | session ↔ issue 双向跳转链接 | ⚠️ 部分实现（session→orchestrator ✅，orchestrator→session ✅） |
 | **F-96-F** | **小修** | 📋 设计完成 |
 | **F-96-F1** | `session_storage.py` snapshot 路径修复（`os.path.join` / `resolve()` 问题） | 📋 设计完成 |
-| **F-96-F2** | visualizer `session_parser.py` metadata 扩展（支持 `issue_id` / `verification_status`） | 📋 设计完成 |
+| **F-96-F2** | visualizer `session_parser.py` metadata 扩展（支持 `issue_id` / `verification_status`） | ✅ 已完成 |
 
 #### 改造点清单
 
@@ -8685,4 +8686,4 @@ clawcodex_ext/community_radar/
 | **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ✅ **已完成** |
 | **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ✅ **已完成** |
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
-| **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | 📋 **设计完成** |
+| **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ⚠️ **部分已完成** |
