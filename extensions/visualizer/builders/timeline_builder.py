@@ -18,8 +18,12 @@ from ..parsers.multi_agent_parser import MultiAgentParser
 class TimelineBuilder:
     """Build a unified timeline for a session by combining all data sources."""
 
-    def __init__(self, sessions_dir: Path | None = None) -> None:
-        self.session_parser = SessionMetadataParser(sessions_dir=sessions_dir)
+    def __init__(
+        self, sessions_dir: Path | None = None, reports_dir: Path | None = None,
+    ) -> None:
+        self.session_parser = SessionMetadataParser(
+            sessions_dir=sessions_dir, reports_dir=reports_dir,
+        )
         self.transcript_parser = TranscriptParser()
         self.tool_events_parser = ToolEventsParser()
         self.multi_agent_parser = MultiAgentParser()

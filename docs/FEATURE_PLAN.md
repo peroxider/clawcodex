@@ -7811,13 +7811,13 @@ extensions/visualizer/
 | **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 | Phase 5 |
 | **F-95-A** | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — | Phase 5 |
 | **F-95-B** | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — | Phase 5 |
-| | **F-96** | **Orchestrator 实时看板接入（State Journal）** | ⚠️ **部分已完成** | 2 周 | Phase 6 |
+| | **F-96** | **Orchestrator 实时看板接入（State Journal）** | ✅ **已完成** | 2 周 | Phase 6 |
 | | F-96-A | StateJournalWriter（orchestrator 写入器） | ✅ 已完成 | — | Phase 6 |
 | | F-96-B | StateJournalSink（ProgressSink 桥接） | ✅ 已完成 | — | Phase 6 |
 | | F-96-C | Visualizer 后端（OrchestratorStateParser + API + WS） | ✅ 已完成 | — | Phase 6 |
 | | F-96-D | Visualizer 看板前端页面 | ✅ 已完成 | — | Phase 6 |
-| | F-96-E | 现有 session 详情页增强（issue_id / verification） | ⚠️ 部分实现 | — | Phase 6 |
-| | F-96-F | 小修：snapshot 路径修复 + metadata 扩展 | 📋 设计完成 | — | Phase 6 |
+| | F-96-E | 现有 session 详情页增强（issue_id / verification） | ✅ 已完成 | — | Phase 6 |
+| | F-96-F | WebSocket 实时推送（state journal live tail） | ✅ 已完成 | — | Phase 6 |
 
 ### 8.4 核心数据模型
 
@@ -7974,12 +7974,12 @@ AgentRunner._run_iteration()
 | **F-96-D1** | `orchestrator_dashboard.html` — 主看板页（issue 列表 + 状态 + 进度条） | ✅ 已完成 |
 | **F-96-D2** | `orchestrator_issue_row.html` — 单个 issue 卡片（含 verification 状态、PR 链接） | ✅ 已完成 |
 | **F-96-D3** | 状态指示器（导航栏 badge 显示 running/failed 计数） | ✅ 已完成 |
-| **F-96-E** | **现有 session 详情页增强** | ⚠️ 部分实现 |
+| **F-96-E** | **现有 session 详情页增强** | ✅ 已完成 |
 | **F-96-E1** | `session_row.html` 显示 `issue_id` | ✅ 已完成 |
 | **F-96-E2** | `session_row.html` 显示 verification 摘要 | ✅ 已完成 |
-| **F-96-E3** | session ↔ issue 双向跳转链接 | ⚠️ 部分实现（session→orchestrator ✅，orchestrator→session ✅） |
-| **F-96-F** | **小修** | 📋 设计完成 |
-| **F-96-F1** | `session_storage.py` snapshot 路径修复（`os.path.join` / `resolve()` 问题） | 📋 设计完成 |
+| **F-96-E3** | session ↔ issue 双向跳转链接 | ✅ 已完成 |
+| **F-96-F** | **小修** | ✅ 已完成 |
+| **F-96-F1** | `session_storage.py` snapshot 路径修复（`os.path.join` / `resolve()` 问题） | ✅ 已完成 |
 | **F-96-F2** | visualizer `session_parser.py` metadata 扩展（支持 `issue_id` / `verification_status`） | ✅ 已完成 |
 
 #### 改造点清单
@@ -8686,4 +8686,4 @@ clawcodex_ext/community_radar/
 | **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ✅ **已完成** |
 | **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ✅ **已完成** |
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
-| **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ⚠️ **部分已完成** |
+| **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |

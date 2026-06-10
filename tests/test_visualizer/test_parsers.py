@@ -370,6 +370,39 @@ class TestSessionMetadataParser:
         assert viz is not None
         assert viz.status == "unknown"
 
+    def test_status_stale_short_session_is_completed(self, tmp_path):
+        """Regression: a session that ran for <5s and was killed 47h ago
+        (e.g. 429 rate limit 27ms after start) must NOT be reported as
+        ``"running"``. The old ``last < start + 5`` fallback returned
+        ``"running"`` for any short session regardless of age, which
+        stuck stale orchestrator failures as "running" forever.
+        Reproduces the ``run-01-20260608T085433Z`` mis-classification
+        (orchestrator-ISSUE-429, killed by 429 in 27ms)."""
+        import os
+        import time as _time
+        session_dir = tmp_path / "stale-short"
+        session_dir.mkdir()
+        # 47 hours ago, ran for 27ms, then died.
+        ancient = _time.time() - 47 * 3600
+        meta = {"start_time": ancient, "last_updated": ancient + 0.027}
+        (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        tp = session_dir / "transcript.jsonl"
+        tp.write_text('{"role":"assistant","content":[]}\n', encoding="utf-8")
+        # mtime matches last_updated — transcript is also 47h stale.
+        os.utime(tp, (ancient, ancient))
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("stale-short")
+        assert viz is not None
+        # Both signals are >47h old, so neither rule 2 (mtime <5min)
+        # nor rule 3 (last_updated <5min) fires. The session is stale.
+        # The old code returned "running" here via the brand-new
+        # fallback; the fix returns "completed".
+        assert viz.status == "completed", (
+            f"stale short session mis-classified as {viz.status!r} "
+            f"(expected 'completed')"
+        )
+
 
 # ---------------------------------------------------------------------------
 # ToolEventsParser

@@ -53,12 +53,47 @@ body {
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 16px; gap: 12px;
 }
+.toolbar-left {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
 .search-box input {
     background: var(--bg-secondary); border: 1px solid var(--border-color);
     color: var(--text-primary); padding: 8px 16px; border-radius: var(--radius);
     width: 300px; font-size: 14px;
 }
 .search-box input:focus { outline: none; border-color: var(--text-accent); }
+
+/* Status filter dropdown (toolbar) */
+.status-filter {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: var(--radius); padding: 0 6px 0 10px; height: 36px;
+}
+.status-filter-label {
+    font-size: 12px; color: var(--text-secondary); user-select: none;
+}
+.status-filter-select {
+    background: transparent; border: none; color: var(--text-primary);
+    font-size: 13px; padding: 6px 4px; cursor: pointer; outline: none;
+    min-width: 110px;
+}
+.status-filter-select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+/* Layout toggle (grid / list) */
+.layout-toggle {
+    display: inline-flex; border: 1px solid var(--border-color);
+    border-radius: var(--radius); overflow: hidden; background: var(--bg-secondary);
+}
+.layout-toggle-btn {
+    background: transparent; border: none; color: var(--text-secondary);
+    padding: 8px 14px; cursor: pointer; font-size: 13px; transition: all 0.2s;
+    border-right: 1px solid var(--border-color);
+}
+.layout-toggle-btn:last-child { border-right: none; }
+.layout-toggle-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.layout-toggle-btn.active {
+    background: var(--text-accent); color: #fff;
+}
 
 /* Buttons */
 .btn {
@@ -132,6 +167,44 @@ body {
 .status-running { background: rgba(115,194,222,0.2); color: var(--info); }
 .status-unknown { background: rgba(160,160,176,0.2); color: var(--text-secondary); }
 
+/* Sessions list (Windows-Explorer-style detail view).
+   Single column, low row height, fixed-width cells aligned with the
+   header so clicking a column header sorts the rows in place. */
+.sessions-list { display: flex; flex-direction: column; gap: 0; }
+.sessions-list .list-header,
+.sessions-list .session-row {
+    display: grid;
+    grid-template-columns: 150px 90px 1fr 110px 150px 90px 70px 70px;
+    align-items: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 13px;
+}
+.sessions-list .list-header {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    position: sticky; top: 0; z-index: 1;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.sessions-list .cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.sessions-list .cell-sortable {
+    cursor: pointer; user-select: none;
+    transition: color 0.15s;
+}
+.sessions-list .cell-sortable:hover { color: var(--text-primary); }
+.sessions-list .cell-sortable.active { color: var(--text-accent); }
+.sessions-list .session-row {
+    cursor: pointer; transition: background 0.15s;
+    background: var(--bg-primary);
+}
+.sessions-list .session-row:hover { background: var(--bg-hover); }
+.sessions-list .session-row .cell-title { color: var(--text-primary); font-weight: 500; }
+
 /* Session detail */
 .session-header { margin-bottom: 20px; }
 .session-title-row { display: flex; justify-content: space-between; align-items: center; }
@@ -146,6 +219,34 @@ body {
     display: flex; gap: 20px; flex-wrap: wrap;
 }
 .session-meta span { display: inline-flex; align-items: center; gap: 4px; }
+
+/* F-96-E: Orchestrator issue association in session detail */
+.session-orch-info {
+    margin-top: 8px; font-size: 13px;
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+}
+.orch-info-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(145, 204, 117, 0.15); color: #91cc75;
+    padding: 2px 10px; border-radius: 12px; font-size: 12px;
+}
+.orch-info-badge a {
+    color: #91cc75; text-decoration: underline; text-underline-offset: 2px;
+}
+.orch-info-badge a:hover { color: #b8e6a0; }
+.verify-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 12px; font-size: 12px;
+}
+.verify-passed, .verify-success { background: rgba(145,204,117,0.2); color: #91cc75; }
+.verify-failed, .verify-error { background: rgba(238,102,102,0.2); color: #ee6666; }
+
+/* Session link icon in orchestrator dashboard */
+.session-link {
+    margin-left: 4px; text-decoration: none; font-size: 14px;
+    opacity: 0.7; transition: opacity 0.15s;
+}
+.session-link:hover { opacity: 1; }
 
 /* Gantt container */
 .gantt-container {
@@ -220,4 +321,11 @@ body {
     .sessions-grid { grid-template-columns: 1fr; }
     .search-box input { width: 200px; }
     .session-title-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+    /* List view falls back to horizontal scroll on narrow screens so all
+       columns remain visible (and sortable). */
+    .sessions-list { overflow-x: auto; }
+    .sessions-list .list-header,
+    .sessions-list .session-row {
+        min-width: 900px;
+    }
 }

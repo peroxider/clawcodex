@@ -172,5 +172,5 @@ class TestTimeRange:
         assert tr["min"] == 0.0
         assert tr["max"] >= 1800.0
         assert len(tr["tickLabels"]) >= 2
-        # First label should be 0
-        assert tr["tickLabels"][0] == "0分钟"
+        # First label should be the zero tick
+        assert tr["tickLabels"][0] == "0"

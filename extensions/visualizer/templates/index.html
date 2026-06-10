@@ -3,8 +3,31 @@
 
 {% block content %}
 <div class="toolbar">
-    <div class="search-box">
-        <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
+    <div class="toolbar-left">
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
+        </div>
+        <div class="status-filter">
+            <label for="status-filter-select" class="status-filter-label">Status:</label>
+            <select id="status-filter-select" class="status-filter-select" onchange="onStatusFilterChange()">
+                <option value="default" selected>Default (running, completed, success)</option>
+                <option value="all">All</option>
+                <option value="running">running</option>
+                <option value="unknown">unknown</option>
+                <option value="completed">completed</option>
+                <option value="success">success</option>
+                <option value="failed">failed</option>
+                <option value="error">error</option>
+                <option value="aborted">aborted</option>
+                <option value="cancelled">cancelled</option>
+            </select>
+        </div>
+        <div class="layout-toggle" role="group" aria-label="Layout mode">
+            <button type="button" id="layout-toggle-grid" class="layout-toggle-btn active"
+                    title="Card grid view" onclick="setLayoutMode('grid')">▦ Grid</button>
+            <button type="button" id="layout-toggle-list" class="layout-toggle-btn"
+                    title="Detailed list view" onclick="setLayoutMode('list')">☰ List</button>
+        </div>
     </div>
     <div class="toolbar-actions">
         <span id="live-indicator" class="live-indicator" title="Auto-refresh every 5s">
@@ -63,6 +86,7 @@
 <script src="/static/js/app.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        if (typeof _restoreUiState === 'function') _restoreUiState();
         loadWorkspaces();
         loadSessions();
         startLivePolling();

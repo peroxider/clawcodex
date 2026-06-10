@@ -16,6 +16,30 @@ let lastWorkspacesSig = '';
 let lastSessionsSig = '';
 let lastWorkspacesData = null;
 
+// ---- Filter / layout state (persisted to localStorage) ----
+// "default" → only the "live" set: running, completed, success.
+// "all"     → no status filter.
+// Otherwise → exact match against session.status.
+const DEFAULT_STATUS_SET = new Set(['running', 'completed', 'success']);
+let statusFilter = _loadPref('statusFilter', 'default');
+// 'grid' | 'list'
+let layoutMode = _loadPref('layoutMode', 'grid');
+// Sort key for list view (see _SORT_COLUMNS). Default: newest first.
+let sortBy = _loadPref('sortBy', 'start_time');
+// 'asc' | 'desc'
+let sortDir = _loadPref('sortDir', 'desc');
+let searchQuery = '';
+
+function _loadPref(key, fallback) {
+    try {
+        const v = localStorage.getItem('viz.' + key);
+        return v === null ? fallback : v;
+    } catch (_) { return fallback; }
+}
+function _savePref(key, value) {
+    try { localStorage.setItem('viz.' + key, value); } catch (_) { /* private mode */ }
+}
+
 function _workspaceSig(workspaces) {
     // Compact signature: id + name + session_count. Skips last_updated
     // (jittery on re-stat) and path (irrelevant to UI).
@@ -141,11 +165,7 @@ async function _refreshSessionsList() {
     lastSessionsSig = sig;
     allSessions = sessions;
     _pushStatusBar();
-    if (sessions.length === 0) {
-        grid.innerHTML = '<div class="empty-state">No sessions found</div>';
-        return;
-    }
-    grid.innerHTML = sessions.map(s => renderSessionCard(s)).join('');
+    _applyFiltersAndRender();
 }
 
 async function loadWorkspaces() {
@@ -171,11 +191,7 @@ async function loadSessions() {
         allSessions = sessions;
         lastSessionsSig = _sessionSig(sessions);
         _pushStatusBar();
-        if (sessions.length === 0) {
-            grid.innerHTML = '<div class="empty-state">No sessions found</div>';
-            return;
-        }
-        grid.innerHTML = sessions.map(s => renderSessionCard(s)).join('');
+        _applyFiltersAndRender();
     } catch (e) {
         grid.innerHTML = `<div class="empty-state">Error loading sessions: ${e.message}</div>`;
         console.error('Failed to load sessions:', e);
@@ -203,32 +219,167 @@ function renderSessionCard(s) {
     `;
 }
 
-function selectWorkspace(wsId, el) {
-    currentWorkspace = wsId;
-    document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
-    if (el) el.classList.add('active');
-    loadSessions();
+// Columns available for list-view sort. Each entry maps a sort key to a
+// human label and an extractor that returns the comparable value from a
+// session. Missing fields sort to the bottom regardless of direction.
+const _SORT_COLUMNS = {
+    start_time: { label: 'Start', get: s => s.start_time || 0 },
+    session_id: { label: 'ID', get: s => (s.session_id || '').toLowerCase() },
+    title:      { label: 'Title', get: s => (s.title || s.session_id || '').toLowerCase() },
+    status:     { label: 'Status', get: s => s.status || '' },
+    model:      { label: 'Model', get: s => s.model || '' },
+    duration_ms:{ label: 'Duration', get: s => s.duration_ms || 0 },
+    turn_count: { label: 'Turns', get: s => s.turn_count || 0 },
+    tool_count: { label: 'Tools', get: s => s.tool_count || 0 },
+};
+
+function _sortedSessions(arr) {
+    const col = _SORT_COLUMNS[sortBy] || _SORT_COLUMNS.start_time;
+    const sign = sortDir === 'asc' ? 1 : -1;
+    return arr.slice().sort((a, b) => {
+        const av = col.get(a);
+        const bv = col.get(b);
+        if (av < bv) return -1 * sign;
+        if (av > bv) return 1 * sign;
+        return 0;
+    });
 }
 
-function refreshSessions() {
-    loadSessions();
+function renderSessionRow(s) {
+    const statusClass = VizUtils.statusClass(s.status);
+    const duration = VizUtils.formatDuration(s.duration_ms);
+    const startTime = VizUtils.formatTime(s.start_time);
+    const titleEsc = (s.title || s.session_id || '').replace(/[<&>]/g, c =>
+        ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const idShort = (s.session_id || '').slice(0, 8);
+    return `
+        <div class="session-row" onclick="window.location.href='/session/${s.session_id}'">
+            <div class="cell cell-time">${startTime}</div>
+            <div class="cell cell-id" title="${s.session_id || ''}">${idShort}</div>
+            <div class="cell cell-title">${titleEsc}</div>
+            <div class="cell cell-status"><span class="status-badge ${statusClass}">${s.status || 'unknown'}</span></div>
+            <div class="cell cell-model">${s.model || '—'}</div>
+            <div class="cell cell-duration">${duration}</div>
+            <div class="cell cell-turns">${s.turn_count || 0}</div>
+            <div class="cell cell-tools">${s.tool_count || 0}</div>
+        </div>
+    `;
+}
+
+function _renderListHeader() {
+    const cols = [
+        ['start_time', 'Start'],
+        ['session_id', 'ID'],
+        ['title', 'Title'],
+        ['status', 'Status'],
+        ['model', 'Model'],
+        ['duration_ms', 'Duration'],
+        ['turn_count', 'Turns'],
+        ['tool_count', 'Tools'],
+    ];
+    return cols.map(([key, label]) => {
+        const isActive = sortBy === key;
+        const arrow = isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<div class="cell cell-sortable${isActive ? ' active' : ''}"
+                     onclick="event.stopPropagation();onSortColumn('${key}')">${label}${arrow}</div>`;
+    }).join('');
+}
+
+function onSortColumn(key) {
+    if (sortBy === key) {
+        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortBy = key;
+        sortDir = (key === 'start_time' || key === 'duration_ms'
+                   || key === 'turn_count' || key === 'tool_count') ? 'desc' : 'asc';
+    }
+    _savePref('sortBy', sortBy);
+    _savePref('sortDir', sortDir);
+    _applyFiltersAndRender();
+}
+
+function setLayoutMode(mode) {
+    if (mode !== 'grid' && mode !== 'list') return;
+    layoutMode = mode;
+    _savePref('layoutMode', mode);
+    const gridBtn = document.getElementById('layout-toggle-grid');
+    const listBtn = document.getElementById('layout-toggle-list');
+    if (gridBtn) gridBtn.classList.toggle('active', mode === 'grid');
+    if (listBtn) listBtn.classList.toggle('active', mode === 'list');
+    const grid = document.getElementById('sessions-grid');
+    if (grid) {
+        grid.classList.toggle('sessions-grid', mode === 'grid');
+        grid.classList.toggle('sessions-list', mode === 'list');
+    }
+    _applyFiltersAndRender();
+}
+
+function onStatusFilterChange() {
+    const sel = document.getElementById('status-filter-select');
+    if (!sel) return;
+    statusFilter = sel.value;
+    _savePref('statusFilter', statusFilter);
+    _applyFiltersAndRender();
+}
+
+function _filteredSessions() {
+    let arr = allSessions;
+    // Status filter
+    if (statusFilter === 'default') {
+        arr = arr.filter(s => DEFAULT_STATUS_SET.has((s.status || '').toLowerCase()));
+    } else if (statusFilter !== 'all') {
+        const target = statusFilter.toLowerCase();
+        arr = arr.filter(s => (s.status || '').toLowerCase() === target);
+    }
+    // Search filter (id / title / agent / model)
+    if (searchQuery) {
+        const q = searchQuery;
+        arr = arr.filter(s =>
+            (s.session_id || '').toLowerCase().includes(q) ||
+            (s.title || '').toLowerCase().includes(q) ||
+            (s.agent_name || '').toLowerCase().includes(q) ||
+            (s.model || '').toLowerCase().includes(q)
+        );
+    }
+    return arr;
+}
+
+function _applyFiltersAndRender() {
+    const grid = document.getElementById('sessions-grid');
+    if (!grid) return;
+    const filtered = _filteredSessions();
+    if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty-state">No matching sessions</div>';
+        return;
+    }
+    if (layoutMode === 'list') {
+        const sorted = _sortedSessions(filtered);
+        grid.innerHTML = `<div class="list-header">${_renderListHeader()}</div>`
+            + sorted.map(renderSessionRow).join('');
+    } else {
+        grid.innerHTML = filtered.map(renderSessionCard).join('');
+    }
+}
+
+// Restore persisted UI state into the controls on first paint.
+function _restoreUiState() {
+    const sel = document.getElementById('status-filter-select');
+    if (sel) sel.value = statusFilter;
+    const gridBtn = document.getElementById('layout-toggle-grid');
+    const listBtn = document.getElementById('layout-toggle-list');
+    const grid = document.getElementById('sessions-grid');
+    if (grid) {
+        grid.classList.toggle('sessions-grid', layoutMode === 'grid');
+        grid.classList.toggle('sessions-list', layoutMode === 'list');
+    }
+    if (gridBtn) gridBtn.classList.toggle('active', layoutMode === 'grid');
+    if (listBtn) listBtn.classList.toggle('active', layoutMode === 'list');
 }
 
 function filterSessions() {
-    const query = document.getElementById('search-input').value.toLowerCase();
-    const grid = document.getElementById('sessions-grid');
-    const filtered = allSessions.filter(s =>
-        (s.session_id || '').toLowerCase().includes(query) ||
-        (s.title || '').toLowerCase().includes(query) ||
-        (s.agent_name || '').toLowerCase().includes(query) ||
-        (s.model || '').toLowerCase().includes(query)
-    );
-
-    if (filtered.length === 0) {
-        grid.innerHTML = '<div class="empty-state">No matching sessions</div>';
-    } else {
-        grid.innerHTML = filtered.map(s => renderSessionCard(s)).join('');
-    }
+    const input = document.getElementById('search-input');
+    searchQuery = (input ? input.value : '').toLowerCase();
+    _applyFiltersAndRender();
 }
 
 function openCompareDialog() {
@@ -282,3 +433,7 @@ window.doCompare = doCompare;
 window.openMultiSessionDialog = openMultiSessionDialog;
 window.closeMultiSessionDialog = closeMultiSessionDialog;
 window.openMultiSessionPage = openMultiSessionPage;
+window.setLayoutMode = setLayoutMode;
+window.onStatusFilterChange = onStatusFilterChange;
+window.onSortColumn = onSortColumn;
+window._restoreUiState = _restoreUiState;

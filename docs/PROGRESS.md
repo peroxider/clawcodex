@@ -1459,8 +1459,8 @@ AgentRunner._run_iteration()
 | F-96-B | StateJournalSink（ProgressSink 桥接） | ✅ 已完成 |
 | F-96-C | Visualizer 后端（OrchestratorStateParser + API + WS） | ✅ 已完成 |
 | F-96-D | Visualizer 看板前端页面 | ✅ 已完成 |
-| F-96-E | 现有 session 详情页增强（issue_id / verification） | ⚠️ 部分实现 |
-| F-96-F | 小修：snapshot 路径修复 + metadata 扩展 | 📋 设计完成 |
+| F-96-E | 现有 session 详情页增强（issue_id / verification） | ✅ 已完成 |
+| F-96-F | WebSocket 实时推送（state journal live tail） | ✅ 已完成 |
 
 #### 关键设计决策
 

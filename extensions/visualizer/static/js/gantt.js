@@ -40,6 +40,34 @@ function renderSessionHeader(data) {
     if (titleEl && data.title) {
         titleEl.textContent = data.title;
     }
+
+    // F-96-E: Orchestrator issue association
+    const orchEl = document.getElementById('session-orch-info');
+    if (orchEl) {
+        const issueId = data.issue_id;
+        const verifyStatus = data.verification_status;
+        if (issueId) {
+            orchEl.style.display = '';
+            const issueLink = document.createElement('a');
+            issueLink.href = '/viz/orchestrator';
+            issueLink.title = 'View in Orchestrator Dashboard';
+            issueLink.textContent = 'Issue ' + issueId;
+            const linkSpan = document.createElement('span');
+            linkSpan.className = 'orch-info-badge';
+            linkSpan.textContent = '🎛 ';
+            linkSpan.appendChild(issueLink);
+            orchEl.innerHTML = '';
+            orchEl.appendChild(linkSpan);
+            if (verifyStatus) {
+                const vs = document.createElement('span');
+                vs.className = 'verify-badge verify-' + verifyStatus.replace(/[^a-zA-Z0-9_-]/g, '');
+                vs.textContent = verifyStatus;
+                orchEl.appendChild(vs);
+            }
+        } else {
+            orchEl.style.display = 'none';
+        }
+    }
 }
 
 async function renderGanttChart(sessionId) {
