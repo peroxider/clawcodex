@@ -7,6 +7,10 @@
         <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
     </div>
     <div class="toolbar-actions">
+        <span id="live-indicator" class="live-indicator" title="Auto-refresh every 5s">
+            <span class="live-dot"></span>
+            <span class="live-label">Live</span>
+        </span>
         <button onclick="openMultiSessionDialog()" class="btn">🌐 Multi-Session View</button>
         <button onclick="openCompareDialog()" class="btn">📊 Compare</button>
         <button onclick="refreshSessions()" class="btn btn-primary">🔄 Refresh</button>
@@ -61,6 +65,16 @@
     document.addEventListener('DOMContentLoaded', () => {
         loadWorkspaces();
         loadSessions();
+        startLivePolling();
+    });
+    // Stop polling when the tab is hidden — saves a fetch every 5s in
+    // background tabs and avoids races when the user comes back.
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopLivePolling();
+        } else if (typeof startLivePolling === 'function') {
+            startLivePolling();
+        }
     });
 </script>
 {% endblock %}

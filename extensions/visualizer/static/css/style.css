@@ -70,6 +70,33 @@ body {
 .btn-primary { background: var(--text-accent); border-color: var(--text-accent); color: #fff; }
 .btn-primary:hover { opacity: 0.9; }
 
+/* Live polling indicator (toolbar status pill) */
+.live-indicator {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 12px; font-size: 12px;
+    background: var(--bg-secondary); color: var(--text-secondary);
+    border: 1px solid var(--border-color); transition: all 0.2s;
+    user-select: none;
+}
+.live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #6b7280; transition: background 0.2s;
+}
+.live-indicator.live { color: #52c41a; border-color: rgba(82, 196, 26, 0.4); }
+.live-indicator.live .live-dot {
+    background: #52c41a;
+    box-shadow: 0 0 6px rgba(82, 196, 26, 0.6);
+    animation: live-pulse 2s ease-in-out infinite;
+}
+.live-indicator.paused { color: #faad14; border-color: rgba(250, 173, 20, 0.4); }
+.live-indicator.paused .live-dot { background: #faad14; }
+.live-indicator.error { color: #ff4d4f; border-color: rgba(255, 77, 79, 0.4); }
+.live-indicator.error .live-dot { background: #ff4d4f; }
+@keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
 /* Workspace tabs */
 .workspace-tabs {
     display: flex; gap: 4px; margin-bottom: 16px;

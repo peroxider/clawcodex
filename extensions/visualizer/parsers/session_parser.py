@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import SessionVizData, OperationStats
 
 logger = logging.getLogger(__name__)
+
+# A session is considered "running" if either the transcript file's
+# mtime OR the metadata's ``last_updated`` field has been touched within
+# this window. 5 minutes is generous enough to cover the longest-known
+# LLM calls while still flipping a session to "completed" within a
+# reasonable time after the agent finishes.
+_RUNNING_RECENCY_SECONDS = 300
 
 
 class SessionMetadataParser:
@@ -89,16 +97,44 @@ class SessionMetadataParser:
         return results[:limit]
 
     def _infer_status(self, meta: dict[str, Any], transcript_path: Path) -> str:
-        """Infer session status from metadata and transcript existence."""
+        """Infer session status from metadata and transcript freshness.
+
+        Resolution order (first match wins):
+          1. ``status`` field explicitly set in metadata.
+          2. Transcript file's mtime is within ``_RUNNING_RECENCY_SECONDS``
+             → still being written, so ``"running"``.
+          3. ``last_updated`` is within ``_RUNNING_RECENCY_SECONDS``
+             → metadata is being kept fresh, so ``"running"``.
+          4. Transcript missing entirely → ``"unknown"`` (agent may be
+             in the brief window between metadata creation and first
+             tool call; polling will flip it to ``running`` once
+             activity shows up).
+          5. Otherwise → ``"completed"``.
+
+        The recency check is what makes the live poll useful: a session
+        that started an hour ago but is still actively running (e.g. a
+        long workflow with a live orchestrator) correctly shows
+        ``"running"`` instead of being mis-classified as
+        ``"completed"`` just because ``last > start + 5``.
+        """
         if meta.get("status"):
-            return meta["status"]
+            return str(meta["status"])
+
+        now = time.time()
+        if transcript_path.exists():
+            try:
+                if now - transcript_path.stat().st_mtime < _RUNNING_RECENCY_SECONDS:
+                    return "running"
+            except OSError:
+                pass
+        last_updated = meta.get("last_updated") or 0
+        if last_updated and now - last_updated < _RUNNING_RECENCY_SECONDS:
+            return "running"
         if not transcript_path.exists():
             return "unknown"
-        # If transcript exists but no explicit status, assume completed
-        # if last_updated is significantly after start_time
         start = meta.get("start_time", 0)
-        last = meta.get("last_updated", 0)
-        if last > start + 5:  # at least 5 seconds elapsed
+        last = last_updated or start
+        if last > start + 5:  # at least 5 seconds of activity
             return "completed"
         return "running"
 

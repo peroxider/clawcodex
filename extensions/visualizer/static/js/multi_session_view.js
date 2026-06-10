@@ -13,15 +13,49 @@
 const MultiSessionView = (function() {
     let chart = null;
     let currentData = null;
+    // Track init() arguments so live updates can re-render and re-init
+    // without forcing the caller to pass options on every event.
+    let currentContainerId = 'ms-chart';
+    let currentLegendId = 'ms-legend-bar';
+    let currentSessionIds = null;
+    // Stash gantt.js's onLiveEvent so we can co-exist on session_row.html
+    // — when the user is on the waterfall view we own the dispatcher and
+    // also nudge gantt.js so the gantt chart stays in sync if mounted.
+    let ganttLiveEvent = null;
 
     /**
      * Initialize the view for the given session IDs.
-     * Public entry point used by multi_session.html inline script.
+     * Public entry point used by multi_session.html inline script and
+     * session_row.html (single-session waterfall).
+     *
+     * @param {string[]} sessionIds
+     * @param {object} [options]
+     * @param {string} [options.chartContainerId='ms-chart']  ECharts target div.
+     * @param {string|null} [options.legendContainerId='ms-legend-bar']
+     *        Legend pill bar div. Pass null to skip (e.g. when the page
+     *        already renders legend counts in its own chrome).
      */
-    async function init(sessionIds) {
+    async function init(sessionIds, options) {
+        const opts = options || {};
+        const chartId = opts.chartContainerId || 'ms-chart';
+        const legendId = opts.legendContainerId === undefined
+            ? 'ms-legend-bar' : opts.legendContainerId;
+        currentContainerId = chartId;
+        currentLegendId = legendId;
+        currentSessionIds = sessionIds;
+
+        // First init() on this page — capture gantt.js's onLiveEvent (if
+        // any) before we replace the global. This is what lets the
+        // waterfall and the gantt view co-exist on session_row.html.
+        if (!ganttLiveEvent && typeof window.onLiveEvent === 'function'
+                && window.onLiveEvent !== onLiveEvent) {
+            ganttLiveEvent = window.onLiveEvent;
+        }
+        window.onLiveEvent = onLiveEvent;
+
         if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
-            document.getElementById('ms-chart').innerHTML =
-                '<div class="empty-state">未提供 session ID</div>';
+            const el = document.getElementById(chartId);
+            if (el) el.innerHTML = '<div class="empty-state">未提供 session ID</div>';
             return;
         }
         try {
@@ -29,20 +63,96 @@ const MultiSessionView = (function() {
                 `/api/viz/multi-session?sessions=${encodeURIComponent(sessionIds.join(','))}`
             );
             currentData = data;
-            renderLegend(data.legend || []);
-            renderChart(data);
+            if (legendId) renderLegend(data.legend || [], legendId);
+            renderChart(data, chartId);
         } catch (e) {
             console.error('Multi-session load failed:', e);
-            const el = document.getElementById('ms-chart');
+            const el = document.getElementById(chartId);
             if (el) el.innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
         }
     }
 
     // ------------------------------------------------------------------
+    // Live event handler (window.onLiveEvent)
+    // ------------------------------------------------------------------
+    function onLiveEvent(event) {
+        if (!event) return;
+        // Waterfall not initialized yet — defer to gantt.js (full reload).
+        if (!currentData || !chart) {
+            if (typeof ganttLiveEvent === 'function') ganttLiveEvent(event);
+            return;
+        }
+        let handled = false;
+        if (event.type === 'bar_update') {
+            handled = applyBarUpdate(event);
+            if (handled) {
+                renderChart(currentData, currentContainerId);
+                if (currentLegendId) renderLegend(currentData.legend || [], currentLegendId);
+            }
+        } else if (event.type === 'transcript_event') {
+            // Sub-agent activity, config updates, etc. — full server
+            // round-trip is the simplest correct path.
+            init(currentSessionIds, {
+                chartContainerId: currentContainerId,
+                legendContainerId: currentLegendId,
+            });
+            return;
+        }
+        // Always nudge the gantt view if it's still mounted, so the two
+        // views stay in sync.  Cheap when the gantt chart isn't visible.
+        if (typeof ganttLiveEvent === 'function' && window.ganttChart) {
+            try { ganttLiveEvent(event); } catch (e) { /* swallow */ }
+        }
+    }
+
+    /**
+     * Mutate ``currentData`` in place with a structured ``bar_update``.
+     * Returns true if the data was changed and a re-render is warranted.
+     */
+    function applyBarUpdate(event) {
+        const sessionId = event.session_id;
+        const bar = event && event.bar;
+        if (!sessionId || !bar) return false;
+        const session = (currentData.sessions || []).find(s => s.id === sessionId);
+        if (!session) return false;  // event is for a session not in the view
+
+        const baseTime = (currentData.timeRange && currentData.timeRange.min) || 0;
+        const startRel = Math.max(0, (bar.start_time || 0) - baseTime);
+        const endRel = Math.max(startRel + 0.05, (bar.end_time || startRel) - baseTime);
+        const tick = {
+            x: startRel,
+            w: endRel - startRel,
+            category: bar.category || 'other',
+            color: bar.color || '#a0a0b0',
+            status: bar.status || 'running',
+            label: bar.label || bar.tool_name || '',
+            id: bar.id,
+        };
+        session.ticks = session.ticks || [];
+        const existingIdx = session.ticks.findIndex(t => t.id === bar.id);
+        const isNew = existingIdx < 0;
+        if (isNew) session.ticks.push(tick);
+        else session.ticks[existingIdx] = tick;
+
+        // Keep legend count in sync for newly-emitted bars.
+        if (isNew && Array.isArray(currentData.legend)) {
+            const legendItem = currentData.legend.find(l => l.category === tick.category);
+            if (legendItem) legendItem.count = (legendItem.count || 0) + 1;
+        }
+        // Extend the time axis if the new bar goes past the right edge.
+        if (currentData.timeRange && endRel * 1.1 > (currentData.timeRange.max || 0)) {
+            currentData.timeRange.max = endRel * 1.1;
+        }
+        // Track the session end so the endMarker / stats reflect activity.
+        session.end_time = Math.max(session.end_time || 0, bar.end_time || 0);
+        return true;
+    }
+
+    // ------------------------------------------------------------------
     // Legend bar (pure HTML — no ECharts needed)
     // ------------------------------------------------------------------
-    function renderLegend(legend) {
-        const bar = document.getElementById('ms-legend-bar');
+    function renderLegend(legend, containerId) {
+        const bar = document.getElementById(containerId || 'ms-legend-bar');
         if (!bar) return;
         if (!legend.length) {
             bar.innerHTML = '';
@@ -60,8 +170,8 @@ const MultiSessionView = (function() {
     // ------------------------------------------------------------------
     // Main chart (ECharts custom series)
     // ------------------------------------------------------------------
-    function renderChart(data) {
-        const container = document.getElementById('ms-chart');
+    function renderChart(data, containerId) {
+        const container = document.getElementById(containerId || 'ms-chart');
         if (!container) return;
 
         if (!chart) {
@@ -415,9 +525,15 @@ const MultiSessionView = (function() {
     function buildEndMarker(s, yPx) {
         if (!s.endMarker) return null;
         const xEnd = chart.convertToPixel({ xAxisIndex: 0 }, s.endMarker.x)[0];
+        // The model pill lives at x=[16, 216]. If the endMarker is in that
+        // zone (which happens whenever the end of the session is near the
+        // start of the time axis, e.g. an in-progress session), push it
+        // past the pill so it doesn't overlap with the model label.
+        const modelPillRight = 220;
+        const xPos = (xEnd < modelPillRight) ? modelPillRight : (xEnd + 8);
         return {
             type: 'group',
-            position: [xEnd + 8, yPx - 8],
+            position: [xPos, yPx - 8],
             children: [{
                 type: 'circle',
                 shape: { r: 4, cx: 0, cy: 8 },
@@ -537,7 +653,8 @@ const MultiSessionView = (function() {
     return { init };
 })();
 
-// Public entry point used by multi_session.html inline script
-async function initMultiSessionView(sessionIds) {
-    return MultiSessionView.init(sessionIds);
+// Public entry point used by multi_session.html inline script and
+// session_row.html (single-session waterfall).
+async function initMultiSessionView(sessionIds, options) {
+    return MultiSessionView.init(sessionIds, options);
 }

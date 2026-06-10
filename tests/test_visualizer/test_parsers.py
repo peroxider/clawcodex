@@ -283,6 +283,93 @@ class TestSessionMetadataParser:
         sessions = parser.list_sessions(limit=2)
         assert len(sessions) == 2
 
+    # ---- _infer_status recency behavior (drives live polling) ----
+
+    def test_status_recent_transcript_is_running(self, tmp_path):
+        """A session whose transcript was touched <5 min ago is 'running'."""
+        import time as _time
+        session_dir = tmp_path / "live-session"
+        session_dir.mkdir()
+        meta = {"start_time": _time.time() - 60, "last_updated": _time.time() - 60}
+        (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        tp = session_dir / "transcript.jsonl"
+        tp.write_text('{"role":"assistant","content":[]}\n', encoding="utf-8")
+        # mtime is "now" because we just wrote the file.
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("live-session")
+        assert viz is not None
+        assert viz.status == "running"
+
+    def test_status_recent_last_updated_is_running(self, tmp_path):
+        """A session whose last_updated is recent is 'running' even if
+        the transcript mtime is stale (e.g. metadata is being kept fresh
+        by the agent loop while no new tool calls happen)."""
+        import time as _time
+        session_dir = tmp_path / "live-session"
+        session_dir.mkdir()
+        meta = {"start_time": _time.time() - 600, "last_updated": _time.time() - 30}
+        (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        # Old transcript mtime (10 min ago) — beyond the 5-min window.
+        old = _time.time() - 600
+        tp = session_dir / "transcript.jsonl"
+        tp.write_text('{"role":"assistant","content":[]}\n', encoding="utf-8")
+        import os
+        os.utime(tp, (old, old))
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("live-session")
+        assert viz is not None
+        assert viz.status == "running"
+
+    def test_status_old_transcript_is_completed(self, tmp_path):
+        """A session whose transcript is older than 5 min is 'completed'."""
+        import os
+        import time as _time
+        session_dir = tmp_path / "old-session"
+        session_dir.mkdir()
+        old = _time.time() - 3600
+        meta = {"start_time": old - 60, "last_updated": old}
+        (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        tp = session_dir / "transcript.jsonl"
+        tp.write_text('{"role":"assistant","content":[]}\n', encoding="utf-8")
+        os.utime(tp, (old, old))
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("old-session")
+        assert viz is not None
+        assert viz.status == "completed"
+
+    def test_status_explicit_wins_over_recency(self, tmp_path):
+        """An explicit 'status' in metadata is always respected, even if
+        the transcript mtime is fresh — handles the case where the agent
+        loop writes status='completed' before flushing the transcript."""
+        import time as _time
+        session_dir = tmp_path / "weird-session"
+        session_dir.mkdir()
+        meta = {
+            "start_time": _time.time() - 60,
+            "last_updated": _time.time() - 5,
+            "status": "failed",
+        }
+        (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+        tp = session_dir / "transcript.jsonl"
+        tp.write_text('{"role":"assistant","content":[]}\n', encoding="utf-8")
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("weird-session")
+        assert viz is not None
+        assert viz.status == "failed"
+
+    def test_status_no_transcript_no_metadata_is_unknown(self, tmp_path):
+        session_dir = tmp_path / "bare-session"
+        session_dir.mkdir()
+        # No metadata.json, no transcript.jsonl
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("bare-session")
+        assert viz is not None
+        assert viz.status == "unknown"
+
 
 # ---------------------------------------------------------------------------
 # ToolEventsParser

@@ -1,6 +1,9 @@
 {# Status Bar — shows connection status and session metadata #}
 <div class="status-bar" id="viz-status-bar">
-    <div class="status-section">
+    {# WebSocket indicator — only meaningful on pages that call
+       connectLiveTail() (session detail). On pages with HTTP-only
+       polling (index), the section is hidden at runtime. #}
+    <div class="status-section" id="status-ws-section">
         <span id="status-ws-indicator" class="status-dot disconnected"></span>
         <span id="status-ws-label">Disconnected</span>
     </div>
@@ -73,28 +76,34 @@
 
     function setAutoRefresh(enabled) {
         const el = document.getElementById('status-auto-refresh');
-        if (el) el.textContent = enabled ? 'On (3s)' : 'Off';
+        if (el) el.textContent = enabled ? 'On (5s)' : 'Off';
     }
 
-    // Listen for WebSocket status changes
-    if (typeof vizWs !== 'undefined') {
+    // ---- Page-context detection ----
+    // The WebSocket section is only meaningful on pages that open a
+    // live tail via connectLiveTail() (session detail). On pages with
+    // HTTP-only polling (index, comparison) #ws-status doesn't exist,
+    // so we hide the WS section instead of leaving a confusing
+    // "Disconnected" label that suggests a broken connection.
+    const wsSection = document.getElementById('status-ws-section');
+    const wsEl = document.getElementById('ws-status');
+    if (wsSection && !wsEl) wsSection.style.display = 'none';
+
+    // Listen for WebSocket status changes (only on pages that have one).
+    if (wsEl && typeof vizWs !== 'undefined') {
         const origConnect = vizWs.connect.bind(vizWs);
         vizWs.connect = function(sid) {
             updateWsStatus('connecting');
             origConnect(sid);
         };
-    }
-
-    // Poll WS status from DOM
-    setInterval(function() {
-        const wsEl = document.getElementById('ws-status');
-        if (wsEl) {
+        // Poll WS status from DOM every 2s.
+        setInterval(function() {
             const connected = wsEl.classList.contains('connected');
             updateWsStatus(connected ? 'connected' : 'disconnected');
-        }
-    }, 2000);
+        }, 2000);
+    }
 
-    // Expose globally
+    // Expose globally so the polling flow in app.js can drive the bar.
     window.VizStatusBar = {
         updateWsStatus,
         updateSessionCount,
