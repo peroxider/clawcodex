@@ -94,6 +94,12 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="SECONDS",
         help="Seconds to wait after SIGTERM before SIGKILL (default: 5.0)",
     )
+    stop_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Stop all running orchestrator daemons and clean up all stale metadata. "
+             "Useful after test suites or when multiple workflows were started.",
+    )
 
     # --- server start ---
     start_parser = server_sub.add_parser(
@@ -281,8 +287,106 @@ def _run_status(args: argparse.Namespace) -> int:
 # server stop
 # ---------------------------------------------------------------------------
 
+def _run_stop_all(args: argparse.Namespace) -> int:
+    """Stop all running orchestrator daemons and clean up all stale metadata.
+
+    Iterates every metadata file under ``~/.clawcodex/orchestrator/*/metadata.json``.
+    - Live PIDs → send signal (SIGTERM / SIGKILL) and wait for graceful exit.
+    - Dead PIDs → clean up stale metadata immediately.
+    """
+    orchestrator_dir = Path.home() / ".clawcodex" / "orchestrator"
+    if not orchestrator_dir.exists():
+        print("No orchestrator metadata directory found — nothing to stop.")
+        return 0
+
+    metadata_files: list[tuple[Path, dict]] = []
+    for md_dir in orchestrator_dir.iterdir():
+        if not md_dir.is_dir():
+            continue
+        mf = md_dir / "metadata.json"
+        if not mf.exists():
+            continue
+        try:
+            data = json.loads(mf.read_text(encoding="utf-8"))
+            metadata_files.append((mf, data))
+        except Exception:
+            continue
+
+    if not metadata_files:
+        print("No orchestrator metadata found — nothing to stop.")
+        return 0
+
+    sig = signal.SIGKILL if args.force else signal.SIGTERM
+    sig_name = "SIGKILL" if args.force else "SIGTERM"
+    timeout = args.timeout
+
+    stopped = 0
+    cleaned = 0
+    errors = 0
+
+    print(f"Stopping all orchestrator daemons ({len(metadata_files)} metadata files found)...")
+    print()
+
+    for meta_path, meta in metadata_files:
+        pid = meta.get("pid")
+        slug = meta.get("project_slug", meta_path.parent.name)
+        ws = meta.get("workspace_root", "?")
+
+        if pid is None or not _is_pid_alive(pid):
+            pid_str = pid or "N/A"
+            print(f"  [{slug}] already stopped (PID {pid_str}) — cleaning up stale metadata")
+            try:
+                meta_path.unlink(missing_ok=True)
+                cleaned += 1
+            except OSError as exc:
+                print(f"    ⚠ failed to clean metadata: {exc}")
+                errors += 1
+            continue
+
+        # Send signal
+        print(f"  [{slug}] stopping daemon (PID {pid}, workspace: {ws})...")
+        print(f"    Sending {sig_name}...")
+        try:
+            os.kill(pid, sig)
+        except ProcessLookupError:
+            print(f"    Process {pid} already exited.")
+        except PermissionError:
+            print(f"    ⚠ Permission denied — cannot signal PID {pid}.", file=sys.stderr)
+            errors += 1
+            continue
+
+        # Wait for graceful shutdown (non-force only)
+        if not args.force:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if not _is_pid_alive(pid):
+                    break
+                time.sleep(0.2)
+            else:
+                print(f"    ⚠ Process did not exit within {timeout}s timeout. Remove --force or kill manually: kill -9 {pid}")
+                errors += 1
+                # Still clean up metadata
+        else:
+            # Brief pause so SIGKILL takes effect
+            time.sleep(0.3)
+
+        try:
+            meta_path.unlink(missing_ok=True)
+            stopped += 1
+        except OSError as exc:
+            print(f"    ⚠ failed to clean metadata: {exc}")
+            errors += 1
+
+    print()
+    print(f"Done: {stopped} stopped, {cleaned} stale cleaned, {errors} error(s).")
+    return 1 if errors else 0
+
+
 def _run_stop(args: argparse.Namespace) -> int:
     """Stop the orchestrator daemon. Idempotent — already-stopped → exit 0."""
+    if getattr(args, "all", False):
+        return _run_stop_all(args)
+
     meta_path, meta = _find_metadata(args)
 
     if meta is None:
