@@ -2,9 +2,11 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.1
-> 更新日期: 2026-06-28
+> 版本: v3.2
+> 更新日期: 2026-07
 > 上游同步: 58ea488 (dev-decoupling-refactor)
+>
+> **v3.2 变更**：完成代码检视审计（6 个特性状态修正）+ 归档操作。已完成特性的行内详情已全部替换为 ARCHIVED_PROGRESS.md 链接：F-40（新增 §六）、F-44/F-45/F-47/F-50/F-51（指向 §四）。F-40 状态已在上次 v3.1 修正，本次完成归档。详见 §二/F-40~F-51 各节。
 >
 > **v2.16 变更**：完成 CCB（claude-code-best）全面对标分析，识别 clawcodex 的 8 个重大特性缺口纳入规划管线。新增 F-60 Pipe IPC + LAN 群控（P0）、F-61 Computer Use 屏幕操控（P0）、F-62 Chrome 浏览器控制（P1）、F-63 Channels 频道通知（P1）、F-64 Voice Mode 语音输入（P2）、F-65 Langfuse Agent 可观测性（P1）、F-66 ACP 协议支持（P2）、F-67 Buddy / Proactive 模式（P2）。同时更新 §四 CCB 对标优势特性总表，明确 clawcodex 对比 CCB 的 5 项领先特性（Orchestrator 自动流水线、Verification Gate、SOP 编译器、LiteLLM Provider、Manager/Worker 增强通信）。所有 F-60~F-67 设置为 ⏳ 待开始状态，详见 §四。
 >
@@ -22,7 +24,7 @@
 >
 > **v2.7 变更**：新增 F-41 Coordinator 轻量工具集（✅ 已完成）。给 Coordinator 配置独立的轻量工具集（Read、WebSearch、WebFetch），加上原有的 Agent、SendMessage、TaskStop，共 6 个工具。Coordinator 可直接处理简单查询（搜网页、读文件），无需为每个请求创建 Worker。所有写操作工具（Write、Edit、Bash、Grep、Glob）仍隔离，强制委派复杂任务给 Worker。涉及 `src/coordinator/mode.py` 的 `_COORDINATOR_ALLOWED_TOOLS` 扩展 + `src/coordinator/prompt.py` 的 "Your Tools" 提示词更新 + `src/repl/core.py` 注释同步。231/231 orchestrator 测试通过。
 >
-> **v2.6 变更**：新增 F-40 ProgressReporter Sink 协议重构（📋 设计完成）。解决 F-38 Sub-D 落地时遗留的三个问题：(1) `Orchestrator` 上 `ProgressReporter` 单例的 `_current_task_id` / `_phase_count` 共享可变状态在并发 issue 下竞争；(2) `AgentRunner` 只转发 `PhaseComplete`，`_on_session_complete` 形同虚设，会话结束无进度落点；(3) `progress = phase_count * 25` 是假数据。设计引入 `ProgressSink` Protocol + `CompositeProgressSink` 扇出 + `ToolContextProgressSink` 默认实现 + `ProgressReporter` 降级为 shim；新增 `WorkflowConfig.phases` 用于真实进度计算。
+> **v2.6 变更**：新增 F-40 ProgressReporter Sink 协议重构（后经代码检视确认为 ✅ 已完成）。解决 F-38 Sub-D 落地时遗留的三个问题：(1) `Orchestrator` 上 `ProgressReporter` 单例的 `_current_task_id` / `_phase_count` 共享可变状态在并发 issue 下竞争；(2) `AgentRunner` 只转发 `PhaseComplete`，`_on_session_complete` 形同虚设，会话结束无进度落点；(3) `progress = phase_count * 25` 是假数据。设计引入 `ProgressSink` Protocol + `CompositeProgressSink` 扇出 + `ToolContextProgressSink` 默认实现 + `ProgressReporter` 降级为 shim；新增 `WorkflowConfig.phases` 用于真实进度计算。**（注意：v2.6 原文标为 📋 设计完成，2026-07 代码检视确认 `progress_sink.py` 已完整落地，详 §二 F-40）**
 >
 > **v2.5 变更**：表格中所有 ✅ 已完成 / ✅ 基础完成的项（R-1~R-7、F-1、F-3、F-14、F-15、F-17、F-19、F-20、F-21、F-23、F-24、F-25、F-27、F-29、F-30、F-31、F-32）详细设计已归档至 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) 与 [ARCHIVED_FEATURES.md](./ARCHIVED_FEATURES.md)，本文件仅保留任务总览表与仍处规划/进行中任务的详细设计。
 
@@ -50,7 +52,7 @@
 
 ### 1.2 功能模块开发
 
-> 状态为 ✅ 完成 / ✅ 基础完成的项（含 F-1、F-3、F-13、F-14、F-15、F-17、F-19、F-20、F-21、F-23、F-24、F-25、F-27、F-29、F-30、F-31、F-32、F-34、F-36、F-38、F-39、F-41、F-42、F-43、F-45、F-47）详细设计与进度已归档；本文仅保留概览与链接，详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) 与 [ARCHIVED_FEATURES.md](./ARCHIVED_FEATURES.md)。
+> 状态为 ✅ 完成 / ✅ 基础完成的项（含 F-1、F-3、F-13、F-14、F-15、F-17、F-19、F-20、F-21、F-23、F-24、F-25、F-27、F-29、F-30、F-31、F-32、F-34、F-36、F-38、F-39、F-40、F-41、F-42、F-43、F-44、F-45、F-47、F-50、F-51）详细设计与进度已归档；本文仅保留概览与链接，详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) 与 [ARCHIVED_FEATURES.md](./ARCHIVED_FEATURES.md)。
 
 | ID | 模块 | 优先级 | 状态 | 备注 |
 |----|------|--------|------|------|
@@ -71,7 +73,7 @@
 | F-15 | 权限模式切换 (Shift+Tab) | P1 | ✅ 完成 | REPL/LiveStatus/TUI 中支持 `default→acceptEdits→plan→bypassPermissions` 循环切换，状态栏显示当前模式，/permission 命令 |
 | F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ⏳ 待开始 | 基于 LLM 的自动权限模式切换，减少交互疲劳 |
 | F-17 | 工具系统按需加载（Tool System Extension） | P1 | ✅ 完成 | 四种工具模式（bare/default/clawcodex/all），4 bundle 简化设计，bundle 引用前缀 ":"，与上游解耦 |
-| F-18 | CreateAgentTool 动态工具创建 | P2 | 🔄 规划中 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制 |
+| F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 基础完成 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。`clawcodex_ext/tool_system/tools/create_agent_tool.py`（241 行）+ `clawcodex_ext/agent/tool_authoring/factory.py` 完整实现；`src/tool_system/tools/create_agent_tool.py` 重导出 |
 | F-19 | SOP 转化模式 | P2 | 🔄 进行中 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；**`clawcodex-dev pos convert` CLI 子命令待注册**（dispatch.py/subcommand_registry.py 中未实现），当前仅支持斜杠命令和 Python API 调用 |
 | F-20 | Agent 阶段性进度汇报 | P2 | ✅ 完成 | 三组合方案：检查点触发 + ProgressReportTool + ToolContext.tasks 持久化；PhaseComplete 时双重调用 ProgressReportTool + TaskUpdateTool 更新 metadata |
 | F-21 | 后台运行 + 恢复同步 | P1 | ✅ 完成 | Ctrl+B 后台化 + TailFollower 实时同步 + SessionWatcher 多终端感知，补丁 0067-0074 |
@@ -81,16 +83,16 @@
 | F-25 | Advisor Token 计数与状态显示 | P2 | ✅ 完成 | max_history 100→2000，Provider token 追踪增强，client-side advisor mode |
 | F-26 | Away-Summary（离开摘要） | P2 | 📋 规划中 | ※ 标记 + 浅灰色，终端失焦 5 分钟自动触发，支持 /recap 手动命令 |
 | F-27 | TUI 响应性修复（LLM 超时后 Ctrl+C/ESC 无响应） | P1 | ✅ 完成 | StreamWatchdog 超时时触发 AbortSignal；Ctrl+C 先尝试取消 agent 再退出 |
-| F-28 | Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话 | P1 | 🔄 设计完成 | Fork-Continue 模式：Ctrl+B 后 fork 子进程继续运行 agent，--resume 通过 TailFollower 实时显示增量输出 |
+| F-28 | Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话 | P1 | ✅ 完成 | Fork-Continue 模式：Ctrl+B 后 fork 子进程继续运行 agent，--resume 通过 TailFollower 实时显示增量输出。`clawcodex_ext/agent/background_runner.py`（417 行）完整实现 `launch_background_runner`/`get_background_runner_status`/`wait_for_background_runner`/`cleanup_background_runner`；REPL `live_status.py` 有 Ctrl+B 接线 |
 | F-29 | TaskInspect/TaskDirectives 工具注册 | P2 | ✅ 完成 | 将 TaskInspectTool 和 TaskDirectivesTool 注册到 ALL_STATIC_TOOLS，实现 Manager Agent 查询/指令 Worker |
 | F-30 | ProgressReportTool 工具注册 | P2 | ✅ 完成 | 将 ProgressReportTool 注册到 ALL_STATIC_TOOLS，Agent 可调用阶段性进度汇报 |
 | F-31 | TUI 权限模式选择器 | P1 | ✅ 完成 | 模态对话框支持 5 种权限模式切换 (default/acceptEdits/plan/bypassPermissions/dontAsk) |
 | F-32 | 会话恢复浏览器 (Resume Conversation) | P1 | ✅ 完成 | 模糊搜索、实时过滤、会话元数据展示，支持 /resume 命令和 --tui --resume 启动选项 |
 | F-36 | LocalTracker 本地 Issue 文档源 | P1 | ✅ 完成 | 新增 `tracker.kind: local`，从本地 Markdown/JSON issue 文档读取待处理任务，支持离线测试与私有本地工作流 |
-| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | 📋 设计完成 | 将 PR 网页检视意见、inline comments、review summary 与 CI 失败日志转化为 follow-up agent run，自动修改同一 PR 分支并提交更新 |
+| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | 🔄 进行中 | 将 PR 网页检视意见、inline comments、review summary 与 CI 失败日志转化为 follow-up agent run，自动修改同一 PR 分支并提交更新。`extensions/orchestrator/review_feedback.py`（109 行）— `ReviewFeedbackService` + `ReviewFollowup`；`extensions/orchestrator/config/schema.py` — `ReviewFeedbackConfig`；已接线到 `orchestrator.py:_process_review_feedback()`（L320/991-999） |
 | F-38 | Orchestrator 验证与报告闭环（verification + report → PR） | P0 | ✅ 完成 | commit/push 前自动跑 verification gate（pre_push hook + test_command），agent 跑完写结构化报告，git_sync 用报告改写 PR body 并合并为单条 issue 汇总评论；进度由 dead-code `progress_reporter` 接入主流程 |
 | F-39 | Orchestrator Issue 重跑入口（label + comment 命令双通道） | P0 | ✅ 完成（Sub-A~F） | 三种 label 表达重做意图：`agent:retry`（重置本地状态、关旧 PR、重跑整个 issue）、`agent:follow-up`（保留 PR、叠 commit、对应 F-37 follow-up）、`agent:blocked`（永久跳过）；comment 命令 `/agent retry` / `/agent follow-up` 由原作者或 maintainer 触发并限频；CLI 兜底 `issue retry --id 1 --mode reset`。Sub-A label 解析+意图分发、Sub-B 重置重跑、Sub-C follow-up 叠 commit、Sub-D comment 命令解析、Sub-E CLI 兜底、Sub-F 限频+角色校验均已落地；端到端 10-11 阶段（实际 GitCode/GitHub issue 联动）待真实环境验证 |
-| F-40 | ProgressReporter Sink 协议重构 | P1 | 📋 设计完成 | 把 `Orchestrator` 上 `ProgressReporter` 单例拆为每 session 独立的 `ProgressSink` 实例；新增 `CompositeProgressSink` 扇出支持 F-37/F-39 零侵入接入；补全 `SessionComplete` / `TurnComplete` 转发；引入 `WorkflowConfig.phases` 做真实进度计算，淘汰 `phase_count * 25` 假数据 |
+| F-40 | ProgressReporter Sink 协议重构 | P1 | ✅ 已完成 | 把 `Orchestrator` 上 `ProgressReporter` 单例拆为每 session 独立的 `ProgressSink` 实例（`progress_sink.py` 已完整落地）；新增 `CompositeProgressSink` 扇出支持 F-37/F-39 零侵入接入；补全 `SessionComplete` / `TurnComplete` 转发；引入 `WorkflowConfig.phases` 做真实进度计算，淘汰 `phase_count * 25` 假数据 |
 | F-41 | Coordinator 轻量工具集 | P1 | ✅ 已完成 | 给 Coordinator 配置独立的轻量工具集（Read、WebSearch、WebFetch），加上原有的 Agent、SendMessage、TaskStop，共 6 个工具。Coordinator 可直接处理简单查询（搜网页、读文件），无需为每个请求创建 Worker。所有写操作工具（Write、Edit、Bash、Grep、Glob）仍隔离，强制委派复杂任务给 Worker。涉及 `src/coordinator/mode.py` 的 `_COORDINATOR_ALLOWED_TOOLS` 扩展 + `src/coordinator/prompt.py` 的 "Your Tools" 提示词更新 + `src/repl/core.py` 注释同步。231/231 orchestrator 测试通过 |
 | F-42 | Orchestrator Shared / Sequential Workspace 策略 | P0 | ✅ 完成 | 扩展 `workspace.strategy: isolated \| shared \| sequential`，保留现有 per-issue workspace，同时支持本地 feature-plan issue 在同一 working tree / integration branch 上串行叠加开发；包含单并发校验、顺序锁、dirty tree guard、每 issue commit 链元数据、shared cleanup preserve 与两 issue 端到端验收 |
 | F-43 | CLI 模型供应商与模型切换 | P1 | ✅ 已完成 (2026-06-02) | 新增 `clawcodex provider` / `clawcodex model` 子命令族（list/show/current/use/unset）+ REPL/TUI 内 `/provider` / `/model` 斜杠命令；fast-path 注册表 + `ModelRegistry` / `ModelStore` / `Resolver` + `RuntimeContext.swap_provider` 热切换；所有新代码落在 `clawcodex_ext/cli/`，`src/*` 仅追加 `CommandContext.runtime_context` seam 与 `TUIOptions.runtime_context` 透传；持久化借道 `src.config` 不重写 I/O；错误文案统一英文；`--scope project` 落入后续规划 |
@@ -99,12 +101,12 @@
 | F-46 | permission_mode enum 正交拆分 | P2 | ⏳ 规划中 | 把 `permission_mode` 混合 enum（`default` / `plan` / `bypassPermissions` / `acceptEdits` / `dontAsk` / `auto` / `bubble`）拆为三个正交字段：`interactive: bool`（是否要 TTY 弹 prompt）、`default_decision: Literal["allow", "deny", "ask"]`（无人值守默认）、`audit_log: Literal["none", "minimal", "full"]`（per-tool 决策是否落盘）。F-46.0（v2.13）只拆 `audit_log`，**F-45 已落地**可消费 NDJSON 旁路做端到端验证；`permission_mode` 保留为 backward-compat shim 标 deprecated；F-46.1+ 拆其余两字段推到 v2.15+。 |
 | F-47 | Permission Settings Schema 重构（`permissions` 改 dict 形态 + plumb 启动模式） | P1 | ✅ 完成（含 F-47.1 hotfix） | 修四层串联 bug：`SettingsSchema.permissions: list[PermissionRule]` 与磁盘实际 dict 形态不一致 → dict 落进 known 字段，`allowBypassPermissionsMode` 进不到 `extra` → `has_allow_bypass_permissions_mode` 永远 False → Shift+Tab cycle 看不到 Bypass；同时 `resolve_permission_state` 没把 `permissions.defaultMode` 喂给 `initial_permission_mode_from_cli`、顶层 `settings.permission_mode` 字段未读。引入 `PermissionsConfig` dataclass 对齐磁盘 + TS 上游契约；`has_allow_bypass_permissions_mode` 加 `extra["permissions"]` fallback；`resolve_permission_state` 真正 plumb `settings_default_mode`；删除 settings 层"假" `PermissionRule` 死代码。**F-47.1 (2026-06-02) hotfix**：项目尚未发布、磁盘上没有需要迁移的旧配置，直接删除原本保留的顶层 `settings.permission_mode` back-compat 读取通道——`SettingsSchema.permission_mode` 字段保留为兼容形态但启动时不再被读；详见 风险 #3 / 设计决定 #3 / F-47.1 备注。 |
 | F-48 | src/ 核心路径二开修改解耦 | P0 | 📋 设计完成 | 将 `src/` 中 **29 个纯新增文件 + 10 个功能修改文件**全部解耦到 `clawcodex_ext/` 和 `extensions/`。新增 7 个外部库适配器统一迁移（F-48.1 子特性）、Orchestrator 配套工具 5 个、Provider 扩展 3 个、Auth 子系统 2 个、TUI 屏幕 2 个、服务/工具 5 个、工具编写系统 1 个。修改文件解耦沿用 Phase 1~3（注册表/Protocol 扩展 → 子类覆盖 → 入口点恢复）。目标：src/ 二开新增文件数从 29 → 0，功能修改文件数从 10 → 0 |
-| F-49 | Issue 会话统一存储与实时介入协议 | P1 | 📋 设计完成 | 将 headless agent 的 `.event_logs/` 扁平 NDJSON 统一为 `SessionStorage` 的 `transcript.jsonl` 格式。核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator run 的完整对话进入交互式 REPL**（operator 可继续对话、接管 agent、崩溃恢复），而非仅只读围观。设计扩展：**Phase 0.1 Message 转录映射规则**（TextDelta/ToolCallEvent/ToolResultEvent → AssistantMessage/UserMessage 精确分组+轮次对齐）、**Phase 0.2 --resume 会话恢复 + TailFollower 实时观察 + 问题追溯**、**Phase 0.3 大内容文件引用**（复用 SessionStorage._replace_large_content）。Phase 1 socket 控制 → Phase 2 attach TUI → Phase 3 session 恢复。**扩展**：`SessionMetadata.tags` 字段已落地（见 §7 Phase 4），改进会话可发现性。详见 FEATURE_PLAN §3.1.11 Phase 0.1-0.3。 |
-| F-50 | SOP 转换器固化 | P2 | 📋 设计完成 | 见 FEATURE_PLAN §4.2 |
+| F-49 | Issue 会话统一存储与实时介入协议 | P1 | 🔄 进行中 | 将 headless agent 的 `.event_logs/` 扁平 NDJSON 统一为 `SessionStorage` 的 `transcript.jsonl` 格式。核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator run 的完整对话进入交互式 REPL**。`extensions/agent/session_persist.py`（130 行）— `save_to_session_storage`/`load_from_session_storage` 已实现并通过 `src/agent/session.py` 接线；`extensions/orchestrator/control_socket.py`（272 行）— F-49 Phase 1 Unix Socket 控制通道完整实现，已接入 `agent_runner.py`：`ControlSocket.send_event`/`ControlCommand` 支持 pause/resume/stop/inject/status。Phase 0.2 session resume + Phase 2 attach TUI 待补齐 |
+| F-50 | SOP 转换器固化 | P2 | ✅ 基础完成 | 三层映射（SOP/workflow→Skill、SDK→工具）全链路实现：`extensions/pos_converter/` 共 9 文件 2,429 行 — `SourceCodeParser`(563)、`SkillGrouper`(251)、`AgentBuilder`(326)、`AgentMarkdownWriter`(446)、`sdk_parser`(149)、`templates`(194)、`convert_pos_skill`(237)、`default_agent`(222)。**遗留**：`clawcodex-dev pos convert` CLI 子命令待注册（当前仅斜杠命令 + Python API） |
 | F-51 | AgentRunner 空转检测机制（no-op detection） | P0 | ✅ 完成 | 在 `extensions/orchestrator/agent_runner.py` 中添加连续 5 轮工作区文件无变更检测，防止 agent 在 issue deliverables 已存在的场景下陷入无限 busy-work 循环。对应 PR 检视意见自动修复闭环（F-37）中的已修复前置问题。|
 | F-52 | Python SDK 方法注册为 Tool | P2 | 📋 规划中 | 将 SOP 生成的 ADF 方法（`detect_modality`、`load_dataset` 等）注册为真实的 `Tool` 对象，使 sub-agent 可直接调用而非通过 Bash 回退。`extensions/pos_converter/tool_registry.py` — `ToolWrapper` + `register_source_operations()`。依赖 F-50。 |
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | 📋 规划中 | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/`。依赖 F-52。 |
-| F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 📋 设计完成 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点：`QueryRunner.stream()` heartbeat、`AgentRunner` turn/event counters、watchdog timeout snapshot、持久化 `debug.ndjson` 与 registry/CLI 诊断字段，用于定位 agent run 有请求但无文件改动/报告/commit 的 stuck-run。 |
+| F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 🔄 进行中 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点。已落地：`extensions/orchestrator/debug_log.py`（29 行）— `append_debug_event` + `ObservabilityConfig` schema；`agent_runner.py:751` 写 `debug.ndjson`。仪表盘/query-runner heartbeat/CLI 诊断字段待补齐 |
 | F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
 | F-60 | Pipe IPC + LAN 群控系统 | P0 | ⏳ 待开始 | 对标 CCB Pipe IPC 多实例协作 + LAN UDP Multicast 自动发现。支持同机 Unix Domain Socket 命名管道通信、跨机器零配置发现、消息广播路由、权限转发。预计 3-4 周。 |
 | F-61 | Computer Use 屏幕操控 | P0 | ⏳ 待开始 | 对标 CCB Computer Use。支持跨平台截图（macOS screencapture / Windows PowerShell / Linux scrot）、跨平台键鼠模拟、应用/窗口管理、剪贴板读写。预计 2-3 周。 |
@@ -253,6 +255,13 @@
 ---
 
 
+## F-40: ProgressReporter Sink 重构
+
+**状态**: ✅ 已完成（代码已全部落地）
+
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §六 F-40 ProgressReporter Sink 重构](./ARCHIVED_PROGRESS.md#六f-40-progressreporter-sink-重构)。
+
+
 ## 三、Agent 核心能力进度
 
 > F-2、F-4、F-9~F-13、F-16、F-18~F-20、F-75、F-78、F-80 的详细设计见 FEATURE_PLAN 第二章各节。
@@ -272,24 +281,14 @@
 
 **状态**: ✅ 已完成 (2026-06-03)
 
-| 任务 | 文件 | 状态 | 说明 |
-|------|------|------|------|
-| `register_discovery_hook()` 全局注册表 | `clawcodex_ext/cli/model_cmd/registry.py` | ✅ | `_DISCOVERY_HOOKS` dict + register 函数；`ModelRegistry.__init__` 接受 `discovery_hooks` 参数 |
-| `available_models()` 合并 hook | `clawcodex_ext/cli/model_cmd/registry.py` | ✅ | 静态基线 + hook 结果去重合并，异常静默；`validate_model`/`infer_provider_for_model` 天然支持 |
-| `openai-codex` API 发现钩子 | `clawcodex_ext/providers/hooks.py` | ✅ | 调用 `get_codex_model_ids(token)`，无 token 或 API 失败时静默返回空 |
-| 自动注册 | `clawcodex_ext/providers/__init__.py` + `clawcodex_ext/__init__.py` | ✅ | import 时自动注册，在 ModelRegistry 首次实例化前完成 |
-| `resolve()` 信任已保存配置 | `clawcodex_ext/cli/model_cmd/resolver.py` | ✅ | `validate_model` 失败时走 `user-warn`，不再降级回默认 |
-| 移除 `gpt-5.5` 硬编码 | `src/providers/__init__.py` | ✅ | 回归静态基线，由 hook 动态发现 |
-| 回归测试 | `tests/test_f43_model_registry.py` | ✅ | 新增 6 个发现钩子测试（添加/隔离/异常静默/去重/validate_model/infer_provider），14/14 F-43 全部通过 |
-| **端到端验证** | 手动确认 | ✅ | 模拟第三方扩展注册 `my-llm` 钩子，`available_models`/`validate_model`/`infer_provider_for_model` 全链路通过 |
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-43](./ARCHIVED_PROGRESS.md#四-f-43)。
 
 
 ## F-44: Orchestrator 人工检视闸门（Review Gate）
 
 **状态**: ✅ 完成
-**优先级**: P1
 
-> 详细进度已归档至 [ARCHIVED_PROGRESS.md §五.13 F-44 Orchestrator 人工检视闸门](./ARCHIVED_PROGRESS.md#五13-f-44-orchestrator-人工检视闸门review-gate)。
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-44 Orchestrator 人工检视闸门](./ARCHIVED_PROGRESS.md#四-f-44-orchestrator-人工检视闸门review-gate)。
 
 ---
 
@@ -298,7 +297,7 @@
 
 **状态**: ✅ 已完成 (2026-06-02)
 
-> 详细进度已归档至 [ARCHIVED_PROGRESS.md §五.7 F-45 Orchestrator tool-call 审计旁路](./ARCHIVED_PROGRESS.md#五7-f-45-orchestrator-tool-call-审计旁路)。
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-45](./ARCHIVED_PROGRESS.md#四-f-45)。
 
 
 ## F-46: permission_mode enum 正交拆分
@@ -405,7 +404,7 @@
 
 **状态**: ✅ 完成（含 F-47.1 hotfix）
 
-> 详细进度已归档至 [ARCHIVED_PROGRESS.md §五.9 F-47 Permission Settings Schema 重构](./ARCHIVED_PROGRESS.md#五9-f-47-permission-settings-schema-重构)。
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-47](./ARCHIVED_PROGRESS.md#四-f-47)。
 
 
 ## F-89: @agent-name 多入口统一支持
@@ -886,9 +885,8 @@ session = Session.resume(issue_session_id)
 ## F-50: SOP 转换器源码固化（SourceCodeParser + 增强 SkillGrouper + AgentMarkdownWriter）
 
 **状态**: ✅ 完成
-**优先级**: P1
 
-> 详细进度已归档至 [ARCHIVED_PROGRESS.md §五.14 F-50 SOP 转换器源码固化](./ARCHIVED_PROGRESS.md#五14-f-50-pos-转换器源码固化sourcecodeparser--增强-skillgrouper--agentmarkdownwriter)。
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-50 SOP 转换器源码固化](./ARCHIVED_PROGRESS.md#四-f-50-sop-转换器源码固化)。
 
 ---
 
@@ -896,11 +894,8 @@ session = Session.resume(issue_session_id)
 ## F-51: AgentRunner 空转检测机制（no-op detection）
 
 **状态**: ✅ 完成
-**优先级**: P0
 
-> 详细进度已归档至 [ARCHIVED_PROGRESS.md §五.12 F-51 AgentRunner 空转检测机制](./ARCHIVED_PROGRESS.md#五12-f-51-agentrunner-空转检测机制no-op-detection)。
-
----
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §四 F-51 AgentRunner 空转检测机制](./ARCHIVED_PROGRESS.md#四-f-51-agentrunner-空转检测机制no-op-detection)。
 
 
 ## F-52: Python SDK 方法注册为 Tool
@@ -1340,7 +1335,7 @@ CronTask due
 > 本节跟踪第 8 章 Multi-Session 可视化分析平台实施进度。
 > 独立 FastAPI app + Jinja2 + ECharts CDN，零 npm 依赖，全进 wheel。
 
-**状态**: ✅ 已完成 | **优先级**: P0 | **测试**: 32/32 通过
+**状态**: ✅ 已完成 | **优先级**: P0 | **测试**: 110/110 通过
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
@@ -1368,17 +1363,60 @@ CronTask due
 
 ```
 extensions/visualizer/
-├── server.py                    # 独立 FastAPI app（端口 8765）
+├── __init__.py                  # v0.1.0
+├── server.py                    # 独立 FastAPI app（端口 8765，15+ API 端点 + 4 前端页）
 ├── ws.py                        # WebSocket live tail
 ├── cli.py                       # clawcodex viz 子命令
 ├── orchestrator_link.py         # F-38/F-45/F-54 链接生成
-├── import_router.py             # 条件性 session 导入
-├── models/viz_models.py         # 5 个 Pydantic 模型
-├── parsers/                     # 4 个解析器
-├── builders/                    # 7 个构建器
-├── templates/                   # 7 个 Jinja2 模板
-└── static/js/                   # 4 个 JS 文件（零 npm）
-tests/test_visualizer/           # 32 个测试
+├── import_router.py             # 条件性 session 导入（SSRF 保护）
+├── models/
+│   └── viz_models.py            # 10 个 Pydantic 模型（SessionVizData/TimelineBar/Anomaly/...）
+├── parsers/
+│   ├── session_parser.py        # SessionMetadata → viz 数据
+│   ├── transcript_parser.py     # 增量流式 JSONL 解析
+│   ├── multi_agent_parser.py    # mailbox cross-ref 推断
+│   └── tool_events_parser.py    # F-45 events.ndjson 解析
+├── builders/
+│   ├── gantt_data_builder.py    # 甘特图数据组装
+│   ├── timeline_builder.py      # 时间轴 bars（聚合各 parser 输出）
+│   ├── comparison_builder.py    # 跨 session 对比
+│   ├── stats_builder.py         # OperationStats 聚合
+│   ├── anomaly_builder.py       # F-51 no-op 阈值
+│   ├── export_builder.py        # PNG/SVG/JSON/PDF 导出
+│   ├── agent_tree_builder.py    # 多 Agent 树
+│   ├── agent_tree_layout.py     # 多 Agent 瀑布布局（spawn/join/depth）
+│   ├── operation_categorizer.py # 操作分类（READ/EXECUTE/WRITE/ORCHESTRATE/OTHER）
+│   └── multi_session_view_builder.py  # 多 session 瀑布视图（F-95 前端 payload）
+├── templates/                   # 9 个 Jinja2 模板（零 npm）
+│   ├── base.html
+│   ├── index.html               # 甘特图主页面
+│   ├── session_row.html         # 单 Session 详情页
+│   ├── comparison.html          # 跨 Session 对比页面
+│   ├── multi_session.html       # 多 Session 瀑布视图
+│   ├── stats_bar.html
+│   ├── anomaly_panel.html
+│   ├── export_dialog.html
+│   └── status_bar.html
+├── static/
+│   ├── css/
+│   │   ├── style.css            # 主样式
+│   │   └── multi_session.css    # 瀑布视图专用样式
+│   └── js/
+│       ├── app.js               # 搜索/过滤/交互
+│       ├── gantt.js             # ECharts 甘特图
+│       ├── websocket.js         # 原生 WebSocket
+│       ├── utils.js             # 工具函数
+│       └── multi_session_view.js # 多 Session 瀑布视图（ECharts custom series）
+└── fixtures/
+    └── sample_session.json      # 示例 Session 数据
+tests/test_visualizer/           # 7 个测试文件，110 个测试
+├── test_server.py               # 28 测试 — 后端 API、导入、导出、分享、搜索
+├── test_parsers.py              # 41 测试 — 4 个解析器覆盖
+├── test_multi_session_api.py    # 10 测试 — 多 session API 端点
+├── test_multi_session_view_builder.py  # 10 测试 — 瀑布视图构建器
+├── test_operation_categorizer.py       # 13 测试 — 操作分类规则
+├── test_orchestrator_link.py           # 4 测试 — 编排链接生成
+└── test_agent_tree_layout.py           # 8 测试 — Agent 树布局
 ```
 
 ### 关键设计决策

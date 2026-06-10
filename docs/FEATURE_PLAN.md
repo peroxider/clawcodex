@@ -1,9 +1,13 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.0（目录重构版）
-> 更新日期: 2026-06 | 上游同步: 58ea488 (dev-decoupling-refactor)
+> 版本: v3.2（目录重构版）
+> 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
 > 
+> **v3.2 变更（代码检视审计扩展）**：扩展 v3.1 审计覆盖 80+ 特性。新增修正：F-18 (CreateAgentTool) 从 🔄 规划中 → ✅ 基础完成（`create_agent_tool.py` 241 行 + tool_authoring factory），F-28 (Ctrl+B 后台) 从 🔄 设计完成 → ✅ 完成（`background_runner.py` 417 行 + REPL 接线），F-37 (PR 检视意见自动修复) 从 📋 设计完成 → 🔄 进行中（`review_feedback.py` 109 行 + `ReviewFeedbackConfig` + orchestrator 接线），F-49 (Issue 会话存储) 从 📋 设计完成 → 🔄 进行中（`control_socket.py` 272 行 + `session_persist.py` 130 行 + `agent_runner.py` 接线），F-50 (SOP 转换器固化) 从 📋 设计完成 → ✅ 基础完成（`pos_converter/` 9 文件 2,429 行），F-54 (运行期可观测性) 从 📋 设计完成 → 🔄 进行中（`debug_log.py` + `ObservabilityConfig` + `agent_runner.py:751` debug.ndjson）。
+>
+> **v3.1 变更（代码检视审计）**：完成全量功能实现状态代码交叉验证。主要修正：F-40 (ProgressReporter Sink) 状态从 📋 设计完成 → ✅ 已完成。该特性已在 `extensions/orchestrator/progress_sink.py` 完整落地（`ProgressSink` Protocol / `CompositeProgressSink` / `ToolContextProgressSink`），`progress_reporter.py` 降级为 shim。
+>
 > **v3.0 变更（目录重构）**：从目录视角合并同类项，原 10 章压缩为 **8 章 + 附录**。已完成特性降级为一行注记；F-40 被割裂的设计稿归入所属子节；§9(CCB 对标)与§10(Python 生态补缺)合并为单章并按子领域分组；跨章节重复概念去重。本文件保留 v2.17 所有内容，仅做结构重组。
 
 ---
@@ -21,7 +25,7 @@
     - [1.1.3 验证与报告闭环（F-38 ✅）](#1-1-3-验证与报告闭环)
     - [1.1.4 Issue 重跑入口（F-39 ✅）](#1-1-4-issue-重跑入口)
     - [1.2.1 Shared/Sequential Workspace（F-42 ✅）](#1-2-1-shared-sequential-workspace)
-    - [1.2.2 ProgressReporter Sink 重构（F-40 📋）](#1-2-2-progressreporter-sink-重构)
+    - [1.2.2 ProgressReporter Sink 重构（F-40 ✅）](#1-2-2-progressreporter-sink-重构)
     - [1.3.1 AgentRunner 空转检测（F-51 ✅）](#1-3-1-agentrunner-空转检测)
     - [1.3.2 运行期可观测性与 stuck-run debug（F-54 📋）](#1-3-2-运行期可观测性与-stuck-run-debug)
     - [1.3.3 Tool-call 审计旁路（F-45 ✅）](#1-3-3-tool-call-审计旁路)
@@ -208,8 +212,10 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 >
 > 仍处规划/设计阶段、保留详细设计稿的子节如下：
 > - §1.1.2 PR 检视意见自动修复闭环设计（F-37，📋 规划中）
-> - §1.2.2 ProgressReporter Sink 协议重构设计（F-40，📋 设计完成）
 > - §1.3.2 运行期可观测性与 stuck-run debug（F-54，📋 设计完成）
+> 
+> 已完成但仍保留设计稿的子节：
+> - §1.2.2 ProgressReporter Sink 协议重构设计（F-40，✅ 已完成 — `ProgressSink`/`CompositeProgressSink`/`ToolContextProgressSink` 已在 `progress_sink.py` 落地，`progress_reporter.py` 降级为兼容 shim）
 > - 已完成的 LocalTracker（F-36）、验证与报告闭环（F-38）、Issue 重跑入口（F-39）、Coordinator 轻量工具集（F-41）、Shared / Sequential Workspace（F-42）、Tool-call 审计旁路（F-45）、人工检视闸门（F-44）与 AgentRunner 空转检测（F-51）详见 [ARCHIVED_FEATURES.md §二十一](./ARCHIVED_FEATURES.md#二十一2026-06-02-已实现功能归档)。
 
 #### 1.1.1 LocalTracker 本地 Issue 文档源设计（F-36）
@@ -352,277 +358,11 @@ review_feedback:
 > `workspace.strategy: isolated | shared | sequential` 落地。详见 [ARCHIVED_FEATURES.md §二十一.5](./ARCHIVED_FEATURES.md#二十一5-f-42-sharedsequential-workspace-策略)。
 
 #### 1.2.2 ProgressReporter Sink 重构（F-40）
-#### 设计目标
+**状态**: ✅ 已完成（代码已全部落地）
 
-把 `extensions/orchestrator/progress_reporter.py` 从「绑死 `ToolContext` 的单例」重构为「以 `ProgressSink` 协议为最小契约的多消费者可插拔架构」:
-
-1. 每 session 持有独立 sink 实例，状态天然隔离，消除并发竞争。
-2. `AgentRunner` 转发全部三类事件 (`PhaseComplete` / `TurnComplete` / `SessionComplete`)，session 结束一定有进度落点。
-3. 进度计算改用 `WorkflowConfig.phases` 比例 + LLM 显式覆盖，淘汰 `phase_count * 25` 假数据。
-4. 引入 `CompositeProgressSink` 扇出，让 F-37 (PR 检视意见自动修复) / F-39 (Issue 重跑) 后续可零侵入注册专用 sink。
-5. 保留 `ProgressReporter` 名字为向后兼容 shim，既有测试与调用方不破。
-
-#### 架构对比
-
-```
-旧架构（F-38 落地后，2026-06-01）:
-  Orchestrator.__init__ ── 一次 ──> ProgressReporter (单例)
-                                          ↓
-                                  共享 _current_task_id / _phase_count
-                                          ↓
-                          AgentRunner.run(progress_reporter=...)
-                                          ↓
-                                  progress_reporter.on_event(phase_event, session)
-                                          ↓
-                          _progress_report_call + _task_update_call
-                                          ↓
-                                  ToolContext.tasks[id].metadata.progress_stages
-
-新架构（F-40 提案）:
-  Orchestrator._dispatch_issue(issue):
-      ↓
-      task_id = self._allocate_task_id(issue)
-      inner = ToolContextProgressSink(task_id, self._progress_context,
-                                       workflow_phases=self.workflow.phases)
-      sink = CompositeProgressSink([
-          inner,
-          # 未来: PRReviewAutoFixSink(task_id, registry, git_sync),  # F-37
-          # 未来: RetryLabelSink(task_id, tracker),                  # F-39
-      ])
-      ↓
-  await self.agent_runner.run(session, self.workflow, progress_sink=sink, ...)
-      ↓
-      sink.on_phase_complete(event, session)   # sink 实例独占 task_id
-      sink.on_turn_complete(event, session)     # 三个事件全部转发
-      sink.on_session_complete(event, session)  # session 结束必落点
-```
-
-#### 关键组件
-
-#### 1. ProgressSink 协议（extensions/orchestrator/progress_sink.py）
-
-```python
-class ProgressSink(Protocol):
-    """A consumer of agent progress events for ONE task/session.
-
-    每个 sink 实例独占一个 task_id 与私有计数，状态由实例承载
-    （非线程安全 = 没问题，因为实例不会被并发访问）。
-    """
-    task_id: str
-
-    def on_phase_complete(self, event: PhaseComplete, session: AgentSession) -> None: ...
-    def on_turn_complete(self, event: TurnComplete, session: AgentSession) -> None: ...
-    def on_session_complete(self, event: SessionComplete, session: AgentSession) -> None: ...
-```
-
-#### 2. CompositeProgressSink 扇出
-
-```python
-class CompositeProgressSink:
-    def __init__(self, sinks: Iterable[ProgressSink]) -> None:
-        self._sinks: list[ProgressSink] = list(sinks)
-
-    def add(self, sink: ProgressSink) -> None:
-        self._sinks.append(sink)
-
-    def on_phase_complete(self, event, session):
-        for s in self._sinks:
-            try:
-                s.on_phase_complete(event, session)
-            except Exception:
-                logger.exception("sink %s.on_phase_complete failed", s)
-    # on_turn_complete / on_session_complete 同理
-```
-
-#### 3. ToolContextProgressSink 默认实现
-
-```python
-class ToolContextProgressSink:
-    """默认实现：把事件落进 ToolContext.tasks（与原 ProgressReporter 行为等价）。"""
-
-    def __init__(
-        self,
-        task_id: str,
-        context: ToolContext,
-        workflow_phases: list[str] | None = None,
-        fallback_to_phase_step: bool = False,
-    ) -> None:
-        self.task_id = task_id
-        self._context = context
-        self._phase_count = 0
-        self._workflow_phases = workflow_phases or []
-        self._fallback_to_phase_step = fallback_to_phase_step
-
-    def _named_phase(self, idx: int) -> str:
-        if 1 <= idx <= len(self._workflow_phases):
-            return self._workflow_phases[idx - 1]
-        return f"phase_{idx}"
-
-    def _phase_progress(self, idx: int) -> int | None:
-        if self._workflow_phases:
-            named = self._named_phase(idx)
-            real_idx = self._workflow_phases.index(named)
-            return int((real_idx + 1) / len(self._workflow_phases) * 100)
-        if self._fallback_to_phase_step:
-            return min(idx * 25, 100)
-        return None  # 未知，让 LLM 显式报
-
-    def on_phase_complete(self, event, session):
-        if not self.task_id:
-            return
-        self._phase_count += 1
-        phase_name = self._named_phase(self._phase_count)
-        progress = self._phase_progress(self._phase_count)
-        from src.tool_system.tools.progress_report import _progress_report_call
-        from src.tool_system.tools.tasks_v2 import _task_update_call
-        _progress_report_call({
-            "taskId": self.task_id,
-            "stage": phase_name,
-            "progress": progress,  # 可能 None
-            "summary": f"Completed phase {self._phase_count}",
-            "metadata": {
-                "turn_count": event.turn_count,
-                "phase": event.phase,
-                "auto": True,
-            },
-        }, self._context)
-        _task_update_call({
-            "taskId": self.task_id,
-            "metadata": {
-                "phase": event.phase,
-                "turn_count": event.turn_count,
-                "phase_name": phase_name,
-                "phase_complete": True,
-            },
-        }, self._context)
-
-    def on_turn_complete(self, event, session):
-        # 不落 ToolContext（避免噪音），仅 debug 日志
-        logger.debug("turn %d complete for task %s", event.turn, self.task_id)
-
-    def on_session_complete(self, event, session):
-        if not self.task_id:
-            return
-        from src.tool_system.tools.progress_report import _progress_report_call
-        _progress_report_call({
-            "taskId": self.task_id,
-            "stage": f"session_{event.reason}",
-            "progress": 100 if event.reason == "success" else None,
-            "summary": f"Session ended: {event.reason}",
-            "metadata": {
-                "session_status": session.status,
-                "turn_count": session.turn_count,
-                "phase_count": self._phase_count,
-            },
-        }, self._context)
-```
-
-#### 4. ProgressReporter 兼容 shim
-
-```python
-class ProgressReporter:
-    """已弃用。新代码请直接使用 ToolContextProgressSink。"""
-
-    def __init__(self, context: ToolContext) -> None:
-        self._context = context
-        self._current_task_id: str | None = None
-        self._phase_count = 0
-        self._sink: ToolContextProgressSink | None = None
-
-    def set_task_id(self, task_id: str) -> None:
-        self._current_task_id = task_id
-        self._phase_count = 0
-        self._sink = ToolContextProgressSink(task_id, self._context)
-
-    def on_event(self, event, session):
-        # 老 API: 根据类型分发
-        if not self._sink:
-            return
-        if isinstance(event, PhaseComplete):
-            self._sink.on_phase_complete(event, session)
-        elif isinstance(event, TurnComplete):
-            self._sink.on_turn_complete(event, session)
-        elif isinstance(event, SessionComplete):
-            self._sink.on_session_complete(event, session)
-```
-
-#### 改造点清单
-
-| 文件 | 改动 | Sub |
-|------|------|-----|
-| `extensions/orchestrator/progress_sink.py` | **新建**：`ProgressSink` 协议 + `CompositeProgressSink` + `ToolContextProgressSink` | A/B |
-| `src/orchestrator/config/schema.py` | `WorkflowConfig` 新增 `phases: list[str] = field(default_factory=list)` 字段 | E |
-| `extensions/orchestrator/progress_reporter.py` | 改写为兼容 shim；`on_event` 走 `isinstance` 分发；`set_task_id` 创建新 sink；标记 `@deprecated` | F |
-| `extensions/orchestrator/agent_runner.py` | 参数 `progress_reporter` → `progress_sink`；`SessionComplete` 分支与 `max_turns` 路径补 `sink.on_session_complete`；若有 `TurnComplete` 分支也补 `sink.on_turn_complete`；`_write_event_log` 行为不变 | C |
-| `extensions/orchestrator/orchestrator.py` | 删除 `self._progress_reporter = ProgressReporter(...)`；`_dispatch_issue` / `_run_issue` 中为每个 session 新建 `ToolContextProgressSink` + `CompositeProgressSink`；保留 `_progress_context` 共享 | D |
-| `src/tool_system/tools/progress_report.py` | `ProgressReportTool` prompt 增「建议显式传 `progress`」指引；`_progress_report_call` 接受 `progress=None`（已支持） | E |
-| `tests/test_orchestrator_agent_runner.py` | 新增并发回归 + 三事件覆盖测试；保留现有 stub（走 `on_event` 老 API 兼容） | G |
-
-#### 进度计算决策表
-
-| 来源 | 触发时机 | `progress` 值 | 优先级 |
-|------|----------|---------------|--------|
-| LLM 显式调 `ProgressReport` 工具 | LLM 主动汇报 | LLM 传入的 `progress` | 最高 (覆盖一切) |
-| `WorkflowConfig.phases` + 自动 `on_phase_complete` | PhaseComplete 事件 | `(current_idx+1) / total * 100` | 中 |
-| 兜底（均无） | PhaseComplete 事件 | `None` (UI 显示「未知」) | 最低 |
-| `SessionComplete` 终态 | 会话结束 | `100` (reason=success) / `None` (其他) | 终态 |
-
-`workflow.observability.progress.fallback_to_phase_step: bool = True` 时，中间档用 `phase_count * 25` 兜底（软迁移期），后续翻 `False` 强推 None。
-
-#### 并发正确性证明
-
-| 时间 | 事件 | 旧实现（单例） | 新实现（每 session 独立 sink） |
-|------|------|----------------|--------------------------------|
-| t0 | Issue A 启动 → `set_task_id("A")` | `_current_task_id="A"` | 创建 `SinkA(task_id="A")` |
-| t1 | Issue B 启动 → `set_task_id("B")` | `_current_task_id="B"` (覆盖) | 创建 `SinkB(task_id="B")` |
-| t2 | A 触发 `PhaseComplete` | 写到 task **B** ❌ | 通过 `SinkA` 写到 task A ✓ |
-| t3 | B 触发 `PhaseComplete` | 写到 task **B** ✓ | 通过 `SinkB` 写到 task B ✓ |
-
-`AgentRunner.run` 当前是 `async`，每个 session 跑在独立 task 上；新架构下每个 task 持自己的 sink，无共享可变状态。
-
-#### 验收标准
-
-- 并发跑两个 issue 时，每个 session 的 `ToolContext.tasks[id].metadata.progress_stages` 列表只含本 session 的事件，无串扰。
-- `SessionComplete` 触发后，`ToolContext.tasks[id].metadata.current_stage` 含 `session_{reason}`、`metadata.progress` 在 `reason=success` 时为 100、其他情况为 `None`。
-- `WorkflowConfig.phases=["analysis", "design", "impl", "test", "review"]` 配置下，完成第 2 个 phase 时 `progress=40`；LLM 显式调 `ProgressReport` 传 `progress=37` 时覆盖自动值。
-- `WorkflowConfig.phases` 缺失或为空时，自动 `on_phase_complete` 写 `progress=None`，`StatusDashboard` 显示「Phase N (进度未知)」，而不是误导的 25/50/75/100。
-- `ProgressReporter` 类的 `on_event(event, session)` 旧 API 仍可用，内部按 `isinstance(event, PhaseComplete / TurnComplete / SessionComplete)` 分发，现有 stub 测试不修改即可通过。
-- `CompositeProgressSink` 内任一 sink 抛异常被独立捕获并 `logger.exception`，不影响其他 sink 接收事件。
-- F-37 / F-39 后续接入时，只需在 `Orchestrator._dispatch_issue` 注册额外 sink（`PRReviewAutoFixSink` / `RetryLabelSink`），无需修改 `AgentRunner` 或 `progress_reporter.py`。
-
-#### 风险与约束
-
-- **API 改名 breaking**：`AgentRunner.run` 的 `progress_reporter` kwarg 改 `progress_sink` 是字面量破坏，需同步改 `Orchestrator` 调用方与所有 stub 测试。Mitigation: `ProgressReporter` shim 仍可作为 `progress_sink` 传入（duck type，只要实现三个 `on_*` 方法即可）。
-- **进度从假数据变 `None` 的 UI 退化**：默认配置下旧用户从「25/50/75/100」退到「未知」。Mitigation: 加 `workflow.observability.progress.fallback_to_phase_step: bool = True` 配置开关（默认保留旧行为），后续再翻 `False`。
-- **每个 session 多一个 sink 对象**：内存增长可忽略（Python 单实例，几 KB），无 perf 风险。
-- **事件总线语义变化**：`CompositeProgressSink` 是同步扇出，任意 sink 阻塞会卡住 `AgentRunner` 主循环。Mitigation: 每个 sink 内部 try/except + 短超时；慢消费者应自己 queue + 后台线程。
-- **Import 顺序**：`progress_reporter.py` (shim) → `progress_sink.py` (默认实现) → `agent_runner.py` (调用方) 依赖链需保持单向，避免循环 import。建议 `progress_reporter.py` 用 `from .progress_sink import ToolContextProgressSink` 软引用，`TYPE_CHECKING` 保护。
-
-#### 实施阶段
-
-| 阶段 | 任务 | Sub | 状态 |
-|------|------|-----|------|
-| 1 | 新建 `extensions/orchestrator/progress_sink.py`，定义 `ProgressSink` Protocol + `CompositeProgressSink` + `ToolContextProgressSink` | A/B | 📋 待开始 |
-| 2 | `src/orchestrator/config/schema.py:WorkflowConfig` 新增 `phases: list[str] = field(default_factory=list)` 字段，旧 workflow.md 无 `phases` 时退化为「无 phase 权重，自动上报 `progress=None`」 | E | 📋 待开始 |
-| 3 | `extensions/orchestrator/progress_reporter.py` 改写为 shim，内部维护 `ToolContextProgressSink`，`on_event` 走 `isinstance` 分发；`set_task_id` 创建新 sink；`from .progress_sink import ...` 软引用，避免循环 import | F | 📋 待开始 |
-| 4 | `extensions/orchestrator/agent_runner.py`：参数 `progress_reporter` → `progress_sink`；`SessionComplete` 分支与 `max_turns` 路径补 `sink.on_session_complete`；若有 `TurnComplete` 分支也补 `sink.on_turn_complete`；`_write_event_log` 行为不变 | C | 📋 待开始 |
-| 5 | `extensions/orchestrator/orchestrator.py:125-126` 删除单例；`_dispatch_issue` / `_run_issue` 中为每个 session 新建 `ToolContextProgressSink` + `CompositeProgressSink`；保留 `_progress_context` 共享 | D | 📋 待开始 |
-| 6 | `src/tool_system/tools/progress_report.py` 的 `ProgressReportTool` prompt 增「建议显式传 `progress`」指引；`_progress_report_call` 接受 `progress=None`（已支持，无需改实现） | E | 📋 待开始 |
-| 7 | 单元测试：`ToolContextProgressSink` 三个回调直接调；`CompositeProgressSink` 扇出且单 sink 异常不阻塞；`ProgressReporter` shim 的 `on_event` 类型分发；`WorkflowConfig.phases` 解析默认空 | A/B/E/F | 📋 待开始 |
-| 8 | 回归测试：`asyncio.gather` 并发跑两个 session，断言各自的 `ToolContext.tasks` 写入互不串扰；`SessionComplete` 落点测试 | G | 📋 待开始 |
-| 9 | 更新 `tests/test_orchestrator_agent_runner.py` 的 stub（若依赖 `progress_reporter` kwarg，改为 `progress_sink`）；运行 `pytest tests/test_orchestrator_*.py -q` 与 `tests/manual_e2e_f38.py -v -s` 确认不破 | G | 📋 待开始 |
-
-#### 依赖与协同
-
-- **依赖 F-1、F-38 Sub-D**：F-38 已把 `ProgressReporter` 接到主流程，本特性在此基础上重构；不破坏 F-38 验收标准（`progress_reporter.ProgressReporter` 在主流程被构造 → 改为 `ToolContextProgressSink` 在主流程被构造）。
-- **先于 F-37 落地收益**：F-37 (PR 检视意见自动修复) 后续可注册 `PRReviewAutoFixSink` 监听 `on_session_complete` 触发 follow-up run，无需改 `AgentRunner`。
-- **先于 F-39 落地收益**：F-39 (Issue 重跑) 后续可注册 `RetryLabelSink` 监听 `on_session_complete` 更新 issue label，无需改 `AgentRunner`。
-- **不破坏 F-36 LocalTracker**：LocalTracker 派发的 session 也走相同的 sink 构造路径，`ToolContextProgressSink` 行为对其等价（数据落 `ToolContext.tasks`，不访问远程）。
-- **与 F-22 Cron 系统解耦**：Cron 触发的 prompt 不走 orchestrator，sink 链路不被影响。
+> Protocol 设计、架构对比、关键组件（ProgressSink / CompositeProgressSink / ToolContextProgressSink / ProgressReporter shim）、改造点、进度计算、验收标准、风险与实施阶段的完整设计文档已归档至 [ARCHIVED_FEATURES.md §二十一.7 F-40 ProgressReporter Sink 重构](./ARCHIVED_FEATURES.md#二十一7-f-40-progressreporter-sink-重构)。
 
 ---
-
-
 
 #### 1.3.1 AgentRunner 空转检测机制（F-51）
 **状态**: ✅ 完成
@@ -7978,7 +7718,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 八、Multi-Session 可视化分析平台（F-91~F-95）
 
-**状态**: ✅ 开发完成 | **优先级**: P0 | **代码**: 100% ✅ 全部 69 测试通过
+**状态**: ✅ 开发完成 | **优先级**: P0 | **代码**: 100% ✅ 全部 110 测试通过
 
 ### 8.1 背景
 
@@ -7994,13 +7734,14 @@ Multi-Session 可视化分析平台是一个独立的 Web 应用，通过甘特�
 
 ```
 extensions/visualizer/
-├── server.py                    # 独立 FastAPI app（路径 B，默认 8765）
+├── __init__.py                  # v0.1.0
+├── server.py                    # 独立 FastAPI app（端口 8765，15+ API 端点 + 4 前端页面）
 ├── ws.py                        # WebSocket live tail
 ├── cli.py                       # clawcodex-dev viz 子命令
 ├── orchestrator_link.py         # F-38/F-45/F-54 链接生成
 ├── import_router.py             # 条件性 session 导入（--allow-import）
 ├── models/
-│   └── viz_models.py            # 5 个 Pydantic 模型
+│   └── viz_models.py            # 10 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats / ShareLink / ...）
 ├── parsers/
 │   ├── session_parser.py        # SessionMetadata → viz 数据
 │   ├── transcript_parser.py     # 增量流式 JSONL 解析
@@ -8008,29 +7749,37 @@ extensions/visualizer/
 │   └── tool_events_parser.py    # F-45 events.ndjson 解析
 ├── builders/
 │   ├── gantt_data_builder.py    # 甘特图数据组装
-│   ├── timeline_builder.py      # 时间轴 bars
+│   ├── timeline_builder.py      # 时间轴 bars（聚合各 parser 输出）
 │   ├── comparison_builder.py    # 跨 session 对比
 │   ├── stats_builder.py         # OperationStats 聚合
 │   ├── anomaly_builder.py       # F-51 no-op 阈值
 │   ├── export_builder.py        # PNG/SVG/JSON/PDF
-│   └── agent_tree_builder.py    # 多 Agent 树（P1）
-├── templates/                   # Jinja2 模板（零 npm）
+│   ├── agent_tree_builder.py    # 多 Agent 树（P0 简化版）
+│   ├── agent_tree_layout.py     # 多 Agent 瀑布布局（spawn/join/depth）
+│   ├── operation_categorizer.py # 操作分类（READ/EXECUTE/WRITE/ORCHESTRATE/OTHER）
+│   └── multi_session_view_builder.py  # 多 session 瀑布视图（F-95 前端 payload）
+├── templates/                   # 9 个 Jinja2 模板（零 npm）
 │   ├── base.html
 │   ├── index.html               # 甘特图主页面
 │   ├── session_row.html         # 单 Session 详情页
 │   ├── comparison.html          # 跨 Session 对比页面
+│   ├── multi_session.html       # 多 Session 瀑布视图
 │   ├── stats_bar.html
 │   ├── anomaly_panel.html
 │   ├── export_dialog.html
 │   └── status_bar.html
 ├── static/
-│   ├── css/style.css
+│   ├── css/
+│   │   ├── style.css            # 主样式
+│   │   └── multi_session.css    # 瀑布视图专用样式
 │   └── js/
 │       ├── app.js               # 搜索/过滤/交互
 │       ├── gantt.js             # ECharts 甘特图
 │       ├── websocket.js         # 原生 WebSocket
-│       └── utils.js             # 工具函数
+│       ├── utils.js             # 工具函数
+│       └── multi_session_view.js # 多 Session 瀑布视图（ECharts custom series）
 └── fixtures/                    # 示例数据
+    └── sample_session.json
 ```
 
 **关键技术栈**：
@@ -8733,7 +8482,7 @@ clawcodex_ext/community_radar/
 | F-37 | PR 检视意见自动修复 | §1.1.2 | 📋 规划中 |
 | F-38 | 验证与报告闭环 | §1.1.3 | ✅ 完成 |
 | F-39 | Issue 重跑入口 | §1.1.4 | ✅ 完成 |
-| F-40 | ProgressReporter Sink | §1.2.2 | 📋 设计完成 |
+| F-40 | ProgressReporter Sink | §1.2.2 | ✅ 已完成 |
 | F-41 | Coordinator 工具集 | §1.3.4 | ✅ 完成 |
 | F-42 | Workspace 策略 | §1.2.1 | ✅ 完成 |
 | F-43 | CLI 模型切换 | §3.1 | ✅ 完成 |
