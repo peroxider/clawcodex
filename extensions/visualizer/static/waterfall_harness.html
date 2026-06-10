@@ -66,7 +66,11 @@ body { background:#1a1a2e; color:#e0e0e0; margin:0; padding:0; font-family: -app
  * box + aggregation paths.
  * ---------------------------------------------------------- */
 (function buildMockPayload() {
-    const N_TICKS = 819;
+    // Bumped to 4000 ticks (~2.2 ticks/sec) so aggregation is visible
+    // at every zoom level — the +N badge needs clustered bars to be
+    // demonstrable.  The original 819 case is still hittable via the
+    // 6px hit area, just not visible as aggregated fat bars.
+    const N_TICKS = 4000;
     const SPAN = 1800;
     const TOOL_COLORS = {
         Read:        '#5470c6',
@@ -170,6 +174,36 @@ body { background:#1a1a2e; color:#e0e0e0; margin:0; padding:0; font-family: -app
 /* Mock apiFetch to return the synthetic payload */
 VizUtils.apiFetch = async function(url) {
     if (url.includes('/api/viz/multi-session')) return window.__MOCK_PAYLOAD;
+    // LLM I/O mock — synth an input + output pair keyed off the turn id.
+    // Mirrors the server response shape (session_id, turn_id, input,
+    // output — each with content_blocks[]).
+    const m = url.match(/\/api\/viz\/turn\/([^/]+)__([^/]+)\/llm-io/);
+    if (m) {
+        const sessionId = decodeURIComponent(m[1]);
+        const turnId = decodeURIComponent(m[2]);
+        return {
+            session_id: sessionId,
+            turn_id: turnId,
+            input: {
+                role: 'assistant',
+                timestamp: 1749_500_000 + (parseInt(turnId.replace(/\D/g, '')) || 0),
+                content_blocks: [
+                    { type: 'text', text: `Calling tool for turn ${turnId}…` },
+                    { type: 'tool_use', id: turnId, name: 'Read',
+                      input: { file_path: `src/handler_${turnId}.py` } },
+                ],
+            },
+            output: {
+                role: 'user',
+                timestamp: 1749_500_000 + (parseInt(turnId.replace(/\D/g, '')) || 0) + 1,
+                content_blocks: [
+                    { type: 'tool_result', tool_use_id: turnId,
+                      content: `# handler_${turnId}.py\nimport sys\ndef main():\n    return 42\n`,
+                      is_error: false },
+                ],
+            },
+        };
+    }
     throw new Error('mock apiFetch: ' + url);
 };
 
