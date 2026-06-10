@@ -108,6 +108,7 @@ class RuntimeContext:
                 mode=effective_mode,
                 is_bypass_permissions_mode_available=bypass_available,
             ),
+            tool_registry=tool_registry,
         )
         if effective_mode == "bypassPermissions":
             tool_context.allow_docs = True
