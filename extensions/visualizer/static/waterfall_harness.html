@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Waterfall Fix — Playwright Harness</title>
+<link rel="stylesheet" href="/static/css/multi_session.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+body { background:#1a1a2e; color:#e0e0e0; margin:0; padding:0; font-family: -apple-system, sans-serif; }
+.harness-header {
+    padding: 12px 20px; border-bottom: 1px solid #2a2a4e;
+    display:flex; justify-content:space-between; align-items:center;
+}
+.harness-header h1 { font-size: 16px; margin:0; }
+.harness-header .meta { font-size: 12px; color:#a0a0b0; }
+.chart-host { padding: 12px 20px; }
+#waterfall-chart { width: 100%; height: 640px; }
+</style>
+</head>
+<body>
+<div class="harness-header">
+    <h1>🎯 Waterfall 修复验证 harness</h1>
+    <span class="meta">F-95 / F-96 · 6px hit box + aggregation + drawer</span>
+</div>
+<div class="chart-host">
+    <div id="waterfall-chart"></div>
+</div>
+
+<!-- mirror session_row.html drawer markup -->
+<aside id="turn-drawer" class="turn-drawer" aria-hidden="true" role="dialog" aria-labelledby="turn-drawer-title">
+    <div class="turn-drawer-header">
+        <h3 id="turn-drawer-title">Turn Detail</h3>
+        <button type="button" class="turn-drawer-close" aria-label="Close drawer">×</button>
+    </div>
+    <div class="turn-drawer-body">
+        <section class="turn-drawer-section">
+            <h4>Overview</h4>
+            <dl id="turn-drawer-overview"></dl>
+        </section>
+        <section class="turn-drawer-section turn-drawer-aggregated" id="turn-drawer-aggregated" style="display:none;">
+            <h4>Aggregated Turns <span class="turn-drawer-count" id="turn-drawer-agg-count"></span></h4>
+            <ul id="turn-drawer-agg-list"></ul>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>Session Records <small>(coming soon)</small></h4>
+            <div id="turn-drawer-records"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>LLM I/O <small>(coming soon)</small></h4>
+            <div id="turn-drawer-llm"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>Tool I/O <small>(coming soon)</small></h4>
+            <div id="turn-drawer-tools"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+    </div>
+</aside>
+
+<script src="/static/js/utils.js"></script>
+<script src="/static/js/multi_session_view.js"></script>
+<script>
+/* ----------------------------------------------------------
+ * Build a synthetic 819-tick payload matching the original
+ * screenshot. Tools/turns distributed across 1800s with a
+ * few 0.05-1s operations to exercise the 0.5s floor + hit
+ * box + aggregation paths.
+ * ---------------------------------------------------------- */
+(function buildMockPayload() {
+    const N_TICKS = 819;
+    const SPAN = 1800;
+    const TOOL_COLORS = {
+        Read:        '#5470c6',
+        Write:       '#91cc75',
+        Edit:        '#fac858',
+        Bash:        '#ee6666',
+        Grep:        '#73c0de',
+        Agent:       '#9c7cff',
+        WebFetch:    '#ea7ccc',
+        TodoWrite:   '#3ba272',
+    };
+    const CATEGORIES = ['read', 'write', 'execute', 'orchestrate', 'other'];
+    const CATEGORY_COLOR = {
+        read: '#5470c6', write: '#91cc75', execute: '#ee6666',
+        orchestrate: '#9c7cff', other: '#a0a0b0',
+    };
+    const TOOLS = Object.keys(TOOL_COLORS);
+    const STATUSES = ['success', 'success', 'success', 'running', 'failed'];
+
+    const ticks = [];
+    for (let i = 0; i < N_TICKS; i++) {
+        const tool = TOOLS[i % TOOLS.length];
+        const status = STATUSES[Math.floor(Math.random() * STATUSES.length)];
+        const dur = 0.05 + Math.random() * 1.5;
+        const start = (i / N_TICKS) * SPAN + (Math.random() - 0.5) * 0.2;
+        const cat = (tool === 'Agent') ? 'orchestrate'
+                  : (tool === 'Bash')  ? 'execute'
+                  : (tool === 'Write' || tool === 'Edit') ? 'write'
+                  : (tool === 'Read' || tool === 'Grep') ? 'read'
+                  : 'other';
+        ticks.push({
+            id: `tc-${String(i).padStart(4, '0')}`,
+            x: start,
+            w: dur,
+            color: CATEGORY_COLOR[cat],
+            status,
+            label: tool,
+            category: cat,
+        });
+    }
+    ticks.sort((a, b) => a.x - b.x);
+
+    const subAgentTicks = [];
+    for (let i = 0; i < 120; i++) {
+        const tool = TOOLS[i % TOOLS.length];
+        const dur = 0.1 + Math.random() * 2;
+        const start = 200 + (i / 120) * 1500 + (Math.random() - 0.5) * 0.3;
+        const cat = (tool === 'Agent') ? 'orchestrate' : 'read';
+        subAgentTicks.push({
+            id: `sub-${i}`,
+            x: start, w: dur,
+            color: CATEGORY_COLOR[cat],
+            status: 'success',
+            label: tool,
+            category: cat,
+        });
+    }
+
+    // Category counts (drives the legend)
+    const counts = { read:0, write:0, execute:0, orchestrate:0, other:0 };
+    for (const t of ticks) counts[t.category]++;
+    const legend = [
+        { category:'read',        label:'Read',    color:'#5470c6', count:counts.read },
+        { category:'write',       label:'Write',   color:'#91cc75', count:counts.write },
+        { category:'execute',     label:'Bash',    color:'#ee6666', count:counts.execute },
+        { category:'orchestrate', label:'Agent',   color:'#9c7cff', count:counts.orchestrate },
+        { category:'other',       label:'Other',   color:'#a0a0b0', count:counts.other },
+    ];
+
+    window.__MOCK_PAYLOAD = {
+        timeRange: { min: 0, max: SPAN, tickSeconds:[0,300,600,900,1200,1500,1800], tickLabels:[] },
+        legend,
+        sessions: [{
+            id: 'sess-001',
+            name: 'orchestrator-F-54',
+            metadata: 'run-02-20260607T092723Z · 27.6min · 819 turns',
+            y: 0,
+            ticks,
+            status: 'completed',
+            model: 'claude-opus-4-7',
+            endMarker: { x: SPAN, label: 'completed' },
+        }],
+        agents: [{
+            id: 'agent-001',
+            parentSessionId: 'sess-001',
+            name: 'subagent-coder',
+            role: '执行',
+            roleColor: '#9c7cff',
+            title: 'subagent-coder',
+            count: subAgentTicks.length,
+            spawnX: 200,
+            joinX: 1700,
+            depthY: 1,
+            ticks: subAgentTicks,
+        }],
+        edges: [{ type: 'fork', from: { y: 0, x: 200 }, to: { y: 1, x: 200 } },
+                { type: 'join', from: { y: 1, x: 1700 }, to: { y: 0, x: 1700 } }],
+    };
+})();
+
+/* Mock apiFetch to return the synthetic payload */
+VizUtils.apiFetch = async function(url) {
+    if (url.includes('/api/viz/multi-session')) return window.__MOCK_PAYLOAD;
+    throw new Error('mock apiFetch: ' + url);
+};
+
+/* Boot the chart */
+window.addEventListener('DOMContentLoaded', () => {
+    initMultiSessionView(['sess-001'], {
+        chartContainerId: 'waterfall-chart',
+        legendContainerId: null,
+    });
+
+    /* Drawer wiring (mirror session_row.html) */
+    const closeBtn = document.querySelector('#turn-drawer .turn-drawer-close');
+    if (closeBtn) closeBtn.addEventListener('click', window.closeTurnDrawer);
+    const drawer = document.getElementById('turn-drawer');
+    if (drawer) drawer.addEventListener('click', (e) => {
+        if (e.target === drawer) window.closeTurnDrawer();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') window.closeTurnDrawer();
+    });
+});
+</script>
+</body>
+</html>

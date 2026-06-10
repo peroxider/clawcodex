@@ -60,6 +60,38 @@
 {# Include export dialog #}
 {% include "export_dialog.html" %}
 
+{# Side drawer for turn detail (waterfall click target) #}
+<aside id="turn-drawer" class="turn-drawer" aria-hidden="true" role="dialog"
+       aria-labelledby="turn-drawer-title">
+    <div class="turn-drawer-header">
+        <h3 id="turn-drawer-title">Turn Detail</h3>
+        <button type="button" class="turn-drawer-close"
+                aria-label="Close drawer">×</button>
+    </div>
+    <div class="turn-drawer-body">
+        <section class="turn-drawer-section">
+            <h4>Overview</h4>
+            <dl id="turn-drawer-overview"></dl>
+        </section>
+        <section class="turn-drawer-section turn-drawer-aggregated" id="turn-drawer-aggregated" style="display:none;">
+            <h4>Aggregated Turns <span class="turn-drawer-count" id="turn-drawer-agg-count"></span></h4>
+            <ul id="turn-drawer-agg-list"></ul>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>Session Records <small>(coming soon)</small></h4>
+            <div id="turn-drawer-records"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>LLM I/O <small>(coming soon)</small></h4>
+            <div id="turn-drawer-llm"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+        <section class="turn-drawer-section">
+            <h4>Tool I/O <small>(coming soon)</small></h4>
+            <div id="turn-drawer-tools"><div class="turn-drawer-empty">Not loaded yet</div></div>
+        </section>
+    </div>
+</aside>
+
 {# Include status bar #}
 {% include "status_bar.html" %}
 {% endblock %}
@@ -108,6 +140,20 @@
             window.loadSessionDetail(SESSION_ID);
         }
         connectLiveTail(SESSION_ID);
+
+        // Wire the drawer's close button (avoids inline onclick so
+        // closeTurnDrawer can stay inside the IIFE in multi_session_view.js).
+        const closeBtn = document.querySelector('#turn-drawer .turn-drawer-close');
+        if (closeBtn) closeBtn.addEventListener('click', window.closeTurnDrawer);
+        const drawer = document.getElementById('turn-drawer');
+        if (drawer) {
+            drawer.addEventListener('click', (e) => {
+                if (e.target === drawer) window.closeTurnDrawer();
+            });
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') window.closeTurnDrawer();
+        });
     });
 </script>
 {% endblock %}

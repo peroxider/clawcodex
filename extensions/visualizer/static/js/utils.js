@@ -22,12 +22,16 @@ const VizUtils = {
       *   else     -> one decimal place in hours
      */
     formatDuration(ms) {
-        if (ms == null || ms === 0) return '0ms';
+        if (ms == null) return '—';
+        if (ms === 0) return '0ms';
         const n = Number(ms);
         if (!Number.isFinite(n)) return '—';
-        if (Math.abs(n) < 1000) return `${n.toFixed(1)}ms`;
-        if (Math.abs(n) < 60000) return `${(n / 1000).toFixed(1)}s`;
-        if (Math.abs(n) < 3600000) return `${(n / 60000).toFixed(1)}min`;
+        const abs = Math.abs(n);
+        if (abs < 1)        return `${n.toFixed(2)}ms`;
+        if (abs < 1000)     return `${n.toFixed(0)}ms`;
+        if (abs < 10000)    return `${(n / 1000).toFixed(1)}s`;
+        if (abs < 60000)    return `${(n / 1000).toFixed(0)}s`;
+        if (abs < 3600000)  return `${(n / 60000).toFixed(0)}m`;
         return `${(n / 3600000).toFixed(1)}h`;
     },
 

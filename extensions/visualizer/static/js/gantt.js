@@ -96,6 +96,18 @@ async function renderGanttChart(sessionId) {
             return;
         }
 
+        const tr = ganttData.timeRange || {};
+        const rangeSpan = (typeof tr.min === 'number' && typeof tr.max === 'number')
+            ? Math.max(tr.max - tr.min, 0)
+            : 0;
+        // 5% padding, with a small floor to avoid zero-width axes on tiny
+        // sessions. Floor is a fraction of the span, not an absolute value,
+        // so 300ms sessions get ~15ms padding, not 1s (which would 3x the
+        // range and re-introduce the "compressed to the left" bug).
+        const xPad = Math.max(rangeSpan * 0.05, rangeSpan * 0.02, 1);
+        const xMin = (typeof tr.min === 'number') ? tr.min - xPad : 'dataMin';
+        const xMax = (typeof tr.max === 'number') ? tr.max + xPad : 'dataMax';
+
         const option = {
             backgroundColor: 'transparent',
             tooltip: {
@@ -111,8 +123,16 @@ async function renderGanttChart(sessionId) {
             grid: { left: 150, right: 40, top: 30, bottom: 60 },
             xAxis: {
                 type: 'value',
+                min: xMin,
+                max: xMax,
+                // splitNumber only — no minInterval. A minInterval of 1s
+                // would force ECharts to extend the axis when the data is
+                // sub-second, which is the exact bug we're fixing.
+                splitNumber: 6,
                 axisLabel: {
-                    formatter: v => VizUtils.formatDuration(v)
+                    formatter: v => VizUtils.formatDuration(v),
+                    interval: 'auto',
+                    hideOverlap: true
                 }
             },
             yAxis: {

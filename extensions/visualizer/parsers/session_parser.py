@@ -53,7 +53,13 @@ class SessionMetadataParser:
         # Build base SessionVizData
         start_time = meta.get("start_time", 0.0)
         last_updated = meta.get("last_updated", start_time)
-        duration_ms = int((last_updated - start_time) * 1000) if last_updated > start_time else 0
+        # Prefer an explicit ``end_time`` in the metadata (the wall-clock end
+        # the session actually ran to). Fall back to ``last_updated``, which
+        # tracks writes to the metadata file itself (and is missing from many
+        # fixtures / imports, in which case it defaulted to ``start_time``
+        # — silently yielding ``duration_ms = 0`` and a zero-width gantt).
+        end_time = meta.get("end_time") or last_updated
+        duration_ms = int((end_time - start_time) * 1000) if end_time > start_time else 0
 
         # Backfill start_time from the transcript when metadata is clock-skewed.
         # Common when the agent loop creates metadata at session start but the
@@ -65,9 +71,14 @@ class SessionMetadataParser:
         if transcript_path.exists():
             transcript_min_ts = self._transcript_min_timestamp(transcript_path)
             if transcript_min_ts and (start_time <= 0 or transcript_min_ts < start_time):
-                anchor_end = last_updated if last_updated and last_updated > transcript_min_ts else transcript_min_ts
+                anchor_end = end_time if end_time and end_time > transcript_min_ts else transcript_min_ts
                 duration_ms = max(0, int((anchor_end - transcript_min_ts) * 1000))
                 start_time = transcript_min_ts
+
+        # ``turn_count``: prefer explicit field; fall back to message_count for
+        # older metadata that used the older key. ``tool_count`` is enriched
+        # from the snapshot / run report below.
+        turn_count = meta.get("turn_count", 0) or meta.get("message_count", 0)
 
         viz = SessionVizData(
             session_id=session_id,
@@ -75,14 +86,15 @@ class SessionMetadataParser:
             workspace=meta.get("cwd", ""),
             model=meta.get("model", ""),
             start_time=start_time,
-            end_time=last_updated,
+            end_time=end_time,
             duration_ms=duration_ms,
             status=self._infer_status(meta, transcript_path),
             agent_name=meta.get("agent_name", ""),
             tags=meta.get("tags", []),
             transcript_path=str(transcript_path) if transcript_path.exists() else None,
             snapshot_path=str(snapshot_path) if snapshot_path.exists() else None,
-            turn_count=meta.get("message_count", 0),
+            turn_count=turn_count,
+            tool_count=meta.get("tool_count", 0),
             detected_mode=meta.get("detected_mode", ""),
             config_summary=meta.get("config", {}),
         )

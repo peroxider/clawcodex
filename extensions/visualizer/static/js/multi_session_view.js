@@ -23,6 +23,22 @@ const MultiSessionView = (function() {
     // also nudge gantt.js so the gantt chart stays in sync if mounted.
     let ganttLiveEvent = null;
 
+    // ---- View density tuning (waterfall fix) ----
+    // Below HIT_MIN_PX the canvas rect becomes unhittable; we wrap each
+    // foreground bar in a transparent 6px-wide hit zone.
+    const HIT_MIN_PX = 6;
+    // Visible-window threshold (in data seconds) below which we render
+    // ticks in their natural per-turn form, and above which we collapse
+    // neighbours into aggregated "fat" bars. Re-evaluated on datazoom.
+    const DETAIL_THRESHOLD_SEC = 60;
+    // Debounce window for re-aggregating after a datazoom burst.
+    let densifyTimer = null;
+    // Cache the last mode so we can short-circuit re-renders.
+    let lastViewMode = 'detail';
+    // Cached dataZoom state — preserved across the re-render that
+    // follows a density-mode switch so the user's zoom doesn't jump.
+    let lastDzState = null;
+
     /**
      * Initialize the view for the given session IDs.
      * Public entry point used by multi_session.html inline script and
@@ -118,7 +134,9 @@ const MultiSessionView = (function() {
 
         const baseTime = (currentData.timeRange && currentData.timeRange.min) || 0;
         const startRel = Math.max(0, (bar.start_time || 0) - baseTime);
-        const endRel = Math.max(startRel + 0.05, (bar.end_time || startRel) - baseTime);
+        // 0.5s floor prevents micro-bars from consuming pixels and
+        // making the waterfall un-hittable; 0.05s was too aggressive.
+        const endRel = Math.max(startRel + 0.5, (bar.end_time || startRel) - baseTime);
         const tick = {
             x: startRel,
             w: endRel - startRel,
@@ -177,6 +195,66 @@ const MultiSessionView = (function() {
         if (!chart) {
             chart = echarts.init(container, 'dark', { renderer: 'canvas' });
             window.addEventListener('resize', () => chart && chart.resize());
+
+            // ---- Click: open the side drawer with turn metadata ----
+            chart.on('click', function(params) {
+                if (!params || !params.data) return;
+                // Skip edge series — they carry no turn payload.
+                if (params.seriesName === 'edges') return;
+                openTurnDrawer(buildTurnMeta(params.data));
+            });
+
+            // ---- Datazoom: debounced re-aggregation ----
+            // When the user pans/zooms across the DETAIL_THRESHOLD_SEC
+            // boundary we rebuild the series with the right density.
+            // We capture the dataZoom state from the event payload
+            // (params.batch[0].start/end) because the option isn't
+            // guaranteed to be updated yet when the handler fires.
+            // We also derive the next mode from lastDzState + the
+            // session's timeRange rather than chart.getOption(), so a
+            // dispatchAction (or any source of dataZoom updates) is
+            // reflected even when the option hasn't been re-applied.
+            chart.on('datazoom', function(params) {
+                if (densifyTimer) clearTimeout(densifyTimer);
+                // ECharts surfaces dataZoom state in two shapes:
+                //   - user gestures:  params.batch = [{ start, end, ... }]
+                //   - dispatchAction: params = { type, start, end }  (top-level)
+                // Read both, prefer the explicit numbers on whichever
+                // shape we got, and fall back to chart.getOption() only
+                // as a last resort.
+                let nextStart, nextEnd;
+                const batch = params && params.batch && params.batch[0];
+                if (batch && typeof batch.start === 'number'
+                        && typeof batch.end === 'number') {
+                    nextStart = batch.start; nextEnd = batch.end;
+                } else if (params && typeof params.start === 'number'
+                        && typeof params.end === 'number') {
+                    nextStart = params.start; nextEnd = params.end;
+                } else {
+                    const dz = chart.getOption().dataZoom;
+                    if (dz && dz[0]) {
+                        nextStart = dz[0].start || 0;
+                        nextEnd = dz[0].end || 100;
+                    }
+                }
+                if (typeof nextStart === 'number' && typeof nextEnd === 'number') {
+                    lastDzState = { start: nextStart, end: nextEnd };
+                }
+                densifyTimer = setTimeout(() => {
+                    // Use the cached lastDzState + the session's timeRange
+                    // to decide the mode. This matches what renderChart
+                    // uses for its own aggregation decision, so the two
+                    // stay in sync even if chart.getOption() lags.
+                    const ts = (currentData && currentData.timeRange) || {};
+                    const span = Math.max(1, (ts.max || 60) - (ts.min || 0));
+                    const dz = lastDzState || { start: 0, end: 100 };
+                    const visSpan = span * (dz.end - dz.start) / 100;
+                    const nextMode = visSpan > DETAIL_THRESHOLD_SEC ? 'density' : 'detail';
+                    if (nextMode === lastViewMode) return;
+                    lastViewMode = nextMode;
+                    if (currentData) renderChart(currentData, currentContainerId);
+                }, 180);
+            });
         }
 
         const sessions = data.sessions || [];
@@ -193,29 +271,30 @@ const MultiSessionView = (function() {
         const yIndex = new Map(yCategories.map((label, i) => [label, i]));
 
         // ---- Session swimlane series (activity ticks per session) ----
-        const sessionTickData = sessions.flatMap(s => {
+        const sessionTickDataRaw = sessions.flatMap(s => {
             const yi = yIndex.get(sessionLabel(s));
             return (s.ticks || []).map(t => ({
                 value: [
                     yi,
                     t.x,
-                    t.x + (t.w || 0.05),
+                    t.x + (t.w || 0.5),
                     t.color,
                     t.status,
                     t.label,
                     t.id,
                 ],
                 itemId: t.id,
+                sessionId: s.id,
+                agentId: null,
             }));
         });
 
         // ---- Agent swimlane series (one per agent) ----
-        const agentTickData = [];
-        const agentEdgeData = [];
+        const agentTickDataRaw = [];
         for (const a of agents) {
             const yi = yIndex.get(agentLabel(a));
             // Background span (spawn → join) — subtle gray bar
-            agentTickData.push({
+            agentTickDataRaw.push({
                 value: [
                     yi,
                     a.spawnX,
@@ -226,14 +305,63 @@ const MultiSessionView = (function() {
                     `span-${a.id}`,
                 ],
                 isBackground: true,
+                sessionId: a.parentSessionId || null,
+                agentId: a.id,
             });
             // Activity ticks from agent metadata (or empty)
             for (const t of (a.ticks || [])) {
-                agentTickData.push({
-                    value: [yi, t.x, t.x + (t.w || 0.05), t.color, t.status, t.label, t.id],
+                agentTickDataRaw.push({
+                    value: [yi, t.x, t.x + (t.w || 0.5), t.color, t.status, t.label, t.id],
                     itemId: t.id,
+                    sessionId: a.parentSessionId || null,
+                    agentId: a.id,
                 });
             }
+        }
+
+        // ---- Density-aware aggregation ----
+        // When the visible window is wide (zoomed out) we collapse
+        // neighbouring turns into single "fat" bars so the user can
+        // still hover/click. Crucially the aggregation operates on
+        // the *visible* window only: ticks outside the current view
+        // are filtered out first, and bucket size is computed from
+        // visSpan (not the full timeline span) so the bucket grid
+        // adapts to the user's zoom level.
+        // ---- Density-aware aggregation ----
+        // When the visible window is wide (zoomed out) we collapse
+        // neighbouring turns into single "fat" bars so the user can
+        // still hover/click. Crucially the aggregation operates on
+        // the *visible* window only: ticks outside the current view
+        // are filtered out first, and bucket size is computed from
+        // visSpan (not the full timeline span) so the bucket grid
+        // adapts to the user's zoom level.
+        //
+        // NB: we can't read xAxis min/max from chart.getOption() here
+        // — on the very first render the chart hasn't been given an
+        // option yet, so chart.getOption() returns the default empty
+        // option and getEffectiveRange() short-circuits to null. We
+        // derive the range from timeRange + lastDzState directly.
+        const xMin = timeRange.min || 0;
+        const xMax = timeRange.max || 60;
+        const dzState = lastDzState || { start: 0, end: 100 };
+        const xSpan = Math.max(1, xMax - xMin);
+        const effRange = {
+            visMin: xMin + xSpan * dzState.start / 100,
+            visMax: xMin + xSpan * dzState.end / 100,
+            visSpan: xSpan * (dzState.end - dzState.start) / 100,
+        };
+        const sessionTickData = sessionTickDataRaw;
+        const agentTickData = agentTickDataRaw;
+        const renderedMode = effRange.visSpan > DETAIL_THRESHOLD_SEC ? 'density' : 'detail';
+        lastViewMode = renderedMode;
+        if (renderedMode === 'density') {
+            const sIn = filterToRange(sessionTickDataRaw, effRange.visMin, effRange.visMax);
+            const aIn = filterToRange(agentTickDataRaw, effRange.visMin, effRange.visMax);
+            const bucketCount = Math.max(50, Math.min(600, Math.round(effRange.visSpan / 0.2)));
+            const sDens = densifyTicks(sIn, effRange.visSpan, bucketCount);
+            const aDens = densifyTicks(aIn, effRange.visSpan, bucketCount);
+            sessionTickData.splice(0, sessionTickData.length, ...sDens);
+            agentTickData.splice(0, agentTickData.length, ...aDens);
         }
 
         // ---- Edges (fork/join) for graph series ----
@@ -320,12 +448,20 @@ const MultiSessionView = (function() {
                     const v = params.data.value;
                     if (v.length < 6) return '';
                     if (params.data.isBackground) {
-                        return `<strong>${v[4] || ''}</strong><br/>
+                        return `<strong>${escapeHtml(v[4] || '')}</strong><br/>
                                 <span style="color:#a0a0b0">background span</span>`;
                     }
-                    return `<strong>${v[5] || v[4] || ''}</strong><br/>
-                            x: ${v[1].toFixed(1)}s<br/>
-                            status: ${v[4] || '—'}`;
+                    if (params.data.aggregatedCount > 1) {
+                        return `<strong>${params.data.aggregatedCount} aggregated turns</strong><br/>
+                                <span style="color:#a0a0b0">click to expand</span>`;
+                    }
+                    const id = params.data.itemId || v[6] || '—';
+                    const dur = ((v[2] || 0) - (v[1] || 0)).toFixed(2);
+                    return `<strong>${escapeHtml(v[5] || v[4] || id)}</strong><br/>
+                            <span style="color:#a0a0b0">id:</span> ${escapeHtml(id)}<br/>
+                            <span style="color:#a0a0b0">start:</span> ${formatRelSec(v[1])}<br/>
+                            <span style="color:#a0a0b0">dur:</span> ${dur}s<br/>
+                            <span style="color:#a0a0b0">status:</span> ${escapeHtml(v[4] || '—')}`;
                 },
             },
             grid: {
@@ -366,9 +502,13 @@ const MultiSessionView = (function() {
                 splitLine: { show: true, lineStyle: { color: 'rgba(160,160,176,0.05)' } },
             },
             dataZoom: [
-                { type: 'slider', xAxisIndex: 0, height: 16, bottom: 16, start: 0, end: 100,
+                { type: 'slider', xAxisIndex: 0, height: 16, bottom: 16,
+                  start: lastDzState ? lastDzState.start : 0,
+                  end: lastDzState ? lastDzState.end : 100,
                   textStyle: { color: '#a0a0b0' } },
-                { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: true, moveOnMouseMove: true },
+                { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: true, moveOnMouseMove: true,
+                  start: lastDzState ? lastDzState.start : 0,
+                  end: lastDzState ? lastDzState.end : 100 },
             ],
             series: [
                 // Session activity ticks
@@ -378,7 +518,7 @@ const MultiSessionView = (function() {
                     renderItem: renderTick,
                     encode: { x: [1, 2], y: 0 },
                     data: sessionTickData,
-                    progressive: 5000,
+                    progressive: 0,
                     z: 3,
                 },
                 // Agent activity ticks (foreground + background spans)
@@ -388,7 +528,7 @@ const MultiSessionView = (function() {
                     renderItem: renderTick,
                     encode: { x: [1, 2], y: 0 },
                     data: agentTickData,
-                    progressive: 5000,
+                    progressive: 0,
                     z: 2,
                 },
                 // Fork / join curves
@@ -414,6 +554,16 @@ const MultiSessionView = (function() {
 
     // ------------------------------------------------------------------
     // Custom-series renderer for one tick
+    //
+    // Renders each foreground bar as a <group> containing:
+    //   1. A thin, clipped, visible rect (1.5px floor — preserves the
+    //      dense "rainfall" look).
+    //   2. A transparent rect with a 6px minimum width that absorbs
+    //      pointer events (hover/click). The hit area is clipped to
+    //      the plot rectangle so it never spills out of the chart.
+    //
+    // Background spans and aggregated bars keep a slightly larger
+    // visual floor because they represent longer-lived activity.
     // ------------------------------------------------------------------
     function renderTick(params, api) {
         const yIdx = api.value(0);
@@ -421,34 +571,476 @@ const MultiSessionView = (function() {
         const xEnd = api.coord([api.value(2), yIdx])[0];
         const color = api.value(3) || '#5470c6';
         const isBg = params.data && params.data.isBackground;
+        const isAggregated = params.data && params.data.aggregatedCount > 1;
 
         const height = api.size([0, 1])[1] * (isBg ? 0.85 : 0.5);
         const y = api.coord([0, yIdx])[1];
 
-        const width = Math.max(xEnd - xStart, isBg ? 1 : 1.5);
+        // ---- Visual width (thin rect) ----
+        const visFloor = isBg ? 2 : (isAggregated ? 4 : 1.5);
+        const visWidth = Math.max(xEnd - xStart, visFloor);
+
         if (isBg) {
             return {
                 type: 'rect',
                 shape: {
                     x: xStart, y: y - height / 2,
-                    width: width, height: height, r: 3,
+                    width: visWidth, height: height, r: 3,
                 },
                 style: { fill: color, stroke: 'none' },
             };
         }
+
+        // ---- Hit area (transparent, 6px min, centered on bar) ----
+        const xCenter = (xStart + xEnd) / 2;
+        const hitW = Math.max(visWidth, HIT_MIN_PX);
+        const hitX = xCenter - hitW / 2;
+        const plotBox = {
+            x: params.coordSys.x, y: params.coordSys.y,
+            width: params.coordSys.width, height: params.coordSys.height,
+        };
+        const visRect = echarts.graphic.clipRectByRect({
+            x: xStart, y: y - height / 2,
+            width: visWidth, height: height, r: 1,
+        }, plotBox);
+        const hitRect = echarts.graphic.clipRectByRect({
+            x: hitX, y: y - height / 2,
+            width: hitW, height: height, r: 1,
+        }, plotBox);
+
         return {
-            type: 'rect',
-            shape: echarts.graphic.clipRectByRect({
-                x: xStart, y: y - height / 2,
-                width: width, height: height, r: 1,
-            }, {
-                x: params.coordSys.x, y: params.coordSys.y,
-                width: params.coordSys.width, height: params.coordSys.height,
-            }),
-            style: { fill: color, opacity: 0.95 },
-            emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 0.5 } },
+            type: 'group',
+            silent: false,
+            children: [
+                {
+                    type: 'rect',
+                    shape: visRect,
+                    style: {
+                        fill: color,
+                        opacity: isAggregated ? 0.85 : 0.95,
+                    },
+                    emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 2 } },
+                },
+                {
+                    // Eats hover/click; rendered behind the bar via z order.
+                    type: 'rect',
+                    shape: hitRect,
+                    style: { fill: 'transparent' },
+                    silent: false,
+                    z: -1,
+                },
+            ].concat(_aggregatedBadge(params, xStart, xEnd, y, height, color)),
         };
     }
+
+    /**
+     * Build the ``+N`` corner badge for an aggregated bar. Returns an
+     * empty array for non-aggregated bars so the caller can simply
+     * ``.concat()`` the result. The badge is only drawn when the bar
+     * is wide enough to fit it (>16px) so dense buckets stay readable.
+     */
+    function _aggregatedBadge(params, xStart, xEnd, y, height, color) {
+        const aggCount = params.data && params.data.aggregatedCount;
+        if (!aggCount || aggCount <= 1) return [];
+        const barWidth = xEnd - xStart;
+        if (barWidth < 16) return [];
+        const label = `+${aggCount}`;
+        // Font size scales gently with bar height so very thin rows stay
+        // legible without overflowing.
+        const fs = Math.max(8, Math.min(11, Math.floor(height * 0.55)));
+        // Approx text width: 0.6em per char + 4px padding each side.
+        const padX = 4;
+        const approxW = label.length * fs * 0.6 + padX * 2;
+        // Anchor the badge to the bar's top-right corner, but clamp to
+        // the right edge so it doesn't spill past the visible bar.
+        const badgeW = Math.min(approxW, barWidth - 2);
+        const badgeH = fs + 2;
+        const bx = xEnd - badgeW;
+        const by = y - height / 2 + 1;
+        return [
+            {
+                type: 'rect',
+                shape: { x: bx, y: by, width: badgeW, height: badgeH, r: 2 },
+                style: {
+                    fill: 'rgba(0, 0, 0, 0.55)',
+                    stroke: 'rgba(255, 255, 255, 0.7)',
+                    lineWidth: 0.5,
+                },
+                silent: true,
+                z: 2,
+            },
+            {
+                type: 'text',
+                style: {
+                    text: label,
+                    fill: '#ffffff',
+                    font: `${fs}px ui-monospace, monospace`,
+                    fontWeight: 600,
+                    align: 'center',
+                    verticalAlign: 'middle',
+                    x: bx + badgeW / 2,
+                    y: by + badgeH / 2,
+                },
+                silent: true,
+                z: 3,
+            },
+        ];
+    }
+
+    // ------------------------------------------------------------------
+    // Aggregation: collapse neighbouring ticks into wider bars
+    //
+    // Sort by x, then bucket by floor(x / bucketSize) * bucketSize.
+    // Single-element buckets pass through unchanged so isolated turns
+    // stay individually clickable. Aggregated buckets carry their
+    // constituent ticks in `data.aggregated` for the drawer to list.
+    // ------------------------------------------------------------------
+    function densifyTicks(ticks, totalSpan, targetCount) {
+        if (!Array.isArray(ticks) || ticks.length === 0) return ticks;
+        const cap = Math.max(50, Math.min(targetCount || 400, ticks.length));
+        if (ticks.length <= cap) return ticks;
+        const bucket = totalSpan / cap;
+
+        const sorted = ticks.slice().sort((a, b) => (a.value[1] || 0) - (b.value[1] || 0));
+        const out = [];
+        let buf = [];
+        let bucketStart = Math.floor((sorted[0].value[1] || 0) / bucket) * bucket;
+
+        const flush = () => {
+            if (buf.length === 0) return;
+            if (buf.length === 1) {
+                out.push(buf[0]);
+            } else {
+                const first = buf[0];
+                // Pick the most-frequent colour in the bucket; fall back
+                // to a distinct "aggregated" purple.
+                const colorCounts = new Map();
+                for (const t of buf) {
+                    const c = (t.value && t.value[3]) || '#9c7cff';
+                    colorCounts.set(c, (colorCounts.get(c) || 0) + 1);
+                }
+                let pickColor = '#9c7cff';
+                let pickCount = 0;
+                for (const [c, n] of colorCounts) {
+                    if (n > pickCount) { pickColor = c; pickCount = n; }
+                }
+                out.push({
+                    value: [first.value[0], bucketStart, bucketStart + bucket,
+                            pickColor, 'aggregated',
+                            `${buf.length} turns`, `agg-${bucketStart.toFixed(2)}`],
+                    itemId: `agg-${bucketStart.toFixed(2)}`,
+                    sessionId: first.sessionId,
+                    agentId: first.agentId,
+                    aggregatedCount: buf.length,
+                    aggregated: buf.slice(),
+                });
+            }
+            buf = [];
+        };
+
+        for (const t of sorted) {
+            const xs = t.value[1] || 0;
+            const bStart = Math.floor(xs / bucket) * bucket;
+            if (bStart !== bucketStart) {
+                flush();
+                bucketStart = bStart;
+            }
+            buf.push(t);
+        }
+        flush();
+        return out;
+    }
+
+    // ------------------------------------------------------------------
+    // Density mode decision
+    // ------------------------------------------------------------------
+    function shouldDensify() {
+        return getVisibleSec() > DETAIL_THRESHOLD_SEC;
+    }
+    function currentBucketCount() {
+        // Aim for ~one bucket per 0.2s of visible range, clamped 50..600.
+        const vis = getVisibleSec();
+        const target = Math.round(vis / 0.2);
+        return Math.max(50, Math.min(600, target));
+    }
+    // Returns the current visible window in the same coordinate system
+    // as the tick data (t.x): { visMin, visMax, visSpan }.  null if the
+    // chart hasn't been laid out yet.
+    function getEffectiveRange() {
+        if (!chart) return null;
+        const opt = chart.getOption();
+        const xAxis = opt && opt.xAxis && opt.xAxis[0];
+        const dz = opt && opt.dataZoom && opt.dataZoom[0];
+        if (!xAxis || xAxis.min == null || xAxis.max == null) return null;
+        const min = xAxis.min || 0;
+        const max = xAxis.max || 0;
+        const start = (dz && typeof dz.start === 'number') ? dz.start : 0;
+        const end = (dz && typeof dz.end === 'number') ? dz.end : 100;
+        const span = max - min;
+        return {
+            visMin: min + span * start / 100,
+            visMax: min + span * end / 100,
+            visSpan: span * (end - start) / 100,
+        };
+    }
+    function getVisibleSec() {
+        const r = getEffectiveRange();
+        return r ? r.visSpan : 0;
+    }
+    // Keep only ticks whose [xStart, xEnd] overlaps [visMin, visMax].
+    function filterToRange(ticks, visMin, visMax) {
+        if (!Array.isArray(ticks) || ticks.length === 0) return ticks;
+        return ticks.filter(t => {
+            const xStart = (t.value && t.value[1]) || 0;
+            const xEnd = (t.value && t.value[2]) || (xStart + 0.5);
+            return xEnd >= visMin && xStart <= visMax;
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Side drawer — shows the clicked (or aggregated) turn's metadata.
+    // The LLM I/O / Tool I/O / Session Records panels are intentionally
+    // empty placeholders; downstream code can populate them by
+    // listening for the 'turn-drawer:opened' CustomEvent.
+    // ------------------------------------------------------------------
+    function openTurnDrawer(meta) {
+        const drawer = document.getElementById('turn-drawer');
+        if (!drawer) return;
+        const overview = document.getElementById('turn-drawer-overview');
+        const title = document.getElementById('turn-drawer-title');
+        const aggSection = document.getElementById('turn-drawer-aggregated');
+        const aggList = document.getElementById('turn-drawer-agg-list');
+        const aggCount = document.getElementById('turn-drawer-agg-count');
+        if (!overview || !title) return;
+
+        const aggregated = meta.aggregated;
+        if (Array.isArray(aggregated) && aggregated.length > 1) {
+            title.textContent = `${aggregated.length} Aggregated Turns`;
+            aggSection.style.display = '';
+            aggCount.textContent = `(${aggregated.length})`;
+            aggList.innerHTML = aggregated.map(t => {
+                const v = t.value;
+                const id = t.itemId || (v && v[6]);
+                const start = formatRelSec(v[1]);
+                const end = formatRelSec(v[2] || (v[1] + 0.5));
+                return `<li class="turn-drawer-agg-item" data-item-id="${id}">
+                    <span class="ms-dot" style="background:${v[3] || '#9c7cff'}"></span>
+                    <span class="turn-drawer-agg-label">${escapeHtml(v[5] || id || 'turn')}</span>
+                    <span class="turn-drawer-agg-time">${start} → ${end}</span>
+                </li>`;
+            }).join('');
+            // Make each aggregated row clickable to drill in.
+            for (const li of aggList.querySelectorAll('li')) {
+                li.addEventListener('click', () => {
+                    const id = li.dataset.itemId;
+                    const t = aggregated.find(t2 => t2.itemId === id);
+                    if (t) openTurnDrawer(buildTurnMeta(t));
+                });
+            }
+        } else {
+            title.textContent = meta.label || meta.turnId || 'Turn Detail';
+            aggSection.style.display = 'none';
+        }
+
+        overview.innerHTML = `
+            <dt>Session</dt><dd>${escapeHtml(meta.sessionId || '—')}</dd>
+            <dt>Agent</dt><dd>${escapeHtml(meta.agentId || '—')}</dd>
+            <dt>Turn ID</dt><dd>${escapeHtml(meta.turnId || '—')}</dd>
+            <dt>Status</dt><dd>${escapeHtml(meta.status || '—')}</dd>
+            <dt>Start (rel)</dt><dd>${formatRelSec(meta.startRel)}</dd>
+            <dt>End (rel)</dt><dd>${formatRelSec(meta.endRel)}</dd>
+            <dt>Duration</dt><dd>${(meta.endRel - meta.startRel).toFixed(2)}s</dd>
+        `;
+
+        drawer.classList.add('open');
+        drawer.setAttribute('aria-hidden', 'false');
+
+        // Reset downstream sections to their "not loaded" state.
+        for (const id of ['turn-drawer-records', 'turn-drawer-llm', 'turn-drawer-tools']) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<div class="turn-drawer-empty">Not loaded yet</div>';
+        }
+
+        // Fetch LLM I/O (assistant message + tool result) for this turn.
+        // Aggregated clicks drill into the first turn in the bucket; the
+        // drawer also exposes the aggregated list so the user can pick
+        // a different one — selecting a row re-opens the drawer with that
+        // turn's id (see the click handlers below) and re-fetches here.
+        _loadTurnLlmIo(meta);
+
+        // Extension hook for future async detail loaders.
+        try {
+            window.dispatchEvent(new CustomEvent('turn-drawer:opened', { detail: meta }));
+        } catch (e) { /* CustomEvent unavailable in very old browsers */ }
+        if (typeof window.__loadTurnDetail === 'function') {
+            try { window.__loadTurnDetail(meta); } catch (e) { /* swallow */ }
+        }
+    }
+
+    /**
+     * Fetch ``/api/viz/turn/{session_id}__{turn_id}/llm-io`` and render
+     * the result into ``#turn-drawer-llm``. Three states:
+     *   - loading: shows a spinner / "Loading…" line
+     *   - success: input + output blocks rendered as labeled <details>
+     *   - error  : a short error line with the status code
+     * The function never throws — fetch/network failures are surfaced
+     * inline so the rest of the drawer keeps working.
+     */
+    async function _loadTurnLlmIo(meta) {
+        const section = document.getElementById('turn-drawer-llm');
+        if (!section) return;
+        const sessionId = meta && meta.sessionId;
+        const turnId = meta && meta.turnId;
+        if (!sessionId || !turnId) {
+            section.innerHTML = '<div class="turn-drawer-empty">'
+                + 'No turn id — pick a turn from the chart.</div>';
+            return;
+        }
+        section.innerHTML = '<div class="turn-drawer-loading">'
+            + '<span class="turn-drawer-spinner"></span> Loading LLM I/O…</div>';
+        const url = `/api/viz/turn/${encodeURIComponent(sessionId)}__`
+                  + `${encodeURIComponent(turnId)}/llm-io`;
+        try {
+            const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!resp.ok) {
+                let detail = `HTTP ${resp.status}`;
+                try {
+                    const body = await resp.json();
+                    if (body && body.detail) detail = body.detail;
+                } catch (_) { /* ignore body parse */ }
+                section.innerHTML = `<div class="turn-drawer-error">`
+                    + `<strong>Failed to load LLM I/O</strong><br/>`
+                    + `<span>${escapeHtml(detail)}</span></div>`;
+                return;
+            }
+            const payload = await resp.json();
+            section.innerHTML = _renderLlmIoHtml(payload);
+        } catch (e) {
+            section.innerHTML = `<div class="turn-drawer-error">`
+                + `<strong>Network error</strong><br/>`
+                + `<span>${escapeHtml(String(e && e.message || e))}</span></div>`;
+        }
+    }
+
+    /**
+     * Render the LLM I/O payload as collapsible sections: "Input"
+     * (the assistant message that issued the tool call) and "Output"
+     * (the tool message that returned the result). Long strings are
+     * truncated server-side so the drawer stays light.
+     */
+    function _renderLlmIoHtml(payload) {
+        if (!payload) return '<div class="turn-drawer-empty">Empty response</div>';
+        const blocks = [];
+        blocks.push(`<div class="turn-drawer-llm-meta">`
+            + `<span class="turn-drawer-llm-session">${escapeHtml(payload.session_id || '—')}</span>`
+            + ` · turn <code>${escapeHtml(payload.turn_id || '—')}</code></div>`);
+        if (payload.input) {
+            blocks.push('<details class="turn-drawer-llm-block" open>'
+                + '<summary>Input <small>(assistant → tool call)</small></summary>'
+                + _renderContentBlocks(payload.input.content_blocks || [])
+                + '</details>');
+        } else {
+            blocks.push('<div class="turn-drawer-empty">'
+                + 'No input message found for this turn.</div>');
+        }
+        if (payload.output) {
+            blocks.push('<details class="turn-drawer-llm-block" open>'
+                + '<summary>Output <small>(tool result)</small></summary>'
+                + _renderContentBlocks(payload.output.content_blocks || [])
+                + '</details>');
+        } else {
+            blocks.push('<div class="turn-drawer-empty">'
+                + 'No output message found for this turn.</div>');
+        }
+        return blocks.join('');
+    }
+
+    function _renderContentBlocks(blocks) {
+        if (!blocks.length) return '<div class="turn-drawer-empty">(empty)</div>';
+        return blocks.map(b => {
+            const t = b.type || 'block';
+            if (t === 'text') {
+                return `<div class="turn-drawer-llm-text">`
+                    + `<pre>${escapeHtml(b.text || '')}</pre></div>`;
+            }
+            if (t === 'tool_use') {
+                return `<div class="turn-drawer-llm-tool-use">`
+                    + `<div class="turn-drawer-llm-tag">tool_use · ${escapeHtml(b.name || '?')}`
+                    + ` · id=${escapeHtml(b.id || '')}</div>`
+                    + `<pre>${escapeHtml(JSON.stringify(b.input || {}, null, 2))}</pre>`
+                    + `</div>`;
+            }
+            if (t === 'tool_result') {
+                return `<div class="turn-drawer-llm-tool-result">`
+                    + `<div class="turn-drawer-llm-tag">tool_result`
+                    + ` · tool_use_id=${escapeHtml(b.tool_use_id || '')}`
+                    + (b.is_error ? ' · <em>error</em>' : '')
+                    + `</div>`
+                    + `<pre>${escapeHtml(typeof b.content === 'string' ? b.content : JSON.stringify(b.content, null, 2))}</pre>`
+                    + `</div>`;
+            }
+            if (t === 'tool_call_legacy') {
+                const fn = b.function || {};
+                return `<div class="turn-drawer-llm-tool-use">`
+                    + `<div class="turn-drawer-llm-tag">tool_call_legacy`
+                    + ` · ${escapeHtml(fn.name || '?')}`
+                    + ` · id=${escapeHtml(b.id || '')}</div>`
+                    + `<pre>${escapeHtml(JSON.stringify(fn.arguments || {}, null, 2))}</pre>`
+                    + `</div>`;
+            }
+            // Generic block — render as JSON so nothing is silently dropped.
+            return `<div class="turn-drawer-llm-generic">`
+                + `<div class="turn-drawer-llm-tag">${escapeHtml(t)}</div>`
+                + `<pre>${escapeHtml(JSON.stringify(b, null, 2))}</pre>`
+                + `</div>`;
+        }).join('');
+    }
+
+    function closeTurnDrawer() {
+        const drawer = document.getElementById('turn-drawer');
+        if (!drawer) return;
+        drawer.classList.remove('open');
+        drawer.setAttribute('aria-hidden', 'true');
+    }
+
+    function buildTurnMeta(t) {
+        const v = t.value || [];
+        return {
+            sessionId: t.sessionId || null,
+            agentId: t.agentId || null,
+            turnId: t.itemId || v[6] || null,
+            startRel: v[1],
+            endRel: v[2] || (v[1] + 0.5),
+            color: v[3],
+            status: v[4],
+            label: v[5],
+            aggregated: t.aggregated,
+            isBackground: t.isBackground,
+        };
+    }
+
+    function formatRelSec(sec) {
+        if (typeof sec !== 'number' || !isFinite(sec)) return '—';
+        const sign = sec < 0 ? '-' : '';
+        const a = Math.abs(sec);
+        const m = Math.floor(a / 60);
+        const s = Math.floor(a % 60);
+        const ms = Math.round((a - Math.floor(a)) * 1000);
+        return `${sign}${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+    }
+
+    function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Expose the drawer API on window so inline onclick handlers
+    // (and downstream feature code) can call it.
+    window.openTurnDrawer = openTurnDrawer;
+    window.closeTurnDrawer = closeTurnDrawer;
 
     // ------------------------------------------------------------------
     // Badge / label overlay (ECharts graphic component)

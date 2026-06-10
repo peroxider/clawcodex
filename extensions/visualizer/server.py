@@ -6,6 +6,7 @@ Default port 8765; expose ``mount_viz(app)`` for future F-82 merge.
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -112,6 +113,122 @@ class _AppState:
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
+
+# Per-block truncation cap for the LLM I/O drawer payload. Tool outputs
+# can be megabytes; the drawer only renders a preview.
+_LLM_IO_MAX_BLOCK_CHARS = 4000
+# Whole-message cap, summed across all content blocks.
+_LLM_IO_MAX_MESSAGE_CHARS = 16000
+
+
+def _truncate(value: Any, limit: int) -> Any:
+    """Truncate a string to ``limit`` chars; pass through other types."""
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit] + f"\n… [truncated, {len(value) - limit} chars omitted]"
+    return value
+
+
+def _normalize_blocks(content: Any) -> list[dict[str, Any]]:
+    """Return a flat list of content blocks for either Anthropic or legacy envelopes.
+
+    Anthropic-style: ``content`` is a list of ``{type, ...}`` dicts.
+    Legacy: ``content`` is a string and ``tool_calls`` is a separate list.
+    Both shapes get normalized into a list of block dicts so the drawer
+    can render them uniformly.
+    """
+    blocks: list[dict[str, Any]] = []
+    if isinstance(content, list):
+        for b in content:
+            if isinstance(b, dict):
+                blocks.append(b)
+    elif isinstance(content, str):
+        if content:
+            blocks.append({"type": "text", "text": content})
+    return blocks
+
+
+def _strip_message(
+    msg: dict[str, Any], *, max_blocks: int = 16,
+) -> dict[str, Any]:
+    """Return a compact, drawer-friendly view of a transcript message.
+
+    Strips large/redundant fields, truncates long strings, and caps the
+    number of content blocks so the JSON stays under ~16KB per message.
+    """
+    out: dict[str, Any] = {}
+    for key in ("role", "timestamp", "_timestamp", "name", "tool_call_id"):
+        if key in msg:
+            out[key] = msg[key]
+    blocks = _normalize_blocks(msg.get("content"))
+    if "tool_calls" in msg and isinstance(msg["tool_calls"], list):
+        for tc in msg["tool_calls"]:
+            if isinstance(tc, dict):
+                blocks.append({"type": "tool_call_legacy", **tc})
+    rendered: list[dict[str, Any]] = []
+    total = 0
+    for b in blocks[:max_blocks]:
+        rb = {k: _truncate(v, _LLM_IO_MAX_BLOCK_CHARS)
+              for k, v in b.items() if v is not None}
+        rendered.append(rb)
+        total += sum(len(str(v)) for v in rb.values())
+        if total >= _LLM_IO_MAX_MESSAGE_CHARS:
+            break
+    out["content_blocks"] = rendered
+    return out
+
+
+def _scan_transcript_for_turn(
+    transcript_path: Path, turn_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Scan a transcript.jsonl for the LLM I/O of a single turn.
+
+    Returns ``(input_msg, output_msg)`` where ``input_msg`` is the
+    assistant message that issued the tool call (the LLM's "input") and
+    ``output_msg`` is the tool message that returned the result (the
+    LLM's "output"). Either may be ``None`` if only one half of the
+    pair exists in the transcript.
+    """
+    input_msg: dict[str, Any] | None = None
+    output_msg: dict[str, Any] | None = None
+    with open(transcript_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            role = entry.get("role")
+            # Anthropic content-block envelope (assistant + tool)
+            for blk in _normalize_blocks(entry.get("content")):
+                btype = blk.get("type")
+                if input_msg is None and role == "assistant":
+                    if btype == "tool_use" and blk.get("id") == turn_id:
+                        input_msg = entry
+                        break
+                if output_msg is None and (role == "user" or btype == "tool_result"):
+                    if btype == "tool_result" and blk.get("tool_use_id") == turn_id:
+                        output_msg = entry
+                        break
+            # Legacy envelope: assistant.tool_calls[] / tool.tool_call_id
+            if input_msg is None and role == "assistant":
+                for tc in entry.get("tool_calls") or []:
+                    if isinstance(tc, dict) and tc.get("id") == turn_id:
+                        input_msg = entry
+                        break
+            if output_msg is None and role == "tool":
+                if entry.get("tool_call_id") == turn_id:
+                    output_msg = entry
+            if input_msg is not None and output_msg is not None:
+                break
+    return (
+        _strip_message(input_msg) if input_msg else None,
+        _strip_message(output_msg) if output_msg else None,
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -285,6 +402,68 @@ def create_app(
                 detail=f"No sessions found (missing: {','.join(missing)})",
             )
         return app.state.viz.multi_session_builder.build(viz_list)
+
+    @app.get("/api/viz/turn/{turn_ref}/llm-io", tags=["turn"])
+    async def get_turn_llm_io(turn_ref: str):
+        """Return the LLM I/O (assistant message + tool result) for a turn.
+
+        ``turn_ref`` is a composite id of the form ``{session_id}__{turn_id}``
+        where ``turn_id`` is the tool-call id visible on the waterfall
+        (e.g. ``tc-0008``). Double-underscore separates the two because it
+        is URL-safe and never appears in either field.
+
+        The endpoint scans the session's ``transcript.jsonl`` for the
+        assistant message that issued the matching tool call (the LLM's
+        "input") and the tool message that returned the matching result
+        (the LLM's "output"). Both Anthropic-style content blocks
+        (``type: tool_use`` / ``type: tool_result``) and legacy
+        ``tool_calls`` / ``tool_call_id`` envelopes are supported.
+
+        The payload is intentionally small and text-focused — long tool
+        outputs are truncated to ``_max_content_chars`` so the drawer
+        can render without buffering megabytes.
+        """
+        if "__" not in turn_ref:
+            raise HTTPException(
+                status_code=400,
+                detail="turn_ref must be of the form {session_id}__{turn_id}",
+            )
+        session_id, turn_id = turn_ref.split("__", 1)
+        if not session_id or not turn_id:
+            raise HTTPException(
+                status_code=400,
+                detail="turn_ref must contain non-empty session_id and turn_id",
+            )
+        session_dir = app.state.viz.sessions_dir / session_id
+        if not session_dir.exists():
+            raise HTTPException(
+                status_code=404, detail=f"Session {session_id} not found",
+            )
+        transcript_path = session_dir / "transcript.jsonl"
+        if not transcript_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"No transcript for session {session_id}",
+            )
+        try:
+            input_msg, output_msg = _scan_transcript_for_turn(
+                transcript_path, turn_id,
+            )
+        except Exception as e:  # noqa: BLE001 — surface as 500
+            logger.warning("LLM I/O scan failed for %s/%s: %s",
+                           session_id, turn_id, e)
+            raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
+        if input_msg is None and output_msg is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Turn {turn_id} not found in session {session_id}",
+            )
+        return {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "input": input_msg,
+            "output": output_msg,
+        }
 
     @app.get("/api/viz/sessions/{session_id}/report", tags=["session"])
     async def get_session_report(session_id: str):
