@@ -1806,4 +1806,37 @@ agent:
 | 章节 | §2.8 |
 | 备注 | 设计完成，见 FEATURE_PLAN §2.8 |
 
+---
+
+## 六、2026-07 代码检视审计归档
+
+> 归档日期: 2026-07
+> 来源: 代码检视审计（v3.2）后新增的已实现条目。
+
+---
+
+### F-40 ProgressReporter Sink 重构
+
+**状态**: ✅ 已完成（代码已全部落地）
+
+F-40 核心设计（`ProgressSink` Protocol、`CompositeProgressSink` 扇出、`ToolContextProgressSink` 默认实现、`ProgressReporter` 兼容 shim）已在 `extensions/orchestrator/progress_sink.py` 完整实现。
+
+**代码检视确认（2026-07）**：
+- `extensions/orchestrator/progress_sink.py` — `ProgressSink` Protocol、`CompositeProgressSink`、`ToolContextProgressSink` 全部落地（~320 行）
+- `extensions/orchestrator/agent_runner.py` — 通过 `_dispatch_sink()` 方法转发三类事件
+- `extensions/orchestrator/progress_reporter.py` — 降级为向后兼容 shim
+- 设计文档中的"未来: PRReviewAutoFixSink"和"未来: RetryLabelSink"是下游 F-37/F-39 的消费者，不属于 F-40 本身
+
+**解决背景**：F-38 Sub-D 落地时遗留的三个问题：
+1. `Orchestrator` 上 `ProgressReporter` 单例的 `_current_task_id` / `_phase_count` 共享可变状态在并发 issue 下竞争
+2. `AgentRunner` 只转发 `PhaseComplete`，`_on_session_complete` 形同虚设，会话结束无进度落点
+3. `progress = phase_count * 25` 是假数据
+
+**设计**：
+- `ProgressSink` Protocol — 事件驱动进度接口（`on_phase_complete` / `on_session_complete` / `on_turn_complete`）
+- `CompositeProgressSink` — 扇出到多个 sink，支持 F-37/F-39 零侵入接入
+- `ToolContextProgressSink` — 默认 sink，用 `tool_context.progress` 做真实进度计算
+- `WorkflowConfig.phases` — 新增配置字段
+- `ProgressReporter` — 降级为向后兼容 shim
+
 
