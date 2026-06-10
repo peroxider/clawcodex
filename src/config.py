@@ -299,12 +299,23 @@ def save_config(config: dict[str, Any]) -> None:
 
 
 def get_provider_config(provider: str) -> dict[str, Any]:
-    """Get configuration for a specific provider."""
+    """Get configuration for a specific provider, with env-var fallback."""
     config = load_config()
     providers = config.get("providers", {})
     if provider not in providers:
         raise ValueError(f"Unknown provider: {provider}")
-    return providers[provider]
+    cfg = dict(providers[provider])
+    # Fall back to environment variables when config file has empty values.
+    env_key = os.environ.get(f"{provider.upper()}_API_KEY")
+    if not cfg.get("api_key") and env_key:
+        cfg["api_key"] = env_key
+    env_base = os.environ.get(f"{provider.upper()}_BASE_URL")
+    if not cfg.get("base_url") and env_base:
+        cfg["base_url"] = env_base
+    env_model = os.environ.get(f"{provider.upper()}_MODEL")
+    if not cfg.get("default_model") and env_model:
+        cfg["default_model"] = env_model
+    return cfg
 
 
 def set_api_key(

@@ -174,6 +174,7 @@ class GitSyncService:
             if is_sequential:
                 await self._run_pre_commit_hook(repo_root, session)
             self._run_git_checked(["add", "-A"], repo_root)
+            self._apply_file_whitelist(repo_root)
             commit_message = self._build_commit_message(issue, followup=followup_pr is not None)
             self._run_git_checked(["commit", "-m", commit_message], repo_root)
             commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
@@ -268,6 +269,12 @@ class GitSyncService:
                     pull_request=None,
                 ),
             )
+            # GitCode PR creation may not return number/url immediately;
+            # fall back to listing open PRs and matching by head branch.
+            if pr_ref is not None and (not pr_ref.number or not pr_ref.url):
+                pr_ref = await self._find_pr_fallback(
+                    pr_ref, head_branch=branch_name, base_branch=base_branch,
+                )
 
         report_result = self._write_report(
             session=session,
@@ -612,8 +619,33 @@ class GitSyncService:
                 repo_root,
             )
 
+    def _apply_file_whitelist(self, repo_root: str) -> None:
+        """Unstage files outside the allowed whitelist before commit.
+
+        When ``agent.allowed_changed_files`` is configured, only the
+        specified glob patterns may enter the commit.  Any other staged
+        file is reset to unstaged (``git reset -- <path>``).  If all
+        files are filtered out the commit is still attempted — it will
+        simply produce no commit (no staged changes), which the caller
+        already handles gracefully.
+        """
+        whitelist = self._agent_config.allowed_changed_files
+        if not whitelist:
+            return
+        import fnmatch
+        stdout, _, rc = _run_git(["diff", "--cached", "--name-only"], repo_root)
+        if rc != 0 or not stdout.strip():
+            return
+        staged = [f.strip() for f in stdout.strip().splitlines() if f.strip()]
+        to_unstage = [
+            f for f in staged
+            if not any(fnmatch.fnmatch(f, pat) for pat in whitelist)
+        ]
+        if to_unstage:
+            self._run_git_checked(["reset", "--", *to_unstage], repo_root)
+
     def _build_commit_message(self, issue: Issue, *, followup: bool = False) -> str:
-        identifier = (issue.identifier or "issue").strip()
+        identifier = (issue.identifier or "issue").strip().lstrip("#")
         title = (issue.title or "automated update").strip()
         prefix = "fix" if followup else "feat"
         message = f"{prefix}: {identifier} {title}"
@@ -781,6 +813,47 @@ class GitSyncService:
                 f"git {' '.join(args)} failed: {stderr or stdout}"
             )
         return stdout.strip()
+
+    async def _find_pr_fallback(
+        self,
+        pr_ref: PullRequestRef,
+        *,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestRef:
+        """Find a just-created PR when the initial response lacks number/url.
+
+        Some trackers (notably GitCode) return a pull-request object where
+        ``number`` and ``url`` are empty right after creation.  This method
+        polls the tracker's open-PR list and matches by ``head_branch``.
+        """
+        import asyncio
+        for _ in range(3):
+            try:
+                open_prs = await self.tracker.list_pull_requests(
+                    state="open",
+                    head=head_branch,
+                )
+            except (TypeError, AttributeError):
+                # Tracker doesn't support head filtering — try unfiltered.
+                try:
+                    open_prs = await self.tracker.list_pull_requests(state="open")
+                except Exception:
+                    return pr_ref
+            except Exception:
+                return pr_ref
+            if open_prs:
+                for candidate in open_prs:
+                    candidate_head = (
+                        getattr(candidate, "head_ref", None)
+                        or getattr(candidate, "head_branch", None)
+                        or getattr(candidate, "source_branch", None)
+                        or ""
+                    )
+                    if candidate_head == head_branch:
+                        return candidate
+            await asyncio.sleep(2)
+        return pr_ref
 
 
 def _slugify(value: str) -> str:

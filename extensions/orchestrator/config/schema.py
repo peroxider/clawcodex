@@ -260,6 +260,11 @@ class AgentConfig:
     # personal plan). Set to 0 for unlimited request rate.
     delay_between_requests_ms: int = 2000
     run_timeout_ms: int = 1_800_000
+    # File-path whitelist gate (glob patterns). When non-empty, only files
+    # matching at least one pattern may enter the commit.  The gate runs
+    # AFTER ``git add -A`` and unstages any file that doesn't match.
+    # An empty list disables the gate (default).
+    allowed_changed_files: list[str] = field(default_factory=list)
     # F-44: Human review gating. When True, the orchestrator marks each
     # completed issue as PENDING_REVIEW instead of COMPLETED after sync,
     # requiring a human to run `orchestrator issue review --id <id> --approve`
@@ -527,6 +532,10 @@ class WorkflowConfig:
                 "delay_between_requests_ms", 2000
             ),
             run_timeout_ms=agent_raw.get("run_timeout_ms", 1_800_000),
+            # File-path whitelist gate (see AgentConfig docstring).
+            allowed_changed_files=_normalize_string_list(
+                agent_raw.get("allowed_changed_files"), default=[]
+            ),
             # F-44: review gate — when True, sync ends at PENDING_REVIEW
             # instead of COMPLETED, requiring human approve CLI command.
             review_required=bool(agent_raw.get("review_required", False)),
