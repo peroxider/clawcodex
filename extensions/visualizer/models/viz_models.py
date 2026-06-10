@@ -206,7 +206,15 @@ class Anomaly(BaseModel):
 class OperationStats(BaseModel):
     """Aggregated operation statistics for a session.
 
-    7 fields; displayed in the stats bar.
+    8 fields; displayed in the stats bar.
+
+    Note: ``total_duration_ms`` is the *sum of per-bar ``duration_ms``
+    values* (parser-supplied approximations — text bars are 100ms,
+    message bars 50ms, etc).  ``wall_clock_duration_ms`` is the true
+    wall-clock span from the earliest bar start to the latest bar end,
+    which can diverge significantly from ``total_duration_ms`` when
+    the session's metadata ``start_time`` is clock-skewed relative to
+    its transcript (e.g. a resume that re-opens an old session).
     """
 
     total_ops: int = 0
@@ -214,6 +222,7 @@ class OperationStats(BaseModel):
     avg_duration_ms: float = 0.0
     max_concurrent: int = 0
     total_duration_ms: int = 0
+    wall_clock_duration_ms: int = 0
     context_tokens: int = 0
     cost_usd: float = 0.0
 
@@ -312,6 +321,10 @@ class SessionVizData(BaseModel):
         default_factory=dict,
         description="Aggregated layout info: spawn_time, join_time, subagent_count, by_role.",
     )
+
+    # F-96-E: Orchestrator issue association
+    issue_id: str = ""
+    verification_status: str = ""
 
     model_config = {"populate_by_name": True}
 

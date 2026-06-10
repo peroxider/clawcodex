@@ -36,27 +36,48 @@ from ..models.viz_models import (
 logger = logging.getLogger(__name__)
 
 
-# Tick density (seconds per major tick) — matches 0/5/10/15/20/25/30 min
-# in the reference image.  Sorted DESCENDING so we pick the LARGEST step
-# that still yields <= 8 ticks across the range.
-_TICK_STEP_SECONDS: list[int] = [600, 300, 120, 60, 30, 15, 10, 5, 1]
+# Tick density — sorted DESCENDING so we pick the LARGEST step that
+# still yields <= 8 ticks across the range.  Two layers:
+#   _TICK_STEP_MS    sub-second ranges (in milliseconds)
+#   _TICK_STEP_SECS  second-and-up ranges (in seconds)
+# Matches 0/5/10/15/20/25/30 min in the reference image.
+_TICK_STEP_MS: list[int] = [500, 200, 100, 50, 20, 10, 5, 1]
+_TICK_STEP_SECS: list[int] = [600, 300, 120, 60, 30, 15, 10, 5, 1]
 
 
-def _pick_tick_step(total_seconds: float) -> int:
-    for s in _TICK_STEP_SECONDS:
-        # 6-7 ticks across the range
+def _pick_tick_step(total_seconds: float) -> float:
+    """Return the largest tick step that yields <= 8 ticks across the range.
+
+    For ranges under 1s we step in milliseconds; for >= 1s we step in seconds.
+    """
+    if total_seconds < 1.0:
+        ms = total_seconds * 1000
+        for s in _TICK_STEP_MS:
+            if ms / s <= 8:
+                return s / 1000  # convert to seconds
+        return _TICK_STEP_MS[-1] / 1000
+    for s in _TICK_STEP_SECS:
         if total_seconds / s <= 8:
             return s
-    return _TICK_STEP_SECONDS[-1]
+    return _TICK_STEP_SECS[-1]
 
 
 def _format_tick(seconds: float) -> str:
-    """Format a tick label in minutes (e.g. '5分钟')."""
+    """Format a tick label.  Examples:
+        0      -> '0'
+        50ms   -> '50ms'
+        0.7    -> '0.7s'
+        5      -> '5s'
+        60     -> '1分钟'
+        1800   -> '30分钟'
+    """
     if seconds == 0:
-        return "0分钟"
+        return "0"
+    if seconds < 1:
+        return f"{int(round(seconds * 1000))}ms"
+    if seconds < 60:
+        return f"{seconds:.1f}s" if seconds != int(seconds) else f"{int(seconds)}s"
     minutes = seconds / 60
-    if minutes < 1:
-        return f"{int(seconds)}s"
     if minutes == int(minutes):
         return f"{int(minutes)}分钟"
     return f"{minutes:.1f}分钟"
@@ -91,28 +112,64 @@ class MultiSessionViewBuilder:
             }
 
         base_time = min(s.start_time or 0 for s in sessions)
-        # x in seconds, relative to base_time
+        # x in seconds, relative to base_time. Do NOT clamp negatives:
+        # the start_time backfill in SessionMetadataParser can still be
+        # later than a few transcript entries when the agent loop wrote
+        # metadata at a wall-clock later than the first message (e.g. an
+        # out-of-order resume). Clamping here collapses those bars onto
+        # x=0, hiding them off the left edge of the chart. The
+        # ``timeRange.min`` below is widened to the actual minimum rel
+        # so ECharts renders them in the visible area.
         def rel(t: float) -> float:
-            return max(0.0, t - base_time)
+            return t - base_time
 
         # ---- 1. timeRange
+        # Use actual data range with 10% padding, so short / in-progress
+        # sessions (e.g. one that just dispatched 9 messages in 0.04s)
+        # don't get crushed into an invisible dot at x=0 by a 60s minimum.
         max_end = 0.0
+        min_rel: float | None = None
+        total_bars = 0
         for s in sessions:
             if s.end_time and s.end_time > base_time:
                 max_end = max(max_end, rel(s.end_time))
+            total_bars += len(s.timeline)
             for bar in s.timeline:
-                max_end = max(max_end, rel(bar.end_time))
+                rel_end = rel(bar.end_time)
+                max_end = max(max_end, rel_end)
+                rel_start = rel(bar.start_time)
+                if min_rel is None or rel_start < min_rel:
+                    min_rel = rel_start
             for node in s.agent_tree:
                 if node.spawn_x is not None:
                     max_end = max(max_end, node.spawn_x)
                 if node.join_x is not None:
                     max_end = max(max_end, node.join_x)
-        max_end = max(max_end, 60.0)  # at least 1 minute of axis
+        if max_end > 0:
+            max_end = max_end * 1.1  # 10% padding
+            # Defensive floor: when the entire session lived in a sub-second
+            # window (e.g. an orchestrator issue that finished in 0.7ms),
+            # 1.1× padding still crushes the chart to 0~0.78ms. ECharts'
+            # clipRectByRect then drops every bar off-screen. If the
+            # timeline is non-empty but the visible window would be
+            # sub-second, fall back to a sensible minimum so the bars
+            # actually have pixels to render in.
+            if max_end < 1.0 and total_bars > 0:
+                max_end = max(60.0, total_bars * 0.5)
+        else:
+            max_end = 60.0  # fallback for empty timelines (matches old default)
 
         step = _pick_tick_step(max_end)
-        tick_seconds = list(range(0, int(max_end) + 1, step))
+        # While loop (not range) so sub-second steps work for short
+        # in-progress sessions. range() requires int step in Python 3.
+        tick_seconds: list[float] = []
+        t = 0.0
+        # Tiny epsilon guards against float drift at fractional step boundaries
+        while t <= max_end + 1e-9:
+            tick_seconds.append(round(t, 6))
+            t += step
         if tick_seconds[-1] < max_end:
-            tick_seconds.append(int(max_end))
+            tick_seconds.append(round(max_end, 6))
         tick_labels = [_format_tick(s) for s in tick_seconds]
 
         # ---- 2. legend
@@ -190,7 +247,7 @@ class MultiSessionViewBuilder:
 
         return {
             "timeRange": {
-                "min": 0.0,
+                "min": 0.0 if min_rel is None else min(0.0, min_rel),
                 "max": max_end,
                 "tickSeconds": tick_seconds,
                 "tickLabels": tick_labels,
@@ -212,18 +269,31 @@ class MultiSessionViewBuilder:
         ]
 
     def _session_name(self, s: SessionVizData) -> str:
-        """Compose the model pill label, e.g. ``Opus4.8 · xhigh``."""
+        """Compose the model pill label, e.g. ``Opus4.8 · xhigh``.
+
+        Fallback chain (avoids the meaningless literal ``"session"`` when
+        the metadata has no model and no detected mode — e.g. an
+        orchestrator session where ``metadata.json`` only has
+        ``session_id`` and ``start_time``):
+
+            1. ``<model> · <mode>``  when model is set
+            2. ``<mode>``            when mode is set
+            3. ``<session_id[:8]>``  short id
+        """
         model = (s.model or "").strip()
-        # Strip a long provider prefix like "claude-" for readability
         for prefix in ("claude-", "openai-", "azure-"):
             if model.lower().startswith(prefix):
                 model = model[len(prefix):]
                 break
-        # Take just the family identifier (e.g. opus-4-7)
-        mode = (s.detected_mode or s.config_summary.get("config") or "session")
-        if model:
+        mode = (s.detected_mode or s.config_summary.get("config") or "").strip()
+        if model and mode:
             return f"{model} · {mode}"
-        return mode or s.session_id[:8]
+        if model:
+            return model
+        if mode:
+            return mode
+        # Last-resort: short id (e.g. "run-01-2") instead of literal "session"
+        return s.session_id[:8] or "session"
 
     def _build_ticks(
         self,

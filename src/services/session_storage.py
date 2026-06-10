@@ -96,6 +96,13 @@ class SessionStorage:
         self._content_dir = self._session_dir / CONTENT_DIR_NAME
         self._write_buffer: list[dict[str, Any]] = []
         self._metadata: SessionMetadata | None = None
+        # Set of message uuids already flushed to disk — guards against
+        # duplicate transcript lines when ``save_to_session_storage``
+        # is called multiple times for the same session (e.g. resume
+        # paths, agent loop restarts). Lazy-initialised on first flush
+        # from the on-disk transcript so a resumed session inherits
+        # the de-dup baseline instead of re-appending everything.
+        self._flushed_uuids: set[str] | None = None
 
     @property
     def session_dir(self) -> Path:
@@ -111,7 +118,34 @@ class SessionStorage:
         title: str = "",
         tags: list[str] | None = None,
     ) -> SessionMetadata:
-        """Initialize session metadata."""
+        """Initialize session metadata.
+
+        Idempotent: when ``metadata.json`` already exists on disk
+        (e.g. a resumed session or a second ``save_to_session_storage``
+        call for the same session_id), the existing ``start_time`` is
+        preserved instead of being overwritten with ``time.time()``.
+        The same applies to the on-disk ``message_count`` and
+        ``last_updated`` — only the caller-supplied fields are written.
+        This prevents the clock-skew class of bugs where re-saving a
+        session moves its start_time later than the messages it
+        contains (see visualizer screenshot repro for
+        ``02cba64e-…``).
+        """
+        existing = self._load_metadata()
+        if existing is not None:
+            # Preserve wall-clock anchors from disk; refresh the
+            # caller-supplied identity fields only.
+            if model:
+                existing.model = model
+            if cwd:
+                existing.cwd = cwd
+            if title:
+                existing.title = title
+            if tags:
+                existing.tags = tags
+            self._metadata = existing
+            self._save_metadata()
+            return existing
         self._metadata = SessionMetadata(
             session_id=self.session_id,
             model=model,
@@ -173,14 +207,40 @@ class SessionStorage:
             self.flush()
 
     def flush(self) -> None:
-        """Flush buffered messages to disk."""
+        """Flush buffered messages to disk.
+
+        Dedupes by message ``uuid``: if a buffered entry's uuid was
+        already flushed (either this session's buffer or the on-disk
+        transcript), it is skipped. This prevents the transcript
+        doubling seen when ``save_to_session_storage`` is invoked
+        twice for the same session — the second call would otherwise
+        re-append the entire conversation, producing the duplicate
+        lines visible in screenshot repro
+        (transcript.jsonl lines 1-6 == 7-12, identical uuids).
+        """
         if not self._write_buffer:
+            return
+        # Lazy-init the seen-uuid set from the on-disk transcript so
+        # resumed sessions don't restart from an empty baseline.
+        if self._flushed_uuids is None:
+            self._flushed_uuids = self._scan_flushed_uuids()
+        # Filter buffer, preserving order, and track newly-flushed ids.
+        to_write: list[dict[str, Any]] = []
+        for entry in self._write_buffer:
+            uuid = entry.get("uuid") if isinstance(entry, dict) else None
+            if uuid and uuid in self._flushed_uuids:
+                continue
+            to_write.append(entry)
+            if uuid:
+                self._flushed_uuids.add(uuid)
+        if not to_write:
+            self._write_buffer.clear()
             return
         self._session_dir.mkdir(parents=True, exist_ok=True)
         with open(self._transcript_path, "a", encoding="utf-8") as f:
-            for entry in self._write_buffer:
+            for entry in to_write:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        count = len(self._write_buffer)
+        count = len(to_write)
         self._write_buffer.clear()
 
         # Update metadata message count
@@ -188,6 +248,33 @@ class SessionStorage:
             self._metadata.message_count += count
             self._metadata.last_updated = time.time()
             self._save_metadata()
+
+    def _scan_flushed_uuids(self) -> set[str]:
+        """Walk the on-disk transcript and collect already-flushed uuids.
+
+        Tolerant of malformed lines (mirrors ``read_transcript``) so
+        a corrupt trailing write doesn't poison the dedup baseline.
+        """
+        seen: set[str] = set()
+        if not self._transcript_path.exists():
+            return seen
+        try:
+            with open(self._transcript_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(entry, dict):
+                        uuid = entry.get("uuid")
+                        if isinstance(uuid, str) and uuid:
+                            seen.add(uuid)
+        except OSError:
+            return seen
+        return seen
 
     # --- Content replacement ---
 
