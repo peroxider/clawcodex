@@ -521,10 +521,14 @@ class RepositoryIssueClient:
         )
         try:
             return response.json()
-        except ValueError as exc:
+        except ValueError:
+            # Some endpoints (e.g. GitCode comment PATCH) return 200 with
+            # an empty body. Return None gracefully instead of raising.
+            if response.status_code < 400 and not response.content:
+                return None
             raise RepositoryTrackerError(
                 f"invalid_json_response status={response.status_code}"
-            ) from exc
+            ) from None
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         client = self._http_client

@@ -32,20 +32,29 @@ def build_provider_from_config(provider_name: str, model: str | None = None) -> 
             model=selected_model,
         )
 
+    # Resolve API key: config first, then env var / keychain fallback.
     if not provider_cfg.get("api_key"):
-        # If provider has no config entry at all (unknown provider), allow
-        # api_key=None — the provider implementation will handle the missing
-        # key (e.g. ollama runs locally without auth).
-        if provider_cfg:  # known provider with missing config
+        from src.auth.auth import load_api_key
+        api_key = load_api_key(provider_name)
+        if not api_key and provider_cfg:
             raise RuntimeError(
-                f"API key for provider '{provider_name}' is not configured. Run `clawcodex login` to set it up."
+                f"API key for provider '{provider_name}' is not configured. "
+                "Run `clawcodex login` to set it up, or set the "
+                f"{provider_name.upper()}_API_KEY environment variable."
             )
-        api_key = None
     else:
         api_key = provider_cfg["api_key"]
+
+    # Resolve base_url: config first, then env var fallback.
+    base_url = provider_cfg.get("base_url")
+    if not base_url:
+        env_base = os.environ.get(f"{provider_name.upper()}_BASE_URL")
+        if env_base:
+            base_url = env_base
+
     return create_provider(
         provider_name,
         api_key=api_key,
-        base_url=provider_cfg.get("base_url"),
+        base_url=base_url,
         model=selected_model,
     )
