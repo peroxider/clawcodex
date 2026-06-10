@@ -120,9 +120,9 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 
 **抽象需求**: Agent 系统应支持任务进度上报、定时任务调度、长期运行稳定,并具备工具使用统计与策略优化的能力,确保无人值守场景下不失控、不沉默失败。
 
-#### SR-2.1 任务进度与可观测（→ FEATURE_PLAN §2.1 Agent 进度汇报（F-20）、§1.3.2 F-54 运行期可观测性）
+#### SR-2.1 任务进度与可观测（→ FEATURE_PLAN §2.1 Agent 进度汇报（F-20）、§1.3.2 F-54 运行期可观测性、§八 Multi-Session 可视化分析平台（F-91~F-95））
 
-让用户和 Manager Agent 能清晰看到 Worker 状态、长任务阶段产出,并支持审计与回溯。
+让用户和 Manager Agent 能清晰看到 Worker 状态、长任务阶段产出,并支持审计与回溯。提供 Web 可视化界面查看 Session 甘特图、操作时序、异常检测和多 Session 对比。
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
@@ -132,6 +132,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-38 | Progress event log | ndjson 事件流、阶段完成/错误/warning | 用户可通过 CLI tail 看到阶段进度 | ✅ 已完成 → F-38 | 已完成 | ndjson event log、CLI 渲染 |
 | AR-F-45 | 编排场景 ndjson 审计 | 编排场景下工具调用审计流 | 用户可审查无人值守任务实际操作 | ✅ 已完成 → F-45 | 已完成 | ndjson audit、py sink |
 | AR-F-54 | 运行期可观测性 | stuck-run debug 诊断 | 用户可诊断 Agent 卡住原因 | 📋 规划中 → F-54 | — | py 诊断工具、测试 |
+| AR-F-91~95 | Multi-Session 可视化分析平台（Visualizer） | 独立 FastAPI app + Jinja2 + ECharts CDN；15 个 API 端点 + WebSocket live tail；甘特图/异常检测/多 session 对比/多 Agent 瀑布视图；4 个解析器 + 10 个构建器；SSRF 保护导入/PNG-SVG-JSON-PDF 导出；分享链接管理（TTL 7 天）；`clawcodex viz` CLI 子命令；F-38/F-45/F-54 协同链接 | 用户可通过浏览器可视化查看 Session 执行甘特图、操作时序分布、异常检测报告，支持单 Session 调试到数十个 Session 批量对比 | ✅ 已完成 → F-91~F-95 | 已完成 | py FastAPI app、Jinja2 模板、JS 前端、CLI、110 测试 |
 
 #### SR-2.2 定时任务与调度（→ FEATURE_PLAN §五 F-22 定时任务系统）
 
@@ -195,9 +196,9 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-49 | Takeover 接管 | 终止 Agent 并进入 REPL 接管 workspace | 用户可在自动化失控或复杂场景下手动接手 | ✅ 已完成 → F-49 | 已完成 | py CLI、REPL attach |
 | AR-F-78 | Issue 语义澄清流程 | Agent 主动识别不明确 issue、生成澄清问题列表、等待用户回答后继续执行 | 用户可为不明确的 issue 提供澄清，Agent 根据回答调整执行 | 📋 规划中 → F-78 | — | py 澄清流程、问题生成、等待机制 |
 
-#### SR-3.3 验证、报告与 PR 质量（→ FEATURE_PLAN §1.1.2 F-37 PR 检视修复、§1.1.3 F-38 验证与报告、§1.2.2 F-40 ProgressReporter）
+#### SR-3.3 验证、报告与 PR 质量（→ FEATURE_PLAN §1.1.2 F-37 PR 检视修复、§1.1.3 F-38 验证与报告、§1.2.2 F-40 ProgressReporter、§八 Multi-Session 可视化分析平台（F-91~F-95））
 
-让 Agent 在 commit/push 前必须验证,生成结构化报告,把信息回写到 PR body / 评论 / event log;并支持对 PR review 反馈的自动 follow-up。
+让 Agent 在 commit/push 前必须验证,生成结构化报告,把信息回写到 PR body / 评论 / event log;并支持对 PR review 反馈的自动 follow-up。Visualizer 通过 OrchestratorLink 将 F-38 验证报告 / F-45 tool events / F-54 debug 日志在 Web 界面中统一展现。
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
@@ -508,15 +509,16 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 > F-1（Orchestrator 主循环，属于 §1 整体）、F-7（Remote WebUI，🔭 长期规划）、
 > F-15（Shift+Tab 权限循环）、F-17（工具按需加载）、F-21（后台运行与恢复）、
 > F-23（Skills System/Bridge）、F-26（Away Summary）、F-29（Manager 监督工具）、
-> F-31（TUI 状态区）、F-34（Runtime Protocol）——均为早期已完成功能或长期规划，
+> F-31（TUI 状态区）、F-34（Runtime Protocol）、F-91~F-95（Visualizer 可视化分析平台）
+> ——均为早期已完成功能或长期规划，
 > 纳入 ARCHIVED_FEATURES.md 归档记录。
 
 | 类别 | 抽象需求 (IR) | 系统需求 (SR) | 组件需求 (AR) | 说明 |
 |------|---------------|---------------|---------------|------|
-| 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~97 | 保持原有细粒度分解（未合并重构） |
+| 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~98 | 保持原有细粒度分解（含新增 AR-F-91~95） |
 | 场景特性 | 2 (IR-3, IR-4) | 7 (SR-3.1 ~ SR-3.4, SR-4.1 ~ SR-4.3) | ~23 | 合并后每 AR 对应一个独立 F-N |
 | 未来规划特性 | 1 (IR-5) | 5 (SR-5.1 ~ SR-5.5) | ~28 | 合并后每 AR 对应一个特性模块 |
-| **合计** | **5** | **21** | **~148** | 较原 368 减少 ~60% |
+| **合计** | **5** | **21** | **~149** | 较原 368 减少 ~59% |
 
 每个 IR 下挂 4~5 个 SR,平均每 SR 下挂 3~7 个 AR（合并后）。
 ---
