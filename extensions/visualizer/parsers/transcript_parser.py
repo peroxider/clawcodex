@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import BarStatus, BarType, TimelineBar
-from ..builders.operation_categorizer import OperationCategorizer
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +60,8 @@ class TranscriptParser:
     }
 
     def __init__(self) -> None:
+        from ..builders.operation_categorizer import OperationCategorizer
+
         self._bar_counter = 0
         self._turn_counter = 0
         self._last_timestamp: float | None = None
@@ -181,7 +182,7 @@ class TranscriptParser:
     def _tool_use_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
         """Create a bar for a tool_use block."""
         tool_name = block.get("name", "unknown")
-        tool_use_id = block.get("tool_use_id", "")
+        tool_use_id = block.get("id") or block.get("tool_use_id", "")
         self._bar_counter += 1
         bar_id = f"tu-{self._bar_counter}"
         # Store pending for pairing with result later

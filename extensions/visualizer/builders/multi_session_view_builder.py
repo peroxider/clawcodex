@@ -124,46 +124,31 @@ class MultiSessionViewBuilder:
             return t - base_time
 
         # ---- 1. timeRange
-        # Use actual data range with 10% padding, so short / in-progress
-        # sessions (e.g. one that just dispatched 9 messages in 0.04s)
-        # don't get crushed into an invisible dot at x=0 by a 60s minimum.
-        max_end = 0.0
+        # Use actual activity range so session end-time drift does not leave
+        # a large empty right side.
+        max_end: float | None = None
         min_rel: float | None = None
-        total_bars = 0
         for s in sessions:
-            if s.end_time and s.end_time > base_time:
-                max_end = max(max_end, rel(s.end_time))
-            total_bars += len(s.timeline)
             for bar in s.timeline:
                 rel_end = rel(bar.end_time)
-                max_end = max(max_end, rel_end)
+                max_end = rel_end if max_end is None else max(max_end, rel_end)
                 rel_start = rel(bar.start_time)
                 if min_rel is None or rel_start < min_rel:
                     min_rel = rel_start
-            for node in s.agent_tree:
-                if node.spawn_x is not None:
-                    max_end = max(max_end, node.spawn_x)
-                if node.join_x is not None:
-                    max_end = max(max_end, node.join_x)
-        if max_end > 0:
-            max_end = max_end * 1.1  # 10% padding
-            # Defensive floor: when the entire session lived in a sub-second
-            # window (e.g. an orchestrator issue that finished in 0.7ms),
-            # 1.1× padding still crushes the chart to 0~0.78ms. ECharts'
-            # clipRectByRect then drops every bar off-screen. If the
-            # timeline is non-empty but the visible window would be
-            # sub-second, fall back to a sensible minimum so the bars
-            # actually have pixels to render in.
-            if max_end < 1.0 and total_bars > 0:
-                max_end = max(60.0, total_bars * 0.5)
+        if max_end is not None and min_rel is not None:
+            if max_end <= min_rel:
+                max_end = min_rel + 0.001
         else:
             max_end = 60.0  # fallback for empty timelines (matches old default)
+            min_rel = 0.0
 
-        step = _pick_tick_step(max_end)
+        range_min = min(0.0, min_rel)
+        total_range = max_end - range_min
+        step = _pick_tick_step(total_range)
         # While loop (not range) so sub-second steps work for short
         # in-progress sessions. range() requires int step in Python 3.
         tick_seconds: list[float] = []
-        t = 0.0
+        t = range_min
         # Tiny epsilon guards against float drift at fractional step boundaries
         while t <= max_end + 1e-9:
             tick_seconds.append(round(t, 6))
@@ -247,7 +232,7 @@ class MultiSessionViewBuilder:
 
         return {
             "timeRange": {
-                "min": 0.0 if min_rel is None else min(0.0, min_rel),
+                "min": range_min,
                 "max": max_end,
                 "tickSeconds": tick_seconds,
                 "tickLabels": tick_labels,
@@ -308,12 +293,15 @@ class MultiSessionViewBuilder:
             cat = _classify_ticks(bar)
             ticks.append({
                 "x": rel_fn(bar.start_time),
-                "w": max(0.05, rel_fn(bar.end_time) - rel_fn(bar.start_time)),
+                "w": max(0.001, rel_fn(bar.end_time) - rel_fn(bar.start_time)),
                 "category": cat.value,
                 "color": bar.color or cat.color,
                 "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
                 "label": bar.label,
                 "id": bar.id,
+                "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
+                "detail": bar.detail,
+                "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
             })
         return ticks
 

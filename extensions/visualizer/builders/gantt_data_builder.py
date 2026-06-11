@@ -99,42 +99,22 @@ class GanttDataBuilder:
                 bar.status.value,
                 color,
                 bar.detail,
+                bar.type.value,
             ])
 
-        # Compute timeRange: the chart's x-axis should cover the full
-        # wall-clock span of the session, NOT just the sum of bar durations.
-        # Two reasons:
-        #   1. The header shows "27.6min" elapsed while "Total Duration" is
-        #      300ms — these are very different magnitudes. Bars are
-        #      positioned at their *real* wall-clock times, so the x-axis
-        #      must include the full span or bars will be clipped.
-        #   2. The fallback (just bar range) is still used as a minimum so
-        #      sub-second sessions don't get crushed to 0-width pixels.
+        # Default Gantt bounds follow the actual visible bars. Session
+        # metadata can extend long after the final agent/tool event, which
+        # creates large empty space on the right and makes short bars hard to
+        # select.
         bar_min = min(b.start_time for b in bars) - base_time
         bar_max = max(b.end_time for b in bars) - base_time
 
-        # Wall-clock end: prefer session metadata end_time; fall back to
-        # the bar range when metadata is missing or zero.
-        if self.time_mode == TimeMode.RELATIVE:
-            wall_end = (
-                (session.end_time - base_time)
-                if session.end_time and session.end_time > base_time
-                else 0.0
-            )
-            wall_start = 0.0
-        else:
-            wall_end = session.end_time if session.end_time else 0.0
-            wall_start = 0.0
+        min_time = bar_min
+        max_time = bar_max
 
-        min_time = min(bar_min, wall_start)
-        max_time = max(bar_max, wall_end)
-
-        # Defensive floor (mirrors multi_session_view_builder): if both
-        # the wall-clock span and the bar span are sub-second, give the
-        # chart at least a few seconds of room so ECharts can render
-        # tick labels and bars aren't crushed to invisible dots.
-        if max_time > 0 and (max_time - min_time) < 1.0 and len(bars) > 0:
-            max_time = max(max_time, 60.0, len(bars) * 0.5)
+        # Give all-zero-length timelines a tiny range so ECharts can render.
+        if max_time <= min_time:
+            max_time = min_time + 0.001
 
         return {
             "categories": categories,

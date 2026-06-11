@@ -357,6 +357,39 @@
 .turn-drawer-llm-tool-use .turn-drawer-llm-tag { color: #91cc75; }
 .turn-drawer-llm-tool-result .turn-drawer-llm-tag { color: #5470c6; }
 
+.turn-drawer-io-card {
+    margin-bottom: 10px;
+    border: 1px solid var(--ms-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    overflow: hidden;
+}
+.turn-drawer-io-title {
+    padding: 8px 10px 2px;
+    color: var(--text-accent, #9c7cff);
+    font-size: 12px;
+    font-weight: 600;
+}
+.turn-drawer-io-meta {
+    padding: 0 10px 7px;
+    color: var(--ms-muted);
+    font-size: 11px;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    word-break: break-all;
+}
+.turn-drawer-io-card pre {
+    margin: 0;
+    padding: 9px 10px;
+    background: var(--bg-primary, #1a1a2e);
+    border-top: 1px solid var(--ms-border);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow: auto;
+}
+
 .turn-drawer-aggregated ul {
     list-style: none;
     padding: 0;

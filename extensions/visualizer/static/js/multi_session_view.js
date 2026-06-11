@@ -24,9 +24,11 @@ const MultiSessionView = (function() {
     let ganttLiveEvent = null;
 
     // ---- View density tuning (waterfall fix) ----
-    // Below HIT_MIN_PX the canvas rect becomes unhittable; we wrap each
-    // foreground bar in a transparent 6px-wide hit zone.
-    const HIT_MIN_PX = 6;
+    // Below HIT_MIN_PX the canvas rect becomes hard to hit; we wrap each
+    // foreground bar in a transparent hit zone.
+    const HIT_MIN_PX = 10;
+    const VISIBLE_MIN_PX = 8;
+    const MIN_TICK_SECONDS = 0.001;
     // Visible-window threshold (in data seconds) below which we render
     // ticks in their natural per-turn form, and above which we collapse
     // neighbours into aggregated "fat" bars. Re-evaluated on datazoom.
@@ -38,6 +40,57 @@ const MultiSessionView = (function() {
     // Cached dataZoom state — preserved across the re-render that
     // follows a density-mode switch so the user's zoom doesn't jump.
     let lastDzState = null;
+
+    async function _loadTurnIo(meta) {
+        const llmSection = document.getElementById('turn-drawer-llm');
+        const toolSection = document.getElementById('turn-drawer-tools');
+        const sessionId = meta && meta.sessionId;
+        const candidates = transcriptLookupIds(meta);
+        if (!sessionId || candidates.length === 0) {
+            renderLocalRecords(meta);
+            return;
+        }
+
+        if (llmSection) {
+            llmSection.innerHTML = '<div class="turn-drawer-loading">'
+                + '<span class="turn-drawer-spinner"></span> Loading transcript I/O...</div>';
+        }
+        if (toolSection) {
+            toolSection.innerHTML = '<div class="turn-drawer-loading">'
+                + '<span class="turn-drawer-spinner"></span> Loading tool I/O...</div>';
+        }
+
+        let lastError = '';
+        for (const turnId of candidates) {
+            const url = `/api/viz/turn/${encodeURIComponent(sessionId)}__`
+                      + `${encodeURIComponent(turnId)}/llm-io`;
+            try {
+                const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (!resp.ok) {
+                    let detail = `HTTP ${resp.status}`;
+                    try {
+                        const body = await resp.json();
+                        if (body && body.detail) detail = body.detail;
+                    } catch (_) { /* ignore body parse */ }
+                    lastError = detail;
+                    continue;
+                }
+                const payload = await resp.json();
+                renderSessionRecords(payload, meta);
+                if (llmSection) llmSection.innerHTML = _renderLlmIoHtml(payload);
+                if (toolSection) toolSection.innerHTML = _renderToolIoHtml(payload, meta);
+                return;
+            } catch (e) {
+                lastError = String(e && e.message || e);
+            }
+        }
+
+        renderLocalIo(meta);
+        renderLocalRecords(meta);
+        if (!hasLocalLlmPreview(meta)) {
+            appendIoHint(llmSection, `Transcript lookup failed: ${lastError || 'not found'}`);
+        }
+    }
 
     /**
      * Initialize the view for the given session IDs.
@@ -134,9 +187,10 @@ const MultiSessionView = (function() {
 
         const baseTime = (currentData.timeRange && currentData.timeRange.min) || 0;
         const startRel = Math.max(0, (bar.start_time || 0) - baseTime);
-        // 0.5s floor prevents micro-bars from consuming pixels and
-        // making the waterfall un-hittable; 0.05s was too aggressive.
-        const endRel = Math.max(startRel + 0.5, (bar.end_time || startRel) - baseTime);
+        const endRel = Math.max(
+            startRel + MIN_TICK_SECONDS,
+            (bar.end_time || startRel) - baseTime
+        );
         const tick = {
             x: startRel,
             w: endRel - startRel,
@@ -277,7 +331,7 @@ const MultiSessionView = (function() {
                 value: [
                     yi,
                     t.x,
-                    t.x + (t.w || 0.5),
+                    t.x + tickWidthSeconds(t),
                     t.color,
                     t.status,
                     t.label,
@@ -286,6 +340,9 @@ const MultiSessionView = (function() {
                 itemId: t.id,
                 sessionId: s.id,
                 agentId: null,
+                barType: t.type || null,
+                detail: t.detail || null,
+                toolUseId: t.toolUseId || (t.detail && t.detail.tool_use_id) || null,
             }));
         });
 
@@ -311,12 +368,21 @@ const MultiSessionView = (function() {
             // Activity ticks from agent metadata (or empty)
             for (const t of (a.ticks || [])) {
                 agentTickDataRaw.push({
-                    value: [yi, t.x, t.x + (t.w || 0.5), t.color, t.status, t.label, t.id],
+                    value: [yi, t.x, t.x + tickWidthSeconds(t), t.color, t.status, t.label, t.id],
                     itemId: t.id,
                     sessionId: a.parentSessionId || null,
                     agentId: a.id,
+                    barType: t.type || null,
+                    detail: t.detail || null,
+                    toolUseId: t.toolUseId || (t.detail && t.detail.tool_use_id) || null,
                 });
             }
+        }
+
+        const activityRange = getTickTimeRange(sessionTickDataRaw, agentTickDataRaw);
+        if (activityRange) {
+            timeRange.min = activityRange.min;
+            timeRange.max = activityRange.max;
         }
 
         // ---- Density-aware aggregation ----
@@ -472,7 +538,6 @@ const MultiSessionView = (function() {
                 type: 'value',
                 min: timeRange.min,
                 max: timeRange.max,
-                interval: (timeRange.tickSeconds[1] || 60) - (timeRange.tickSeconds[0] || 0),
                 axisLabel: {
                     color: '#a0a0b0',
                     fontSize: 11,
@@ -548,6 +613,7 @@ const MultiSessionView = (function() {
             ],
         };
 
+        option.xAxis.axisLabel.formatter = formatRelSec;
         chart.setOption(option, true);
         attachBadges(data, yIndex, yCategories);
     }
@@ -556,15 +622,41 @@ const MultiSessionView = (function() {
     // Custom-series renderer for one tick
     //
     // Renders each foreground bar as a <group> containing:
-    //   1. A thin, clipped, visible rect (1.5px floor — preserves the
+    //   1. A clipped, visible rect with a pixel floor (preserves the
     //      dense "rainfall" look).
-    //   2. A transparent rect with a 6px minimum width that absorbs
+    //   2. A transparent rect with a minimum width that absorbs
     //      pointer events (hover/click). The hit area is clipped to
     //      the plot rectangle so it never spills out of the chart.
     //
     // Background spans and aggregated bars keep a slightly larger
     // visual floor because they represent longer-lived activity.
     // ------------------------------------------------------------------
+    function tickWidthSeconds(t) {
+        const w = t && typeof t.w === 'number' ? t.w : 0;
+        return Math.max(w, MIN_TICK_SECONDS);
+    }
+
+    function getTickTimeRange(...groups) {
+        const starts = [];
+        const ends = [];
+
+        for (const group of groups) {
+            for (const tick of group || []) {
+                if (tick && tick.isBackground) continue;
+                const v = tick && tick.value;
+                if (!Array.isArray(v)) continue;
+                if (typeof v[1] === 'number') starts.push(v[1]);
+                if (typeof v[2] === 'number') ends.push(v[2]);
+            }
+        }
+
+        if (!starts.length || !ends.length) return null;
+        const min = Math.min(...starts);
+        let max = Math.max(...ends);
+        if (max <= min) max = min + MIN_TICK_SECONDS;
+        return { min, max };
+    }
+
     function renderTick(params, api) {
         const yIdx = api.value(0);
         const xStart = api.coord([api.value(1), yIdx])[0];
@@ -577,7 +669,7 @@ const MultiSessionView = (function() {
         const y = api.coord([0, yIdx])[1];
 
         // ---- Visual width (thin rect) ----
-        const visFloor = isBg ? 2 : (isAggregated ? 4 : 1.5);
+        const visFloor = isBg ? 2 : VISIBLE_MIN_PX;
         const visWidth = Math.max(xEnd - xStart, visFloor);
 
         if (isBg) {
@@ -591,7 +683,7 @@ const MultiSessionView = (function() {
             };
         }
 
-        // ---- Hit area (transparent, 6px min, centered on bar) ----
+        // ---- Hit area (transparent min width, centered on bar) ----
         const xCenter = (xStart + xEnd) / 2;
         const hitW = Math.max(visWidth, HIT_MIN_PX);
         const hitX = xCenter - hitW / 2;
@@ -792,7 +884,7 @@ const MultiSessionView = (function() {
         if (!Array.isArray(ticks) || ticks.length === 0) return ticks;
         return ticks.filter(t => {
             const xStart = (t.value && t.value[1]) || 0;
-            const xEnd = (t.value && t.value[2]) || (xStart + 0.5);
+            const xEnd = (t.value && t.value[2]) || (xStart + MIN_TICK_SECONDS);
             return xEnd >= visMin && xStart <= visMax;
         });
     }
@@ -822,7 +914,7 @@ const MultiSessionView = (function() {
                 const v = t.value;
                 const id = t.itemId || (v && v[6]);
                 const start = formatRelSec(v[1]);
-                const end = formatRelSec(v[2] || (v[1] + 0.5));
+                const end = formatRelSec(v[2] || (v[1] + MIN_TICK_SECONDS));
                 return `<li class="turn-drawer-agg-item" data-item-id="${id}">
                     <span class="ms-dot" style="background:${v[3] || '#9c7cff'}"></span>
                     <span class="turn-drawer-agg-label">${escapeHtml(v[5] || id || 'turn')}</span>
@@ -855,18 +947,15 @@ const MultiSessionView = (function() {
         drawer.classList.add('open');
         drawer.setAttribute('aria-hidden', 'false');
 
-        // Reset downstream sections to their "not loaded" state.
-        for (const id of ['turn-drawer-records', 'turn-drawer-llm', 'turn-drawer-tools']) {
-            const el = document.getElementById(id);
-            if (el) el.innerHTML = '<div class="turn-drawer-empty">Not loaded yet</div>';
-        }
+        renderLocalRecords(meta);
+        renderLocalIo(meta);
 
         // Fetch LLM I/O (assistant message + tool result) for this turn.
         // Aggregated clicks drill into the first turn in the bucket; the
         // drawer also exposes the aggregated list so the user can pick
         // a different one — selecting a row re-opens the drawer with that
         // turn's id (see the click handlers below) and re-fetches here.
-        _loadTurnLlmIo(meta);
+        _loadTurnIo(meta);
 
         // Extension hook for future async detail loaders.
         try {
@@ -996,6 +1085,238 @@ const MultiSessionView = (function() {
         }).join('');
     }
 
+    function _renderToolIoHtml(payload, meta) {
+        const inputBlocks = ((payload && payload.input && payload.input.content_blocks) || [])
+            .filter(b => b && (b.type === 'tool_use' || b.type === 'tool_call_legacy'));
+        const outputBlocks = ((payload && payload.output && payload.output.content_blocks) || [])
+            .filter(b => b && b.type === 'tool_result');
+        const cards = [];
+
+        if (inputBlocks.length) {
+            cards.push(...inputBlocks.map(b => renderToolInputCard(b)));
+        } else if (meta && meta.detail && Object.keys(meta.detail).length) {
+            cards.push(renderLocalToolCard(meta));
+        }
+
+        if (outputBlocks.length) {
+            cards.push(...outputBlocks.map(b => renderToolOutputCard(b)));
+        }
+
+        return cards.length
+            ? cards.join('')
+            : '<div class="turn-drawer-empty">No tool input/output found for this item.</div>';
+    }
+
+    function renderLocalIo(meta) {
+        const llmSection = document.getElementById('turn-drawer-llm');
+        const toolSection = document.getElementById('turn-drawer-tools');
+        const detail = (meta && meta.detail) || {};
+        const barType = meta && meta.barType;
+
+        if (llmSection) {
+            if (detail.text_preview) {
+                llmSection.innerHTML = renderTextCard('Preview', detail.text_preview);
+            } else if (barType === 'custom' && meta.label) {
+                llmSection.innerHTML = renderTextCard('Message', meta.label);
+            } else {
+                llmSection.innerHTML = '<div class="turn-drawer-empty">No LLM text preview for this item.</div>';
+            }
+        }
+
+        if (toolSection) {
+            if (detail.params || detail.tool_use_id || barType === 'tool_call') {
+                toolSection.innerHTML = renderLocalToolCard(meta);
+            } else if (detail.excerpt) {
+                toolSection.innerHTML = renderTextCard('Tool result preview', detail.excerpt);
+            } else {
+                toolSection.innerHTML = '<div class="turn-drawer-empty">No tool input/output for this item.</div>';
+            }
+        }
+    }
+
+    function hasLocalLlmPreview(meta) {
+        const detail = (meta && meta.detail) || {};
+        return Boolean(detail.text_preview || ((meta && meta.barType) === 'custom' && meta.label));
+    }
+
+    function renderLocalRecords(meta) {
+        const recordsSection = document.getElementById('turn-drawer-records');
+        if (!recordsSection) return;
+
+        const detail = (meta && meta.detail) || {};
+        const record = {
+            source: 'chart',
+            sessionId: meta && meta.sessionId,
+            agentId: meta && meta.agentId,
+            turnId: meta && meta.turnId,
+            toolUseId: meta && meta.toolUseId,
+            type: meta && meta.barType,
+            label: meta && meta.label,
+            status: meta && meta.status,
+            startRel: meta && meta.startRel,
+            endRel: meta && meta.endRel,
+            detail,
+        };
+
+        recordsSection.innerHTML = renderRecordCard('Chart record', record);
+    }
+
+    function renderSessionRecords(payload, meta) {
+        const recordsSection = document.getElementById('turn-drawer-records');
+        if (!recordsSection) return;
+
+        const cards = [renderRecordCard('Chart record', {
+            source: 'chart',
+            sessionId: meta && meta.sessionId,
+            turnId: meta && meta.turnId,
+            toolUseId: meta && meta.toolUseId,
+            type: meta && meta.barType,
+            label: meta && meta.label,
+            status: meta && meta.status,
+            startRel: meta && meta.startRel,
+            endRel: meta && meta.endRel,
+            detail: meta && meta.detail,
+        })];
+
+        if (payload && payload.input) {
+            cards.push(renderRecordCard('Transcript input record', compactMessageRecord(payload.input)));
+        }
+        if (payload && payload.output) {
+            cards.push(renderRecordCard('Transcript output record', compactMessageRecord(payload.output)));
+        }
+
+        recordsSection.innerHTML = cards.join('');
+    }
+
+    function compactMessageRecord(message) {
+        const blocks = (message && message.content_blocks) || [];
+        return {
+            role: message && message.role,
+            name: message && message.name,
+            timestamp: (message && (message.timestamp || message._timestamp)) || '',
+            toolCallId: message && message.tool_call_id,
+            content: blocks.map(compactBlockRecord),
+        };
+    }
+
+    function compactBlockRecord(block) {
+        if (!block) return {};
+        if (block.type === 'text') {
+            return { type: 'text', text: block.text || '' };
+        }
+        if (block.type === 'tool_use') {
+            return {
+                type: 'tool_use',
+                id: block.id || '',
+                name: block.name || '',
+                input: block.input || {},
+            };
+        }
+        if (block.type === 'tool_result') {
+            return {
+                type: 'tool_result',
+                tool_use_id: block.tool_use_id || '',
+                is_error: !!block.is_error,
+                content: block.content || '',
+            };
+        }
+        if (block.type === 'tool_call_legacy') {
+            return {
+                type: 'tool_call_legacy',
+                id: block.id || '',
+                function: block.function || {},
+            };
+        }
+        return block;
+    }
+
+    function renderRecordCard(title, record) {
+        return renderIoCard(title, record && record.role ? `role=${record.role}` : '', '', record || {});
+    }
+
+    function _renderLlmIoHtml(payload) {
+        if (!payload) return '<div class="turn-drawer-empty">Empty response</div>';
+        const inputText = textLikeBlocks(payload.input && payload.input.content_blocks);
+        const outputText = textLikeBlocks(payload.output && payload.output.content_blocks);
+        const cards = [];
+        if (inputText.length) cards.push(renderTextCard('LLM input/context', inputText.join('\n\n')));
+        if (outputText.length) cards.push(renderTextCard('LLM output', outputText.join('\n\n')));
+        return cards.length
+            ? cards.join('')
+            : '<div class="turn-drawer-empty">No text blocks found; see Tool I/O for call details.</div>';
+    }
+
+    function textLikeBlocks(blocks) {
+        return (blocks || [])
+            .filter(b => b && b.type === 'text' && b.text)
+            .map(b => b.text);
+    }
+
+    function renderToolInputCard(block) {
+        if (block.type === 'tool_call_legacy') {
+            const fn = block.function || {};
+            return renderIoCard('Tool input', fn.name || 'tool', block.id || '', fn.arguments || {});
+        }
+        return renderIoCard('Tool input', block.name || 'tool', block.id || '', block.input || {});
+    }
+
+    function renderToolOutputCard(block) {
+        return renderIoCard(
+            block.is_error ? 'Tool output (error)' : 'Tool output',
+            'result',
+            block.tool_use_id || '',
+            block.content || ''
+        );
+    }
+
+    function renderLocalToolCard(meta) {
+        const detail = (meta && meta.detail) || {};
+        return renderIoCard('Tool input', meta.label || meta.barType || 'tool', detail.tool_use_id || meta.toolUseId || '', detail.params || detail);
+    }
+
+    function renderTextCard(title, text) {
+        return renderIoCard(title, '', '', text || '');
+    }
+
+    function renderIoCard(title, name, id, body) {
+        const heading = [name, id ? `id=${id}` : ''].filter(Boolean).join(' · ');
+        return `<div class="turn-drawer-io-card">
+            <div class="turn-drawer-io-title">${escapeHtml(title)}</div>
+            ${heading ? `<div class="turn-drawer-io-meta">${escapeHtml(heading)}</div>` : ''}
+            <pre>${escapeHtml(formatIoBody(body))}</pre>
+        </div>`;
+    }
+
+    function formatIoBody(body) {
+        if (body == null || body === '') return '(empty)';
+        if (typeof body === 'string') return body;
+        try {
+            return JSON.stringify(body, null, 2);
+        } catch (_) {
+            return String(body);
+        }
+    }
+
+    function uniqueTruthy(values) {
+        return [...new Set((values || []).filter(v => v != null && String(v).trim() !== '').map(String))];
+    }
+
+    function transcriptLookupIds(meta) {
+        if (!meta) return [];
+        const ids = [meta.toolUseId];
+        const turnId = meta.turnId ? String(meta.turnId) : '';
+        if (turnId.startsWith('call_') || meta.barType === 'tool_call' || meta.barType === 'tool_result') {
+            ids.push(turnId);
+        }
+        return uniqueTruthy(ids);
+    }
+
+    function appendIoHint(section, message) {
+        if (!section || !message) return;
+        section.insertAdjacentHTML('beforeend',
+            `<div class="turn-drawer-error"><span>${escapeHtml(message)}</span></div>`);
+    }
+
     function closeTurnDrawer() {
         const drawer = document.getElementById('turn-drawer');
         if (!drawer) return;
@@ -1010,12 +1331,15 @@ const MultiSessionView = (function() {
             agentId: t.agentId || null,
             turnId: t.itemId || v[6] || null,
             startRel: v[1],
-            endRel: v[2] || (v[1] + 0.5),
+            endRel: v[2] || (v[1] + MIN_TICK_SECONDS),
             color: v[3],
             status: v[4],
             label: v[5],
             aggregated: t.aggregated,
             isBackground: t.isBackground,
+            barType: t.barType || null,
+            detail: t.detail || null,
+            toolUseId: t.toolUseId || (t.detail && t.detail.tool_use_id) || null,
         };
     }
 
@@ -1023,10 +1347,14 @@ const MultiSessionView = (function() {
         if (typeof sec !== 'number' || !isFinite(sec)) return '—';
         const sign = sec < 0 ? '-' : '';
         const a = Math.abs(sec);
-        const m = Math.floor(a / 60);
+        const h = Math.floor(a / 3600);
+        const m = Math.floor((a % 3600) / 60);
         const s = Math.floor(a % 60);
         const ms = Math.round((a - Math.floor(a)) * 1000);
-        return `${sign}${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        if (h > 0) {
+            return `${sign}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        }
+        return `${sign}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
     }
 
     function escapeHtml(s) {

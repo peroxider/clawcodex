@@ -6,6 +6,20 @@ let ganttChart = null;
 let currentTimeMode = 'relative';
 let currentSessionData = null;
 
+function formatRelativeMs(ms) {
+    if (typeof ms !== 'number' || !isFinite(ms)) return '-';
+    const sign = ms < 0 ? '-' : '';
+    const totalMs = Math.max(0, Math.round(Math.abs(ms)));
+    const hours = Math.floor(totalMs / 3600000);
+    const minutes = Math.floor((totalMs % 3600000) / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    const millis = totalMs % 1000;
+    if (hours > 0) {
+        return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+    }
+    return `${sign}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
 async function loadSessionDetail(sessionId) {
     try {
         const data = await VizUtils.apiFetch(`/api/viz/sessions/${sessionId}`);
@@ -84,12 +98,18 @@ async function renderGanttChart(sessionId) {
 
         if (!ganttChart) {
             ganttChart = echarts.init(container, 'dark');
+            ganttChart.on('click', handleGanttClick);
             // Responsive
             window.addEventListener('resize', () => ganttChart?.resize());
         }
 
         const categories = ganttData.categories || [];
-        const series = ganttData.series || [];
+        const series = (ganttData.series || []).map(row => {
+            if (!Array.isArray(row)) return row;
+            if (row[9]) return row;
+            const categoryName = categories[row[0]] || '';
+            return [...row, categoryName];
+        });
 
         if (categories.length === 0 || series.length === 0) {
             ganttChart.setOption({
@@ -99,7 +119,8 @@ async function renderGanttChart(sessionId) {
             return;
         }
 
-        const tr = ganttData.timeRange || {};
+        const seriesBounds = getSeriesTimeRange(series);
+        const tr = seriesBounds || ganttData.timeRange || {};
         const rangeSpan = (typeof tr.min === 'number' && typeof tr.max === 'number')
             ? Math.max(tr.max - tr.min, 0)
             : 0;
@@ -133,7 +154,7 @@ async function renderGanttChart(sessionId) {
                 // sub-second, which is the exact bug we're fixing.
                 splitNumber: 6,
                 axisLabel: {
-                    formatter: v => VizUtils.formatDuration(v),
+                    formatter: formatRelativeMs,
                     interval: 'auto',
                     hideOverlap: true
                 }
@@ -165,6 +186,47 @@ async function renderGanttChart(sessionId) {
     }
 }
 
+function handleGanttClick(params) {
+    const d = params && params.data;
+    if (!Array.isArray(d) || typeof window.openTurnDrawer !== 'function') return;
+
+    const detail = d[8] || {};
+    const turnId = detail.tool_use_id || d[5] || null;
+    window.openTurnDrawer({
+        sessionId: currentSessionData?.session_id || null,
+        agentId: null,
+        turnId,
+        startRel: d[1],
+        endRel: d[2],
+        color: d[7],
+        status: d[6],
+        label: d[4],
+        barType: d[9] || null,
+        detail,
+        toolUseId: detail.tool_use_id || null,
+    });
+}
+
+function getSeriesTimeRange(series) {
+    const starts = [];
+    const ends = [];
+
+    for (const row of series) {
+        if (!Array.isArray(row)) continue;
+        if (typeof row[1] === 'number') starts.push(row[1]);
+        if (typeof row[2] === 'number') ends.push(row[2]);
+    }
+
+    if (starts.length === 0 || ends.length === 0) return null;
+
+    const min = Math.min(...starts);
+    let max = Math.max(...ends);
+    if (max <= min) {
+        max = min + 1;
+    }
+    return { min, max };
+}
+
 function renderGanttBar(params, api) {
     const categoryIdx = api.value(0);
     const start = api.coord([api.value(1), categoryIdx]);
@@ -174,10 +236,12 @@ function renderGanttBar(params, api) {
     const label = api.value(4) || '';
     const status = api.value(6) || 'success';
     const color = api.value(7) || '#5470c6';
+    const barType = api.value(9) || '';
+    const minWidth = ['custom', 'llm_call', 'tool_call'].includes(barType) ? 8 : 2;
 
     const rectShape = echarts.graphic.clipRectByRect({
         x: start[0], y: start[1] - height / 2,
-        width: Math.max(end[0] - start[0], 2), height: height
+        width: Math.max(end[0] - start[0], minWidth), height: height
     }, {
         x: params.coordSys.x, y: params.coordSys.y,
         width: params.coordSys.width, height: params.coordSys.height

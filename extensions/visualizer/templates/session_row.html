@@ -78,15 +78,15 @@
             <ul id="turn-drawer-agg-list"></ul>
         </section>
         <section class="turn-drawer-section">
-            <h4>Session Records <small>(coming soon)</small></h4>
+            <h4>Session Records</h4>
             <div id="turn-drawer-records"><div class="turn-drawer-empty">Not loaded yet</div></div>
         </section>
         <section class="turn-drawer-section">
-            <h4>LLM I/O <small>(coming soon)</small></h4>
+            <h4>LLM I/O</h4>
             <div id="turn-drawer-llm"><div class="turn-drawer-empty">Not loaded yet</div></div>
         </section>
         <section class="turn-drawer-section">
-            <h4>Tool I/O <small>(coming soon)</small></h4>
+            <h4>Tool I/O</h4>
             <div id="turn-drawer-tools"><div class="turn-drawer-empty">Not loaded yet</div></div>
         </section>
     </div>
@@ -97,8 +97,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/gantt.js?v=20260611-gantt-visible-render"></script>
-<script src="/static/js/multi_session_view.js"></script>
+<script src="/static/js/gantt.js?v=20260611-axis-io-svg"></script>
+<script src="/static/js/multi_session_view.js?v=20260611-axis-io-svg"></script>
 <script>
     const SESSION_ID = "{{ session_id }}";
     // Decide default view from URL ?view=gantt or fallback to waterfall

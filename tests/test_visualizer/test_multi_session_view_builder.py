@@ -161,7 +161,7 @@ class TestEdges:
 
 
 class TestTimeRange:
-    def test_tick_labels_cover_full_range(self):
+    def test_tick_labels_cover_activity_range(self):
         viz = _session("s1", 0, 1800,
             _bar("Read", 0, 5),
             _bar("Bash", 60, 120),
@@ -170,7 +170,16 @@ class TestTimeRange:
         out = MultiSessionViewBuilder().build([viz])
         tr = out["timeRange"]
         assert tr["min"] == 0.0
-        assert tr["max"] >= 1800.0
+        assert tr["max"] == 120.0
         assert len(tr["tickLabels"]) >= 2
         # First label should be the zero tick
         assert tr["tickLabels"][0] == "0"
+
+    def test_time_range_ignores_late_session_end(self):
+        viz = _session("s1", 0, 3600,
+            _bar("Read", 10, 10.05),
+            _bar("Bash", 20, 20.1),
+        )
+        out = MultiSessionViewBuilder().build([viz])
+        assert out["timeRange"]["min"] == 0.0
+        assert out["timeRange"]["max"] == 20.1

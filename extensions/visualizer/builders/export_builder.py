@@ -10,6 +10,7 @@ import io
 import json
 import logging
 from typing import Any
+from xml.sax.saxutils import escape
 
 from ..models.viz_models import ComparisonResult, ExportFormat, SessionVizData
 
@@ -53,7 +54,12 @@ class ExportBuilder:
         """Generate a simple SVG representation of the timeline."""
         bars = session.timeline
         if not bars:
-            svg = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="100"><text x="10" y="50">No timeline data</text></svg>'
+            svg = (
+                '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="100">'
+                '<rect width="100%" height="100%" fill="#11162a"/>'
+                '<text x="10" y="50" font-size="14" font-family="sans-serif" fill="#d7defa">'
+                'No timeline data</text></svg>'
+            )
             return svg.encode("utf-8"), "image/svg+xml", f"{session.session_id}.svg"
 
         width = 1200
@@ -61,15 +67,17 @@ class ExportBuilder:
         header_height = 40
         chart_height = max(len(bars) * row_height + header_height, 200)
 
-        base_time = bars[0].start_time
+        base_time = min(b.start_time for b in bars)
         total_span = max(b.end_time for b in bars) - base_time
         if total_span <= 0:
             total_span = 1
 
+        title = escape(session.title or session.session_id[:8])
         svg_parts: list[str] = [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{chart_height}">',
-            f'<rect width="100%" height="100%" fill="#f8f9fa"/>',
-            f'<text x="10" y="25" font-size="16" font-family="sans-serif" fill="#333">Session: {session.title or session.session_id[:8]}</text>',
+            '<rect width="100%" height="100%" fill="#11162a"/>',
+            '<rect x="6" y="6" width="1188" height="28" fill="#17213d" opacity="0.92" rx="4"/>',
+            f'<text x="14" y="25" font-size="16" font-family="sans-serif" fill="#eef3ff">Session: {title}</text>',
         ]
 
         colors = {"tool_call": "#91cc75", "llm_call": "#5470c6", "phase": "#ee6666", "custom": "#9a60b4"}
@@ -84,7 +92,7 @@ class ExportBuilder:
             )
             svg_parts.append(
                 f'<text x="{x + 4}" y="{y + row_height - 10}" font-size="10" '
-                f'font-family="sans-serif" fill="#fff">{bar.label[:20]}</text>'
+                f'font-family="sans-serif" fill="#ffffff">{escape(bar.label[:20])}</text>'
             )
 
         svg_parts.append("</svg>")
