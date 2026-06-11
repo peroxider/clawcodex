@@ -101,6 +101,10 @@ class TranscriptParser:
         # the TOOL_CALL bar so per-tool timing in the gantt / stats bar
         # reflects real tool latency instead of 0.
         self._pair_tool_durations(bars)
+        # Backfill LLM_TEXT bar durations — _text_bar() emits placeholders
+        # (duration_ms=100) because at parse time the next entry's timestamp
+        # is unknown. Resolve from the gap to the next bar in the timeline.
+        self._pair_llm_text_durations(bars)
         return bars
 
     def _pair_tool_durations(self, bars: list[TimelineBar]) -> None:
@@ -174,6 +178,41 @@ class TranscriptParser:
                 bar.end_time = nxt.start_time
                 bar.duration_ms = int((nxt.start_time - bar.start_time) * 1000)
                 break  # only the first strictly-later next-bar is consulted
+
+    def _pair_llm_text_durations(self, bars: list[TimelineBar]) -> None:
+        """Backfill LLM_TEXT bar durations from the next bar's start time.
+
+        ``_text_bar()`` emits placeholder bars (``duration_ms=100``,
+        ``end_time = start_time + 0.1s``) because at parse time the
+        next entry's timestamp isn't known yet. After the full file
+        is parsed, this pass resolves the actual text-generation span
+        from each LLM_TEXT bar's start_time to the start of the next
+        bar in chronological order.
+
+        Bars within the same transcript entry (text + tool_use blocks)
+        share the same timestamp, so they are skipped (their duration
+        is covered by the very next *different* entry's timestamp).
+        """
+        text_bars = [b for b in bars if b.type == BarType.LLM_CALL]
+        if not text_bars:
+            return
+
+        # Build a sorted index (start_time, id) of all bars for lookup
+        all_sorted = sorted(bars, key=lambda b: (b.start_time, b.id))
+
+        for text_bar in text_bars:
+            # Find the first bar that starts strictly after this text_bar.
+            # 1ms epsilon avoids self-matching on floating point rounding
+            # and skips sibling bars from the same transcript entry.
+            for next_bar in all_sorted:
+                if next_bar.start_time > text_bar.start_time + 0.001:
+                    duration_ms = int(
+                        (next_bar.start_time - text_bar.start_time) * 1000
+                    )
+                    if duration_ms >= 100:  # only update if materially longer
+                        text_bar.end_time = next_bar.start_time
+                        text_bar.duration_ms = duration_ms
+                    break
 
     def parse_incremental(
         self,

@@ -72,11 +72,12 @@ class TestAgentTreeLayoutSingleSubagent:
         assert len(viz.agent_tree) == 2
         sub = [n for n in viz.agent_tree if n.parent_id][0]
         assert sub.spawn_x == 30.0
-        # join_x = end of Agent bar (matched by subagent_description)
-        assert sub.join_x == 40.0
+        # join_x spans through follow-up activity so the waterfall branch
+        # can show the sub-agent's progress window instead of an empty lane.
+        assert sub.join_x == 60.0
         assert sub.depth_y == 1
         assert sub.role == "评审"
-        assert sub.role_color == "#5470c6"
+        assert sub.role_color == "#7c3aed"
 
     def test_layout_summary_counts(self):
         viz = _session(0, 200,

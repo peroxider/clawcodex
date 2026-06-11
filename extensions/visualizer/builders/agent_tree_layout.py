@@ -70,12 +70,15 @@ def _role_label_for(subagent_type: str | None, description: str | None) -> str:
 
 
 def _role_color_for(role: str) -> str:
-    """Role pill color — same magenta/blue palette as the reference image."""
+    """Role pill color — aligned with design-spec reference image.
+
+    评审(purple) / 核对(red) / 写入(pink) / 执行(blue)
+    """
     return {
-        "评审": "#5470c6",   # blue (matches agent_swimlane accent)
-        "核对": "#ea7ccc",   # pink (matches fork/join curve)
-        "写入": "#fac858",
-        "执行": "#52c41a",
+        "评审": "#7c3aed",   # purple
+        "核对": "#dc2626",   # red
+        "写入": "#ec4899",   # pink
+        "执行": "#3b82f6",   # blue
     }.get(role, "#a0a0b0")
 
 
@@ -271,10 +274,10 @@ class AgentTreeLayout:
                 best = bar.end_time
             elif node.name and node.name in (detail.get("subagent_description") or ""):
                 best = bar.end_time
-        if best is not None:
-            return max(0.0, best - base_time)
         # Fallback: last bar of any kind
         later = [b.end_time for b in timeline if b.start_time >= spawn_t]
+        if best is not None:
+            return max(0.0, max(best, max(later) if later else best) - base_time)
         if not later:
             return None
         return max(0.0, max(later) - base_time)

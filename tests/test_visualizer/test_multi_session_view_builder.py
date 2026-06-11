@@ -57,7 +57,7 @@ class TestMultiSessionViewBuilderEmpty:
         assert out["sessions"] == []
         assert out["agents"] == []
         assert out["edges"] == []
-        assert len(out["legend"]) == 8  # all 8 categories with count 0
+        assert len(out["legend"]) == 5  # design-spec: 5 primary categories
 
 
 class TestSingleSessionLegend:
@@ -82,7 +82,7 @@ class TestSingleSessionLegend:
         viz = _session("s1", 0, 100, _bar("Read", 0, 5))
         out = MultiSessionViewBuilder().build([viz])
         labels = [l["label"] for l in out["legend"]]
-        assert labels == ["读取", "执行", "写入", "编排", "推理", "轮次", "后台", "其他"]
+        assert labels == ["读取", "执行", "写入", "编排", "其他"]
 
     def test_pre_set_other_llm_bar_is_refined(self):
         llm = TimelineBar(
@@ -94,12 +94,12 @@ class TestSingleSessionLegend:
             duration_ms=5000,
             detail={"text_preview": "thinking"},
         )
-        llm.category = OperationCategory.OTHER
+        llm.category = OperationCategory.LLM_TEXT
         viz = _session("s1", 0, 100, llm)
         out = MultiSessionViewBuilder().build([viz])
         legend = {l["category"]: l["count"] for l in out["legend"]}
-        assert legend["llm_text"] == 1
-        assert legend["other"] == 0
+        # Design-spec: LLM_TEXT rolled into OTHER for legend count
+        assert legend["other"] == 1
         assert out["sessions"][0]["ticks"][0]["category"] == "llm_text"
 
 
@@ -161,6 +161,32 @@ class TestAgentRows:
         out = MultiSessionViewBuilder().build([viz])
         ys = sorted(a["depthY"] for a in out["agents"])
         assert ys == [1, 2]
+
+    def test_subagent_rows_include_window_activity_ticks(self):
+        viz = _session("s1", 0, 600,
+            _bar("Agent", 100, 110, subagent_type="review", subagent_description="A", isAgentInvocation=True),
+            _bar("Read", 120, 122),
+            _bar("Bash", 130, 135),
+        )
+        AgentTreeLayout().layout(viz)
+        out = MultiSessionViewBuilder().build([viz])
+        agent = out["agents"][0]
+        labels = {t["label"] for t in agent["ticks"]}
+        assert {"Read", "Bash"}.issubset(labels)
+        assert agent["duration"] > 0
+
+    def test_explicit_agent_id_activity_wins_over_window_fallback(self):
+        explicit = _bar("Read", 20, 22)
+        explicit.agent_id = "auto/A"
+        viz = _session("s1", 0, 600,
+            _bar("Agent", 100, 110, subagent_type="review", subagent_description="A", isAgentInvocation=True),
+            explicit,
+            _bar("Bash", 120, 125),
+        )
+        AgentTreeLayout().layout(viz)
+        out = MultiSessionViewBuilder().build([viz])
+        labels = [t["label"] for t in out["agents"][0]["ticks"]]
+        assert labels == ["Read"]
 
 
 class TestEdges:

@@ -1,13 +1,14 @@
 /**
  * ClawCodex Visualizer — Multi-Session Waterfall View (F-95)
  *
- * Renders the JSON payload from /api/viz/multi-session into an ECharts
- * custom-series chart that matches the reference layout:
- *   - top: 5-pill legend with counts
+ * Design-spec aligned with session分析效果图.png:
+ *   - top: 5-pill legend with counts (read/execute/write/orchestrate/other)
  *   - left: time axis (relative, e.g. 0/5/10/15/20/25/30 min)
- *   - rows: each session gets a swimlane, sub-agents cascade below
- *   - activity ticks: dense color-coded vertical bars
- *   - fork/join: pink curved lines between parent and sub-agents
+ *   - rows: each session gets a swimlane, sub-agents cascade below in waterfall
+ *   - activity ticks: dense color-coded vertical bars (28% lane height)
+ *   - fork/join: pink/blue curved bezier lines between parent and sub-agents
+ *   - model pills: rounded capsules with metadata (ops · agentType · context)
+ *   - agent pills: role-colored capsules (评审/核对/写入/执行) + score
  */
 
 const MultiSessionView = (function() {
@@ -26,8 +27,8 @@ const MultiSessionView = (function() {
     // ---- View density tuning (waterfall fix) ----
     // Below HIT_MIN_PX the canvas rect becomes hard to hit; we wrap each
     // foreground bar in a transparent hit zone.
-    const HIT_MIN_PX = 10;
-    const VISIBLE_MIN_PX = 8;
+    const HIT_MIN_PX = 8;
+    const VISIBLE_MIN_PX = 6;
     const MIN_TICK_SECONDS = 0.001;
     // F-95 follow-up: per-category opacity for the custom-series bars.
     // LLM_TEXT bars (assistant text/thinking spans) get a low opacity so
@@ -35,7 +36,12 @@ const MultiSessionView = (function() {
     // narrower tool-call chips that share the same pixel range, even at
     // maximum dataZoom zoom. All other categories default to 0.95.
     const OPACITY_BY_CAT = {
-        llm_text: 0.35,
+        llm_text: 0.25,
+        read: 0.9,
+        execute: 0.9,
+        write: 0.9,
+        orchestrate: 0.85,
+        other: 0.75,
     };
     // Visible-window threshold (in data seconds) below which we render
     // ticks in their natural per-turn form, and above which we collapse
@@ -48,6 +54,8 @@ const MultiSessionView = (function() {
     // Cached dataZoom state — preserved across the re-render that
     // follows a density-mode switch so the user's zoom doesn't jump.
     let lastDzState = null;
+    let selectedAgentId = null;
+    let badgePayloads = [];
 
     async function _loadTurnIo(meta) {
         const llmSection = document.getElementById('turn-drawer-llm');
@@ -140,6 +148,7 @@ const MultiSessionView = (function() {
                 `/api/viz/multi-session?sessions=${encodeURIComponent(sessionIds.join(','))}`
             );
             currentData = data;
+            updateReferenceChrome(data);
             if (legendId) renderLegend(data.legend || [], legendId);
             renderChart(data, chartId);
         } catch (e) {
@@ -247,6 +256,48 @@ const MultiSessionView = (function() {
         `).join('');
     }
 
+    function updateReferenceChrome(data) {
+        const shell = document.querySelector('.ms-analysis-shell');
+        if (!shell || !data) return;
+        const sessions = data.sessions || [];
+        const agents = data.agents || [];
+        const first = sessions[0] || {};
+        const modelEl = document.getElementById('ms-reference-model');
+        const summaryEl = document.getElementById('ms-reference-summary');
+        const statusEl = document.getElementById('ms-reference-status');
+
+        if (modelEl) {
+            const model = first.model || first.name || first.id || 'Opus4.8';
+            modelEl.textContent = truncateVisual(model, 38);
+        }
+
+        if (summaryEl) {
+            const mainOps = first.totalOps || (first.ticks || []).length || 0;
+            const subCount = agents.filter(a => a.parentSessionId === first.id).length || agents.length;
+            const subOps = agents.reduce((sum, a) => sum + (a.count || (a.ticks || []).length || 0), 0);
+            const context = first.contextSize || first.context || '';
+            const childrenCtx = agents.map(a => a.contextSize || a.context).filter(Boolean);
+            const pieces = [];
+            pieces.push(subCount
+                ? `${mainOps} 主线 + ${subCount} 子agent (${subOps || mainOps} 调用)`
+                : `${mainOps} 主线 · 单agent`);
+            if (context) pieces.push(`主agent上下文 ${context}`);
+            if (childrenCtx.length) pieces.push(`子agent ${childrenCtx[0]}${childrenCtx.length > 1 ? '-' + childrenCtx[childrenCtx.length - 1] : ''}`);
+            summaryEl.innerHTML = pieces.map(p => `<span>${escapeHtml(p)}</span>`).join('');
+        }
+
+        if (statusEl) {
+            const marker = first.endMarker || {};
+            const timeLabel = marker.timeLabel || marker.durationLabel || '';
+            const status = marker.statusLabel || marker.label || first.status || '汇合修复 ✓';
+            statusEl.innerHTML = `
+                ${timeLabel ? `<span>${escapeHtml(timeLabel)}</span>` : ''}
+                <span>${escapeHtml(status)}</span>
+                <span class="ms-reference-dot"></span>
+            `;
+        }
+    }
+
     // ------------------------------------------------------------------
     // Main chart (ECharts custom series)
     // ------------------------------------------------------------------
@@ -285,7 +336,31 @@ const MultiSessionView = (function() {
                 if (!params || !params.data) return;
                 // Skip edge series — they carry no turn payload.
                 if (params.seriesName === 'edges') return;
-                openTurnDrawer(buildTurnMeta(params.data));
+                if (params.seriesName === 'lanes' && params.data.agentId) {
+                    selectedAgentId = selectedAgentId === params.data.agentId ? null : params.data.agentId;
+                    renderChart(currentData, currentContainerId);
+                    return;
+                }
+                // F-95 follow-up: agent label pill click. The pill
+                // lives in the 'badges' custom series; buildBadgeData
+                // tags it with kind === 'agent' (index 2) and agentId
+                // (index 3) in the value tuple. We read from
+                // params.value rather than params.data because the
+                // custom-series encode pipeline rebuilds params.data
+                // from the internal DataStore and drops extra fields.
+                if (params.seriesName === 'badges'
+                        && Array.isArray(params.value)
+                        && badgePayloads[params.value[2]]
+                        && badgePayloads[params.value[2]].kind === 'agent') {
+                    const agentId = badgePayloads[params.value[2]].agentId;
+                    selectedAgentId = selectedAgentId === agentId ? null : agentId;
+                    renderChart(currentData, currentContainerId);
+                    return;
+                }
+                const meta = buildTurnMeta(params.data);
+                selectedAgentId = meta.agentId || null;
+                renderChart(currentData, currentContainerId);
+                openTurnDrawer(meta);
             });
 
             // ---- Datazoom: debounced re-aggregation ----
@@ -345,6 +420,7 @@ const MultiSessionView = (function() {
         const agents = data.agents || [];
         const edges = data.edges || [];
         const timeRange = data.timeRange || { min: 0, max: 60, tickSeconds: [], tickLabels: [] };
+        const layout = getChartLayout(container);
 
         // Build implicit y categories: each row is one lane.
         // Row 0: first session
@@ -353,6 +429,8 @@ const MultiSessionView = (function() {
         // The server already does this — we just take y as-is.
         const yCategories = buildYCategories(sessions, agents);
         const yIndex = new Map(yCategories.map((label, i) => [label, i]));
+        const laneData = buildLaneData(sessions, agents, yIndex, yCategories, timeRange);
+        const badgeData = buildBadgeData(sessions, agents, yIndex);
 
         // ---- Session swimlane series (activity ticks per session) ----
         const sessionTickDataRaw = sessions.flatMap(s => {
@@ -366,6 +444,7 @@ const MultiSessionView = (function() {
                     t.status,
                     t.label,
                     t.id,
+                    t.category || 'other',
                 ],
                 itemId: t.id,
                 sessionId: s.id,
@@ -382,27 +461,39 @@ const MultiSessionView = (function() {
         for (const a of agents) {
             const yi = yIndex.get(agentLabel(a));
             // Background span (spawn → join) — subtle gray bar
-            agentTickDataRaw.push({
-                value: [
-                    yi,
-                    a.spawnX,
-                    a.joinX,
+                agentTickDataRaw.push({
+                    value: [
+                        yi,
+                        a.spawnX,
+                        a.joinX,
                     'rgba(255,255,255,0.04)',
                     'span',
                     a.title,
                     `span-${a.id}`,
+                    'span',
                 ],
                 isBackground: true,
-                sessionId: a.parentSessionId || null,
-                agentId: a.id,
-            });
+                    sessionId: a.parentSessionId || null,
+                    agentId: a.id,
+                    laneRole: a.role || '执行',
+                });
             // Activity ticks from agent metadata (or empty)
             for (const t of (a.ticks || [])) {
                 agentTickDataRaw.push({
-                    value: [yi, t.x, t.x + tickWidthSeconds(t), t.color, t.status, t.label, t.id],
+                    value: [
+                        yi,
+                        t.x,
+                        t.x + tickWidthSeconds(t),
+                        t.color,
+                        t.status,
+                        t.label,
+                        t.id,
+                        t.category || 'other',
+                    ],
                     itemId: t.id,
                     sessionId: a.parentSessionId || null,
                     agentId: a.id,
+                    laneRole: a.role || '执行',
                     category: t.category || 'other',
                     barType: t.type || null,
                     detail: t.detail || null,
@@ -465,6 +556,7 @@ const MultiSessionView = (function() {
         // ---- Edges (fork/join) for graph series ----
         const graphNodes = [];
         const graphLinks = [];
+        const branchData = [];
         // Session nodes
         for (const s of sessions) {
             graphNodes.push({
@@ -508,7 +600,12 @@ const MultiSessionView = (function() {
                 graphLinks.push({
                     source: `fork-${parent.id}-${child.id}`,
                     target: `fork-end-${parent.id}-${child.id}`,
-                    lineStyle: { color: '#ea7ccc', width: 1.5, curveness: 0.3, opacity: 0.7 },
+                    lineStyle: edgeStyle(child.id, 'fork'),
+                });
+                branchData.push({
+                    value: [parentY, e.from.x, e.to.x, childY, 'fork'],
+                    agentId: child.id,
+                    color: '#ea7ccc',
                 });
             } else if (e.type === 'join') {
                 const childY = e.from.y;
@@ -528,13 +625,18 @@ const MultiSessionView = (function() {
                 graphLinks.push({
                     source: `join-${parent.id}-${child.id}`,
                     target: `join-end-${parent.id}-${child.id}`,
-                    lineStyle: { color: '#ea7ccc', width: 1.5, curveness: 0.3, opacity: 0.7 },
+                    lineStyle: edgeStyle(child.id, 'join'),
+                });
+                branchData.push({
+                    value: [childY, e.from.x, e.to.x, parentY, 'join'],
+                    agentId: child.id,
+                    color: '#7aa2ff',
                 });
             }
         }
 
         const option = {
-            backgroundColor: 'transparent',
+            backgroundColor: layout.reference ? 'transparent' : '#0d1117',
             animation: false,
             // F-95 legend fix: disable ECharts' auto-rendered legend so it
             // never collides with the HTML `.ms-legend-bar` (which session_row
@@ -545,82 +647,73 @@ const MultiSessionView = (function() {
             legend: { show: false },
             tooltip: {
                 trigger: 'item',
-                backgroundColor: 'rgba(26, 26, 46, 0.95)',
-                borderColor: '#2a2a4e',
-                textStyle: { color: '#e0e0e0', fontSize: 12 },
+                backgroundColor: 'rgba(13, 17, 23, 0.95)',
+                borderColor: '#30363d',
+                textStyle: { color: '#c9d1d9', fontSize: 11 },
                 formatter: function(params) {
                     if (!params.data || !params.data.value) return '';
                     const v = params.data.value;
                     if (v.length < 6) return '';
                     if (params.data.isBackground) {
                         return `<strong>${escapeHtml(v[4] || '')}</strong><br/>
-                                <span style="color:#a0a0b0">background span</span>`;
+                                <span style="color:#8b949e">background span</span>`;
                     }
                     if (params.data.aggregatedCount > 1) {
                         return `<strong>${params.data.aggregatedCount} aggregated turns</strong><br/>
-                                <span style="color:#a0a0b0">click to expand</span>`;
+                                <span style="color:#8b949e">click to expand</span>`;
                     }
                     const id = params.data.itemId || v[6] || '—';
                     const dur = ((v[2] || 0) - (v[1] || 0)).toFixed(2);
                     return `<strong>${escapeHtml(v[5] || v[4] || id)}</strong><br/>
-                            <span style="color:#a0a0b0">id:</span> ${escapeHtml(id)}<br/>
-                            <span style="color:#a0a0b0">start:</span> ${formatRelSec(v[1])}<br/>
-                            <span style="color:#a0a0b0">dur:</span> ${dur}s<br/>
-                            <span style="color:#a0a0b0">status:</span> ${escapeHtml(v[4] || '—')}`;
+                            <span style="color:#8b949e">id:</span> ${escapeHtml(id)}<br/>
+                            <span style="color:#8b949e">start:</span> ${formatRelSec(v[1])}<br/>
+                            <span style="color:#8b949e">dur:</span> ${dur}s<br/>
+                            <span style="color:#8b949e">status:</span> ${escapeHtml(v[4] || '—')}`;
                 },
             },
             grid: {
-                // F-95 legend fix: HTML `.ms-legend-bar` lives above the
-                // chart, so we no longer need the 70px top gutter that was
-                // reserved for ECharts' default legend. containLabel:true
-                // auto-reserves space on the left for long y-axis labels
-                // (e.g. "workflow 派生子agent") so they never clip into
-                // the swimlane bars.
-                left: 220, right: 60, top: 24, bottom: 60,
-                containLabel: true,
+                left: layout.gridLeft,
+                right: layout.gridRight,
+                top: layout.gridTop,
+                bottom: layout.gridBottom,
+                containLabel: !layout.reference,
             },
             xAxis: {
                 type: 'value',
                 min: timeRange.min,
                 max: timeRange.max,
                 axisLabel: {
-                    color: '#a0a0b0',
-                    fontSize: 11,
-                    formatter: function(v) {
-                        const mins = v / 60;
-                        if (mins < 1) return `${Math.round(v)}s`;
-                        if (Math.abs(mins - Math.round(mins)) < 0.01) return `${Math.round(mins)}分钟`;
-                        return `${mins.toFixed(1)}分钟`;
+                    show: !layout.compact && !layout.reference,
+                    color: '#8b949e',
+                    fontSize: 10,
+                    formatter: formatRelSec,
+                },
+                axisLine: { lineStyle: { color: layout.reference ? 'rgba(108,132,154,0.08)' : 'rgba(139,148,158,0.06)' } },
+                axisTick: { show: !layout.reference, lineStyle: { color: 'rgba(139,148,158,0.04)' } },
+                splitLine: {
+                    lineStyle: {
+                        type: layout.reference ? 'dashed' : 'solid',
+                        color: layout.reference ? 'rgba(116,139,162,0.16)' : 'rgba(139,148,158,0.035)',
+                        width: layout.reference ? 1.2 : 1,
                     },
                 },
-                splitLine: { lineStyle: { color: 'rgba(160,160,176,0.08)' } },
             },
             yAxis: {
                 type: 'category',
                 data: yCategories,
-                inverse: false,
+                inverse: true,
                 axisLabel: {
-                    color: '#a0a0b0',
-                    fontSize: 11,
-                    // F-95 follow-up: aggressive visual-width truncation.
-                    // The y-axis gutter is grid.left:220px, and the model
-                    // pill / agent label graphic elements also live in this
-                    // gutter (at x=[16, 216]). Chinese chars are ~2x the
-                    // pixel width of ASCII at 11px font, so a 24-char limit
-                    // still overflows.  Target ~10 visual units (≈110px)
-                    // to guarantee no horizontal collision with the
-                    // graphic elements. Full info is shown in the model
-                    // pill (sessions) or agent label pill (sub-agents).
+                    show: false,
+                    color: '#8b949e',
+                    fontSize: 10,
                     margin: 4,
                     formatter: function(value) {
-                        const TARGET_PX = 110;
-                        const charPx = 11;
-                        const maxVisual = TARGET_PX / charPx; // ~10
+                        const TARGET_PX = layout.compact ? 42 : 110;
+                        const charPx = 10;
+                        const maxVisual = TARGET_PX / charPx;
                         let visual = 0;
                         let out = '';
                         for (const ch of value) {
-                            // CJK + fullwidth punctuation weigh 2,
-                            // ASCII + halfwidth weighs 1.
                             const w = /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? 2 : 1;
                             if (visual + w > maxVisual) {
                                 out += '…';
@@ -634,19 +727,44 @@ const MultiSessionView = (function() {
                 },
                 axisLine: { show: false },
                 axisTick: { show: false },
-                splitLine: { show: true, lineStyle: { color: 'rgba(160,160,176,0.05)' } },
+                splitLine: {
+                    show: !layout.reference,
+                    lineStyle: { color: 'rgba(139,148,158,0.03)' },
+                },
             },
             dataZoom: [
-                { type: 'slider', xAxisIndex: 0, height: 16, bottom: 16,
+                { type: 'slider', xAxisIndex: 0, height: layout.reference ? 0 : 14, bottom: layout.reference ? 0 : 14,
+                  show: !layout.reference,
                   start: lastDzState ? lastDzState.start : 0,
                   end: lastDzState ? lastDzState.end : 100,
-                  textStyle: { color: '#a0a0b0' } },
+                  textStyle: { color: '#8b949e' },
+                  borderColor: '#30363d',
+                  fillerColor: 'rgba(88,166,255,0.08)',
+                  handleStyle: { color: '#58a6ff' },
+                  dataBackground: {
+                      lineStyle: { color: '#30363d' },
+                      areaStyle: { color: '#161b22' }
+                  },
+                  selectedDataBackground: {
+                      lineStyle: { color: '#58a6ff' },
+                      areaStyle: { color: 'rgba(88,166,255,0.1)' }
+                  }
+                },
                 { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: true, moveOnMouseMove: true,
                   start: lastDzState ? lastDzState.start : 0,
                   end: lastDzState ? lastDzState.end : 100 },
             ],
             series: [
                 // Session activity ticks
+                {
+                    name: 'lanes',
+                    type: 'custom',
+                    renderItem: renderLane,
+                    encode: { x: [1, 2], y: 0 },
+                    data: laneData,
+                    progressive: 0,
+                    z: 0,
+                },
                 {
                     name: 'sessions',
                     type: 'custom',
@@ -668,6 +786,16 @@ const MultiSessionView = (function() {
                 },
                 // Fork / join curves
                 {
+                    name: 'branches',
+                    type: 'custom',
+                    renderItem: renderBranch,
+                    encode: { x: [1, 2], y: [0, 3] },
+                    data: branchData,
+                    progressive: 0,
+                    silent: true,
+                    z: 5,
+                },
+                {
                     name: 'edges',
                     type: 'graph',
                     coordinateSystem: 'cartesian2d',
@@ -680,33 +808,73 @@ const MultiSessionView = (function() {
                     lineStyle: { width: 1.5, opacity: 0.7 },
                     z: 4,
                 },
+                // F-95 follow-up: model / agent / end-marker / spawn
+                // callout pills. They live in their own custom series
+                // so `notMerge: true` on the main setOption no longer
+                // wipes them. `clip: false` lets the gutter pills
+                // (model + agent) render outside the plot area; the
+                // end-marker and spawn callout use real data-x
+                // coordinates and are clamped to the plot edge.
+                {
+                    name: 'badges',
+                    type: 'custom',
+                    coordinateSystem: 'cartesian2d',
+                    renderItem: renderBadge,
+                    encode: { x: 1, y: 0 },
+                    data: badgeData,
+                    clip: false,
+                    progressive: 0,
+                    z: 10,
+                },
             ],
         };
 
         option.xAxis.axisLabel.formatter = formatRelSec;
         chart.setOption(option, true);
-        // F-95 follow-up: `chart.convertToPixel` returns null until the
-        // chart has completed its initial layout pass, so calling
-        // `attachBadges` synchronously here produced `yPx = null` and
-        // all badge positions collapsed to (x, NaN). ECharts then
-        // fell back to y=0, stacking every pill at the top of the
-        // chart and overlapping the y-axis category labels. Defer
-        // attachment to the 'finished' event, which fires once the
-        // layout (and any animation) is complete and `convertToPixel`
-        // returns valid coordinates.
-        if (chart.__attachBadgesHandler) {
-            chart.off('finished', chart.__attachBadgesHandler);
+    }
+
+    function getChartLayout(container) {
+        const width = container && container.clientWidth ? container.clientWidth : 1000;
+        const compact = width < 640;
+        const reference = !!(container && container.dataset && container.dataset.visualMode === 'reference');
+        if (reference) {
+            const mobile = width < 900;
+            return {
+                compact: mobile,
+                reference: true,
+                gridLeft: mobile ? 18 : 20,
+                gridRight: mobile ? 16 : 64,
+                gridTop: mobile ? 58 : 51,
+                gridBottom: mobile ? 22 : 26,
+                badgeX: mobile ? 16 : 17,
+                modelWidth: mobile ? 250 : 390,
+                agentRoleWidth: mobile ? 44 : 46,
+                agentTitleX: mobile ? 52 : 56,
+                agentCountX: mobile ? 156 : 188,
+                agentTitleVisual: mobile ? 10 : 18,
+                rowScale: mobile ? 0.9 : 0.82,
+            };
         }
-        const handler = function () {
-            chart.off('finished', handler);
-            try {
-                attachBadges(data, yIndex, yCategories);
-            } finally {
-                chart.__attachBadgesHandler = null;
-            }
+        return {
+            compact,
+            reference: false,
+            gridLeft: compact ? 108 : 260,
+            gridRight: compact ? 20 : 48,
+            gridTop: 20,
+            gridBottom: 56,
+            badgeX: compact ? 8 : 16,
+            modelWidth: compact ? 84 : 200,
+            agentRoleWidth: compact ? 44 : 72,
+            agentTitleX: compact ? 48 : 82,
+            agentCountX: compact ? 96 : 186,
+            agentTitleVisual: compact ? 6 : 20,
+            rowScale: 1,
         };
-        chart.__attachBadgesHandler = handler;
-        chart.on('finished', handler);
+    }
+
+    function currentLayout() {
+        const el = document.getElementById(currentContainerId);
+        return getChartLayout(el);
     }
 
     // ------------------------------------------------------------------
@@ -749,10 +917,11 @@ const MultiSessionView = (function() {
     }
 
     function renderTick(params, api) {
+        const layout = currentLayout();
         const yIdx = api.value(0);
         const xStart = api.coord([api.value(1), yIdx])[0];
         const xEnd = api.coord([api.value(2), yIdx])[0];
-        const color = api.value(3) || '#5470c6';
+        let color = api.value(3) || '#5470c6';
         const isBg = params.data && params.data.isBackground;
         const isAggregated = params.data && params.data.aggregatedCount > 1;
         // F-95 follow-up: per-category opacity. LLM_TEXT bars (which
@@ -760,24 +929,40 @@ const MultiSessionView = (function() {
         // so they read as a background layer and never visually
         // obscure the narrower tool-call chips that share the same
         // pixel range, even when the user zooms in to the maximum.
-        const cat = (params.data && params.data.category) || 'other';
-        const baseOpacity = OPACITY_BY_CAT[cat] != null ? OPACITY_BY_CAT[cat] : 0.95;
+        const cat = api.value(7) || (params.data && params.data.category) || 'other';
+        if (layout.reference) color = referenceColor(cat, color);
+        const isOrchestrate = cat === 'orchestrate';
+        let baseOpacity = OPACITY_BY_CAT[cat] != null ? OPACITY_BY_CAT[cat] : 0.95;
+        if (isOrchestrate) baseOpacity = 0.34;
+        const agentId = params.data && params.data.agentId;
+        const isDimmed = selectedAgentId && agentId && selectedAgentId !== agentId;
+        const isFocused = selectedAgentId && agentId && selectedAgentId === agentId;
+        if (isDimmed) baseOpacity *= 0.32;
 
-        const height = api.size([0, 1])[1] * (isBg ? 0.65 : 0.35);
+        const rowHeight = api.size([0, 1])[1] * (layout.rowScale || 1);
+        const height = layout.reference
+            ? Math.max(5, Math.min(22, rowHeight * (isBg ? 0.62 : (isOrchestrate ? 0.16 : 0.34))))
+            : rowHeight * (isBg ? 0.55 : (isOrchestrate ? 0.14 : 0.28));
         const y = api.coord([0, yIdx])[1];
+        const yOffset = isOrchestrate ? -rowHeight * (layout.reference ? 0.2 : 0.14) : 0;
 
         // ---- Visual width (thin rect) ----
-        const visFloor = isBg ? 2 : VISIBLE_MIN_PX;
+        const visFloor = isBg ? 2 : (layout.reference ? 5 : VISIBLE_MIN_PX);
         const visWidth = Math.max(xEnd - xStart, visFloor);
 
         if (isBg) {
             return {
                 type: 'rect',
                 shape: {
-                    x: xStart, y: y - height / 2,
+                    x: xStart, y: y + yOffset - height / 2,
                     width: visWidth, height: height, r: 3,
                 },
-                style: { fill: color, stroke: 'none' },
+                style: {
+                    fill: color,
+                    opacity: isDimmed ? 0.18 : (layout.reference ? 0.52 : 0.65),
+                    stroke: isFocused ? color : 'none',
+                    lineWidth: isFocused ? 1 : 0,
+                },
             };
         }
 
@@ -794,9 +979,62 @@ const MultiSessionView = (function() {
             width: visWidth, height: height, r: 1,
         }, plotBox);
         const hitRect = echarts.graphic.clipRectByRect({
-            x: hitX, y: y - height / 2,
-            width: hitW, height: height, r: 1,
+            x: hitX, y: y - rowHeight * 0.24,
+            width: hitW, height: rowHeight * 0.48, r: 1,
         }, plotBox);
+
+        if (isOrchestrate) {
+            const railH = 3;
+            const railRect = echarts.graphic.clipRectByRect({
+                x: xStart,
+                y: y - rowHeight * 0.30,
+                width: Math.max(xEnd - xStart, 12),
+                height: railH,
+                r: 1.5,
+            }, plotBox);
+            const handleRect = echarts.graphic.clipRectByRect({
+                x: xStart - 2,
+                y: y - rowHeight * 0.30 - 3,
+                width: 5,
+                height: railH + 6,
+                r: 1.5,
+            }, plotBox);
+            return {
+                type: 'group',
+                silent: false,
+                children: [
+                    {
+                        type: 'rect',
+                        shape: railRect,
+                        style: {
+                        fill: color,
+                        opacity: isDimmed ? 0.18 : (layout.reference ? 0.72 : 0.65),
+                        shadowBlur: isFocused ? 6 : (layout.reference ? 3 : 2),
+                        shadowColor: color,
+                        },
+                        emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 1.2 } },
+                    },
+                    {
+                        type: 'rect',
+                        shape: handleRect,
+                        style: {
+                            fill: color,
+                            opacity: isDimmed ? 0.25 : (layout.reference ? 0.9 : 0.85),
+                            stroke: layout.reference ? 'rgba(151,177,205,0.38)' : 'rgba(255,255,255,0.6)',
+                            lineWidth: 0.6,
+                        },
+                        silent: true,
+                    },
+                    {
+                        type: 'rect',
+                        shape: hitRect,
+                        style: { fill: 'transparent' },
+                        silent: false,
+                        z: -1,
+                    },
+                ],
+            };
+        }
 
         return {
             type: 'group',
@@ -808,11 +1046,14 @@ const MultiSessionView = (function() {
                     style: {
                         fill: color,
                         opacity: isAggregated ? baseOpacity * 0.9 : baseOpacity,
+                        stroke: isOrchestrate ? color : undefined,
+                        lineWidth: isOrchestrate ? 0.6 : 0,
+                        shadowBlur: isFocused ? 4 : (layout.reference ? 2 : 0),
+                        shadowColor: color,
                     },
-                    emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 2 } },
+                    emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 1.5 } },
                 },
                 {
-                    // Eats hover/click; rendered behind the bar via z order.
                     type: 'rect',
                     shape: hitRect,
                     style: { fill: 'transparent' },
@@ -821,6 +1062,19 @@ const MultiSessionView = (function() {
                 },
             ].concat(_aggregatedBadge(params, xStart, xEnd, y, height, color)),
         };
+    }
+
+    function referenceColor(category, fallback) {
+        const colors = {
+            read: '#5f83ef',
+            write: '#8acb3e',
+            execute: '#d5a43b',
+            orchestrate: '#c83f86',
+            llm_text: '#526579',
+            other: '#748394',
+            span: '#33465c',
+        };
+        return colors[category] || fallback || '#748394';
     }
 
     /**
@@ -837,7 +1091,7 @@ const MultiSessionView = (function() {
         const label = `+${aggCount}`;
         // Font size scales gently with bar height so very thin rows stay
         // legible without overflowing.
-        const fs = Math.max(8, Math.min(11, Math.floor(height * 0.55)));
+        const fs = Math.max(7, Math.min(10, Math.floor(height * 0.5)));
         // Approx text width: 0.6em per char + 4px padding each side.
         const padX = 4;
         const approxW = label.length * fs * 0.6 + padX * 2;
@@ -917,7 +1171,8 @@ const MultiSessionView = (function() {
                 out.push({
                     value: [first.value[0], bucketStart, bucketStart + bucket,
                             pickColor, 'aggregated',
-                            `${buf.length} turns`, `agg-${bucketStart.toFixed(2)}`],
+                            `${buf.length} turns`, `agg-${bucketStart.toFixed(2)}`,
+                            (first.value && first.value[7]) || first.category || 'other'],
                     itemId: `agg-${bucketStart.toFixed(2)}`,
                     sessionId: first.sessionId,
                     agentId: first.agentId,
@@ -1443,16 +1698,17 @@ const MultiSessionView = (function() {
 
     function formatRelSec(sec) {
         if (typeof sec !== 'number' || !isFinite(sec)) return '—';
-        const sign = sec < 0 ? '-' : '';
         const a = Math.abs(sec);
-        const h = Math.floor(a / 3600);
-        const m = Math.floor((a % 3600) / 60);
-        const s = Math.floor(a % 60);
-        const ms = Math.round((a - Math.floor(a)) * 1000);
-        if (h > 0) {
-            return `${sign}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        if (a < 60) {
+            return `${Math.round(a)}s`;
         }
-        return `${sign}${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+        const minutes = Math.floor(a / 60);
+        if (minutes < 60) {
+            return `${minutes}分钟`;
+        }
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return `${h}小时${m}分钟`;
     }
 
     function escapeHtml(s) {
@@ -1469,203 +1725,469 @@ const MultiSessionView = (function() {
     window.closeTurnDrawer = closeTurnDrawer;
 
     // ------------------------------------------------------------------
-    // Badge / label overlay (ECharts graphic component)
+    // Badge / label overlay
+    //
+    // Modeled as a custom series ('badges') so the pills are part of
+    // the main option and survive `setOption(option, true)`. Earlier
+    // the pills were added via `chart.setOption({graphic:{...}})`
+    // inside a 'finished' handler; that approach suffered from three
+    // problems:
+    //   1. `notMerge: true` cleared the graphic elements before the
+    //      'finished' handler had a chance to re-add them.
+    //   2. The 'finished' event does not fire reliably on re-renders
+    //      when `animation: false`, so the pills would stay cleared
+    //      (this is the bug: clicking a sub-agent swimlane caused
+    //      the title pills to disappear).
+    //   3. The two setOption calls in attachBadges (clear + re-add)
+    //      were batched by ECharts and could collapse to the empty
+    //      state on some code paths.
+    //
+    // Putting pills in a custom series fixes all three: the series is
+    // re-rendered as part of the main option, `renderItem` runs after
+    // ECharts has finished layout so `api.coord()` is valid, and
+    // `clip:false` lets the gutter pills render outside the plot area.
     // ------------------------------------------------------------------
-    function attachBadges(data, yIndex, yCategories) {
-        const elements = [];
-        const sessions = data.sessions || [];
-        const agents = data.agents || [];
-
-        // Model pill (left side, y row) for each session
+    function buildBadgeData(sessions, agents, yIndex) {
+        // Every field the renderer needs is stuffed into the `value`
+        // array. ECharts 5.x custom series with `encode` rebuilds
+        // `params.data` from the internal DataStore, dropping any
+        // extra fields we put on the data object. Stuffing everything
+        // into the value tuple is the only reliable way to round-trip
+        // data through the encode pipeline.
+        //
+        // Index layout per kind:
+        //   model     [yi, 0,    'model',     active,     sessionName, totalOps, agentType, contextSize]
+        //   agent     [yi, 0,    'agent',     agentId,    role, title, count, roleColor, score, scoreLabel]
+        //   endmarker [yi, xData,'endmarker', timeLabel,  statusLabel]
+        //   spawn     [yi, xData,'spawn',      label]
+        const data = [];
+        badgePayloads = [];
+        const pushBadge = (yi, x, payload) => {
+            const idx = badgePayloads.push(payload) - 1;
+            data.push({ value: [yi, x, idx] });
+        };
         for (const s of sessions) {
             const yi = yIndex.get(sessionLabel(s));
-            // F-95 follow-up: use the 1D form of convertToPixel. The 2D
-            // form `convertToPixel({yAxisIndex:0}, [0, yi])` returns null
-            // for category axes, so all badge y-coordinates collapsed to
-            // NaN and the pills stacked at y=0 of the chart container,
-            // overlapping the y-axis category labels. The 1D form returns
-            // the pixel y-coordinate directly.
-            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, yi);
-            const active = s.y === 0 ? true : false; // first session is "active"
-            elements.push(buildModelPill(s, yPx, active));
-            // End marker
+            if (typeof yi !== 'number') continue;
+            const active = s.y === 0 ? 1 : 0;
+            const sessionName = s.name || s.id.slice(0, 8);
+            pushBadge(yi, 0, {
+                kind: 'model',
+                active,
+                sessionName,
+                totalOps: s.totalOps || 0,
+                agentType: s.agentType || '',
+                contextSize: s.contextSize || '',
+            });
             if (s.endMarker) {
-                elements.push(buildEndMarker(s, yPx));
+                pushBadge(yi, s.endMarker.x, {
+                    kind: 'endmarker',
+                    timeLabel: s.endMarker.timeLabel || '',
+                    statusLabel: s.endMarker.statusLabel || s.endMarker.label || '',
+                });
             }
-            // Spawn callout
             if (s.spawnCallout) {
-                elements.push(buildSpawnCallout(s, yPx));
+                pushBadge(yi, s.spawnCallout.x, {
+                    kind: 'spawn',
+                    label: s.spawnCallout.label || '',
+                });
             }
         }
-        // Agent row labels (role + title + count) on the right side
         for (const a of agents) {
             const yi = yIndex.get(agentLabel(a));
-            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, yi);
-            elements.push(buildAgentLabel(a, yPx));
+            if (typeof yi !== 'number') continue;
+            pushBadge(yi, a.joinX || a.spawnX || 0, {
+                kind: 'agent',
+                agentId: a.id,
+                role: a.role || '执行',
+                title: a.title || '',
+                count: a.count || 0,
+                roleColor: a.roleColor || '#3b82f6',
+                score: a.score != null ? a.score : '',
+                scoreLabel: a.scoreLabel || a.title || '',
+            });
+        }
+        return data;
+    }
+
+    function renderBadge(params, api) {
+        const yIdx = api.value(0);
+        const xData = api.value(1);
+        const raw = badgePayloads[api.value(2)] || {};
+        const kind = raw.kind;
+        const layout = currentLayout();
+        const yPx = api.coord([0, yIdx])[1];
+
+        if (kind === 'model') {
+            const active = raw.active != null ? raw.active : api.value(3) === 1;
+            const sessionName = String(raw.sessionName || api.value(4) || '');
+            const totalOps = raw.totalOps || api.value(5) || 0;
+            const agentType = String(raw.agentType || api.value(6) || '');
+            const contextSize = String(raw.contextSize || api.value(7) || '');
+            const GUTTER_RIGHT = layout.badgeX;
+            const pillW = layout.modelWidth;
+            const metaParts = [];
+            if (totalOps) metaParts.push(`${totalOps} 工具调用`);
+            if (agentType) metaParts.push(agentType);
+            if (contextSize) metaParts.push(`上下文 ${contextSize}`);
+            const metaText = metaParts.join(' · ');
+            return {
+                type: 'group',
+                position: [GUTTER_RIGHT, yPx - 10],
+                silent: true,
+                children: [
+                    {
+                        type: 'rect',
+                        shape: { x: 0, y: 0, width: pillW, height: 20, r: 10 },
+                        style: {
+                            fill: layout.reference ? 'rgba(17, 29, 42, 0.06)' : (active ? 'rgba(88,166,255,0.12)' : 'rgba(22,27,34,0.6)'),
+                            stroke: layout.reference ? 'rgba(255,255,255,0)' : (active ? 'rgba(88,166,255,0.4)' : 'rgba(48,54,61,0.5)'),
+                            lineWidth: layout.reference ? 0 : (active ? 1 : 0.8),
+                            shadowBlur: layout.reference ? 0 : (active ? 4 : 0),
+                            shadowColor: 'rgba(88,166,255,0.25)',
+                        },
+                        silent: true,
+                    },
+                    {
+                        type: 'text',
+                        style: {
+                            text: truncateVisual(sessionName, layout.compact ? 10 : 24),
+                            fill: layout.reference ? 'rgba(201,211,224,0)' : '#c9d1d9',
+                            fontSize: layout.reference ? 1 : 11,
+                            fontWeight: 600,
+                            x: 10, y: 10,
+                        },
+                        silent: true,
+                    },
+                    metaText ? {
+                        type: 'text',
+                        style: {
+                            text: metaText,
+                            fill: '#8b949e',
+                            fontSize: 10,
+                            x: pillW + 12, y: 10,
+                        },
+                        silent: true,
+                    } : null,
+                ].filter(Boolean),
+            };
         }
 
-        // F-95 follow-up: clear stale graphic elements before re-adding.
-        // setOption merges by default, so without this each 'finished'
-        // event (or ResizeObserver / rAF / data refresh re-entry) stacks
-        // new pills on top of the old ones, producing duplicate labels
-        // at the wrong pixel positions (e.g. an old model pill at x≈380
-        // persisting after a re-render that already moved it to x=224).
-        chart.setOption({ graphic: { elements: [] } });
-        chart.setOption({ graphic: { elements } });
+        if (kind === 'agent') {
+            const agentId = raw.agentId || api.value(3);
+            const role = String(raw.role || api.value(4) || '执行');
+            const title = String(raw.title || api.value(5) || '');
+            const count = raw.count || api.value(6) || 0;
+            const roleColor = String(raw.roleColor || api.value(7) || '#58a6ff');
+            const score = raw.score != null ? raw.score : api.value(8);
+            const scoreLabel = String(raw.scoreLabel || api.value(9) || title);
+            const xPx = api.coord([xData, yIdx])[0];
+            const GUTTER_RIGHT = layout.reference
+                ? Math.max(layout.gridLeft + 4, Math.min(xPx + 12, params.coordSys.x + params.coordSys.width - 310))
+                : layout.badgeX;
+            const active = !selectedAgentId || selectedAgentId === agentId;
+            const dimmed = selectedAgentId && selectedAgentId !== agentId;
+            return {
+                type: 'group',
+                position: [GUTTER_RIGHT, yPx - (layout.reference ? 10 : 7)],
+                silent: false,
+                children: [
+                    {
+                        type: 'rect',
+                        shape: { x: 0, y: 0, width: layout.agentRoleWidth, height: layout.reference ? 20 : 16, r: layout.reference ? 4 : 8 },
+                        style: {
+                            fill: layout.reference ? 'rgba(177, 40, 102, 0.52)' : roleColor,
+                            opacity: active ? (layout.reference ? 0.95 : 0.15) : 0.06,
+                            stroke: layout.reference ? 'rgba(202, 65, 132, 0.72)' : roleColor,
+                            lineWidth: active ? (layout.reference ? 0.6 : 1) : 0.5,
+                            shadowBlur: active ? (layout.reference ? 8 : 4) : 0,
+                            shadowColor: roleColor,
+                        },
+                        silent: true,
+                    },
+                    {
+                        type: 'text',
+                        style: {
+                            text: truncateVisual(role, layout.compact ? 4 : 8),
+                            fill: layout.reference ? '#f1a6ce' : roleColor,
+                            fontSize: layout.reference ? 12 : 9,
+                            fontWeight: 700,
+                            opacity: dimmed ? 0.4 : 1,
+                            x: layout.reference ? 9 : 8,
+                            y: layout.reference ? 10 : 8,
+                        },
+                        silent: true,
+                    },
+                    {
+                        type: 'text',
+                        style: {
+                            text: truncateVisual(scoreLabel, layout.agentTitleVisual),
+                            fill: layout.reference ? '#9ba9ba' : '#c9d1d9',
+                            fontSize: layout.reference ? 15 : 10,
+                            fontWeight: active ? (layout.reference ? 700 : 600) : 400,
+                            opacity: dimmed ? 0.4 : 1,
+                            x: layout.agentTitleX,
+                            y: layout.reference ? 10 : 8,
+                        },
+                        silent: true,
+                    },
+                    score !== '' ? {
+                        type: 'text',
+                        style: {
+                            text: String(score),
+                            fill: layout.reference ? '#8290a0' : '#8b949e',
+                            fontSize: layout.reference ? 13 : 10,
+                            fontVariantNumeric: 'tabular-nums',
+                            opacity: dimmed ? 0.4 : 1,
+                            x: layout.agentCountX,
+                            y: layout.reference ? 10 : 8,
+                        },
+                        silent: true,
+                    } : null,
+                ].filter(Boolean),
+            };
+        }
+
+        if (kind === 'endmarker') {
+            const xEnd = api.coord([xData, yIdx])[0];
+            const modelPillRight = layout.gridLeft;
+            const xPos = (xEnd < modelPillRight) ? modelPillRight : (xEnd + 8);
+            const timeLabel = String(raw.timeLabel || api.value(3) || '');
+            const statusLabel = String(raw.statusLabel || api.value(4) || '');
+            return {
+                type: 'group',
+                position: [xPos, yPx - 7],
+                silent: true,
+                children: [
+                    {
+                        type: 'circle',
+                        shape: { cx: 0, cy: 7, r: layout.reference ? 0 : 3.5 },
+                        style: { fill: '#3fb950', opacity: layout.reference ? 0 : 1 },
+                        silent: true,
+                    },
+                    timeLabel ? {
+                        type: 'text',
+                        style: {
+                            text: timeLabel,
+                            fill: layout.reference ? '#c2ccd7' : '#c9d1d9',
+                            fontSize: layout.reference ? 14 : 10,
+                            x: 9, y: 0,
+                        },
+                        silent: true,
+                    } : null,
+                    statusLabel ? {
+                        type: 'text',
+                        style: {
+                            text: statusLabel,
+                            fill: layout.reference ? '#8190a0' : '#8b949e',
+                            fontSize: layout.reference ? 14 : 10,
+                            x: 9 + (timeLabel ? timeLabel.length * 6 : 0), y: 0,
+                        },
+                        silent: true,
+                    } : null,
+                ].filter(Boolean),
+            };
+        }
+
+        if (kind === 'spawn') {
+            const xPx = api.coord([xData, yIdx])[0];
+            const PILL_W = layout.reference ? 328 : (layout.compact ? 150 : 200);
+            const xClamped = Math.max(layout.gridLeft + 8, xPx - PILL_W / 2);
+            const topY = layout.reference ? Math.max(91, yPx + 28) : Math.max(8, yPx - 124);
+            const label = String(raw.label || api.value(3) || '');
+            return {
+                type: 'group',
+                position: [xClamped, topY],
+                silent: true,
+                children: [{
+                    type: 'rect',
+                    shape: { x: 0, y: 0, width: PILL_W, height: layout.reference ? 36 : 20, r: layout.reference ? 6 : 5 },
+                    style: {
+                        fill: layout.reference ? 'rgba(42, 50, 98, 0.56)' : 'rgba(22, 27, 34, 0.94)',
+                        stroke: layout.reference ? 'rgba(91, 112, 222, 0.65)' : '#ea7ccc',
+                        lineWidth: layout.reference ? 2 : 0.8,
+                        shadowBlur: layout.reference ? 10 : 6,
+                        shadowColor: layout.reference ? 'rgba(91,112,222,0.35)' : 'rgba(234,124,204,0.3)',
+                    },
+                    silent: true,
+                }, {
+                    type: 'text',
+                    style: {
+                        text: layout.reference ? label : label,
+                        fill: layout.reference ? '#8fa0f4' : '#f2b7df',
+                        fontSize: layout.reference ? 16 : 10,
+                        fontWeight: 800,
+                        x: layout.reference ? 18 : 10,
+                        y: layout.reference ? 18 : 10,
+                    },
+                    silent: true,
+                }],
+            };
+        }
+
+        return { type: 'group', children: [], silent: true };
     }
 
-    function buildModelPill(s, yPx, active) {
-        // F-95 follow-up: move the model pill out of the y-axis gutter
-        // to prevent overlap with the (truncated) y-axis category label
-        // and the spawn callout pill. The pill now sits at the very left
-        // edge of the chart canvas, just inside grid.left:220.
-        const GUTTER_RIGHT = 224;
-        return {
-            type: 'group',
-            position: [GUTTER_RIGHT, yPx - 12],
-            children: [{
+    function buildLaneData(sessions, agents, yIndex, yCategories, timeRange) {
+        const xMin = timeRange.min || 0;
+        const xMax = timeRange.max || Math.max(60, xMin + 60);
+        const perSession = new Map();
+        for (const s of sessions) perSession.set(s.id, []);
+        for (const a of agents) {
+            if (perSession.has(a.parentSessionId)) perSession.get(a.parentSessionId).push(a);
+        }
+        const lanes = [];
+        for (const s of sessions) {
+            const yi = yIndex.get(sessionLabel(s));
+            const children = perSession.get(s.id) || [];
+            const maxChildY = children.length
+                ? Math.max(...children.map(a => yIndex.get(agentLabel(a))).filter(v => typeof v === 'number'))
+                : yi;
+            lanes.push({
+                value: [yi, xMin, xMax, '#5470c6', 1],
+                sessionId: s.id,
+                isSessionLane: true,
+                childCount: children.length,
+                groupTop: yi,
+                groupBottom: maxChildY,
+                active: !selectedAgentId,
+            });
+        }
+        for (const a of agents) {
+            const yi = yIndex.get(agentLabel(a));
+            const color = a.roleColor || '#5470c6';
+            lanes.push({
+                value: [yi, xMin, xMax, color, 0],
+                sessionId: a.parentSessionId || null,
+                agentId: a.id,
+                role: a.role || '执行',
+                active: !selectedAgentId || selectedAgentId === a.id,
+                dimmed: selectedAgentId && selectedAgentId !== a.id,
+            });
+        }
+        return lanes.filter(l => typeof l.value[0] === 'number');
+    }
+
+    function renderLane(params, api) {
+        const layout = currentLayout();
+        const yIdx = api.value(0);
+        const xStart = api.coord([api.value(1), yIdx])[0];
+        const xEnd = api.coord([api.value(2), yIdx])[0];
+        const y = api.coord([0, yIdx])[1];
+        const rowH = api.size([0, 1])[1] * (layout.rowScale || 1);
+        const color = api.value(3) || '#5470c6';
+        const isSession = !!api.value(4);
+        const data = params.data || {};
+        const height = layout.reference
+            ? Math.max(18, Math.min(31, rowH * (isSession ? 0.7 : 0.68)))
+            : Math.max(16, rowH * (isSession ? 0.78 : 0.68));
+        const opacity = data.dimmed ? 0.06 : (isSession ? (layout.reference ? 0.06 : 0.08) : (layout.reference ? 0.12 : 0.04));
+        const borderOpacity = data.active ? 0.5 : 0.12;
+        const children = [{
+            type: 'rect',
+            shape: { x: xStart, y: y - height / 2, width: xEnd - xStart, height, r: layout.reference ? 4 : (isSession ? 4 : 3) },
+            style: {
+                fill: isSession
+                    ? (layout.reference ? 'rgba(38, 57, 76, 0.28)' : 'rgba(88,166,255,0.05)')
+                    : (layout.reference ? 'rgba(51, 67, 86, 0.72)' : 'rgba(255,255,255,0.015)'),
+                opacity,
+                stroke: data.active
+                    ? (isSession
+                        ? (layout.reference ? 'rgba(81,103,128,0.38)' : 'rgba(88,166,255,0.18)')
+                        : (layout.reference ? 'rgba(101,121,145,0.28)' : color))
+                    : 'rgba(139,148,158,0.12)',
+                lineWidth: data.active ? (isSession ? 0.6 : (layout.reference ? 0.5 : 0.8)) : 0.3,
+                shadowBlur: data.active && !isSession ? (layout.reference ? 2 : 4) : 0,
+                shadowColor: color,
+            },
+            silent: isSession,
+        }];
+        if (!isSession && !layout.reference) {
+            children.push({
                 type: 'rect',
-                shape: { width: 200, height: 24, r: 12 },
-                style: {
-                    fill: active ? 'rgba(84,112,198,0.18)' : 'rgba(15,52,96,0.4)',
-                    stroke: active ? '#5470c6' : '#2a2a4e',
-                    lineWidth: active ? 1.5 : 1,
+                shape: { x: xStart + 1, y: y - height / 2 + 2, width: 2, height: height - 4, r: 1 },
+                style: { fill: color, opacity: borderOpacity },
+                silent: true,
+            });
+        }
+        return { type: 'group', children, silent: isSession };
+    }
+
+    function renderBranch(params, api) {
+        const layout = currentLayout();
+        const fromY = api.value(0);
+        const fromX = api.value(1);
+        const toX = api.value(2);
+        const toY = api.value(3);
+        const kind = api.value(4);
+        const p1 = api.coord([fromX, fromY]);
+        const p2 = api.coord([toX, toY]);
+        const data = params.data || {};
+        const active = !selectedAgentId || selectedAgentId === data.agentId;
+        const color = data.color || (kind === 'join' ? '#7aa2ff' : '#ea7ccc');
+        const dx = layout.reference
+            ? Math.max(42, Math.min(135, Math.abs(p2[1] - p1[1]) * 0.72))
+            : Math.max(34, Math.min(92, Math.abs(p2[1] - p1[1]) * 0.5));
+        const dir = kind === 'join' ? -1 : 1;
+        const cpx = p1[0] + dir * dx;
+        return {
+            type: 'group',
+            children: [
+                {
+                    type: 'bezierCurve',
+                    shape: {
+                        x1: p1[0],
+                        y1: p1[1],
+                        x2: p2[0],
+                        y2: p2[1],
+                        cpx1: cpx,
+                        cpy1: p1[1],
+                        cpx2: cpx,
+                        cpy2: p2[1],
+                    },
+                    style: {
+                        stroke: color,
+                        fill: null,
+                        lineWidth: active ? (layout.reference ? 1.8 : 1.5) : 0.7,
+                        opacity: active ? (layout.reference ? 0.46 : 0.6) : 0.15,
+                        shadowBlur: active ? (layout.reference ? 7 : 4) : 0,
+                        shadowColor: color,
+                    },
                 },
-            }, {
-                type: 'text',
-                position: [12, 12],
-                style: {
-                    text: s.name || s.id.slice(0, 8),
-                    fill: '#e0e0e0',
-                    fontSize: 12,
-                    fontWeight: 600,
+                {
+                    type: 'circle',
+                    shape: { cx: p2[0], cy: p2[1], r: active ? (layout.reference ? 3.8 : 2.8) : 2 },
+                    style: {
+                        fill: color,
+                        opacity: active ? 0.75 : 0.2,
+                    },
                 },
-            }],
+            ],
         };
     }
 
-
-    function buildEndMarker(s, yPx) {
-        if (!s.endMarker) return null;
-        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
-        const xEnd = chart.convertToPixel({ xAxisIndex: 0 }, s.endMarker.x);
-        // The model pill lives at x=[16, 216]. If the endMarker is in that
-        // zone (which happens whenever the end of the session is near the
-        // start of the time axis, e.g. an in-progress session), push it
-        // past the pill so it doesn't overlap with the model label.
-        const modelPillRight = 220;
-        const xPos = (xEnd < modelPillRight) ? modelPillRight : (xEnd + 8);
+    function edgeStyle(agentId, edgeType) {
+        const active = !selectedAgentId || selectedAgentId === agentId;
         return {
-            type: 'group',
-            position: [xPos, yPx - 8],
-            children: [{
-                type: 'circle',
-                shape: { r: 4, cx: 0, cy: 8 },
-                style: { fill: '#91cc75' },
-            }, {
-                type: 'text',
-                position: [10, 0],
-                style: {
-                    text: s.endMarker.label,
-                    fill: '#e0e0e0',
-                    fontSize: 11,
-                },
-            }],
+            color: edgeType === 'join' ? '#7aa2ff' : '#ea7ccc',
+            width: active ? 2 : 0.8,
+            curveness: edgeType === 'join' ? 0.26 : 0.34,
+            opacity: active ? 0.8 : 0.15,
+            shadowBlur: active ? 4 : 0,
+            shadowColor: edgeType === 'join' ? 'rgba(122,162,255,0.45)' : 'rgba(234,124,204,0.45)',
         };
     }
 
-    function buildSpawnCallout(s, yPx) {
-        if (!s.spawnCallout) return null;
-        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
-        const xPx = chart.convertToPixel({ xAxisIndex: 0 }, s.spawnCallout.x);
-        // F-95 follow-up: anchor the pill to the TOP of the chart canvas
-        // (in the grid.top margin) and clamp x so it never spills into
-        // the y-axis gutter. The original `yPx + 16` placed the pill
-        // directly below the session row, which collided with the
-        // subagent's y-axis label and the agent label pill in the
-        // gutter. Anchoring to the topmost row's pixel - 30 puts the
-        // pill safely above all row labels.
-        const PILL_W = 200;
-        const GUTTER_RIGHT = 224; // grid.left:220 + 4px breathing room
-        const xClamped = Math.max(GUTTER_RIGHT, xPx - PILL_W / 2);
-        const yAxisData = (chart.getOption().yAxis[0] || {}).data || [];
-        const topYi = yAxisData.length - 1;
-        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
-        const topY = topYi >= 0
-            ? chart.convertToPixel({ yAxisIndex: 0 }, topYi)
-            : yPx - 30;
-        return {
-            type: 'group',
-            position: [xClamped, topY - 30],
-            children: [{
-                type: 'rect',
-                shape: { width: PILL_W, height: 22, r: 4 },
-                style: {
-                    fill: 'rgba(234,124,204,0.15)',
-                    stroke: '#ea7ccc',
-                    lineWidth: 1,
-                },
-            }, {
-                type: 'text',
-                position: [10, 11],
-                style: {
-                    text: `▼ ${s.spawnCallout.label}`,
-                    fill: '#ea7ccc',
-                    fontSize: 11,
-                    fontWeight: 600,
-                },
-            }],
-        };
-    }
-
-    function buildAgentLabel(a, yPx) {
-        // F-95 follow-up: move the agent label pill out of the y-axis
-        // gutter. The gutter (x < 220) is shared with the y-axis category
-        // labels, and the original position [16, ...] overlapped with
-        // them for any sub-agent row. Anchor the pill to the right of
-        // the gutter boundary so it sits inside the chart canvas where
-        // it has the full 220px of room to the right.
-        const GUTTER_RIGHT = 224;
-        return {
-            type: 'group',
-            position: [GUTTER_RIGHT, yPx - 8],
-            children: [{
-                type: 'rect',
-                shape: { width: 70, height: 16, r: 8 },
-                style: {
-                    fill: a.roleColor || '#5470c6',
-                    opacity: 0.18,
-                    stroke: a.roleColor || '#5470c6',
-                    lineWidth: 0.8,
-                },
-            }, {
-                type: 'text',
-                position: [10, 8],
-                style: {
-                    text: a.role || '执行',
-                    fill: a.roleColor || '#5470c6',
-                    fontSize: 10,
-                    fontWeight: 600,
-                },
-            }, {
-                type: 'text',
-                position: [78, 8],
-                style: {
-                    text: a.title || '',
-                    fill: '#e0e0e0',
-                    fontSize: 11,
-                },
-            }, {
-                type: 'text',
-                position: [180, 8],
-                style: {
-                    text: String(a.count || 0),
-                    fill: '#a0a0b0',
-                    fontSize: 11,
-                    fontVariantNumeric: 'tabular-nums',
-                },
-            }],
-        };
+    function truncateVisual(value, maxVisual) {
+        let visual = 0;
+        let out = '';
+        for (const ch of String(value || '')) {
+            const w = /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? 2 : 1;
+            if (visual + w > maxVisual) return out + '…';
+            out += ch;
+            visual += w;
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------

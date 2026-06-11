@@ -41,6 +41,14 @@ class SessionMetadataParser:
         metadata_path = session_dir / "metadata.json"
         transcript_path = session_dir / "transcript.jsonl"
         snapshot_path = session_dir / f"{session_id}.json"
+        # F-91-B 补遗: Session.save() 和 AgentSession._save_json_snapshot()
+        # 将快照写入 ~/.clawcodex/sessions/{session_id}.json (sessions 根目录),
+        # 而非 SessionStorage 的子目录 {session_id}/{session_id}.json。
+        # 所以当子目录路径找不到时，回退到 sessions 根目录查找。
+        if not snapshot_path.exists():
+            alt_snapshot_path = self.sessions_dir / f"{session_id}.json"
+            if alt_snapshot_path.exists():
+                snapshot_path = alt_snapshot_path
 
         # Load metadata
         meta: dict[str, Any] = {}
@@ -190,6 +198,16 @@ class SessionMetadataParser:
             msgs = conv.get("messages", [])
             if msgs:
                 viz.turn_count = len(msgs)
+                # Count tool_use blocks across all messages for tool_count
+                tool_count = 0
+                for msg in msgs:
+                    content = msg.get("content", [])
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use":
+                                tool_count += 1
+                if tool_count:
+                    viz.tool_count = tool_count
         except Exception as e:
             logger.debug("Snapshot enrich failed for %s: %s", viz.session_id, e)
 

@@ -1,43 +1,51 @@
 {% extends "base.html" %}
-{% block title %}Multi-Session Waterfall — ClawCodex Visualizer{% endblock %}
+{% block title %}Session Analysis - ClawCodex Visualizer{% endblock %}
 
 {% block content %}
-<div class="multi-session-header">
-    <div class="multi-session-title-row">
-        <h2>🌐 Multi-Session Waterfall</h2>
-        <div class="multi-session-actions">
-            <input type="text" id="ms-session-ids"
+<section class="ms-analysis-shell">
+    <div class="ms-reference-topbar" aria-label="session summary">
+        <div class="ms-reference-model" id="ms-reference-model">Opus4.8 · ultracode (xhight+workflows)</div>
+        <div class="ms-reference-summary" id="ms-reference-summary">
+            <span>61 主线 + 22 子agent (328 调用)</span>
+            <span>主agent上下文 164K</span>
+            <span>子agent 21-66K</span>
+        </div>
+        <div class="ms-reference-status" id="ms-reference-status">
+            <span>29:50</span>
+            <span>汇合修复 ✓</span>
+            <span class="ms-reference-dot"></span>
+        </div>
+    </div>
+
+    <div class="ms-chart-container ms-reference-canvas"
+         id="ms-chart"
+         data-visual-mode="reference"
+         style="width:100%; height:100%;">
+    </div>
+
+    <div class="ms-reference-empty" id="ms-reference-empty" hidden>
+        <div class="ms-reference-empty-title">加载 session 分析</div>
+        <div class="ms-reference-empty-controls">
+            <input type="text"
+                   id="ms-session-ids"
                    class="input-wide"
                    placeholder="session-id-1,session-id-2,..."
                    value="">
-            <button onclick="reloadMultiSession()" class="btn btn-primary">🔄 加载</button>
-            <a href="/" class="btn">← 返回</a>
+            <button onclick="reloadMultiSession()" class="btn btn-primary">加载</button>
+            <a href="/" class="btn">返回</a>
+        </div>
+        <div class="ms-reference-empty-hint">
+            使用 <code>?session_ids=a,b,c</code> 读取，或粘贴 1-5 个 session ID。
         </div>
     </div>
-    <div class="ms-context-hint" id="ms-context-hint">
-        从 <code>?session_ids=a,b,c</code> 读取，或在输入框粘贴 1-5 个 session ID（逗号分隔）
-    </div>
-</div>
-
-<div class="ms-legend-bar" id="ms-legend-bar">
-    <!-- Populated by multi_session_view.js -->
-</div>
-
-<div class="ms-chart-container" id="ms-chart" style="width:100%; height:680px;">
-</div>
-
-<div class="ms-edge-explain">
-    <span class="ms-edge-legend">
-        <span class="ms-edge-line"></span> 父 agent → 子 agent 派生（fork）/ 汇合（join）
-    </span>
-    <span class="ms-tip">提示：滚轮缩放 / 拖动底部滑块</span>
-</div>
+</section>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/multi_session_view.js?v=20260611-axis-io-svg"></script>
+<script src="/static/js/multi_session_view.js?v=20260611-reference-align"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        document.body.classList.add('ms-reference-page');
         const params = new URLSearchParams(window.location.search);
         const fromUrl = params.get('session_ids') || '';
         const input = document.getElementById('ms-session-ids');
@@ -46,8 +54,8 @@
             initMultiSessionView(fromUrl.split(',').map(s => s.trim()).filter(Boolean));
         } else {
             input.value = '';
-            document.getElementById('ms-chart').innerHTML =
-                '<div class="empty-state">在上方输入框填写 1-5 个 session ID 后点击「加载」</div>';
+            document.getElementById('ms-reference-empty').hidden = false;
+            document.getElementById('ms-chart').innerHTML = '';
         }
     });
 
@@ -58,10 +66,10 @@
             alert('请至少输入一个 session ID');
             return;
         }
-        // Sync URL so the view is shareable
         const url = new URL(window.location.href);
         url.searchParams.set('session_ids', ids.join(','));
         window.history.replaceState({}, '', url);
+        document.getElementById('ms-reference-empty').hidden = true;
         initMultiSessionView(ids);
     }
 </script>

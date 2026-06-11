@@ -83,14 +83,14 @@ class OperationCategory(str, Enum):
 
 
 _CATEGORY_COLORS: dict[OperationCategory, str] = {
-    OperationCategory.READ: "#52c41a",
-    OperationCategory.EXECUTE: "#5470c6",
-    OperationCategory.WRITE: "#fac858",
-    OperationCategory.ORCHESTRATE: "#ea7ccc",
-    OperationCategory.LLM_TEXT: "#7ec8e3",
-    OperationCategory.TURN: "#b48ead",
-    OperationCategory.BACKGROUND: "#8a8a9c",
-    OperationCategory.OTHER: "#a0a0b0",
+    OperationCategory.READ: "#3fb950",
+    OperationCategory.EXECUTE: "#58a6ff",
+    OperationCategory.WRITE: "#d29922",
+    OperationCategory.ORCHESTRATE: "#f778ba",
+    OperationCategory.LLM_TEXT: "#79c0ff",
+    OperationCategory.TURN: "#bc8cff",
+    OperationCategory.BACKGROUND: "#8b949e",
+    OperationCategory.OTHER: "#6e7681",
 }
 
 _CATEGORY_LABELS: dict[OperationCategory, str] = {

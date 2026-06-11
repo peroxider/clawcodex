@@ -64,24 +64,26 @@ def _pick_tick_step(total_seconds: float) -> float:
 
 
 def _format_tick(seconds: float) -> str:
-    """Format a tick label.  Examples:
-        0      -> '0'
-        50ms   -> '50ms'
-        0.7    -> '0.7s'
-        5      -> '5s'
-        60     -> '1分钟'
-        1800   -> '30分钟'
+    """Format a tick label aligned with the design spec.
+
+    Examples:
+        0       -> '0'
+        30      -> '30s'       (< 1 minute)
+        300     -> '5分钟'     (1-60 minutes)
+        5400    -> '1小时30分钟' (>= 60 minutes)
     """
     if seconds == 0:
         return "0"
-    if seconds < 1:
-        return f"{int(round(seconds * 1000))}ms"
     if seconds < 60:
-        return f"{seconds:.1f}s" if seconds != int(seconds) else f"{int(seconds)}s"
-    minutes = seconds / 60
-    if minutes == int(minutes):
-        return f"{int(minutes)}分钟"
-    return f"{minutes:.1f}分钟"
+        return f"{int(round(seconds))}s"
+    minutes = int(seconds / 60)
+    if minutes < 60:
+        return f"{minutes}分钟"
+    hours = minutes // 60
+    mins = minutes % 60
+    if mins == 0:
+        return f"{hours}小时"
+    return f"{hours}小时{mins}分钟"
 
 
 def _wall_clock(ts: float) -> str:
@@ -153,33 +155,54 @@ class MultiSessionViewBuilder:
             tick_seconds.append(round(max_end, 6))
         tick_labels = [_format_tick(s) for s in tick_seconds]
 
-        # ---- 2. legend
+        # ---- 2. legend (design-spec: 5 primary categories)
         category_counts: Counter[OperationCategory] = Counter()
         for s in sessions:
             for bar in s.timeline:
                 category_counts[categorizer.categorize(bar)] += 1
-        legend = [
-            {
+        # Map secondary categories into the 5 primary legend buckets
+        _LEGEND_PRIMARY = [
+            OperationCategory.READ,
+            OperationCategory.EXECUTE,
+            OperationCategory.WRITE,
+            OperationCategory.ORCHESTRATE,
+            OperationCategory.OTHER,
+        ]
+        # Roll LLM_TEXT / TURN / BACKGROUND into OTHER for the legend count
+        other_count = (
+            category_counts.get(OperationCategory.OTHER, 0)
+            + category_counts.get(OperationCategory.LLM_TEXT, 0)
+            + category_counts.get(OperationCategory.TURN, 0)
+            + category_counts.get(OperationCategory.BACKGROUND, 0)
+        )
+        legend = []
+        for c in _LEGEND_PRIMARY:
+            count = other_count if c == OperationCategory.OTHER else category_counts.get(c, 0)
+            legend.append({
                 "category": c.value,
                 "label": c.label,
                 "color": c.color,
-                "count": category_counts.get(c, 0),
-            }
-            for c in OperationCategory
-        ]
+                "count": count,
+            })
 
         # ---- 3. sessions
         session_rows: list[dict[str, Any]] = []
         for y, s in enumerate(sessions):
             ticks = self._build_ticks(s.timeline, rel, categorizer)
+            metadata_str = self._session_metadata(s)
+            agent_type = self._detect_agent_type(s)
             row: dict[str, Any] = {
                 "id": s.session_id,
                 "name": self._session_name(s),
-                "metadata": self._session_metadata(s),
+                "metadata": metadata_str,
+                "agentType": agent_type,
                 "y": y,
                 "ticks": ticks,
                 "status": s.status,
                 "model": s.model,
+                "totalOps": s.tool_count or s.stats.total_ops,
+                "contextTokens": s.stats.context_tokens,
+                "contextSize": self._fmt_tokens(s.stats.context_tokens) if s.stats.context_tokens else "",
                 "endMarker": self._end_marker(s, rel),
             }
             summary = s.agent_layout_summary or {}
@@ -188,7 +211,7 @@ class MultiSessionViewBuilder:
                 sub = summary.get("subagent_count", 0)
                 row["spawnCallout"] = {
                     "x": summary["spawn_time"],
-                    "label": f"{spawn_clock}  Workflow 派生 {sub} 子agent" if spawn_clock else f"Workflow 派生 {sub} 子agent",
+                    "label": f"▼ {spawn_clock} Workflow 派生 {sub} 子agent" if spawn_clock else f"▼ Workflow 派生 {sub} 子agent",
                     "subagentCount": sub,
                     "byRole": summary.get("by_role", {}),
                 }
@@ -204,18 +227,26 @@ class MultiSessionViewBuilder:
             for node in s.agent_tree:
                 if not node.parent_id:  # None or ""
                     continue
+                spawn_x = node.spawn_x or 0.0
+                join_x = node.join_x or node.spawn_x or 0.0
+                # Extract score from metadata if available (design-spec: 评审/核对评分)
+                score = node.metadata.get("score") if node.metadata else None
+                score_label = node.metadata.get("score_label") if node.metadata else None
                 agent_rows.append({
                     "id": f"{s.session_id}/{node.agent_id}",
                     "parentSessionId": s.session_id,
                     "name": node.name,
                     "role": node.role or "执行",
-                    "roleColor": node.role_color or "#a0a0b0",
+                    "roleColor": node.role_color or "#3b82f6",
                     "title": node.name,
                     "count": self._bar_count_for_agent(node),
-                    "spawnX": node.spawn_x or 0.0,
-                    "joinX": node.join_x or node.spawn_x or 0.0,
+                    "score": score,
+                    "scoreLabel": score_label or node.name,
+                    "spawnX": spawn_x,
+                    "joinX": join_x,
+                    "duration": max(0.001, join_x - spawn_x),
                     "depthY": 0,  # filled in by _renumber_agents
-                    "ticks": [],
+                    "ticks": self._build_agent_ticks(s.timeline, node, rel, categorizer),
                 })
         agent_rows.sort(key=lambda r: (r["parentSessionId"], r["spawnX"]))
         agent_rows = self._renumber_agents(agent_rows, session_rows)
@@ -243,7 +274,13 @@ class MultiSessionViewBuilder:
     def _empty_legend(self) -> list[dict[str, Any]]:
         return [
             {"category": c.value, "label": c.label, "color": c.color, "count": 0}
-            for c in OperationCategory
+            for c in [
+                OperationCategory.READ,
+                OperationCategory.EXECUTE,
+                OperationCategory.WRITE,
+                OperationCategory.ORCHESTRATE,
+                OperationCategory.OTHER,
+            ]
         ]
 
     def _session_name(self, s: SessionVizData) -> str:
@@ -299,8 +336,63 @@ class MultiSessionViewBuilder:
             })
         return ticks
 
+    def _build_agent_ticks(
+        self,
+        timeline: list[TimelineBar],
+        node,
+        rel_fn,
+        categorizer: OperationCategorizer,
+    ) -> list[dict[str, Any]]:
+        """Project activity into a sub-agent lane.
+
+        Prefer bars that explicitly carry the child ``agent_id``.  Real
+        transcripts often do not have that ownership yet, so fall back to
+        the node's spawn/join window and render non-orchestration activity
+        in that interval as the sub-agent's activity fingerprint.
+        """
+        spawn_x = node.spawn_x
+        join_x = node.join_x
+        if spawn_x is None:
+            return []
+        if join_x is None or join_x <= spawn_x:
+            join_x = spawn_x + 0.001
+
+        explicit: list[TimelineBar] = []
+        for bar in timeline:
+            detail = bar.detail or {}
+            owner = bar.agent_id or detail.get("agent_id") or detail.get("subagent_id")
+            if owner and str(owner) == str(node.agent_id):
+                explicit.append(bar)
+        source = explicit if explicit else [
+            bar for bar in timeline
+            if spawn_x <= rel_fn(bar.start_time) <= join_x
+            and categorizer.categorize(bar) != OperationCategory.ORCHESTRATE
+        ]
+
+        ticks: list[dict[str, Any]] = []
+        for bar in source:
+            if bar.end_time <= 0:
+                continue
+            cat = categorizer.categorize(bar)
+            x = rel_fn(bar.start_time)
+            end = rel_fn(bar.end_time)
+            ticks.append({
+                "x": x,
+                "w": max(0.001, end - x),
+                "category": cat.value,
+                "color": bar.color or cat.color,
+                "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
+                "label": bar.label,
+                "id": f"{node.agent_id}:{bar.id}",
+                "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
+                "detail": bar.detail,
+                "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
+            })
+        return ticks
+
     def _session_metadata(self, s: SessionVizData) -> str:
         """Compose the human-readable stats line, e.g.
+        ``53 工具调用 · 单agent · 上下文 138K`` or
         ``61 主线 + 22 子agent (328 调用) · 主agent上下文 164K · 子agent 21-66K``.
         """
         parts: list[str] = []
@@ -332,6 +424,21 @@ class MultiSessionViewBuilder:
         ctx = s.stats.context_tokens
         if ctx:
             parts.append(f"上下文 {self._fmt_tokens(ctx)}")
+
+        # Sub-agent context range (for multi-agent sessions)
+        if sub:
+            sub_ctxs = [
+                n.stats.context_tokens for n in s.agent_tree
+                if n.parent_id and n.stats and n.stats.context_tokens
+            ]
+            if sub_ctxs:
+                min_ctx = min(sub_ctxs)
+                max_ctx = max(sub_ctxs)
+                if min_ctx == max_ctx:
+                    parts.append(f"子agent {self._fmt_tokens(min_ctx)}")
+                else:
+                    parts.append(f"子agent {self._fmt_tokens(min_ctx)}-{self._fmt_tokens(max_ctx)}")
+
         text = " · ".join(parts) if parts else "—"
         # F-95 follow-up: truncate long metadata so it doesn't overflow
         # the chart canvas / y-axis gutter when sessions have a lot of
@@ -346,17 +453,36 @@ class MultiSessionViewBuilder:
             return None
         x = rel_fn(end)
         clock = _wall_clock(end)
-        if s.status in ("success", "completed"):
-            label = f"{clock} 收工 ✓"
+        sub = s.agent_layout_summary.get("subagent_count", 0) if s.agent_layout_summary else 0
+        if sub:
+            status_label = "汇合修复 ✓"
+        elif s.status in ("success", "completed"):
+            status_label = "收工 ✓"
         elif s.status in ("failed", "error"):
-            label = f"{clock} 失败 ✗"
+            status_label = "失败 ✗"
         elif s.status == "running":
-            label = f"{clock} 进行中"
-        elif sub := s.agent_layout_summary.get("subagent_count", 0) if s.agent_layout_summary else 0:
-            label = f"{clock} 汇合修复 ✓"
+            status_label = "进行中"
         else:
-            label = f"{clock} 结束"
-        return {"x": x, "label": label}
+            status_label = "结束"
+        # Design-spec: single-agent mode label
+        if s.detected_mode == "single" and not sub:
+            status_label = f"单agent{status_label}"
+        label = f"{clock} {status_label}" if clock else status_label
+        return {
+            "x": x,
+            "label": label,
+            "timeLabel": clock or "",
+            "statusLabel": status_label,
+        }
+
+    def _detect_agent_type(self, s: SessionVizData) -> str:
+        """Detect agent type description for the design-spec model pill right-side info."""
+        sub = s.agent_layout_summary.get("subagent_count", 0) if s.agent_layout_summary else 0
+        if s.detected_mode == "single" and not sub:
+            return "单agent"
+        if sub:
+            return f"xhigh+workflows"
+        return s.detected_mode or "agent"
 
     def _flatten_agents(
         self,

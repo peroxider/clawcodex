@@ -1,15 +1,172 @@
 /* ClawCodex Visualizer — Multi-Session Waterfall View (F-95) */
 
 :root {
-    --ms-bg: var(--bg-primary);
-    --ms-panel: var(--bg-secondary);
-    --ms-border: var(--border-color);
-    --ms-text: var(--text-primary);
-    --ms-muted: var(--text-secondary);
-    --ms-fork: #ea7ccc;
-    --ms-fork-dim: rgba(234, 124, 204, 0.35);
+    --ms-bg: #101b26;
+    --ms-panel: #152333;
+    --ms-border: #26384a;
+    --ms-text: #c3cedb;
+    --ms-muted: #738294;
+    --ms-fork: #c83f86;
+    --ms-fork-dim: rgba(200, 63, 134, 0.35);
+    --ms-join: #5a7fe9;
     --ms-pill-radius: 999px;
-    --ms-row-h: 36px;
+    --ms-row-h: 32px;
+    --ms-canvas: #0d1117;
+    --ms-role-review: #a371f7;
+    --ms-role-verify: #f85149;
+    --ms-role-edit: #f778ba;
+    --ms-role-execute: #58a6ff;
+}
+
+body.ms-reference-page {
+    background: #101b26;
+    overflow: hidden;
+}
+
+body.ms-reference-page .navbar,
+body.ms-reference-page .footer {
+    display: none;
+}
+
+body.ms-reference-page .container {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ms-analysis-shell {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(15, 27, 39, 0.98), rgba(15, 25, 36, 0.98)),
+        #101b26;
+    color: var(--ms-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.ms-analysis-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(90deg, rgba(111, 132, 155, 0.16) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(111, 132, 155, 0.035) 1px, transparent 1px);
+    background-size: 110px 100%, 100% 36px;
+    opacity: 0.7;
+    z-index: 0;
+}
+
+.ms-reference-topbar {
+    position: absolute;
+    z-index: 3;
+    top: 11px;
+    left: 17px;
+    right: 58px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #bec9d7;
+    text-shadow: 0 0 8px rgba(132, 163, 205, 0.45);
+    white-space: nowrap;
+}
+
+.ms-reference-model {
+    height: 39px;
+    min-width: 390px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 15px;
+    border: 3px solid rgba(224, 237, 249, 0.92);
+    border-radius: 13px;
+    background: rgba(15, 24, 35, 0.72);
+    color: #d9e3ef;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0;
+    box-shadow:
+        0 0 0 1px rgba(74, 102, 132, 0.3),
+        0 0 16px rgba(205, 224, 241, 0.2);
+}
+
+.ms-reference-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+    color: #aeb9c8;
+    font-size: 16px;
+    font-weight: 750;
+}
+
+.ms-reference-summary span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-reference-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #b9c5d2;
+    font-size: 16px;
+    font-weight: 760;
+}
+
+.ms-reference-dot {
+    width: 9px;
+    height: 13px;
+    border-radius: 2px;
+    background: #6176ed;
+    box-shadow: 0 0 8px rgba(97, 118, 237, 0.7);
+}
+
+.ms-reference-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+.ms-reference-empty {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    top: 50%;
+    width: min(520px, calc(100vw - 40px));
+    transform: translate(-50%, -50%);
+    padding: 22px;
+    border: 1px solid rgba(105, 125, 147, 0.34);
+    border-radius: 8px;
+    background: rgba(18, 31, 44, 0.9);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.36);
+}
+
+.ms-reference-empty-title {
+    margin-bottom: 14px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.ms-reference-empty-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.ms-reference-empty-controls .input-wide {
+    min-width: 0;
+    flex: 1;
+}
+
+.ms-reference-empty-hint {
+    margin-top: 12px;
+    color: var(--ms-muted);
+    font-size: 12px;
 }
 
 /* ----------------------------------------------------------------- *
@@ -79,15 +236,15 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 12px;
-    background: var(--ms-panel);
-    border: 1px solid var(--ms-border);
-    border-radius: var(--ms-pill-radius);
-    font-size: 12px;
+    padding: 4px 10px;
+    background: rgba(22, 27, 34, 0.9);
+    border: 1px solid rgba(48, 54, 61, 0.6);
+    border-radius: 6px;
+    font-size: 11px;
     color: var(--ms-text);
 }
 .ms-legend-pill .ms-dot {
-    width: 8px; height: 8px; border-radius: 50%;
+    width: 8px; height: 8px; border-radius: 2px;
     display: inline-block;
 }
 .ms-legend-pill .ms-count {
@@ -100,10 +257,55 @@
  *  Chart container
  * ----------------------------------------------------------------- */
 .ms-chart-container {
-    background: var(--ms-panel);
+    background: var(--ms-canvas);
     border: 1px solid var(--ms-border);
-    border-radius: var(--radius);
+    border-radius: 6px;
     overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    min-height: 360px;
+    position: relative;
+}
+.ms-chart-container::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(90deg, rgba(139, 148, 158, 0.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(139, 148, 158, 0.025) 1px, transparent 1px);
+    background-size: 100px 100%, 100% 32px;
+    opacity: 0.3;
+}
+
+.ms-reference-canvas.ms-chart-container {
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+}
+
+.ms-reference-canvas.ms-chart-container::before {
+    display: none;
+}
+
+@media (max-width: 900px) {
+    .ms-reference-topbar {
+        right: 16px;
+        gap: 8px;
+    }
+
+    .ms-reference-model {
+        min-width: 250px;
+        height: 34px;
+        border-width: 2px;
+        font-size: 12px;
+    }
+
+    .ms-reference-summary,
+    .ms-reference-status {
+        font-size: 12px;
+    }
 }
 
 /* ----------------------------------------------------------------- *
@@ -113,9 +315,11 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 4px;
-    font-size: 12px;
+    padding: 8px 4px 6px;
+    font-size: 11px;
     color: var(--ms-muted);
+    gap: 12px;
+    flex-wrap: wrap;
 }
 .ms-edge-legend {
     display: inline-flex;
@@ -124,12 +328,12 @@
 }
 .ms-edge-line {
     display: inline-block;
-    width: 32px; height: 2px;
+    width: 28px; height: 1.5px;
     background: var(--ms-fork);
-    box-shadow: 0 0 6px var(--ms-fork-dim);
-    border-radius: 2px;
+    box-shadow: 0 0 4px var(--ms-fork-dim);
+    border-radius: 1px;
 }
-.ms-tip { color: var(--ms-muted); }
+.ms-tip { color: var(--ms-muted); opacity: 0.7; }
 
 /* ----------------------------------------------------------------- *
  *  View toggle (waterfall / gantt) used on session_row.html
@@ -142,12 +346,12 @@
     overflow: hidden;
 }
 .view-toggle-btn {
-    padding: 6px 14px;
+    padding: 5px 12px;
     background: transparent;
     border: none;
     color: var(--ms-muted);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     transition: all 0.15s;
 }
 .view-toggle-btn:hover { color: var(--ms-text); }
@@ -168,19 +372,19 @@
     position: fixed;
     top: 0;
     right: 0;
-    width: 440px;
+    width: 420px;
     max-width: 92vw;
     height: 100vh;
     background: var(--ms-panel);
     border-left: 1px solid var(--ms-border);
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+    box-shadow: -6px 0 20px rgba(0, 0, 0, 0.5);
     transform: translateX(100%);
     transition: transform 0.25s ease;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     color: var(--ms-text);
-    font-size: 13px;
+    font-size: 12px;
 }
 .turn-drawer.open { transform: translateX(0); }
 
@@ -194,7 +398,7 @@
 }
 .turn-drawer-header h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -224,7 +428,7 @@
 }
 .turn-drawer-section:last-child { border-bottom: none; }
 .turn-drawer-section h4 {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--ms-muted);
@@ -244,7 +448,7 @@
     grid-template-columns: max-content 1fr;
     gap: 4px 12px;
     margin: 0;
-    font-size: 12px;
+    font-size: 11px;
     font-family: var(--font-mono, ui-monospace, monospace);
 }
 .turn-drawer-section dt { color: var(--ms-muted); }
@@ -257,10 +461,10 @@
 .turn-drawer-empty {
     color: var(--ms-muted);
     font-style: italic;
-    font-size: 12px;
+    font-size: 11px;
     padding: 10px;
     text-align: center;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.015);
     border: 1px dashed var(--ms-border);
     border-radius: 4px;
 }
@@ -278,14 +482,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: 11px;
     color: var(--ms-muted);
     padding: 8px 0;
 }
 .turn-drawer-spinner {
-    width: 12px; height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.15);
-    border-top-color: var(--text-accent, #9c7cff);
+    width: 11px; height: 11px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--text-accent, #58a6ff);
     border-radius: 50%;
     animation: turn-drawer-spin 0.8s linear infinite;
     display: inline-block;
@@ -294,16 +498,16 @@
     to { transform: rotate(360deg); }
 }
 .turn-drawer-error {
-    color: #ff7875;
-    font-size: 12px;
+    color: #f85149;
+    font-size: 11px;
     padding: 10px;
-    background: rgba(255, 77, 79, 0.08);
-    border: 1px solid rgba(255, 77, 79, 0.3);
+    background: rgba(248, 81, 73, 0.06);
+    border: 1px solid rgba(248, 81, 73, 0.25);
     border-radius: 4px;
 }
 .turn-drawer-error span { color: var(--ms-muted); }
 .turn-drawer-llm-meta {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--ms-muted);
     margin-bottom: 10px;
     font-family: var(--font-mono, ui-monospace, monospace);
@@ -322,7 +526,7 @@
 .turn-drawer-llm-block > summary {
     cursor: pointer;
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     color: var(--text-accent, #9c7cff);
     user-select: none;
@@ -346,10 +550,10 @@
 .turn-drawer-llm-block pre {
     margin: 0;
     padding: 8px 12px;
-    background: var(--bg-primary, #1a1a2e);
+    background: var(--bg-primary, #0d1117);
     border-top: 1px solid var(--ms-border);
     border-radius: 0 0 4px 4px;
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.5;
     overflow-x: auto;
     white-space: pre-wrap;
@@ -358,15 +562,15 @@
     overflow-y: auto;
 }
 .turn-drawer-llm-tag {
-    font-size: 10px;
+    font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--ms-muted);
     padding: 6px 10px 4px;
     font-family: var(--font-mono, ui-monospace, monospace);
 }
-.turn-drawer-llm-tool-use .turn-drawer-llm-tag { color: #91cc75; }
-.turn-drawer-llm-tool-result .turn-drawer-llm-tag { color: #5470c6; }
+.turn-drawer-llm-tool-use .turn-drawer-llm-tag { color: #3fb950; }
+.turn-drawer-llm-tool-result .turn-drawer-llm-tag { color: #58a6ff; }
 
 .turn-drawer-io-card {
     margin-bottom: 10px;
@@ -378,22 +582,22 @@
 .turn-drawer-io-title {
     padding: 8px 10px 2px;
     color: var(--text-accent, #9c7cff);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
 }
 .turn-drawer-io-meta {
     padding: 0 10px 7px;
     color: var(--ms-muted);
-    font-size: 11px;
+    font-size: 10px;
     font-family: var(--font-mono, ui-monospace, monospace);
     word-break: break-all;
 }
 .turn-drawer-io-card pre {
     margin: 0;
     padding: 9px 10px;
-    background: var(--bg-primary, #1a1a2e);
+    background: var(--bg-primary, #0d1117);
     border-top: 1px solid var(--ms-border);
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
@@ -415,7 +619,7 @@
     padding: 6px 8px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     margin-bottom: 2px;
     transition: background 0.1s;
 }
@@ -433,7 +637,7 @@
 .turn-drawer-agg-time {
     color: var(--ms-muted);
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
+    font-size: 10px;
 }
 .turn-drawer-count {
     color: var(--ms-muted);
