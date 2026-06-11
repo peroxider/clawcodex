@@ -4,7 +4,7 @@
 > 版本: v3.2（目录重构版）
 > 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
 > 
-> **v3.2 变更（代码检视审计扩展）**：扩展 v3.1 审计覆盖 80+ 特性。新增修正：F-18 (CreateAgentTool) 从 🔄 规划中 → ✅ 基础完成（`create_agent_tool.py` 241 行 + tool_authoring factory），F-28 (Ctrl+B 后台) 从 🔄 设计完成 → ✅ 完成（`background_runner.py` 417 行 + REPL 接线），F-37 (PR 检视意见自动修复) 从 📋 设计完成 → 🔄 进行中（`review_feedback.py` 109 行 + `ReviewFeedbackConfig` + orchestrator 接线），F-49 (Issue 会话存储) 从 📋 设计完成 → 🔄 进行中（`control_socket.py` 272 行 + `session_persist.py` 130 行 + `agent_runner.py` 接线），F-50 (SOP 转换器固化) 从 📋 设计完成 → ✅ 基础完成（`pos_converter/` 9 文件 2,429 行），F-54 (运行期可观测性) 从 📋 设计完成 → 🔄 进行中（`debug_log.py` + `ObservabilityConfig` + `agent_runner.py:751` debug.ndjson）。
+> **v3.2 变更（代码检视审计扩展）**：扩展 v3.1 审计覆盖 80+ 特性。新增修正：F-18 (CreateAgentTool) 从 🔄 规划中 → ✅ 已完成（commit 59d8243 补齐集成闭环：EXTENSION_TOOLS 内置注册 + 启动自动加载持久化工具 + ToolContext.tool_registry 运行时接线 + 模板语法修复），F-28 (Ctrl+B 后台) 从 🔄 设计完成 → ✅ 完成（`background_runner.py` 417 行 + REPL 接线），F-37 (PR 检视意见自动修复) 从 📋 设计完成 → 🔄 进行中（`review_feedback.py` 109 行 + `ReviewFeedbackConfig` + orchestrator 接线），F-49 (Issue 会话存储) 从 📋 设计完成 → 🔄 进行中（`control_socket.py` 272 行 + `session_persist.py` 130 行 + `agent_runner.py` 接线），F-50 (SOP 转换器固化) 从 📋 设计完成 → ✅ 基础完成（`pos_converter/` 9 文件 2,429 行），F-54 (运行期可观测性) 从 📋 设计完成 → 🔄 进行中（`debug_log.py` + `ObservabilityConfig` + `agent_runner.py:751` debug.ndjson）。
 >
 > **v3.1 变更（代码检视审计）**：完成全量功能实现状态代码交叉验证。主要修正：F-40 (ProgressReporter Sink) 状态从 📋 设计完成 → ✅ 已完成。该特性已在 `extensions/orchestrator/progress_sink.py` 完整落地（`ProgressSink` Protocol / `CompositeProgressSink` / `ToolContextProgressSink`），`progress_reporter.py` 降级为 shim。
 >
@@ -1557,8 +1557,10 @@ clawcodex attach cicd-agent
 ---
 
 ### 2.9 CreateAgentTool 动态工具创建（F-18）
-**状态**: 🔄 规划中
+**状态**: ✅ 已完成
 **目标**: Agent 可根据三方 CLI/API 规范动态创建工具，实现"工具创建工具"的 Meta Tool 能力
+
+> commit 59d8243 补齐集成闭环：CreateAgentTool 已注册为内置工具 (`EXTENSION_TOOLS`)，启动时自动加载持久化 Agent 工具 (`build_default_registry(load_agent_tools=True)`)，`ToolContext.tool_registry` 提供运行时注册表接线。
 
 #### 2.9.1 功能说明
 允许 Agent 分析第三方工具（CLI 命令或 HTTP API）的接口规范，然后动态创建一个可用的工具：
@@ -1569,7 +1571,9 @@ Agent 分析 CLI 规范 → 生成工具规范 → 调用 CreateAgentTool → �
 
 #### 2.9.2 架构设计
 ```
-src/agent/tool_authoring/           # 新增模块（与上游解耦）
+# 核心实现（clawcodex_ext — 与上游解耦）
+clawcodex_ext/tool_system/tools/create_agent_tool.py    # CreateAgentTool 实现（入口）
+clawcodex_ext/agent/tool_authoring/                     # Tool 创建基础设施
 ├── spec.py                         # AgentToolSpec 定义
 ├── validators.py                   # 规范验证器
 ├── factory.py                      # build_tool() 调用封装
@@ -1580,8 +1584,13 @@ src/agent/tool_authoring/           # 新增模块（与上游解耦）
     ├── http.py                     # HTTP 请求调用
     └── python.py                   # Python 函数映射
 
+# 集成接线（启动时自动注册）
+extensions/tool_system_ext/registration.py   # EXTENSION_TOOLS 列表包含 make_create_agent_tool()
+src/tool_system/defaults.py                  # build_default_registry(load_agent_tools=True) 自动加载持久化工具
+src/tool_system/context.py                   # ToolContext.tool_registry 字段
+clawcodex_ext/runtime/context.py             # 运行时传递 tool_registry
 src/tool_system/tools/
-└── create_agent_tool.py            # CreateAgentTool 实现
+└── (无新文件 — 通过重导出兼容)
 ```
 
 #### 2.9.3 工具规范（AgentToolSpec）
@@ -1639,7 +1648,7 @@ class AgentToolSpec:
 | 超时保护 | `call_handlers/bash.py` | subprocess timeout=30 |
 
 #### 2.9.7 持久化机制
-Agent 创建的工具保存到 `~/.clawcodex/agent-tools/{name}.json`，重启后自动加载。
+Agent 创建的工具保存到 `~/.clawcodex/agent-tools/{name}.json`，重启后通过 `build_default_registry(load_agent_tools=True)` 自动加载持久化工具到活动 Registry。
 
 #### 2.9.8 与现有系统集成
 | 现有组件 | 如何协作 |
@@ -1648,19 +1657,26 @@ Agent 创建的工具保存到 `~/.clawcodex/agent-tools/{name}.json`，重启�
 | `ToolRegistry` | 工具创建后调用 `registry.register(tool)` |
 | `parse_agent_markdown` | 已有工具定义解析，可复用 schema 验证 |
 | MCP 工具包装 | 参考 `tool_wrapper.py` 的声明式工具模式 |
-| `resolve_agent_tools()` | 允许 `source="agent-created"` 的工具被解析 |
+| `EXTENSION_TOOLS` | `extensions/tool_system_ext/registration.py` 列表包含 `make_create_agent_tool()`，启动时自动注册 CreateAgentTool |
+| `build_default_registry()` | `src/tool_system/defaults.py`: `load_agent_tools=True` 参数启动时加载持久化 Agent 工具 |
+| `ToolContext.tool_registry` | `src/tool_system/context.py`: 运行时注册表字段，CreateAgentTool 创建工具后自动调用 `registry.register(tool)` |
 
 #### 2.9.9 实现文件
 | 文件 | 位置 | 状态 |
 |------|------|------|
-| `tool_authoring/spec.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/validators.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/call_handlers/bash.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/call_handlers/http.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/factory.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/registry_ext.py` | `src/agent/tool_authoring/` | 规划中 |
-| `tool_authoring/persistence.py` | `src/agent/tool_authoring/` | 规划中 |
-| `create_agent_tool.py` | `src/tool_system/tools/` | 规划中 |
+| `create_agent_tool.py` | `clawcodex_ext/tool_system/tools/` | ✅ 已完成 |
+| `spec.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `validators.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `factory.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `registry_ext.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `persistence.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/bash.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/http.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/python.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `registration.py`（工具注册） | `extensions/tool_system_ext/` | ✅ 已完成（commit 59d8243 新增） |
+| `defaults.py`（启动自动加载） | `src/tool_system/` | ✅ 已完成（commit 59d8243 新增） |
+| `context.py`（registry 字段） | `src/tool_system/` | ✅ 已完成（commit 59d8243 新增） |
+| `runtime/context.py`（接线） | `clawcodex_ext/runtime/` | ✅ 已完成（commit 59d8243 新增） |
 
 ---
 
@@ -8630,7 +8646,7 @@ clawcodex_ext/community_radar/
 | F-12 | cacheWarning 容量 | §2.11 | 🔄 规划中 |
 | F-13 | 记忆作用域隔离 | §2.5 | ✅ 完成 |
 | F-16 | Auto 模式 | §2.13 | 📋 规划中 |
-| F-18 | CreateAgentTool | §2.9 | 🔄 规划中 |
+| F-18 | CreateAgentTool | §2.9 | ✅ 已完成 |
 | F-20 | Agent 进度汇报 | §2.1 | ✅ 完成 |
 | F-22 | Cron 系统 | §五 | 🔄 进行中 |
 | F-36 | LocalTracker | §1.1.1 | ✅ 完成 |

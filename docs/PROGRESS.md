@@ -73,7 +73,7 @@
 | F-15 | 权限模式切换 (Shift+Tab) | P1 | ✅ 完成 | REPL/LiveStatus/TUI 中支持 `default→acceptEdits→plan→bypassPermissions` 循环切换，状态栏显示当前模式，/permission 命令 |
 | F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ⏳ 待开始 | 基于 LLM 的自动权限模式切换，减少交互疲劳 |
 | F-17 | 工具系统按需加载（Tool System Extension） | P1 | ✅ 完成 | 四种工具模式（bare/default/clawcodex/all），4 bundle 简化设计，bundle 引用前缀 ":"，与上游解耦 |
-| F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 基础完成 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。`clawcodex_ext/tool_system/tools/create_agent_tool.py`（241 行）+ `clawcodex_ext/agent/tool_authoring/factory.py` 完整实现；`src/tool_system/tools/create_agent_tool.py` 重导出 |
+| F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 已完成 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。基础实现在 `clawcodex_ext/tool_system/tools/create_agent_tool.py` + `clawcodex_ext/agent/tool_authoring/factory.py`。commit 59d8243 补齐集成闭环：（1）已注册为内置工具 (`extensions/tool_system_ext/registration.py` `EXTENSION_TOOLS`)；（2）启动时自动加载持久化 Agent 工具 (`src/tool_system/defaults.py` `load_agent_tools=True`)；（3）`ToolContext.tool_registry` 运行时注册表字段 + 创建工具时自动注册到活动 registry；（4）模板 `{param}` → `{{param}}` 语法修复；（5）输出字段 `tool.*` → `spec.*` 修复 |
 | F-19 | SOP 转化模式 | P2 | 🔄 进行中 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；**`clawcodex-dev pos convert` CLI 子命令待注册**（dispatch.py/subcommand_registry.py 中未实现），当前仅支持斜杠命令和 Python API 调用 |
 | F-20 | Agent 阶段性进度汇报 | P2 | ✅ 完成 | 三组合方案：检查点触发 + ProgressReportTool + ToolContext.tasks 持久化；PhaseComplete 时双重调用 ProgressReportTool + TaskUpdateTool 更新 metadata |
 | F-21 | 后台运行 + 恢复同步 | P1 | ✅ 完成 | Ctrl+B 后台化 + TailFollower 实时同步 + SessionWatcher 多终端感知，补丁 0067-0074 |
