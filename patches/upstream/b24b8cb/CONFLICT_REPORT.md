@@ -1,7 +1,7 @@
 # b24b8cb 补丁冲突分析报告
 
 **生成时间**：2026-06-08
-**脚本**：`python3 scripts/regenerate_patches_upstream.py --commit b24b8cb --preserve-file patches/upstream/b24b8cb/preserve.list --allow-deletes`
+**脚本**：`python3 scripts/regenerate_patches.py --commit b24b8cb --preserve-file patches/upstream/b24b8cb/preserve.list --allow-deletes`
 **结果**：`patches/upstream/b24b8cb/` 共 173 个补丁（132 modified + 40 new + 1 deleted），25 个上游文件保留在 base 中。
 **验证**：`git apply --check` 与 `git apply` 全部 173 个补丁均通过；将补丁应用到 `src/upstream/b24b8cb/` 副本后，所得树与 `src/` 在排除 `upstream/`、`orchestrator/`、`__pycache__/` 路径后，**唯一差异即 preserve 列表中那 4 个文件的内容**（它们故意保留 b24b8cb 上游新内容，覆盖 `src/` 中的 58ea488 旧内容）。
 
@@ -196,7 +196,7 @@ Common but differ: 4
 - 现有的 `patches/upstream/58ea488/` 队列**未变**——脚本升级是 in-place 的，但只针对本次重生成（b24b8cb）。
 - 若日后需要让 58ea488 也升级到 strict 策略，再次跑：
   ```bash
-  python3 scripts/regenerate_patches_upstream.py --commit 58ea488 --allow-deletes
+  python3 scripts/regenerate_patches.py --commit 58ea488 --allow-deletes
   ```
   即可。**注意**：会新增 40 个 new patch，patch 编号会变；不影响 `git am` / `quilt push -a` 语义。
 

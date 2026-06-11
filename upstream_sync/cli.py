@@ -312,6 +312,61 @@ def generate_patch(
 
 
 # ---------------------------------------------------------------------------
+# regenerate-patches (strict reconstruction)
+# ---------------------------------------------------------------------------
+
+@app.command("regenerate-patches")
+def regenerate_patches(
+    commit: str = typer.Option(..., help="Upstream commit hash (used to locate src/upstream/{commit})"),
+    src: Path = typer.Option(Path("src"), help="Downstream source tree (default: src/)"),
+    upstream_root: Path = typer.Option(Path("src/upstream"), help="Upstream snapshots root (default: src/upstream)"),
+    patch_root: Path = typer.Option(Path("patches/upstream"), help="Patches root (default: patches/upstream)"),
+    allow_deletes: bool = typer.Option(False, help="Generate delete patches for upstream files absent from src"),
+    preserve: list[str] = typer.Option([], help="Relative path to preserve from upstream base (repeatable)"),
+    preserve_file: Path | None = typer.Option(None, help="File with one relative path per line to preserve"),
+    config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
+) -> None:
+    """Regenerate all overlay patches from an upstream snapshot (strict reconstruction).
+
+    Compares the upstream snapshot at ``src/upstream/{commit}`` against the
+    current ``src/`` tree and generates a complete patch queue.  The queue
+    satisfies the invariant::
+
+        src/upstream/{commit} + patches/upstream/{commit}/series == src/
+    """
+    cfg = load_config(config)
+    generator = PatchGenerator(Path("."), cfg)
+
+    preserve_set = PatchGenerator.collect_preserve(
+        preserve_args=preserve,
+        preserve_file_path=preserve_file,
+    )
+
+    result = generator.regenerate(
+        commit=commit,
+        src_dir=src,
+        upstream_dir=upstream_root / commit,
+        patch_root=patch_root / commit,
+        allow_deletes=allow_deletes,
+        preserve=preserve_set,
+    )
+
+    typer.echo(f"Modified files: {result.modified_count}")
+    typer.echo(f"New files (fork-only): {result.new_count}")
+    typer.echo(f"Deleted files (by fork): {result.deleted_count}")
+    typer.echo(f"Preserved files (new in upstream base, kept): {result.preserved_count}")
+    typer.echo(f"Total patches: {len(result.patch_entries)}")
+    typer.echo(f"Total size: {result.total_size:,} bytes ({result.total_size / 1024 / 1024:.1f} MB)")
+    typer.echo(f"Patch directory: {result.patch_dir}")
+    typer.echo(f"Series file: {result.series_file}")
+    if result.preserved_files:
+        typer.echo("")
+        typer.echo("Preserved files (no patch, kept from upstream base):")
+        for rel in sorted(result.preserved_files):
+            typer.echo(f"  {rel}")
+
+
+# ---------------------------------------------------------------------------
 # backup
 # ---------------------------------------------------------------------------
 
