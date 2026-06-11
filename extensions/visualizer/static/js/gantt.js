@@ -78,6 +78,9 @@ async function renderGanttChart(sessionId) {
 
         const container = document.getElementById('gantt-chart');
         if (!container) return;
+        if (container.offsetWidth === 0 || container.offsetHeight === 0) {
+            return;
+        }
 
         if (!ganttChart) {
             ganttChart = echarts.init(container, 'dark');
@@ -156,6 +159,7 @@ async function renderGanttChart(sessionId) {
         };
 
         ganttChart.setOption(option, true);
+        resizeGanttChart();
     } catch (e) {
         console.error('Failed to render gantt:', e);
     }
@@ -276,6 +280,15 @@ function changeTimeMode(mode) {
     }
 }
 
+function resizeGanttChart() {
+    if (!ganttChart) return;
+
+    requestAnimationFrame(() => {
+        ganttChart.resize();
+        requestAnimationFrame(() => ganttChart?.resize());
+    });
+}
+
 async function exportSession(format) {
     if (!currentSessionData) return;
     try {
@@ -300,6 +313,8 @@ function onLiveEvent(event) {
 
 // Make functions globally available
 window.loadSessionDetail = loadSessionDetail;
+window.renderGanttChart = renderGanttChart;
 window.changeTimeMode = changeTimeMode;
+window.resizeGanttChart = resizeGanttChart;
 window.exportSession = exportSession;
 window.onLiveEvent = onLiveEvent;
