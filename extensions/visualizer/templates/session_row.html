@@ -34,6 +34,12 @@
   {% include "stats_bar.html" %}
 {% endwith %}
 
+{# F-95 legend fix: explicit HTML legend bar for the single-session
+   waterfall on session_row.html. multi_session_view.js's renderLegend()
+   populates this with the same 5-pill content (category · count) the
+   multi-page view shows, so both surfaces stay consistent. #}
+<div id="ms-legend-bar" class="ms-legend-bar"></div>
+
 {# Waterfall view (default) — wraps the new multi_session_view with 1 session #}
 <div class="ms-chart-container" id="waterfall-chart" style="width:100%; height:560px; margin-bottom:20px;">
     <div class="empty-state">Loading waterfall view…</div>
@@ -115,12 +121,17 @@
             waterfall.style.display = '';
             gantt.style.display = 'none';
             if (!window.__waterfallLoaded) {
-                // Single-session waterfall: render into the page's own chart div,
-                // skip the dedicated multi-page legend bar (the session page
-                // already shows counts via session-meta + stats_bar).
+                // Single-session waterfall: render into the page's own chart
+                // div and populate the page-level #ms-legend-bar above it.
+                // The HTML legend bar carries the 5-pill category counts
+                // (Read/Write/Bash/Agent/Other); the stats_bar beneath the
+                // header carries the top-level numbers (Total Ops / Avg
+                // Duration / ...). The two surfaces are intentionally
+                // separate so a user can scan category distribution without
+                // re-rendering the chart.
                 initMultiSessionView([SESSION_ID], {
                     chartContainerId: 'waterfall-chart',
-                    legendContainerId: null,
+                    legendContainerId: 'ms-legend-bar',
                 });
                 window.__waterfallLoaded = true;
             }

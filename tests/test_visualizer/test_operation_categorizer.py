@@ -75,6 +75,12 @@ class TestOperationCategorizerExplicitFlags:
         bar.category = OperationCategory.WRITE
         assert cat.categorize(bar) == OperationCategory.WRITE
 
+    def test_pre_set_other_can_be_refined(self):
+        cat = OperationCategorizer()
+        bar = _bar("LLM text", bar_type=BarType.LLM_CALL)
+        bar.category = OperationCategory.OTHER
+        assert cat.categorize(bar) == OperationCategory.LLM_TEXT
+
 
 class TestOperationCategorizerBarTypeFallback:
     def test_phase_type_is_orchestrate(self):
@@ -89,9 +95,36 @@ class TestOperationCategorizerBarTypeFallback:
         bar.detail = {}
         assert cat.categorize(bar) == OperationCategory.ORCHESTRATE
 
-    def test_text_type_is_other(self):
+    def test_llm_call_type_is_llm_text(self):
         cat = OperationCategorizer()
         bar = _bar("LLM text", bar_type=BarType.LLM_CALL)
+        bar.detail = {}
+        assert cat.categorize(bar) == OperationCategory.LLM_TEXT
+
+    def test_turn_type_is_turn(self):
+        cat = OperationCategorizer()
+        bar = _bar("turn-1", bar_type=BarType.TURN)
+        bar.detail = {}
+        assert cat.categorize(bar) == OperationCategory.TURN
+
+    def test_isBackground_flag_is_background(self):
+        cat = OperationCategorizer()
+        bar = _bar("polling", detail={"isBackground": True})
+        assert cat.categorize(bar) == OperationCategory.BACKGROUND
+
+    def test_is_background_snake_case(self):
+        cat = OperationCategorizer()
+        bar = _bar("polling", detail={"is_background": True})
+        assert cat.categorize(bar) == OperationCategory.BACKGROUND
+
+    def test_background_flag_wins_over_bar_type(self):
+        cat = OperationCategorizer()
+        bar = _bar("background thinking", detail={"isBackground": True}, bar_type=BarType.LLM_CALL)
+        assert cat.categorize(bar) == OperationCategory.BACKGROUND
+
+    def test_tool_result_type_is_other(self):
+        cat = OperationCategorizer()
+        bar = _bar("tool result echo", bar_type=BarType.TOOL_RESULT)
         bar.detail = {}
         assert cat.categorize(bar) == OperationCategory.OTHER
 
@@ -103,5 +136,6 @@ class TestOperationCategoryColor:
 
     def test_legend_labels_present(self):
         labels = {c.label for c in OperationCategory}
-        # All five Chinese labels
-        assert {"读取", "执行", "写入", "编排", "其他"} <= labels
+        # All eight Chinese labels (F-95 follow-up split OTHER into 3 sub-cats)
+        assert {"读取", "执行", "写入", "编排",
+                "推理", "轮次", "后台", "其他"} <= labels

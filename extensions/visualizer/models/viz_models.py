@@ -53,14 +53,22 @@ class BarStatus(str, Enum):
 class OperationCategory(str, Enum):
     """High-level operation category for the multi-session waterfall view.
 
-    Five buckets mapped 1:1 to the legend in the reference visualization:
-    读取 (read) / 执行 (execute) / 写入 (write) / 编排 (orchestrate) / 其他 (other).
+    Eight buckets mapped 1:1 to the legend in the reference visualization:
+    读取 (read) / 执行 (execute) / 写入 (write) / 编排 (orchestrate) /
+    推理 (llm_text) / 轮次 (turn) / 后台 (background) / 其他 (other).
+
+    The 推理 / 轮次 / 后台 buckets were added in 2026-06-11 to split
+    the previous catch-all "其他" (other) — which had 46/55 ops in
+    orchestrator sessions — into meaningful sub-types.
     """
 
     READ = "read"
     EXECUTE = "execute"
     WRITE = "write"
     ORCHESTRATE = "orchestrate"
+    LLM_TEXT = "llm_text"
+    TURN = "turn"
+    BACKGROUND = "background"
     OTHER = "other"
 
     @property
@@ -79,6 +87,9 @@ _CATEGORY_COLORS: dict[OperationCategory, str] = {
     OperationCategory.EXECUTE: "#5470c6",
     OperationCategory.WRITE: "#fac858",
     OperationCategory.ORCHESTRATE: "#ea7ccc",
+    OperationCategory.LLM_TEXT: "#7ec8e3",
+    OperationCategory.TURN: "#b48ead",
+    OperationCategory.BACKGROUND: "#8a8a9c",
     OperationCategory.OTHER: "#a0a0b0",
 }
 
@@ -87,6 +98,9 @@ _CATEGORY_LABELS: dict[OperationCategory, str] = {
     OperationCategory.EXECUTE: "执行",
     OperationCategory.WRITE: "写入",
     OperationCategory.ORCHESTRATE: "编排",
+    OperationCategory.LLM_TEXT: "推理",
+    OperationCategory.TURN: "轮次",
+    OperationCategory.BACKGROUND: "后台",
     OperationCategory.OTHER: "其他",
 }
 

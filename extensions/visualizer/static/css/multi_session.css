@@ -64,6 +64,17 @@
     padding: 8px 4px 14px 4px;
     flex-wrap: wrap;
 }
+/* F-95 legend fix: on session_row.html the legend bar sits between the
+   stats_bar (Total Ops / Avg Duration / ...) and the waterfall chart
+   container. Give it a touch of breathing room on the top edge so the
+   pill capsules don't visually bond to the stats_bar's underline, and
+   trim the bottom padding back since the chart container already has
+   its own 20px margin-bottom. */
+.session-header ~ .ms-legend-bar,
+.ms-legend-bar:has(+ .ms-chart-container) {
+    margin-top: 6px;
+    padding-bottom: 8px;
+}
 .ms-legend-pill {
     display: inline-flex;
     align-items: center;

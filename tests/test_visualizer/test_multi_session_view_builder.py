@@ -57,7 +57,7 @@ class TestMultiSessionViewBuilderEmpty:
         assert out["sessions"] == []
         assert out["agents"] == []
         assert out["edges"] == []
-        assert len(out["legend"]) == 5  # all 5 categories with count 0
+        assert len(out["legend"]) == 8  # all 8 categories with count 0
 
 
 class TestSingleSessionLegend:
@@ -82,7 +82,25 @@ class TestSingleSessionLegend:
         viz = _session("s1", 0, 100, _bar("Read", 0, 5))
         out = MultiSessionViewBuilder().build([viz])
         labels = [l["label"] for l in out["legend"]]
-        assert labels == ["读取", "执行", "写入", "编排", "其他"]
+        assert labels == ["读取", "执行", "写入", "编排", "推理", "轮次", "后台", "其他"]
+
+    def test_pre_set_other_llm_bar_is_refined(self):
+        llm = TimelineBar(
+            id="llm-1",
+            type=BarType.LLM_CALL,
+            label="LLM text",
+            start_time=0,
+            end_time=5,
+            duration_ms=5000,
+            detail={"text_preview": "thinking"},
+        )
+        llm.category = OperationCategory.OTHER
+        viz = _session("s1", 0, 100, llm)
+        out = MultiSessionViewBuilder().build([viz])
+        legend = {l["category"]: l["count"] for l in out["legend"]}
+        assert legend["llm_text"] == 1
+        assert legend["other"] == 0
+        assert out["sessions"][0]["ticks"][0]["category"] == "llm_text"
 
 
 class TestSingleSessionLayout:

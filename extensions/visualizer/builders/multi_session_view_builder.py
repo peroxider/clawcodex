@@ -26,6 +26,7 @@ import logging
 from collections import Counter
 from typing import Any
 
+from .operation_categorizer import OperationCategorizer
 from ..models.viz_models import (
     BarType,
     OperationCategory,
@@ -91,13 +92,6 @@ def _wall_clock(ts: float) -> str:
     return time.strftime("%H:%M", time.localtime(ts))
 
 
-def _classify_ticks(bar: TimelineBar) -> OperationCategory:
-    """Get the bar's category, with safe fallback."""
-    if bar.category is not None:
-        return bar.category
-    return OperationCategory.OTHER
-
-
 class MultiSessionViewBuilder:
     """Build the multi-session waterfall view payload."""
 
@@ -122,6 +116,8 @@ class MultiSessionViewBuilder:
         # so ECharts renders them in the visible area.
         def rel(t: float) -> float:
             return t - base_time
+
+        categorizer = OperationCategorizer()
 
         # ---- 1. timeRange
         # Use actual activity range so session end-time drift does not leave
@@ -161,10 +157,7 @@ class MultiSessionViewBuilder:
         category_counts: Counter[OperationCategory] = Counter()
         for s in sessions:
             for bar in s.timeline:
-                if bar.category is not None:
-                    category_counts[bar.category] += 1
-                else:
-                    category_counts[OperationCategory.OTHER] += 1
+                category_counts[categorizer.categorize(bar)] += 1
         legend = [
             {
                 "category": c.value,
@@ -178,7 +171,7 @@ class MultiSessionViewBuilder:
         # ---- 3. sessions
         session_rows: list[dict[str, Any]] = []
         for y, s in enumerate(sessions):
-            ticks = self._build_ticks(s.timeline, rel)
+            ticks = self._build_ticks(s.timeline, rel, categorizer)
             row: dict[str, Any] = {
                 "id": s.session_id,
                 "name": self._session_name(s),
@@ -284,13 +277,14 @@ class MultiSessionViewBuilder:
         self,
         timeline: list[TimelineBar],
         rel_fn,
+        categorizer: OperationCategorizer,
     ) -> list[dict[str, Any]]:
         """Project timeline bars into dense x positions for the activity-bar view."""
         ticks: list[dict[str, Any]] = []
         for bar in timeline:
             if bar.end_time <= 0:
                 continue
-            cat = _classify_ticks(bar)
+            cat = categorizer.categorize(bar)
             ticks.append({
                 "x": rel_fn(bar.start_time),
                 "w": max(0.001, rel_fn(bar.end_time) - rel_fn(bar.start_time)),
@@ -338,7 +332,13 @@ class MultiSessionViewBuilder:
         ctx = s.stats.context_tokens
         if ctx:
             parts.append(f"上下文 {self._fmt_tokens(ctx)}")
-        return " · ".join(parts) if parts else "—"
+        text = " · ".join(parts) if parts else "—"
+        # F-95 follow-up: truncate long metadata so it doesn't overflow
+        # the chart canvas / y-axis gutter when sessions have a lot of
+        # sub-agents and large context windows.
+        if len(text) > 80:
+            text = text[:79] + "…"
+        return text
 
     def _end_marker(self, s: SessionVizData, rel_fn) -> dict[str, Any] | None:
         end = s.end_time

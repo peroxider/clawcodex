@@ -29,6 +29,14 @@ const MultiSessionView = (function() {
     const HIT_MIN_PX = 10;
     const VISIBLE_MIN_PX = 8;
     const MIN_TICK_SECONDS = 0.001;
+    // F-95 follow-up: per-category opacity for the custom-series bars.
+    // LLM_TEXT bars (assistant text/thinking spans) get a low opacity so
+    // they read as a background layer and never visually obscure the
+    // narrower tool-call chips that share the same pixel range, even at
+    // maximum dataZoom zoom. All other categories default to 0.95.
+    const OPACITY_BY_CAT = {
+        llm_text: 0.35,
+    };
     // Visible-window threshold (in data seconds) below which we render
     // ticks in their natural per-turn form, and above which we collapse
     // neighbours into aggregated "fat" bars. Re-evaluated on datazoom.
@@ -250,6 +258,28 @@ const MultiSessionView = (function() {
             chart = echarts.init(container, 'dark', { renderer: 'canvas' });
             window.addEventListener('resize', () => chart && chart.resize());
 
+            // F-95 ResizeObserver fix: when the page (or its tab) lays
+            // out after init(), the canvas can be created with width=0
+            // and the chart never recovers. window.resize alone doesn't
+            // catch container-only size changes (e.g. sidebar collapse),
+            // so observe the container directly and re-fit on every
+            // observed dimension change. Guarded by chart being non-null
+            // since the observer may fire after teardown.
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(() => {
+                    if (chart) chart.resize();
+                });
+                ro.observe(container);
+            }
+            // First-frame re-fit: the parent flex/grid may not have
+            // assigned a real width at the moment echarts.init runs.
+            // requestAnimationFrame defers the resize until after the
+            // current layout pass, which matches how ECharts' own
+            // examples handle this case.
+            requestAnimationFrame(() => {
+                if (chart) chart.resize();
+            });
+
             // ---- Click: open the side drawer with turn metadata ----
             chart.on('click', function(params) {
                 if (!params || !params.data) return;
@@ -340,6 +370,7 @@ const MultiSessionView = (function() {
                 itemId: t.id,
                 sessionId: s.id,
                 agentId: null,
+                category: t.category || 'other',
                 barType: t.type || null,
                 detail: t.detail || null,
                 toolUseId: t.toolUseId || (t.detail && t.detail.tool_use_id) || null,
@@ -372,6 +403,7 @@ const MultiSessionView = (function() {
                     itemId: t.id,
                     sessionId: a.parentSessionId || null,
                     agentId: a.id,
+                    category: t.category || 'other',
                     barType: t.type || null,
                     detail: t.detail || null,
                     toolUseId: t.toolUseId || (t.detail && t.detail.tool_use_id) || null,
@@ -504,6 +536,13 @@ const MultiSessionView = (function() {
         const option = {
             backgroundColor: 'transparent',
             animation: false,
+            // F-95 legend fix: disable ECharts' auto-rendered legend so it
+            // never collides with the HTML `.ms-legend-bar` (which session_row
+            // places above the chart).  The HTML bar carries the same
+            // 5-pill content via renderLegend(); the ECharts default legend
+            // would otherwise wrap onto 2-3 lines inside grid.top:70 and
+            // stack on top of the stats bar.
+            legend: { show: false },
             tooltip: {
                 trigger: 'item',
                 backgroundColor: 'rgba(26, 26, 46, 0.95)',
@@ -531,8 +570,14 @@ const MultiSessionView = (function() {
                 },
             },
             grid: {
-                left: 220, right: 60, top: 70, bottom: 60,
-                containLabel: false,
+                // F-95 legend fix: HTML `.ms-legend-bar` lives above the
+                // chart, so we no longer need the 70px top gutter that was
+                // reserved for ECharts' default legend. containLabel:true
+                // auto-reserves space on the left for long y-axis labels
+                // (e.g. "workflow 派生子agent") so they never clip into
+                // the swimlane bars.
+                left: 220, right: 60, top: 24, bottom: 60,
+                containLabel: true,
             },
             xAxis: {
                 type: 'value',
@@ -557,9 +602,34 @@ const MultiSessionView = (function() {
                 axisLabel: {
                     color: '#a0a0b0',
                     fontSize: 11,
+                    // F-95 follow-up: aggressive visual-width truncation.
+                    // The y-axis gutter is grid.left:220px, and the model
+                    // pill / agent label graphic elements also live in this
+                    // gutter (at x=[16, 216]). Chinese chars are ~2x the
+                    // pixel width of ASCII at 11px font, so a 24-char limit
+                    // still overflows.  Target ~10 visual units (≈110px)
+                    // to guarantee no horizontal collision with the
+                    // graphic elements. Full info is shown in the model
+                    // pill (sessions) or agent label pill (sub-agents).
+                    margin: 4,
                     formatter: function(value) {
-                        // value is the label string; truncate for the y-axis
-                        return value.length > 24 ? value.slice(0, 22) + '…' : value;
+                        const TARGET_PX = 110;
+                        const charPx = 11;
+                        const maxVisual = TARGET_PX / charPx; // ~10
+                        let visual = 0;
+                        let out = '';
+                        for (const ch of value) {
+                            // CJK + fullwidth punctuation weigh 2,
+                            // ASCII + halfwidth weighs 1.
+                            const w = /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? 2 : 1;
+                            if (visual + w > maxVisual) {
+                                out += '…';
+                                break;
+                            }
+                            out += ch;
+                            visual += w;
+                        }
+                        return out;
                     },
                 },
                 axisLine: { show: false },
@@ -615,7 +685,28 @@ const MultiSessionView = (function() {
 
         option.xAxis.axisLabel.formatter = formatRelSec;
         chart.setOption(option, true);
-        attachBadges(data, yIndex, yCategories);
+        // F-95 follow-up: `chart.convertToPixel` returns null until the
+        // chart has completed its initial layout pass, so calling
+        // `attachBadges` synchronously here produced `yPx = null` and
+        // all badge positions collapsed to (x, NaN). ECharts then
+        // fell back to y=0, stacking every pill at the top of the
+        // chart and overlapping the y-axis category labels. Defer
+        // attachment to the 'finished' event, which fires once the
+        // layout (and any animation) is complete and `convertToPixel`
+        // returns valid coordinates.
+        if (chart.__attachBadgesHandler) {
+            chart.off('finished', chart.__attachBadgesHandler);
+        }
+        const handler = function () {
+            chart.off('finished', handler);
+            try {
+                attachBadges(data, yIndex, yCategories);
+            } finally {
+                chart.__attachBadgesHandler = null;
+            }
+        };
+        chart.__attachBadgesHandler = handler;
+        chart.on('finished', handler);
     }
 
     // ------------------------------------------------------------------
@@ -664,8 +755,15 @@ const MultiSessionView = (function() {
         const color = api.value(3) || '#5470c6';
         const isBg = params.data && params.data.isBackground;
         const isAggregated = params.data && params.data.aggregatedCount > 1;
+        // F-95 follow-up: per-category opacity. LLM_TEXT bars (which
+        // span long assistant text/thinking periods) get a low opacity
+        // so they read as a background layer and never visually
+        // obscure the narrower tool-call chips that share the same
+        // pixel range, even when the user zooms in to the maximum.
+        const cat = (params.data && params.data.category) || 'other';
+        const baseOpacity = OPACITY_BY_CAT[cat] != null ? OPACITY_BY_CAT[cat] : 0.95;
 
-        const height = api.size([0, 1])[1] * (isBg ? 0.85 : 0.5);
+        const height = api.size([0, 1])[1] * (isBg ? 0.65 : 0.35);
         const y = api.coord([0, yIdx])[1];
 
         // ---- Visual width (thin rect) ----
@@ -709,7 +807,7 @@ const MultiSessionView = (function() {
                     shape: visRect,
                     style: {
                         fill: color,
-                        opacity: isAggregated ? 0.85 : 0.95,
+                        opacity: isAggregated ? baseOpacity * 0.9 : baseOpacity,
                     },
                     emphasis: { style: { opacity: 1, stroke: '#fff', lineWidth: 2 } },
                 },
@@ -1381,11 +1479,15 @@ const MultiSessionView = (function() {
         // Model pill (left side, y row) for each session
         for (const s of sessions) {
             const yi = yIndex.get(sessionLabel(s));
-            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, [0, yi])[1];
+            // F-95 follow-up: use the 1D form of convertToPixel. The 2D
+            // form `convertToPixel({yAxisIndex:0}, [0, yi])` returns null
+            // for category axes, so all badge y-coordinates collapsed to
+            // NaN and the pills stacked at y=0 of the chart container,
+            // overlapping the y-axis category labels. The 1D form returns
+            // the pixel y-coordinate directly.
+            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, yi);
             const active = s.y === 0 ? true : false; // first session is "active"
             elements.push(buildModelPill(s, yPx, active));
-            // Metadata text
-            elements.push(buildMetadata(s, yPx));
             // End marker
             if (s.endMarker) {
                 elements.push(buildEndMarker(s, yPx));
@@ -1398,17 +1500,29 @@ const MultiSessionView = (function() {
         // Agent row labels (role + title + count) on the right side
         for (const a of agents) {
             const yi = yIndex.get(agentLabel(a));
-            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, [0, yi])[1];
+            const yPx = chart.convertToPixel({ yAxisIndex: 0 }, yi);
             elements.push(buildAgentLabel(a, yPx));
         }
 
+        // F-95 follow-up: clear stale graphic elements before re-adding.
+        // setOption merges by default, so without this each 'finished'
+        // event (or ResizeObserver / rAF / data refresh re-entry) stacks
+        // new pills on top of the old ones, producing duplicate labels
+        // at the wrong pixel positions (e.g. an old model pill at x≈380
+        // persisting after a re-render that already moved it to x=224).
+        chart.setOption({ graphic: { elements: [] } });
         chart.setOption({ graphic: { elements } });
     }
 
     function buildModelPill(s, yPx, active) {
+        // F-95 follow-up: move the model pill out of the y-axis gutter
+        // to prevent overlap with the (truncated) y-axis category label
+        // and the spawn callout pill. The pill now sits at the very left
+        // edge of the chart canvas, just inside grid.left:220.
+        const GUTTER_RIGHT = 224;
         return {
             type: 'group',
-            position: [16, yPx - 12],
+            position: [GUTTER_RIGHT, yPx - 12],
             children: [{
                 type: 'rect',
                 shape: { width: 200, height: 24, r: 12 },
@@ -1430,21 +1544,11 @@ const MultiSessionView = (function() {
         };
     }
 
-    function buildMetadata(s, yPx) {
-        return {
-            type: 'text',
-            position: [16, yPx + 18],
-            style: {
-                text: s.metadata || '',
-                fill: '#a0a0b0',
-                fontSize: 11,
-            },
-        };
-    }
 
     function buildEndMarker(s, yPx) {
         if (!s.endMarker) return null;
-        const xEnd = chart.convertToPixel({ xAxisIndex: 0 }, s.endMarker.x)[0];
+        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
+        const xEnd = chart.convertToPixel({ xAxisIndex: 0 }, s.endMarker.x);
         // The model pill lives at x=[16, 216]. If the endMarker is in that
         // zone (which happens whenever the end of the session is near the
         // start of the time axis, e.g. an in-progress session), push it
@@ -1472,13 +1576,30 @@ const MultiSessionView = (function() {
 
     function buildSpawnCallout(s, yPx) {
         if (!s.spawnCallout) return null;
-        const xPx = chart.convertToPixel({ xAxisIndex: 0 }, s.spawnCallout.x)[0];
+        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
+        const xPx = chart.convertToPixel({ xAxisIndex: 0 }, s.spawnCallout.x);
+        // F-95 follow-up: anchor the pill to the TOP of the chart canvas
+        // (in the grid.top margin) and clamp x so it never spills into
+        // the y-axis gutter. The original `yPx + 16` placed the pill
+        // directly below the session row, which collided with the
+        // subagent's y-axis label and the agent label pill in the
+        // gutter. Anchoring to the topmost row's pixel - 30 puts the
+        // pill safely above all row labels.
+        const PILL_W = 200;
+        const GUTTER_RIGHT = 224; // grid.left:220 + 4px breathing room
+        const xClamped = Math.max(GUTTER_RIGHT, xPx - PILL_W / 2);
+        const yAxisData = (chart.getOption().yAxis[0] || {}).data || [];
+        const topYi = yAxisData.length - 1;
+        // F-95 follow-up: 1D form of convertToPixel (see attachBadges).
+        const topY = topYi >= 0
+            ? chart.convertToPixel({ yAxisIndex: 0 }, topYi)
+            : yPx - 30;
         return {
             type: 'group',
-            position: [xPx - 100, yPx + 16],
+            position: [xClamped, topY - 30],
             children: [{
                 type: 'rect',
-                shape: { width: 200, height: 22, r: 4 },
+                shape: { width: PILL_W, height: 22, r: 4 },
                 style: {
                     fill: 'rgba(234,124,204,0.15)',
                     stroke: '#ea7ccc',
@@ -1498,9 +1619,16 @@ const MultiSessionView = (function() {
     }
 
     function buildAgentLabel(a, yPx) {
+        // F-95 follow-up: move the agent label pill out of the y-axis
+        // gutter. The gutter (x < 220) is shared with the y-axis category
+        // labels, and the original position [16, ...] overlapped with
+        // them for any sub-agent row. Anchor the pill to the right of
+        // the gutter boundary so it sits inside the chart canvas where
+        // it has the full 220px of room to the right.
+        const GUTTER_RIGHT = 224;
         return {
             type: 'group',
-            position: [16, yPx - 8],
+            position: [GUTTER_RIGHT, yPx - 8],
             children: [{
                 type: 'rect',
                 shape: { width: 70, height: 16, r: 8 },

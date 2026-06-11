@@ -29,6 +29,20 @@ async function loadSessionDetail(sessionId) {
         renderStats(data.stats);
         renderAnomalies(data.anomalies);
         renderAgentTree(data.agent_tree);
+        // Drive the bottom status bar — the bar is included in the layout
+        // but only the index page was updating it, so visiting
+        // /session/{id} left "Sessions: 0 / Last Updated: —" even for
+        // completed sessions. Show 1 (we're viewing one) and the
+        // session's own end_time / last_updated.
+        if (typeof window.VizStatusBar === 'object' && window.VizStatusBar) {
+            window.VizStatusBar.updateSessionCount(1);
+            const ts = data.end_time || data.last_updated || 0;
+            if (ts > 0 && typeof window.VizStatusBar.updateLastUpdatedTo === 'function') {
+                window.VizStatusBar.updateLastUpdatedTo(ts);
+            } else {
+                window.VizStatusBar.updateLastUpdated();
+            }
+        }
     } catch (e) {
         console.error('Failed to load session:', e);
         document.getElementById('session-meta').textContent = `Error: ${e.message}`;

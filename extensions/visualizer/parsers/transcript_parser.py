@@ -90,10 +90,90 @@ class TranscriptParser:
                 except json.JSONDecodeError:
                     logger.debug("Malformed JSONL line %d", line_num)
                     continue
-                bar = self._entry_to_bar(entry, line_num)
-                if bar is not None:
-                    bars.append(bar)
+                entry_bars = self._entry_to_bars(entry, line_num)
+                if entry_bars:
+                    bars.extend(entry_bars)
+        # Backfill TOOL_CALL bar durations from matching TOOL_RESULT bars.
+        # _tool_use_bar() emits a placeholder bar with duration_ms=0
+        # (the result hasn't been seen yet); _tool_result_bar() emits a
+        # separate bar carrying the actual latency. After the full file
+        # is parsed, copy the resolved end_time + duration_ms back onto
+        # the TOOL_CALL bar so per-tool timing in the gantt / stats bar
+        # reflects real tool latency instead of 0.
+        self._pair_tool_durations(bars)
         return bars
+
+    def _pair_tool_durations(self, bars: list[TimelineBar]) -> None:
+        """Resolve TOOL_CALL bar durations.
+
+        Two passes:
+
+        1. **Primary** — copy ``end_time`` / ``duration_ms`` from the
+           matching ``TOOL_RESULT`` bar (matched by ``tool_use_id``)
+           back onto the ``TOOL_CALL``. Happy path.
+
+        2. **Fallback** — for any ``TOOL_CALL`` still at ``duration_ms
+           == 0`` after pass 1, estimate the duration from the *next*
+           bar's ``start_time``. This covers real-world transcripts where
+           the ``TOOL_RESULT`` block was never persisted: the session
+           was killed mid-tool, the result is in a different log
+           channel, or the upstream writer only emits ``tool_use``
+           events. The next bar's ``start_time`` is when the next
+           operation began — a reasonable upper bound on the tool's
+           actual latency (the agent had to wait at least this long for
+           the tool to return control before doing the next thing).
+
+        Only ``TOOL_CALL`` bars whose ``duration_ms`` is still 0 are
+        touched, so a future path that pre-fills a duration (e.g. live
+        tail with the result already in flight) is preserved. In pass
+        1, the first ``TOOL_CALL`` occurrence wins so a malformed
+        replay with duplicate ``tool_use_id`` values doesn't clobber
+        an earlier bar.
+        """
+        # ---- Pass 1: tool_use ↔ tool_result pairing ----
+        tool_use_index: dict[str, int] = {}
+        for i, bar in enumerate(bars):
+            if bar.type != BarType.TOOL_CALL:
+                continue
+            tuid = bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else None
+            if tuid and tuid not in tool_use_index:
+                tool_use_index[tuid] = i
+
+        for bar in bars:
+            if bar.type != BarType.TOOL_RESULT:
+                continue
+            tuid = bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else None
+            if not tuid:
+                continue
+            idx = tool_use_index.get(tuid)
+            if idx is None:
+                continue
+            tool_call_bar = bars[idx]
+            if tool_call_bar.duration_ms != 0 or bar.duration_ms <= 0:
+                continue
+            tool_call_bar.end_time = bar.end_time
+            tool_call_bar.duration_ms = bar.duration_ms
+
+        # ---- Pass 2: next-bar estimate for still-zero tool_call bars ----
+        # Find the first *strictly later* bar. Sibling tool_use blocks
+        # emitted in the same entry share ``start_time`` (parallel
+        # calls dispatched together); using one as the estimate for
+        # another would yield 0ms and look like the placeholder
+        # we were trying to fix. Skip until we find a bar with
+        # ``start_time > bar.start_time``.
+        for i, bar in enumerate(bars):
+            if bar.type != BarType.TOOL_CALL or bar.duration_ms != 0:
+                continue
+            for j in range(i + 1, len(bars)):
+                nxt = bars[j]
+                if nxt.id == bar.id:
+                    continue
+                if nxt.start_time <= bar.start_time:
+                    # Parallel sibling in the same entry — keep looking.
+                    continue
+                bar.end_time = nxt.start_time
+                bar.duration_ms = int((nxt.start_time - bar.start_time) * 1000)
+                break  # only the first strictly-later next-bar is consulted
 
     def parse_incremental(
         self,
@@ -119,14 +199,24 @@ class TranscriptParser:
                 entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            bar = self._entry_to_bar(entry, line_num)
-            if bar is not None:
-                bars.append(bar)
+            entry_bars = self._entry_to_bars(entry, line_num)
+            if entry_bars:
+                bars.extend(entry_bars)
 
         return bars, new_offset
 
-    def _entry_to_bar(self, entry: dict[str, Any], line_num: int) -> TimelineBar | None:
-        """Convert a single transcript entry to a TimelineBar."""
+    def _entry_to_bars(self, entry: dict[str, Any], line_num: int) -> list[TimelineBar]:
+        """Convert a single transcript entry to one or more TimelineBars.
+
+        A single entry can carry multiple content blocks (Anthropic API
+        format: ``[text, tool_use, tool_use, ...]``). All non-empty blocks
+        are returned as separate bars so per-tool stats, the gantt, and
+        the duration-backfill pass see the full timeline.
+
+        The earlier "first bar per entry" simplification dropped the
+        rest of the blocks, which made Avg Duration stats come out
+        artificially low and hid parallel tool_use calls from the gantt.
+        """
         role = entry.get("role", "")
         msg_type = entry.get("type", "")
         content = entry.get("content", [])
@@ -145,7 +235,7 @@ class TranscriptParser:
         # tool_use/tool_result branches below, so system-role lines like
         # ``__background_complete__`` are simply skipped.
         if role not in ("assistant", "user"):
-            return None
+            return []
 
         # Handle tool_use blocks (inside assistant messages)
         if isinstance(content, list):
@@ -167,16 +257,13 @@ class TranscriptParser:
                     bar = self._text_bar(block, timestamp)
                     if bar:
                         bars.append(bar)
-            # Return the first bar or a composite placeholder
-            if bars:
-                return bars[0]  # Simplified: first bar per entry
-            return None
+            return bars
 
         # Plain text messages (assistant/user with string content)
         text = content if isinstance(content, str) else ""
         if not text:
-            return None
-        return self._message_bar(role, text, timestamp)
+            return []
+        return [self._message_bar(role, text, timestamp)]
 
 
     def _tool_use_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:

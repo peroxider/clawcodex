@@ -1,18 +1,26 @@
 """Operation categorizer (F-95 waterfall legend).
 
-Maps a ``TimelineBar`` to one of five ``OperationCategory`` buckets that
+Maps a ``TimelineBar`` to one of eight ``OperationCategory`` buckets that
 match the reference visualization's top legend:
 
   读取  READ          🟢 Read / Glob / Grep / WebFetch / WebSearch
   执行  EXECUTE       🔵 Bash / Execute / TaskKill / BashOutput / KillShell
   写入  WRITE         🟡 Write / Edit / MultiEdit / NotebookEdit / TodoWrite
   编排  ORCHESTRATE   🟣 Agent / Task (subagent invocation)
-  其他  OTHER         ⚪ anything else (LLM text, tool_result echoes, etc.)
+  推理  LLM_TEXT      🔷 LLM_CALL bars (assistant text/thinking spans)
+  轮次  TURN          🟪 TURN bars (turn boundaries)
+  后台  BACKGROUND    ⬜ polling / wait spans flagged isBackground
+  其他  OTHER         ⚪ anything else (residual catch-all)
 
 Resolution order:
   1. Explicit ``isAgentInvocation`` / ``is_agent_invocation`` flag in detail  → ORCHESTRATE
   2. ``tool_name`` against per-category rule sets
-  3. BarType-based fallback: PHASE/SESSION → ORCHESTRATE, others → OTHER
+  3. BarType-based fallback:
+        LLM_CALL      → LLM_TEXT
+        TURN          → TURN
+        PHASE/SESSION → ORCHESTRATE
+  4. ``isBackground`` detail flag → BACKGROUND
+  5. anything else → OTHER
 
 The categorizer is pure (no I/O), and is safe to invoke from any parser.
 """
@@ -45,7 +53,7 @@ class OperationCategorizer:
 
         Never returns ``None`` — falls back to ``OTHER`` for unclassifiable bars.
         """
-        if bar.category is not None:
+        if bar.category is not None and bar.category != OperationCategory.OTHER:
             return bar.category
 
         detail = bar.detail or {}
@@ -59,11 +67,21 @@ class OperationCategorizer:
             if tool_name in names:
                 return cat
 
-        # 3. BarType fallback.
+        # 3. Background flag wins over bar-type fallback.
+        if detail.get("isBackground") or detail.get("is_background"):
+            return OperationCategory.BACKGROUND
+
+        # 4. BarType-based fallback (split the previous catch-all OTHER).
+        if bar.type == BarType.LLM_CALL:
+            return OperationCategory.LLM_TEXT
+        if bar.type == BarType.TURN:
+            return OperationCategory.TURN
         if bar.type == BarType.PHASE:
             return OperationCategory.ORCHESTRATE
         if bar.type == BarType.SESSION:
             return OperationCategory.ORCHESTRATE
+
+        # 5. Residual catch-all.
         return OperationCategory.OTHER
 
 
