@@ -587,6 +587,7 @@ def message_to_dict(message: MessageLike) -> dict[str, Any]:
         "isApiErrorMessage", "apiError", "error", "errorDetails",
         "model", "origin", "toolUseID", "parentToolUseID", "data",
         "imagePasteIds", "summarizeMetadata", "preventContinuation",
+        "usage",
     ):
         val = _get_field(message, attr, None)
         if val is not None and val is not False:
