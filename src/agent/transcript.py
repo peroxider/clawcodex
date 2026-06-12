@@ -49,7 +49,7 @@ import logging
 import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,33 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Path helpers — stable across Writer / Reader / future GC
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Path helper — overridable via extension hook
+# ---------------------------------------------------------------------------
+
+#: Optional resolver registered by extensions (e.g. ``clawcodex_ext.transcript.nested_path``).
+#: Signature: ``(agent_id: str, parent_session_id: str | None) -> str | None``.
+#: Return ``None`` to fall through to the default flat path.
+_transcript_path_resolver: Callable[[str, Optional[str]], Optional[str]] | None = None
+
+
+def register_transcript_path_resolver(
+    resolver: Callable[[str, Optional[str]], Optional[str]],
+) -> None:
+    """Register a custom transcript path resolver.
+
+    The resolver receives ``(agent_id, parent_session_id)`` and should
+    return an absolute path (as ``str``) or ``None`` to fall through to
+    the default ``~/.clawcodex/transcripts/<agent_id>.jsonl``.
+
+    Provided so extensions in ``clawcodex_ext/`` can nest sub-agent
+    transcripts under the parent session's directory tree without
+    patching core code.
+    """
+    global _transcript_path_resolver
+    _transcript_path_resolver = resolver
 
 
 def _transcripts_root() -> Path:
@@ -78,22 +105,19 @@ def get_agent_transcript_path(
 ) -> str:
     """Absolute path to the agent's JSONL transcript.
 
-    When *parent_session_id* is provided the transcript lives under
-    ``~/.clawcodex/sessions/<parent_session_id>/subagents/agent-<safe_id>.jsonl``
-    so it travels with the parent session's directory.  When it is
-    ``None`` the legacy path ``~/.clawcodex/transcripts/<safe_id>.jsonl``
-    is used.
+    Delegates to a registered extension resolver first; when none is
+    registered (or the resolver returns ``None``), falls back to the
+    default flat path ``~/.clawcodex/transcripts/<safe_id>.jsonl``.
 
     Returns a string (not a ``Path``) because ``LocalAgentTaskState.output_file``
     is typed as ``str`` for serializability. Callers that prefer
     ``Path(get_agent_transcript_path(...))`` can still wrap it.
     """
     safe_id = _sanitize_agent_id(agent_id)
-    if parent_session_id:
-        _safe_session = _sanitize_agent_id(parent_session_id)
-        root = Path.home() / ".clawcodex" / "sessions" / _safe_session / "subagents"
-        root.mkdir(parents=True, exist_ok=True)
-        return str(root / f"agent-{safe_id}.jsonl")
+    if _transcript_path_resolver is not None:
+        override = _transcript_path_resolver(agent_id, parent_session_id)
+        if override is not None:
+            return override
     return str(_transcripts_root() / f"{safe_id}.jsonl")
 
 
@@ -340,4 +364,5 @@ __all__ = [
     "TranscriptReader",
     "get_agent_transcript_path",
     "ensure_transcript_dir",
+    "register_transcript_path_resolver",
 ]

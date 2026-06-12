@@ -28,22 +28,48 @@ from src.agent.transcript import (
 
 
 def test_transcript_path_uses_agent_id_and_jsonl_suffix() -> None:
-    # Fallback path (no parent_session_id)
+    # Default flat path (no resolver registered)
     p = get_agent_transcript_path("a1b2c3d4z")
     assert p.endswith("/a1b2c3d4z.jsonl")
     assert ".clawcodex/transcripts" in p
 
-    # Nested path (with parent_session_id)
+    # parent_session_id param accepted but ignored by default (no resolver)
     p2 = get_agent_transcript_path("a1b2c3d4z", parent_session_id="ses-01")
-    assert p2.endswith(".jsonl")
-    assert ".clawcodex/sessions/ses-01/subagents/agent-" in p2
+    assert p2.endswith("/a1b2c3d4z.jsonl")
+    assert ".clawcodex/transcripts" in p2
 
 
-def test_transcript_path_nested_with_parent_session_id() -> None:
-    """When parent_session_id is given, path nests under sessions/<id>/subagents/."""
-    p = get_agent_transcript_path("my-agent", parent_session_id="parent-xyz")
-    assert ".clawcodex/sessions/parent-xyz/subagents/agent-my-agent.jsonl" in p
-    assert p.endswith("agent-my-agent.jsonl")
+def test_transcript_path_with_resolver(tmp_path: Path) -> None:
+    """Registered resolver takes effect; parent_session_id routes to nested dir."""
+    from src.agent.transcript import register_transcript_path_resolver
+
+    calls: list[tuple[str, str | None]] = []
+
+    def stub_resolver(
+        agent_id: str, parent_session_id: str | None = None
+    ) -> str | None:
+        calls.append((agent_id, parent_session_id))
+        if parent_session_id:
+            return str(tmp_path / "subagents" / f"agent-{agent_id}.jsonl")
+        return None
+
+    register_transcript_path_resolver(stub_resolver)
+    try:
+        # With parent_session_id → resolver returns nested path
+        p = get_agent_transcript_path("my-agent", parent_session_id="p-xyz")
+        assert p.endswith("agent-my-agent.jsonl")
+        assert "subagents" in p
+        assert calls == [("my-agent", "p-xyz")]
+
+        calls.clear()
+
+        # Without parent_session_id → resolver returns None → fallback flat
+        p2 = get_agent_transcript_path("my-agent")
+        assert ".clawcodex/transcripts" in p2
+        assert calls == [("my-agent", None)]
+    finally:
+        # Clean up the resolver so other tests are unaffected
+        register_transcript_path_resolver(lambda _a, _ps: None)  # noqa: ARG005
 
 
 def test_transcript_path_rejects_traversal() -> None:
