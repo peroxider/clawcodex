@@ -361,11 +361,42 @@ def make_agent_tool(
         prompt: str,
         agent_type: str,
     ) -> ToolResult:
-        """Run an agent synchronously and return the result."""
+        """Run an agent synchronously and return the result.
+
+        Ch04 / Sync-Agent-Transcript (2026-06-13): Persist the sub-agent's
+        internal message transcript to disk, matching what the async path
+        already does via ``TranscriptWriter``.  This ensures ``cli --resume``,
+        the visualizer, and the session-analyzer can inspect sub-agent
+        internals even when ``run_in_background`` was not set.
+
+        The transcript is written **after** the agent finishes — simpler than
+        streaming because the sync path runs in a thread-pool / nested event
+        loop.  A lost transcript write is logged but never propagated, so a
+        filesystem error cannot crash the agent execution.
+        """
         from ..protocol import ToolResult as TR
         from src.types.messages import Message
+        from src.agent.transcript import TranscriptWriter, get_agent_transcript_path
+        from src.bootstrap.state import get_session_id
 
         agent_messages: list[Message] = []
+
+        # Compute the sidechain transcript path so sync agents also leave
+        # a persistent record (nested under the parent session).
+        parent_sid = get_session_id()
+        transcript_path = get_agent_transcript_path(
+            agent_id, parent_session_id=parent_sid,
+        )
+        transcript_writer: TranscriptWriter | None = None
+        try:
+            transcript_writer = TranscriptWriter(
+                transcript_path, parent_session_id=parent_sid,
+            )
+        except Exception:
+            logger.exception(
+                "sync agent transcript open failed for %s; continuing without persistence",
+                agent_id,
+            )
 
         try:
             loop = asyncio.get_event_loop()
@@ -384,6 +415,17 @@ def make_agent_tool(
             agent_messages = asyncio.run(
                 _collect_agent_messages(run_params)
             )
+        finally:
+            if transcript_writer is not None:
+                try:
+                    for msg in agent_messages:
+                        transcript_writer.append(msg)
+                except Exception:
+                    logger.exception(
+                        "failed to write sync agent transcript for %s", agent_id,
+                    )
+                finally:
+                    transcript_writer.close()
 
         # Finalize result
         metadata = {
