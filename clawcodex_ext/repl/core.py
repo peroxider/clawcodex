@@ -427,6 +427,7 @@ from src.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import StreamEvent
 from src.types.messages import AssistantMessage, SystemMessage, UserMessage
 from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
+from src.utils.abort_controller import AbortController
 
 # New command system imports
 from src.command_system import (
@@ -585,13 +586,35 @@ class ClawcodexREPL:
         else:
             self.tool_context.permission_handler = self._handle_permission_request
 
+        # Runtime permission controller — the single chokepoint for
+        # Shift+Tab cycles and ``/permissions`` picks. The controller
+        # owns the threading.Lock that serializes the multi-field swap
+        # (``permission_context`` + ``permission_handler`` +
+        # ``allow_docs``) so the agent worker thread never sees a torn
+        # write. ``default_handler`` is the snapshotted non-bypass
+        # handler restored on every cycle out of ``bypassPermissions``.
+        # ``app_state_store`` is None on the REPL — there's no reactive
+        # ``AppState`` store wired here today, so the controller skips
+        # the AppState write (the CCR/SDK listener chain). The TUI path
+        # wires the store at controller construction time.
+        from clawcodex_ext.permissions.runtime import (
+            RuntimePermissionController,
+        )
+
+        self._runtime_permission_controller = RuntimePermissionController(
+            tool_context_factory=lambda: self.tool_context,
+            default_handler=self._handle_permission_request,
+            app_state_store=None,
+            notify=self._notify_permission_mode_change,
+        )
+
         # Persistent bottom-toolbar accumulators. Mirrors the TS Ink
         # status line that always shows model · provider · cwd · turn /
         # token totals.
         self._stats_turns: int = 0
         self._stats_input_tokens: int = 0
         self._stats_output_tokens: int = 0
-        self._direct_stream_abort: bool = False
+        self._direct_abort_controller: AbortController | None = None
 
         # Messages the user typed into LiveStatus while the agent was
         # working. The main run() loop drains this before falling back to
@@ -1279,6 +1302,7 @@ class ClawcodexREPL:
                             status_message,
                             on_submit=_on_submit,
                             on_expand=self._do_expand_last,
+                            on_permission_cycle=self._apply_permission_mode_cycle,
                             completer=self.completer,
                         ) as status:
                             status_ref.append(status)
@@ -3079,34 +3103,49 @@ class ClawcodexREPL:
         return descriptions.get(mode, "")
 
     def _apply_permission_mode(self, mode: PermissionMode) -> None:
-        """Apply a permission mode change to all stateful objects."""
-        from src.permissions import apply_permission_update, PermissionUpdateSetMode
+        """Apply a specific permission mode via the runtime controller.
 
-        ctx = self.tool_context
-        if ctx is None:
+        Called by the ``/permissions`` slash command picker. Routes
+        through :class:`RuntimePermissionController` so the same lock /
+        AppState-write / handler-restore logic is shared with the
+        Shift+Tab keybinding path. Returns the mode applied; the
+        caller is responsible for printing a user-facing confirmation.
+        """
+        next_mode = self._runtime_permission_controller.set_mode(mode)
+        self._permission_mode = next_mode
+        return next_mode
+
+    def _apply_permission_mode_cycle(self) -> None:
+        """Shift+Tab: cycle to the next permission mode.
+
+        Bound to ``LiveStatus.on_permission_cycle`` at all three
+        construction sites so the keybinding fires during the agent
+        run (the prompt_toolkit background thread remains alive while
+        ``_run_query`` blocks on the worker).
+        """
+        next_mode = self._runtime_permission_controller.cycle()
+        self._permission_mode = next_mode
+
+    def _notify_permission_mode_change(self, mode: str) -> None:
+        """Surface a mode change in the live status row or console.
+
+        Called by the runtime controller after the multi-field swap.
+        When a :class:`LiveStatus` is mounted (i.e. the agent is
+        running), update its visible message — the user sees the new
+        mode inline in the spinner row. Otherwise fall through to
+        :meth:`console.print` so the change is visible between turns.
+        """
+        status = getattr(self, "_active_live_status", None)
+        if status is not None:
+            try:
+                status.update(f"mode: {mode}")
+            except Exception:
+                pass
             return
-
-        # Build an updated permission context
-        next_ctx = apply_permission_update(
-            ctx.permission_context,
-            PermissionUpdateSetMode(
-                type="setMode",
-                destination="session",
-                mode=mode,
-            ),
-        )
-
-        # Update all stateful references
-        self._permission_mode = mode
-        ctx.permission_context = next_ctx
-
-        # Update the handler based on the new mode
-        if mode == "bypassPermissions":
-            ctx.permission_handler = lambda _tn, _msg, _sug: (True, False)
-            ctx.allow_docs = True
-        else:
-            ctx.permission_handler = self._handle_permission_request
-            ctx.allow_docs = False
+        try:
+            self.console.print(f"[dim]Permission mode: {mode}[/dim]")
+        except Exception:
+            pass
 
     def _try_run_skill_slash(self, raw: str) -> bool:
         text = raw.strip()
@@ -3290,32 +3329,41 @@ class ClawcodexREPL:
         return not any(marker in text for marker in code_task_markers)
 
     def _stream_direct_response(self, on_text_chunk=None) -> str | None:
-        streamed_chunks: list[str] = []
+        """Stream a response via ``chat_stream_response`` which supports abort.
+
+        Uses the upstream provider's ``chat_stream_response`` (with built-in
+        ``StreamAbortGuard``) instead of ``chat_stream``, so CTRL+C via the
+        ``AbortController`` terminates the HTTP connection immediately
+        instead of waiting for the next chunk to arrive.
+        """
+
+        abort_controller = getattr(self, '_direct_abort_controller', None)
+        if abort_controller is None:
+            abort_controller = AbortController()
+        abort_signal = abort_controller.signal
+        # If user already cancelled before we got here, bail fast.
+        if abort_signal.aborted:
+            return None
 
         try:
             api_messages, call_kwargs = self._build_direct_stream_payload()
-            stream_iter = self.provider.chat_stream(api_messages, tools=None, **call_kwargs)
-            for chunk in stream_iter:
-                # ESC inside ``LiveStatus`` flips this flag; bail at the next
-                # streamed chunk so the user feels an immediate response.
-                if getattr(self, "_direct_stream_abort", False):
-                    break
-                if not chunk:
-                    continue
-                streamed_chunks.append(chunk)
-                if on_text_chunk is not None:
-                    on_text_chunk(chunk)
+            response = self.provider.chat_stream_response(
+                api_messages, tools=None,
+                abort_signal=abort_signal,
+                on_text_chunk=on_text_chunk,
+                **call_kwargs,
+            )
         except Exception:
-            # Safe fallback: only fall back when nothing has been emitted yet.
-            if not streamed_chunks:
+            # Provider raised (e.g. AbortError from user cancel, or a
+            # real error). If the abort controller was tripped, the user
+            # cancelled — return None without logging an error.
+            if abort_signal.aborted:
                 return None
             raise
 
-        if not streamed_chunks:
-            return None
-
-        full_response = "".join(streamed_chunks)
-        self.session.conversation.add_assistant_message(full_response)
+        full_response = response.content if response and response.content else None
+        if full_response:
+            self.session.conversation.add_assistant_message(full_response)
         return full_response
 
     def _get_last_assistant_text(self) -> str | None:
@@ -3502,10 +3550,18 @@ class ClawcodexREPL:
                     _stop_status_once()
                     self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
 
-                self._direct_stream_abort = False
+                self._direct_abort_controller = AbortController()
 
                 def _cancel_direct_stream() -> None:
-                    self._direct_stream_abort = True
+                    if self._direct_abort_controller is not None:
+                        self._direct_abort_controller.abort("user_interrupt")
+                    # Immediate visual feedback — update the LiveStatus message
+                    status = getattr(self, '_active_live_status', None)
+                    if status is not None:
+                        try:
+                            status.update("[yellow]Cancelling…[/yellow]")
+                        except Exception:
+                            pass
 
                 _direct_status_ref: list[LiveStatus] = []
 
@@ -3524,7 +3580,8 @@ class ClawcodexREPL:
                     _background_requested_direct = True
                     # Also cancel the direct stream so it stops
                     # consuming tokens immediately.
-                    self._direct_stream_abort = True
+                    if self._direct_abort_controller is not None:
+                        self._direct_abort_controller.abort("background")
 
                 with _pt_patch_stdout(raw=True):
                     with LiveStatus(
@@ -3533,6 +3590,7 @@ class ClawcodexREPL:
                         on_submit=_on_submit_direct,
                         on_expand=self._do_expand_last,
                         on_background=_on_background_direct,
+                        on_permission_cycle=self._apply_permission_mode_cycle,
                         completer=self.completer,
                     ) as status:
                         _direct_status_ref.append(status)
@@ -3545,6 +3603,11 @@ class ClawcodexREPL:
                             self._active_live_status = None
                 if direct_response is not None:
                     self.console.print("\n")
+                    return
+                # User pressed ESC/Ctrl+C during direct stream — skip the
+                # engine path entirely instead of falling through.
+                if (self._direct_abort_controller is not None
+                        and self._direct_abort_controller.signal.aborted):
                     return
                 if _background_requested_direct:
                     raise BackgroundEscape()
@@ -3843,6 +3906,15 @@ class ClawcodexREPL:
                     engine.interrupt()
                 except Exception:
                     pass
+                # Immediate visual feedback — update the LiveStatus message
+                # so the user sees "Cancelling…" without waiting for the
+                # abort to propagate through the provider stream.
+                status = getattr(self, '_active_live_status', None)
+                if status is not None:
+                    try:
+                        status.update("[yellow]Cancelling…[/yellow]")
+                    except Exception:
+                        pass
 
             _engine_status_ref: list[LiveStatus] = []
 
@@ -3873,6 +3945,7 @@ class ClawcodexREPL:
                     on_submit=_on_submit_engine,
                     on_expand=self._do_expand_last,
                     on_background=_on_background_engine,
+                    on_permission_cycle=self._apply_permission_mode_cycle,
                     completer=self.completer,
                 ) as status:
                     _engine_status_ref.append(status)

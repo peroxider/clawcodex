@@ -197,7 +197,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._stats_turns: int = 0
         self._stats_input_tokens: int = 0
         self._stats_output_tokens: int = 0
-        self._direct_stream_abort: bool = False
+        self._direct_abort_controller: AbortController | None = None
         self._queued_prompts: list[str] = []
         self._queued_prompts_lock = threading.Lock()
         self._permission_prompt_lock = threading.Lock()
