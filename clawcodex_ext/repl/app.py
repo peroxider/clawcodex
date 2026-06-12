@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any
 
 from src.agent import Session
 from src.providers.runtime import build_provider_from_config
-from src.repl.core import ClawcodexREPL, _SlashOnlyCompleter
+from src.repl.core import ClawcodexREPL, _MessageHistoryCompleter, _SlashOnlyCompleter
 
 if TYPE_CHECKING:
     pass
@@ -272,8 +272,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._at_completer = AtFileCompleter(
             cwd=str(self.tool_context.workspace_root)
         )
+        self._message_history_completer = _MessageHistoryCompleter(
+            self._get_user_message_history
+        )
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer]
+            [self._slash_completer, self._at_completer, self._message_history_completer]
         )
 
         # Warm the slash-command suggestion cache in the background.
@@ -380,6 +383,22 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 else:
                     ctx.permission_handler = self._handle_permission_request
                     ctx.allow_docs = False
+
+            @self.bindings.add("tab")  # type: ignore[attr-defined]
+            def _tab_accepts_completion_or_triggers_message_history(event):  # type: ignore[no-untyped-def]
+                """Tab: accept the current completion, or start message-history
+                completion if no popup is open.
+
+                When a completion menu is already displayed, Tab cycles to the
+                next item (prompt_toolkit default).  When no popup is open,
+                this starts the merged completer's completion with
+                ``select_first=True`` so the user gets an instant suggestion
+                from slash commands, file paths, or message history.
+                """
+                buf = event.current_buffer
+                if buf.complete_state:
+                    return
+                buf.start_completion(select_first=True)
 
         # ---- PromptSession ----
         from prompt_toolkit import PromptSession

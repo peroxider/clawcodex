@@ -221,6 +221,7 @@ class ClawCodexTUI(App):
             workspace_root=self.workspace_root,
             words_provider=self._slash_command_words,
             suggestions_provider=self._slash_command_suggestions,
+            message_history_provider=self._message_history_provider,
             # Pass the live BaseProvider so the status line's advisor
             # segment can call ``decide_advisor_mode(provider, ...)``
             # and show the correct mode label (server/client/inactive).
@@ -1292,6 +1293,28 @@ class ClawCodexTUI(App):
 
     def _slash_command_suggestions(self) -> list[CommandSuggestion]:
         return build_command_suggestions(self.workspace_root, self.tool_context)
+
+    def _message_history_provider(self) -> list[str]:
+        """Return previous user messages from the session conversation."""
+        try:
+            messages = getattr(self.session, "conversation", None)
+            if messages is None:
+                return []
+            msgs = getattr(messages, "messages", [])
+            from src.types.messages import UserMessage
+            result: list[str] = []
+            for msg in msgs:
+                if isinstance(msg, UserMessage):
+                    content = msg.content
+                    if isinstance(content, str):
+                        result.append(content)
+                    elif isinstance(content, list):
+                        for block in content:
+                            if hasattr(block, "text"):
+                                result.append(block.text)
+            return result
+        except Exception:
+            return []
 
     def _post_to_screen(self, message: Any) -> None:
         target = self._repl_screen or self

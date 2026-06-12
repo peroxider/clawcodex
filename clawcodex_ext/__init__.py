@@ -7,6 +7,10 @@ from clawcodex_ext.memory.scope_aware_prompt import install_memory_extension  # 
 from clawcodex_ext.providers import (  # noqa: F401 — registers model discovery hooks
     _codex_api_discovery,
 )
+from clawcodex_ext.providers.patches import install as _install_provider_patches  # noqa: F401
+from clawcodex_ext.transcript.nested_path import init as _init_nested_transcript  # noqa: F401
 
 install_permission_extensions()
 install_memory_extension()
+_install_provider_patches()
+_init_nested_transcript()

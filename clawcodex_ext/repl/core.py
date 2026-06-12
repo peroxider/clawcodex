@@ -269,6 +269,111 @@ class _SlashOnlyCompleter(Completer):
                 return None, 0
         return None, 0
 
+class _MessageHistoryCompleter(Completer):
+    """Trigger autocompletion from previous user messages in the session.
+
+    This completer provides "smart" completion based on the conversation
+    history: when the user starts typing a word that matches the beginning
+    of a previous user message, it surfaces that full message as a
+    completion candidate.
+
+    Rules:
+
+    * Only triggers when the cursor is at position 0 (start of buffer)
+      OR when the cursor sits on a word that follows whitespace
+      (i.e. mid-input completion on a whitespace-delimited token).
+    * Collects user message text from ``history_messages`` (a list of
+      strings supplied by the caller via a property accessor).
+    * Ranks: exact match of entire message first, then longest-prefix
+      match, then by recency (most recent first).
+    * Yields at most 5 candidates to keep the popup uncluttered.
+    """
+
+    def __init__(self, history_provider):
+        """Initialize with a callable that returns a list of user message
+        strings from previous turns.
+
+        Args:
+            history_provider: A callable returning ``list[str]`` of
+                previous user messages. May raise; failures are
+                silently ignored so completions never crash the REPL.
+        """
+        self._history_provider = history_provider
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        cursor_pos = document.cursor_position
+
+        # Only complete when cursor is at the very start, OR when
+        # the cursor sits inside a word that follows whitespace.
+        # This avoids interfering with normal typing mid-sentence.
+        current_word = document.get_word_under_cursor()
+        if not current_word:
+            return
+
+        # Check: is the word at position 0 (start of buffer)?
+        if cursor_pos == len(current_word):
+            start_pos = 0
+        else:
+            # Is there whitespace (or nothing) before this word?
+            if cursor_pos < len(text):
+                prefix = text[:cursor_pos - len(current_word)]
+                if prefix and not prefix[-1].isspace():
+                    return  # mid-word completion — don't trigger
+                start_pos = len(text) - len(text[:cursor_pos])
+                # Recalculate start_pos properly
+                word_start = cursor_pos - len(current_word)
+                if word_start > 0 and not text[word_start - 1].isspace():
+                    return
+                start_pos = word_start
+            else:
+                return
+
+        partial = current_word
+
+        try:
+            history = self._history_provider() or []
+        except Exception:
+            return
+
+        # Find matching messages
+        partial_lower = partial.lower()
+        scored: list[tuple[int, int, str]] = []  # (rank, index, full_msg)
+        seen: set[str] = set()
+
+        for idx, msg in enumerate(reversed(history)):
+            if not isinstance(msg, str):
+                continue
+            msg_key = msg.lower()
+            if msg_key in seen:
+                continue
+            seen.add(msg_key)
+
+            if msg_key == partial_lower:
+                # Exact match — full message already typed
+                scored.append((0, idx, msg))
+            elif msg.lower().startswith(partial_lower):
+                # Prefix match — message starts with what user typed
+                scored.append((1, idx, msg))
+            elif _fuzzy_subseq(msg.lower(), partial_lower):
+                # Fuzzy subsequence match
+                scored.append((2, idx, msg))
+
+        # Sort: rank asc, then recency (lower idx = more recent)
+        scored.sort(key=lambda t: (t[0], t[1]))
+        scored = scored[:5]  # limit to 5 suggestions
+
+        for rank, idx, full_msg in scored:
+            # Replace the partial word with the full message
+            start_position = -len(current_word)
+            yield Completion(
+                text=full_msg,
+                start_position=start_position,
+                display=full_msg[:80] + ("..." if len(full_msg) > 80 else ""),
+                display_meta="history",
+            )
+
+
 try:
     from rich.cells import cell_len
     from rich.console import Console, Group
@@ -571,8 +676,11 @@ class ClawcodexREPL:
         self._at_completer = AtFileCompleter(
             cwd=str(self.tool_context.workspace_root)
         )
+        self._message_history_completer = _MessageHistoryCompleter(
+            self._get_user_message_history
+        )
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer]
+            [self._slash_completer, self._at_completer, self._message_history_completer]
         )
 
         # Warm the slash-command suggestion cache in the background so the
@@ -695,6 +803,27 @@ class ClawcodexREPL:
                     # Fallback: print directly. Prompt may redraw oddly
                     # but at least the expansion lands in scrollback.
                     self._do_expand_last()
+
+            @self.bindings.add("tab")  # type: ignore[attr-defined]
+            def _tab_accepts_completion_or_triggers_message_history(event):  # type: ignore[no-untyped-def]
+                """Tab: accept the current completion, or start message-history
+                completion if no popup is open.
+
+                When a completion menu is already displayed, Tab cycles to the
+                next item (prompt_toolkit default).  When no popup is open,
+                this starts the merged completer's completion with
+                ``select_first=True`` so the user gets an instant suggestion
+                from slash commands, file paths, or message history.
+                """
+                buf = event.current_buffer
+                if buf.complete_state:
+                    # Popup is open — Tab cycles to next item (default PTk
+                    # behavior). We just prevent Enter from closing it.
+                    return
+                # No popup open — start completion. The merged completer
+                # will try slash, @-file, and message-history completers
+                # in order, picking whichever matches the current input.
+                buf.start_completion(select_first=True)
 
         self.prompt_session = PromptSession(
             history=FileHistory(str(history_file)),
@@ -1236,6 +1365,41 @@ class ClawcodexREPL:
             deduped.append(w)
         return deduped
 
+    def _get_user_message_history(self) -> list[str]:
+        """Return previous user message text from the session.
+
+        Reads from ``self.session.conversation.messages`` which is the
+        canonical message store shared with the QueryEngine. Extracts
+        only ``UserMessage`` entries so the completer only suggests
+        text the user actually typed (not assistant responses).
+        Returns messages in chronological order (oldest first).
+        """
+
+        try:
+            conv = getattr(self, "session", None)
+            if conv is None:
+                return []
+            messages = getattr(conv, "messages", None)
+            if messages is None:
+                return []
+            from src.types.messages import UserMessage
+
+            result: list[str] = []
+            for msg in messages:
+                if isinstance(msg, UserMessage):
+                    # ``content`` can be str or list[ContentBlock].
+                    # We extract plain text for completion purposes.
+                    content = msg.content
+                    if isinstance(content, str):
+                        result.append(content)
+                    elif isinstance(content, list):
+                        for block in content:
+                            if hasattr(block, "text"):
+                                result.append(block.text)
+            return result
+        except Exception:
+            return []
+
     # REPL-only built-ins not covered by the shared TUI ``LOCAL_BUILTINS``.
     # Used to seed descriptions for the prompt_toolkit completion menu so
     # ``/save`` etc. show meta text alongside the registry-backed entries.
@@ -1336,7 +1500,7 @@ class ClawcodexREPL:
                     suggestions_provider=self._get_slash_command_suggestions,
                 )
             self.completer = merge_completers(
-                [self._slash_completer, self._at_completer]
+                [self._slash_completer, self._at_completer, self._message_history_completer]
             )
             if hasattr(self, "prompt_session") and getattr(self.prompt_session, "completer", None) is not None:
                 self.prompt_session.completer = self.completer

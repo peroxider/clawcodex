@@ -87,6 +87,7 @@ class REPLScreen(Screen):
         workspace_root: Path,
         words_provider: Callable[[], list[str]],
         suggestions_provider: Callable[[], list["CommandSuggestion"]] | None = None,
+        message_history_provider: Callable[[], list[str]] | None = None,
         provider_instance: object | None = None,
     ) -> None:
         super().__init__()
@@ -96,6 +97,7 @@ class REPLScreen(Screen):
         self._workspace_root = Path(workspace_root)
         self._words_provider = words_provider
         self._suggestions_provider = suggestions_provider
+        self._message_history_provider = message_history_provider
         self._provider_instance = provider_instance
 
         self.header_widget = StartupHeader(
@@ -114,6 +116,7 @@ class REPLScreen(Screen):
         self.prompt_input = PromptInput(
             words_provider=words_provider,
             suggestions_provider=suggestions_provider,
+            message_history_provider=message_history_provider,
         )
         # ARIA live region — stays height: 1 and only announces the
         # most recent status change. Mounted just above the status
