@@ -44,6 +44,8 @@ class SourceOperation:
     parameters: list[ParamSpec] = field(default_factory=list)
     return_type: str | None = None
     source_code: str = ""            # 完整源码片段，嵌入技能参考
+    class_name: str | None = None    # 所属类名（用于 IO_RELATION 的 ClassName.methodName 命名）
+    file_stem: str = ""              # 源文件名（不含 .py，用于顶层函数去歧义）
 
 
 @dataclass
@@ -139,7 +141,7 @@ class SourceCodeParser:
                 getattr(node, "parent", None), ast.ClassDef
             ):
                 # Module-level function (not inside a class)
-                op = self._extract_operation(node, lines)
+                op = self._extract_operation(node, lines, file_path=path)
                 if op:
                     operations.append(op)
 
@@ -252,8 +254,9 @@ class SourceCodeParser:
                     "__exit__",
                 ):
                     continue
-                op = self._extract_operation(node, lines)
+                op = self._extract_operation(node, lines, file_path=file_path)
                 if op:
+                    op.class_name = cls_node.name
                     operations.append(op)
 
         return operations
@@ -271,7 +274,7 @@ class SourceCodeParser:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 if node.name.startswith("_"):
                     continue
-                op = self._extract_operation(node, lines)
+                op = self._extract_operation(node, lines, file_path=file_path)
                 if op:
                     operations.append(op)
 
@@ -281,8 +284,15 @@ class SourceCodeParser:
         self,
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         lines: list[str],
+        file_path: Path | None = None,
     ) -> SourceOperation | None:
-        """从 AST 函数/方法节点提取 SourceOperation。"""
+        """从 AST 函数/方法节点提取 SourceOperation。
+
+        Args:
+            node: AST 函数或异步函数定义节点。
+            lines: 源文件按行分割的列表。
+            file_path: 源文件路径，用于填充 ``file_stem`` 字段。
+        """
         # docstring
         docstring = ast.get_docstring(node) or ""
         description, params_from_doc = self._parse_docstring(docstring)
@@ -312,6 +322,7 @@ class SourceCodeParser:
             parameters=ast_params,
             return_type=return_type,
             source_code=source_code,
+            file_stem=file_path.stem if file_path else "",
         )
 
     # ---- docstring parsing ------------------------------------------------
@@ -549,7 +560,13 @@ class SourceCodeParser:
     def _build_io_schema(
         operations: list[SourceOperation],
     ) -> tuple[dict, dict]:
-        """从操作列表构建输入/输出 schema。"""
+        """从操作列表构建输入/输出 schema。
+
+        Returns:
+            (input_schema, output_schema) 元组：
+            input_schema  → {参数名: 类型提示}  如 ``{"path": "str"}``
+            output_schema → {方法名: 返回类型}  如 ``{"encode": "bool"}``
+        """
         input_schema: dict[str, str] = {}
         output_schema: dict[str, str] = {}
 

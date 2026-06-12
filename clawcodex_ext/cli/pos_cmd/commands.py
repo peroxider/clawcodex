@@ -46,14 +46,14 @@ def run_pos_command(args: list[str]) -> int:
     return 2
 
 
-def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str]:
+def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str, int, str, str, str, bool]:
     """Parse ``pos convert`` arguments.
 
-    Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir).
+    Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview).
     """
     if not args:
         print("error: missing <sdk_spec> argument", file=sys.stderr)
-        print("usage: clawcodex pos convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>]", file=sys.stderr)
+        print("usage: clawcodex pos convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>]", file=sys.stderr)
         raise SystemExit(2)
 
     sdk_spec = args[0]
@@ -62,6 +62,11 @@ def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str]:
     agent_name = ""
     strategy = ""
     skills_dir = ""
+    max_groups = 0
+    mapping_rules_file = ""
+    llm_provider = ""
+    llm_model = ""
+    preview = False
 
     i = 1
     while i < len(args):
@@ -81,17 +86,32 @@ def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str]:
         elif token == "--skills" and i + 1 < len(args):
             skills_dir = args[i + 1]
             i += 2
+        elif token == "--max-groups" and i + 1 < len(args):
+            max_groups = int(args[i + 1])
+            i += 2
+        elif token == "--mapping-rules" and i + 1 < len(args):
+            mapping_rules_file = args[i + 1]
+            i += 2
+        elif token == "--llm-provider" and i + 1 < len(args):
+            llm_provider = args[i + 1]
+            i += 2
+        elif token == "--llm-model" and i + 1 < len(args):
+            llm_model = args[i + 1]
+            i += 2
+        elif token == "--preview":
+            preview = True
+            i += 1
         else:
             print(f"error: unknown argument: {token}", file=sys.stderr)
             raise SystemExit(2)
 
-    return sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir
+    return sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview
 
 
 def _handle_convert(args: list[str]) -> int:
     """Handle ``pos convert`` — convert an SOP spec into an Agent."""
     try:
-        sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir = _parse_convert_args(args)
+        sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview = _parse_convert_args(args)
     except SystemExit:
         return 2
 
@@ -99,7 +119,7 @@ def _handle_convert(args: list[str]) -> int:
 
     # Auto-detection: if sdk_spec is an existing directory, use SourceCodeParser
     if sdk_path.is_dir():
-        return _handle_convert_from_source(sdk_path, output_dir, requirements, agent_name, strategy, skills_dir)
+        return _handle_convert_from_source(sdk_path, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview)
 
     # Legacy path: sdk_spec is a comma-separated spec string
     from extensions.pos_converter.convert_pos_skill import convert_pos_to_agent
@@ -142,14 +162,35 @@ def _handle_convert_from_source(
     agent_name: str | None,
     strategy: str,
     skills_dir: str,
+    max_groups: int = 0,
+    mapping_rules_file: str = "",
+    llm_provider_name: str = "",
+    llm_model: str = "",
+    preview: bool = False,
 ) -> int:
-    """Convert a source code directory into an Agent using SourceCodeParser."""
-    from extensions.pos_converter.source_parser import SourceCodeParser, SourceComponent
-    from extensions.pos_converter.skill_grouper import GroupStrategy, group_source_components
+    """Convert a source code directory into Agents via SourceCodeParser + grouping strategy.
+
+    Generates one agent per grouped Skill (not per raw SourceComponent),
+    plus an overview agent.  The --strategy flag controls how components
+    are merged: COMPONENT_GROUP (default, 1:1), KEYWORD_MATCH, IO_RELATION,
+    or LLM_SEMANTIC.
+
+    --mapping-rules accepts a YAML/JSON file with custom MappingRule definitions
+    for KEYWORD_MATCH strategy.
+    --llm-provider and --llm-model control which LLM backend is used for
+    LLM_SEMANTIC strategy.  When omitted, the default provider from
+    ~/.clawcodex/config.json is used.
+    """
+    from extensions.pos_converter.source_parser import SourceCodeParser
+    from extensions.pos_converter.skill_grouper import GroupStrategy, group_source_components, SkillSpec, MappingRule, MatchType
     from extensions.pos_converter.agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 
     parser = SourceCodeParser(str(sdk_path))
     components = parser.parse()
+
+    if not components:
+        print("error: No source components found in directory", file=sys.stderr)
+        return 2
 
     parsed_strategy = strategy.lower() if strategy else ""
     if parsed_strategy == "keyword":
@@ -161,32 +202,84 @@ def _handle_convert_from_source(
     else:
         group_strategy = GroupStrategy.COMPONENT_GROUP
 
-    group_result = group_source_components(components, strategy=group_strategy)
+    custom_rules: list[MappingRule] | None = None
+    if mapping_rules_file and group_strategy == GroupStrategy.KEYWORD_MATCH:
+        custom_rules = _load_mapping_rules(mapping_rules_file)
 
-    # Build overview info for multi-component projects
-    overview_info = []
-    for comp in components:
-        info = AgentComponentInfo(
-            name=f"{comp.name}-agent",
-            description=comp.description,
-            capabilities=[op.name for op in comp.operations[:5]],
-            input_types=list(comp.input_schema.keys()),
-            output_types=list(comp.output_schema.keys()),
-            invoke_pattern=f'@{comp.name}-agent {{task}}',
+    llm_provider_obj = None
+    if group_strategy == GroupStrategy.LLM_SEMANTIC:
+        llm_provider_obj = _create_llm_provider(llm_provider_name, llm_model)
+        if llm_provider_obj is None:
+            print("warning: LLM_SEMANTIC requires a configured LLM provider; falling back to keyword match strategy", file=sys.stderr)
+            group_strategy = GroupStrategy.KEYWORD_MATCH
+
+    group_result = group_source_components(
+        components,
+        strategy=group_strategy,
+        max_io_groups=max_groups if max_groups > 0 else None,
+        mapping_rules=custom_rules,
+        requirements=requirements,
+        llm_provider=llm_provider_obj,
+    )
+    grouped_skills: list[SkillSpec] = group_result.skills
+
+    # Build per-skill AgentComponentInfo for the overview agent.
+    overview_info: list[AgentComponentInfo] = []
+    for skill in grouped_skills:
+        overview_info.append(
+            AgentComponentInfo(
+                name=f"{skill.name}-agent",
+                description=skill.description,
+                capabilities=skill.allowed_tools[:5],
+                invoke_pattern=f"@{skill.name}-agent {{task}}",
+            )
         )
-        overview_info.append(info)
 
+    overview_count = 1 if len(overview_info) > 1 else 0
+    total_agents = len(grouped_skills) + overview_count
+
+    if preview:
+        # ── Preview mode: print clean summary, skip all file writes ──
+        strategy_labels = {
+            "IO_RELATION": "IO_RELATION",
+            "KEYWORD_MATCH": "KEYWORD_MATCH",
+            "LLM_SEMANTIC": "LLM_SEMANTIC",
+            "COMPONENT_GROUP": "COMPONENT_GROUP",
+        }
+        label = strategy_labels.get(group_strategy.name, group_strategy.name)
+        print(f"[Preview] Strategy: {label}")
+        print(f"   Source Components: {len(components)}")
+        print(f"   Grouped Skills: {len(grouped_skills)}")
+        print(f"   Agent file count: {total_agents} ({len(grouped_skills)} + {overview_count} overview)")
+        if len(components) != len(grouped_skills):
+            reduction = 100 - int(len(grouped_skills) / len(components) * 100)
+            print(f"   Agent 缩减率: {reduction}% ({len(components)} → {total_agents})")
+        print(f"   Skills:")
+        for skill in grouped_skills:
+            sample_tools = skill.allowed_tools[:3]
+            sample_str = ", ".join(sample_tools)
+            if len(skill.allowed_tools) > 3:
+                sample_str += ", …"
+            print(f"     - {skill.name}-agent ({len(skill.allowed_tools)} tools): {sample_str}")
+        if group_result.unmatched_tools:
+            for w in group_result.unmatched_tools:
+                print(f"   Warning: unmatched tool: {w}", file=sys.stderr)
+        return 0
+
+    # ── Normal mode: write files + print summary ──
     writer = AgentMarkdownWriter()
     if output_dir:
         out_path = Path(output_dir)
-        for component in components:
+        for skill in grouped_skills:
             agent_def = {
-                "name": f"{component.name}-agent",
-                "description": component.description,
-                "tools": [op.name for op in component.operations],
+                "name": f"{skill.name}-agent",
+                "description": skill.description,
+                "tools": skill.allowed_tools,
                 "skills": [],
             }
             writer.write_agent(agent_def, out_path)
+
+        # Overview agent — always generated when there are 2+ agents
         if len(overview_info) > 1:
             writer.write_overview_agent(
                 name=agent_name or "clawcodex-overview",
@@ -196,46 +289,150 @@ def _handle_convert_from_source(
                 output_dir=out_path,
             )
 
-    # Also write skills if --skills was specified
+    # Write skills if --skills was specified
     if skills_dir:
         skills_path = Path(skills_dir)
         skills_path.mkdir(parents=True, exist_ok=True)
-        for comp in components:
-            skill_file = skills_path / f"{comp.name}-skill.md"
+        for skill in grouped_skills:
+            skill_file = skills_path / f"{skill.name}-skill.md"
             skill_lines = [
                 "---",
-                f"name: {comp.name}-skill",
-                f"description: {comp.description}",
+                f"name: {skill.name}-skill",
+                f"description: {skill.description}",
                 "user-invocable: true",
                 "allowed-tools:",
             ]
-            for op in comp.operations:
-                skill_lines.append(f"  - {op.name}")
+            for tool in skill.allowed_tools:
+                skill_lines.append(f"  - {tool}")
             skill_lines.append("---")
             skill_lines.append("")
-            skill_lines.append(f"# Skill: {comp.name}-skill")
+            skill_lines.append(f"# Skill: {skill.name}-skill")
             skill_lines.append("")
-            skill_lines.append(comp.description)
+            skill_lines.append(skill.description)
             skill_lines.append("")
             skill_lines.append("## Included Tools")
-            for op in comp.operations:
-                skill_lines.append(f"- `{op.name}`")
+            for tool in skill.allowed_tools:
+                skill_lines.append(f"- `{tool}`")
             skill_file.write_text("\n".join(skill_lines), encoding="utf-8")
             print(f"   Skill file: {skill_file}")
 
-    # Print summary
-    print(f"✅ Converted source directory to Agent: {sdk_path}")
-    print(f"   Components: {len(components)}")
+    # Print summary — show actual agent count after grouping
+    print(f"✅ Converted source directory to Agents: {sdk_path}")
+    print(f"   Source components: {len(components)}")
+    print(f"   Grouped skills (agents): {len(grouped_skills)}")
     print(f"   Strategy: {group_strategy.name}")
-    for i, comp in enumerate(components):
-        print(f"     Component {i + 1}: {comp.name}")
-        print(f"       Description: {comp.description}")
-        print(f"       Operations: {len(comp.operations)}")
+    if len(components) != len(grouped_skills):
+        reduction = 100 - int(len(grouped_skills) / len(components) * 100)
+        print(f"   Agent reduction: {reduction}% ({len(components)} components → {total_agents} agents)")
+    for i, skill in enumerate(grouped_skills):
+        print(f"     Agent {i + 1}: {skill.name}-agent")
+        print(f"       Description: {skill.description}")
+        print(f"       Tools: {len(skill.allowed_tools)}")
     if group_result.unmatched_tools:
         for w in group_result.unmatched_tools:
             print(f"   Warning: unmatched tool: {w}", file=sys.stderr)
 
     return 0
+
+
+def _load_mapping_rules(file_path: str) -> list[MappingRule]:
+    """Load custom MappingRule definitions from a YAML or JSON file.
+
+    Expected format (YAML):
+        rules:
+          - method_pattern: "docker_"
+            tool_name: "docker_ops"
+            skill_name: "build_image"
+            description: "Docker build operations"
+            match_type: "prefix"
+          - method_pattern: "video_encode|video_decode"
+            tool_name: "video_ops"
+            skill_name: "video_processing"
+            description: "Video codec operations"
+            match_type: "regex"
+          - method_pattern: "core"
+            tool_name: "core_ops"
+            skill_name: "core"
+            description: "Core module operations"
+            match_type: "substring"
+            match_target: "comp_name"
+
+    Expected format (JSON):
+        {
+          "rules": [
+            {"method_pattern": "docker_", "tool_name": "docker_ops", "skill_name": "build_image", "description": "...", "match_type": "prefix"}
+          ]
+        }
+    """
+    from extensions.pos_converter.skill_grouper import MappingRule, MatchType, MatchTarget
+    import json
+
+    path = Path(file_path)
+    if not path.is_file():
+        print(f"error: mapping rules file not found: {file_path}", file=sys.stderr)
+        raise SystemExit(2)
+
+    raw = path.read_text(encoding="utf-8")
+
+    try:
+        if path.suffix in (".yaml", ".yml"):
+            try:
+                import yaml
+                data = yaml.safe_load(raw)
+            except ImportError:
+                print("error: PyYAML not installed, use JSON format for mapping rules", file=sys.stderr)
+                raise SystemExit(2)
+        else:
+            data = json.loads(raw)
+    except (json.JSONDecodeError, Exception) as exc:
+        print(f"error: failed to parse mapping rules file: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+
+    rules_raw = data.get("rules", [])
+    rules: list[MappingRule] = []
+    for entry in rules_raw:
+        match_type_str = entry.get("match_type", "substring")
+        try:
+            match_type = MatchType(match_type_str)
+        except ValueError:
+            match_type = MatchType.SUBSTRING
+        match_target_str = entry.get("match_target", "op_name")
+        try:
+            match_target = MatchTarget(match_target_str)
+        except ValueError:
+            match_target = MatchTarget.OP_NAME
+        rules.append(
+            MappingRule(
+                method_pattern=entry["method_pattern"],
+                tool_name=entry.get("tool_name", ""),
+                skill_name=entry["skill_name"],
+                description=entry.get("description", ""),
+                match_type=match_type,
+                match_target=match_target,
+            )
+        )
+
+    return rules
+
+
+def _create_llm_provider(provider_name: str, model: str) -> object | None:
+    """Create an LLM provider for LLM_SEMANTIC strategy.
+
+    Uses the project's ``build_provider_from_config`` infrastructure.
+    Falls back to the default provider from config when ``provider_name``
+    is empty.  Returns None when no provider can be created (missing
+    API key, unknown provider, etc.).
+    """
+    try:
+        from src.providers.runtime import build_provider_from_config
+        from src.config import get_default_provider
+
+        resolved_name = provider_name or get_default_provider()
+        resolved_model = model or None
+        return build_provider_from_config(resolved_name, model=resolved_model)
+    except Exception as exc:
+        print(f"warning: failed to create LLM provider '{provider_name}': {exc}", file=sys.stderr)
+        return None
 
 
 def _write_output_files(
