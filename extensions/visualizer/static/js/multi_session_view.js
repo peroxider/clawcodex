@@ -2,7 +2,8 @@
  * ClawCodex Visualizer — Multi-Session Waterfall View (F-95)
  *
  * Design-spec aligned with session分析效果图.png:
- *   - top: 5-pill legend with counts (read/execute/write/orchestrate/other)
+ *   - top: 8-pill legend with counts (read/execute/write/orchestrate/
+ *          llm_text/turn/background/other) — full OperationCategory breakdown
  *   - left: time axis (relative, e.g. 0/5/10/15/20/25/30 min)
  *   - rows: each session gets a swimlane, sub-agents cascade below in waterfall
  *   - activity ticks: dense color-coded vertical bars (28% lane height)
@@ -54,6 +55,17 @@ const MultiSessionView = (function() {
     // Cached dataZoom state — preserved across the re-render that
     // follows a density-mode switch so the user's zoom doesn't jump.
     let lastDzState = null;
+    // Visible x-range in data seconds. Mirrors lastDzState but in
+    // absolute (not percent) units. The axisLabel formatter reads
+    // this to decide between ``mm:ss.SSS`` and the compact
+    // ``S.SSS`` form when the user has zoomed into a sub-second
+    // window.
+    let currentVisibleRange = { min: 0, max: 0 };
+    // True when the visible window is < 1s wide. In that case the
+    // ``mm:`` prefix of every tick label is identical, so we drop
+    // it to keep the labels short and let the .SSS part carry the
+    // useful per-tick information.
+    let isCompactMs = false;
     let selectedAgentId = null;
     let badgePayloads = [];
 
@@ -399,6 +411,21 @@ const MultiSessionView = (function() {
                 if (typeof nextStart === 'number' && typeof nextEnd === 'number') {
                     lastDzState = { start: nextStart, end: nextEnd };
                 }
+                // Recompute the visible x-range in absolute (data-seconds)
+                // units. The axisLabel formatter reads isCompactMs to pick
+                // between ``mm:ss.SSS`` and the compact ``S.SSS`` form, so
+                // this has to be updated on every zoom tick — not just at
+                // the debounced density-mode boundary.
+                {
+                    const ts = (currentData && currentData.timeRange) || {};
+                    const span = Math.max(1, (ts.max || 60) - (ts.min || 0));
+                    const dzState = lastDzState || { start: 0, end: 100 };
+                    const baseMin = (typeof ts.min === 'number') ? ts.min : 0;
+                    const visMin = baseMin + (dzState.start / 100) * span;
+                    const visMax = baseMin + (dzState.end / 100) * span;
+                    currentVisibleRange = { min: visMin, max: visMax };
+                    isCompactMs = (visMax - visMin) < 1.0;
+                }
                 densifyTimer = setTimeout(() => {
                     // Use the cached lastDzState + the session's timeRange
                     // to decide the mode. This matches what renderChart
@@ -641,7 +668,7 @@ const MultiSessionView = (function() {
             // F-95 legend fix: disable ECharts' auto-rendered legend so it
             // never collides with the HTML `.ms-legend-bar` (which session_row
             // places above the chart).  The HTML bar carries the same
-            // 5-pill content via renderLegend(); the ECharts default legend
+            // 8-pill content via renderLegend(); the ECharts default legend
             // would otherwise wrap onto 2-3 lines inside grid.top:70 and
             // stack on top of the stats bar.
             legend: { show: false },
@@ -686,7 +713,11 @@ const MultiSessionView = (function() {
                     show: !layout.compact && !layout.reference,
                     color: '#8b949e',
                     fontSize: 10,
-                    formatter: formatRelSec,
+                    // Wrap formatRelSec so the zoom-aware compact mode
+                    // is honored. The wrapper reads isCompactMs, which
+                    // is updated on every datazoom event (and seeded to
+                    // the full timeRange at first render below).
+                    formatter: function(sec) { return formatRelSec(sec, isCompactMs); },
                 },
                 axisLine: { lineStyle: { color: layout.reference ? 'rgba(108,132,154,0.08)' : 'rgba(139,148,158,0.06)' } },
                 axisTick: { show: !layout.reference, lineStyle: { color: 'rgba(139,148,158,0.04)' } },
@@ -829,7 +860,21 @@ const MultiSessionView = (function() {
             ],
         };
 
-        option.xAxis.axisLabel.formatter = formatRelSec;
+        option.xAxis.axisLabel.formatter = function(sec) { return formatRelSec(sec, isCompactMs); };
+        // Seed the visible range + compact flag for this render. On
+        // first paint lastDzState is null and the chart shows the
+        // full timeRange, so compact is false. On a re-render that
+        // follows a density-mode switch the cached lastDzState is
+        // restored and the formatter stays zoom-consistent.
+        {
+            const dzState = lastDzState || { start: 0, end: 100 };
+            const span = Math.max(1, (timeRange.max || 60) - (timeRange.min || 0));
+            const baseMin = (typeof timeRange.min === 'number') ? timeRange.min : 0;
+            const visMin = baseMin + (dzState.start / 100) * span;
+            const visMax = baseMin + (dzState.end / 100) * span;
+            currentVisibleRange = { min: visMin, max: visMax };
+            isCompactMs = (visMax - visMin) < 1.0;
+        }
         chart.setOption(option, true);
     }
 
@@ -1696,19 +1741,36 @@ const MultiSessionView = (function() {
         };
     }
 
-    function formatRelSec(sec) {
+    /**
+     * Format a relative-time-in-seconds value as ``mm:ss.SSS``.
+     *
+     * Default mode (``compact=false``) always emits a zero-padded
+     * ``mm:ss.SSS`` string — e.g. ``8s`` becomes ``00:08.000`` and
+     * ``90m`` becomes ``90:00.000``. The minute column is allowed to
+     * roll past 60 for sessions that exceed an hour.
+     *
+     * Compact mode (``compact=true``) drops the ``mm:`` prefix and
+     * emits ``S.SSS`` (total seconds.milliseconds), which keeps the
+     * visible label length stable when the user has zoomed the
+     * xAxis into a sub-second window. Used by the xAxis label
+     * formatter when ``isCompactMs`` is true; other call sites
+     * (tooltips, drawer) use the default full format.
+     */
+    function formatRelSec(sec, compact) {
         if (typeof sec !== 'number' || !isFinite(sec)) return '—';
-        const a = Math.abs(sec);
-        if (a < 60) {
-            return `${Math.round(a)}s`;
+        if (sec < 0) sec = 0;
+        const totalMs = Math.round(sec * 1000);
+        const minutes = Math.floor(totalMs / 60000);
+        const remMs = totalMs - minutes * 60000;
+        const secs = Math.floor(remMs / 1000);
+        const ms = remMs - secs * 1000;
+        const pad2 = (n) => String(n).padStart(2, '0');
+        const pad3 = (n) => String(n).padStart(3, '0');
+        if (compact) {
+            const totalSecs = minutes * 60 + secs;
+            return `${totalSecs}.${pad3(ms)}`;
         }
-        const minutes = Math.floor(a / 60);
-        if (minutes < 60) {
-            return `${minutes}分钟`;
-        }
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        return `${h}小时${m}分钟`;
+        return `${pad2(minutes)}:${pad2(secs)}.${pad3(ms)}`;
     }
 
     function escapeHtml(s) {

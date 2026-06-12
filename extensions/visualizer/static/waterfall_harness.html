@@ -82,10 +82,14 @@ body { background:#1a1a2e; color:#e0e0e0; margin:0; padding:0; font-family: -app
         WebFetch:    '#ea7ccc',
         TodoWrite:   '#3ba272',
     };
-    const CATEGORIES = ['read', 'write', 'execute', 'orchestrate', 'other'];
+    const CATEGORIES = [
+        'read', 'execute', 'write', 'orchestrate',
+        'llm_text', 'turn', 'background', 'other',
+    ];
     const CATEGORY_COLOR = {
-        read: '#5470c6', write: '#91cc75', execute: '#ee6666',
-        orchestrate: '#9c7cff', other: '#a0a0b0',
+        read: '#5470c6', execute: '#ee6666', write: '#91cc75',
+        orchestrate: '#9c7cff', llm_text: '#79c0ff', turn: '#bc8cff',
+        background: '#8b949e', other: '#a0a0b0',
     };
     const TOOLS = Object.keys(TOOL_COLORS);
     const STATUSES = ['success', 'success', 'success', 'running', 'failed'];
@@ -129,15 +133,24 @@ body { background:#1a1a2e; color:#e0e0e0; margin:0; padding:0; font-family: -app
         });
     }
 
-    // Category counts (drives the legend)
-    const counts = { read:0, write:0, execute:0, orchestrate:0, other:0 };
-    for (const t of ticks) counts[t.category]++;
+    // Category counts (drives the legend) — 8 categories to match the
+    // production builder's _LEGEND_CATEGORIES (see multi_session_view_builder.py).
+    const counts = {
+        read:0, execute:0, write:0, orchestrate:0,
+        llm_text:0, turn:0, background:0, other:0,
+    };
+    for (const t of ticks) {
+        if (t.category in counts) counts[t.category]++;
+    }
     const legend = [
-        { category:'read',        label:'Read',    color:'#5470c6', count:counts.read },
-        { category:'write',       label:'Write',   color:'#91cc75', count:counts.write },
-        { category:'execute',     label:'Bash',    color:'#ee6666', count:counts.execute },
-        { category:'orchestrate', label:'Agent',   color:'#9c7cff', count:counts.orchestrate },
-        { category:'other',       label:'Other',   color:'#a0a0b0', count:counts.other },
+        { category:'read',        label:'读取',   color:'#5470c6', count:counts.read },
+        { category:'execute',     label:'执行',   color:'#ee6666', count:counts.execute },
+        { category:'write',       label:'写入',   color:'#91cc75', count:counts.write },
+        { category:'orchestrate', label:'编排',   color:'#9c7cff', count:counts.orchestrate },
+        { category:'llm_text',    label:'推理',   color:'#79c0ff', count:counts.llm_text },
+        { category:'turn',        label:'轮次',   color:'#bc8cff', count:counts.turn },
+        { category:'background',  label:'后台',   color:'#8b949e', count:counts.background },
+        { category:'other',       label:'其他',   color:'#a0a0b0', count:counts.other },
     ];
 
     window.__MOCK_PAYLOAD = {

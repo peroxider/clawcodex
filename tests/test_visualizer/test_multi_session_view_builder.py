@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from extensions.visualizer.builders.multi_session_view_builder import MultiSessionViewBuilder
+from extensions.visualizer.builders.multi_session_view_builder import (
+    MultiSessionViewBuilder,
+    _format_tick,
+)
 from extensions.visualizer.builders.agent_tree_layout import AgentTreeLayout
 from extensions.visualizer.builders.operation_categorizer import OperationCategorizer
 from extensions.visualizer.models.viz_models import (
@@ -57,7 +60,7 @@ class TestMultiSessionViewBuilderEmpty:
         assert out["sessions"] == []
         assert out["agents"] == []
         assert out["edges"] == []
-        assert len(out["legend"]) == 5  # design-spec: 5 primary categories
+        assert len(out["legend"]) == 8  # full OperationCategory set (F-95 follow-up)
 
 
 class TestSingleSessionLegend:
@@ -82,7 +85,10 @@ class TestSingleSessionLegend:
         viz = _session("s1", 0, 100, _bar("Read", 0, 5))
         out = MultiSessionViewBuilder().build([viz])
         labels = [l["label"] for l in out["legend"]]
-        assert labels == ["读取", "执行", "写入", "编排", "其他"]
+        assert labels == [
+            "读取", "执行", "写入", "编排",
+            "推理", "轮次", "后台", "其他",
+        ]
 
     def test_pre_set_other_llm_bar_is_refined(self):
         llm = TimelineBar(
@@ -98,8 +104,12 @@ class TestSingleSessionLegend:
         viz = _session("s1", 0, 100, llm)
         out = MultiSessionViewBuilder().build([viz])
         legend = {l["category"]: l["count"] for l in out["legend"]}
-        # Design-spec: LLM_TEXT rolled into OTHER for legend count
-        assert legend["other"] == 1
+        # F-95 follow-up: LLM_TEXT gets its own legend bucket (no longer
+        # rolled into OTHER). The categorizer still refines the bar from
+        # whatever was pre-set on the model into the LLM_TEXT category,
+        # and the rendered tick carries the refined category.
+        assert legend["llm_text"] == 1
+        assert legend["other"] == 0
         assert out["sessions"][0]["ticks"][0]["category"] == "llm_text"
 
 
@@ -216,8 +226,61 @@ class TestTimeRange:
         assert tr["min"] == 0.0
         assert tr["max"] == 120.0
         assert len(tr["tickLabels"]) >= 2
-        # First label should be the zero tick
-        assert tr["tickLabels"][0] == "0"
+        # First label should be the zero tick in mm:ss.SSS form.
+        assert tr["tickLabels"][0] == "00:00.000"
+
+    def test_format_tick_zero(self):
+        assert _format_tick(0) == "00:00.000"
+
+    def test_format_tick_sub_second(self):
+        # Sub-second values round to 3 decimal ms digits.
+        assert _format_tick(0.5) == "00:00.500"
+        assert _format_tick(0.001) == "00:00.001"
+        assert _format_tick(0.9995) == "00:01.000"  # rounds up
+
+    def test_format_tick_seconds_only(self):
+        assert _format_tick(8) == "00:08.000"
+        assert _format_tick(30) == "00:30.000"
+        assert _format_tick(59) == "00:59.000"
+
+    def test_format_tick_minutes(self):
+        assert _format_tick(60) == "01:00.000"
+        assert _format_tick(125) == "02:05.000"
+        assert _format_tick(300) == "05:00.000"
+
+    def test_format_tick_rolls_past_60_minutes(self):
+        # 90 minutes -> minute column rolls past 60 (no hour rollover).
+        assert _format_tick(90 * 60) == "90:00.000"
+        assert _format_tick(125 * 60 + 7.25) == "125:07.250"
+
+    def test_format_tick_millisecond_precision(self):
+        # 8s + 500ms + 250us rounds to .500 (5-digit us input).
+        assert _format_tick(8.5) == "00:08.500"
+        assert _format_tick(0.123) == "00:00.123"
+
+    def test_format_tick_negative_clamps_to_zero(self):
+        # Defensive: negative seconds (shouldn't happen, but the
+        # formatter used to crash on None) must not blow up.
+        assert _format_tick(-5) == "00:00.000"
+        assert _format_tick(None) == "00:00.000"
+
+    def test_format_tick_no_chinese_format_remaining(self):
+        # F-95 follow-up: the waterfall xAxis used to emit
+        # ``5分钟`` / ``1小时30分钟``. None of those should survive
+        # the conversion to mm:ss.SSS.
+        for s in (0, 8, 60, 300, 3600, 5400, 7321.5):
+            label = _format_tick(s)
+            assert "分钟" not in label
+            assert "小时" not in label
+            assert "s" not in label  # no short suffix either
+            # Always exactly mm:ss.SSS shape (with rolling minutes).
+            assert label.count(":") == 1
+            head, tail = label.split(":")
+            assert len(head) >= 2 and head.isdigit()
+            assert "." in tail
+            sec_part, ms_part = tail.split(".")
+            assert len(sec_part) == 2 and sec_part.isdigit()
+            assert len(ms_part) == 3 and ms_part.isdigit()
 
     def test_time_range_ignores_late_session_end(self):
         viz = _session("s1", 0, 3600,

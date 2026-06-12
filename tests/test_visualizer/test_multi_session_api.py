@@ -65,8 +65,8 @@ class TestMultiSessionAPI:
             assert k in data, f"missing {k}"
         assert len(data["sessions"]) == 1
         assert data["sessions"][0]["id"] == "ms-session-a"
-        # Legend has 5 categories
-        assert len(data["legend"]) == 5
+        # Legend has 8 categories (F-95 follow-up — full OperationCategory set)
+        assert len(data["legend"]) == 8
 
     def test_two_sessions_aligned_on_shared_axis(self, client):
         resp = client.get("/api/viz/multi-session?sessions=ms-session-a,ms-session-b")
@@ -102,11 +102,17 @@ class TestMultiSessionAPI:
         # Only ms-session-a is in the payload
         assert len(data["sessions"]) == 1
 
-    def test_legend_includes_all_five_categories(self, client):
+    def test_legend_includes_all_eight_categories(self, client):
         resp = client.get("/api/viz/multi-session?sessions=ms-session-a")
         data = resp.json()
         cats = [l["category"] for l in data["legend"]]
-        assert cats == ["read", "execute", "write", "orchestrate", "other"]
+        # F-95 follow-up: full 8-category breakdown, with LLM_TEXT / TURN /
+        # BACKGROUND no longer rolled into OTHER. Order is fixed by
+        # _LEGEND_CATEGORIES in multi_session_view_builder.py.
+        assert cats == [
+            "read", "execute", "write", "orchestrate",
+            "llm_text", "turn", "background", "other",
+        ]
 
     def test_time_range_is_non_negative(self, client):
         resp = client.get("/api/viz/multi-session?sessions=ms-session-a,ms-session-b")

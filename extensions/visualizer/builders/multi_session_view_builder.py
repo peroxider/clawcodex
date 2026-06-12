@@ -64,26 +64,20 @@ def _pick_tick_step(total_seconds: float) -> float:
 
 
 def _format_tick(seconds: float) -> str:
-    """Format a tick label aligned with the design spec.
+    """Format a tick label as ``mm:ss.SSS`` (zero-padded, millisecond precision).
 
     Examples:
-        0       -> '0'
-        30      -> '30s'       (< 1 minute)
-        300     -> '5分钟'     (1-60 minutes)
-        5400    -> '1小时30分钟' (>= 60 minutes)
+        0       -> '00:00.000'
+        30      -> '00:30.000'
+        300     -> '05:00.000'
+        5400    -> '90:00.000'   (90 min, minute column rolls past 60)
     """
-    if seconds == 0:
-        return "0"
-    if seconds < 60:
-        return f"{int(round(seconds))}s"
-    minutes = int(seconds / 60)
-    if minutes < 60:
-        return f"{minutes}分钟"
-    hours = minutes // 60
-    mins = minutes % 60
-    if mins == 0:
-        return f"{hours}小时"
-    return f"{hours}小时{mins}分钟"
+    if seconds is None or seconds < 0:
+        seconds = 0
+    total_ms = int(round(seconds * 1000))
+    minutes, rem_ms = divmod(total_ms, 60_000)
+    secs, ms = divmod(rem_ms, 1_000)
+    return f"{minutes:02d}:{secs:02d}.{ms:03d}"
 
 
 def _wall_clock(ts: float) -> str:
@@ -155,35 +149,39 @@ class MultiSessionViewBuilder:
             tick_seconds.append(round(max_end, 6))
         tick_labels = [_format_tick(s) for s in tick_seconds]
 
-        # ---- 2. legend (design-spec: 5 primary categories)
+        # ---- 2. legend (8 categories — full OperationCategory set)
+        # F-95 follow-up: previously the legend rolled LLM_TEXT / TURN /
+        # BACKGROUND into OTHER (5-pill design-spec). The "其他" bucket
+        # was the largest by far in orchestrator sessions (e.g. 30/55 in
+        # 9c3ce1e5), with the bulk of it being LLM_TEXT (assistant
+        # text/thinking spans). Exposing the 8-category breakdown
+        # matches the categorizer's actual resolution and makes the
+        # distribution legible — see viz_models.py:OperationCategory
+        # for the rationale recorded when the secondary buckets were
+        # added in 2026-06-11.
         category_counts: Counter[OperationCategory] = Counter()
         for s in sessions:
             for bar in s.timeline:
                 category_counts[categorizer.categorize(bar)] += 1
-        # Map secondary categories into the 5 primary legend buckets
-        _LEGEND_PRIMARY = [
+        _LEGEND_CATEGORIES: list[OperationCategory] = [
             OperationCategory.READ,
             OperationCategory.EXECUTE,
             OperationCategory.WRITE,
             OperationCategory.ORCHESTRATE,
+            OperationCategory.LLM_TEXT,
+            OperationCategory.TURN,
+            OperationCategory.BACKGROUND,
             OperationCategory.OTHER,
         ]
-        # Roll LLM_TEXT / TURN / BACKGROUND into OTHER for the legend count
-        other_count = (
-            category_counts.get(OperationCategory.OTHER, 0)
-            + category_counts.get(OperationCategory.LLM_TEXT, 0)
-            + category_counts.get(OperationCategory.TURN, 0)
-            + category_counts.get(OperationCategory.BACKGROUND, 0)
-        )
-        legend = []
-        for c in _LEGEND_PRIMARY:
-            count = other_count if c == OperationCategory.OTHER else category_counts.get(c, 0)
-            legend.append({
+        legend = [
+            {
                 "category": c.value,
                 "label": c.label,
                 "color": c.color,
-                "count": count,
-            })
+                "count": category_counts.get(c, 0),
+            }
+            for c in _LEGEND_CATEGORIES
+        ]
 
         # ---- 3. sessions
         session_rows: list[dict[str, Any]] = []
@@ -272,6 +270,8 @@ class MultiSessionViewBuilder:
     # ------------------------------------------------------------------
 
     def _empty_legend(self) -> list[dict[str, Any]]:
+        # Must match the 8 categories in build()'s _LEGEND_CATEGORIES
+        # so empty sessions render the same 8-pill bar as populated ones.
         return [
             {"category": c.value, "label": c.label, "color": c.color, "count": 0}
             for c in [
@@ -279,6 +279,9 @@ class MultiSessionViewBuilder:
                 OperationCategory.EXECUTE,
                 OperationCategory.WRITE,
                 OperationCategory.ORCHESTRATE,
+                OperationCategory.LLM_TEXT,
+                OperationCategory.TURN,
+                OperationCategory.BACKGROUND,
                 OperationCategory.OTHER,
             ]
         ]

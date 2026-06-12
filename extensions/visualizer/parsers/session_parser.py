@@ -114,6 +114,10 @@ class SessionMetadataParser:
         # F-96-E: Enrich from orchestrator state journal (issue_id, verification_status)
         self._enrich_from_state_journal(viz)
 
+        # Lowest-priority fallback: context_tokens from metadata.json
+        if not viz.stats.context_tokens:
+            viz.stats.context_tokens = meta.get("totalContextTokens", 0) or meta.get("context_tokens", 0)
+
         return viz
 
     def list_sessions(self, limit: int = 100) -> list[SessionVizData]:
@@ -187,10 +191,16 @@ class SessionMetadataParser:
             cost = data.get("cost", {})
             if cost:
                 viz.stats.cost_usd = cost.get("total_cost_usd", 0.0)
-                viz.stats.context_tokens = sum(
-                    u.get("input_tokens", 0) + u.get("output_tokens", 0)
-                    for u in cost.get("model_usage", {}).values()
-                )
+                cost_model_usage = cost.get("model_usage", {})
+                if cost_model_usage:
+                    viz.stats.context_tokens = sum(
+                        u.get("input_tokens", 0) + u.get("output_tokens", 0) +
+                        u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+                        for u in cost_model_usage.values()
+                    )
+                # Fallback: if model_usage was empty, try top-level totalContextTokens
+                if not viz.stats.context_tokens and data.get("totalContextTokens"):
+                    viz.stats.context_tokens = int(data["totalContextTokens"])
             viz.provider = data.get("provider", viz.provider)
             viz.model = data.get("model", viz.model)
             # Count turns from conversation if available
@@ -226,6 +236,7 @@ class SessionMetadataParser:
                 viz.status = data.get("status", viz.status).lower()
                 viz.report_path = str(report_json.with_suffix(".md"))
                 viz.tool_events_path = data.get("tool_events_path")
+                viz.stats.context_tokens = data.get("context_tokens", viz.stats.context_tokens)
                 viz.end_reason = data.get("session_end_reason")
                 viz.end_summary = data.get("session_end_summary", "")
             except Exception as e:
