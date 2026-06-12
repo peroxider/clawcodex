@@ -252,6 +252,55 @@ extensions/orchestrator/
 `parsers/` 中的解析器（session、transcript、tool_events、multi_agent），
 `static/` 中的静态资源（CSS + JS）。
 
+### Session Analyzer（`extensions/session_analyzer/`）
+
+单 Session 会话时间线分析器（`F-96`）。完全 Python 栈（FastAPI + Jinja2 + HTMX 1.9 + Alpine.js 3.13），无 React/Next 依赖，替代原 `sessions-v0-dev/` Next.js 16 + React 19 实现。
+
+**目录结构**：
+
+```
+extensions/session_analyzer/
+├── server.py                 # FastAPI app 工厂 + 静态资源挂载
+├── models/                   # Pydantic v2 模型（Category / ToolEvent / Agent / Session）
+├── parsers/                  # JSONL 解析器 + 工具分类（read/execute/write/orchestrate/other）
+├── fixtures/                 # 确定性样例数据（LCG 随机种子 22 子 agent）
+├── formatting.py             # 时间轴刻度 + Token 格式化
+├── routers/                  # FastAPI 路由（主页 + 导入 + 样例 + HTMX 部分）
+├── templates/                # Jinja2 模板（base/index + 6 个 _partials/）
+└── static/                   # CSS（OKLCH 设计令牌）+ JS bridge + SVG 图标精灵
+```
+
+**关键设计**：
+
+- **零状态服务端**：所有 session 数据通过 HTMX 的 `values` 选项以 JSON 字符串传给后端，渲染后由客户端 DOM 管理；服务器无需缓存。
+- **Pydantic v2 别名**：`Session` 模型用 `Field(alias="...")` + `populate_by_name=True` 支持 `camelCase` / `snake_case` 双向兼容；模板通过 `model_dump(by_alias=True, exclude_none=True)` 拿到与前端 `lib/types.ts` 一致的字段命名。
+- **侧链分组**：Claude Code 的 `isSidechain=true` 记录被 `group_sidechains()` 聚合为单个子 agent（含 N 个工具调用），匹配原 `parse-session.ts` 的语义。
+- **URL 长度回避**：22 子 agent × 328 调用的 JSON 序列化超长，所以 row 部分路由采用「展开时内联工作流面板」而非「懒加载二次请求」——这与原 React 实现的 `expanded ? <WorkflowPanel/> : null` 行为一致。
+- **OKLCH 设计令牌**：`static/css/theme.css` 中所有颜色用 `oklch(L C H)` 表达（感知均匀色彩空间），与 `sessions-v0-dev/app/globals.css` 保持一致。
+- **视觉回归**：`tests/session_analyzer/test_visual_regression.py` 使用结构化 HTML 快照（必需子串 + 哈希比对）替代 Playwright 像素比对——环境零依赖、可在 CI 跑稳。
+
+**路由契约**：
+
+| Method | Path | 用途 |
+|--------|------|------|
+| GET    | `/sa/` | 主页（demo 模式自动加载样例） |
+| POST   | `/sa/sessions/import` | 多文件 JSONL 上传 + 解析 |
+| GET    | `/sa/sessions/sample` | 返回 2 个确定性 demo session |
+| DELETE | `/sa/sessions/{id}` | 客户端 DOM 移除 + 服务端空响应 |
+| GET    | `/sa/htmx/sessions/{id}/row` | 单 session row HTML（HTMX 部分） |
+| GET    | `/sa/htmx/legend` | 图例栏 HTML（计数参数） |
+| GET    | `/sa/static/...` | 静态资源（CSS / JS / SVG / fonts） |
+| GET    | `/sa/healthz` | 存活探针 |
+
+**测试矩阵**（`tests/session_analyzer/`，141+ 用例）：
+
+- `test_scaffold.py` — 路由 / 静态资源 / 模块导入 smoke
+- `test_categorize.py` — 49 用例，覆盖 5 类工具分类（含正则 fallback）
+- `test_parser.py` — 33 用例，验证侧链分组 + 持续时间裁剪 + 序号
+- `test_sample_data.py` — 13 用例，验证 LCG 确定性 + 22 子 agent 结构
+- `test_interaction.py` — 29 用例，HTMX 部分路由 + 端到端上传 / 样例流
+- `test_visual_regression.py` — 10 用例，结构化 HTML 快照 + 主题 CSS 验证
+
 ### POS Converter（`extensions/pos_converter/`）
 
 将 POS（过程化编排规范）`workflow.md` 转换为协调的多代理系统。

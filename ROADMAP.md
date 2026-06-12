@@ -133,6 +133,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-45 | 编排场景 ndjson 审计 | 编排场景下工具调用审计流 | 用户可审查无人值守任务实际操作 | ✅ 已完成 → F-45 | 已完成 | ndjson audit、py sink |
 | AR-F-54 | 运行期可观测性 | stuck-run debug 诊断 | 用户可诊断 Agent 卡住原因 | 📋 规划中 → F-54 | — | py 诊断工具、测试 |
 | AR-F-91~95 | Multi-Session 可视化分析平台（Visualizer） | 独立 FastAPI app + Jinja2 + ECharts CDN；15 个 API 端点 + WebSocket live tail；甘特图/异常检测/多 session 对比/多 Agent 瀑布视图；4 个解析器 + 10 个构建器；SSRF 保护导入/PNG-SVG-JSON-PDF 导出；分享链接管理（TTL 7 天）；`clawcodex viz` CLI 子命令；F-38/F-45/F-54 协同链接 | 用户可通过浏览器可视化查看 Session 执行甘特图、操作时序分布、异常检测报告，支持单 Session 调试到数十个 Session 批量对比 | ✅ 已完成 → F-91~F-95 | 已完成 | py FastAPI app、Jinja2 模板、JS 前端、CLI、110 测试 |
+| AR-F-96 | 单 Session 会话时间线分析器（Session Analyzer） | 完全 Python 栈 FastAPI app（无 React/Next 依赖），替代 sessions-v0-dev；Jinja2 模板 + HTMX 1.9 + Alpine.js 3.13；OKLCH 设计令牌；Pydantic v2 数据模型（camelCase 字段别名）；JSONL 解析器 + 侧链分组（isSidechain 还原 Claude Code 的子 agent）；5 类工具分类（read/execute/write/orchestrate/other）；自适应时间轴刻度；22 子 agent 演示数据（6 评审 + 16 核对、328 调用）；HTMX 部分路由（`/sa/sessions/{import,sample,delete}` + `/sa/htmx/sessions/{id}/row`）；视觉回归（结构化 HTML 快照 + 哈希比对） | 用户可在浏览器内加载 Claude Code 会话 JSONL 文件，按时间线查看主 agent 和子 agent 的工具调用，悬停查看详情，按图例筛选，演示模式自动加载确定性样例 | ✅ 已完成 → F-96 | 已完成 | py FastAPI app、Jinja2 模板、JS bridge、CLI、141+ 测试（5 测试模块 + 视觉回归） |
 
 #### SR-2.2 定时任务与调度（→ FEATURE_PLAN §五 F-22 定时任务系统）
 
