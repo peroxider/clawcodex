@@ -209,6 +209,31 @@ class TestREPL(unittest.TestCase):
                         for args, _kwargs in repl.console.print.call_args_list
                     ))
 
+    def test_local_command_text_defaults_to_plain_output(self):
+        """Ordinary local command output must not be markdown-rendered."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+
+        repl._print_local_command_text("**plain**", command="status")
+
+        first_arg = repl.console.print.call_args_list[0].args[0]
+        self.assertEqual(first_arg, "\n**plain**")
+        self.assertFalse(any(
+            args and isinstance(args[0], Markdown)
+            for args, _kwargs in repl.console.print.call_args_list
+        ))
+
+    def test_recap_local_command_text_renders_markdown(self):
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+
+        repl._print_local_command_text("Recap\n- **done**", command="recap")
+
+        self.assertTrue(any(
+            args and isinstance(args[0], Markdown)
+            for args, _kwargs in repl.console.print.call_args_list
+        ))
+
     def test_handle_command_tools_lists_registered_tools(self):
         """/tools must call ToolRegistry.list_tools() and print each name.
 

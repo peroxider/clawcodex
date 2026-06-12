@@ -426,6 +426,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
         register_runtime_commands(self.command_registry)  # instance registry (autocomplete)
         register_runtime_commands(None)  # global registry (execute_command_sync lookup)
+        from clawcodex_ext.away_summary.registration import register_away_summary_commands
+        register_away_summary_commands(self.command_registry)
+        register_away_summary_commands(None)
 
         self.command_context = create_command_context(
             workspace_root=self.workspace_root,
@@ -494,4 +497,12 @@ class ClawCodexExtREPL(ClawcodexREPL):
     def chat(self, user_input: str, max_turns: int | None = None):
         """Override chat() to track the last user input in metadata."""
         self._update_metadata_last_input(user_input)
-        return super().chat(user_input, max_turns=max_turns)
+        controller = getattr(self, "_away_summary_controller", None)
+        if controller is not None:
+            controller.on_run_start()
+        try:
+            return super().chat(user_input, max_turns=max_turns)
+        finally:
+            if controller is not None:
+                controller.on_run_finish()
+                controller.on_assistant_turn_complete()

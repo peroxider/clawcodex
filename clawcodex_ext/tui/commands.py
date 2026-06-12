@@ -76,6 +76,7 @@ class CommandDispatchResult:
     handled: bool
     prompt_text: str | None = None
     system_text: str | None = None
+    system_render: str = "plain"
     open_dialog: str | None = None
     error: str | None = None
 
@@ -161,10 +162,15 @@ def build_command_suggestions(
         from src.command_system.builtins import register_builtin_commands
         from src.command_system.registry import CommandRegistry, get_command_registry
 
+        from clawcodex_ext.away_summary.registration import register_away_summary_commands
+
         register_builtin_commands(None)
         registry: CommandRegistry = get_command_registry()
-        for cmd in registry.list_commands():
+        register_away_summary_commands(registry)
+        for cmd in registry.list_commands(include_disabled=True):
             if getattr(cmd, "is_hidden", False):
+                continue
+            if cmd.name != "recap" and not cmd.is_enabled():
                 continue
             aliases = tuple(getattr(cmd, "aliases", []) or [])
             tag = "workflow" if getattr(cmd, "kind", None) == "workflow" else None
@@ -334,7 +340,6 @@ async def dispatch_registry_command(
 
     try:
         from src.command_system.builtins import execute_command_async
-        from src.command_system.types import CommandResult  # noqa: F401
 
         result = await execute_command_async(name, args, command_context)
     except Exception as exc:
@@ -346,7 +351,11 @@ async def dispatch_registry_command(
         return CommandDispatchResult(handled=True, error=result.error)
 
     if result.result_type == "text":
-        return CommandDispatchResult(handled=True, system_text=result.text or "")
+        return CommandDispatchResult(
+            handled=True,
+            system_text=result.text or "",
+            system_render="markdown" if name == "recap" else "plain",
+        )
 
     if result.result_type == "prompt":
         prompt_text = ""

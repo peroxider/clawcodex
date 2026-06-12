@@ -259,6 +259,7 @@ class SkillPromptCommand(PromptCommand):
 class LocalCommand(CommandBase):
     """A command that executes local code."""
     supports_non_interactive: bool = False
+    run_in_thread: bool = False
     _call_impl: Optional[LocalCommandCall] = field(default=None, repr=False, compare=False)
 
     @property
@@ -272,6 +273,8 @@ class LocalCommand(CommandBase):
     async def call(self, args: str, context: CommandContext) -> LocalCommandResult:
         """Execute the local command."""
         if self._call_impl is not None:
+            if self.run_in_thread:
+                return await asyncio.to_thread(self._call_impl, args, context)
             return self._call_impl(args, context)
         return LocalCommandResult(type="text", value=f"Command {self.name} not implemented")
 

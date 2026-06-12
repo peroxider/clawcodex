@@ -20,12 +20,39 @@ from src.entrypoints.tui import (
 from src.tool_system.context import ToolContext
 from src.tool_system.registry import ToolRegistry
 
-from clawcodex_ext.tui.app import ClawCodexTUI
+from clawcodex_ext.tui.app import ClawCodexExtTUI
 
 
 def run_tui(
     options: TUIOptions,
     *,
+    provider: Any | None = None,
+    session: Session | None = None,
+    tool_registry: ToolRegistry | None = None,
+    tool_context: ToolContext | None = None,
+    runtime_context: Any | None = None,
+    resume_session_id: str | None = None,
+    resume_browse: bool = False,
+    append_system_prompt: str = "",
+) -> int:
+    return _run_tui_with_app(
+        options,
+        app_cls=ClawCodexExtTUI,
+        provider=provider,
+        session=session,
+        tool_registry=tool_registry,
+        tool_context=tool_context,
+        runtime_context=runtime_context,
+        resume_session_id=resume_session_id,
+        resume_browse=resume_browse,
+        append_system_prompt=append_system_prompt,
+    )
+
+
+def _run_tui_with_app(
+    options: TUIOptions,
+    *,
+    app_cls: type[ClawCodexExtTUI] = ClawCodexExtTUI,
     provider: Any | None = None,
     session: Session | None = None,
     tool_registry: ToolRegistry | None = None,
@@ -144,7 +171,7 @@ def run_tui(
         used_session = Session.create(provider_name, model_label)
 
     # Build and run app
-    app = ClawCodexTUI(
+    app = app_cls(
         provider=provider,
         provider_name=provider_name,
         workspace_root=workspace_root,
@@ -238,4 +265,4 @@ def _filter_registry(registry, *, keep) -> None:
                     pass
 
 
-__all__ = ["run_tui"]
+__all__ = ["run_tui", "_run_tui_with_app"]

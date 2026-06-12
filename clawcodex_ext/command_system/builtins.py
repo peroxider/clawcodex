@@ -1201,6 +1201,8 @@ def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> t
         return False, None, f"Unknown command: {cmd_name}"
     if cmd.command_type != CommandType.LOCAL:
         return False, None, f"Command not implemented for sync execution: {cmd_name}"
+    if isinstance(cmd, LocalCommand) and cmd.run_in_thread:
+        return False, None, f"Command requires async execution: {cmd_name}"
 
     try:
         if isinstance(cmd, LocalCommand) and cmd._call_impl is not None:
@@ -1266,6 +1268,12 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
     reg = registry or get_command_registry()
     for cmd in get_builtin_commands():
         reg.register(cmd)
+    try:
+        from clawcodex_ext.away_summary.registration import register_away_summary_commands
+
+        register_away_summary_commands(reg)
+    except Exception:
+        pass
 
 
 async def execute_command_async(
