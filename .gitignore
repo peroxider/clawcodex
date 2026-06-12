@@ -176,3 +176,5 @@ coverage/
 /.atomcode/
 /.audit_temp/
 /tmp/
+/.trae/
+/.store/
