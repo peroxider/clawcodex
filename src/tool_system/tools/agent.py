@@ -442,6 +442,7 @@ def make_agent_tool(
         # importing them at module scope would tangle with
         # ``defaults.py``'s tool-construction order.
         from src.agent.transcript import TranscriptWriter
+        from src.bootstrap.state import get_session_id
         from src.tasks.local_agent import (
             LocalAgentTaskState,
             complete_agent_task,
@@ -478,6 +479,7 @@ def make_agent_tool(
             prompt=prompt,
             agent_type=agent_type,
             registry=context.runtime_tasks,
+            parent_session_id=get_session_id(),
         )
         # ``register_async_agent`` populated ``output_file`` with the
         # JSONL transcript path; pull it back so the writer points at
@@ -495,7 +497,7 @@ def make_agent_tool(
             transcript: TranscriptWriter | None = None
             if transcript_path:
                 try:
-                    transcript = TranscriptWriter(transcript_path)
+                    transcript = TranscriptWriter(transcript_path, parent_session_id=get_session_id())
                 except OSError:
                     # Transcript open failure must not abort the run —
                     # downstream Chunk D / Chunk F will degrade

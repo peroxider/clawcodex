@@ -227,6 +227,7 @@ async def resume_agent_background(
         agent_type=prev.agent_type,
         selected_agent=prev.selected_agent,
         model=prev.model,
+        parent_session_id=prev.parent_session_id,
         tool_use_id=prev.tool_use_id,
         registry=runtime,
     )

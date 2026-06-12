@@ -28,10 +28,22 @@ from src.agent.transcript import (
 
 
 def test_transcript_path_uses_agent_id_and_jsonl_suffix() -> None:
+    # Fallback path (no parent_session_id)
     p = get_agent_transcript_path("a1b2c3d4z")
     assert p.endswith("/a1b2c3d4z.jsonl")
-    # Stable under .clawcodex/transcripts/
     assert ".clawcodex/transcripts" in p
+
+    # Nested path (with parent_session_id)
+    p2 = get_agent_transcript_path("a1b2c3d4z", parent_session_id="ses-01")
+    assert p2.endswith(".jsonl")
+    assert ".clawcodex/sessions/ses-01/subagents/agent-" in p2
+
+
+def test_transcript_path_nested_with_parent_session_id() -> None:
+    """When parent_session_id is given, path nests under sessions/<id>/subagents/."""
+    p = get_agent_transcript_path("my-agent", parent_session_id="parent-xyz")
+    assert ".clawcodex/sessions/parent-xyz/subagents/agent-my-agent.jsonl" in p
+    assert p.endswith("agent-my-agent.jsonl")
 
 
 def test_transcript_path_rejects_traversal() -> None:

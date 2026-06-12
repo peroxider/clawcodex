@@ -91,6 +91,7 @@ class LocalAgentTaskState(TaskStateBase):
     # message onto the resumed agent's pending_messages instead.
     # Reset to False on the fresh state ``register_async_agent`` upserts.
     is_resuming: bool = False
+    parent_session_id: str = ""
 
 
 def is_local_agent_task(state: Any) -> bool:
@@ -116,6 +117,7 @@ def register_async_agent(
     selected_agent: Any = None,
     model: str | None = None,
     tool_use_id: str | None = None,
+    parent_session_id: str | None = None,
     registry: "RuntimeTaskRegistry",
 ) -> LocalAgentTaskState:
     """Register a brand-new background agent on the runtime registry.
@@ -139,7 +141,7 @@ def register_async_agent(
     # the cycle untangled.
     from src.agent.transcript import get_agent_transcript_path
 
-    output_file = get_agent_transcript_path(agent_id)
+    output_file = get_agent_transcript_path(agent_id, parent_session_id=parent_session_id)
 
     state = LocalAgentTaskState(
         id=agent_id,
@@ -154,6 +156,7 @@ def register_async_agent(
         selected_agent=selected_agent,
         model=model,
         tool_use_id=tool_use_id,
+        parent_session_id=parent_session_id or "",
         is_backgrounded=True,
     )
     registry.upsert(state)

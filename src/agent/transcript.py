@@ -72,14 +72,28 @@ def _transcripts_root() -> Path:
     return root
 
 
-def get_agent_transcript_path(agent_id: str) -> str:
-    """Absolute path to ``<transcripts>/<agent_id>.jsonl``.
+def get_agent_transcript_path(
+    agent_id: str,
+    parent_session_id: str | None = None,
+) -> str:
+    """Absolute path to the agent's JSONL transcript.
+
+    When *parent_session_id* is provided the transcript lives under
+    ``~/.clawcodex/sessions/<parent_session_id>/subagents/agent-<safe_id>.jsonl``
+    so it travels with the parent session's directory.  When it is
+    ``None`` the legacy path ``~/.clawcodex/transcripts/<safe_id>.jsonl``
+    is used.
 
     Returns a string (not a ``Path``) because ``LocalAgentTaskState.output_file``
     is typed as ``str`` for serializability. Callers that prefer
     ``Path(get_agent_transcript_path(...))`` can still wrap it.
     """
     safe_id = _sanitize_agent_id(agent_id)
+    if parent_session_id:
+        _safe_session = _sanitize_agent_id(parent_session_id)
+        root = Path.home() / ".clawcodex" / "sessions" / _safe_session / "subagents"
+        root.mkdir(parents=True, exist_ok=True)
+        return str(root / f"agent-{safe_id}.jsonl")
     return str(_transcripts_root() / f"{safe_id}.jsonl")
 
 
@@ -107,11 +121,16 @@ def _sanitize_agent_id(agent_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _serialize_message(message: Any) -> str:
+def _serialize_message(message: Any, parent_session_id: str | None = None) -> str:
     """Convert a ``Message`` (or any JSON-shaped object) to a single
     UTF-8 JSON line. Falls back to ``repr`` for non-serializable objects
     so a malformed message can't bring the writer down — corrupt lines
     are reader-tolerant per the format design.
+
+    When *parent_session_id* is provided the string ``"parent_session_id"``
+    key is injected into the serialized dict so downstream consumers
+    (reader, auto-resume) can correlate the message back to the parent
+    session without inspecting the file path.
     """
     if is_dataclass(message) and not isinstance(message, type):
         # Chunk-D N1 fold-in (widened from `(TypeError, ValueError)`):
@@ -128,6 +147,8 @@ def _serialize_message(message: Any) -> str:
     else:
         # Last-resort: try to serialize a str() of it.
         payload = {"_unserializable": repr(message)}
+    if parent_session_id is not None:
+        payload["parent_session_id"] = parent_session_id
     try:
         # ``ensure_ascii=False`` keeps unicode readable in transcripts;
         # ``separators`` with no spaces keeps lines compact.
@@ -157,8 +178,9 @@ class TranscriptWriter:
     bash worker threads.
     """
 
-    def __init__(self, path: str | Path) -> None:
+    def __init__(self, path: str | Path, parent_session_id: str | None = None) -> None:
         self._path = str(path)
+        self._parent_session_id = parent_session_id
         # Ensure parent dir exists (transcript root may not have been
         # created yet if the caller bypassed ``get_agent_transcript_path``).
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
@@ -188,7 +210,7 @@ class TranscriptWriter:
         """
         if self._closed or self._fd is None:
             raise RuntimeError("TranscriptWriter is closed")
-        line = _serialize_message(message) + "\n"
+        line = _serialize_message(message, self._parent_session_id) + "\n"
         encoded = line.encode("utf-8")
         # ``os.write`` may short-write under specific OS conditions;
         # loop until the whole buffer is on disk. For O_APPEND files
