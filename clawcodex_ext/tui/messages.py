@@ -234,6 +234,21 @@ class PermissionModeCycleRequested(Message):
 
 
 @dataclass
+class PermissionModeChanged(Message):
+    """The runtime permission controller applied a new mode.
+
+    Emitted by :class:`AgentBridge._post_to_screen` (or the controller's
+    notify hook) after the multi-field swap succeeds. The REPL screen
+    listens for this to update the status bar and append a transcript
+    line — keeping the UI in lockstep with the actual ``ToolContext``
+    state. The single chokepoint (the controller) emits one event per
+    mode change, so listeners never have to dedupe.
+    """
+
+    mode: str
+
+
+@dataclass
 class PromptPasted(Message):
     """Bracketed-paste landed in the :class:`PromptInput` widget.
 

@@ -36,6 +36,7 @@ from src.tool_system.registry import ToolRegistry
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.config import load_away_summary_config
 from clawcodex_ext.away_summary.messages import format_away_summary_for_display
+from clawcodex_ext.permissions.runtime import RuntimePermissionController
 
 from .a11y import Announcer, describe_status
 from .agent_bridge import AgentBridge
@@ -48,7 +49,12 @@ from .commands import (
     dispatch_registry_command,
 )
 from .history_store import HistoryStore  # noqa: F401 (re-exported for tests)
-from .messages import AssistantMessage, CancelRequested, ToolEventMessage
+from .messages import (
+    AssistantMessage,
+    CancelRequested,
+    PermissionModeChanged,
+    ToolEventMessage,
+)
 from .screens.cost_threshold import CostThresholdScreen
 from .screens.diff_dialog import DiffDialogScreen, FileDiff
 from .screens.effort_picker import EffortPickerScreen
@@ -170,6 +176,21 @@ class ClawCodexTUI(App):
         # Screen-reader announcer. The :class:`LiveRegion` widget is
         # bound in :meth:`on_mount` once the REPL screen is composed.
         self.announcer = Announcer(self)
+        # Runtime permission controller — single chokepoint for Shift+Tab
+        # cycles (``action_cycle_permission_mode``) and picker picks
+        # (``_open_permission_mode_picker``). The ``default_handler`` is
+        # the agent bridge's own permission handler — captured NOW
+        # before any cycle can overwrite it, so a later cycle out of
+        # ``bypassPermissions`` restores the exact callable the bridge
+        # wired into ``tool_context.permission_handler`` at construction
+        # time. The notify hook posts a ``PermissionModeChanged``
+        # message so the REPL screen can update the status bar.
+        self._runtime_permission_controller = RuntimePermissionController(
+            tool_context_factory=lambda: self.tool_context,
+            default_handler=None,  # wired below after AgentBridge exists
+            app_state_store=None,  # TUI uses direct AppState mutation today
+            notify=self._post_permission_mode_changed,
+        )
         self._agent_bridge = AgentBridge(
             post_message=self._post_to_screen,
             session=self.session,
@@ -182,7 +203,23 @@ class ClawCodexTUI(App):
             stream=self.stream,
             tail_follower=tail_follower,
             append_system_prompt=self._append_system_prompt,
+            runtime_permission_controller=self._runtime_permission_controller,
         )
+        # Patch the controller's ``default_handler`` now that the
+        # bridge has installed its own ``permission_handler`` on the
+        # ``ToolContext``. The cycle-out-of-bypass path reads this to
+        # restore the non-bypass handler. Late binding is safe because
+        # the controller reads ``default_handler`` lazily inside
+        # ``_apply`` (under the lock), not at construction.
+        self._runtime_permission_controller._default_handler = (
+            self._agent_bridge._permission_handler
+        )
+        # Also stamp it on the ToolContext so future hand-rolled cycles
+        # (none today, but a future hook) can find the same callable.
+        if self.tool_context is not None:
+            self.tool_context.default_permission_handler = (
+                self._agent_bridge._permission_handler
+            )
         self._install_away_summary_controller()
         self._resume_browse = resume_browse
 
@@ -443,38 +480,30 @@ class ClawCodexTUI(App):
     def action_cycle_permission_mode(self) -> None:
         """Shift+Tab: cycle through permission modes.
 
-        Cycles: default → acceptEdits → plan → bypassPermissions (if available) → default.
+        Routes through the runtime permission controller so the
+        multi-field swap (``permission_context`` +
+        ``permission_handler`` + ``allow_docs``) is serialized under a
+        single lock; the agent worker thread never sees a torn write.
+        The controller's notify hook posts a
+        :class:`PermissionModeChanged` message that the screen
+        handles to update the status bar and append a transcript line.
         """
-        from src.permissions import cycle_permission_mode
-
-        ctx = self.tool_context
-        if ctx is None or ctx.permission_context is None:
+        if self._runtime_permission_controller is None:
             return
-        current_mode = ctx.permission_context.mode
-        is_bypass_available = False
+        self._runtime_permission_controller.cycle()
+
+    def _post_permission_mode_changed(self, mode: str) -> None:
+        """Notify hook for the runtime permission controller.
+
+        Posts a :class:`PermissionModeChanged` message so the REPL
+        screen can update the status bar and append a transcript line.
+        Wrapped in ``try/except`` because the controller calls this
+        under the lock; a UI failure must not unwind the swap.
+        """
         try:
-            from src.permissions.modes import has_allow_bypass_permissions_mode
-            is_bypass_available = has_allow_bypass_permissions_mode()
+            self._post_to_screen(PermissionModeChanged(mode=mode))
         except Exception:
             pass
-        cycle_ctx = ctx.permission_context.__class__(
-            mode=current_mode,
-            is_bypass_permissions_mode_available=is_bypass_available,
-        )
-        next_mode, next_ctx = cycle_permission_mode(cycle_ctx)
-        ctx.permission_context = next_ctx
-        if next_mode == "bypassPermissions":
-            ctx.permission_handler = lambda _tn, _msg, _sug: (True, False)
-            ctx.allow_docs = True
-        else:
-            ctx.permission_handler = self._agent_bridge._permission_handler
-            ctx.allow_docs = False
-        if self._repl_screen is not None:
-            self._repl_screen.transcript.append_system(
-                f"Permission mode: {next_mode}", style="muted"
-            )
-            self._repl_screen.status_bar.set_permission_mode(next_mode)
-        self.announcer.announce(f"Permission mode: {next_mode}")
 
     # ---- local command dispatcher ----
     def handle_local_slash_command(self, text: str, transcript: Transcript) -> bool:
@@ -797,34 +826,18 @@ class ClawCodexTUI(App):
             if not mode:
                 return
             try:
-                from src.permissions.updates import apply_permission_update
-                from src.permissions.types import PermissionUpdateSetMode
-
-                ctx = self.tool_context
-                if ctx is not None and ctx.permission_context is not None:
-                    new_ctx = apply_permission_update(
-                        ctx.permission_context,
-                        PermissionUpdateSetMode(
-                            type="setMode",
-                            destination="session",
-                            mode=mode,
-                        ),
-                    )
-                    ctx.permission_context = new_ctx
-                    # Update the permission handler if mode changed
-                    if mode == "bypassPermissions":
-                        ctx.permission_handler = lambda _tn, _msg, _sug: (True, False)
-                        ctx.allow_docs = True
-                    else:
-                        # Re-wire the UI permission handler from the bridge
-                        ctx.permission_handler = self._agent_bridge._permission_handler
-                        ctx.allow_docs = False
-                    transcript.append_system(
-                        f"Permission mode set to {mode}.", style="muted"
-                    )
-                    if self._repl_screen is not None:
-                        self._repl_screen.status_bar.set_permission_mode(mode)
-                    self.announcer.announce(f"Permission mode: {mode}.")
+                if self.tool_context is None or self.tool_context.permission_context is None:
+                    return
+                # Route through the runtime controller so the same
+                # lock / AppState-write / handler-restore logic is
+                # shared with Shift+Tab. The controller's notify hook
+                # posts ``PermissionModeChanged`` which the screen
+                # handles to update the status bar.
+                self._runtime_permission_controller.set_mode(mode)
+                transcript.append_system(
+                    f"Permission mode set to {mode}.", style="muted"
+                )
+                self.announcer.announce(f"Permission mode: {mode}.")
             except Exception as exc:
                 transcript.append_system(
                     f"Failed to set permission mode: {exc}", style="error"

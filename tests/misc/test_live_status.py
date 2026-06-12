@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 import time
+import warnings
 
 import pytest
 
@@ -139,3 +140,169 @@ def test_paused_context_releases_and_restores_application() -> None:
         time.sleep(0.05)
     assert status._thread is None
     assert status._app is None
+
+
+def test_on_permission_cycle_callback_invoked() -> None:
+    """The s-tab binding must invoke ``on_permission_cycle`` when set,
+    bypassing the legacy ``getattr(on_submit, "__self__")`` path. The
+    binding handler is extracted from ``app.key_bindings`` and invoked
+    directly — the handler does not read its ``event`` argument, so
+    passing ``None`` is safe.
+
+    The test also passes a bound-method ``on_submit`` whose
+    ``__self__`` exposes ``_permission_mode``, so the legacy fallback
+    *would* match if the binding reached it. The
+    ``DeprecationWarning`` assertion is the contract guard: if a
+    regression removed the short-circuit, the legacy path would run
+    and the warning would fire.
+    """
+
+    class _LegacyStubRepl:
+        """Stand-in REPL — the legacy fallback matches if it runs."""
+
+        _permission_mode = "default"
+        _is_bypass_permissions_mode_available = False
+        tool_context = None
+
+        def submit(self, text: str) -> None:  # pragma: no cover - never called
+            pass
+
+    repl = _LegacyStubRepl()
+    called: list[str] = []
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        status = LiveStatus(
+            "x",
+            on_submit=repl.submit,  # bound method — legacy path WOULD match
+            on_permission_cycle=lambda: called.append("ok"),
+        )
+        with status:
+            time.sleep(0.05)
+            app = status._app
+            if app is None:
+                pytest.skip("Application did not start under headless pytest")
+
+            # prompt_toolkit stores ``KeyBindings.bindings`` as a list
+            # of ``Binding`` objects with a ``keys`` tuple of
+            # ``Keys`` enum values (e.g. ``Keys.BackTab`` whose
+            # ``.value == "s-tab"``) and a ``handler`` callable.
+            stab = None
+            for binding in app.key_bindings.bindings:
+                if any(
+                    getattr(key, "value", None) == "s-tab"
+                    for key in binding.keys
+                ):
+                    stab = binding
+                    break
+            assert stab is not None, "s-tab binding not registered"
+            stab.handler(event=None)
+
+    assert called == ["ok"], "on_permission_cycle callback was not invoked"
+    # The legacy fallback's DeprecationWarning must NOT fire when
+    # on_permission_cycle is set — the new path short-circuits the
+    # binding before the legacy code runs.
+    deprecations = [
+        w for w in caught if issubclass(w.category, DeprecationWarning)
+    ]
+    assert deprecations == [], (
+        f"unexpected DeprecationWarning(s): {[str(w.message) for w in deprecations]}"
+    )
+    # The legacy guard flag is not set (the new path was taken).
+    assert not getattr(status, "_legacy_perm_cycle_warned", False)
+
+
+def test_on_permission_cycle_not_set_keeps_legacy_path() -> None:
+    """When ``on_permission_cycle`` is ``None``, the s-tab binding
+    must NOT short-circuit on the new path. The test verifies
+    ``status._on_permission_cycle`` is ``None`` — proving the kwarg
+    default and the field name are stable. (Driving the legacy path
+    itself would require a real REPL instance with a working
+    ``tool_context``; the silent-bypass regression is covered by
+    ``tests/runtime/test_permission_runtime.py::test_set_mode_fires_listener_chain``.)
+    """
+
+    status = LiveStatus("x")
+    assert status._on_permission_cycle is None
+
+
+def test_legacy_fallback_fires_deprecation_when_repl_matches() -> None:
+    """When ``on_permission_cycle`` is ``None`` and ``on_submit`` is a
+    bound method whose ``__self__`` exposes ``_permission_mode``, the
+    legacy fallback path must fire its single-shot
+    ``DeprecationWarning`` exactly once across multiple binding
+    invocations.
+
+    This pins the contract: the warning is per-instance, not per
+    Shift+Tab press — a noisy log would drown the spinner row's
+    real messages.
+    """
+
+    class _LegacyStubRepl:
+        _permission_mode = "default"
+        _is_bypass_permissions_mode_available = False
+        tool_context = None
+
+        def submit(self, text: str) -> None:  # pragma: no cover
+            pass
+
+    repl = _LegacyStubRepl()
+    # Use a custom permission handler so the legacy code path
+    # *reaches* the ``tool_context`` swap without raising. We don't
+    # assert on the resulting mode (the handler isn't actually called
+    # by the binding — the binding only mutates state); we only assert
+    # the DeprecationWarning semantics.
+    class _StubToolContext:
+        permission_context = None
+        permission_handler = None
+        allow_docs = False
+        default_permission_handler = None
+
+        def __setattr__(self, name: str, value: object) -> None:
+            object.__setattr__(self, name, value)
+
+    ctx = _StubToolContext()
+    ctx.default_permission_handler = lambda *a, **kw: (True, False)
+    repl.tool_context = ctx
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        status = LiveStatus(
+            "x",
+            on_submit=repl.submit,
+        )
+        with status:
+            time.sleep(0.05)
+            app = status._app
+            if app is None:
+                pytest.skip("Application did not start under headless pytest")
+
+            stab = None
+            for binding in app.key_bindings.bindings:
+                if any(
+                    getattr(key, "value", None) == "s-tab"
+                    for key in binding.keys
+                ):
+                    stab = binding
+                    break
+            assert stab is not None, "s-tab binding not registered"
+
+            # First press: warning fires.
+            stab.handler(event=None)
+            # Second press: single-shot, no second warning.
+            stab.handler(event=None)
+            stab.handler(event=None)
+
+    perm_deprecations = [
+        w
+        for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and "permission_cycle" in str(w.message)
+    ]
+    assert len(perm_deprecations) == 1, (
+        f"expected exactly one DeprecationWarning, got {len(perm_deprecations)}: "
+        f"{[str(w.message) for w in perm_deprecations]}"
+    )
+    # The legacy guard flag is set after the first invocation.
+    assert getattr(status, "_legacy_perm_cycle_warned", False) is True
+

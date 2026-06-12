@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+import warnings
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
@@ -109,6 +110,7 @@ class LiveStatus:
         on_submit: Callable[[str], None] | None = None,
         on_expand: Callable[[], None] | None = None,
         on_background: Callable[[], None] | None = None,
+        on_permission_cycle: Callable[[], None] | None = None,
         completer=None,
         verbose: bool = False,
     ) -> None:
@@ -122,6 +124,13 @@ class LiveStatus:
         self._on_submit = on_submit
         self._on_expand = on_expand
         self._on_background = on_background
+        # Preferred Shift+Tab handler. When set, the s-tab key binding
+        # invokes this callback (typically ``repl._apply_permission_mode_cycle``,
+        # which routes through ``RuntimePermissionController``). When unset,
+        # the binding falls back to the legacy ``getattr(on_submit, "__self__")``
+        # path with a one-shot ``DeprecationWarning`` — the legacy path
+        # exists for downstream callers that haven't migrated yet.
+        self._on_permission_cycle = on_permission_cycle
         # Optional ``prompt_toolkit.completion.Completer``. When set,
         # the live input buffer surfaces completions (e.g. ``@`` file
         # mentions, slash commands) in a popup above the input row —
@@ -334,6 +343,24 @@ class LiveStatus:
 
             Delegates to the REPL's permission context if available.
             """
+            # Preferred path: caller-supplied callback (e.g.
+            # ``repl._apply_permission_mode_cycle``) routes through the
+            # runtime permission controller and handles thread safety,
+            # AppState listener firing, and UI notification in one place.
+            cb = self._on_permission_cycle
+            if cb is not None:
+                try:
+                    cb()
+                except Exception:
+                    pass
+                return
+
+            # Legacy fallback: ``getattr(on_submit, "__self__")`` reaches
+            # the REPL instance via the bound method's reference. Kept
+            # for backward compatibility with downstream callers that
+            # haven't migrated to ``on_permission_cycle``; the warning
+            # fires once per ``LiveStatus`` instance, not on every
+            # Shift+Tab press, so the log stays quiet at runtime.
             try:
                 from src.permissions import cycle_permission_mode
                 from src.permissions.types import ToolPermissionContext
@@ -342,6 +369,15 @@ class LiveStatus:
                 if on_submit is not None:
                     repl = getattr(on_submit, "__self__", None)
                     if repl is not None and hasattr(repl, "_permission_mode"):
+                        if not getattr(self, "_legacy_perm_cycle_warned", False):
+                            self._legacy_perm_cycle_warned = True
+                            warnings.warn(
+                                "LiveStatus Shift+Tab falling back to legacy "
+                                "on_submit.__self__ path; pass on_permission_cycle "
+                                "explicitly to silence this DeprecationWarning.",
+                                DeprecationWarning,
+                                stacklevel=2,
+                            )
                         current_mode = repl._permission_mode
                         is_bypass_available = getattr(
                             repl, "_is_bypass_permissions_mode_available", False

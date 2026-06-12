@@ -68,6 +68,7 @@ class AgentBridge:
         stream: bool = True,
         tail_follower: Any | None = None,
         append_system_prompt: str = "",
+        runtime_permission_controller: Any | None = None,
     ) -> None:
         self._post = post_message
         self._session = session
@@ -81,6 +82,13 @@ class AgentBridge:
         self._append_system_prompt = append_system_prompt
         self._busy_lock = threading.Lock()
         self._busy = False
+        # Runtime permission controller — the unified chokepoint for
+        # Shift+Tab cycles. Stored on the bridge so ``replace_runtime``
+        # can rewire it if the tool context is swapped mid-session.
+        # ``None`` is tolerated: callers that pre-date the unified
+        # controller (mostly older tests) get the legacy direct-mutation
+        # path through ``action_cycle_permission_mode``.
+        self._runtime_permission_controller = runtime_permission_controller
         # Per-run abort controller. Created fresh in :meth:`submit` and
         # tripped by :meth:`cancel` (ESC from the prompt). The agent
         # loop checks the signal at safe boundaries; the streaming
@@ -90,6 +98,13 @@ class AgentBridge:
         # Wire permission handler: the tool dispatcher calls this from
         # the worker thread, we post to the UI and block on an Event.
         tool_context.permission_handler = self._permission_handler
+        # Also stamp the controller's ``default_permission_handler`` on
+        # the tool context so a later cycle-out-of-bypass restores this
+        # exact callable. Idempotent with the TUI app's __init__ patch
+        # — the bridge is the authoritative owner of the handler, so
+        # any post-construction wiring wins.
+        if tool_context.default_permission_handler is None:
+            tool_context.default_permission_handler = self._permission_handler
         # Wire AskUserQuestion handler: the AskUserQuestion tool calls
         # ``context.ask_user(questions)`` from the worker thread. We
         # mirror the permission pattern — post a request to the UI,
@@ -124,6 +139,8 @@ class AgentBridge:
         self._tool_registry = tool_registry
         self._tool_context = tool_context
         tool_context.permission_handler = self._permission_handler
+        if tool_context.default_permission_handler is None:
+            tool_context.default_permission_handler = self._permission_handler
         tool_context.ask_user = self._ask_user_handler
 
     def reset_advisor_dedup(self) -> None:

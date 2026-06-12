@@ -158,6 +158,14 @@ class ToolContext:
     allow_docs: bool = False
 
     permission_handler: Callable[[str, str, Optional[str]], tuple[bool, bool]] | None = None
+    # Snapshot of the non-bypass permission handler, captured at
+    # construction. The runtime permission controller
+    # (``clawcodex_ext/permissions/runtime.py``) reads this on every
+    # cycle out of ``bypassPermissions`` mode so the swap can restore
+    # the original handler without reaching into the REPL/TUI's
+    # internals. ``__post_init__`` defaults it to ``permission_handler``
+    # when omitted so existing call sites keep working.
+    default_permission_handler: Callable[..., Any] | None = None
 
     options: ToolUseOptions = field(default_factory=ToolUseOptions)
     # Always present; callers that own the per-run cancellation lifecycle
@@ -238,6 +246,8 @@ class ToolContext:
             self.cwd = self.workspace_root
         else:
             self.cwd = Path(self.cwd).resolve()
+        if self.default_permission_handler is None:
+            self.default_permission_handler = self.permission_handler
 
     def mark_file_read(self, path: Path, *, partial: bool = False) -> None:
         stat = path.stat()

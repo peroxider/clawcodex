@@ -42,6 +42,7 @@ from ..messages import (
     AskUserQuestionResolved,
     AssistantChunk,
     AssistantMessage,
+    PermissionModeChanged,
     PermissionModeCycleRequested,
     PermissionRequested,
     PermissionResolved,
@@ -191,6 +192,20 @@ class REPLScreen(Screen):
     ) -> None:
         """Handle Shift+Tab posted from PromptInput."""
         self.action_cycle_permission_mode()
+
+    def on_permission_mode_changed(
+        self, message: PermissionModeChanged
+    ) -> None:
+        """Handle a mode change posted by the runtime permission
+        controller. Updates the status bar and appends a transcript
+        line so the user sees the new mode regardless of which entry
+        point fired (Shift+Tab, ``/permissions`` picker, or the
+        ``permissions_command`` registry path).
+        """
+        self.status_bar.set_permission_mode(message.mode)
+        self.transcript.append_system(
+            f"Permission mode: {message.mode}", style="muted"
+        )
 
     # ---- prompt submission ----
     def on_prompt_submitted(self, message: PromptSubmitted) -> None:

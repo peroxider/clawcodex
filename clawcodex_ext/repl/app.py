@@ -193,6 +193,32 @@ class ClawCodexExtREPL(ClawcodexREPL):
         else:
             self.tool_context.permission_handler = self._handle_permission_request
 
+        # ---- Runtime permission controller (downstream subclass) ----
+        # The upstream ``ClawcodexREPL.__init__`` instantiates its own
+        # controller, but this subclass overrides ``__init__`` without
+        # calling ``super().__init__``, so we build one here. The
+        # duplicate ``s-tab`` binding further down in this file routes
+        # through it; ``/permissions`` (if any) and the LiveStatus
+        # Shift+Tab path also go through the same chokepoint.
+        #
+        # ``default_permission_handler`` is snapshotted on the
+        # ``ToolContext`` so the controller can restore it on cycle
+        # OUT of ``bypassPermissions`` without reaching back into
+        # ``self._handle_permission_request``.
+        if self.tool_context is not None:
+            self.tool_context.default_permission_handler = (
+                self._handle_permission_request
+            )
+        from clawcodex_ext.permissions.runtime import (
+            RuntimePermissionController,
+        )
+
+        self._runtime_permission_controller = RuntimePermissionController(
+            tool_context_factory=lambda: self.tool_context,
+            default_handler=self._handle_permission_request,
+            notify=self._notify_permission_mode_change,
+        )
+
         # ---- State fields (shared with upstream) ----
         self._stats_turns: int = 0
         self._stats_input_tokens: int = 0
@@ -355,34 +381,14 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
                 Mirrors the TypeScript Ink reference's Shift+Tab binding
                 for cycling through default → acceptEdits → plan →
-                bypassPermissions → default.
+                bypassPermissions → default. Routes through
+                :class:`RuntimePermissionController` so the lock, the
+                ``apply_permission_update`` canonical mutation, the
+                AppState listener chain, and the default-handler
+                restoration are all shared with the ``/permissions``
+                picker and the LiveStatus Shift+Tab path.
                 """
-                from src.permissions import cycle_permission_mode
-
-                ctx = self.tool_context
-                if ctx is None:
-                    return
-                current_mode = ctx.permission_context.mode
-                is_bypass_available = (
-                    self._is_bypass_permissions_mode_available
-                )
-                # Build a context for cycle_permission_mode
-                from src.permissions.types import ToolPermissionContext
-                cycle_ctx = ToolPermissionContext(
-                    mode=current_mode,
-                    is_bypass_permissions_mode_available=is_bypass_available,
-                )
-                next_mode, next_ctx = cycle_permission_mode(cycle_ctx)
-                # Update the REPL's permission state
-                self._permission_mode = next_mode
-                ctx.permission_context = next_ctx
-                # Update the tool context's permission handler if mode changed
-                if next_mode == "bypassPermissions":
-                    ctx.permission_handler = lambda _tn, _msg, _sug: (True, False)
-                    ctx.allow_docs = True
-                else:
-                    ctx.permission_handler = self._handle_permission_request
-                    ctx.allow_docs = False
+                self._apply_permission_mode_cycle()
 
             @self.bindings.add("tab")  # type: ignore[attr-defined]
             def _tab_accepts_completion_or_triggers_message_history(event):  # type: ignore[no-untyped-def]
@@ -461,6 +467,47 @@ class ClawCodexExtREPL(ClawcodexREPL):
         )
 
         self._update_built_in_commands_with_command_system()
+
+    # ---- Runtime permission controller helpers ----
+    # Mirrors the upstream ``ClawcodexREPL`` methods. The downstream
+    # subclass overrides ``__init__`` without calling ``super().__init__``,
+    # so the controller is instantiated locally (see ``__init__`` above)
+    # and these helpers route the ``s-tab`` binding (registered in
+    # ``__init__``) through the chokepoint. Sharing the helper with the
+    # upstream class keeps the two implementations in lockstep — any
+    # future change to the controller contract only needs to be applied
+    # in one place.
+    def _apply_permission_mode_cycle(self) -> None:
+        """Shift+Tab: cycle to the next permission mode.
+
+        Routes through :class:`RuntimePermissionController` so the
+        same lock / ``apply_permission_update`` / AppState-write /
+        handler-restore logic is shared with the ``/permissions``
+        picker and the LiveStatus Shift+Tab path.
+        """
+        next_mode = self._runtime_permission_controller.cycle()
+        self._permission_mode = next_mode
+
+    def _notify_permission_mode_change(self, mode: str) -> None:
+        """Surface a mode change in the live status row or console.
+
+        Called by the runtime controller after the multi-field swap.
+        When a :class:`LiveStatus` is mounted (i.e. the agent is
+        running), update its visible message — the user sees the new
+        mode inline in the spinner row. Otherwise fall through to
+        :meth:`console.print` so the change is visible between turns.
+        """
+        status = getattr(self, "_active_live_status", None)
+        if status is not None:
+            try:
+                status.update(f"mode: {mode}")
+            except Exception:
+                pass
+            return
+        try:
+            self.console.print(f"[green]Permission mode: {mode}[/green]")
+        except Exception:
+            pass
 
     # ---- S-R4-M: session metadata management ----
 
