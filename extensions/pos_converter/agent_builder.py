@@ -157,20 +157,20 @@ class AgentBuilder:
         skill_paths = writer.write_skills(skill_dicts, self._output_dir)
         md_files.extend(skill_paths)
 
-        # If multiple source components, auto-generate overview agent
-        if len(self._source_components) > 1:
-            overview_info = []
-            for comp in self._source_components:
-                overview_info.append(
-                    AgentComponentInfo(
-                        name=f"{comp.name}-agent",
-                        description=comp.description,
-                        capabilities=[op.name for op in comp.operations[:5]],
-                        input_types=list(comp.input_schema.keys()),
-                        output_types=list(comp.output_schema.keys()),
-                        invoke_pattern=f"@{comp.name}-agent {{task}}",
-                    )
+        # Build overview from grouped skills (not raw source_components).
+        overview_info: list[AgentComponentInfo] = []
+        for skill in self._skills:
+            overview_info.append(
+                AgentComponentInfo(
+                    name=f"{skill.name}-agent",
+                    description=skill.description,
+                    capabilities=skill.allowed_tools[:5],
+                    invoke_pattern=f"@{skill.name}-agent {{task}}",
                 )
+            )
+
+        # Overview agent — generated when there are 2+ agents
+        if len(overview_info) > 1:
             overview_path = writer.write_overview_agent(
                 name="clawcodex-overview",
                 description=f"Overview agent for {self._agent_name}",

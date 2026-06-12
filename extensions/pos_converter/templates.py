@@ -16,6 +16,8 @@ class MappingRule:
     tool_name: str
     skill_name: str
     description: str = ""
+    match_type: str = "substring"
+    match_target: str = "op_name"
 
 
 # Template for generating Agent markdown files
@@ -174,10 +176,6 @@ when_to_use: {{ description }}
 {{ agent.description }}
 
 **能力**: {% for cap in agent.capabilities %}{{ cap }}{% if not loop.last %}, {% endif %}{% endfor %}
-
-**输入类型**: {% for t in agent.input_types %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}
-
-**输出类型**: {% for t in agent.output_types %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}
 
 **调用方式**: `{{ agent.invoke_pattern }}`
 

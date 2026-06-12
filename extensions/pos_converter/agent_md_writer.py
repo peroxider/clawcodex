@@ -154,10 +154,6 @@ when_to_use: {{ description }}
 
 **能力**: {% for cap in agent.capabilities %}{{ cap }}{% if not loop.last %}, {% endif %}{% endfor %}
 
-**输入类型**: {% for t in agent.input_types %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}
-
-**输出类型**: {% for t in agent.output_types %}{{ t }}{% if not loop.last %}, {% endif %}{% endfor %}
-
 **调用方式**: `{{ agent.invoke_pattern }}`
 
 {% endfor %}
