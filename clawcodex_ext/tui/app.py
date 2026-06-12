@@ -33,6 +33,10 @@ from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.registry import ToolRegistry
 
+from clawcodex_ext.away_summary.controller import AwaySummaryController
+from clawcodex_ext.away_summary.config import load_away_summary_config
+from clawcodex_ext.away_summary.messages import format_away_summary_for_display
+
 from .a11y import Announcer, describe_status
 from .agent_bridge import AgentBridge
 from .commands import (
@@ -152,6 +156,7 @@ class ClawCodexTUI(App):
         )
         self._repl_screen: REPLScreen | None = None
         self._command_context: Any | None = None
+        self._away_summary_controller: AwaySummaryController | None = None
         # Transcript renderables captured at exit time so entry points
         # can dump them back to the main terminal scrollback after the
         # alt-screen tears down. Mirrors the TS ink behaviour where the
@@ -178,6 +183,7 @@ class ClawCodexTUI(App):
             tail_follower=tail_follower,
             append_system_prompt=self._append_system_prompt,
         )
+        self._install_away_summary_controller()
         self._resume_browse = resume_browse
 
     # The base CSS for the REPL; Phase 1 uses Textual's default theme
@@ -196,8 +202,6 @@ class ClawCodexTUI(App):
 
     # ---- lifecycle ----
     def on_mount(self) -> None:
-        import sys
-        print(f"[DEBUG app] on_mount called, session has {len(self.session.conversation.messages)} messages", file=sys.stderr)
         # Apply palette-derived CSS on top of the component defaults so
         # the chrome picks up the correct background / foreground even
         # when Textual's internal theme doesn't cover every slot.
@@ -225,9 +229,10 @@ class ClawCodexTUI(App):
         self.push_screen(self._repl_screen)
 
         # Replay conversation history from a resumed session so the
-        # transcript widget shows the prior context immediately.
-        if self.session.conversation.messages:
-            self._replay_history()
+        # transcript widget shows the prior context immediately. Defer
+        # until after the first refresh so REPLScreen has mounted its
+        # TranscriptView before rows are appended.
+        self._schedule_replay_history()
 
         # Terminal chrome: set a descriptive title, enable DEC 1004
         # focus reporting, and mark the tab idle. The app-state
@@ -248,6 +253,8 @@ class ClawCodexTUI(App):
             self._show_resume_browser()
 
     def on_unmount(self) -> None:
+        if self._away_summary_controller is not None:
+            self._away_summary_controller.close()
         # Best-effort cleanup so we don't leave stale chrome on the host.
         try:
             self._state_unsub()  # type: ignore[attr-defined]
@@ -301,6 +308,8 @@ class ClawCodexTUI(App):
         """
 
         self._capture_exit_snapshot()
+        if self._away_summary_controller is not None:
+            self._away_summary_controller.close()
         # Save session state so it can be resumed later.
         try:
             self.session.save()
@@ -500,13 +509,29 @@ class ClawCodexTUI(App):
         return True
 
     async def _dispatch_registry_async(self, text: str, transcript: Transcript) -> None:
-        result = await dispatch_registry_command(
-            text,
-            command_context=self._ensure_command_context(),
+        stripped = text.strip()
+        command_name = (
+            stripped[1:].split(maxsplit=1)[0].lower()
+            if stripped.startswith("/")
+            else ""
         )
+        show_busy = command_name == "recap" and not self.app_state.is_thinking
+        if show_busy:
+            self.app_state.set_thinking(True, verb="Recapping")
+        try:
+            result = await dispatch_registry_command(
+                text,
+                command_context=self._ensure_command_context(),
+            )
+        finally:
+            if show_busy:
+                self.app_state.set_thinking(False)
         if not result.handled:
             # Unknown command — show the raw text as a user prompt so
             # the agent can react to it, matching legacy REPL behavior.
+            if result.error:
+                transcript.append_system(result.error, style="error")
+                return
             transcript.append_user(text)
             self.submit_to_agent(text)
             return
@@ -563,7 +588,11 @@ class ClawCodexTUI(App):
             transcript.append_system(f"Stream mode {status}.")
             return
         if result.system_text:
-            transcript.append_system(result.system_text, style="muted")
+            transcript.append_system(
+                result.system_text,
+                style="muted",
+                render=result.system_render,
+            )
         if result.prompt_text:
             transcript.append_user(f"(from slash command) {result.prompt_text[:80]}…")
             self.submit_to_agent(result.prompt_text)
@@ -1066,6 +1095,7 @@ class ClawCodexTUI(App):
                 tool_context=self.tool_context,
                 runtime_context=self.runtime_context,
             )
+            self._command_context.session = self.session
         except Exception:
             self._command_context = None
         return self._command_context
@@ -1073,6 +1103,8 @@ class ClawCodexTUI(App):
     # ---- agent loop plumbing ----
     def submit_to_agent(self, prompt: str) -> None:
         ## _log(f'[app.py] submit_to_agent called: {prompt}')
+        if self._away_summary_controller is not None:
+            self._away_summary_controller.on_user_interaction("submit")
         # Track last user input in session metadata for the session browser.
         self._update_metadata_last_input(prompt)
         try:
@@ -1091,6 +1123,8 @@ class ClawCodexTUI(App):
     def on_cancel_requested(self, _: CancelRequested) -> None:
         """ESC from the prompt — cancel the in-flight agent run, if any."""
 
+        if self._away_summary_controller is not None:
+            self._away_summary_controller.on_user_interaction("cancel")
         if self._agent_bridge.cancel():
             self.announcer.announce("Cancelling…", level="assertive", notify=False)
 
@@ -1123,12 +1157,12 @@ class ClawCodexTUI(App):
             # Swap session + bridge.
             self.session = resumed
             self._agent_bridge._session = resumed
+            self._install_away_summary_controller()
             if tail is not None:
                 self._agent_bridge._tail_follower = tail
                 self._agent_bridge._start_tail_follower()
             # Replay the restored conversation into the transcript.
-            if resumed.conversation.messages and self._repl_screen is not None:
-                self._replay_history()
+            self._schedule_replay_history()
         except Exception:
             pass
 
@@ -1142,6 +1176,48 @@ class ClawCodexTUI(App):
         # fails loudly instead of silently swallowing user questions
         # the way the old no-op lambda did.
         return ToolContext(workspace_root=self.workspace_root)
+
+    def _install_away_summary_controller(self) -> None:
+        if self._away_summary_controller is not None:
+            self._away_summary_controller.close()
+
+        def _display(text: str) -> None:
+            def _append() -> None:
+                if self._repl_screen is not None:
+                    display_text = (
+                        text.strip()
+                        if text.strip().startswith(("Recap", "Away Summary"))
+                        else format_away_summary_for_display(text)
+                    )
+                    self._repl_screen.transcript.append_system(
+                        display_text,
+                        style="muted",
+                        render="markdown",
+                    )
+
+            try:
+                self.call_from_thread(_append)
+            except RuntimeError:
+                _append()
+
+        self._away_summary_controller = AwaySummaryController(
+            conversation=self.session.conversation,
+            provider_getter=lambda: self.provider,
+            model_getter=lambda: self.model,
+            session_getter=lambda: self.session,
+            display=_display,
+            config_loader=lambda: load_away_summary_config(cwd=self.workspace_root),
+        )
+
+    def _schedule_replay_history(self) -> None:
+        if self._repl_screen is None:
+            return
+        if not getattr(self.session.conversation, "messages", None):
+            return
+        try:
+            self.call_after_refresh(self._replay_history)
+        except Exception:
+            self._replay_history()
 
     def _replay_history(self) -> None:
         """Replay conversation messages from a resumed session to the transcript.
@@ -1161,6 +1237,15 @@ class ClawCodexTUI(App):
                 text = _flatten_message_text(content)
                 if text and self._repl_screen is not None:
                     self._repl_screen.transcript.append_user(text)
+                continue
+            if role == "system":
+                subtype = getattr(msg, "subtype", None) or ""
+                if subtype == "away_summary" and self._repl_screen is not None:
+                    self._repl_screen.transcript.append_system(
+                        format_away_summary_for_display(msg),
+                        style="muted",
+                        render="markdown",
+                    )
                 continue
             if role == "assistant":
                 text = _flatten_message_text(content)
@@ -1214,3 +1299,14 @@ class ClawCodexTUI(App):
             target.post_message(message)
         except Exception:
             pass
+
+
+class ClawCodexExtTUI(ClawCodexTUI):
+    """Downstream TUI app class.
+
+    Kept as a named subclass so downstream entrypoints can depend on the
+    extension surface without changing the upstream-shaped ``ClawCodexTUI``
+    facade.
+    """
+
+    pass

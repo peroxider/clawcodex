@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from clawcodex_ext.away_summary.controller import AwaySummaryController
+from clawcodex_ext.away_summary.registration import register_away_summary_commands
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
 
@@ -73,6 +75,16 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     # registry so the slash-command dispatcher can find them.
     if getattr(repl, "command_registry", None) is not None:
         register_runtime_commands(repl.command_registry)
+        register_away_summary_commands(repl.command_registry)
+        update_commands = getattr(
+            repl,
+            "_update_built_in_commands_with_command_system",
+            None,
+        )
+        if callable(update_commands):
+            update_commands()
+
+    _install_away_summary_controller(repl)
 
     runtime = getattr(repl, "runtime_context", None)
     if runtime is None:
@@ -84,6 +96,33 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
 
     # ---- SIGTERM / SIGINT: save session + print resume hint (S-R1) ----
     _register_signal_session_save(repl)
+
+
+def _install_away_summary_controller(repl: "ClawcodexREPL") -> None:
+    if getattr(repl, "_away_summary_controller", None) is not None:
+        return
+
+    session = getattr(repl, "session", None)
+    conversation = getattr(session, "conversation", None)
+    if conversation is None:
+        return
+
+    def _display(text: str) -> None:
+        print_recap = getattr(repl, "_print_local_command_text", None)
+        if callable(print_recap):
+            print_recap(text, command="recap")
+            return
+        console = getattr(repl, "console", None)
+        if console is not None:
+            console.print(text)
+
+    repl._away_summary_controller = AwaySummaryController(
+        conversation=conversation,
+        provider_getter=lambda: getattr(repl, "provider", None),
+        model_getter=lambda: getattr(getattr(repl, "provider", None), "model", None),
+        session_getter=lambda: getattr(repl, "session", None),
+        display=_display,
+    )
 
 
 def _register_signal_session_save(repl: "ClawcodexREPL") -> None:

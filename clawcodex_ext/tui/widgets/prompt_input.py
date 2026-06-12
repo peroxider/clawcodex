@@ -268,7 +268,7 @@ class PromptInput(Vertical):
             idx = self._suggestions.highlighted
             if idx is not None:
                 option = self._suggestions.get_option_at_index(idx)
-                if option is not None and option.id:
+                if option is not None and option.id and option.id != text:
                     self._input.value = option.id
                     self._input.cursor_position = len(option.id)
                     self._hide_suggestions()

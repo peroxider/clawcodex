@@ -297,7 +297,13 @@ class TranscriptView(VerticalScroll):
         self.mount(SystemMessage(f"advisor [{kind}]", style="muted"))
         self._scroll_end()
 
-    def append_system(self, text: str, *, style: str = "muted") -> None:
+    def append_system(
+        self,
+        text: str,
+        *,
+        style: str = "muted",
+        render: str = "plain",
+    ) -> None:
         """Append a system / informational row.
 
         The ``style`` argument historically accepted Rich style strings
@@ -308,7 +314,7 @@ class TranscriptView(VerticalScroll):
 
         self._retire_active_assistant()
         canonical = _canonical_system_style(style)
-        self.mount(SystemMessage(text, style=canonical))
+        self.mount(SystemMessage(text, style=canonical, render=render))
         self._scroll_end()
 
     def clear_transcript(self) -> None:

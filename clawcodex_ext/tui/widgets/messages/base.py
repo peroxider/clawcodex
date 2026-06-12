@@ -8,6 +8,7 @@ dynamic children, not a single rendered block.
 
 from __future__ import annotations
 
+from rich.markdown import Markdown
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Vertical
@@ -53,32 +54,47 @@ class SystemMessage(BaseRow):
     }
     """
 
-    def __init__(self, text: str, *, style: str = "muted") -> None:
+    def __init__(
+        self,
+        text: str,
+        *,
+        style: str = "muted",
+        render: str = "plain",
+    ) -> None:
         super().__init__()
         self._text = text
         self._style = style
+        self._render_mode = render
         if style == "error":
             self.add_class("-error")
         else:
             self.add_class("-muted")
 
     def compose(self) -> ComposeResult:
-        yield Static(Text(self._text), markup=False)
+        if self._render_mode == "markdown":
+            yield Static(Markdown(self._text))
+        else:
+            yield Static(Text(self._text), markup=False)
 
     def update_text(self, text: str) -> None:
         """Swap the row contents in place without re-mounting children."""
         self._text = text
         try:
             static = self.query_one(Static)
-            static.update(Text(text))
+            if self._render_mode == "markdown":
+                static.update(Markdown(text))
+            else:
+                static.update(Text(text))
         except Exception:
             # Before mount — next compose() will pick up the new text.
             pass
 
-    def snapshot(self) -> Text:
-        """Return a Rich :class:`Text` for post-exit scrollback dump."""
+    def snapshot(self):
+        """Return a Rich renderable for post-exit scrollback dump."""
 
         style = "dim" if self._style != "error" else "red"
+        if self._render_mode == "markdown":
+            return Markdown(self._text)
         return Text(self._text, style=style)
 
 

@@ -20,6 +20,7 @@ alongside the new widget layout.
 from __future__ import annotations
 
 import pytest
+from rich.markdown import Markdown
 
 pytest.importorskip("textual")
 
@@ -276,3 +277,32 @@ async def test_append_system_mounts_system_row(tmp_path):
         await pilot.pause()
         row = _rows(t)[-1]
         assert isinstance(row, SystemMessage)
+
+
+@pytest.mark.asyncio
+async def test_append_system_defaults_to_plain_text(tmp_path):
+    app = _make_app(tmp_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        t = app.screen.query_one(Transcript)
+        t.append_system("**not bold**", style="muted")
+        await pilot.pause()
+        row = _rows(t)[-1]
+
+    assert isinstance(row, SystemMessage)
+    assert row._render_mode == "plain"  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_append_system_can_render_away_summary_markdown(tmp_path):
+    app = _make_app(tmp_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        t = app.screen.query_one(Transcript)
+        t.append_system("Recap\n- **done**", style="muted", render="markdown")
+        await pilot.pause()
+        row = _rows(t)[-1]
+
+    assert isinstance(row, SystemMessage)
+    assert row._render_mode == "markdown"  # noqa: SLF001
+    assert isinstance(row.snapshot(), Markdown)

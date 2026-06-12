@@ -206,6 +206,10 @@ class REPLScreen(Screen):
     # ---- agent message handlers ----
     def on_agent_run_started(self, _: AgentRunStarted) -> None:
         self.status_bar.set_busy()
+        app = self.app
+        controller = getattr(app, "_away_summary_controller", None)
+        if controller is not None:
+            controller.on_run_start()
 
     def on_assistant_chunk(self, message: AssistantChunk) -> None:
         ## _log(f'[repl.py] on_assistant_chunk: {message.text[:50] if message.text else "empty"}...')
@@ -241,13 +245,18 @@ class REPLScreen(Screen):
 
     def on_agent_run_finished(self, message: AgentRunFinished) -> None:
         self.status_bar.set_idle()
+        app = self.app
+        controller = getattr(app, "_away_summary_controller", None)
+        if controller is not None:
+            controller.on_run_finish()
         if message.error:
             self.transcript.append_system(f"error: {message.error}", style="error")
-            app = self.app
             if hasattr(app, "announcer"):
                 app.announcer.announce(  # type: ignore[attr-defined]
                     f"Error: {message.error}", level="assertive"
                 )
+        elif controller is not None:
+            controller.on_assistant_turn_complete()
         self.prompt_input.set_enabled(True)
         self.call_after_refresh(self.prompt_input.focus_input)
 

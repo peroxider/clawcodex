@@ -495,6 +495,8 @@ class ClawcodexREPL:
         # reference's "type while it's still thinking" affordance.
         self._queued_prompts: list[str] = []
         self._queued_prompts_lock = threading.Lock()
+        self._background_outputs: list[str] = []
+        self._background_outputs_lock = threading.Lock()
         # Permission dialogs can be requested from different worker paths
         # (e.g. subagents/tools). Serialize interactive prompts so we never
         # mount competing prompt_toolkit applications at once.
@@ -1037,6 +1039,15 @@ class ClawcodexREPL:
         # Create command registry and register built-ins
         self.command_registry = CommandRegistry()
         register_builtin_commands(self.command_registry)
+        try:
+            from clawcodex_ext.away_summary.registration import (
+                register_away_summary_commands,
+            )
+
+            register_away_summary_commands(None)
+            register_away_summary_commands(self.command_registry)
+        except Exception:
+            pass
 
         # Create cost tracker and history
         self.cost_tracker = CostTracker()
@@ -1109,6 +1120,49 @@ class ClawcodexREPL:
         except Exception as e:
             return CommandResult.error(command, str(e))
 
+    def _run_command_async_with_status(
+        self,
+        command: str,
+        args: str,
+        *,
+        status_message: str | None = None,
+    ) -> CommandResult:
+        """Run async slash-command execution without freezing the visible REPL."""
+
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                self._try_execute_command_async(command, args),
+            )
+            if status_message:
+                status_ref: list[LiveStatus] = []
+
+                def _on_submit(text: str) -> None:
+                    self._enqueue_prompt(text)
+                    if status_ref:
+                        status_ref[0].update(status_message)
+
+                try:
+                    with _pt_patch_stdout(raw=True):
+                        with LiveStatus(
+                            status_message,
+                            on_submit=_on_submit,
+                            on_expand=self._do_expand_last,
+                            completer=self.completer,
+                        ) as status:
+                            status_ref.append(status)
+                            self._active_live_status = status
+                            try:
+                                while not future.done():
+                                    time.sleep(0.05)
+                            finally:
+                                self._active_live_status = None
+                except Exception:
+                    self._active_live_status = None
+            return future.result()
+
     def _handle_command_result(self, result: CommandResult) -> bool:
         """Handle the result of a command execution.
 
@@ -1121,7 +1175,10 @@ class ClawcodexREPL:
 
         if result.result_type == "text":
             if result.text:
-                self.console.print("\n" + result.text)
+                self._print_local_command_text(
+                    result.text,
+                    command=result.command_name,
+                )
                 self.console.print()
             return True
 
@@ -1145,6 +1202,19 @@ class ClawcodexREPL:
             return True
 
         return False
+
+    def _print_local_command_text(self, text: str, *, command: str = "") -> None:
+        """Print local command output, rendering only /recap as Markdown."""
+
+        if command == "recap" and self._is_recap_text(text):
+            self.console.print()
+            self.console.print(Markdown(text))
+            return
+        self.console.print("\n" + text)
+
+    @staticmethod
+    def _is_recap_text(text: str) -> bool:
+        return text.strip().startswith(("Recap\n", "Away Summary\n"))
 
     def _get_slash_command_words(self) -> list[str]:
         words = list(self._built_in_commands)
@@ -1809,6 +1879,28 @@ class ClawcodexREPL:
                 return None
             return self._queued_prompts.pop(0)
 
+    def _ensure_background_output_queue(self) -> None:
+        if not hasattr(self, "_background_outputs_lock"):
+            self._background_outputs_lock = threading.Lock()
+        if not hasattr(self, "_background_outputs"):
+            self._background_outputs = []
+
+    def _enqueue_background_output(self, text: str) -> None:
+        self._ensure_background_output_queue()
+        with self._background_outputs_lock:
+            self._background_outputs.append(text)
+
+    def _drain_background_outputs(self) -> None:
+        self._ensure_background_output_queue()
+        with self._background_outputs_lock:
+            outputs = list(self._background_outputs)
+            self._background_outputs.clear()
+        for text in outputs:
+            if self._is_recap_text(text):
+                self._print_local_command_text(text, command="recap")
+                continue
+            self.console.print(text)
+
     def _drain_cron_outbox(self) -> None:
         """Drain ``cron_prompt`` / ``cron_missed`` events from the
         tool context outbox and enqueue them as user-submitted prompts.
@@ -2427,6 +2519,7 @@ class ClawcodexREPL:
             try:
                 self._refresh_completer()
                 self._drain_cron_outbox()
+                self._drain_background_outputs()
                 queued = self._pop_queued_prompt()
                 if queued is not None:
                     # Echo queued submissions with a dim background so
@@ -2449,7 +2542,8 @@ class ClawcodexREPL:
                     if getattr(self, '_api_key_missing', False):
                         user_input = input('❯ ')
                     else:
-                        user_input = self.prompt_session.prompt('❯ ')
+                        with _pt_patch_stdout(raw=True):
+                            user_input = self.prompt_session.prompt('❯ ')
 
                 if user_input is None:
                     # app.exit() was called (e.g., Ctrl+B)
@@ -2536,14 +2630,7 @@ class ClawcodexREPL:
             if cmd_name == 'init':
                 # Use async path for PromptCommand
                 try:
-                    # Run async command execution in a new event loop
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run,
-                            self._try_execute_command_async(cmd_name, args)
-                        )
-                        result = future.result()
+                    result = self._run_command_async_with_status(cmd_name, args)
 
                     if result.success:
                         self._handle_command_result(result)
@@ -2576,13 +2663,11 @@ class ClawcodexREPL:
                 # Use async path for PromptCommand
                 # Run in a new event loop since we're in a sync context
                 try:
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            asyncio.run,
-                            self._try_execute_command_async(cmd_name, args)
-                        )
-                        result = future.result()
+                    result = self._run_command_async_with_status(
+                        cmd_name,
+                        args,
+                        status_message="Recapping..." if cmd_name == "recap" else None,
+                    )
 
                     if result.success:
                         if self._handle_command_result(result):
