@@ -114,6 +114,30 @@ class _SlashSuggestions(OptionList):
     """
 
 
+class _MessageSuggestions(OptionList):
+    """Popup for message-history completions."""
+
+    DEFAULT_CSS = """
+    _MessageSuggestions {
+        max-height: 6;
+        border: none;
+        padding: 0;
+        background: $background;
+        height: auto;
+    }
+    _MessageSuggestions > .option-list--option {
+        padding: 0 1;
+    }
+    _MessageSuggestions > .option-list--option-highlighted {
+        background: $boost;
+        text-style: bold;
+    }
+    _MessageSuggestions.-hidden {
+        display: none;
+    }
+    """
+
+
 class PromptInput(Vertical):
     """Input line plus slash-command suggestion popup."""
 
@@ -137,15 +161,20 @@ class PromptInput(Vertical):
         *,
         words_provider: Callable[[], list[str]],
         suggestions_provider: Callable[[], list[CommandSuggestion]] | None = None,
+        message_history_provider: Callable[[], list[str]] | None = None,
         vim_mode: bool = False,
     ) -> None:
         super().__init__()
         self._words_provider = words_provider
         self._suggestions_provider = suggestions_provider
+        self._message_history_provider = message_history_provider
+        self._message_completions: list[str] = []
+        self._message_completion_pos: int | None = None
         self._history: list[str] = []
         self._history_pos: int | None = None
         self._input = _PasteAwareInput(placeholder="Type a prompt, or / for commands")
         self._suggestions = _SlashSuggestions(classes="-hidden")
+        self._message_suggestions = _MessageSuggestions(classes="-hidden")
         self._vim = VimState(enabled=vim_mode)
         self._yank_buffer: str = ""
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
@@ -162,6 +191,7 @@ class PromptInput(Vertical):
         yield self._mode_indicator
         yield self._input
         yield self._suggestions
+        yield self._message_suggestions
         yield self._footer
 
     def on_mount(self) -> None:
@@ -174,12 +204,14 @@ class PromptInput(Vertical):
     def clear(self) -> None:
         self._input.value = ""
         self._hide_suggestions()
+        self._hide_message_suggestions()
 
     def set_value(self, value: str) -> None:
         """Replace the draft text in the prompt (used by /history)."""
 
         self._input.value = value or ""
         self._hide_suggestions()
+        self._hide_message_suggestions()
 
     # ---- bracketed paste ----
     def handle_paste(self, text: str) -> PasteInfo:
@@ -287,7 +319,11 @@ class PromptInput(Vertical):
         if event.option.id:
             self._input.value = event.option.id
             self._input.cursor_position = len(event.option.id)
-            self._hide_suggestions()
+            # Determine which popup the OptionList belongs to.
+            if event.sender is self._message_suggestions:
+                self._hide_message_suggestions()
+            else:
+                self._hide_suggestions()
 
     async def on_key(self, event: events.Key) -> None:
         key = event.key
@@ -314,6 +350,10 @@ class PromptInput(Vertical):
             self._hide_suggestions()
             event.stop()
             return
+        if key == "escape" and not self._message_suggestions.has_class("-hidden"):
+            self._hide_message_suggestions()
+            event.stop()
+            return
         if key == "escape":
             # Bubble up to the app; it decides whether to actually
             # cancel based on whether the agent bridge is busy.
@@ -322,6 +362,14 @@ class PromptInput(Vertical):
             event.stop()
             return
         if key in ("up", "down"):
+            if not self._message_suggestions.has_class("-hidden"):
+                # Message-history popup takes priority over history navigation
+                if key == "up":
+                    self._message_suggestions.action_cursor_up()
+                else:
+                    self._message_suggestions.action_cursor_down()
+                event.stop()
+                return
             if not self._suggestions.has_class("-hidden"):
                 self._suggestions.focus()
                 if key == "up":
@@ -333,6 +381,30 @@ class PromptInput(Vertical):
             self._navigate_history(1 if key == "up" else -1)
             event.stop()
             return
+        if key == "tab":
+            # Tab: if message-suggestions popup is open, accept the
+            # highlighted item. Otherwise, trigger a refresh to show
+            # message-history completions.
+            if not self._message_suggestions.has_class("-hidden"):
+                idx = self._message_suggestions.highlighted
+                if idx is not None:
+                    opt = self._message_suggestions.get_option_at_index(idx)
+                    if opt is not None and opt.id:
+                        self._input.value = opt.id
+                        self._input.cursor_position = len(opt.id)
+                        self._hide_message_suggestions()
+                event.stop()
+                return
+            # No popup open — try to trigger message-history completions
+            self._refresh_message_suggestions(
+                self._input.value or "",
+                self._input.cursor_position,
+            )
+            if not self._message_suggestions.has_class("-hidden"):
+                event.stop()
+                return
+            # Fall through to slash suggestions if message history has
+            # nothing (keeps slash-completion via / working normally).
 
     # ---- vim action application ----
     def _apply_vim_action(self, action: str) -> None:
@@ -386,19 +458,23 @@ class PromptInput(Vertical):
     # ---- suggestion plumbing ----
     def _refresh_suggestions(self, text: str, cursor: int) -> None:
         token, _ = _current_slash_token(text[:cursor])
-        if token is None:
-            self._hide_suggestions()
-            return
-        partial = token[1:].lower()
+        if token is not None:
+            # Slash mode: show command suggestions
+            self._hide_message_suggestions()
+            partial = token[1:].lower()
 
-        options = self._build_suggestion_options(partial)
-        if not options:
+            options = self._build_suggestion_options(partial)
+            if not options:
+                self._hide_suggestions()
+                return
+            self._suggestions.clear_options()
+            self._suggestions.add_options(options)
+            self._suggestions.highlighted = 0
+            self._suggestions.remove_class("-hidden")
+        else:
+            # Non-slash mode: hide slash suggestions, check message history
             self._hide_suggestions()
-            return
-        self._suggestions.clear_options()
-        self._suggestions.add_options(options)
-        self._suggestions.highlighted = 0
-        self._suggestions.remove_class("-hidden")
+            self._refresh_message_suggestions(text, cursor)
 
     def _build_suggestion_options(self, partial: str) -> list[Option]:
         """Return the rich Option rows to show under the prompt.
@@ -423,6 +499,74 @@ class PromptInput(Vertical):
         if not self._suggestions.has_class("-hidden"):
             self._suggestions.add_class("-hidden")
             self._suggestions.clear_options()
+
+    def _refresh_message_suggestions(self, text: str, cursor: int) -> None:
+        """Refresh message-history completions when not in slash mode.
+
+        Collects the current token (non-whitespace word) under the cursor.
+        If it matches the start of any previous user message, shows them
+        in a popup below the input line.
+        """
+        if not self._message_history_provider:
+            self._hide_message_suggestions()
+            return
+
+        # Extract the current token (non-whitespace word) under cursor.
+        prefix = text[:cursor]
+        # Find the start of the current token
+        i = cursor - 1
+        while i >= 0 and not prefix[i].isspace():
+            i -= 1
+        current_token = prefix[i + 1: cursor]
+
+        if not current_token:
+            self._hide_message_suggestions()
+            return
+
+        token_lower = current_token.lower()
+
+        try:
+            history = self._message_history_provider() or []
+        except Exception:
+            self._hide_message_suggestions()
+            return
+
+        # Find matching messages, ranked by relevance
+        scored: list[tuple[int, int, str]] = []
+        seen: set[str] = set()
+        for idx, msg in enumerate(reversed(history)):
+            if not isinstance(msg, str):
+                continue
+            msg_key = msg.lower()
+            if msg_key in seen:
+                continue
+            seen.add(msg_key)
+
+            if msg_key == token_lower:
+                scored.append((0, idx, msg))
+            elif msg_key.startswith(token_lower):
+                scored.append((1, idx, msg))
+            elif _fuzzy_match(msg_key, token_lower):
+                scored.append((2, idx, msg))
+
+        scored.sort(key=lambda t: (t[0], t[1]))
+        scored = scored[:_MAX_VISIBLE_SUGGESTIONS]
+
+        if not scored:
+            self._hide_message_suggestions()
+            return
+
+        self._message_suggestions.clear_options()
+        for rank, idx, full_msg in scored:
+            display = full_msg[:100] + ("..." if len(full_msg) > 100 else "")
+            self._message_suggestions.add_option(display, id=full_msg)
+        self._message_suggestions.highlighted = 0
+        self._message_suggestions.remove_class("-hidden")
+
+    def _hide_message_suggestions(self) -> None:
+        if not self._message_suggestions.has_class("-hidden"):
+            self._message_suggestions.add_class("-hidden")
+            self._message_suggestions.clear_options()
 
     def _navigate_history(self, direction: int) -> None:
         """``direction`` = +1 means older (Up); -1 means newer (Down)."""
