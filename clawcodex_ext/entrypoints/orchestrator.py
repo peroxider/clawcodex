@@ -17,6 +17,7 @@ extracted before the subcommand token.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 
@@ -68,6 +69,10 @@ Usage (noun-verb):
     add_dashboard_parser(subparsers)  # dashboard [--port PORT]
 
     # Parse all arguments
+    if os.environ.get("_ARGCOMPLETE") == "1":
+        import argcomplete
+
+        argcomplete.autocomplete(parser)
     args = parser.parse_args(filtered_rest)
 
     # Dispatch — noun-verb dispatch

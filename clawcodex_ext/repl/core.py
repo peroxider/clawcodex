@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from clawcodex_ext.utils.completers import (
+    current_slash_token,
+    rank_message_history,
+    rank_suggestions,
+)
+
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
@@ -85,20 +91,6 @@ except ModuleNotFoundError:  # pragma: no cover
             raise EOFError()
 
 
-def _fuzzy_subseq(name: str, partial: str) -> bool:
-    """Lightweight subsequence match (``partial`` chars appear in order)."""
-
-    if not partial:
-        return True
-    i = 0
-    for ch in name:
-        if ch == partial[i]:
-            i += 1
-            if i == len(partial):
-                return True
-    return False
-
-
 class _SlashOnlyCompleter(Completer):
     """Trigger autocompletion only for slash commands, matching the reference
     Claude Code behavior.
@@ -125,7 +117,7 @@ class _SlashOnlyCompleter(Completer):
 
     def get_completions(self, document, complete_event):  # type: ignore[override]
         text = document.text_before_cursor
-        token, token_start = self._current_slash_token(text)
+        token, token_start = current_slash_token(text)
         if token is None:
             return
         partial = token[1:].lower()  # strip leading '/'
@@ -159,64 +151,16 @@ class _SlashOnlyCompleter(Completer):
     def _rich_completions(self, suggestions, partial, start_position):
         """Yield ``Completion`` entries with ``display`` + ``display_meta``.
 
-        Matches the TS ranking: exact name → exact alias → prefix name →
-        prefix alias → fuzzy. Aliases are surfaced in ``(alias)`` only
-        when the typed prefix matched the alias, so an unmatched partial
-        does not pollute the menu with every alternate name.
+        Ranks suggestions via the shared ``rank_suggestions`` helper
+        (exact name → exact alias → prefix name → prefix alias → fuzzy
+        subsequence) and renders each as a two-column prompt_toolkit
+        entry: ``/name (alias)`` left, ``[tag] description`` right.
+        Aliases are surfaced in ``(alias)`` only when the typed prefix
+        matched the alias, so an unmatched partial does not pollute the
+        menu with every alternate name.
         """
 
-        scored: list[tuple[int, int, Any, str | None]] = []
-        seen: set[str] = set()
-        for idx, sugg in enumerate(suggestions):
-            name = getattr(sugg, "name", None)
-            if not isinstance(name, str) or not name:
-                continue
-            name_lc = name.lower()
-            if name_lc in seen:
-                continue
-            aliases = tuple(getattr(sugg, "aliases", ()) or ())
-            matched_alias: str | None = None
-            rank: int | None = None
-            if not partial:
-                rank = 0
-            elif name_lc == partial:
-                rank = 0
-            else:
-                exact_alias = next(
-                    (a for a in aliases if a.lower() == partial), None
-                )
-                if exact_alias:
-                    rank = 1
-                    matched_alias = exact_alias
-                elif name_lc.startswith(partial):
-                    rank = 2
-                else:
-                    prefix_alias = next(
-                        (a for a in aliases if a.lower().startswith(partial)),
-                        None,
-                    )
-                    if prefix_alias:
-                        rank = 3
-                        matched_alias = prefix_alias
-                    elif _fuzzy_subseq(name_lc, partial):
-                        rank = 5
-                    else:
-                        fuzzy_alias = next(
-                            (a for a in aliases if _fuzzy_subseq(a.lower(), partial)),
-                            None,
-                        )
-                        if fuzzy_alias:
-                            rank = 6
-                            matched_alias = fuzzy_alias
-            if rank is None:
-                continue
-            seen.add(name_lc)
-            secondary = idx if not partial else len(name)
-            scored.append((rank, secondary, sugg, matched_alias))
-
-        scored.sort(key=lambda t: (t[0], t[1], t[2].name.lower()))
-
-        for _, _, sugg, matched_alias in scored:
+        for sugg, matched_alias in rank_suggestions(suggestions, partial):
             alias_text = f" ({matched_alias})" if matched_alias else ""
             display_text = f"/{sugg.name}{alias_text}"
             display_styled = [("class:completion.command", display_text)]
@@ -238,36 +182,14 @@ class _SlashOnlyCompleter(Completer):
                 display_meta=meta_parts if meta_parts else None,
             )
 
-    @staticmethod
-    def _current_slash_token(text: str) -> tuple[str | None, int]:
-        """Return ``(token, start_index)`` for the slash token under the cursor.
 
-        ``token`` is ``None`` when the cursor is not inside a slash command.
-        ``start_index`` is the offset of the leading ``/`` in ``text``.
-        """
+# Back-compat: downstream subclasses (e.g. ClawCodexExtREPL in
+# clawcodex_ext/repl/app.py) reach into the static method
+# ``_SlashOnlyCompleter._current_slash_token(...)`` to detect slash
+# tokens for their own key bindings. Keep the public shape stable by
+# aliasing to the shared module function.
+_SlashOnlyCompleter._current_slash_token = staticmethod(current_slash_token)
 
-        if not text:
-            return None, 0
-        if text.startswith("/"):
-            # Start-of-buffer slash: complete only while cursor is on the
-            # command word (before the first space).
-            space_idx = text.find(" ")
-            if space_idx != -1:
-                return None, 0
-            return text, 0
-        # Mid-input slash: whitespace + '/' immediately before the cursor.
-        for i in range(len(text) - 1, -1, -1):
-            ch = text[i]
-            if ch == "/":
-                if i > 0 and not text[i - 1].isspace():
-                    return None, 0
-                token = text[i:]
-                if " " in token:
-                    return None, 0
-                return token, i
-            if ch.isspace():
-                return None, 0
-        return None, 0
 
 class _MessageHistoryCompleter(Completer):
     """Trigger autocompletion from previous user messages in the session.
@@ -336,36 +258,12 @@ class _MessageHistoryCompleter(Completer):
         except Exception:
             return
 
-        # Find matching messages
-        partial_lower = partial.lower()
-        scored: list[tuple[int, int, str]] = []  # (rank, index, full_msg)
-        seen: set[str] = set()
-
-        for idx, msg in enumerate(reversed(history)):
-            if not isinstance(msg, str):
-                continue
-            msg_key = msg.lower()
-            if msg_key in seen:
-                continue
-            seen.add(msg_key)
-
-            if msg_key == partial_lower:
-                # Exact match — full message already typed
-                scored.append((0, idx, msg))
-            elif msg.lower().startswith(partial_lower):
-                # Prefix match — message starts with what user typed
-                scored.append((1, idx, msg))
-            elif _fuzzy_subseq(msg.lower(), partial_lower):
-                # Fuzzy subsequence match
-                scored.append((2, idx, msg))
-
-        # Sort: rank asc, then recency (lower idx = more recent)
-        scored.sort(key=lambda t: (t[0], t[1]))
-        scored = scored[:5]  # limit to 5 suggestions
-
-        for rank, idx, full_msg in scored:
-            # Replace the partial word with the full message
-            start_position = -len(current_word)
+        # Rank matches via the shared helper. The REPL surfaces at most
+        # 5 suggestions, mirrors the prior behaviour.
+        start_position = -len(current_word)
+        for full_msg in rank_message_history(
+            history, partial.lower(), limit=5
+        ):
             yield Completion(
                 text=full_msg,
                 start_position=start_position,

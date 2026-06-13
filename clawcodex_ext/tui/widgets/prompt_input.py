@@ -42,6 +42,13 @@ from ..vim import VimState
 from .prompt_input_footer import PromptInputFooter
 from .prompt_input_mode_indicator import PromptInputModeIndicator
 
+from clawcodex_ext.utils.completers import (
+    current_slash_token,
+    fuzzy_match,
+    rank_message_history,
+    rank_suggestions,
+)
+
 # Reuse the same matching machinery as the prompt_toolkit REPL.
 # ``_AT_TOKEN_RE`` matches ``@<query>`` at the cursor position;
 # ``_is_path_like_token`` / ``_path_completions`` handle absolute
@@ -669,35 +676,26 @@ class PromptInput(Vertical):
             self._hide_message_suggestions()
             return
 
-        # Find matching messages, ranked by relevance
-        scored: list[tuple[int, int, str]] = []
-        seen: set[str] = set()
-        for idx, msg in enumerate(reversed(history)):
-            if not isinstance(msg, str):
-                continue
-            msg_key = msg.lower()
-            if msg_key in seen:
-                continue
-            seen.add(msg_key)
+        # Rank via shared helper. The TUI surfaces up to
+        # ``_MAX_VISIBLE_SUGGESTIONS`` (10) entries, more than the REPL's
+        # 5 to compensate for Textual popup height.
+        ranked = rank_message_history(
+            history, token_lower, limit=_MAX_VISIBLE_SUGGESTIONS
+        )
 
-            if msg_key == token_lower:
-                scored.append((0, idx, msg))
-            elif msg_key.startswith(token_lower):
-                scored.append((1, idx, msg))
-            elif _fuzzy_match(msg_key, token_lower):
-                scored.append((2, idx, msg))
-
-        scored.sort(key=lambda t: (t[0], t[1]))
-        scored = scored[:_MAX_VISIBLE_SUGGESTIONS]
-
-        if not scored:
+        if not ranked:
             self._hide_message_suggestions()
             return
 
         self._message_suggestions.clear_options()
-        for rank, idx, full_msg in scored:
+        for full_msg in ranked:
             display = full_msg[:100] + ("..." if len(full_msg) > 100 else "")
-            self._message_suggestions.add_option(display, id=full_msg)
+            # Textual 0.79 的 OptionList.add_option 不再接受 id=
+            # kwarg；通过 Option 包装传入。id 是选中后回填到 input
+            # 的全文（display 仅作展示截断）。
+            self._message_suggestions.add_option(
+                Option(display, id=full_msg)
+            )
         self._message_suggestions.highlighted = 0
         self._message_suggestions.remove_class("-hidden")
 
@@ -746,8 +744,10 @@ class PromptInput(Vertical):
                 return
             self._at_file_suggestions.clear_options()
             for entry in entries:
+                # Textual 0.79: id= kwarg 不再被 add_option 接受，
+                # 改用 Option 包装。
                 self._at_file_suggestions.add_option(
-                    entry.display, id="@" + entry.text,
+                    Option(entry.display, id="@" + entry.text),
                 )
             self._at_file_suggestions.highlighted = 0
             self._at_file_suggestions.remove_class("-hidden")
@@ -767,7 +767,11 @@ class PromptInput(Vertical):
 
         self._at_file_suggestions.clear_options()
         for path in matches:
-            self._at_file_suggestions.add_option(path, id="@" + path)
+            # Textual 0.79: id= kwarg 不再被 add_option 接受，
+            # 改用 Option 包装。
+            self._at_file_suggestions.add_option(
+                Option(path, id="@" + path)
+            )
         self._at_file_suggestions.highlighted = 0
         self._at_file_suggestions.remove_class("-hidden")
 
@@ -804,71 +808,24 @@ def _options_from_suggestions(
 ) -> list[Option]:
     """Filter + rank rich command suggestions, then render two-column rows.
 
-    Sort order matches the TS ranking spirit: exact name → exact alias
-    → prefix name → prefix alias → fuzzy subsequence. Duplicates (same
-    name) are collapsed; aliases are surfaced only when the user typed
-    them so an unmatched ``/com<TAB>`` does not get polluted with the
-    full alias list.
+    Delegates the matching/scoring to the shared
+    :func:`clawcodex_ext.utils.completers.rank_suggestions` (same
+    algorithm as the REPL's ``_rich_completions``), then renders each
+    ranked entry as a two-column Rich ``Text`` row.
+
+    Aliases are surfaced only when the typed prefix matched the alias
+    so an unmatched ``/com<TAB>`` does not get polluted with the full
+    alias list.
     """
 
-    scored: list[tuple[int, int, CommandSuggestion, str | None]] = []
-    seen: set[str] = set()
-    for idx, sugg in enumerate(suggestions):
-        if not isinstance(sugg, CommandSuggestion):
-            continue
-        name_lc = sugg.name.lower()
-        if name_lc in seen:
-            continue
-        matched_alias: str | None = None
-        rank: int | None = None
-        if not partial:
-            # Preserve the provider's order — built-ins first, then
-            # skills — by collapsing every entry into one rank bucket
-            # and tiebreaking on the insertion index below.
-            rank = 0
-        elif name_lc == partial:
-            rank = 0
-        else:
-            alias_exact = next(
-                (a for a in sugg.aliases if a.lower() == partial), None
-            )
-            if alias_exact:
-                rank = 1
-                matched_alias = alias_exact
-            elif name_lc.startswith(partial):
-                rank = 2
-            else:
-                alias_prefix = next(
-                    (a for a in sugg.aliases if a.lower().startswith(partial)),
-                    None,
-                )
-                if alias_prefix:
-                    rank = 3
-                    matched_alias = alias_prefix
-                elif _fuzzy_match(name_lc, partial):
-                    rank = 5
-                else:
-                    alias_fuzzy = next(
-                        (a for a in sugg.aliases if _fuzzy_match(a.lower(), partial)),
-                        None,
-                    )
-                    if alias_fuzzy:
-                        rank = 6
-                        matched_alias = alias_fuzzy
-        if rank is None:
-            continue
-        seen.add(name_lc)
-        # Tiebreak: for an empty partial preserve insertion order so
-        # built-ins lead skills; otherwise shorter names (closer to
-        # the typed prefix) sort first, then alphabetically.
-        secondary = idx if not partial else len(sugg.name)
-        scored.append((rank, secondary, sugg, matched_alias))
-
-    scored.sort(key=lambda t: (t[0], t[1], t[2].name.lower()))
-    scored = scored[:_MAX_VISIBLE_SUGGESTIONS]
+    ranked = rank_suggestions(
+        (s for s in suggestions if isinstance(s, CommandSuggestion)),
+        partial,
+        max_results=_MAX_VISIBLE_SUGGESTIONS,
+    )
     return [
         Option(_render_suggestion_row(sugg, matched_alias), id=sugg.slash)
-        for _, _, sugg, matched_alias in scored
+        for sugg, matched_alias in ranked
     ]
 
 
@@ -888,7 +845,7 @@ def _options_from_words(words: list[Any], partial: str) -> list[Option]:
         key = word[1:].lower()
         if key in seen:
             continue
-        if not partial or _fuzzy_match(key, partial):
+        if not partial or fuzzy_match(key, partial):
             seen.add(key)
             matches.append(word)
             if len(matches) >= _MAX_VISIBLE_SUGGESTIONS:
@@ -927,26 +884,6 @@ def _render_suggestion_row(
     return row
 
 
-def _fuzzy_match(name: str, partial: str) -> bool:
-    """Lightweight fuzzy matcher: prefix wins, subsequence falls back.
-
-    Matches the behavior of ``useTypeahead`` in
-    ``typescript/src/components/PromptInput/useTypeahead.ts`` at a
-    reduced fidelity (no scoring, no MRU). Prefix matches are always
-    preferred so the most common ``/ex<Tab>`` workflow feels snappy.
-    """
-
-    if name.startswith(partial):
-        return True
-    i = 0
-    for ch in name:
-        if ch == partial[i]:
-            i += 1
-            if i == len(partial):
-                return True
-    return False
-
-
 def _next_word(text: str, pos: int) -> int:
     """Return the cursor index of the next word start.
 
@@ -979,31 +916,8 @@ def _prev_word(text: str, pos: int) -> int:
     return pos
 
 
-def _current_slash_token(text_before_cursor: str) -> tuple[str | None, int]:
-    """Return ``(token, start_idx)`` for the slash command under the cursor.
-
-    Semantics locked in by :mod:`tests.tui.test_slash_token_parser`: a
-    slash token is a ``/word`` that either starts at the beginning of
-    the buffer or is preceded by whitespace. A slash followed by a
-    space has already been "committed" and does not re-open the popup.
-    """
-
-    text = text_before_cursor
-    if not text:
-        return None, 0
-    if text.startswith("/"):
-        if " " in text:
-            return None, 0
-        return text, 0
-    for i in range(len(text) - 1, -1, -1):
-        ch = text[i]
-        if ch == "/":
-            if i > 0 and not text[i - 1].isspace():
-                return None, 0
-            token = text[i:]
-            if " " in token:
-                return None, 0
-            return token, i
-        if ch.isspace():
-            return None, 0
-    return None, 0
+# Back-compat: ``tests.tui.test_slash_token_parser`` imports
+# ``_current_slash_token`` via the ``src.tui.widgets.prompt_input``
+# lazy proxy. Re-export the shared function under the same name so
+# the proxy can find it and the spec-locking test continues to pass.
+_current_slash_token = current_slash_token

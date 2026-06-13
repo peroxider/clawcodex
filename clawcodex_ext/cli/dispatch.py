@@ -2,7 +2,53 @@
 
 from __future__ import annotations
 
+import os
 import sys
+
+
+def _maybe_argcomplete_top_level(argv: list[str]) -> None:
+    """If argcomplete is active, expose the fast-path subcommand nouns.
+
+    The flat top-level parser at ``build_parser()`` does not know about
+    the subcommand sieve in ``run_cli`` (login/config/mcp/.../provider/
+    model/pos/viz). When ``_ARGCOMPLETE`` is set, argcomplete's
+    ``autocomplete()`` will only complete the flat parser's tokens. This
+    hook attaches the sieve's noun set as the first-positional choice
+    list so the shell can offer the full subcommand set. No-op when
+    ``_ARGCOMPLETE`` is unset; the lazy import keeps ``--help`` under
+    the 5-second budget enforced by the stability gate.
+    """
+
+    if os.environ.get("_ARGCOMPLETE") != "1":
+        return
+    import argcomplete  # noqa: F401
+
+    from clawcodex_ext.cli.parser import build_parser
+    from clawcodex_ext.cli.subcommand_registry import (
+        _SUBCOMMANDS,
+        load_builtin_subcommands,
+    )
+
+    parser = build_parser()
+    load_builtin_subcommands()
+    top_level = (
+        "login",
+        "config",
+        "mcp",
+        "daemon",
+        "doctor",
+        "orchestrator",
+        "autonomy",
+        "schedule",
+    ) + tuple(_SUBCOMMANDS.keys())
+    # Override the first-positional ``prompt`` argument's choice list
+    # so argcomplete offers the subcommand nouns. argcomplete reads the
+    # parser's own argument table for flag completion automatically.
+    for action in parser._actions:  # type: ignore[attr-defined]
+        if action.dest == "prompt":
+            action.choices = top_level  # type: ignore[attr-defined]
+            break
+    argcomplete.autocomplete(parser, always_complete_options=False)
 
 
 def run_cli(argv: list[str] | None = None) -> int:
@@ -45,6 +91,11 @@ def run_cli(argv: list[str] | None = None) -> int:
     # subcommand name don't mis-route (e.g. ``clawcodex --model mcp`` or
     # ``clawcodex -p "doctor"``). The TS reference also positions
     # specialized subcommands at argv[0]; global flags don't precede them.
+    #
+    # If argcomplete is active, attach the sieve-mirror parser first so
+    # subcommand-noun completion works before the sieve runs. No-op when
+    # ``_ARGCOMPLETE`` is unset; lazy import keeps ``--help`` under 5s.
+    _maybe_argcomplete_top_level(argv)
     rest = argv[1:]
     if rest and not rest[0].startswith('-'):
         token = rest[0]
