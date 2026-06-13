@@ -85,6 +85,8 @@ dependencies = [
     "outlines>=0.0.80",
     # upstream-sync: CLI framework
     "typer[all]>=0.12.0",
+    # F-??: shell tab completion for the ``clawcodex-dev`` entrypoint
+    "argcomplete>=3.5.0",
     "jinja2>=3.1.0",
     # F-91~F-95: Multi-Session Visualizer backend
     "fastapi>=0.115.0",
@@ -123,13 +125,12 @@ markers = [
     "linux_only: marks tests that require Linux (auto-skipped on macOS/Windows)",
 ]
 filterwarnings = [
-    # Ch16 Phase 0 (WI-0.2/0.3) + ch01 round-2 P3: legacy CCR-named stubs at
-    # src/services/bridge and scripts/audit/remote_runtime emit DeprecationWarnings
-    # on import to surface the rename to src/bridge etc. Existing tests still
-    # exercise those modules; suppress so ``pytest -W error::DeprecationWarning``
-    # doesn't break the pre-existing test suite. (The remote_runtime stub was
-    # relocated from src/ to scripts/audit/ when audit scaffolding moved.)
-    "ignore::DeprecationWarning:src.services.bridge",
+    # Ch16 Phase 0 (WI-0.2/0.3) + ch01 round-2 P3: scripts/audit/remote_runtime
+    # emits DeprecationWarnings on import (the remote_runtime stub was
+    # relocated from src/ to scripts/audit/ when audit scaffolding moved).
+    # Existing tests still exercise that module; suppress so
+    # ``pytest -W error::DeprecationWarning`` doesn't break the pre-existing
+    # test suite.
     "ignore::DeprecationWarning:scripts.audit.remote_runtime",
 ]
 

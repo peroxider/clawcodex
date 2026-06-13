@@ -367,8 +367,9 @@ class TestStage5ExtContextSystem:
     def test_context_system_gitpython_adapter_import(self):
         """GitPython 适配器导入。
 
-        注意：由于 `tests/git/` 目录遮蔽了 `git` 包名，此导入可能失败。
-        这是项目层级的 PYTHONPATH 问题，不是核心功能的回归。
+        注意：由于 `tests/git_fixtures/` 不再遮蔽 `git` 包名（2026-06 重命名），
+        此导入可以正常进行。如未来 `tests/` 下出现 `git` 目录名，会再次
+        触发 PYTHONPATH 遮蔽。
         """
         import pytest
         import importlib
@@ -383,10 +384,11 @@ class TestStage5ExtContextSystem:
             import git  # noqa: F401
         except ImportError:
             pytest.skip("GitPython 未安装")
-        # 检查是否被 tests/git/ 遮蔽
+        # 防御性检查：如果 git 加载后没有 Repo 属性，说明被非 GitPython 的
+        # 影子包覆盖了
         import git as _git_check
         if not hasattr(_git_check, 'Repo'):
-            pytest.skip("PYTHONPATH 遮蔽：tests/git/ 遮盖了 GitPython (无 Repo)")
+            pytest.skip("PYTHONPATH 遮蔽：tests/ 下存在遮盖 GitPython 的目录")
         from clawcodex_ext.context_system._gitpython_adapter import (
             GitPythonProvider,
             GitContextSnapshot,

@@ -165,6 +165,27 @@ clawcodex-dev cron --help          # see cron subcommands
 clawcodex-dev pos --help           # see SOP compiler subcommands
 ```
 
+### Shell tab completion
+
+`clawcodex-dev` ships with [argcomplete](https://github.com/kislyuk/argcomplete)
+support. After installation, enable completion for your shell:
+
+```bash
+# bash
+eval "$(register-python-argcomplete clawcodex-dev)"
+
+# zsh
+eval "$(register-python-argcomplete clawcodex-dev)"
+
+# fish
+register-python-argcomplete --shell fish clawcodex-dev | source
+```
+
+Tab completion covers the top-level subcommands (`login`, `config`, `mcp`,
+`daemon`, `doctor`, `orchestrator`, `autonomy`, `schedule`, `provider`,
+`model`, `pos`, `viz`) and the top-level flags. The `orchestrator`
+subcommand also completes its nouns (`server` / `issue` / `dashboard`).
+
 Requires **Python 3.10+** (3.11 recommended). Linux / macOS / WSL2.
 
 > The upstream CLI (`python -m src.cli`) still works — this fork adds a parallel `clawcodex-dev` entry that registers the downstream subcommands (`orchestrator`, `cron`, `pos`, ...).
