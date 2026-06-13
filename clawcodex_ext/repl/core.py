@@ -519,7 +519,11 @@ class ClawcodexREPL:
         # ``prompt_session.prompt()`` so queued prompts are sent back-to-back
         # without the user having to retype them — matches the TS Ink
         # reference's "type while it's still thinking" affordance.
-        self._queued_prompts: list[str] = []
+        # ``deque(maxlen=100)`` silently drops the oldest entry once full
+        # so a long-running session can't accumulate an unbounded queue
+        # under the per-turn lock. See ``clear_pending_turn_buffers`` for
+        # the turn-end reset that runs even on small queues.
+        self._queued_prompts: deque[str] = deque(maxlen=100)
         self._queued_prompts_lock = threading.Lock()
         self._background_outputs: list[str] = []
         self._background_outputs_lock = threading.Lock()
@@ -543,6 +547,14 @@ class ClawcodexREPL:
         # below — see ``_do_expand_last``. Bounded so the deque doesn't
         # grow unboundedly during a long session.
         self._expandable_blocks: deque[tuple[str, str]] = deque(maxlen=20)
+
+        # Streaming buffer of ``Thinking…`` text chunks. ``_expand_thinking``
+        # concatenates them into the spinner label. ``deque(maxlen=1000)``
+        # silently drops the oldest chunk once full so a runaway / backgrounded
+        # session can't grow this buffer past ~1k strings.
+        # ``clear_pending_turn_buffers`` additionally empties it at every turn
+        # boundary for tight memory budgets (the WSL2 3.8 GB OOM repro).
+        self._thinking_chunks: deque[str] = deque(maxlen=1000)
 
         # Original built-in commands - define this FIRST!
         self._original_built_ins = [
@@ -1963,7 +1975,7 @@ class ClawcodexREPL:
         with self._queued_prompts_lock:
             if not self._queued_prompts:
                 return None
-            return self._queued_prompts.pop(0)
+            return self._queued_prompts.popleft()
 
     def _ensure_background_output_queue(self) -> None:
         if not hasattr(self, "_background_outputs_lock"):
@@ -2018,6 +2030,30 @@ class ClawcodexREPL:
     def _queued_count(self) -> int:
         with self._queued_prompts_lock:
             return len(self._queued_prompts)
+
+    def clear_pending_turn_buffers(self) -> None:
+        """Reset per-turn UI / queue buffers at the end of each chat() turn.
+
+        Called from the main ``chat()`` loop immediately after the
+        :class:`LiveStatus` context manager has torn down (so the spinner
+        row is no longer drawing) and before ``_stats_turns`` is
+        incremented. At this point the REPL is single-threaded between
+        turns, so the deque ``.clear()`` calls are safe without locks.
+
+        Without this reset, ``_thinking_chunks`` and ``_queued_prompts``
+        accumulate string references across turns; on a long session
+        with queued prompts (the WSL2 3.8 GB OOM repro showed 53.5k
+        tokens queued) the leaked references add up. The deques are
+        already bounded via ``maxlen=`` so an emergency upper bound
+        exists, but per-turn clearing keeps the working set minimal.
+
+        ``_expandable_blocks`` is not cleared — its ``maxlen=20`` already
+        bounds it, and clearing would defeat the ``ctrl+o`` re-expand
+        feature that replays the most recent block.
+        """
+        with self._queued_prompts_lock:
+            self._queued_prompts.clear()
+        self._thinking_chunks.clear()
 
     def _status_message(self) -> str:
         """Spinner status text. Includes queued-prompt count when non-zero."""
@@ -3864,6 +3900,13 @@ class ClawcodexREPL:
             engine.reset_abort_controller()
 
             self._engine_messages = engine.get_messages()
+            # Drop per-turn UI / queue buffers before the next turn starts
+            # so a long session can't accumulate buffered references across
+            # turns. Safe to call here: the LiveStatus context manager has
+            # already torn down (no spinner is reading these buffers), and
+            # the REPL is single-threaded between turns. See
+            # ``clear_pending_turn_buffers`` for the OOM-repro rationale.
+            self.clear_pending_turn_buffers()
             self._stats_turns += 1
 
             # Companion observer — fire per-turn reaction if relevant keywords

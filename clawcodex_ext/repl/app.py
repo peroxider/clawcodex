@@ -102,7 +102,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self.tool_registry = None
             self.tool_context = None
             self._engine_messages = []
-            self._queued_prompts = []
+            # ``deque(maxlen=100)`` silently drops the oldest entry once full
+            # so a long-running session can't accumulate an unbounded queue
+            # under the per-turn lock. See ``clear_pending_turn_buffers`` in
+            # core.py for the turn-end reset that runs even on small queues.
+            self._queued_prompts: deque[str] = deque(maxlen=100)
             self._queued_prompts_lock = threading.Lock()
             self._original_built_ins = [
                 "/", "/help", "/exit", "/quit", "/q", "/clear",
@@ -224,7 +228,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._stats_input_tokens: int = 0
         self._stats_output_tokens: int = 0
         self._direct_abort_controller: AbortController | None = None
-        self._queued_prompts: list[str] = []
+        # ``deque(maxlen=100)`` silently drops the oldest entry once full
+        # so a long-running session can't accumulate an unbounded queue
+        # under the per-turn lock. See ``clear_pending_turn_buffers`` in
+        # core.py for the turn-end reset that runs even on small queues.
+        self._queued_prompts: deque[str] = deque(maxlen=100)
         self._queued_prompts_lock = threading.Lock()
         self._permission_prompt_lock = threading.Lock()
         self._permission_decision_cache: dict[str, bool] = {}
@@ -233,7 +241,12 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         # ---- Downstream-only state ----
         self._thinking_visible: bool = True
-        self._thinking_chunks: list[str] = []
+        # Streaming thought chunks — bounded by ``deque(maxlen=1000)`` so a
+        # runaway / backgrounded session can't grow this buffer past ~1k
+        # strings. ``clear_pending_turn_buffers`` (in core.py) additionally
+        # empties it at every turn boundary for tight memory budgets (the
+        # WSL2 3.8 GB OOM repro). ``clear_pending_turn_buffers``.
+        self._thinking_chunks: deque[str] = deque(maxlen=1000)
 
         # ---- Cost tracker & history (created here for _init_command_system)
         from src.cost_tracker import CostTracker
