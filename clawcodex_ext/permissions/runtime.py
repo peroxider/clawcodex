@@ -37,7 +37,7 @@ from typing import Any, Callable
 
 from src.permissions.cycle import cycle_permission_mode, get_next_permission_mode
 from src.permissions.modes import has_allow_bypass_permissions_mode
-from src.permissions.types import PermissionUpdateSetMode
+from src.permissions.types import PermissionMode, PermissionUpdateSetMode
 from src.permissions.updates import apply_permission_update
 from src.state.app_state import replace_state
 from src.utils.store import Store
@@ -107,7 +107,7 @@ class RuntimePermissionController:
         """The reactive :class:`AppState` store, if wired."""
         return self._store
 
-    def current_mode(self) -> str:
+    def current_mode(self) -> PermissionMode:
         """Return the current ``ToolContext.permission_context.mode``.
 
         Reads outside the lock — the single-attribute access is
@@ -121,7 +121,7 @@ class RuntimePermissionController:
         return ctx.permission_context.mode
 
     # ---- mutators (all hold the lock for the full swap) ----
-    def cycle(self) -> str:
+    def cycle(self) -> PermissionMode:
         """Advance to the next permission mode and return it.
 
         Cycle order is the canonical Shift+Tab order
@@ -142,7 +142,7 @@ class RuntimePermissionController:
         with self._lock:
             return self._cycle_locked()
 
-    def set_mode(self, mode: str) -> str:
+    def set_mode(self, mode: PermissionMode) -> PermissionMode:
         """Set a specific permission mode and return it.
 
         Used by the picker (``/permissions``) where the user picks a
@@ -170,7 +170,7 @@ class RuntimePermissionController:
         except Exception:
             return False
 
-    def _cycle_locked(self) -> str:
+    def _cycle_locked(self) -> PermissionMode:
         """Compute the next mode and apply it. Caller must hold ``_lock``."""
         ctx = self._tool_context_factory()
         if ctx is None or ctx.permission_context is None:
@@ -186,7 +186,7 @@ class RuntimePermissionController:
         )
         return self._apply_locked(next_mode)
 
-    def _apply_locked(self, target_mode: str) -> str:
+    def _apply_locked(self, target_mode: PermissionMode) -> PermissionMode:
         """Atomically apply ``target_mode``. Caller must hold ``_lock``.
 
         Performs: (1) :func:`apply_permission_update` to construct a
@@ -275,8 +275,8 @@ def ToolPermissionContextFactory(  # type: ignore[no-redef]
 
 def apply_permission_mode_runtime(
     controller: RuntimePermissionController,
-    target_mode: str | None = None,
-) -> str:
+    target_mode: PermissionMode | None = None,
+) -> PermissionMode:
     """Module-level convenience helper.
 
     ``target_mode=None`` → :meth:`RuntimePermissionController.cycle`
