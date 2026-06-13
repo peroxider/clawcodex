@@ -373,44 +373,58 @@ def make_agent_tool(
         the visualizer, and the session-analyzer can inspect sub-agent
         internals even when ``run_in_background`` was not set.
 
-        The transcript is written **after** the agent finishes — simpler than
-        streaming because the sync path runs in a thread-pool / nested event
-        loop.  A lost transcript write is logged but never propagated, so a
-        filesystem error cannot crash the agent execution.
+        OOM Fix 1 (2026-06-13): stream ``run_agent`` directly into the
+        transcript writer. The pre-fix shape was
+        ``asyncio.run(_collect_agent_messages(...))`` → ``for msg in
+        agent_messages: transcript_writer.append(msg)`` in a
+        ``finally`` block — the full subagent message list was held in
+        memory between collection and the post-collect write loop. On
+        the WSL2 3.8 GB repro, a multi-MB Explore subagent blew the
+        parent RSS ceiling in that window. The new shape inlines the
+        transcript append into the ``async for message in
+        run_agent(run_params):`` loop so writes happen *during*
+        collection; the list still carries the full transcript for
+        ``finalize_agent_tool``'s tool-use count, but peak memory no
+        longer sits on top of the eager list.
 
-        Chapter-12 / WI-2.6 (2026-06-13): the sync path now also registers a
-        :class:`LocalAgentTaskState` on ``context.runtime_tasks`` so
-        ``TaskOutput`` / ``task_output_key`` work uniformly for sync and
-        async agents. The state transitions ``running → completed`` (or
-        ``failed`` on the exception path) mirror the async lifecycle. The
-        full transcript path is plumbed through to ``finalize_agent_tool``
-        so a multi-MB subagent report gets truncated for parent-side
-        injection while remaining recoverable via ``TaskOutput``.
+        Chapter-12 / WI-2.6: a ``LocalAgentTaskState`` is registered on
+        ``context.runtime_tasks`` so ``TaskOutput`` /
+        ``task_output_key`` resolve identically for sync and async
+        agents. The full transcript path is plumbed through to
+        ``finalize_agent_tool`` so a multi-MB subagent report gets
+        truncated for parent-side injection while remaining recoverable
+        via ``TaskOutput``.
         """
         from ..protocol import ToolResult as TR
-        from src.types.messages import Message
+        from src.types.messages import AssistantMessage, Message
         from src.agent.transcript import TranscriptWriter, get_agent_transcript_path
         from src.bootstrap.state import get_session_id
         from src.tasks.local_agent import LocalAgentTaskState
+        from src.types.content_blocks import TextBlock, ToolUseBlock
 
-        agent_messages: list[Message] = []
+        # OOM Fix 1: stream ``run_agent`` directly into the transcript
+        # writer. The list still carries the full transcript for
+        # ``finalize_agent_tool``'s tool-use count, but the OOM peak
+        # is no worse than the generator's per-message retention.
 
-        # Compute the sidechain transcript path so sync agents also leave
-        # a persistent record (nested under the parent session).
+        # Compute the sidechain transcript path so sync agents also
+        # leave a persistent record (nested under the parent session).
         parent_sid = get_session_id()
-        transcript_path = get_agent_transcript_path(
+        transcript_path_str: str | None = get_agent_transcript_path(
             agent_id, parent_session_id=parent_sid,
         )
         transcript_writer: TranscriptWriter | None = None
-        try:
-            transcript_writer = TranscriptWriter(
-                transcript_path, parent_session_id=parent_sid,
-            )
-        except Exception:
-            logger.exception(
-                "sync agent transcript open failed for %s; continuing without persistence",
-                agent_id,
-            )
+        if transcript_path_str:
+            try:
+                transcript_writer = TranscriptWriter(
+                    transcript_path_str, parent_session_id=parent_sid,
+                )
+            except Exception:
+                logger.exception(
+                    "sync agent transcript open failed for %s; continuing without persistence",
+                    agent_id,
+                )
+                transcript_path_str = None  # No file → no path to surface.
 
         # WI-2.6: register the sync task on ``runtime_tasks`` so
         # ``TaskOutput`` / ``task_output_key`` resolve identically for
@@ -425,49 +439,140 @@ def make_agent_tool(
             agent_type=agent_type,
             status="running",
             started_at=start_time,
-            output_file=str(transcript_path),
+            output_file=str(transcript_path_str) if transcript_path_str else "",
             parent_session_id=parent_sid,
         )
         context.runtime_tasks[agent_id] = sync_state
 
+        messages_for_finalize: list[Message] = []
+        last_assistant: AssistantMessage | None = None
+
+        def _stream_collect() -> None:
+            """Drive ``run_agent`` from a fresh event loop, streaming
+            messages into ``messages_for_finalize`` and the transcript
+            writer. Mutates enclosing variables via ``nonlocal``; the
+            cross-thread happens-before is provided by
+            ``concurrent.futures.Future.result()`` (or, in the no-loop
+            case, by single-threaded sequential execution).
+            """
+            nonlocal last_assistant, transcript_writer
+            loop = asyncio.new_event_loop()
+            try:
+                async def _go() -> None:
+                    # The inner ``async def`` shadows ``transcript_writer``
+                    # at function scope; without its own ``nonlocal`` the
+                    # reassignment below would create a new local and
+                    # raise ``UnboundLocalError`` on the read above.
+                    nonlocal transcript_writer
+                    async for message in run_agent(run_params):
+                        messages_for_finalize.append(message)
+                        if isinstance(message, AssistantMessage):
+                            last_assistant = message
+                        # Live progress line — mirrors the stderr
+                        # output the eager ``_collect_agent_messages``
+                        # used to emit; the model can be the only
+                        # consumer of ``output`` so the user must still
+                        # see what the subagent is doing.
+                        try:
+                            content = (
+                                message.content
+                                if isinstance(message, AssistantMessage)
+                                else None
+                            )
+                            if isinstance(content, str) and content.strip():
+                                sys.stderr.write(
+                                    f"  ⎿ [{agent_type}] {content.strip()[:200]}\n"
+                                )
+                                sys.stderr.flush()
+                            elif isinstance(content, list):
+                                for block in content:
+                                    if isinstance(block, TextBlock) and block.text.strip():
+                                        sys.stderr.write(
+                                            f"  ⎿ [{agent_type}] {block.text.strip()[:200]}\n"
+                                        )
+                                        sys.stderr.flush()
+                                    elif isinstance(block, ToolUseBlock):
+                                        sys.stderr.write(
+                                            _format_subagent_tool_use(
+                                                agent_type,
+                                                block.name,
+                                                getattr(block, "input", None),
+                                            )
+                                        )
+                                        sys.stderr.flush()
+                        except Exception:
+                            logger.exception(
+                                "sync subagent progress line failed for %s",
+                                agent_id,
+                            )
+                        # Persist to disk per message — the OOM Fix 1
+                        # point: no post-collect write loop holds the
+                        # list. Mirror of the async path's ``OSError``
+                        # recovery.
+                        if transcript_writer is not None:
+                            try:
+                                transcript_writer.append(message)
+                            except OSError:
+                                logger.exception(
+                                    "sync agent transcript append failed for %s; "
+                                    "further appends will be skipped",
+                                    agent_id,
+                                )
+                                try:
+                                    transcript_writer.close()
+                                except Exception:
+                                    pass
+                                transcript_writer = None
+                loop.run_until_complete(_go())
+            finally:
+                loop.close()
+
+        run_exc: BaseException | None = None
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're inside an async context — use a nested run
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(_sync_collect_agent_messages, run_params)
-                    agent_messages = future.result()
-            else:
-                agent_messages = loop.run_until_complete(
-                    _collect_agent_messages(run_params)
-                )
-        except RuntimeError:
-            # No event loop — create one
-            agent_messages = asyncio.run(
-                _collect_agent_messages(run_params)
-            )
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Nested-loop safe path: drive the streaming on a
+                    # worker thread with its own event loop. Mirrors
+                    # the previous ``_sync_collect_agent_messages`` shape.
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        future = pool.submit(_stream_collect)
+                        future.result()
+                else:
+                    _stream_collect()
+            except RuntimeError:
+                # No event loop in this thread — create one
+                _stream_collect()
+        except BaseException as exc:  # noqa: BLE001
+            run_exc = exc
+            sync_state.status = "failed"
+            sync_state.error = str(exc)
+            sync_state.completed_at = time.time()
+            raise
         finally:
             if transcript_writer is not None:
                 try:
-                    for msg in agent_messages:
-                        transcript_writer.append(msg)
+                    transcript_writer.close()
                 except Exception:
                     logger.exception(
-                        "failed to write sync agent transcript for %s", agent_id,
+                        "failed to close sync agent transcript for %s", agent_id,
                     )
-                finally:
-                    transcript_writer.close()
 
-        # Finalize result
+        # Finalize result. ``last_assistant_msg`` skips the second
+        # ``reversed(messages_for_finalize)`` walk in
+        # ``finalize_agent_tool``; ``transcript_path`` enables the
+        # truncation notice to point at the sidechain file.
         metadata = {
             "start_time": start_time,
             "agent_type": agent_type,
         }
         result = finalize_agent_tool(
-            agent_messages, agent_id, metadata,
-            transcript_path=str(transcript_path),
+            messages_for_finalize, agent_id, metadata,
+            last_assistant_msg=last_assistant,
+            transcript_path=transcript_path_str,
         )
+        del messages_for_finalize  # help refcount release the list promptly
 
         # Mirror the async completion path: flip the registered
         # ``LocalAgentTaskState`` to ``completed`` and snapshot the
@@ -485,7 +590,7 @@ def make_agent_tool(
         return TR(
             name=AGENT_TOOL_NAME,
             output={
-                "status": "completed",
+                "status": "failed" if run_exc is not None else "completed",
                 "prompt": prompt,
                 "agent_id": result.agent_id,
                 "agent_type": result.agent_type,
@@ -494,7 +599,7 @@ def make_agent_tool(
                 "total_tokens": result.total_tokens,
                 "total_tool_use_count": result.total_tool_use_count,
                 "task_output_key": agent_id,
-                "transcript_path": str(transcript_path),
+                "transcript_path": result.transcript_path,
                 "truncated": result.truncated,
             },
         )
@@ -872,7 +977,16 @@ def _resolve_fork_worktree_cwd(context: ToolContext) -> str | None:
 
 
 def _sync_collect_agent_messages(params: RunAgentParams) -> list[Any]:
-    """Collect agent messages synchronously in a new event loop."""
+    """Collect agent messages synchronously in a new event loop.
+
+    Retained for ``tests/agent/test_subagent_progress_line.py``. The
+    production sync path (``_run_sync_agent``) now streams messages
+    directly from ``run_agent`` into the transcript writer and a
+    ``messages_for_finalize`` list (OOM Fix 1, see ``_stream_collect``);
+    the eager ``list[Any]`` shape this helper returns is no longer used
+    in production. Remove in a follow-up if the test ever migrates to
+    the streaming path.
+    """
     return asyncio.run(_collect_agent_messages(params))
 
 
@@ -915,6 +1029,15 @@ async def _collect_agent_messages(params: RunAgentParams) -> list[Any]:
 
     Prints intermediate agent messages (explanatory text, tool use summaries)
     to stderr so the user sees progress in real-time instead of a silent wait.
+
+    Retained for ``tests/agent/test_subagent_progress_line.py``. The
+    production sync path (``_run_sync_agent``) now streams messages
+    directly from ``run_agent`` into the transcript writer and a
+    ``messages_for_finalize`` list (OOM Fix 1, see ``_stream_collect``);
+    the eager ``list[Any]`` shape this helper returns is no longer used
+    in production. The progress-line formatting is the source-of-truth
+    that the streaming path mirrors inline. Remove in a follow-up if
+    the test ever migrates to the streaming path.
     """
     from src.types.messages import Message, AssistantMessage
     from src.types.content_blocks import TextBlock, ToolUseBlock
