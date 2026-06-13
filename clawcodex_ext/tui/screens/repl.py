@@ -118,6 +118,7 @@ class REPLScreen(Screen):
             words_provider=words_provider,
             suggestions_provider=suggestions_provider,
             message_history_provider=message_history_provider,
+            cwd=self._workspace_root,
         )
         # ARIA live region — stays height: 1 and only announces the
         # most recent status change. Mounted just above the status
