@@ -182,6 +182,14 @@ class AgentToolResult:
     total_duration_ms: int
     total_tokens: int
     total_tool_use_count: int
+    # ``truncated=True`` when the assistant text was clipped to fit under
+    # ``DEFAULT_TRUNCATE_CHAR_LIMIT`` / ``DEFAULT_TRUNCATE_LINE_LIMIT``.
+    # The full transcript lives at ``transcript_path`` (relative to the
+    # session dir) so callers can ``TaskOutput`` into it for the rest.
+    # Defaults preserve the pre-WI-2.6 positional-arg signature, so
+    # direct construction in tests / fixtures keeps working.
+    truncated: bool = False
+    transcript_path: str | None = None
 
 
 def count_tool_uses(messages: list[Message]) -> int:
@@ -203,6 +211,8 @@ def finalize_agent_tool(
     metadata: dict[str, Any],
     *,
     progress: Any | None = None,
+    last_assistant_msg: Message | None = None,
+    transcript_path: str | None = None,
 ) -> AgentToolResult:
     """Extract final result from agent messages.
 
@@ -217,13 +227,29 @@ def finalize_agent_tool(
     feed one during iteration), we fall back to recomputing from
     ``message.usage`` so the behavior degrades gracefully rather than
     silently returning zero.
+
+    Chapter-12 / WI-2.6: a sync subagent that produced multi-MB reports
+    would OOM the parent session because the entire last-assistant text
+    was inlined into the parent ``state.messages`` tool_result. The fix
+    is two-pronged: callers that already know the last assistant (the
+    streaming path) pass it via ``last_assistant_msg`` to skip the
+    ``reversed(agent_messages)`` scan; and the resulting text is run
+    through :func:`_truncate_text_blocks` so the parent only ever sees
+    a bounded preview. The full transcript lives at ``transcript_path``
+    for ``TaskOutput`` recovery.
     """
-    # Find the last assistant message
+    # Find the last assistant message — prefer the caller's already-known
+    # value (streaming path tracks it incrementally; the reversed scan
+    # would be O(n) for no benefit). Fall back to the historical scan for
+    # callers that don't track it.
     last_assistant: AssistantMessage | None = None
-    for msg in reversed(agent_messages):
-        if isinstance(msg, AssistantMessage):
-            last_assistant = msg
-            break
+    if last_assistant_msg is not None and isinstance(last_assistant_msg, AssistantMessage):
+        last_assistant = last_assistant_msg
+    else:
+        for msg in reversed(agent_messages):
+            if isinstance(msg, AssistantMessage):
+                last_assistant = msg
+                break
 
     if last_assistant is None:
         raise ValueError("No assistant messages found")
@@ -251,6 +277,17 @@ def finalize_agent_tool(
                     if content:
                         break
 
+    # WI-2.6: bound the parent-visible content so a multi-MB subagent
+    # report doesn't OOM the parent. The full text is recoverable via
+    # ``transcript_path`` + ``TaskOutput``. ``truncate`` is a no-op when
+    # the content is already under the limit.
+    truncated, content = _truncate_text_blocks(
+        content,
+        char_limit=DEFAULT_TRUNCATE_CHAR_LIMIT,
+        line_limit=DEFAULT_TRUNCATE_LINE_LIMIT,
+        transcript_path=transcript_path,
+    )
+
     total_tool_use_count = count_tool_uses(agent_messages)
     start_time = metadata.get("start_time", time.time())
     duration_ms = int((time.time() - start_time) * 1000)
@@ -263,7 +300,89 @@ def finalize_agent_tool(
         total_duration_ms=duration_ms,
         total_tokens=total_tokens,
         total_tool_use_count=total_tool_use_count,
+        truncated=truncated,
+        transcript_path=transcript_path,
     )
+
+
+# WI-2.6: text-block truncation thresholds. Tuned so the parent
+# tool_result stays under ~8 KB regardless of how chatty the subagent
+# was; line cap mirrors a reasonable "summary"-shaped answer. These are
+# conservative — the OOM repro on WSL2 (3.8 GB RAM) only needed ~9 KB
+# of pre-truncation content to wedge the parent context.
+DEFAULT_TRUNCATE_CHAR_LIMIT: int = 8_192
+DEFAULT_TRUNCATE_LINE_LIMIT: int = 200
+
+
+def _truncate_text_blocks(
+    content: list[dict[str, Any]],
+    *,
+    char_limit: int,
+    line_limit: int,
+    transcript_path: str | None,
+) -> tuple[bool, list[dict[str, Any]]]:
+    """Bound the size of ``content`` text blocks for parent-side injection.
+
+    Joins every ``{"type": "text", "text": "..."}`` block, applies the
+    char + line cap, and (if either cap fires) replaces the trailing
+    content with a single text block containing the head of the original
+    text plus a one-line notice pointing at the on-disk transcript.
+    Non-text blocks (e.g. tool_use placeholders) are dropped — by the
+    point we get here the assistant has already finished its work, so
+    tool_use in the "last message" would be a model error, and the
+    transcript is the authoritative record.
+
+    Returns ``(truncated, new_content)``:
+      * ``truncated`` is True iff either cap fired.
+      * ``new_content`` is always a single-element list when
+        truncated, otherwise the input list is returned untouched.
+    """
+    if not content:
+        return False, content
+
+    text_blocks = [b for b in content if isinstance(b, dict) and b.get("type") == "text"]
+    if not text_blocks:
+        return False, content
+
+    joined = "\n".join(str(b.get("text", "")) for b in text_blocks)
+    total_chars = len(joined)
+    total_lines = joined.count("\n") + (0 if joined.endswith("\n") else 1)
+
+    if total_chars <= char_limit and total_lines <= line_limit:
+        return False, content
+
+    # Truncate: keep head of the text, drop the rest, append notice.
+    kept = joined
+    if len(kept) > char_limit:
+        kept = kept[:char_limit]
+    # Line cap: walk the kept string and stop after ``line_limit`` newlines.
+    if kept.count("\n") >= line_limit:
+        # Find the position of the line_limit-th newline and cut there.
+        cut_pos = -1
+        seen = 0
+        for idx, ch in enumerate(kept):
+            if ch == "\n":
+                seen += 1
+                if seen == line_limit:
+                    cut_pos = idx
+                    break
+        if cut_pos >= 0:
+            kept = kept[:cut_pos]
+
+    if transcript_path:
+        notice = (
+            f"\n\n[truncated: showing first {len(kept)} chars / "
+            f"{kept.count(chr(10)) + (0 if kept.endswith(chr(10)) else 1)} lines "
+            f"of {total_chars} chars — full transcript at {transcript_path}]"
+        )
+    else:
+        notice = (
+            f"\n\n[truncated: showing first {len(kept)} chars / "
+            f"{kept.count(chr(10)) + (0 if kept.endswith(chr(10)) else 1)} lines "
+            f"of {total_chars} chars — transcript not available]"
+        )
+
+    return True, [{"type": "text", "text": kept + notice}]
 
 
 def _resolve_total_tokens(

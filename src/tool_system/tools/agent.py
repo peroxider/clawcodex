@@ -347,18 +347,22 @@ def make_agent_tool(
         else:
             return _run_sync_agent(
                 run_params=run_params,
+                context=context,
                 agent_id=agent_id,
                 start_time=start_time,
                 prompt=prompt,
+                description=description,
                 agent_type=agent_def.agent_type,
             )
 
     def _run_sync_agent(
         *,
         run_params: RunAgentParams,
+        context: ToolContext,
         agent_id: str,
         start_time: float,
         prompt: str,
+        description: str,
         agent_type: str,
     ) -> ToolResult:
         """Run an agent synchronously and return the result.
@@ -373,11 +377,21 @@ def make_agent_tool(
         streaming because the sync path runs in a thread-pool / nested event
         loop.  A lost transcript write is logged but never propagated, so a
         filesystem error cannot crash the agent execution.
+
+        Chapter-12 / WI-2.6 (2026-06-13): the sync path now also registers a
+        :class:`LocalAgentTaskState` on ``context.runtime_tasks`` so
+        ``TaskOutput`` / ``task_output_key`` work uniformly for sync and
+        async agents. The state transitions ``running → completed`` (or
+        ``failed`` on the exception path) mirror the async lifecycle. The
+        full transcript path is plumbed through to ``finalize_agent_tool``
+        so a multi-MB subagent report gets truncated for parent-side
+        injection while remaining recoverable via ``TaskOutput``.
         """
         from ..protocol import ToolResult as TR
         from src.types.messages import Message
         from src.agent.transcript import TranscriptWriter, get_agent_transcript_path
         from src.bootstrap.state import get_session_id
+        from src.tasks.local_agent import LocalAgentTaskState
 
         agent_messages: list[Message] = []
 
@@ -397,6 +411,24 @@ def make_agent_tool(
                 "sync agent transcript open failed for %s; continuing without persistence",
                 agent_id,
             )
+
+        # WI-2.6: register the sync task on ``runtime_tasks`` so
+        # ``TaskOutput`` / ``task_output_key`` resolve identically for
+        # sync and async agents. ``output_file`` is the absolute
+        # transcript path; mirrors what ``register_async_agent`` writes
+        # for the async path. The state is mutated in place on success /
+        # failure below.
+        sync_state = LocalAgentTaskState(
+            agent_id=agent_id,
+            description=description,
+            prompt=prompt,
+            agent_type=agent_type,
+            status="running",
+            started_at=start_time,
+            output_file=str(transcript_path),
+            parent_session_id=parent_sid,
+        )
+        context.runtime_tasks[agent_id] = sync_state
 
         try:
             loop = asyncio.get_event_loop()
@@ -432,7 +464,23 @@ def make_agent_tool(
             "start_time": start_time,
             "agent_type": agent_type,
         }
-        result = finalize_agent_tool(agent_messages, agent_id, metadata)
+        result = finalize_agent_tool(
+            agent_messages, agent_id, metadata,
+            transcript_path=str(transcript_path),
+        )
+
+        # Mirror the async completion path: flip the registered
+        # ``LocalAgentTaskState`` to ``completed`` and snapshot the
+        # truncated preview as ``result_text`` so a follow-up
+        # ``TaskOutput`` call can show it without re-running.
+        result_text = "\n".join(
+            block.get("text", "")
+            for block in result.content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ).strip()
+        sync_state.status = "completed"
+        sync_state.completed_at = time.time()
+        sync_state.result_text = result_text
 
         return TR(
             name=AGENT_TOOL_NAME,
@@ -445,6 +493,9 @@ def make_agent_tool(
                 "total_duration_ms": result.total_duration_ms,
                 "total_tokens": result.total_tokens,
                 "total_tool_use_count": result.total_tool_use_count,
+                "task_output_key": agent_id,
+                "transcript_path": str(transcript_path),
+                "truncated": result.truncated,
             },
         )
 
@@ -584,7 +635,9 @@ def make_agent_tool(
                         "agent_type": agent_type,
                     }
                     result = finalize_agent_tool(
-                        messages, agent_id, metadata, progress=tracker
+                        messages, agent_id, metadata,
+                        progress=tracker,
+                        transcript_path=transcript_path or None,
                     )
                     result_text = "\n".join(
                         block.get("text", "")

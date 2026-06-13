@@ -392,3 +392,94 @@ class TestFinalizeAgentTool:
             "agent_type": "test",
         })
         assert result.total_tool_use_count == 2
+
+    def test_no_truncation_when_content_under_limit(self):
+        """Under the 8 KB / 200-line cap, content passes through untouched."""
+        from src.agent.agent_tool_utils import (
+            DEFAULT_TRUNCATE_CHAR_LIMIT,
+            DEFAULT_TRUNCATE_LINE_LIMIT,
+        )
+        import time
+        # 100 lines × 50 chars = 5000 chars, well under both limits.
+        small_text = "\n".join(f"line {i}: " + "x" * 40 for i in range(100))
+        msgs = [AssistantMessage(content=[TextBlock(text=small_text)])]
+        result = finalize_agent_tool(
+            msgs, "a1",
+            {"start_time": time.time(), "agent_type": "test"},
+            transcript_path="/tmp/agent-a1.jsonl",
+        )
+        assert result.truncated is False
+        # Unchanged content: single text block, full text preserved.
+        assert len(result.content) == 1
+        assert result.content[0]["text"] == small_text
+        # transcript_path is still recorded on the result for TaskOutput
+        # recovery even when no truncation happened.
+        assert result.transcript_path == "/tmp/agent-a1.jsonl"
+        # Sanity-check the limit constants — guard against accidental
+        # silent regression of the threshold.
+        assert DEFAULT_TRUNCATE_CHAR_LIMIT == 8_192
+        assert DEFAULT_TRUNCATE_LINE_LIMIT == 200
+
+    def test_truncation_applies_when_content_exceeds_limit(self):
+        """Over the char cap, text is clipped and a notice block points at the transcript."""
+        import time
+        big_text = "x" * 20_000  # 20 KB > 8 KB cap
+        msgs = [AssistantMessage(content=[TextBlock(text=big_text)])]
+        result = finalize_agent_tool(
+            msgs, "a1",
+            {"start_time": time.time(), "agent_type": "test"},
+            transcript_path="/tmp/agent-a1.jsonl",
+        )
+        assert result.truncated is True
+        assert len(result.content) == 1
+        text = result.content[0]["text"]
+        # The head of the original text survives.
+        assert text.startswith("x" * 100)
+        # A notice points at the on-disk transcript so the parent can
+        # TaskOutput to read the rest.
+        assert "truncated" in text
+        assert "/tmp/agent-a1.jsonl" in text
+        # The kept portion itself must not exceed the char cap.
+        kept = text.split("\n\n[truncated")[0]
+        assert len(kept) <= 8_192
+
+    def test_truncation_notice_handles_missing_transcript_path(self):
+        """Without a transcript path, the notice says 'transcript not available'."""
+        import time
+        big_text = "x" * 20_000
+        msgs = [AssistantMessage(content=[TextBlock(text=big_text)])]
+        result = finalize_agent_tool(
+            msgs, "a1",
+            {"start_time": time.time(), "agent_type": "test"},
+            # transcript_path omitted → default None
+        )
+        assert result.truncated is True
+        text = result.content[0]["text"]
+        assert "transcript not available" in text
+        # result.transcript_path stays None for downstream handlers.
+        assert result.transcript_path is None
+
+    def test_last_assistant_msg_skips_reversed_scan(self):
+        """Passing ``last_assistant_msg`` lets the streaming path avoid the O(n) scan."""
+        from src.agent.agent_tool_utils import AgentToolResult
+        import time
+        # Two assistants: a 50-line "fake history" message and a short
+        # tail. Streaming should always pick the tail — never fall back
+        # to reversed scan and pick the "fake" head.
+        head = AssistantMessage(
+            content=[TextBlock(text="WRONG: this is from earlier in the run\n" * 50)],
+        )
+        tail = AssistantMessage(content=[TextBlock(text="RIGHT: streaming final answer")])
+        msgs = [head, tail]
+        result = finalize_agent_tool(
+            msgs, "a1",
+            {"start_time": time.time(), "agent_type": "test"},
+            last_assistant_msg=tail,
+        )
+        # Tail content wins; head never appears in the output.
+        joined = "\n".join(b["text"] for b in result.content)
+        assert "RIGHT: streaming final answer" in joined
+        assert "WRONG" not in joined
+        # Type assertion guards the dataclass shape used by callers.
+        assert isinstance(result, AgentToolResult)
+        assert result.truncated is False
