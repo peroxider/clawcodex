@@ -7,6 +7,8 @@ from __future__ import annotations
 # immediately (avoiding the circular-import chain:
 #   src.auth.codex_oauth → clawcodex_ext → … → src.auth.codex_oauth).
 
+from src.providers import PROVIDER_INFO
+
 from clawcodex_ext.providers.factory import register_provider, register_provider_info
 
 from clawcodex_ext.providers.hooks import _codex_api_discovery
@@ -42,4 +44,44 @@ register_provider(
         ],
     },
     _OpenAICodexProvider_lazy,  # type: ignore[arg-type]
+)
+
+
+# ---------------------------------------------------------------------------
+# Cancel-latency overrides — replace the upstream built-in providers
+# with clawcodex_ext subclasses that bound cancel latency to ~100ms
+# (vs. worst-case ~60s on platforms where ``response.close()`` from
+# another thread does not interrupt the blocking httpx read).
+#
+# The hook added to ``src.providers.get_provider_class`` checks
+# ``_EXTRA_PROVIDER_CLASSES`` first, so these registrations win over
+# the hardcoded if-branches in the upstream resolver.
+# ---------------------------------------------------------------------------
+
+def _ClawcodexAnthropicProvider_lazy():
+    from clawcodex_ext.providers.anthropic_provider import (
+        ClawcodexAnthropicProvider,
+    )
+    return ClawcodexAnthropicProvider
+
+
+def _ClawcodexMinimaxProvider_lazy():
+    from clawcodex_ext.providers.minimax_provider import (
+        ClawcodexMinimaxProvider,
+    )
+    return ClawcodexMinimaxProvider
+
+
+# Pass the existing PROVIDER_INFO entry through so the register call
+# is type-correct; ``register_provider_info`` is a no-op when the name
+# is already in PROVIDER_INFO, so this doesn't mutate the display dict.
+register_provider(
+    "anthropic",
+    PROVIDER_INFO["anthropic"],  # type: ignore[arg-type]
+    _ClawcodexAnthropicProvider_lazy,  # type: ignore[arg-type]
+)
+register_provider(
+    "minimax",
+    PROVIDER_INFO["minimax"],  # type: ignore[arg-type]
+    _ClawcodexMinimaxProvider_lazy,  # type: ignore[arg-type]
 )

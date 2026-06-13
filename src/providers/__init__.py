@@ -186,7 +186,26 @@ _EXTRA_PROVIDER_CLASSES: dict[str, type] = {}
 
 
 def get_provider_class(provider_name: str):
-    """Get provider class by name."""
+    """Get provider class by name.
+
+    Resolution order:
+
+    1. ``_EXTRA_PROVIDER_CLASSES`` — populated by
+       ``clawcodex_ext.providers.factory.register_provider()`` and
+       checked FIRST so downstream can override any built-in
+       provider. Values may be a class or a zero-arg callable that
+       returns one (lazy import).
+    2. The hardcoded ``if`` branches below — upstream built-in
+       defaults (anthropic, openai, glm, minimax, openrouter,
+       deepseek, gemini). Used as fallbacks when no downstream
+       override is registered.
+    """
+    if provider_name in _EXTRA_PROVIDER_CLASSES:
+        entry = _EXTRA_PROVIDER_CLASSES[provider_name]
+        if callable(entry) and not isinstance(entry, type):
+            entry = entry()
+            _EXTRA_PROVIDER_CLASSES[provider_name] = entry
+        return entry
     if provider_name == "anthropic":
         from .anthropic_provider import AnthropicProvider
 
@@ -215,14 +234,6 @@ def get_provider_class(provider_name: str):
         from .gemini_provider import GeminiProvider
 
         return GeminiProvider
-    # Extension providers registered at runtime.
-    # Values may be a class or a zero-arg callable that returns one (lazy import).
-    if provider_name in _EXTRA_PROVIDER_CLASSES:
-        entry = _EXTRA_PROVIDER_CLASSES[provider_name]
-        if callable(entry) and not isinstance(entry, type):
-            entry = entry()
-            _EXTRA_PROVIDER_CLASSES[provider_name] = entry
-        return entry
     raise ValueError(f"Unknown provider: {provider_name}")
 
 
