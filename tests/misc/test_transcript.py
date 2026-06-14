@@ -104,6 +104,9 @@ def test_ensure_transcript_dir_creates_and_returns_path() -> None:
 
 
 def test_writer_appends_one_jsonl_line_per_call(tmp_path: Path) -> None:
+    # Bare string content is normalized to a text-block list at the disk
+    # boundary (Step 3 of the root-cause plan) so that on-disk shape is
+    # uniform regardless of which Message subclass produced the record.
     path = tmp_path / "x.jsonl"
     with TranscriptWriter(path) as w:
         w.append({"role": "user", "content": "hi"})
@@ -111,8 +114,14 @@ def test_writer_appends_one_jsonl_line_per_call(tmp_path: Path) -> None:
     raw = path.read_text(encoding="utf-8")
     lines = raw.splitlines()
     assert len(lines) == 2
-    assert json.loads(lines[0]) == {"role": "user", "content": "hi"}
-    assert json.loads(lines[1]) == {"role": "assistant", "content": "ok"}
+    assert json.loads(lines[0]) == {
+        "role": "user",
+        "content": [{"type": "text", "text": "hi"}],
+    }
+    assert json.loads(lines[1]) == {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "ok"}],
+    }
 
 
 def test_writer_append_is_terminated_with_newline(tmp_path: Path) -> None:
