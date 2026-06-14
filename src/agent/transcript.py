@@ -99,6 +99,43 @@ def _transcripts_root() -> Path:
     return root
 
 
+#: One-shot guard so a long-lived process doesn't spam the log once
+#: per sub-agent spawn when the resolver is missing. The flag flips
+#: on the first fallback hit; subsequent hits are silent.
+_flat_fallback_warned: bool = False
+
+
+def _warn_flat_fallback(parent_session_id: Optional[str]) -> None:
+    """Emit a single warning when no nested resolver is registered.
+
+    Tells the operator that a sub-agent transcript is about to land in
+    the flat ``~/.clawcodex/transcripts/`` fallback rather than the
+    designed
+    ``~/.clawcodex/sessions/<parent_session_id>/subagents/`` tree.
+    In practice this means the entry point skipped
+    ``src.init.init()`` — every documented entry point (REPL,
+    headless, bridge, TUI, SDK) is supposed to call ``init()`` first
+    so the resolver gets registered. The warning silences itself
+    under ``PYTEST_CURRENT_TEST`` because the test suite routinely
+    exercises the fallback path with stub resolvers cleared
+    afterwards (see ``tests/misc/test_transcript.py``).
+    """
+    global _flat_fallback_warned
+    if _flat_fallback_warned:
+        return
+    if os.environ.get("PYTEST_CURRENT_TEST") is not None:
+        return
+    _flat_fallback_warned = True
+    logger.warning(
+        "sub-agent transcript fell back to flat path "
+        "~/.clawcodex/transcripts/<id>.jsonl; no nested resolver "
+        "registered. This usually means the entry point skipped "
+        "src.init.init() — confirm init() runs before the agent "
+        "loop. parent_session_id=%r",
+        parent_session_id,
+    )
+
+
 def get_agent_transcript_path(
     agent_id: str,
     parent_session_id: str | None = None,
@@ -107,7 +144,9 @@ def get_agent_transcript_path(
 
     Delegates to a registered extension resolver first; when none is
     registered (or the resolver returns ``None``), falls back to the
-    default flat path ``~/.clawcodex/transcripts/<safe_id>.jsonl``.
+    default flat path ``~/.clawcodex/transcripts/<safe_id>.jsonl``
+    and emits a one-shot warning so the operator can spot entry
+    points that bypassed ``src.init.init()``.
 
     Returns a string (not a ``Path``) because ``LocalAgentTaskState.output_file``
     is typed as ``str`` for serializability. Callers that prefer
@@ -118,6 +157,7 @@ def get_agent_transcript_path(
         override = _transcript_path_resolver(agent_id, parent_session_id)
         if override is not None:
             return override
+    _warn_flat_fallback(parent_session_id)
     return str(_transcripts_root() / f"{safe_id}.jsonl")
 
 

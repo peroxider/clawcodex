@@ -68,6 +68,17 @@ def init() -> None:
     3. ``start_api_preconnect`` — DNS+TLS warmup (moved from cli.main).
     4. Placeholder for plan-phase-2: remote-managed-settings init.
     5. Placeholder for plan-phase-2: policy-limits init.
+    6. ``ensure_nested_transcript_initialized`` — register the
+       nested-session transcript path resolver so sub-agent JSONL
+       files land under
+       ``<parent_session_id>/subagents/agent-<id>.jsonl`` instead
+       of the flat ``~/.clawcodex/transcripts/`` fallback. Wrapped
+       in a flag-guarded idempotent helper; safe under repeated
+       invocations. Local import — ``clawcodex_ext`` is loaded
+       only after ``src/`` is fully initialized, sidestepping the
+       ``src.permissions.cycle`` ↔ ``clawcodex_ext`` circular
+       import that prevents registering at package import time
+       (see ``clawcodex_ext/__init__.py`` for the full rationale).
 
     The placeholder substeps are no-ops for plan phase 1; they exist
     to mark the seam where future work plugs in.
@@ -101,6 +112,22 @@ def init() -> None:
 
     _placeholder_initialize_remote_managed_settings()
     _placeholder_initialize_policy_limits()
+
+    # Substep 6: register the nested-session transcript path resolver
+    # so sub-agent JSONL files land under
+    # ``<parent_session_id>/subagents/agent-<id>.jsonl`` instead of
+    # the flat ``~/.clawcodex/transcripts/`` fallback. The local
+    # import keeps ``clawcodex_ext`` out of ``src.init``'s module
+    # surface — by the time ``init()`` runs, every ``src/`` module
+    # is fully loaded, so the lazy wrapper sees the world in a
+    # consistent state and can safely register the resolver. The
+    # helper is flag-guarded, so re-entry from a second ``init()``
+    # caller (memoize or test) is a no-op.
+    _logger.info("init: registering nested-session transcript resolver")
+    from clawcodex_ext import ensure_nested_transcript_initialized
+    ensure_nested_transcript_initialized()
+    profile_checkpoint("init_after_nested_transcript")
+
     profile_checkpoint("init_function_end")
 
 

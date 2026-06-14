@@ -10,11 +10,22 @@
 # which imports ``src.tool_system.build_tool`` — completing the cycle and
 # raising ``ImportError: cannot import name 'Tool' from partially
 # initialized module 'src.tool_system.build_tool'`` at import time.
-# The transcript resolver registration is therefore invoked from
-# ``clawcodex_ext/cli/main.py`` (the CLI entry point) instead, where
-# all ``src/`` modules are guaranteed fully loaded. Use the
-# ``ensure_nested_transcript_initialized()`` helper below to trigger
-# it from non-CLI entry points (e.g. the REPL launcher).
+# The transcript resolver registration is therefore invoked lazily
+# from the canonical per-process bootstrap — ``src/init.py:init()``,
+# which is the documented "called from multiple entry points
+# (each one calls it once; memoize handles dedup)" hook used by
+# REPL, headless, bridge, TUI, SDK, and the CLI. By the time
+# ``init()`` runs, every ``src/`` module is fully loaded, so the
+# ``ensure_nested_transcript_initialized()`` wrapper below can
+# safely import and register the resolver without re-triggering
+# the partial-init cycle described above.
+#
+# ``clawcodex_ext/cli/main.py`` retains an explicit
+# ``ensure_nested_transcript_initialized()`` call as a defensive
+# double-check: the helper is flag-guarded, so the second
+# registration is a no-op, but having the call there means the
+# resolver is guaranteed to be live before the first transcript
+# write even if a future caller forgets ``init()``.
 from clawcodex_ext.permissions import install_permission_extensions  # noqa: F401
 from clawcodex_ext.memory.scope_aware_prompt import install_memory_extension  # noqa: F401
 from clawcodex_ext.providers import (  # noqa: F401 — registers model discovery hooks
