@@ -386,6 +386,21 @@ _TASK_WIDGET_TOOL_NAMES: set[str] = {
 }
 
 
+async def _drain_history(history) -> None:
+    """Prime a ``prompt_toolkit`` ``History`` by driving ``History.load()``.
+
+    ``History.get_strings()`` only reads the in-memory ``_loaded_strings``
+    cache, which is populated lazily by the async ``History.load()``
+    generator. ``PromptSession`` does not await it before the first
+    prompt, so on the first keystroke ``AutoSuggestFromHistory`` always
+    sees an empty list and never produces a ghost-text suggestion.
+    Exhausting the generator once at REPL construction time forces the
+    cache to be populated so the very first suggestion lookup works.
+    """
+    async for _ in history.load():
+        pass
+
+
 class ClawcodexREPL:
     """Interactive REPL for Claw Codex."""
 
@@ -737,43 +752,23 @@ class ClawcodexREPL:
                     # but at least the expansion lands in scrollback.
                     self._do_expand_last()
 
-            @self.bindings.add("tab")  # type: ignore[attr-defined]
-            def _tab_accepts_completion_or_triggers_message_history(event):  # type: ignore[no-untyped-def]
-                """Tab: accept the autosuggestion, cycle the completion popup,
-                or open a new completion menu.
-
-                Order of precedence:
-
-                1. If ``AutoSuggestFromHistory`` produced a ghost-text
-                   suggestion (the dimmed suffix after the cursor), Tab
-                   accepts it via ``buf.apply_suggestion()`` — the
-                   fish-style "press Tab to complete" affordance.
-                2. If a completion popup is already open, fall through to
-                   prompt_toolkit's default Tab handling, which cycles to
-                   the next item.
-                3. Otherwise, start the merged completer with
-                   ``select_first=True`` so the user gets an instant
-                   suggestion from slash commands, file paths, or message
-                   history.
-                """
-                buf = event.current_buffer
-                if buf.suggestion is not None:
-                    # Fish-style: accept the dimmed ghost-text suggestion
-                    # (e.g. typing "he" shows gray "llo" — Tab completes
-                    # to "hello" before falling through to the popup).
-                    buf.apply_suggestion()
-                    return
-                if buf.complete_state:
-                    # Popup is open — Tab cycles to next item (default PTk
-                    # behavior). We just prevent Enter from closing it.
-                    return
-                # No popup open — start completion. The merged completer
-                # will try slash, @-file, and message-history completers
-                # in order, picking whichever matches the current input.
-                buf.start_completion(select_first=True)
+        # ``AutoSuggestFromHistory`` reads its suggestions via
+        # ``history.get_strings()``, which on the base ``History`` class
+        # is a thin wrapper around the in-memory ``_loaded_strings`` cache
+        # (see ``prompt_toolkit/history.py:History.get_strings``). That
+        # cache is only populated by the async ``History.load()`` generator
+        # — there is no ``__iter__`` on the base class in 3.0.52.
+        # ``PromptSession`` itself does not await ``history.load()`` before
+        # the first prompt, so without an explicit priming step the
+        # autosuggest always sees an empty list on the first keystroke
+        # and never produces a ghost-text suggestion. Drain ``load()`` once
+        # here so the very first ``he`` typed by the user already sees
+        # the matching ``hello`` from disk.
+        file_history = FileHistory(str(history_file))
+        asyncio.run(_drain_history(file_history))
 
         self.prompt_session = PromptSession(
-            history=FileHistory(str(history_file)),
+            history=file_history,
             auto_suggest=AutoSuggestFromHistory(),
             completer=self.completer,
             style=Style.from_dict({

@@ -491,47 +491,6 @@ class PromptInput(Vertical):
             self._navigate_history(1 if key == "up" else -1)
             event.stop()
             return
-        if key == "tab":
-            # Tab: if @ file suggestions popup is open, accept the
-            # highlighted item.
-            if not self._at_file_suggestions.has_class("-hidden"):
-                idx = self._at_file_suggestions.highlighted
-                if idx is not None:
-                    opt = self._at_file_suggestions.get_option_at_index(idx)
-                    if opt is not None and opt.id:
-                        self._input.value = opt.id
-                        self._input.cursor_position = len(opt.id)
-                        self._hide_at_file_suggestions()
-                event.stop()
-                return
-            # Tab: if message-suggestions popup is open, accept the
-            # highlighted item.
-            if not self._message_suggestions.has_class("-hidden"):
-                idx = self._message_suggestions.highlighted
-                if idx is not None:
-                    opt = self._message_suggestions.get_option_at_index(idx)
-                    if opt is not None and opt.id:
-                        self._input.value = opt.id
-                        self._input.cursor_position = len(opt.id)
-                        self._hide_message_suggestions()
-                event.stop()
-                return
-            # No popup open — try to trigger @ file completions first
-            text = self._input.value or ""
-            cursor = self._input.cursor_position
-            at_query = _current_at_token(text[:cursor])
-            if at_query is not None:
-                self._refresh_at_file_suggestions(at_query)
-                if not self._at_file_suggestions.has_class("-hidden"):
-                    event.stop()
-                    return
-            # Then try message-history completions
-            self._refresh_message_suggestions(text, cursor)
-            if not self._message_suggestions.has_class("-hidden"):
-                event.stop()
-                return
-            # Fall through to slash suggestions if message history has
-            # nothing (keeps slash-completion via / working normally).
 
     # ---- vim action application ----
     def _apply_vim_action(self, action: str) -> None:
