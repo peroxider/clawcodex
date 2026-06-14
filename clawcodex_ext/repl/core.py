@@ -739,16 +739,30 @@ class ClawcodexREPL:
 
             @self.bindings.add("tab")  # type: ignore[attr-defined]
             def _tab_accepts_completion_or_triggers_message_history(event):  # type: ignore[no-untyped-def]
-                """Tab: accept the current completion, or start message-history
-                completion if no popup is open.
+                """Tab: accept the autosuggestion, cycle the completion popup,
+                or open a new completion menu.
 
-                When a completion menu is already displayed, Tab cycles to the
-                next item (prompt_toolkit default).  When no popup is open,
-                this starts the merged completer's completion with
-                ``select_first=True`` so the user gets an instant suggestion
-                from slash commands, file paths, or message history.
+                Order of precedence:
+
+                1. If ``AutoSuggestFromHistory`` produced a ghost-text
+                   suggestion (the dimmed suffix after the cursor), Tab
+                   accepts it via ``buf.apply_suggestion()`` — the
+                   fish-style "press Tab to complete" affordance.
+                2. If a completion popup is already open, fall through to
+                   prompt_toolkit's default Tab handling, which cycles to
+                   the next item.
+                3. Otherwise, start the merged completer with
+                   ``select_first=True`` so the user gets an instant
+                   suggestion from slash commands, file paths, or message
+                   history.
                 """
                 buf = event.current_buffer
+                if buf.suggestion is not None:
+                    # Fish-style: accept the dimmed ghost-text suggestion
+                    # (e.g. typing "he" shows gray "llo" — Tab completes
+                    # to "hello" before falling through to the popup).
+                    buf.apply_suggestion()
+                    return
                 if buf.complete_state:
                     # Popup is open — Tab cycles to next item (default PTk
                     # behavior). We just prevent Enter from closing it.

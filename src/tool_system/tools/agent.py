@@ -433,16 +433,17 @@ def make_agent_tool(
         # for the async path. The state is mutated in place on success /
         # failure below.
         sync_state = LocalAgentTaskState(
+            id=agent_id,
             agent_id=agent_id,
             description=description,
             prompt=prompt,
             agent_type=agent_type,
             status="running",
-            started_at=start_time,
+            start_time=start_time,
             output_file=str(transcript_path_str) if transcript_path_str else "",
             parent_session_id=parent_sid,
         )
-        context.runtime_tasks[agent_id] = sync_state
+        context.runtime_tasks.upsert(sync_state)
 
         messages_for_finalize: list[Message] = []
         last_assistant: AssistantMessage | None = None
