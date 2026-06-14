@@ -31,6 +31,11 @@ class ToolResultBlock:
     # are stripped by map_result_to_api before going on the wire. Never
     # serialized via content_block_to_dict.
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Real tool execution time in milliseconds (dispatch → return). Populated
+    # by ``process_tool_result_block`` in src/services/tool_execution/ when
+    # the caller measures it; otherwise ``None`` and downstream parsers
+    # fall back to the tool_use → tool_result record gap.
+    duration_ms: int | None = None
 
 
 @dataclass
@@ -101,10 +106,20 @@ def content_block_from_dict(data: Mapping[str, Any]) -> ContentBlock:
             content = raw_content
         else:
             content = str(raw_content)
+        raw_duration = data.get("duration_ms", data.get("durationMs"))
+        duration_ms: int | None = None
+        # Reject negative values AND non-finite floats (`+inf`, `-inf`,
+        # `nan`). The `>= 0` half of the guard would let `+inf` through,
+        # and `int(inf)` raises OverflowError — a single malformed
+        # transcript would crash the parser. `0 <= x < inf` is True
+        # only for finite non-negative numbers.
+        if isinstance(raw_duration, (int, float)) and 0 <= float(raw_duration) < float("inf"):
+            duration_ms = int(raw_duration)
         return ToolResultBlock(
             tool_use_id=str(data.get("tool_use_id", "")),
             content=content,
             is_error=bool(data.get("is_error", False)),
+            duration_ms=duration_ms,
         )
 
     if block_type == "thinking":
@@ -165,12 +180,15 @@ def content_block_to_dict(block: Any) -> dict[str, Any]:
             ]
         else:
             result_content = block.content
-        return {
+        out: dict[str, Any] = {
             "type": "tool_result",
             "tool_use_id": block.tool_use_id,
             "content": result_content,
             "is_error": block.is_error,
         }
+        if block.duration_ms is not None:
+            out["duration_ms"] = int(block.duration_ms)
+        return out
 
     if isinstance(block, ThinkingBlock):
         payload: dict[str, Any] = {"type": "thinking", "thinking": block.thinking}
@@ -202,12 +220,20 @@ def content_block_to_dict(block: Any) -> dict[str, Any]:
             "input": dict(raw_input) if isinstance(raw_input, Mapping) else {},
         }
     if block_type == "tool_result":
-        return {
+        out: dict[str, Any] = {
             "type": "tool_result",
             "tool_use_id": str(getattr(block, "tool_use_id", "")),
             "content": getattr(block, "content", ""),
             "is_error": bool(getattr(block, "is_error", False)),
         }
+        duration_ms = getattr(block, "duration_ms", None)
+        # Same `0 <= x < inf` guard as `content_block_from_dict` above —
+        # the dict-branch only fires for object-form blocks coming from
+        # internal code, but a buggy caller passing `+inf` would
+        # otherwise crash on `int(inf)`.
+        if isinstance(duration_ms, (int, float)) and 0 <= float(duration_ms) < float("inf"):
+            out["duration_ms"] = int(duration_ms)
+        return out
 
     return {"type": "text", "text": str(block)}
 

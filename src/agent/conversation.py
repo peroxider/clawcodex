@@ -48,6 +48,19 @@ class Conversation:
         normalized_content = _normalize_message_content(content)
         self.messages.append(create_message(role, normalized_content))
 
+    def add_existing_message(self, message: Message) -> None:
+        """Append a fully-formed Message, preserving all of its fields.
+
+        Use this when the caller already has a populated Message (e.g. the
+        agent loop's on_message callback) — ``add_message(role, content)``
+        rebuilds via ``create_message`` and drops AssistantMessage fields
+        like ``usage``, ``model``, and ``requestId`` that aren't on the
+        base ``Message`` dataclass.
+        """
+        if len(self.messages) >= self.max_history:
+            self.messages.pop(0)
+        self.messages.append(message)
+
     def add_user_message(self, content: MessageContent):
         # ``MessageContent = str | list[ContentBlock]``: ``add_message`` ->
         # ``_normalize_message_content`` already handles both shapes, so
@@ -59,11 +72,18 @@ class Conversation:
     def add_assistant_message(self, content: MessageContent):
         self.add_message("assistant", content)
 
-    def add_tool_result_message(self, tool_use_id: str, content: str | list[dict[str, Any]], is_error: bool = False):
+    def add_tool_result_message(
+        self,
+        tool_use_id: str,
+        content: str | list[dict[str, Any]],
+        is_error: bool = False,
+        duration_ms: int | None = None,
+    ):
         block = ToolResultBlock(
             tool_use_id=tool_use_id,
             content=content,
             is_error=is_error,
+            duration_ms=duration_ms,
         )
         self.add_message("user", [block])
 

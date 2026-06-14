@@ -31,6 +31,7 @@ from typing import Any, Callable
 
 from ..tool_system.context import ToolContext
 from ..tool_system.registry import ToolRegistry
+from clawcodex_ext.tool_system import get_team_aware_tool_list
 from ..providers.base import BaseProvider
 from ..types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from ..types.messages import (
@@ -107,7 +108,10 @@ def run_query_as_agent_loop_sync(
         # ``tool_use IDs must match tool_result IDs`` and the
         # proximate cause would be invisible.
         try:
-            conversation.add_message(msg.role, msg.content)
+            # ``add_existing_message`` preserves ``usage``/``model``/
+            # ``requestId`` set on AssistantMessage; ``add_message`` would
+            # drop them by rebuilding via ``create_message``.
+            conversation.add_existing_message(msg)
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
@@ -247,7 +251,7 @@ async def run_query_as_agent_loop(
     params = QueryParams(
         messages=list(initial_messages),
         system_prompt=system_prompt,
-        tools=tool_registry.list_tools(),
+        tools=get_team_aware_tool_list(tool_registry, tool_context.team),
         tool_registry=tool_registry,
         tool_use_context=tool_context,
         provider=provider,
