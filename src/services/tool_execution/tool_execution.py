@@ -324,6 +324,7 @@ async def _check_permissions_and_call_tool(
             tool_use_id,
             tool_results_dir=tool_results_dir,
             aggregate_chars_so_far=tool_use_context.tool_result_chars_so_far,
+            duration_ms=duration_ms,
         )
         tool_use_context.tool_result_chars_so_far += compute_block_chars(
             tool_result_block,
@@ -400,14 +401,18 @@ async def _check_permissions_and_call_tool(
 
         error_content = _format_error(error)
 
+        error_block: dict[str, Any] = {
+            "type": "tool_result",
+            "content": error_content,
+            "is_error": True,
+            "tool_use_id": tool_use_id,
+        }
+        if duration_ms is not None and duration_ms >= 0:
+            error_block["duration_ms"] = int(duration_ms)
+
         resulting_messages.append(MessageUpdateLazy(
             message=create_user_message(
-                content=[{
-                    "type": "tool_result",
-                    "content": error_content,
-                    "is_error": True,
-                    "tool_use_id": tool_use_id,
-                }],
+                content=[error_block],
                 toolUseResult=f"Error: {error_content}",
             ),
         ))

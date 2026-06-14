@@ -2,6 +2,19 @@
 
 # Eagerly register downstream extensions that must be in place before any
 # src/ code runs.  These registrations are idempotent.
+#
+# NOTE: ``_init_nested_transcript`` is intentionally NOT called here.
+# Calling it would import ``src.agent.transcript`` while ``src.tool_system``
+# is mid-load (via the ``src.permissions.cycle`` → ``clawcodex_ext`` lazy
+# proxy path), which in turn imports ``src.agent.agent_tool_utils``,
+# which imports ``src.tool_system.build_tool`` — completing the cycle and
+# raising ``ImportError: cannot import name 'Tool' from partially
+# initialized module 'src.tool_system.build_tool'`` at import time.
+# The transcript resolver registration is therefore invoked from
+# ``clawcodex_ext/cli/main.py`` (the CLI entry point) instead, where
+# all ``src/`` modules are guaranteed fully loaded. Use the
+# ``ensure_nested_transcript_initialized()`` helper below to trigger
+# it from non-CLI entry points (e.g. the REPL launcher).
 from clawcodex_ext.permissions import install_permission_extensions  # noqa: F401
 from clawcodex_ext.memory.scope_aware_prompt import install_memory_extension  # noqa: F401
 from clawcodex_ext.providers import (  # noqa: F401 — registers model discovery hooks
@@ -13,4 +26,29 @@ from clawcodex_ext.transcript.nested_path import init as _init_nested_transcript
 install_permission_extensions()
 install_memory_extension()
 _install_provider_patches()
-_init_nested_transcript()
+
+# Flag-guarded lazy initializer. Idempotent: a second call is a no-op
+# so callers (CLI main, REPL launcher, tests) can invoke it freely
+# without worrying about double-registration of the path resolver.
+_nested_transcript_initialized: bool = False
+
+
+def ensure_nested_transcript_initialized() -> None:
+    """Register the nested-session transcript path resolver.
+
+    Safe to call multiple times. Must be called from a context where
+    ``src/`` modules are fully loaded (e.g. the CLI entry point or
+    the REPL launcher) — invoking it during ``clawcodex_ext`` package
+    import would re-trigger the circular import that this lazy
+    wrapper exists to avoid.
+    """
+    global _nested_transcript_initialized
+    if _nested_transcript_initialized:
+        return
+    _init_nested_transcript()
+    _nested_transcript_initialized = True
+
+
+__all__ = [
+    "ensure_nested_transcript_initialized",
+]

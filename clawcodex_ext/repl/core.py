@@ -2032,7 +2032,7 @@ class ClawcodexREPL:
             return len(self._queued_prompts)
 
     def clear_pending_turn_buffers(self) -> None:
-        """Reset per-turn UI / queue buffers at the end of each chat() turn.
+        """Reset per-turn transient UI buffers at the end of each chat() turn.
 
         Called from the main ``chat()`` loop immediately after the
         :class:`LiveStatus` context manager has torn down (so the spinner
@@ -2040,19 +2040,28 @@ class ClawcodexREPL:
         incremented. At this point the REPL is single-threaded between
         turns, so the deque ``.clear()`` calls are safe without locks.
 
-        Without this reset, ``_thinking_chunks`` and ``_queued_prompts``
-        accumulate string references across turns; on a long session
-        with queued prompts (the WSL2 3.8 GB OOM repro showed 53.5k
-        tokens queued) the leaked references add up. The deques are
-        already bounded via ``maxlen=`` so an emergency upper bound
-        exists, but per-turn clearing keeps the working set minimal.
+        Cleared here:
+        * ``_thinking_chunks`` — streaming ``Thinking…`` text appended while
+          the engine ran. The spinner is gone, so the buffer is dead
+          memory. Bounded by ``deque(maxlen=1000)`` regardless, but
+          per-turn clearing keeps the working set minimal (the
+          WSL2 3.8 GB OOM repro was driven by this buffer).
 
-        ``_expandable_blocks`` is not cleared — its ``maxlen=20`` already
-        bounds it, and clearing would defeat the ``ctrl+o`` re-expand
-        feature that replays the most recent block.
+        NOT cleared here (and intentionally so):
+        * ``_queued_prompts`` — these are *user input* the LiveStatus
+          spinner captured while the engine was running (the
+          "type while it's still thinking" affordance, ported from
+          the TS Ink reference). They must survive the turn boundary
+          so the outer ``run()`` loop can drain them via
+          ``_pop_queued_prompt()`` on the next iteration. Wiping them
+          here would silently drop whatever the user typed during the
+          turn. The ``deque(maxlen=100)`` is the actual memory cap; if
+          the user truly floods the spinner, the oldest entry is
+          dropped FIFO, not the whole queue.
+        * ``_expandable_blocks`` — its ``maxlen=20`` already bounds it,
+          and clearing would defeat the ``ctrl+o`` re-expand feature
+          that replays the most recent block.
         """
-        with self._queued_prompts_lock:
-            self._queued_prompts.clear()
         self._thinking_chunks.clear()
 
     def _status_message(self) -> str:
@@ -3552,7 +3561,8 @@ class ClawcodexREPL:
             style_dir = getattr(self.tool_context, "output_style_dir", None)
             style_prompt = resolve_output_style(style_name, style_dir).prompt
 
-            tools = self.tool_registry.list_tools()
+            from clawcodex_ext.tool_system import get_team_aware_tool_list
+            tools = get_team_aware_tool_list(self.tool_registry, self.tool_context.team)
 
             # Coordinator Mode — when ``CLAUDE_CODE_COORDINATOR_MODE=true``,
             # restrict the tool list to read-only + delegation tools
@@ -3900,11 +3910,14 @@ class ClawcodexREPL:
             engine.reset_abort_controller()
 
             self._engine_messages = engine.get_messages()
-            # Drop per-turn UI / queue buffers before the next turn starts
-            # so a long session can't accumulate buffered references across
-            # turns. Safe to call here: the LiveStatus context manager has
-            # already torn down (no spinner is reading these buffers), and
-            # the REPL is single-threaded between turns. See
+            # Drop per-turn *UI* buffers (spinner streaming text) before
+            # the next turn starts so a long session can't accumulate
+            # buffered references. Safe to call here: the LiveStatus
+            # context manager has already torn down (no spinner is
+            # reading these buffers), and the REPL is single-threaded
+            # between turns. Note: this deliberately does NOT touch
+            # ``_queued_prompts`` — those are pending user input that
+            # ``run()`` will drain on the next loop iteration. See
             # ``clear_pending_turn_buffers`` for the OOM-repro rationale.
             self.clear_pending_turn_buffers()
             self._stats_turns += 1

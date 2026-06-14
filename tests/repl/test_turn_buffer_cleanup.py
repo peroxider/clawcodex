@@ -115,11 +115,36 @@ class TestTurnBufferCleanup(unittest.TestCase):
 
         repl.clear_pending_turn_buffers()
 
-        self.assertEqual(len(repl._queued_prompts), 0)
+        # _thinking_chunks is transient UI state and must be cleared so
+        # the next turn's spinner starts fresh (this is the buffer that
+        # drove the WSL2 3.8 GB OOM repro).
         self.assertEqual(len(repl._thinking_chunks), 0)
         # _expandable_blocks must NOT be cleared — see helper docstring
         # on the "stash the user just expanded from" rationale.
         self.assertEqual(len(repl._expandable_blocks), 1)
+
+    def test_clear_pending_turn_buffers_preserves_queued_prompts(self) -> None:
+        """Regression: the LiveStatus spinner enqueues user input into
+        ``_queued_prompts`` *during* a turn. ``run()`` drains that queue
+        at the *start* of the next iteration via ``_pop_queued_prompt``.
+        Clearing the queue at the turn boundary (the d6b8ac0 regression)
+        silently dropped whatever the user typed while the engine was
+        running, breaking the "type while it's still thinking" affordance.
+        The helper must therefore leave ``_queued_prompts`` alone — the
+        ``deque(maxlen=100)`` is the actual memory cap.
+        """
+        repl = self._make_repl()
+        repl._enqueue_prompt("typed-during-turn-1")
+        repl._enqueue_prompt("typed-during-turn-2")
+
+        repl.clear_pending_turn_buffers()
+
+        self.assertEqual(len(repl._queued_prompts), 2)
+        # FIFO order preserved so the next ``_pop_queued_prompt()`` returns
+        # the earliest typed input first.
+        self.assertEqual(repl._pop_queued_prompt(), "typed-during-turn-1")
+        self.assertEqual(repl._pop_queued_prompt(), "typed-during-turn-2")
+        self.assertIsNone(repl._pop_queued_prompt())
 
     def test_clear_pending_turn_buffers_idempotent(self) -> None:
         repl = self._make_repl()
@@ -156,25 +181,22 @@ class TestTurnBufferCleanup(unittest.TestCase):
     # -- no-growth regression --
 
     def test_no_buffer_growth_across_n_turns(self) -> None:
-        """Simulate N turns: the helper must keep both buffers bounded
-        by the cap rather than letting leftovers from earlier turns
-        accumulate forever. This is the direct regression test for the
-        OOM repro where ``_thinking_chunks`` was unbounded.
+        """Simulate N turns: the helper must keep ``_thinking_chunks``
+        bounded by the cap (the buffer that drove the OOM repro) and
+        must not let leftovers from earlier turns accumulate forever.
+        ``_queued_prompts`` is a *separate* concern — see
+        ``test_clear_pending_turn_buffers_preserves_queued_prompts``.
         """
         repl = self._make_repl()
         for turn in range(50):
-            # Simulate 30 thinking chunks and 5 queued prompts per turn.
+            # Simulate 30 thinking chunks per turn.
             for i in range(30):
                 repl._thinking_chunks.append(f"turn-{turn}-chunk-{i}")
-            for i in range(5):
-                repl._enqueue_prompt(f"turn-{turn}-p-{i}")
             # And the live agent replies while queued prompts grow.
             self.assertLessEqual(len(repl._thinking_chunks), 1000)
-            self.assertLessEqual(len(repl._queued_prompts), 100)
             # Now the turn boundary fires.
             repl.clear_pending_turn_buffers()
             self.assertEqual(len(repl._thinking_chunks), 0)
-            self.assertEqual(len(repl._queued_prompts), 0)
 
 
 if __name__ == "__main__":

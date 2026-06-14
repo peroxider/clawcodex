@@ -26,14 +26,23 @@ from .registry_ext import ToolRegistryExt
 
 from .agent_config import AgentToolConfig, ToolMode, load_tool_config
 
+from .team_filter import (
+    TEAM_ONLY_TOOL_NAMES,
+    filter_team_only_tools,
+    has_team_context,
+)
+
 __all__ = [
     "TOOL_BUNDLES",
     "MODE_BUNDLES",
     "ALL_BUNDLE_NAMES",
     "get_bundle_tools",
     "get_all_bundle_tools",
+    "TEAM_ONLY_TOOL_NAMES",
     "ToolRegistryExt",
     "AgentToolConfig",
     "ToolMode",
+    "filter_team_only_tools",
+    "has_team_context",
     "load_tool_config",
 ]

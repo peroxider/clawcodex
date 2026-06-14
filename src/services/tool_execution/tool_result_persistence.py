@@ -327,6 +327,7 @@ def maybe_persist_large_tool_result(
     tool_results_dir: Path,
     aggregate_chars_so_far: int = 0,
     aggregate_cap: int = MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
     """Apply per-tool persistence to a tool_result block.
 
@@ -362,10 +363,16 @@ def maybe_persist_large_tool_result(
     if is_tool_result_content_empty(content):
         new_block = dict(tool_result_block)
         new_block["content"] = f"({tool_name} completed with no output)"
+        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+            new_block["duration_ms"] = int(duration_ms)
         return new_block
 
     # Image content must not be persisted — the model needs the bytes.
     if _has_image_block(content):
+        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+            stamped = dict(tool_result_block)
+            stamped["duration_ms"] = int(duration_ms)
+            return stamped
         return tool_result_block
 
     size = _content_size(content)
@@ -378,6 +385,10 @@ def maybe_persist_large_tool_result(
     # Read still gets persisted whenever the running aggregate is
     # close to the cap.
     if threshold == float("inf"):
+        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+            stamped = dict(tool_result_block)
+            stamped["duration_ms"] = int(duration_ms)
+            return stamped
         return tool_result_block
 
     # WI-5.1: per-message aggregate gate. Even when this block alone is
@@ -387,6 +398,10 @@ def maybe_persist_large_tool_result(
     # point per ``toolLimits.ts:49`` semantics.
     aggregate_would_exceed = (aggregate_chars_so_far + size) > aggregate_cap
     if size <= threshold and not aggregate_would_exceed:
+        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+            stamped = dict(tool_result_block)
+            stamped["duration_ms"] = int(duration_ms)
+            return stamped
         return tool_result_block
 
     tool_use_id = tool_result_block.get("tool_use_id") or _hash_id(content)
@@ -402,12 +417,18 @@ def maybe_persist_large_tool_result(
             tool_name,
             persist_result.error,  # type: ignore[union-attr]
         )
+        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+            stamped = dict(tool_result_block)
+            stamped["duration_ms"] = int(duration_ms)
+            return stamped
         return tool_result_block
 
     assert isinstance(persist_result, PersistedToolResult)
     message = build_large_tool_result_message(persist_result)
     new_block = dict(tool_result_block)
     new_block["content"] = message
+    if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        new_block["duration_ms"] = int(duration_ms)
     return new_block
 
 
@@ -428,6 +449,7 @@ def process_tool_result_block(
     *,
     tool_results_dir: Path,
     aggregate_chars_so_far: int = 0,
+    duration_ms: int | None = None,
 ) -> dict[str, Any]:
     """Map a tool result to its API form and apply per-tool persistence.
 
@@ -442,6 +464,11 @@ def process_tool_result_block(
     total past ``MAX_TOOL_RESULTS_PER_MESSAGE_CHARS``. Updating the
     counter post-call is the caller's responsibility — use
     ``compute_block_chars(returned_block)`` to measure.
+
+    ``duration_ms`` is the real tool execution time measured by the
+    caller (see ``run_tool_use`` in tool_execution.py). It's stamped
+    onto the returned block so downstream visualization can read the
+    timing without relying on the tool_use → tool_result record gap.
     """
     tool_result_block = tool.map_result_to_api(tool_use_result, tool_use_id)
     threshold = get_persistence_threshold(tool.name, tool.max_result_size_chars)
@@ -451,6 +478,7 @@ def process_tool_result_block(
         threshold=threshold,
         tool_results_dir=tool_results_dir,
         aggregate_chars_so_far=aggregate_chars_so_far,
+        duration_ms=duration_ms,
     )
 
 
