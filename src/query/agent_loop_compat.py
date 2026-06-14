@@ -44,6 +44,9 @@ from ..utils.abort_controller import AbortController, AbortError, AbortSignal
 from .query import QueryParams, StreamEvent, query
 from .transitions import Terminal, TerminalHolder
 
+import logging
+from ..agent.transcript import TranscriptWriter, get_main_transcript_path
+
 
 # Renderer types are now canonically in ``src.tool_system.renderers``
 # (per the F.4 extraction in PR #N). ``src/tui/__init__.py`` doesn't
@@ -273,9 +276,53 @@ async def run_query_as_agent_loop(
     num_turns = 0
     last_assistant_text = ""
 
+    # Open the main-conversation JSONL transcript so the full
+    # user↔model exchange is on disk for ``cli --resume`` and the
+    # session-analysis viewer. Mirrors the sub-agent sidechain
+    # pattern (``src.tool_system.tools.agent``) but uses the fixed
+    # ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` convention
+    # from ``get_main_transcript_path``. If no session id is
+    # attached to the tool context (e.g. legacy test entry points
+    # that build a bare context), persistence is silently skipped
+    # — same as the pre-fix behavior, just spelled out.
+    main_transcript: TranscriptWriter | None = None
+    main_session_id = getattr(tool_context, "session_id", None)
+    if main_session_id:
+        try:
+            main_transcript = TranscriptWriter(
+                get_main_transcript_path(main_session_id),
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "main transcript open failed for session %s; "
+                "continuing without disk persistence",
+                main_session_id,
+            )
+            main_transcript = None
+
     async for msg in query(params, terminal_holder=holder):
         if isinstance(msg, StreamEvent):
             continue
+
+        # Persist every real Message to the main transcript. Filter
+        # matches the legacy ``on_message`` gates (skip isApiError,
+        # skip isMeta) so the on-disk shape mirrors what the legacy
+        # Conversation would have held.
+        if main_transcript is not None:
+            _persist_is_api_error = bool(getattr(msg, "isApiErrorMessage", False))
+            _persist_is_meta = bool(getattr(msg, "isMeta", False))
+            if not _persist_is_api_error and not _persist_is_meta:
+                try:
+                    main_transcript.append(msg)
+                except OSError:
+                    logging.getLogger(__name__).exception(
+                        "main transcript append failed; further appends will be skipped"
+                    )
+                    try:
+                        main_transcript.close()
+                    except OSError:
+                        pass
+                    main_transcript = None
 
         # Bridge cancel_signal: if it fires mid-stream, propagate to
         # the loop's abort_controller. The loop checks signal.aborted
@@ -406,6 +453,20 @@ async def run_query_as_agent_loop(
             ):
                 response_text = entry["message"]
                 break
+
+    # Close the main transcript. Single close call (no try/finally
+    # wrapper around the whole function) — if the loop throws, the
+    # OS reclaims the fd on process exit. JSONL append-only writers
+    # don't need ordered teardown.
+    if main_transcript is not None:
+        try:
+            main_transcript.close()
+        except OSError:
+            logging.getLogger(__name__).exception(
+                "main transcript close failed for session %s",
+                main_session_id,
+            )
+
     return AgentLoopRunResult(
         response_text=response_text,
         usage=usage,

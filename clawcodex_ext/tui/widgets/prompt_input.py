@@ -32,7 +32,7 @@ from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.message import Message
-from textual.widgets import Input, OptionList
+from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ..commands import CommandSuggestion
@@ -223,6 +223,14 @@ class PromptInput(Vertical):
         border: round $primary-darken-2;
         padding: 0 1;
     }
+    PromptInput > #ghost-suggestion {
+        height: auto;
+        padding: 0 2;
+        color: $text 40%;
+    }
+    PromptInput > #ghost-suggestion.-hidden {
+        display: none;
+    }
     """
 
     BINDINGS = [
@@ -250,6 +258,7 @@ class PromptInput(Vertical):
         self._suggestions = _SlashSuggestions(classes="-hidden")
         self._message_suggestions = _MessageSuggestions(classes="-hidden")
         self._at_file_suggestions = _AtFileSuggestions(classes="-hidden")
+        self._ghost_suggestion = Static("", id="ghost-suggestion", classes="-hidden")
         self._vim = VimState(enabled=vim_mode)
         self._yank_buffer: str = ""
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
@@ -270,6 +279,7 @@ class PromptInput(Vertical):
     def compose(self) -> ComposeResult:
         yield self._mode_indicator
         yield self._input
+        yield self._ghost_suggestion
         yield self._suggestions
         yield self._message_suggestions
         yield self._at_file_suggestions
@@ -286,6 +296,7 @@ class PromptInput(Vertical):
         self._input.value = ""
         self._hide_suggestions()
         self._hide_message_suggestions()
+        self._hide_ghost_suggestion()
 
     def set_value(self, value: str) -> None:
         """Replace the draft text in the prompt (used by /history)."""
@@ -293,6 +304,7 @@ class PromptInput(Vertical):
         self._input.value = value or ""
         self._hide_suggestions()
         self._hide_message_suggestions()
+        self._hide_ghost_suggestion()
 
     # ---- bracketed paste ----
     def handle_paste(self, text: str) -> PasteInfo:
@@ -370,6 +382,15 @@ class PromptInput(Vertical):
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
         self._refresh_suggestions(event.value, event.input.cursor_position)
+        # Show ghost-text suggestion from history when no popup is open.
+        if (
+            self._suggestions.has_class("-hidden")
+            and self._message_suggestions.has_class("-hidden")
+            and self._at_file_suggestions.has_class("-hidden")
+        ):
+            self._refresh_ghost_suggestion(event.value or "")
+        else:
+            self._hide_ghost_suggestion()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         text = (event.value or "").strip()
@@ -401,6 +422,7 @@ class PromptInput(Vertical):
         self._history_pos = None
         self._hide_suggestions()
         self._hide_at_file_suggestions()
+        self._hide_ghost_suggestion()
         self._input.value = ""
         ## _log(f'[prompt_input] posting PromptSubmitted: {text}')
         self.post_message(PromptSubmitted(text=text))
@@ -463,6 +485,17 @@ class PromptInput(Vertical):
             self.post_message(CancelRequested())
             event.stop()
             return
+
+        # Tab / Right / Ctrl+E: accept the ghost-text suggestion.
+        # Only when the cursor is at the end of the input and a
+        # suggestion is visible — mirrors REPL's AutoSuggestFromHistory
+        # accept keys (→ / ⌃F / ⌃E).
+        if key in ("tab", "right", "ctrl+e"):
+            if not self._ghost_suggestion.has_class("-hidden"):
+                self._accept_ghost_suggestion()
+                event.stop()
+                return
+
         if key in ("up", "down"):
             # @ file suggestions take top priority
             if not self._at_file_suggestions.has_class("-hidden"):
@@ -540,6 +573,44 @@ class PromptInput(Vertical):
                 self._history_pos = None
                 inp.value = ""
                 self.post_message(PromptSubmitted(text=text))
+
+    # ---- ghost-text suggestion from history ----
+
+    def _find_history_suggestion(self, text: str) -> str | None:
+        """Return the most recent history entry starting with *text*, or None."""
+        if not text:
+            return None
+        for entry in reversed(self._history):
+            if entry.startswith(text) and entry != text:
+                return entry
+        return None
+
+    def _refresh_ghost_suggestion(self, text: str) -> None:
+        """Show a dim ghost-text suggestion from history below the input."""
+        match = self._find_history_suggestion(text)
+        if match is not None:
+            suffix = match[len(text):]
+            hint = Text()
+            hint.append(suffix, style="dim")
+            hint.append(" (→ to accept)", style="dim cyan")
+            self._ghost_suggestion.update(hint)
+            self._ghost_suggestion.remove_class("-hidden")
+        else:
+            self._hide_ghost_suggestion()
+
+    def _hide_ghost_suggestion(self) -> None:
+        if not self._ghost_suggestion.has_class("-hidden"):
+            self._ghost_suggestion.add_class("-hidden")
+            self._ghost_suggestion.update("")
+
+    def _accept_ghost_suggestion(self) -> None:
+        """Accept the ghost-text suggestion, appending it to the input."""
+        text = self._input.value or ""
+        match = self._find_history_suggestion(text)
+        if match is not None:
+            self._input.value = match
+            self._input.cursor_position = len(match)
+            self._hide_ghost_suggestion()
 
     # ---- suggestion plumbing ----
     def _refresh_suggestions(self, text: str, cursor: int) -> None:

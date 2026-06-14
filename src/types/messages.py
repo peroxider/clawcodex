@@ -82,6 +82,14 @@ class AssistantMessage(Message):
     error: dict[str, Any] | None = None
     errorDetails: str | None = None
     isApiErrorMessage: bool = False
+    # Real LLM inference duration in milliseconds. Captured at the
+    # call site (``src.query.query._call_model_sync``) and surfaced
+    # to the transcript so downstream consumers (session-analysis
+    # viewer, ``cli --resume``) can render the real latency without
+    # relying on the heuristic next-event gap. ``None`` means the
+    # upstream never measured it (legacy records, API-error
+    # messages, streaming that errored before completion).
+    duration_ms: int | None = None
 
 
 @dataclass
@@ -587,7 +595,7 @@ def message_to_dict(message: MessageLike) -> dict[str, Any]:
         "isApiErrorMessage", "apiError", "error", "errorDetails",
         "model", "origin", "toolUseID", "parentToolUseID", "data",
         "imagePasteIds", "summarizeMetadata", "preventContinuation",
-        "usage",
+        "usage", "duration_ms",
     ):
         val = _get_field(message, attr, None)
         if val is not None and val is not False:

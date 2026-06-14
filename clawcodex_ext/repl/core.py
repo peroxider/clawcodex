@@ -11,7 +11,7 @@ from clawcodex_ext.utils.completers import (
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
-    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory, Suggestion
     from prompt_toolkit.styles import Style
     from prompt_toolkit.completion import Completer, Completion, WordCompleter
     from prompt_toolkit.input import ansi_escape_sequences as _pt_ansi_seq
@@ -384,6 +384,34 @@ _TASK_WIDGET_TOOL_NAMES: set[str] = {
     "TaskGet",
     "TodoWrite",
 }
+
+
+_GHOST_HINT = " (→ to accept)"
+
+
+class _HintedAutoSuggest(AutoSuggestFromHistory):
+    """Append ``(→ to accept)`` to ghost-text suggestions."""
+
+    def get_suggestion(self, buffer, document):
+        suggestion = super().get_suggestion(buffer, document)
+        if suggestion and suggestion.text:
+            return Suggestion(suggestion.text + _GHOST_HINT)
+        return suggestion
+
+
+def _patch_accept_suggestion_bindings(bindings):
+    """Override →/⌃F/⌃E so they strip the hint before inserting."""
+
+    @bindings.add("right")
+    @bindings.add("c-f")
+    @bindings.add("c-e")
+    def _accept(event):
+        buf = event.current_buffer
+        suggestion = buf.suggestion
+        if suggestion and suggestion.text.endswith(_GHOST_HINT):
+            buf.insert_text(suggestion.text[: -len(_GHOST_HINT)])
+        elif suggestion:
+            buf.insert_text(suggestion.text)
 
 
 async def _drain_history(history) -> None:
@@ -769,7 +797,7 @@ class ClawcodexREPL:
 
         self.prompt_session = PromptSession(
             history=file_history,
-            auto_suggest=AutoSuggestFromHistory(),
+            auto_suggest=_HintedAutoSuggest(),
             completer=self.completer,
             style=Style.from_dict({
                 # Dim background on the ``❯`` marker so the user
@@ -797,6 +825,7 @@ class ClawcodexREPL:
             prompt_continuation=self._prompt_continuation,
             bottom_toolbar=self._bottom_toolbar,
         )
+        _patch_accept_suggestion_bindings(self.bindings)
 
     def _bottom_toolbar(self):
         """Single-line status footer for the input prompt.

@@ -292,7 +292,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         from prompt_toolkit.completion import merge_completers
         from prompt_toolkit.history import FileHistory
-        from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+        from clawcodex_ext.repl.core import (
+            _HintedAutoSuggest,
+            _patch_accept_suggestion_bindings,
+        )
         from prompt_toolkit.styles import Style
 
         from src.repl.at_file_completer import AtFileCompleter
@@ -408,7 +411,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         self.prompt_session = PromptSession(
             history=FileHistory(str(history_file)),
-            auto_suggest=AutoSuggestFromHistory(),
+            auto_suggest=_HintedAutoSuggest(),
             completer=self.completer,
             style=Style.from_dict({
                 "prompt": "bold fg:ansiblue bg:#262626",
@@ -428,6 +431,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             prompt_continuation=self._prompt_continuation,
             bottom_toolbar=self._bottom_toolbar,
         )
+        _patch_accept_suggestion_bindings(self.bindings)
 
     # ---- Override _init_command_system to pass downstream fields ----
 

@@ -161,6 +161,25 @@ def get_agent_transcript_path(
     return str(_transcripts_root() / f"{safe_id}.jsonl")
 
 
+def get_main_transcript_path(session_id: str) -> str:
+    """Absolute path to the main conversation's JSONL transcript.
+
+    The main conversation is the user's primary session — distinct
+    from sub-agent sidechains. Layout matches the convention the
+    session-analysis viewer expects at
+    ``clawcodex_sessions_analysis/lib/adapters/clawcodex.ts``.
+
+    Path: ``~/.clawcodex/sessions/<session_id>/transcript.jsonl``.
+
+    The directory is created on demand by ``TranscriptWriter``'s
+    constructor (parents=True). No resolver hook is consulted — the
+    main path is a fixed convention; routing it through the
+    sub-agent resolver would only complicate the call sites.
+    """
+    safe_id = _sanitize_agent_id(session_id)
+    return str(Path.home() / ".clawcodex" / "sessions" / safe_id / "transcript.jsonl")
+
+
 def _sanitize_agent_id(agent_id: str) -> str:
     """Reject path-traversing agent_ids before we touch the filesystem.
 
@@ -195,6 +214,13 @@ def _serialize_message(message: Any, parent_session_id: str | None = None) -> st
     key is injected into the serialized dict so downstream consumers
     (reader, auto-resume) can correlate the message back to the parent
     session without inspecting the file path.
+
+    String ``content`` payloads are wrapped as a single text block at
+    the disk boundary so the on-disk shape is uniform across main and
+    sub-agent transcripts (``content`` is always a list of blocks).
+    The API boundary (``normalize_message_for_api`` in
+    ``src.types.messages``) keeps its string-or-list tolerance
+    unchanged — only the on-disk representation is normalized.
     """
     if is_dataclass(message) and not isinstance(message, type):
         # Chunk-D N1 fold-in (widened from `(TypeError, ValueError)`):
@@ -213,12 +239,65 @@ def _serialize_message(message: Any, parent_session_id: str | None = None) -> st
         payload = {"_unserializable": repr(message)}
     if parent_session_id is not None:
         payload["parent_session_id"] = parent_session_id
+    # Normalize string content → single text block. Done after
+    # ``asdict`` (so the asdict call doesn't need to know about the
+    # shape) and before ``json.dumps`` (so the on-disk JSONL is
+    # uniform). The API boundary still accepts both shapes.
+    content = payload.get("content")
+    if isinstance(content, str):
+        payload["content"] = [{"type": "text", "text": content}]
     try:
         # ``ensure_ascii=False`` keeps unicode readable in transcripts;
         # ``separators`` with no spaces keeps lines compact.
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     except Exception as exc:
         return json.dumps({"_unserializable": repr(message), "_error": str(exc)})
+
+
+def _extract_ts_epoch(message: Any) -> float | None:
+    """Best-effort extract a comparable epoch-seconds float from a message.
+
+    Used by :class:`TranscriptWriter`'s ts-order flush buffer to sort
+    records before writing. Returns ``None`` when no parseable ts is
+    available — the caller treats ``None`` as "flush immediately" so
+    the buffer never loses data.
+
+    Accepts dataclass messages (looks for ``.timestamp``), top-level
+    dicts (looks for ``"timestamp"`` or ``"ts"``), and nested
+    ``{message: {...}}`` dicts (looks for ``"timestamp"`` inside the
+    inner message). Falls back to ``None`` on parse failure rather
+    than raising — a malformed ts must not abort the write path.
+    """
+    candidate: Any = None
+    if is_dataclass(message) and not isinstance(message, type):
+        candidate = getattr(message, "timestamp", None)
+    elif isinstance(message, dict):
+        candidate = message.get("timestamp") or message.get("ts")
+        if candidate is None:
+            inner = message.get("message")
+            if isinstance(inner, dict):
+                candidate = inner.get("timestamp") or inner.get("ts")
+    if not isinstance(candidate, str) or not candidate:
+        return None
+    # Accept both ``...Z`` and ``...+00:00`` ISO shapes. ``fromisoformat``
+    # handles both from Python 3.11+; for the trailing-Z case we
+    # normalize to ``+00:00`` so older interpreters don't choke.
+    iso = candidate
+    if iso.endswith("Z"):
+        iso = iso[:-1] + "+00:00"
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return None
+    try:
+        return dt.timestamp()
+    except (OSError, OverflowError, ValueError):
+        # ``OSError`` on platforms where ``timestamp()`` fails for
+        # pre-1970 or far-future dates; ``OverflowError`` for
+        # pre-epoch years that overflow the C time_t. Both signal
+        # "unusable for ordering" — fall back to None.
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +319,24 @@ class TranscriptWriter:
     across an ``append()`` call: while file IO is fast, blocking under
     the registry's lock would deadlock the asyncio scheduler against
     bash worker threads.
+
+    ts-order flushing (added for the session-analysis viewer): the
+    writer holds a small in-memory buffer keyed on the message
+    timestamp. When the buffer hits a size cap (entries or bytes,
+    whichever first) it's flushed in ascending ts order. Records
+    without a parseable ISO ts flush immediately — opportunistic
+    ordering, no data loss. POSIX line atomicity is preserved
+    because each individual ``os.write`` is still ≤ PIPE_BUF.
     """
+
+    # Buffer caps for ts-order flushing. 64 entries is enough to
+    # absorb an asyncio scheduler reorder of one agent turn's worth
+    # of messages (user prompt + assistant tool_use + tool_result +
+    # next assistant) without growing unboundedly; 8 KiB keeps the
+    # buffered payload under 2× PIPE_BUF so the sort + flush is
+    # bounded. Both are class constants so tests can override.
+    _SORT_BUFFER_MAX_ENTRIES: int = 64
+    _SORT_BUFFER_MAX_BYTES: int = 8 * 1024
 
     def __init__(self, path: str | Path, parent_session_id: str | None = None) -> None:
         self._path = str(path)
@@ -258,6 +354,11 @@ class TranscriptWriter:
             0o600,
         )
         self._closed = False
+        # ts-order flush buffer. List of ``(ts_epoch_float, encoded_line)``
+        # pairs; flushed in ascending ts when full or on close.
+        # ``None`` ts means "flush immediately" — we never buffer those.
+        self._sort_buffer: list[tuple[float, bytes]] = []
+        self._sort_buffer_bytes: int = 0
 
     @property
     def path(self) -> str:
@@ -271,11 +372,50 @@ class TranscriptWriter:
         guarantees this for sizes ≤ ``PIPE_BUF`` (≥4096 bytes on every
         modern Unix); for larger lines the reader is tolerant of
         partial trailing content per the JSONL format design.
+
+        ts ordering: a small in-memory buffer is held and flushed in
+        ascending-timestamp order once it hits a size cap. Records
+        without a parseable ISO timestamp bypass the buffer — they
+        land on disk in arrival order, which is the safest fallback.
         """
         if self._closed or self._fd is None:
             raise RuntimeError("TranscriptWriter is closed")
         line = _serialize_message(message, self._parent_session_id) + "\n"
         encoded = line.encode("utf-8")
+        ts = _extract_ts_epoch(message)
+        if ts is None:
+            # Unparseable ts → write now, don't buffer. Also flush
+            # any pending buffered records first so the file is in
+            # roughly-ts-order up to this point.
+            self._flush_sort_buffer()
+            self._write_raw(encoded)
+            return
+        self._sort_buffer.append((ts, encoded))
+        self._sort_buffer_bytes += len(encoded)
+        if (
+            len(self._sort_buffer) >= self._SORT_BUFFER_MAX_ENTRIES
+            or self._sort_buffer_bytes >= self._SORT_BUFFER_MAX_BYTES
+        ):
+            self._flush_sort_buffer()
+
+    def _flush_sort_buffer(self) -> None:
+        """Sort the buffered (ts, line) pairs ascending and write them out.
+
+        Called when the buffer hits its size cap or on ``close``.
+        Stable sort so equal-ts records retain insertion order
+        (Python's sort is stable, per the language spec).
+        """
+        if not self._sort_buffer:
+            return
+        # ``key=lambda r: r[0]`` is faster than ``itemgetter`` for a
+        # tuple because it avoids the per-element attribute lookup.
+        self._sort_buffer.sort(key=lambda r: r[0])
+        for _ts, encoded in self._sort_buffer:
+            self._write_raw(encoded)
+        self._sort_buffer.clear()
+        self._sort_buffer_bytes = 0
+
+    def _write_raw(self, encoded: bytes) -> None:
         # ``os.write`` may short-write under specific OS conditions;
         # loop until the whole buffer is on disk. For O_APPEND files
         # the returned ``n`` is byte count of THIS write, so the loop
@@ -292,6 +432,13 @@ class TranscriptWriter:
     def close(self) -> None:
         if self._closed:
             return
+        # Drain any buffered records BEFORE marking closed so the
+        # final state of the file is in ts order. ``_flush_sort_buffer``
+        # is a no-op when the buffer is empty.
+        try:
+            self._flush_sort_buffer()
+        except OSError:
+            logger.exception("transcript flush-on-close failed for %s", self._path)
         self._closed = True
         fd, self._fd = self._fd, None
         if fd is not None:
@@ -403,6 +550,7 @@ __all__ = [
     "TranscriptWriter",
     "TranscriptReader",
     "get_agent_transcript_path",
+    "get_main_transcript_path",
     "ensure_transcript_dir",
     "register_transcript_path_resolver",
 ]

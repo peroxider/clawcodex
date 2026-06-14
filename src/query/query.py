@@ -736,19 +736,26 @@ async def _call_model_sync(
 
     stop_reason = response.finish_reason or "end_turn"
 
+    # Capture the real LLM inference duration outside the _diag gate
+    # so the value always lands on the AssistantMessage (and from
+    # there on the JSONL transcript). The downstream session-analysis
+    # viewer reads this to render the real LLM bar width; without
+    # it, the viewer would have to fall back to a heuristic.
+    _inference_ms = int((time.monotonic() - _t0) * 1000)
+
     if _diag:
-        _elapsed = time.monotonic() - _t0
         _text_len = len(response.content) if response.content else 0
         _tool_count = len(response.tool_uses) if response.tool_uses else 0
         logger.warning(
             "[DIAG] _call_model_sync: response in %.1fs  text=%d chars  tools=%d  finish=%s  usage=%s",
-            _elapsed, _text_len, _tool_count, stop_reason, response.usage,
+            _inference_ms / 1000.0, _text_len, _tool_count, stop_reason, response.usage,
         )
 
     assistant_msg = AssistantMessage(
         content=assistant_blocks if assistant_blocks else "",
         stop_reason=stop_reason,
         usage=response.usage,
+        duration_ms=_inference_ms,
     )
     if response.reasoning_content:
         # Preserve provider thinking metadata for follow-up turns.
