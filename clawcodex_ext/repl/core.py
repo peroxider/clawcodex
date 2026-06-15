@@ -3716,7 +3716,11 @@ class ClawcodexREPL:
         self.session.conversation.add_user_message(user_message_content)
 
         try:
-            self.console.print("\n[bold]Assistant[/bold]")
+            # Show the agent name (from @agent-mention) or default to "Assistant"
+            _agent_label = "Assistant"
+            if agent_attachments:
+                _agent_label = agent_attachments[0].get("agent_type", "Assistant")
+            self.console.print(f"\n[bold]{_agent_label}[/bold]")
 
             stream_started = False
 
