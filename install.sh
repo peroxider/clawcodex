@@ -41,17 +41,21 @@ set -euo pipefail
 # ============================================================================
 # Versioning scheme
 # -----------------
-#   INSTALLER_VERSION  — version of this install.sh script itself
+#   INSTALLER_VERSION  — version of this install.sh script
 #   CLAWCODEX_VERSION  — version of clawcodex that THIS install.sh installs
 #   REPO_REF           — git ref (tag/branch) the install clones
 #
-# Bump CLAWCODEX_VERSION in lockstep with clawcodex releases and commit it
-# alongside the matching tag on the remote. That way an OLD install.sh always
-# installs the OLD clawcodex (with its OLD uv.lock), never the bleeding edge.
+# The install.sh script is released alongside the clawcodex tag it ships
+# with, so INSTALLER_VERSION == CLAWCODEX_VERSION for the bundle. Small
+# script changes (typo fixes, log tweaks, new flags) do NOT bump the
+# installer version — the version moves only when a new clawcodex tag
+# is cut. To install a different clawcodex version, fetch the install.sh
+# from that version's tag; an old install.sh still installs the old
+# clawcodex (with its old uv.lock), never the bleeding edge.
 # If REPO_REF doesn't resolve on the remote, the install falls back to the
 # default branch with a loud warning — useful during the pre-tag period of
 # a release but should never ship in a tagged installer.
-readonly INSTALLER_VERSION="1.3.0"
+readonly INSTALLER_VERSION="0.5.0"
 readonly CLAWCODEX_VERSION="0.5.0"
 # REPO_REF is intentionally NOT readonly — it gets reassigned when the user
 # passes --ref. Same for CLAWCODEX_HOME / CLAWCODEX_PARENT_DIR / CONFIG_DIR
