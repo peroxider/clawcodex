@@ -442,6 +442,35 @@ class PromptInput(Vertical):
 
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
+        # When the user is navigating the in-session history with
+        # Up/Down, :meth:`_navigate_history` programmatically sets the
+        # input value to a previous prompt. Because Textual fires
+        # ``Input.Changed`` for every value assignment — programmatic
+        # or not — the usual handler would call
+        # :meth:`_refresh_message_suggestions` and pop a multi-row
+        # history-completion OptionList under the field. The user did
+        # not ask for completions; they asked to recall. Showing the
+        # popup there renders ~6 rows of empty-looking space below the
+        # field (perceived as "extra blank lines"), and the ghost-text
+        # hint would also flash a longer history match under the
+        # field. Suppress all suggestion surfaces until the user
+        # diverges from the recalled entry.
+        if self._history_pos is not None:
+            if (
+                self._history_pos >= len(self._history)
+                or event.value != self._history[self._history_pos]
+            ):
+                # The user has typed past the recalled entry — drop out
+                # of history-navigation mode so subsequent keystrokes
+                # behave normally.
+                self._history_pos = None
+            else:
+                self._hide_suggestions()
+                self._hide_message_suggestions()
+                self._hide_at_file_suggestions()
+                self._hide_agent_suggestions()
+                self._hide_ghost_suggestion()
+                return
         self._refresh_suggestions(event.value, event.input.cursor_position)
         # Show ghost-text suggestion from history when no popup is open.
         if (
