@@ -3624,3 +3624,198 @@ def update_cache_warning(source: str, state: CacheWarningState):
 | 详细设计 | 见 FEATURE_PLAN.md §1.3.2 |
 
 
+
+## 二十三、代码审查归档——已完成特性设计详情（FEATURE_PLAN v3.x）
+
+> 以下特性在 FEATURE_PLAN.md 中标记为 ✅ 已完成，现将完整设计详情从 FEATURE_PLAN.md 迁移至此。
+> 源文档对应章节保留索引链接。
+
+### 二十三.1 F-18 CreateAgentTool 动态工具创建
+
+**状态**: ✅ 已完成
+**目标**: Agent 可根据三方 CLI/API 规范动态创建工具，实现"工具创建工具"的 Meta Tool 能力
+
+commit 59d8243 补齐集成闭环：CreateAgentTool 已注册为内置工具 (`EXTENSION_TOOLS`)，启动时自动加载持久化 Agent 工具 (`build_default_registry(load_agent_tools=True)`)，`ToolContext.tool_registry` 提供运行时注册表接线。
+
+#### 功能说明
+允许 Agent 分析第三方工具（CLI 命令或 HTTP API）的接口规范，然后动态创建一个可用的工具：
+```
+Agent 分析 CLI 规范 → 生成工具规范 → 调用 CreateAgentTool → 注册新工具 → 使用新工具
+```
+
+#### 架构设计
+```
+# 核心实现（clawcodex_ext — 与上游解耦）
+clawcodex_ext/tool_system/tools/create_agent_tool.py    # CreateAgentTool 实现（入口）
+clawcodex_ext/agent/tool_authoring/                     # Tool 创建基础设施
+├── spec.py                         # AgentToolSpec 定义
+├── validators.py                   # 规范验证器
+├── factory.py                      # build_tool() 调用封装
+├── registry_ext.py                 # Agent 创建工具注册表
+├── persistence.py                  # 工具持久化
+└── call_handlers/                  # call_impl 处理
+    ├── bash.py                     # bash 命令调用
+    ├── http.py                     # HTTP 请求调用
+    └── python.py                   # Python 函数映射
+
+# 集成接线（启动时自动注册）
+extensions/tool_system_ext/registration.py   # EXTENSION_TOOLS 列表包含 make_create_agent_tool()
+src/tool_system/defaults.py                  # build_default_registry(load_agent_tools=True) 自动加载持久化工具
+src/tool_system/context.py                   # ToolContext.tool_registry 字段
+clawcodex_ext/runtime/context.py             # 运行时传递 tool_registry
+```
+
+#### 工具规范（AgentToolSpec）
+```python
+@dataclass(frozen=True)
+class AgentToolSpec:
+    name: str                          # 工具唯一名称
+    description: str                   # 工具描述
+    input_schema: dict                 # JSON Schema
+    call_type: "bash" | "http" | "python"  # 调用类型
+    call_impl: str | dict              # 实现（类型依赖）
+    tags: list[str] = field(default_factory=list)  # 分类标签
+    aliases: tuple[str, ...] = ()
+    source: str = "agent-created"      # 来源标记
+```
+
+#### 三种 call_impl 安全限制
+| call_type | call_impl 示例 | 安全级别 |
+|-----------|---------------|---------|
+| `bash` | `"git status --porcelain {path}"` | ✅ 占位符防注入，预定义命令白名单 |
+| `http` | `{"method": "GET", "url": "https://api.github.com/{endpoint}"}` | ✅ 模板化，方法白名单 |
+| `python` | `"fetch_data"` → 映射到预定义函数 | ⚠️ 仅白名单函数注册 |
+
+命令白名单（bash）：`git`, `gh`, `glab`, `curl`, `wget`, `kubectl`, `docker`, `npm`, `pip`
+HTTP 方法白名单：`GET`, `POST`, `PUT`, `DELETE`, `PATCH`
+
+#### 安全性约束
+| 约束类型 | 实现位置 | 说明 |
+|---------|---------|------|
+| 命令白名单 | `validators.py:_validate_bash_impl` | 仅允许预定义命令 |
+| HTTP 方法白名单 | `validators.py:_validate_http_impl` | 仅白名单方法 |
+| Python 函数注册 | `validators.py:_validate_python_impl` | 仅白名单函数 |
+| 无任意代码执行 | `factory.py` | call_impl 是模板/映射，非代码 |
+| 参数化防注入 | `call_handlers/bash.py` | format 替换，无 shell 注入 |
+| 超时保护 | `call_handlers/bash.py` | subprocess timeout=30 |
+
+#### 持久化机制
+Agent 创建的工具保存到 `~/.clawcodex/agent-tools/{name}.json`，重启后通过 `build_default_registry(load_agent_tools=True)` 自动加载持久化工具到活动 Registry。
+
+#### 与现有系统集成
+| 现有组件 | 如何协作 |
+|---------|---------|
+| `build_tool()` | 作为工厂函数，CreateAgentTool 调用它 |
+| `ToolRegistry` | 工具创建后调用 `registry.register(tool)` |
+| `parse_agent_markdown` | 已有工具定义解析，可复用 schema 验证 |
+| MCP 工具包装 | 参考 `tool_wrapper.py` 的声明式工具模式 |
+| `EXTENSION_TOOLS` | `extensions/tool_system_ext/registration.py` 列表包含 `make_create_agent_tool()` |
+| `build_default_registry()` | `src/tool_system/defaults.py`: `load_agent_tools=True` 参数 |
+| `ToolContext.tool_registry` | `src/tool_system/context.py`: 运行时注册表字段 |
+
+#### 实现文件
+| 文件 | 位置 | 状态 |
+|------|------|------|
+| `create_agent_tool.py` | `clawcodex_ext/tool_system/tools/` | ✅ 已完成 |
+| `spec.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `validators.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `factory.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `registry_ext.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `persistence.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/bash.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/http.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `call_handlers/python.py` | `clawcodex_ext/agent/tool_authoring/` | ✅ 已完成 |
+| `registration.py` | `extensions/tool_system_ext/` | ✅ 已完成 |
+| `defaults.py` | `src/tool_system/` | ✅ 已完成 |
+| `context.py` | `src/tool_system/` | ✅ 已完成 |
+| `runtime/context.py` | `clawcodex_ext/runtime/` | ✅ 已完成 |
+
+### 二十三.2 F-16 Auto 模式 (TRANSCRIPT_CLASSIFIER)
+
+**状态**: ✅ 已完成（F-16）
+**目标**: 基于 LLM 的自动权限模式切换，减少交互疲劳
+
+`auto_mode_classify()` 完整实现在 `src/permissions/check.py`：覆盖 Bash（命令安全分级）、Read（只读放行）、Write/Edit（安全路径白名单验证）、Agent（标记工具）、MCP（需显式审批）。配套 `DenialTracker` 支持拒绝计数与自动升级。所有内置工具均实现 `to_auto_classifier_input`。测试覆盖在 `tests/permissions/test_permission_classifier.py` 和 `tests/tool/test_tool_classifier_input.py`。
+
+#### 工作原理
+```
+用户启动 Auto 模式 → Agent 执行工具调用时触发分类器
+→ TRANSCRIPT_CLASSIFIER 分析: 工具类型、命令内容、执行上下文、历史行为模式
+→ 分类决策: Auto-Allow 直接执行 / Auto-Deny 静默拒绝 / Fallback to Ask 回退
+→ 记录分类结果用于后续判断
+```
+
+#### 与手动模式的区别
+| 模式 | 触发方式 | 确认频率 | 适用场景 |
+|------|---------|---------|---------|
+| `default` | 手动确认每个敏感操作 | 高 | 学习/审查模式 |
+| `acceptEdits` | 手动确认写操作 | 中 | 代码迭代 |
+| `plan` | 仅读取，编辑前分析 | 低 | 探索代码库 |
+| `auto` | LLM 自动判断 | 自动调节 | 长任务/减少疲劳 |
+| `bypassPermissions` | 无限制 | 无 | 隔离环境 |
+
+#### 循环切换逻辑
+`Shift+Tab` 循环切换顺序：`default → acceptEdits → plan → bypassPermissions → default`
+注意：`auto` 模式不出现在手动循环中，需要通过 `--permission-mode auto` 启动或由分类器自动触发。
+
+#### 实施阶段
+| 阶段 | 内容 | 优先级 | 状态 |
+|------|------|--------|------|
+| Phase A1 | TRANSCRIPT_CLASSIFIER 核心实现 | P2 | ✅ 已完成 |
+| Phase A2 | `canCycleToAuto()` 判断逻辑 | P2 | ✅ 已完成 |
+| Phase A3 | Auto Mode 工具执行前集成 | P2 | ✅ 已完成 |
+| Phase A4 | 分类结果缓存机制 | P3 | 📋 待开始 |
+
+### 二十三.3 F-52 Python SDK 方法注册为 Tool
+
+**状态**: ✅ 已完成
+
+`clawcodex_ext/agent/tool_authoring/validators.py` 的 `register_python_function()` + `list_python_functions()` 已实现；`factory.py` 的 `build_tool_from_spec()` 支持 python/http/bash 三种 call_type；`spec.py` 定义 `AgentToolSpec` 数据模型；`persistence.py` 支持本地持久化。CreateAgentTool（F-18）已集成本能力。
+
+#### 背景
+当前 SOP 转换器解析 Python 源码后，在 Agent 定义的 `tools:` 字段列出的方法名仅仅是字符串。当 sub-agent 被启动后，其可用工具列表只包含 clawcodex 内置工具，SOP 方法不在 `ToolRegistry` 中，Agent 只能退而通过 `Bash` subprocess 手动执行对应 Python 函数。
+
+#### 设计目标
+1. 新增 `register_tool_from_function(func, name, description, tool_registry)` 机制，将任意 Python 可调用对象包装为标准 `Tool` 对象并注册。
+2. 生成的 Agent markdown 中的 `tools:` 列表在加载时自动触发注册，使方法名变为可调用的工具。
+3. 保持 `src/*` 零改动——所有新增代码落入 `extensions/pos_converter/`。
+
+#### 架构
+```
+SOP convert → AgentMarkdownWriter → .claude/agents/*.md (tools: [detect_modality, ...])
+                         ↓ (新增)
+               tool_registry.py → wrap SourceOperation → Tool
+                         ↓
+               ToolRegistry.register(name="detect_modality", fn=wrapped_callable)
+                         ↓
+               sub-agent 调用 detect_modality() → 执行 ADF Python 方法
+```
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| `ToolWrapper` | `extensions/pos_converter/tool_registry.py` | 将 `SourceOperation` 包装为 `Tool` 对象 |
+| `register_source_operations` | `extensions/pos_converter/tool_registry.py` | 批量注册某 agent 的所有操作 |
+| `AgentBuilder` 增量 | `extensions/pos_converter/agent_builder.py` | `build()` 自动调用注册 |
+| `load_agents_dir.py` 适配 | `extensions/pos_converter/agent_loader_hook.py` | 扫描时自动注册底层函数 |
+
+#### 实现切片
+1. `extensions/pos_converter/tool_registry.py` — `ToolWrapper` + `register_source_operations()`
+2. `source_parser.py` 增量 — `SourceOperation` 增加 `is_async` / `is_generator` 元数据
+3. `agent_builder.py` 增量 — `build()` 在持久化后自动注册 tool
+4. `agent_loader_hook.py` — 加载 agent markdown 时注册 `source_path` 工具
+
+#### 验收标准
+1. `ToolWrapper(operation).to_tool().name == "detect_modality"`
+2. `ToolWrapper(operation).to_tool().parameters` 正确映射 `ParamSpec`
+3. `register_source_operations(agent_def, registry)` 后 registry 返回有效 `Tool`
+4. 不传入 Python 源文件时优雅降级
+5. 新增测试通过，现有测试继续通过
+
+#### 风险与约束
+- 动态 import 安全：需校验 `source_path` 属于项目目录
+- 作用域泄漏：`register_source_operations()` 应按 `agent_type` 做作用域限定
+- 依赖 F-18（CreateAgentTool）作为运行时替代注册路径
+
+#### 依赖与协同
+- **依赖**: F-50（SourceCodeParser），F-18（CreateAgentTool）
+- **协同**: F-53（Tool→CLI 命令）以此为前置
