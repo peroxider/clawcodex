@@ -200,7 +200,12 @@ class Orchestrator:
             )
 
     def _sync_gitignore_to_workspace(self, workspace: Any) -> None:
-        """Write ignore patterns for orchestrator-managed workspace files."""
+        """Write ignore patterns for orchestrator-managed workspace files.
+
+        Always writes to ``.git/info/exclude`` (local-only) rather than
+        ``.gitignore`` so that orchestrator patterns are never tracked by
+        git and never appear in agent commits.
+        """
         workspace_path = Path(workspace.path)
         ignore_path = workspace_path / ".git" / "info" / "exclude"
         if not ignore_path.parent.exists():
@@ -1218,6 +1223,7 @@ class Orchestrator:
         session.previous_issue_id = previous_issue_id
         session.sequence_index = sequence_index
         session.integration_branch = integration_branch
+        session.base_branch = base_branch
         # F-39 Sub-C: if the registry intent is FOLLOWUP, wire the
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.

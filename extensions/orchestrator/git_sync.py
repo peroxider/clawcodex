@@ -171,6 +171,7 @@ class GitSyncService:
             if is_sequential:
                 await self._run_pre_commit_hook(repo_root, session)
             self._run_git_checked(["add", "-A"], repo_root)
+            self._unstage_orchestrator_artifacts(repo_root)
             self._apply_file_whitelist(repo_root)
             commit_message = self._build_commit_message(
                 issue,
@@ -622,6 +623,37 @@ class GitSyncService:
                 ["config", "user.name", "ClawCodex Bot"],
                 repo_root,
             )
+
+    _ORCHESTRATOR_ARTIFACTS: tuple[str, ...] = (
+        ".orchestrator_control",
+        ".reports",
+        ".operator_hints.md",
+        ".clawcodex_issue_registry.json",
+        ".clawcodex_clarification_queue.json",
+        ".clawcodex_workspace.lock",
+        ".event_streams",
+        "daemon.pid",
+    )
+
+    def _unstage_orchestrator_artifacts(self, repo_root: str) -> None:
+        """Remove orchestrator-internal files from the staging area.
+
+        Safety net: even if ``.git/info/exclude`` patterns are bypassed
+        (e.g. the agent overwrites the exclude file), these files will
+        never enter a commit.
+        """
+        stdout, _, rc = _run_git(["diff", "--cached", "--name-only"], repo_root)
+        if rc != 0 or not stdout.strip():
+            return
+        staged = {f.strip() for f in stdout.strip().splitlines() if f.strip()}
+        to_unstage: list[str] = []
+        for path in staged:
+            for artifact in self._ORCHESTRATOR_ARTIFACTS:
+                if path == artifact or path.startswith(f"{artifact}/"):
+                    to_unstage.append(path)
+                    break
+        if to_unstage:
+            self._run_git_checked(["reset", "--", *to_unstage], repo_root)
 
     def _apply_file_whitelist(self, repo_root: str) -> None:
         """Unstage files outside the allowed whitelist before commit.
