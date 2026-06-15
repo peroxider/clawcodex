@@ -298,6 +298,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         )
         from prompt_toolkit.styles import Style
 
+        from src.repl.agent_mention_completer import AgentMentionCompleter
         from src.repl.at_file_completer import AtFileCompleter
 
         history_file = _Path.home() / ".clawcodex" / "history"
@@ -314,11 +315,14 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._at_completer = AtFileCompleter(
             cwd=str(self.tool_context.workspace_root)
         )
+        self._agent_completer = AgentMentionCompleter(
+            self._available_agents
+        )
         self._message_history_completer = _MessageHistoryCompleter(
             self._get_user_message_history
         )
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer, self._message_history_completer]
+            [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
         )
 
         # Warm the slash-command suggestion cache in the background.
@@ -423,8 +427,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
             _accept_key = "c-e"
             _accept_tab_alias = True
 
+        self._file_history = FileHistory(str(history_file))
         self.prompt_session = PromptSession(
-            history=FileHistory(str(history_file)),
+            history=self._file_history,
             auto_suggest=_HintedAutoSuggest(
                 accept_key=_accept_key,
                 has_tab_alias=_accept_tab_alias,

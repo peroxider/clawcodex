@@ -22,6 +22,7 @@ Phase 2 to swap in a ``TextArea`` without changing the public surface.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -196,6 +197,30 @@ class _AtFileSuggestions(OptionList):
     """
 
 
+class _AgentSuggestions(OptionList):
+    """Popup for ``@agent-<type>`` completions."""
+
+    DEFAULT_CSS = """
+    _AgentSuggestions {
+        max-height: 12;
+        border: none;
+        padding: 0;
+        background: $background;
+        height: auto;
+    }
+    _AgentSuggestions > .option-list--option {
+        padding: 0 1;
+    }
+    _AgentSuggestions > .option-list--option-highlighted {
+        background: $boost;
+        text-style: bold;
+    }
+    _AgentSuggestions.-hidden {
+        display: none;
+    }
+    """
+
+
 def _current_at_token(text_before_cursor: str) -> str | None:
     """Return the query after ``@`` at the current cursor position, or None.
 
@@ -210,6 +235,28 @@ def _current_at_token(text_before_cursor: str) -> str | None:
     if at_pos > 0 and not text_before_cursor[at_pos - 1].isspace():
         return None
     return match.group(1)
+
+
+# Regex to detect ``@agent-<partial>`` mention tokens for the TUI.
+# Same pattern used by the prompt_toolkit ``AgentMentionCompleter``.
+_AGENT_COMPLETE_RE = re.compile(r"(?:^|(?<=\s))@(agent-[\w:.@\-]*)$")
+
+
+def _current_agent_token(text_before_cursor: str) -> str | None:
+    """Return the partial agent type after ``@agent-``, or None if the
+    cursor is not on an ``@agent-`` token.
+
+    A valid token must be at the start of the buffer or preceded by
+    whitespace — ``foo@agent-bar`` does not count.
+    """
+    match = _AGENT_COMPLETE_RE.search(text_before_cursor)
+    if match is None:
+        return None
+    at_pos = match.start()
+    if at_pos > 0 and not text_before_cursor[at_pos - 1].isspace():
+        return None
+    token = match.group(1)  # e.g. "agent-explor" or "agent-"
+    return token[len("agent-"):]  # e.g. "explor" or ""
 
 
 class PromptInput(Vertical):
@@ -244,6 +291,7 @@ class PromptInput(Vertical):
         words_provider: Callable[[], list[str]],
         suggestions_provider: Callable[[], list[CommandSuggestion]] | None = None,
         message_history_provider: Callable[[], list[str]] | None = None,
+        agents_provider: Callable[[], list[Any]] | None = None,
         cwd: str | os.PathLike[str] | None = None,
         vim_mode: bool = False,
         accept_suggestion_key: str = "c-e",
@@ -253,6 +301,7 @@ class PromptInput(Vertical):
         self._words_provider = words_provider
         self._suggestions_provider = suggestions_provider
         self._message_history_provider = message_history_provider
+        self._agents_provider = agents_provider
         self._message_completions: list[str] = []
         self._message_completion_pos: int | None = None
         self._history: list[str] = []
@@ -261,6 +310,7 @@ class PromptInput(Vertical):
         self._suggestions = _SlashSuggestions(classes="-hidden")
         self._message_suggestions = _MessageSuggestions(classes="-hidden")
         self._at_file_suggestions = _AtFileSuggestions(classes="-hidden")
+        self._agent_suggestions = _AgentSuggestions(classes="-hidden")
         self._ghost_suggestion = Static("", id="ghost-suggestion", classes="-hidden")
         self._vim = VimState(enabled=vim_mode)
         # Configured ghost-suggestion accept key. Stored in two forms:
@@ -293,6 +343,7 @@ class PromptInput(Vertical):
         yield self._suggestions
         yield self._message_suggestions
         yield self._at_file_suggestions
+        yield self._agent_suggestions
         yield self._footer
 
     def on_mount(self) -> None:
@@ -397,6 +448,7 @@ class PromptInput(Vertical):
             self._suggestions.has_class("-hidden")
             and self._message_suggestions.has_class("-hidden")
             and self._at_file_suggestions.has_class("-hidden")
+            and self._agent_suggestions.has_class("-hidden")
         ):
             self._refresh_ghost_suggestion(event.value or "")
         else:
@@ -452,6 +504,8 @@ class PromptInput(Vertical):
                 self._hide_at_file_suggestions()
             elif event.option_list is self._message_suggestions:
                 self._hide_message_suggestions()
+            elif event.option_list is self._agent_suggestions:
+                self._hide_agent_suggestions()
             else:
                 self._hide_suggestions()
 
@@ -653,6 +707,7 @@ class PromptInput(Vertical):
             # Slash mode: show command suggestions
             self._hide_message_suggestions()
             self._hide_at_file_suggestions()
+            self._hide_agent_suggestions()
             partial = token[1:].lower()
 
             options = self._build_suggestion_options(partial)
@@ -665,17 +720,30 @@ class PromptInput(Vertical):
             self._suggestions.remove_class("-hidden")
             return
 
+        # Check for ``@agent-<type>`` mention token (takes priority over
+        # plain ``@`` file completions so the agent names popup doesn't
+        # compete with file suggestions for the same token).
+        agent_query = _current_agent_token(text[:cursor])
+        if agent_query is not None:
+            self._hide_suggestions()
+            self._hide_message_suggestions()
+            self._hide_at_file_suggestions()
+            self._refresh_agent_suggestions(agent_query)
+            return
+
         # Check for ``@`` file-completion token
         at_query = _current_at_token(text[:cursor])
         if at_query is not None:
             self._hide_suggestions()
             self._hide_message_suggestions()
+            self._hide_agent_suggestions()
             self._refresh_at_file_suggestions(at_query)
             return
 
-        # Non-slash, non-@ mode: hide slash suggestions, check message history
+        # Non-slash, non-@ mode: hide all popups, check message history
         self._hide_suggestions()
         self._hide_at_file_suggestions()
+        self._hide_agent_suggestions()
         self._refresh_message_suggestions(text, cursor)
 
     def _build_suggestion_options(self, partial: str) -> list[Option]:
@@ -843,7 +911,59 @@ class PromptInput(Vertical):
         if not self._at_file_suggestions.has_class("-hidden"):
             self._at_file_suggestions.add_class("-hidden")
             self._at_file_suggestions.clear_options()
-            self._message_suggestions.clear_options()
+
+    def _refresh_agent_suggestions(self, query: str) -> None:
+        """Refresh the ``@agent-<type>`` suggestion popup.
+
+        Matches the typed partial against known agent ``agent_type`` values.
+        """
+        if not self._agents_provider:
+            self._hide_agent_suggestions()
+            return
+
+        try:
+            agents = self._agents_provider()
+        except Exception:
+            self._hide_agent_suggestions()
+            return
+
+        if not agents:
+            self._hide_agent_suggestions()
+            return
+
+        query_lower = query.lower()
+        matches: list[tuple[str, str]] = []  # (agent_type, name)
+
+        for agent in agents:
+            agent_type = getattr(agent, "agent_type", None) or (
+                agent.get("agent_type") if isinstance(agent, dict) else None
+            )
+            if not isinstance(agent_type, str) or not agent_type:
+                continue
+            if query_lower not in agent_type.lower():
+                continue
+            name = getattr(agent, "name", None) or (
+                agent.get("name", "") if isinstance(agent, dict) else ""
+            )
+            matches.append((agent_type, str(name) if name else ""))
+
+        if not matches:
+            self._hide_agent_suggestions()
+            return
+
+        self._agent_suggestions.clear_options()
+        for agent_type, name in matches:
+            display = f"{agent_type}  — {name}" if name else agent_type
+            self._agent_suggestions.add_option(
+                Option(display, id=f"@agent-{agent_type}"),
+            )
+        self._agent_suggestions.highlighted = 0
+        self._agent_suggestions.remove_class("-hidden")
+
+    def _hide_agent_suggestions(self) -> None:
+        if not self._agent_suggestions.has_class("-hidden"):
+            self._agent_suggestions.add_class("-hidden")
+            self._agent_suggestions.clear_options()
 
     def _navigate_history(self, direction: int) -> None:
         """``direction`` = +1 means older (Up); -1 means newer (Down)."""

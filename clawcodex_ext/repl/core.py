@@ -339,6 +339,7 @@ from src.command_system import (
 )
 from src.cost_tracker import CostTracker
 from src.history import HistoryLog
+from src.repl.agent_mention_completer import AgentMentionCompleter
 from src.repl.at_file_completer import AtFileCompleter
 from src.repl.live_status import LiveStatus
 
@@ -750,11 +751,14 @@ class ClawcodexREPL:
         self._at_completer = AtFileCompleter(
             cwd=str(self.tool_context.workspace_root)
         )
+        self._agent_completer = AgentMentionCompleter(
+            self._available_agents
+        )
         self._message_history_completer = _MessageHistoryCompleter(
             self._get_user_message_history
         )
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer, self._message_history_completer]
+            [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
         )
 
         # Warm the slash-command suggestion cache in the background so the
@@ -892,6 +896,10 @@ class ClawcodexREPL:
         # the matching ``hello`` from disk.
         file_history = FileHistory(str(history_file))
         asyncio.run(_drain_history(file_history))
+        # Expose the shared history so ``LiveStatus`` (background agent
+        # input) can pass it to its ``Buffer`` and support up/down
+        # history navigation identical to the foreground prompt.
+        self._file_history = file_history
 
         # Read the configured accept key (default ``c-e``) and whether
         # Tab should be a context-aware alias, so the ghost-text hint
@@ -1593,8 +1601,12 @@ class ClawcodexREPL:
                     self._get_slash_command_words,
                     suggestions_provider=self._get_slash_command_suggestions,
                 )
+            if not hasattr(self, "_agent_completer") or self._agent_completer is None:
+                self._agent_completer = AgentMentionCompleter(
+                    self._available_agents
+                )
             self.completer = merge_completers(
-                [self._slash_completer, self._at_completer, self._message_history_completer]
+                [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
             )
             if hasattr(self, "prompt_session") and getattr(self.prompt_session, "completer", None) is not None:
                 self.prompt_session.completer = self.completer
@@ -3785,6 +3797,7 @@ class ClawcodexREPL:
                         on_background=_on_background_direct,
                         on_permission_cycle=self._apply_permission_mode_cycle,
                         completer=self.completer,
+                        history=self._file_history,
                     ) as status:
                         _direct_status_ref.append(status)
                         self._active_live_status = status
@@ -4146,6 +4159,7 @@ class ClawcodexREPL:
                     on_background=_on_background_engine,
                     on_permission_cycle=self._apply_permission_mode_cycle,
                     completer=self.completer,
+                    history=self._file_history,
                 ) as status:
                     _engine_status_ref.append(status)
                     self._active_live_status = status

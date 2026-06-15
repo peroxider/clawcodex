@@ -261,6 +261,7 @@ class ClawCodexTUI(App):
             words_provider=self._slash_command_words,
             suggestions_provider=self._slash_command_suggestions,
             message_history_provider=self._message_history_provider,
+            agents_provider=self._available_agents,
             # Pass the live BaseProvider so the status line's advisor
             # segment can call ``decide_advisor_mode(provider, ...)``
             # and show the correct mode label (server/client/inactive).
@@ -1344,6 +1345,44 @@ class ClawCodexTUI(App):
             return result
         except Exception:
             return []
+
+    def _available_agents(self) -> list[Any]:
+        """Return available agent definitions for ``@agent-<type>`` completion."""
+        try:
+            from src.agent.agent_definitions import get_built_in_agents
+            from src.agent.load_agents_dir import (
+                get_agent_definitions_with_overrides,
+            )
+        except Exception:
+            return []
+
+        extra = getattr(
+            getattr(self.tool_context, "options", None),
+            "agent_definitions",
+            None,
+        )
+        if isinstance(extra, dict):
+            active = extra.get("active_agents")
+            if isinstance(active, list) and active:
+                return list(active)
+
+        try:
+            cwd = str(self.workspace_root)
+            agents = list(get_built_in_agents())
+            override_cwd = getattr(
+                getattr(self.tool_context, "options", None),
+                "agent_dir_override",
+                None,
+            )
+            if override_cwd is not None:
+                extra_agents = list(get_agent_definitions_with_overrides(str(override_cwd)))
+                known = {a.agent_type for a in agents}
+                for agent in extra_agents:
+                    if agent.agent_type not in known:
+                        agents.append(agent)
+            return agents
+        except Exception:
+            return list(get_built_in_agents())
 
     def _post_to_screen(self, message: Any) -> None:
         target = self._repl_screen or self

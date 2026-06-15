@@ -114,6 +114,7 @@ class REPLScreen(Screen):
         words_provider: Callable[[], list[str]],
         suggestions_provider: Callable[[], list["CommandSuggestion"]] | None = None,
         message_history_provider: Callable[[], list[str]] | None = None,
+        agents_provider: Callable[[], list[Any]] | None = None,
         provider_instance: object | None = None,
     ) -> None:
         super().__init__()
@@ -124,6 +125,7 @@ class REPLScreen(Screen):
         self._words_provider = words_provider
         self._suggestions_provider = suggestions_provider
         self._message_history_provider = message_history_provider
+        self._agents_provider = agents_provider
         self._provider_instance = provider_instance
 
         self.header_widget = StartupHeader(
@@ -143,6 +145,7 @@ class REPLScreen(Screen):
             words_provider=words_provider,
             suggestions_provider=suggestions_provider,
             message_history_provider=message_history_provider,
+            agents_provider=agents_provider,
             cwd=self._workspace_root,
             accept_suggestion_key=_configured_accept_suggestion_key(),
             accept_suggestion_tab_alias=_configured_accept_suggestion_tab_alias(),
