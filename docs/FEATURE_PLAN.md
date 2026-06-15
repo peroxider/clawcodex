@@ -7990,14 +7990,14 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | 📋 待开始 |
-| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | 📋 待开始 |
-| F-97-C | 实现 redaction 与 error fingerprint，补全单元测试 | 📋 待开始 |
-| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | 📋 待开始 |
-| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | 📋 待开始 |
-| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | 📋 待开始 |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | 📋 待开始 |
-| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | 📋 待开始 |
+| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成（2026-06） |
+| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | ✅ 已完成（2026-06） |
+| F-97-C | 实现 redaction 与 error fingerprint，补全单元测试 | ✅ 已完成（2026-06） |
+| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成（2026-06） |
+| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成（2026-06） |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ⏳ 推迟到二期（本期仅 LocalFileReporter + DryRunReporter） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06） |
+| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；Issue 上报部分二期再补 E2E） |
 
 验收标准：
 
@@ -8659,4 +8659,4 @@ clawcodex_ext/community_radar/
 | **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ✅ **已完成** |
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
-| F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | 📋 设计完成 |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |

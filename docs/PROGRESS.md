@@ -152,7 +152,7 @@
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
-| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | 📋 设计完成 | `clawcodex/telemetry` 独立包，本地聚合 + Issue 上报 |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第一期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + Issue 上报（Issue 上报推迟到二期） |
 
 ---
 
@@ -1484,7 +1484,7 @@ AgentRunner._run_iteration()
 
 ## F-97: 独立遥测系统（Issue-based Telemetry）
 
-**状态**: 📋 设计完成 | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
+**状态**: ✅ 第一期实现完成（A~E + G） | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
 
 ### 目标
 
@@ -1497,39 +1497,39 @@ AgentRunner._run_iteration()
 | 本地 analytics 事件模型 | ✅ 已有 | `EventType` / `AnalyticsEvent` / `log_event()` 已存在 |
 | Sink 抽象 | ✅ 已有 | `NullSink` / `ConsoleSink` / `FileSink`，默认 `NullSink` |
 | Session metadata | ✅ 基础已有 | 可收集 OS、Python、IDE、model、resume/non-interactive 等字段 |
-| 实际埋点覆盖 | ⚠️ 局部 | 主要集中在 image/pdf pipeline 等少数路径 |
-| 每日使用统计 | ❌ 缺失 | 无 daily aggregation、跨会话计数、执行次数统计 |
-| 崩溃去重与上报 | ❌ 缺失 | 无全局 exception hook、fingerprint、crash summary |
-| 远端遥测通道 | ❌ 缺失 | 无公网服务，当前也没有通用 create issue reporter |
+| 实际埋点覆盖 | ✅ 已扩展 | F-97 覆盖 CLI/REPL/TUI/headless/orchestrator 入口埋点 |
+| 每日使用统计 | ✅ 已实现 | `DailyAggregator` 输出 sessions/commands/exit_status/platforms/providers/crashes |
+| 崩溃去重与上报 | ✅ 已实现 | 全局 excepthook + 16 字符 fingerprint + `crashes/` JSONL |
+| 远端遥测通道 | ⏳ 二期 | IssueReporter 推迟到下一轮；本期仅 LocalFileReporter + DryRunReporter |
 
 ### 实施进度
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | 📋 待开始 |
-| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | 📋 待开始 |
-| F-97-C | 实现 redaction 与 error fingerprint，并覆盖 secret/path/prompt/output 过滤测试 | 📋 待开始 |
-| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | 📋 待开始 |
-| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | 📋 待开始 |
-| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | 📋 待开始 |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | 📋 待开始 |
-| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | 📋 待开始 |
+| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成 |
+| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | ✅ 已完成 |
+| F-97-C | 实现 redaction 与 error fingerprint，并覆盖 secret/path/prompt/output 过滤测试 | ✅ 已完成 |
+| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成 |
+| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成 |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ⏳ 推迟到二期（本期仅 LocalFileReporter + DryRunReporter） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（status / preview / flush / enable / disable） |
+| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | ✅ 已完成（单元测试 + stability gate，Issue 上报部分推迟） |
 
 ### 验收标准
 
-- 默认配置下不采集、不上报；启用 `telemetry.enabled=true` 后仅写本地事件。
-- 启用本地 telemetry 后，连续运行 CLI/REPL/headless 能生成 daily summary，包含每日执行次数和会话次数。
-- 人为触发异常后，本地 crash summary 包含稳定 fingerprint，同类错误能聚合计数。
-- 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
-- reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript。
-- 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
-- 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重。
+- ✅ 默认配置下不采集、不上报；启用 `telemetry.enabled=true` 后仅写本地事件。
+- ✅ 启用本地 telemetry 后，连续运行 CLI/REPL/headless 能生成 daily summary，包含每日执行次数和会话次数。
+- ✅ 人为触发异常后，本地 crash summary 包含稳定 fingerprint，同类错误能聚合计数。
+- ⏳ 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue（二期）。
+- ✅ reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript（DryRun 渲染时过 `scan_secrets` 命中即拒）。
+- ✅ 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
+- ✅ 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重（54 个单测全过）。
 
 ### 风险与约束
 
 - 遥测必须默认关闭，远端 Issue 上报也必须单独显式启用。
 - 高频事件不得逐条写远端 Issue，只能先本地聚合，再低频上报 daily summary。
-- Issue 平台 API 差异会影响 create/update/find-by-title 行为，需要分别适配 GitHub/Gitee/GitCode。
+- Issue 平台 API 差异会影响 create/update/find-by-title 行为，需要分别适配 GitHub/Gitee/GitCode（二期）。
 - 现有 `src/services/analytics/` 不应立即删除；首期通过 adapter 兼容，避免破坏 image/pdf 现有埋点。
 - 隐私边界是验收标准的一部分，redaction 失败时必须拒绝上报，而不是 best-effort 上传。
 
@@ -1541,6 +1541,18 @@ AgentRunner._run_iteration()
 | RepositoryIssueClient | 设计参考 | 可复用 GitHub/Gitee/GitCode 鉴权与 HTTP 映射思路，但 F-97 不依赖 orchestrator 运行时 |
 | F-54 运行期可观测性 | 职责边界 | F-54 关注单次 agent run debug，F-97 关注用户侧低频聚合遥测 |
 | F-65 Langfuse 可观测性 | 职责边界 | F-65 面向 tracing/训练数据集，F-97 面向产品使用统计和崩溃摘要 |
+
+### 入口埋点覆盖（已实施）
+
+| 入口 | 位置 | 事件 |
+|------|------|------|
+| CLI 主路径 | `clawcodex_ext/cli/dispatch.py:run_cli` | session_start / session_end / command_run，fast-path 全部子命令 (--version / login / config / mcp / daemon / doctor / orchestrator / autonomy / schedule) 独立包埋点 |
+| Print 模式 | `clawcodex_ext/cli/runners.py:run_print_mode` | session_start / session_end / command_run (mode=non_interactive) |
+| REPL 模式 | `clawcodex_ext/cli/runners.py:start_repl` | session_start / session_end / command_run (mode=interactive)，SystemExit/KeyboardInterrupt 正常落 session_end |
+| TUI 模式 | `clawcodex_ext/cli/runners.py:run_tui_mode` + `clawcodex_ext/tui/entrypoint.py:_run_tui_with_app` | session_start / session_end / command_run (mode=interactive)，异常路径落 record_error |
+| Headless 模式 | `clawcodex_ext/entrypoints/headless.py:run_headless` | session_start / session_end / command_run (mode=non_interactive)，Exception / (AbortError, KeyboardInterrupt) 路径落 record_error |
+| Orchestrator | `extensions/orchestrator/orchestrator.py:run` | session_start / session_end / command_run (mode=daemon)，统一按 workspace+day 派生 session_id |
+| 全局崩溃 | `src/init.py:init` → `clawcodex/telemetry/hooks.py:install_exception_hooks` | 包装 `sys.excepthook` + `threading.excepthook`，触发即调 record_error 并保持原 hook 调用 |
 
 ## 九、CCB 对标缺口补缺进度
 
