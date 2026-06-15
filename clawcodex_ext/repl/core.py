@@ -3019,8 +3019,6 @@ class ClawcodexREPL:
                     self.console.print(f"[red]Error executing /init: {e}[/red]")
                 return
 
-            # Handle /permission natively (REPL) — supports both interactive menu
-            # and direct argument e.g. /permission dontAsk
             if cmd_name == 'permission':
                 self._handle_permission_command(args)
                 return
