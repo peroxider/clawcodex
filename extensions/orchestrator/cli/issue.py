@@ -526,6 +526,59 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Optional comment for approval",
     )
 
+    # --- issue feedback ---
+    feedback_parser = issue_sub.add_parser(
+        "feedback",
+        help="List, approve, or dismiss pending PR review feedback",
+        description="Manage pending PR review feedback items. Use --list to show pending items, "
+                    "--approve to trigger follow-up for pending feedback, or --dismiss to remove "
+                    "feedback without processing.",
+    )
+    feedback_parser.add_argument(
+        "--id",
+        type=str,
+        required=True,
+        metavar="ISSUE_ID",
+        help="Issue identifier with pending feedback",
+    )
+    feedback_parser.add_argument(
+        "--list",
+        action="store_true",
+        dest="list_feedback",
+        help="List all pending feedback items for the issue",
+    )
+    feedback_parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="Approve pending feedback and trigger follow-up agent run",
+    )
+    feedback_parser.add_argument(
+        "--dismiss",
+        action="store_true",
+        help="Dismiss pending feedback without triggering follow-up",
+    )
+    feedback_parser.add_argument(
+        "--feedback-id",
+        type=str,
+        nargs="*",
+        metavar="FEEDBACK_ID",
+        help="Specific feedback item IDs to approve/dismiss (all pending if omitted)",
+    )
+    feedback_parser.add_argument(
+        "--workspace",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Explicit workspace root path",
+    )
+    feedback_parser.add_argument(
+        "--workflow",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to WORKFLOW.md",
+    )
+
     # --- issue diff ---
     diff_parser = issue_sub.add_parser(
         "diff",
@@ -687,6 +740,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_diff(registry_path, args)
     elif cmd == "retry":
         return _run_retry(registry_path, args)
+    elif cmd == "feedback":
+        return _run_feedback(registry_path, args)
 
     print(f"error: unknown issue subcommand '{cmd}'", file=sys.stderr)
     return 2
@@ -1661,6 +1716,65 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
 
 # ---------------------------------------------------------------------------
 # Internal helpers
+# ---------------------------------------------------------------------------
+# issue feedback
+# ---------------------------------------------------------------------------
+
+def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
+    """List, approve, or dismiss pending PR review feedback."""
+    issue_id = getattr(args, "id", None)
+    if not issue_id:
+        print("error: --id is required", file=sys.stderr)
+        return 2
+
+    if not registry_path or not registry_path.exists():
+        print(f"No registry found. Cannot manage feedback for issue {issue_id}.", file=sys.stderr)
+        return 1
+
+    from extensions.orchestrator.issue_registry import IssueRegistry
+    registry = IssueRegistry(registry_path)
+    record = registry.get(issue_id)
+    if record is None:
+        print(f"Issue {issue_id} not found in registry.", file=sys.stderr)
+        return 1
+
+    list_feedback = getattr(args, "list_feedback", False)
+    approve = getattr(args, "approve", False)
+    dismiss = getattr(args, "dismiss", False)
+
+    if not list_feedback and not approve and not dismiss:
+        print("error: specify --list, --approve, or --dismiss", file=sys.stderr)
+        return 2
+
+    if list_feedback:
+        if not record.pending_feedback_ids:
+            print(f"No pending feedback for issue {issue_id}.")
+            return 0
+        print(f"Pending feedback for issue {issue_id}:")
+        for i, fid in enumerate(record.pending_feedback_ids, 1):
+            print(f"  {i}. {fid}")
+        print(f"\nTotal: {len(record.pending_feedback_ids)} pending item(s)")
+        return 0
+
+    target_ids = getattr(args, "feedback_id", None) or list(record.pending_feedback_ids)
+    if not target_ids:
+        print(f"No pending feedback to process for issue {issue_id}.")
+        return 0
+
+    if dismiss:
+        registry.mark_feedback_processed(issue_id, target_ids)
+        print(f"Dismissed {len(target_ids)} feedback item(s) for issue {issue_id}.")
+        return 0
+
+    if approve:
+        _write_control("review_followup", issue_id, ",".join(target_ids))
+        print(f"Approved {len(target_ids)} feedback item(s) for issue {issue_id}.")
+        print("Follow-up will be triggered on next orchestrator poll cycle.")
+        return 0
+
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # issue diff
 # ---------------------------------------------------------------------------

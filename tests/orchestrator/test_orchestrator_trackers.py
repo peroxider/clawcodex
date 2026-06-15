@@ -22,6 +22,10 @@ from extensions.orchestrator.config.schema import WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.local_tracker.adapter import LocalTrackerAdapter
 from extensions.orchestrator.orchestrator import Orchestrator
+from extensions.orchestrator.repo_tracker.client import (
+    _PLATFORMS,
+    _build_issue_update_payload,
+)
 from extensions.orchestrator.repo_tracker.adapter import RepositoryTrackerAdapter
 from extensions.orchestrator.tracker import (
     PullRequestFeedback,
@@ -81,6 +85,32 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
         config = WorkflowConfig.from_dict({"tracker": {"kind": "gitcode"}})
         self.assertEqual(config.tracker.active_states, ["opened"])
         self.assertEqual(config.tracker.endpoint, "https://api.gitcode.com/api/v5")
+
+    def test_non_bearer_issue_state_updates_use_state_event(self) -> None:
+        self.assertEqual(
+            _build_issue_update_payload(
+                state="completed",
+                labels=None,
+                platform=_PLATFORMS["gitcode"],
+            ),
+            {"state_event": "close"},
+        )
+        self.assertEqual(
+            _build_issue_update_payload(
+                state="open",
+                labels=None,
+                platform=_PLATFORMS["gitee"],
+            ),
+            {"state_event": "reopen"},
+        )
+        self.assertEqual(
+            _build_issue_update_payload(
+                state="completed",
+                labels=None,
+                platform=_PLATFORMS["github"],
+            ),
+            {"state": "closed"},
+        )
 
     def test_review_feedback_config_defaults_to_manual_disabled(self) -> None:
         config = WorkflowConfig.from_dict({})
@@ -740,8 +770,8 @@ class TestIssueRegistryFeedbackState(unittest.TestCase):
 class _ReviewFeedbackTracker(TrackerAdapter):
     def __init__(self, feedback: list[PullRequestFeedback]) -> None:
         self.feedback = feedback
-        self.fetch_requests: list[tuple[PullRequestRef, bool]] = []
-        self.replies: list[tuple[PullRequestRef, PullRequestFeedback, str]] = []
+        self.fetch_requests: list[tuple[PullRequestRef, str | None, bool]] = []
+        self.replies: list[tuple[PullRequestRef, PullRequestFeedback, str, str | None]] = []
 
     async def fetch_candidate_issues(self) -> list[Issue]:
         return []
@@ -761,10 +791,11 @@ class _ReviewFeedbackTracker(TrackerAdapter):
         self,
         *,
         pull_request: PullRequestRef,
+        issue_id: str | None = None,
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
-        self.fetch_requests.append((pull_request, include_ci_failures))
+        self.fetch_requests.append((pull_request, issue_id, include_ci_failures))
         return list(self.feedback)
 
     async def reply_to_pull_request_feedback(
@@ -773,8 +804,9 @@ class _ReviewFeedbackTracker(TrackerAdapter):
         pull_request: PullRequestRef,
         feedback: PullRequestFeedback,
         body: str,
+        issue_id: str | None = None,
     ):
-        self.replies.append((pull_request, feedback, body))
+        self.replies.append((pull_request, feedback, body, issue_id))
         return None
 
 
@@ -1006,6 +1038,16 @@ class TestReviewFeedbackService(unittest.IsolatedAsyncioTestCase):
                         body="please fix this",
                         updated_at="cursor-new",
                     ),
+                    PullRequestFeedback(
+                        id="conversation:summary",
+                        source="conversation",
+                        body="## ClawCodex Run Summary\n\n- Status: `completed`",
+                    ),
+                    PullRequestFeedback(
+                        id="conversation:automated-change",
+                        source="conversation",
+                        body="## ClawCodex Automated Change\n\n- Branch: `feature/x`",
+                    ),
                 ]
             )
 
@@ -1019,6 +1061,7 @@ class TestReviewFeedbackService(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(followups), 1)
         self.assertEqual([item.id for item in followups[0].feedback], ["conversation:new"])
+        self.assertEqual(tracker.fetch_requests[0][1], "42")
         assert record is not None
         self.assertEqual(record.pending_feedback_ids, ["conversation:new"])
         self.assertEqual(record.feedback_cursor, "cursor-new")
@@ -1455,6 +1498,98 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_gitcode_find_pull_request_matches_broad_list_by_branch(self) -> None:
+        seen_queries: list[dict[str, str]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls":
+                seen_queries.append(dict(request.url.params))
+                if "head" in request.url.params:
+                    return httpx.Response(200, json=[])
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "number": 31,
+                            "title": "Other PR",
+                            "html_url": "https://gitcode.test/acme/widget/pulls/31",
+                            "head": {"ref": "feature/other"},
+                            "base": {"ref": "main"},
+                        },
+                        {
+                            "number": 33,
+                            "title": "Matched PR",
+                            "html_url": "https://gitcode.test/acme/widget/pulls/33",
+                            "head": {"ref": "feature/issue-3"},
+                            "base": {"ref": "main"},
+                        },
+                    ],
+                )
+            raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            adapter = RepositoryTrackerAdapter(
+                platform="gitcode",
+                owner="acme",
+                repo="widget",
+                api_key="gitcode-token",
+                http_client=client,
+            )
+            pr = await adapter.find_pull_request(
+                head_branch="feature/issue-3",
+                base_branch="main",
+            )
+
+        self.assertEqual(pr.number if pr else None, "33")
+        self.assertEqual(len(seen_queries), 2)
+
+    async def test_gitcode_create_pull_request_recovers_missing_number_from_list(self) -> None:
+        requests: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request.method)
+            if request.method == "POST" and request.url.path == "/api/v5/repos/acme/widget/pulls":
+                return httpx.Response(201, json={"title": "Created PR"})
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls":
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "number": 34,
+                            "title": "Created PR",
+                            "html_url": "https://gitcode.test/acme/widget/pulls/34",
+                            "head": {"ref": "feature/issue-4"},
+                            "base": {"ref": "main"},
+                        }
+                    ],
+                )
+            raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            adapter = RepositoryTrackerAdapter(
+                platform="gitcode",
+                owner="acme",
+                repo="widget",
+                api_key="gitcode-token",
+                http_client=client,
+            )
+            pr = await adapter.client.create_pull_request(
+                title="Created PR",
+                head_branch="feature/issue-4",
+                base_branch="main",
+                body="PR body",
+            )
+
+        self.assertEqual(
+            pr,
+            PullRequestRef(
+                number="34",
+                title="Created PR",
+                url="https://gitcode.test/acme/widget/pulls/34",
+            ),
+        )
+        self.assertEqual(requests, ["POST", "GET"])
+
     async def test_update_pull_request_uses_pull_patch(self) -> None:
         seen: dict[str, Any] = {}
 
@@ -1504,7 +1639,7 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
             self.assertEqual(request.url.params.get("access_token"), "gitcode-token")
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/issues/9/comments":
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/issues/42/comments":
                 return httpx.Response(
                     200,
                     json=[
@@ -1584,6 +1719,7 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
             )
             feedback = await adapter.fetch_pull_request_feedback(
                 pull_request=PullRequestRef(number="9"),
+                issue_id="42",
                 max_log_chars_per_check=30,
             )
 
@@ -1604,6 +1740,34 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(feedback[3].severity, "error")
         self.assertTrue(feedback[4].body.endswith("...<truncated>"))
         self.assertEqual(len(requests), 5)
+
+    async def test_fetch_pull_request_feedback_skips_missing_optional_review_endpoint(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/issues/9/comments":
+                return httpx.Response(
+                    200,
+                    json=[{"id": 101, "body": "Please update docs"}],
+                )
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/comments":
+                return httpx.Response(200, json=[])
+            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/reviews":
+                return httpx.Response(404, json={"message": "Not Found"})
+            raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            adapter = RepositoryTrackerAdapter(
+                platform="gitcode",
+                owner="acme",
+                repo="widget",
+                api_key="gitcode-token",
+                http_client=client,
+            )
+            feedback = await adapter.fetch_pull_request_feedback(
+                pull_request=PullRequestRef(number="9"),
+                include_ci_failures=False,
+            )
+
+        self.assertEqual([item.id for item in feedback], ["conversation:101"])
 
     async def test_gitcode_reply_to_inline_feedback_strips_normalized_prefix(self) -> None:
         seen: dict[str, Any] = {}
@@ -1672,7 +1836,8 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
                     body="Please update docs",
                 ),
                 body="Handled",
+                issue_id="42",
             )
 
-        self.assertEqual(seen["path"], "/repos/acme/widget/issues/9/comments")
+        self.assertEqual(seen["path"], "/repos/acme/widget/issues/42/comments")
         self.assertEqual(seen["payload"], {"body": "Handled"})

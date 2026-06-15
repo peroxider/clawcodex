@@ -31,6 +31,7 @@ from src.utils.git import get_file_status
 from .tracker import (
     Command,
     Intent,
+    PullRequestFeedback,
     PullRequestRef,
     TrackerAdapter,
     command_to_intent,
@@ -150,15 +151,6 @@ class Orchestrator:
         # per-session :class:`ToolContextProgressSink` writes into the
         # same ``ToolContext.tasks[id].metadata.progress_stages`` dict.
 
-        # F-96-A: StateJournalWriter for real-time dashboard integration.
-        # Creates ``{workspace}/.reports/run_{run_id}/state_journal.ndjson``
-        # that the Visualizer can consume without importing orchestrator code.
-        # The writer is ``None`` until the first issue launches; it is then
-        # bound to that run's directory.  All concurrent issues within one
-        # orchestrator invocation share the same journal file (distinguished
-        # by the ``issue_id`` / ``run_id`` fields in each NDJSON line).
-        self._state_journal_writer: "StateJournalWriter | None" = None
-
     def _build_session_sink(self, task_id: str) -> Any:
         """Build a fresh :class:`CompositeProgressSink` for one session.
 
@@ -187,17 +179,7 @@ class Orchestrator:
                 self.workflow.agent.fallback_to_phase_step
             ),
         )
-        sinks = [inner]
-
-        # F-96-B: attach StateJournalSink so progress events are
-        # automatically written to state_journal.ndjson.
-        if self._state_journal_writer is not None:
-            from .state_journal_sink import StateJournalSink
-            sinks.append(
-                StateJournalSink(writer=self._state_journal_writer, task_id=task_id)
-            )
-
-        return CompositeProgressSink(sinks)
+        return CompositeProgressSink([inner])
 
     def _validate_workspace_strategy(self) -> None:
         if self.workflow.workspace.strategy != "sequential":
@@ -220,10 +202,7 @@ class Orchestrator:
     def _sync_gitignore_to_workspace(self, workspace: Any) -> None:
         """Write ignore patterns for orchestrator-managed workspace files."""
         workspace_path = Path(workspace.path)
-        if self.workflow.workspace.strategy == "sequential":
-            ignore_path = workspace_path / ".git" / "info" / "exclude"
-        else:
-            ignore_path = workspace_path / ".gitignore"
+        ignore_path = workspace_path / ".git" / "info" / "exclude"
         if not ignore_path.parent.exists():
             return
 
@@ -1059,6 +1038,7 @@ class Orchestrator:
             logger.error("Workspace creation failed for PR follow-up issue_id=%s: %s", issue.id, exc)
             self._state.claimed.discard(issue.id or "")
             return
+        start_commit_sha = await self.workspace.current_head(workspace.path)
 
         session = AgentSession(
             issue=issue,
@@ -1070,7 +1050,11 @@ class Orchestrator:
         )
         session.pull_request = followup.pull_request
         session.base_branch = followup.record.base_branch
+        session.start_commit_sha = start_commit_sha
         session.feedback_ids = [item.id for item in followup.feedback]
+        # Use the first feedback body as the commit message for descriptive titles
+        first_body = (followup.feedback[0].body or "").strip() if followup.feedback else ""
+        session.feedback_commit_body = first_body[:72]
         self._state.running[issue.id or ""] = session
         if self._registry.mark_running(issue.id or "") is None:
             logger.warning(
@@ -1107,33 +1091,6 @@ class Orchestrator:
         if not await self._dependencies_satisfied(issue):
             self._state.claimed.discard(issue.id)
             return
-
-        # F-96-A: lazily initialise the shared StateJournalWriter on first
-        # issue launch.  The run_id is derived from the orchestrator start
-        # time so all issues within one invocation share the same journal.
-        if self._state_journal_writer is None:
-            try:
-                from .state_journal import StateJournalWriter
-                import datetime
-                run_id = datetime.datetime.now().strftime("run_%Y%m%d_%H%M%S")
-                run_dir = self._workspace_root / ".reports" / run_id
-                self._state_journal_writer = StateJournalWriter(
-                    run_dir=run_dir, run_id=run_id,
-                )
-                self._state_journal_writer.write_event({
-                    "type": "orchestrator_start",
-                    "workflow": self._workflow_path,
-                })
-            except Exception as exc:
-                logger.debug("StateJournalWriter init failed: %s", exc)
-
-        # F-96-A: emit issue_status=claimed to the journal
-        if self._state_journal_writer is not None:
-            self._state_journal_writer.write_issue_status(
-                issue_id=issue.id or "",
-                status="claimed",
-                message=f"Claimed issue {issue.identifier or issue.id}",
-            )
 
         # F-39 Sub-B: if the registry carries a RETRY intent for this
         # issue, close the existing remote PR (best-effort) and reset
@@ -1365,7 +1322,7 @@ class Orchestrator:
                         # instead of creating a new one.
                         sync_mode = (
                             "followup"
-                            if session.run_kind == "agent_followup"
+                            if session.run_kind in ("agent_followup", "review_followup")
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(
@@ -1397,6 +1354,7 @@ class Orchestrator:
                                     commit_sha=sync_result.commit_sha,
                                 )
                                 await self._reply_to_processed_feedback(session)
+                                await self._post_feedback_summary(session, sync_result)
                             elif session.run_kind == "agent_followup":
                                 # F-39 Sub-C: a follow-up keeps the
                                 # existing pr_number / pr_url / status;
@@ -1560,64 +1518,6 @@ class Orchestrator:
                 if workspace_dirty is not None:
                     session.run_workspace_dirty = workspace_dirty
                 self._update_run_diagnostics(session)
-
-                # F-96-A: emit issue_status / verification / pr_status / complete
-                # events to the state journal so the Visualizer can track
-                # the orchestrator's state machine in real time.
-                if self._state_journal_writer is not None:
-                    _jid = session.issue.id or ""
-                    try:
-                        # Terminal issue status
-                        if session.issue.id in self._state.pending_review:
-                            self._state_journal_writer.write_issue_status(
-                                issue_id=_jid, status="pending_review",
-                                message="Awaiting human review",
-                            )
-                        elif session.status == "completed":
-                            self._state_journal_writer.write_issue_status(
-                                issue_id=_jid, status="completed",
-                            )
-                            # Verification
-                            vs = getattr(session, "verification_status", None)
-                            if vs:
-                                self._state_journal_writer.write_verification(
-                                    issue_id=_jid,
-                                    verification_status=vs,
-                                    result=getattr(session, "verification_output", "") or "",
-                                )
-                            # PR status
-                            record = self._registry.get(_jid)
-                            if record and record.pr_url:
-                                self._state_journal_writer.write_pr_status(
-                                    issue_id=_jid,
-                                    pr_url=record.pr_url,
-                                    pr_number=str(record.pr_number) if record.pr_number else None,
-                                )
-                        elif session.status in (
-                            "verification_failed",
-                            "agent_timeout",
-                            "max_turns_exceeded",
-                            "rate_limit_circuit_open",
-                            "stagnation",
-                            "loop_detected",
-                            "cancelled",
-                            "failed",
-                            "before_run_failed",
-                        ):
-                            self._state_journal_writer.write_error(
-                                issue_id=_jid,
-                                error=f"{session.status}: {getattr(session, 'verification_output', '') or getattr(session, 'session_end_summary', '') or ''}",
-                            )
-                        # Session ref (link to transcript)
-                        session_path = getattr(session, "session_path", None) or getattr(session, "workspace", "")
-                        if session_path:
-                            self._state_journal_writer.write_session_ref(
-                                issue_id=_jid,
-                                session_id=getattr(session, "run_id", _jid),
-                                session_path=str(session_path),
-                            )
-                    except Exception:
-                        pass
 
                 if session.issue.id in self._state.running:
                     del self._state.running[session.issue.id]
@@ -1785,12 +1685,14 @@ class Orchestrator:
         try:
             feedback = await self.tracker.fetch_pull_request_feedback(
                 pull_request=pull_request,
+                issue_id=session.issue.id,
                 include_ci_failures=False,
             )
         except Exception as exc:
             logger.warning("Failed to refresh feedback for replies issue_id=%s: %s", session.issue.id, exc)
             return
-        body = "Handled in the latest ClawCodex follow-up commit."
+        from .review_feedback import REPLY_MARKER
+        body = REPLY_MARKER
         for item in feedback:
             if item.id not in feedback_ids:
                 continue
@@ -1799,6 +1701,7 @@ class Orchestrator:
                     pull_request=pull_request,
                     feedback=item,
                     body=body,
+                    issue_id=session.issue.id,
                 )
             except Exception as exc:
                 logger.warning(
@@ -1807,6 +1710,108 @@ class Orchestrator:
                     item.id,
                     exc,
                 )
+
+    async def _post_feedback_summary(self, session: AgentSession, sync_result: Any) -> None:
+        """Post a processing summary comment to the PR after a review follow-up."""
+        pull_request = getattr(session, "pull_request", None)
+        feedback_ids = list(getattr(session, "feedback_ids", []))
+        if pull_request is None or not feedback_ids:
+            return
+        record = self._registry.get(session.issue.id or "")
+        attempt = record.followup_attempt_count if record else 1
+
+        try:
+            all_feedback = await self.tracker.fetch_pull_request_feedback(
+                pull_request=pull_request,
+                issue_id=session.issue.id,
+                include_ci_failures=self.workflow.review_feedback.include_ci_failures,
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch feedback for summary issue_id=%s: %s", session.issue.id, exc)
+            all_feedback = []
+
+        feedback_by_id = {item.id: item for item in all_feedback}
+        processed = []
+        skipped = []
+        commit_sha = getattr(sync_result, "commit_sha", None)
+        for fid in feedback_ids:
+            fb = feedback_by_id.get(fid)
+            if fb is None:
+                continue
+            if commit_sha:
+                processed.append(fb)
+            else:
+                skipped.append({"feedback": fb, "reason": "No changes were committed"})
+
+        summary = PromptBuilder.render_feedback_summary(
+            attempt=attempt,
+            processed=processed,
+            skipped=skipped,
+        )
+        try:
+            await self.tracker.create_comment(session.issue.id or "", summary)
+        except Exception as exc:
+            logger.warning("Failed to post feedback summary issue_id=%s: %s", session.issue.id, exc)
+
+    async def _handle_review_followup_control(self, issue_id: str, extra: str) -> None:
+        """Handle a CLI-approved review_followup control command."""
+        if not issue_id:
+            return
+        record = self._registry.get(issue_id)
+        if record is None:
+            logger.warning("review_followup control: issue %s not in registry", issue_id)
+            return
+        if issue_id in self._state.running:
+            logger.info("review_followup control: issue %s already running, skipping", issue_id)
+            return
+
+        feedback_ids = [fid.strip() for fid in extra.split(",") if fid.strip()] if extra else list(record.pending_feedback_ids)
+        if not feedback_ids:
+            logger.info("review_followup control: no feedback IDs for issue %s", issue_id)
+            return
+
+        pull_request = PullRequestRef(
+            number=record.pr_number,
+            url=record.pr_url,
+        )
+        issue = Issue(
+            id=record.issue_id,
+            identifier=record.issue_identifier,
+            title=record.issue_identifier,
+            branch_name=record.branch_name,
+        )
+        feedback_items: list[PullRequestFeedback] = []
+        try:
+            all_feedback = await self.tracker.fetch_pull_request_feedback(
+                pull_request=pull_request,
+                issue_id=record.issue_id,
+                include_ci_failures=self.workflow.review_feedback.include_ci_failures,
+            )
+            feedback_by_id = {item.id: item for item in all_feedback}
+            for fid in feedback_ids:
+                if fid in feedback_by_id:
+                    feedback_items.append(feedback_by_id[fid])
+        except Exception as exc:
+            logger.error("review_followup control: failed to fetch feedback for issue %s: %s", issue_id, exc)
+            return
+
+        if not feedback_items:
+            logger.info("review_followup control: no matching feedback found for issue %s", issue_id)
+            return
+
+        followup = ReviewFollowup(
+            issue=issue,
+            record=record,
+            pull_request=pull_request,
+            feedback=feedback_items,
+            prompt="",
+        )
+        self._state.claimed.add(issue_id)
+        await self._launch_review_followup(followup)
+        logger.info(
+            "review_followup control: launched follow-up for issue %s with %d feedback items",
+            issue_id, len(feedback_items),
+        )
 
     async def _schedule_retry(
         self,
@@ -2010,7 +2015,10 @@ class Orchestrator:
                 extra = parts[2].strip() if len(parts) > 2 else ""
 
                 try:
-                    self._apply_control_command(cmd, issue_id, extra)
+                    if cmd == "review_followup":
+                        await self._handle_review_followup_control(issue_id, extra)
+                    else:
+                        self._apply_control_command(cmd, issue_id, extra)
                 finally:
                     # Clean up control file after processing
                     try:

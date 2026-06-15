@@ -264,6 +264,10 @@ class TrackerAdapter(ABC):
         """Update pull request metadata when supported."""
         return None
 
+    async def get_authenticated_user(self) -> str | None:
+        """Return the platform login of the token owner, if detectable."""
+        return None
+
     async def update_comment(
         self,
         issue_id: str,
@@ -289,6 +293,7 @@ class TrackerAdapter(ABC):
         self,
         *,
         pull_request: "PullRequestRef",
+        issue_id: str | None = None,
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
@@ -301,6 +306,7 @@ class TrackerAdapter(ABC):
         pull_request: "PullRequestRef",
         feedback: PullRequestFeedback,
         body: str,
+        issue_id: str | None = None,
     ) -> "Comment | None":
         """Reply to a pull request feedback item after a follow-up run."""
         return None

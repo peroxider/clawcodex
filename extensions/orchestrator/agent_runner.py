@@ -2000,18 +2000,34 @@ class AgentRunner:
                             timeout=10,
                         )
                         has_uncommitted = bool(proc.stdout.strip())
+                        head_changed = False
+                        start_commit_sha = getattr(session, "start_commit_sha", None)
+                        if start_commit_sha:
+                            head_proc = subprocess.run(
+                                ["git", "rev-parse", "HEAD"],
+                                cwd=str(ws_path),
+                                capture_output=True,
+                                text=True,
+                                timeout=10,
+                            )
+                            current_head = head_proc.stdout.strip()
+                            head_changed = bool(
+                                current_head and current_head != start_commit_sha
+                            )
                         # If there are uncommitted changes or the agent
                         # already finished its work, stop the loop.
-                        if has_uncommitted or session.status in (
+                        if has_uncommitted or head_changed or session.status in (
                             "completed", "task_complete"
                         ):
                             logger.info(
                                 "Issue %s work appears done in workspace "
-                                "(turn_count=%d, has_uncommitted=%s) — "
+                                "(turn_count=%d, has_uncommitted=%s, "
+                                "head_changed=%s) — "
                                 "stopping continuation loop",
                                 issue.id,
                                 session.turn_count,
                                 has_uncommitted,
+                                head_changed,
                             )
                             return False, refreshed_issue
                     except Exception:

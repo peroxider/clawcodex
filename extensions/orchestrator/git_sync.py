@@ -145,10 +145,7 @@ class GitSyncService:
         is_local_tracker = isinstance(self.tracker, LocalTrackerAdapter)
         workspace_strategy = getattr(session, "workspace_strategy", "isolated")
         is_sequential = workspace_strategy == "sequential"
-        if is_sequential:
-            self._sync_git_exclude(repo_root)
-        else:
-            self._sync_gitignore(repo_root)
+        self._sync_git_exclude(repo_root)
         no_push = is_local_tracker or is_sequential
 
         followup_pr = getattr(session, "pull_request", None)
@@ -175,7 +172,11 @@ class GitSyncService:
                 await self._run_pre_commit_hook(repo_root, session)
             self._run_git_checked(["add", "-A"], repo_root)
             self._apply_file_whitelist(repo_root)
-            commit_message = self._build_commit_message(issue, followup=followup_pr is not None)
+            commit_message = self._build_commit_message(
+                issue,
+                followup=followup_pr is not None,
+                feedback_body=getattr(session, "feedback_commit_body", None),
+            )
             self._run_git_checked(["commit", "-m", commit_message], repo_root)
             commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
             committed = True
@@ -298,7 +299,11 @@ class GitSyncService:
                 ),
             )
             if updated_pr is not None:
-                pr_ref = updated_pr
+                pr_ref = self._merge_pr_ref(updated_pr, pr_ref)
+                if not pr_ref.number or not pr_ref.url:
+                    pr_ref = await self._find_pr_fallback(
+                        pr_ref, head_branch=branch_name, base_branch=base_branch,
+                    )
                 self._write_report(
                     session=session,
                     branch_name=branch_name,
@@ -480,8 +485,7 @@ class GitSyncService:
         return "\n".join(sorted(s.path for s in get_file_status(repo_root)))
 
     def _sync_gitignore(self, repo_root: str) -> None:
-        gitignore_path = Path(repo_root) / ".gitignore"
-        self._append_ignore_patterns(gitignore_path)
+        self._sync_git_exclude(repo_root)
 
     def _sync_git_exclude(self, repo_root: str) -> None:
         exclude_path = Path(repo_root) / ".git" / "info" / "exclude"
@@ -644,10 +648,14 @@ class GitSyncService:
         if to_unstage:
             self._run_git_checked(["reset", "--", *to_unstage], repo_root)
 
-    def _build_commit_message(self, issue: Issue, *, followup: bool = False) -> str:
+    def _build_commit_message(self, issue: Issue, *, followup: bool = False, feedback_body: str | None = None) -> str:
         identifier = (issue.identifier or "issue").strip().lstrip("#")
-        title = (issue.title or "automated update").strip()
         prefix = "fix" if followup else "feat"
+        if followup and feedback_body:
+            # Use the review comment as the commit title
+            title = feedback_body.strip()[:72]
+        else:
+            title = (issue.title or "automated update").strip()
         message = f"{prefix}: {identifier} {title}"
         return message[:72]
 
@@ -800,6 +808,17 @@ class GitSyncService:
         prefix = self._branch_prefix or "clawcodex"
         return f"{prefix}/{slug}"
 
+    def _merge_pr_ref(
+        self,
+        updated: PullRequestRef,
+        existing: PullRequestRef,
+    ) -> PullRequestRef:
+        return PullRequestRef(
+            number=updated.number or existing.number,
+            url=updated.url or existing.url,
+            title=updated.title or existing.title,
+        )
+
     def _run_git_output(self, args: list[str], repo_root: str) -> str:
         stdout, stderr, rc = _run_git(args, repo_root)
         if rc != 0:
@@ -828,7 +847,17 @@ class GitSyncService:
         polls the tracker's open-PR list and matches by ``head_branch``.
         """
         import asyncio
-        for _ in range(3):
+        for _ in range(15):
+            try:
+                found = await self.tracker.find_pull_request(
+                    head_branch=head_branch,
+                    base_branch=base_branch,
+                )
+            except Exception:
+                found = None
+            if found is not None and (found.number or found.url):
+                return self._merge_pr_ref(found, pr_ref)
+
             try:
                 open_prs = await self.tracker.list_pull_requests(
                     state="open",

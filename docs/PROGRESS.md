@@ -175,7 +175,7 @@
 
 ## F-37: Orchestrator PR 检视意见自动修复闭环
 
-**状态**: 📋 设计完成
+**状态**: ✅ 已完成（核心链路已验证）
 **优先级**: P0
 **规划文档**: `docs/FEATURE_PLAN.md` → `3.1.4 PR 检视意见自动修复闭环设计`
 
@@ -190,26 +190,26 @@
 | Issue 自动实现 | ✅ 已具备 | Orchestrator 可轮询 issue 并启动 agent run |
 | 自动 commit/push/PR | ✅ 已具备 | `GitSyncService` 在 agent 完成后提交、推送并创建/复用 PR |
 | Issue 评论读取 | ✅ 已具备 | TrackerAdapter 已有 issue comments 接口，主要服务 clarification 流程 |
-| PR conversation 评论读取 | ❌ 待实现 | 需要读取 PR 对应 issue comments 或平台 PR comments API |
-| PR inline review comments 读取 | ❌ 待实现 | 需要平台 API 支持文件路径、行号、diff hunk |
-| Review summary 读取 | ❌ 待实现 | 需要读取 PR reviews / review notes |
-| CI/pipeline 失败日志读取 | ❌ 待实现 | 需要读取 checks、jobs、pipeline logs 并做摘要/截断 |
-| Feedback 幂等处理 | ❌ 待实现 | 需要记录已处理 feedback id/check id，避免重复修复 |
-| 同 PR 分支 follow-up run | ❌ 待实现 | 需要新增 review-fix prompt 和复用原 PR 分支的 git sync 模式 |
+| PR conversation 评论读取 | ✅ 已完成 | 使用 issue_id 读取 PR 对应 issue conversation，避免混用 PR number |
+| PR inline review comments 读取 | ✅ 已完成 | 归一化文件路径、行号、diff hunk，进入 review-fix prompt |
+| Review summary 读取 | ✅ 已完成 | GitHub `/pulls/{number}/reviews` 已验证；GitCode 该端点返回 404，按平台能力跳过 |
+| CI/pipeline 失败日志读取 | ✅ 已完成 | 读取 check/status 失败项，按 `max_log_chars_per_check` 截断摘要 |
+| Feedback 幂等处理 | ✅ 已完成 | `processed_feedback_ids` / `pending_feedback_ids` 防止重复触发 |
+| 同 PR 分支 follow-up run | ✅ 已完成 | `git_sync.sync(mode="followup")` 复用原 PR 分支并追加 `fix:` commit |
 
 ### 实施进度
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| 1 | 扩展 tracker 协议，新增 `PullRequestFeedback` 数据模型和 PR feedback fetch/reply 接口 | 📋 待开始 |
-| 2 | 扩展 GitHub/Gitee/GitCode repository client，读取 PR conversation、inline review comments、review summary | 📋 待开始 |
-| 3 | 接入 CI/pipeline 失败日志读取与日志截断策略 | 📋 待开始 |
-| 4 | 扩展 registry 或新增 feedback store，记录 feedback cursor、已处理 id、follow-up attempt 次数 | 📋 待开始 |
-| 5 | 在 Orchestrator poll loop 增加 review follow-up 阶段，扫描已有 open PR 的新反馈 | 📋 待开始 |
-| 6 | 新增 review-fix prompt builder，约束 agent 只处理 PR 检视意见与 CI 失败 | 📋 待开始 |
-| 7 | 调整 git sync follow-up 模式，确保只 commit/push 原 PR 分支，不创建新 PR | 📋 待开始 |
-| 8 | 增加评论回复/汇总能力，标记已处理、无法处理或需 clarification 的反馈 | 📋 待开始 |
-| 9 | 增加单元测试和端到端测试：去重、bot 评论过滤、inline 映射、CI 日志截断、重试上限 | 📋 待开始 |
+| 1 | 扩展 tracker 协议，新增 `PullRequestFeedback` 数据模型和 PR feedback fetch/reply 接口 | ✅ 已完成 |
+| 2 | 扩展 GitHub/Gitee/GitCode repository client，读取 PR conversation、inline review comments、review summary | ✅ 已完成 |
+| 3 | 接入 CI/pipeline 失败日志读取与日志截断策略 | ✅ 已完成 |
+| 4 | 扩展 registry 或新增 feedback store，记录 feedback cursor、已处理 id、follow-up attempt 次数 | ✅ 已完成 |
+| 5 | 在 Orchestrator poll loop 增加 review follow-up 阶段，扫描已有 open PR 的新反馈 | ✅ 已完成 |
+| 6 | 新增 review-fix prompt builder，约束 agent 只处理 PR 检视意见与 CI 失败 | ✅ 已完成 |
+| 7 | 调整 git sync follow-up 模式，确保只 commit/push 原 PR 分支，不创建新 PR | ✅ 已完成 |
+| 8 | 增加评论回复/汇总能力，标记已处理、无法处理或需 clarification 的反馈 | ✅ 已完成 |
+| 9 | 增加单元测试和端到端测试：去重、bot 评论过滤、inline 映射、CI 日志截断、重试上限 | ✅ 已完成 |
 
 ### 验收标准
 
@@ -229,6 +229,13 @@
 - 网页评论可能包含互相冲突的要求，首期应优先处理明确、可定位、可验证的反馈。
 - 自动回复评论应避免刷屏，推荐按 run 汇总回复，或仅回复明确处理完成的 inline comments。
 - 默认不做自动合并、force push、关闭 PR 等高风险动作。
+
+### 真实环境验证摘要
+
+- GitCode `test-f37` 已验证 Issue → PR、conversation follow-up、inline review follow-up、幂等、批处理、`max_followup_attempts_per_pr`、`ignore_authors`。
+- GitCode `/pulls/{number}/reviews` 返回 404，因此 Review Summary 在 GitCode 上按“不支持的可选端点”跳过。
+- GitHub `yeyunu/test37` PR #2 已验证 Review Summary 可采集为 `review_summary:4473425602`，并在 manual 模式进入 `pending_feedback_ids`。
+- GitHub Review Summary 测试中 review 作者与 token 用户相同；为验证采集能力，测试 workflow 显式设置了非当前用户的 `bot_login`，真实部署建议使用独立 bot token 或显式配置 `bot_login`。
 
 ---
 
