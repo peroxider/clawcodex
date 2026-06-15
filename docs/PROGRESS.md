@@ -2,11 +2,22 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.2
+> 版本: v3.3
 > 更新日期: 2026-07
 > 上游同步: 58ea488 (dev-decoupling-refactor)
 >
-> **v3.2 变更**：完成代码检视审计（6 个特性状态修正）+ 归档操作。已完成特性的行内详情已全部替换为 ARCHIVED_PROGRESS.md 链接：F-40（新增 §六）、F-44/F-45/F-47/F-50/F-51（指向 §四）。F-40 状态已在上次 v3.1 修正，本次完成归档。详见 §二/F-40~F-51 各节。
+> **v3.3 变更**：代码检视审计 — 修复 8 个特性状态与代码不对齐问题。
+>   - F-4 结构化输出：🔄 进行中 → ✅ 已完成（Outlines 适配器已完整实现至 clawcodex_ext/agent/）
+>   - F-16 Auto Mode：⏳ 待开始 → ✅ 已完成（auto_mode_classify + 测试双套）
+>   - F-19 SOP 转化：🔄 进行中 → ✅ 已完成（CLI 子命令已在 subcommand_registry.py:36 注册）
+>   - F-26 Away Summary：📋 规划中 → ✅ 已完成（10 个文件完整在 clawcodex_ext/away_summary/）
+>   - F-50 SOP 固化：✅ 基础完成 → ✅ 已完成（CLI 入口已注册，移除遗留注释）
+>   - F-52 SDK→Tool：📋 规划中 → ✅ 已完成（register_python_function + 完整 tool_authoring）
+>   - F-64 Voice：⏳ 待开始 → 🟡 进行中（接口层已完成：detection.py + stt.py）
+>   - F-67 Buddy：⏳ 待开始 → ✅ 已完成（src/buddy/ 8 文件完整实现）
+>   - F-89 @agent-name：📋 设计完成 → ✅ 基础完成（--agent CLI + 自动发现已实现）
+>   - F-2 Team 成员管理：⏳ 规划中 → 🔄 进行中（SendMessage + resume_agent 已落地）
+>   - 合计本次修正：11 项
 >
 > **v2.16 变更**：完成 CCB（claude-code-best）全面对标分析，识别 clawcodex 的 8 个重大特性缺口纳入规划管线。新增 F-60 Pipe IPC + LAN 群控（P0）、F-61 Computer Use 屏幕操控（P0）、F-62 Chrome 浏览器控制（P1）、F-63 Channels 频道通知（P1）、F-64 Voice Mode 语音输入（P2）、F-65 Langfuse Agent 可观测性（P1）、F-66 ACP 协议支持（P2）、F-67 Buddy / Proactive 模式（P2）。同时更新 §四 CCB 对标优势特性总表，明确 clawcodex 对比 CCB 的 5 项领先特性（Orchestrator 自动流水线、Verification Gate、SOP 编译器、LiteLLM Provider、Manager/Worker 增强通信）。所有 F-60~F-67 设置为 ⏳ 待开始状态，详见 §四。
 >
@@ -52,14 +63,14 @@
 
 ### 1.2 功能模块开发
 
-> 状态为 ✅ 完成 / ✅ 基础完成的项（含 F-1、F-3、F-13、F-14、F-15、F-17、F-19、F-20、F-21、F-23、F-24、F-25、F-27、F-29、F-30、F-31、F-32、F-34、F-36、F-38、F-39、F-40、F-41、F-42、F-43、F-44、F-45、F-47、F-50、F-51）详细设计与进度已归档；本文仅保留概览与链接，详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) 与 [ARCHIVED_FEATURES.md](./ARCHIVED_FEATURES.md)。
+> 状态为 ✅ 完成 / ✅ 基础完成的项（含 F-1、F-3、F-4、F-13、F-14、F-15、F-16、F-17、F-19、F-20、F-21、F-23、F-24、F-25、F-26、F-27、F-29、F-30、F-31、F-32、F-34、F-36、F-38、F-39、F-40、F-41、F-42、F-43、F-44、F-45、F-47、F-50、F-51、F-52、F-55、F-67、F-89）详细设计与进度已归档；本文仅保留概览与链接，详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) 与 [ARCHIVED_FEATURES.md](./ARCHIVED_FEATURES.md)。
 
 | ID | 模块 | 优先级 | 状态 | 备注 |
 |----|------|--------|------|------|
 | F-1 | Orchestrator 自主模式 | P0 | ✅ 完成 | Symphony 集成 |
-| F-2 | Team 成员管理 (Phase-7) | P1 | ⏳ 规划中 | members 数组 |
+| F-2 | Team 成员管理 (Phase-7) | P1 | 🔄 进行中 | members 数组，SendMessage 消息交互 + resume_agent 恢复已完成，TeamCreate/TeamDelete 待实现 |
 | F-3 | MCP 协议扩展 | P1 | ✅ 基础完成 | Stdio/HTTP/SSE/WS |
-| F-4 | 结构化输出集成 | P2 | 🔄 进行中 | Outlines 适配器已就绪 |
+| F-4 | 结构化输出集成 | P2 | ✅ 已完成 | Outlines 适配器已完整实现并迁移至 clawcodex_ext/agent/，src/ 仅留 facade |
 | F-5 | Voice Mode | P2 | ⏳ →F-64 | 已合并至 F-64（Voice Mode 语音输入） |
 | F-6 | Computer Use | P0 | ⏳ →F-61 | 已合并至 F-61（Computer Use 屏幕操控） |
 | F-7 | Remote Control | P2 | ⏳ →F-82 | 已合并至 F-82（Remote Control Server） |
@@ -71,17 +82,17 @@
 | F-13 | Agent 记忆作用域隔离 | P1 | ✅ 完成 | 按需加载不同作用域记忆，clawcodex_ext try-import 降级模式 |
 | F-14 | 三层解耦架构（Layer Isolation） | P1 | ✅ 完成 | upstream/capabilities/features 三层分离，零层违规 |
 | F-15 | 权限模式切换 (Shift+Tab) | P1 | ✅ 完成 | REPL/LiveStatus/TUI 中支持 `default→acceptEdits→plan→bypassPermissions` 循环切换，状态栏显示当前模式，/permission 命令 |
-| F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ⏳ 待开始 | 基于 LLM 的自动权限模式切换，减少交互疲劳 |
+| F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ✅ 已完成 | `auto_mode_classify()` + `AutoModeDecision` + `DenialTracker` 完整实现在 `src/permissions/check.py`；`to_auto_classifier_input` 覆盖所有工具；`tests/permissions/test_permission_classifier.py` + `tests/tool/test_tool_classifier_input.py` 两套测试 |
 | F-17 | 工具系统按需加载（Tool System Extension） | P1 | ✅ 完成 | 四种工具模式（bare/default/clawcodex/all），4 bundle 简化设计，bundle 引用前缀 ":"，与上游解耦 |
 | F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 已完成 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。基础实现在 `clawcodex_ext/tool_system/tools/create_agent_tool.py` + `clawcodex_ext/agent/tool_authoring/factory.py`。commit 59d8243 补齐集成闭环：（1）已注册为内置工具 (`extensions/tool_system_ext/registration.py` `EXTENSION_TOOLS`)；（2）启动时自动加载持久化 Agent 工具 (`src/tool_system/defaults.py` `load_agent_tools=True`)；（3）`ToolContext.tool_registry` 运行时注册表字段 + 创建工具时自动注册到活动 registry；（4）模板 `{param}` → `{{param}}` 语法修复；（5）输出字段 `tool.*` → `spec.*` 修复 |
-| F-19 | SOP 转化模式 | P2 | 🔄 进行中 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；**`clawcodex-dev pos convert` CLI 子命令待注册**（dispatch.py/subcommand_registry.py 中未实现），当前仅支持斜杠命令和 Python API 调用 |
+| F-19 | SOP 转化模式 | P2 | ✅ 已完成 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；`clawcodex-dev pos convert` CLI 子命令已注册在 `subcommand_registry.py:36`，- `clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）；输出包含 `.claude/agents/<name>.md` agent 定义 + skill 文件 + orchestrator workflow |
 | F-20 | Agent 阶段性进度汇报 | P2 | ✅ 完成 | 三组合方案：检查点触发 + ProgressReportTool + ToolContext.tasks 持久化；PhaseComplete 时双重调用 ProgressReportTool + TaskUpdateTool 更新 metadata |
 | F-21 | 后台运行 + 恢复同步 | P1 | ✅ 完成 | Ctrl+B 后台化 + TailFollower 实时同步 + SessionWatcher 多终端感知，补丁 0067-0074 |
 | F-22 | Cron 系统执行引擎 | P0 | 🔄 进行中（Phase A ✅ 已完成） | `clawcodex_ext/cron_system/` 已补齐 parser/storage/scheduler/jitter/lock/permanent/inFlight/基础 runs/status；历史 G1~G8 已落地；Phase A runtime-first 接线完成——REPL/TUI/headless 均通过 `RuntimeContext.build()` 获得后台 cron 调度器，REPL 新增 `_drain_cron_outbox()` 将 `tool_context.outbox` 中的 `cron_prompt`/`cron_missed` 事件经 `_enqueue_prompt` 注入为自动用户输入。剩余缺口保持 F22-R2~R8：scheduled fire 执行队列、run lifecycle finalize、用户管理/status 入口、busy gate/filter、durable reload、teammate ownership 与 CCB env gate 兼容。 |
 | F-23 | Bridge Phase 8-11 多 Session Daemon | P1 | ✅ 完成 | 多会话桥接器完整实现，bridge_main/repl_bridge/remote_bridge_core/session_runner，Phase 1-11 全部完成 |
 | F-24 | Agent Loop Consolidation (Stage 4) | P1 | ✅ 完成 | 删除 agent_loop.py (537 行)，新增 renderers.py (+257) 和 advisor.py (+125)，重构到 src/query/ |
 | F-25 | Advisor Token 计数与状态显示 | P2 | ✅ 完成 | max_history 100→2000，Provider token 追踪增强，client-side advisor mode |
-| F-26 | Away-Summary（离开摘要） | P2 | 📋 规划中 | ※ 标记 + 浅灰色，终端失焦 5 分钟自动触发，支持 /recap 手动命令 |
+| F-26 | Away-Summary（离开摘要） | P2 | ✅ 已完成 | `clawcodex_ext/away_summary/` 共 10 个文件完整实现：service.py（6346 行）、controller.py（4655 行）、config.py、command.py、fingerprint.py、messages.py、prompt.py、registration.py；支持终端失焦检测、※ 标记 + 浅灰色、/recap 手动命令 |
 | F-27 | TUI 响应性修复（LLM 超时后 Ctrl+C/ESC 无响应） | P1 | ✅ 完成 | StreamWatchdog 超时时触发 AbortSignal；Ctrl+C 先尝试取消 agent 再退出 |
 | F-28 | Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话 | P1 | ✅ 完成 | Fork-Continue 模式：Ctrl+B 后 fork 子进程继续运行 agent，--resume 通过 TailFollower 实时显示增量输出。`clawcodex_ext/agent/background_runner.py`（417 行）完整实现 `launch_background_runner`/`get_background_runner_status`/`wait_for_background_runner`/`cleanup_background_runner`；REPL `live_status.py` 有 Ctrl+B 接线 |
 | F-29 | TaskInspect/TaskDirectives 工具注册 | P2 | ✅ 完成 | 将 TaskInspectTool 和 TaskDirectivesTool 注册到 ALL_STATIC_TOOLS，实现 Manager Agent 查询/指令 Worker |
@@ -98,13 +109,13 @@
 | F-43 | CLI 模型供应商与模型切换 | P1 | ✅ 已完成 (2026-06-02) | 新增 `clawcodex provider` / `clawcodex model` 子命令族（list/show/current/use/unset）+ REPL/TUI 内 `/provider` / `/model` 斜杠命令；fast-path 注册表 + `ModelRegistry` / `ModelStore` / `Resolver` + `RuntimeContext.swap_provider` 热切换；所有新代码落在 `clawcodex_ext/cli/`，`src/*` 仅追加 `CommandContext.runtime_context` seam 与 `TUIOptions.runtime_context` 透传；持久化借道 `src.config` 不重写 I/O；错误文案统一英文；`--scope project` 落入后续规划 |
 | F-44 | Orchestrator 人工检视闸门（Review Gate） | P1 | ✅ 完成 | 可选的人工检视闸门，`workflow.md` 中 `agent.review_required: true` 启用。sync 后有代码变更时标记 `PENDING_REVIEW` 而非直接 `COMPLETED`；CLI `issue review --approve/--reject` 审批或驳回；驳回自动触发 F-39 retry。向后兼容，默认关闭。 |
 | F-45 | Orchestrator tool-call 审计旁路（tool-events.ndjson + 报告登记） | P1 | ✅ 已完成 (2026-06-02) | 在 `extensions/orchestrator/agent_runner.py:_handle_tool_call` 之后追加 NDJSON 旁路落盘到 `~/.clawcodex/tool-events/{run_id}/events.ndjson`，与 `permission_mode` 解耦（`bypassPermissions` / `dontAsk` / `acceptEdits` / `default` 一视同仁全写）；扩展 `report_writer.RunReport` 加 `tool_events_path` 字段并在 markdown 模板登记路径，让审计员从 run 报告直接定位完整 per-tool 决策流水。修复 TS 注释 "bypass = no logging" 在 Python 端的事实偏差 —— `ApprovalPolicy` 一直在跑，只是决策没落盘。落地时同步修复了 `_handle_tool_call` 死代码调用链 + 加 50MB rotate + `.reports` 进默认 gitignore。16 个新测试 + 全 271 回归 + F-38 E2E 4/4 全绿。 |
-| F-46 | permission_mode enum 正交拆分 | P2 | ⏳ 规划中 | 把 `permission_mode` 混合 enum（`default` / `plan` / `bypassPermissions` / `acceptEdits` / `dontAsk` / `auto` / `bubble`）拆为三个正交字段：`interactive: bool`（是否要 TTY 弹 prompt）、`default_decision: Literal["allow", "deny", "ask"]`（无人值守默认）、`audit_log: Literal["none", "minimal", "full"]`（per-tool 决策是否落盘）。F-46.0（v2.13）只拆 `audit_log`，**F-45 已落地**可消费 NDJSON 旁路做端到端验证；`permission_mode` 保留为 backward-compat shim 标 deprecated；F-46.1+ 拆其余两字段推到 v2.15+。 |
+| F-46 | permission_mode enum 正交拆分 | P2 | ⏳ 规划中 | 把 `permission_mode` 混合 enum（`default` / `plan` / `bypassPermissions` / `acceptEdits` / `dontAsk` / `auto` / `bubble`）拆为三个正交字段：`interactive: bool`（是否要 TTY 弹 prompt）、`default_decision: Literal["allow", "deny", "ask"]`（无人值守默认）、`audit_log: Literal["none", "minimal", "full"]`（per-tool 决策是否落盘）。**F-46.0 暂未实现**：`schema.py` 中仍为单一的 `permission_mode` 字段，`WorkflowConfig.audit_log` 字段未落地；F-45 的 NDJSON 旁路（`tool-events.ndjson`）已独立实现，可消费。`permission_mode` 保留为 backward-compat shim；F-46.1+ 拆其余两字段推到后续。 |
 | F-47 | Permission Settings Schema 重构（`permissions` 改 dict 形态 + plumb 启动模式） | P1 | ✅ 完成（含 F-47.1 hotfix） | 修四层串联 bug：`SettingsSchema.permissions: list[PermissionRule]` 与磁盘实际 dict 形态不一致 → dict 落进 known 字段，`allowBypassPermissionsMode` 进不到 `extra` → `has_allow_bypass_permissions_mode` 永远 False → Shift+Tab cycle 看不到 Bypass；同时 `resolve_permission_state` 没把 `permissions.defaultMode` 喂给 `initial_permission_mode_from_cli`、顶层 `settings.permission_mode` 字段未读。引入 `PermissionsConfig` dataclass 对齐磁盘 + TS 上游契约；`has_allow_bypass_permissions_mode` 加 `extra["permissions"]` fallback；`resolve_permission_state` 真正 plumb `settings_default_mode`；删除 settings 层"假" `PermissionRule` 死代码。**F-47.1 (2026-06-02) hotfix**：项目尚未发布、磁盘上没有需要迁移的旧配置，直接删除原本保留的顶层 `settings.permission_mode` back-compat 读取通道——`SettingsSchema.permission_mode` 字段保留为兼容形态但启动时不再被读；详见 风险 #3 / 设计决定 #3 / F-47.1 备注。 |
 | F-48 | src/ 核心路径二开修改解耦 | P0 | 📋 设计完成 | 将 `src/` 中 **29 个纯新增文件 + 10 个功能修改文件**全部解耦到 `clawcodex_ext/` 和 `extensions/`。新增 7 个外部库适配器统一迁移（F-48.1 子特性）、Orchestrator 配套工具 5 个、Provider 扩展 3 个、Auth 子系统 2 个、TUI 屏幕 2 个、服务/工具 5 个、工具编写系统 1 个。修改文件解耦沿用 Phase 1~3（注册表/Protocol 扩展 → 子类覆盖 → 入口点恢复）。目标：src/ 二开新增文件数从 29 → 0，功能修改文件数从 10 → 0 |
 | F-49 | Issue 会话统一存储与实时介入协议 | P1 | 🔄 进行中 | 将 headless agent 的 `.event_logs/` 扁平 NDJSON 统一为 `SessionStorage` 的 `transcript.jsonl` 格式。核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator run 的完整对话进入交互式 REPL**。`extensions/agent/session_persist.py`（130 行）— `save_to_session_storage`/`load_from_session_storage` 已实现并通过 `src/agent/session.py` 接线；`extensions/orchestrator/control_socket.py`（272 行）— F-49 Phase 1 Unix Socket 控制通道完整实现，已接入 `agent_runner.py`：`ControlSocket.send_event`/`ControlCommand` 支持 pause/resume/stop/inject/status。Phase 0.2 session resume + Phase 2 attach TUI 待补齐 |
-| F-50 | SOP 转换器固化 | P2 | ✅ 基础完成 | 三层映射（SOP/workflow→Skill、SDK→工具）全链路实现：`extensions/pos_converter/` 共 9 文件 2,429 行 — `SourceCodeParser`(563)、`SkillGrouper`(251)、`AgentBuilder`(326)、`AgentMarkdownWriter`(446)、`sdk_parser`(149)、`templates`(194)、`convert_pos_skill`(237)、`default_agent`(222)。**遗留**：`clawcodex-dev pos convert` CLI 子命令待注册（当前仅斜杠命令 + Python API） |
+| F-50 | SOP 转换器固化 | P2 | ✅ 已完成 | 三层映射（SOP/workflow→Skill、SDK→工具）全链路实现：`extensions/pos_converter/` 共 9 文件 2,429 行 — `SourceCodeParser`(563)、`SkillGrouper`(251)、`AgentBuilder`(326)、`AgentMarkdownWriter`(446)、`sdk_parser`(149)、`templates`(194)、`convert_pos_skill`(237)、`default_agent`(222)。`clawcodex-dev pos convert` CLI 子命令已注册（`subcommand_registry.py:36`），`clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）。F-55 分组策略增强已完成。 |
 | F-51 | AgentRunner 空转检测机制（no-op detection） | P0 | ✅ 完成 | 在 `extensions/orchestrator/agent_runner.py` 中添加连续 5 轮工作区文件无变更检测，防止 agent 在 issue deliverables 已存在的场景下陷入无限 busy-work 循环。对应 PR 检视意见自动修复闭环（F-37）中的已修复前置问题。|
-| F-52 | Python SDK 方法注册为 Tool | P2 | 📋 规划中 | 将 SOP 生成的 ADF 方法（`detect_modality`、`load_dataset` 等）注册为真实的 `Tool` 对象，使 sub-agent 可直接调用而非通过 Bash 回退。`extensions/pos_converter/tool_registry.py` — `ToolWrapper` + `register_source_operations()`。依赖 F-50。 |
+| F-52 | Python SDK 方法注册为 Tool | P2 | ✅ 已完成 | `clawcodex_ext/agent/tool_authoring/validators.py` 含 `register_python_function()` + `list_python_functions()`；`factory.py` 的 `build_tool_from_spec()` 支持 python/http/bash 三种 call_type；`spec.py` 定义 `AgentToolSpec` 数据模型；`persistence.py` 支持本地持久化。`CreateAgentTool`（F-18）已集成本能力 |
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | 📋 规划中 | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/`。依赖 F-52。 |
 | F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 🔄 进行中 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点。已落地：`extensions/orchestrator/debug_log.py`（29 行）— `append_debug_event` + `ObservabilityConfig` schema；`agent_runner.py:751` 写 `debug.ndjson`。仪表盘/query-runner heartbeat/CLI 诊断字段待补齐 |
 | F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
@@ -112,10 +123,10 @@
 | F-61 | Computer Use 屏幕操控 | P0 | ⏳ 待开始 | 对标 CCB Computer Use。支持跨平台截图（macOS screencapture / Windows PowerShell / Linux scrot）、跨平台键鼠模拟、应用/窗口管理、剪贴板读写。预计 2-3 周。 |
 | F-62 | Chrome 浏览器自动化控制 | P1 | ⏳ 待开始 | 对标 CCB Chrome Use。Chrome MCP 扩展桥接，支持页面导航、点击、填表、截图、执行 JS。预计 1-2 周。 |
 | F-63 | Channels 频道通知系统 | P1 | ⏳ 待开始 | 对标 CCB Channels。支持飞书、Slack、Discord、微信等渠道的通知推送与 MCP 服务器消息转发。预计 2 周。 |
-| F-64 | Voice Mode 语音输入 | P2 | ⏳ 待开始 | 对标 CCB Voice Mode。ASR 语音识别（豆包 doubaoime-asr / Whisper）、Push-to-Talk 语音交互、音频流 WebSocket 传输。预计 1-2 周。 |
+| F-64 | Voice Mode 语音输入 | P2 | 🟡 进行中（接口层已完成） | `src/services/voice/` 含 `detection.py`（VoiceActivityDetector、VoiceActivityState、VoiceActivityConfig）和 `stt.py`（STTProvider 抽象类 + STTConfig + STTResult），但运行时集成与端到端实现待补齐。对标 CCB Voice Mode。ASR 语音识别（Whisper）、Push-to-Talk 语音交互、音频流 WebSocket 传输。预计 1-2 周。 |
 | F-65 | Langfuse Agent 可观测性 | P1 | ⏳ 待开始 | 对标 CCB Langfuse。OpenTelemetry + Langfuse SDK 集成，Agent Loop 级追踪，一键转化为训练数据集。预计 1 周。 |
 | F-66 | ACP 协议支持 | P2 | ⏳ 待开始 | 对标 CCB ACP（Agent Client Protocol）。Zed/Cursor 等 IDE 集成协议支持，会话恢复与 Skills 桥接。预计 1-2 周。 |
-| F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ⏳ 待开始 | 对标 CCB Buddy 伴侣系统 + Proactive 自主模式。后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。预计 2 周。 |
+| F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | `src/buddy/` 共 8 个文件完整实现：`companion.py`(5693)、`observer.py`(3447)、`soul.py`(1875)、`sprites.py`(13463)、`types.py`(5278)、`prompt.py`(3320)、`notification.py`(1957)、`feature.py`(341)；支持后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。已列为 Phase 5 解耦对象。 |
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
 | F-69 | Budget/Poor Mode | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-70 | Plugin 系统 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §4.3 |
@@ -135,7 +146,7 @@
 | F-86 | Kairos/Brief 调度 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-88 | Explore/Plan Agent | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-89 | @agent-name 多入口统一支持 | P1 | 📋 设计完成 | 见 FEATURE_PLAN §3.4 |
+| F-89 | @agent-name 多入口统一支持 | P1 | ✅ 基础完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI 内部 `@agent-name` 引用自动解析。 |
 | F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 5 模型 / 4 解析器 / 7 构建器 |
 | F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 15 REST 端点 + WebSocket live tail |
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
@@ -1288,9 +1299,9 @@ CronTask due
 | F22-R5 | busy gate / assistant/headless/filter 语义 | ⏳ 待开始 | 需要对齐 `claude-code-best` 的 `isLoading`、assistantMode、filter 语义，避免繁忙时重入、headless 无法路由时静默丢任务。 |
 | F22-R6 | durable 文件 reload 行为 | ⏳ 待确认 | 已有文件存储和锁，但还需端到端验证多会话/外部编辑 `.claude/scheduled_tasks.json` 后 scheduler 热加载与稳定性。 |
 | F22-R7 | teammate/agent ownership | ⏳ 待设计 | CCB task schema 有 `agentId`；ClawCodex 需要决定 coordinator/team cron ownership、可见性、路由和失败策略。 |
-| | F22-R8 | CCB-compatible gate 命名与用户心智 | ⏳ 待确认 | 当前主要使用 `CLAWCODEX_DISABLE_CRON`；若用户从 CCB 迁移，建议兼容 `CLAUDE_CODE_DISABLE_CRON` 或在文档/CLI 中明确差异。 |
-| | **G9** | **SDK daemon 模式（`dir`/`lockIdentity`）** | ⏳ 待设计 | scheduler 当前依赖 bootstrap session state；daemon/headless 独立运行需支持可选 `dir` 和 `lock_identity` 参数，无 session 时自动降级。详见 FEATURE_PLAN §4.11.11。 |
-| | **G10** | **`cronToHuman(utc)` UTC 模式显示** | ⏳ 待设计 | `cron_to_human()` 无 UTC 参数；需增加 `utc=True` 时按本地时区偏移显示，远程 agent 场景使用。详见 FEATURE_PLAN §4.11.11。 |
+| F22-R8 | CCB-compatible gate 命名与用户心智 | ⏳ 待确认 | 当前主要使用 `CLAWCODEX_DISABLE_CRON`；若用户从 CCB 迁移，建议兼容 `CLAUDE_CODE_DISABLE_CRON` 或在文档/CLI 中明确差异。 |
+| G9 | SDK daemon 模式（`dir`/`lockIdentity`） | ⏳ 待设计 | scheduler 当前依赖 bootstrap session state；daemon/headless 独立运行需支持可选 `dir` 和 `lock_identity` 参数，无 session 时自动降级。详见 FEATURE_PLAN §5.11.11。 |
+| G10 | `cronToHuman(utc)` UTC 模式显示 | ⏳ 待设计 | `cron_to_human()` 无 UTC 参数；需增加 `utc=True` 时按本地时区偏移显示，远程 agent 场景使用。详见 FEATURE_PLAN §5.11.11。 |
 
 ### 里程碑
 
@@ -1301,7 +1312,7 @@ CronTask due
 | 3 | cron task lock - 多进程调度锁与清理（extension 路径） | ✅ 基础完成 |
 | 4 | cron scheduler - 轮询、due/missed/expired、inFlight、jitter（extension 路径） | ✅ 基础完成 |
 | 5 | cron jitter config - 文件/env 动态配置与每 tick reload（extension 路径） | ✅ 基础完成 |
-| 6 | tools / command adapter - CronCreate/List/Delete 替换 fallback 工具，补齐 `/cron-list`、`/cron-delete` 用户入口 | ✅ 完成（工具替换已接线，用户入口待细节验证） |
+| 6 | tools / command adapter - CronCreate/List/Delete 替换 fallback 工具，补齐 `/cron-list`、`/cron-delete` 用户入口 | ✅ 完成（工具替换已接线入 REPL/TUI/headless 所有路径；REPL `_drain_cron_outbox()` 消费 outbox 事件入队到 query pipeline；用户入口 `/cron-list`/`/cron-delete` 待 skill 接线） |
 | 7 | runs.py - scheduled-task run 账本扩展到 autonomy-compatible schema 与 active source 去重 | ⏳ 待扩展 |
 | 8 | queue lifecycle - scheduled fire 入队、claim running、finalize completed/failed/cancelled | ⏳ 待开始 |
 | 9 | trigger detail/manual fire - 单任务详情与手动触发 run id 回显 | ⏳ 待开始 |
@@ -1316,9 +1327,9 @@ CronTask due
 | **G5** | **锁注册式清理与 PID 增强** - atexit 清理、PID 分身检测、同 session 锁接管 | ✅ 完成 |
 | **G6** | **工具 Prompt 指引增强** - CronCreate/List/Delete 的 prompt 字段补充最佳实践说明 | ✅ 完成 |
 | **G7** | **Analytics 遥测事件预留** - fire/missed/expired 事件点预留 Optional[Callable] | ✅ 完成 |
-| | **G8** | **inFlight 防重复触发** — 异步 IO 期间用 in_flight Set 防止同一任务二次触发 | ✅ 完成 |
-| | **G9** | **SDK daemon 模式（`dir`/`lockIdentity`）** — 可选脱离 session state 独立运行 | ⏳ 待设计 |
-| | **G10** | **`cronToHuman(utc)` UTC 模式** — `cron_to_human()` 增加 `utc` 参数 | ⏳ 待设计 |
+| G8 | inFlight 防重复触发 — 异步 IO 期间用 in_flight Set 防止同一任务二次触发 | ✅ 完成 |
+| G9 | SDK daemon 模式（`dir`/`lockIdentity`）— 可选脱离 session state 独立运行 | ⏳ 待设计 |
+| G10 | `cronToHuman(utc)` UTC 模式 — `cron_to_human()` 增加 `utc` 参数 | ⏳ 待设计 |
 
 ---
 

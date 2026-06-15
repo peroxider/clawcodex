@@ -141,7 +141,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
-| AR-F-22 | 定时任务系统 | cron 表达式解析、human schedule 文本解析、CronTask 任务模型、Durable/Session Task Store、Scheduler Lock 防重复、确定性 jitter、REPL/TUI/headless Runtime 接线、CronDispatchBridge、Cron Run Store 生命周期、`/loop`/`/cron-list`/`/cron-delete` Skill 集成、Missed One-shot 安全确认、Teammate Ownership 路由 | 用户可用 cron/natural language 描述定时任务，重启后任务保留，多窗口不重复执行，任务像普通输入一样被执行，可查询每次运行结果，Team 场景下路由正确 | 🟡 进行中 → F-22 | 综合工时约 12 周 | py 解析器、dataclass、store、lock、jitter、runtime、dispatch bridge、run store、skill、通知、路由
+| AR-F-22 | 定时任务系统 | cron 表达式解析、human schedule 文本解析、CronTask 任务模型、Durable/Session Task Store、Scheduler Lock 防重复(PID 验证+session takeover+atexit 清理)、确定性 jitter(递归正向+单次反向)、Feature Gate 运行时 kill 开关、REPL/TUI/headless Runtime 接线（`_drain_cron_outbox()` + `RuntimeContext.build()`）、Cron Run Store NDJSON 生命周期(queued→running→completed/failed/cancelled)、Permanent 免过期任务、inFlight 防重复触发、Analytics 事件预留钩子、`/loop` Skill、Autonomy Status/Runs 展示、Missed One-shot 安全确认、Teammate Ownership 路由 | 用户可用 cron/natural language 描述定时任务，重启后任务保留，多窗口不重复执行，任务像普通输入一样被执行，可查询每次运行结果，Team 场景下路由正确 | 🟡 进行中 → F-22（G1~G8 已完成，Phase A runtime 接线已完成；剩余 F22-R2~R8：执行队列 finalize、用户管理入口、busy gate/filter、durable reload、teammate ownership、CCB env 兼容） | 综合工时约 12 周 | py 解析器、dataclass、store、lock、jitter、runtime、dispatch bridge、run store、skill、通知、路由 |
 
 #### SR-2.3 稳定性与开放替代（→ FEATURE_PLAN §1.3.3 F-45 Tool-call 审计、§1.3.1 F-51 空转检测、§4.1 F-48: src/ 核心路径二开修改解耦方案）
 
@@ -237,7 +237,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-1  | Orchestrator Server 运维 | `orchestrator server start/status/stop` CLI、Daemon 状态文件 | 用户可让 ClawCodex 持续值守 issue 队列并看到自身健康度 | ✅ 已完成 → F-1 | 已完成 | py daemon CLI、状态文件 |
-| AR-F-22 | Cron 驱动巡检与自治状态 | Cron 驱动(issue 巡检/报告生成/社区扫描)、Autonomy Status 汇总(cron runs/orchestrator issue/team members)、Remote Scheduled Agent、远程 cron schedule 管理、Remote Web Dashboard | 用户可定时巡检 issue、生成报告，用一个命令查看自动值守系统健康度，可通过浏览器监督无人值守任务 | 🟡 进行中 → F-22 | 综合约 4 周 | py cron runtime、status CLI、Web UI、API |
+| AR-F-22 | Cron 驱动巡检与自治状态 | Cron 驱动(issue 巡检/报告生成/社区扫描)、Autonomy Status 汇总(cron runs/orchestrator issue/team members)、Remote Scheduled Agent、远程 cron schedule 管理、Remote Web Dashboard | 用户可定时巡检 issue、生成报告，用一个命令查看自动值守系统健康度，可通过浏览器监督无人值守任务 | 🟡 进行中 → F-22（底层定时任务引擎 G1~G8+Phase A 已完成；剩余端到端接线和远程 cron schedule 管理待完成） | 综合约 4 周 | py cron runtime、status CLI、Web UI、API |
 | AR-F-7  | RemoteTrigger 远程启动与 WebUI | RemoteTrigger 入口 + 鉴权 + 审计日志、远程 server API、Web Dashboard(issue/cron/team/runs 视图 + 鉴权) | 用户可从外部系统启动工作流，在浏览器中远程监督所有任务 | 🔭 长期规划 → F-7 | 综合约 3-4 周 | py API、鉴权配置、Web UI、Docker 镜像 |
 | AR-F-26 | Away Summary 服务 | 终端失焦检测、长时间离开检测、配置 idle 阈值、`/recap` Skill | 用户离开后回来可快速知道 Agent 做了什么 | 📋 规划中 → F-26 | 1.5 周 | py service、焦点检测、skill 代码 |
 | AR-F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | OpenAI 标准接口（Chat Completions/Responses/Models）、Session 管理（CRUD+fork+chat）、异步 Runs（SSE 事件流）、Cron Job 管理、认证与安全（API KEY+CORS+密钥检测）、Agent LRU 缓存（128 上限）、客户端断连处理、SSE 流式工具事件推送 | 用户可直接了解 F-82 的完整开源参考实现；为 AR-F-7 WebUI 和远程 API 提供 Chat Completions / Session / Runs 端点设计参考 | 📋 参考实现 → F-90 | 外部项目已完整实现 | 参考文档（见 FEATURE_PLAN §7.1） |

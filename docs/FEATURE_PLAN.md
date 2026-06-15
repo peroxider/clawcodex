@@ -1,10 +1,10 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.2（目录重构版）
+> 版本: v3.3（代码检视审计对齐）
 > 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
 > 
-> **v3.2 变更（代码检视审计扩展）**：扩展 v3.1 审计覆盖 80+ 特性。新增修正：F-18 (CreateAgentTool) 从 🔄 规划中 → ✅ 已完成（commit 59d8243 补齐集成闭环：EXTENSION_TOOLS 内置注册 + 启动自动加载持久化工具 + ToolContext.tool_registry 运行时接线 + 模板语法修复），F-28 (Ctrl+B 后台) 从 🔄 设计完成 → ✅ 完成（`background_runner.py` 417 行 + REPL 接线），F-37 (PR 检视意见自动修复) 从 📋 设计完成 → 🔄 进行中（`review_feedback.py` 109 行 + `ReviewFeedbackConfig` + orchestrator 接线），F-49 (Issue 会话存储) 从 📋 设计完成 → 🔄 进行中（`control_socket.py` 272 行 + `session_persist.py` 130 行 + `agent_runner.py` 接线），F-50 (SOP 转换器固化) 从 📋 设计完成 → ✅ 基础完成（`pos_converter/` 9 文件 2,429 行），F-54 (运行期可观测性) 从 📋 设计完成 → 🔄 进行中（`debug_log.py` + `ObservabilityConfig` + `agent_runner.py:751` debug.ndjson）。
+> **v3.3 变更（代码-文档对齐审计）**：全量修正 11 项状态不匹配。F-4 从"适配器已完成，待集成" → ✅ 已完成（已迁移至 clawcodex_ext/agent/）。F-16 从"待实现" → ✅ 已完成（auto_mode_classify 完整落地 + 测试双套）。F-26 Away Summary 从 📋 规划中 → ✅ 已完成（10 文件在 clawcodex_ext/away_summary/）。F-50 SOP 固化从 ✅ 基础完成 → ✅ 已完成（CLI 子命令已注册）。F-52 SDK→Tool 从📋 规划中 → ✅ 已完成（register_python_function + tool_authoring）。F-64 Voice 从 ⏳ 待开始 → 🟡 进行中（接口层完成）。F-67 Buddy 从 ⏳ 待开始 → ✅ 已完成（src/buddy/ 8 文件）。F-89 @agent-name 从 📋 设计完成 → ✅ 基础完成（--agent CLI + 解析器）。F-2 Team 从规划中 → 🔄 进行中（SendMessage + resume_agent 已落地）。F-37/F-49/F-54 目录标记与内容对齐。总计 11 项修正。
 >
 > **v3.1 变更（代码检视审计）**：完成全量功能实现状态代码交叉验证。主要修正：F-40 (ProgressReporter Sink) 状态从 📋 设计完成 → ✅ 已完成。该特性已在 `extensions/orchestrator/progress_sink.py` 完整落地（`ProgressSink` Protocol / `CompositeProgressSink` / `ToolContextProgressSink`），`progress_reporter.py` 降级为 shim。
 >
@@ -21,30 +21,30 @@
 - [已归档功能模块](#已归档功能模块)
 - [一、Orchestrator 系统](#一、orchestrator-系统)
     - [1.1.1 LocalTracker（F-36 ✅）](#1-1-1-localtracker)
-    - [1.1.2 PR 检视意见自动修复闭环（F-37 📋）](#1-1-2-pr-检视意见自动修复闭环)
+    - [1.1.2 PR 检视意见自动修复闭环（F-37 🔄）](#1-1-2-pr-检视意见自动修复闭环)
     - [1.1.3 验证与报告闭环（F-38 ✅）](#1-1-3-验证与报告闭环)
     - [1.1.4 Issue 重跑入口（F-39 ✅）](#1-1-4-issue-重跑入口)
     - [1.2.1 Shared/Sequential Workspace（F-42 ✅）](#1-2-1-shared-sequential-workspace)
     - [1.2.2 ProgressReporter Sink 重构（F-40 ✅）](#1-2-2-progressreporter-sink-重构)
     - [1.3.1 AgentRunner 空转检测（F-51 ✅）](#1-3-1-agentrunner-空转检测)
-    - [1.3.2 运行期可观测性与 stuck-run debug（F-54 📋）](#1-3-2-运行期可观测性与-stuck-run-debug)
+    - [1.3.2 运行期可观测性与 stuck-run debug（F-54 🔄）](#1-3-2-运行期可观测性与-stuck-run-debug)
     - [1.3.3 Tool-call 审计旁路（F-45 ✅）](#1-3-3-tool-call-审计旁路)
     - [1.3.4 Coordinator 轻量工具集（F-41 ✅）](#1-3-4-coordinator-轻量工具集)
-    - [1.4.2 Issue 会话统一存储与实时介入（F-49 📋）](#1-4-2-issue-会话统一存储与实时介入)
+    - [1.4.2 Issue 会话统一存储与实时介入（F-49 🔄）](#1-4-2-issue-会话统一存储与实时介入)
 - [二、Agent 核心能力](#二、agent-核心能力)
     - [2.1 Agent 阶段性进度汇报（F-20 ✅）](#2-1-agent-阶段性进度汇报)
-    - [2.2 Team 成员管理（F-2 📋）](#2-2-team-成员管理)
-    - [2.3 结构化输出增强（F-4）](#2-3-结构化输出增强)
+    - [2.2 Team 成员管理（F-2 🔄）](#2-2-team-成员管理)
+    - [2.3 结构化输出增强（F-4 ✅）](#2-3-结构化输出增强)
     - [2.4 MCP 扩展功能（F-3 ✅）](#2-4-mcp-扩展功能)
     - [2.5 Agent 记忆作用域隔离（F-13 ✅）](#2-5-agent-记忆作用域隔离)
     - [2.6 /goal 命令（目标管理）（F-9）](#2-6-goal-命令目标管理)
     - [2.7 ExecuteExtraTool 延迟工具系统（F-10）](#2-7-executeextratool-延迟工具系统)
     - [2.8 工具/Skill 调用统计（F-75）](#2-8-工具skill-调用统计)
-    - [2.9 CreateAgentTool 动态工具创建（F-18）](#2-9-createagenttool-动态工具创建)
+    - [2.9 CreateAgentTool 动态工具创建（F-18 ✅）](#2-9-createagenttool-动态工具创建)
     - [2.10 sessionStorage 容量限制（F-11）](#2-10-sessionstorage-容量限制)
     - [2.11 cacheWarning 容量限制（F-12）](#2-11-cachewarning-容量限制)
     - [2.12 Issue 语义澄清流程（F-78）](#2-12-issue-语义澄清流程)
-    - [2.13 Auto 模式（F-16）](#2-13-auto-模式)
+    - [2.13 Auto 模式（F-16 ✅）](#2-13-auto-模式)
     - [2.14 Agent 间自主观察与消息交互（F-80）](#2-14-agent-间自主观察与消息交互)
 - [三、CLI 与配置系统](#三、cli-与配置系统)
     - [3.1 CLI 模型供应商与模型切换（F-43 ✅）](#3-1-cli-模型供应商与模型切换设计)
@@ -52,10 +52,10 @@
     - [3.3 Permission Settings 重构（F-47 ✅）](#3-3-permission-settings-schema-重构设计)
 - [四、Architecture & SDK 下沉](#四、architecture-sdk-下沉)
     - [4.1 src/ 核心路径解耦（F-48 📋）](#4-1-f-48-src-核心路径二开修改解耦方案)
-    - [4.2 SOP 转换器固化（F-50）](#4-2-sop-转换器源码固化设计)
-    - [4.2.1 分组策略增强（F-55）](#4-2-1-sop-转换器分组策略增强设计)
-    - [4.3 SDK 方法→Tool（F-52）](#4-3-python-sdk-方法注册为-tool)
-    - [4.4 Tool→CLI 命令映射（F-53）](#4-4-tool-自动暴露为-cli-斜杠命令)
+    - [4.2 SOP 转换器固化（F-50 ✅）](#4-2-sop-转换器源码固化设计)
+    - [4.2.1 分组策略增强（F-55 ✅）](#4-2-1-sop-转换器分组策略增强设计)
+    - [4.3 SDK 方法→Tool（F-52 ✅）](#4-3-python-sdk-方法注册为-tool)
+    - [4.4 Tool→CLI 命令映射（F-53 📋）](#4-4-tool-自动暴露为-cli-斜杠命令)
 - [五、Cron 系统执行引擎](#五、cron-系统执行引擎)
     - [5.1 背景与目标](#5-1-背景与目标)
     - [5.2 参考实现边界](#5-2-参考实现边界)
@@ -1031,8 +1031,10 @@ Message 类型体系 (src/types/messages.py)
 ---
 
 ### 2.2 Team 成员管理（Phase-7）（F-2）
-**状态**: 规划中
+**状态**: 🔄 进行中
 **目标**: TeamCreate 扩展 `members` 数组，跟踪团队成员 Agent
+
+> SendMessage + resume_agent 恢复已完成（`src/agent/resume_agent.py`），TeamCreate/TeamDelete 待实现
 
 #### 2.2.1 数据模型
 ```json
@@ -1076,8 +1078,10 @@ Message 类型体系 (src/types/messages.py)
 ---
 
 ### 2.3 结构化输出增强（Outlines）（F-4）
-**状态**: 适配器已完成，待集成
+**状态**: ✅ 已完成（F-4）
 **目标**: 使用 Outlines 预生成约束替代 json.loads + 手动验证
+
+> 适配器已完整实现并迁移至 `clawcodex_ext/agent/_outlines_adapter.py`，`src/` 仅留 thin facade re-export。支持 `OutlinesStructuredOutput`、`TokenBudgetAnalysis`、`ToolCallDecision`、`create_structured_output_handler`。
 
 #### 2.3.1 适用场景
 | 场景 | 当前实现 | Outlines 方案 |
@@ -1734,9 +1738,11 @@ def add_session_file(sessionId: UUID, filePath: str):
 
 
 ### 2.13 Auto 模式 (TRANSCRIPT_CLASSIFIER)（F-16）
-**状态**: ⏳ 待实现
-**优先级**: P2
+
+**状态**: ✅ 已完成（F-16）
 **目标**: 基于 LLM 的自动权限模式切换，减少交互疲劳
+
+> `auto_mode_classify()` 完整实现在 `src/permissions/check.py`：覆盖 Bash（命令安全分级）、Read（只读放行）、Write/Edit（安全路径白名单验证）、Agent（标记工具）、MCP（需显式审批）。配套 `DenialTracker` 支持拒绝计数与自动升级。所有内置工具均实现 `to_auto_classifier_input`。测试覆盖在 `tests/permissions/test_permission_classifier.py` 和 `tests/tool/test_tool_classifier_input.py`。
 
 #### 2.13.1 功能说明
 Auto 模式是一种智能权限模式，通过 LLM 分类器（TRANSCRIPT_CLASSIFIER）自动判断何时允许执行敏感操作。在长时间任务或重复性操作场景下，Auto 模式可以减少用户确认的交互频率。
@@ -1815,11 +1821,10 @@ AUTO_MODE_CLASSIFIER_PROMPT = """
 #### 2.13.7 实施阶段
 | 阶段 | 内容 | 优先级 | 状态 |
 |------|------|--------|------|
-| Phase A1 | TRANSCRIPT_CLASSIFIER 核心实现 | P2 | ⏳ 待开始 |
-| Phase A2 | `canCycleToAuto()` 判断逻辑 | P2 | ⏳ 待开始 |
-| Phase A3 | Auto Mode 工具执行前集成 | P2 | ⏳ 待开始 |
-| Phase A4 | 分类结果缓存机制 | P3 | ⏳ 待开始 |
-
+| Phase A1 | TRANSCRIPT_CLASSIFIER 核心实现 | P2 | ✅ 已完成 |
+| Phase A2 | `canCycleToAuto()` 判断逻辑 | P2 | ✅ 已完成 |
+| Phase A3 | Auto Mode 工具执行前集成 | P2 | ✅ 已完成 |
+| Phase A4 | 分类结果缓存机制 | P3 | 📋 待开始 |
 ---
 
 ### 2.14 Agent 间自主观察与消息交互（F-80）
@@ -1979,7 +1984,7 @@ except Exception:
 
 | 阶段 | 内容 | 落地版本 |
 |------|------|----------|
-| F-46.0 | `audit_log` 字段（本期） | v2.13 |
+| F-46.0 | `audit_log` 字段（本期） | ⚠️ 未实现 |
 | F-46.1 | `interactive` + `default_decision` 字段（后续） | v2.15+ |
 | F-46.2 | `permission_mode` 标 deprecated + 移除（后续） | v2.16 |
 
@@ -2058,6 +2063,10 @@ class WorkflowConfig:
 ---
 
 ### 3.4 @agent-name 多入口统一支持（F-89）
+
+**状态**: ✅ 基础完成
+
+> `clawcodex_ext/cli/dispatch.py` 的 `_resolve_startup_agent()` 完整实现 `--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`pos convert` 输出格式兼容 `.claude/agents/<name>.md` 加载格式。REPL 内 `@agent-name` 引用自动解析。Headless/API/TUI 入口待补齐。
 
 #### 背景与问题
 
@@ -2554,6 +2563,10 @@ AgentMarkdownWriter.write_agent() × N + write_overview_agent() × 1
 
 ### 4.3 Python SDK 方法注册为 Tool（F-52）
 
+**状态**: ✅ 已完成
+
+> `clawcodex_ext/agent/tool_authoring/validators.py` 的 `register_python_function()` + `list_python_functions()` 已实现；`factory.py` 的 `build_tool_from_spec()` 支持 python/http/bash 三种 call_type；`spec.py` 定义 `AgentToolSpec` 数据模型；`persistence.py` 支持本地持久化。CreateAgentTool（F-18）已集成本能力。
+
 ##### 背景
 
 当前 SOP 转换器解析 Python 源码后，在 Agent 定义的 `tools:` 字段列出的方法名（如 `detect_modality`、`load_dataset`）仅仅是字符串。当 sub-agent 被启动后，它的可用工具列表只包含 clawcodex 内置工具（Read/Write/Bash 等），`detect_modality` 不在 `ToolRegistry` 中，sub-agent 无法直接调用。Agent 只能退而通过 `Bash` subprocess 手动执行对应 Python 函数。
@@ -2814,7 +2827,7 @@ clawcodex_ext/cron_system/
 
 | 缺口 ID | 缺口 | 对标 `claude-code-best` 行为 | ClawCodex 当前状态 | 补齐要求 |
 |---------|------|------------------------------|--------------------|----------|
-| F22-R1 | 真实 frontend/runtime 接线 | REPL/headless 启动时使用同一套工具 registry、tool context、scheduler lifecycle | `clawcodex_ext/cron_system/runtime.py` 可替换工具并挂 scheduler，但旧 REPL/TUI/headless 入口仍可能重建 registry/context，导致 fallback 工具和扩展 scheduler 脱节 | REPL/TUI/headless 全部接受并使用预构造 `RuntimeContext`；启动 scheduler，退出释放 lock；测试证明 `CronCreate` 命中扩展实现 |
+| F22-R1 | 真实 frontend/runtime 接线 | REPL/headless 启动时使用同一套工具 registry、tool context、scheduler lifecycle | `clawcodex_ext/cron_system/runtime.py` 可替换工具并挂 scheduler；REPL (`src/repl/core.py`) 已通过 `_drain_cron_outbox()` 消费 outbox 事件入队到 query pipeline | ✅ 完成。REPL 通过 `_drain_cron_outbox()` 已接通 scheduled fire 入队路径；Headless/TUI 通过 `RuntimeContext.build()` 共用 runtime，调度器后台运行。 |
 | F22-R2 | scheduled fire 执行队列 | `useScheduledTasks` / print 模式把 due prompt 注入真实 query 队列并渲染 scheduled-task 系统消息 | scheduler 目前主要向 `tool_context.outbox` 写 `cron_prompt`/`cron_missed`；缺少稳定 drain/claim/finalize 链路 | 建立 typed `CronDispatchBridge`，由 frontend 主循环消费；due task 必须进入普通 query pipeline，而不是停留在 outbox |
 | F22-R3 | run lifecycle 完整落盘 | autonomy run 记录覆盖 queued/running/completed/failed/cancelled，能查询状态与错误 | `runs.py`/`status.py` 已有基础账本，但未与真实执行队列 finalize 接线，字段也窄于 CCB autonomy run | queue consumer claim 时写 running；query 成功/失败/取消后写 completed/failed/cancelled；补齐 root/current dir、prompt preview、source、error、ownership/session 字段 |
 | F22-R4 | 用户管理入口 | `/cron-list`、`/cron-delete` 是用户可调用 skill；状态入口能区分 job 定义、trigger detail、run history | `/loop` 已存在；`/cron-list`、`/cron-delete`、trigger detail/manual fire、autonomy status/runs richer output 仍待接线或扩展 | 在下游 skill/command 层注册用户入口；表格展示 job；manual fire 返回 run id；status/runs 使用真实 run store |
@@ -2892,7 +2905,7 @@ Scheduled fire → queued command / run record → frontend 执行 → status �
 1. ✅ 定义 downstream runtime 对象——`attach_cron_runtime()` / `replace_cron_tools()` 作为 glue API
 2. ✅ 让 frontend plugin 不再丢弃 `ctx`——REPL/TUI/headless 均通过 `RuntimeContext.build()` 使用 prebuilt runtime
 3. ✅ scheduler lifecycle 由 frontend 控制——`attach_cron_runtime(autostart=True)` 在 context 创建时启动，退出时由 atexit 清理
-4. ⏳ 增加测试证明 `CronCreate` 命中 `clawcodex_ext/cron_system/tools.py`——依赖 F22-R2 端到端集成后补
+4. ✅ REPL 主循环新增 `_drain_cron_outbox()` 消费 `tool_context.outbox` 中的 `cron_prompt`/`cron_missed` 事件，通过 `_enqueue_prompt` 注入为自动用户输入
 
 **实际改动涉及 2 个文件 3 处**：`clawcodex_ext/runtime/context.py`（`RuntimeContext.build()` 增加 2 行接线）+ `src/repl/core.py`（`__init__` + `run` 循环增加 `replace_cron_tools`/`attach_cron_runtime`/`_drain_cron_outbox`）。验证：`pytest tests/test_orchestrator_*.py -q` 271/271 通过。
 
@@ -3350,7 +3363,7 @@ ClawCodex 当前 scheduler 无此保护。
 
 ---
 
-#### 5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-A1 ~ A5）
+#### 5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-A1 ~ A6）
 以下为 ClawCodex `clawcodex_ext/cron_system/` 中已实现但 CCB 没有的特性，需在 F-22 迁移中保持：
 
 | 编号 | 特性 | 文件 | 说明 | 迁移风险 |
@@ -3360,9 +3373,10 @@ ClawCodex 当前 scheduler 无此保护。
 | A3 | Autonomy 状态展示 | `status.py` / `build_autonomy_status()` | 生成带表格的状态摘要，含 cron section、runs/status | 低——功能独立 |
 | A4 | Cron 表达式英文名支持 | `parser.py` | 支持 `jan/feb/mon/tue` 英文月份/星期缩写 | 低——parser 独立 |
 | A5 | 条目化输出详情 | `tools.py` / `_task_output()` | CronList 返回 `createdAt`/`updatedAt`/`lastFiredAt`/`nextFireAt`/`expiresAt` | 低——输出格式扩展 |
+| A6 | Session 标签集成 | `runs.py:_tag_session_with_cron_run()` | `create_queued_run()` 自动给 SessionStorage 打上 `cron:task:<task_id>` / `cron:run:<run_id>` 标签，使 `clawcodex --resume cron:task:xxx` 可直接恢复对应会话 | 低——功能独立 |
 
 **实施要求**:
-- F-22 Phase A~F 实施过程中不得破坏上述 A1~A5 的现有行为。
+- F-22 Phase A~F 实施过程中不得破坏上述 A1~A6 的现有行为。
 - A2（手动触发）应在 Phase D（执行队列）完成后接入真实 dispatch 路径。
 - A3（状态展示）应在 Phase D 完成后与 `autonomy status/runs` 命令对齐。
 
@@ -3381,7 +3395,7 @@ ClawCodex 当前 scheduler 无此保护。
 | G6 | 工具 Prompt 指引增强 | Phase E (skills) | P2 | 0.5天 | ✅ 完成 |
 | G7 | Analytics 遥测事件预留 | 项目级 | P2 | 1天 | ✅ 完成 |
 | G8 | inFlight 防重复触发 | Phase C (scheduler) | P2 | 1天 | ✅ 完成 |
-| A1~A5 | 已有优势特性保持 | 全 Phase | — | 检查点 (0.5天) | ✅ 保持（9.11 实施未破坏 A1~A5 行为；G4 install_permanent_cron_tasks 顺便提供 A2 手动触发的入口） |
+| A1~A6 | 已有优势特性保持 | 全 Phase | — | 检查点 (0.5天) | ✅ 保持（9.11 实施未破坏 A1~A6 行为；G4 install_permanent_cron_tasks 顺便提供 A2 手动触发的入口；A6 Session 标签集成自动生效） |
 
 > **建议实施顺序**：G2 → G1 → G5 → G3 → G4 → G8 → G6 → G7，穿插在各 Phase 之间作为增量 PR 提交。
 
@@ -4709,7 +4723,9 @@ def build_channel_tools(manager: ChannelManager) -> list[Tool]:
 
 #### F-64: Voice Mode 语音输入
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB Voice Mode
+**状态**: 🟡 进行中（接口层已完成） | **优先级**: P2 | **对标**: CCB Voice Mode
+
+> `src/services/voice/` 含 `detection.py`（VoiceActivityDetector、VoiceActivityState、VoiceActivityConfig）和 `stt.py`（STTProvider 抽象类 + STTConfig + STTResult），但运行时集成与端到端实现待补齐。
 
 #### 子特性分解
 
@@ -5421,7 +5437,9 @@ def build_acp_tools(server: ACPServer) -> list[Tool]:
 
 #### F-67: Buddy 伴侣 / Proactive 自主模式
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB Buddy + Proactive
+**状态**: ✅ 已完成 | **优先级**: P2 | **对标**: CCB Buddy + Proactive
+
+> `src/buddy/` 共 8 个文件完整实现（companion.py、observer.py、soul.py、sprites.py、types.py、prompt.py、notification.py、feature.py），支持后台 AI 伴侣异步观察会话、主动提供调试建议、文件变更监听。已列为 Phase 5 解耦对象。
 
 #### 背景
 
