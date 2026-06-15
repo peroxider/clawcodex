@@ -7,7 +7,9 @@ TUI can resume an existing session and print a resume hint on exit.
 
 from __future__ import annotations
 
+import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -188,14 +190,66 @@ def _run_tui_with_app(
     # ---- SIGTERM/SIGINT: save session + print resume hint via graceful shutdown (S-R1) ----
     _register_tui_signal_save(used_session)
 
+    # F-97: best-effort session_start. The session id is the same one
+    # the conversation persists under so the per-day aggregator can
+    # cross-link events to a known session. Failures are swallowed.
     try:
-        app.run(inline=True, inline_no_clear=True, mouse=False)
+        from clawcodex.telemetry import record_session_start
+
+        record_session_start(
+            session_id=used_session.session_id,
+            entrypoint="tui",
+            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            is_non_interactive=False,
+        )
+    except Exception:
+        pass
+
+    tui_start = time.monotonic()
+    exit_code = 0
+    try:
+        app.run()
     except KeyboardInterrupt:
-        return 130
+        exit_code = 130
+    except Exception as exc:
+        # F-97: best-effort error event with stable fingerprint.
+        # Failures are swallowed.
+        try:
+            from clawcodex.telemetry import record_error
+
+            record_error(session_id=used_session.session_id, exc=exc)
+        except Exception:
+            pass
+        raise
+    finally:
+        # F-97: best-effort session_end + command_run. Telemetry
+        # must never block the user's exit.
+        try:
+            from clawcodex.telemetry import (
+                record_command_run,
+                record_session_end,
+            )
+
+            duration_s = time.monotonic() - tui_start
+            record_session_end(
+                session_id=used_session.session_id,
+                duration_s=duration_s,
+                exit_status=exit_code,
+            )
+            record_command_run(
+                session_id=used_session.session_id,
+                command_name="tui",
+                mode="interactive",
+                success=(exit_code == 0),
+                duration_s=duration_s,
+                exit_status=exit_code,
+            )
+        except Exception:
+            pass
 
     # --- After TUI exits, print resume hint ---
     _print_resume_hint(used_session)
-    return 0
+    return exit_code
 
 
 def _register_tui_signal_save(session: Session) -> None:

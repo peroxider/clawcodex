@@ -215,9 +215,19 @@ def textual_css_overrides(palette: Palette) -> str:
     fighting ``textual.theme`` subclassing.
     """
 
+    # Textual CSS variables MUST be defined at the stylesheet *top level*,
+    # NOT inside a selector (otherwise the CSS parser rejects them).
     return f"""
-    Screen {{
-        background: {palette.background};
-        color: {palette.text};
-    }}
+$primary: {palette.primary};
+$surface: {palette.surface};
+$text: {palette.text};
+$text-muted: {palette.text_muted};
+$border: {palette.border};
+$warning: {palette.warning};
+$success: {palette.success};
+$error: {palette.error};
+Screen {{
+    background: {palette.background};
+    color: {palette.text};
+}}
     """

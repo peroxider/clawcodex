@@ -235,7 +235,11 @@ class AssistantTextMessage(BaseRow):
         """
 
         text = self._final_text if self._finalised else self.streaming_text
-        header = Text((self._agent_name or "assistant") + "\n", style="bold #c58af9")
+        try:
+            color = self.app.palette.assistant
+        except Exception:
+            color = "#c58af9"
+        header = Text((self._agent_name or "assistant") + "\n", style=f"bold {color}")
         if not (text or "").strip():
             return header
         cache = get_markdown_cache()

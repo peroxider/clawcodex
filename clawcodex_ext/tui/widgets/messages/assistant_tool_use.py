@@ -100,11 +100,18 @@ class AssistantToolUseMessage(BaseRow):
 
     def snapshot(self) -> Text:
         """Return a Rich :class:`Text` for post-exit scrollback dump."""
-
+        try:
+            tool_color = self.app.palette.tool
+            success_color = self.app.palette.success
+            error_color = self.app.palette.error
+        except Exception:
+            tool_color = "#f5c451"
+            success_color = "#7ee787"
+            error_color = "#ff7b72"
         glyph_color = {
-            "done": "bold green",
-            "error": "bold red",
-        }.get(self.status, "bold #f5c451")
+            "done": f"bold {success_color}",
+            "error": f"bold {error_color}",
+        }.get(self.status, f"bold {tool_color}")
         return Text(str(self._header_text()), style=glyph_color)
 
     def _header_widget(self) -> RowHeader | None:

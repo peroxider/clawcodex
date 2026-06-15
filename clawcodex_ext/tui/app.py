@@ -173,6 +173,10 @@ class ClawCodexTUI(App):
         # per turn and auto-rotates past ``max_entries``.
         self.history_store = HistoryStore()
         self._theme_name = (theme_name or self._resolve_theme_name())
+        # Index into ``self.stylesheet._sources`` for the theme CSS
+        # overrides.  Tracked so ``apply_theme`` can *replace* the
+        # source instead of stacking duplicates.
+        self._theme_source_idx: int | None = None
         # Screen-reader announcer. The :class:`LiveRegion` widget is
         # bound in :meth:`on_mount` once the REPL screen is composed.
         self.announcer = Announcer(self)
@@ -243,10 +247,8 @@ class ClawCodexTUI(App):
         # the chrome picks up the correct background / foreground even
         # when Textual's internal theme doesn't cover every slot.
         try:
-            self.stylesheet.add_source(
-                textual_css_overrides(self.palette),
-                path="palette-overrides",
-            )
+            self._theme_source_idx = len(self.stylesheet._sources)
+            self.stylesheet.add_source(textual_css_overrides(self.palette))
             self.stylesheet.parse()
         except Exception:
             pass
@@ -1050,13 +1052,26 @@ class ClawCodexTUI(App):
 
         self.palette = get_palette(name)
         self._theme_name = name
+        # Persist the user's theme choice to global config so it
+        # survives TUI restarts.
         try:
-            self.stylesheet.add_source(
-                textual_css_overrides(self.palette),
-                path="palette-overrides",
-            )
+            from src.config import set_theme
+
+            set_theme(name)
+        except ImportError:
+            pass
+        try:
+            new_css = textual_css_overrides(self.palette)
+            if (
+                self._theme_source_idx is not None
+                and self._theme_source_idx < len(self.stylesheet._sources)
+            ):
+                self.stylesheet._sources[self._theme_source_idx] = (new_css, None)
+            else:
+                self._theme_source_idx = len(self.stylesheet._sources)
+                self.stylesheet.add_source(new_css)
             self.stylesheet.parse()
-            self.refresh(layout=True)
+            self.refresh_css()
         except Exception:
             pass
         if transcript is not None:

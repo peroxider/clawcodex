@@ -85,25 +85,43 @@ class StartupHeader(Static):
         display_path = _display_cwd(self._workspace_root)
         width = self._width_hint or 80
         content_width = max(28, min(width - 12, 72))
+        # Use palette colors when available, fall back to hardcoded defaults
+        try:
+            palette = self.app.palette
+            muted = palette.text_muted
+            text = palette.text
+            primary = palette.primary
+            secondary = palette.secondary
+            success = palette.success
+            info = palette.info
+            border = palette.border
+        except Exception:
+            muted = "#9a9a9a"
+            text = "#e6e6e6"
+            primary = "#8ab4f8"
+            secondary = "#c58af9"
+            success = "#7ee787"
+            info = "#79c0ff"
+            border = "#2a2a33"
         table = Table.grid(padding=(0, 1))
-        table.add_column(style="bright_black", justify="right", no_wrap=True)
-        table.add_column(style="white", ratio=1)
+        table.add_column(style=muted, justify="right", no_wrap=True)
+        table.add_column(style=text, ratio=1)
         table.add_row(
             "Version",
             Text.assemble(
-                ("ClawCodex", "bold white"),
+                ("ClawCodex", f"bold {text}"),
                 ("  ", ""),
-                (f"v{self._version}", "bold cyan"),
+                (f"v{self._version}", f"bold {info}"),
             ),
         )
-        table.add_row("Model", Text(self._model or "unknown", style="bold magenta"))
+        table.add_row("Model", Text(self._model or "unknown", style=f"bold {secondary}"))
         table.add_row(
             "Provider",
-            Text(f"{self._provider.upper()} Provider", style="bold green"),
+            Text(f"{self._provider.upper()} Provider", style=f"bold {success}"),
         )
         table.add_row(
             "Workspace",
-            Text(_truncate_middle(display_path, content_width - 12), style="bold blue"),
+            Text(_truncate_middle(display_path, content_width - 12), style=f"bold {primary}"),
         )
 
         footer = Text(self._slash_hints, style="dim")
@@ -114,8 +132,8 @@ class StartupHeader(Static):
         )
         return Panel(
             body,
-            border_style="bright_black",
-            title="[bold bright_cyan] CLAWCODEX [/bold bright_cyan]",
+            border_style=border,
+            title=f"[bold {primary}] CLAWCODEX [/bold {primary}]",
             subtitle="[dim]interactive terminal[/dim]",
             padding=(0, 2),
         )
