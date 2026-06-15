@@ -306,6 +306,7 @@ import json
 import threading
 import time
 from collections import deque
+from datetime import datetime
 from typing import Any
 
 from src.agent import Session
@@ -348,6 +349,20 @@ except ImportError:
     _HAS_CRON = False
     attach_cron_runtime = None  # type: ignore[assignment]
     replace_cron_tools = None  # type: ignore[assignment]
+
+_CRON_WAKE = object()
+
+_CRON_PROMPT_PRELUDE = "This prompt was generated automatically from a scheduled task."
+
+
+def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
+    """Wrap a cron prompt with context so the LLM knows it's automated."""
+    now = datetime.now()
+    time_str = now.strftime("%b %d %-I:%M%p").lower()
+    header = f"✻ Running scheduled task ({time_str})"
+    if task_id:
+        header += f" · {task_id}"
+    return f"{header}\n\n{_CRON_PROMPT_PRELUDE}\n\n---\n\n{prompt}"
 
 try:
     from prompt_toolkit.patch_stdout import patch_stdout as _pt_patch_stdout
@@ -2037,12 +2052,50 @@ class ClawcodexREPL:
                 continue
             self.console.print(text)
 
+    async def _prompt_with_cron_watch(self) -> str | None:
+        """Run prompt_async with a concurrent outbox watcher.
+
+        The watcher runs in the same event loop and checks for cron events
+        every 1 second. When events are found, it calls app.exit(_CRON_WAKE)
+        from within the event loop, avoiding cross-thread issues.
+
+        The watcher runs in the same event loop as the prompt, calls
+        app.exit() from within the loop — no cross-thread issues, no
+        exception propagation issues.
+        """
+        app = self.prompt_session.app
+
+        async def _watch_outbox():
+            """Watch for cron events and wake the prompt when found."""
+            while True:
+                await asyncio.sleep(1.0)
+                outbox = getattr(self.tool_context, "outbox", None)
+                if outbox and getattr(app, "future", None) is not None:
+                    app.exit(result=_CRON_WAKE)
+                    return
+
+        watch_task = asyncio.ensure_future(_watch_outbox())
+        try:
+            return await self.prompt_session.prompt_async("❯ ")
+        finally:
+            watch_task.cancel()
+            try:
+                await watch_task
+            except asyncio.CancelledError:
+                pass
+
     def _drain_cron_outbox(self) -> None:
         """Drain ``cron_prompt`` / ``cron_missed`` events from the
         tool context outbox and enqueue them as user-submitted prompts.
 
         Called every iteration in ``run()`` before the normal prompt check,
         so a background cron firing is injected as if the user typed it.
+
+        Cron prompts are wrapped with a context prelude so the LLM
+        understands this is an automated scheduled task execution,
+        not a new user request. This prevents the LLM from asking
+        clarifying questions (e.g. "when should I remind you?")
+        instead of directly executing the prompt.
         """
         if not _HAS_CRON:
             return
@@ -2056,8 +2109,9 @@ class ClawcodexREPL:
                 etype = entry.get("type", "")
                 if etype == "cron_prompt":
                     prompt = (entry.get("prompt") or "").strip()
+                    task_id = entry.get("task_id", "")
                     if prompt:
-                        drained.append(prompt)
+                        drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
                 elif etype == "cron_missed":
                     notification = (entry.get("notification") or "").strip()
                     if notification:
@@ -2684,6 +2738,23 @@ class ClawcodexREPL:
         if resumed and self.session.conversation.messages:
             self._replay_resume_history()
 
+        # Phase B-2 wake: spin up a long-lived asyncio loop on the
+        # main thread so the in-loop cron watcher can call app.exit()
+        # from within the event loop. The loop is closed on exit.
+        self._cron_loop = asyncio.new_event_loop()
+        try:
+            self._run_main_loop()
+        finally:
+            try:
+                self._cron_loop.close()
+            except Exception:
+                pass
+
+    def _run_main_loop(self) -> None:
+        """Inner body of the REPL main loop. Extracted so we can
+        own the asyncio event loop lifecycle cleanly in ``run``."""
+        import asyncio
+
         while True:
             try:
                 self._refresh_completer()
@@ -2695,7 +2766,13 @@ class ClawcodexREPL:
                     # they read as a discrete user-message block when
                     # they land in scrollback alongside the agent's
                     # transcript output.
-                    self._echo_user_input(queued)
+                    # For cron prompts, only display the header line (first line)
+                    # to avoid showing the prelude text to the user.
+                    if queued.startswith("✻ Running scheduled task"):
+                        first_line = queued.split("\n")[0]
+                        self._echo_user_input(first_line)
+                    else:
+                        self._echo_user_input(queued)
                     user_input = queued
                 else:
                     # Blank line of breathing room between the previous
@@ -2711,8 +2788,22 @@ class ClawcodexREPL:
                     if getattr(self, '_api_key_missing', False):
                         user_input = input('❯ ')
                     else:
+                        # Phase B-2 wake: run prompt_async with a
+                        # concurrent outbox watcher in the same event loop.
+                        # The watcher checks for cron events every 1 second
+                        # and calls app.exit(_CRON_WAKE) from within the loop
+                        # when events are found. This avoids all cross-thread
+                        # issues.
                         with _pt_patch_stdout(raw=True):
-                            user_input = self.prompt_session.prompt('❯ ')
+                            self._current_prompt_task = self._cron_loop.create_task(
+                                self._prompt_with_cron_watch()
+                            )
+                            try:
+                                user_input = self._cron_loop.run_until_complete(
+                                    self._current_prompt_task
+                                )
+                            finally:
+                                self._current_prompt_task = None
 
                 if user_input is None:
                     # app.exit() was called (e.g., Ctrl+B)
@@ -2724,6 +2815,12 @@ class ClawcodexREPL:
                     self.console.print("\n[blue]Goodbye![/blue]")
                     break
 
+                if user_input is _CRON_WAKE:
+                    # app.exit(_CRON_WAKE) returned normally.
+                    # Drain the outbox and re-prompt.
+                    self._drain_cron_outbox()
+                    continue
+
                 if not user_input.strip():
                     continue
 
@@ -2733,6 +2830,12 @@ class ClawcodexREPL:
 
                 self.chat(user_input)
 
+            except asyncio.CancelledError:
+                # Safety net: app.exit() returns normally, so this path
+                # should rarely be hit. Kept for edge cases (e.g. external
+                # cancellation, prompt_toolkit internals).
+                self._drain_cron_outbox()
+                continue
             except KeyboardInterrupt:
                 try:
                     self.session.save()

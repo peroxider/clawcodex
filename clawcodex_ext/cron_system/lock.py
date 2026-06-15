@@ -175,6 +175,16 @@ class CronTaskLock:
     def path(self) -> Path:
         return self.workspace_root / self.lock_relative_path
 
+    @property
+    def is_acquired(self) -> bool:
+        """True iff ``acquire()`` has succeeded and ``release()`` has not
+        since run. Used by the scheduler to gate session-task firing
+        (Phase B-2): only the process currently holding the scheduler
+        lock may fire durable=False tasks, since the session_store is
+        process-local.
+        """
+        return self.acquired
+
     def acquire(self) -> bool:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {

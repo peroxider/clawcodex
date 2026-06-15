@@ -18,7 +18,6 @@ from typing import Optional
 
 from ..bundled_skills import BundledSkillDefinition, register_bundled_skill
 
-
 # Cron-tool name constants. The Python tool registry exposes
 # ``CronCreate`` / ``CronDelete`` (see ``src.tool_system.tools.cron``)
 # which is the same naming the prompt body references.
@@ -98,15 +97,50 @@ def _parse_trailing_every_clause(text: str) -> tuple[str, str] | None:
     return m.group(1).strip(), interval
 
 
+_CHINESE_UNIT_MAP = {
+    "秒": "s",
+    "秒钟": "s",
+    "分": "m",
+    "分钟": "m",
+    "时": "h",
+    "小时": "h",
+    "天": "d",
+    "日": "d",
+}
+
+_CHINESE_INTERVAL_RE = re.compile(r"每(?:隔)?\s*(\d+)?\s*(秒钟?|分钟?|小时?|天|日)")
+
+
+def _parse_chinese_interval(text: str) -> tuple[str, str] | None:
+    """Extract interval from Chinese text like ``每隔1分钟提醒我...``.
+
+    Supports both ``每N<unit>`` and ``每<unit>`` (defaults to 1).
+    Returns ``(remaining_prompt, canonical_interval)`` or None.
+    """
+    m = _CHINESE_INTERVAL_RE.search(text)
+    if not m:
+        return None
+    raw_num = m.group(1)
+    value = int(raw_num, 10) if raw_num else 1
+    if value < 1:
+        return None
+    unit = _CHINESE_UNIT_MAP.get(m.group(2))
+    if unit is None:
+        return None
+    remaining = (text[: m.start()] + text[m.end() :]).strip()
+    return remaining, f"{value}{unit}"
+
+
 def parse_loop_args(args: str) -> ParsedLoopArgs:
-    """Port of TS ``parseLoopArgs``.
+    """Port of TS ``parseLoopArgs`` with Chinese interval support.
 
     Routing:
-    - empty args                   → ``dynamic-maintenance``
-    - bare interval (``5m``)       → ``fixed-maintenance``
-    - ``<interval> <prompt>``      → ``fixed-prompt``
-    - ``<prompt> every <interval>`` → ``fixed-prompt``
-    - anything else                → ``fixed-prompt`` with a 10m default
+    - empty args                              → ``dynamic-maintenance``
+    - bare interval (``5m``)                  → ``fixed-maintenance``
+    - ``<interval> <prompt>``                 → ``fixed-prompt``
+    - ``<prompt> every <interval>``           → ``fixed-prompt``
+    - Chinese ``每(隔)N<unit>...``            → ``fixed-prompt`` / ``fixed-maintenance``
+    - anything else                           → ``fixed-prompt`` with a 10m default
     """
     trimmed = args.strip()
     if not trimmed:
@@ -128,6 +162,13 @@ def parse_loop_args(args: str) -> ParsedLoopArgs:
     trailing = _parse_trailing_every_clause(trimmed)
     if trailing:
         prompt, interval = trailing
+        if not prompt:
+            return ParsedLoopArgs(mode="fixed-maintenance", interval=interval)
+        return ParsedLoopArgs(mode="fixed-prompt", interval=interval, prompt=prompt)
+
+    chinese = _parse_chinese_interval(trimmed)
+    if chinese:
+        prompt, interval = chinese
         if not prompt:
             return ParsedLoopArgs(mode="fixed-maintenance", interval=interval)
         return ParsedLoopArgs(mode="fixed-prompt", interval=interval, prompt=prompt)
@@ -162,7 +203,10 @@ def _build_fixed_prompt(parsed: ParsedLoopArgs) -> str:
         "\n"
         "The user invoked /loop with a fixed interval.\n"
         "\n"
-        f"Requested interval: {parsed.interval}\n"
+        f"Requested interval: **{parsed.interval}**\n"
+        "\n"
+        "IMPORTANT: Use the parsed interval above exactly as given. "
+        "Do NOT infer or substitute a different interval from the prompt text.\n"
         "\n"
         f"{target_instructions}\n"
         "## Instructions\n"

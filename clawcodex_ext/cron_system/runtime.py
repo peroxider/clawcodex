@@ -16,7 +16,9 @@ _CRON_TOOL_NAMES = {"croncreate", "crondelete", "cronlist"}
 
 
 def replace_cron_tools(registry: Any) -> None:
-    registry._tools = [tool for tool in registry._tools if tool.name.lower() not in _CRON_TOOL_NAMES]
+    registry._tools = [
+        tool for tool in registry._tools if tool.name.lower() not in _CRON_TOOL_NAMES
+    ]
     for name in list(registry._by_name.keys()):
         tool = registry._by_name[name]
         if tool.name.lower() in _CRON_TOOL_NAMES:
@@ -83,6 +85,12 @@ def attach_cron_runtime(
     # (if present) lets REPL callers inject a GrowthBook-style remote source.
     config_loader = getattr(ctx, "cron_jitter_config", None)
 
+    # Phase A-3: pass the in-memory session store to the scheduler so
+    # durable=False tasks are also discoverable. ``ctx.crons`` is set
+    # upstream by ToolContext; it is None for contexts that never hold
+    # session-only tasks (e.g. headless ``-p`` one-shot runs).
+    session_store = getattr(ctx, "crons", None)
+
     scheduler = CronScheduler(
         ctx.workspace_root,
         on_fire=on_fire,
@@ -93,6 +101,7 @@ def attach_cron_runtime(
         on_fire_event=_log_event,
         on_missed_event=_log_event,
         on_expired_event=_log_event,
+        session_store=session_store,
     )
     setattr(ctx, "cron_scheduler", scheduler)
     setattr(ctx, "cron_jitter_config", lambda: load_jitter_config(ctx.workspace_root))
