@@ -3792,6 +3792,11 @@ class ClawcodexREPL:
                             self._active_live_status = None
                 if direct_response is not None:
                     self.console.print("\n")
+                    # Per-turn save: persist JSONL transcript only (lightweight).
+                    try:
+                        self.session.save_transcript()
+                    except Exception:
+                        pass
                     return
                 # User pressed ESC/Ctrl+C during direct stream — skip the
                 # engine path entirely instead of falling through.
@@ -4182,6 +4187,12 @@ class ClawcodexREPL:
             if not last_text_was_printed and response_text:
                 self.console.print(Markdown(response_text))
             self.console.print()
+
+            # Per-turn save: persist JSONL transcript only (lightweight).
+            try:
+                self.session.save_transcript()
+            except Exception:
+                pass
 
             # If Ctrl+B was pressed during the engine run, raise
             # BackgroundEscape *after* the LiveStatus is torn down

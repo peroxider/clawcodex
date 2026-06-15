@@ -397,6 +397,12 @@ class AgentBridge:
                 ),
                 num_turns=compat_result.num_turns,
             )
+
+            # Per-turn save: persist JSONL transcript only (lightweight).
+            try:
+                self._session.save_transcript()
+            except Exception:
+                pass
         except AbortError:
             self._post(
                 AgentRunFinished(

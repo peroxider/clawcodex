@@ -94,6 +94,24 @@ class Session:
         except ImportError:
             pass
 
+    def save_transcript(self):
+        """Lightweight per-turn save: JSONL transcript only.
+
+        Skips the full JSON snapshot (``self.save()`` writes that) so
+        each call costs O(new messages) rather than O(conversation size).
+        The full snapshot with cost block is written once at session exit
+        via ``save()``.
+
+        ``--resume`` can reconstruct the conversation from the JSONL
+        transcript alone (via ``SessionStorage.read_messages()``), so
+        intermediate snapshots are unnecessary for correctness.
+        """
+        try:
+            from extensions.agent.session_persist import save_to_session_storage
+            save_to_session_storage(self)
+        except ImportError:
+            pass
+
     @classmethod
     def load(cls, session_id: str) -> Optional['Session']:
         """Load session from disk."""
