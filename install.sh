@@ -15,7 +15,8 @@
 #  Usage:
 #     ./install.sh                # install
 #     ./install.sh --uninstall    # remove everything this script created
-#     ./install.sh --help
+#     ./install.sh --help         # English help
+#     ./install.sh --help-zh      # 中文使用说明
 # ----------------------------------------------------------------------------
 set -euo pipefail
 
@@ -539,7 +540,8 @@ OPTIONS
                            Use for non-interactive / CI / Docker installs.
                            You can configure later by running 'clawcodex-dev'.
     --uninstall, -u        Remove everything this installer created.
-    --help, -h             Show this help.
+    --help, -h             Show this help (English).
+    --help-zh              Show help in Chinese (中文帮助).
     --version, -v          Print installer version.
 
 DEFAULTS
@@ -565,6 +567,61 @@ NOTES
     - On Windows, run from Git Bash or WSL. Native cmd / PowerShell is not
       supported by this shell script.
     - All flags can be combined: e.g.
+        $0 --ref v0.5.0 --install-dir /opt/clawcodex --config-dir /var/lib/clawcodex --no-venv --no-setup
+EOF
+}
+
+print_help_zh() {
+    cat <<EOF
+clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VERSION})
+
+用法
+    $0 [选项]
+
+选项
+    --ref <引用>           覆盖要安装的 git 引用（commit SHA、tag 或分支）。
+                           默认：${REPO_REF}（由 CLAWCODEX_VERSION 推导得出）。
+                           常用于 bisect 时精确锁定 commit，或测试未发布代码。
+    --install-dir <路径>   覆盖项目克隆和 venv 所在的位置。
+                           默认：${DEFAULT_INSTALL_DIR}
+    --config-dir <路径>    覆盖运行时配置目录（会话、鉴权、历史记录）。
+                           默认：${DEFAULT_CONFIG_DIR}
+                           通过 wrapper 脚本注入的 CLAWCODEX_CONFIG_DIR
+                           环境变量暴露给 clawcodex-dev。
+    --no-venv              跳过虚拟环境的创建。依赖直接安装到当前系统
+                           Python（使用 'uv pip install --system'）。适用
+                           于 Docker 镜像、发行版自带 Python、或任何 venv
+                           多余的环境。
+    --no-setup             跳过安装后的交互式配置向导。适用于非交互 / CI
+                           / Docker 场景。之后可随时手动运行
+                           'clawcodex-dev' 进行配置。
+    --uninstall, -u        卸载：移除本脚本创建的所有内容。
+    --help, -h             显示英文版帮助。
+    --help-zh              显示本中文版帮助。
+    --version, -v          打印安装脚本版本。
+
+默认值
+    仓库地址   ：${REPO_URL}
+    Git 引用  ：${REPO_REF}  （用 --ref 覆盖）
+    安装路径  ：${DEFAULT_INSTALL_DIR}  （用 --install-dir 覆盖）
+    配置路径  ：${DEFAULT_CONFIG_DIR}  （用 --config-dir 覆盖）
+    Python    ：>= ${PYTHON_MIN_VERSION}  （缺失时由 uv 自动提供）
+    工具链    ：uv（Astral 的包管理器——用户级安装，无需 sudo）
+
+版本控制
+    本 install.sh 与 clawcodex 的某个发布版本一一对应。CLAWCODEX_VERSION
+    和 REPO_REF 是版本钉子；对应的 uv.lock 把所有传递依赖一并锁定。要
+    安装不同版本的 clawcodex，请下载该发布版自带的 install.sh——不要
+    单独修改这些常量，因为真正钉住依赖版本的是 lock 文件。--ref 标志
+    是用于测试特定 commit 的有意保留的逃生口，**不能**替代正规打 tag
+    的安装脚本。
+
+注意事项
+    - 重复运行本脚本是安全的：已存在的仓库会 fast-forward，已存在的
+      venv 会复用，命令 wrapper 会重新生成。
+    - 在 Windows 上请从 Git Bash 或 WSL 运行；本 shell 脚本不支持
+      原生 cmd / PowerShell。
+    - 所有选项可组合使用，例如：
         $0 --ref v0.5.0 --install-dir /opt/clawcodex --config-dir /var/lib/clawcodex --no-venv --no-setup
 EOF
 }
@@ -658,6 +715,8 @@ parse_args() {
                 uninstall; exit 0 ;;
             --help|-h)
                 print_help; exit 0 ;;
+            --help-zh)
+                print_help_zh; exit 0 ;;
             --version|-v)
                 echo "install.sh v${INSTALLER_VERSION} (installs clawcodex v${CLAWCODEX_VERSION})"
                 exit 0 ;;
