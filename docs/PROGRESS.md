@@ -152,7 +152,7 @@
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
-| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第一期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + Issue 上报（Issue 上报推迟到二期） |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 已完成第二期 | `clawcodex/telemetry` 独立包，本地聚合 + GitHub/Gitee/GitCode Issue 上报 |
 
 ---
 
@@ -1491,7 +1491,7 @@ AgentRunner._run_iteration()
 
 ## F-97: 独立遥测系统（Issue-based Telemetry）
 
-**状态**: ✅ 第一期实现完成（A~E + G） | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
+**状态**: ✅ 第二期实现完成（A~H） | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
 
 ### 目标
 
@@ -1507,7 +1507,7 @@ AgentRunner._run_iteration()
 | 实际埋点覆盖 | ✅ 已扩展 | F-97 覆盖 CLI/REPL/TUI/headless/orchestrator 入口埋点 |
 | 每日使用统计 | ✅ 已实现 | `DailyAggregator` 输出 sessions/commands/exit_status/platforms/providers/crashes |
 | 崩溃去重与上报 | ✅ 已实现 | 全局 excepthook + 16 字符 fingerprint + `crashes/` JSONL |
-| 远端遥测通道 | ⏳ 二期 | IssueReporter 推迟到下一轮；本期仅 LocalFileReporter + DryRunReporter |
+| 远端遥测通道 | ✅ 已实现 | `IssueReporter` 支持 GitHub/Gitee/GitCode create/update/find、日期块更新、cursor 去重与失败本地记录 |
 
 ### 实施进度
 
@@ -1518,25 +1518,25 @@ AgentRunner._run_iteration()
 | F-97-C | 实现 redaction 与 error fingerprint，并覆盖 secret/path/prompt/output 过滤测试 | ✅ 已完成 |
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成 |
 | F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成 |
-| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ⏳ 推迟到二期（本期仅 LocalFileReporter + DryRunReporter） |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（status / preview / flush / enable / disable） |
-| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | ✅ 已完成（单元测试 + stability gate，Issue 上报部分推迟） |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（GitHub/Gitee/GitCode issue reporter + RepositoryIssueClient 复用） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（status / preview / flush / enable / disable，status/enable 已隐藏 API key） |
+| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | ✅ 已完成（telemetry 单测、repo tracker 单测、stability gate、独立 verification PASS） |
 
 ### 验收标准
 
 - ✅ 默认配置下不采集、不上报；启用 `telemetry.enabled=true` 后仅写本地事件。
 - ✅ 启用本地 telemetry 后，连续运行 CLI/REPL/headless 能生成 daily summary，包含每日执行次数和会话次数。
 - ✅ 人为触发异常后，本地 crash summary 包含稳定 fingerprint，同类错误能聚合计数。
-- ⏳ 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue（二期）。
-- ✅ reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript（DryRun 渲染时过 `scan_secrets` 命中即拒）。
-- ✅ 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
-- ✅ 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重（54 个单测全过）。
+- ✅ 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
+- ✅ reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript；上报前 `scan_secrets` 命中即拒绝 HTTP 调用。
+- ✅ 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log，且不保存原始 rendered body。
+- ✅ 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重与 GitHub/Gitee/GitCode issue client 编码（telemetry 71 个单测、repo tracker 56 个单测、stability gate 171 个测试全过）。
 
 ### 风险与约束
 
 - 遥测必须默认关闭，远端 Issue 上报也必须单独显式启用。
 - 高频事件不得逐条写远端 Issue，只能先本地聚合，再低频上报 daily summary。
-- Issue 平台 API 差异会影响 create/update/find-by-title 行为，需要分别适配 GitHub/Gitee/GitCode（二期）。
+- Issue 平台 API 差异会影响 create/update/find-by-title 行为；第二期已在 `RepositoryIssueClient` 中适配 GitHub JSON/Bearer 与 Gitee/GitCode form + `access_token` query。
 - 现有 `src/services/analytics/` 不应立即删除；首期通过 adapter 兼容，避免破坏 image/pdf 现有埋点。
 - 隐私边界是验收标准的一部分，redaction 失败时必须拒绝上报，而不是 best-effort 上传。
 
@@ -1545,7 +1545,7 @@ AgentRunner._run_iteration()
 | 特性/模块 | 关系 | 说明 |
 |-----------|------|------|
 | `src/services/analytics/` | 可选事件来源 | 现有 analytics sink 可后续桥接到 telemetry recorder |
-| RepositoryIssueClient | 设计参考 | 可复用 GitHub/Gitee/GitCode 鉴权与 HTTP 映射思路，但 F-97 不依赖 orchestrator 运行时 |
+| RepositoryIssueClient | 已复用 | `IssueReporter` 复用其 GitHub/Gitee/GitCode 鉴权与 HTTP 映射；遥测侧只负责渲染、隐私 gate、cursor 与失败记录 |
 | F-54 运行期可观测性 | 职责边界 | F-54 关注单次 agent run debug，F-97 关注用户侧低频聚合遥测 |
 | F-65 Langfuse 可观测性 | 职责边界 | F-65 面向 tracing/训练数据集，F-97 面向产品使用统计和崩溃摘要 |
 

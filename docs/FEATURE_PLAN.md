@@ -7811,7 +7811,7 @@ AgentRunner._run_iteration()
 
 ## 九、独立遥测系统（F-97）
 
-**状态**: 📋 设计完成 | **优先级**: P1 | **类型**: 新特性 | **目标路径**: `clawcodex/telemetry/`
+**状态**: ✅ 第二期实现完成 | **优先级**: P1 | **类型**: 新特性 | **目标路径**: `clawcodex/telemetry/`
 
 ### 9.1 背景与目标
 
@@ -7835,11 +7835,11 @@ F-97 的目标是新增一个与 orchestrator、visualizer、现有 analytics �
 | 本地事件模型 | ✅ 已有 | `EventType` / `AnalyticsEvent` / `log_event()` 已存在 |
 | Sink 抽象 | ✅ 已有 | `NullSink` / `ConsoleSink` / `FileSink`，默认 `NullSink` |
 | Session metadata | ✅ 基础已有 | OS、Python、IDE、model、resume/non-interactive 等字段 |
-| 实际埋点覆盖 | ⚠️ 局部 | 主要集中在 image/pdf 处理等局部路径 |
-| 每日使用统计 | ❌ 缺失 | 无 daily aggregation 和跨会话指标 |
-| 崩溃上报 | ❌ 缺失 | 无全局 exception hook、fingerprint、去重 |
-| 远端上报 | ❌ 缺失 | 无 telemetry backend，也无 create issue reporter |
-| Issue 创建能力 | ❌ 缺失 | repository tracker 已有 comment/update issue，但未形成通用 create issue API |
+| 实际埋点覆盖 | ✅ 已扩展 | 覆盖 CLI/REPL/TUI/headless/orchestrator 入口 session 与 command_run 最小埋点 |
+| 每日使用统计 | ✅ 已实现 | `DailyAggregator` 输出 sessions/commands/exit_status/platforms/providers/crashes |
+| 崩溃上报 | ✅ 已实现 | 全局 exception hook、asyncio exception handler、稳定 fingerprint 与 `crashes/` JSONL |
+| 远端上报 | ✅ 已实现 | opt-in `IssueReporter` 支持 GitHub/Gitee/GitCode issue create/update/find |
+| Issue 创建能力 | ✅ 已实现 | `RepositoryIssueClient` 提供 `create_issue` / `update_issue_body` / `find_issue_by_title`，复用平台鉴权与 HTTP 映射 |
 
 F-97 不直接替换现有 `src/services/analytics/`。短期策略是把现有 analytics 视为低层事件来源之一，由 telemetry adapter 可选消费；长期可将 analytics sink 收敛为 telemetry recorder 的兼容入口。
 
@@ -7949,14 +7949,15 @@ include_outputs = false
 
 Issue reporter 行为：
 
-1. 读取本地 `summaries/YYYY-MM-DD.json`。
+1. `flush()` 强制重新聚合当天数据，避免上传 stale summary。
 2. 将 daily summary 渲染为 markdown，包含版本、平台、入口、会话数、命令数、错误 fingerprint top N。
-3. 根据配置选择上报模式：
-   - `update_or_create`：维护一个长期 telemetry inbox issue，按日期追加或更新折叠块。
-   - `create_daily`：每天创建一个 `Telemetry YYYY-MM-DD` issue。
-   - `local_file`：只生成 markdown 文件，不访问网络。
-4. 上报成功后记录 reporter cursor，避免重复刷屏。
-5. 上报失败不影响主流程，只记录本地 `reporter_errors.jsonl`。
+3. 上报前执行 `redactor.scan_secrets(rendered)`；命中疑似 secret 时拒绝 HTTP 调用，只写本地失败记录。
+4. 根据配置选择上报模式：
+   - `update_or_create`：维护一个长期 telemetry inbox issue，按日期 marker 替换或追加块。
+   - `create_daily`：每天创建或更新一个带日期后缀的 issue。
+   - `local_file`：由 `LocalFileReporter` 处理，只生成 markdown 文件，不访问网络。
+5. 上报成功后记录 reporter cursor，避免同一日期、同一内容、同一目标配置重复刷屏。
+6. 上报失败不影响主流程，只记录本地 `reporter_errors` JSONL，且不保存原始 rendered body。
 
 Issue 正文示例：
 
@@ -7982,8 +7983,8 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 与现有 tracker 的关系：
 
-- F-97 可复用 `extensions/orchestrator/repo_tracker/client.py` 的平台鉴权与 HTTP 映射思路，但不直接依赖 orchestrator 运行时。
-- 首期可在 telemetry reporter 内实现轻量 `create_issue` / `update_issue_body` / `find_issue_by_title`，后续再抽公共 repository client。
+- F-97 复用 `extensions/orchestrator/repo_tracker/client.py::RepositoryIssueClient` 的平台鉴权与 HTTP 映射；telemetry 不依赖 orchestrator daemon 运行时。
+- `RepositoryIssueClient` 已提供 `create_issue` / `update_issue_body` / `find_issue_by_title`，GitHub 使用 JSON + Bearer，Gitee/GitCode 使用 form body + `access_token` query。
 - LocalTracker 只用于测试和离线模拟，不作为产品遥测远端。
 
 ### 9.6 实施阶段与验收标准
@@ -7995,9 +7996,9 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 | F-97-C | 实现 redaction 与 error fingerprint，补全单元测试 | ✅ 已完成（2026-06） |
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成（2026-06） |
 | F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成（2026-06） |
-| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ⏳ 推迟到二期（本期仅 LocalFileReporter + DryRunReporter） |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06） |
-| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；Issue 上报部分二期再补 E2E） |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（2026-06；GitHub/Gitee/GitCode issue reporter + cursor dedupe + reporter_errors） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06；status / preview / flush / enable / disable，status/enable 不泄露 API key） |
+| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；secret scan 阻断 HTTP、reporter_errors 不保存 rendered body，独立 verification PASS） |
 
 验收标准：
 
@@ -8011,7 +8012,7 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 风险与约束：
 
-- Issue 平台 API 差异会影响 `find by title`、label、body update 等行为，需要为 GitHub/Gitee/GitCode 分别适配。
+- Issue 平台 API 差异会影响 `find by title`、label、body update 等行为；第二期已覆盖 GitHub/Gitee/GitCode 的认证与 payload 编码差异。
 - 遥测最容易引发用户信任问题，默认关闭和上报前预览必须作为产品边界，而不是实现细节。
 - 高频事件不能逐条上报 Issue，只能本地聚合后低频上报，否则会刷屏和触发平台限流。
 - `src/services/analytics/` 现有接口不应立即删除；先通过 adapter 兼容，避免破坏 image/pdf 等已有调用点。
