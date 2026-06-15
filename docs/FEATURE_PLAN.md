@@ -91,8 +91,15 @@
     - [8.8 实施建议顺序](#8-8-实施建议顺序)
     - [8.9 风险评估](#8-9-风险评估)
     - [8.10 Orchestrator 实时看板接入（F-96）](#810-orchestrator-实时看板接入f-96)
-- [九、自升级闭环（IR-5）](#九自升级闭环ir-5)
-    - [9.1 开源社区新特性雷达（SR-5.1）](#91-开源社区新特性雷达sr-51)
+- [九、独立遥测系统（F-97）](#九独立遥测系统f-97)
+    - [9.1 背景与目标](#91-背景与目标)
+    - [9.2 当前基线](#92-当前基线)
+    - [9.3 目标架构](#93-目标架构)
+    - [9.4 事件模型与隐私边界](#94-事件模型与隐私边界)
+    - [9.5 Issue 上报链路](#95-issue-上报链路)
+    - [9.6 实施阶段与验收标准](#96-实施阶段与验收标准)
+- [十、自升级闭环（IR-5）](#十自升级闭环ir-5)
+    - [10.1 开源社区新特性雷达（SR-5.1）](#101-开源社区新特性雷达sr-51)
 - [附录：F-Number 快速索引](#附录-f-number-快速索引)
 
 ---
@@ -8062,7 +8069,216 @@ AgentRunner._run_iteration()
 3. **Phase 3**（2-3 天）：看板前端页面 + session 详情页增强
 4. **Phase 4**（1 天）：测试 + 边界情况处理（无 orchestrator 运行、文件写错误等）
 
-## 九、自升级闭环（IR-5）
+## 九、独立遥测系统（F-97）
+
+**状态**: 📋 设计完成 | **优先级**: P1 | **类型**: 新特性 | **目标路径**: `clawcodex/telemetry/`
+
+### 9.1 背景与目标
+
+ClawCodex 当前已有 `src/services/analytics/` 级别的本地 analytics 骨架，可记录事件并输出到空 sink、控制台或 JSONL 文件，但它不是完整的产品遥测系统：默认事件会被 `NullSink` 丢弃，埋点覆盖面有限，缺少跨日使用统计、崩溃去重、远端上报与问题闭环。用户报错时，开发者无法稳定获得“发生了什么版本、什么入口、什么错误类型、每天执行/会话次数是否异常”等诊断信息。
+
+F-97 的目标是新增一个与 orchestrator、visualizer、现有 analytics 都解耦的独立遥测系统，在没有公网服务 IP 的约束下，通过自动创建或更新 Issue 的方式提交经过脱敏和聚合的错误与使用情况摘要。
+
+核心目标：
+
+1. **独立实现**：新代码默认放在 `clawcodex/telemetry/`，业务侧只调用稳定 recorder API，不直接依赖上报器或 tracker。
+2. **默认关闭**：遥测采集、远端 Issue 上报均默认关闭，必须由用户显式启用。
+3. **本地优先**：所有事件先写本地 JSONL/SQLite-lite 形态存储，再由后台任务聚合为 daily summary 和 crash summary。
+4. **Issue 上报**：没有公网服务时，通过 GitHub/Gitee/GitCode 自动创建或更新 telemetry issue 作为远端收集通道。
+5. **隐私优先**：默认禁止上传 prompt、模型输出、transcript、文件正文、API key、环境变量、绝对路径、完整命令参数等敏感内容。
+6. **可诊断**：支持每日执行次数、会话次数、入口分布、版本/平台分布、错误 fingerprint、崩溃频率和最近失败摘要。
+
+### 9.2 当前基线
+
+| 能力 | 当前状态 | 说明 |
+|------|----------|------|
+| 本地事件模型 | ✅ 已有 | `EventType` / `AnalyticsEvent` / `log_event()` 已存在 |
+| Sink 抽象 | ✅ 已有 | `NullSink` / `ConsoleSink` / `FileSink`，默认 `NullSink` |
+| Session metadata | ✅ 基础已有 | OS、Python、IDE、model、resume/non-interactive 等字段 |
+| 实际埋点覆盖 | ⚠️ 局部 | 主要集中在 image/pdf 处理等局部路径 |
+| 每日使用统计 | ❌ 缺失 | 无 daily aggregation 和跨会话指标 |
+| 崩溃上报 | ❌ 缺失 | 无全局 exception hook、fingerprint、去重 |
+| 远端上报 | ❌ 缺失 | 无 telemetry backend，也无 create issue reporter |
+| Issue 创建能力 | ❌ 缺失 | repository tracker 已有 comment/update issue，但未形成通用 create issue API |
+
+F-97 不直接替换现有 `src/services/analytics/`。短期策略是把现有 analytics 视为低层事件来源之一，由 telemetry adapter 可选消费；长期可将 analytics sink 收敛为 telemetry recorder 的兼容入口。
+
+### 9.3 目标架构
+
+```
+业务入口 / CLI / REPL / TUI / headless / orchestrator
+        │
+        ▼
+clawcodex.telemetry.recorder
+  record_session_start()
+  record_session_end()
+  record_command_run()
+  record_error()
+  record_tool_summary()
+        │
+        ▼
+本地队列与存储
+  events/YYYY-MM-DD.jsonl
+  crashes/YYYY-MM-DD.jsonl
+  summaries/YYYY-MM-DD.json
+        │
+        ├── daily aggregator
+        │     ├─ usage summary
+        │     └─ crash fingerprint summary
+        │
+        └── reporter（可选启用）
+              ├─ IssueReporter
+              ├─ LocalFileReporter
+              └─ DryRunReporter
+```
+
+建议目录结构：
+
+```
+clawcodex/telemetry/
+├── __init__.py
+├── config.py              # TelemetryConfig + settings/env 解析
+├── events.py              # TelemetryEvent / UsageEvent / ErrorEvent
+├── recorder.py            # 业务侧稳定 API，负责 best-effort 采集
+├── storage.py             # 本地 JSONL 写入、rotate、flush
+├── aggregator.py          # daily summary / crash summary 聚合
+├── redaction.py           # 脱敏、路径归一化、命令参数裁剪
+├── fingerprint.py         # exception fingerprint 与去重 key
+├── reporters/
+│   ├── base.py            # Reporter Protocol
+│   ├── issue.py           # GitHub/Gitee/GitCode issue reporter
+│   ├── local_file.py      # 离线导出
+│   └── dry_run.py         # 测试/预览
+└── hooks.py               # sys.excepthook / asyncio exception hook 接线
+```
+
+配置示例：
+
+```toml
+[telemetry]
+enabled = false
+local_only = true
+storage_dir = "~/.clawcodex/telemetry"
+retention_days = 30
+
+[telemetry.reporting]
+enabled = false
+kind = "issue"
+platform = "github"          # github | gitee | gitcode
+owner = "example"
+repo = "clawcodex-telemetry"
+issue_title = "ClawCodex Telemetry Inbox"
+mode = "update_or_create"     # update_or_create | create_daily | local_file
+interval_hours = 24
+
+[telemetry.privacy]
+include_stacktrace = true
+include_command_name = true
+include_command_args = false
+include_absolute_paths = false
+include_prompts = false
+include_outputs = false
+```
+
+### 9.4 事件模型与隐私边界
+
+首期事件类型保持小而稳定，避免把 telemetry 变成 transcript 上传系统：
+
+| 事件 | 用途 | 默认字段 |
+|------|------|----------|
+| `session_start` | 统计会话次数、入口、版本 | session_id hash、入口、版本、平台、Python 版本 |
+| `session_end` | 统计成功/失败、时长 | duration、exit_status、error_fingerprint |
+| `command_run` | 统计每日执行次数 | command_name、mode、success、duration |
+| `provider_request_summary` | 统计 provider 使用概况 | provider、model、success、latency bucket、error class |
+| `tool_use_summary` | 统计工具类别 | tool_name、success、duration bucket，不含参数 |
+| `error` | 崩溃与失败诊断 | error_class、message hash、fingerprint、sanitized stack |
+| `daily_summary` | 上报聚合单位 | usage counters、top fingerprints、version/platform buckets |
+
+隐私边界：
+
+- 不采集 prompt、assistant 输出、tool result 正文、transcript、文件内容、diff 内容。
+- 不上传 API key、token、cookie、环境变量、完整 shell 命令参数、绝对路径、用户名、主机名。
+- 路径只保留类别或 basename hash，例如 `<project>/src/...`、`path_hash`。
+- 错误 message 默认做规则脱敏后再 hash；Issue 正文中优先展示 error class、fingerprint、模块名和计数。
+- stacktrace 默认只保留项目内相对模块、函数名、行号；可配置关闭。
+- reporter 写入前必须经过 `redaction.py` 二次扫描，发现疑似 secret 时拒绝上报并保留本地错误。
+
+### 9.5 Issue 上报链路
+
+在没有公网服务 IP 的约束下，F-97 使用 Issue 作为低频、聚合、可人工检视的远端收集通道。
+
+Issue reporter 行为：
+
+1. 读取本地 `summaries/YYYY-MM-DD.json`。
+2. 将 daily summary 渲染为 markdown，包含版本、平台、入口、会话数、命令数、错误 fingerprint top N。
+3. 根据配置选择上报模式：
+   - `update_or_create`：维护一个长期 telemetry inbox issue，按日期追加或更新折叠块。
+   - `create_daily`：每天创建一个 `Telemetry YYYY-MM-DD` issue。
+   - `local_file`：只生成 markdown 文件，不访问网络。
+4. 上报成功后记录 reporter cursor，避免重复刷屏。
+5. 上报失败不影响主流程，只记录本地 `reporter_errors.jsonl`。
+
+Issue 正文示例：
+
+```markdown
+## ClawCodex Telemetry Summary — 2026-06-15
+
+- Version: 0.x.y
+- Sessions: 42
+- Command runs: 118
+- Successful exits: 39
+- Failed exits: 3
+- Platforms: Linux 31 / Windows 8 / macOS 3
+
+### Top error fingerprints
+
+| Fingerprint | Count | Error class | First seen | Last seen |
+|-------------|------:|-------------|------------|-----------|
+| abc123 | 2 | ProviderTimeoutError | 10:12 | 18:44 |
+| def456 | 1 | ConfigValidationError | 09:03 | 09:03 |
+
+No prompts, outputs, file contents, API keys, environment variables, or absolute paths are included.
+```
+
+与现有 tracker 的关系：
+
+- F-97 可复用 `extensions/orchestrator/repo_tracker/client.py` 的平台鉴权与 HTTP 映射思路，但不直接依赖 orchestrator 运行时。
+- 首期可在 telemetry reporter 内实现轻量 `create_issue` / `update_issue_body` / `find_issue_by_title`，后续再抽公共 repository client。
+- LocalTracker 只用于测试和离线模拟，不作为产品遥测远端。
+
+### 9.6 实施阶段与验收标准
+
+| 阶段 | 任务 | 状态 |
+|------|------|------|
+| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | 📋 待开始 |
+| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | 📋 待开始 |
+| F-97-C | 实现 redaction 与 error fingerprint，补全单元测试 | 📋 待开始 |
+| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | 📋 待开始 |
+| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | 📋 待开始 |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | 📋 待开始 |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | 📋 待开始 |
+| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | 📋 待开始 |
+
+验收标准：
+
+1. 默认配置下不采集、不上报；启用 `enabled=true` 后仅写本地事件。
+2. 启用本地 telemetry 后，连续运行 CLI/REPL/headless 能生成 daily summary，包含每日执行次数和会话次数。
+3. 人为触发异常后，本地 crash summary 包含稳定 fingerprint，同类错误能聚合计数。
+4. 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
+5. reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript。
+6. 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
+7. 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重。
+
+风险与约束：
+
+- Issue 平台 API 差异会影响 `find by title`、label、body update 等行为，需要为 GitHub/Gitee/GitCode 分别适配。
+- 遥测最容易引发用户信任问题，默认关闭和上报前预览必须作为产品边界，而不是实现细节。
+- 高频事件不能逐条上报 Issue，只能本地聚合后低频上报，否则会刷屏和触发平台限流。
+- `src/services/analytics/` 现有接口不应立即删除；先通过 adapter 兼容，避免破坏 image/pdf 等已有调用点。
+
+---
+
+## 十、自升级闭环（IR-5）
 
 > **说明**：本章对应 ROADMAP §4.1 IR-5 自升级闭环，是 ClawCodex 长期进化的顶层架构。目前仅 SR-5.1 已有详细设计，其余 SR-5.2~SR-5.5 仍为 🔭 长期规划。
 
@@ -8079,13 +8295,13 @@ SR-5.6 CCB 对标缺口补缺        → 见 §七
 
 ---
 
-### 9.1 开源社区新特性雷达（SR-5.1）
+### 10.1 开源社区新特性雷达（SR-5.1）
 
 **状态**: 🔭 长期规划 | **优先级**: P2 | **代码**: 0%
 
 **目标**: 持续抓取开源 Agent 项目（Claude Code、Aider、SWE-agent、OpenHands、AutoGen、CrewAI、LangGraph 等）的 release / commit / PR / issue，抽取候选特性并按分类与评分去重整理，生成结构化的社区动态摘要报告。
 
-#### 9.1.1 背景与动机
+#### 10.1.1 背景与动机
 
 ClawCodex 定位为 Claude Code 的 Python 移植版 + 自主扩展平台。开源 Agent 生态（Aider、SWE-agent、OpenHands、AutoGen、CrewAI、LangGraph 等）每个月都有新的能力出现，ClawCodex 需要一个系统化渠道来发现、评估并吸收这些社区创新。
 
@@ -8096,7 +8312,7 @@ ClawCodex 定位为 Claude Code 的 Python 移植版 + 自主扩展平台。开�
 
 SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → 评分 → 报告。
 
-#### 9.1.2 目标跟踪的项目
+#### 10.1.2 目标跟踪的项目
 
 **Phase 1（核心 Agent 项目）**：
 
@@ -8116,7 +8332,7 @@ SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → �
 - TaskWarden / Eliza（Agent 框架/运行时方向）
 - OpenClaw（ClawCodex 自己的上游基准）
 
-#### 9.1.3 整体流程
+#### 10.1.3 整体流程
 
 ```text
 定时触发（Cron）
@@ -8140,7 +8356,7 @@ SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → �
 持久化与通知（AR-5.1.4） → 结果存入本地 store，可选推送到用户通道
 ```
 
-#### 9.1.4 子特性分解
+#### 10.1.4 子特性分解
 
 | AR 编号 | 名称 | 核心能力 | 状态 | 工时估算 |
 |---------|------|---------|:----:|:--------:|
@@ -8153,7 +8369,7 @@ SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → �
 
 ---
 
-#### 9.1.5 AR-5.1.1 源注册表与抓取器
+#### 10.1.5 AR-5.1.1 源注册表与抓取器
 
 **文件路径**: `clawcodex_ext/community_radar/fetcher.py`, `clawcodex_ext/community_radar/registry.py`
 
@@ -8271,7 +8487,7 @@ class Fetcher:
 
 ---
 
-#### 9.1.6 AR-5.1.2 候选特性抽取与分类
+#### 10.1.6 AR-5.1.2 候选特性抽取与分类
 
 **文件路径**: `clawcodex_ext/community_radar/extractor.py`, `clawcodex_ext/community_radar/classifier.py`
 
@@ -8367,7 +8583,7 @@ multi_agent
 
 ---
 
-#### 9.1.7 AR-5.1.3 评分与报告系统
+#### 10.1.7 AR-5.1.3 评分与报告系统
 
 **文件路径**: `clawcodex_ext/community_radar/scorer.py`, `clawcodex_ext/community_radar/reporter.py`
 
@@ -8463,7 +8679,7 @@ Aider 新增了 `--lint` 模式的自动修复能力，SWE-agent 改进了 issue
 
 ---
 
-#### 9.1.8 AR-5.1.4 Cron 集成
+#### 10.1.8 AR-5.1.4 Cron 集成
 
 通过 ClawCodex 已有的 Cron 系统（F-22）进行调度：
 
@@ -8484,7 +8700,7 @@ Cron 集成点：
 
 ---
 
-#### 9.1.9 三方集成组件
+#### 10.1.9 三方集成组件
 
 以下开源项目可作为 SR-5.1 的可选集成组件，不需要重新制造轮子：
 
@@ -8511,7 +8727,7 @@ Cron 集成点：
 
 ---
 
-#### 9.1.10 与 ClawCodex 现有能力的协同
+#### 10.1.10 与 ClawCodex 现有能力的协同
 
 | 现有组件/能力 | SR-5.1 中的角色 | 说明 |
 |-------------|----------------|------|
@@ -8523,7 +8739,7 @@ Cron 集成点：
 | **ProgressReporter Sink**（F-40） | 可选集成 | 长时间抓取任务进度上报 |
 | **Feature Gate**（F-68 设计） | 架构适配检查 | 评估新特性与 Feature Flag 系统的兼容性 |
 
-#### 9.1.11 文件结构
+#### 10.1.11 文件结构
 
 ```
 clawcodex_ext/community_radar/
@@ -8563,7 +8779,7 @@ clawcodex_ext/community_radar/
     └── prs/                   # PR 缓存
 ```
 
-#### 9.1.12 实施阶段
+#### 10.1.12 实施阶段
 
 **Phase 1 — 最小可用（2 周）**：
 1. 实现 `WatchSource` / `SourceRegistry` + YAML 配置加载
@@ -8589,7 +8805,7 @@ clawcodex_ext/community_radar/
 3. 与 SR-5.2（自我规划）对接的 JSON 输出格式定型
 4. 单元测试 + 集成测试
 
-#### 9.1.13 验收标准
+#### 10.1.13 验收标准
 
 | # | 验收项 | 验收方式 |
 |---|--------|---------|
@@ -8602,7 +8818,7 @@ clawcodex_ext/community_radar/
 | 7 | 可通过 Cron 定时触发 | 配置 `cron_schedule` 后自动按计划运行 |
 | 8 | 非破坏性：不修改 `src/*` 任何文件 | git diff 确认全部落在 `clawcodex_ext/community_radar/` |
 
-#### 9.1.14 风险与约束
+#### 10.1.14 风险与约束
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
@@ -8612,7 +8828,7 @@ clawcodex_ext/community_radar/
 | 信息噪声导致报告质量低 | 用户忽略报告 | 评分阈值过滤 + 最高评分限条数；用户可配置关注分类 |
 | 自升级误改核心上游代码 | 破坏 upstream sync | 强制 Architecture Fit Checker；默认写入 `clawcodex_ext/*` |
 
-#### 9.1.15 已拟定的设计决定
+#### 10.1.15 已拟定的设计决定
 
 1. **不另造数据库**：缓存使用 JSON 文件，复用 ClawCodex 已有的纯文件存储模式
 2. **不强制 LLM**：规则抽取优先，LLM 仅作辅助分类和摘要生成（用户可配置关闭）
@@ -8621,7 +8837,7 @@ clawcodex_ext/community_radar/
 5. **StackPulse 作为参考架构**：其 `fetcher → AI digest → feed` 三阶段架构设计可直接借鉴
 6. **`clawcodex_ext/community_radar/` 作为落地路径**：不修改 `src/*`，符合 F-48 解耦约束
 
-#### 9.1.16 依赖与协同
+#### 10.1.16 依赖与协同
 
 | 依赖 | 类型 | 说明 |
 |------|------|------|
@@ -8703,3 +8919,4 @@ clawcodex_ext/community_radar/
 | **F-94** | **Visualizer CLI 集成 + workspace 扫描** | §8.3 | ✅ **已完成** |
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | 📋 设计完成 |

@@ -141,6 +141,7 @@
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | 📋 设计完成 | `clawcodex/telemetry` 独立包，本地聚合 + Issue 上报 |
 
 ---
 
@@ -1469,6 +1470,66 @@ AgentRunner._run_iteration()
 3. **无依赖方向**：orchestrator 不 import visualizer，visualizer 不 import orchestrator。唯一共享约定是事件格式。
 4. **不修改 SessionMetadata 模型**：issue_id 和 verification 信息通过 state_journal 关联。
 5. **向后兼容**：无 state_journal.ndjson 时，看板页面显示 "no active orchestrator run"。
+
+## F-97: 独立遥测系统（Issue-based Telemetry）
+
+**状态**: 📋 设计完成 | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
+
+### 目标
+
+新增一个独立于 orchestrator 和现有 `src/services/analytics/` 的遥测系统，默认实现路径为 `clawcodex/telemetry/`。系统用于在用户显式启用后，本地记录使用情况与错误摘要，聚合每日执行次数、会话次数、入口分布、版本/平台分布和错误 fingerprint；在没有公网服务 IP 的约束下，通过自动创建或更新 Issue 的方式上报脱敏后的 daily summary。
+
+### 当前基线
+
+| 能力 | 当前状态 | 说明 |
+|------|----------|------|
+| 本地 analytics 事件模型 | ✅ 已有 | `EventType` / `AnalyticsEvent` / `log_event()` 已存在 |
+| Sink 抽象 | ✅ 已有 | `NullSink` / `ConsoleSink` / `FileSink`，默认 `NullSink` |
+| Session metadata | ✅ 基础已有 | 可收集 OS、Python、IDE、model、resume/non-interactive 等字段 |
+| 实际埋点覆盖 | ⚠️ 局部 | 主要集中在 image/pdf pipeline 等少数路径 |
+| 每日使用统计 | ❌ 缺失 | 无 daily aggregation、跨会话计数、执行次数统计 |
+| 崩溃去重与上报 | ❌ 缺失 | 无全局 exception hook、fingerprint、crash summary |
+| 远端遥测通道 | ❌ 缺失 | 无公网服务，当前也没有通用 create issue reporter |
+
+### 实施进度
+
+| 阶段 | 任务 | 状态 |
+|------|------|------|
+| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | 📋 待开始 |
+| F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | 📋 待开始 |
+| F-97-C | 实现 redaction 与 error fingerprint，并覆盖 secret/path/prompt/output 过滤测试 | 📋 待开始 |
+| F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | 📋 待开始 |
+| F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | 📋 待开始 |
+| F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | 📋 待开始 |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | 📋 待开始 |
+| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | 📋 待开始 |
+
+### 验收标准
+
+- 默认配置下不采集、不上报；启用 `telemetry.enabled=true` 后仅写本地事件。
+- 启用本地 telemetry 后，连续运行 CLI/REPL/headless 能生成 daily summary，包含每日执行次数和会话次数。
+- 人为触发异常后，本地 crash summary 包含稳定 fingerprint，同类错误能聚合计数。
+- 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
+- reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript。
+- 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
+- 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重。
+
+### 风险与约束
+
+- 遥测必须默认关闭，远端 Issue 上报也必须单独显式启用。
+- 高频事件不得逐条写远端 Issue，只能先本地聚合，再低频上报 daily summary。
+- Issue 平台 API 差异会影响 create/update/find-by-title 行为，需要分别适配 GitHub/Gitee/GitCode。
+- 现有 `src/services/analytics/` 不应立即删除；首期通过 adapter 兼容，避免破坏 image/pdf 现有埋点。
+- 隐私边界是验收标准的一部分，redaction 失败时必须拒绝上报，而不是 best-effort 上传。
+
+### 依赖与协同
+
+| 特性/模块 | 关系 | 说明 |
+|-----------|------|------|
+| `src/services/analytics/` | 可选事件来源 | 现有 analytics sink 可后续桥接到 telemetry recorder |
+| RepositoryIssueClient | 设计参考 | 可复用 GitHub/Gitee/GitCode 鉴权与 HTTP 映射思路，但 F-97 不依赖 orchestrator 运行时 |
+| F-54 运行期可观测性 | 职责边界 | F-54 关注单次 agent run debug，F-97 关注用户侧低频聚合遥测 |
+| F-65 Langfuse 可观测性 | 职责边界 | F-65 面向 tracing/训练数据集，F-97 面向产品使用统计和崩溃摘要 |
 
 ## 九、CCB 对标缺口补缺进度
 
