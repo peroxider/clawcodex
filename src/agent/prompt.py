@@ -111,6 +111,9 @@ def get_agent_prompt(
     # --- Usage notes ---
     usage_parts = [
         f"\nUsage notes:\n"
+        f"- The **`prompt` field is REQUIRED** — the tool will error if it is "
+        f"missing. Always provide a complete, self-contained task description "
+        f"for the agent to execute.",
         f"- Always include a short description (3-5 words) summarizing what the agent will do",
     ]
 
