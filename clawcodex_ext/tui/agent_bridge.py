@@ -286,6 +286,7 @@ class AgentBridge:
     def _run_agent_in_thread(self) -> None:
         ## _log(f'[agent_bridge] _run_agent_in_thread STARTED')
         controller = self._abort_controller
+        agent_type = self._tool_context.agent_type or ""
 
         def _on_event(event: ToolEvent) -> None:
             # Keep the app_state in sync so StatusLine / overlays can
@@ -315,7 +316,7 @@ class AgentBridge:
                 raise AbortError(controller.signal.reason or "user_interrupt")
             ## _log(f'[agent_bridge] _on_text: {chunk[:30] if chunk else "empty"}...')
             self._state.append_streaming_text(chunk)
-            self._post(AssistantChunk(text=chunk))
+            self._post(AssistantChunk(text=chunk, agent_name=agent_type))
 
         def _on_thinking(chunk: str) -> None:
             """Handle thinking content chunks from the provider."""
@@ -419,7 +420,7 @@ class AgentBridge:
             self._finish()
             return
 
-        self._post(AssistantMessage(text=result.response_text))
+        self._post(AssistantMessage(text=result.response_text, agent_name=agent_type))
         # Surface any advisor activity from this run as transcript rows.
         # The Python provider path doesn't emit per-event hooks for
         # server tools (the SDK's high-level ``messages.stream`` only

@@ -349,7 +349,9 @@ def should_export_structured_message(msg: Any, msg_type: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def message_heading(message_type: str) -> str:
+def message_heading(message_type: str, display_name: Optional[str] = None) -> str:
+    if display_name is not None:
+        return display_name
     if message_type == "user":
         return "User"
     if message_type == "assistant":

@@ -270,7 +270,7 @@ class ClawCodexTUI(App):
         # transcript widget shows the prior context immediately. Defer
         # until after the first refresh so REPLScreen has mounted its
         # TranscriptView before rows are appended.
-        self._schedule_replay_history()
+        self._schedule_replay_history_MARKER()
 
         # Terminal chrome: set a descriptive title, enable DEC 1004
         # focus reporting, and mark the tab idle. The app-state
@@ -1176,7 +1176,7 @@ class ClawCodexTUI(App):
                 self._agent_bridge._tail_follower = tail
                 self._agent_bridge._start_tail_follower()
             # Replay the restored conversation into the transcript.
-            self._schedule_replay_history()
+            self._schedule_replay_history_MARKER()
         except Exception:
             pass
 
@@ -1223,17 +1223,17 @@ class ClawCodexTUI(App):
             config_loader=lambda: load_away_summary_config(cwd=self.workspace_root),
         )
 
-    def _schedule_replay_history(self) -> None:
+    def _schedule_replay_history_MARKER(self) -> None:
         if self._repl_screen is None:
             return
         if not getattr(self.session.conversation, "messages", None):
             return
         try:
-            self.call_after_refresh(self._replay_history)
+            self.call_after_refresh(self._replay_history_MARKER)
         except Exception:
-            self._replay_history()
+            self._replay_history_MARKER()
 
-    def _replay_history(self) -> None:
+    def _replay_history_MARKER(self) -> None:
         """Replay conversation messages from a resumed session to the transcript.
 
         Emits ``AssistantMessage`` / ``ToolEventMessage`` for each historical
@@ -1241,6 +1241,7 @@ class ClawCodexTUI(App):
         after ``--resume``. Only called from :meth:`on_mount` when the
         session has existing messages.
         """
+        agent_type = getattr(self.tool_context, "agent_type", None) or ""
         for msg in self.session.conversation.messages:
             role = getattr(msg, "role", None) or ""
             content = getattr(msg, "content", None) or ""
@@ -1264,7 +1265,7 @@ class ClawCodexTUI(App):
             if role == "assistant":
                 text = _flatten_message_text(content)
                 if text:
-                    self._post_to_screen(AssistantMessage(text=text))
+                    self._post_to_screen(AssistantMessage(text=text, agent_name=agent_type))
                 # Replay tool_use / tool_result / thinking blocks from the content list.
                 if isinstance(content, list):
                     for item in content:

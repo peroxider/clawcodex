@@ -55,6 +55,7 @@ class AssistantChunk(Message):
     """
 
     text: str
+    agent_name: str = ""
 
 
 @dataclass
@@ -78,6 +79,7 @@ class AssistantMessage(Message):
     """
 
     text: str
+    agent_name: str = ""
 
 
 @dataclass

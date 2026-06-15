@@ -96,7 +96,7 @@ class TranscriptView(VerticalScroll):
         self.mount(row)
         self._scroll_end()
 
-    def append_assistant_chunk(self, chunk: str) -> None:
+    def append_assistant_chunk(self, chunk: str, *, agent_name: str = "") -> None:
         if not chunk:
             return
         # Symmetric guard with ``append_thinking_chunk`` (Critic-flagged):
@@ -108,7 +108,7 @@ class TranscriptView(VerticalScroll):
         if active is not None and not isinstance(active, AssistantTextMessage):
             self._retire_active_assistant()
         if self._active_assistant is None:
-            self._active_assistant = AssistantTextMessage()
+            self._active_assistant = AssistantTextMessage(agent_name=agent_name)
             self.mount(self._active_assistant)
         self._active_assistant.append_chunk(chunk)
         self._scroll_end()
@@ -156,7 +156,7 @@ class TranscriptView(VerticalScroll):
             row.finalise(text)
         self._scroll_end()
 
-    def append_assistant(self, text: str) -> None:
+    def append_assistant(self, text: str, *, agent_name: str = "") -> None:
         if isinstance(self._active_assistant, AssistantTextMessage):
             self._active_assistant.finalise(text or self._active_assistant.streaming_text)
             self._active_assistant = None
@@ -165,7 +165,7 @@ class TranscriptView(VerticalScroll):
         if self._active_assistant is not None:
             self._retire_active_assistant()
         if (text or "").strip():
-            row = AssistantTextMessage()
+            row = AssistantTextMessage(agent_name=agent_name)
             self.mount(row)
             row.finalise(text)
         self._scroll_end()

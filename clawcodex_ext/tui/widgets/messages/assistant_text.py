@@ -127,8 +127,9 @@ class AssistantTextMessage(BaseRow):
 
     streaming_text: reactive[str] = reactive("", layout=True)
 
-    def __init__(self) -> None:
+    def __init__(self, agent_name: str = "") -> None:
         super().__init__()
+        self._agent_name = agent_name
         self._finalised = False
         self._final_text = ""
         # Track the last renderable handed to ``body.update(...)`` so tests
@@ -140,7 +141,7 @@ class AssistantTextMessage(BaseRow):
 
     # ---- composition ----
     def compose(self) -> ComposeResult:
-        header = RowHeader(Text("assistant", style="bold"), markup=False)
+        header = RowHeader(Text(self._agent_name or "assistant", style="bold"), markup=False)
         header.add_class("-assistant")
         yield header
         yield Static(Text(""), markup=False, classes="-body")
@@ -234,7 +235,7 @@ class AssistantTextMessage(BaseRow):
         """
 
         text = self._final_text if self._finalised else self.streaming_text
-        header = Text("assistant\n", style="bold #c58af9")
+        header = Text((self._agent_name or "assistant") + "\n", style="bold #c58af9")
         if not (text or "").strip():
             return header
         cache = get_markdown_cache()

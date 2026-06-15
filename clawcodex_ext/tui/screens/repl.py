@@ -259,7 +259,7 @@ class REPLScreen(Screen):
 
     def on_assistant_chunk(self, message: AssistantChunk) -> None:
         ## _log(f'[repl.py] on_assistant_chunk: {message.text[:50] if message.text else "empty"}...')
-        self.transcript.append_assistant_chunk(message.text)
+        self.transcript.append_assistant_chunk(message.text, agent_name=message.agent_name)
 
     def on_thinking_chunk(self, message: ThinkingChunk) -> None:
         ## _log(f'[repl.py] on_thinking_chunk: {message.text[:50] if message.text else "empty"}...')
@@ -267,7 +267,7 @@ class REPLScreen(Screen):
 
     def on_assistant_message(self, message: AssistantMessage) -> None:
         ## _log(f'[repl.py] on_assistant_message: {message.text[:100] if message.text else "empty"}...')
-        self.transcript.append_assistant(message.text)
+        self.transcript.append_assistant(message.text, agent_name=message.agent_name)
 
     def on_tool_event_message(self, message: ToolEventMessage) -> None:
         self.transcript.append_tool_event(
