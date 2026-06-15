@@ -159,6 +159,7 @@ class WorkspaceManager:
                 shutil.rmtree(path, ignore_errors=True)
                 await self._clone_repository(path)
                 created = True
+            await self._checkout_base_branch(path)
             await self._checkout_issue_branch(path, issue)
             return created
 
@@ -242,6 +243,48 @@ class WorkspaceManager:
             command.extend(["--depth", str(self.config.clone_depth)])
         command.extend([effective_url, str(path)])
         await self._run_process(command, cwd=str(path.parent))
+
+    async def _checkout_base_branch(self, path: Path) -> None:
+        base_branch = (self.config.base_branch or "").strip()
+        if not base_branch:
+            return
+        if not (path / ".git").exists():
+            return
+        if await self._try_process(["git", "checkout", base_branch], cwd=str(path)):
+            return
+        await self._try_process(
+            [
+                "git",
+                "fetch",
+                "origin",
+                f"{base_branch}:refs/remotes/origin/{base_branch}",
+            ],
+            cwd=str(path),
+        )
+        if await self._try_process(
+            [
+                "git",
+                "show-ref",
+                "--verify",
+                "--quiet",
+                f"refs/remotes/origin/{base_branch}",
+            ],
+            cwd=str(path),
+        ):
+            await self._try_process(
+                [
+                    "git",
+                    "checkout",
+                    "-b",
+                    base_branch,
+                    f"refs/remotes/origin/{base_branch}",
+                ],
+                cwd=str(path),
+            )
+        else:
+            await self._try_process(
+                ["git", "checkout", "-b", base_branch], cwd=str(path)
+            )
 
     async def _checkout_issue_branch(self, path: Path, issue: Any) -> None:
         if not self.config.checkout_issue_branch:
