@@ -83,6 +83,13 @@ def spawn_background_bash(
         stdout=output_handle,
         stderr=subprocess.STDOUT,
         start_new_session=True,
+        # Force UTF-8 decode on Windows. On zh-CN Windows the default
+        # reader-thread codepage is GBK, which crashes on UTF-8 bytes
+        # such as 0x96. The reader thread raises UnicodeDecodeError on
+        # the first undecodable byte and the process output is lost —
+        # symmetric to the foreground fix in bash_tool.py.
+        encoding="utf-8",
+        errors="replace",
     )
 
     started_at = time.time()

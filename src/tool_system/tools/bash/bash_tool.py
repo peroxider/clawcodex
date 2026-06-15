@@ -87,6 +87,12 @@ def _run_bash_with_abort(
         "stdout": subprocess.PIPE,
         "stderr": subprocess.PIPE,
         "text": True,
+        # Force UTF-8 on Windows. Without this, Popen's reader thread uses
+        # the system codepage (GBK on zh-CN Windows) and crashes with
+        # UnicodeDecodeError the moment the child emits a byte that isn't
+        # valid in that codepage (e.g. 0x96 from a UTF-8 continuation).
+        "encoding": "utf-8",
+        "errors": "replace",
     }
     # F-40 root-cause fix: ensure /root/Conda/bin is in PATH for every
     # bash subprocess.  The daemon's own PATH includes it, but

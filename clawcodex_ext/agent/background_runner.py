@@ -343,6 +343,18 @@ def _launch_via_subprocess(
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
+        # Force the child Python process to use UTF-8 on its stdout/stderr.
+        # On zh-CN Windows the default is GBK, which would corrupt any
+        # Chinese / emoji output written by ``print()`` / ``logger.info()``
+        # in ``src.agent.background_runner`` before it ever reaches this
+        # log file. ``PYTHONUTF8`` also flips the default text-mode
+        # encoding to UTF-8 inside the child. We inherit everything else
+        # from the parent's environment so PATH / venv / proxies still
+        # work the same way as a direct invocation.
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8"
+        child_env["PYTHONUTF8"] = "1"
+
         proc = subprocess.Popen(
             [
                 sys.executable, "-m", "src.agent.background_runner",
@@ -351,6 +363,14 @@ def _launch_via_subprocess(
             ],
             stdout=open(log_path, "a", encoding="utf-8"),  # noqa: SIM115
             stderr=subprocess.STDOUT,
+            env=child_env,
+            # No-op while stdout is a file handle (Popen uses the handle
+            # directly and does not spawn a reader thread), but kept in
+            # lockstep with the bash_tool / ripgrep fixes so a future
+            # refactor that flips this to PIPE doesn't regress the
+            # zh-CN Windows behaviour.
+            encoding="utf-8",
+            errors="replace",
             creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
         )
         _write_runner_marker(session.session_id, proc.pid)

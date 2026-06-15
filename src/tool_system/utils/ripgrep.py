@@ -124,6 +124,13 @@ def _run_rg_with_abort(
         "stdout": subprocess.PIPE,
         "stderr": subprocess.PIPE,
         "text": True,
+        # Force UTF-8 on Windows. The default reader-thread codepage is
+        # the system one (GBK on zh-CN Windows); the first byte that is
+        # invalid in that codepage (e.g. 0x96 from a UTF-8 sequence in
+        # a Chinese-language source file) kills the reader thread with
+        # UnicodeDecodeError. ``errors="replace"`` is belt-and-braces.
+        "encoding": "utf-8",
+        "errors": "replace",
     }
     if sys.platform == "win32":
         popen_kwargs["creationflags"] = getattr(
