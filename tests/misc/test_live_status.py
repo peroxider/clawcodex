@@ -306,3 +306,46 @@ def test_legacy_fallback_fires_deprecation_when_repl_matches() -> None:
     # The legacy guard flag is set after the first invocation.
     assert getattr(status, "_legacy_perm_cycle_warned", False) is True
 
+
+def test_history_parameter_accepted() -> None:
+    """``LiveStatus`` accepts an optional ``history`` parameter
+    and passes it to the underlying ``Buffer``."""
+    from prompt_toolkit.history import InMemoryHistory
+
+    shared = InMemoryHistory()
+    status = LiveStatus("test-history", history=shared)
+    assert status._history is shared
+    with status:
+        time.sleep(0.05)
+        buf = status._input_buffer
+        if buf is not None:
+            assert buf.history is shared
+    # Cleanup: the background thread stops on context exit.
+    time.sleep(0.05)
+
+
+def test_history_defaults_to_inmemory() -> None:
+    """Without an explicit ``history``, Buffer gets an
+    ``InMemoryHistory`` so up/down navigation at least
+    works within a single LiveStatus session."""
+    status = LiveStatus("x")
+    with status:
+        time.sleep(0.05)
+        buf = status._input_buffer
+        if buf is not None:
+            from prompt_toolkit.history import InMemoryHistory
+            assert isinstance(buf.history, InMemoryHistory)
+    time.sleep(0.05)
+
+
+def test_up_down_history_bindings_registered() -> None:
+    """Verify the up/down history bindings exist in
+    ``LiveStatus._run_thread`` via source inspection.
+    These bindings are what enable history navigation
+    during agent work."""
+    import inspect
+    src = inspect.getsource(LiveStatus._run_thread)
+    assert '@bindings.add("up")' in src
+    assert '@bindings.add("down")' in src
+    assert "buf.history_backward()" in src
+    assert "buf.history_forward()" in src

@@ -113,6 +113,7 @@ class LiveStatus:
         on_permission_cycle: Callable[[], None] | None = None,
         completer=None,
         verbose: bool = False,
+        history: Any = None,
     ) -> None:
         if not _HAS_PROMPT_TOOLKIT:
             raise RuntimeError(
@@ -155,6 +156,10 @@ class LiveStatus:
         # Force-show the elapsed/token suffix before the 30s threshold.
         # Maps to the TS ``verbose`` prop in ``SpinnerWithVerb``.
         self._verbose = verbose
+        # Shared prompt ``History`` (typically the same ``FileHistory``
+        # used by the foreground ``PromptSession``). When set, the input
+        # buffer supports up/down history navigation during agent work.
+        self._history = history
 
     # ---- public API ----
     def update(self, message: str) -> None:
@@ -400,6 +405,20 @@ class LiveStatus:
             except Exception:
                 pass
 
+        @bindings.add("up")
+        def _history_backward(event):  # type: ignore[no-untyped-def]
+            """Up arrow: navigate to previous history entry."""
+            buf = event.current_buffer
+            if buf.history:
+                buf.history_backward()
+
+        @bindings.add("down")
+        def _history_forward(event):  # type: ignore[no-untyped-def]
+            """Down arrow: navigate to next history entry."""
+            buf = event.current_buffer
+            if buf.history:
+                buf.history_forward()
+
         # Editable input field — accepts keystrokes during agent work and
         # queues submissions back to the REPL via ``on_submit``.
         def _accept(buf: "Buffer") -> bool:
@@ -426,6 +445,7 @@ class LiveStatus:
             accept_handler=_accept,
             completer=self._completer,
             complete_while_typing=self._completer is not None,
+            history=self._history,
         )
 
         spinner_control = FormattedTextControl(
@@ -523,6 +543,31 @@ class LiveStatus:
             except Exception:
                 pass
 
+    @staticmethod
+    def _parse_rich_markup(text: str, base_style: str = "") -> list[tuple[str, str]]:
+        """Convert Rich ``[tag]text[/tag]`` markup to prompt_toolkit style tuples.
+
+        Rich uses ``[yellow]text[/yellow]`` to colour text; prompt_toolkit's
+        ``FormattedText`` expects ``(style, text)`` tuples instead.  This parser
+        handles the subset of Rich markup commonly used by caller code so that
+        branded messages (e.g. ``[yellow]Cancelling…[/yellow]``) render with the
+        intended colour rather than leaking the tag source.
+        """
+        import re
+
+        _rich_tag_re = re.compile(r"\[(\w+(?:[ -]\w+)*)\](.*?)\[/\1\]")
+        parts: list[tuple[str, str]] = []
+        pos = 0
+        for m in _rich_tag_re.finditer(text):
+            if m.start() > pos:
+                parts.append((base_style, text[pos : m.start()]))
+            tag_style = f"{base_style} {m.group(1)}" if base_style else m.group(1)
+            parts.append((tag_style, m.group(2)))
+            pos = m.end()
+        if pos < len(text):
+            parts.append((base_style, text[pos:]))
+        return parts
+
     def _render_spinner_text(self) -> "FormattedText":
         with self._lock:
             message = self._message
@@ -549,11 +594,15 @@ class LiveStatus:
                 suffix += f" · ↓ {format_number(tokens)} tokens"
         suffix += ")"
 
+        # Parse Rich-style markup so ``[yellow]Cancelling…[/yellow]`` is
+        # rendered as yellow text instead of leaking the tag source.
+        status_parts = self._parse_rich_markup(message, "class:status")
+
         return FormattedText(
             [
                 ("class:spinner", frame),
                 ("", " "),
-                ("class:status", message),
+                *status_parts,
                 ("class:hint", suffix),
             ]
         )

@@ -76,6 +76,45 @@ class TestStage3Repl:
             cleanup_config()
             os.chdir(old_cwd)
 
+    def test_repl_file_history_attr(self) -> None:
+        """Both ``ClawcodexREPL`` and ``ClawCodexExtREPL`` set
+        ``self._file_history`` in their ``__init__``, enabling up/down
+        history navigation during agent work.
+
+        Regression guard: if either class omits this attribute,
+        ``LiveStatus(history=self._file_history)`` in ``chat()``
+        raises ``AttributeError``.
+        """
+        import inspect
+
+        # Check ClawcodexREPL (core.py)
+        from src.repl.core import ClawcodexREPL
+        core_src = inspect.getsource(ClawcodexREPL.__init__)
+        assert "self._file_history" in core_src, (
+            "ClawcodexREPL.__init__ must set self._file_history"
+        )
+
+        # Check ClawCodexExtREPL (app.py)
+        from clawcodex_ext.repl.app import ClawCodexExtREPL
+        app_src = inspect.getsource(ClawCodexExtREPL.__init__)
+        assert "self._file_history" in app_src, (
+            "ClawCodexExtREPL.__init__ must set self._file_history"
+        )
+
+    def test_chat_passes_history_to_live_status(self) -> None:
+        """Both ``chat()`` paths pass ``history=self._file_history``
+        to ``LiveStatus(...)`` (direct-stream and engine paths)."""
+        import inspect
+
+        from src.repl.core import ClawcodexREPL
+        chat_src = inspect.getsource(ClawcodexREPL.chat)
+        # Count occurrences — one in each LiveStatus(...) call
+        count = chat_src.count("history=self._file_history")
+        assert count >= 2, (
+            f"Expected at least 2 ``history=self._file_history`` "
+            f"in chat(), found {count}"
+        )
+
 
 class TestStage3Headless:
     """Headless 可用性测试 — 模块导入和选项构建。"""
