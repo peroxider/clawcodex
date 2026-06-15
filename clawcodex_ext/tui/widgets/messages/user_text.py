@@ -34,7 +34,11 @@ class UserTextMessage(BaseRow):
         yield Static(self._build_text(), markup=False)
 
     def _build_text(self) -> Text:
-        prefix = Text("❯ ", style="bold #8ab4f8")
+        try:
+            color = self.app.palette.user
+        except Exception:
+            color = "#8ab4f8"
+        prefix = Text("❯ ", style=f"bold {color}")
         body = Text(self._text, style="bold")
         return prefix + body
 
