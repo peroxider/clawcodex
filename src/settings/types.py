@@ -235,6 +235,13 @@ class SettingsSchema:
     # Session retention days
     session_retention_days: int = 30
 
+    # REPL/TUI key for accepting the ghost-text suggestion in the input
+    # box. Stored in prompt_toolkit's key notation (``"c-e"``, ``"tab"``,
+    # ``"c-j"``, ``"f2"`` …) and translated to Textual's event.key form
+    # at the TUI call site. Default ``"c-e"`` matches the upstream
+    # ``AutoSuggestFromHistory`` accept key.
+    accept_suggestion_key: str = "c-e"
+
     # Extra raw fields for forward compatibility
     extra: dict[str, Any] = field(default_factory=dict)
 

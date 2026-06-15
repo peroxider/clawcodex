@@ -401,28 +401,52 @@ _TASK_WIDGET_TOOL_NAMES: set[str] = {
 }
 
 
-_GHOST_HINT = " (CTRL + e to accept)"
+def _ghost_hint_for(key: str) -> str:
+    """Build the trailing ghost-text hint for the configured accept key."""
+    from clawcodex_ext.utils.key_format import display_key
+
+    return f" ({display_key(key)} to accept)"
 
 
 class _HintedAutoSuggest(AutoSuggestFromHistory):
-    """Append ``(CTRL + e to accept)`` to ghost-text suggestions."""
+    """Append ``(CTRL + e to accept)`` to ghost-text suggestions.
+
+    The accept key is parameterised so users can move the binding to
+    ``tab`` or another key via ``settings.accept_suggestion_key`` while
+    keeping the displayed hint in sync.
+    """
+
+    def __init__(self, accept_key: str = "c-e") -> None:
+        super().__init__()
+        self._accept_key = accept_key
+        self._hint = _ghost_hint_for(accept_key)
 
     def get_suggestion(self, buffer, document):
         suggestion = super().get_suggestion(buffer, document)
         if suggestion and suggestion.text:
-            return Suggestion(suggestion.text + _GHOST_HINT)
+            return Suggestion(suggestion.text + self._hint)
         return suggestion
 
 
-def _patch_accept_suggestion_bindings(bindings):
-    """Override ⌃E so it strips the hint before inserting."""
+def _patch_accept_suggestion_bindings(bindings, accept_key: str = "c-e"):
+    """Override the accept key so it strips the hint before inserting.
 
-    @bindings.add("c-e")
+    *accept_key* is the prompt_toolkit spelling (e.g. ``"c-e"``, ``"tab"``,
+    ``"c-j"``). The hint stripped from the inserted text always matches
+    the one rendered by :class:`_HintedAutoSuggest` for the same key.
+    """
+
+    from clawcodex_ext.utils.key_format import to_prompt_toolkit_key
+
+    pt_key = to_prompt_toolkit_key(accept_key)
+    hint = _ghost_hint_for(accept_key)
+
+    @bindings.add(pt_key)
     def _accept(event):
         buf = event.current_buffer
         suggestion = buf.suggestion
-        if suggestion and suggestion.text.endswith(_GHOST_HINT):
-            buf.insert_text(suggestion.text[: -len(_GHOST_HINT)])
+        if suggestion and suggestion.text.endswith(hint):
+            buf.insert_text(suggestion.text[: -len(hint)])
         elif suggestion:
             buf.insert_text(suggestion.text)
 
@@ -808,9 +832,20 @@ class ClawcodexREPL:
         file_history = FileHistory(str(history_file))
         asyncio.run(_drain_history(file_history))
 
+        # Read the configured accept key (default ``c-e``) so the
+        # ghost-text hint and the binding registration agree.
+        try:
+            from src.settings.settings import get_settings as _get_settings
+
+            _accept_key = getattr(
+                _get_settings(), "accept_suggestion_key", "c-e"
+            ) or "c-e"
+        except Exception:
+            _accept_key = "c-e"
+
         self.prompt_session = PromptSession(
             history=file_history,
-            auto_suggest=_HintedAutoSuggest(),
+            auto_suggest=_HintedAutoSuggest(accept_key=_accept_key),
             completer=self.completer,
             style=Style.from_dict({
                 # Dim background on the ``❯`` marker so the user
@@ -838,7 +873,7 @@ class ClawcodexREPL:
             prompt_continuation=self._prompt_continuation,
             bottom_toolbar=self._bottom_toolbar,
         )
-        _patch_accept_suggestion_bindings(self.bindings)
+        _patch_accept_suggestion_bindings(self.bindings, accept_key=_accept_key)
 
     def _bottom_toolbar(self):
         """Single-line status footer for the input prompt.

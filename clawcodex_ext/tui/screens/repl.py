@@ -31,6 +31,21 @@ def _log(msg: str) -> None:
         with open('/tmp/tui_flow.log', 'a') as f:
             f.write(msg + '\n')
 
+
+def _configured_accept_suggestion_key() -> str:
+    """Read ``settings.accept_suggestion_key`` with a safe fallback.
+
+    Settings is the single source of truth; the REPL side reads the
+    same value at its own construction site. Both default to ``"c-e"``
+    so existing users see no change.
+    """
+    try:
+        from src.settings.settings import get_settings
+
+        return getattr(get_settings(), "accept_suggestion_key", "c-e") or "c-e"
+    except Exception:
+        return "c-e"
+
 from textual.app import ComposeResult
 from textual.screen import Screen
 
@@ -119,6 +134,7 @@ class REPLScreen(Screen):
             suggestions_provider=suggestions_provider,
             message_history_provider=message_history_provider,
             cwd=self._workspace_root,
+            accept_suggestion_key=_configured_accept_suggestion_key(),
         )
         # ARIA live region — stays height: 1 and only announces the
         # most recent status change. Mounted just above the status
