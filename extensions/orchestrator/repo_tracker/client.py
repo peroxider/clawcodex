@@ -217,6 +217,24 @@ class RepositoryIssueClient:
                 found = True
         return newer
 
+    async def create_issue(
+        self,
+        *,
+        title: str,
+        body: str,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        payload: dict[str, Any] = {"title": title, "body": body}
+        if labels:
+            payload["labels"] = labels
+        result = await self._request_json(
+            "POST",
+            f"/repos/{self.owner}/{self.repo}/issues",
+            json=payload if self.platform.auth_mode == "bearer" else None,
+            data=payload if self.platform.auth_mode != "bearer" else None,
+        )
+        return result if isinstance(result, dict) else None
+
     async def update_issue(
         self,
         issue_id: str,
@@ -237,6 +255,59 @@ class RepositoryIssueClient:
             json=payload if self.platform.auth_mode == "bearer" else None,
             data=payload if self.platform.auth_mode != "bearer" else None,
         )
+
+    async def update_issue_body(
+        self,
+        issue_id: str,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        labels: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        payload: dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if body is not None:
+            payload["body"] = body
+        if labels is not None:
+            payload["labels"] = labels
+        if not payload:
+            return None
+        result = await self._request_json(
+            "PATCH",
+            f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
+            json=payload if self.platform.auth_mode == "bearer" else None,
+            data=payload if self.platform.auth_mode != "bearer" else None,
+        )
+        return result if isinstance(result, dict) else None
+
+    async def find_issue_by_title(
+        self,
+        title: str,
+        *,
+        state: str = "open",
+    ) -> dict[str, Any] | None:
+        page = 1
+        while True:
+            payload = await self._request_json(
+                "GET",
+                f"/repos/{self.owner}/{self.repo}/issues",
+                params={
+                    "state": state or self.platform.open_state,
+                    "per_page": _PAGE_SIZE,
+                    "page": page,
+                },
+            )
+            if not isinstance(payload, list):
+                return None
+            for item in payload:
+                if not isinstance(item, dict) or item.get("pull_request"):
+                    continue
+                if item.get("title") == title:
+                    return item
+            if len(payload) < _PAGE_SIZE:
+                return None
+            page += 1
 
     async def find_pull_request(
         self,

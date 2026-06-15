@@ -7,7 +7,7 @@ import sys
 from contextlib import redirect_stdout
 
 from clawcodex.telemetry import cli
-from clawcodex.telemetry.config import TelemetryConfig, load_config
+from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
 from clawcodex.telemetry.recorder import reset_recorder_for_tests
 
 
@@ -72,3 +72,74 @@ def test_main_unknown_subcommand(monkeypatch, tmp_path, capsys):
     captured = capsys.readouterr()
     assert rc == 2
     assert "unknown subcommand" in captured.out
+
+
+def test_status_prints_issue_reporting_fields_without_secret(monkeypatch, tmp_path, capsys):
+    secret = "ghp_12345678901234567890"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: TelemetryConfig(
+            enabled=False,
+            storage_dir=tmp_path / "telemetry",
+            reporting=ReportingConfig(
+                reporting_enabled=True,
+                kind="issue",
+                platform="gitcode",
+                owner="acme",
+                repo="widget",
+                endpoint="https://gitcode.example/api",
+                issue_title="Telemetry Inbox",
+                mode="create_daily",
+                interval_hours=6,
+                token_env="CLAW_TELEMETRY_REPORTING_TOKEN",
+                api_key=secret,
+            ),
+        ),
+    )
+    reset_recorder_for_tests()
+
+    rc = cli.run_status([])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "kind='issue' mode='create_daily'" in out
+    assert "platform      : gitcode" in out
+    assert "owner/repo    : acme / widget" in out
+    assert "issue_title   : Telemetry Inbox" in out
+    assert "token_env     : CLAW_TELEMETRY_REPORTING_TOKEN" in out
+    assert "api_key_set   : True" in out
+    assert secret not in out
+
+
+def test_enable_snippet_includes_issue_fields_without_api_key(monkeypatch, tmp_path, capsys):
+    secret = "ghp_12345678901234567890"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: TelemetryConfig(
+            storage_dir=tmp_path / "telemetry",
+            reporting=ReportingConfig(
+                reporting_enabled=True,
+                kind="issue",
+                owner="acme",
+                repo="widget",
+                api_key=secret,
+            ),
+        ),
+    )
+
+    rc = cli.run_enable([])
+    out = capsys.readouterr().out
+    parsed = json.loads(out[out.find("{") :])
+    reporting = parsed["telemetry"]["reporting"]
+
+    assert rc == 0
+    assert reporting["kind"] == "issue"
+    assert reporting["owner"] == "acme"
+    assert reporting["repo"] == "widget"
+    assert reporting["token_env"] == "CLAW_TELEMETRY_REPORTING_TOKEN"
+    assert "api_key" not in reporting
+    assert secret not in out

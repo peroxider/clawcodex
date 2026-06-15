@@ -29,14 +29,21 @@ logger = logging.getLogger(__name__)
 class ReportingConfig:
     """Reporter configuration.
 
-    ``kind`` is a free-form string understood by concrete reporter
-    implementations. The two values F-97 ships with are ``"local_file"``
-    and ``"dry_run"``. ``"issue"`` is reserved for the deferred
-    IssueReporter.
+    ``kind`` selects the reporter implementation. Remote issue reporting
+    remains opt-in via ``reporting_enabled`` and ``kind=\"issue\"``.
     """
 
     reporting_enabled: bool = False
     kind: str = "local_file"
+    platform: str = "github"
+    owner: str = ""
+    repo: str = ""
+    endpoint: str | None = None
+    issue_title: str = "ClawCodex Telemetry Inbox"
+    mode: str = "update_or_create"
+    interval_hours: int = 24
+    api_key: str = ""
+    token_env: str = ""
 
 
 @dataclass(frozen=True)
@@ -114,13 +121,40 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         retention_days = base.retention_days
 
     reporting_section = _section(on_disk_section, "reporting")
+    reporting_enabled_raw = reporting_section.get(
+        "reporting_enabled",
+        reporting_section.get("enabled", base.reporting.reporting_enabled),
+    )
     reporting_enabled = _coerce_bool(
-        reporting_section.get("reporting_enabled", base.reporting.reporting_enabled),
+        reporting_enabled_raw,
         base.reporting.reporting_enabled,
     )
     reporting_kind = str(
         reporting_section.get("kind", base.reporting.kind) or base.reporting.kind
     )
+    reporting_platform = str(
+        reporting_section.get("platform", base.reporting.platform) or base.reporting.platform
+    )
+    reporting_owner = str(reporting_section.get("owner", base.reporting.owner) or "")
+    reporting_repo = str(reporting_section.get("repo", base.reporting.repo) or "")
+    endpoint_raw = reporting_section.get("endpoint", base.reporting.endpoint)
+    reporting_endpoint = str(endpoint_raw).rstrip("/") if endpoint_raw else None
+    reporting_issue_title = str(
+        reporting_section.get("issue_title", base.reporting.issue_title)
+        or base.reporting.issue_title
+    )
+    reporting_mode = str(
+        reporting_section.get("mode", base.reporting.mode) or base.reporting.mode
+    )
+    interval_raw = reporting_section.get("interval_hours", base.reporting.interval_hours)
+    try:
+        reporting_interval_hours = max(1, int(interval_raw))
+    except (TypeError, ValueError):
+        reporting_interval_hours = base.reporting.interval_hours
+    reporting_token_env = str(reporting_section.get("token_env", base.reporting.token_env) or "")
+    reporting_api_key = str(reporting_section.get("api_key", base.reporting.api_key) or "")
+    if reporting_token_env and not reporting_api_key:
+        reporting_api_key = os.environ.get(reporting_token_env, "")
 
     redaction_section = _section(on_disk_section, "redaction")
     redaction_cfg = base.redaction
@@ -170,6 +204,15 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         reporting=ReportingConfig(
             reporting_enabled=reporting_enabled,
             kind=reporting_kind,
+            platform=reporting_platform,
+            owner=reporting_owner,
+            repo=reporting_repo,
+            endpoint=reporting_endpoint,
+            issue_title=reporting_issue_title,
+            mode=reporting_mode,
+            interval_hours=reporting_interval_hours,
+            api_key=reporting_api_key,
+            token_env=reporting_token_env,
         ),
     )
 
@@ -198,5 +241,14 @@ def _apply_env_overrides(cfg: TelemetryConfig) -> TelemetryConfig:
         reporting=ReportingConfig(
             reporting_enabled=reporting_enabled,
             kind=cfg.reporting.kind,
+            platform=cfg.reporting.platform,
+            owner=cfg.reporting.owner,
+            repo=cfg.reporting.repo,
+            endpoint=cfg.reporting.endpoint,
+            issue_title=cfg.reporting.issue_title,
+            mode=cfg.reporting.mode,
+            interval_hours=cfg.reporting.interval_hours,
+            api_key=cfg.reporting.api_key,
+            token_env=cfg.reporting.token_env,
         ),
     )

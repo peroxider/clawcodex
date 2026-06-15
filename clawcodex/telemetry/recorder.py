@@ -144,9 +144,6 @@ class _TelemetryRecorderImpl:
         self._lock = threading.Lock()
         self._closed = False
         self._dry_run = DryRunReporter()
-        # Auto-register the dry-run reporter for CLI ``preview`` so
-        # callers can read what *would* be reported.
-        self._reporters.add(self._dry_run)
 
     @property
     def config(self) -> TelemetryConfig:
@@ -319,7 +316,10 @@ class _TelemetryRecorderImpl:
         if self._closed:
             return
         try:
-            summary = self._aggregator.aggregate_today_if_stale()
+            from .storage import utc_date, utc_now
+
+            date = utc_date(utc_now())
+            summary = self._aggregator.aggregate(date)
         except Exception as exc:  # noqa: BLE001
             logger.debug("telemetry: flush aggregator failed: %s", exc)
             return
@@ -328,9 +328,6 @@ class _TelemetryRecorderImpl:
         if not self._cfg.reporting.reporting_enabled:
             return
         try:
-            from .storage import utc_date, utc_now
-
-            date = utc_date(utc_now())
             rendered = self._dry_run.render(summary, date)
             self._reporters.emit(rendered, date=date)
         except Exception as exc:  # noqa: BLE001
@@ -419,7 +416,7 @@ def _build_recorder() -> _NullRecorder | _TelemetryRecorderImpl:
     redactor = Redactor(cfg.redaction, _default_project_roots())
     reporters = CompositeReporter()
     if cfg.reporting.reporting_enabled:
-        reporters.add(LocalFileReporter(storage, redactor))
+        _configure_reporters(cfg, storage, redactor, reporters)
 
     return _TelemetryRecorderImpl(
         cfg=cfg,
@@ -428,6 +425,45 @@ def _build_recorder() -> _NullRecorder | _TelemetryRecorderImpl:
         redactor=redactor,
         reporters=reporters,
     )
+
+
+def _configure_reporters(
+    cfg: TelemetryConfig,
+    storage: LocalJsonlStorage,
+    redactor: Redactor,
+    reporters: CompositeReporter,
+) -> None:
+    kind = (cfg.reporting.kind or "local_file").strip().lower()
+    mode = (cfg.reporting.mode or "update_or_create").strip().lower()
+    if kind == "dry_run":
+        reporters.add(DryRunReporter())
+        return
+    if kind == "issue" and mode != "local_file":
+        try:
+            from .reporters.issue import IssueReporter
+
+            reporters.add(
+                IssueReporter(
+                    storage=storage,
+                    redactor=redactor,
+                    config=cfg.reporting,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: issue reporter init failed: %s", exc)
+            storage.append(
+                "reporter_errors",
+                {
+                    "timestamp": time.time(),
+                    "kind": "issue",
+                    "reason": "init_failed",
+                    "platform": cfg.reporting.platform,
+                    "mode": cfg.reporting.mode,
+                    "error": str(exc),
+                },
+            )
+        return
+    reporters.add(LocalFileReporter(storage, redactor))
 
 
 def reset_recorder_for_tests() -> None:

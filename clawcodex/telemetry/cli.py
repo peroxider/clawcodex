@@ -54,8 +54,15 @@ def run_status(argv: Sequence[str] | None = None) -> int:
     _print(f"  retention_days : {cfg.retention_days}")
     _print(
         f"  reporting      : enabled={cfg.reporting.reporting_enabled} "
-        f"kind={cfg.reporting.kind!r}"
+        f"kind={cfg.reporting.kind!r} mode={cfg.reporting.mode!r}"
     )
+    _print(f"    platform      : {cfg.reporting.platform}")
+    _print(f"    owner/repo    : {cfg.reporting.owner or '-'} / {cfg.reporting.repo or '-'}")
+    _print(f"    endpoint      : {cfg.reporting.endpoint or '(default)'}")
+    _print(f"    issue_title   : {cfg.reporting.issue_title}")
+    _print(f"    interval_hours: {cfg.reporting.interval_hours}")
+    _print(f"    token_env     : {cfg.reporting.token_env or '-'}")
+    _print(f"    api_key_set   : {bool(cfg.reporting.api_key)}")
     _print("  redaction:")
     for field_name in (
         "include_command_name",
@@ -179,6 +186,14 @@ def _asdict(cfg: TelemetryConfig) -> dict[str, Any]:
         "reporting": {
             "reporting_enabled": cfg.reporting.reporting_enabled,
             "kind": cfg.reporting.kind,
+            "platform": cfg.reporting.platform,
+            "owner": cfg.reporting.owner or "example",
+            "repo": cfg.reporting.repo or "clawcodex-telemetry",
+            "endpoint": cfg.reporting.endpoint,
+            "issue_title": cfg.reporting.issue_title,
+            "mode": cfg.reporting.mode,
+            "interval_hours": cfg.reporting.interval_hours,
+            "token_env": cfg.reporting.token_env or "CLAW_TELEMETRY_REPORTING_TOKEN",
         },
         "redaction": {
             "include_command_name": cfg.redaction.include_command_name,

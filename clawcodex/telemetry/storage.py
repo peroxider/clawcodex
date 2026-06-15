@@ -16,6 +16,8 @@ Three directories are managed by default:
   (created on demand).
 * ``reporter_blocked/`` — JSONL rows describing reporter refusals
   (created on demand).
+* ``reporter_errors/`` — JSONL rows describing remote reporter failures
+  without storing rendered report bodies.
 """
 from __future__ import annotations
 
@@ -27,7 +29,15 @@ from typing import Any, Final
 
 logger = logging.getLogger(__name__)
 
-_KINDS: Final[tuple[str, ...]] = ("events", "crashes", "summaries", "reports", "reporter_blocked")
+_KINDS: Final[tuple[str, ...]] = (
+    "events",
+    "crashes",
+    "summaries",
+    "reports",
+    "reporter_blocked",
+    "reporter_errors",
+    "reporter_cursors",
+)
 
 
 def utc_date(ts: float) -> str:
@@ -73,7 +83,7 @@ class LocalJsonlStorage:
             return self._dir_for(kind) / f"{date}.json"
         if kind == "reports":
             return self._dir_for(kind) / f"{date}.md"
-        if kind == "reporter_blocked":
+        if kind in {"reporter_blocked", "reporter_errors"}:
             return self._dir_for(kind) / f"{date}.jsonl"
         return self._dir_for(kind) / f"{date}.jsonl"
 
@@ -85,7 +95,7 @@ class LocalJsonlStorage:
         Returns ``True`` on success, ``False`` on any error. The
         surrounding caller MUST NOT treat a ``False`` as fatal.
         """
-        if kind not in ("events", "crashes", "reporter_blocked"):
+        if kind not in ("events", "crashes", "reporter_blocked", "reporter_errors"):
             raise ValueError(
                 f"append() only writes JSONL kinds; got {kind!r}"
             )
@@ -180,6 +190,41 @@ class LocalJsonlStorage:
                     out.append(name[: -len(suffix)])
                     break
         return sorted(out)
+
+    def read_reporter_cursor(self, reporter_name: str) -> dict[str, Any]:
+        path = self._cursor_path(reporter_name)
+        if not path.exists():
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def write_reporter_cursor(self, reporter_name: str, cursor: dict[str, Any]) -> bool:
+        path = self._cursor_path(reporter_name)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning("telemetry: mkdir failed for reporter cursor: %s", exc)
+            return False
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cursor, f, ensure_ascii=False, default=str, indent=2)
+                f.write("\n")
+            import os
+
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.warning("telemetry: cursor write failed: %s", exc)
+            return False
+        return True
+
+    def _cursor_path(self, reporter_name: str) -> Path:
+        safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in reporter_name)
+        return self._dir_for("reporter_cursors") / f"{safe or 'default'}.json"
 
     # -- retention ------------------------------------------------------
 
