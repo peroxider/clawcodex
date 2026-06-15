@@ -401,11 +401,36 @@ _TASK_WIDGET_TOOL_NAMES: set[str] = {
 }
 
 
-def _ghost_hint_for(key: str) -> str:
-    """Build the trailing ghost-text hint for the configured accept key."""
-    from clawcodex_ext.utils.key_format import display_key
+def _ghost_hint_for(key: str, *, has_tab_alias: bool = True) -> str:
+    """Build the trailing ghost-text hint for the configured accept key.
 
-    return f" ({display_key(key)} to accept)"
+    When *has_tab_alias* is true and *key* is not already tab, the hint
+    also mentions ``TAB`` as a context-aware secondary key. Mirrors the
+    upstream ``useTypeahead`` behaviour where Tab is bound to
+    ``autocomplete:accept`` only while a ghost-text suggestion is shown.
+    """
+    from clawcodex_ext.utils.key_format import display_key, to_prompt_toolkit_key
+
+    base = display_key(key)
+    if has_tab_alias and to_prompt_toolkit_key(key) != "tab":
+        base = f"{base} or {display_key('tab')}"
+    return f" ({base} to accept)"
+
+
+# Module-level state tracking ghost-text suggestion visibility.
+#
+# prompt_toolkit's ``Condition`` filter accepts a no-arg callable — the
+# filter cannot see the current buffer. We instead observe the
+# ``_HintedAutoSuggest.get_suggestion`` calls (which the framework
+# invokes on every keystroke) and stash a tuple of
+# ``(suggestion_text, complete_state_active)`` for the registered
+# ``tab`` binding's filter closure to read.
+#
+# NOTE: a single shared state is fine because only one REPL/PromptSession
+# is typically mounted at a time per process. Multi-session REPLs (none
+# exist upstream) would need to thread per-buffer state through the
+# filter — out of scope for plan 3.
+_ghost_state: dict[str, object] = {"suggestion": None, "complete_active": False}
 
 
 class _HintedAutoSuggest(AutoSuggestFromHistory):
@@ -416,39 +441,75 @@ class _HintedAutoSuggest(AutoSuggestFromHistory):
     keeping the displayed hint in sync.
     """
 
-    def __init__(self, accept_key: str = "c-e") -> None:
+    def __init__(self, accept_key: str = "c-e", *, has_tab_alias: bool = True) -> None:
         super().__init__()
         self._accept_key = accept_key
-        self._hint = _ghost_hint_for(accept_key)
+        self._hint = _ghost_hint_for(accept_key, has_tab_alias=has_tab_alias)
 
     def get_suggestion(self, buffer, document):
         suggestion = super().get_suggestion(buffer, document)
+        # Refresh the module-level visibility snapshot so the Tab
+        # binding's filter can decide whether to fire.
+        _ghost_state["suggestion"] = suggestion.text if suggestion else None
+        _ghost_state["complete_active"] = bool(
+            getattr(buffer, "complete_state", None)
+        )
         if suggestion and suggestion.text:
             return Suggestion(suggestion.text + self._hint)
         return suggestion
 
 
-def _patch_accept_suggestion_bindings(bindings, accept_key: str = "c-e"):
+def _patch_accept_suggestion_bindings(
+    bindings, accept_key: str = "c-e", *, has_tab_alias: bool = True
+):
     """Override the accept key so it strips the hint before inserting.
 
     *accept_key* is the prompt_toolkit spelling (e.g. ``"c-e"``, ``"tab"``,
     ``"c-j"``). The hint stripped from the inserted text always matches
     the one rendered by :class:`_HintedAutoSuggest` for the same key.
+
+    When *has_tab_alias* is true, a context-aware ``tab`` binding is
+    also registered: it fires only when the ghost-text suggestion is
+    visible AND the completion menu is closed, so it never competes
+    with the slash/``@``/history completion navigation Tab. When the
+    filter is false, prompt_toolkit's default Tab handler runs and
+    cycles through the active completion menu.
     """
+
+    from prompt_toolkit.filters import Condition
 
     from clawcodex_ext.utils.key_format import to_prompt_toolkit_key
 
     pt_key = to_prompt_toolkit_key(accept_key)
-    hint = _ghost_hint_for(accept_key)
+    hint = _ghost_hint_for(accept_key, has_tab_alias=has_tab_alias)
 
-    @bindings.add(pt_key)
-    def _accept(event):
-        buf = event.current_buffer
+    def _accept_ghost(buf):
         suggestion = buf.suggestion
         if suggestion and suggestion.text.endswith(hint):
             buf.insert_text(suggestion.text[: -len(hint)])
         elif suggestion:
             buf.insert_text(suggestion.text)
+
+    @bindings.add(pt_key)
+    def _accept(event):
+        _accept_ghost(event.current_buffer)
+
+    if has_tab_alias and pt_key != "tab":
+        # Context-aware Tab: only fire when ghost is showing and no
+        # completion popup is active. The filter is a no-arg closure
+        # that reads the module-level snapshot kept fresh by
+        # ``_HintedAutoSuggest.get_suggestion``. When the filter
+        # returns False, prompt_toolkit's default Tab handler runs
+        # (cycle completion menu / insert a tab).
+        def _tab_filter() -> bool:
+            return (
+                _ghost_state.get("suggestion") is not None
+                and not _ghost_state.get("complete_active", False)
+            )
+
+        @bindings.add("tab", filter=Condition(_tab_filter))
+        def _tab_accept(event):
+            _accept_ghost(event.current_buffer)
 
 
 async def _drain_history(history) -> None:

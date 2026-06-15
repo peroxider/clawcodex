@@ -48,7 +48,7 @@ from clawcodex_ext.utils.completers import (
     rank_message_history,
     rank_suggestions,
 )
-from clawcodex_ext.utils.key_format import display_key, to_textual_key
+from clawcodex_ext.utils.key_format import display_key, to_prompt_toolkit_key, to_textual_key
 
 # Reuse the same matching machinery as the prompt_toolkit REPL.
 # ``_AT_TOKEN_RE`` matches ``@<query>`` at the cursor position;
@@ -504,6 +504,20 @@ class PromptInput(Vertical):
                 event.stop()
                 return
 
+        # Context-aware Tab: accept the ghost-text suggestion when one
+        # is visible, otherwise let the event bubble up to the App's
+        # default ``focus_next`` binding. Mirrors the upstream
+        # ``useTypeahead`` Autocomplete-context behaviour where ``tab``
+        # is only bound to ``autocomplete:accept`` while a suggestion
+        # is shown. Crucially, we do NOT call ``event.stop()`` when
+        # the ghost is hidden — that would break the standard
+        # widget-to-widget focus navigation.
+        if key == "tab":
+            if not self._ghost_suggestion.has_class("-hidden"):
+                self._accept_ghost_suggestion()
+                event.stop()
+                return
+
         if key in ("up", "down"):
             # @ file suggestions take top priority
             if not self._at_file_suggestions.has_class("-hidden"):
@@ -598,12 +612,16 @@ class PromptInput(Vertical):
         match = self._find_history_suggestion(text)
         if match is not None:
             suffix = match[len(text):]
+            # Mirror the REPL's ``_ghost_hint_for`` shape so the TUI and
+            # REPL hint read identically. ``TAB`` is always advertised
+            # as a context-aware secondary accept key unless the user
+            # has already remapped the primary key to ``tab`` itself.
+            base = display_key(self._accept_key_raw)
+            if to_prompt_toolkit_key(self._accept_key_raw) != "tab":
+                base = f"{base} or {display_key('tab')}"
             hint = Text()
             hint.append(suffix, style="dim")
-            hint.append(
-                f" ({display_key(self._accept_key_raw)} to accept)",
-                style="dim cyan",
-            )
+            hint.append(f" ({base} to accept)", style="dim cyan")
             self._ghost_suggestion.update(hint)
             self._ghost_suggestion.remove_class("-hidden")
         else:
