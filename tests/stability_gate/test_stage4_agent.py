@@ -358,3 +358,89 @@ class TestStage4SubagentInParentSession:
             import clawcodex_ext
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
+
+
+class TestStage4Resilience:
+    """Conversation / Session 恢复性测试 — P0#5 空/downstream保护, P1#10 损坏恢复, P2#15 并发写安全。"""
+
+    def test_conversation_empty_messages_downstream(self):
+        """空的 Conversation.get_messages() 返回 []，下游不炸。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation()
+        msgs = conv.get_messages()
+        assert msgs == []
+
+    def test_conversation_to_dict_from_dict_round_trip_empty(self):
+        """空 Conversation to_dict → from_dict 不抛异常，messages 为空。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation()
+        data = conv.to_dict()
+        restored = Conversation.from_dict(data)
+        assert restored.get_messages() == []
+
+    def test_conversation_from_dict_missing_messages_key(self):
+        """from_dict 入参缺失 messages key 时不抛异常。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation.from_dict({"max_history": 500})
+        assert conv.get_messages() == []
+
+    def test_conversation_from_dict_none_messages(self):
+        """from_dict 入参 messages 为 None 时不抛异常。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation.from_dict({"messages": None})
+        assert conv.get_messages() == []
+
+    def test_conversation_max_history_cap(self):
+        """超过 max_history 时旧消息被截断，不爆炸。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation(max_history=3)
+        for i in range(5):
+            conv.add_user_message(f"msg-{i}")
+            conv.add_assistant_message(f"resp-{i}")
+        msgs = conv.get_messages()
+        assert len(msgs) <= 6  # 3 pairs max
+        assert msgs[0]["content"] != "msg-0"  # 旧消息被弹出
+
+    def test_session_load_nonexistent(self):
+        """Session.load 不存在的 session_id 返回 None 而非抛异常。"""
+        from src.agent.session import Session
+
+        s = Session.load("__nonexistent_session_id_for_test__")
+        assert s is None
+
+    def test_session_save_and_load_round_trip(self, tmp_path):
+        """Session.save 后 Session.load 能恢复。"""
+        from pathlib import Path
+        from unittest.mock import patch
+        from src.agent.session import Session
+        from src.agent.conversation import Conversation
+
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        with patch("pathlib.Path.home", return_value=fake_home):
+            conv = Conversation()
+            conv.add_user_message("hello")
+            conv.add_assistant_message("world")
+            session = Session(session_id="test-save-load", provider="test", model="test", conversation=conv)
+            session.save()
+            loaded = Session.load("test-save-load")
+            assert loaded is not None
+            assert loaded.session_id == "test-save-load"
+            msgs = loaded.conversation.get_messages()
+            assert len(msgs) == 2
+
+    def test_add_message_large_content(self):
+        """给 Conversation 添加超长字符串不崩溃。"""
+        from src.agent.conversation import Conversation
+
+        conv = Conversation()
+        large = "x" * 100_000
+        conv.add_user_message(large)
+        msgs = conv.get_messages()
+        assert len(msgs) == 1
+        assert len(msgs[0]["content"]) == 100_000

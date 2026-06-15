@@ -319,3 +319,114 @@ class TestStage7TextualApiDrift:
             "改用 action_select()。\n命中：\n  "
             + "\n  ".join(offenders)
         )
+
+
+# ---- TUI resize 边界 + 多弹层冲突 --------------------------------------
+
+
+class TestStage7TuiResize:
+    """TUI resize 边界测试 — P0#3 resize 到极端值不崩溃。"""
+
+    pytestmark = pytest.mark.asyncio
+
+    async def test_resize_tiny_terminal(self):
+        """resize 到 1x1 极小尺寸不应 crash。"""
+        from textual.app import App, ComposeResult
+        from clawcodex_ext.tui.widgets.prompt_input import PromptInput
+
+        class _TinyHost(App):
+            def compose(self) -> ComposeResult:
+                yield PromptInput(words_provider=lambda: [])
+
+        # size=(columns, rows) => 1 col x 1 row 极端小
+        async with _TinyHost().run_test(size=(1, 1)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            pi = pilot.app.query_one(PromptInput)
+            assert pi is not None
+            # 能在 1x1 终端中键入文字
+            pi._input.value = "x"
+            assert pi._input.value == "x"
+
+    async def test_resize_large_terminal(self):
+        """resize 到 200x200 超大尺寸不应 crash。"""
+        from textual.app import App, ComposeResult
+        from clawcodex_ext.tui.widgets.prompt_input import PromptInput
+
+        class _LargeHost(App):
+            def compose(self) -> ComposeResult:
+                yield PromptInput(words_provider=lambda: [])
+
+        async with _LargeHost().run_test(size=(200, 200)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            pi = pilot.app.query_one(PromptInput)
+            assert pi is not None
+            pi._input.value = "hello in large terminal"
+            assert "hello" in pi._input.value
+            # 验证弹层也能正常添加
+            from textual.widgets.option_list import Option
+            pi._suggestions.add_option(Option("/test", id="/test"))
+            pi._suggestions.remove_class("-hidden")
+            assert not pi._suggestions.has_class("-hidden")
+
+    async def test_slash_and_at_file_popup_simultaneous(self):
+        """同时打开 slash + @file 弹层不冲突 (P2#11 多弹层)。"""
+        from textual.app import App, ComposeResult
+        from textual.widgets.option_list import Option
+        from clawcodex_ext.tui.widgets.prompt_input import PromptInput
+
+        class _MultiPopupHost(App):
+            def compose(self) -> ComposeResult:
+                yield PromptInput(words_provider=lambda: ["/repl", "/exit"])
+
+        async with _MultiPopupHost().run_test() as pilot:
+            await pilot.pause()
+            pi = pilot.app.query_one(PromptInput)
+
+            # 打开 slash 弹层 — 使用 words_provider 不含的命令避免重复 id
+            pi._input.value = "/"
+            await pilot.pause()
+            # _refresh_suggestions 已从 words_provider 填充了 /repl /exit
+            pi._suggestions.remove_class("-hidden")
+            await pilot.pause()
+
+            # 同时打开 @file 弹层
+            pi._at_file_suggestions.add_option(Option("foo.py", id="@foo.py"))
+            pi._at_file_suggestions.remove_class("-hidden")
+            await pilot.pause()
+
+            # 两个弹层都应可见 — 不崩溃即通过
+            assert not pi._suggestions.has_class("-hidden")
+            assert not pi._at_file_suggestions.has_class("-hidden")
+
+            # Enter 不应抛异常（即使弹层都开着）
+            await pilot.press("enter")
+            await pilot.pause()
+            await pilot.pause()
+            # 测试通过 = 没有异常抛出
+
+    async def test_resize_does_not_lose_input(self):
+        """resize 后已输入的文本不应丢失。"""
+        from textual.app import App, ComposeResult
+        from clawcodex_ext.tui.widgets.prompt_input import PromptInput
+
+        class _ResizeHost(App):
+            def compose(self) -> ComposeResult:
+                yield PromptInput(words_provider=lambda: [])
+
+        async with _ResizeHost().run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            pi = pilot.app.query_one(PromptInput)
+            pi._input.value = "persistent text"
+            await pilot.pause()
+
+            # 通过 pilot.resize_terminal 模拟终端 resize (width, height)
+            await pilot.resize_terminal(120, 40)
+            await pilot.pause()
+            await pilot.pause()
+
+            # resize 后 input 内容不变
+            assert pi._input.value == "persistent text", (
+                "resize 后 input 内容不应丢失"
+            )

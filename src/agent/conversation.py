@@ -102,7 +102,7 @@ class Conversation:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Conversation":
         conv = cls(max_history=data.get("max_history", 100))
-        for msg_data in data.get("messages", []):
+        for msg_data in data.get("messages") or []:
             if isinstance(msg_data, dict):
                 conv.messages.append(message_from_dict(msg_data))
         return conv

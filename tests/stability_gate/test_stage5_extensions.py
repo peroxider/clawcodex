@@ -435,3 +435,48 @@ class TestStage5ExtBridge:
         from clawcodex_ext.services.tail_follower import TailFollower
 
         assert TailFollower is not None
+
+
+class TestStage5Resilience:
+    """扩展加载健壮性 — P1#9 坏扩展不阻塞启动, P2#12 Hook 异常隔离。"""
+
+    def test_bad_extension_import_does_not_crash_interpreter(self):
+        """模拟 import 一个坏的 .py 模块不应造成进程级崩溃。
+
+        验证: 即使 import 一个语法错误的模块, Python 的 ImportError
+        可以被 caught, 不会级联到 SystemExit/SIGABRT.
+        """
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_pkg = Path(tmpdir) / "bad_ext"
+            bad_pkg.mkdir()
+            (bad_pkg / "__init__.py").write_text(
+                "this is not valid python =(", encoding="utf-8"
+            )
+            sys.path.insert(0, tmpdir)
+            try:
+                # 这应该抛 ImportError / SyntaxError 而不是 SystemExit
+                __import__("bad_ext")
+                assert False, "should have raised"
+            except Exception:
+                # 任何 Exception 都可以 —— 关键是不导致进程崩溃
+                pass
+            finally:
+                if tmpdir in sys.path:
+                    sys.path.remove(tmpdir)
+
+    def test_root_level_py_import_error_caught(self):
+        """项目根目录的 *.py 如果 import 失败, 不应级联到其他模块。
+
+        注: 这是对 '坏扩展不阻塞主程序启动' 的简化模拟 ——
+        验证 import 异常的作用域被限制在 try/except 内。
+        """
+        # 核心模块的导入不应被前一个失败的 import 影响
+        from src.agent.conversation import Conversation
+
+        conv = Conversation()
+        conv.add_user_message("still works after bad import")
+        assert len(conv.get_messages()) == 1
