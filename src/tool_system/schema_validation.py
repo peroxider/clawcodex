@@ -107,7 +107,15 @@ def _validate_object(value: dict[str, Any], schema: Mapping[str, Any], *, path: 
 
     for req in required:
         if req not in value:
-            issues.append(ValidationIssue(path, f"missing required field {req!r}"))
+            # Include available parameter names so the LLM can self-correct.
+            # Without this, it gets "missing required field 'file_path'" but
+            # has no clue what fields the tool actually accepts.
+            if properties:
+                available = ", ".join(sorted(properties.keys()))
+                msg = f"missing required field {req!r}. Available parameters: {available}"
+            else:
+                msg = f"missing required field {req!r}"
+            issues.append(ValidationIssue(path, msg))
 
     for key, val in value.items():
         prop_schema = properties.get(key) if isinstance(properties, dict) else None
