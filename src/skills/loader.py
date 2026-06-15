@@ -845,6 +845,8 @@ def _is_path_gitignored(path: str, cwd: str) -> bool:
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5,
         )
     except (FileNotFoundError, subprocess.SubprocessError, OSError):

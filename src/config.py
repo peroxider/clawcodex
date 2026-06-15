@@ -53,7 +53,7 @@ def _find_git_root(cwd: str | Path | None = None) -> Path | None:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, cwd=str(start), timeout=5,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(start), timeout=5,
         )
         if result.returncode == 0:
             return Path(result.stdout.strip())

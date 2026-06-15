@@ -39,6 +39,8 @@ def execute_bash(command_template: str, params: dict[str, Any]) -> str:
             shell=True,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
     except subprocess.TimeoutExpired as exc:

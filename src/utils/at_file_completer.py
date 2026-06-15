@@ -426,6 +426,8 @@ def _list_git_files(cwd: Path) -> list[str] | None:
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=2.0,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -452,6 +454,8 @@ def _list_git_files(cwd: Path) -> list[str] | None:
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=5.0,
         )
     except (OSError, subprocess.TimeoutExpired):

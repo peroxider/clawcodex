@@ -207,6 +207,8 @@ def find_canonical_git_root(start: str | os.PathLike[str] | None = None) -> str 
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=cwd,
             timeout=5,
         )

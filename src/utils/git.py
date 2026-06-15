@@ -22,6 +22,8 @@ def _run_git(
             ["git", *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=effective_cwd,
             timeout=timeout,
         )
@@ -120,6 +122,8 @@ def get_file_status(cwd: str | None = None) -> list[FileStatus]:
             ["git", "status", "--porcelain", "-z"],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             cwd=effective_cwd,
             timeout=30.0,
         )
