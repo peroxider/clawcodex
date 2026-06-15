@@ -32,8 +32,13 @@ def save_to_session_storage(session: Any) -> None:
     transcript is the file that :class:`TailFollower` watches during
     ``--resume``, so it must exist and contain all current messages
     for the resume path to work correctly.
+
+    Also writes the full cost block (API usage, durations, token counts)
+    to both ``metadata.json`` and ``transcript.jsonl``, matching the
+    shape written by ``Session.save()`` into ``<sid>.json``.
     """
     try:
+        from src.agent.session import _snapshot_cost_block
         from src.services.session_storage import SessionStorage
 
         storage = SessionStorage(session_id=session.session_id)
@@ -58,6 +63,18 @@ def save_to_session_storage(session: Any) -> None:
         for msg_data in messages_list:
             if isinstance(msg_data, dict):
                 storage.write_raw(msg_data)
+        storage.flush()
+
+        # --- Cost block: write to both metadata.json and transcript.jsonl ---
+        cost_block = _snapshot_cost_block()
+        # metadata.json gets the full cost dict
+        storage.update_metadata(cost=cost_block)
+        # transcript.jsonl gets a dedicated cost-block entry (type="cost_block"
+        # so read_messages() skips it, but read_transcript() returns it)
+        storage.write_raw({
+            "type": "cost_block",
+            "cost": cost_block,
+        })
         storage.flush()
     except Exception:
         pass  # Best-effort; not critical if this fails.

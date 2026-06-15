@@ -40,15 +40,17 @@ class SessionMetadataParser:
 
         metadata_path = session_dir / "metadata.json"
         transcript_path = session_dir / "transcript.jsonl"
-        snapshot_path = session_dir / f"{session_id}.json"
-        # F-91-B 补遗: Session.save() 和 AgentSession._save_json_snapshot()
-        # 将快照写入 ~/.clawcodex/sessions/{session_id}.json (sessions 根目录),
-        # 而非 SessionStorage 的子目录 {session_id}/{session_id}.json。
-        # 所以当子目录路径找不到时，回退到 sessions 根目录查找。
+        snapshot_path = session_dir / "session.json"
+        # 向后兼容: 旧版 Session.save() 写入 {session_id}.json
+        # (子目录内) 或 sessions_dir/{session_id}.json (根目录)
         if not snapshot_path.exists():
-            alt_snapshot_path = self.sessions_dir / f"{session_id}.json"
+            alt_snapshot_path = session_dir / f"{session_id}.json"
             if alt_snapshot_path.exists():
                 snapshot_path = alt_snapshot_path
+            else:
+                root_snapshot = self.sessions_dir / f"{session_id}.json"
+                if root_snapshot.exists():
+                    snapshot_path = root_snapshot
 
         # Load metadata
         meta: dict[str, Any] = {}

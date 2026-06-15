@@ -174,7 +174,10 @@ class TestRestoreCostStateForSession:
         sessions_dir.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(cost_restore_mod, "_sessions_dir", lambda: sessions_dir)
         self._sessions_dir = sessions_dir
-        self._test_file = sessions_dir / f"{self.test_sid}.json"
+        # Create the per-session subdirectory where session.json lives
+        session_subdir = sessions_dir / str(self.test_sid)
+        session_subdir.mkdir(parents=True, exist_ok=True)
+        self._test_file = session_subdir / "session.json"
         yield
 
     def test_restore_returns_false_when_file_missing(self) -> None:

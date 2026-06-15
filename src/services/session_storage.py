@@ -47,6 +47,7 @@ class SessionMetadata:
     last_user_input: str = ""
     agent_name: str = ""  # S-R4-A: agent type used for the session
     tags: list[str] = field(default_factory=list)
+    cost: dict[str, Any] | None = None  # Full cost block (matches _snapshot_cost_block shape)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -61,6 +62,7 @@ class SessionMetadata:
             "last_user_input": self.last_user_input,
             "agent_name": self.agent_name,
             "tags": self.tags,
+            "cost": self.cost,
         }
 
     @classmethod
@@ -77,6 +79,7 @@ class SessionMetadata:
             last_user_input=data.get("last_user_input", ""),
             agent_name=data.get("agent_name", ""),
             tags=data.get("tags", []),
+            cost=data.get("cost"),
         )
 
 
