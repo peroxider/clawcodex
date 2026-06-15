@@ -486,11 +486,11 @@ class PromptInput(Vertical):
             event.stop()
             return
 
-        # Tab / Right / Ctrl+E: accept the ghost-text suggestion.
+        # Ctrl+E: accept the ghost-text suggestion.
         # Only when the cursor is at the end of the input and a
         # suggestion is visible — mirrors REPL's AutoSuggestFromHistory
-        # accept keys (→ / ⌃F / ⌃E).
-        if key in ("tab", "right", "ctrl+e"):
+        # accept key (⌃E).
+        if key == "ctrl+e":
             if not self._ghost_suggestion.has_class("-hidden"):
                 self._accept_ghost_suggestion()
                 event.stop()
@@ -592,7 +592,7 @@ class PromptInput(Vertical):
             suffix = match[len(text):]
             hint = Text()
             hint.append(suffix, style="dim")
-            hint.append(" (→ to accept)", style="dim cyan")
+            hint.append(" (CTRL + e to accept)", style="dim cyan")
             self._ghost_suggestion.update(hint)
             self._ghost_suggestion.remove_class("-hidden")
         else:

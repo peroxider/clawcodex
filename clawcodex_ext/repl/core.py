@@ -401,11 +401,11 @@ _TASK_WIDGET_TOOL_NAMES: set[str] = {
 }
 
 
-_GHOST_HINT = " (→ to accept)"
+_GHOST_HINT = " (CTRL + e to accept)"
 
 
 class _HintedAutoSuggest(AutoSuggestFromHistory):
-    """Append ``(→ to accept)`` to ghost-text suggestions."""
+    """Append ``(CTRL + e to accept)`` to ghost-text suggestions."""
 
     def get_suggestion(self, buffer, document):
         suggestion = super().get_suggestion(buffer, document)
@@ -415,10 +415,8 @@ class _HintedAutoSuggest(AutoSuggestFromHistory):
 
 
 def _patch_accept_suggestion_bindings(bindings):
-    """Override →/⌃F/⌃E so they strip the hint before inserting."""
+    """Override ⌃E so it strips the hint before inserting."""
 
-    @bindings.add("right")
-    @bindings.add("c-f")
     @bindings.add("c-e")
     def _accept(event):
         buf = event.current_buffer
