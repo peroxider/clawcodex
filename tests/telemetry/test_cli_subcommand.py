@@ -11,6 +11,24 @@ from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
 from clawcodex.telemetry.recorder import reset_recorder_for_tests
 
 
+class _PreviewRecorder:
+    enabled = True
+
+    def __init__(self) -> None:
+        self.dates: list[str] = []
+
+    def build_report_for(self, date: str) -> str:
+        self.dates.append(date)
+        return f"safe report for {date}"
+
+
+class _SecretPreviewRecorder:
+    enabled = True
+
+    def build_report_for(self, date: str) -> str:
+        return "rendered body contains leaked AKIAIOSFODNN7EXAMPLE"
+
+
 def test_status_default(monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
@@ -56,6 +74,59 @@ def test_preview_when_disabled(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 1
     assert "disabled" in out
+
+
+def test_preview_accepts_main_style_date_arg(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    recorder = _PreviewRecorder()
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+    )
+    monkeypatch.setattr(cli, "get_recorder", lambda: recorder)
+
+    rc = cli.main(["preview", "2026-06-14"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert recorder.dates == ["2026-06-14"]
+    assert "safe report for 2026-06-14" in out
+
+
+def test_preview_accepts_direct_date_arg(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    recorder = _PreviewRecorder()
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+    )
+    monkeypatch.setattr(cli, "get_recorder", lambda: recorder)
+
+    rc = cli.run_preview(["2026-06-13"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert recorder.dates == ["2026-06-13"]
+    assert "safe report for 2026-06-13" in out
+
+
+def test_preview_secret_scan_refuses_rendered_body(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+    )
+    monkeypatch.setattr(cli, "get_recorder", lambda: _SecretPreviewRecorder())
+
+    rc = cli.run_preview(["2026-06-13"])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "Secret scan matched" in out
+    assert "rendered body contains" not in out
 
 
 def test_main_dispatches_to_status(monkeypatch, tmp_path, capsys):

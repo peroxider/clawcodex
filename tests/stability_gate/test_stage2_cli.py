@@ -59,6 +59,11 @@ class TestStage2CliSmoke:
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
         assert len(proc.stdout.strip()) > 0
 
+    def test_cli_telemetry_status_exits_0(self):
+        proc = _run_cli("telemetry", "status")
+        assert proc.returncode == 0, f"stderr={proc.stderr!r}"
+        assert "Telemetry status" in proc.stdout
+
     @pytest.mark.parametrize(
         "flag,desc",
         [

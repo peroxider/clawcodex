@@ -111,7 +111,7 @@ def run_preview(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        date = argv[1] if argv and len(argv) > 1 else utc_date(utc_now())
+        date = _preview_date_arg(argv)
         if not cfg.enabled:
             _print("telemetry: disabled — preview is empty")
             return 0
@@ -176,6 +176,15 @@ def run_disable(argv: Sequence[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _preview_date_arg(argv: Sequence[str] | None) -> str:
+    args = list(argv or [])
+    if len(args) >= 2 and args[0] == "preview":
+        return args[1]
+    if args and args[0] != "preview":
+        return args[0]
+    return utc_date(utc_now())
 
 
 def _asdict(cfg: TelemetryConfig) -> dict[str, Any]:
