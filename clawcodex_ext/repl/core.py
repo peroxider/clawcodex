@@ -3307,7 +3307,7 @@ class ClawcodexREPL:
 
 **Usage:**
 - Type your message and press Enter to chat
-- Use Tab for command completion
+- Use ↓/↑ and Enter to accept a slash-command suggestion
 - Press Ctrl+C to interrupt current operation
 - Press Ctrl+D to exit
 - Multi-line input: Shift+Enter, Meta/Alt+Enter, or `\` + Enter inserts a newline; plain Enter submits
