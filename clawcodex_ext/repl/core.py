@@ -893,20 +893,29 @@ class ClawcodexREPL:
         file_history = FileHistory(str(history_file))
         asyncio.run(_drain_history(file_history))
 
-        # Read the configured accept key (default ``c-e``) so the
-        # ghost-text hint and the binding registration agree.
+        # Read the configured accept key (default ``c-e``) and whether
+        # Tab should be a context-aware alias, so the ghost-text hint
+        # and binding registration agree.
         try:
             from src.settings.settings import get_settings as _get_settings
 
+            _settings = _get_settings()
             _accept_key = getattr(
-                _get_settings(), "accept_suggestion_key", "c-e"
+                _settings, "accept_suggestion_key", "c-e"
             ) or "c-e"
+            _accept_tab_alias = bool(
+                getattr(_settings, "accept_suggestion_tab_alias", True)
+            )
         except Exception:
             _accept_key = "c-e"
+            _accept_tab_alias = True
 
         self.prompt_session = PromptSession(
             history=file_history,
-            auto_suggest=_HintedAutoSuggest(accept_key=_accept_key),
+            auto_suggest=_HintedAutoSuggest(
+                accept_key=_accept_key,
+                has_tab_alias=_accept_tab_alias,
+            ),
             completer=self.completer,
             style=Style.from_dict({
                 # Dim background on the ``❯`` marker so the user
@@ -934,7 +943,11 @@ class ClawcodexREPL:
             prompt_continuation=self._prompt_continuation,
             bottom_toolbar=self._bottom_toolbar,
         )
-        _patch_accept_suggestion_bindings(self.bindings, accept_key=_accept_key)
+        _patch_accept_suggestion_bindings(
+            self.bindings,
+            accept_key=_accept_key,
+            has_tab_alias=_accept_tab_alias,
+        )
 
     def _bottom_toolbar(self):
         """Single-line status footer for the input prompt.

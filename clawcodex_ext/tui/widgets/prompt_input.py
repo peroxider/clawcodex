@@ -247,6 +247,7 @@ class PromptInput(Vertical):
         cwd: str | os.PathLike[str] | None = None,
         vim_mode: bool = False,
         accept_suggestion_key: str = "c-e",
+        accept_suggestion_tab_alias: bool = True,
     ) -> None:
         super().__init__()
         self._words_provider = words_provider
@@ -268,6 +269,7 @@ class PromptInput(Vertical):
         # Textual event.key form (used in ``on_key`` to dispatch).
         self._accept_key_raw: str = accept_suggestion_key or "c-e"
         self._accept_key_textual: str = to_textual_key(self._accept_key_raw)
+        self._accept_tab_alias: bool = bool(accept_suggestion_tab_alias)
         self._yank_buffer: str = ""
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
         # Test seam — the host reads :class:`PromptPasted` instead.
@@ -512,7 +514,7 @@ class PromptInput(Vertical):
         # is shown. Crucially, we do NOT call ``event.stop()`` when
         # the ghost is hidden — that would break the standard
         # widget-to-widget focus navigation.
-        if key == "tab":
+        if key == "tab" and self._accept_tab_alias:
             if not self._ghost_suggestion.has_class("-hidden"):
                 self._accept_ghost_suggestion()
                 event.stop()
@@ -617,7 +619,10 @@ class PromptInput(Vertical):
             # as a context-aware secondary accept key unless the user
             # has already remapped the primary key to ``tab`` itself.
             base = display_key(self._accept_key_raw)
-            if to_prompt_toolkit_key(self._accept_key_raw) != "tab":
+            if (
+                self._accept_tab_alias
+                and to_prompt_toolkit_key(self._accept_key_raw) != "tab"
+            ):
                 base = f"{base} or {display_key('tab')}"
             hint = Text()
             hint.append(suffix, style="dim")

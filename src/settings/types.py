@@ -242,6 +242,15 @@ class SettingsSchema:
     # ``AutoSuggestFromHistory`` accept key.
     accept_suggestion_key: str = "c-e"
 
+    # Whether to also bind ``Tab`` as a context-aware secondary accept
+    # key (Plan 4 opt-out). When true (default), the REPL registers a
+    # filtered Tab binding and the TUI intercepts Tab in
+    # ``on_key`` only while a ghost-text suggestion is visible,
+    # mirroring the upstream ``useTypeahead`` Autocomplete-context
+    # behaviour. Set to false to keep Tab exclusively bound to the
+    # framework's default (focus_next / completion-menu cycling).
+    accept_suggestion_tab_alias: bool = True
+
     # Extra raw fields for forward compatibility
     extra: dict[str, Any] = field(default_factory=dict)
 

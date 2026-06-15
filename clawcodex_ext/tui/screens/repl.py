@@ -46,6 +46,16 @@ def _configured_accept_suggestion_key() -> str:
     except Exception:
         return "c-e"
 
+
+def _configured_accept_suggestion_tab_alias() -> bool:
+    """Read ``settings.accept_suggestion_tab_alias`` with a safe fallback."""
+    try:
+        from src.settings.settings import get_settings
+
+        return bool(getattr(get_settings(), "accept_suggestion_tab_alias", True))
+    except Exception:
+        return True
+
 from textual.app import ComposeResult
 from textual.screen import Screen
 
@@ -135,6 +145,7 @@ class REPLScreen(Screen):
             message_history_provider=message_history_provider,
             cwd=self._workspace_root,
             accept_suggestion_key=_configured_accept_suggestion_key(),
+            accept_suggestion_tab_alias=_configured_accept_suggestion_tab_alias(),
         )
         # ARIA live region — stays height: 1 and only announces the
         # most recent status change. Mounted just above the status

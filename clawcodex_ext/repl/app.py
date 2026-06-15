@@ -412,15 +412,23 @@ class ClawCodexExtREPL(ClawcodexREPL):
         try:
             from src.settings.settings import get_settings as _get_settings
 
+            _settings = _get_settings()
             _accept_key = getattr(
-                _get_settings(), "accept_suggestion_key", "c-e"
+                _settings, "accept_suggestion_key", "c-e"
             ) or "c-e"
+            _accept_tab_alias = bool(
+                getattr(_settings, "accept_suggestion_tab_alias", True)
+            )
         except Exception:
             _accept_key = "c-e"
+            _accept_tab_alias = True
 
         self.prompt_session = PromptSession(
             history=FileHistory(str(history_file)),
-            auto_suggest=_HintedAutoSuggest(accept_key=_accept_key),
+            auto_suggest=_HintedAutoSuggest(
+                accept_key=_accept_key,
+                has_tab_alias=_accept_tab_alias,
+            ),
             completer=self.completer,
             style=Style.from_dict({
                 "prompt": "bold fg:ansiblue bg:#262626",
@@ -440,7 +448,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
             prompt_continuation=self._prompt_continuation,
             bottom_toolbar=self._bottom_toolbar,
         )
-        _patch_accept_suggestion_bindings(self.bindings, accept_key=_accept_key)
+        _patch_accept_suggestion_bindings(
+            self.bindings,
+            accept_key=_accept_key,
+            has_tab_alias=_accept_tab_alias,
+        )
 
     # ---- Override _init_command_system to pass downstream fields ----
 
