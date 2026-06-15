@@ -61,10 +61,10 @@ class Session:
         :class:`TailFollower` to watch for lines written by a
         backgrounded agent.
         """
-        session_dir = Path.home() / ".clawcodex" / "sessions"
+        session_dir = Path.home() / ".clawcodex" / "sessions" / self.session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
-        session_file = session_dir / f"{self.session_id}.json"
+        session_file = session_dir / "session.json"
 
         cost_block = _snapshot_cost_block()
 
@@ -115,7 +115,7 @@ class Session:
     @classmethod
     def load(cls, session_id: str) -> Optional['Session']:
         """Load session from disk."""
-        session_file = Path.home() / ".clawcodex" / "sessions" / f"{session_id}.json"
+        session_file = Path.home() / ".clawcodex" / "sessions" / session_id / "session.json"
 
         if not session_file.exists():
             return None
