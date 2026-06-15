@@ -70,6 +70,9 @@ class RepositoryTrackerAdapter(TrackerAdapter):
     ) -> Intent:
         return intent_from_label_set(labels, self.intent_labels)
 
+    async def get_authenticated_user(self) -> str | None:
+        return await self.client.get_authenticated_user()
+
     async def close_pull_request(
         self,
         pull_request: PullRequestRef,
@@ -235,11 +238,13 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self,
         *,
         pull_request: PullRequestRef,
+        issue_id: str | None = None,
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
         return await self.client.fetch_pull_request_feedback(
             pull_request=pull_request,
+            issue_id=issue_id,
             include_ci_failures=include_ci_failures,
             max_log_chars_per_check=max_log_chars_per_check,
         )
@@ -250,11 +255,13 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         pull_request: PullRequestRef,
         feedback: PullRequestFeedback,
         body: str,
+        issue_id: str | None = None,
     ) -> Comment | None:
         created = await self.client.reply_to_pull_request_feedback(
             pull_request=pull_request,
             feedback=feedback,
             body=body,
+            issue_id=issue_id,
         )
         if created is None:
             return None

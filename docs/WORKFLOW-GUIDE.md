@@ -482,6 +482,13 @@ The service uses `tracker.fetch_pull_request_feedback` /
 `tracker.reply_to_pull_request_feedback`. Local tracker always returns
 empty feedback (no real PR), so this section is a no-op there.
 
+Platform support is capability-based. GitHub supports conversation
+comments, inline review comments, review summaries, and CI feedback.
+GitCode supports conversation comments, inline review comments, and CI
+status feedback in the verified flow, but its `/pulls/{number}/reviews`
+endpoint returns 404; review summaries are therefore skipped there as an
+unsupported optional endpoint.
+
 A follow-up run uses `git_sync.sync(mode="followup")`, which:
 - reuses the existing `pull_request` from the issue registry,
 - commits on the same branch with a `fix:` prefix (vs. `feat:` for new

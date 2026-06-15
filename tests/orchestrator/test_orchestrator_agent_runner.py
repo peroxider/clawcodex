@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -78,6 +79,68 @@ class _ProgressReporter:
 
 
 class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
+    async def test_should_continue_stops_when_head_changed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace_path = Path(tmp) / "ws"
+            workspace_path.mkdir()
+            subprocess.run(["git", "init"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            (workspace_path / "README.md").write_text("base\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "initial"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            start_sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            (workspace_path / "README.md").write_text("updated\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "commit", "-m", "agent committed"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            issue = Issue(id="77", identifier="ISSUE-77", title="Committed")
+            session = AgentSession(
+                issue=issue,
+                workspace=Workspace(
+                    path=workspace_path,
+                    issue_identifier="ISSUE-77",
+                    issue_id="77",
+                ),
+            )
+            session.turn_count = 1
+            session.has_made_progress = True
+            session.start_commit_sha = start_sha
+            runner = AgentRunner(AgentConfig(max_turns=3), CodexConfig())
+
+            should_continue, _ = await runner._should_continue(
+                issue,
+                _ActiveTrackerStub(["open"]),
+                session,
+            )
+
+        self.assertFalse(should_continue)
+
     async def test_run_posts_summary_placeholder_and_writes_phase_event_log(self) -> None:
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"

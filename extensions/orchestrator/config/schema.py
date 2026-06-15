@@ -345,6 +345,7 @@ class ReviewFeedbackConfig:
     include_ci_failures: bool = True
     reply_to_comments: bool = True
     ignore_authors: list[str] = field(default_factory=list)
+    bot_login: str | None = None
     max_log_chars_per_check: int = 12_000
     max_followup_attempts_per_pr: int = 5
 
@@ -637,6 +638,7 @@ class WorkflowConfig:
                 ignore_authors=_normalize_string_list(
                     review_feedback_raw.get("ignore_authors"), []
                 ),
+                bot_login=_resolve_env_value(review_feedback_raw.get("bot_login")),
                 max_log_chars_per_check=review_feedback_raw.get(
                     "max_log_chars_per_check", 12_000
                 ),

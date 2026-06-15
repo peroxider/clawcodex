@@ -108,6 +108,20 @@ class _Tracker(TrackerAdapter):
         )
 
 
+class _FindPRTracker(_Tracker):
+    async def find_pull_request(
+        self,
+        *,
+        head_branch: str,
+        base_branch: str,
+    ) -> PullRequestRef | None:
+        return PullRequestRef(
+            number="44",
+            url="https://example.test/pr/44",
+            title=f"{head_branch}->{base_branch}",
+        )
+
+
 class _Session:
     def __init__(self, issue: Issue, workspace: Workspace) -> None:
         self.issue = issue
@@ -144,6 +158,45 @@ def _build_origin_repo(base: Path) -> Path:
 
 
 class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
+    def test_merge_pr_ref_preserves_existing_number_and_url(self) -> None:
+        service = GitSyncService(_Tracker())
+
+        result = service._merge_pr_ref(
+            PullRequestRef(title="Updated title"),
+            PullRequestRef(
+                number="9",
+                url="https://example.test/pr/9",
+                title="Old title",
+            ),
+        )
+
+        self.assertEqual(
+            result,
+            PullRequestRef(
+                number="9",
+                url="https://example.test/pr/9",
+                title="Updated title",
+            ),
+        )
+
+    async def test_find_pr_fallback_uses_tracker_find_pull_request(self) -> None:
+        service = GitSyncService(_FindPRTracker())
+
+        result = await service._find_pr_fallback(
+            PullRequestRef(title="pending"),
+            head_branch="feature/issue-44",
+            base_branch="main",
+        )
+
+        self.assertEqual(
+            result,
+            PullRequestRef(
+                number="44",
+                url="https://example.test/pr/44",
+                title="feature/issue-44->main",
+            ),
+        )
+
     async def test_sync_commits_pushes_and_creates_pr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)
@@ -518,8 +571,11 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             workspace = await manager.create_for_issue(issue)
             service = GitSyncService(_Tracker())
             service._sync_gitignore(str(workspace.path))
-            _git(["add", ".gitignore"], workspace.path)
-            _git(["commit", "-m", "test: prepare ignore baseline"], workspace.path)
+            self.assertFalse((workspace.path / ".gitignore").exists())
+            self.assertIn(
+                ".clawcodex_issue_registry.json",
+                (workspace.path / ".git" / "info" / "exclude").read_text(encoding="utf-8"),
+            )
             start_commit_sha = _git_output(["rev-parse", "HEAD"], workspace.path)
             (workspace.path / "README.md").write_text("agent committed\n", encoding="utf-8")
             _git(["add", "README.md"], workspace.path)

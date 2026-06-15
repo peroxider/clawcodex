@@ -197,6 +197,54 @@ class PromptBuilder:
             return _DEFAULT_PROMPT
 
     @staticmethod
+    def render_feedback_summary(
+        *,
+        attempt: int,
+        processed: list[PullRequestFeedback],
+        skipped: list[dict],
+    ) -> str:
+        """Render a post-followup summary for the PR.
+
+        Args:
+            attempt: Follow-up attempt number.
+            processed: Feedback items that were auto-handled.
+            skipped: Dicts with keys ``feedback`` (PullRequestFeedback)
+                and ``reason`` (str) for items needing human attention.
+        """
+        lines = [
+            "## ClawCodex PR Review Follow-up Summary",
+            "",
+            f"**Follow-up attempt**: #{attempt}",
+            f"**Processed**: {len(processed)} item(s)",
+        ]
+        if processed:
+            lines += ["", "### Auto-handled"]
+            for item in processed:
+                loc = ""
+                if item.file_path:
+                    loc = f" (`{item.file_path}"
+                    if item.line:
+                        loc += f":{item.line}"
+                    loc += "`)"
+                body_preview = (item.body or "")[:80]
+                if len(item.body or "") > 80:
+                    body_preview += "..."
+                lines.append(f"- [{item.source}] {item.id}{loc}: {body_preview}")
+        if skipped:
+            lines += ["", "### Needs human attention"]
+            for entry in skipped:
+                fb = entry["feedback"]
+                reason = entry["reason"]
+                loc = ""
+                if fb.file_path:
+                    loc = f" (`{fb.file_path}"
+                    if fb.line:
+                        loc += f":{fb.line}"
+                    loc += "`)"
+                lines.append(f"- [{fb.source}] {fb.id}{loc}: {reason}")
+        return "\n".join(lines)
+
+    @staticmethod
     def build_continuation_prompt(
         turn_number: int,
         max_turns: int,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 import re
@@ -11,6 +13,8 @@ import httpx
 
 from ..issue import Issue
 from ..tracker import PullRequestFeedback, PullRequestRef
+
+logger = logging.getLogger(__name__)
 
 _PAGE_SIZE = 100
 
@@ -254,18 +258,37 @@ class RepositoryIssueClient:
             f"/repos/{self.owner}/{self.repo}/pulls",
             params=params,
         )
-        if not isinstance(payload, list):
-            return None
-        for item in payload:
-            pr = _normalize_pull_request(item)
-            if pr is not None:
-                return pr
-        return None
+        pr = _find_pull_request_in_payload(
+            payload,
+            head_branch=head_branch,
+            base_branch=base_branch,
+            allow_unique_unmatched=True,
+        )
+        if pr is not None:
+            return pr
+
+        # Some GitCode responses ignore or partially apply head/base query
+        # filters. Fall back to an open-PR list and match locally.
+        broad_payload = await self._request_json(
+            "GET",
+            f"/repos/{self.owner}/{self.repo}/pulls",
+            params={
+                "state": self.platform.open_state,
+                "per_page": _PAGE_SIZE,
+                "page": 1,
+            },
+        )
+        return _find_pull_request_in_payload(
+            broad_payload,
+            head_branch=head_branch,
+            base_branch=base_branch,
+        )
 
     async def fetch_pull_request_feedback(
         self,
         *,
         pull_request: PullRequestRef,
+        issue_id: str | None = None,
         include_ci_failures: bool = True,
         max_log_chars_per_check: int = 12_000,
     ) -> list[PullRequestFeedback]:
@@ -273,16 +296,38 @@ class RepositoryIssueClient:
             return []
 
         feedback: list[PullRequestFeedback] = []
-        feedback.extend(await self._fetch_pull_request_conversation_feedback(pull_request.number))
-        feedback.extend(await self._fetch_pull_request_inline_feedback(pull_request.number))
-        feedback.extend(await self._fetch_pull_request_review_feedback(pull_request.number))
-        if include_ci_failures:
-            feedback.extend(
-                await self._fetch_pull_request_ci_feedback(
-                    pull_request.number,
-                    max_log_chars_per_check=max_log_chars_per_check,
+        effective_issue_id = issue_id or pull_request.number
+        for _name, fetcher in [
+            ("conversation", lambda: self._fetch_pull_request_conversation_feedback(effective_issue_id)),
+            ("inline", lambda: self._fetch_pull_request_inline_feedback(pull_request.number)),
+            ("review", lambda: self._fetch_pull_request_review_feedback(pull_request.number)),
+        ]:
+            try:
+                feedback.extend(await fetcher())
+            except RepositoryTrackerError as exc:
+                if _is_not_found_error(exc) and _name in {"inline", "review"}:
+                    logger.debug(
+                        "Skipping unsupported %s feedback endpoint for PR #%s: %s",
+                        _name, pull_request.number, exc,
+                    )
+                    continue
+                logger.warning(
+                    "Failed to fetch %s feedback for PR #%s: %s",
+                    _name, pull_request.number, exc,
                 )
-            )
+        if include_ci_failures:
+            try:
+                feedback.extend(
+                    await self._fetch_pull_request_ci_feedback(
+                        pull_request.number,
+                        max_log_chars_per_check=max_log_chars_per_check,
+                    )
+                )
+            except RepositoryTrackerError as exc:
+                logger.warning(
+                    "Failed to fetch CI feedback for PR #%s: %s",
+                    pull_request.number, exc,
+                )
         return feedback
 
     async def reply_to_pull_request_feedback(
@@ -291,6 +336,7 @@ class RepositoryIssueClient:
         pull_request: PullRequestRef,
         feedback: PullRequestFeedback,
         body: str,
+        issue_id: str | None = None,
     ) -> dict[str, Any] | None:
         if pull_request.number is None:
             return None
@@ -298,7 +344,7 @@ class RepositoryIssueClient:
             comment_id = feedback.id.split(":", 1)[1] if ":" in feedback.id else feedback.id
             endpoint = f"/repos/{self.owner}/{self.repo}/pulls/{pull_request.number}/comments/{comment_id}/replies"
         else:
-            endpoint = f"/repos/{self.owner}/{self.repo}/issues/{pull_request.number}/comments"
+            endpoint = f"/repos/{self.owner}/{self.repo}/issues/{issue_id or pull_request.number}/comments"
         payload = {"body": body}
         result = await self._request_json(
             "POST",
@@ -307,6 +353,16 @@ class RepositoryIssueClient:
             data=payload if self.platform.auth_mode != "bearer" else None,
         )
         return result if isinstance(result, dict) else None
+
+    async def get_authenticated_user(self) -> str | None:
+        """Return the login of the authenticated token owner, or None."""
+        try:
+            payload = await self._request_json("GET", "/user")
+        except RepositoryTrackerError:
+            return None
+        if isinstance(payload, dict):
+            return payload.get("login") or payload.get("username") or payload.get("name")
+        return None
 
     async def update_pull_request(
         self,
@@ -392,6 +448,15 @@ class RepositoryIssueClient:
         pr = _normalize_pull_request(body_resp)
         if pr is None:
             raise RepositoryTrackerError("invalid_pull_request_response")
+        if not pr.number or not pr.url:
+            for _ in range(12):
+                found = await self.find_pull_request(
+                    head_branch=head_branch,
+                    base_branch=base_branch,
+                )
+                if found is not None and found.number and found.url:
+                    return found
+                await asyncio.sleep(1)
         return pr
 
     async def _fetch_pull_request_conversation_feedback(
@@ -449,6 +514,22 @@ class RepositoryIssueClient:
             return []
 
         checks = await self._fetch_ci_checks(sha)
+
+        if self.platform.name == "github":
+            for item in checks:
+                state = str(item.get("conclusion") or "").strip().lower()
+                if state not in {"failure", "failed", "error", "cancelled", "timed_out"}:
+                    continue
+                check_id = item.get("id")
+                if not check_id:
+                    continue
+                try:
+                    annotations = await self._fetch_check_run_annotations(str(check_id))
+                    if annotations:
+                        item["_annotations"] = annotations
+                except RepositoryTrackerError:
+                    pass
+
         return [
             feedback
             for feedback in (
@@ -472,6 +553,12 @@ class RepositoryIssueClient:
             return check_runs if isinstance(check_runs, list) else []
         return await self._fetch_paginated(
             f"/repos/{self.owner}/{self.repo}/commits/{sha}/statuses"
+        )
+
+    async def _fetch_check_run_annotations(self, check_run_id: str) -> list[dict[str, Any]]:
+        """Fetch annotations for a GitHub check-run (file/line level errors)."""
+        return await self._fetch_paginated(
+            f"/repos/{self.owner}/{self.repo}/check-runs/{check_run_id}/annotations"
         )
 
     async def _fetch_paginated(self, path: str) -> list[dict[str, Any]]:
@@ -664,7 +751,9 @@ def _normalize_ci_feedback(
     if state not in {"failure", "failed", "error", "cancelled", "timed_out"}:
         return None
     name = _string_value(payload.get("name") or payload.get("context")) or "CI check"
-    summary = _string_value(payload.get("output", {}).get("summary") if isinstance(payload.get("output"), dict) else None)
+    output = payload.get("output") if isinstance(payload.get("output"), dict) else {}
+    summary = _string_value(output.get("summary") if isinstance(output, dict) else None)
+    text = _string_value(output.get("text") if isinstance(output, dict) else None)
     description = _string_value(payload.get("description"))
     details_url = _string_value(payload.get("details_url") or payload.get("html_url") or payload.get("target_url"))
     parts = [f"{name} reported {state}."]
@@ -672,6 +761,31 @@ def _normalize_ci_feedback(
         parts.append(description)
     if summary:
         parts.append(summary)
+    if text:
+        parts.append(f"Output:\n{text}")
+
+    annotations = payload.get("_annotations")
+    if isinstance(annotations, list) and annotations:
+        ann_lines = ["Annotations:"]
+        for ann in annotations:
+            if not isinstance(ann, dict):
+                continue
+            ann_path = ann.get("path", "")
+            ann_line = ann.get("start_line") or ann.get("line")
+            ann_end = ann.get("end_line")
+            ann_level = ann.get("annotation_level", "")
+            ann_msg = ann.get("message", "")
+            ann_title = ann.get("title", "")
+            loc = ann_path
+            if ann_line:
+                loc += f":{ann_line}"
+                if ann_end and ann_end != ann_line:
+                    loc += f"-{ann_end}"
+            prefix = f"[{ann_level}] " if ann_level else ""
+            title_part = f" {ann_title}:" if ann_title else ""
+            ann_lines.append(f"  - {prefix}{loc}{title_part} {ann_msg}")
+        parts.append("\n".join(ann_lines))
+
     body = "\n\n".join(parts)
     if len(body) > max_log_chars_per_check:
         body = body[:max_log_chars_per_check] + "\n...<truncated>"
@@ -806,15 +920,83 @@ def _build_issue_update_payload(
     normalized = (state or "").strip().lower()
     if normalized:
         if normalized in _TERMINAL_STATE_ALIASES:
-            payload["state"] = platform.closed_state
+            if platform.auth_mode == "bearer":
+                payload["state"] = platform.closed_state
+            else:
+                payload["state_event"] = "close"
         elif normalized in _OPEN_STATE_ALIASES:
-            payload["state"] = platform.open_state
+            if platform.auth_mode == "bearer":
+                payload["state"] = platform.open_state
+            else:
+                payload["state_event"] = "reopen"
     if labels:
         if platform.auth_mode == "bearer":
             payload["labels"] = labels
         else:
             payload["labels"] = ",".join(labels)
     return payload
+
+
+def _find_pull_request_in_payload(
+    payload: Any,
+    *,
+    head_branch: str,
+    base_branch: str,
+    allow_unique_unmatched: bool = False,
+) -> PullRequestRef | None:
+    if not isinstance(payload, list):
+        return None
+    unmatched_without_branches: list[PullRequestRef] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        pr = _normalize_pull_request(item)
+        if pr is None:
+            continue
+        if _pull_request_matches(item, head_branch=head_branch, base_branch=base_branch):
+            return pr
+        if not _payload_has_branch_fields(item):
+            unmatched_without_branches.append(pr)
+    if allow_unique_unmatched and len(unmatched_without_branches) == 1:
+        return unmatched_without_branches[0]
+    return None
+
+
+def _pull_request_matches(
+    payload: dict[str, Any],
+    *,
+    head_branch: str,
+    base_branch: str,
+) -> bool:
+    head = _extract_ref_name(payload.get("head") or payload.get("source_branch"))
+    base = _extract_ref_name(payload.get("base") or payload.get("target_branch"))
+    if head is None and base is None:
+        return False
+    if head is not None and head != head_branch:
+        return False
+    if base is not None and base != base_branch:
+        return False
+    return True
+
+
+def _payload_has_branch_fields(payload: dict[str, Any]) -> bool:
+    return any(key in payload for key in ("head", "base", "source_branch", "target_branch"))
+
+
+def _extract_ref_name(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, dict):
+        for key in ("ref", "name", "branch", "label"):
+            ref = value.get(key)
+            if not isinstance(ref, str) or not ref:
+                continue
+            return ref.rsplit(":", 1)[-1] if key == "label" else ref
+    return None
+
+
+def _is_not_found_error(exc: RepositoryTrackerError) -> bool:
+    return "status=404" in str(exc)
 
 
 def _parse_datetime(value: Any) -> datetime | None:
