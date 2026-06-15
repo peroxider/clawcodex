@@ -2,6 +2,66 @@
 
 from __future__ import annotations
 
+import time
+import uuid
+
+
+def _telemetry_session_record(
+    *, entrypoint: str, is_non_interactive: bool
+) -> tuple[str, float]:
+    """F-97: best-effort session_start helper. Returns (session_id, start_ts)."""
+    sid = _telemetry_derive_session_id()
+    start = time.monotonic()
+    try:
+        from clawcodex.telemetry import record_session_start
+
+        import os
+        record_session_start(
+            session_id=sid,
+            entrypoint=entrypoint,
+            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            is_non_interactive=is_non_interactive,
+        )
+    except Exception:
+        pass
+    return sid, start
+
+
+def _telemetry_session_end(
+    *, session_id: str, command_name: str, mode: str, success: bool,
+    duration_s: float, exit_status: int,
+) -> None:
+    try:
+        from clawcodex.telemetry import record_command_run, record_session_end
+
+        record_session_end(
+            session_id=session_id,
+            duration_s=duration_s,
+            exit_status=exit_status,
+        )
+        record_command_run(
+            session_id=session_id,
+            command_name=command_name,
+            mode=mode,
+            success=success,
+            duration_s=duration_s,
+            exit_status=exit_status,
+        )
+    except Exception:
+        pass
+
+
+def _telemetry_derive_session_id() -> str:
+    try:
+        from src.bootstrap.state import get_session_id
+
+        sid = get_session_id()
+        if isinstance(sid, str) and sid:
+            return sid
+    except Exception:
+        pass
+    return uuid.uuid4().hex
+
 
 # ----------------------------------------------------------------------
 # Print mode
@@ -12,6 +72,15 @@ def run_print_mode(args) -> int:
 
     from src.cli_core.exit import cli_error
     from src.entrypoints.headless import HeadlessOptions, run_headless
+
+    # F-97: print mode is invoked directly by external callers, so emit
+    # session_start here as a fallback for the dispatch path that does
+    # not pass through run_cli. The dispatch path emits a session_start
+    # of its own with entrypoint="cli"; we keep this branch distinct so
+    # nested re-entry is observable in the recorder's per-day cache.
+    sid, start = _telemetry_session_record(
+        entrypoint="print", is_non_interactive=True,
+    )
 
     # Some combinations are invalid; report early with a helpful message.
     if args.input_format == 'stream-json' and args.output_format != 'stream-json':
@@ -43,7 +112,16 @@ def run_print_mode(args) -> int:
         include_partial_messages=bool(args.include_partial_messages),
         verbose=bool(args.verbose),
     )
-    return run_headless(options)
+    rc = run_headless(options)
+    _telemetry_session_end(
+        session_id=sid,
+        command_name="print",
+        mode="non_interactive",
+        success=(rc == 0),
+        duration_s=time.monotonic() - start,
+        exit_status=rc,
+    )
+    return rc
 
 
 # ----------------------------------------------------------------------
@@ -55,6 +133,14 @@ def run_tui_mode(args) -> int:
 
     from clawcodex_ext.tui.entrypoint import run_tui
     from src.entrypoints.tui import TUIOptions
+
+    # F-97: emit session_start so direct invocations of run_tui_mode
+    # (e.g. from tests or sub-shells) are still observable. The
+    # dispatch path in run_cli also emits one; the recorder de-dupes
+    # session_id matching via the per-day cache.
+    sid, start = _telemetry_session_record(
+        entrypoint="tui", is_non_interactive=False,
+    )
 
     allowed = _split_csv(args.allowed_tools)
     disallowed = _split_csv(args.disallowed_tools)
@@ -74,11 +160,20 @@ def run_tui_mode(args) -> int:
         permission_mode=args._resolved_permission_mode,
         is_bypass_permissions_mode_available=args._resolved_is_bypass_available,
     )
-    return run_tui(
+    rc = run_tui(
         options,
         resume_session_id=resume_session_id,
         resume_browse=resume_browse,
     )
+    _telemetry_session_end(
+        session_id=sid,
+        command_name="tui",
+        mode="interactive",
+        success=(rc == 0),
+        duration_s=time.monotonic() - start,
+        exit_status=rc,
+    )
+    return rc
 
 
 # ----------------------------------------------------------------------
@@ -262,6 +357,14 @@ def start_repl(
     from src.config import get_default_provider
     from clawcodex_ext.repl.app import ClawCodexExtREPL
 
+    # F-97: emit session_start so direct invocations of start_repl
+    # (e.g. from legacy tests, MCP fast-path, or `python -m`) are
+    # observable. The dispatch path in run_cli also emits one; the
+    # recorder dedupes by session_id match in the per-day cache.
+    sid, start = _telemetry_session_record(
+        entrypoint="repl", is_non_interactive=False,
+    )
+
     provider = get_default_provider()
     repl = ClawCodexExtREPL(
         provider_name=provider,
@@ -270,5 +373,23 @@ def start_repl(
         is_bypass_permissions_mode_available=is_bypass_permissions_mode_available,
         resume_session_id=resume_session_id,
     )
-    repl.run()
-    return 0
+    rc = 0
+    try:
+        repl.run()
+    except SystemExit as exc:
+        rc = exc.code if isinstance(exc.code, int) else 1
+    except KeyboardInterrupt:
+        rc = 130
+    except Exception:
+        rc = 1
+        raise
+    finally:
+        _telemetry_session_end(
+            session_id=sid,
+            command_name="repl",
+            mode="interactive",
+            success=(rc == 0),
+            duration_s=time.monotonic() - start,
+            exit_status=rc,
+        )
+    return rc

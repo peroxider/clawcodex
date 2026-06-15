@@ -151,6 +151,21 @@ def run_headless(options: HeadlessOptions) -> int:
 
     session = Session.create(provider_name, getattr(provider, "model", model or ""))
 
+    # F-97: best-effort session_start. The session id is the same one
+    # the conversation persists under so the per-day aggregator can
+    # cross-link events to a known session. Failures are swallowed.
+    try:
+        from clawcodex.telemetry import record_session_start
+
+        record_session_start(
+            session_id=session.session_id,
+            entrypoint="headless",
+            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            is_non_interactive=True,
+        )
+    except Exception:
+        pass
+
     tool_registry = build_default_registry(provider=provider)
     if options.allowed_tools:
         allow = {name.lower() for name in options.allowed_tools}
@@ -383,6 +398,16 @@ def run_headless(options: HeadlessOptions) -> int:
                     raise
                 except Exception as exc:
                     exit_code = 1
+                    # F-97: best-effort error event with stable
+                    # fingerprint. The session_id lets the aggregator
+                    # correlate the crash with the same conversation
+                    # that emitted the assistant / tool events.
+                    try:
+                        from clawcodex.telemetry import record_error
+
+                        record_error(session_id=session.session_id, exc=exc)
+                    except Exception:
+                        pass
                     if writer is not None:
                         writer.write(
                             ResultEvent(
@@ -407,7 +432,7 @@ def run_headless(options: HeadlessOptions) -> int:
                 if writer is not None:
                     writer.write(AssistantEvent(text=result.response_text))
                 aggregate_text.append(result.response_text)
-        except (AbortError, KeyboardInterrupt):
+        except (AbortError, KeyboardInterrupt) as exc:
             # Cancellation from ANY point in the loop body lands here:
             # * ``AbortError`` from a cooperative unwind inside
             #   ``run_agent_loop`` (first SIGINT, in-flight mode).
@@ -419,6 +444,19 @@ def run_headless(options: HeadlessOptions) -> int:
             # signal, and pairing ``is_error=False`` with a populated
             # ``error`` field would confuse consumers.
             exit_code = 130
+            # F-97: best-effort cancellation record. Distinguishes
+            # user cancellation (KeyboardInterrupt / AbortError) from
+            # a real provider/tool crash by passing the exception
+            # instance — the recorder's fingerprint path picks up
+            # KeyboardInterrupt fingerprints, which is useful for
+            # surfacing repeat-abort issues without counting them as
+            # crashes. Failures are swallowed.
+            try:
+                from clawcodex.telemetry import record_error
+
+                record_error(session_id=session.session_id, exc=exc)
+            except Exception:
+                pass
             if writer is not None:
                 writer.write(
                     ResultEvent(
@@ -473,6 +511,30 @@ def run_headless(options: HeadlessOptions) -> int:
                 usage=usage_total or None,
             )
         )
+
+    # F-97: best-effort session_end + command_run. The session id is
+    # the same one the conversation persists under so the per-day
+    # aggregator can cross-link events to a known session. Failures
+    # are swallowed — telemetry must never block the user's exit.
+    try:
+        from clawcodex.telemetry import record_command_run, record_session_end
+
+        duration_s = time.monotonic() - start
+        record_session_end(
+            session_id=session.session_id,
+            duration_s=duration_s,
+            exit_status=exit_code,
+        )
+        record_command_run(
+            session_id=session.session_id,
+            command_name="headless",
+            mode="non_interactive",
+            success=(exit_code == 0),
+            duration_s=duration_s,
+            exit_status=exit_code,
+        )
+    except Exception:
+        pass
 
     return exit_code
 

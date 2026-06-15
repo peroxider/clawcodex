@@ -128,6 +128,18 @@ def init() -> None:
     ensure_nested_transcript_initialized()
     profile_checkpoint("init_after_nested_transcript")
 
+    # F-97: install global exception hooks. Idempotent and best-effort —
+    # a misconfigured telemetry config must never block init. Local
+    # import avoids pinning telemetry in ``src.init``'s module surface.
+    _logger.info("init: installing F-97 exception hooks")
+    try:
+        from clawcodex.telemetry.hooks import install_exception_hooks
+
+        install_exception_hooks()
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("init: telemetry hook install failed: %s", exc)
+    profile_checkpoint("init_after_telemetry_hooks")
+
     profile_checkpoint("init_function_end")
 
 

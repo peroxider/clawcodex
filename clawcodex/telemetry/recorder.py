@@ -1,0 +1,452 @@
+"""TelemetryRecorder — the single chokepoint for F-97 event capture.
+
+The recorder is the only public surface business code talks to:
+
+* :func:`get_recorder` returns either a real :class:`TelemetryRecorder`
+  or a :class:`_NullRecorder` whose methods are no-ops. The default
+  is :class:`_NullRecorder` because :attr:`TelemetryConfig.enabled` is
+  ``False`` until a user opts in.
+* All public methods are best-effort: any exception inside the
+  recorder is logged and swallowed. Business code MUST NOT be
+  affected by telemetry failures.
+* The recorder is process-global and lazily initialized. Re-entry
+  from threads is safe because each method takes its own short
+  critical section; the underlying :class:`LocalJsonlStorage` writes
+  are atomic per file.
+"""
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import threading
+import time
+import uuid
+from dataclasses import dataclass
+from typing import Any, Final, Optional
+
+from .aggregator import DailyAggregator
+from .config import TelemetryConfig, load_config
+from .events import EventType, TelemetryEvent
+from .fingerprint import compute_fingerprint
+from .redaction import Redactor
+from .reporters import CompositeReporter, DryRunReporter, LocalFileReporter, Reporter
+from .storage import LocalJsonlStorage
+
+logger = logging.getLogger(__name__)
+
+_REDACTION_PROJECT_ROOTS: Final[tuple[str, ...]] = (
+    # Resolved at construction time; updated lazily by ``_build_recorder``.
+)
+
+
+def _default_project_roots() -> tuple[str, ...]:
+    roots: list[str] = []
+    try:
+        from src.config import GLOBAL_CONFIG_DIR  # type: ignore[import-not-found]
+
+        roots.append(str(GLOBAL_CONFIG_DIR))
+    except Exception:
+        pass
+    try:
+        from pathlib import Path
+
+        cwd = str(Path.cwd())
+        if cwd and cwd not in roots:
+            roots.append(cwd)
+    except Exception:
+        pass
+    return tuple(roots)
+
+
+def _short_session_id(raw: str) -> str:
+    """Return a 16-char stable-ish hash of a session id.
+
+    Telemetry is a low-frequency aggregate stream; the full session
+    id is overkill for a join key and would re-introduce the
+    cardinality problem the spec warns against.
+    """
+    if not raw:
+        raw = uuid.uuid4().hex
+    return hashlib.sha1(raw.encode("utf-8", errors="replace")).hexdigest()[:16]
+
+
+# ---------------------------------------------------------------------------
+# Null recorder (zero-cost when disabled)
+# ---------------------------------------------------------------------------
+
+
+class _NullRecorder:
+    """All methods are no-ops; used when telemetry is disabled."""
+
+    enabled: bool = False
+
+    def record_session_start(self, **_: Any) -> None:
+        return None
+
+    def record_session_end(self, **_: Any) -> None:
+        return None
+
+    def record_command_run(self, **_: Any) -> None:
+        return None
+
+    def record_error(self, **_: Any) -> None:
+        return None
+
+    def record_tool_summary(self, **_: Any) -> None:
+        return None
+
+    def flush(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    @property
+    def config(self) -> TelemetryConfig:
+        return TelemetryConfig()
+
+    @property
+    def dry_run_reporter(self) -> DryRunReporter:
+        return DryRunReporter()
+
+    def build_report_for(self, date: str) -> str:
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Real recorder
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _BuildResult:
+    recorder: "_TelemetryRecorderImpl | _NullRecorder"
+    cleanup: "list[Any]"
+
+
+class _TelemetryRecorderImpl:
+    enabled: bool = True
+
+    def __init__(
+        self,
+        cfg: TelemetryConfig,
+        storage: LocalJsonlStorage,
+        aggregator: DailyAggregator,
+        redactor: Redactor,
+        reporters: CompositeReporter,
+    ) -> None:
+        self._cfg = cfg
+        self._storage = storage
+        self._aggregator = aggregator
+        self._redactor = redactor
+        self._reporters = reporters
+        self._lock = threading.Lock()
+        self._closed = False
+        self._dry_run = DryRunReporter()
+        # Auto-register the dry-run reporter for CLI ``preview`` so
+        # callers can read what *would* be reported.
+        self._reporters.add(self._dry_run)
+
+    @property
+    def config(self) -> TelemetryConfig:
+        return self._cfg
+
+    @property
+    def dry_run_reporter(self) -> DryRunReporter:
+        return self._dry_run
+
+    def build_report_for(self, date: str) -> str:
+        summary = self._storage.read_latest_summary(date) or {}
+        if not summary:
+            # Build on demand if today's aggregator hasn't run yet.
+            self._aggregator.aggregate(date)
+            summary = self._storage.read_latest_summary(date) or {}
+        return self._dry_run.render(summary, date)
+
+    # -- public recorders ----------------------------------------------
+
+    def record_session_start(
+        self,
+        *,
+        session_id: str,
+        entrypoint: str,
+        client_type: str = "cli",
+        is_non_interactive: bool = False,
+        platform: str | None = None,
+        python_version: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        if self._closed:
+            return
+        if platform is None:
+            try:
+                import platform as _platform
+
+                platform = _platform.system() or "unknown"
+            except Exception:
+                platform = "unknown"
+        if python_version is None:
+            try:
+                import platform as _platform
+
+                python_version = _platform.python_version() or "unknown"
+            except Exception:
+                python_version = "unknown"
+
+        event = TelemetryEvent(
+            type=EventType.SESSION_START,
+            timestamp=time.time(),
+            session_id=_short_session_id(session_id),
+            fields={
+                "entrypoint": entrypoint,
+                "client_type": client_type,
+                "is_non_interactive": bool(is_non_interactive),
+                "platform": platform,
+                "python_version": python_version,
+                "provider": provider or "unknown",
+                "model": model or "unknown",
+                "app_version": _safe_app_version(),
+            },
+        )
+        self._enqueue_event(event)
+
+    def record_session_end(
+        self,
+        *,
+        session_id: str,
+        duration_s: float,
+        exit_status: int,
+    ) -> None:
+        if self._closed:
+            return
+        event = TelemetryEvent(
+            type=EventType.SESSION_END,
+            timestamp=time.time(),
+            session_id=_short_session_id(session_id),
+            fields={
+                "duration_s": float(duration_s),
+                "exit_status": int(exit_status),
+            },
+        )
+        self._enqueue_event(event)
+
+    def record_command_run(
+        self,
+        *,
+        session_id: str,
+        command_name: str,
+        mode: str = "non_interactive",
+        success: bool = True,
+        duration_s: float = 0.0,
+        exit_status: int | None = None,
+    ) -> None:
+        if self._closed:
+            return
+        event = TelemetryEvent(
+            type=EventType.COMMAND_RUN,
+            timestamp=time.time(),
+            session_id=_short_session_id(session_id),
+            fields={
+                "command_name": command_name,
+                "mode": mode,
+                "success": bool(success),
+                "duration_s": float(duration_s),
+                "exit_status": int(exit_status) if exit_status is not None else None,
+            },
+        )
+        self._enqueue_event(event)
+
+    def record_tool_summary(
+        self,
+        *,
+        session_id: str,
+        tool_name: str,
+        success: bool = True,
+        duration_s: float = 0.0,
+    ) -> None:
+        if self._closed:
+            return
+        event = TelemetryEvent(
+            type=EventType.TOOL_SUMMARY,
+            timestamp=time.time(),
+            session_id=_short_session_id(session_id),
+            fields={
+                "tool_name": tool_name,
+                "success": bool(success),
+                "duration_s": float(duration_s),
+            },
+        )
+        self._enqueue_event(event)
+
+    def record_error(
+        self,
+        *,
+        session_id: str,
+        exc: BaseException,
+    ) -> None:
+        if self._closed:
+            return
+        try:
+            fingerprint = compute_fingerprint(
+                exc, project_roots=tuple(self._redactor.project_roots)
+            )
+        except Exception:  # noqa: BLE001
+            fingerprint = "unknown"
+        try:
+            stacktrace = self._redactor.truncate_stacktrace(exc)
+        except Exception:  # noqa: BLE001
+            stacktrace = []
+
+        error_event = TelemetryEvent(
+            type=EventType.ERROR,
+            timestamp=time.time(),
+            session_id=_short_session_id(session_id),
+            fields={
+                "error_class": type(exc).__name__,
+                "fingerprint": fingerprint,
+                "stacktrace": stacktrace,
+            },
+        )
+        self._enqueue_event(error_event, kind="events")
+        self._enqueue_event(error_event, kind="crashes")
+
+    # -- lifecycle ------------------------------------------------------
+
+    def flush(self) -> None:
+        """Force aggregator to run for today; safe to call repeatedly."""
+        if self._closed:
+            return
+        try:
+            summary = self._aggregator.aggregate_today_if_stale()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: flush aggregator failed: %s", exc)
+            return
+        if not summary:
+            return
+        if not self._cfg.reporting.reporting_enabled:
+            return
+        try:
+            from .storage import utc_date, utc_now
+
+            date = utc_date(utc_now())
+            rendered = self._dry_run.render(summary, date)
+            self._reporters.emit(rendered, date=date)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: flush reporter failed: %s", exc)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+        try:
+            self._storage.retention_sweep()
+        except Exception:  # noqa: BLE001
+            pass
+
+    # -- internals ------------------------------------------------------
+
+    def _enqueue_event(
+        self, event: TelemetryEvent, kind: str = "events"
+    ) -> None:
+        try:
+            redacted = self._redactor.redact_event(event)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: redact failed (%s), dropping", exc)
+            return
+        try:
+            self._storage.append(kind, redacted.to_dict())
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: append failed (%s)", exc)
+        try:
+            self._aggregator.aggregate_today_if_stale()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("telemetry: aggregator failed (%s)", exc)
+
+
+def _safe_app_version() -> str:
+    try:
+        from .version import __version__
+
+        return __version__
+    except Exception:
+        return "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Module-level lazy singleton
+# ---------------------------------------------------------------------------
+
+_RECORDER_LOCK = threading.Lock()
+_RECORDER: _NullRecorder | _TelemetryRecorderImpl | None = None
+
+
+def get_recorder() -> _NullRecorder | _TelemetryRecorderImpl:
+    """Return the process-global recorder, building it on first call.
+
+    The result is a :class:`_NullRecorder` when
+    :attr:`TelemetryConfig.enabled` is ``False`` (the default); the
+    real :class:`_TelemetryRecorderImpl` is returned otherwise.
+    """
+    global _RECORDER
+    if _RECORDER is not None:
+        return _RECORDER
+    with _RECORDER_LOCK:
+        if _RECORDER is not None:
+            return _RECORDER
+        _RECORDER = _build_recorder()
+        return _RECORDER
+
+
+def _build_recorder() -> _NullRecorder | _TelemetryRecorderImpl:
+    try:
+        cfg = load_config()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("telemetry: load_config failed (%s), using defaults", exc)
+        cfg = TelemetryConfig()
+    if not cfg.enabled:
+        return _NullRecorder()
+
+    try:
+        storage = LocalJsonlStorage(cfg.storage_dir, cfg.retention_days)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("telemetry: storage init failed (%s)", exc)
+        return _NullRecorder()
+
+    aggregator = DailyAggregator(storage)
+    redactor = Redactor(cfg.redaction, _default_project_roots())
+    reporters = CompositeReporter()
+    if cfg.reporting.reporting_enabled:
+        reporters.add(LocalFileReporter(storage, redactor))
+
+    return _TelemetryRecorderImpl(
+        cfg=cfg,
+        storage=storage,
+        aggregator=aggregator,
+        redactor=redactor,
+        reporters=reporters,
+    )
+
+
+def reset_recorder_for_tests() -> None:
+    """Reset the global recorder. Tests only."""
+    global _RECORDER
+    with _RECORDER_LOCK:
+        if _RECORDER is not None and not isinstance(_RECORDER, _NullRecorder):
+            try:
+                _RECORDER.close()
+            except Exception:
+                pass
+        _RECORDER = None
+
+
+def override_recorder(recorder: Optional["_NullRecorder | _TelemetryRecorderImpl"]) -> None:
+    """Tests and embedders may pin a specific recorder instance.
+
+    ``None`` restores the lazy default.
+    """
+    global _RECORDER
+    with _RECORDER_LOCK:
+        _RECORDER = recorder

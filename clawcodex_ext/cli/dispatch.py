@@ -4,6 +4,67 @@ from __future__ import annotations
 
 import os
 import sys
+import time
+import uuid
+
+
+def _telemetry_record_session(
+    *, session_id: str, entrypoint: str, is_non_interactive: bool
+) -> None:
+    """Best-effort F-97 session_start.
+
+    Local import keeps ``clawcodex.telemetry`` out of the CLI dispatch
+    module surface for ``--help`` cold start.
+    """
+    try:
+        from clawcodex.telemetry import record_session_start
+
+        record_session_start(
+            session_id=session_id,
+            entrypoint=entrypoint,
+            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            is_non_interactive=is_non_interactive,
+        )
+    except Exception:
+        # Telemetry MUST NEVER block the CLI; failures are best-effort.
+        pass
+
+
+def _telemetry_record_end(
+    *, session_id: str, command_name: str, mode: str, success: bool,
+    duration_s: float, exit_status: int,
+) -> None:
+    try:
+        from clawcodex.telemetry import record_command_run, record_session_end
+
+        record_session_end(
+            session_id=session_id,
+            duration_s=duration_s,
+            exit_status=exit_status,
+        )
+        record_command_run(
+            session_id=session_id,
+            command_name=command_name,
+            mode=mode,
+            success=success,
+            duration_s=duration_s,
+            exit_status=exit_status,
+        )
+    except Exception:
+        pass
+
+
+def _derive_session_id() -> str:
+    """Resolve a session id, preferring the bootstrap one when set."""
+    try:
+        from src.bootstrap.state import get_session_id
+
+        sid = get_session_id()
+        if isinstance(sid, str) and sid:
+            return sid
+    except Exception:
+        pass
+    return uuid.uuid4().hex
 
 
 def _maybe_argcomplete_top_level(argv: list[str]) -> None:
@@ -72,10 +133,29 @@ def run_cli(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv
 
+    # F-97: emit session_start as early as possible. The session id
+    # is best-effort and never blocks the CLI; failures are swallowed
+    # inside the helper.
+    _telemetry_session_id = _derive_session_id()
+    _telemetry_start = time.monotonic()
+    _telemetry_record_session(
+        session_id=_telemetry_session_id,
+        entrypoint="cli",
+        is_non_interactive=False,
+    )
+
     # --version short-circuit (mirrors TS main.tsx pre-argparse fast-path)
     if len(argv) == 2 and argv[1] in ('--version', '-v', '-V'):
         from src import __version__
         print(f"claw-codex version {__version__} (Python)")
+        _telemetry_record_end(
+            session_id=_telemetry_session_id,
+            command_name="version",
+            mode="non_interactive",
+            success=True,
+            duration_s=time.monotonic() - _telemetry_start,
+            exit_status=0,
+        )
         return 0
 
     # Subcommands are matched BEFORE the main parser to avoid argparse treating
@@ -104,28 +184,93 @@ def run_cli(argv: list[str] | None = None) -> int:
         # Import src_cli late so monkeypatches to src.cli.* take effect.
         import src.cli as src_cli
 
+        # F-97: each fast-path return is wrapped to record command_run
+        # + session_end. The helper swallows any telemetry failure.
         if token == 'login':
-            return src_cli.handle_login()
+            rc = src_cli.handle_login()
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="login",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'config':
-            return src_cli.show_config()
+            rc = src_cli.show_config()
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="config",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
 
         from clawcodex_ext.cli.subcommand_registry import get_subcommand
         subcommand = get_subcommand(token)
         if subcommand is not None:
-            return subcommand(rest_args)
+            rc = subcommand(rest_args)
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name=token,
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
 
         if token == 'mcp':
             from src.entrypoints.mcp import run_mcp_subcommand
-            return run_mcp_subcommand(rest_args)
+            rc = run_mcp_subcommand(rest_args)
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="mcp",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'daemon':
             from src.entrypoints.daemon import run_daemon_subcommand
-            return run_daemon_subcommand(rest_args)
+            rc = run_daemon_subcommand(rest_args)
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="daemon",
+                mode="daemon",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'doctor':
             from src.entrypoints.doctor import run_doctor
-            return run_doctor()
+            rc = run_doctor()
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="doctor",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'orchestrator':
             from src.entrypoints.orchestrator import run_orchestrator_subcommand
-            return run_orchestrator_subcommand(rest_args)
+            rc = run_orchestrator_subcommand(rest_args)
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="orchestrator",
+                mode="daemon",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'autonomy':
             from pathlib import Path
 
@@ -134,14 +279,25 @@ def run_cli(argv: list[str] | None = None) -> int:
             deep = '--deep' in rest_args
             filtered_args = [arg for arg in rest_args if arg != '--deep']
             command = filtered_args[0] if filtered_args else 'status'
+            rc = 0
             if command == 'status':
                 print(build_autonomy_status(Path.cwd(), deep=deep))
-                return 0
-            if command == 'runs':
+                rc = 0
+            elif command == 'runs':
                 print(build_autonomy_runs(Path.cwd(), deep=deep))
-                return 0
-            print("usage: clawcodex autonomy [status|runs] [--deep]", file=sys.stderr)
-            return 2
+                rc = 0
+            else:
+                print("usage: clawcodex autonomy [status|runs] [--deep]", file=sys.stderr)
+                rc = 2
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="autonomy",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
         if token == 'schedule':
             from pathlib import Path
 
@@ -154,27 +310,40 @@ def run_cli(argv: list[str] | None = None) -> int:
             from clawcodex_ext.cron_system.status import build_schedule_list
 
             command = rest_args[0] if rest_args else 'list'
+            rc = 0
             if command == 'list':
                 print(build_schedule_list(Path.cwd()))
-                return 0
-            if command == 'get' and len(rest_args) >= 2:
+                rc = 0
+            elif command == 'get' and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 detail = get_cron_task_detail(cwd, rest_args[1])
                 if detail is None:
                     print(f"No scheduled job with id '{rest_args[1]}'", file=sys.stderr)
-                    return 1
-                print(format_cron_task_detail(detail))
-                return 0
-            if command == 'run' and len(rest_args) >= 2:
+                    rc = 1
+                else:
+                    print(format_cron_task_detail(detail))
+                    rc = 0
+            elif command == 'run' and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 run = manual_fire_cron_task(cwd, rest_args[1], current_dir=cwd)
                 if run is None and get_cron_task_detail(cwd, rest_args[1]) is None:
                     print(f"No scheduled job with id '{rest_args[1]}'", file=sys.stderr)
-                    return 1
-                print(format_manual_fire_result(rest_args[1], run))
-                return 0
-            print("usage: clawcodex schedule [list|get ID|run ID]", file=sys.stderr)
-            return 2
+                    rc = 1
+                else:
+                    print(format_manual_fire_result(rest_args[1], run))
+                    rc = 0
+            else:
+                print("usage: clawcodex schedule [list|get ID|run ID]", file=sys.stderr)
+                rc = 2
+            _telemetry_record_end(
+                session_id=_telemetry_session_id,
+                command_name="schedule",
+                mode="non_interactive",
+                success=(rc == 0),
+                duration_s=time.monotonic() - _telemetry_start,
+                exit_status=rc,
+            )
+            return rc
 
     from clawcodex_ext.cli.parser import build_parser
     parser = build_parser()
@@ -312,7 +481,16 @@ def run_cli(argv: list[str] | None = None) -> int:
         profile_checkpoint("mode_dispatch_print")
         profile_checkpoint("phase4_dispatch")
         frontend = get_frontend("headless")
-        return frontend.run(ctx, argv[1:])
+        rc = frontend.run(ctx, argv[1:])
+        _telemetry_record_end(
+            session_id=_telemetry_session_id,
+            command_name="print",
+            mode="non_interactive",
+            success=(rc == 0),
+            duration_s=time.monotonic() - _telemetry_start,
+            exit_status=rc,
+        )
+        return rc
 
     from src.entrypoints.tui import should_use_tui
 
@@ -320,13 +498,31 @@ def run_cli(argv: list[str] | None = None) -> int:
         profile_checkpoint("mode_dispatch_tui")
         profile_checkpoint("phase4_dispatch")
         frontend = get_frontend("tui")
-        return frontend.run(ctx, argv[1:])
+        rc = frontend.run(ctx, argv[1:])
+        _telemetry_record_end(
+            session_id=_telemetry_session_id,
+            command_name="tui",
+            mode="interactive",
+            success=(rc == 0),
+            duration_s=time.monotonic() - _telemetry_start,
+            exit_status=rc,
+        )
+        return rc
 
     profile_checkpoint("mode_dispatch_repl")
     profile_checkpoint("phase4_dispatch")
 
     frontend = get_frontend("repl")
-    return frontend.run(ctx, argv[1:])
+    rc = frontend.run(ctx, argv[1:])
+    _telemetry_record_end(
+        session_id=_telemetry_session_id,
+        command_name="repl",
+        mode="interactive",
+        success=(rc == 0),
+        duration_s=time.monotonic() - _telemetry_start,
+        exit_status=rc,
+    )
+    return rc
 
 
 # ---------------------------------------------------------------------------

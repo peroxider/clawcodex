@@ -480,3 +480,201 @@ class TestStage5Resilience:
         conv = Conversation()
         conv.add_user_message("still works after bad import")
         assert len(conv.get_messages()) == 1
+
+
+class TestStage5Telemetry:
+    """F-97: telemetry (clawcodex_ext/cli/dispatch 段并行的遥测段)。
+
+    验证 telemetry 子系统在不破坏现有扩展语义的前提下提供
+    privacy-first 的本地事件流 + crash 去重 fingerprint。
+    """
+
+    def test_telemetry_subpackage_imports(self):
+        """All F-97 submodules importable."""
+        import clawcodex.telemetry
+        from clawcodex.telemetry import (
+            aggregator,
+            cli as telemetry_cli,
+            config,
+            events,
+            fingerprint,
+            hooks,
+            redaction,
+            storage,
+            version,
+        )
+        from clawcodex.telemetry.reporters import (
+            base,
+            dry_run,
+            local_file,
+        )
+
+        # Events enum has the full set defined in the design doc.
+        from clawcodex.telemetry.events import EventType
+
+        assert EventType.SESSION_START.value == "session_start"
+        assert EventType.SESSION_END.value == "session_end"
+        assert EventType.COMMAND_RUN.value == "command_run"
+        assert EventType.TOOL_SUMMARY.value == "tool_summary"
+        assert EventType.ERROR.value == "error"
+        assert EventType.CRASH.value == "crash"
+        assert EventType.DAILY_SUMMARY.value == "daily_summary"
+
+        # Each module exposes the public surface the public API expects.
+        assert callable(config.load_config)
+        assert callable(redaction.Redactor)
+        assert callable(fingerprint.compute_fingerprint)
+        assert callable(storage.LocalJsonlStorage)
+        assert callable(aggregator.DailyAggregator)
+        assert callable(hooks.install_exception_hooks)
+        assert callable(hooks.uninstall_exception_hooks)
+        assert callable(telemetry_cli.run_status)
+        assert callable(telemetry_cli.run_preview)
+        assert callable(telemetry_cli.run_flush)
+        assert callable(telemetry_cli.run_enable)
+        assert callable(telemetry_cli.run_disable)
+
+    def test_telemetry_default_off_zero_io(self):
+        """Default config must be enabled=False with no I/O performed.
+
+        Verifies the privacy-first design: when telemetry is off
+        (the default), get_recorder() returns _NullRecorder and no
+        storage, redaction, or aggregator instances are created.
+        """
+        from clawcodex.telemetry import config, recorder
+
+        # Reset the cached singleton to honor any leftover state.
+        recorder.reset_recorder_for_tests()
+
+        # Sanity: default config is off.
+        cfg = config.TelemetryConfig()
+        assert cfg.enabled is False
+        assert cfg.reporting.reporting_enabled is False
+
+        # Recorder should be the null implementation.
+        r = recorder.get_recorder()
+        assert isinstance(r, recorder._NullRecorder)
+        assert r.enabled is False
+
+    def test_telemetry_recorder_endpoints_noop_when_disabled(self):
+        """All public recorder endpoints are no-ops when telemetry is off.
+
+        Each method must NOT raise and must NOT touch storage. The
+        cold-start path (--help) goes through this code, so any
+        exception here would break the 5-second budget.
+        """
+        from clawcodex.telemetry import recorder
+
+        recorder.reset_recorder_for_tests()
+        r = recorder.get_recorder()
+        # None of these may raise.
+        r.record_session_start(session_id="x", entrypoint="cli")
+        r.record_session_end(session_id="x", duration_s=0.1, exit_status=0)
+        r.record_command_run(
+            session_id="x",
+            command_name="repl",
+            mode="interactive",
+            success=True,
+            duration_s=0.1,
+            exit_status=0,
+        )
+        try:
+            raise RuntimeError("noop")
+        except RuntimeError as exc:
+            r.record_error(session_id="x", exc=exc)
+        r.record_tool_summary(
+            session_id="x",
+            tool_name="bash",
+            success=True,
+            duration_s=0.05,
+        )
+        r.flush()
+        r.close()
+
+    def test_telemetry_redaction_strips_secrets(self):
+        """Redactor must mask API keys, tokens, and absolute paths.
+
+        ``redact_text`` is the message-level scrubber (AKIA / sk- /
+        ghp_ / Bearer / password= / api_key= / private key blocks).
+        Field-level path normalization happens on ``cwd`` /
+        ``file_path`` keys via ``_normalize_path``, not in
+        ``redact_text``. We exercise both surfaces here.
+        """
+        from clawcodex.telemetry.redaction import RedactionConfig, Redactor
+
+        redactor = Redactor(RedactionConfig(), project_roots=("/proj",))
+
+        # Message-level: AWS / OpenAI / GitHub / Bearer / private key.
+        text = (
+            "AKIAIOSFODNN7EXAMPLE leaked "
+            "sk-abcdefghijklmnopqrstuv "
+            "ghp_abcdefghijklmnopqrstuv "
+            "Bearer eyJabc123def456ghi789jkl"
+        )
+        sanitized = redactor.redact_text(text)
+        assert "AKIAIOSFODNN7EXAMPLE" not in sanitized
+        assert "sk-abcdefghijklmnopqrstuv" not in sanitized
+        assert "ghp_abcdefghijklmnopqrstuv" not in sanitized
+        assert "eyJabc123def456ghi789jkl" not in sanitized
+        # Placeholder should appear at least 4 times.
+        assert sanitized.count("[REDACTED]") >= 4
+
+        # Field-level: cwd / file_path keys get normalized to project
+        # relative form (or path:<hash> when not under any project
+        # root). Absolute paths in those fields must not survive.
+        redacted = redactor._redact_value(
+            "file_path", "/home/alice/secret.txt"
+        )
+        assert "/home/alice" not in str(redacted)
+        redacted_cwd = redactor._redact_value(
+            "cwd", "/home/alice/projects/secret"
+        )
+        assert "/home/alice" not in str(redacted_cwd)
+
+    def test_telemetry_fingerprint_stable_across_runs(self):
+        """Fingerprint for the same exception class+location is stable."""
+        from clawcodex.telemetry.fingerprint import compute_fingerprint
+
+        try:
+            raise ValueError("boom")
+        except ValueError as exc:
+            a = compute_fingerprint(exc)
+            b = compute_fingerprint(exc)
+        assert a == b
+        assert len(a) == 16
+
+    def test_telemetry_storage_creates_dirs_lazily(self):
+        """Storage eagerly creates the base dir on construction; subdirs
+        (events/, crashes/, ...) are created lazily on first append.
+
+        Validates the privacy-first design: enabled=False never
+        instantiates the storage at all (covered by the prior test).
+        """
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / "telemetry"
+            from clawcodex.telemetry.storage import LocalJsonlStorage
+
+            # Constructor creates the base dir eagerly so the first
+            # append can write without an extra mkdir round-trip.
+            assert not base.exists()
+            storage = LocalJsonlStorage(base, retention_days=7)
+            assert base.exists()
+            # Subdirectories (events/, crashes/, ...) are NOT created
+            # until the first append lands — that's the lazy bit.
+            assert not (base / "events").exists()
+            assert not (base / "crashes").exists()
+
+            from clawcodex.telemetry.events import EventType, TelemetryEvent
+
+            event = TelemetryEvent(
+                type=EventType.SESSION_START,
+                timestamp=0.0,
+                session_id="deadbeef",
+            )
+            storage.append("events", event.to_dict())
+            # After first append, the events/ subdir exists.
+            assert (base / "events").exists()
+

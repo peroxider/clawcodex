@@ -148,3 +148,21 @@ class TestStage1CoreImports:
         import src.prefetch
 
         assert callable(src.prefetch.get_or_start_keychain_prefetch)
+
+    def test_telemetry_import(self):
+        """F-97: telemetry package importable; default-off path zero-cost."""
+        import clawcodex.telemetry
+        from clawcodex.telemetry import recorder
+
+        assert callable(recorder.get_recorder)
+        # _NullRecorder is the default; its public methods must be no-ops
+        # and must NOT raise. Validates the zero-cost on-by-default design.
+        null = recorder._NullRecorder()
+        assert null.enabled is False
+        null.record_session_start(session_id="x", entrypoint="cli")
+        null.record_session_end(session_id="x", duration_s=0.0, exit_status=0)
+        null.record_command_run(session_id="x", command_name="repl")
+        null.record_error(session_id="x", exc=RuntimeError("noop"))
+        null.record_tool_summary(session_id="x", tool_name="bash")
+        null.flush()
+        null.close()

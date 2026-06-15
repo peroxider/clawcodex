@@ -238,6 +238,24 @@ class Orchestrator:
                     self._state.poll_interval_ms,
                     self._state.max_concurrent_agents)
 
+        # F-97: best-effort session_start at the top of the polling
+        # loop. The session id is the workflow root path's basename
+        # plus a stable hash so the per-day aggregator can group all
+        # orchestrator daemons across the day. Failures are swallowed.
+        orch_start = time.monotonic()
+        orch_session_id = self._derive_orchestrator_session_id()
+        try:
+            from clawcodex.telemetry import record_session_start
+
+            record_session_start(
+                session_id=orch_session_id,
+                entrypoint="orchestrator",
+                client_type="cli",
+                is_non_interactive=True,
+            )
+        except Exception:
+            pass
+
         # Clean up terminal workspaces on startup
         await self.workspace.run_terminal_workspace_cleanup()
         await self._recover_stale_running_records()
@@ -246,18 +264,73 @@ class Orchestrator:
         heartbeat_task = asyncio.create_task(self._metadata_heartbeat_loop())
         self._tasks.add(heartbeat_task)
 
-        while not self._shutdown_event.is_set():
-            await self._poll_and_dispatch()
+        try:
+            while not self._shutdown_event.is_set():
+                await self._poll_and_dispatch()
+                try:
+                    await asyncio.wait_for(
+                        self._shutdown_event.wait(),
+                        timeout=self._state.poll_interval_ms / 1000.0,
+                    )
+                except asyncio.TimeoutError:
+                    pass
+
+            logger.info("Orchestrator shutting down")
+            await self._cancel_all_tasks()
+            exit_status = 0
+        except Exception as exc:
+            # F-97: best-effort error event with stable fingerprint.
+            # Failures are swallowed.
             try:
-                await asyncio.wait_for(
-                    self._shutdown_event.wait(),
-                    timeout=self._state.poll_interval_ms / 1000.0,
+                from clawcodex.telemetry import record_error
+
+                record_error(session_id=orch_session_id, exc=exc)
+            except Exception:
+                pass
+            exit_status = 1
+            raise
+        finally:
+            # F-97: best-effort session_end + command_run.
+            try:
+                from clawcodex.telemetry import (
+                    record_command_run,
+                    record_session_end,
                 )
-            except asyncio.TimeoutError:
+
+                duration_s = time.monotonic() - orch_start
+                record_session_end(
+                    session_id=orch_session_id,
+                    duration_s=duration_s,
+                    exit_status=exit_status,
+                )
+                record_command_run(
+                    session_id=orch_session_id,
+                    command_name="orchestrator",
+                    mode="daemon",
+                    success=(exit_status == 0),
+                    duration_s=duration_s,
+                    exit_status=exit_status,
+                )
+            except Exception:
                 pass
 
-        logger.info("Orchestrator shutting down")
-        await self._cancel_all_tasks()
+    def _derive_orchestrator_session_id(self) -> str:
+        """Stable session id for the orchestrator daemon.
+
+        Combines the workspace root path with a daily salt so all
+        orchestrator daemons on a given day share the same id
+        (the polling loop is one continuous session for telemetry
+        purposes — restart on a new day = new session).
+        """
+        try:
+            from datetime import datetime, timezone
+            import hashlib
+            workspace = str(self._workspace_root) if self._workspace_root else ""
+            day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            raw = f"orchestrator:{workspace}:{day}"
+            return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+        except Exception:
+            return "orchestrator"
 
     async def _recover_stale_running_records(self) -> None:
         reason = "Recovered stale running issue on orchestrator startup"
