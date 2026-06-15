@@ -146,6 +146,63 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address revi
 
 ## Quick Start
 
+**Compatible versions in this README** (matched 1:1 with the bundled `install.sh`):
+
+| Component | Version | Notes |
+|---|---|---|
+| `install.sh` | v0.5.0 | The installer script that ships with this README (released with the clawcodex tag it installs) |
+| `clawcodex` | v0.5.0 | The version this `install.sh` installs |
+| Git ref | `v0.5.0` | The git tag/branch the installer clones |
+
+To install a different clawcodex version, download the `install.sh` that ships on that version's tag.
+
+### One-Click Install (recommended)
+
+The fastest path. `install.sh` does everything end-to-end: OS detection,
+Git / uv / Python prerequisite checks, repo clone, venv creation,
+lock-pinned dep install, global command registration, and shell rc
+patching.
+
+```bash
+git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex \
+  && bash /tmp/clawcodex/install.sh
+```
+
+After it finishes (typically ~20s on a fresh box):
+
+```bash
+source ~/.bashrc                # or: source ~/.zshrc   (or open a new terminal)
+clawcodex-dev --version         # verify the install
+```
+
+Common flag / subcommand variants:
+
+```bash
+# Diagnose environment without installing
+bash /tmp/clawcodex/install.sh doctor
+
+# Preview every step without applying changes
+bash /tmp/clawcodex/install.sh --dry-run
+
+# Non-interactive install (CI / Docker)
+bash /tmp/clawcodex/install.sh --no-venv --no-setup --yes \
+                                  --log-file /tmp/install.log
+
+# Install a specific tag / commit
+bash /tmp/clawcodex/install.sh --ref v0.5.0
+```
+
+When you're done with the temp clone:
+
+```bash
+rm -rf /tmp/clawcodex
+```
+
+### Manual install (alternative)
+
+If you prefer to wire it up by hand — useful when developing on the
+project itself, or when `install.sh` is unavailable:
+
 ```bash
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
@@ -186,9 +243,101 @@ Tab completion covers the top-level subcommands (`login`, `config`, `mcp`,
 `model`, `pos`, `viz`) and the top-level flags. The `orchestrator`
 subcommand also completes its nouns (`server` / `issue` / `dashboard`).
 
-Requires **Python 3.10+** (3.11 recommended). Linux / macOS / WSL2.
-
 > The upstream CLI (`python -m src.cli`) still works — this fork adds a parallel `clawcodex-dev` entry that registers the downstream subcommands (`orchestrator`, `cron`, `pos`, ...).
+
+---
+
+## Prerequisites & Supported Platforms
+
+### Operating systems
+
+| OS | Status | Notes |
+|---|---|---|
+| Linux (Debian, Ubuntu, Fedora, RHEL, Arch, openSUSE, …) | ✅ Supported | Default test platform |
+| macOS 12+ (Monterey and newer) | ✅ Supported | Apple Silicon and Intel |
+| WSL2 (Ubuntu / Debian inside Windows) | ✅ Supported | Recommended on Windows |
+| Git Bash on Windows | ✅ Supported | For users who can't enable WSL |
+| Windows: native `cmd.exe` / PowerShell | ❌ Not supported | Use Git Bash or WSL instead |
+
+> Native Windows shells (`cmd.exe`, PowerShell) are not supported by
+> `install.sh` because it is a bash script. Use Git Bash (ships with
+> [Git for Windows](https://git-scm.com/download/win)) or WSL2
+> ([install guide](https://learn.microsoft.com/windows/wsl/install)).
+
+### Required software
+
+| Tool | Min version | Auto-provisioned? |
+|---|---|---|
+| **Git** | any 2.x | No — install via OS package manager |
+| **Python** | 3.10+ (3.11 recommended) | ✅ Yes — `uv` installs it on demand |
+| **uv** | any 0.5+ | ✅ Yes — downloaded from `astral.sh` on first run |
+| **curl** or **wget** | any | No — required for `uv` install + repo clone |
+| **bash** | 4+ | Pre-installed on Linux/macOS; macOS 3.2 is fine via `bash -s` |
+
+Install Git on your platform:
+
+```bash
+sudo apt install -y git          # Debian / Ubuntu
+sudo dnf install -y git          # Fedora / RHEL
+sudo pacman -S --noconfirm git   # Arch
+xcode-select --install           # macOS
+```
+
+### Network
+
+The install reaches out to three HTTPS endpoints. All three are
+required for a first-time install (subsequent runs reuse the cache):
+
+- `https://gitcode.com/chadwweng/clawcodex` — repo clone
+- `https://astral.sh/uv/install.sh` — uv installer (first run only)
+- `https://pypi.org/` (and the default PyPI index) — Python deps
+
+If you're behind a corporate proxy / firewall, set `HTTPS_PROXY` /
+`HTTP_PROXY` and the standard Python `REQUESTS_CA_BUNDLE` variables
+before running `install.sh`. The script honors `https_proxy` /
+`http_proxy` env vars for `curl`.
+
+### Disk
+
+About **500 MB** free in the install directory (`$HOME/.clawcodex/`
+by default) — covers the repo, `.venv`, and the resolved dep tree.
+The runtime config dir (`$HOME/.clawcodex/`) also accumulates session
+history, logs, and auth tokens; budget an extra **~100 MB** for that.
+
+### Permissions
+
+`install.sh` is **fully user-local** — it does **not** require
+`sudo` or root. All writes go to:
+
+- `$HOME/.clawcodex/clawcodex/` — project source + venv
+- `$HOME/.clawcodex/` — runtime config
+- `$HOME/.local/bin/` — `clawcodex` and `clawcodex-dev` wrappers
+- `~/.bashrc` / `~/.zshrc` / `~/.profile` — adds `~/.local/bin` to `PATH`
+
+If you point `--install-dir` at a system path (e.g. `/opt/clawcodex`),
+you **will** need sudo. The script will fail otherwise.
+
+### Things to know
+
+- **No system Python is touched when using the default venv mode** —
+  the install creates a project-local `.venv` and only writes there.
+- **In `--no-venv` mode**, the install uses `uv pip install --system`
+  and falls back to `--break-system-packages` on PEP 668 systems.
+  Only use this in Docker images, throwaway CI runners, or other
+  already-isolated environments.
+- **After install, open a new shell** (or `source ~/.bashrc` /
+  `~/.zshrc` / `~/.profile`) for the `clawcodex-dev` command to be
+  on `$PATH`. `install.sh` patches the rc file but cannot reload
+  the current shell.
+- **Re-running `install.sh` is safe** — existing repos are
+  fast-forwarded, existing venvs are reused, command wrappers are
+  regenerated. To start completely fresh, run `./install.sh
+  uninstall` first.
+- **To install a different clawcodex version** (older or newer
+  than the one this README's `install.sh` ships with), download
+  the `install.sh` that lives on that version's tag — each
+  release ships with its own installer, and the lockfile pins
+  every transitive dependency.
 
 ---
 
@@ -388,7 +537,7 @@ The upstream loads all 30+ tools at startup. This fork adds **bundles** for fast
 |---|---|---|
 | `bare` | Read, Write, Edit, Bash, Grep, Glob | Headless CI runs |
 | `default` | + WebFetch, WebSearch, TodoWrite, AskUserQuestion | Normal REPL sessions |
-| `clawcodex` | + Agent, Team, SendMessage, Cron, PlanMode, MCP, Skill | Full REPL with team workflows |
+| `clawcodex` | v0.5.0 | Full REPL with team workflows |
 | `all` | Everything in the registry | Maximum flexibility |
 
 Switch with `clawcodex-dev --tool-bundle clawcodex` (or `tool_bundles` in `~/.clawcodex/config.json`).

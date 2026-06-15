@@ -67,6 +67,62 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "处理评审
 
 ## 快速开始
 
+**本 README 配套的版本**（与随附的 `install.sh` 一一对应）：
+
+| 组件 | 版本 | 说明 |
+|---|---|---|
+| `install.sh` | v0.5.0 | 随本 README 一同发布的安装脚本（与所装 clawcodex tag 同版本号发布） |
+| `clawcodex` | v0.5.0 | 这个 `install.sh` 要安装的版本 |
+| Git ref | `v0.5.0` | 安装器克隆的 git tag / branch |
+
+要安装其他版本的 clawcodex，请下载该版本 tag 自带的 `install.sh`。
+
+### 一键安装（推荐）
+
+最省事的安装方式。`install.sh` 会端到端完成全部步骤：操作系统识别、
+Git / uv / Python 前置检查、仓库克隆、虚拟环境创建、依赖锁定安装、
+全局命令注册、shell rc 修补。
+
+```bash
+git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex \
+  && bash /tmp/clawcodex/install.sh
+```
+
+脚本结束后（全新机器上通常约 20 秒）：
+
+```bash
+source ~/.bashrc                # 或：source ~/.zshrc   （或新开一个终端）
+clawcodex-dev --version         # 验证安装
+```
+
+常用旗标 / 子命令变体：
+
+```bash
+# 仅诊断环境，不实际安装
+bash /tmp/clawcodex/install.sh doctor
+
+# 预览每一步会做什么，但不实际改动
+bash /tmp/clawcodex/install.sh --dry-run
+
+# 非交互式安装（CI / Docker）
+bash /tmp/clawcodex/install.sh --no-venv --no-setup --yes \
+                                  --log-file /tmp/install.log
+
+# 安装指定的 tag / commit
+bash /tmp/clawcodex/install.sh --ref v0.5.0
+```
+
+清理临时克隆：
+
+```bash
+rm -rf /tmp/clawcodex
+```
+
+### 手动安装（备选）
+
+如果你更想手工配置 —— 例如在项目本身上做开发，或者 `install.sh`
+不可用时：
+
 ```bash
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
@@ -86,9 +142,96 @@ clawcodex-dev cron --help          # 查看定时任务子命令
 clawcodex-dev pos --help           # 查看 SOP 编译器子命令
 ```
 
-需要 **Python 3.10+**（推荐 3.11）。Linux / macOS / WSL2。
-
 > 上游的 CLI 入口（`python -m src.cli`）依然可用 —— 本 fork 新增了一个并行的 `clawcodex-dev` 入口，挂载下游子命令（`orchestrator`、`cron`、`pos` 等）。
+
+---
+
+## 环境要求与适配平台
+
+### 操作系统
+
+| 操作系统 | 状态 | 说明 |
+|---|---|---|
+| Linux（Debian、Ubuntu、Fedora、RHEL、Arch、openSUSE …） | ✅ 支持 | 默认测试平台 |
+| macOS 12+（Monterey 及更新） | ✅ 支持 | Apple Silicon 和 Intel |
+| WSL2（Windows 内的 Ubuntu / Debian） | ✅ 支持 | Windows 上的推荐方案 |
+| Windows 上的 Git Bash | ✅ 支持 | 不便启用 WSL 时的备选 |
+| Windows：原生 `cmd.exe` / PowerShell | ❌ 不支持 | 请改用 Git Bash 或 WSL |
+
+> 原生 Windows shell（`cmd.exe`、PowerShell）不被 `install.sh` 支持，
+> 因为它是一个 bash 脚本。请使用 Git Bash（随
+> [Git for Windows](https://git-scm.com/download/win) 一起安装）或
+> WSL2（[安装指南](https://learn.microsoft.com/windows/wsl/install)）。
+
+### 必需软件
+
+| 工具 | 最低版本 | 是否自动安装？ |
+|---|---|---|
+| **Git** | 任意 2.x | 否 —— 用系统包管理器安装 |
+| **Python** | 3.10+（推荐 3.11） | ✅ 是 —— `uv` 按需安装 |
+| **uv** | 任意 0.5+ | ✅ 是 —— 首次运行从 `astral.sh` 下载 |
+| **curl** 或 **wget** | 任意 | 否 —— 装 `uv` 和克隆仓库时需要 |
+| **bash** | 4+ | Linux/macOS 自带；macOS 自带 3.2 即可（通过 `bash -s`） |
+
+在各平台安装 Git：
+
+```bash
+sudo apt install -y git          # Debian / Ubuntu
+sudo dnf install -y git          # Fedora / RHEL
+sudo pacman -S --noconfirm git   # Arch
+xcode-select --install           # macOS
+```
+
+### 网络
+
+安装会访问三个 HTTPS 端点。首次安装时三个都需要（后续运行会复用缓存）：
+
+- `https://gitcode.com/chadwweng/clawcodex` —— 克隆仓库
+- `https://astral.sh/uv/install.sh` —— 安装 uv（仅首次）
+- `https://pypi.org/`（及默认 PyPI 索引）—— Python 依赖
+
+如果你在公司代理 / 防火墙后面，运行 `install.sh` 之前请先设置
+`HTTPS_PROXY` / `HTTP_PROXY` 以及标准的 Python `REQUESTS_CA_BUNDLE`
+环境变量。脚本会识别 `https_proxy` / `http_proxy` 环境变量并让
+`curl` 走代理。
+
+### 磁盘空间
+
+安装目录（默认 `$HOME/.clawcodex/`）下需要大约 **500 MB** 可用空间
+—— 覆盖仓库本身、`.venv`、解析后的依赖树。
+运行时配置目录（`$HOME/.clawcodex/`）还会积累会话历史、日志、auth
+令牌，建议再预留约 **100 MB**。
+
+### 权限
+
+`install.sh` 是**完全用户本地**的 —— **不需要** `sudo` 或 root 权限。
+所有写入都发生在以下位置：
+
+- `$HOME/.clawcodex/clawcodex/` —— 项目源码 + 虚拟环境
+- `$HOME/.clawcodex/` —— 运行时配置
+- `$HOME/.local/bin/` —— `clawcodex` 和 `clawcodex-dev` 命令包装
+- `~/.bashrc` / `~/.zshrc` / `~/.profile` —— 把 `~/.local/bin` 加入 `PATH`
+
+如果用 `--install-dir` 把安装目录指向系统路径（例如 `/opt/clawcodex`），
+**必须**使用 sudo，否则脚本会失败。
+
+### 需要注意的事
+
+- **使用默认 venv 模式时不会触碰系统 Python** —— 安装器只创建项目
+  本地的 `.venv` 并只在那里写入。
+- **在 `--no-venv` 模式下**，安装器使用 `uv pip install --system`，
+  并在 PEP 668 系统上自动回退到 `--break-system-packages`。仅在
+  Docker 镜像、临时 CI runner 或其他已经隔离的环境中使用此模式。
+- **安装完成后需要新开一个 shell**（或 `source ~/.bashrc` /
+  `~/.zshrc` / `~/.profile`），`clawcodex-dev` 命令才会出现在 `$PATH`
+  上。`install.sh` 会修补 rc 文件，但无法重载当前 shell。
+- **重复运行 `install.sh` 是安全的** —— 已存在的仓库会 fast-forward，
+  已存在的 venv 会复用，命令包装会重新生成。要从零开始，先跑
+  `./install.sh uninstall`。
+- **要安装不同版本的 clawcodex**（比本 README 配的 `install.sh`
+  所装版本更旧或更新），下载该版本 tag 自带的 `install.sh` 即可
+  —— 每个 release 都自带专属的安装器，lockfile 把所有传递依赖都
+  锁住了。
 
 ---
 
@@ -288,7 +431,7 @@ clawcodex-dev coordinator team delete --name build-team
 |---|---|---|
 | `bare` | Read, Write, Edit, Bash, Grep, Glob | Headless CI 跑 |
 | `default` | + WebFetch, WebSearch, TodoWrite, AskUserQuestion | 普通 REPL 会话 |
-| `clawcodex` | + Agent, Team, SendMessage, Cron, PlanMode, MCP, Skill | 完整 REPL 含团队工作流 |
+| `clawcodex` | v0.5.0 | 完整 REPL 含团队工作流 |
 | `all` | 注册表里所有 | 最大灵活性 |
 
 切换方式：`clawcodex-dev --tool-bundle clawcodex`（或在 `~/.clawcodex/config.json` 的 `tool_bundles` 字段）。
