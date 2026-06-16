@@ -724,6 +724,36 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Initial state (default: open)",
     )
     init_parser.add_argument(
+        "--category",
+        default="",
+        metavar="TAG",
+        help="Category label (e.g. review-auto-fix, docs, refactor)",
+    )
+    init_parser.add_argument(
+        "--branch-name",
+        default="",
+        metavar="NAME",
+        help="Preferred branch name (leave blank for auto-generation)",
+    )
+    init_parser.add_argument(
+        "--base-branch",
+        default="",
+        metavar="BRANCH",
+        help="Base branch (e.g. dev-decoupling, main)",
+    )
+    init_parser.add_argument(
+        "--assignee",
+        default="",
+        metavar="USER",
+        help="Assignee / team for tracking",
+    )
+    init_parser.add_argument(
+        "--url",
+        default="",
+        metavar="URL",
+        help="Upstream issue / document URL",
+    )
+    init_parser.add_argument(
         "--output", "--out",
         default="./issue.md",
         metavar="FILE",
@@ -2337,6 +2367,7 @@ def _run_init(args: argparse.Namespace) -> int:
     # Locate template
     import extensions.orchestrator.templates as tpl_mod
     from pathlib import Path
+    from datetime import datetime, timezone
 
     tpl = None
     for p in tpl_mod.__path__:  # type: ignore[attr-defined]
@@ -2373,8 +2404,14 @@ def _run_init(args: argparse.Namespace) -> int:
     title = val(args.title, "Issue title", "")
     priority = val(args.priority, "Priority (0-3)", "3")
     state = args.state or "open"
+    category = val(args.category, "Category label (e.g. feature, bug, refactor)", "feature")
+    branch_name = val(args.branch_name, "Preferred branch name (blank for auto)", "")
+    base_branch = val(args.base_branch, "Base branch (e.g. main, dev-decoupling)", "")
+    assignee = val(args.assignee, "Assignee / team", "")
+    url = val(args.url, "Upstream issue / document URL", "")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # Read and do basic <...> placeholder replacement
+    # Read and replace all <...> placeholders
     raw = tpl.read_text(encoding="utf-8")
     replacements = {
         "<ID>": issue_id,
@@ -2382,18 +2419,28 @@ def _run_init(args: argparse.Namespace) -> int:
         "<TITLE>": title,
         "<PRIORITY>": priority,
         "<STATE>": state,
+        "<CATEGORY_TAG>": category,
+        "<BRANCH_NAME>": branch_name,
+        "<BASE_BRANCH>": base_branch,
+        "<ASSIGNEE>": assignee,
+        "<UPSTREAM_URL>": url,
+        "<ISO8601>": now,
     }
-    for key, val in replacements.items():
-        raw = raw.replace(key, val)
+    for key, replacement in replacements.items():
+        raw = raw.replace(key, replacement)
 
     # Write
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(raw, encoding="utf-8")
 
+    remaining = raw.count("<") and raw.count(">")
     print(f"✓ Generated {out}")
     print()
     print("  Next steps:")
-    print(f"    1. Edit {out.name} — fill remaining <...> placeholders")
+    if remaining:
+        print(f"    1. Edit {out.name} — review and fill any remaining <...> placeholders")
+    else:
+        print(f"    1. Review {out.name} — all placeholders have been filled")
     print(f"    2. Move it to your local tracker's issues path")
     print(f"    3. Start: clawcodex orchestrator server start --workflow workflow.md")
     return 0

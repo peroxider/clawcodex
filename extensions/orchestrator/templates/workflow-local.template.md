@@ -2,30 +2,30 @@
 # =============================================================================
 # ClawCodex Orchestrator — Local-Tracker Workflow Template
 # =============================================================================
-# 本模板用于「本地文件 issue 驱动」的开发场景：
+# This template is for the "local file-based issue tracking" scenario:
 #   - tracker.kind = local
-#   - issues 存为 <issues_path>/*.md，frontmatter + body
-#   - workspace.repo_clone_url 指向目标仓库（orchestrator 会 fresh clone）
-#   - 本地 tracker 触发 no_push，commit 只在 workspace 留下分支
-#   - 人工检视后从 workspace 拉分支合入目标分支
+#   - issues are stored as <issues_path>/*.md with frontmatter + body
+#   - workspace.repo_clone_url points to the target repo (orchestrator fresh-clones)
+#   - local tracker triggers no_push; commits stay in the workspace branch
+#   - after manual review, pull the branch from workspace into the target repo
 #
-# 启动方式：
+# Usage:
 #   clawcodex orchestrator workflow init --template workflow-local
 #
-# 占位符（启动前替换或改成 env 引用）：
-#   <OWNER>         仓库 owner
-#   <REPO>          仓库名
-#   <REPO_URL>      仓库 clone URL（https / ssh / file 均可）
-#   <BRANCH_PREFIX> issue 分支前缀，例如 feature / fix
-#   <REVIEW_REMOTE> post_sync 推 review 分支用的 remote 名（默认 origin）
-#   <REVIEW_PREFIX> review 分支前缀，默认 review
+# Placeholders (replace before starting, or use env references):
+#   {{OWNER}}         Repository owner
+#   {{REPO}}          Repository name
+#   {{REPO_URL}}      Repository clone URL (https / ssh / file)
+#   {{BRANCH_PREFIX}} Issue branch prefix, e.g. feature / fix
+#   {{REVIEW_REMOTE}} Remote name for post_sync review push (default: origin)
+#   {{REVIEW_PREFIX}} Review branch prefix (default: review)
 # =============================================================================
 
 tracker:
   kind: local
-  issues_path: <ISSUES_PATH>            # 例如 $HOME/projects/<REPO>/.issues
-  assignee: <OWNER>                     # 仅作记录用，不参与轮询过滤
-  branch_prefix: <BRANCH_PREFIX>        # 生成的分支形如 <BRANCH_PREFIX>/<id>-<slug>
+  issues_path: {{ISSUES_PATH}}            # e.g. $HOME/projects/{{REPO}}/.issues
+  assignee: {{OWNER}}                     # informational only, not used for polling filter
+  branch_prefix: {{BRANCH_PREFIX}}        # generated branches: {{BRANCH_PREFIX}}/<id>-<slug>
   active_states:
     - open
     - ready
@@ -37,24 +37,24 @@ tracker:
     - abandoned
 
 # -----------------------------------------------------------------------------
-# Polling: 每 30 秒扫一次 issues 目录
+# Polling: scan the issues directory every 30 seconds
 # -----------------------------------------------------------------------------
 polling:
   interval_ms: 30000
 
 # -----------------------------------------------------------------------------
-# Workspace: 把目标仓库 fresh clone 到本地，issue 分支在 clone 里提交
+# Workspace: fresh-clone the target repo; issue branches are committed in the clone
 # -----------------------------------------------------------------------------
-# 注意：workspace 是独立 working tree，不是你当前的项目目录。
-# 分支、commit 全部落在这个 clone 的 .git/。
-# 检视后用 git push / cherry-pick / pull 把改动搬回主项目。
+# Note: workspace is an independent working tree, NOT your current project directory.
+# All branches and commits live inside this clone's .git/.
+# After review, use git push / cherry-pick / pull to move changes into the main project.
 workspace:
-  root: <WORKSPACE_ROOT>                # 例如 $HOME/.cache/clawcodex-workspaces
-  repo_clone_url: <REPO_URL>            # 例如 https://gitcode.com/<OWNER>/<REPO>.git
+  root: {{WORKSPACE_ROOT}}                # e.g. $HOME/.cache/clawcodex-workspaces
+  repo_clone_url: {{REPO_URL}}            # e.g. https://gitcode.com/{{OWNER}}/{{REPO}}.git
   clone_depth: 1
   checkout_issue_branch: true
-  git_username: <OWNER>
-  git_token: $GITCODE_TOKEN             # 走环境变量，避免明文
+  git_username: {{OWNER}}
+  git_token: $GITCODE_TOKEN               # use env var to avoid plaintext secrets
   gitignore_patterns:
     - .reports
     - "*.pyc"
@@ -67,10 +67,10 @@ workspace:
     - ".issues/*.comments.ndjson"
 
 # -----------------------------------------------------------------------------
-# Agent: ClawCodex / Codex 的执行参数
+# Agent: ClawCodex / Codex execution parameters
 # -----------------------------------------------------------------------------
 agent:
-  max_concurrent_agents: 1              # LocalTracker 共享 ProgressReporter，并发建议 1
+  max_concurrent_agents: 1              # LocalTracker shares ProgressReporter; keep at 1
   max_turns: 200
   max_retry_attempts: 6
   max_retry_backoff_ms: 300000
@@ -78,15 +78,15 @@ agent:
     open: 1
     ready: 1
   provider: anthropic
-  # 留空会让 schema.py 自动从 dontAsk 升级为 bypassPermissions（headless 安全）
+  # Leave blank to let schema.py auto-promote dontAsk → bypassPermissions (headless safe)
   permission_mode: bypassPermissions
-  # F-38 验证三件套。空字符串 = 跳过该步
-  test_command: "<TEST_COMMAND>"        # 例如 "python3 -m pytest tests/test_orchestrator_*.py -q"
+  # F-38 verification trio. Empty string = skip that step.
+  test_command: "{{TEST_COMMAND}}"        # e.g. "python3 -m pytest tests/test_orchestrator_*.py -q"
   build_command: ""
   lint_command: ""
   verification:
     timeout_ms: 600000
-  # F-39 Sub-F: 单 issue 最多自动重试次数（超过后 agent:retry 也不再生效）
+  # F-39 Sub-F: max auto-retries per issue (agent:retry disabled after this)
   max_retries_per_issue: 3
   allow_anyone_to_retry: false
 
@@ -104,22 +104,23 @@ codex:
 # -----------------------------------------------------------------------------
 # Hooks
 # -----------------------------------------------------------------------------
-# - before_run / after_run：开始 / 结束时的轻量通知
-# - pre_commit / pre_push / post_sync：F-38 同步钩子；空字符串 = 跳过
-# - post_sync 这里演示把分支推到 <REVIEW_REMOTE> 的 review/<id>，
-#   供你 fetch 后检视合入。push 不改 working tree，post_sync dirty check 不会触发。
-#   如果不想推远程，把 post_sync 留空，分支只在 workspace 目录里。
+# - before_run / after_run: lightweight notifications at start / end
+# - pre_commit / pre_push / post_sync: F-38 sync hooks; empty string = skip
+# - post_sync here pushes the branch to {{REVIEW_REMOTE}} as review/<id> for
+#   manual review. Push does not modify the working tree, so the post_sync
+#   dirty check will not trigger. Leave post_sync empty to keep branches local only.
 hooks:
   before_run: "echo '[orchestrator] starting $ISSUE_IDENTIFIER'"
   after_run:  "echo '[orchestrator] finished $ISSUE_IDENTIFIER'"
   pre_commit: ""
   pre_push: ""
-  post_sync: "git push -u <REVIEW_REMOTE> HEAD:<REVIEW_PREFIX>/$ISSUE_IDENTIFIER"
+  post_sync: "git push -u {{REVIEW_REMOTE}} HEAD:{{REVIEW_PREFIX}}/$ISSUE_IDENTIFIER"
   timeout_ms: 120000
 
 # -----------------------------------------------------------------------------
-# Review feedback (F-37)：从 PR review 拉评论触发 follow-up
-# 本地场景下没有真实 PR，关闭即可；要开启就把 enabled 设 true 并配 mode
+# Review feedback (F-37): pull PR review comments to trigger follow-up
+# No real PRs in local mode; leave disabled. Set enabled=true and configure
+# mode to turn on.
 # -----------------------------------------------------------------------------
 review_feedback:
   enabled: false
@@ -147,41 +148,43 @@ server:
 
 # Orchestrator Agent Prompt
 
-你正在为仓库 **<REPO_URL>** 开发一个由本地 issue 卡片定义的子特性。
+You are working on a sub-feature for the **{{REPO_URL}}** repository,
+defined by a local issue card.
 
-**当前状态（不要重复这些步骤）：**
-- issue frontmatter 和 body 已经从 `<ISSUES_PATH>/<id>.md` 解析出来
-- 仓库已 fresh clone 到当前工作目录（`<WORKSPACE_ROOT>/<safe_id>/`）
-- 已切到 `{{ issue.branch_name }}` 分支，基于 `{{ issue.base_branch or '默认分支' }}`
+**Current state (do NOT repeat these steps):**
+- Issue frontmatter and body have been parsed from `<ISSUES_PATH>/<id>.md`
+- The repository has been fresh-cloned into the current working directory (`<WORKSPACE_ROOT>/<safe_id>/`)
+- You are on the `{{ issue.branch_name }}` branch, based on `{{ issue.base_branch or 'default branch' }}`
 
-**你的任务：**
-1. 读 issue 卡片（frontmatter + body），重点关注「验收标准」「不要做」
-2. 跑 `git status && git log --oneline -5` 确认基线
-3. 探索代码、定位需要改的文件
-4. 实施修改、添加 / 更新测试
-5. 运行 `agent.test_command`（workflow 里配置的）确保通过
-6. **不要 push、不要开 PR、不要 merge** —— orchestrator 会处理同步
-7. 用 Conventional Commits 风格的 commit message（`feat:` / `fix:` / `refactor:` 等）
+**Your task:**
+1. Read the issue card (frontmatter + body), focusing on "acceptance criteria" and "do not do"
+2. Run `git status && git log --oneline -5` to confirm the baseline
+3. Explore the codebase, locate files that need changes
+4. Implement changes, add / update tests
+5. Run `agent.test_command` (configured in the workflow) and ensure it passes
+6. **Do NOT push, do NOT open a PR, do NOT merge** — the orchestrator handles sync
+7. Use Conventional Commits style (`feat:` / `fix:` / `refactor:` etc.)
 
-**约束：**
-- 只在 working tree 里动手脚，不要碰 workspace 根目录之外的文件
-- 不要新建仓库、不要改 `.git/config`、不要 force push
-- 不要改 `extensions/orchestrator/tracker.py` 的 `TrackerAdapter` 接口
-- 保持改动聚焦在当前 issue，不要顺手清理无关代码
+**Constraints:**
+- Only modify files inside the working tree; do not touch files outside the workspace root
+- Do not create new repos, modify `.git/config`, or force push
+- Do not change the `TrackerAdapter` interface in `extensions/orchestrator/tracker.py`
+- Keep changes focused on the current issue; do not clean up unrelated code
 
 **Issue:** {{ issue.identifier }} — {{ issue.title }}
 {% if issue.description %}
-**描述：**
+**Description:**
 {{ issue.description }}
 {% endif %}
 {% if issue.labels %}
 **Labels:** {{ issue.labels | join(", ") }}
 {% endif %}
 {% if issue.base_branch %}
-**基线分支:** `{{ issue.base_branch }}`
+**Base branch:** `{{ issue.base_branch }}`
 {% endif %}
 {% if issue.priority is not none %}
-**优先级:** P{{ issue.priority }}
+**Priority:** P{{ issue.priority }}
 {% endif %}
 
-工作目录就是 issue 分支的根。改完代码、写完 commit，剩下的交给 orchestrator。
+The working directory is the root of the issue branch. Make your changes, commit,
+and leave the rest to the orchestrator.

@@ -98,11 +98,18 @@ def _prompt(label: str, default: str = "", secret: bool = False) -> str:
 
 
 def _fill_placeholders(content: str, values: dict[str, str]) -> str:
-    """Replace ``{{KEY}}`` placeholders with corresponding *values*."""
+    """Replace ``{{KEY}}`` and ``<KEY>`` placeholders with corresponding *values*.
+
+    Handles two placeholder styles:
+    - ``{{KEY}}`` — used by the remote-tracker workflow template
+    - ``<KEY>``   — used by the local-tracker workflow template and issue cards
+    """
     for key, val in values.items():
         content = content.replace("{{" + key + "}}", val)
         # Also replace ${{KEY}}_ENV style
         content = content.replace("${{" + key + "_ENV}}", val)
+        # Also replace <KEY> style (used by workflow-local.template.md)
+        content = content.replace("<" + key + ">", val)
     return content
 
 
@@ -138,9 +145,9 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     init_parser.add_argument(
         "--kind", "-k",
-        default="",
+        default="github",
         metavar="TRACKER",
-        help="Tracker kind: github, gitcode, gitee, linear, local (default: prompt)",
+        help="Tracker kind: github, gitcode, gitee, linear, local (default: github)",
     )
     init_parser.add_argument(
         "--owner", "-o",
@@ -240,7 +247,30 @@ def _run_init(args: argparse.Namespace) -> int:
             return _prompt(label, default)
         return default
 
-    kind = val(args.kind, "Tracker kind (github/gitcode/gitee/linear/local)", "github")
+    # Auto-infer --kind from --template when not explicitly provided
+    _TEMPLATE_KIND_HINTS = {
+        "workflow-local": "local",
+        "workflow": "github",
+    }
+    kind_default = _TEMPLATE_KIND_HINTS.get(variant, "github")
+    kind = val(args.kind, "Tracker kind (github/gitcode/gitee/linear/local)", kind_default)
+
+    # Cross-validate --template and --kind
+    _TEMPLATE_KIND_COMPAT = {
+        "workflow-local": {"local"},
+        "workflow": {"github", "gitcode", "gitee", "linear"},
+    }
+    compat = _TEMPLATE_KIND_COMPAT.get(variant)
+    if compat and kind not in compat:
+        print(
+            f"✗ Template '{variant}' is not compatible with --kind '{kind}'.\n"
+            f"  Expected one of: {', '.join(sorted(compat))}\n"
+            f"  Hint: use --template workflow-local for local tracker, "
+            f"or --template workflow for remote trackers.",
+            file=sys.stderr,
+        )
+        return 1
+
     owner = val(args.owner, "Repository owner")
     repo = val(args.repo, "Repository name")
     endpoint = val(args.endpoint, "API endpoint (leave blank for default)")
@@ -275,7 +305,7 @@ def _run_init(args: argparse.Namespace) -> int:
     if not endpoint:
         endpoint = endpoint_defaults.get(kind, "")
 
-    # Build substitution map
+    # Build substitution map (covers both {{KEY}} and <KEY> placeholder styles)
     values = {
         "TRACKER_KIND": kind,
         "TRACKER_ENDPOINT": endpoint,
@@ -289,6 +319,13 @@ def _run_init(args: argparse.Namespace) -> int:
         "GIT_PUSH_USER": push_user,
         "GIT_PUSH_TOKEN_ENV": token_env,
         "REPO_URL": clone_url.removesuffix(".git") if clone_url else "",
+        # Keys for <KEY> style placeholders in workflow-local.template.md
+        "OWNER": owner,
+        "REPO": repo,
+        "ISSUES_PATH": val("", "Issues path (local tracker)", f".issues"),
+        "REVIEW_REMOTE": val("", "Review remote name", "origin"),
+        "REVIEW_PREFIX": val("", "Review branch prefix", "review"),
+        "TEST_COMMAND": val("", "Test command (empty to skip)", ""),
     }
 
     # Read and fill template
@@ -302,7 +339,7 @@ def _run_init(args: argparse.Namespace) -> int:
     print(f"✓ Generated {out}")
     print()
     print("  Next steps:")
-    print(f"    1. Edit {out.name} — check every {{PLACEHOLDER}} was replaced")
+    print(f"    1. Edit {out.name} — check every placeholder was replaced")
     print(f"    2. Set the required env var: export {token_env}=<your-token>")
     print(f"    3. Start: clawcodex orchestrator server start --workflow {out.name}")
     print()
