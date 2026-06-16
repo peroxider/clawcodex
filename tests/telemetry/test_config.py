@@ -181,3 +181,125 @@ def test_load_config_cwd_falls_back_for_legacy_loader(monkeypatch, tmp_path):
 
     assert cfg.enabled is True
     assert calls == 1
+
+
+# ---------------------------------------------------------------------------
+# F-97-K: TOML config loader
+# ---------------------------------------------------------------------------
+
+
+def _write_pyproject(cwd: Path, table: str) -> Path:
+    """Write a minimal pyproject.toml with one telemetry table at cwd."""
+    p = cwd / "pyproject.toml"
+    p.write_text(
+        "[project]\n"
+        'name = "demo"\n'
+        "version = \"0.0.1\"\n\n"
+        f"[tool.clawcodex.{table}]\n"
+        "enabled = true\n"
+        "storage_dir = \"/tmp/tel-toml-test\"\n",
+        encoding="utf-8",
+    )
+    return p
+
+
+def _write_telemetry_toml(cwd: Path) -> Path:
+    p = cwd / "telemetry.toml"
+    p.write_text(
+        "[telemetry]\n"
+        "enabled = true\n"
+        "retention_days = 7\n",
+        encoding="utf-8",
+    )
+    return p
+
+
+def test_load_config_reads_pyproject_toml_section(monkeypatch, tmp_path):
+    """F-97-K: pyproject.toml [tool.clawcodex.telemetry] is discovered
+    by walking upward from cwd."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    monkeypatch.setattr("src.config.load_config", lambda *a, **k: {})
+    _write_pyproject(tmp_path, "telemetry")
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is True
+    assert str(cfg.storage_dir) == "/tmp/tel-toml-test"
+
+
+def test_load_config_reads_telemetry_toml(monkeypatch, tmp_path):
+    """F-97-K: standalone <cwd>/telemetry.toml is read directly."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    monkeypatch.setattr("src.config.load_config", lambda *a, **k: {})
+    _write_telemetry_toml(tmp_path)
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is True
+    assert cfg.retention_days == 7
+
+
+def test_load_config_json_overrides_toml(monkeypatch, tmp_path):
+    """F-97-K: when both TOML and JSON provide the same key, JSON wins."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    _write_telemetry_toml(tmp_path)  # TOML: enabled = true
+    monkeypatch.setattr(
+        "src.config.load_config",
+        lambda *a, **k: {"telemetry": {"enabled": False}},
+    )
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is False  # JSON wins
+
+
+def test_load_config_toml_invalid_falls_back_to_defaults(monkeypatch, tmp_path):
+    """F-97-K: malformed TOML must not break load_config — silently
+    treat it as 'no TOML section' and use dataclass defaults."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    monkeypatch.setattr("src.config.load_config", lambda *a, **k: {})
+    (tmp_path / "telemetry.toml").write_text(
+        "this is not valid = toml = = =",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is False
+    assert cfg.retention_days == 30
+
+
+def test_load_config_pyproject_walks_upward_from_cwd(monkeypatch, tmp_path):
+    """F-97-K: the TOML loader walks upward from cwd looking for
+    pyproject.toml, so a nested invocation still finds the table."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    monkeypatch.setattr("src.config.load_config", lambda *a, **k: {})
+    _write_pyproject(tmp_path, "telemetry")
+    nested = tmp_path / "sub" / "deeper"
+    nested.mkdir(parents=True)
+
+    cfg = load_config(cwd=nested)
+
+    assert cfg.enabled is True
+    assert str(cfg.storage_dir) == "/tmp/tel-toml-test"
+
+
+def test_load_config_no_toml_files_unchanged_from_json_only(monkeypatch, tmp_path):
+    """F-97-K: when no TOML files are present, behavior is identical to
+    the pre-F-97-K JSON-only path."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CLAW_TELEMETRY_ENABLED", raising=False)
+    monkeypatch.setattr(
+        "src.config.load_config",
+        lambda *a, **k: {"telemetry": {"enabled": True, "retention_days": 14}},
+    )
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is True
+    assert cfg.retention_days == 14

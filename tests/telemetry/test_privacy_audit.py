@@ -225,3 +225,70 @@ def test_analytics_bridge_redacts_prompt_output_and_secrets(tmp_path) -> None:
         reset_recorder_for_tests()
         reset_analytics_bridge_for_tests()
         set_analytics_sink(_NullAnalyticsSink())
+
+
+# ---------------------------------------------------------------------------
+# F-97-L: cross-version privacy + dedup invariant
+# ---------------------------------------------------------------------------
+
+
+def test_v1_v2_fingerprint_redact_and_migrate_hash_equivalent() -> None:
+    """A v1 ERROR event with a 16-char fingerprint string and a v2
+    ERROR event with a structured fingerprint dict (same ``hash``)
+    must remain dedupable after the redaction + migration pipeline.
+
+    This is the single invariant the F-97-L rollout rests on: even
+    after the reda``tor scrubs secret-like patterns out of the hash
+    and the migrator normalizes the v1 string into the v2 dict form,
+    the two events must end up in the same crash bucket — so the
+    daily crash summary doesn't double-count legacy errors.
+    """
+    from clawcodex.telemetry.migration import (
+        _fingerprint_dict_to_hash,
+        normalize_event,
+    )
+
+    shared_hash = "abc1234567890def"
+    redactor = Redactor(RedactionConfig(), ())
+
+    v1_event = TelemetryEvent(
+        type=EventType.ERROR,
+        session_id="legacy-sess",
+        fields={
+            "error_class": "ValueError",
+            "fingerprint": shared_hash,
+            "stacktrace": ["ValueError: oops"],
+        },
+    )
+    v2_event = TelemetryEvent(
+        type=EventType.ERROR,
+        session_id="modern-sess",
+        fields={
+            "error_class": "ValueError",
+            "fingerprint": {
+                "hash": shared_hash,
+                "version": 2,
+                "method": "sha1-truncate",
+            },
+            "stacktrace": ["ValueError: oops"],
+        },
+    )
+
+    v1_redacted = redactor.redact_event(v1_event).to_dict()
+    v2_redacted = redactor.redact_event(v2_event).to_dict()
+
+    v1_normalized = normalize_event(v1_redacted)
+    v2_normalized = normalize_event(v2_redacted)
+
+    v1_join_key = _fingerprint_dict_to_hash(v1_normalized["fields"]["fingerprint"])
+    v2_join_key = _fingerprint_dict_to_hash(v2_normalized["fields"]["fingerprint"])
+
+    assert v1_join_key == v2_join_key == shared_hash
+    # Both end up at v2 after the pipeline
+    assert v1_normalized["schema_version"] == 2
+    assert v2_normalized["schema_version"] == 2
+    # No secrets in either redacted payload
+    for value in (shared_hash,):
+        assert value in v1_redacted["fields"]["fingerprint"]  # short hash is non-sensitive
+    assert v1_redacted["fields"].get("error_class") == "ValueError"
+    assert v2_redacted["fields"].get("error_class") == "ValueError"

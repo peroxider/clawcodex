@@ -144,3 +144,92 @@ def test_aggregate_handles_payload_without_fields(tmp_path):
     agg = DailyAggregator(storage)
     summary = agg.aggregate(utc_date(utc_now()))
     assert summary["sessions"] == 1
+
+
+# ---------------------------------------------------------------------------
+# F-97-L: mixed v1 / v2 events
+# ---------------------------------------------------------------------------
+
+
+def _session_start_v2(sid):
+    """v2-shaped session_start row, mirroring :func:`_session_start`."""
+    return {
+        "type": "session_start",
+        "timestamp": time.time(),
+        "session_id": sid,
+        "schema_version": 2,
+        "fields": {
+            "entrypoint": "tui",
+            "client_type": "tui",
+            "platform": "Linux",
+            "python_version": "3.12.0",
+            "provider": "anthropic",
+            "model": "claude-opus-4-7",
+        },
+    }
+
+
+def _crash_v2(sid, fingerprint_hash, error_class="ValueError"):
+    """v2-shaped crash row with the structured fingerprint dict form."""
+    return {
+        "type": "error",
+        "timestamp": time.time(),
+        "session_id": sid,
+        "schema_version": 2,
+        "fields": {
+            "error_class": error_class,
+            "fingerprint": {
+                "hash": fingerprint_hash,
+                "version": 2,
+                "method": "sha1-truncate",
+            },
+            "stacktrace": ["line1"],
+        },
+    }
+
+
+def test_aggregate_handles_v1_and_v2_mixed(tmp_path):
+    """F-97-L: events written before and after the v1→v2 cutover must
+    produce a single coherent daily summary — sessions counted from
+    both shapes, summary stamped at v2."""
+    storage = _storage(tmp_path)
+    # v1 row (legacy binary)
+    storage.append("events", _session_start("v1-sess"))
+    storage.append("events", _command_run("v1-sess", name="repl"))
+    # v2 row (current binary)
+    storage.append("events", _session_start_v2("v2-sess"))
+    storage.append("events", _command_run("v2-sess", name="tui"))
+    agg = DailyAggregator(storage)
+    summary = agg.aggregate(utc_date(utc_now()))
+
+    assert summary["schema_version"] == 2
+    assert summary["sessions"] == 2
+    assert summary["commands"] == 2
+    # Both shapes must contribute to the top-commands list. Tied
+    # counts preserve insertion order, so don't assert index here.
+    names = [entry["name"] for entry in summary["top_commands"]]
+    assert set(names) == {"repl", "tui"}
+
+
+def test_aggregate_crash_summary_groups_v1_v2_same_hash(tmp_path):
+    """F-97-L: a v1 crash with fingerprint string 'abc123' and a v2
+    crash with fingerprint dict ``{'hash': 'abc123', ...}`` must end
+    up in the same crash bucket after the v1→v2 migration."""
+    storage = _storage(tmp_path)
+    storage.append("crashes", _crash("v1-sess", fingerprint="abc123", error_class="E"))
+    storage.append("crashes", _crash_v2("v2-sess", "abc123", error_class="E"))
+    storage.append("crashes", _crash("v1-sess", fingerprint="different", error_class="E"))
+    agg = DailyAggregator(storage)
+    summary = agg.aggregate(utc_date(utc_now()))
+
+    crashes = summary["crashes"]
+    assert crashes["total"] == 3
+    # The shared "abc123" hash from both shapes must collapse to a
+    # single bucket with count=2; the distinct hash forms a second
+    # bucket.
+    by_hash = {entry["fingerprint"]: entry for entry in crashes["top"]}
+    assert by_hash["abc123"]["count"] == 2
+    assert by_hash["different"]["count"] == 1
+    # And the v2-shaped crash and v1-shaped crash must agree on the
+    # recorded error_class
+    assert by_hash["abc123"]["error_class"] == "E"

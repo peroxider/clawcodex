@@ -91,13 +91,33 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
     Order (lowest → highest precedence):
 
     1. :class:`TelemetryConfig` dataclass defaults.
-    2. ``telemetry`` section of the merged config (loaded via
+    2. TOML section discovered by
+       :func:`clawcodex.telemetry._toml.load_toml_telemetry` — first
+       ``pyproject.toml`` walked upward from ``cwd`` (looking for
+       ``[tool.clawcodex.telemetry]``), then a standalone
+       ``<cwd>/telemetry.toml``.
+    3. ``telemetry`` section of the merged config (loaded via
        :func:`src.config.load_config`); unknown keys are dropped.
-    3. Process environment overrides.
+       JSON wins over TOML on key collisions.
+    4. Process environment overrides.
     """
     base = TelemetryConfig()
 
     on_disk_section: dict[str, Any] = {}
+    # F-97-K: TOML is layered between dataclass defaults and the legacy
+    # JSON section. The JSON section is intentionally given precedence
+    # so existing CI / production deployments that already maintain a
+    # JSON config keep working untouched.
+    try:
+        from ._toml import load_toml_telemetry
+
+        toml_section = load_toml_telemetry(cwd)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("telemetry: TOML loader failed: %s", exc)
+        toml_section = {}
+    if isinstance(toml_section, dict) and toml_section:
+        on_disk_section.update(toml_section)
+
     try:
         from src.config import load_config as _load  # type: ignore[import-not-found]
 
@@ -106,7 +126,9 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         except TypeError:
             merged = _load()
         if isinstance(merged, dict):
-            on_disk_section = _section(merged, "telemetry")
+            json_section = _section(merged, "telemetry")
+            if json_section:
+                on_disk_section.update(json_section)
     except Exception as exc:  # noqa: BLE001
         logger.debug("telemetry: failed to load src.config: %s", exc)
 

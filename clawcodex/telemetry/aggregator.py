@@ -17,6 +17,7 @@ from collections import Counter
 from typing import Any, Final
 
 from .events import SCHEMA_VERSION, EventType
+from .migration import SCHEMA_VERSION_V2, _fingerprint_dict_to_hash, normalize_event
 from .storage import LocalJsonlStorage, utc_date, utc_now
 from .version import __version__
 
@@ -98,6 +99,10 @@ class DailyAggregator:
         duration_count = 0
 
         for raw in events:
+            # F-97-L: normalize to v2 so the rest of the loop can rely
+            # on a single shape (especially the structured fingerprint
+            # dict). The upgrade is idempotent for already-v2 events.
+            raw = normalize_event(raw)
             etype = raw.get("type")
             fields = raw.get("fields", {}) or {}
             sid = raw.get("session_id", "")
@@ -150,7 +155,7 @@ class DailyAggregator:
         crash_summary = self._build_crash_summary(crashes)
 
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": SCHEMA_VERSION_V2,
             "date": date,
             "version": __version__,
             "generated_at": utc_now(),
@@ -188,8 +193,13 @@ class DailyAggregator:
 
         buckets: dict[str, dict[str, Any]] = {}
         for raw in crashes:
+            # F-97-L: v2 events carry fingerprint as a structured dict;
+            # v1 events carry it as a string. ``normalize_event`` already
+            # ran in ``_build_summary`` but the crash sub-loop may also
+            # be called directly, so re-normalize for safety.
+            raw = normalize_event(raw)
             fields = raw.get("fields", {}) or {}
-            fp = fields.get("fingerprint") or "unknown"
+            fp = _fingerprint_dict_to_hash(fields.get("fingerprint")) or "unknown"
             bucket = buckets.setdefault(
                 fp,
                 {

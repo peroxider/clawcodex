@@ -12,7 +12,18 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Final
 
+# F-97-L: ``SCHEMA_VERSION`` is the *read* default — events missing the
+# ``schema_version`` field are treated as v1 so legacy on-disk data
+# still loads. New events are written with the value re-exported from
+# ``migration.py`` (see :data:`SCHEMA_VERSION_V2`).
+# F-97-L: ``SCHEMA_VERSION`` is the *read* default — events missing the
+# ``schema_version`` field are treated as v1 so legacy on-disk data
+# still loads. Newly-written events are stamped with
+# :data:`SCHEMA_VERSION_V2` via the ``TelemetryEvent`` field default
+# below.
 SCHEMA_VERSION: Final[int] = 1
+SCHEMA_VERSION_V2: Final[int] = 2
+_CURRENT_SCHEMA_VERSION: Final[int] = SCHEMA_VERSION_V2
 
 
 class EventType(str, Enum):
@@ -45,7 +56,7 @@ class TelemetryEvent:
     type: EventType
     timestamp: float = field(default_factory=time.time)
     session_id: str = ""
-    schema_version: int = SCHEMA_VERSION
+    schema_version: int = SCHEMA_VERSION_V2
     fields: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

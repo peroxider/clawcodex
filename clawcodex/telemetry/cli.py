@@ -158,6 +158,14 @@ def run_enable(argv: Sequence[str] | None = None) -> int:
     cfg = load_config()
     target = _asdict(cfg)
     _print(
+        "Tip (F-97-K): you can also drop the equivalent settings into a "
+        "TOML file the loader probes automatically:"
+    )
+    _print("  - <cwd>/telemetry.toml  (standalone)")
+    _print("  - <repo>/pyproject.toml  [tool.clawcodex.telemetry] table")
+    _print("See telemetry.toml.example in the repo root for the full key set.")
+    _print("")
+    _print(
         "Add the following snippet to your merged config (e.g. "
         "~/.clawcodex/config.json or <repo>/.claude/config.json) and "
         "restart clawcodex:"

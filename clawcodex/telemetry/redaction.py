@@ -223,6 +223,19 @@ class Redactor:
                     continue
                 safe[str(sub_key)] = self._redact_value(str(sub_key), sub_value)
             return safe
+        # F-97-L: v2 ``fingerprint`` is a structured dict whose ``hash``
+        # field is a 16-char digest (low risk) and whose ``version`` /
+        # ``method`` fields are low-cardinality identifiers. Run the
+        # hash through ``redact_text`` so any embedded secret pattern
+        # is caught; recurse on the rest.
+        if key == "fingerprint" and isinstance(value, dict):
+            safe_fp: dict[str, Any] = {}
+            for sub_key, sub_value in value.items():
+                if sub_key == "hash" and isinstance(sub_value, str):
+                    safe_fp[sub_key] = self.redact_text(sub_value)
+                else:
+                    safe_fp[sub_key] = self._redact_value(str(sub_key), sub_value)
+            return safe_fp
         if isinstance(value, str):
             return self.redact_text(value)
         if isinstance(value, dict):

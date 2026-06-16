@@ -1,0 +1,44 @@
+# F-97 telemetry example configuration
+#
+# This file shows every key the F-97 telemetry system understands. Drop
+# it into your project as `telemetry.toml` (the location the F-97
+# loader probes by default) or copy the `[tool.clawcodex.telemetry]`
+# table into your existing `pyproject.toml`.
+#
+# Layered precedence (lowest → highest):
+#   1. dataclass defaults
+#   2. pyproject.toml [tool.clawcodex.telemetry]  (walked upward from cwd)
+#   3. <cwd>/telemetry.toml                       (this file)
+#   4. src.config JSON section                    (wins on collision)
+#   5. CLAW_TELEMETRY_* environment variables
+#
+# All toggles default to off — you must opt in explicitly. F-97 is
+# privacy-first; see `docs/FEATURE_PLAN.md §9.4` for the data model.
+
+[telemetry]
+enabled = false                                # master switch (default off)
+storage_dir = "~/.clawcodex/telemetry"         # JSONL output root
+retention_days = 30                            # 1..365, days of on-disk history
+
+[telemetry.reporting]
+reporting_enabled = false                      # remote opt-in (default off)
+kind = "local_file"                            # local_file | issue | dry_run
+platform = "github"                            # github | gitee | gitcode
+owner = ""                                     # GitHub/Gitee/GitCode owner
+repo = ""                                      # repository name
+endpoint = ""                                  # custom API base (optional)
+issue_title = "ClawCodex Telemetry Inbox"      # inbox issue title (issue mode)
+mode = "update_or_create"                      # update_or_create | create_daily
+interval_hours = 24                            # 1..168, min hours between emits
+token_env = "CLAW_TELEMETRY_REPORTING_TOKEN"   # env var holding the API token
+api_key = ""                                   # explicit token (avoid; prefer env)
+
+[telemetry.privacy]
+include_command_name = true                    # whitelist matches; else "other"
+include_command_args = false                   # never record raw argv
+include_absolute_paths = false                 # redact to <project>/... or hash
+include_stacktrace = true                      # truncated, project frames only
+include_prompts = false                        # never record user prompts
+include_outputs = false                        # never record model outputs
+stacktrace_max_lines = 20                      # 1..200 frames
+secret_hash_salt = "clawcodex-telemetry-v1"    # salt for path / secret hashing
