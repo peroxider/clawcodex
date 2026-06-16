@@ -68,6 +68,14 @@ class ReviewFeedbackService:
         for record in self.registry.iter_records_with_pr():
             if len(followups) >= available_slots:
                 break
+            timeout = getattr(self.config, "pending_feedback_timeout_seconds", 600)
+            cleared = self.registry.clear_stale_pending(record.issue_id, timeout)
+            if cleared:
+                logger.info(
+                    "Cleared %d stale pending feedback item(s) for issue %s — will re-detect",
+                    cleared,
+                    record.issue_id,
+                )
             if not self.registry.can_follow_up(
                 record.issue_id,
                 getattr(self.config, "max_followup_attempts_per_pr", 5),

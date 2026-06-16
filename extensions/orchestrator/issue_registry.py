@@ -95,6 +95,7 @@ class IssueRecord:
     stale_answers: list[str] = field(default_factory=list)
     processed_feedback_ids: list[str] = field(default_factory=list)
     pending_feedback_ids: list[str] = field(default_factory=list)
+    pending_feedback_since: float | None = None
     feedback_cursor: str | None = None
     followup_attempt_count: int = 0
     last_followup_commit_sha: str | None = None
@@ -532,6 +533,8 @@ class IssueRegistry:
         record = self._records.get(issue_id)
         if record is None:
             return None
+        if not record.pending_feedback_ids:
+            record.pending_feedback_since = time.time()
         seen = set(record.pending_feedback_ids)
         for feedback_id in feedback_ids:
             if feedback_id not in seen and feedback_id not in record.processed_feedback_ids:
@@ -565,6 +568,8 @@ class IssueRegistry:
             for feedback_id in record.pending_feedback_ids
             if feedback_id not in processed
         ]
+        if not record.pending_feedback_ids:
+            record.pending_feedback_since = None
         if commit_sha is not None:
             record.last_followup_commit_sha = commit_sha
         if cursor is not None:
@@ -582,6 +587,22 @@ class IssueRegistry:
         record.touch()
         self._save()
         return record
+
+    def clear_stale_pending(self, issue_id: str, timeout_seconds: int = 600) -> int:
+        record = self._records.get(issue_id)
+        if record is None or not record.pending_feedback_ids:
+            return 0
+        if record.pending_feedback_since is None:
+            return 0
+        elapsed = time.time() - record.pending_feedback_since
+        if elapsed < timeout_seconds:
+            return 0
+        count = len(record.pending_feedback_ids)
+        record.pending_feedback_ids = []
+        record.pending_feedback_since = None
+        record.touch()
+        self._save()
+        return count
 
     def mark_feedback_checked(self, issue_id: str) -> IssueRecord | None:
         record = self._records.get(issue_id)
