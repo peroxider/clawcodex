@@ -35,6 +35,11 @@
 #     - Each die() includes a "Next steps" block with actionable fixes
 # ----------------------------------------------------------------------------
 set -euo pipefail
+# ERR trap: if a command fails under set -e, print the line number and
+# failing command before exit.  Makes headless / TTY / CI failures
+# self-diagnosing without requiring "bash -x".
+set -E
+trap 'log_err "Installer crash at line $LINENO: $BASH_COMMAND"' ERR
 
 # ============================================================================
 #  Config (read-only defaults)
@@ -1012,6 +1017,9 @@ OPTIONS
     --no-setup             Skip the post-install configuration-wizard prompt.
                            Use for non-interactive / CI / Docker installs.
                            You can configure later by running 'clawcodex-dev'.
+    --debug                Enable shell trace mode (set -x) for debugging
+                           installer failures.  Produces verbose output of
+                           every command executed.
     --dry-run              Preview every change without applying it. Prints
                            each command that would run as '[DRY-RUN] would
                            run: ...'. Combines well with status / doctor.
@@ -1157,6 +1165,8 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
     --no-setup             跳过安装后的交互式配置向导。适用于非交互 / CI
                            / Docker 场景。之后可随时手动运行
                            'clawcodex-dev' 进行配置。
+    --debug                启用 shell 追踪模式（set -x），用于调试安装
+                           失败原因。会输出每一条执行的命令。
     --dry-run              预览所有改动但不实际执行。把每条会运行的命令打
                            印为 '[DRY-RUN] would run: ...'。与 status /
                            doctor 配合使用效果更佳。
@@ -1284,6 +1294,9 @@ install_main() {
     if [[ -n "${LOG_FILE:-}" ]]; then
         echo -e "  ${C_BOLD}Log file:${C_RESET}    $LOG_FILE"
     fi
+    if [[ "${DEBUG:-0}" -eq 1 ]]; then
+        echo -e "  ${C_BOLD}Debug:${C_RESET}       ${C_YELLOW}ON (set -x trace)${C_RESET}"
+    fi
 
     log_step "1/7  Checking prerequisites"
     check_git
@@ -1340,6 +1353,7 @@ RUN_SETUP=1      # --no-setup flips to 0
 DRY_RUN=0        # --dry-run flips to 1
 ASSUME_YES=0     # --yes/-y flips to 1
 LOG_FILE=""      # --log-file <path>
+DEBUG=0          # --debug flips to 1 (set -x trace)
 SUBCOMMAND=""    # positional verb (install/status/doctor/verify/update/uninstall/help)
 SCRIPT_START_TS=$(date +%s)
 
@@ -1375,6 +1389,8 @@ parse_args() {
                 USE_VENV=0; shift ;;
             --no-setup)
                 RUN_SETUP=0; shift ;;
+            --debug)
+                DEBUG=1; shift ;;
             --uninstall|-u)
                 SUBCOMMAND="uninstall"; shift ;;
             --help|-h)
@@ -1463,6 +1479,12 @@ fi
 # Install the EXIT trap. Runs on every exit (normal, error, or signal).
 # Emits a structured "DONE: success|FAILED" line plus log-file location.
 trap '_on_exit_summary $?' EXIT
+
+# Activate debug mode (set -x) if --debug was passed.  Must come after the
+# trap setup so the trace output is visible from the very first command.
+if [[ "$DEBUG" -eq 1 ]]; then
+    set -x
+fi
 
 # Dispatch to subcommand. Default to 'install' when none was given.
 case "${SUBCOMMAND:-install}" in
