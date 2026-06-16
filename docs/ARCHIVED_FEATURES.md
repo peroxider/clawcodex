@@ -3819,3 +3819,98 @@ SOP convert → AgentMarkdownWriter → .claude/agents/*.md (tools: [detect_moda
 #### 依赖与协同
 - **依赖**: F-50（SourceCodeParser），F-18（CreateAgentTool）
 - **协同**: F-53（Tool→CLI 命令）以此为前置
+
+### 二十三.4 F-89 @agent-name 多入口统一支持
+
+**状态**: ✅ 已完成
+**目标**: 实现 `@agent-name` 引用在 REPL、TUI、Headless 三种前端入口及子 Agent 创建上下文中的统一解析与分发，消除「`@agent-name` 在某个入口可用、在另一个入口不可用」的碎片化问题。
+
+#### 背景与问题
+
+此前 `@agent-name` 机制仅在前台 REPL 中被「加载 agents 目录 → 全局 agent 注册表 → AgentTool 显式创建 sub-agent」的路径支持。随着 F-34 Frontend 解耦和 F-18 CreateAgentTool 的落地，三种缺口暴露：
+
+1. **入口不一致**：TUI 中 `@agent-name` 用法依赖 `agent_bridge.py` 的间接查找，与 REPL 的解析路径不同，导致某些 agent 定义在 REPL 可用但在 TUI 中无法解析。
+2. **注册表不统一**：`AgentTool` 通过 `TOOL_REGISTRY` 查找 agent，而 `ClawcodexREPL` 通过 `session.available_agents` 查找——两套索引存在延迟同步。
+3. **持久化 agent 可见性**：CreateAgentTool（F-18）创建的持久化 agent 被写入 `~/.clawcodex/agent-tools/`，但 `load_agents_dir()` 扫描路径不包含该目录。
+
+#### 目标
+
+1. **统一 agent 注册表**：所有 agent 来源（内置 agents 目录、用户 `.claude/agents/`、持久化 `~/.clawcodex/agent-tools/`）合并到单一全局 `AgentRegistry`。
+2. **入口无关解析**：REPL、TUI、Headless 三种入口共用 `resolve_agent(name) -> AgentDefinition | None` 解析函数。
+3. **子 Agent 创建对齐**：`AgentTool` 内部使用同一注册表，不做二次查找。
+4. **启动时一致性校验**：启动时检测三入口解析结果是否一致，不一致时记录 warning。
+
+#### 现状诊断
+
+| 问题 | 此前位置 | 影响 |
+|------|----------|------|
+| TUI vs REPL `@agent` 解析路径分裂 | `agent_bridge.py:resolve_agent` vs `repl/core.py:handle_agent_prefix` | TUI 下部分 agent 不可用 |
+| `AgentTool` 使用 `TOOL_REGISTRY` 而非 `AgentRegistry` | `tools/agent.py:382` | 持久化 agent 不可见 |
+| `load_agents_dir()` 不扫描 `~/.clawcodex/agent-tools/` | `clawcodex_ext/cli/agents.py:45` | CreateAgentTool 创建的 agent 需重启才可见 |
+| 三种入口各自维护 `loaded_agents` 缓存 | `tui/app.py` / `repl/core.py` / `headless.py` | 缓存不一致 |
+
+#### 接入点设计
+
+```
+                     ┌──────────────────────────────┐
+                     │      AgentRegistry (全局)      │
+                     │  ┌──────────────────────────┐ │
+                     │  │  .claude/agents/*.md      │ │
+                     │  │  ~/.clawcodex/agent-tools/*│ │
+                     │  │  built-in agents           │ │
+                     │  └──────────────────────────┘ │
+                     └──────┬──────────────┬─────────┘
+                            │              │
+              ┌─────────────▼──┐    ┌──────▼──────────┐
+              │ Frontend Layer │    │   AgentTool     │
+              │  (REPL/TUI/    │    │  (sub-agent 创建)│
+              │   Headless)    │    │                  │
+              │ resolve_agent()│    │ registry.get()   │
+              └────────────────┘    └─────────────────┘
+```
+
+**AgentRegistry 统一来源**：
+
+| 来源 | 路径 | 优先级 | 扫描时机 |
+|------|------|--------|---------|
+| 内置 agents | `clawcodex_ext/agents/` | 最低（fallback） | import 时 |
+| 用户 agents | `.claude/agents/*.md` | 中 | 初始化时 |
+| 持久化 agent-tools | `~/.clawcodex/agent-tools/*.json` | 高（用户显式创建） | 初始化时 + F-18 创建后热注册 |
+
+**解析优先级**：用户 agent > 持久化 agent-tool > 内置 agent（同名冲突以高优先级为准）。
+
+#### 实现切片
+
+| Sub | 名称 | 内容 | 文件 |
+|-----|------|------|------|
+| A | 全局 AgentRegistry | 合并三来源的单一注册表，提供 `register()` / `get()` / `list()` / `resolve()` | `clawcodex_ext/agent/registry.py` |
+| B | 统一 `resolve_agent()` | 入口无关的 agent 名称解析函数，替换 `agent_bridge.py` 和 `repl/core.py` 各自实现 | `clawcodex_ext/agent/resolver.py` |
+| C | AgentTool 对接 | `AgentTool` 内部改为调用 `AgentRegistry.get()` 而非 `TOOL_REGISTRY` | `src/tool_system/tools/agent.py` |
+| D | 持久化 agent 热注册 | CreateAgentTool 创建 agent 后立即调用 `AgentRegistry.register()`，无需重启 | `clawcodex_ext/agent/tool_authoring/persistence.py` |
+| E | 启动一致性校验 | 三入口在初始化后调 `verify_agent_consistency()` | `clawcodex_ext/runtime/context.py` |
+| F | 删除冗余缓存 | 移除 TUI/REPL/Headless 各自维护的 `loaded_agents` 实例属性 | 各入口文件 |
+
+#### 验收标准
+
+1. 在 `.claude/agents/` 中放置 `my-agent.md`，REPL、TUI、Headless 三种入口均可通过 `@my-agent` 解析到相同 `AgentDefinition`。
+2. 通过 CreateAgentTool 创建持久化 agent，立即在同一会话中通过 `@agent-name` 可访问（无需重启）。
+3. `AgentTool` 创建的 sub-agent 与前端 `@agent-name` 解析到同一个 agent 定义。
+4. 同名 agent（内置 vs 用户）以用户 agent 优先级为准。
+5. 启动日志无 agent 解析不一致 warning。
+6. 删除 TUI/REPL 各自 `loaded_agents` 缓存后功能不受影响。
+7. 全部 orchestrator 回归测试通过。
+
+#### 风险与约束
+
+| 风险 | 缓解 |
+|------|------|
+| 全局注册表成为耦合中心 | AgentRegistry 只做聚合不包含业务逻辑，所有来源的加载逻辑仍在各自模块 |
+| 热注册导致并发问题 | AgentRegistry 内部使用 `threading.Lock`，新增来源时 register 为原子操作 |
+| 持久化 agent-tools JSON 格式与 agent markdown 格式不兼容 | AgentTool 持久化写入时额外生成 `.md` 文件以便 `load_agents_dir()` 兼容扫描 |
+| 启动一致性校验增加 50-200ms 延迟 | 只在 `verbose` 模式下执行完整校验；默认模式仅做抽样（首个 agent 名交叉解析） |
+
+#### 依赖与协同
+
+- **依赖**: F-18（CreateAgentTool 持久化机制）、F-34（Frontend 解耦，提供统一初始化入口）
+- **协同**: F-16（Auto 模式，`auto_mode_classify` 需要 agent 注册表判断子 agent 权限）；F-50（SOP 转换器生成的 agent markdown 通过统一路径注册）
+- **前置条件**: `AgentRegistry` 在 `RuntimeContext.build()` 中初始化完 todo 后调用 `register_all_sources()`
