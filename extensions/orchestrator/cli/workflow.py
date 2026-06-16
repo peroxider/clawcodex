@@ -21,47 +21,51 @@ from pathlib import Path
 
 # ── Template resolution ──────────────────────────────────────────────
 
-def _template_path() -> Path:
-    """Return the path to ``workflow.template.md`` inside the package.
+def _template_path(variant: str = "workflow") -> Path:
+    """Return the path to ``{variant}.template.md`` inside the package.
 
     Works for both editable installs (source tree) and non-editable
     installs (site-packages zip / wheel).
+
+    Raises ``FileNotFoundError`` if the variant does not exist.
     """
     import extensions.orchestrator.templates as tpl_mod
 
-    # importlib.resources.as_file / files requires Python 3.9+;
-    # fall back to module __path__ for the common case.
+    # Try named variant first, fall back to "workflow" generic name
+    candidates = [f"{variant}.template.md", "workflow.template.md"]
+
+    for p in tpl_mod.__path__:  # type: ignore[attr-defined]
+        for name in candidates:
+            candidate = Path(p) / name
+            if candidate.exists():
+                return candidate
+
+    # Python 3.9+ importlib.resources API as second resort
     try:
-        # Python 3.9+ preferred API
         from importlib.resources import files
-        ref = files("extensions.orchestrator.templates") / "workflow.template.md"  # type: ignore[arg-type]
-        # files() returns a Traversable; try to get a concrete path
-        if hasattr(ref, "__fspath__"):
-            return Path(ref.__fspath__())
-        # MultiplexedPath — use as_file context manager
-        from importlib.resources import as_file
-        import contextlib
-        with contextlib.suppress(Exception):
-            return Path(str(ref))
+        for name in candidates:
+            ref = files("extensions.orchestrator.templates") / name  # type: ignore[arg-type]
+            if hasattr(ref, "__fspath__"):
+                p = Path(ref.__fspath__())
+                if p.exists():
+                    return p
+            # MultiplexedPath
+            if str(ref) and Path(str(ref)).exists():
+                return Path(str(ref))
     except Exception:
         pass
-
-    # Fallback: walk the module's __path__
-    for p in tpl_mod.__path__:  # type: ignore[attr-defined]
-        candidate = Path(p) / "workflow.template.md"
-        if candidate.exists():
-            return candidate
 
     # Last resort: walk sys.modules for the orchestrator package
     import extensions.orchestrator as orch_mod
     base = Path(orch_mod.__file__).parent  # type: ignore[arg-type]
-    candidate = base / "templates" / "workflow.template.md"
-    if candidate.exists():
-        return candidate
+    for name in candidates:
+        candidate = base / "templates" / name
+        if candidate.exists():
+            return candidate
 
     raise FileNotFoundError(
-        "Cannot locate workflow.template.md — your install may be corrupt. "
-        "Try: pip install -e .  or re-run install.sh"
+        f"Cannot locate template '{variant}' — your install may be corrupt. "
+        f"Run 'clawcodex orchestrator workflow list-templates' to see available variants."
     )
 
 
@@ -123,6 +127,14 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Generate workflow.md from template",
         description="Copy the packaged workflow template to the current directory "
                     "and replace placeholders with your values.",
+    )
+    init_parser.add_argument(
+        "--template", "-t",
+        default="workflow",
+        metavar="VARIANT",
+        help="Template variant: workflow (default, remote tracker), "
+             "workflow-local (local file-based tracker). "
+             "Run 'list-templates' to see all available variants.",
     )
     init_parser.add_argument(
         "--kind", "-k",
@@ -203,9 +215,11 @@ def run(args: argparse.Namespace) -> int:
 
 def _run_init(args: argparse.Namespace) -> int:
     """Copy and fill the workflow template."""
+    variant = args.template or "workflow"
+
     # Locate template
     try:
-        tpl = _template_path()
+        tpl = _template_path(variant)
     except FileNotFoundError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1

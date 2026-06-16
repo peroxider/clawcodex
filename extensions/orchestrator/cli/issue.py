@@ -685,6 +685,56 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to WORKFLOW.md (resolution hint when metadata is missing)",
     )
 
+    # --- issue init ---
+    init_parser = issue_sub.add_parser(
+        "init",
+        help="Scaffold an issue card from the issue-card.template.md",
+        description="Copy the packaged issue-card.template.md to the specified "
+                    "output path and optionally replace <...> placeholders. "
+                    "Useful for local-tracker workflows where issues are *.md files.",
+    )
+    init_parser.add_argument(
+        "--id",
+        default="",
+        metavar="ID",
+        help="Issue ID (e.g. F-37.1-pr-auto-fix)",
+    )
+    init_parser.add_argument(
+        "--identifier",
+        default="",
+        metavar="IDENTIFIER",
+        help="Short identifier (e.g. F-37.1)",
+    )
+    init_parser.add_argument(
+        "--title",
+        default="",
+        metavar="TITLE",
+        help="Issue title",
+    )
+    init_parser.add_argument(
+        "--priority",
+        default="",
+        metavar="PRIORITY",
+        help="Priority 0-3",
+    )
+    init_parser.add_argument(
+        "--state",
+        default="open",
+        metavar="STATE",
+        help="Initial state (default: open)",
+    )
+    init_parser.add_argument(
+        "--output", "--out",
+        default="./issue.md",
+        metavar="FILE",
+        help="Output file path (default: ./issue.md)",
+    )
+    init_parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Skip prompts; use defaults for missing values",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Run dispatch
@@ -742,6 +792,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_retry(registry_path, args)
     elif cmd == "feedback":
         return _run_feedback(registry_path, args)
+    elif cmd == "init":
+        return _run_init(args)
 
     print(f"error: unknown issue subcommand '{cmd}'", file=sys.stderr)
     return 2
@@ -2276,3 +2328,72 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
         print(f"  audit log: {audit_path}")
     print("  The orchestrator will pick this up on its next poll cycle.")
     return 0 if not rate_limited else 3
+
+
+# ── issue init ───────────────────────────────────────────────────────
+
+def _run_init(args: argparse.Namespace) -> int:
+    """Scaffold an issue card from the issue-card.template.md."""
+    # Locate template
+    import extensions.orchestrator.templates as tpl_mod
+    from pathlib import Path
+
+    tpl = None
+    for p in tpl_mod.__path__:  # type: ignore[attr-defined]
+        candidate = Path(p) / "issue-card.template.md"
+        if candidate.exists():
+            tpl = candidate
+            break
+
+    if tpl is None:
+        print("✗ Cannot locate issue-card.template.md — your install may be corrupt.", file=sys.stderr)
+        return 1
+
+    # Determine output path
+    out = Path(args.output).expanduser().resolve()
+    if out.exists():
+        print(f"✗ {out} already exists — remove it first or use --output", file=sys.stderr)
+        return 1
+
+    interactive = sys.stdin.isatty() and not args.non_interactive
+
+    def val(flag_val: str, label: str, default: str = "") -> str:
+        if flag_val:
+            return flag_val
+        if interactive:
+            try:
+                raw = input(f"  {label} [{default}]: ")
+                return raw.strip() or default
+            except (EOFError, KeyboardInterrupt):
+                return default
+        return default
+
+    issue_id = val(args.id, "Issue ID (e.g. F-37.1-pr-auto-fix)", "")
+    identifier = val(args.identifier, "Short identifier (e.g. F-37.1)", "")
+    title = val(args.title, "Issue title", "")
+    priority = val(args.priority, "Priority (0-3)", "3")
+    state = args.state or "open"
+
+    # Read and do basic <...> placeholder replacement
+    raw = tpl.read_text(encoding="utf-8")
+    replacements = {
+        "<ID>": issue_id,
+        "<IDENTIFIER>": identifier,
+        "<TITLE>": title,
+        "<PRIORITY>": priority,
+        "<STATE>": state,
+    }
+    for key, val in replacements.items():
+        raw = raw.replace(key, val)
+
+    # Write
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(raw, encoding="utf-8")
+
+    print(f"✓ Generated {out}")
+    print()
+    print("  Next steps:")
+    print(f"    1. Edit {out.name} — fill remaining <...> placeholders")
+    print(f"    2. Move it to your local tracker's issues path")
+    print(f"    3. Start: clawcodex orchestrator server start --workflow workflow.md")
+    return 0
