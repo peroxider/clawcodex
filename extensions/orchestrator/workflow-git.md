@@ -11,7 +11,6 @@ tracker:
   # GitCode personal access token. 优先读取 $GITCODE_TOKEN / $GITCODE_API_KEY;
   # 若必须内联,使用 $GITCODE_TOKEN 形式让 schema 在加载时从 env 解析。
   api_key: $GITCODE_TOKEN
-  # 只跟踪 master 分支上被指派给本账号、且处于打开状态的 issue
   assignee: chadwweng
   branch_prefix: clawcodex
   # GitCode uses "open" state for open issues
