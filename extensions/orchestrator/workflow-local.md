@@ -19,6 +19,11 @@
 #   <BRANCH_PREFIX> issue 分支前缀，例如 feature / fix
 #   <REVIEW_REMOTE> post_sync 推 review 分支用的 remote 名（默认 origin）
 #   <REVIEW_PREFIX> review 分支前缀，默认 review
+#
+# Per-issue 前置字段（写在 .issues/<id>.md 的 YAML frontmatter）：
+#   python_executable  绝对路径。覆盖 workspace / 自动探测 / agent 默认。
+#                      留空 → 回退到 workspace.python_executable → 探测 → agent 默认。
+#                      例如：python_executable: /opt/projectX/.venv/bin/python
 # =============================================================================
 
 tracker:
@@ -65,6 +70,20 @@ workspace:
     - .ruff_cache
     - "*.log"
     - ".issues/*.comments.ndjson"
+  # F-?? python interpreter resolution (cascade level 2).
+  # 当目标仓库用不同的 python 解释器（pyenv / venv / conda / uv），
+  # 留空让 orchestrator 自动探测；想强制用某个解释器就填绝对路径。
+  # ⚠️ 不要填 "<...>" 占位符字面字符串 —— resolver 会把它当作有效路径。
+  # 强制用某个解释器时填真实绝对路径，例如：
+  #   python_executable: "/opt/projectX/.venv/bin/python"
+  python_executable: ""
+  python_auto_detect: true
+  python_detect_files:
+    - .python-version
+    - pyvenv.cfg
+    - .venv/pyvenv.cfg
+    - Pipfile
+    - environment.yml
 
 # -----------------------------------------------------------------------------
 # Agent: ClawCodex / Codex 的执行参数
@@ -78,10 +97,20 @@ agent:
     open: 1
     ready: 1
   provider: anthropic
+  # 注入 agent prompt 的 Python 解释器绝对路径；空字符串 = 不注入。
+  # 留空表示 agent 用 PATH 默认 python3；想强制用某个解释器时填真实绝对路径。
+  # ⚠️ 不要填 "<...>" 占位符字面字符串 —— resolver 会把它当作有效路径。
+  # 强制用某个解释器时填真实绝对路径，例如：
+  #   python_executable: "/opt/projectX/.venv/bin/python"
+  python_executable: ""
   # 留空会让 schema.py 自动从 dontAsk 升级为 bypassPermissions（headless 安全）
   permission_mode: bypassPermissions
-  # F-38 验证三件套。空字符串 = 跳过该步
-  test_command: "<TEST_COMMAND>"        # 例如 "python3 -m pytest tests/test_orchestrator_*.py -q"
+  # F-38 验证三件套。空字符串 = 跳过该步（不是用默认值）。
+  # ⚠️ 不要填 "<...>" 占位符字面字符串 —— 会让 git_sync 真的去跑一个
+  # 名为 "<TEST_COMMAND>" 的命令并报错。填真实命令才会激活该步验证。
+  # 真实命令示例：
+  #   test_command: "python3 -m pytest tests/test_orchestrator_*.py -q"
+  test_command: ""
   build_command: ""
   lint_command: ""
   verification:

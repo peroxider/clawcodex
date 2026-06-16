@@ -40,6 +40,19 @@ workspace:
     - __pycache__
     - "*.egg-info"
     - .pytest_cache
+  # F-?? python interpreter resolution (cascade level 2).
+  # 留空 + python_auto_detect=true → orchestrator 会扫描 workspace 里的
+  # .python-version / pyvenv.cfg / .venv/pyvenv.cfg / environment.yml，
+  # 自动找出项目实际使用的 python 解释器。
+  # 想强制用某个绝对路径，写到 python_executable 里，会跳过探测。
+  python_executable: ""
+  python_auto_detect: true
+  python_detect_files:
+    - .python-version
+    - pyvenv.cfg
+    - .venv/pyvenv.cfg
+    - Pipfile
+    - environment.yml
 
 # ---------------------------------------------------------------------------
 # Agent / Codex: 调度 ClawCodex 处理 issue
@@ -52,6 +65,10 @@ agent:
   max_retry_attempts: 3
   max_retry_backoff_ms: 300000
   provider: anthropic
+  # 注入 agent prompt 的 Python 解释器绝对路径；空字符串 = 不注入。
+  # 注入后 agent 在 continuation guidance 中被告知「始终用此绝对路径」，
+  # 避免在 CI/不同机器上因 PATH 不同而浪费时间探测环境。
+  python_executable: ""
   # Orchestrator 模式必须使用 bypassPermissions:
   #   - dontAsk 仍可能触发 ApprovalPolicy,导致 headless 下工具调用被拒绝
   #   - bypassPermissions 会让 headless 把 permission_handler 设为 None,所有工具调用自动批准
