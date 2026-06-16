@@ -101,7 +101,10 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
     try:
         from src.config import load_config as _load  # type: ignore[import-not-found]
 
-        merged = _load()
+        try:
+            merged = _load(cwd=cwd) if cwd is not None else _load()
+        except TypeError:
+            merged = _load()
         if isinstance(merged, dict):
             on_disk_section = _section(merged, "telemetry")
     except Exception as exc:  # noqa: BLE001

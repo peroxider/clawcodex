@@ -148,3 +148,36 @@ def test_invalid_interval_hours_falls_back_to_default(monkeypatch, tmp_path):
     cfg = load_config()
 
     assert cfg.reporting.interval_hours == 24
+
+
+def test_load_config_passes_cwd_when_supported(monkeypatch, tmp_path):
+    seen: dict[str, object] = {}
+
+    def fake_load_config(*, cwd=None):
+        seen["cwd"] = cwd
+        return {"telemetry": {"enabled": True}}
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("src.config.load_config", fake_load_config)
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is True
+    assert seen["cwd"] == tmp_path
+
+
+def test_load_config_cwd_falls_back_for_legacy_loader(monkeypatch, tmp_path):
+    calls = 0
+
+    def fake_load_config():
+        nonlocal calls
+        calls += 1
+        return {"telemetry": {"enabled": True}}
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("src.config.load_config", fake_load_config)
+
+    cfg = load_config(cwd=tmp_path)
+
+    assert cfg.enabled is True
+    assert calls == 1

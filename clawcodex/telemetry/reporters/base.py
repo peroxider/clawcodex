@@ -1,8 +1,7 @@
 """Reporter Protocol and the fan-out composite.
 
-Concrete reporters are :class:`LocalFileReporter` and
-:class:`DryRunReporter`. The :class:`IssueReporter` is reserved for
-F-97-F and is intentionally absent in this round.
+Concrete reporters include :class:`LocalFileReporter`,
+:class:`DryRunReporter`, and :class:`IssueReporter` implementations.
 
 The Protocol intentionally matches the shape used by
 ``extensions/orchestrator/progress_sink.py:CompositeProgressSink`` —
