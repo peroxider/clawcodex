@@ -35,8 +35,18 @@ def collect_session_metadata(
     ide_version: str = "",
     is_non_interactive: bool = False,
     is_resume: bool = False,
+    start_time: float | None = None,
+    extra: dict[str, object] | None = None,
 ) -> SessionAnalyticsMetadata:
-    """Collect session metadata from the environment."""
+    """Collect session metadata from the environment.
+
+    ``start_time`` defaults to ``time.time()`` when omitted; ``extra`` is
+    a free-form dict that the F-97 telemetry redactor will scrub for
+    sensitive keys (``prompt``/``output``/``transcript``/``messages``).
+    The dataclass was extended with these two fields in F-97-J so the
+    analytics → telemetry bridge can pass through caller-supplied
+    start_time and per-deployment extras without losing fidelity.
+    """
     return SessionAnalyticsMetadata(
         session_id=session_id,
         model=model,
@@ -47,4 +57,6 @@ def collect_session_metadata(
         ide_version=ide_version,
         is_non_interactive=is_non_interactive,
         is_resume=is_resume,
+        start_time=start_time if start_time is not None else time.time(),
+        extra=dict(extra) if extra else {},
     )

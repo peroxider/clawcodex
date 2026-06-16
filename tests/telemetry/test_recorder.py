@@ -250,3 +250,137 @@ def test_flush_forces_fresh_aggregation_before_emit(tmp_path):
 
     assert "Sessions: 1" in reporter.last_rendered
     assert "Command runs: 1" in reporter.last_rendered
+
+
+# ---------------------------------------------------------------------------
+# F-97-J: SessionAnalyticsMetadata → record_session_start bridge
+# ---------------------------------------------------------------------------
+
+
+def _build_recorder_for_j(tmp_path: Path) -> _TelemetryRecorderImpl:
+    storage = recorder_mod.LocalJsonlStorage(tmp_path / "telemetry", 7)
+    return _TelemetryRecorderImpl(
+        cfg=TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+        storage=storage,
+        aggregator=recorder_mod.DailyAggregator(storage),
+        redactor=Redactor(RedactionConfig(), (str(tmp_path),)),
+        reporters=recorder_mod.CompositeReporter(),
+    )
+
+
+def test_record_session_start_includes_analytics_metadata_fields(tmp_path):
+    """F-97-J: explicit analytics metadata kwargs land in the JSONL row."""
+    impl = _build_recorder_for_j(tmp_path)
+
+    impl.record_session_start(
+        session_id="meta-explicit",
+        entrypoint="tui",
+        client_type="tui",
+        is_non_interactive=False,
+        platform="Linux",
+        os_version="6.6.87.2-microsoft-standard-WSL2",
+        ide_type="vscode",
+        ide_version="1.102.0",
+        is_resume=True,
+        start_time=1718400000.0,
+        extra={"region": "us-east-1", "channel": "internal"},
+    )
+
+    rows = impl._storage.read_day("events", utc_date(utc_now()))
+    session = next(r for r in rows if r["type"] == "session_start")
+    fields = session["fields"]
+    assert fields["os_version"] == "6.6.87.2-microsoft-standard-WSL2"
+    assert fields["ide_type"] == "vscode"
+    assert fields["ide_version"] == "1.102.0"
+    assert fields["is_resume"] is True
+    assert fields["start_time"] == 1718400000.0
+    assert fields["extra"] == {"region": "us-east-1", "channel": "internal"}
+
+
+def test_record_session_start_autocollects_analytics_when_kwargs_omitted(tmp_path):
+    """F-97-J: omitting the new kwargs still fills them in via
+    ``collect_session_metadata``. The bridge must be transparent so old
+    call sites that pass only the 8-kw signature keep working."""
+    impl = _build_recorder_for_j(tmp_path)
+
+    impl.record_session_start(
+        session_id="meta-autocollect",
+        entrypoint="cli",
+        client_type="cli",
+        is_non_interactive=True,
+        platform="Linux",
+        model="claude-opus-4-7",
+        ide_type="vscode",
+        ide_version="1.102.0",
+        is_resume=False,
+    )
+
+    rows = impl._storage.read_day("events", utc_date(utc_now()))
+    session = next(r for r in rows if r["type"] == "session_start")
+    fields = session["fields"]
+    # platform-supplied fields are kept verbatim
+    assert fields["ide_type"] == "vscode"
+    assert fields["ide_version"] == "1.102.0"
+    assert fields["is_resume"] is False
+    # os_version / start_time / extra are auto-derived (non-empty)
+    assert isinstance(fields["os_version"], str) and fields["os_version"]
+    assert isinstance(fields["start_time"], float) and fields["start_time"] > 0
+    assert fields["extra"] == {}
+
+
+def test_record_session_start_redacts_extra_dict(tmp_path):
+    """F-97-J: the ``extra`` dict must never smuggle prompt/output/
+    transcript/messages into the payload, even if a caller passes them
+    directly. The redactor's ``_BLOCKED_EXTRA_KEYS`` set is the single
+    gate."""
+    impl = _build_recorder_for_j(tmp_path)
+
+    impl.record_session_start(
+        session_id="meta-redact",
+        entrypoint="cli",
+        client_type="cli",
+        is_non_interactive=True,
+        platform="Linux",
+        extra={
+            "PROMPT": "private user prompt",
+            "output": "private assistant output",
+            "transcript": "session transcript",
+            "MESSAGES": "all messages",
+            "region": "us-east-1",
+        },
+    )
+
+    rows = impl._storage.read_day("events", utc_date(utc_now()))
+    session = next(r for r in rows if r["type"] == "session_start")
+    extra = session["fields"]["extra"]
+    # Blocked keys are dropped, case-insensitively
+    assert "PROMPT" not in extra
+    assert "prompt" not in extra
+    assert "output" not in extra
+    assert "transcript" not in extra
+    assert "MESSAGES" not in extra
+    # Non-blocked keys survive
+    assert extra == {"region": "us-east-1"}
+
+
+def test_record_session_start_noop_when_disabled_even_with_metadata(tmp_path):
+    """F-97-J: the NullRecorder swallows all kwargs without raising so
+    direct call sites in CLI dispatch can pass the analytics fields
+    unconditionally — no need to gate by enabled-state."""
+    null = _NullRecorder()
+    null.record_session_start(
+        session_id="disabled",
+        entrypoint="cli",
+        client_type="cli",
+        is_non_interactive=True,
+        platform="Linux",
+        os_version="6.6",
+        ide_type="vscode",
+        ide_version="1.102.0",
+        is_resume=True,
+        start_time=1718400000.0,
+        extra={"k": "v"},
+    )
+    assert null.enabled is False
+    # No I/O: no storage was attached
+    assert not hasattr(null, "_storage")

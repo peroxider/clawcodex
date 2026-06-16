@@ -45,6 +45,14 @@ _SECRET_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
 
 _REDACTION_PLACEHOLDER: Final[str] = "[REDACTED]"
 
+# F-97-J: keys that may never survive inside the analytics ``extra`` dict
+# (case-insensitive). Same surface as the prompt/output block-list used
+# by ``redact_event`` so a caller cannot smuggle user data into the
+# payload via the analytics metadata bridge.
+_BLOCKED_EXTRA_KEYS: Final[frozenset[str]] = frozenset(
+    {"prompt", "output", "transcript", "messages", "input", "response"}
+)
+
 
 @dataclass(frozen=True)
 class RedactionConfig:
@@ -203,6 +211,18 @@ class Redactor:
             return {str(k): _REDACTION_PLACEHOLDER for k in value.keys()}
         if key == "stacktrace" and isinstance(value, (list, tuple)):
             return [str(line) for line in value][: self.cfg.stacktrace_max_lines]
+        # F-97-J: ``extra`` is a caller-supplied dict from
+        # ``SessionAnalyticsMetadata``. It must NEVER smuggle prompts,
+        # outputs, transcripts, or messages into the payload. Recurse
+        # through the dict after dropping blocked keys, so a sneaky
+        # nested ``{"prompt": "..."}`` is also caught.
+        if key == "extra" and isinstance(value, dict):
+            safe: dict[str, Any] = {}
+            for sub_key, sub_value in value.items():
+                if sub_key.lower() in _BLOCKED_EXTRA_KEYS:
+                    continue
+                safe[str(sub_key)] = self._redact_value(str(sub_key), sub_value)
+            return safe
         if isinstance(value, str):
             return self.redact_text(value)
         if isinstance(value, dict):

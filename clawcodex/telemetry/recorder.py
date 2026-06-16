@@ -177,7 +177,22 @@ class _TelemetryRecorderImpl:
         python_version: str | None = None,
         provider: str | None = None,
         model: str | None = None,
+        os_version: str | None = None,
+        ide_type: str | None = None,
+        ide_version: str | None = None,
+        is_resume: bool | None = None,
+        start_time: float | None = None,
+        extra: dict[str, object] | None = None,
     ) -> None:
+        """Best-effort F-97 session_start.
+
+        F-97-J: ``os_version`` / ``ide_type`` / ``ide_version`` /
+        ``is_resume`` / ``start_time`` / ``extra`` are bridged from
+        :class:`src.services.analytics.metadata.SessionAnalyticsMetadata`.
+        When any of them is ``None`` (or absent) the recorder falls back
+        to :func:`collect_session_metadata` so a caller can stay on the
+        old 8-kw signature and still get the analytics fields for free.
+        """
         if self._closed:
             return
         if platform is None:
@@ -195,6 +210,41 @@ class _TelemetryRecorderImpl:
             except Exception:
                 python_version = "unknown"
 
+        # F-97-J: when the analytics fields are not supplied, derive them
+        # from the same source the analytics layer uses. Any failure is
+        # swallowed — telemetry must never break business code.
+        if (
+            os_version is None
+            or ide_type is None
+            or ide_version is None
+            or is_resume is None
+            or start_time is None
+            or extra is None
+        ):
+            try:
+                from src.services.analytics.metadata import collect_session_metadata
+
+                meta = collect_session_metadata(
+                    session_id=session_id,
+                    model=model or "",
+                    ide_type=ide_type or "",
+                    ide_version=ide_version or "",
+                    is_non_interactive=bool(is_non_interactive),
+                    is_resume=bool(is_resume) if is_resume is not None else False,
+                )
+            except Exception:
+                meta = None
+            if meta is not None:
+                os_version = os_version if os_version is not None else meta.os_version
+                ide_type = ide_type if ide_type is not None else meta.ide_type
+                ide_version = ide_version if ide_version is not None else meta.ide_version
+                if is_resume is None:
+                    is_resume = meta.is_resume
+                if start_time is None:
+                    start_time = meta.start_time
+                if extra is None:
+                    extra = dict(meta.extra) if meta.extra else None
+
         event = TelemetryEvent(
             type=EventType.SESSION_START,
             timestamp=time.time(),
@@ -204,9 +254,15 @@ class _TelemetryRecorderImpl:
                 "client_type": client_type,
                 "is_non_interactive": bool(is_non_interactive),
                 "platform": platform,
+                "os_version": os_version or "",
                 "python_version": python_version,
                 "provider": provider or "unknown",
                 "model": model or "unknown",
+                "ide_type": ide_type or "",
+                "ide_version": ide_version or "",
+                "is_resume": bool(is_resume) if is_resume is not None else False,
+                "start_time": float(start_time) if start_time is not None else 0.0,
+                "extra": dict(extra) if extra else {},
                 "app_version": _safe_app_version(),
             },
         )
