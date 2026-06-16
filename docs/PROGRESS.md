@@ -2,22 +2,17 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.3
+> 版本: v3.4
 > 更新日期: 2026-07
 > 上游同步: 58ea488 (dev-decoupling-refactor)
 >
-> **v3.3 变更**：代码检视审计 — 修复 8 个特性状态与代码不对齐问题。
->   - F-4 结构化输出：🔄 进行中 → ✅ 已完成（Outlines 适配器已完整实现至 clawcodex_ext/agent/）
->   - F-16 Auto Mode：⏳ 待开始 → ✅ 已完成（auto_mode_classify + 测试双套）
->   - F-19 SOP 转化：🔄 进行中 → ✅ 已完成（CLI 子命令已在 subcommand_registry.py:36 注册）
->   - F-26 Away Summary：📋 规划中 → ✅ 已完成（10 个文件完整在 clawcodex_ext/away_summary/）
->   - F-50 SOP 固化：✅ 基础完成 → ✅ 已完成（CLI 入口已注册，移除遗留注释）
->   - F-52 SDK→Tool：📋 规划中 → ✅ 已完成（register_python_function + 完整 tool_authoring）
->   - F-64 Voice：⏳ 待开始 → 🟡 进行中（接口层已完成：detection.py + stt.py）
->   - F-67 Buddy：⏳ 待开始 → ✅ 已完成（src/buddy/ 8 文件完整实现）
->   - F-89 @agent-name：📋 设计完成 → ✅ 基础完成（--agent CLI + 自动发现已实现）
->   - F-2 Team 成员管理：⏳ 规划中 → 🔄 进行中（SendMessage + resume_agent 已落地）
->   - 合计本次修正：11 项
+> **v3.4 变更**：代码实现审计 — 修正 5 个 FEATURE_PLAN.md 状态与代码不对齐问题。
+>   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（与 PROGRESS.md 对齐，PullRequestFeedback/ReviewFeedbackService 全部落地）
+>   - F-46 permission_mode 正交拆分：⏳ 规划中 → 🟡 部分完成（F-46.0 headless auto-override 已实现，F-46.1 待后续）
+>   - F-48 src/ 核心路径解耦：📋 设计完成 → 🟡 进行中（F-48.2 完成 3 项，Phase 4-9 持续进行）
+>   - F-54 运行期可观测性：目录标记与状态对齐为 🔄 进行中
+>   - F-12 cacheWarning 容量限制：已在 clawcodex_ext/utils/cache_warning.py 实现（✅ 完成，FEATURE_PLAN.md 已对齐）
+>   - 合计本次修正：5 项
 >
 > **v2.16 变更**：完成 CCB（claude-code-best）全面对标分析，识别 clawcodex 的 8 个重大特性缺口纳入规划管线。新增 F-60 Pipe IPC + LAN 群控（P0）、F-61 Computer Use 屏幕操控（P0）、F-62 Chrome 浏览器控制（P1）、F-63 Channels 频道通知（P1）、F-64 Voice Mode 语音输入（P2）、F-65 Langfuse Agent 可观测性（P1）、F-66 ACP 协议支持（P2）、F-67 Buddy / Proactive 模式（P2）。同时更新 §四 CCB 对标优势特性总表，明确 clawcodex 对比 CCB 的 5 项领先特性（Orchestrator 自动流水线、Verification Gate、SOP 编译器、LiteLLM Provider、Manager/Worker 增强通信）。所有 F-60~F-67 设置为 ⏳ 待开始状态，详见 §四。
 >
@@ -321,7 +316,7 @@
 
 ## F-46: permission_mode enum 正交拆分
 
-**状态**: ⏳ 规划中
+**状态**: 🟡 部分完成（F-46.0 已完成）
 **优先级**: P2
 **规划文档**: `docs/FEATURE_PLAN.md` → `§5.2 permission_mode enum 正交拆分设计（F-46）`
 **触发场景**: 2026-06-02 F-45 设计时发现，`permission_mode` 这个 enum（`default` / `plan` / `bypassPermissions` / `acceptEdits` / `dontAsk` / `auto` / `bubble`）把**三个正交概念压在一个字段里**：(1) 是否要 TTY 弹 prompt（`interactive`）；(2) 无人值守时的默认决策（`default_decision: allow|deny|ask`）；(3) per-tool 决策是否落盘（`audit_log: none|minimal|full`）。这种 "超级 enum" 导致设计债累积：`dontAsk` 听上去像 "headless + audit" 但实际在 orchestrator 会被 auto-upgrade 到 `bypassPermissions`；`bypassPermissions` 听上去像 "全开" 但 TS 注释说 "no logging"，而 Python 端其实有 ApprovalPolicy 拦截。schema 层把语义耦合在一起，下游所有 "我想加一种 mode" 的尝试都得新增一个 enum case。
@@ -978,7 +973,7 @@ session = Session.resume(issue_session_id)
 
 ## F-54: AgentRunner / QueryRunner 运行期可观测性
 
-**状态**: 📋 设计完成
+**状态**: 🟡 部分完成（control_socket + debug_log 已落地）
 **优先级**: P0
 **规划文档**: `docs/FEATURE_PLAN.md` → `§3.1.13 AgentRunner / QueryRunner 运行期可观测性与 stuck-run debug（F-54）`
 **依赖**: F-38（验证与报告闭环）、F-40（ProgressSink 事件扇出）、F-45（tool-events 审计旁路）、F-49（会话统一存储，长期目标）

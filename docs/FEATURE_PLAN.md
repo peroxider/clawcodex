@@ -1,10 +1,15 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.3（代码检视审计对齐）
+> 版本: v3.4（代码实现审计对齐）
 > 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
 > 
-> **v3.3 变更（代码-文档对齐审计）**：全量修正 11 项状态不匹配。F-4 从"适配器已完成，待集成" → ✅ 已完成（已迁移至 clawcodex_ext/agent/）。F-16 从"待实现" → ✅ 已完成（auto_mode_classify 完整落地 + 测试双套）。F-26 Away Summary 从 📋 规划中 → ✅ 已完成（10 文件在 clawcodex_ext/away_summary/）。F-50 SOP 固化从 ✅ 基础完成 → ✅ 已完成（CLI 子命令已注册）。F-52 SDK→Tool 从📋 规划中 → ✅ 已完成（register_python_function + tool_authoring）。F-64 Voice 从 ⏳ 待开始 → 🟡 进行中（接口层完成）。F-67 Buddy 从 ⏳ 待开始 → ✅ 已完成（src/buddy/ 8 文件）。F-89 @agent-name 从 📋 设计完成 → ✅ 基础完成（--agent CLI + 解析器）。F-2 Team 从规划中 → 🔄 进行中（SendMessage + resume_agent 已落地）。F-37/F-49/F-54 目录标记与内容对齐。总计 11 项修正。
+> **v3.4 变更（代码实现审计对齐）**：全面修正 5 项特性状态与代码不对齐。
+>   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（PullRequestFeedback/ReviewFeedbackConfig/ReviewFeedbackService/Orchestrator review follow-up 全部落地）
+>   - F-46 permission_mode 正交拆分：⏳ 规划中 → 🟡 部分完成（F-46.0：headless auto-override 已实现；F-46.1：三字段正交拆分待后续）
+>   - F-48 src/ 核心路径解耦：📋 设计完成 → 🟡 进行中（F-48.2 完成 3 项，Phase 4-9 持续进行）
+>   - F-54 运行期可观测性：目录标记与状态对齐为 🔄 进行中
+>   - F-12 cacheWarning 容量限制：状态补充为 🟡 部分完成（CacheWarning 类已在 clawcodex_ext/utils/cache_warning.py 实现）
 >
 > **v3.1 变更（代码检视审计）**：完成全量功能实现状态代码交叉验证。主要修正：F-40 (ProgressReporter Sink) 状态从 📋 设计完成 → ✅ 已完成。该特性已在 `extensions/orchestrator/progress_sink.py` 完整落地（`ProgressSink` Protocol / `CompositeProgressSink` / `ToolContextProgressSink`），`progress_reporter.py` 降级为 shim。
 >
@@ -21,7 +26,7 @@
 - [已归档功能模块](#已归档功能模块)
 - [一、Orchestrator 系统](#一、orchestrator-系统)
     - [1.1.1 LocalTracker（F-36 ✅）](#1-1-1-localtracker)
-    - [1.1.2 PR 检视意见自动修复闭环（F-37 🔄）](#1-1-2-pr-检视意见自动修复闭环)
+    - [1.1.2 PR 检视意见自动修复闭环（F-37 ✅）](#1-1-2-pr-检视意见自动修复闭环)
     - [1.1.3 验证与报告闭环（F-38 ✅）](#1-1-3-验证与报告闭环)
     - [1.1.4 Issue 重跑入口（F-39 ✅）](#1-1-4-issue-重跑入口)
     - [1.2.1 Shared/Sequential Workspace（F-42 ✅）](#1-2-1-shared-sequential-workspace)
@@ -232,9 +237,11 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 > 详细设计与落地记录已归档至 [ARCHIVED_FEATURES.md §二十一.1](./ARCHIVED_FEATURES.md#二十一1-f-36-localtracker-本地-issue-文档源)。
 
 #### 1.1.2 PR 检视意见自动修复闭环（F-37）
-**状态**: 📋 规划中
+**状态**: ✅ 已完成（核心链路已验证）
 **优先级**: P0
-**目标**: 将“基于 PR 网页检视意见自动修改并更新 PR”的能力产品化到 `extensions/orchestrator`，形成 issue → implementation PR → review feedback → follow-up fix → push update 的自动闭环。
+**目标**: 将"基于 PR 网页检视意见自动修改并更新 PR"的能力产品化到 `extensions/orchestrator`，形成 issue → implementation PR → review feedback → follow-up fix → push update 的自动闭环。
+
+> 完整实现（PullRequestFeedback / ReviewFeedbackConfig / ReviewFeedbackService / Orchestrator review follow-up 轮询 / GitSync follow-up 模式）已在 `extensions/orchestrator/` 落地。详细落地记录见 [ARCHIVED_FEATURES.md §二十一.9 F-37 PR 检视意见自动修复闭环](./ARCHIVED_FEATURES.md#二十一9-f-37-pr-检视意见自动修复闭环)。
 
 ##### 背景与范围
 
@@ -1766,7 +1773,7 @@ except Exception:
 - **扩展方只需一行** `register_discovery_hook("my-provider", my_fn)`，无需修改 `src/` 任何文件。
 
 ### 3.2 permission_mode enum 正交拆分设计（F-46）
-**状态**: ⏳ 规划中
+**状态**: 🟡 部分完成（F-46.0 已完成）
 **优先级**: P2
 **跟踪文档**: `docs/PROGRESS.md` → `F-46: permission_mode enum 正交拆分`
 
@@ -1965,7 +1972,7 @@ clawcodex_ext/command_system/input_processing.py
 ## 四、Architecture & SDK 下沉
 
 ### 4.1 F-48: src/ 核心路径二开修改解耦方案
-> **状态**: 📋 设计完成
+> **状态**: 🟡 进行中（F-48.2 已完成 3 项解耦）
 > **优先级**: P0
 > **目标**: 将 `src/` 中所有二开新增功能文件 + 功能修改点全部迁移到 `clawcodex_ext/` 和 `extensions/` 扩展路径，使 `src/` 与上游源码（`src/upstream/58ea488/`）仅剩格式/import 层面差异，消除所有功能性差异。目标量化：src/ 二开新增文件数从 **30 → 0**（含 `src/orchestrator/` 顶层包），功能修改文件数从 10 → 0。
 
