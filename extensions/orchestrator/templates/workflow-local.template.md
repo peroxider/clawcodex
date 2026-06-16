@@ -10,7 +10,7 @@
 #   - 人工检视后从 workspace 拉分支合入目标分支
 #
 # 启动方式：
-#   clawcodex-dev orchestrator server start --workflow ./workflow-local.md
+#   clawcodex orchestrator workflow init --template workflow-local
 #
 # 占位符（启动前替换或改成 env 引用）：
 #   <OWNER>         仓库 owner
