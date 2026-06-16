@@ -442,8 +442,8 @@ class ControlSocket:
 
 #### 1.4.2 Issue 会话统一存储与实时介入协议（F-49）
 
-**状态**: 📋 设计完成
-**状态**: 📋 设计完成
+**状态**: 📋 设计完成（Phase 5 新增: session.json + transcript.jsonl 合并）
+**状态**: 📋 设计完成（Phase 5 新增: session.json + transcript.jsonl 合并）
 **优先级**: P1
 **依赖**: F-21（后台运行 + 恢复同步）、F-38（验证与报告闭环）、F-40（ProgressReporter Sink 协议重构）
 
@@ -911,6 +911,157 @@ Message 类型体系 (src/types/messages.py)
 
 ---
 ---
+#### 1.4.5 F-49 Phase 5 — session.json + transcript.jsonl 合并（方案C：JSONL + 精简 metadata）
+
+**状态**: 📋 设计完成
+**优先级**: P1
+**工作量**: 2-3天
+**依赖**: F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
+**特性标识**: F-49-P5
+
+##### 问题现状：三文件的冗余与不一致风险
+
+当前每个会话目录 `~/.clawcodex/sessions/<sid>/` 包含 **3 个持久化文件**：
+
+| 文件 | 生产者 | 写策略 | 内容 |
+|------|--------|--------|------|
+| `session.json` | `Session.save()` | 覆写（会话退出时） | provider + 全量消息 + cost 块 |
+| `metadata.json` | `SessionStorage` | 覆写（每次变更） | model, cwd, title, tags, cost 等 |
+| `transcript.jsonl` | `SessionStorage.flush()` / `TranscriptWriter` | 追加写 | 逐行 Message dict + cost_block 事件 |
+
+核心问题：
+
+```
+1. 消息双重存储：session.json 存全量消息数组，transcript.jsonl 也存逐行消息（磁盘 2×，且可能不一致）
+2. provider 字段仅存在于 session.json，transcript.jsonl 无此信息
+3. 三条写路径 → 数据不一致风险高（time-of-check-to-time-of-use）
+4. cost 块同时写入 metadata.json 和 transcript.jsonl 两处
+```
+
+##### 目标：从 3 文件减为 2 文件，消除消息冗余
+
+```
+现状:  sessions/xxx/  ├── session.json      (全量消息 + provider + cost)
+                       ├── metadata.json     (摘要字段 + cost)
+                       └── transcript.jsonl  (逐行消息 + cost_block)
+
+目标:  sessions/xxx/  ├── metadata.json      (精简摘要，仅列表用)
+                       └── transcript.jsonl  (增强: 首行 session_init + 消息行 + 末行 session_snapshot)
+```
+
+消除 `session.json` 全量消息转储，所有必要信息（provider + 消息 + cost）由 `transcript.jsonl` 单一文件承载。
+
+##### 文件格式规范
+
+**`transcript.jsonl`**（增强格式）：
+
+```
+第 1 行:  {"type":"session_init","session_id":"...","provider":"openai",
+           "model":"claude-sonnet-4-20250514","created_at":"2026-06-16T09:03:02"}
+
+第 2~N 行: {"type":"message","role":"user","content":[...],"uuid":"...","timestamp":"..."}
+           {"type":"message","role":"assistant","content":[...],"uuid":"...","timestamp":"..."}
+           {"type":"cost_block","cost":{"total_cost_usd":0.01,...}}              (每轮费用快照)
+
+最后 1 行: {"type":"session_snapshot","cost":{...},"updated_at":"2026-06-16T10:00:00"}
+           (每次 Session.save() 追加，可被后续 snapshot 覆盖)
+```
+
+行类型：
+| `type` | 写时机 | 用途 |
+|--------|--------|------|
+| `session_init` | 会话创建时写入第 1 行 | `Session.load()` 读 provider + model + created_at |
+| `message` | 每轮消息写入 | 恢复会话消息列表 |
+| `cost_block` | 每轮结束后写入 | 流式回放费用变化 |
+| `session_snapshot` | `Session.save()` 时追加 | `cost_restore` 读最后一行恢复 cost 计数器 |
+
+**`metadata.json`**（精简为仅列表摘要）：
+
+```json
+{
+  "session_id": "...",
+  "model": "claude-sonnet-4-20250514",
+  "title": "session-xxx",
+  "start_time": 1781571782.727674,
+  "last_updated": 1781571782.735989,
+  "message_count": 42,
+  "tags": ["orchestrator"]
+}
+```
+
+移出字段：`cwd`, `total_cost`, `last_user_input`, `agent_name`, `cost` 全部从 metadata 移除，改从 `transcript.jsonl` 首行/末行读取。
+
+##### 读写流程对比
+
+| 操作 | 现状（3 文件） | Phase 5 后（2 文件） |
+|------|:-------------:|:------------------:|
+| `Session.save()` | 写 session.json（覆写）+ 追加 cost_block 到 transcript.jsonl | 追加 `session_snapshot` 行到 transcript.jsonl + 更新 metadata.json |
+| `Session.load(sid)` | 读 session.json → O(1) 全量反序列化 | 读 transcript.jsonl 第 1 行（provider） + 扫描所有 message 行 + 读最后 1 行（cost） |
+| `SessionStorage.flush()` | 追加消息行到 transcript.jsonl | 不变 |
+| `cost_restore.restore_cost_state_for_session()` | 读 session.json 的 cost 块 | 读 transcript.jsonl 最后一行（`tail -1` → O(1)） |
+| `SessionStorage.list_sessions()` | 读 metadata.json（O(1) per session） | 不变 |
+| `TailFollower` | `tail -f transcript.jsonl` | 不变 |
+
+##### 具体改造点
+
+| 编号 | 文件 | 改动说明 | 工作量 |
+|:----:|------|---------|:------:|
+| P5-A | `src/agent/session.py` `save()` | 删除 session.json 写入；改为追加 `type:"session_snapshot"` 行到 transcript.jsonl | 0.5天 |
+| P5-B | `src/agent/session.py` `load()` | 改为读 transcript.jsonl：首行→provider/model/created_at；扫描 message 行→conversation；尾行→cost | 1天 |
+| P5-C | `src/services/cost_restore.py` | 改为读 transcript.jsonl 最后一行（`tail -1`）获取 cost 块 | 0.5天 |
+| P5-D | `src/agent/session.py` `resume()` | 依赖 P5-B 自动生效；删除 `Session.load()` 回退到 `load_from_session_storage` 的逻辑 | 0.25天 |
+| P5-E | `extensions/agent/session_persist.py` | `save_to_session_storage()` 写入 transcript.jsonl 第 1 行 `session_init`（含 provider + model）；删除多余的 cost_block 双写 | 0.5天 |
+| P5-F | `src/services/session_storage.py` | metadata.json 精简：移除 cwd, total_cost, last_user_input, agent_name, cost 字段 | 0.5天 |
+| P5-G | `src/agent/transcript.py` `TranscriptWriter` | 可选：支持写入 `session_init` 类型行（复用已有序列化逻辑） | 0.25天 |
+| P5-H | 旧 session 迁移脚本 | `clawcodex-dev session migrate --from-3-file` 读取旧 `.json` 转换为新的 transcript.jsonl 格式 | 1天 |
+
+##### 向后兼容策略
+
+- **读取降级**：`Session.load()` 检测到 `session.json` 存在且 `transcript.jsonl` 的第 1 行不是 `session_init` 类型时，自动回退到旧格式（从 session.json 读取 provider 和消息）
+- **只读旧会话**：旧 session.json 不会自动删除，用户可在确认 Phase 5 稳定后手动运行迁移脚本
+- **Phase 5 内部可开关**：通过 Feature Gate `F49_P5_ENABLED=true/false` 控制新写入路径
+- **`metadata.json` 字段兼容**：reader 对 metadata.json 中缺失的 cwd/cost 等字段有默认值处理
+
+##### 方案对比验证
+
+| 维度 | 现状（3 文件） | 方案 A（纯 JSONL） | 方案 B（Hybrid） | **方案 C（JSONL + 精简 meta）** |
+|------|:------------:|:----------------:|:--------------:|:---------------------------:|
+| 文件数 | 3 | 1 | 1 | **2** |
+| 消息冗余 | 2 份（.json + .jsonl） | 无冗余 | 无冗余 | **无冗余** |
+| 列表 O(1) | ✅ | ❌（需 scan 到尾行） | ✅ | **✅** |
+| 恢复 O(1) | ✅（.json） | ❌（scan 消息） | ✅（先读 header） | **❌（需 scan 消息，但 N 通常 < 2000）** |
+| cost_restore O(1) | ✅ | ✅（tail -1） | ✅ | **✅（tail -1）** |
+| 追加写性能 | ✅ | ✅ | ❌（每轮覆写头部） | **✅** |
+| 数据一致风险 | 中（3 文件） | 低（单文件） | 低 | **低** |
+| 迁移难度 | 基线 | 高（全量变更） | 中 | **低（6 个文件改动）** |
+
+##### 验收标准
+
+| # | 场景 | 预期 |
+|---|------|------|
+| 1 | REPL 交互 → exit → `Session.load()` | provider + 全量消息 + cost 正确恢复，无 session.json 依赖 |
+| 2 | Cron bg_runner 运行 → exit | transcript.jsonl 最后一行是 `session_snapshot`，含正确 cost |
+| 3 | `cost_restore.restore_cost_state_for_session()` | 从 transcript.jsonl `tail -1` 恢复 cost 计数器 |
+| 4 | `SessionStorage.list_sessions()` | 50 个会话读取 < 200ms（仅读 metadata.json） |
+| 5 | 旧 session.json 仅存在时 `Session.load()` | 自动降级读取旧格式，日志提示建议迁移 |
+| 6 | Phase 5 写入后 `TailFollower` | 不变行为：增量追加行正确触发 |
+| 7 | 消息一致性：save → load → 再次 save → 再次 load | 消息条数、顺序、uuid 完全一致 |
+
+##### 风险与约束
+
+- **恢复性能降级**：`Session.load()` 从 O(1) 变为 O(N)。实测 N=500 条消息时，JSONL 扫描 < 50ms，属于可接受范围
+- **并发写 tail 行**：`session_snapshot` 使用追加写而非覆写，可能存在多个 snapshot 行。reader 应取最后一行（已设计为 `tail -1`）
+- **迁移脚本**：建议 Phase 5 稳定运行 1 周后再批量迁移旧会话，期间维持读降级兼容
+- **`cwd` 从 metadata 移除**：`session_resume._adjust_paths()` 需要 cwd 做路径调整。改为从 transcript.jsonl 首行 `session_init` 读取，或运行时由 `AgentRunner.run()` 注入
+
+##### 依赖与协同
+
+- **F-49 Phase 0 ~ 0.4**：前置依赖，统一事件存储 + 全场景会话恢复
+- **F-91 ~ F-96 Visualizer**：`session.json` 的移除需要 Visualizer 的数据管道适配新的 transcript.jsonl 首行/尾行格式
+- **F-97 Telemetry**：须确认遥测事件读的是 transcript.jsonl 而非 session.json
+- **F-54 可观测性**：`state_journal.ndjson` 无冲突（独立文件，与 session 存储无关）
+
+
 ## 二、Agent 核心能力
 
 ### 2.1 Agent 阶段性进度汇报（F-20）
@@ -8042,7 +8193,7 @@ clawcodex_ext/community_radar/
 | F-46 | permission_mode 拆分 | §3.2 | 📋 设计完成 |
 | F-47 | Settings 重构 | §3.3 | ✅ 完成 |
 | F-48 | src/ 解耦方案 | §4.1 | 📋 设计完成 |
-| F-49 | 会话统一存储 | §1.4.2 | 📋 设计完成 |
+| F-49 | 会话统一存储（含 Phase 5 格式合并） | §1.4.2 / §1.4.5 | 📋 设计完成（Phase 5 新增） |
 | F-50 | SOP 转换器固化 | §4.2 | 📋 设计完成 |
 | F-51 | AgentRunner 空转检测 | §1.3.1 | ✅ 完成 |
 | F-52 | SDK→Tool 注册 | §4.3 | 📋 设计完成 |

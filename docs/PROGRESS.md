@@ -671,7 +671,7 @@
 
 ## F-49: Issue 会话统一存储与实时介入协议
 
-**状态**: 📋 设计完成（Phase 0.4 新增: 全场景统一闭包）
+**状态**: 📋 设计完成（Phase 0.4 + Phase 5: 全场景统一闭包 + 会话格式合并）
 **优先级**: P1
 **规划文档**: `docs/FEATURE_PLAN.md` → `§1.4.2 Issue 会话统一存储与实时介入协议（F-49）` + `§1.4.3 全场景会话恢复统一闭包（F-49 Phase 0.4）`
 **依赖**: F-21（后台运行 + 恢复同步）、F-38（验证与报告闭环）、F-40（ProgressReporter Sink 协议重构）
@@ -805,6 +805,36 @@ F-49 Phase 0 ~ 0.3 统一了事件存储格式，但 `Session.resume()` 在 Sess
 | 8 | `.json` 快照不存在时，`--resume` 也能恢复 | 依赖 SessionStorage JSONL fallback |
 
 **依赖**：F-49 Phase 0 ~ 0.3（统一事件存储）
+
+#### Phase 5 — session.json + transcript.jsonl 合并（方案C，2-3天）
+
+**背景**：Phase 0 ~ 0.4 完成了事件存储统一和全场景会话恢复闭包，但仍有 3 个文件（session.json + metadata.json + transcript.jsonl）管理会话数据，消息在 session.json 和 transcript.jsonl 之间双重存储，存在不一致风险。
+
+**目标**：消除 session.json，将其承载的 provider + cost 信息嵌入 transcript.jsonl 首/末行，保留 metadata.json 仅做 O(1) 列表查询。
+
+详见 FEATURE_PLAN.md §1.4.5。
+
+| 编号 | 子特性 | 文件 | 改动说明 | 状态 | 工作量 |
+|:----:|--------|------|---------|:----:|:------:|
+| P5-A | save() 停写 session.json | `src/agent/session.py` | 删除 session.json 写入，改为追加 `type:"session_snapshot"` 行到 transcript.jsonl | ⏳ 待开始 | 0.5天 |
+| P5-B | load() 改读 transcript.jsonl | `src/agent/session.py` | 首行→provider, 消息行→conversation, 尾行→cost | ⏳ 待开始 | 1天 |
+| P5-C | cost_restore 改读 tail -1 | `src/services/cost_restore.py` | 从 transcript.jsonl 最后一行读 cost 块，不依赖 session.json | ⏳ 待开始 | 0.5天 |
+| P5-D | resume() 简化降级路径 | `src/agent/session.py` | 删除 Session.load() 回退到 load_from_session_storage 的双路径 | ⏳ 待开始 | 0.25天 |
+| P5-E | session_persist 写 session_init 行 | `extensions/agent/session_persist.py` | 写入第 1 行含 provider + model；删除多余 cost_block 双写 | ⏳ 待开始 | 0.5天 |
+| P5-F | metadata.json 精简 | `src/services/session_storage.py` | 移除 cwd/total_cost/last_user_input/agent_name/cost | ⏳ 待开始 | 0.5天 |
+| P5-G | 旧 session 迁移脚本 | `clawcodex-dev session migrate` | 读取旧 .json 转换为新 transcript.jsonl 格式 | ⏳ 待开始 | 1天 |
+
+**验收标准**：
+
+| # | 场景 | 预期 |
+|---|------|------|
+| 1 | REPL 交互 → exit → Session.load() | provider + 全量消息 + cost 正确恢复，无 session.json |
+| 2 | cost_restore.restore_cost_state_for_session() | 从 transcript.jsonl tail -1 恢复 cost |
+| 3 | SessionStorage.list_sessions() | 50 个会话 < 200ms |
+| 4 | 旧 session.json 存在时自动降级 | 日志提示建议迁移，行为不变 |
+| 5 | save → load → save → load 消息一致 | 条数/顺序/uuid 一致 |
+
+**依赖**：F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
 
 #### Phase 1 — Unix Socket 控制通道（2-3天）
 
