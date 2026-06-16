@@ -38,6 +38,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ─── pdeath_sig helper ────────────────────────────────────────────────
+# When the orchestrator is killed abruptly (SIGKILL, segfault, OOM),
+# child processes (hooks, verification) become orphans. PR_SET_PDEATHSIG
+# asks the kernel to deliver SIGTERM to children when the parent dies.
+
+def _set_pdeathsig() -> None:
+    """Set PR_SET_PDEATHSIG so child receives SIGTERM if parent dies."""
+    try:
+        import ctypes
+        import signal as _signal
+
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        PR_SET_PDEATHSIG = 1
+        libc.prctl(PR_SET_PDEATHSIG, _signal.SIGTERM)
+    except Exception:
+        pass
+
 # If the agent runs this many consecutive turns without making any
 # file changes, the runner assumes it is stuck (e.g. the issue
 # deliverables already exist in the base branch / workspace) and
@@ -2164,6 +2181,7 @@ class AgentRunner:
             proc = await asyncio.create_subprocess_shell(
                 test_cmd,
                 cwd=str(ws_path),
+                preexec_fn=_set_pdeathsig,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

@@ -1588,8 +1588,10 @@ class Orchestrator:
                 # When the stop command cancels the task, capture
                 # the reason so the registry marks the issue as
                 # cancelled instead of silently dropping it.
+                # Also clean up the workspace immediately to avoid
+                # leaking worktrees on unexpected cancellation.
                 logger.warning(
-                    "Agent run cancelled issue_id=%s",
+                    "Agent run cancelled issue_id=%s — cleaning up workspace",
                     session.issue.id,
                 )
                 session.status = "cancelled"
@@ -1597,6 +1599,17 @@ class Orchestrator:
                 session.session_end_summary = "cancelled by operator"
                 session.verification_status = "cancelled"
                 session.verification_output = "Operator requested stop"
+                # Best-effort workspace cleanup on cancellation so
+                # worktrees are not left dirty even if the outer
+                # finally block is skipped or interrupted.
+                try:
+                    await self.workspace.cleanup(session.issue)
+                except Exception as cleanup_exc:
+                    logger.warning(
+                        "Workspace cleanup on cancellation failed issue_id=%s: %s",
+                        session.issue.id,
+                        cleanup_exc,
+                    )
             except Exception as exc:
                 logger.exception(
                     "Agent run failed issue_id=%s: %s",
@@ -1721,6 +1734,17 @@ class Orchestrator:
                     # The cron tick will mark the issue abandoned on
                     # the next pass and the operator can either
                     # adjust the issue / workflow or skip it.
+                elif session.status == "cancelled":
+                    logger.info(
+                        "Issue %s cancelled by operator — skipping retry",
+                        session.issue.id,
+                    )
+                    self.status_dashboard.on_session_failed(
+                        session.issue.id or "",
+                        "cancelled",
+                    )
+                    self._registry.mark_failed(session.issue.id or "")
+                    # Do NOT schedule retry — operator explicitly cancelled.
                 else:
                     self.status_dashboard.on_session_failed(
                         session.issue.id or "",

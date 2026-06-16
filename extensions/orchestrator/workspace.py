@@ -18,6 +18,26 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# ─── pdeath_sig helper ────────────────────────────────────────────────
+# When the orchestrator is killed abruptly (SIGKILL, segfault, OOM),
+# child processes (hooks, verification) become orphans. PR_SET_PDEATHSIG
+# asks the kernel to deliver SIGTERM to children when the parent dies.
+# This is Linux-specific; on other platforms the ctypes call fails
+# silently and children may still orphan — a known gap.
+
+def _set_pdeathsig() -> None:
+    """Set PR_SET_PDEATHSIG so child receives SIGTERM if parent dies."""
+    try:
+        import ctypes
+        import signal as _signal
+
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        PR_SET_PDEATHSIG = 1
+        libc.prctl(PR_SET_PDEATHSIG, _signal.SIGTERM)
+    except Exception:
+        pass
+
+
 @dataclass
 class Workspace:
     """One active workspace."""
@@ -564,6 +584,7 @@ class WorkspaceManager:
         if shell:
             proc = await asyncio.create_subprocess_shell(
                 str(command),
+                preexec_fn=_set_pdeathsig,
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
@@ -572,6 +593,7 @@ class WorkspaceManager:
             assert isinstance(command, list)
             proc = await asyncio.create_subprocess_exec(
                 *command,
+                preexec_fn=_set_pdeathsig,
                 cwd=cwd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,

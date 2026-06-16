@@ -554,6 +554,32 @@ def _run_orchestrator(
             file=sys.stderr,
         )
 
+    # Register signal handlers for graceful shutdown on SIGTERM/SIGINT.
+    # Without these, a plain `kill <pid>` or Ctrl+C sends SIGTERM/SIGINT
+    # which Python asyncio does not handle — the process dies immediately
+    # without running any cleanup (shutdown(), _cancel_all_tasks(), atexit).
+    # With signal handlers, the event loop catches the signal and calls
+    # subsystem.shutdown(), which sets _shutdown_event so the polling loop
+    # exits cleanly, then _cancel_all_tasks() cancels running issues.
+    #
+    # SIGKILL (-9) cannot be caught and will still cause abrupt death;
+    # the pdeath_sig PR_SET_PDEATHSIG in subprocesses mitigates orphan
+    # children for that case.
+    loop = asyncio.get_event_loop()
+
+    def _schedule_shutdown(sig_name: str) -> None:
+        """Callback registered via loop.add_signal_handler."""
+        logger.info("Received %s — scheduling graceful shutdown...", sig_name)
+        # Schedule the async shutdown as a task; add_signal_handler
+        # only accepts synchronous callables.
+        asyncio.create_task(subsystem.shutdown())
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(
+            sig,
+            lambda sig_name=signal.Signals(sig).name: _schedule_shutdown(sig_name),
+        )
+
     async def _run() -> None:
         try:
             await subsystem.run()
