@@ -134,6 +134,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-54 | 运行期可观测性 | stuck-run debug 诊断 | 用户可诊断 Agent 卡住原因 | 📋 规划中 → F-54 | — | py 诊断工具、测试 |
 | AR-F-91~95 | Multi-Session 可视化分析平台（Visualizer） | 独立 FastAPI app + Jinja2 + ECharts CDN；15 个 API 端点 + WebSocket live tail；甘特图/异常检测/多 session 对比/多 Agent 瀑布视图；4 个解析器 + 10 个构建器；SSRF 保护导入/PNG-SVG-JSON-PDF 导出；分享链接管理（TTL 7 天）；`clawcodex viz` CLI 子命令；F-38/F-45/F-54 协同链接 | 用户可通过浏览器可视化查看 Session 执行甘特图、操作时序分布、异常检测报告，支持单 Session 调试到数十个 Session 批量对比 | ✅ 已完成 → F-91~F-95 | 已完成 | py FastAPI app、Jinja2 模板、JS 前端、CLI、110 测试 |
 | AR-F-96 | 单 Session 会话时间线分析器（Session Analyzer） | 完全 Python 栈 FastAPI app（无 React/Next 依赖），替代 sessions-v0-dev；Jinja2 模板 + HTMX 1.9 + Alpine.js 3.13；OKLCH 设计令牌；Pydantic v2 数据模型（camelCase 字段别名）；JSONL 解析器 + 侧链分组（isSidechain 还原 Claude Code 的子 agent）；5 类工具分类（read/execute/write/orchestrate/other）；自适应时间轴刻度；22 子 agent 演示数据（6 评审 + 16 核对、328 调用）；HTMX 部分路由（`/sa/sessions/{import,sample,delete}` + `/sa/htmx/sessions/{id}/row`）；视觉回归（结构化 HTML 快照 + 哈希比对） | 用户可在浏览器内加载 Claude Code 会话 JSONL 文件，按时间线查看主 agent 和子 agent 的工具调用，悬停查看详情，按图例筛选，演示模式自动加载确定性样例 | ✅ 已完成 → F-96 | 已完成 | py FastAPI app、Jinja2 模板、JS bridge、CLI、141+ 测试（5 测试模块 + 视觉回归） |
+| AR-F-97 | 独立遥测系统（Issue-based Telemetry） | `telemetry/` 包：JSONL 存储/rotate/retention、`DailyAggregator`、redaction + error fingerprint（16 字符 fingerprint + `crashes/` JSONL）、`IssueReporter` GitHub/Gitee/GitCode create/update/find/cursor 去重；CLI 子命令（status/preview/flush/enable/disable）；`AnalyticsTelemetrySink` 14-way EventType 桥接；TOML 配置加载（`pyproject.toml` 优先）；Schema v1→v2 迁移；7 入口埋点（CLI/REPL/TUI/Headless/Orchestrator/Print/全局崩溃） | 用户启用后，系统自动记录每日使用统计与崩溃摘要，通过 Issue 上报脱敏 daily summary，可在本地查看和手动触发上报 | ✅ 已完成 → F-97 | 已完成 | py telemetry 包、recorder、aggregator、redactor、IssueReporter、CLI、130+ 测试 |
 
 #### SR-2.2 定时任务与调度（→ FEATURE_PLAN §五 F-22 定时任务系统）
 
@@ -239,7 +240,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-1  | Orchestrator Server 运维 | `orchestrator server start/status/stop` CLI、Daemon 状态文件 | 用户可让 ClawCodex 持续值守 issue 队列并看到自身健康度 | ✅ 已完成 → F-1 | 已完成 | py daemon CLI、状态文件 |
 | AR-F-22 | Cron 驱动巡检与自治状态 | Cron 驱动(issue 巡检/报告生成/社区扫描)、Autonomy Status 汇总(cron runs/orchestrator issue/team members)、Remote Scheduled Agent、远程 cron schedule 管理、Remote Web Dashboard | 用户可定时巡检 issue、生成报告，用一个命令查看自动值守系统健康度，可通过浏览器监督无人值守任务 | 🟡 进行中 → F-22（底层定时任务引擎 G1~G8+Phase A 已完成；剩余端到端接线和远程 cron schedule 管理待完成） | 综合约 4 周 | py cron runtime、status CLI、Web UI、API |
 | AR-F-7  | RemoteTrigger 远程启动与 WebUI | RemoteTrigger 入口 + 鉴权 + 审计日志、远程 server API、Web Dashboard(issue/cron/team/runs 视图 + 鉴权) | 用户可从外部系统启动工作流，在浏览器中远程监督所有任务 | 🔭 长期规划 → F-7 | 综合约 3-4 周 | py API、鉴权配置、Web UI、Docker 镜像 |
-| AR-F-26 | Away Summary 服务 | 终端失焦检测、长时间离开检测、配置 idle 阈值、`/recap` Skill | 用户离开后回来可快速知道 Agent 做了什么 | 📋 规划中 → F-26 | 1.5 周 | py service、焦点检测、skill 代码 |
+| AR-F-26 | Away Summary 服务 | 终端失焦检测、长时间离开检测、配置 idle 阈值、`/recap` Skill | 用户离开后回来可快速知道 Agent 做了什么 | ✅ 已完成 → F-26 | 已完成 | py service、焦点检测、skill 代码 |
 | AR-F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | OpenAI 标准接口（Chat Completions/Responses/Models）、Session 管理（CRUD+fork+chat）、异步 Runs（SSE 事件流）、Cron Job 管理、认证与安全（API KEY+CORS+密钥检测）、Agent LRU 缓存（128 上限）、客户端断连处理、SSE 流式工具事件推送 | 用户可直接了解 F-82 的完整开源参考实现；为 AR-F-7 WebUI 和远程 API 提供 Chat Completions / Session / Runs 端点设计参考 | 📋 参考实现 → F-90 | 外部项目已完整实现 | 参考文档（见 FEATURE_PLAN §7.1） |
 
 #### SR-4.3 业务 Agent 长期运行（→ FEATURE_PLAN 🔭 待补充设计）
@@ -337,10 +338,10 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-F-72 | Multi-API 原生适配器 | 统一多模型 API 适配层 | 用户可无缝切换更多模型供应商 | ⏳ 待开始 → F-72 | — | py 适配器、配置 |
 | AR-F-74 | Sandbox 沙箱远程执行 | 沙箱/Docker/SSH 远程执行 | 用户可在隔离环境中安全执行代码 | ⏳ 待开始 → F-74 | — | py 沙箱、远程执行 |
 | AR-F-63 | Channels 频道通知 | 多频道通知系统（Slack/Discord/邮件等） | 用户可从多渠道接收 Agent 通知 | ⏳ 待开始 → F-63 | — | py 通知系统 |
-| AR-F-64 | Voice Mode 语音输入 | 语音输入与输出 | 用户可用语音与 Agent 交互 | ⏳ 待开始 → F-64 | — | py 语音模块 |
+| AR-F-64 | Voice Mode 语音输入 | 语音输入与输出（接口层已完成：detection + stt） | 用户可用语音与 Agent 交互 | 🟡 进行中 → F-64 | — | py 语音模块 |
 | AR-F-65 | Langfuse 可观测 | Langfuse Agent 可观测性集成 | 用户可追踪 Agent 执行链路和性能 | ⏳ 待开始 → F-65 | — | py Langfuse 集成 |
 | AR-F-66 | ACP 协议支持 | Agent Communication Protocol | 用户可让 Agent 通过标准协议通信 | ⏳ 待开始 → F-66 | — | py ACP 协议 |
-| AR-F-67 | Buddy 伴侣/Proactive 自主 | 主动式 Agent 伴侣模式 | 用户可让 Agent 主动提供建议和帮助 | ⏳ 待开始 → F-67 | — | py Buddy 模式 |
+| AR-F-67 | Buddy 伴侣/Proactive 自主 | 主动式 Agent 伴侣模式 | 用户可让 Agent 主动提供建议和帮助 | ✅ 已完成 → F-67 | 已完成 | py Buddy 模式 |
 | AR-F-69 | Budget/Poor Mode | 资源节俭模式 | 用户可在资源受限时仍有效使用 Agent | ⏳ 待开始 → F-69 | — | py 节俭模式 |
 | AR-F-83 | Ultraplan 高级规划 | 高级规划模式 | 用户可让 Agent 进行深度规划和拆解 | ⏳ 待开始 → F-83 | — | py 规划模式 |
 | AR-F-84 | Context Collapse 上下文折叠 | 上下文折叠与压缩 | 用户可让 Agent 处理更大上下文 | ⏳ 待开始 → F-84 | — | py 上下文折叠 |
