@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 from src.agent.conversation import Conversation
 from src.outputStyles import BUILTIN_OUTPUT_STYLES, load_output_styles_dir, resolve_output_style
 from src.providers.base import ChatResponse
-from src.tool_system.agent_loop import run_agent_loop
+from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 
@@ -44,6 +44,7 @@ class TestOutputStyles(unittest.TestCase):
             conversation.add_user_message("hello")
 
             provider = MagicMock()
+            provider.chat_stream_response.side_effect = NotImplementedError()
             provider.chat.return_value = ChatResponse(
                 content="ok",
                 model="test",
@@ -61,4 +62,3 @@ class TestOutputStyles(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

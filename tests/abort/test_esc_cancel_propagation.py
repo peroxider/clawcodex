@@ -32,7 +32,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.providers.base import ChatResponse
-from src.tool_system.agent_loop import run_agent_loop
+from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
 from src.tool_system.context import ToolContext
 from src.tool_system.protocol import ToolResult
 from src.tool_system.registry import ToolRegistry
@@ -64,10 +64,8 @@ class _FakeAnthropic:
 
 
 # Make ``_is_anthropic_provider`` happy without importing the real SDK class.
-def _patch_anthropic_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.tool_system import agent_loop
-
-    monkeypatch.setattr(agent_loop, "_is_anthropic_provider", lambda _p: True)
+def _patch_anthropic_check(_monkeypatch: pytest.MonkeyPatch) -> None:
+    pass
 
 
 def _make_context(workspace: Path) -> ToolContext:

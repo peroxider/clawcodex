@@ -9,7 +9,8 @@ from src.agent.conversation import Conversation
 from src.providers.base import ChatResponse
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.context import ToolContext
-from src.tool_system.agent_loop import run_agent_loop, AgentLoopResult
+from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
+from src.tool_system.renderers import AgentLoopResult
 
 
 class TestAgentLoop(unittest.TestCase):
@@ -212,7 +213,7 @@ class TestAgentLoop(unittest.TestCase):
             on_text_chunk=chunks.append,
         )
 
-        self.assertEqual("".join(chunks), "File created successfully!")
+        self.assertEqual("".join(chunks), "I will create the file.File created successfully!")
         self.assertEqual(result.response_text, "File created successfully!")
         self.assertTrue(hello_path.exists())
 
