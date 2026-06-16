@@ -1839,4 +1839,79 @@ F-40 核心设计（`ProgressSink` Protocol、`CompositeProgressSink` 扇出、`
 - `WorkflowConfig.phases` — 新增配置字段
 - `ProgressReporter` — 降级为向后兼容 shim
 
+## 七、Multi-Session 可视化分析平台（F-91~F-96）
 
+**状态**: ✅ 开发完成（F-96: ✅ 已完成） | **优先级**: P0 | **测试**: 110/110 通过
+
+独立 FastAPI app + Jinja2 + ECharts CDN，零 npm 依赖，全进 wheel。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| **F-91** | Visualizer 核心数据管道 | ✅ 已完成 | 3 周 |
+| F-91-A | 5 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats） | ✅ 已完成 | — |
+| F-91-B | 4 个解析器（session / transcript / multi_agent / tool_events） | ✅ 已完成 | — |
+| F-91-C | 7 个构建器（gantt / timeline / comparison / stats / anomaly / export / agent_tree） | ✅ 已完成 | — |
+| **F-92** | Visualizer 后端 API + 实时推送 | ✅ 已完成 | 2 周 |
+| F-92-A | 独立 FastAPI app + /api/viz/ 路由（15 个端点含 import/export/share） | ✅ 已完成 | — |
+| F-92-B | WebSocket live tail（/api/viz/ws/sessions/{sid}） | ✅ 已完成 | — |
+| F-92-C | 条件性导入（--allow-import, SSRF 校验）+ 导出（PNG/SVG/JSON/PDF） | ✅ 已完成 | — |
+| F-92-D | 分享链接管理（POST/GET/DEL /api/viz/share） | ✅ 已完成 | — |
+| **F-93** | Visualizer 前端（Jinja2 + ECharts CDN） | ✅ 已完成 | 2.5 周 |
+| F-93-A | 甘特图主页面（相对/绝对/窗口时间轴三模式） | ✅ 已完成 | — |
+| F-93-B | 搜索/筛选/异常面板/跨 session 对比页面 | ✅ 已完成 | — |
+| F-93-C | 多 Agent 树（简化版） | ✅ 已完成 | — |
+| **F-94** | CLI 集成 + workspace 扫描 | ✅ 已完成 | 1 周 |
+| F-94-A | clawcodex-dev viz 子命令 | ✅ 已完成 | — |
+| F-94-B | workspace 多租户（workspaces.json + 自动扫描） | ✅ 已完成 | — |
+| **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 |
+| F-95-A | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — |
+| F-95-B | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — |
+
+### 代码结构
+
+extensions/visualizer/ 含 server.py / ws.py / cli.py / orchestrator_link.py / import_router.py + models / parsers / builders / templates / static / fixtures
+tests/test_visualizer/ 含 7 个测试文件 110 个测试
+
+### 关键设计决策
+
+1. 独立 FastAPI app（预留 mount_viz 供未来合并）
+2. 前端零 npm：Jinja2 + ECharts CDN
+3. 增量流式解析：`file.seek` + `readlines`
+4. ECharts progressive: 5000 降级策略
+5. 分享链接磁盘持久化
+
+### F-96: Orchestrator 实时看板接入（State Journal）
+
+通过共享 NDJSON 打通 orchestrator → visualizer 链路。6 项子特性全部完成。
+
+## 八、F-97 独立遥测系统（Issue-based Telemetry）
+
+**状态**: ✅ 第二期实现完成（A~I） | **优先级**: P1
+
+### 目标
+
+新增一个独立于 orchestrator 和现有 analytics 的遥测系统，本地记录使用情况与错误摘要，通过 Issue 上报脱敏 daily summary。
+
+### 当前基线
+
+本地 analytics 事件模型 / Sink 抽象 / Session metadata 已有；埋点、聚合、崩溃去重、远端上报已全部实现。
+
+### 实施进度（A~L 12 项全部完成）
+
+F-97-A 包结构 → F-97-L Schema v2 迁移。详见 `FEATURE_PLAN.md §九`。
+
+### 验收标准
+
+- 默认不采集不上报
+- 启用后 daily summary 含执行次数/会话次数
+- 崩溃 fingerprint 稳定聚合
+- Issue reporter 在 GitHub/Gitee/GitCode 创建/更新
+- payload 不含敏感数据
+- 网络失败不影响主命令退出码
+- 130+ 单元测试覆盖
+
+### 实施过程
+
+2026-06-15~16 期间 8 个 commit 完成 A~L 全部子特性（`a2cbfb1`, `37aea3d`, `9a9bab2`, `1465218`, `042ef4f`, `38bab8c`, `76d9688`, `41e2b30`）。
+
+**教训**：verification 必须以本地 pytest 输出为准。
