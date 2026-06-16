@@ -451,13 +451,17 @@ def _run_stop(args: argparse.Namespace) -> int:
 def _run_start(args: argparse.Namespace) -> int:
     """Start the orchestrator daemon. Idempotent — already-running → show status."""
     # Check if already running
-    _, meta = _find_metadata(args)
+    meta_path, meta = _find_metadata(args)
     if meta:
         pid = meta.get("pid")
         if pid and _is_pid_alive(pid):
             print(f"Orchestrator daemon is already running (PID {pid}).")
             print("Showing current status:")
             return _run_status(args)
+        # Clean up stale metadata from dead PID before starting fresh
+        if meta_path and meta_path.exists():
+            meta_path.unlink(missing_ok=True)
+            print(f"  Cleaned stale metadata from dead PID {pid or 'N/A'}")
 
     # Launch the orchestrator directly
     return _run_orchestrator(

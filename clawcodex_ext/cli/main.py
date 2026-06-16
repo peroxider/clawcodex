@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 
 def main():
     """Delegate to the downstream CLI dispatch.
@@ -16,3 +18,7 @@ def main():
     ensure_nested_transcript_initialized()
     from clawcodex_ext.cli.dispatch import run_cli
     return run_cli()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
