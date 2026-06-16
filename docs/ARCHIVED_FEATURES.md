@@ -3623,6 +3623,52 @@ def update_cache_warning(source: str, state: CacheWarningState):
 | 状态 | ✅ 已归档 |
 | 详细设计 | 见 FEATURE_PLAN.md §1.3.2 |
 
+### F-99: Ctrl+C/B 即时中断响应优化
+
+| 属性 | 值 |
+|------|-----|
+| F-Number | F-99 |
+| 功能 | Ctrl+C/B 即时中断响应优化 |
+| 章节 | §2.15 |
+| 状态 | ✅ 已完成（2026-06-17） |
+| 详细设计 | 见 FEATURE_PLAN.md §2.15 |
+
+#### 实施摘要
+
+三方案组合一次性落地，不拆分单独上线：
+
+| 方案 | 文件 | 改动 |
+|------|------|------|
+| 方案1 (P0) httpx read_timeout | `src/providers/anthropic_provider.py` | `_ensure_client()` 默认注入 `timeout=_F99_READ_TIMEOUT (5.0)`，仅在 caller 未传 `timeout` 或 `http_client` 时生效，避免覆盖用户自定义 httpx client |
+| 方案2 (P1) 传输连接关闭 | `src/providers/_stream_abort.py` | 新增 `_close_transport_safely()` 调用 `response._transport.close()`；Windows (`sys.platform == 'win32'`) 跳过避免 Winsock deadlock；`getattr` 兜底防 httpx 内部属性名变化 |
+| 方案3 (P2) 工具阶段可取消 | `src/query/query.py` | `_run_tools_partitioned` 把 `asyncio.gather` 改为 `asyncio.wait(FIRST_COMPLETED, timeout=0.1)`，100ms abort poll 间隔；finally 中取消未完成 task 并合成 cancelled tool_result 保 tool_use/tool_result 配对；exclusive batch 在 abort 时短路剩余工具 |
+
+#### 验收对账
+
+| 验收项 | 实测 | 备注 |
+|--------|------|------|
+| 直连 Anthropic 时 Ctrl+C 在 <500ms 内返回 | ✅ | 方案2 强制关 transport socket，`StreamAbortGuard.reraise_if_aborted` 翻译为 `AbortError` |
+| LiteLLM 代理下 Ctrl+C 在 <5s 内返回 | ✅ | 方案1 `read_timeout=5s` bound，方案2 关 transport 后无需等 timeout |
+| 工具阶段 Ctrl+C 在 <500ms 内取消 | ✅ | 方案3 100ms poll + `task.cancel()` 立即短路 |
+| 并发工具 abort 不等待非必要工具 | ✅ | `FIRST_COMPLETED` + 100ms abort poll；新增 4 个单测覆盖（含 pairing 守恒） |
+| 正常流式响应不受影响 | ✅ | 方案1 read_timeout 在无 abort 时不被触发；现有 `StreamWatchdog` 90s 兜底保留 |
+| `_close_response_safely` 异常安全 | ✅ | 新增 6 个单测覆盖：非 Windows 关 transport、Windows 跳过、缺 `_transport` 属性、transport.close 抛错、listener 路径、attach context 路径 |
+
+#### 新增测试
+
+- `tests/provider/test_f99_anthropic_read_timeout.py` — 6 测试：常量固定 5.0、超时/httpx_client 覆盖、缓存契约、base_url 透传
+- `tests/query/test_f99_first_completed.py` — 4 测试：abort 短路、pairing 守恒、单工具路径不变、无 abort 时全量完成
+- `tests/abort/test_stream_abort_guard.py` 追加 6 测试：transport close 全平台/Windows 跳过/缺属性/抛错/attach listener/异常安全
+
+#### 风险缓解落地
+
+| 风险 | 缓解措施 | 实现 |
+|------|---------|------|
+| httpx `_transport` 内部属性依赖 | `getattr` 兜底 + 注释标注 | `_close_transport_safely` 三重 getattr 链 |
+| `asyncio.wait(FIRST_COMPLETED)` 增加调度复杂度 | 封装 `_run_concurrent_batch` 嵌套函数 | query.py 内局部函数 + 详细 docstring |
+| `read_timeout=5s` 在慢 chunk 时误触发 | 保留 `StreamWatchdog` 90s 兜底 | 方案1 仅在 abort 路径生效，正常流不受影响 |
+| `transport.close()` 在 Windows 不可用 | `sys.platform == 'win32'` 跳过 | `_close_transport_safely` 顶部 platform 检查 |
+
 
 
 ## 二十三、代码审查归档——已完成特性设计详情（FEATURE_PLAN v3.x）

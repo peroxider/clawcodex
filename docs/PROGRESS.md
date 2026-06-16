@@ -148,7 +148,7 @@
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
-| F-99 | Ctrl+C/B 即时中断响应优化 | P0 | 📋 设计完成 | 三类子方案：httpx read_timeout + 传输连接关闭 + 工具阶段可取消。解决 LLM 流式响应中 Ctrl+C 需要 10~30s 才能生效的 UX 问题 |
+| F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 三方案组合：① `AnthropicProvider._ensure_client` 默认注入 `timeout=5.0`（httpx read_timeout bound）② `_close_response_safely` 增加 `response._transport.close()`（Windows 跳过）③ `_run_tools_partitioned` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` + 100ms abort poll + 合成 cancelled tool_result 保持配对。新增 10 个单测覆盖方案2/3 + 6 个覆盖方案1。Cancel latency bound：直连 Anthropic <500ms，LiteLLM 代理 bound 在 read_timeout=5s |
 
 ---
 
@@ -1931,9 +1931,9 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 | 文件 | 改动 | 方案 | 状态 |
 |------|------|------|:----:|
-| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=httpx.Timeout(30.0, read=5.0))` | 方案1 | 📋 待实现 |
-| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `getattr(response, '_transport', None)` 关闭 | 方案2 | 📋 待实现 |
-| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + abort 时 `task.cancel()` | 方案3 | 📋 待实现 |
+| `src/providers/anthropic_provider.py` | `_ensure_client()` 注入 `timeout=_F99_READ_TIMEOUT (5.0)`（caller 已传 `timeout`/`http_client` 时不覆盖） | 方案1 | ✅ 已实现 |
+| `src/providers/_stream_abort.py` | `_close_transport_safely()` 通过 `getattr(response, '_transport', None)` 关闭；Windows `sys.platform == 'win32'` 跳过 | 方案2 | ✅ 已实现 |
+| `src/query/query.py` | `_run_tools_partitioned` → 嵌套 `_run_concurrent_batch` 改用 `asyncio.wait(FIRST_COMPLETED, timeout=0.1)` + `task.cancel()` + 合成 cancelled tool_result 保 pairing | 方案3 | ✅ 已实现 |
 
 ### 实施进度
 

@@ -1654,7 +1654,7 @@ def add_session_file(sessionId: UUID, filePath: str):
 
 ### 2.15 Ctrl+C/B 即时中断响应优化（F-99）
 
-**状态**: 📋 设计完成 | **优先级**: P0
+**状态**: ✅ 已完成（2026-06-17）| **优先级**: P0
 
 **目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
 
@@ -1703,10 +1703,10 @@ F-99 三层方案
 
 | 文件 | 改动 | 方案 | 状态 |
 |------|------|------|------|
-| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=...)` | 方案1 | 📋 待实现 |
-| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `response._transport.close()` | 方案2 | 📋 待实现 |
-| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` | 方案3 | 📋 待实现 |
-| `src/query/query.py` | `_dispatch_single_tool()` 传递 abort_signal 给工具执行 | 方案3 | 📋 待实现 |
+| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=...)` | 方案1 | ✅ 已实现 |
+| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `response._transport.close()` | 方案2 | ✅ 已实现 |
+| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` | 方案3 | ✅ 已实现 |
+| `src/query/query.py` | `_dispatch_single_tool()` 传递 abort_signal 给工具执行 | 方案3 | ✅ 已实现（通过 `tool_use_context.abort_controller`） |
 
 #### 验收标准
 
@@ -8330,4 +8330,4 @@ clawcodex_ext/community_radar/
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
-| F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | 📋 设计完成 | 三类子方案：httpx read_timeout + 传输连接关闭 + 工具阶段可取消 |
+| F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | ✅ 已完成（2026-06-17） | 三方案组合：`AnthropicProvider._ensure_client` 默认 `timeout=5.0` + `_close_response_safely` 关 transport（Win 跳过） + `_run_tools_partitioned` 改 `asyncio.wait(FIRST_COMPLETED)` + 100ms abort poll + synth cancelled result 保配对。Cancel bound：直连 <500ms，LiteLLM bound 在 5s |
