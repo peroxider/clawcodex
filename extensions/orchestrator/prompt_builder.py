@@ -6,6 +6,7 @@ Port of Symphony's PromptBuilder (Solid template → Jinja2).
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -114,6 +115,7 @@ class PromptBuilder:
         pending_question: str | None = None,
         options: list[str] | None = None,
         session: Any | None = None,
+        python_executable: str | None = None,
     ) -> str:
         """Build prompt using workflow's WORKFLOW.md body template + issue data.
 
@@ -180,6 +182,12 @@ class PromptBuilder:
                 "---\n"
                 "\n"
                 f"{rendered}"
+            )
+
+        if python_executable:
+            rendered = (
+                f"⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径运行 Python，"
+                f"不要调试环境差异。\n\n{rendered}"
             )
 
         return rendered
@@ -259,6 +267,7 @@ class PromptBuilder:
         max_turns: int,
         issue_context: str | None = None,
         session: Any | None = None,
+        python_executable: str | None = None,
     ) -> str:
         """Build continuation prompt for subsequent turns.
 
@@ -279,9 +288,15 @@ class PromptBuilder:
         # what was already done in previous turns.
         git_log_summary = _get_git_log_summary(session)
 
+        python_constraint = (
+            f"⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径，不要调试环境差异。\n"
+            if python_executable
+            else ""
+        )
+
         return (
             f"Continuation guidance:\n\n"
-            f"⛔ **约束提醒**：始终用 `/root/Conda/bin/python3` 绝对路径，不要调试环境差异。\n"
+            f"{python_constraint}"
             f"⛔ `pytest` 禁止使用管道 `| tail -40`/`| head -50`，用 `--tb=short -q` 替代。\n"
             f"⛔ 建议终端命令时用 `clawcodex-dev` CLI，不要用 `python3 -c` 或 `PYTHONPATH=`。\n"
             f"- This is continuation turn #{turn_number} of {max_turns}.{context_block}{urgency}\n"
@@ -447,3 +462,209 @@ def _get_git_log_summary(session: Any) -> str:
         return f"\nRecent commits in workspace:\n```\n{log_out}\n```\n"
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return ""
+
+
+# ─── Python interpreter detection + cascade resolver ────────────────
+# F-?? workspace-level python_executable: detect the interpreter
+# inside the target repo via project-level signals, then expose a
+# cascade so the prompt builder can pick the most specific value.
+
+
+def _parse_pyvenv_home(cfg_path: Path) -> str:
+    """Extract ``home = <path>`` from a pyvenv.cfg file.
+
+    Returns the home directory string or ``""`` on parse failure /
+    missing file. Soft-fails by design: malformed pyvenv.cfg must
+    not block prompt rendering.
+    """
+    try:
+        text = cfg_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.lower().startswith("home"):
+            _, _, value = stripped.partition("=")
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
+def _parse_conda_env_name(yml_path: Path) -> str:
+    """Extract the conda env ``name:`` from an environment.yml.
+
+    Returns the env name or ``""`` if no ``name:`` key is set.
+    """
+    try:
+        text = yml_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if stripped.lower().startswith("name"):
+            _, _, value = stripped.partition(":")
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
+# Ordered conda root locations probed when an ``environment.yml`` is
+# present. ``CONDA_PREFIX`` is consulted first when set (covers any
+# non-standard install location), then the common defaults.
+_CONDA_ROOT_CANDIDATES: tuple[str, ...] = (
+    "/opt/conda",
+    "/root/anaconda3",
+    "/root/miniconda3",
+    "/usr/local/anaconda3",
+    "/usr/local/miniconda3",
+    "/opt/anaconda3",
+)
+
+
+def _detect_python_in_workspace(
+    workspace_path: Path | None,
+    candidates: list[str],
+) -> str:
+    """Walk a list of project-level signals and return the absolute
+    path of the first Python interpreter that can be derived from
+    them. Returns ``""`` when nothing matches.
+
+    Soft-fails: missing files, malformed contents, or non-existent
+    interpreter binaries are silently skipped — the function is
+    best-effort and never raises.
+
+    Recognised probe kinds (matched by relative path):
+
+    * ``.python-version`` — pyenv version spec; resolved against
+      ``$PYENV_ROOT`` or ``~/.pyenv/versions/<v>/bin/python3``.
+    * ``pyvenv.cfg`` and ``.venv/pyvenv.cfg`` — venv / uv / poetry
+      venv markers; the ``home = ...`` line gives the venv root.
+    * ``environment.yml`` — conda env file; ``name:`` is matched
+      against ``$CONDA_PREFIX`` and a set of well-known conda
+      install prefixes.
+    * ``Pipfile`` and ``pyproject.toml`` — recognised but skipped
+      because they describe dependencies rather than interpreter
+      paths. Listed in the default candidates so operators can
+      disable them via ``python_detect_files`` if desired.
+    """
+    if workspace_path is None:
+        return ""
+    workspace_path = Path(workspace_path)
+    if not workspace_path.exists():
+        return ""
+
+    for rel in candidates:
+        f = workspace_path / rel
+        if not f.exists() or not f.is_file():
+            continue
+        try:
+            if rel == ".python-version":
+                version = f.read_text(encoding="utf-8", errors="replace").strip()
+                if version:
+                    pyenv_root = Path(
+                        os.environ.get("PYENV_ROOT", str(Path.home() / ".pyenv"))
+                    )
+                    py = pyenv_root / "versions" / version / "bin" / "python3"
+                    if py.exists():
+                        return str(py)
+            elif rel.endswith("pyvenv.cfg"):
+                home = _parse_pyvenv_home(f)
+                if home:
+                    py = Path(home) / "bin" / "python3"
+                    if py.exists():
+                        return str(py)
+            elif rel == "environment.yml":
+                env_name = _parse_conda_env_name(f)
+                if env_name:
+                    conda_prefix = os.environ.get("CONDA_PREFIX", "").strip()
+                    roots: list[str] = [conda_prefix] if conda_prefix else []
+                    roots += list(_CONDA_ROOT_CANDIDATES)
+                    for root in roots:
+                        if not root:
+                            continue
+                        py = Path(root) / "envs" / env_name / "bin" / "python3"
+                        if py.exists():
+                            return str(py)
+            elif rel in ("Pipfile", "pyproject.toml"):
+                continue
+        except OSError:
+            continue
+    return ""
+
+
+def resolve_python_executable(
+    *,
+    workspace_path: Path | None,
+    agent_cfg: Any,
+    workspace_cfg: Any,
+    issue_executable: str = "",
+) -> str:
+    """Cascade resolver: pick the most specific Python interpreter
+    path available.
+
+    Resolution order (first non-empty wins):
+
+    1. ``issue_executable`` — per-issue override (e.g. from
+       ``LocalTracker`` frontmatter ``python_executable: ...``).
+       Highest priority because a single issue may legitimately
+       need a different interpreter than its sibling issues in the
+       same workspace.
+    2. ``workspace_cfg.python_executable`` — explicit per-workspace
+       override (handles "different repo needs different python").
+    3. Auto-detected path via
+       :func:`_detect_python_in_workspace` when
+       ``workspace_cfg.python_auto_detect`` is True.
+    4. ``agent_cfg.python_executable`` — workflow-wide default
+       (the MVP-1 knob).
+    5. Empty string — caller should treat as "no constraint"; the
+       agent will rely on PATH ``python3``.
+
+    Args:
+        workspace_path: Absolute path to the workspace directory
+            (``Workspace.path``), or ``None`` when there is no
+            workspace yet (e.g. unit tests).
+        agent_cfg: An ``AgentConfig``-like object exposing
+            ``python_executable``.
+        workspace_cfg: A ``WorkspaceConfig``-like object exposing
+            ``python_executable``, ``python_auto_detect`` and
+            ``python_detect_files``.
+        issue_executable: Per-issue override string. ``""`` (the
+            default) skips this level entirely. Provided by the
+            caller from ``Issue.python_executable`` (populated by
+            ``LocalTrackerAdapter`` from the issue markdown
+            frontmatter).
+
+    Returns:
+        Absolute path string, or ``""`` when no constraint applies.
+    """
+    issue_override = (issue_executable or "").strip()
+    if issue_override:
+        return issue_override
+
+    ws_explicit = getattr(workspace_cfg, "python_executable", "") or ""
+    if ws_explicit:
+        return ws_explicit
+
+    auto_detect = getattr(workspace_cfg, "python_auto_detect", True)
+    if auto_detect:
+        detect_files = list(
+            getattr(workspace_cfg, "python_detect_files", None)
+            or [
+                ".python-version",
+                "pyvenv.cfg",
+                ".venv/pyvenv.cfg",
+                "Pipfile",
+                "environment.yml",
+            ]
+        )
+        detected = _detect_python_in_workspace(workspace_path, detect_files)
+        if detected:
+            return detected
+
+    agent_default = getattr(agent_cfg, "python_executable", "") or ""
+    if agent_default:
+        return agent_default
+
+    return ""

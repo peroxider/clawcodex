@@ -19,10 +19,10 @@ from ..api.query import PhaseComplete, QueryConfig, QueryRunner
 from ..api.query import SessionComplete, TextDelta, ToolCallEvent, ToolResultEvent, TurnComplete
 from .approval_policy import ApprovalPolicy, get_approval_policy, ToolCallEvent as PolicyToolCallEvent
 from src.utils.git import get_file_status
-from .config.schema import AgentConfig, CodexConfig, WorkflowConfig
+from .config.schema import AgentConfig, CodexConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
-from .prompt_builder import PromptBuilder
+from .prompt_builder import PromptBuilder, resolve_python_executable
 from .tool_event_log import ToolEventLog
 from .workspace import Workspace
 
@@ -324,9 +324,17 @@ class AgentRunner:
         self,
         agent_config: AgentConfig,
         codex_config: CodexConfig,
+        workspace_cfg: WorkspaceConfig | None = None,
     ) -> None:
         self.agent_config = agent_config
         self.codex_config = codex_config
+        # F-?? workspace-level python_executable resolver input. When
+        # None (the default for legacy callers and unit tests) we
+        # substitute an empty ``WorkspaceConfig()`` so the cascade
+        # resolver still works: workspace explicit → detect → agent
+        # default → "".  Production wires this from
+        # ``workflow_config.workspace`` in orchestration.py.
+        self.workspace_cfg: WorkspaceConfig = workspace_cfg or WorkspaceConfig()
         self.max_turns = agent_config.max_turns
         self._approval_policy: ApprovalPolicy = get_approval_policy(
             getattr(codex_config, "approval_policy", "never") or "never"
@@ -885,6 +893,12 @@ class AgentRunner:
                             pending_question=pending_question,
                             options=options,
                             session=session,
+                            python_executable=resolve_python_executable(
+                                workspace_path=getattr(workspace, "path", None),
+                                agent_cfg=self.agent_config,
+                                workspace_cfg=self.workspace_cfg,
+                                issue_executable=getattr(issue, "python_executable", "") or "",
+                            ),
                         )
                     session._issue_context = prompt  # Store for continuation
                 else:
@@ -893,6 +907,12 @@ class AgentRunner:
                         max_turns=self.max_turns,
                         issue_context=getattr(session, "_issue_context", None),
                         session=session,
+                        python_executable=resolve_python_executable(
+                                workspace_path=getattr(workspace, "path", None),
+                                agent_cfg=self.agent_config,
+                                workspace_cfg=self.workspace_cfg,
+                                issue_executable=getattr(issue, "python_executable", "") or "",
+                            ),
                     )
                     logger.info(
                         "Continuation turn %d/%s for issue_id=%s",

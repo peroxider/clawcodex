@@ -26,6 +26,16 @@ class Issue:
     assigned_to_worker: bool = True
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # F-?? per-issue python interpreter override (cascade level 1,
+    # highest priority). When non-empty, this value overrides every
+    # other source — workspace ``python_executable``,
+    # ``_detect_python_in_workspace``, and ``agent.python_executable``.
+    # Empty string (the default) means "fall through to the next
+    # level of the cascade." Populated by ``LocalTrackerAdapter`` from
+    # the issue markdown frontmatter (``python_executable: ...``);
+    # remote trackers (GitHub/Gitee/GitCode/Linear) leave it empty
+    # and rely on workspace-level or agent-level configuration.
+    python_executable: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for template rendering."""

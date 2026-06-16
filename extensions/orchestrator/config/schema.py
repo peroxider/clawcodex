@@ -191,6 +191,29 @@ class WorkspaceConfig:
     require_clean_between_issues: bool = True
     preserve_on_terminal: bool = True
     sequential_lock: bool = True
+    # F-?? python interpreter resolution cascade (level 2):
+    # workspace-scoped Python interpreter. When ``python_executable``
+    # is set, it overrides the ``agent.python_executable`` default.
+    # When empty, the resolver will try ``python_auto_detect`` to
+    # locate the interpreter from project-level signals
+    # (``.python-version``, ``pyvenv.cfg``, ``environment.yml``,
+    # ``.venv/pyvenv.cfg``). When detection is disabled or fails,
+    # the resolver falls back to ``agent.python_executable`` and
+    # finally to "no constraint" (the agent uses PATH ``python3``).
+    python_executable: str = ""
+    python_auto_detect: bool = True
+    # Ordered list of relative paths to probe for python interpreter
+    # hints. The first match wins. Default probes cover pyenv, venv,
+    # uv/poetry virtualenvs, pipenv, and conda env files.
+    python_detect_files: list[str] = field(
+        default_factory=lambda: [
+            ".python-version",
+            "pyvenv.cfg",
+            ".venv/pyvenv.cfg",
+            "Pipfile",
+            "environment.yml",
+        ]
+    )
 
 
 @dataclass
@@ -303,6 +326,16 @@ class AgentConfig:
     # infinite tool-call loops (no SessionComplete emitted) while
     # still allowing complex multi-step operations.
     max_tools_per_turn: int = 50
+    # Path of the Python interpreter the agent should use when
+    # running shell commands inside the workspace. Empty string
+    # (the default) means "do not inject a path instruction; let
+    # the LLM rely on PATH." When set, an absolute path here is
+    # injected into both the turn-0 issue prompt and the
+    # continuation guidance so the agent does not waste turns
+    # hunting for the right interpreter. Replace the
+    # previously-hardcoded `/root/Conda/bin/python3` in
+    # ``PromptBuilder.build_continuation_prompt``.
+    python_executable: str = ""
 
 
 @dataclass

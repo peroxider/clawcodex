@@ -62,6 +62,13 @@ def parse_markdown_issue(path: Path) -> LocalIssueDocument:
         labels=_string_list(metadata.get("labels")),
         created_at=_datetime_or_none(metadata.get("created_at")),
         updated_at=_datetime_or_none(metadata.get("updated_at")),
+        # F-?? per-issue python interpreter override (cascade level 1,
+        # highest priority). Pulled from the issue markdown
+        # frontmatter; remote trackers (GitHub/Gitee/GitCode/Linear)
+        # leave this empty and rely on workspace-level or agent-level
+        # configuration. Empty string falls through to the next
+        # cascade level in ``resolve_python_executable``.
+        python_executable=_string_or_none(metadata.get("python_executable")) or "",
     )
     return LocalIssueDocument(
         path=path,

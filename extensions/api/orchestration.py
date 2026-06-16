@@ -74,6 +74,7 @@ class OrchestrationSubsystem:
         self.agent_runner = AgentRunner(
             agent_config=workflow_config.agent,
             codex_config=workflow_config.codex,
+            workspace_cfg=workflow_config.workspace,
         )
         self.status_dashboard = StatusDashboard()
         self._orchestrator = None
