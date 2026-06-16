@@ -5,7 +5,7 @@ ClawCodex has two parallel event systems:
 * :mod:`src.services.analytics` — older, pluggable :class:`AnalyticsSink`
   abstraction (``NullSink``/``ConsoleSink``/``FileSink``) consumed by
   ``image_processor.py``/``image_validation.py``/``pdf_extraction.py``.
-* :mod:`clawcodex.telemetry` — newer, opt-in F-97 system with local
+* :mod:`telemetry` — newer, opt-in F-97 system with local
   JSONL storage, redaction, daily aggregation and opt-in Issue
   reporting. Redaction runs on every event in
   :meth:`_TelemetryRecorderImpl._enqueue_event` so any field set on a
@@ -66,7 +66,7 @@ _COMMAND_RUN_SUBTYPES: frozenset[str] = frozenset(
 
 
 def _short_session_id(raw: str) -> str:
-    """Mirror :func:`clawcodex.telemetry.recorder._short_session_id`.
+    """Mirror :func:`telemetry.recorder._short_session_id`.
 
     The recorder hashes raw session ids to a stable 16-char SHA1
     prefix for storage. The bridge must use the same join key so
@@ -268,7 +268,7 @@ def install_analytics_bridge(
     """Install :class:`AnalyticsTelemetrySink` as the global analytics sink.
 
     Idempotent: calling it twice returns the existing instance. Safe to
-    call before :func:`clawcodex.telemetry.recorder.get_recorder` is
+    call before :func:`telemetry.recorder.get_recorder` is
     first invoked — the bridge lazily resolves the recorder on each
     ``emit()``. When telemetry is disabled the recorder is a no-op and
     the bridge becomes one too, so this can be installed permanently

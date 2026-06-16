@@ -7880,7 +7880,7 @@ AgentRunner._run_iteration()
 
 ## 九、独立遥测系统（F-97）
 
-**状态**: ✅ 第二期实现完成 | **优先级**: P1 | **类型**: 新特性 | **目标路径**: `clawcodex/telemetry/`
+**状态**: ✅ 第二期实现完成 | **优先级**: P1 | **类型**: 新特性 | **目标路径**: `telemetry/`
 
 ### 9.1 背景与目标
 
@@ -7890,7 +7890,7 @@ F-97 的目标是新增一个与 orchestrator、visualizer、现有 analytics �
 
 核心目标：
 
-1. **独立实现**：新代码默认放在 `clawcodex/telemetry/`，业务侧只调用稳定 recorder API，不直接依赖上报器或 tracker。
+1. **独立实现**：新代码默认放在 `telemetry/`，业务侧只调用稳定 recorder API，不直接依赖上报器或 tracker。
 2. **默认关闭**：遥测采集、远端 Issue 上报均默认关闭，必须由用户显式启用。
 3. **本地优先**：所有事件先写本地 JSONL/SQLite-lite 形态存储，再由后台任务聚合为 daily summary 和 crash summary。
 4. **Issue 上报**：没有公网服务时，通过 GitHub/Gitee/GitCode 自动创建或更新 telemetry issue 作为远端收集通道。
@@ -7918,7 +7918,7 @@ F-97 不直接替换现有 `src/services/analytics/`。短期策略是把现有 
 业务入口 / CLI / REPL / TUI / headless / orchestrator
         │
         ▼
-clawcodex.telemetry.recorder
+telemetry.recorder
   record_session_start()
   record_session_end()
   record_command_run()
@@ -7944,7 +7944,7 @@ clawcodex.telemetry.recorder
 建议目录结构：
 
 ```
-clawcodex/telemetry/
+telemetry/
 ├── __init__.py
 ├── config.py              # TelemetryConfig + settings/env 解析
 ├── events.py              # TelemetryEvent / UsageEvent / ErrorEvent
@@ -8060,7 +8060,7 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成（2026-06） |
+| F-97-A | 新建 `telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成（2026-06） |
 | F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | ✅ 已完成（2026-06） |
 | F-97-C | 实现 redaction 与 error fingerprint，补全单元测试 | ✅ 已完成（2026-06） |
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成（2026-06） |
@@ -8104,17 +8104,17 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 | 2026-06-16 | 独立 verification agent 复核 PASS | 5 个失败用例 → 78 passed；telemetry 78 + orchestrator tracker 60 + stability gate 172 = 310 测试全过；verifier 抽查确认 8 个敏感值断言、HTTP-call 缺席、secret-leak 三大隐私保证全部保留 |
 | 2026-06-16 | `38bab8c` F-97-I analytics → telemetry 桥接器 | `AnalyticsTelemetrySink(AnalyticsSink)` 14-way EventType 映射；`_enqueue_event` 提升为公开 `record_event(TelemetryEvent, kind)`；`install_exception_hooks()` 末尾自动 `install_analytics_bridge()`；默认 drop 4 类敏感/无语义类型（COMPACT、PERMISSION_PROMPT、PERMISSION_DECISION、MODEL_SWITCH）。7 文件 +990/-2，commit 前实测 102/102 telemetry 测试 + 9/9 analytics + 172/172 stability gate 全过；16 个 telemetry 文件的 pre-existing reflow 噪音已 `git restore` 丢弃，仅携带 F-97-I 自身改动 |
 | 2026-06-16 | `76d9688` F-97-J SessionAnalyticsMetadata 桥接 | `recorder.record_session_start` 签名扩展 6 个 keyword-only kwargs（`os_version`/`ide_type`/`ide_version`/`is_resume`/`start_time`/`extra`），缺省 `None` 时内部自动调 `collect_session_metadata()`，6 个埋点入口零改动；`redaction._redact_value` 新增 `_BLOCKED_EXTRA_KEYS`（`prompt`/`output`/`transcript`/`messages`/`input`/`response`）阻断 `extra` dict 内的敏感键；4 个新单测覆盖显式 kwargs、自动补全、`extra` 阻断与 NullRecorder 透传。4 文件 +223/-1，commit 前实测 106/106 telemetry + 172/172 stability_gate + 9/9 analytics 全过 |
-| 2026-06-16 | `41e2b30` F-97-K TOML + F-97-L Schema v2 迁移 | K：新增 `clawcodex/telemetry/_toml.py`（`tomllib`/`tomli` 双导入兜底 Python 3.10+），按 `pyproject.toml [tool.clawcodex.telemetry]` 向上 walk 优先，再 `<cwd>/telemetry.toml`；`config.load_config` 在 dataclass defaults 与 JSON 段之间插入 TOML 层，JSON 仍胜出；`run_enable` 输出末尾追加 TOML 文件位置提示；`telemetry.toml.example` 进仓库根；6 个新单测含 walk-upward 与 fallback 路径。L：`events.py` 新增 `SCHEMA_VERSION_V2=2`；`TelemetryEvent.schema_version` 字段默认改 v2，新事件自动写 v2；`migration.py` 提供 `migrate_v1_to_v2`（把 `fingerprint` 字符串包成结构化 dict）、`normalize_event`（读路径 dispatcher）、`_fingerprint_dict_to_hash`（v1 字符串 / v2 dict 兼容提 hash）；`aggregator._build_summary` 循环顶部调 `normalize_event`，`_build_crash_summary` 用 `_fingerprint_dict_to_hash` 把 v1 字符串与 v2 dict 聚合到同一 bucket，summary stamp v2；`redaction._redact_value` 接受 v2 fingerprint dict 形态（hash 走 `redact_text` secret-scan）；10 个新 migration 单测 + 2 个 aggregator v1/v2 混合 + 1 个 privacy audit 跨版本断言。12 文件 +864/-6，commit 前实测 130/130 telemetry + 172/172 stability_gate + 9/9 analytics 全过；orchestrator 2 个 pre-existing patch-metadata FileNotFoundError 与 telemetry 无关 |
+| 2026-06-16 | `41e2b30` F-97-K TOML + F-97-L Schema v2 迁移 | K：新增 `telemetry/_toml.py`（`tomllib`/`tomli` 双导入兜底 Python 3.10+），按 `pyproject.toml [tool.clawcodex.telemetry]` 向上 walk 优先，再 `<cwd>/telemetry.toml`；`config.load_config` 在 dataclass defaults 与 JSON 段之间插入 TOML 层，JSON 仍胜出；`run_enable` 输出末尾追加 TOML 文件位置提示；`telemetry.toml.example` 进仓库根；6 个新单测含 walk-upward 与 fallback 路径。L：`events.py` 新增 `SCHEMA_VERSION_V2=2`；`TelemetryEvent.schema_version` 字段默认改 v2，新事件自动写 v2；`migration.py` 提供 `migrate_v1_to_v2`（把 `fingerprint` 字符串包成结构化 dict）、`normalize_event`（读路径 dispatcher）、`_fingerprint_dict_to_hash`（v1 字符串 / v2 dict 兼容提 hash）；`aggregator._build_summary` 循环顶部调 `normalize_event`，`_build_crash_summary` 用 `_fingerprint_dict_to_hash` 把 v1 字符串与 v2 dict 聚合到同一 bucket，summary stamp v2；`redaction._redact_value` 接受 v2 fingerprint dict 形态（hash 走 `redact_text` secret-scan）；10 个新 migration 单测 + 2 个 aggregator v1/v2 混合 + 1 个 privacy audit 跨版本断言。12 文件 +864/-6，commit 前实测 130/130 telemetry + 172/172 stability_gate + 9/9 analytics 全过；orchestrator 2 个 pre-existing patch-metadata FileNotFoundError 与 telemetry 无关 |
 
 **关键经验**：之前一轮其他 agent 声称 "verification PASS"，但实际未跑 `pytest` 收尾。F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
 
 ### 9.8 已识别的产品缺口（F-97-J / F-97-K / F-97-L）
 
-完成 A~I 阶段后，仍有 3 个与 telemetry 直接相关的产品缺口尚未落地。这些缺口与 `clawcodex/telemetry/` 已交付部分解耦，可作为独立子任务排期。
+完成 A~I 阶段后，仍有 3 个与 telemetry 直接相关的产品缺口尚未落地。这些缺口与 `telemetry/` 已交付部分解耦，可作为独立子任务排期。
 
 #### F-97-J：桥接 `SessionAnalyticsMetadata` → telemetry `session_start`
 
-**现状**：`src/services/analytics/metadata.py:15` 定义的 `SessionAnalyticsMetadata` 与 `collect_session_metadata()`（`metadata.py:31`）已被 `src/services/analytics/__init__.py` 导出，但仓库内无任何调用方。`clawcodex/telemetry/recorder.py:record_session_start()` 自己从 `platform.system()` / `platform.python_version()` / `_safe_app_version()` 采集 OS、Python、版本信息，未消费 analytics metadata。
+**现状**：`src/services/analytics/metadata.py:15` 定义的 `SessionAnalyticsMetadata` 与 `collect_session_metadata()`（`metadata.py:31`）已被 `src/services/analytics/__init__.py` 导出，但仓库内无任何调用方。`telemetry/recorder.py:record_session_start()` 自己从 `platform.system()` / `platform.python_version()` / `_safe_app_version()` 采集 OS、Python、版本信息，未消费 analytics metadata。
 
 **目标**：让 telemetry 复用 `collect_session_metadata()` 提供的字段（OS 版本、IDE 类型与版本、是否 resume、start_time、extra），避免双源采集与口径漂移。
 
@@ -8134,7 +8134,7 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 #### F-97-K：TOML 配置文件加载
 
-**现状**：`clawcodex/telemetry/config.py:88` 的 `load_config()` 实际从 `src.config.load_config()`（JSON 形态）合并 `telemetry` 段；FEATURE_PLAN §9.3 给出的 `[telemetry]` / `[telemetry.reporting]` / `[telemetry.privacy]` TOML 示例是示意性写法，当前实现并不读取 TOML。`config.py:5` 注释已明确说明这一点（"docs/FEATURE_PLAN.md §9.3 for the TOML shape — the JSON config"）。
+**现状**：`telemetry/config.py:88` 的 `load_config()` 实际从 `src.config.load_config()`（JSON 形态）合并 `telemetry` 段；FEATURE_PLAN §9.3 给出的 `[telemetry]` / `[telemetry.reporting]` / `[telemetry.privacy]` TOML 示例是示意性写法，当前实现并不读取 TOML。`config.py:5` 注释已明确说明这一点（"docs/FEATURE_PLAN.md §9.3 for the TOML shape — the JSON config"）。
 
 **目标**：让用户可以直接在 `pyproject.toml`（或新建 `telemetry.toml`）中声明 telemetry 配置项，并按 docstring 列出的三层优先级（defaults → on-disk section → env）合并。
 
@@ -8158,7 +8158,7 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 
 #### F-97-L：事件 schema v2 迁移路径
 
-**现状**：`clawcodex/telemetry/events.py:15` 硬编码 `SCHEMA_VERSION: Final[int] = 1`；aggregator (`aggregator.py:153`)、redaction (`redaction.py:183`) 写入时直接使用常量；`events.py:77` 读路径用 `payload.get("schema_version", SCHEMA_VERSION)` 兼容缺省值，但**没有真正的版本协商或迁移**——只要把 v2 事件写进 v1 字段集，读路径就会读到错误的字段。
+**现状**：`telemetry/events.py:15` 硬编码 `SCHEMA_VERSION: Final[int] = 1`；aggregator (`aggregator.py:153`)、redaction (`redaction.py:183`) 写入时直接使用常量；`events.py:77` 读路径用 `payload.get("schema_version", SCHEMA_VERSION)` 兼容缺省值，但**没有真正的版本协商或迁移**——只要把 v2 事件写进 v1 字段集，读路径就会读到错误的字段。
 
 **目标**：为未来 schema 演进（如结构化 `provider_request_summary`、新 fingerprint 算法、新 privacy 字段）建立显式的 v1 → v2 迁移通道，避免 v2 事件被 silently 解释为 v1。
 

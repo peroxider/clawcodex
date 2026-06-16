@@ -92,7 +92,7 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
 
     1. :class:`TelemetryConfig` dataclass defaults.
     2. TOML section discovered by
-       :func:`clawcodex.telemetry._toml.load_toml_telemetry` — first
+       :func:`telemetry._toml.load_toml_telemetry` — first
        ``pyproject.toml`` walked upward from ``cwd`` (looking for
        ``[tool.clawcodex.telemetry]``), then a standalone
        ``<cwd>/telemetry.toml``.

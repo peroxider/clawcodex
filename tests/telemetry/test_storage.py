@@ -5,7 +5,7 @@ import json
 import time
 from pathlib import Path
 
-from clawcodex.telemetry.storage import LocalJsonlStorage, utc_date, utc_now
+from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
 
 
 def _make_storage(tmp_path: Path) -> LocalJsonlStorage:

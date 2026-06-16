@@ -4,8 +4,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from clawcodex.telemetry.aggregator import DailyAggregator
-from clawcodex.telemetry.storage import LocalJsonlStorage, utc_date, utc_now
+from telemetry.aggregator import DailyAggregator
+from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
 
 
 def _storage(tmp_path: Path) -> LocalJsonlStorage:

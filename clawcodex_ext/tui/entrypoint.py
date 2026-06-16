@@ -194,7 +194,7 @@ def _run_tui_with_app(
     # the conversation persists under so the per-day aggregator can
     # cross-link events to a known session. Failures are swallowed.
     try:
-        from clawcodex.telemetry import record_session_start
+        from telemetry import record_session_start
 
         record_session_start(
             session_id=used_session.session_id,
@@ -215,7 +215,7 @@ def _run_tui_with_app(
         # F-97: best-effort error event with stable fingerprint.
         # Failures are swallowed.
         try:
-            from clawcodex.telemetry import record_error
+            from telemetry import record_error
 
             record_error(session_id=used_session.session_id, exc=exc)
         except Exception:
@@ -225,7 +225,7 @@ def _run_tui_with_app(
         # F-97: best-effort session_end + command_run. Telemetry
         # must never block the user's exit.
         try:
-            from clawcodex.telemetry import (
+            from telemetry import (
                 record_command_run,
                 record_session_end,
             )

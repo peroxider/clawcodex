@@ -12,21 +12,21 @@ from pathlib import Path
 
 import pytest
 
-from clawcodex.telemetry import recorder as recorder_mod
-from clawcodex.telemetry.bridge import (
+from telemetry import recorder as recorder_mod
+from telemetry.bridge import (
     AnalyticsTelemetrySink,
     get_analytics_bridge,
     install_analytics_bridge,
     reset_analytics_bridge_for_tests,
 )
-from clawcodex.telemetry.config import TelemetryConfig
-from clawcodex.telemetry.recorder import (
+from telemetry.config import TelemetryConfig
+from telemetry.recorder import (
     _TelemetryRecorderImpl,
     override_recorder,
     reset_recorder_for_tests,
 )
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.storage import utc_date, utc_now
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.storage import utc_date, utc_now
 from src.services.analytics.events import (
     AnalyticsEvent,
     EventType as AnalyticsEventType,

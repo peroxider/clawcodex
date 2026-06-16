@@ -6,18 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from clawcodex.telemetry import recorder as recorder_mod
-from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
-from clawcodex.telemetry.events import EventType, TelemetryEvent
-from clawcodex.telemetry.recorder import (
+from telemetry import recorder as recorder_mod
+from telemetry.config import ReportingConfig, TelemetryConfig
+from telemetry.events import EventType, TelemetryEvent
+from telemetry.recorder import (
     _NullRecorder,
     _TelemetryRecorderImpl,
     get_recorder,
     override_recorder,
     reset_recorder_for_tests,
 )
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.storage import utc_date, utc_now
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.storage import utc_date, utc_now
 
 
 @pytest.fixture(autouse=True)

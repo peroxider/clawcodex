@@ -491,8 +491,8 @@ class TestStage5Telemetry:
 
     def test_telemetry_subpackage_imports(self):
         """All F-97 submodules importable."""
-        import clawcodex.telemetry
-        from clawcodex.telemetry import (
+        import telemetry
+        from telemetry import (
             aggregator,
             cli as telemetry_cli,
             config,
@@ -503,14 +503,14 @@ class TestStage5Telemetry:
             storage,
             version,
         )
-        from clawcodex.telemetry.reporters import (
+        from telemetry.reporters import (
             base,
             dry_run,
             local_file,
         )
 
         # Events enum has the full set defined in the design doc.
-        from clawcodex.telemetry.events import EventType
+        from telemetry.events import EventType
 
         assert EventType.SESSION_START.value == "session_start"
         assert EventType.SESSION_END.value == "session_end"
@@ -541,7 +541,7 @@ class TestStage5Telemetry:
         (the default), get_recorder() returns _NullRecorder and no
         storage, redaction, or aggregator instances are created.
         """
-        from clawcodex.telemetry import config, recorder
+        from telemetry import config, recorder
 
         # Reset the cached singleton to honor any leftover state.
         recorder.reset_recorder_for_tests()
@@ -563,7 +563,7 @@ class TestStage5Telemetry:
         cold-start path (--help) goes through this code, so any
         exception here would break the 5-second budget.
         """
-        from clawcodex.telemetry import recorder
+        from telemetry import recorder
 
         recorder.reset_recorder_for_tests()
         r = recorder.get_recorder()
@@ -600,7 +600,7 @@ class TestStage5Telemetry:
         ``file_path`` keys via ``_normalize_path``, not in
         ``redact_text``. We exercise both surfaces here.
         """
-        from clawcodex.telemetry.redaction import RedactionConfig, Redactor
+        from telemetry.redaction import RedactionConfig, Redactor
 
         redactor = Redactor(RedactionConfig(), project_roots=("/proj",))
 
@@ -633,7 +633,7 @@ class TestStage5Telemetry:
 
     def test_telemetry_fingerprint_stable_across_runs(self):
         """Fingerprint for the same exception class+location is stable."""
-        from clawcodex.telemetry.fingerprint import compute_fingerprint
+        from telemetry.fingerprint import compute_fingerprint
 
         try:
             raise ValueError("boom")
@@ -655,7 +655,7 @@ class TestStage5Telemetry:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir) / "telemetry"
-            from clawcodex.telemetry.storage import LocalJsonlStorage
+            from telemetry.storage import LocalJsonlStorage
 
             # Constructor creates the base dir eagerly so the first
             # append can write without an extra mkdir round-trip.
@@ -667,7 +667,7 @@ class TestStage5Telemetry:
             assert not (base / "events").exists()
             assert not (base / "crashes").exists()
 
-            from clawcodex.telemetry.events import EventType, TelemetryEvent
+            from telemetry.events import EventType, TelemetryEvent
 
             event = TelemetryEvent(
                 type=EventType.SESSION_START,

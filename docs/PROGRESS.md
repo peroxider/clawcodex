@@ -1499,7 +1499,7 @@ AgentRunner._run_iteration()
 
 ### 目标
 
-新增一个独立于 orchestrator 和现有 `src/services/analytics/` 的遥测系统，默认实现路径为 `clawcodex/telemetry/`。系统用于在用户显式启用后，本地记录使用情况与错误摘要，聚合每日执行次数、会话次数、入口分布、版本/平台分布和错误 fingerprint；在没有公网服务 IP 的约束下，通过自动创建或更新 Issue 的方式上报脱敏后的 daily summary。
+新增一个独立于 orchestrator 和现有 `src/services/analytics/` 的遥测系统，默认实现路径为 `telemetry/`。系统用于在用户显式启用后，本地记录使用情况与错误摘要，聚合每日执行次数、会话次数、入口分布、版本/平台分布和错误 fingerprint；在没有公网服务 IP 的约束下，通过自动创建或更新 Issue 的方式上报脱敏后的 daily summary。
 
 ### 当前基线
 
@@ -1517,7 +1517,7 @@ AgentRunner._run_iteration()
 
 | 阶段 | 任务 | 状态 |
 |------|------|------|
-| F-97-A | 新建 `clawcodex/telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成 |
+| F-97-A | 新建 `telemetry/` 包、配置模型、recorder API、Null/local storage | ✅ 已完成 |
 | F-97-B | 实现本地 JSONL 存储、rotate、retention、daily aggregator | ✅ 已完成 |
 | F-97-C | 实现 redaction 与 error fingerprint，并覆盖 secret/path/prompt/output 过滤测试 | ✅ 已完成 |
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成 |
@@ -1567,7 +1567,7 @@ AgentRunner._run_iteration()
 | TUI 模式 | `clawcodex_ext/cli/runners.py:run_tui_mode` + `clawcodex_ext/tui/entrypoint.py:_run_tui_with_app` | session_start / session_end / command_run (mode=interactive)，异常路径落 record_error |
 | Headless 模式 | `clawcodex_ext/entrypoints/headless.py:run_headless` | session_start / session_end / command_run (mode=non_interactive)，Exception / (AbortError, KeyboardInterrupt) 路径落 record_error |
 | Orchestrator | `extensions/orchestrator/orchestrator.py:run` | session_start / session_end / command_run (mode=daemon)，统一按 workspace+day 派生 session_id |
-| 全局崩溃 | `src/init.py:init` → `clawcodex/telemetry/hooks.py:install_exception_hooks` | 包装 `sys.excepthook` + `threading.excepthook`，触发即调 record_error 并保持原 hook 调用 |
+| 全局崩溃 | `src/init.py:init` → `telemetry/hooks.py:install_exception_hooks` | 包装 `sys.excepthook` + `threading.excepthook`，触发即调 record_error 并保持原 hook 调用 |
 
 ### 实施过程与验证历史
 

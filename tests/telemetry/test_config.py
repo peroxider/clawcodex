@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from clawcodex.telemetry.config import (
+from telemetry.config import (
     ReportingConfig,
     TelemetryConfig,
     load_config,
 )
-from clawcodex.telemetry.redaction import RedactionConfig
+from telemetry.redaction import RedactionConfig
 
 
 def test_default_config_is_disabled():

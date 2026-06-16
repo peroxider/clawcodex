@@ -92,8 +92,8 @@ fi
 # Agent-friendly line prefix. Emitted only when stdout/stderr is not a TTY
 # (i.e. when the script is being driven by another process, an agent, a CI
 # runner, or a piped tee). Interactive users see clean output.
-_script_p1() { [[ ! -t 1 ]] && printf '[install.sh] '; }
-_script_p2() { [[ ! -t 2 ]] && printf '[install.sh] ' >&2; }
+_script_p1() { [[ ! -t 1 ]] && printf '[install.sh] '; return 0; }
+_script_p2() { [[ ! -t 2 ]] && printf '[install.sh] ' >&2; return 0; }
 
 log_info() { _script_p1; echo -e "${C_BLUE}==>${C_RESET} ${C_BOLD}$1${C_RESET}"; }
 log_ok()   { _script_p1; echo -e "  ${C_GREEN}✓${C_RESET} $1"; }

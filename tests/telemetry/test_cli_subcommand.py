@@ -6,9 +6,9 @@ import json
 import sys
 from contextlib import redirect_stdout
 
-from clawcodex.telemetry import cli
-from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
-from clawcodex.telemetry.recorder import reset_recorder_for_tests
+from telemetry import cli
+from telemetry.config import ReportingConfig, TelemetryConfig
+from telemetry.recorder import reset_recorder_for_tests
 
 
 class _PreviewRecorder:

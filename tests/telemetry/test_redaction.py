@@ -7,8 +7,8 @@ import textwrap
 
 import pytest
 
-from clawcodex.telemetry.events import EventType, TelemetryEvent
-from clawcodex.telemetry.redaction import (
+from telemetry.events import EventType, TelemetryEvent
+from telemetry.redaction import (
     RedactionConfig,
     Redactor,
     normalize_path_for,
@@ -49,8 +49,8 @@ def test_command_name_whitelist(tmp_path):
 
 def test_path_normalization_under_project(tmp_path):
     r = _redactor(tmp_path)
-    nested = tmp_path / "src" / "clawcodex" / "telemetry" / "events.py"
-    assert r._normalize_path(str(nested)) == "<project>/src/clawcodex/telemetry/events.py"
+    nested = tmp_path / "src" / "telemetry" / "events.py"
+    assert r._normalize_path(str(nested)) == "<project>/src/telemetry/events.py"
 
 
 def test_path_normalization_outside_project(tmp_path):

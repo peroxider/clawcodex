@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from clawcodex.telemetry.config import ReportingConfig
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.reporters.issue import (
+from telemetry.config import ReportingConfig
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.reporters.issue import (
     IssueReporter,
     _replace_or_append_date_block,
     _wrap_date_block,
 )
-from clawcodex.telemetry.storage import LocalJsonlStorage
+from telemetry.storage import LocalJsonlStorage
 
 
 class _FakePlatform:

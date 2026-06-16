@@ -13,7 +13,7 @@ def _telemetry_session_record(
     sid = _telemetry_derive_session_id()
     start = time.monotonic()
     try:
-        from clawcodex.telemetry import record_session_start
+        from telemetry import record_session_start
 
         import os
         record_session_start(
@@ -32,7 +32,7 @@ def _telemetry_session_end(
     duration_s: float, exit_status: int,
 ) -> None:
     try:
-        from clawcodex.telemetry import record_command_run, record_session_end
+        from telemetry import record_command_run, record_session_end
 
         record_session_end(
             session_id=session_id,

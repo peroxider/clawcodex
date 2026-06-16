@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from clawcodex.telemetry.fingerprint import compute_fingerprint
+from telemetry.fingerprint import compute_fingerprint
 
 
 _HEX16 = re.compile(r"^[0-9a-f]{16}$")

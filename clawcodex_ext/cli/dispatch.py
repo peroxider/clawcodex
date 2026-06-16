@@ -13,11 +13,11 @@ def _telemetry_record_session(
 ) -> None:
     """Best-effort F-97 session_start.
 
-    Local import keeps ``clawcodex.telemetry`` out of the CLI dispatch
+    Local import keeps ``telemetry`` out of the CLI dispatch
     module surface for ``--help`` cold start.
     """
     try:
-        from clawcodex.telemetry import record_session_start
+        from telemetry import record_session_start
 
         record_session_start(
             session_id=session_id,
@@ -35,7 +35,7 @@ def _telemetry_record_end(
     duration_s: float, exit_status: int,
 ) -> None:
     try:
-        from clawcodex.telemetry import record_command_run, record_session_end
+        from telemetry import record_command_run, record_session_end
 
         record_session_end(
             session_id=session_id,

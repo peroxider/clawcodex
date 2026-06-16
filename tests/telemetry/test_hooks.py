@@ -6,15 +6,15 @@ import threading
 
 import pytest
 
-from clawcodex.telemetry import hooks, recorder
-from clawcodex.telemetry.config import TelemetryConfig
-from clawcodex.telemetry.recorder import (
+from telemetry import hooks, recorder
+from telemetry.config import TelemetryConfig
+from telemetry.recorder import (
     _TelemetryRecorderImpl,
     override_recorder,
     reset_recorder_for_tests,
 )
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.storage import utc_date, utc_now
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.storage import utc_date, utc_now
 
 
 @pytest.fixture(autouse=True)

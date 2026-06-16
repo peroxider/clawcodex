@@ -133,7 +133,7 @@ def init() -> None:
     # import avoids pinning telemetry in ``src.init``'s module surface.
     _logger.info("init: installing F-97 exception hooks")
     try:
-        from clawcodex.telemetry.hooks import install_exception_hooks
+        from telemetry.hooks import install_exception_hooks
 
         install_exception_hooks()
     except Exception as exc:  # noqa: BLE001

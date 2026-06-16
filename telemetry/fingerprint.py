@@ -1,6 +1,6 @@
 """Stable error fingerprinting.
 
-The fingerprint is the join key used by :mod:`clawcodex.telemetry.aggregator`
+The fingerprint is the join key used by :mod:`telemetry.aggregator`
 to merge per-error occurrences into ``top_error_fingerprints`` and crash
 summaries. It is intentionally short (16 hex chars) and stable across runs
 that hit the same exception class, location and message shape.

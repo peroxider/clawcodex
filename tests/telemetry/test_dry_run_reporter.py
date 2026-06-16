@@ -4,10 +4,10 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from clawcodex.telemetry.aggregator import DailyAggregator
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.reporters import DryRunReporter, LocalFileReporter
-from clawcodex.telemetry.storage import LocalJsonlStorage, utc_date, utc_now
+from telemetry.aggregator import DailyAggregator
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.reporters import DryRunReporter, LocalFileReporter
+from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
 
 
 def _summary_dict(tmp_path):

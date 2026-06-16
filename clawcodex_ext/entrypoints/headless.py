@@ -155,7 +155,7 @@ def run_headless(options: HeadlessOptions) -> int:
     # the conversation persists under so the per-day aggregator can
     # cross-link events to a known session. Failures are swallowed.
     try:
-        from clawcodex.telemetry import record_session_start
+        from telemetry import record_session_start
 
         record_session_start(
             session_id=session.session_id,
@@ -403,7 +403,7 @@ def run_headless(options: HeadlessOptions) -> int:
                     # correlate the crash with the same conversation
                     # that emitted the assistant / tool events.
                     try:
-                        from clawcodex.telemetry import record_error
+                        from telemetry import record_error
 
                         record_error(session_id=session.session_id, exc=exc)
                     except Exception:
@@ -452,7 +452,7 @@ def run_headless(options: HeadlessOptions) -> int:
             # surfacing repeat-abort issues without counting them as
             # crashes. Failures are swallowed.
             try:
-                from clawcodex.telemetry import record_error
+                from telemetry import record_error
 
                 record_error(session_id=session.session_id, exc=exc)
             except Exception:
@@ -517,7 +517,7 @@ def run_headless(options: HeadlessOptions) -> int:
     # aggregator can cross-link events to a known session. Failures
     # are swallowed — telemetry must never block the user's exit.
     try:
-        from clawcodex.telemetry import record_command_run, record_session_end
+        from telemetry import record_command_run, record_session_end
 
         duration_s = time.monotonic() - start
         record_session_end(

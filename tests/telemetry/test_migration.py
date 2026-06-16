@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import pytest
 
-from clawcodex.telemetry.events import (
+from telemetry.events import (
     SCHEMA_VERSION,
     SCHEMA_VERSION_V2,
     TelemetryEvent,
 )
-from clawcodex.telemetry.migration import (
+from telemetry.migration import (
     _fingerprint_dict_to_hash,
     migrate_v1_to_v2,
     normalize_event,

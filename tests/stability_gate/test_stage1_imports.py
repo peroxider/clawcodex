@@ -151,8 +151,8 @@ class TestStage1CoreImports:
 
     def test_telemetry_import(self):
         """F-97: telemetry package importable; default-off path zero-cost."""
-        import clawcodex.telemetry
-        from clawcodex.telemetry import recorder
+        import telemetry
+        from telemetry import recorder
 
         assert callable(recorder.get_recorder)
         # _NullRecorder is the default; its public methods must be no-ops

@@ -1,23 +1,23 @@
 """End-to-end privacy audit tests for telemetry reporter payloads."""
 from __future__ import annotations
 
-from clawcodex.telemetry import recorder as recorder_mod
-from clawcodex.telemetry.aggregator import DailyAggregator
-from clawcodex.telemetry.bridge import (
+from telemetry import recorder as recorder_mod
+from telemetry.aggregator import DailyAggregator
+from telemetry.bridge import (
     install_analytics_bridge,
     reset_analytics_bridge_for_tests,
 )
-from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
-from clawcodex.telemetry.events import EventType, TelemetryEvent
-from clawcodex.telemetry.recorder import (
+from telemetry.config import ReportingConfig, TelemetryConfig
+from telemetry.events import EventType, TelemetryEvent
+from telemetry.recorder import (
     _TelemetryRecorderImpl,
     override_recorder,
     reset_recorder_for_tests,
 )
-from clawcodex.telemetry.redaction import RedactionConfig, Redactor
-from clawcodex.telemetry.reporters.dry_run import DryRunReporter
-from clawcodex.telemetry.reporters.issue import IssueReporter
-from clawcodex.telemetry.storage import LocalJsonlStorage, utc_date, utc_now
+from telemetry.redaction import RedactionConfig, Redactor
+from telemetry.reporters.dry_run import DryRunReporter
+from telemetry.reporters.issue import IssueReporter
+from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
 from src.services.analytics.events import (
     AnalyticsEvent,
     EventType as AnalyticsEventType,
@@ -189,7 +189,7 @@ def test_analytics_bridge_redacts_prompt_output_and_secrets(tmp_path) -> None:
         sensitive_key = "ghp_abcdef0123456789ABCDEF"
 
         bridge = __import__(
-            "clawcodex.telemetry.bridge",
+            "telemetry.bridge",
             fromlist=["get_analytics_bridge"],
         ).get_analytics_bridge()
         assert bridge is not None
@@ -243,7 +243,7 @@ def test_v1_v2_fingerprint_redact_and_migrate_hash_equivalent() -> None:
     the two events must end up in the same crash bucket — so the
     daily crash summary doesn't double-count legacy errors.
     """
-    from clawcodex.telemetry.migration import (
+    from telemetry.migration import (
         _fingerprint_dict_to_hash,
         normalize_event,
     )

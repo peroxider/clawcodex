@@ -245,7 +245,7 @@ class Orchestrator:
         orch_start = time.monotonic()
         orch_session_id = self._derive_orchestrator_session_id()
         try:
-            from clawcodex.telemetry import record_session_start
+            from telemetry import record_session_start
 
             record_session_start(
                 session_id=orch_session_id,
@@ -282,7 +282,7 @@ class Orchestrator:
             # F-97: best-effort error event with stable fingerprint.
             # Failures are swallowed.
             try:
-                from clawcodex.telemetry import record_error
+                from telemetry import record_error
 
                 record_error(session_id=orch_session_id, exc=exc)
             except Exception:
@@ -292,7 +292,7 @@ class Orchestrator:
         finally:
             # F-97: best-effort session_end + command_run.
             try:
-                from clawcodex.telemetry import (
+                from telemetry import (
                     record_command_run,
                     record_session_end,
                 )
