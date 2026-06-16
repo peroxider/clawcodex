@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+import sys
+
 
 class TestStage4Conversation:
     """Conversation 序列化和反序列化测试。"""
@@ -154,6 +156,12 @@ class TestStage4SubagentInParentSession:
         resolver find init() a no-op and fail.
         """
         monkeypatch.setenv("HOME", str(tmp_path))
+        # Windows: Path.home() uses USERPROFILE, not HOME
+        if sys.platform == "win32":
+            monkeypatch.setenv("USERPROFILE", str(tmp_path))
+            # Also clear HOMEDRIVE/HOMEPATH so they don't bypass USERPROFILE
+            monkeypatch.delenv("HOMEDRIVE", raising=False)
+            monkeypatch.delenv("HOMEPATH", raising=False)
         import src.agent.transcript as transcript
         from src.init import init as init_callable
         from src.init import reset_init_for_test_only

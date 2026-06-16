@@ -24,7 +24,11 @@ def _run_cli_env(env_override: dict[str, str], *args: str) -> subprocess.Complet
     """Run ``python -m src.cli`` with custom environment."""
     base_env = os.environ.copy()
     # 保留 PATH 和 Python 路径确保能启动
-    for keep in ("PATH", "PYTHONPATH", "HOME", "LANG", "LC_ALL", "TERM"):
+    # Windows 上 Path.home() 使用 USERPROFILE / HOMEDRIVE+HOMEPATH
+    # asyncio / _overlapped 需要 SYSTEMROOT (Winsock catalog)
+    for keep in ("PATH", "PYTHONPATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+                 "SYSTEMROOT", "WINDIR", "COMSPEC",
+                 "LANG", "LC_ALL", "TERM"):
         if keep in env_override:
             continue
         if keep in base_env:
@@ -43,7 +47,11 @@ class TestStage3cCliEnvironment:
 
     def test_cli_help_no_home(self):
         """HOME 不可用时 --help 仍正常退出。"""
-        env = {"HOME": "/nonexistent_home_for_test", "PATH": os.environ.get("PATH", "/usr/bin")}
+        env = {
+            "HOME": "/nonexistent_home_for_test",
+            "USERPROFILE": "Z:\\nonexistent_userprofile_for_test",
+            "PATH": os.environ.get("PATH", "/usr/bin"),
+        }
         proc = _run_cli_env(env, "--help")
         assert proc.returncode == 0, (
             f"--help with no HOME failed: rc={proc.returncode}, "
@@ -52,7 +60,11 @@ class TestStage3cCliEnvironment:
 
     def test_cli_version_no_home(self):
         """HOME 不可用时 --version 仍正常退出。"""
-        env = {"HOME": "/nonexistent_home_for_test", "PATH": os.environ.get("PATH", "/usr/bin")}
+        env = {
+            "HOME": "/nonexistent_home_for_test",
+            "USERPROFILE": "Z:\\nonexistent_userprofile_for_test",
+            "PATH": os.environ.get("PATH", "/usr/bin"),
+        }
         proc = _run_cli_env(env, "--version")
         assert proc.returncode == 0, (
             f"--version with no HOME failed: rc={proc.returncode}, "
@@ -92,11 +104,18 @@ class TestStage3cCliSignal:
         注: 非交互模式下 KeyboardInterrupt traceback 是 Python 默认行为。
         这里只验证进程没有被 SIGABRT 杀死 (这表示 Python 内部状态损坏)。
         """
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "src.cli", "--help"],
+        popen_kwargs: dict = dict(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+        )
+        # On Windows, create the subprocess in its own group so that
+        # CTRL_BREAK_EVENT does not propagate to the parent (pytest).
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "src.cli", "--help"],
+            **popen_kwargs,
         )
         # 给子进程一点时间启动
         import time
@@ -105,7 +124,11 @@ class TestStage3cCliSignal:
         if sys.platform != "win32":
             proc.send_signal(signal.SIGINT)
         else:
-            proc.send_signal(signal.CTRL_C_EVENT)  # type: ignore[attr-defined]
+            # CTRL_C_EVENT is broadcast to ALL processes in the console
+            # group (including pytest itself).  CTRL_BREAK_EVENT goes only
+            # to the target process group, which we ensure by creating the
+            # subprocess in its own group via CREATE_NEW_PROCESS_GROUP.
+            proc.send_signal(signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
 
         stdout, stderr = proc.communicate(timeout=10)
         # 退出码不应是 -6 (SIGABRT) — 那只在严重的 Python 内部损坏时出现
