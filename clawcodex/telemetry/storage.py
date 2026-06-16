@@ -89,9 +89,18 @@ class LocalJsonlStorage:
 
     # -- public API -----------------------------------------------------
 
-    def append(self, kind: str, payload: dict[str, Any]) -> bool:
+    def append(
+        self,
+        kind: str,
+        payload: dict[str, Any],
+        *,
+        date: str | None = None,
+    ) -> bool:
         """Append *payload* (a single JSONL row) to ``<kind>/YYYY-MM-DD.jsonl``.
 
+        When *date* is provided, the row is written under that date's
+        file. When omitted, the current UTC date is used (legacy
+        behavior for real-time event appends from the recorder).
         Returns ``True`` on success, ``False`` on any error. The
         surrounding caller MUST NOT treat a ``False`` as fatal.
         """
@@ -99,7 +108,8 @@ class LocalJsonlStorage:
             raise ValueError(
                 f"append() only writes JSONL kinds; got {kind!r}"
             )
-        path = self._path_for(kind, utc_date(utc_now()))
+        effective_date = date or utc_date(utc_now())
+        path = self._path_for(kind, effective_date)
         try:
             self._dir_for(kind).mkdir(parents=True, exist_ok=True)
         except OSError as exc:

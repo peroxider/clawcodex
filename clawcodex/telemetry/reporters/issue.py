@@ -190,7 +190,7 @@ class IssueReporter:
             "length": len(rendered),
         }
         payload.update(fields)
-        self._storage.append("reporter_errors", payload)
+        self._storage.append("reporter_errors", payload, date=date)
 
 
 def _content_hash(rendered: str) -> str:
