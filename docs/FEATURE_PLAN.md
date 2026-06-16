@@ -3178,7 +3178,76 @@ Phase C 已规划 "recurring task fired 后更新 `last_fired_at`、`next_fire_a
 
 ---
 
-## 六、会话恢复增强
+#### 5.11.12 Cron 任务累计防护——CCB 4 层设计对照审查（F-22-D1~D4） 📋 设计完成
+
+**背景**：CCB 通过 4 层防护机制确保 cron 定时任务在"每分钟触发、1 小时执行"的场景下不会出现消息堆积和 OOM。以下是逐层对照审查结论。
+
+##### 第 1 层 — sourceId 级 Dedup（核心防护）
+
+| 维度 | 内容 |
+|------|------|
+| CCB 实现 | `createAutonomyQueuedPromptIfNoActiveSource()` + `persistAutonomyRunRecord()` 在 storage lock 下检查 `runs.json` 中是否有同 `sourceId` 的活跃（queued/running）记录；有则跳过触发 |
+| ClawCodex 等效 | `runs.py:create_queued_run()`（L220-268）：在 `acquire_cron_storage_lock` 下扫描已有 runs，调用 `_matches_active_source()`（L363-375）匹配 `trigger + source_id + owner_key` 与 `ACTIVE_RUN_STATUSES` |
+| 差异 | 语义完全对齐。ClawCodex 的 `_matches_active_source()` 额外支持 `owner_key` 过滤，比 CCB 更灵活 |
+| 状态 | ✅ 已完成。见 `clawcodex_ext/cron_system/runs.py` |
+
+**效果**：第 1 分钟的任务还在跑，第 2 分钟的触发直接跳过。消息队列中永远只有 1 个待处理的任务。
+
+##### 第 2 层 — 进程所有者活体检测（防死锁）
+
+| 维度 | 内容 |
+|------|------|
+| CCB 实现 | `isStaleActiveAutonomyRun()` 通过 `isProcessRunning(run.ownerProcessId)` 检测 PID；原进程已死则标记为 `failed` 以供恢复 |
+| ClawCodex 等效 | `runs.py:_is_stale_active_run()`（L378-389）：`os.kill(pid, 0)` → `ProcessLookupError` 即死。同时 `lock.py:_default_pid_validator()`（L51-80）通过 `/proc/<pid>/comm` 白名单识别 ClawCodex/Claude/Python 进程 |
+| 差异 | ClawCodex 额外做了 PID 分身检测（validator 白名单），比 CCB 更防 PID 回收误恢复 |
+| 状态 | ✅ 已完成。见 `clawcodex_ext/cron_system/runs.py` + `lock.py` |
+
+##### 第 3 层 — 调度器 inFlight 防重触
+
+| 维度 | 内容 |
+|------|------|
+| CCB 实现 | `cronScheduler.ts` 的 `inFlight.has(t.id)` — 同一任务的异步 IO（`removeCronTasks`/`markCronTasksFired`）完成前不重复发射 |
+| ClawCodex 等效 | `scheduler.py:CronScheduler` 的 `_in_flight: set[str]` + `_in_flight_lock: threading.Lock`。`check_once` 中 `_in_flight_contains(task.id)` → skip；`finally: _in_flight_remove` 保证异常路径释放 |
+| 差异 | ClawCodex 使用 `threading.Lock`，CCB 的 Set 在 JS 单线程中天然安全。语义等价 |
+| 状态 | ✅ 已完成（F-22-G8）。见 §5.11.8 及 `clawcodex_ext/cron_system/scheduler.py` |
+
+##### 第 4 层 — 调度锁（跨进程互斥）
+
+| 维度 | 内容 |
+|------|------|
+| CCB 实现 | `cronTasksLock.ts` 文件锁，`process(t)` 只由锁持有者执行 |
+| ClawCodex 等效 | `lock.py:CronTaskLock` 用 `os.open(O_EXCL)` 创建 `.claude/scheduled_tasks.lock`；`check_once()` 中 `owns_scheduler_lock` 控制非 durable 任务的发射权限 |
+| 差异 | ClawCodex 额外支持 session takeover（同 sessionId 重入跳过锁竞争）、注册式 atexit/SIGTERM/SIGINT 清理、PID 分身检测 stale recovery |
+| 状态 | ✅ 已完成（F-22-G5）。见 §5.11.5 及 `clawcodex_ext/cron_system/lock.py` |
+
+##### 附加保护措施对照
+
+| 机制 | CCB | ClawCodex | 状态 |
+|------|-----|-----------|------|
+| 两阶段提交（先持久化 run 再更新 last-run） | ✅ | `create_queued_run()` 在 storage lock 中先持久化 run 记录；`mark_cron_tasks_fired()` 独立更新 task 状态 | ✅ |
+| 定时任务自动过期（7 天） | ✅ `DEFAULT_MAX_AGE_DAYS` | `prune_expired_recurring_tasks(max_age_ms=...)` + `permanent=True` 豁免 | ✅ |
+| `maxScheduledAgeMs` 抖动配置 | ✅ GrowthBook 可配 | `load_jitter_config()` 支持 env + `.claude/cron_jitter_config.json` 热加载 | ✅ |
+| `nextFireAt` 清理 | ✅ 每次 tick 后清理 | `mark_cron_tasks_fired()` 更新 `last_fired_at` + `next_fire_at`；`prune_expired_recurring_tasks` 清理过期任务 | ✅ |
+
+##### 总结
+
+对于"每分钟触发、1 小时执行"的场景，ClawCodex 的 4 层防护行为与 CCB 完全等价：
+
+```
+时间线:
+t=0m   fire#1 → create_queued_run → status=queued → _is_stale_active_run 检测正常 → claim → status=running
+t=1m   check_once → find_due → _in_flight_contains? No → create_queued_run → _matches_active_source 命中 → **return None** ❌
+t=2m   check_once → find_due → _in_flight_contains? No → create_queued_run → _matches_active_source 命中 → **return None** ❌
+...
+t=60m  fire#1 完成 → finalize_cron_run → status=completed
+t=61m  check_once → find_due → create_queued_run → _matches_active_source 无命中 → 正常入队 ✅
+```
+
+内存中始终只有 1 个未完成的 run + 1 个 scheduler tick，不会堆积到 OOM。
+
+**CCB 建议评估结论**：CCB 的 4 层防护设计完全合理，ClawCodex 当前已有零散实现（散见于 `runs.py` / `scheduler.py` / `lock.py`），但尚未作为统一的"4 层防护系统"进行集成测试和端到端验证。后续实施需：① 确认各层在真实调度路径中协同工作（特别是 Layer 1 dedup 在 `create_queued_run` 中与 `mark_cron_tasks_fired` 的交互）；② 补充分层集成测试（覆盖"长任务运行中下次触发被跳过"的完整场景）。状态标记：📋 **设计完成**（D1~D4 各层设计均通过 CCB 对标审查，待集成实施）。
+
+---
 
 
 ### 6.1 问题现状

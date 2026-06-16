@@ -1214,7 +1214,7 @@ clawcodex --resume <session_id>                # 按 ID 恢复（不变）
 
 ## F-22: Cron 系统执行引擎
 
-**状态**: 🔄 进行中（Phase A runtime-first 接线 ✅ 已完成：REPL/TUI/headless 运行路径打通，调度器后台运行，REPL 主循环通过 `_drain_cron_outbox()` 消费 `cron_prompt`/`cron_missed` 事件；Phase B~F 分阶段推进）
+**状态**: 🔄 进行中（Phase A runtime-first 接线 ✅ 已完成：REPL/TUI/headless 运行路径打通，调度器后台运行，REPL 主循环通过 `_drain_cron_outbox()` 消费 `cron_prompt`/`cron_missed` 事件；G1~G8 缺口全部闭合 ✅；CCB 4 层任务累计防护（D1~D4）设计完成 📋，待集成验证；Phase B~F 分阶段推进）
 **优先级**: P0
 **参考实现**: claude-code-best `src/utils/cron*.ts`, `src/hooks/useScheduledTasks.ts`, `src/utils/autonomyRuns.ts`, `src/utils/autonomyStatus.ts`, `src/commands/autonomy*.ts`, `src/cli/print.ts`
 
@@ -1320,7 +1320,7 @@ CronTask due
 | 4 | cron scheduler - 轮询、due/missed/expired、inFlight、jitter（extension 路径） | ✅ 基础完成 |
 | 5 | cron jitter config - 文件/env 动态配置与每 tick reload（extension 路径） | ✅ 基础完成 |
 | 6 | tools / command adapter - CronCreate/List/Delete 替换 fallback 工具，补齐 `/cron-list`、`/cron-delete` 用户入口 | ✅ 完成（工具替换已接线入 REPL/TUI/headless 所有路径；REPL `_drain_cron_outbox()` 消费 outbox 事件入队到 query pipeline；用户入口 `/cron-list`/`/cron-delete` 待 skill 接线） |
-| 7 | runs.py - scheduled-task run 账本扩展到 autonomy-compatible schema 与 active source 去重 | ⏳ 待扩展 |
+| 7 | runs.py - scheduled-task run 账本扩展到 autonomy-compatible schema 与 active source 去重 | 📋 设计完成 | 见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
 | 8 | queue lifecycle - scheduled fire 入队、claim running、finalize completed/failed/cancelled | ⏳ 待开始 |
 | 9 | trigger detail/manual fire - 单任务详情与手动触发 run id 回显 | ⏳ 待开始 |
 | 10 | status.py / autonomy commands - `/autonomy status`, `/autonomy runs`, `/autonomy status --deep` 或等价命令的 richer output | ⏳ 待扩展 |
@@ -1337,6 +1337,10 @@ CronTask due
 | G8 | inFlight 防重复触发 — 异步 IO 期间用 in_flight Set 防止同一任务二次触发 | ✅ 完成 |
 | G9 | SDK daemon 模式（`dir`/`lockIdentity`）— 可选脱离 session state 独立运行 | ⏳ 待设计 |
 | G10 | `cronToHuman(utc)` UTC 模式 — `cron_to_human()` 增加 `utc` 参数 | ⏳ 待设计 |
+| **D1** | **sourceId 级 Active-Run 去重（CCB 第1层）** — `create_queued_run()` 在 storage lock 下按 `source_id` 扫描活跃 run，防止高频任务堆积 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
+| **D2** | **PID 活体检测（CCB 第2层）** — `os.kill(pid, 0)` + `/proc/<pid>/comm` 白名单检测原进程存活，死进程自动 recover | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
+| **D3** | **inFlight 防重复触发（CCB 第3层）** — scheduler 内 `_in_flight` Set + Lock 防止异步 IO 期间二次发射 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
+| **D4** | **调度锁跨进程互斥（CCB 第4层）** — `O_EXCL` 文件锁 + session takeover + stale recovery + atexit 清理 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
 
 ---
 
