@@ -1522,6 +1522,9 @@ AgentRunner._run_iteration()
 | F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（主 CLI `telemetry` 可达，status / preview / flush / enable / disable，status/enable 已隐藏 API key） |
 | F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重与隐私审计 | ✅ 已完成（storage → aggregator → reporter payload 审计，secret scan 阻断 HTTP，reporter_errors 不保存 rendered body） |
 | F-97-I | 实现 `src/services/analytics/` → telemetry recorder 桥接（`AnalyticsTelemetrySink` + 公开 `record_event` 入口），让 image/PDF 管线事件在 opt-in 后真正进入 telemetry 聚合 | ✅ 已完成（14-way EventType 映射、COMPACT/PERMISSION_*/MODEL_SWITCH 静默 drop、24 个新单测含端到端隐私审计；commit `38bab8c`） |
+| F-97-J | 桥接 `SessionAnalyticsMetadata` → telemetry `record_session_start`（recorder 内部自动调 `collect_session_metadata()`，6 埋点入口零改动；`extra` dict 走 redactor `_BLOCKED_EXTRA_KEYS` 阻断 prompt/output/transcript/messages） | ✅ 已完成（4 个新单测 + 隐式降级路径；commit `76d9688`） |
+| F-97-K | TOML 配置加载（`pyproject.toml [tool.clawcodex.telemetry]` 优先于 `<cwd>/telemetry.toml`；`tomllib`/`tomli` 双导入；JSON 仍胜出；`run_enable` 提示文件位置；`telemetry.toml.example` 仓库根） | ✅ 已完成（6 个新单测含 walk-upward 与 fallback 路径；commit `41e2b30`） |
+| F-97-L | Schema v1→v2 迁移路径（`migrate_v1_to_v2` 把 `fingerprint` 字符串包成结构化 dict；`normalize_event` 读路径 dispatcher；`SCHEMA_VERSION_V2=2` 为新事件默认值；summary stamp v2；redaction 接受 v2 dict 形态；跨版本 fingerprint dedup 隐私断言） | ✅ 已完成（10 个新 migration 单测 + 2 个 aggregator v1/v2 混合 + 1 个 privacy audit 跨版本；commit `41e2b30`） |
 
 ### 验收标准
 
@@ -1579,15 +1582,19 @@ AgentRunner._run_iteration()
 
 **教训**：之前 agent 的 "verification PASS" 仅复述上一轮 commit message 的乐观描述，没有实际跑 `pytest` 收尾。后续 F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
 
-### 已识别缺口（F-97-J / F-97-K / F-97-L）
+### F-97-J / F-97-K / F-97-L 收尾交付
 
-完成 F-97-I 后，仍有 3 个与 telemetry 直接相关的产品缺口未实现（详见 `docs/FEATURE_PLAN.md` §9.8）：
+完成 F-97-I 后，仍有 3 个与 telemetry 直接相关的产品缺口，详见 `docs/FEATURE_PLAN.md` §9.8。A~I 阶段发布后这三块已收尾交付：
 
-| 缺口 | 现状 | 阻塞点 |
-|------|------|--------|
-| **F-97-J** Session metadata 桥接 | `src/services/analytics/metadata.py:SessionAnalyticsMetadata` / `collect_session_metadata()` 已存在但全无调用方；telemetry `record_session_start` 自己从 `platform.system()` / `_safe_app_version()` 采集，未复用 analytics metadata | 需要在 `clawcodex_ext/cli/dispatch.py:run_cli` 等 6 个埋点入口把 `collect_session_metadata()` 返回值并入 `record_session_start` 的 fields，并保证新字段仍走 `Redactor.redact_event` |
-| **F-97-K** TOML 配置加载 | `clawcodex/telemetry/config.py:load_config()` 实际从 `src.config.load_config()`（JSON 形态）合并 `telemetry` 段；FEATURE_PLAN §9.3 给出的 TOML 示例是示意性 | `src.config` 当前只支持 JSON；需要先扩 `[telemetry]` 段的 TOML 解析（或为 telemetry 单独增加 `pyproject.toml` / `telemetry.toml` 探测），并补 `telemetry.toml.example` |
-| **F-97-L** Schema v2 迁移 | `clawcodex/telemetry/events.py:15` `SCHEMA_VERSION: Final[int] = 1` 硬编码；aggregator / redaction 写入时直接使用常量，无版本协商与升级路径 | 需要设计 v2 字段差异（如结构化 provider_request_summary、新的 fingerprint 算法），实现 `migrate_v1_to_v2()` 与读路径的 v1 兼容回退，并在 privacy audit 中加入跨版本断言 |
+| 缺口 | 交付摘要 | Commit |
+|------|---------|--------|
+| **F-97-J** Session metadata 桥接 | `recorder.record_session_start()` 签名扩展 6 个 keyword-only kwargs（`os_version`/`ide_type`/`ide_version`/`is_resume`/`start_time`/`extra`），缺省 `None` 时内部自动调 `collect_session_metadata()`，6 埋点入口零改动。`redaction._redact_value` 新增 `_BLOCKED_EXTRA_KEYS` 阻断 `extra` 内 `prompt`/`output`/`transcript`/`messages`/`input`/`response`。4 新单测。 | `76d9688` |
+| **F-97-K** TOML 配置加载 | 新增私有 `_toml.py`（`tomllib`/`tomli` 双导入兜底 Python 3.10+），按 `pyproject.toml [tool.clawcodex.telemetry]` 向上 walk 优先，再 `<cwd>/telemetry.toml`。`config.load_config` 在 dataclass defaults 与 JSON 段之间插入 TOML 层，JSON 仍胜出。`run_enable` 输出末尾追加文件位置提示，`telemetry.toml.example` 进仓库根。6 新单测含 walk-upward 与 fallback。 | `41e2b30` |
+| **F-97-L** Schema v2 迁移 | `events.py` 新增 `SCHEMA_VERSION_V2=2` 与 `_CURRENT_SCHEMA_VERSION`；`TelemetryEvent.schema_version` 字段默认改 v2，新事件自动写 v2。`migration.py` 提供 `migrate_v1_to_v2`（把 `fingerprint` 字符串包成 `{"hash", "version", "method"}`）、`normalize_event`（读路径 dispatcher）、`_fingerprint_dict_to_hash`（v1 字符串 / v2 dict 兼容提 hash）。`aggregator._build_summary` 循环顶部调 `normalize_event`，`_build_crash_summary` 用 `_fingerprint_dict_to_hash` 把 v1 字符串与 v2 dict 聚合到同一 bucket，summary stamp v2。`redaction._redact_value` 接受 v2 fingerprint dict 形态（hash 走 `redact_text` secret-scan）。10 新 migration 单测 + 2 个 aggregator v1/v2 混合 + 1 个 privacy audit 跨版本断言。 | `41e2b30` |
+
+Commit 前实测：telemetry 130/130 + stability_gate 172/172 + analytics 9/9 全过；orchestrator 2 个 pre-existing patch-metadata FileNotFoundError 与 telemetry 无关。
+
+**教训**：之前 agent 的 "verification PASS" 仅复述上一轮 commit message 的乐观描述，没有实际跑 `pytest` 收尾。F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
 
 ## 九、CCB 对标缺口补缺进度
 
