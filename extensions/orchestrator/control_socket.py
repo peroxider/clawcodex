@@ -123,13 +123,24 @@ class ControlSocket:
         self._stopped = True
         if self._server is not None:
             self._server.close()
+        closed_writers = list(self._clients)
+        for w in closed_writers:
+            try:
+                w.close()
+            except Exception:
+                pass
+        for w in closed_writers:
+            try:
+                await w.wait_closed()
+            except Exception:
+                pass
+        self._clients.clear()
+        if self._server is not None:
             try:
                 await self._server.wait_closed()
             except Exception:
                 pass
             self._server = None
-        # Cancel any per-connection read loops first so they don't
-        # try to drain a closed transport.
         for t in list(self._read_tasks):
             if not t.done():
                 t.cancel()
@@ -139,12 +150,6 @@ class ControlSocket:
             except (asyncio.CancelledError, Exception):
                 pass
         self._read_tasks.clear()
-        for w in list(self._clients):
-            try:
-                w.close()
-            except Exception:
-                pass
-        self._clients.clear()
         try:
             if self._path.exists():
                 self._path.unlink()

@@ -1567,6 +1567,19 @@ class Orchestrator:
                     session.issue.id,
                     self.workflow.agent.run_timeout_ms,
                 )
+                workspace_dirty = bool(get_file_status(str(session.workspace.path)))
+                append_debug_event(
+                    getattr(session, "debug_log_path", None),
+                    "orchestrator.timeout",
+                    run_id=getattr(session, "run_id", None),
+                    turn_count=getattr(session, "turn_count", 0),
+                    tool_count=getattr(session, "tool_count", 0),
+                    last_event_type=getattr(session, "last_agent_event", None),
+                    last_tool=getattr(session, "last_tool_name", None),
+                    output_len=len(getattr(session, "output_text", "") or ""),
+                    workspace_dirty=workspace_dirty,
+                    timeout_ms=self.workflow.agent.run_timeout_ms,
+                )
                 session.status = "agent_timeout"
                 session.verification_status = "failed"
                 session.verification_output = reason

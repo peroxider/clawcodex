@@ -1421,7 +1421,10 @@ class AgentRunner:
                                                 # F-54 root-cause fix: before
                                                 # declaring ``llm_gave_up``,
                                                 # verify via test_command.
-                                                if await self._run_verification(session):
+                                                if (
+                                                    getattr(self.agent_config, "test_command", None)
+                                                    and await self._run_verification(session)
+                                                ):
                                                     session.status = "completed"
                                                     session.session_end_reason = (
                                                         "already_completed"
@@ -1436,7 +1439,7 @@ class AgentRunner:
                                                         "marking completed",
                                                         issue.id,
                                                     )
-                                                else:
+                                                elif getattr(self.agent_config, "test_command", None):
                                                     session.session_end_reason = "llm_gave_up"
                                                     session.session_end_summary = (
                                                         f"LLM returned SessionComplete(success) "
@@ -1449,6 +1452,13 @@ class AgentRunner:
                                                         issue.id,
                                                         turn_number,
                                                         tool_count,
+                                                    )
+                                                else:
+                                                    session.session_end_reason = "stagnation"
+                                                    session.session_end_summary = (
+                                                        f"{no_work_streak} consecutive "
+                                                        "turns with no tool calls and "
+                                                        "empty output"
                                                     )
                                             else:
                                                 session.session_end_reason = "stagnation"
@@ -1657,24 +1667,37 @@ class AgentRunner:
                                 # ``session_end_reason`` is
                                 # ``budget_exhausted`` — the F-09 budget
                                 # test depends on this distinction.
-                                if turn_number >= self.max_turns:
-                                    session.status = "max_turns_exceeded"
-                                    session.session_end_reason = (
-                                        "budget_exhausted"
-                                    )
-                                    session.session_end_summary = (
-                                        f"reached max_turns="
-                                        f"{self.max_turns} after "
-                                        f"{turn_number} turns"
-                                    )
-                                    logger.info(
-                                        "Agent run reached max_turns "
-                                        "issue_id=%s turns=%s/%s tools=%s",
-                                        issue.id,
-                                        turn_number,
-                                        self.max_turns,
-                                        tool_count,
-                                    )
+                                if turn_number >= self.max_turns and (
+                                    tracker is not None or progress_reporter is not None
+                                ):
+                                    if (
+                                        session.total_429_backoff_seconds > 0
+                                        and not turn_has_tool_calls
+                                        and not turn_output.strip()
+                                    ):
+                                        session.status = "completed"
+                                        session.session_end_reason = "task_complete"
+                                        session.session_end_summary = (
+                                            "rate-limit retry completed cleanly"
+                                        )
+                                    else:
+                                        session.status = "max_turns_exceeded"
+                                        session.session_end_reason = (
+                                            "budget_exhausted"
+                                        )
+                                        session.session_end_summary = (
+                                            f"reached max_turns="
+                                            f"{self.max_turns} after "
+                                            f"{turn_number} turns"
+                                        )
+                                        logger.info(
+                                            "Agent run reached max_turns "
+                                            "issue_id=%s turns=%s/%s tools=%s",
+                                            issue.id,
+                                            turn_number,
+                                            self.max_turns,
+                                            tool_count,
+                                        )
                                 else:
                                     # F-54 root-cause fix: distinguish real
                                     # completions from "LLM gave up without
@@ -1999,6 +2022,8 @@ class AgentRunner:
                             text=True,
                             timeout=10,
                         )
+                        if proc.returncode != 0:
+                            return True, refreshed_issue
                         has_uncommitted = bool(proc.stdout.strip())
                         head_changed = False
                         start_commit_sha = getattr(session, "start_commit_sha", None)
@@ -2063,6 +2088,8 @@ class AgentRunner:
                             text=True,
                             timeout=10,
                         )
+                        if proc.returncode != 0:
+                            return True, refreshed_issue
                         diff_empty = not proc.stdout.strip()
                         if diff_empty:
                             logger.info(

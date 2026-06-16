@@ -238,38 +238,73 @@ async def _run_tail_fallback(
     )
     loop = asyncio.get_event_loop()
 
-    async def _stdin_commands() -> None:
+    async def _stdin_commands() -> bool:
         while True:
             line = await loop.run_in_executor(None, sys.stdin.readline)
             if not line:
-                return
+                return False
             line = line.strip()
             if not line:
                 continue
             if line == "quit":
-                return
+                return True
             parts = line.split(maxsplit=1)
             verb = parts[0]
             payload = parts[1] if len(parts) > 1 else ""
             try:
                 await _send_cmd(writer, verb, payload)
             except Exception:
-                return
+                return False
 
-    stdin_task = asyncio.create_task(_stdin_commands())
+    stdin_task: asyncio.Task[bool] | None = asyncio.create_task(
+        _stdin_commands(),
+    )
+    read_task = asyncio.create_task(reader.readline())
     try:
         while True:
-            line = await reader.readline()
+            wait_for: set[asyncio.Task] = {read_task}
+            if stdin_task is not None:
+                wait_for.add(stdin_task)
+            done, _pending = await asyncio.wait(
+                wait_for,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            if stdin_task is not None and stdin_task in done:
+                try:
+                    quit_requested = stdin_task.result()
+                except Exception:
+                    quit_requested = False
+                stdin_task = None
+                if quit_requested:
+                    read_task.cancel()
+                    try:
+                        await read_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                    return 0
+                if read_task not in done:
+                    continue
+
+            line = read_task.result()
             if not line:
                 return 0
             sys.stdout.write(line.decode("utf-8"))
             sys.stdout.flush()
+            read_task = asyncio.create_task(reader.readline())
     finally:
-        stdin_task.cancel()
-        try:
-            await stdin_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        if not read_task.done():
+            read_task.cancel()
+            try:
+                await read_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        if stdin_task is not None:
+            stdin_task.cancel()
+            try:
+                await stdin_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 # ------------------------------------------------------------------
