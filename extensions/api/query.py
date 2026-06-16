@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator
 
-from extensions.orchestrator.debug_log import append_debug_event
+from .debug_log import append_debug_event
 
 if TYPE_CHECKING:
     from ..capabilities.event_protocol import ToolEventProtocol
@@ -26,7 +26,7 @@ class QueryConfig:
 
     prompt: str
     workspace: str | Path
-    provider: str = "anthropic"
+    provider: str | None = None
     model: str | None = None
     tools: list[str] | None = None  # tool names to enable; None = all
     permission_mode: str = "dontAsk"
@@ -242,7 +242,11 @@ class QueryRunner:
                     next_heartbeat_at = now + 30.0
                 await asyncio.sleep(0.01)
 
-        exit_code = await future
+        try:
+            exit_code = await future
+        except SystemExit as exc:
+            code = exc.code
+            exit_code = code if isinstance(code, int) else 1
         result_text = stdout.getvalue()
         if result_text:
             yield TextDelta(content=result_text)

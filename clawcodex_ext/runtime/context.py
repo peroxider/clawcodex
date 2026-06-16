@@ -22,6 +22,10 @@ class RuntimeOptions:
 
     provider_name: str | None = None
     model: str | None = None
+    prompt: str | None = None
+    output_format: str = "text"
+    input_format: str = "text"
+    include_partial_messages: bool = False
     max_turns: int = 20
     allowed_tools: tuple[str, ...] = ()
     disallowed_tools: tuple[str, ...] = ()
