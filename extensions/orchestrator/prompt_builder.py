@@ -35,6 +35,14 @@ State: {{ issue.state }}
 {% endif %}
 
 Please analyze the issue, implement the necessary changes, and ensure all tests pass.
+
+## CLI Usage Guidelines
+When you need to suggest terminal commands for the user:
+- Always use the `clawcodex-dev` CLI entrypoint, NOT `python3 -c` or `PYTHONPATH=`.
+- For orchestrator status: `clawcodex-dev orchestrator server status`
+- For issue list: `clawcodex-dev orchestrator issue list`
+- For issue tail: `clawcodex-dev orchestrator issue tail --id <id>`
+- For other commands: use `clawcodex-dev orchestrator --help` or `clawcodex-dev --help`
 {% if clarification %}
 {{ clarification }}
 {% endif %}
@@ -77,6 +85,7 @@ Current task:
 - Prefer the smallest correct change that addresses the feedback.
 - If feedback is conflicting or unclear, leave code unchanged for that item and explain what clarification is needed.
 - Run relevant tests or record why they cannot be run.
+- CLI Usage: when suggesting terminal commands, use `clawcodex-dev` not `python3 -c` or `PYTHONPATH=`.
 
 Feedback:
 {% for item in feedback %}
@@ -274,6 +283,7 @@ class PromptBuilder:
             f"Continuation guidance:\n\n"
             f"⛔ **约束提醒**：始终用 `/root/Conda/bin/python3` 绝对路径，不要调试环境差异。\n"
             f"⛔ `pytest` 禁止使用管道 `| tail -40`/`| head -50`，用 `--tb=short -q` 替代。\n"
+            f"⛔ 建议终端命令时用 `clawcodex-dev` CLI，不要用 `python3 -c` 或 `PYTHONPATH=`。\n"
             f"- This is continuation turn #{turn_number} of {max_turns}.{context_block}{urgency}\n"
             f"- Resume from the current workspace state and continue implementing.\n"
             f"- Use available tools (Bash, Write, Edit, Grep, Glob, etc.) to make changes.\n"
