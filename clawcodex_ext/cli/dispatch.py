@@ -350,6 +350,12 @@ def run_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv[1:])
     profile_checkpoint("argparse_done")
 
+    if getattr(args, 'prompt', None) and not getattr(args, 'print', False):
+        parser.error(
+            f"unknown command: {args.prompt} "
+            "(use -p/--print to send a prompt)"
+        )
+
     # Resolve --continue: auto-detect the most recent session (S-R3).
     if getattr(args, 'continue', None) and not getattr(args, 'resume', None):
         from src.services.session_storage import SessionStorage
@@ -445,6 +451,10 @@ def run_cli(argv: list[str] | None = None) -> int:
     runtime_opts = RuntimeOptions(
         provider_name=getattr(args, 'provider', None),
         model=getattr(args, 'model', None),
+        prompt=getattr(args, 'prompt', None),
+        output_format=getattr(args, 'output_format', 'text'),
+        input_format=getattr(args, 'input_format', 'text'),
+        include_partial_messages=getattr(args, 'include_partial_messages', False),
         max_turns=getattr(args, 'max_turns', 20),
         allowed_tools=tuple(_split_csv(getattr(args, 'allowed_tools', None))),
         disallowed_tools=tuple(_split_csv(getattr(args, 'disallowed_tools', None))),

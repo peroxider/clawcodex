@@ -78,6 +78,33 @@ class TestQueryRunnerDebug(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(headless_event["tool"], "Read")
         self.assertEqual(headless_event["tool_use_id"], "tool-1")
 
+    async def test_stream_converts_headless_system_exit_to_session_complete(self) -> None:
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+
+            def fake_run_headless_session(options) -> int:
+                options.stdout.write("missing key")
+                raise SystemExit(2)
+
+            runner = QueryRunner(
+                QueryConfig(
+                    prompt="hello",
+                    workspace=tmp_path,
+                )
+            )
+
+            events = []
+            with patch(
+                "extensions.capabilities.headless_runner.run_headless_session",
+                fake_run_headless_session,
+            ):
+                async for event in runner.stream():
+                    events.append(event)
+
+        self.assertTrue(any(getattr(event, "content", None) == "missing key" for event in events))
+        complete = next(event for event in events if isinstance(event, SessionComplete))
+        self.assertEqual(complete.reason, "exit_code=2")
+
     async def test_stream_drains_queued_events_after_headless_completion(self) -> None:
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

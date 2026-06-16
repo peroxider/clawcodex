@@ -11,6 +11,7 @@ from clawcodex_ext.away_summary.fingerprint import is_away_summary_message
 AWAY_SUMMARY_INSTRUCTIONS = """You are writing a short session recap for a user who stepped away from an interactive coding session.
 
 Write a concise recap of the full session so far. Use 3-6 bullets maximum.
+Write the recap in the dominant language of the recent conversation.
 Focus on:
 - what the user asked for,
 - important decisions and current state,
