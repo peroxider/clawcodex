@@ -7997,8 +7997,8 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成（2026-06） |
 | F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成（2026-06） |
 | F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（2026-06；GitHub/Gitee/GitCode issue reporter + cursor dedupe + reporter_errors） |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06；status / preview / flush / enable / disable，status/enable 不泄露 API key） |
-| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；secret scan 阻断 HTTP、reporter_errors 不保存 rendered body，独立 verification PASS） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06；主 CLI `telemetry` 可达，status / preview / flush / enable / disable，status/enable 不泄露 API key） |
+| F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；storage → aggregator → reporter payload 审计，secret scan 阻断 HTTP，reporter_errors 不保存 rendered body） |
 
 验收标准：
 
@@ -8008,14 +8008,29 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 4. 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
 5. reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript。
 6. 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log。
-7. 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重。
+7. 单元测试覆盖 redaction、fingerprint、aggregator、主 CLI telemetry 子命令、Issue markdown 渲染、reporter cursor 去重与端到端隐私审计。
 
 风险与约束：
 
-- Issue 平台 API 差异会影响 `find by title`、label、body update 等行为；第二期已覆盖 GitHub/Gitee/GitCode 的认证与 payload 编码差异。
+- Issue 平台 API 差异会影响 `find by title`、label、body update 等行为；当前实现已覆盖 GitHub/Gitee/GitCode 的认证与 payload 编码差异。
 - 遥测最容易引发用户信任问题，默认关闭和上报前预览必须作为产品边界，而不是实现细节。
 - 高频事件不能逐条上报 Issue，只能本地聚合后低频上报，否则会刷屏和触发平台限流。
 - `src/services/analytics/` 现有接口不应立即删除；先通过 adapter 兼容，避免破坏 image/pdf 等已有调用点。
+
+### 9.7 实施过程与验证历史
+
+| 时间 | 事件 | 备注 |
+|------|------|------|
+| 2026-06-15 | `a2cbfb1` 第一期 A~E 子特性 | 包含 `clawcodex/telemetry` 包、配置模型、JSONL 存储、redaction、fingerprint、aggregator、CLI/REPL/TUI/headless 埋点、exception hook |
+| 2026-06-15 | `37aea3d` opt-in IssueReporter 引入 | 第二期起点 |
+| 2026-06-15 | `9a9bab2` 第二期实现完成 | GitHub/Gitee/GitCode 上报 + cursor dedupe + reporter_errors + 复用 `RepositoryIssueClient.create_issue` / `update_issue_body` / `find_issue_by_title` |
+| 2026-06-15 | `1465218` CLI 子命令 + 预览 | `telemetry status / preview / flush / enable / disable`，status/enable 不泄露 `api_key` |
+| 2026-06-16 | 复核实测发现 5 个测试失败 | `tests/telemetry/` 报 73 passed + 5 failed；stability_gate 与 orchestrator tracker 仍 PASS |
+| 2026-06-16 | 根因定位 | `IssueReporter._record_error()` 正确接收 `date` 并写入 payload，但 `LocalJsonlStorage.append()` 写文件时硬编码 `utc_date(utc_now())`，忽略调用方传入的 `date` 参数 |
+| 2026-06-16 | `042ef4f` 修复 commit | `LocalJsonlStorage.append()` 新增 `date: str \| None = None` 关键字参数（None 时走老路径，零回归）；`IssueReporter._record_error()` 透传 `date=date`；`tests/telemetry/test_privacy_audit.py` 新增 2 个端到端隐私审计用例 |
+| 2026-06-16 | 独立 verification agent 复核 PASS | 5 个失败用例 → 78 passed；telemetry 78 + orchestrator tracker 60 + stability gate 172 = 310 测试全过；verifier 抽查确认 8 个敏感值断言、HTTP-call 缺席、secret-leak 三大隐私保证全部保留 |
+
+**关键经验**：之前一轮其他 agent 声称 "verification PASS"，但实际未跑 `pytest` 收尾。F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
 
 ---
 

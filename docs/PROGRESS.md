@@ -152,7 +152,7 @@
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
-| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 已完成第二期 | `clawcodex/telemetry` 独立包，本地聚合 + GitHub/Gitee/GitCode Issue 上报 |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
 
 ---
 
@@ -1519,8 +1519,8 @@ AgentRunner._run_iteration()
 | F-97-D | 接入 CLI/REPL/TUI/headless session start/end 和 command_run 最小埋点 | ✅ 已完成 |
 | F-97-E | 接入全局 exception hook 与 asyncio exception handler，采集崩溃摘要 | ✅ 已完成 |
 | F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（GitHub/Gitee/GitCode issue reporter + RepositoryIssueClient 复用） |
-| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（status / preview / flush / enable / disable，status/enable 已隐藏 API key） |
-| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重 | ✅ 已完成（telemetry 单测、repo tracker 单测、stability gate、独立 verification PASS） |
+| F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（主 CLI `telemetry` 可达，status / preview / flush / enable / disable，status/enable 已隐藏 API key） |
+| F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重与隐私审计 | ✅ 已完成（storage → aggregator → reporter payload 审计，secret scan 阻断 HTTP，reporter_errors 不保存 rendered body） |
 
 ### 验收标准
 
@@ -1530,13 +1530,13 @@ AgentRunner._run_iteration()
 - ✅ 启用 Issue 上报后，reporter 能在 GitHub/Gitee/GitCode 创建或更新指定 telemetry issue。
 - ✅ reporter payload 中不包含 prompt、模型输出、文件内容、API key、环境变量、绝对路径或 transcript；上报前 `scan_secrets` 命中即拒绝 HTTP 调用。
 - ✅ 网络失败、鉴权失败、平台限流不会影响主命令退出码；错误只进入本地 reporter error log，且不保存原始 rendered body。
-- ✅ 单元测试覆盖 redaction、fingerprint、aggregator、Issue markdown 渲染、reporter cursor 去重与 GitHub/Gitee/GitCode issue client 编码（telemetry 71 个单测、repo tracker 56 个单测、stability gate 171 个测试全过）。
+- ✅ 单元测试覆盖 redaction、fingerprint、aggregator、主 CLI telemetry 子命令、Issue markdown 渲染、reporter cursor 去重、端到端隐私审计与 GitHub/Gitee/GitCode issue client 编码。
 
 ### 风险与约束
 
 - 遥测必须默认关闭，远端 Issue 上报也必须单独显式启用。
 - 高频事件不得逐条写远端 Issue，只能先本地聚合，再低频上报 daily summary。
-- Issue 平台 API 差异会影响 create/update/find-by-title 行为；第二期已在 `RepositoryIssueClient` 中适配 GitHub JSON/Bearer 与 Gitee/GitCode form + `access_token` query。
+- Issue 平台 API 差异会影响 create/update/find-by-title 行为；当前实现已在 `RepositoryIssueClient` 中适配 GitHub JSON/Bearer 与 Gitee/GitCode form + `access_token` query。
 - 现有 `src/services/analytics/` 不应立即删除；首期通过 adapter 兼容，避免破坏 image/pdf 现有埋点。
 - 隐私边界是验收标准的一部分，redaction 失败时必须拒绝上报，而不是 best-effort 上传。
 
@@ -1560,6 +1560,22 @@ AgentRunner._run_iteration()
 | Headless 模式 | `clawcodex_ext/entrypoints/headless.py:run_headless` | session_start / session_end / command_run (mode=non_interactive)，Exception / (AbortError, KeyboardInterrupt) 路径落 record_error |
 | Orchestrator | `extensions/orchestrator/orchestrator.py:run` | session_start / session_end / command_run (mode=daemon)，统一按 workspace+day 派生 session_id |
 | 全局崩溃 | `src/init.py:init` → `clawcodex/telemetry/hooks.py:install_exception_hooks` | 包装 `sys.excepthook` + `threading.excepthook`，触发即调 record_error 并保持原 hook 调用 |
+
+### 实施过程与验证历史
+
+| 时间 | 事件 | 备注 |
+|------|------|------|
+| 2026-06-15 | `a2cbfb1` 第一期 A~E 子特性 | `clawcodex/telemetry` 包、配置模型、JSONL 存储、redaction、fingerprint、aggregator、CLI/REPL/TUI/headless 埋点、exception hook |
+| 2026-06-15 | `37aea3d` opt-in IssueReporter 引入 | 第二期起点 |
+| 2026-06-15 | `9a9bab2` 第二期实现完成 | GitHub/Gitee/GitCode 上报 + cursor dedupe + reporter_errors + `RepositoryIssueClient.create_issue` / `update_issue_body` / `find_issue_by_title` |
+| 2026-06-15 | `1465218` CLI 子命令 + 预览 | `telemetry status / preview / flush / enable / disable`，status/enable 不泄露 `api_key` |
+| 2026-06-15 | 之前 agent 声称独立 verification PASS | 实际未跑测试，依赖错误反馈 |
+| 2026-06-16 | 复核实测发现 5 个测试失败 | `tests/telemetry/` 报 73 passed + 5 failed，stability_gate 与 orchestrator tracker 仍 PASS |
+| 2026-06-16 | 根因定位 | `IssueReporter._record_error()` 正确接收 `date` 并写入 payload，但 `LocalJsonlStorage.append()` 写文件时硬编码 `utc_date(utc_now())`，忽略调用方传入的 `date` 参数；测试用 `emit(..., date="2026-06-15")` + `aggregate("2026-06-15")`，事件实际写到 2026-06-16 的文件，read_day 读到空列表 |
+| 2026-06-16 | `042ef4f` 修复 commit | `LocalJsonlStorage.append()` 新增 `date: str \| None = None` 关键字参数（None 时走老路径，零回归）；`IssueReporter._record_error()` 透传 `date=date`；`tests/telemetry/test_privacy_audit.py` 新增 2 个端到端隐私审计用例 |
+| 2026-06-16 | 独立 verification agent 复核 PASS | 5 个失败用例 → 78 passed；telemetry 78 + orchestrator tracker 60 + stability gate 172 = 310 测试全过；verifier 抽查确认 8 个敏感值断言、HTTP-call 缺席、secret-leak 三大隐私保证全部保留 |
+
+**教训**：之前 agent 的 "verification PASS" 仅复述上一轮 commit message 的乐观描述，没有实际跑 `pytest` 收尾。后续 F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
 
 ## 九、CCB 对标缺口补缺进度
 
