@@ -12,6 +12,9 @@ Public surface (the only symbols business code should reach for):
 * :func:`record_tool_summary`
 * :class:`TelemetryConfig`      — config dataclass + :func:`load_config`
 * :class:`TelemetryEvent`        — event dataclass + :class:`EventType`
+* :class:`AnalyticsTelemetrySink` — F-97-I drop-in :class:`AnalyticsSink`
+  that routes ``src.services.analytics`` events into the live
+  recorder. Installed by :func:`install_analytics_bridge`.
 
 Anything else is an implementation detail and may change between
 minor releases.
@@ -19,6 +22,11 @@ minor releases.
 from __future__ import annotations
 
 from .aggregator import DailyAggregator
+from .bridge import (
+    AnalyticsTelemetrySink,
+    get_analytics_bridge,
+    install_analytics_bridge,
+)
 from .config import (
     ReportingConfig,
     TelemetryConfig,
@@ -37,6 +45,7 @@ from .storage import LocalJsonlStorage
 from .version import __version__
 
 __all__ = [
+    "AnalyticsTelemetrySink",
     "CompositeReporter",
     "DailyAggregator",
     "DryRunReporter",
@@ -52,6 +61,8 @@ __all__ = [
     "TelemetryEvent",
     "__version__",
     "compute_fingerprint",
+    "get_analytics_bridge",
+    "install_analytics_bridge",
     "load_config",
 ]
 

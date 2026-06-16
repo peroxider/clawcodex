@@ -96,6 +96,9 @@ class _NullRecorder:
     def record_tool_summary(self, **_: Any) -> None:
         return None
 
+    def record_event(self, event: TelemetryEvent, kind: str = "events") -> None:
+        return None
+
     def flush(self) -> None:
         return None
 
@@ -344,6 +347,24 @@ class _TelemetryRecorderImpl:
             pass
 
     # -- internals ------------------------------------------------------
+
+    def record_event(
+        self, event: TelemetryEvent, kind: str = "events"
+    ) -> None:
+        """Submit a pre-built :class:`TelemetryEvent` for redaction + storage.
+
+        This is the public chokepoint for callers that need to attach
+        rich, type-specific payloads that the typed ``record_*()``
+        helpers cannot express — e.g. the analytics → telemetry bridge
+        routing ``IMAGE_PROCESSING`` events with arbitrary ``subtype``
+        and per-call fields.
+
+        Failures are swallowed (debug-logged) so the caller is never
+        blocked by telemetry errors.
+        """
+        if self._closed:
+            return
+        self._enqueue_event(event, kind=kind)
 
     def _enqueue_event(
         self, event: TelemetryEvent, kind: str = "events"

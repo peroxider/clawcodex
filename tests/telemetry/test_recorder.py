@@ -8,6 +8,7 @@ import pytest
 
 from clawcodex.telemetry import recorder as recorder_mod
 from clawcodex.telemetry.config import ReportingConfig, TelemetryConfig
+from clawcodex.telemetry.events import EventType, TelemetryEvent
 from clawcodex.telemetry.recorder import (
     _NullRecorder,
     _TelemetryRecorderImpl,
@@ -39,6 +40,9 @@ def test_default_is_null_recorder():
     except RuntimeError as exc:
         r.record_error(session_id="x", exc=exc)
     r.record_tool_summary(session_id="x", tool_name="bash")
+    r.record_event(
+        TelemetryEvent(type=EventType.TOOL_SUMMARY, session_id="x", fields={"tool_name": "x"})
+    )
     r.flush()
     r.close()
 
@@ -80,6 +84,98 @@ def test_recorder_writes_crash_event(tmp_path):
     crashes = storage.read_day("crashes", today)
     assert crashes and crashes[0]["fields"]["error_class"] == "ValueError"
     assert len(crashes[0]["fields"]["fingerprint"]) == 16
+
+
+def test_record_event_writes_to_storage_via_public_api(tmp_path):
+    """F-97-I: ``record_event`` is the public chokepoint the bridge uses.
+
+    It must accept a pre-built :class:`TelemetryEvent`, run it through
+    the same redaction + storage + aggregation pipeline as the typed
+    ``record_*()`` helpers, and produce the same JSONL row.
+    """
+    storage = recorder_mod.LocalJsonlStorage(tmp_path / "telemetry", 7)
+    impl = _TelemetryRecorderImpl(
+        cfg=TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+        storage=storage,
+        aggregator=recorder_mod.DailyAggregator(storage),
+        redactor=Redactor(RedactionConfig(), (str(tmp_path),)),
+        reporters=recorder_mod.CompositeReporter(),
+    )
+
+    event = TelemetryEvent(
+        type=EventType.TOOL_SUMMARY,
+        session_id="s1",
+        fields={"tool_name": "image_processing", "subtype": "resize"},
+    )
+    impl.record_event(event)
+
+    today = utc_date(utc_now())
+    rows = storage.read_day("events", today)
+    assert any(
+        row["type"] == "tool_summary"
+        and row["fields"]["tool_name"] == "image_processing"
+        for row in rows
+    )
+
+
+def test_record_event_runs_through_redactor(tmp_path):
+    """Sensitive fields on a raw TelemetryEvent must be scrubbed by
+    ``Redactor.redact_event`` inside ``record_event``, not only by the
+    typed helpers."""
+    storage = recorder_mod.LocalJsonlStorage(tmp_path / "telemetry", 7)
+    impl = _TelemetryRecorderImpl(
+        cfg=TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+        storage=storage,
+        aggregator=recorder_mod.DailyAggregator(storage),
+        redactor=Redactor(RedactionConfig(), (str(tmp_path),)),
+        reporters=recorder_mod.CompositeReporter(),
+    )
+
+    impl.record_event(
+        TelemetryEvent(
+            type=EventType.SESSION_START,
+            session_id="s1",
+            fields={
+                "entrypoint": "image_pipeline",
+                "client_type": "cli",
+                "is_non_interactive": True,
+                "platform": "linux",
+                "python_version": "3.12",
+                "provider": "anthropic",
+                "model": "claude-opus-4-7",
+                "app_version": "0.0.0",
+                "prompt": "private user prompt",
+                "output": "private assistant output",
+            },
+        )
+    )
+
+    today = utc_date(utc_now())
+    rows = storage.read_day("events", today)
+    fields = rows[0]["fields"]
+    assert "prompt" not in fields
+    assert "output" not in fields
+
+
+def test_record_event_is_noop_after_close(tmp_path):
+    storage = recorder_mod.LocalJsonlStorage(tmp_path / "telemetry", 7)
+    impl = _TelemetryRecorderImpl(
+        cfg=TelemetryConfig(enabled=True, storage_dir=tmp_path / "telemetry"),
+        storage=storage,
+        aggregator=recorder_mod.DailyAggregator(storage),
+        redactor=Redactor(RedactionConfig(), (str(tmp_path),)),
+        reporters=recorder_mod.CompositeReporter(),
+    )
+    impl.close()
+    impl.record_event(
+        TelemetryEvent(
+            type=EventType.TOOL_SUMMARY,
+            session_id="s1",
+            fields={"tool_name": "x"},
+        )
+    )
+    today = utc_date(utc_now())
+    assert storage.read_day("events", today) == []
 
 
 def test_configure_reporters_wires_issue_reporter(tmp_path):
