@@ -1491,7 +1491,7 @@ AgentRunner._run_iteration()
 
 ## F-97: 独立遥测系统（Issue-based Telemetry）
 
-**状态**: ✅ 第二期实现完成（A~H） | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
+**状态**: ✅ 第二期实现完成（A~I） | **优先级**: P1 | **规划文档**: `docs/FEATURE_PLAN.md` → `九、独立遥测系统（F-97）`
 
 ### 目标
 
@@ -1521,6 +1521,7 @@ AgentRunner._run_iteration()
 | F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（GitHub/Gitee/GitCode issue reporter + RepositoryIssueClient 复用） |
 | F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（主 CLI `telemetry` 可达，status / preview / flush / enable / disable，status/enable 已隐藏 API key） |
 | F-97-H | 增加端到端验证：本地聚合、Issue payload 渲染、reporter 去重与隐私审计 | ✅ 已完成（storage → aggregator → reporter payload 审计，secret scan 阻断 HTTP，reporter_errors 不保存 rendered body） |
+| F-97-I | 实现 `src/services/analytics/` → telemetry recorder 桥接（`AnalyticsTelemetrySink` + 公开 `record_event` 入口），让 image/PDF 管线事件在 opt-in 后真正进入 telemetry 聚合 | ✅ 已完成（14-way EventType 映射、COMPACT/PERMISSION_*/MODEL_SWITCH 静默 drop、24 个新单测含端到端隐私审计；commit `38bab8c`） |
 
 ### 验收标准
 
@@ -1574,8 +1575,19 @@ AgentRunner._run_iteration()
 | 2026-06-16 | 根因定位 | `IssueReporter._record_error()` 正确接收 `date` 并写入 payload，但 `LocalJsonlStorage.append()` 写文件时硬编码 `utc_date(utc_now())`，忽略调用方传入的 `date` 参数；测试用 `emit(..., date="2026-06-15")` + `aggregate("2026-06-15")`，事件实际写到 2026-06-16 的文件，read_day 读到空列表 |
 | 2026-06-16 | `042ef4f` 修复 commit | `LocalJsonlStorage.append()` 新增 `date: str \| None = None` 关键字参数（None 时走老路径，零回归）；`IssueReporter._record_error()` 透传 `date=date`；`tests/telemetry/test_privacy_audit.py` 新增 2 个端到端隐私审计用例 |
 | 2026-06-16 | 独立 verification agent 复核 PASS | 5 个失败用例 → 78 passed；telemetry 78 + orchestrator tracker 60 + stability gate 172 = 310 测试全过；verifier 抽查确认 8 个敏感值断言、HTTP-call 缺席、secret-leak 三大隐私保证全部保留 |
+| 2026-06-16 | `38bab8c` F-97-I analytics → telemetry 桥接器 | `AnalyticsTelemetrySink(AnalyticsSink)` 14-way EventType 映射；`_enqueue_event` 提升为公开 `record_event(TelemetryEvent, kind)`；`install_exception_hooks()` 末尾自动 `install_analytics_bridge()`；默认 drop 4 类敏感/无语义类型（COMPACT、PERMISSION_PROMPT、PERMISSION_DECISION、MODEL_SWITCH）。7 文件 +990/-2，commit 前实测 102/102 telemetry 测试 + 9/9 analytics + 172/172 stability gate 全过；16 个 telemetry 文件的 pre-existing reflow 噪音已 `git restore` 丢弃，仅携带 F-97-I 自身改动 |
 
 **教训**：之前 agent 的 "verification PASS" 仅复述上一轮 commit message 的乐观描述，没有实际跑 `pytest` 收尾。后续 F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
+
+### 已识别缺口（F-97-J / F-97-K / F-97-L）
+
+完成 F-97-I 后，仍有 3 个与 telemetry 直接相关的产品缺口未实现（详见 `docs/FEATURE_PLAN.md` §9.8）：
+
+| 缺口 | 现状 | 阻塞点 |
+|------|------|--------|
+| **F-97-J** Session metadata 桥接 | `src/services/analytics/metadata.py:SessionAnalyticsMetadata` / `collect_session_metadata()` 已存在但全无调用方；telemetry `record_session_start` 自己从 `platform.system()` / `_safe_app_version()` 采集，未复用 analytics metadata | 需要在 `clawcodex_ext/cli/dispatch.py:run_cli` 等 6 个埋点入口把 `collect_session_metadata()` 返回值并入 `record_session_start` 的 fields，并保证新字段仍走 `Redactor.redact_event` |
+| **F-97-K** TOML 配置加载 | `clawcodex/telemetry/config.py:load_config()` 实际从 `src.config.load_config()`（JSON 形态）合并 `telemetry` 段；FEATURE_PLAN §9.3 给出的 TOML 示例是示意性 | `src.config` 当前只支持 JSON；需要先扩 `[telemetry]` 段的 TOML 解析（或为 telemetry 单独增加 `pyproject.toml` / `telemetry.toml` 探测），并补 `telemetry.toml.example` |
+| **F-97-L** Schema v2 迁移 | `clawcodex/telemetry/events.py:15` `SCHEMA_VERSION: Final[int] = 1` 硬编码；aggregator / redaction 写入时直接使用常量，无版本协商与升级路径 | 需要设计 v2 字段差异（如结构化 provider_request_summary、新的 fingerprint 算法），实现 `migrate_v1_to_v2()` 与读路径的 v1 兼容回退，并在 privacy audit 中加入跨版本断言 |
 
 ## 九、CCB 对标缺口补缺进度
 

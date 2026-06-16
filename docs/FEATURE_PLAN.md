@@ -7999,6 +7999,10 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 | F-97-F | 实现 IssueReporter：create/update/find issue、cursor、失败本地记录 | ✅ 已完成（2026-06；GitHub/Gitee/GitCode issue reporter + cursor dedupe + reporter_errors） |
 | F-97-G | 增加用户命令：查看本地摘要、预览上报 markdown、手动触发上报 | ✅ 已完成（2026-06；主 CLI `telemetry` 可达，status / preview / flush / enable / disable，status/enable 不泄露 API key） |
 | F-97-H | 隐私审计测试：secret/path/prompt/output 不得进入 reporter payload | ✅ 已完成（2026-06；storage → aggregator → reporter payload 审计，secret scan 阻断 HTTP，reporter_errors 不保存 rendered body） |
+| F-97-I | 实现 `src/services/analytics/` → telemetry recorder 桥接（`AnalyticsTelemetrySink` + 公开 `record_event` 入口），让 image/PDF 管线事件在 opt-in 后真正进入 telemetry 聚合 | ✅ 已完成（2026-06；14-way EventType 映射、COMPACT/PERMISSION_*/MODEL_SWITCH 静默 drop、24 个新单测含端到端隐私审计） |
+| F-97-J | 桥接 `SessionAnalyticsMetadata` / `collect_session_metadata` 到 telemetry `session_start` 字段 | ⏳ 待开始（见 §9.8） |
+| F-97-K | 支持从项目 TOML 配置文件加载 `[telemetry]` 段（FEATURE_PLAN §9.3 示例的对应实现） | ⏳ 待开始（见 §9.8） |
+| F-97-L | `SCHEMA_VERSION=1` → v2 升级路径（事件格式迁移、版本协商、降级读 v1） | ⏳ 待开始（见 §9.8） |
 
 验收标准：
 
@@ -8015,7 +8019,7 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 - Issue 平台 API 差异会影响 `find by title`、label、body update 等行为；当前实现已覆盖 GitHub/Gitee/GitCode 的认证与 payload 编码差异。
 - 遥测最容易引发用户信任问题，默认关闭和上报前预览必须作为产品边界，而不是实现细节。
 - 高频事件不能逐条上报 Issue，只能本地聚合后低频上报，否则会刷屏和触发平台限流。
-- `src/services/analytics/` 现有接口不应立即删除；先通过 adapter 兼容，避免破坏 image/pdf 等已有调用点。
+- `src/services/analytics/` 现有接口不应立即删除；先通过 adapter 兼容，避免破坏 image/pdf 等已有调用点。F-97-I 已实现事件流桥接（AnalyticsTelemetrySink），但 `SessionAnalyticsMetadata` / `collect_session_metadata` 仍是 dead code，详见 §9.8 F-97-J。
 
 ### 9.7 实施过程与验证历史
 
@@ -8029,8 +8033,78 @@ No prompts, outputs, file contents, API keys, environment variables, or absolute
 | 2026-06-16 | 根因定位 | `IssueReporter._record_error()` 正确接收 `date` 并写入 payload，但 `LocalJsonlStorage.append()` 写文件时硬编码 `utc_date(utc_now())`，忽略调用方传入的 `date` 参数 |
 | 2026-06-16 | `042ef4f` 修复 commit | `LocalJsonlStorage.append()` 新增 `date: str \| None = None` 关键字参数（None 时走老路径，零回归）；`IssueReporter._record_error()` 透传 `date=date`；`tests/telemetry/test_privacy_audit.py` 新增 2 个端到端隐私审计用例 |
 | 2026-06-16 | 独立 verification agent 复核 PASS | 5 个失败用例 → 78 passed；telemetry 78 + orchestrator tracker 60 + stability gate 172 = 310 测试全过；verifier 抽查确认 8 个敏感值断言、HTTP-call 缺席、secret-leak 三大隐私保证全部保留 |
+| 2026-06-16 | `38bab8c` F-97-I analytics → telemetry 桥接器 | `AnalyticsTelemetrySink(AnalyticsSink)` 14-way EventType 映射；`_enqueue_event` 提升为公开 `record_event(TelemetryEvent, kind)`；`install_exception_hooks()` 末尾自动 `install_analytics_bridge()`；默认 drop 4 类敏感/无语义类型（COMPACT、PERMISSION_PROMPT、PERMISSION_DECISION、MODEL_SWITCH）。7 文件 +990/-2，commit 前实测 102/102 telemetry 测试 + 9/9 analytics + 172/172 stability gate 全过；16 个 telemetry 文件的 pre-existing reflow 噪音已 `git restore` 丢弃，仅携带 F-97-I 自身改动 |
 
 **关键经验**：之前一轮其他 agent 声称 "verification PASS"，但实际未跑 `pytest` 收尾。F-97 任何回归必须以本地 `pytest` 输出为准，不接受 "claimed PASS"。
+
+### 9.8 已识别的产品缺口（F-97-J / F-97-K / F-97-L）
+
+完成 A~I 阶段后，仍有 3 个与 telemetry 直接相关的产品缺口尚未落地。这些缺口与 `clawcodex/telemetry/` 已交付部分解耦，可作为独立子任务排期。
+
+#### F-97-J：桥接 `SessionAnalyticsMetadata` → telemetry `session_start`
+
+**现状**：`src/services/analytics/metadata.py:15` 定义的 `SessionAnalyticsMetadata` 与 `collect_session_metadata()`（`metadata.py:31`）已被 `src/services/analytics/__init__.py` 导出，但仓库内无任何调用方。`clawcodex/telemetry/recorder.py:record_session_start()` 自己从 `platform.system()` / `platform.python_version()` / `_safe_app_version()` 采集 OS、Python、版本信息，未消费 analytics metadata。
+
+**目标**：让 telemetry 复用 `collect_session_metadata()` 提供的字段（OS 版本、IDE 类型与版本、是否 resume、start_time、extra），避免双源采集与口径漂移。
+
+**设计要点**：
+
+1. 入口侧（`clawcodex_ext/cli/dispatch.py:run_cli` 等 6 个埋点）调用 `collect_session_metadata()` 并把结果展开为 `record_session_start` 的额外 kwargs（或封装为 `record_session_start_from_metadata(meta)`）。
+2. 新增字段必须经 `Redactor.redact_event()` 走默认隐私边界；`ide_type` / `ide_version` 不属于敏感键，可直接转发。
+3. `is_resume` / `start_time` / `extra` 是 analytics metadata 的特性，需要在 `events.py` 的 `session_start` 字段集中显式登记，避免 analytics → telemetry 语义漂移。
+4. 单元测试：覆盖 `record_session_start_from_metadata` 把 metadata 完整映射到 JSONL；新增 privacy audit 断言 IDE 名称、OS 版本、is_resume 仍不被 redaction 误删。
+
+**依赖**：无前置；与 F-97-I 同类型（"复用 analytics + 接 telemetry"），可复用 bridge.py 的 14-way 映射模式。
+
+**风险**：
+
+- 部分入口（如 orchestrator daemon）目前没有 IDE 信息，需允许 metadata 缺省并降级到 `record_session_start` 旧路径。
+- `extra` 字段是开放 dict，需在 redaction 中加白名单，避免引入新的 prompt / path 上传风险。
+
+#### F-97-K：TOML 配置文件加载
+
+**现状**：`clawcodex/telemetry/config.py:88` 的 `load_config()` 实际从 `src.config.load_config()`（JSON 形态）合并 `telemetry` 段；FEATURE_PLAN §9.3 给出的 `[telemetry]` / `[telemetry.reporting]` / `[telemetry.privacy]` TOML 示例是示意性写法，当前实现并不读取 TOML。`config.py:5` 注释已明确说明这一点（"docs/FEATURE_PLAN.md §9.3 for the TOML shape — the JSON config"）。
+
+**目标**：让用户可以直接在 `pyproject.toml`（或新建 `telemetry.toml`）中声明 telemetry 配置项，并按 docstring 列出的三层优先级（defaults → on-disk section → env）合并。
+
+**设计要点**：
+
+1. 增加 `_load_toml_section(cwd)` 工具，依次探测 `pyproject.toml` 的 `[tool.clawcodex.telemetry]` 表或独立 `<cwd>/telemetry.toml` 文件。探测失败时降级到现有 JSON 路径。
+2. TOML 解析用 `tomllib`（Python 3.11+ 内置）即可，零新依赖。
+3. `RedactionConfig` / `ReportingConfig` 的字段顺序与 TOML key 一一对应（与现有 JSON section 共用 `_section` / `_coerce_bool` 逻辑）。
+4. 单元测试：覆盖 pyproject.toml 与 telemetry.toml 两种来源；空文件 / 缺 `[telemetry]` 段 / TOML 语法错 三种降级路径；env 仍然覆盖 on-disk（顺序正确）。
+5. 文档：在仓库根新增 `telemetry.toml.example`（与 FEATURE_PLAN §9.3 示例保持一致），并在 `clawcodex_ext/cli/.../telemetry.py:enable` 命令输出中提示该文件位置。
+
+**依赖**：
+
+- `src.config` 当前只支持 JSON。若不希望改动 `src.config`，则 `telemetry` 单独探测 TOML 即可，不影响其他模块。
+- Python 3.11+ 是 `tomllib` 前提。需在 `pyproject.toml` 的 `requires-python` 中确认。
+
+**风险**：
+
+- TOML 解析异常（语法错、类型错）必须降级到默认 + 错误日志，绝不能 crash `get_recorder()`；与现有 `load_config()` 的 `try/except` 模式一致。
+- `pyproject.toml` 与 `telemetry.toml` 同时存在时需明确优先级。
+
+#### F-97-L：事件 schema v2 迁移路径
+
+**现状**：`clawcodex/telemetry/events.py:15` 硬编码 `SCHEMA_VERSION: Final[int] = 1`；aggregator (`aggregator.py:153`)、redaction (`redaction.py:183`) 写入时直接使用常量；`events.py:77` 读路径用 `payload.get("schema_version", SCHEMA_VERSION)` 兼容缺省值，但**没有真正的版本协商或迁移**——只要把 v2 事件写进 v1 字段集，读路径就会读到错误的字段。
+
+**目标**：为未来 schema 演进（如结构化 `provider_request_summary`、新 fingerprint 算法、新 privacy 字段）建立显式的 v1 → v2 迁移通道，避免 v2 事件被 silently 解释为 v1。
+
+**设计要点**：
+
+1. 在 `events.py` 增加 `SCHEMA_VERSION = 2`（远期）与 `migrate_v1_to_v2(payload: dict) -> dict` 纯函数；写路径在 `_enqueue_event` 末尾根据 `event.schema_version` 选不同字段集。
+2. 读路径在 `TelemetryEvent.from_dict()` 中先识别 `payload["schema_version"]`，调用对应的 `from_v1_dict` / `from_v2_dict` 工厂；v1 缺省走 v1 路径不变。
+3. 升级期：v2 字段可与 v1 共存（增量字段），降低一次性破坏风险。
+4. 单元测试：覆盖 (a) v1 写 → v1 读 round-trip；(b) v1 写 → v2 读 自动 migrate；(c) v2 写 → v1 读 报错或降级；(d) 缺 `schema_version` 字段的旧数据按 v1 处理。
+5. privacy audit：在 `test_privacy_audit.py` 新增 v1/v2 跨版本 secret 断言，确认迁移不会泄露 v1 时期未识别的敏感字段。
+
+**依赖**：与 F-97-K / F-97-J 独立，可在任意时间点开始。
+
+**风险**：
+
+- 升级期会同时存在 v1 / v2 JSONL 文件，aggregator 必须能区分；建议 v2 写新文件 `events_v2/YYYY-MM-DD.jsonl`，旧 v1 仍可读。
+- 跨版本 fingerprint 算法差异会让同一错误在 v1 / v2 报文中生成不同 fingerprint，影响 daily summary 聚合。需要在 v2 引入 `"fingerprint_algorithm": "v2-sha1"` 字段并存。
 
 ---
 
