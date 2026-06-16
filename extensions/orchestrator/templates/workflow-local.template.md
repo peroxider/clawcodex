@@ -67,7 +67,7 @@ workspace:
     - ".issues/*.comments.ndjson"
 
 # -----------------------------------------------------------------------------
-# Agent: ClawCodex / Codex execution parameters
+# Agent: ClawCodex execution parameters
 # -----------------------------------------------------------------------------
 agent:
   max_concurrent_agents: 1              # LocalTracker shares ProgressReporter; keep at 1
@@ -90,7 +90,7 @@ agent:
   max_retries_per_issue: 3
   allow_anyone_to_retry: false
 
-codex:
+sandbox:
   thread_sandbox: workspace-write
   turn_timeout_ms: 3600000
   read_timeout_ms: 5000

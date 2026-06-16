@@ -156,11 +156,11 @@ def get_approval_policy(policy_name: str | dict[str, Any]) -> ApprovalPolicy:
 
 
 def build_approval_policy_map(
-    codex_config: Any,
+    sandbox_config: Any,
 ) -> dict[str | int, ApprovalPolicy]:
     """Build a map from policy names to instantiated policies.
 
     Mirrors INTEGRATION.md section 3.5 AgentRunner._approval_policy_map.
     """
-    raw = getattr(codex_config, "approval_policy", "never") or "never"
+    raw = getattr(sandbox_config, "approval_policy", "never") or "never"
     return {raw: get_approval_policy(raw)}

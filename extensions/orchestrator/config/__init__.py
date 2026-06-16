@@ -2,7 +2,7 @@
 
 from .schema import (
     AgentConfig,
-    CodexConfig,
+    SandboxConfig,
     HooksConfig,
     ObservabilityConfig,
     PollingConfig,
@@ -15,7 +15,7 @@ from .schema import (
 
 __all__ = [
     "AgentConfig",
-    "CodexConfig",
+    "SandboxConfig",
     "HooksConfig",
     "ObservabilityConfig",
     "PollingConfig",

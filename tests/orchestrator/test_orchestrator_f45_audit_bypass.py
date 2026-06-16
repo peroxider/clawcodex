@@ -25,7 +25,7 @@ from extensions.api.query import (
 from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
 from extensions.orchestrator.config.schema import (
     AgentConfig,
-    CodexConfig,
+    SandboxConfig,
     WorkflowConfig,
 )
 from extensions.orchestrator.issue import Issue
@@ -64,7 +64,7 @@ def _run_with_event(tool_event: ToolCallEvent) -> None:
     """One-shot helper: drive AgentRunner._append_tool_event_log with an
     explicit session_context and HOME override.
     """
-    runner = AgentRunner(AgentConfig(), CodexConfig())
+    runner = AgentRunner(AgentConfig(), SandboxConfig())
     session_context = {
         "run_id": "run-99-20260602T000000Z",
         "permission_mode": "bypassPermissions",
@@ -157,7 +157,7 @@ class TestAppendToolEventLog(unittest.TestCase):
             os.environ["HOME"] = str(base)
 
             # Run with a controlled run_id so we can locate the file.
-            runner = AgentRunner(AgentConfig(), CodexConfig())
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
             runner._append_tool_event_log(
                 _tc_event(approved=True),
                 {
@@ -182,7 +182,7 @@ class TestAppendToolEventLog(unittest.TestCase):
             self.assertIn("ts", row)
 
     def test_writes_multiple_rows_in_order(self) -> None:
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         ctx = {
             "run_id": "run-multi",
             "permission_mode": "dontAsk",
@@ -212,7 +212,7 @@ class TestAppendToolEventLog(unittest.TestCase):
         self.assertEqual(rows[0]["params"], {"command": "ls"})
 
     def test_deny_decision_records_reason(self) -> None:
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         runner._append_tool_event_log(
             _tc_event(approved=False, deny_reason="not in safe-list"),
             {
@@ -235,7 +235,7 @@ class TestAppendToolEventLog(unittest.TestCase):
         self.assertEqual(row["deny_reason"], "not in safe-list")
 
     def test_falls_back_to_unknown_when_run_id_missing(self) -> None:
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         runner._append_tool_event_log(
             _tc_event(approved=True),
             {
@@ -254,7 +254,7 @@ class TestAppendToolEventLog(unittest.TestCase):
         self.assertTrue(log_path.exists())
 
     def test_appends_multiple_lines(self) -> None:
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         ctx = {"run_id": "run-x", "permission_mode": "default", "turn": 0}
         for _ in range(5):
             runner._append_tool_event_log(_tc_event(approved=True), ctx)
@@ -272,7 +272,7 @@ class TestAppendToolEventLog(unittest.TestCase):
         """Defensive: even if the file write itself raises, the agent
         run must not be affected.  We force a failure by pointing
         HOME at an unwritable path."""
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         bad_home = "/this-path-definitely-does-not-exist/clawcodex"
         os.environ["HOME"] = bad_home
         try:
@@ -336,7 +336,7 @@ class TestAgentRunnerWiresAuditBypass(unittest.TestCase):
                 issue=Issue(id="1", identifier="ISSUE-1", title="audit"),
                 workspace=workspace,
             )
-            runner = AgentRunner(AgentConfig(max_turns=1), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -548,7 +548,7 @@ class TestToolEventLogRotation(unittest.TestCase):
         from extensions.orchestrator.agent_runner import (
             _TOOL_EVENT_LOG_ROTATE_BYTES,
         )
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         ctx = {
             "run_id": "run-rotate",
             "permission_mode": "default",
@@ -604,7 +604,7 @@ class TestFourPermissionModes(unittest.TestCase):
         self._home.cleanup()
 
     def test_all_four_modes_emit_rows(self) -> None:
-        runner = AgentRunner(AgentConfig(), CodexConfig())
+        runner = AgentRunner(AgentConfig(), SandboxConfig())
         for mode in (
             "bypassPermissions",
             "dontAsk",

@@ -339,7 +339,7 @@ class AgentConfig:
 
 
 @dataclass
-class CodexConfig:
+class SandboxConfig:
     command: str = ""
     approval_policy: str | dict[str, Any] = field(
         default_factory=lambda: {
@@ -409,7 +409,7 @@ class WorkflowConfig:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     worker: WorkerConfig = field(default_factory=WorkerConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
-    codex: CodexConfig = field(default_factory=CodexConfig)
+    sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
     observability: ObservabilityConfig = field(
@@ -427,7 +427,7 @@ class WorkflowConfig:
         workspace_raw = raw.get("workspace", {})
         worker_raw = raw.get("worker", {})
         agent_raw = raw.get("agent", {})
-        codex_raw = raw.get("codex", {})
+        codex_raw = raw.get("sandbox", {})
         hooks_raw = raw.get("hooks", {})
         review_feedback_raw = raw.get("review_feedback", {})
         observability_raw = raw.get("observability", {})
@@ -620,9 +620,9 @@ class WorkflowConfig:
                     "agent.max_concurrent_agents_by_state values to be <= 1"
                 )
 
-        codex = CodexConfig(
+        sandbox = SandboxConfig(
             command=codex_raw.get("command", ""),
-            approval_policy=codex_raw.get("approval_policy", CodexConfig().approval_policy),
+            approval_policy=codex_raw.get("approval_policy", SandboxConfig().approval_policy),
             thread_sandbox=codex_raw.get("thread_sandbox", "workspace-write"),
             turn_sandbox_policy=codex_raw.get("turn_sandbox_policy"),
             turn_timeout_ms=codex_raw.get("turn_timeout_ms", 3_600_000),
@@ -656,7 +656,7 @@ class WorkflowConfig:
                 ),
             ),
             agent=agent,
-            codex=codex,
+            sandbox=sandbox,
             hooks=hooks,
             review_feedback=ReviewFeedbackConfig(
                 enabled=bool(review_feedback_raw.get("enabled", False)),
@@ -701,8 +701,8 @@ class WorkflowConfig:
     def resolve_turn_sandbox_policy(
         self, workspace_path: str | None = None
     ) -> dict[str, Any]:
-        if self.codex.turn_sandbox_policy:
-            return self.codex.turn_sandbox_policy
+        if self.sandbox.turn_sandbox_policy:
+            return self.sandbox.turn_sandbox_policy
         root = workspace_path or self.workspace.root
         return {
             "type": "workspaceWrite",

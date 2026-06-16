@@ -48,7 +48,7 @@ issue polling → clone → after_create → before_run → agent → after_run
 | Repository clone | `workspace.repo_clone_url` | `git clone` into `workspace.root` |
 | After-create hook | `hooks.after_create` | Runs shell in workspace after clone (e.g. `uv sync`) |
 | Before-run hook | `hooks.before_run` | Runs shell right before the agent starts |
-| Agent development | `agent.*` + `codex.*` | Claude Code develops the fix |
+| Agent development | `agent.*` + `sandbox.*` | Claude Code develops the fix |
 | After-run hook | `hooks.after_run` | Runs shell right after the agent exits |
 | Pre-commit hook | `hooks.pre_commit` | Runs shell on staged changes; may auto-amend |
 | Pre-push verification | `agent.test_command` / `build_command` / `lint_command` | Runs shell verification (gates push) |
@@ -80,7 +80,7 @@ polling:        # { interval_ms: 30000 }
 workspace:      # clone config + strategy
 worker:         # optional remote workers (ssh)
 agent:          # concurrency, provider, commands
-codex:          # optional codex app-server integration
+sandbox:        # execution sandbox and approval policy
 hooks:          # before/after/pre-commit/pre-push/post-sync
 review_feedback: # F-37 PR review auto-fix
 observability:  # dashboard
@@ -390,10 +390,10 @@ to the orchestrator's inter-run retry queue.
 These are **distinct** from `max_retry_backoff_ms` /
 `max_turns_retry_delay_ms`, which govern *between-run* retries.
 
-### Codex integration (optional)
+### Sandbox config (optional)
 
 ```yaml
-codex:
+sandbox:
   command: codex app-server
   thread_sandbox: workspace-write
   turn_sandbox_policy:                          # auto-generated if omitted
@@ -410,8 +410,8 @@ codex:
       mcp_elicitations: true
 ```
 
-The `codex` block is only used if the upstream LLM provider is the
-codex app-server. For Anthropic / OpenAI it can be omitted.
+The `sandbox` block configures execution sandbox and approval policy.
+It can be omitted for most setups — sensible defaults apply.
 
 ---
 
@@ -879,13 +879,13 @@ relative to the workspace unless noted.
 | `rate_limit_exponential_factor` | `2.0` | 429 backoff multiplier |
 | `rate_limit_max_retries` | `5` | 429 circuit-breaker threshold |
 
-### `codex.*`
+### `sandbox.*`
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `command` | `codex app-server` | Codex executable |
+| `command` | `` | Optional external executable (e.g. `codex app-server`) |
 | `approval_policy` | `{"reject": {"sandbox_approval": true, "rules": true, "mcp_elicitations": true}}` | Sandbox / rules / MCP elicitation policy |
-| `thread_sandbox` | `workspace-write` | Codex thread sandbox mode |
+| `thread_sandbox` | `workspace-write` | Thread sandbox mode |
 | `turn_sandbox_policy` | auto-generated | Per-turn sandbox policy |
 | `turn_timeout_ms` | `3600000` | 1 h per turn |
 | `read_timeout_ms` | `5000` | Stdin read timeout |

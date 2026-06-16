@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
 from extensions.orchestrator.config.schema import (
     AgentConfig,
-    CodexConfig,
+    SandboxConfig,
     PollingConfig,
     TrackerConfig,
     WorkflowConfig,
@@ -260,7 +260,7 @@ class TestStatusDashboardThreeIssues(unittest.IsolatedAsyncioTestCase):
                 provider="anthropic",
                 permission_mode="dontAsk",
             ),
-            codex=CodexConfig(approval_policy="never"),
+            sandbox=SandboxConfig(approval_policy="never"),
         )
 
         # Create a mock agent runner that simulates quick completions

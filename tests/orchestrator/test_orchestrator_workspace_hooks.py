@@ -7,7 +7,7 @@ from pathlib import Path
 from extensions.orchestrator.agent_runner import AgentSession
 from extensions.orchestrator.config.schema import (
     AgentConfig,
-    CodexConfig,
+    SandboxConfig,
     PollingConfig,
     TrackerConfig,
     WorkflowConfig,
@@ -109,7 +109,7 @@ class TestOrchestratorWorkspaceHooks(unittest.IsolatedAsyncioTestCase):
                 provider="anthropic",
                 permission_mode="dontAsk",
             ),
-            codex=CodexConfig(approval_policy="never"),
+            sandbox=SandboxConfig(approval_policy="never"),
         )
 
     def _session(self) -> AgentSession:

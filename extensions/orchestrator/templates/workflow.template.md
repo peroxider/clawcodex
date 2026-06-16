@@ -92,9 +92,9 @@ agent:
   permission_mode: bypassPermissions
 
 # ============================================================================
-# Codex — optional codex integration config
+# Sandbox — execution sandbox and approval policy
 # ============================================================================
-codex:
+sandbox:
   thread_sandbox: workspace-write
   turn_timeout_ms: 3600000                                 # 1h per turn
   read_timeout_ms: 5000

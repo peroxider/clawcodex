@@ -14,7 +14,7 @@ from extensions.api.query import (
     ToolResultEvent,
 )
 from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
-from extensions.orchestrator.config.schema import AgentConfig, CodexConfig, WorkflowConfig
+from extensions.orchestrator.config.schema import AgentConfig, SandboxConfig, WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.workspace import Workspace
 from src.services.api.errors import RateLimitError
@@ -131,7 +131,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
             session.turn_count = 1
             session.has_made_progress = True
             session.start_commit_sha = start_sha
-            runner = AgentRunner(AgentConfig(max_turns=3), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=3), SandboxConfig())
 
             should_continue, _ = await runner._should_continue(
                 issue,
@@ -159,7 +159,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
                 )
                 tracker = _CommentTracker()
                 progress = _ProgressReporter()
-                runner = AgentRunner(AgentConfig(max_turns=1), CodexConfig())
+                runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
 
                 with patch("extensions.orchestrator.agent_runner.QueryRunner", _QueryRunnerStub):
                     await runner.run(
@@ -237,7 +237,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
                 issue_attempt=3,
                 followup_attempt=2,
             )
-            runner = AgentRunner(AgentConfig(), CodexConfig())
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
 
             run_id = runner._build_run_id(session)
 
@@ -259,7 +259,7 @@ class TestAgentRunnerMaxTurns(unittest.IsolatedAsyncioTestCase):
                 issue=Issue(id="99", identifier="ISSUE-99", title="Max turns"),
                 workspace=workspace,
             )
-            runner = AgentRunner(AgentConfig(max_turns=2), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=2), SandboxConfig())
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -388,7 +388,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
         session completes and the counter is reset to 0."""
         with TemporaryDirectory() as tmp:
             session = _build_429_session(tmp)
-            runner = AgentRunner(AgentConfig(max_turns=5), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=5), SandboxConfig())
             rec = _install_recording_sleep(runner)
             stub = _BehaviorsStub([
                 [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
@@ -423,7 +423,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                     rate_limit_exponential_factor=2.0,
                     rate_limit_max_retries=10,
                 ),
-                CodexConfig(),
+                SandboxConfig(),
             )
             rec = _install_recording_sleep(runner)
             stub = _BehaviorsStub(_behaviors_429_then_success(num_429=4))
@@ -463,7 +463,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                     rate_limit_base_delay_ms=1_000,
                     rate_limit_max_backoff_ms=10_000,
                 ),
-                CodexConfig(),
+                SandboxConfig(),
             )
             rec = _install_recording_sleep(runner)
             # 4 429s: 3 backoff + the 4th trips the breaker.
@@ -497,7 +497,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                     rate_limit_base_delay_ms=30_000,
                     rate_limit_max_retries=10,
                 ),
-                CodexConfig(),
+                SandboxConfig(),
             )
             rec = _install_recording_sleep(runner)
             # 429, 429, success, 429, success. The 4th 429 should use
@@ -545,7 +545,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
         failure path is responsible for surfacing."""
         with TemporaryDirectory() as tmp:
             session = _build_429_session(tmp)
-            runner = AgentRunner(AgentConfig(max_turns=5), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=5), SandboxConfig())
             rec = _install_recording_sleep(runner)
             stub = _BehaviorsStub(_behaviors_quota_then_fail())
 
@@ -572,7 +572,7 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                     rate_limit_base_delay_ms=10_000,
                     rate_limit_max_retries=5,
                 ),
-                CodexConfig(),
+                SandboxConfig(),
             )
             rec = _install_recording_sleep(runner)
             stub = _BehaviorsStub([
@@ -626,7 +626,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
             tracker = _ActiveTrackerStub(["open", "ready"])
             runner = AgentRunner(
                 AgentConfig(max_turns=20, max_no_op_turns=3),
-                CodexConfig(),
+                SandboxConfig(),
             )
             # Each turn: no tool calls, no output, then
             # SessionComplete(success).  After the 3rd such turn the
@@ -669,7 +669,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
                     loop_detection_window=5,
                     loop_detection_threshold=3,
                 ),
-                CodexConfig(),
+                SandboxConfig(),
             )
             # Each turn calls Read then Write (same signature). The
             # 3rd turn should trip loop_detected.
@@ -719,7 +719,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             session = _build_429_session(tmp)
             tracker = _ActiveTrackerStub(["open", "ready"])
-            runner = AgentRunner(AgentConfig(max_turns=2), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=2), SandboxConfig())
             # Always productive: one tool call per turn. The
             # stagnation/loop guards must NOT trip, and the runner
             # should reach max_turns naturally.
@@ -762,7 +762,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
             tracker = _ActiveTrackerStub(["open", "ready"])
             runner = AgentRunner(
                 AgentConfig(max_turns=3, max_no_op_turns=2),
-                CodexConfig(),
+                SandboxConfig(),
             )
             stub = _BehaviorsStub([
                 # Turn 1: no-op (streak=1)
@@ -939,7 +939,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), CodexConfig(),
+                    AgentConfig(max_turns=1), SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",
@@ -1017,7 +1017,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), CodexConfig(),
+                    AgentConfig(max_turns=1), SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",
@@ -1075,7 +1075,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), CodexConfig(),
+                    AgentConfig(max_turns=1), SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from extensions.api.query import SessionComplete, TextDelta, ToolCallEvent
 from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
-from extensions.orchestrator.config.schema import AgentConfig, CodexConfig, WorkflowConfig
+from extensions.orchestrator.config.schema import AgentConfig, SandboxConfig, WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.workspace import Workspace
 
@@ -36,7 +36,7 @@ class TestOrchestratorAgentRunnerDebug(unittest.IsolatedAsyncioTestCase):
                 issue=Issue(id="78", identifier="ISSUE-78", title="Debug run"),
                 workspace=workspace,
             )
-            runner = AgentRunner(AgentConfig(max_turns=1), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -74,7 +74,7 @@ class TestOrchestratorAgentRunnerDebug(unittest.IsolatedAsyncioTestCase):
                 issue=Issue(id="79", identifier="ISSUE-79", title="Debug updates"),
                 workspace=workspace,
             )
-            runner = AgentRunner(AgentConfig(max_turns=1), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
             snapshots: list[tuple[str | None, int, int, int]] = []
 
             def diagnostics_callback(active_session: AgentSession) -> None:
@@ -120,7 +120,7 @@ class TestOrchestratorAgentRunnerDebug(unittest.IsolatedAsyncioTestCase):
                 workspace=workspace,
                 pause_resume_event=asyncio.Event(),
             )
-            runner = AgentRunner(AgentConfig(max_turns=1), CodexConfig())
+            runner = AgentRunner(AgentConfig(max_turns=1), SandboxConfig())
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",

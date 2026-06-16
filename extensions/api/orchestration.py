@@ -73,7 +73,7 @@ class OrchestrationSubsystem:
         self.tracker_adapter = create_tracker_adapter(workflow_config.tracker)
         self.agent_runner = AgentRunner(
             agent_config=workflow_config.agent,
-            codex_config=workflow_config.codex,
+            sandbox_config=workflow_config.sandbox,
             workspace_cfg=workflow_config.workspace,
         )
         self.status_dashboard = StatusDashboard()

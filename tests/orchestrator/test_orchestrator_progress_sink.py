@@ -29,7 +29,7 @@ from extensions.api.query import (
 )
 from extensions.orchestrator.config.schema import (
     AgentConfig,
-    CodexConfig,
+    SandboxConfig,
     WorkflowConfig,
 )
 from extensions.orchestrator.issue import Issue

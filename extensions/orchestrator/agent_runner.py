@@ -19,7 +19,7 @@ from ..api.query import PhaseComplete, QueryConfig, QueryRunner
 from ..api.query import SessionComplete, TextDelta, ToolCallEvent, ToolResultEvent, TurnComplete
 from .approval_policy import ApprovalPolicy, get_approval_policy, ToolCallEvent as PolicyToolCallEvent
 from src.utils.git import get_file_status
-from .config.schema import AgentConfig, CodexConfig, WorkflowConfig, WorkspaceConfig
+from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
 from .prompt_builder import PromptBuilder, resolve_python_executable
@@ -323,11 +323,11 @@ class AgentRunner:
     def __init__(
         self,
         agent_config: AgentConfig,
-        codex_config: CodexConfig,
+        sandbox_config: SandboxConfig,
         workspace_cfg: WorkspaceConfig | None = None,
     ) -> None:
         self.agent_config = agent_config
-        self.codex_config = codex_config
+        self.sandbox_config = sandbox_config
         # F-?? workspace-level python_executable resolver input. When
         # None (the default for legacy callers and unit tests) we
         # substitute an empty ``WorkspaceConfig()`` so the cascade
@@ -337,7 +337,7 @@ class AgentRunner:
         self.workspace_cfg: WorkspaceConfig = workspace_cfg or WorkspaceConfig()
         self.max_turns = agent_config.max_turns
         self._approval_policy: ApprovalPolicy = get_approval_policy(
-            getattr(codex_config, "approval_policy", "never") or "never"
+            getattr(sandbox_config, "approval_policy", "never") or "never"
         )
         # Injectable sleep hook for 429 backoff. Tests monkey-patch
         # this with a recording coroutine; production paths use the
