@@ -160,6 +160,9 @@ class LiveStatus:
         # used by the foreground ``PromptSession``). When set, the input
         # buffer supports up/down history navigation during agent work.
         self._history = history
+        # Unsubmitted buffer text captured at teardown so ``chat()`` can
+        # enqueue it rather than losing what the user was typing.
+        self._pending_text = ""
 
     # ---- public API ----
     def update(self, message: str) -> None:
@@ -619,6 +622,13 @@ class LiveStatus:
     def _stop(self) -> None:
         app = self._app
         loop = self._loop
+
+        # Capture unsubmitted buffer text *before* the Application is
+        # torn down so ``chat()`` can preserve it across turns.
+        if self._input_buffer is not None:
+            raw = self._input_buffer.text
+            self._pending_text = raw if raw and raw.strip() else ""
+
         if app is not None and loop is not None and not loop.is_closed():
             try:
                 loop.call_soon_threadsafe(app.exit)

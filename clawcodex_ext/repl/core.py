@@ -3807,6 +3807,12 @@ class ClawcodexREPL:
                             )
                         finally:
                             self._active_live_status = None
+                # Capture unsubmitted buffer text before returning so the
+                # user doesn't lose what they were typing when the agent
+                # finishes mid-keystroke.
+                pending = status._pending_text
+                if pending:
+                    self._enqueue_prompt(pending)
                 if direct_response is not None:
                     self.console.print("\n")
                     # Per-turn save: persist JSONL transcript only (lightweight).
@@ -4175,6 +4181,13 @@ class ClawcodexREPL:
                         response_text, last_text_was_printed = asyncio.run(_run_query())
                     finally:
                         self._active_live_status = None
+
+            # Capture unsubmitted buffer text before proceeding so the user
+            # doesn't lose what they were typing when the agent finishes
+            # mid-keystroke (the engine path).
+            pending = status._pending_text
+            if pending:
+                self._enqueue_prompt(pending)
 
             engine.reset_abort_controller()
 

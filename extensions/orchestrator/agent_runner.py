@@ -291,9 +291,9 @@ class AgentSession:
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "cost": cost_block,
             }
-            session_dir = Path.home() / ".clawcodex" / "sessions"
+            session_dir = Path.home() / ".clawcodex" / "sessions" / str(self.run_id)
             session_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_path = session_dir / f"{self.run_id}.json"
+            snapshot_path = session_dir / "session.json"
             with open(snapshot_path, "w", encoding="utf-8") as f:
                 _json.dump(snapshot_data, f, indent=2)
         except Exception:
