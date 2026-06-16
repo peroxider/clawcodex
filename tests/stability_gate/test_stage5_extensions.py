@@ -535,26 +535,29 @@ class TestStage5Telemetry:
         assert callable(telemetry_cli.run_disable)
 
     def test_telemetry_default_off_zero_io(self):
-        """Default config must be enabled=False with no I/O performed.
+        """Default config must have telemetry on (dev-phase) so the
+        _NullRecorder path is exercised ONLY when explicitly disabled.
 
-        Verifies the privacy-first design: when telemetry is off
-        (the default), get_recorder() returns _NullRecorder and no
-        storage, redaction, or aggregator instances are created.
+        .. note::
+           ``TelemetryConfig.enabled`` and ``ReportingConfig.reporting_enabled``
+           are currently ``True`` during development to enable end-to-end testing
+           of error-to-Issue push (see ``telemetry/config.py`` TODOs).
+           Before formal release, revert both to ``False`` and flip the three
+           assertions below back to ``is False`` / ``_NullRecorder``.
         """
         from telemetry import config, recorder
 
         # Reset the cached singleton to honor any leftover state.
         recorder.reset_recorder_for_tests()
 
-        # Sanity: default config is off.
+        # Dev-phase default: telemetry is ON.
         cfg = config.TelemetryConfig()
-        assert cfg.enabled is False
-        assert cfg.reporting.reporting_enabled is False
+        assert cfg.enabled is True  # TODO: revert to False before formal release
+        assert cfg.reporting.reporting_enabled is True  # TODO: revert to False
 
-        # Recorder should be the null implementation.
+        # With enabled=True the singleton is a real recorder, not null.
         r = recorder.get_recorder()
-        assert isinstance(r, recorder._NullRecorder)
-        assert r.enabled is False
+        assert r.enabled is True
 
     def test_telemetry_recorder_endpoints_noop_when_disabled(self):
         """All public recorder endpoints are no-ops when telemetry is off.
