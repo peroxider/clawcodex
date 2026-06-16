@@ -348,6 +348,7 @@ class ReviewFeedbackConfig:
     bot_login: str | None = None
     max_log_chars_per_check: int = 12_000
     max_followup_attempts_per_pr: int = 5
+    pending_feedback_timeout_seconds: int = 600
 
 
 @dataclass
@@ -644,6 +645,9 @@ class WorkflowConfig:
                 ),
                 max_followup_attempts_per_pr=review_feedback_raw.get(
                     "max_followup_attempts_per_pr", 5
+                ),
+                pending_feedback_timeout_seconds=review_feedback_raw.get(
+                    "pending_feedback_timeout_seconds", 600
                 ),
             ),
             observability=ObservabilityConfig(
