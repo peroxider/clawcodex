@@ -51,6 +51,7 @@
     - [2.12 Issue 语义澄清流程（F-78）](#2-12-issue-语义澄清流程)
     - [2.13 Auto 模式（F-16 ✅）](#2-13-auto-模式)
     - [2.14 Agent 间自主观察与消息交互（F-80）](#2-14-agent-间自主观察与消息交互)
+    - [2.15 Ctrl+C/B 即时中断响应优化（F-99）](#2-15-ctrlc-即时中断响应优化f-99)
 - [三、CLI 与配置系统](#三、cli-与配置系统)
     - [3.1 CLI 模型供应商与模型切换（F-43 ✅）](#3-1-cli-模型供应商与模型切换设计)
     - [3.2 permission_mode 正交拆分（F-46 📋）](#3-2-permission-mode-enum-正交拆分设计)
@@ -1648,6 +1649,100 @@ def add_session_file(sessionId: UUID, filePath: str):
 
 > 角色定义（Manager / Worker 通过工具组合自动识别）、核心工具（`TaskInspect` + `TaskDirectives`）、优先级队列（`queue_pending_message` priority 字段 + `drain_pending_messages` 按优先级消费）、工具可见性过滤（仅 Manager 可调用）、权限规则传递与 Phase M1-M5 实施阶段已归档。
 > 详见 [ARCHIVED_FEATURES.md §十八（Agent 间自主观察与消息交互）](./ARCHIVED_FEATURES.md#十八agent-间自主观察与消息交互) 与对应进度归档 [ARCHIVED_PROGRESS.md F-29（TaskInspect/TaskDirectives 工具注册）](./ARCHIVED_PROGRESS.md#f-29-taskinspecttaskdirectives-工具注册)。
+
+---
+
+### 2.15 Ctrl+C/B 即时中断响应优化（F-99）
+
+**状态**: 📋 设计完成 | **优先级**: P0
+
+**目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
+
+#### 问题根因
+
+```
+你按 Ctrl+C
+  ↓  <1ms
+LiveStatus keybinding → engine.interrupt() → abort_controller.abort()
+  ↓  <1ms
+StreamAbortGuard listener → stream.response.close()
+  ↓  ⚠️ httpx 下 close() 是 advisory（不打断阻塞读）
+SDK 继续从 socket 读取 → 模型继续生成 → 10~30s 后自然结束
+```
+
+三瓶颈串联：
+
+| 瓶颈 | 位置 | 延迟贡献 | 原因 |
+|------|------|---------|------|
+| 1. Provider `response.close()` 无效 | `src/providers/_stream_abort.py` `_close_response_safely()` | 10~30s（主要） | LiteLLM/httpx 下 `response.close()` 是 advisory，不打断底层 socket read |
+| 2. `asyncio.gather` 等待所有工具 | `src/query/query.py` L1602 | 0.1~5s（次要） | 工具通过 `asyncio.to_thread` 派发，`gather` 等最慢的那个完成，abort 检查在 gather 之后 |
+| 3. 无传输层终止 | `src/providers/_stream_abort.py` | 无实际中止能力 | `close()` 仅关闭应用层流，底层 TCP 连接可能保持打开 |
+
+#### 方案架构
+
+```
+F-99 三层方案
+├── 方案1: httpx read_timeout（P0）         ← 延迟 bound 在 5s
+│   ├── 改动: AnthropicProvider._ensure_client()
+│   └── 原理: 设置 httpx.Client(read_timeout=5.0)，
+│              即使 close() 无效，5s 后 socket 超时抛异常，
+│              guard.reraise_if_aborted() 翻译为 AbortError
+│
+├── 方案2: 传输连接关闭（P1）                ← 延迟 bound 在 <100ms
+│   ├── 改动: _close_response_safely() 增加 transport.close()
+│   └── 原理: 关闭底层 TCP 连接，真正打断 blocking read，
+│              无须等待 timeout
+│
+└── 方案3: 工具阶段可取消（P2）              ← 工具阶段即时响应
+    ├── 改动: _run_tools_partitioned() 用 asyncio.wait(FIRST_COMPLETED)
+    │         替代 asyncio.gather
+    └── 原理: abort 后取消未执行的工具 future，不等最慢工具完成
+```
+
+#### 改造点清单
+
+| 文件 | 改动 | 方案 | 状态 |
+|------|------|------|------|
+| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=...)` | 方案1 | 📋 待实现 |
+| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `response._transport.close()` | 方案2 | 📋 待实现 |
+| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` | 方案3 | 📋 待实现 |
+| `src/query/query.py` | `_dispatch_single_tool()` 传递 abort_signal 给工具执行 | 方案3 | 📋 待实现 |
+
+#### 验收标准
+
+| # | 验收项 | 验收方式 |
+|---|--------|---------|
+| 1 | 直连 Anthropic 时 Ctrl+C 在 <500ms 内返回提示符 | 手动测试：`clawcodex` → 输入长任务 → Ctrl+C |
+| 2 | LiteLLM 代理下 Ctrl+C 在 <5s 内返回提示符（bound 在 read_timeout） | 同上，通过 LiteLLM 代理 |
+| 3 | 工具执行阶段 Ctrl+C 在 <500ms 内取消当前工具（Bash 已有 50ms poll） | 手动测试：agent 执行 `sleep 30` → Ctrl+C |
+| 4 | 并发工具（Read/Grep/Glob）执行中 abort 不等待非必要工具 | 单元测试验证 `FIRST_COMPLETED` 行为 |
+| 5 | 正常流式响应不受影响（read_timeout 不误触发 fallback） | 运行常规对话确认无中断 |
+| 6 | `_close_response_safely` 回退路径不抛异常 | 异常安全测试 |
+
+#### 风险与约束
+
+| 风险 | 影响 | 缓解措施 |
+|------|------|---------|
+| httpx `_transport` 内部属性依赖 | SDK 升级后属性名变化 | 增加 `getattr` fallback + 注释标注非公开 API |
+| `asyncio.wait(FIRST_COMPLETED)` 增加工具调度复杂度 | 调度逻辑可读性降低 | 封装 helper 函数，保留注释 |
+| read_timeout=5s 在正常慢 chunk 时误触发 | 不必要的 fallback 流式调用 | 保留 `StreamWatchdog` 的 90s 兜底，只在 abort 路径用短 timeout |
+| `transport.close()` 在 Windows 上不可用 | Windows 支持退化 | `sys.platform == "win32"` 时跳过，退化到方案1 |
+
+#### 已拟定的设计决定
+
+1. **方案1+2+3 组合实施**：不拆分单独上线，一次性覆盖所有瓶颈
+2. **不对现有 OpenAI-compatible provider 的 worker thread 方案做额外改动**：其 100ms poll 已足够快，orphan worker 仅浪费带宽不影响 UX
+3. **方案2 用 `getattr` 而非 `hasattr`**：httpx 内部属性可能不存在，使用 try/except 防御
+4. **不做 provider 无关的泛化**：方案1 只改 `AnthropicProvider`（主流场景），OpenAI-compatible 已有 worker thread 方案
+5. **`asyncio.wait(FIRST_COMPLETED)` 只影响 abort 路径**：正常执行时行为与 `asyncio.gather` 一致
+
+#### 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| `httpx` 内部 `Response._transport` | 构建依赖 | 方案2 依赖 httpx 非公开属性 |
+| `asyncio` | 运行时 | 方案3 依赖 asyncio 的 task 取消机制 |
+| 无关 | 无 | 本特性不依赖其他 F-N |
 
 ---
 
@@ -8235,3 +8330,4 @@ clawcodex_ext/community_radar/
 | **F-95** | **Visualizer Orchestrator 协同链接** | §8.3 | ✅ **已完成** |
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
+| F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | 📋 设计完成 | 三类子方案：httpx read_timeout + 传输连接关闭 + 工具阶段可取消 |

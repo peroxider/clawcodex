@@ -148,6 +148,7 @@
 | F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
+| F-99 | Ctrl+C/B 即时中断响应优化 | P0 | 📋 设计完成 | 三类子方案：httpx read_timeout + 传输连接关闭 + 工具阶段可取消。解决 LLM 流式响应中 Ctrl+C 需要 10~30s 才能生效的 UX 问题 |
 
 ---
 
@@ -1896,4 +1897,67 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | P0 | `src/services/bridge/transport.py:69-70` | 删除第69行的裸 `return`，使 `yield` 可达；或根据实际 WebSocket 传输需求重构 stub |
 | P1 | `extensions/orchestrator/agent_runner.py:30` | 删除 `is_quota_exhausted` import |
 | P1 | `extensions/orchestrator/cli/dashboard.py:18` | 删除 `from collections import deque` |
-| P1 | `extensions/orchestrator/cli/issue.py:1575` | 删除 `from pathlib import Path as _Path`（模块级已有 `Path`） |*
+| P1 | `extensions/orchestrator/cli/issue.py:1575` | 删除 `from pathlib import Path as _Path`（模块级已有 `Path`） |
+
+---
+
+## 十二、REPL/Agent 中断响应优化（F-99）
+
+**状态**: 📋 设计完成 | **优先级**: P0
+
+**目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§2.15 Ctrl+C/B 即时中断响应优化（F-99）`
+
+### 问题根因
+
+三瓶颈串联：
+
+| 瓶颈 | 位置 | 延迟贡献 | 原因 |
+|------|------|---------|------|
+| 1. Provider `response.close()` 无效 | `src/providers/_stream_abort.py` `_close_response_safely()` | 10~30s（主要） | LiteLLM/httpx 下 `response.close()` 是 advisory，不打断底层 socket read |
+| 2. `asyncio.gather` 等待所有工具 | `src/query/query.py` L1602 | 0.1~5s（次要） | 工具通过 `asyncio.to_thread` 派发，`gather` 等最慢的那个完成，abort 检查在 gather 之后 |
+| 3. 无传输层终止 | `src/providers/_stream_abort.py` | 无实际中止能力 | `close()` 仅关闭应用层流，底层 TCP 连接可能保持打开 |
+
+### 三层方案
+
+| 方案 | 改动 | 延迟 bound | 风险 |
+|------|------|:----------:|:----:|
+| **方案1**（P0）：httpx read_timeout=5s | `AnthropicProvider._ensure_client()` +5行 | ≤5s | 正常慢 chunk 误触发（极少见） |
+| **方案2**（P1）：传输连接关闭 | `_close_response_safely()` + `transport.close()` +8行 | <100ms | 依赖 httpx `_transport` 内部属性 |
+| **方案3**（P2）：工具阶段可取消 | `_run_tools_partitioned()` → `asyncio.wait(FIRST_COMPLETED)` | <500ms | 调度逻辑复杂度增加 |
+
+### 改造点清单
+
+| 文件 | 改动 | 方案 | 状态 |
+|------|------|------|:----:|
+| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=httpx.Timeout(30.0, read=5.0))` | 方案1 | 📋 待实现 |
+| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `getattr(response, '_transport', None)` 关闭 | 方案2 | 📋 待实现 |
+| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + abort 时 `task.cancel()` | 方案3 | 📋 待实现 |
+
+### 实施进度
+
+| 阶段 | 内容 | 预计工时 | 状态 |
+|------|------|:--------:|:----:|
+| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | 📋 待实现 |
+| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | 📋 待实现 |
+| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | 📋 待实现 |
+| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | 📋 待实现 |
+| Phase E | 稳定性门禁验证 | 0.5天 | 📋 待实现 |
+
+### 验收标准
+
+| # | 验收项 | 验收方式 |
+|---|--------|---------|
+| 1 | 直连 Anthropic 时 Ctrl+C 在 <500ms 内返回提示符 | 手动测试：发送长 prompt → Ctrl+C |
+| 2 | LiteLLM 代理下 Ctrl+C 在 <5s 内返回提示符 | 通过 LiteLLM 代理测试 |
+| 3 | 工具执行阶段 Ctrl+C 在 <500ms 内取消 | agent 执行 `sleep 30` → Ctrl+C |
+| 4 | 正常流式响应不受影响 | 运行常规对话确认无中断 |
+
+### 依赖与协同
+
+| 依赖 | 说明 |
+|------|------|
+| `httpx` 内部 API | 方案2 依赖 `Response._transport`（非公开属性） |
+| F-27 | 本特性为 F-27（TUI 响应性修复）的 Phase 2 增强 |
+| F-28 | Ctrl+B 后台化共享同一 `_cancel_engine` 回调 |*
