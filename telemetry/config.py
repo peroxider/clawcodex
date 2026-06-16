@@ -29,11 +29,19 @@ logger = logging.getLogger(__name__)
 class ReportingConfig:
     """Reporter configuration.
 
+    .. TODO::
+       Before formal release, revert ``reporting_enabled`` to ``False``
+       (see the docstring of :class:`TelemetryConfig` for rationale).
+
     ``kind`` selects the reporter implementation. Remote issue reporting
     remains opt-in via ``reporting_enabled`` and ``kind=\"issue\"``.
+
+    ``auto_push_errors_only`` controls the shutdown-flush hook behaviour:
+    ``True`` (default) — only push when errors exist;
+    ``False`` — push every time on exit (stats + errors).
     """
 
-    reporting_enabled: bool = False
+    reporting_enabled: bool = True  # TODO: revert to False before formal release
     kind: str = "local_file"
     platform: str = "github"
     owner: str = ""
@@ -44,17 +52,25 @@ class ReportingConfig:
     interval_hours: int = 24
     api_key: str = ""
     token_env: str = ""
+    auto_push_errors_only: bool = True
 
 
 @dataclass(frozen=True)
 class TelemetryConfig:
     """F-97 configuration.
 
-    All toggles default to off. ``storage_dir`` is expanded at load
-    time and rejected if it is empty.
+    .. TODO::
+       Before formal release, revert ``enabled`` and
+       ``reporting_enabled`` to ``False`` (see the TODOs below).
+       The dev-phase defaults turn on local recording so error-to-Issue
+       push can be tested end-to-end.  Stats are only written to local
+       JSONL; the ``crashes.total > 0`` gate in the shutdown-flush hook
+       ensures only error days trigger a remote push.
+
+    ``storage_dir`` is expanded at load time and rejected if it is empty.
     """
 
-    enabled: bool = False
+    enabled: bool = True  # TODO: revert to False before formal release
     storage_dir: Path = field(default_factory=lambda: Path("~/.clawcodex/telemetry"))
     retention_days: int = 30
     redaction: RedactionConfig = field(default_factory=RedactionConfig)
@@ -196,6 +212,11 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
                 reporting_api_key = raw
                 break
 
+    auto_push_errors_only = _coerce_bool(
+        reporting_section.get("auto_push_errors_only", base.reporting.auto_push_errors_only),
+        base.reporting.auto_push_errors_only,
+    )
+
     redaction_section = _section(on_disk_section, "redaction")
     redaction_cfg = base.redaction
     if redaction_section:
@@ -253,6 +274,7 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
             interval_hours=reporting_interval_hours,
             api_key=reporting_api_key,
             token_env=reporting_token_env,
+            auto_push_errors_only=auto_push_errors_only,
         ),
     )
 
@@ -290,5 +312,6 @@ def _apply_env_overrides(cfg: TelemetryConfig) -> TelemetryConfig:
             interval_hours=cfg.reporting.interval_hours,
             api_key=cfg.reporting.api_key,
             token_env=cfg.reporting.token_env,
+            auto_push_errors_only=cfg.reporting.auto_push_errors_only,
         ),
     )

@@ -63,6 +63,7 @@ def run_status(argv: Sequence[str] | None = None) -> int:
     _print(f"    interval_hours: {cfg.reporting.interval_hours}")
     _print(f"    token_env     : {cfg.reporting.token_env or '-'}")
     _print(f"    api_key_set   : {bool(cfg.reporting.api_key)}")
+    _print(f"    auto_push_errors_only: {cfg.reporting.auto_push_errors_only}")
     _print("  redaction:")
     for field_name in (
         "include_command_name",
@@ -210,6 +211,7 @@ def _asdict(cfg: TelemetryConfig) -> dict[str, Any]:
             "issue_title": cfg.reporting.issue_title,
             "mode": cfg.reporting.mode,
             "interval_hours": cfg.reporting.interval_hours,
+            "auto_push_errors_only": cfg.reporting.auto_push_errors_only,
             "token_env": cfg.reporting.token_env or "CLAW_TELEMETRY_REPORTING_TOKEN",
         },
         "redaction": {

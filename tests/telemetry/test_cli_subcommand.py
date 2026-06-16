@@ -37,7 +37,7 @@ def test_status_default(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "Telemetry status" in out
-    assert "enabled        : False" in out
+    assert "enabled        : True" in out  # dev-default
 
 
 def test_enable_prints_snippet(monkeypatch, tmp_path, capsys):
@@ -72,8 +72,8 @@ def test_preview_when_disabled(monkeypatch, tmp_path, capsys):
     reset_recorder_for_tests()
     rc = cli.run_preview([])
     out = capsys.readouterr().out
-    assert rc == 1
-    assert "disabled" in out
+    assert rc == 0  # dev-default — enabled=True now
+    assert "disabled" not in out
 
 
 def test_preview_accepts_main_style_date_arg(monkeypatch, tmp_path, capsys):

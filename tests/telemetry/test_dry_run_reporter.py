@@ -65,9 +65,9 @@ def test_dry_run_reporter_renders(tmp_path):
     storage, today, summary = _summary_dict(tmp_path)
     reporter = DryRunReporter()
     rendered = reporter.render(summary, today)
-    assert "ClawCodex Telemetry Summary" in rendered
+    assert "ClawCodex Telemetry" in rendered and "⚠️" in rendered
     assert "Sessions: 1" in rendered
-    assert "Top error fingerprints" in rendered
+    assert "Error report" in rendered
     assert reporter.emit(rendered, date=today) is True
     assert reporter.last_rendered == rendered
     assert reporter.last_date == today

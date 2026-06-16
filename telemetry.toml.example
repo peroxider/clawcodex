@@ -1,5 +1,15 @@
 # F-97 telemetry example configuration
 #
+# TODO before formal release:
+#   enabled = false
+#   [telemetry.reporting]
+#   reporting_enabled = false
+#
+# Dev-phase defaults: enabled + reporting_enabled are true so that
+# error-to-Issue push can be tested end-to-end.  Stats are only written
+# to local JSONL; the crashes.total > 0 gate ensures only error days
+# trigger a remote push.
+#
 # This file shows every key the F-97 telemetry system understands. Drop
 # it into your project as `telemetry.toml` (the location the F-97
 # loader probes automatically) or copy the `[tool.clawcodex.telemetry]`
@@ -23,12 +33,14 @@
 #   standard variable and telemetry will find it.
 
 [telemetry]
-enabled = false                                # master switch (default off)
+enabled = true                                 # master switch (dev default)
+                                                  # TODO: revert to false before release
 storage_dir = "~/.clawcodex/telemetry"         # JSONL output root
 retention_days = 30                            # 1..365, days of on-disk history
 
 [telemetry.reporting]
-reporting_enabled = false                      # remote opt-in (default off)
+reporting_enabled = true                       # remote opt-in (dev default)
+                                                  # TODO: revert to false before release
 kind = "local_file"                            # local_file | issue | dry_run
 platform = "github"                            # github | gitee | gitcode
 owner = ""                                     # GitHub/Gitee/GitCode owner

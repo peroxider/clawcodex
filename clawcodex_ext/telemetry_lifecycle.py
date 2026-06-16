@@ -7,6 +7,10 @@ exit — via SIGINT, SIGTERM, or normal ``atexit``.
 This is a best-effort, fire-and-forget hook. If telemetry is disabled or
 the recorder has not been initialized, the cleanup is a no-op.
 
+The flush is run in a short-lived daemon thread so a slow HTTP request
+to the remote Issue tracker never blocks the process exit. If the thread
+does not finish before the interpreter shuts down, it is silently killed.
+
 Usage
 -----
 Called lazily from ``src/init.py:init()``, after the exception hooks and
@@ -20,6 +24,7 @@ Idempotent — calling it more than once is safe (second call is a no-op).
 from __future__ import annotations
 
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -32,38 +37,47 @@ def _telemetry_shutdown_flush() -> None:
     Only emits to reporters when today's summary contains crashes or
     errors — normal clean exits do NOT push an Issue.
 
+    Runs in a daemon thread so the HTTP request never blocks exit.
     Swallows all exceptions so a misconfigured or broken telemetry
     subsystem never blocks the shutdown drain.
     """
-    try:
-        from telemetry.recorder import get_recorder
-        from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
-        from telemetry.aggregator import DailyAggregator
+    def _do_flush() -> None:
+        try:
+            from telemetry.recorder import get_recorder
+            from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
+            from telemetry.aggregator import DailyAggregator
 
-        recorder = get_recorder()
-        if not getattr(recorder, "enabled", False):
-            return
-        if not recorder.config.reporting.reporting_enabled:
-            return
+            recorder = get_recorder()
+            if not getattr(recorder, "enabled", False):
+                return
+            if not recorder.config.reporting.reporting_enabled:
+                return
 
-        date = utc_date(utc_now())
-        # Aggregate today's events to get a summary dict.
-        storage = LocalJsonlStorage(
-            recorder.config.storage_dir,
-            recorder.config.retention_days,
-        )
-        summary = DailyAggregator(storage).aggregate(date)
-        if not summary:
-            return
+            date = utc_date(utc_now())
+            storage = LocalJsonlStorage(
+                recorder.config.storage_dir,
+                recorder.config.retention_days,
+            )
+            summary = DailyAggregator(storage).aggregate(date)
+            if not summary:
+                return
 
-        # Only push Issue when there are crashes / errors today.
-        crashes = summary.get("crashes", {}) or {}
-        if crashes.get("total", 0) == 0:
-            return
+            # When auto_push_errors_only is False, flush every time (stats + errors).
+            # When True (default), only flush when today's summary has crashes.
+            auto_push_errors_only = getattr(
+                recorder.config.reporting, "auto_push_errors_only", True
+            )
+            if auto_push_errors_only:
+                crashes = summary.get("crashes", {}) or {}
+                if crashes.get("total", 0) == 0:
+                    return
 
-        recorder.flush()
-    except Exception as exc:  # noqa: BLE001 — best-effort
-        logger.debug("telemetry: shutdown flush failed: %s", exc)
+            recorder.flush()
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            logger.debug("telemetry: shutdown flush failed: %s", exc)
+
+    t = threading.Thread(target=_do_flush, name="telemetry-shutdown-flush", daemon=True)
+    t.start()
 
 
 def install_telemetry_shutdown_flush() -> None:

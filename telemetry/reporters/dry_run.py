@@ -55,6 +55,11 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
     Pure function. Mirrors the Issue body template in
     ``docs/FEATURE_PLAN.md`` §9.5 (issue body example) but is fully
     local-only — no issue creation, no remote upload.
+
+    When the report contains crashes or errors the error section is
+    placed at the top (before the stats) and the title is prefixed
+    with a warning indicator so the Issue is immediately identifiable
+    as an error report.
     """
     version = summary.get("version", "unknown")
     sessions = summary.get("sessions", 0)
@@ -62,9 +67,36 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
     platforms = summary.get("platforms", {}) or {}
     exit_status_counts = summary.get("exit_status_counts", {}) or {}
     duration = summary.get("duration_s", {}) or {}
+    crashes = summary.get("crashes", {}) or {}
+    top_crashes = crashes.get("top", []) if isinstance(crashes, dict) else []
+    has_crashes = bool(top_crashes)
 
     lines: list[str] = []
-    lines.append(f"# ClawCodex Telemetry Summary — {date}")
+    title_prefix = "⚠️ " if has_crashes else ""
+    lines.append(f"# {title_prefix}ClawCodex Telemetry — {date}")
+    lines.append("")
+
+    # Error section first (when present) — the Issue is only pushed when
+    # there are crashes, so this is the primary content.
+    if has_crashes:
+        lines.append("## Error report")
+        lines.append("")
+        lines.append("| Fingerprint | Count | Error class | First seen | Last seen |")
+        lines.append("|-------------|------:|-------------|------------|-----------|")
+        for row in top_crashes:
+            lines.append(
+                "| {fp} | {count} | {cls} | {first} | {last} |".format(
+                    fp=row.get("fingerprint", "?"),
+                    count=row.get("count", 0),
+                    cls=row.get("error_class", "?"),
+                    first=row.get("first_seen_iso", "?"),
+                    last=row.get("last_seen_iso", "?"),
+                )
+            )
+        lines.append("")
+
+    # Stats section secondary — provides context around the error.
+    lines.append("## Daily stats")
     lines.append("")
     lines.append(f"- Version: {version}")
     lines.append(f"- Sessions: {sessions}")
@@ -91,29 +123,10 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
             "- Providers: "
             + ", ".join(f"{k} {v}" for k, v in sorted(providers.items()))
         )
-
-    crashes = summary.get("crashes", {}) or {}
-    top_crashes = crashes.get("top", []) if isinstance(crashes, dict) else []
-    if top_crashes:
-        lines.append("")
-        lines.append("## Top error fingerprints")
-        lines.append("")
-        lines.append("| Fingerprint | Count | Error class | First seen | Last seen |")
-        lines.append("|-------------|------:|-------------|------------|-----------|")
-        for row in top_crashes:
-            lines.append(
-                "| {fp} | {count} | {cls} | {first} | {last} |".format(
-                    fp=row.get("fingerprint", "?"),
-                    count=row.get("count", 0),
-                    cls=row.get("error_class", "?"),
-                    first=row.get("first_seen_iso", "?"),
-                    last=row.get("last_seen_iso", "?"),
-                )
-            )
+    lines.append("")
 
     top_commands = summary.get("top_commands", []) or []
     if top_commands:
-        lines.append("")
         lines.append("## Top commands")
         lines.append("")
         for entry in top_commands:

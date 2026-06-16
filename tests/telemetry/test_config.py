@@ -16,8 +16,8 @@ from telemetry.redaction import RedactionConfig
 
 def test_default_config_is_disabled():
     cfg = TelemetryConfig()
-    assert cfg.enabled is False
-    assert cfg.reporting.reporting_enabled is False
+    assert cfg.enabled is True  # dev-default
+    assert cfg.reporting.reporting_enabled is True  # dev-default
     assert cfg.reporting.kind == "local_file"
     assert cfg.retention_days == 30
     assert isinstance(cfg.redaction, RedactionConfig)
@@ -31,8 +31,8 @@ def test_load_config_defaults_when_nothing_set(monkeypatch, tmp_path):
     monkeypatch.delenv("CLAW_TELEMETRY_REPORTING_ENABLED", raising=False)
     monkeypatch.delenv("CLAW_TELEMETRY_STORAGE_DIR", raising=False)
     cfg = load_config()
-    assert cfg.enabled is False
-    assert cfg.reporting.reporting_enabled is False
+    assert cfg.enabled is True  # dev-default
+    assert cfg.reporting.reporting_enabled is True  # dev-default
 
 
 def test_env_override_enables_collection(monkeypatch, tmp_path):
@@ -74,7 +74,7 @@ def test_config_dataclass_is_frozen():
 
 def test_reporting_config_defaults():
     rc = ReportingConfig()
-    assert rc.reporting_enabled is False
+    assert rc.reporting_enabled is True  # dev-default
     assert rc.kind == "local_file"
     assert rc.platform == "github"
     assert rc.mode == "update_or_create"
@@ -269,7 +269,7 @@ def test_load_config_toml_invalid_falls_back_to_defaults(monkeypatch, tmp_path):
 
     cfg = load_config(cwd=tmp_path)
 
-    assert cfg.enabled is False
+    assert cfg.enabled is True  # dev-default
     assert cfg.retention_days == 30
 
 

@@ -45,7 +45,10 @@ class IssueReporter:
 
     def emit(self, rendered: str, *, date: str) -> bool:
         try:
-            return self._emit(rendered, date=date)
+            labels: list[str] | None = None
+            if "## Error report" in rendered:
+                labels = ["telemetry-crash"]
+            return self._emit(rendered, date=date, labels=labels)
         except Exception as exc:  # noqa: BLE001
             logger.warning("telemetry: issue reporter failed: %s", exc)
             self._record_error(
@@ -56,7 +59,7 @@ class IssueReporter:
             )
             return False
 
-    def _emit(self, rendered: str, *, date: str) -> bool:
+    def _emit(self, rendered: str, *, date: str, labels: list[str] | None = None) -> bool:
         if not self._valid_config():
             self._record_error(date=date, reason="missing_config", rendered=rendered)
             return False
@@ -84,7 +87,7 @@ class IssueReporter:
             return True
 
         try:
-            issue = _run_coro_sync(self._upsert(rendered, date=date))
+            issue = _run_coro_sync(self._upsert(rendered, date=date, labels=labels))
         except Exception as exc:  # noqa: BLE001
             self._record_error(
                 date=date,
@@ -111,17 +114,17 @@ class IssueReporter:
         )
         return True
 
-    async def _upsert(self, rendered: str, *, date: str) -> dict[str, Any] | None:
+    async def _upsert(self, rendered: str, *, date: str, labels: list[str] | None = None) -> dict[str, Any] | None:
         client = self._get_client()
         mode = self._config.mode
         if mode == "create_daily":
-            return await self._upsert_daily_issue(rendered, date=date)
+            return await self._upsert_daily_issue(rendered, date=date, labels=labels)
         if mode == "update_or_create":
-            return await self._upsert_inbox_issue(rendered, date=date)
+            return await self._upsert_inbox_issue(rendered, date=date, labels=labels)
         self._record_error(date=date, reason="unsupported_mode", rendered=rendered)
         return None
 
-    async def _upsert_daily_issue(self, rendered: str, *, date: str) -> dict[str, Any] | None:
+    async def _upsert_daily_issue(self, rendered: str, *, date: str, labels: list[str] | None = None) -> dict[str, Any] | None:
         client = self._get_client()
         title = f"{self._config.issue_title} — {date}"
         body = _wrap_date_block(rendered, date)
@@ -129,22 +132,22 @@ class IssueReporter:
         if existing:
             issue_id = _issue_id(existing)
             if issue_id:
-                return await client.update_issue_body(issue_id, title=title, body=body)
-        return await client.create_issue(title=title, body=body)
+                return await client.update_issue_body(issue_id, title=title, body=body, labels=labels)
+        return await client.create_issue(title=title, body=body, labels=labels)
 
-    async def _upsert_inbox_issue(self, rendered: str, *, date: str) -> dict[str, Any] | None:
+    async def _upsert_inbox_issue(self, rendered: str, *, date: str, labels: list[str] | None = None) -> dict[str, Any] | None:
         client = self._get_client()
         title = self._config.issue_title
         block = _wrap_date_block(rendered, date)
         existing = await client.find_issue_by_title(title, state=client.platform.open_state)
         if not existing:
-            return await client.create_issue(title=title, body=block)
+            return await client.create_issue(title=title, body=block, labels=labels)
         issue_id = _issue_id(existing)
         if not issue_id:
             return None
         current_body = str(existing.get("body") or existing.get("description") or "")
         updated_body = _replace_or_append_date_block(current_body, block, date)
-        return await client.update_issue_body(issue_id, title=title, body=updated_body)
+        return await client.update_issue_body(issue_id, title=title, body=updated_body, labels=labels)
 
     def _valid_config(self) -> bool:
         return bool(

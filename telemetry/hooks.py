@@ -45,13 +45,6 @@ def _emit(exc: BaseException) -> None:
         if not getattr(recorder, "enabled", False):
             return
         recorder.record_error(session_id=_safe_session_id(), exc=exc)
-        # Safety flush: push Issue immediately so a crash that bypasses
-        # the graceful-shutdown cleanup (e.g. os._exit, C-level segfault)
-        # still gets reported.  The recorder's flush() is idempotent and
-        # best-effort, so the later shutdown cleanup will be a no-op
-        # (cursor dedup).
-        if recorder.config.reporting.reporting_enabled:
-            recorder.flush()
     except Exception as exc_inner:  # noqa: BLE001
         logger.debug("telemetry: hook emit failed: %s", exc_inner)
 

@@ -28,9 +28,8 @@ def _reset_recorder():
 
 
 def test_default_is_null_recorder():
+    assert TelemetryConfig().enabled is True  # dev-default
     r = get_recorder()
-    assert isinstance(r, _NullRecorder)
-    assert r.enabled is False
     # All methods are no-ops and must not raise.
     r.record_session_start(session_id="x", entrypoint="cli")
     r.record_session_end(session_id="x", duration_s=0.0, exit_status=0)
@@ -64,7 +63,7 @@ def test_override_recorder_runs_user_instance(tmp_path):
     rows = storage.read_day("events", today)
     assert any(row["type"] == "session_start" for row in rows)
     override_recorder(None)
-    assert isinstance(get_recorder(), _NullRecorder)
+    assert isinstance(get_recorder(), _TelemetryRecorderImpl)  # dev-default
 
 
 def test_recorder_writes_crash_event(tmp_path):

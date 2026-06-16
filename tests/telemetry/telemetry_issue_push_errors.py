@@ -320,8 +320,8 @@ def test_real_issue_push(tmpdir: str, token: str) -> None:
             check("RuntimeError" in body, "Issue body 包含 error_class=RuntimeError")
             check("Exit status counts: error=1" in body, "Issue body 包含 error 计数")
             check("clawcodex-telemetry:" in str(body), "Issue body 含 marker 标签")
-            check("## Top error fingerprints" in body, "Issue body 含 crash summary 表")
-            check("fingerprint" in body, "Issue body 含 fingerprint hash（privacy-safe）")
+            check("## Error report" in body, "Issue body 含 Error report 章节")
+            check("Fingerprint" in body, "Issue body 含 fingerprint hash（privacy-safe）")
             print(f"  body 长度: {len(body)} 字符")
             print(f"  body 摘录:\n{body[:400]}\n  ...")
 

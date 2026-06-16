@@ -239,7 +239,7 @@ def main() -> int:
         # 验证: 创建了 Issue
         assert len(client.created) == 1, "预期创建 1 个 Issue"
         assert client.created[0]["title"] == "ClawCodex Telemetry Inbox"
-        assert "ClawCodex Telemetry Summary" in client.created[0]["body"]
+        assert "ClawCodex Telemetry" in client.created[0]["body"]
 
         # 3.5 验证 cursor 写入
         print("\n--- 步骤 5: 验证 reporter cursor ---")
