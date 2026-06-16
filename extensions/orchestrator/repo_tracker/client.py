@@ -242,6 +242,14 @@ class RepositoryIssueClient:
         state: str | None = None,
         labels: list[str] | None = None,
     ) -> None:
+        """Update a remote issue's state and/or labels.
+
+        Best-effort: when the platform is GitCode (``access_token`` auth)
+        and the only change is ``state_event=close``, a known platform
+        limitation prevents the issue from actually closing (HTTP 200 is
+        returned but state stays ``open``). The error is logged at
+        WARNING level and swallowed — the caller is not interrupted.
+        """
         payload = _build_issue_update_payload(
             state=state,
             labels=labels,
@@ -249,12 +257,31 @@ class RepositoryIssueClient:
         )
         if not payload:
             return
-        await self._request_json(
-            "PATCH",
-            f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
-            json=payload if self.platform.auth_mode == "bearer" else None,
-            data=payload if self.platform.auth_mode != "bearer" else None,
-        )
+        try:
+            await self._request_json(
+                "PATCH",
+                f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
+                json=payload if self.platform.auth_mode == "bearer" else None,
+                data=payload if self.platform.auth_mode != "bearer" else None,
+            )
+        except RepositoryTrackerError as exc:
+            # GitCode limitation: state_event=close alone requires at
+            # least one extra content field, and even then the close
+            # doesn't take effect. Degrade gracefully.
+            if (
+                self.platform.auth_mode != "bearer"
+                and list(payload.keys()) == ["state_event"]
+                and "state_event" in str(exc)
+                and "400" in str(exc)
+            ):
+                logger.warning(
+                    "update_issue: GitCode API does not support close via "
+                    "state_event=close (known platform limitation). "
+                    "issue_id=%s state=%s — ignoring.",
+                    issue_id, state,
+                )
+                return
+            raise
 
     async def update_issue_body(
         self,
@@ -987,6 +1014,16 @@ def _build_issue_update_payload(
     labels: list[str] | None,
     platform: RepositoryPlatform,
 ) -> dict[str, Any]:
+    """Build the PATCH payload for :meth:`RepositoryIssueClient.update_issue`.
+
+    For ``access_token``-auth platforms (Gitee, GitCode) the ``state``
+    parameter is translated to ``state_event`` — GitLab-style API.
+    **Known limitation (GitCode)**: ``state_event=close`` is accepted
+    (HTTP 200) but does **not** actually close the issue. This is a
+    platform-side bug; callers that rely on the close side-effect
+    should verify the issue state after the call or degrade gracefully.
+    See ``tests/telemetry_issue_push_real.py`` for reproduction.
+    """
     payload: dict[str, Any] = {}
     normalized = (state or "").strip().lower()
     if normalized:

@@ -140,6 +140,17 @@ def init() -> None:
         _logger.debug("init: telemetry hook install failed: %s", exc)
     profile_checkpoint("init_after_telemetry_hooks")
 
+    # F-97: register telemetry shutdown flush so the aggregator and
+    # reporter emit run on SIGINT/SIGTERM/atexit. Idempotent, best-effort.
+    _logger.info("init: registering telemetry shutdown flush")
+    try:
+        from clawcodex_ext.telemetry_lifecycle import install_telemetry_shutdown_flush
+
+        install_telemetry_shutdown_flush()
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("init: telemetry shutdown flush install failed: %s", exc)
+    profile_checkpoint("init_after_telemetry_shutdown_flush")
+
     profile_checkpoint("init_function_end")
 
 

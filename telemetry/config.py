@@ -181,6 +181,21 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
     if reporting_token_env and not reporting_api_key:
         reporting_api_key = os.environ.get(reporting_token_env, "")
 
+    # Fallback: check platform-standard env vars when no api_key is set.
+    # Users can use their existing platform token without ClawCodex-specific
+    # config (e.g. GITCODE_TOKEN, GITHUB_TOKEN, GITEE_TOKEN).
+    if not reporting_api_key:
+        _platform_env_fallbacks: dict[str, tuple[str, ...]] = {
+            "github": ("GITHUB_TOKEN", "GH_TOKEN"),
+            "gitcode": ("GITCODE_TOKEN",),
+            "gitee": ("GITEE_TOKEN",),
+        }
+        for env_name in _platform_env_fallbacks.get(reporting_platform, ()):
+            raw = os.environ.get(env_name, "")
+            if raw:
+                reporting_api_key = raw
+                break
+
     redaction_section = _section(on_disk_section, "redaction")
     redaction_cfg = base.redaction
     if redaction_section:
