@@ -1080,6 +1080,20 @@ async def _run_tools_partitioned(
     ConcurrencySafe tools (Read, Grep, Glob, etc.) run in parallel up to
     MAX_TOOL_USE_CONCURRENCY.  Non-safe tools (Bash, Edit, Write) run
     exclusively one at a time.
+
+    F-99 方案3: dispatch concurrent tools as ``asyncio`` tasks (rather
+    than ``asyncio.gather`` on raw coroutines) and poll with
+    ``asyncio.wait(FIRST_COMPLETED)`` so a user abort can cancel the
+    in-flight tool tasks as soon as one completes, instead of
+    waiting for the slowest tool in the batch. ``asyncio.to_thread``
+    runs the tool synchronously on a worker thread, so cancelling the
+    wrapping task does NOT preempt the underlying tool — the tool
+    finishes naturally and its result is discarded by the gate. This
+    still wins for UX: ``Ctrl+C`` mid-batch unblocks the agent loop
+    within ``max(remaining_tool_time, ~0s)`` instead of waiting for
+    every tool to finish, and the next turn starts as soon as the
+    abort controller's ``AbortError`` propagates out of
+    :func:`_is_user_cancelled_abort`.
     """
     batches = _partition_tool_calls(tool_use_blocks, tools)
     # Emit all primary tool_result messages first, then all supplemental
@@ -1095,31 +1109,159 @@ async def _run_tools_partitioned(
         primaries.append(pair[0])
         extras.extend(pair[1])
 
+    # F-99 方案3 helper: dispatch a batch of tool_use_blocks concurrently
+    # with FIRST_COMPLETED polling. Aborts short-circuit remaining tasks
+    # so the agent loop unwinds the moment the abort signal trips,
+    # without waiting for stragglers. Returns when every task is done
+    # OR when the abort signal trips (whichever first); on abort,
+    # pending tasks are cancelled (the underlying worker thread is
+    # NOT preemptable — Python has no thread cancellation — but its
+    # result is discarded by the caller-supplied gate at task-done
+    # time).
+    async def _run_concurrent_batch(
+        blocks: list[ToolUseBlock],
+    ) -> None:
+        if not blocks:
+            return
+        if len(blocks) == 1:
+            # Single tool: no benefit from FIRST_COMPLETED polling,
+            # keep the original gather-like shape so the caller path
+            # is unchanged for the common case.
+            pair = await asyncio.to_thread(
+                _dispatch_single_tool,
+                blocks[0],
+                tool_registry,
+                tool_use_context,
+                tools,
+            )
+            _accumulate(pair)
+            return
+
+        tasks: dict[asyncio.Task[tuple[UserMessage, list[UserMessage]]], ToolUseBlock] = {}
+        for block in blocks:
+            task = asyncio.create_task(
+                asyncio.to_thread(
+                    _dispatch_single_tool,
+                    block,
+                    tool_registry,
+                    tool_use_context,
+                    tools,
+                ),
+                name=f"tool-dispatch-{block.name}",
+            )
+            tasks[task] = block
+        try:
+            pending: set[asyncio.Task[tuple[UserMessage, list[UserMessage]]]] = set(tasks)
+            # F-99 方案3 abort poll: ``asyncio.wait`` only returns when
+            # a task completes, so without a timeout it would block
+            # until the slowest remaining tool finishes — the very
+            # behaviour we're fixing. By passing ``timeout=0.1`` we
+            # re-check the abort signal every 100ms, matching the
+            # cancel-latency bound the streaming drain helper
+            # (clawcodex_ext.providers._stream_drain) uses. The 100ms
+            # interval is invisible to the user (well below human
+            # reaction time) and adds no measurable overhead when no
+            # abort fires.
+            _ABORT_POLL_INTERVAL_S = 0.1
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    timeout=_ABORT_POLL_INTERVAL_S,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    # ``asyncio.to_thread`` does not raise CancelledError
+                    # in the worker; cancellation surfaces as the task
+                    # being cancelled (with no result). We discard the
+                    # cancellation path here and rely on the post-loop
+                    # abort check below.
+                    if task.cancelled():
+                        continue
+                    exc = task.exception()
+                    if exc is not None:
+                        # Surface unexpected exceptions so they reach the
+                        # agent-loop's outer try/except — never swallow
+                        # a tool failure silently. AbortError is the
+                        # one exception we DO want to translate into a
+                        # synthetic cancelled tool_result below; it
+                        # arrives via the in-tool AbortError branch in
+                        # _dispatch_single_tool, which has already
+                        # tripped the controller and returned a
+                        # synthetic (non-raising) result, so this path
+                        # should not see AbortError in practice.
+                        raise exc
+                    _accumulate(task.result())
+                # F-99 方案3: poll abort between batches. Even if all
+                # remaining tasks finish naturally, an abort that
+                # fired mid-batch must short-circuit subsequent work
+                # so we don't burn another tool round-trip the user
+                # already cancelled. With ``timeout`` set above this
+                # also catches aborts that fire while no task is
+                # completing — the loop wakes up every 100ms to
+                # check ``aborted`` even when ``done`` is empty.
+                if pending and _is_user_cancelled_abort(tool_use_context):
+                    break
+        finally:
+            # Cancel anything still in flight and await the
+            # cancellations so the event loop doesn't accumulate
+            # dangling task references. ``return_exceptions=True``
+            # keeps CancelledError from being raised into our caller
+            # (which would mask the user's actual AbortError).
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            # Synthesize cancelled tool_results for any block whose
+            # task did not produce one. Mirrors the
+            # ``_is_user_cancelled_abort`` branch at the head of
+            # _dispatch_single_tool, applied retroactively so the
+            # tool_use/tool_result pairing invariant is preserved
+            # even on the abort path.
+            if _is_user_cancelled_abort(tool_use_context):
+                for task, block in tasks.items():
+                    if not task.done() or task.cancelled():
+                        primaries.append(_build_user_cancelled_result(block.id))
+
     for batch in batches:
         if batch.is_concurrent_safe and len(batch.blocks) > 1:
-            coros = [
-                asyncio.to_thread(
-                    _dispatch_single_tool, block, tool_registry, tool_use_context, tools,
-                )
-                for block in batch.blocks[:MAX_TOOL_USE_CONCURRENCY]
-            ]
-            for pair in await asyncio.gather(*coros):
-                _accumulate(pair)
+            # Split at the concurrency cap to match the upstream
+            # behaviour: at most MAX_TOOL_USE_CONCURRENCY tools in
+            # flight per window.
+            window = batch.blocks[:MAX_TOOL_USE_CONCURRENCY]
+            await _run_concurrent_batch(window)
+            if _is_user_cancelled_abort(tool_use_context):
+                # Don't drain the overflow window once the user has
+                # cancelled — emit synthetic results so pairing stays
+                # intact, then exit the batch loop early.
+                for block in batch.blocks[MAX_TOOL_USE_CONCURRENCY:]:
+                    primaries.append(_build_user_cancelled_result(block.id))
+                break
             if len(batch.blocks) > MAX_TOOL_USE_CONCURRENCY:
-                overflow = [
-                    asyncio.to_thread(
-                        _dispatch_single_tool, block, tool_registry, tool_use_context, tools,
-                    )
-                    for block in batch.blocks[MAX_TOOL_USE_CONCURRENCY:]
-                ]
-                for pair in await asyncio.gather(*overflow):
-                    _accumulate(pair)
+                overflow = batch.blocks[MAX_TOOL_USE_CONCURRENCY:]
+                await _run_concurrent_batch(overflow)
+                if _is_user_cancelled_abort(tool_use_context):
+                    # _run_concurrent_batch already appended synthetic
+                    # results for any cancelled-in-flight tool; nothing
+                    # more to do here.
+                    break
         else:
             for block in batch.blocks:
                 pair = await asyncio.to_thread(
                     _dispatch_single_tool, block, tool_registry, tool_use_context, tools,
                 )
                 _accumulate(pair)
+                if _is_user_cancelled_abort(tool_use_context):
+                    # Mark the remaining exclusive-batch tools as
+                    # cancelled too so we don't issue them and so the
+                    # pairing invariant holds.
+                    remaining = batch.blocks[batch.blocks.index(block) + 1:]
+                    for tail_block in remaining:
+                        primaries.append(_build_user_cancelled_result(tail_block.id))
+                    break
+            else:
+                continue
+            # Broke out of the exclusive-batch for-loop due to abort.
+            break
 
     return [*primaries, *extras]
 

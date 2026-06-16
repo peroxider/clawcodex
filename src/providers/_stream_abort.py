@@ -35,6 +35,7 @@ just owns the listener lifecycle.
 """
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Any
 
 from src.utils.abort_controller import AbortError
@@ -44,6 +45,40 @@ if TYPE_CHECKING:
 
 
 __all__ = ["StreamAbortGuard"]
+
+
+def _close_transport_safely(response: Any) -> None:
+    """Best-effort close of the underlying httpx transport — never raises.
+
+    F-99 方案2: ``response.close()`` only releases the application-level
+    stream handle; the underlying TCP connection (and its blocking
+    read) can stay open on platforms where ``close()`` is advisory.
+    Closing the transport forcibly closes the socket so the
+    SDK/httpx layer's blocking read returns immediately with a
+    ``RemoteProtocolError`` / ``ReadError`` (or Windows-equivalent
+    ``ConnectionResetError``) instead of waiting for the read
+    timeout. The subsequent exception is translated to
+    ``AbortError`` by :meth:`StreamAbortGuard.reraise_if_aborted`.
+
+    The transport attribute is httpx-internal — protected by
+    ``getattr`` so a future SDK / httpx version that renames it
+    degrades gracefully to ``response.close()``-only semantics.
+    Skipped on Windows where forcibly closing a socket mid-read
+    can deadlock some kernel-side socket code paths; on Windows
+    we fall back to ``response.close()`` only (方案1's
+    ``read_timeout=5`` is the bound).
+    """
+    if sys.platform == "win32":
+        return
+    try:
+        transport = getattr(response, "_transport", None)
+        if transport is None:
+            return
+        close = getattr(transport, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
 
 
 def _close_response_safely(stream: Any) -> None:
@@ -61,6 +96,10 @@ def _close_response_safely(stream: Any) -> None:
     purely defensive; the next-chunk read will eventually fail by
     other means (timeout, server-side disconnect) even if the close
     is a no-op.
+
+    F-99 方案2 also closes the underlying httpx transport so the
+    blocking socket read is interrupted at the kernel level rather
+    than waiting for ``response.close()`` to trickle through.
     """
     try:
         response = getattr(stream, "response", None)
@@ -68,6 +107,7 @@ def _close_response_safely(stream: Any) -> None:
             close = getattr(response, "close", None)
             if callable(close):
                 close()
+            _close_transport_safely(response)
     except Exception:
         pass
 

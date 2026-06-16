@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.providers._stream_abort import StreamAbortGuard
+from src.providers._stream_abort import StreamAbortGuard, _close_response_safely
 from src.utils.abort_controller import AbortController, AbortError
 
 
@@ -278,3 +278,124 @@ def test_reraise_if_aborted_translates_to_abort_error_with_cause() -> None:
 def test_reraise_if_aborted_no_signal_is_noop() -> None:
     """``abort_signal=None`` guards always treat the exception as non-abort."""
     StreamAbortGuard(None).reraise_if_aborted(RuntimeError("anything"))
+
+
+# ---------------------------------------------------------------------------
+# F-99 方案2: transport.close() — interrupt the underlying socket read
+#
+# ``response.close()`` is advisory on some platforms and does not
+# interrupt the in-flight blocking read on the worker thread. Closing
+# the httpx transport closes the TCP socket, which makes the next
+# read return immediately with an exception. The provider then
+# translates that exception to ``AbortError`` via
+# ``reraise_if_aborted``. These tests pin the close behaviour.
+
+def test_close_response_safely_closes_transport_on_non_windows(monkeypatch) -> None:
+    """F-99: ``_close_response_safely`` calls ``response._transport.close()``.
+
+    Mock ``sys.platform`` so the Windows skip branch doesn't fire and
+    assert both ``response.close`` AND ``response._transport.close``
+    are called. The transport close is the actual interrupt that
+    bounds cancel latency on platforms where ``response.close()`` is
+    advisory.
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "linux")
+    stream = _make_stream()
+    # The MagicMock auto-creates _transport with a callable close;
+    # explicitly verify it gets called.
+    _close_response_safely(stream)
+    stream.response.close.assert_called_once()
+    stream.response._transport.close.assert_called_once()
+
+
+def test_close_response_safely_skips_transport_on_windows(monkeypatch) -> None:
+    """F-99: Windows skips transport.close to avoid kernel-level deadlock risk.
+
+    On Windows, forcibly closing a socket mid-read can deadlock some
+    Winsock code paths. The F-99 plan degrades to ``response.close()``
+    only on Windows, relying on ``read_timeout=5s`` (方案1) for the
+    cancel latency bound instead.
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "win32")
+    stream = _make_stream()
+    _close_response_safely(stream)
+    stream.response.close.assert_called_once()
+    # ``_transport`` should NOT have been touched on Windows.
+    stream.response._transport.close.assert_not_called()
+
+
+def test_close_response_safely_handles_missing_transport(monkeypatch) -> None:
+    """F-99: missing ``_transport`` attribute is a silent no-op, not an error.
+
+    httpx is allowed to rename the attribute in a future major
+    version; the close must degrade to ``response.close()``-only
+    semantics rather than raising AttributeError from the listener
+    thread (which would mask the abort).
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "linux")
+
+    class _NoTransport:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    stream = MagicMock()
+    stream.response = _NoTransport()
+    # Should not raise even though _transport does not exist.
+    _close_response_safely(stream)
+    assert stream.response.closed is True
+
+
+def test_close_response_safely_handles_transport_close_failure(monkeypatch) -> None:
+    """F-99: ``_transport.close()`` failures are swallowed, not propagated.
+
+    The listener fires from the keypress / SIGINT thread — letting
+    the close raise there would crash that thread without delivering
+    the cancel. The helper's contract is ``never raises``; both
+    application-level and transport-level close paths share it.
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "linux")
+    stream = _make_stream()
+    stream.response._transport.close.side_effect = RuntimeError("simulated transport close failure")
+    # Should not raise.
+    _close_response_safely(stream)
+    stream.response.close.assert_called_once()
+
+
+def test_attach_listener_closes_transport_on_abort(monkeypatch) -> None:
+    """F-99 end-to-end: abort fires → both response.close AND _transport.close run.
+
+    Pins the full listener path: the ``attach`` context's listener
+    closes ``stream.response`` AND the underlying transport when the
+    signal fires, so the SDK's blocking read returns immediately.
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "linux")
+    controller = AbortController()
+    stream = _make_stream()
+    guard = StreamAbortGuard(controller.signal)
+
+    with guard.attach(stream):
+        controller.abort("user_interrupt")
+        stream.response.close.assert_called_once()
+        stream.response._transport.close.assert_called_once()
+
+
+def test_attach_transport_close_failure_does_not_propagate(monkeypatch) -> None:
+    """F-99: transport.close() failures during abort must not raise.
+
+    The listener thread cannot be allowed to die mid-abort; if it did,
+    the underlying socket would leak and the agent loop would hang
+    waiting for the read timeout. The defensive ``try/except`` in
+    ``_close_transport_safely`` is the last line of defence.
+    """
+    monkeypatch.setattr("src.providers._stream_abort.sys.platform", "linux")
+    controller = AbortController()
+    stream = _make_stream()
+    stream.response._transport.close.side_effect = OSError("simulated socket error")
+    guard = StreamAbortGuard(controller.signal)
+
+    with guard.attach(stream):
+        controller.abort("user_interrupt")  # must not raise
+

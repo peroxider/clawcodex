@@ -103,3 +103,25 @@ __all__ = [
     "register_provider",
     "register_provider_info",
 ]
+
+
+# F-99 fix (defense-in-depth): trigger the cancel-latency provider
+# registration as a side-effect of importing this module. We place the
+# import at the bottom (after ``register_provider`` /
+# ``register_provider_info`` are defined) so that
+# ``clawcodex_ext/providers/__init__.py`` can import them without a
+# circular-import failure. Every code path that builds a provider
+# (REPL, headless, TUI, agent background runner, CLI subcommands)
+# imports this module either directly or transitively via
+# ``src.providers.runtime``, so the side-effect import guarantees the
+# ``ClawcodexAnthropicProvider`` / ``ClawcodexMinimaxProvider``
+# overrides are registered in ``_EXTRA_PROVIDER_CLASSES`` before any
+# ``get_provider_class(...)`` lookup.
+#
+# Without this, the bare upstream ``AnthropicProvider`` is used and
+# a Ctrl+C waits the full platform socket timeout (~60s) because its
+# only cancellation mechanism is the advisory
+# ``response.close()`` plus our ``_close_transport_safely`` helper
+# (which is a silent no-op on ``httpx.Response`` since the
+# ``_transport`` attribute lives on the client, not the response).
+import clawcodex_ext.providers  # noqa: E402, F401  -- side-effect import

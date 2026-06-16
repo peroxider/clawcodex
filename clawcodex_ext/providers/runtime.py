@@ -4,6 +4,30 @@ from __future__ import annotations
 
 import os
 
+# F-99 fix: importing the package (not just ``factory``) triggers
+# ``clawcodex_ext/providers/__init__.py``, which registers the
+# cancel-latency-fixed ``ClawcodexAnthropicProvider`` /
+# ``ClawcodexMinimaxProvider`` overrides via
+# ``_EXTRA_PROVIDER_CLASSES``. Without this side-effect import,
+# ``get_provider_class("anthropic")`` falls through to the bare
+# upstream ``AnthropicProvider``, which iterates
+# ``stream.text_stream`` on the main thread — its only cancellation
+# mechanism is ``response.close()`` (advisory on Linux/Winsock and
+# silently a no-op for the ``_transport`` access in our
+# ``_close_transport_safely`` helper because ``httpx.Response``
+# doesn't expose ``_transport``), so a Ctrl+C waits the full platform
+# socket timeout (~60s) instead of the ~100ms the worker-thread
+# poll in ``drain_text_stream_with_abort_poll`` provides.
+#
+# Importing here is safe because every provider-build call site goes
+# through ``build_provider_from_config`` / ``create_provider``, and
+# this module sits at the top of that dependency chain. ``factory``
+# already imports cleanly from this module (no circular reference),
+# so the chain is: caller -> ``runtime`` -> factory + package
+# ``__init__`` -> ``register_provider`` populates
+# ``_EXTRA_PROVIDER_CLASSES``.
+import clawcodex_ext.providers  # noqa: F401  -- side-effect import
+
 from src.auth.codex_oauth import CodexAuthError, resolve_codex_runtime_credentials
 from src.config import get_provider_config
 from clawcodex_ext.providers.factory import create_provider

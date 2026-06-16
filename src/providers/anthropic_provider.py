@@ -11,6 +11,25 @@ if TYPE_CHECKING:
     from src.utils.abort_controller import AbortSignal
 
 
+# F-99 方案1: httpx read timeout bound for cancel latency.
+#
+# On LiteLLM-proxy / Windows / some Linux kernels, calling
+# ``response.close()`` from the keypress thread is advisory only — the
+# blocking ``httpx`` socket read continues until the underlying TCP
+# keepalive or platform-level read timeout fires (typically 60s). By
+# configuring the SDK with ``read=5.0`` we cap that wait at 5s; once
+# the timeout surfaces as ``httpx.ReadTimeout``,
+# ``StreamAbortGuard.reraise_if_aborted`` translates it into
+# ``AbortError`` so the agent loop unwinds at the cancel boundary.
+#
+# 5s is chosen to be (a) short enough that a stuck Ctrl+C feels
+# instant, (b) long enough that real network jitter on slow chunks
+# doesn't trip the timeout and trigger an unintended fallback.
+# The idle ``StreamWatchdog`` (90s) still catches the genuinely-stalled
+# case so we don't depend on this 5s for fallback semantics.
+_F99_READ_TIMEOUT = 5.0
+
+
 # WI-4.4 (ch17 Phase 4): defer the ``import anthropic`` call. The SDK
 # alone is ~150-200ms to import (verified by ``my-docs/profiler-baseline.md``:
 # provider import accounts for ~70% of cold-start time). Cold-start paths
@@ -125,7 +144,19 @@ class AnthropicProvider(BaseProvider):
         # are visible. The first access triggers the PEP 562
         # ``__getattr__`` lazy-load above.
         mod = sys.modules[__name__]
-        self.client = mod.anthropic.Anthropic(**self._client_kwargs)
+        # F-99 方案1: bound the blocking httpx read at 5s so a Ctrl+C on
+        # LiteLLM-proxy / Win32 platforms (where ``response.close()`` is
+        # advisory and does NOT interrupt the in-flight socket read)
+        # surfaces as a ``httpx.ReadTimeout`` within ~5s instead of the
+        # upstream default 60s. ``StreamAbortGuard.reraise_if_aborted``
+        # then translates the timeout to ``AbortError`` so the agent loop
+        # unwinds at the cancel boundary. Normal slow chunks don't
+        # trigger the fallback because chunks are smaller than the read
+        # window — the timeout only fires when no bytes arrive for 5s.
+        kwargs = dict(self._client_kwargs)
+        if "timeout" not in kwargs and "http_client" not in kwargs:
+            kwargs["timeout"] = _F99_READ_TIMEOUT
+        self.client = mod.anthropic.Anthropic(**kwargs)
         return self.client
 
     def has_custom_endpoint(self) -> bool:
