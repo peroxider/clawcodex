@@ -9,9 +9,9 @@ Telemetry IssueReporter 真实推送测试。
   export CLAW_TELEMETRY_REPORTING_TOKEN=your_gitcode_access_token
 
 用法：
-  python3 tests/telemetry_issue_push_real.py             # 推送 + 验证
-  python3 tests/telemetry_issue_push_real.py --preview   # 仅预览，不推送
-  python3 tests/telemetry_issue_push_real.py --close     # 推送后关闭 Issue
+  python3 tests/telemetry/telemetry_issue_push_real.py             # 推送 + 验证
+  python3 tests/telemetry/telemetry_issue_push_real.py --preview   # 仅预览，不推送
+  python3 tests/telemetry/telemetry_issue_push_real.py --close     # 推送后关闭 Issue
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # 路径设置
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 _tests_dir = str((_HERE / "tests").resolve())
 sys.path = [str(_HERE)] + [p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir]
@@ -173,7 +173,7 @@ def main() -> int:
         if args.preview:
             print("\n🔍 预览模式 — 未执行推送")
             print(f"   运行以下命令执行推送:")
-            print(f"   CLAW_TELEMETRY_REPORTING_TOKEN=xxx python3 tests/telemetry_issue_push_real.py")
+            print(f"   CLAW_TELEMETRY_REPORTING_TOKEN=xxx python3 tests/telemetry/telemetry_issue_push_real.py")
             return 0
 
         # Step 5: 构造 IssueReporter (无 mock client)
@@ -198,7 +198,7 @@ def main() -> int:
         body_with_tag = (
             f"{rendered.rstrip()}\n\n"
             f"_Test pushed at {timestamp} — "
-            f"this issue was created by `tests/telemetry_issue_push_real.py`._\n"
+            f"this issue was created by `tests/telemetry/telemetry_issue_push_real.py`._\n"
         )
         ok = reporter.emit(body_with_tag, date=DATE)
         assert ok, "emit 失败"

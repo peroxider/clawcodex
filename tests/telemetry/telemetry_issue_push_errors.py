@@ -11,7 +11,7 @@ Telemetry 错误触发 Issue 推送 — 真实 E2E 测试。
   export CLAW_TELEMETRY_REPORTING_TOKEN=你的gitcode_token
 
 用法：
-  python3 tests/telemetry_issue_push_errors.py
+  python3 tests/telemetry/telemetry_issue_push_errors.py
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # 路径
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 _tests_dir = str((_HERE / "tests").resolve())
 sys.path = [str(_HERE)] + [p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir]
@@ -166,13 +166,13 @@ def test_unhandled_exception_via_hooks(tmpdir: str, token: str) -> dict[str, Any
     print("\n" + "=" * 72)
     print("场景 2: 未捕获异常 → sys.excepthook")
     print("  模拟: install_exception_hooks → raise → hooks._emit()")
+    print("  hooks._emit 仅 record_error，flush 由退出时 cleanup 触发")
     print("=" * 72)
 
     from telemetry.recorder import override_recorder, reset_recorder_for_tests
     from telemetry.hooks import install_exception_hooks, uninstall_exception_hooks
     reset_recorder_for_tests()
 
-    # 跟踪 emit
     emitted: list[tuple[str, str]] = []
 
     class _TrackingReporter:
@@ -186,25 +186,26 @@ def test_unhandled_exception_via_hooks(tmpdir: str, token: str) -> dict[str, Any
 
     recorder, storage, cfg = build_recorder(tmpdir, token, client=_TrackingReporter())
     override_recorder(recorder)
-
-    # 安装 hooks（同 init()）
     install_exception_hooks()
 
     # 模拟未捕获异常
     try:
         raise RuntimeError("simulated unhandled exception for telemetry test")
     except RuntimeError as exc:
-        # 模拟 sys.excepthook 做的事情
         from telemetry.hooks import _emit as hook_emit
         hook_emit(exc)
 
-    check(len(emitted) >= 1, "hooks._emit() 后应有立即 flush")
-    check(emitted[0][1] == time.strftime("%Y-%m-%d"), "emit 日期为今天")
+    # hooks._emit 只 record_error，不应 emit
+    check(len(emitted) == 0, "hooks._emit() 不应立即 emit（由 cleanup 触发）")
 
-    # 验证 crash 落盘
+    # 但 error 已落盘
     today = time.strftime("%Y-%m-%d")
     crashes = storage.read_day("crashes", today)
     check(len(crashes) >= 1, f"crashes 文件中有 {len(crashes)} 条 error 事件")
+
+    # 手动 flush 验证后续能正确推
+    recorder.flush()
+    check(len(emitted) >= 1, "flush() 后应有 emit")
 
     uninstall_exception_hooks()
     reset_recorder_for_tests()
@@ -262,6 +263,12 @@ def test_shutdown_cleanup_only_on_error(tmpdir: str, token: str) -> dict[str, An
         recorder_err.record_error(session_id=sid2, exc=exc)
 
     _telemetry_shutdown_flush()
+    # daemon thread 异步执行，给 5s 窗口等它完成
+    import time
+    for _ in range(25):
+        if emitted:
+            break
+        time.sleep(0.2)
     check(len(emitted) >= 1, "3b: 有 error → 应 emit")
 
     reset_recorder_for_tests()

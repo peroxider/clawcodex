@@ -21,7 +21,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # 确保在项目根目录下运行，且 tests/ 不从 sys.path 中遮蔽 stdlib
 # ---------------------------------------------------------------------------
-_HERE = Path(__file__).resolve().parent.parent
+_HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 # 移除脚本所在目录 (tests/) 以防遮蔽 stdlib 模块 (如 tests/token/)
 _tests_dir = str((_HERE / "tests").resolve())

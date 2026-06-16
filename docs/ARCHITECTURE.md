@@ -387,7 +387,7 @@ TS↔Python 一致性报告 CLI 位于 `scripts/audit/`。通过 `python -m scri
 |------|------|------|
 | 稳定性门禁 | `tests/stability_gate/`（6 阶段） | 每次 vibe coding 提交前必须通过 |
 | Orchestrator 单元测试 | `tests/test_orchestrator_*.py` | git_sync、tracker、agent_runner、dashboard、workspace |
-| F-38 E2E | `tests/manual_e2e_f38.py` | 4 轮端到端验证 + PR |
+| F-38 E2E | `tests/orchestrator/manual_e2e_f38.py` | 4 轮端到端验证 + PR |
 | 通用测试 | `tests/` | 各子系统单元测试 |
 
 ### 稳定性门禁层次

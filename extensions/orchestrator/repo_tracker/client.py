@@ -1022,7 +1022,7 @@ def _build_issue_update_payload(
     (HTTP 200) but does **not** actually close the issue. This is a
     platform-side bug; callers that rely on the close side-effect
     should verify the issue state after the call or degrade gracefully.
-    See ``tests/telemetry_issue_push_real.py`` for reproduction.
+    See ``tests/telemetry/telemetry_issue_push_real.py`` for reproduction.
     """
     payload: dict[str, Any] = {}
     normalized = (state or "").strip().lower()
