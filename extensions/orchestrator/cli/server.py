@@ -593,13 +593,18 @@ def _run_orchestrator(
             raise
 
     if dashboard:
-        dashboard_task = asyncio.create_task(
-            _dashboard_loop(subsystem.status_dashboard, port)
-        )
-        try:
-            asyncio.run(_run())
-        finally:
-            dashboard_task.cancel()
+
+        async def _run_with_dashboard() -> None:
+            """Run orchestrator with a concurrent dashboard status loop."""
+            dashboard_task = asyncio.create_task(
+                _dashboard_loop(subsystem.status_dashboard, port)
+            )
+            try:
+                await _run()
+            finally:
+                dashboard_task.cancel()
+
+        asyncio.run(_run_with_dashboard())
     else:
         asyncio.run(_run())
 
