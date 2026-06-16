@@ -192,6 +192,25 @@ bash /tmp/clawcodex/install.sh --no-venv --no-setup --yes \
 bash /tmp/clawcodex/install.sh --ref v0.5.0
 ```
 
+> **💡 Windows 用户请注意：** 以上命令需要在 **Git Bash**（[Git for Windows](https://git-scm.com/download/win) 自带）或 **WSL2** 中执行。
+> 原生 `cmd.exe` / PowerShell 不支持 bash 脚本。如果你只有 cmd/PowerShell，可以：
+>
+> ```powershell
+> # 方案 A：使用 Git Bash（推荐）
+> # 1. 从 https://git-scm.com/download/win 安装 Git for Windows
+> # 2. 在开始菜单中打开 "Git Bash"
+> # 3. 在 Git Bash 中运行：
+> #    git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex
+> #    bash /tmp/clawcodex/install.sh
+>
+> # 方案 B：使用 WSL2（Ubuntu）
+> # 1. 以管理员身份打开 PowerShell，运行：
+> #    wsl --install -d Ubuntu
+> # 2. 重启后打开 Ubuntu 终端，运行：
+> #    git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex
+> #    bash /tmp/clawcodex/install.sh
+> ```
+
 When you're done with the temp clone:
 
 ```bash

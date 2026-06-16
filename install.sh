@@ -1111,8 +1111,13 @@ VERSIONING
 NOTES
     - Re-running this script is safe: existing repos are fast-forwarded,
       existing venvs are reused, command wrappers are regenerated.
-    - On Windows, run from Git Bash or WSL. Native cmd / PowerShell is not
-      supported by this shell script.
+    - On Windows, run from Git Bash or WSL. To set up:
+        Git Bash : install Git for Windows (https://git-scm.com/download/win),
+                   open "Git Bash" from the Start menu, then run this script.
+        WSL2     : open PowerShell as Admin, run 'wsl --install -d Ubuntu',
+                   then run this script in the Ubuntu terminal.
+        The script detects native cmd.exe / PowerShell and exits with a
+        clear instruction — it does NOT support those shells directly.
     - In non-TTY mode (piped / agent / CI), every emitted line is prefixed
       with '[install.sh]'. The EXIT trap emits a 'DONE: success|FAILED'
       line on its own, so you can grep the tail of any captured log.
@@ -1249,8 +1254,13 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
 注意事项
     - 重复运行本脚本是安全的：已存在的仓库会 fast-forward，已存在的
       venv 会复用，命令 wrapper 会重新生成。
-    - 在 Windows 上请从 Git Bash 或 WSL 运行；本 shell 脚本不支持
-      原生 cmd / PowerShell。
+    - 在 Windows 上请从 Git Bash 或 WSL 运行。设置方式：
+        Git Bash : 安装 Git for Windows (https://git-scm.com/download/win)，
+                   在开始菜单中打开 "Git Bash"，然后运行本脚本。
+        WSL2     : 以管理员身份打开 PowerShell，执行 'wsl --install -d Ubuntu'，
+                   重启后在 Ubuntu 终端中运行本脚本。
+        原生 cmd.exe / PowerShell 不支持本脚本——运行时会被检测到并给出
+        明确的提示信息。
     - 在非 TTY 模式（管道 / agent / CI）下，每一行输出都会加上
       '[install.sh]' 前缀。EXIT trap 会单独输出一行
       'DONE: success|FAILED'，所以你可以直接 grep 日志末尾判断结果。
@@ -1403,7 +1413,35 @@ OS=$(detect_os)
 
 # Bail out for native Windows shells — this script targets bash, not cmd/PS.
 if [[ "$OS" == "unknown" ]] && [[ -n "${COMSPEC:-}" || -n "${WINDIR:-}" ]]; then
-    die "Native Windows shell detected. Please run install.sh from Git Bash or WSL."
+    cat >&2 <<'END_MSG'
+✗ Native Windows shell detected (cmd.exe or PowerShell).
+
+  install.sh is a bash script and cannot run directly in cmd or PowerShell.
+  Please use one of the following options:
+
+  Option A — Git Bash (recommended, zero-config):
+    1. Install Git for Windows from https://git-scm.com/download/win
+    2. Open "Git Bash" from the Start menu
+    3. In Git Bash, run:    bash install.sh
+
+  Option B — WSL2 (full Linux environment):
+    1. Open PowerShell as Administrator and run:
+         wsl --install -d Ubuntu
+    2. Restart your computer
+    3. Open the Ubuntu terminal and run:
+         sudo apt update && sudo apt install -y git curl
+         bash install.sh
+
+  Option C — Install manually from source:
+    1. Install Git, Python 3.10+, and curl
+    2. Run:
+         git clone https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex
+         cd /tmp/clawcodex
+         pip install -e ".[all]"
+    (See https://gitcode.com/chadwweng/clawcodex for details)
+
+END_MSG
+    exit 1
 fi
 
 # Make uv visible early in case it's already installed but not on PATH for this shell.
