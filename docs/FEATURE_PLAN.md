@@ -1744,6 +1744,86 @@ F-99 三层方案
 | `asyncio` | 运行时 | 方案3 依赖 asyncio 的 task 取消机制 |
 | 无关 | 无 | 本特性不依赖其他 F-N |
 
+### 2.16 Dreaming 后台记忆整合系统（F-100）
+
+**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+
+**目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。后续章节"背景 / 现状 / 方案 / 任务"对应 `PROGRESS.md` 十三节。
+
+#### 背景
+
+上游 `claude-code-best` 在 `KAIROS` / `KAIROS_DREAM` 特性开关下提供完整的 dreaming：
+
+- `src/services/autoDream/` — 后台 consolidate 服务（`autoDream.ts` 调度、`config.ts` 配置、`consolidationLock.ts` 文件锁、`consolidationPrompt.ts` 总结 prompt）
+- `src/tasks/DreamTask/DreamTask.ts` — Dream 任务实现
+- `src/skills/bundled/dream.ts` — `/dream` slash skill
+- `src/components/tasks/DreamDetailDialog.tsx` — TUI 详情对话框
+- `docs/features/auto-dream.md` + `docs/features/kairos.md` — 设计文档
+
+#### 现状（clawcodex 侧）
+
+clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实现**：
+
+| 位置 | 现状 | 缺口 |
+|------|------|------|
+| `src/tasks_core.py:38` | `TaskType` literal 已声明 `"dream"` | 无对应 Task 类 |
+| `src/tasks_core.py:75` | `_TASK_ID_PREFIXES["dream"] = "d"` | 无 |
+| `src/task_registry.py:184` | 注释标记 Dream 为 out-of-scope | 无 |
+| `tests/tasks/test_task_registry.py:202` | `assert get_task_by_type("dream") is None` | 需解锁 |
+| `extensions/skills_ext/bundles.py:36` | bundle 列表里有 `"dream"` | 无 skill 实现（引用悬空） |
+| `clawcodex_ext/cron_system/runtime.py:126` | 文档提及 dream 为 permanent cron | 未注册 |
+| `clawcodex_ext/cron_system/tools.py:82` | dream 列入免清理名单 | 未注册 |
+
+#### 方案
+
+1. **`DreamTask` 实现**（`src/tasks/dream/dream_task.py`）
+   - 继承 `LocalAgentTask` 模式
+   - 调度：周期 24h + 立即触发入口
+   - 行为：扫描未关联 / 低信号 auto-memory → 调 LLM 总结 → 写回索引
+2. **`autoDream` 服务**（`clawcodex_ext/dreaming/service.py`）
+   - 周期 loop + 错误隔离（单次失败不影响下次）
+   - 复用 `src/memory/` 已有的 auto-memory 读写 API
+3. **`consolidationLock`**（`clawcodex_ext/dreaming/lock.py`）
+   - 基于 `clawcodex_ext/cron_system/dist_lock.py`，TTL 30min
+   - 防止多进程同时 consolidate
+4. **`/dream` slash skill**（`extensions/skills_ext/builtin/dream.py`）
+   - 替换 `bundles.py:36` 悬空引用
+   - 支持子命令：`/dream run` / `/dream status` / `/dream once`
+5. **永久 cron 集成**（`clawcodex_ext/cron_system/builtin_tasks.py`）
+   - 注册 `dream` / `catch-up` / `morning-checkin` 三件套
+   - 启动时若未注册自动补齐
+
+#### 任务拆分
+
+| 任务 | 预计工时 | 依赖 |
+|------|:--------:|------|
+| 100.1 `DreamTask` 类 | 1天 | — |
+| 100.2 `autoDream` 服务主循环 | 1天 | 100.1 |
+| 100.3 `consolidationLock` | 0.5天 | 100.2 |
+| 100.4 `/dream` slash skill | 0.5天 | 100.1 |
+| 100.5 永久 cron 集成 | 0.5天 | 100.2 |
+| 100.6 解锁 test 不变量 | 0.25天 | 100.1 |
+| 100.7 测试 + 门禁 | 1天 | 全部 |
+
+合计：4.75 天（约 1 人周）
+
+#### 风险与缓解
+
+- **LLM 成本**：默认 24h 周期 + `dreaming.interval_hours` 可配
+- **写回竞态**：复用 `extensions/orchestrator/workspace.py` 的 workspace lock
+- **特性开关**：不引入 `KAIROS` / `KAIROS_DREAM`，直接实现
+- **TUI 暂缓**：本期不做 `DreamDetailDialog`，先 CLI + skill
+
+#### 依赖
+
+| 依赖 | 类型 |
+|------|------|
+| `src/tasks_core.py` 已有 literal | 内置 |
+| `clawcodex_ext/cron_system/dist_lock.py` | 复用 |
+| `src/memory/`（auto-memory） | 复用 |
+| `extensions/orchestrator/workspace.py` lock | 复用 |
+| `/mnt/c/Workspace/claude-code-best/...` | 参考实现 |
+
 ---
 
 ## 三、CLI 与配置系统
@@ -8331,3 +8411,4 @@ clawcodex_ext/community_radar/
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
 | F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | ✅ 已完成（2026-06-17） | 三方案组合：`AnthropicProvider._ensure_client` 默认 `timeout=5.0` + `_close_response_safely` 关 transport（Win 跳过） + `_run_tools_partitioned` 改 `asyncio.wait(FIRST_COMPLETED)` + 100ms abort poll + synth cancelled result 保配对。Cancel bound：直连 <500ms，LiteLLM bound 在 5s |
+| **F-100** | **Dreaming 后台记忆整合系统** | **§2.16** | **📋 设计中（2026-06-17）** | **移植上游 `claude-code-best` 的 `DreamTask` + `autoDream` + `/dream` skill。当前为桩：literal `"dream"` / 前缀 `d` 已声明但无 Task 类；`bundles.py:36` 引用悬空；`tests/tasks/test_task_registry.py:202` 不变量待解锁。子特性 100.1~100.7，工时合计 4.75 天** |

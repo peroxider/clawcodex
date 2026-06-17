@@ -1961,3 +1961,87 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | `httpx` 内部 API | 方案2 依赖 `Response._transport`（非公开属性） |
 | F-27 | 本特性为 F-27（TUI 响应性修复）的 Phase 2 增强 |
 | F-28 | Ctrl+B 后台化共享同一 `_cancel_engine` 回调 |*
+
+---
+
+## 十三、Dreaming 后台记忆整合系统（F-100）
+
+**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+
+**目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§2.16 Dreaming 后台记忆整合系统（F-100）`
+
+### 当前基线（全部为桩，无实现）
+
+| 位置 | 内容 | 状态 |
+|------|------|------|
+| `src/tasks_core.py:38` | `TaskType` literal 已声明 `"dream"` | 🟡 占位 |
+| `src/tasks_core.py:75` | `_TASK_ID_PREFIXES["dream"] = "d"` | 🟡 占位 |
+| `src/task_registry.py:184` 注释 | "Remote/Workflow/Monitor/Dream 显式 out-of-scope" | 🟡 占位 |
+| `tests/tasks/test_task_registry.py:202` | `assert get_task_by_type("dream") is None` | 🟢 受保护不变量 |
+| `extensions/skills_ext/bundles.py:36` | bundle 列表里有 `"dream"` 但无 skill 实现 | 🔴 引用悬空 |
+| `clawcodex_ext/cron_system/runtime.py:126` | 文档提及 "dream" 为 permanent cron | 🟡 仅文档 |
+| `clawcodex_ext/cron_system/tools.py:82` | "dream" 列入免清理名单 | 🟡 仅文档 |
+| `docs/FEATURE_PLAN.md:2741` | 规划条目 "dream：后台探索性分析" | 📋 规划中 |
+
+### 子特性
+
+| # | 子特性 | 优先级 | 状态 |
+|---|--------|:------:|:----:|
+| 100.1 | `DreamTask` 任务类实现（`src/tasks/dream/`）：扫描未关联 / 低信号 auto-memory → 总结 → 写回 | P2 | ✅ 完成（Phase A） |
+| 100.2 | `autoDream` consolidate 服务（`clawcodex_ext/dreaming/`）：周期性合并 / 去重 / 索引 | P2 | ✅ 完成（Phase A，runner 为 stub） |
+| 100.3 | `consolidationLock` 互斥锁（基于 `clawcodex_ext/cron_system/dist_lock.py`）防并发 consolidate | P2 | ✅ 完成（Phase A，自带 PID + mtime） |
+| 100.4 | `/dream` slash skill 实现（替换 `bundles.py:36` 悬空引用） | P2 | 📋 待实现（Phase C） |
+| 100.5 | 接入 `clawcodex_ext/cron_system` 作为 permanent cron 任务（catch-up / morning-checkin / dream 三件套） | P2 | 📋 待实现（Phase D） |
+| 100.6 | 解锁 `tests/tasks/test_task_registry.py:202` 不变量：`get_task_by_type("dream")` 不再是 `None` | P2 | ✅ 完成（Phase A） |
+| 100.7 | 单元测试 + E2E（手动触发 + 调度触发） + 稳定性门禁 | P2 | 🟡 部分完成（Phase A 单测全过；E2E 待 Phase D 调度后补） |
+
+### 实施进度
+
+| 阶段 | 内容 | 预计工时 | 状态 |
+|------|------|:--------:|:----:|
+| Phase A | 子特性 100.1+100.2+100.3+100.6：DreamTask + autoDream 主循环 + consolidationLock + 解锁 test 不变量（runner 是 stub：可由 `set_dream_runner_factory` 在生产 wiring 时替换） | 2天 | ✅ 完成 |
+| Phase B | 子特性 100.3：consolidationLock（基于已有 `dist_lock.py`，加 30min TTL） | 0.5天 | 📋 待实现 |
+| Phase C | 子特性 100.4：`/dream` slash skill + TUI 状态展示 | 0.5天 | 📋 待实现 |
+| Phase D | 子特性 100.5：cron 永久任务注册（`install_permanent_cron_tasks`） | 0.5天 | 📋 待实现 |
+| Phase E | 子特性 100.6+100.7：测试 + 门禁 | 1天 | 📋 待实现 |
+
+### 验收标准
+
+| # | 验收项 | 验收方式 |
+|---|--------|---------|
+| 1 | `get_task_by_type("dream")` 返回非 None 的 Task 类 | 单元测试（解锁 `test_task_registry.py:202` 断言） |
+| 2 | `clawcodex-dev dream run` 触发一次完整 consolidate，跑通后 `auto-memory` 索引更新 | 手动测试 |
+| 3 | 两个进程同时调 `clawcodex-dev dream run`，只有一个能进入 critical section | 并发测试（基于 `dist_lock` 已有测试） |
+| 4 | 启动时若检测到 `dream` 周期任务未注册，自动注册为 permanent cron | E2E（参考 `tests/cron/test_permanent_tasks.py`） |
+| 5 | `/dream` slash skill 在 REPL/headless 中可调用 | 稳定性门禁 stage3d 覆盖 |
+| 6 | 稳定性门禁（`tests/stability_gate/`）全绿 | CI |
+
+### 风险与约束
+
+| 风险 | 影响 | 缓解 |
+|------|------|------|
+| 上游 `KAIROS` / `KAIROS_DREAM` 特性开关缺失 | 编译期行为差异 | 本期不引入特性开关，直接按 TS 默认行为实现 |
+| consolidate 写回 auto-memory 时若用户正编辑记忆 | 竞态写覆盖 | 借用 `extensions/orchestrator/workspace.py` 已有的 workspace lock |
+| DreamTask 周期触发频率过高 | LLM 调用成本 | 默认 24h，可配置 `dreaming.interval_hours` |
+| 100.4 `/dream` skill 与现有 `simplify` / `review-pr` 命名风格不一致 | UX 不统一 | 复用 `extensions/skills_ext/bundles.py` 现有结构 |
+
+### 已拟定的设计决定
+
+1. **不引入 `KAIROS` / `KAIROS_DREAM` 特性开关**：上游这两个 flag 是 experiment gate，clawcodex 风格是直接实现，不做 A/B 分流
+2. **consolidation 锁复用 `dist_lock`**：避免另起一套锁协议，与 cron 系统保持一致
+3. **DreamTask 默认调度周期 24h**，可被 `clawcodex-dev dream run --once` 强制立即触发
+4. **TUI DreamDetailDialog 本期不做**：先落地后端实现 + `/dream` slash skill，TUI 留待后续增量
+5. **保留 `_TASK_ID_PREFIXES["dream"] = "d"`** 不变：与 TS `Task.ts` 字节对齐是 chapter-10 port 的硬约束
+
+### 依赖与协同
+
+| 依赖 | 说明 |
+|------|------|
+| `src/tasks_core.py` | 需要补 `DreamTask` 实现（literal 已在） |
+| `clawcodex_ext/cron_system/dist_lock.py` | consolidationLock 复用 |
+| `extensions/skills_ext/bundles.py` | 替换悬空 `"dream"` 引用 |
+| `src/memory/`（auto-memory 模块） | consolidate 读写目标 |
+| `extensions/orchestrator/workspace.py` lock | 防用户编辑竞态 |
+| 上游参考 | `/mnt/c/Workspace/claude-code-best/src/tasks/DreamTask/` + `src/services/autoDream/` + `src/skills/bundled/dream.ts` |
