@@ -10,7 +10,18 @@ from typing import Any, Callable, Literal
 from ..permissions.types import PermissionMode
 
 
-AgentSource = Literal["built-in", "user", "project", "managed", "plugin", "dynamic"]
+AgentSource = Literal[
+    "built-in",
+    "user",
+    "project",
+    "managed",
+    "plugin",
+    "dynamic",
+    # Decoupled extension layers — populated by clawcodex_ext and extensions/.
+    # See clawcodex_ext/agent/registry.py and load_agents_dir._MERGE_ORDER.
+    "clawcodex_ext",
+    "extensions",
+]
 
 
 @dataclass

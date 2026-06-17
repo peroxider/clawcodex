@@ -43,9 +43,15 @@ _SOURCE_TO_AGENT_SOURCE: dict[str, str] = {
 
 # Priority order for last-wins merge — earlier entries are overridden by
 # later ones if they share an agent_type.
+# Order: built-in < plugin < clawcodex_ext < extensions < user < project < managed.
+# The two new tiers (``clawcodex_ext`` / ``extensions``) come from the decoupled
+# registration API in ``clawcodex_ext/agent/registry.py`` and the markdown
+# discovery in ``clawcodex_ext/agent/markdown_discovery.py``.
 _MERGE_ORDER: tuple[str, ...] = (
     "built-in",
     "plugin",
+    "clawcodex_ext",
+    "extensions",
     SOURCE_USER,
     SOURCE_PROJECT,
     SOURCE_MANAGED,
@@ -136,11 +142,47 @@ def get_agent_definitions_with_overrides(cwd: str) -> list[AgentDefinition]:
             logger.exception("plugin agent loading failed; continuing without plugin agents")
             plugin_agents = []
 
+        # Decoupled extension agents: programmatic registry + markdown
+        # discovery under clawcodex_ext/agent/agents/ and extensions/*/agents/.
+        # Wrapped in its own try/except so a broken extension never disables
+        # the model's ability to spawn built-in agents.
+        clawcodex_ext_agents: list[AgentDefinition] = []
+        extension_agents: list[AgentDefinition] = []
+        try:
+            from clawcodex_ext.agent import ensure_bundled_agents_registered
+            from clawcodex_ext.agent.markdown_discovery import (
+                discover_clawcodex_ext_agents,
+                discover_extension_agents,
+            )
+            from clawcodex_ext.agent.registry import (
+                AgentRegistry,
+                SOURCE_CLAWCODEX_EXT,
+                SOURCE_EXTENSIONS,
+            )
+            ensure_bundled_agents_registered()
+            # Programmatic registrations + markdown files together.
+            clawcodex_ext_agents = (
+                AgentRegistry.by_source(SOURCE_CLAWCODEX_EXT)
+                + discover_clawcodex_ext_agents()
+            )
+            extension_agents = (
+                AgentRegistry.by_source(SOURCE_EXTENSIONS)
+                + discover_extension_agents()
+            )
+        except Exception:
+            logger.exception(
+                "extension agent loading failed; continuing without extension agents"
+            )
+            clawcodex_ext_agents = []
+            extension_agents = []
+
         custom = _load_custom_agents(cwd)
 
         sources_in_order: dict[str, list[AgentDefinition]] = {
             "built-in": builtins,
             "plugin": plugin_agents,
+            "clawcodex_ext": clawcodex_ext_agents,
+            "extensions": extension_agents,
             SOURCE_USER: custom[SOURCE_USER],
             SOURCE_PROJECT: custom[SOURCE_PROJECT],
             SOURCE_MANAGED: custom[SOURCE_MANAGED],
