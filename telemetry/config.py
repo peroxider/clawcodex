@@ -43,7 +43,7 @@ class ReportingConfig:
 
     reporting_enabled: bool = True  # TODO: revert to False before formal release
     kind: str = "local_file"
-    platform: str = "github"
+    platform: str = "gitcode"
     owner: str = ""
     repo: str = ""
     endpoint: str | None = None
@@ -202,8 +202,8 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
     # config (e.g. GITCODE_TOKEN, GITHUB_TOKEN, GITEE_TOKEN).
     if not reporting_api_key:
         _platform_env_fallbacks: dict[str, tuple[str, ...]] = {
-            "github": ("GITHUB_TOKEN", "GH_TOKEN"),
             "gitcode": ("GITCODE_TOKEN",),
+            "github": ("GITHUB_TOKEN", "GH_TOKEN"),
             "gitee": ("GITEE_TOKEN",),
         }
         for env_name in _platform_env_fallbacks.get(reporting_platform, ()):
