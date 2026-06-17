@@ -2719,7 +2719,7 @@ class ClawcodexREPL:
         from src.tool_system.renderers import summarize_tool_use
 
         self.console.print()
-        self.console.print("[dim]─── resumed conversation history ───[/dim]\n")
+        self.console.print("[dim]─── resumed conversation history ───[/dim]")
 
         # Build a tool_use_id → (name, input) map so we can show
         # the right header above each ToolResultBlock.
@@ -2734,6 +2734,22 @@ class ClawcodexREPL:
             content = getattr(msg, 'content', None)
 
             if role == 'system':
+                # F-103: Render away_summary (Recapitulate) system messages
+                # instead of skipping them, matching live-chat behaviour where
+                # _print_local_command_text renders /recap output as Markdown.
+                subtype = getattr(msg, 'subtype', None) or ''
+                if subtype == 'away_summary':
+                    try:
+                        from clawcodex_ext.away_summary.messages import (
+                            format_away_summary_for_display,
+                        )
+                        display = format_away_summary_for_display(
+                            getattr(msg, 'content', '') or ''
+                        )
+                    except Exception:
+                        display = str(getattr(msg, 'content', '') or '')
+                    self.console.print()
+                    self.console.print(Markdown(display))
                 continue
 
             if role == 'user':
@@ -2777,9 +2793,25 @@ class ClawcodexREPL:
                 continue
 
             if role == 'assistant':
+                # Use the agent type from tool_context (set by @agent-mention
+                # or agent config) just like live chat does — fall back to
+                # "Assistant" for the default case.
+                _agent_label = getattr(
+                    getattr(self, 'tool_context', None), 'agent_type', None
+                ) or "Assistant"
+                # Print the agent label once per message, matching live-chat
+                # behaviour where chat() prints "[bold]Assistant[/bold]" before
+                # the streaming response even starts (core.py:4072).
+                self.console.print(f"\n[bold]{_agent_label}[/bold]")
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, TextBlock) and block.text:
+                            # Suppress NO_CONTENT_MESSAGE placeholder that
+                            # create_assistant_message injects for empty
+                            # responses — matches live-chat behaviour where
+                            # _run_query skips empty TextBlocks.
+                            if block.text == "[No content]":
+                                continue
                             self.console.print(Markdown(block.text))
                         elif isinstance(block, ToolUseBlock):
                             tool_use_map[block.id] = (block.name, block.input)
@@ -2808,6 +2840,7 @@ class ClawcodexREPL:
                             # in replay, same as live chat (no visible output).
                             pass
                 elif isinstance(content, str) and content:
+                    self.console.print(f"\n[bold]{_agent_label}[/bold]")
                     self.console.print(Markdown(content))
                 continue
 
@@ -2818,7 +2851,7 @@ class ClawcodexREPL:
             self.console.print(header)
             tool_block_needs_leading_space = True
 
-        self.console.print("\n[dim]─── end of history ───[/dim]\n")
+        self.console.print("\n[dim]─── end of history ───[/dim]")
 
     def _flatten_message_content(self, content: Any) -> str:
         """Normalise Message.content (string or block list) to text."""
@@ -3102,6 +3135,32 @@ class ClawcodexREPL:
         if raw == "/":
             self._show_slash_palette()
             return
+
+        # ── REPL-native handlers — must run BEFORE the palette check ───
+        if raw.startswith("/") and " " not in raw:
+            candidate = raw[1:].lower()
+            if candidate == "diff":
+                self._handle_repl_diff()
+                return
+            if candidate == "mcp":
+                self._handle_repl_mcp()
+                return
+            if candidate == "tasks":
+                self._handle_repl_tasks()
+                return
+            if candidate == "rewind":
+                self._handle_repl_rewind()
+                return
+            if candidate == "effort":
+                self._handle_repl_effort("")
+                return
+            if candidate == "history":
+                self._handle_repl_history()
+                return
+            if candidate == "idle":
+                self._handle_repl_idle()
+                return
+
         if raw.startswith("/") and " " not in raw and raw.lower() not in (c.lower() for c in self._built_in_commands):
             query = raw[1:]
             if query:
@@ -3517,10 +3576,26 @@ class ClawcodexREPL:
 
     def _handle_repl_idle(self) -> None:
         """Show idle / away-summary configuration."""
-        self.console.print("\n[bold cyan]Idle / Away Configuration[/bold cyan]")
-        self.console.print("  [dim]Idle-return prompts are managed via the away-summary feature.[/dim]")
-        self.console.print("  [dim]Use /tui to access the interactive idle config dialog.[/dim]")
-        self.console.print("  [dim]To clear the conversation and reset idle state: /clear[/dim]")
+        try:
+            from clawcodex_ext.away_summary.config import load_away_summary_config
+            cfg = load_away_summary_config()
+        except Exception:
+            cfg = None
+
+        self.console.print("\n[bold cyan]Idle Configuration[/bold cyan]")
+        if cfg is not None:
+            self.console.print(f"  Auto-summary:    [green]enabled[/green]" if cfg.enabled else f"  Auto-summary:    [dim]disabled[/dim]")
+            self.console.print(f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)")
+            self.console.print(f"  Min turns:       {cfg.min_turns}")
+            self.console.print(f"  /recap command:  [green]available[/green]" if cfg.recap_command_enabled else f"  /recap command:  [dim]disabled[/dim]")
+            self.console.print()
+            self.console.print("  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]")
+        else:
+            self.console.print("  [dim]Away summary config not available.[/dim]")
+        self.console.print()
+        self.console.print("  [dim]On idle return you can:[/dim]")
+        self.console.print("  [dim]  Continue — resume the conversation[/dim]")
+        self.console.print("  [dim]  /clear   — start a fresh conversation[/dim]")
         self.console.print()
 
     # ── End of REPL-native handlers ─────────────────────────────────────
