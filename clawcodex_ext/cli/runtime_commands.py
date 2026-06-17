@@ -60,15 +60,14 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
     tokens = args.split()
 
     if not tokens:
-        lines = [
-            _format_runtime_current(context),
-            "",
-            format_provider_list(),
-        ]
+        current = _format_runtime_current(context)
+        lines = [current, "", format_provider_list()] if current else [format_provider_list()]
         return _text("\n".join(lines))
 
     provider = tokens[0]
     runtime = _runtime(context)
+    if runtime is None:
+        return _text("Runtime context is not available — cannot switch provider.")
 
     warnings: list[str] = []
     try:
@@ -84,7 +83,9 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
     lines = [f"Provider switched to: {provider}"]
     lines.extend(warnings)
     lines.append("")
-    lines.append(_format_runtime_current(context))
+    current = _format_runtime_current(context)
+    if current is not None:
+        lines.append(current)
     return _text("\n".join(lines))
 
 
@@ -92,11 +93,8 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
     tokens = args.split()
 
     if not tokens:
-        lines = [
-            _format_runtime_current(context),
-            "",
-            format_model_list(),
-        ]
+        current = _format_runtime_current(context)
+        lines = [current, "", format_model_list()] if current else [format_model_list()]
         return _text("\n".join(lines))
 
     try:
@@ -151,12 +149,14 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         )
 
     runtime = _runtime(context)
-    runtime.swap_provider(provider, model)
+    runtime.swap_provider(provider, model)  # type: ignore[union-attr]
     _sync_context(context, runtime)
     lines = [f"Model switched to: {model} (provider: {provider})"]
     lines.extend(warnings)
     lines.append("")
-    lines.append(_format_runtime_current(context))
+    current = _format_runtime_current(context)
+    if current is not None:
+        lines.append(current)
     return _text("\n".join(lines))
 
 
@@ -178,11 +178,15 @@ def _parse_model_args(tokens: list[str]) -> tuple[str, str | None]:
     return model, provider
 
 
-def _runtime(context: Any) -> Any:
-    runtime = getattr(context, "runtime_context", None)
-    if runtime is None:
-        raise ValueError("Runtime context is not available")
-    return runtime
+def _runtime(context: Any) -> Any | None:
+    """Return the runtime context, or *None* if not available.
+
+    Callers that only *display* current state (no-arg ``/model`` /
+    ``/provider``) should tolerate *None* and omit the current-state
+    line.  Callers that *mutate* state (``/model <name>``) raise
+    ``ValueError`` themselves when they need ``swap_provider``.
+    """
+    return getattr(context, "runtime_context", None)
 
 
 def _sync_context(context: Any, runtime: Any) -> None:
@@ -191,8 +195,13 @@ def _sync_context(context: Any, runtime: Any) -> None:
     context.tool_context = runtime.tool_context
 
 
-def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str:
+def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str | None:
+    """Return a ``"provider: …\nmodel: …"`` snippet, or *None* when the
+    runtime context is missing (callers that tolerate absence should
+    simply omit the block)."""
     runtime = _runtime(context)
+    if runtime is None:
+        return None
     lines = []
     if prefix:
         lines.append(prefix)
