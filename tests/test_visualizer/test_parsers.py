@@ -453,11 +453,19 @@ class TestTranscriptParser:
         assert bars[0].type == BarType.LLM_CALL
 
     def test_skip_system_role(self, tmp_path):
+        """System role: emitted as a CUSTOM bar with ``user_role='system'`` so
+        the bezier view can surface compact / away_summary / local_command
+        markers. Previously skipped (P1 contract change)."""
         p = self._make_jsonl(tmp_path, [
             {"role": "system", "content": "__background_complete__", "_timestamp": 1717500000.0},
         ])
         bars = TranscriptParser().parse_file(p)
-        assert len(bars) == 0
+        assert len(bars) == 1
+        bar = bars[0]
+        assert bar.type == BarType.CUSTOM
+        assert bar.user_role == "system"
+        assert bar.duration_unrecorded is True
+        assert bar.ts_unrecorded is False
 
     def test_malformed_json_line_skipped(self, tmp_path):
         p = tmp_path / "bad.jsonl"

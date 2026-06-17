@@ -49,6 +49,11 @@
 <div class="gantt-container" id="gantt-chart" style="width:100%; height:500px; display:none;">
 </div>
 
+{# Bezier waterfall view (P2 skeleton — hidden by default, shown when ?view=bezier) #}
+<div class="bezier-waterfall-shell ms-chart-container" id="bezier-chart"
+     style="width:100%; height:560px; display:none; overflow:auto;">
+</div>
+
 <div class="panels-row">
     {# Include anomaly panel (container-only, rendered by gantt.js) #}
     {% with include_mode="container" %}
@@ -105,11 +110,18 @@
 {% block scripts %}
 <script src="/static/js/gantt.js?v=20260611-agent-lanes"></script>
 <script src="/static/js/multi_session_view.js?v=20260611-agent-lanes"></script>
+<script src="/static/js/bezier_waterfall.js?v=20260617-bezier"></script>
 <script>
     const SESSION_ID = "{{ session_id }}";
-    // Decide default view from URL ?view=gantt or fallback to waterfall
+    // Decide default view from URL ?view=gantt | ?view=bezier, fallback to waterfall
     const urlParams = new URLSearchParams(window.location.search);
-    const initialView = urlParams.get('view') === 'gantt' ? 'gantt' : 'waterfall';
+    const _viewParam = urlParams.get('view');
+    const initialView = (_viewParam === 'gantt' || _viewParam === 'bezier') ? _viewParam : 'waterfall';
+    // Track which views have been initialised so re-toggling (P6 will
+    // wire the button) doesn't re-fetch / re-render unnecessarily. The
+    // bezier skeleton stores its own instance, but the guard keeps the
+    // entry path symmetric across views.
+    window.__bezierLoaded = false;
 
     function switchView(view) {
         document.querySelectorAll('.view-toggle-btn').forEach(b => {
@@ -117,9 +129,11 @@
         });
         const waterfall = document.getElementById('waterfall-chart');
         const gantt = document.getElementById('gantt-chart');
+        const bezier = document.getElementById('bezier-chart');
         if (view === 'waterfall') {
             waterfall.style.display = '';
             gantt.style.display = 'none';
+            if (bezier) bezier.style.display = 'none';
             if (!window.__waterfallLoaded) {
                 // Single-session waterfall: render into the page's own chart
                 // div and populate the page-level #ms-legend-bar above it.
@@ -135,9 +149,21 @@
                 });
                 window.__waterfallLoaded = true;
             }
+        } else if (view === 'bezier') {
+            waterfall.style.display = 'none';
+            gantt.style.display = 'none';
+            if (bezier) bezier.style.display = '';
+            // P2 skeleton entry — P3+ will add zoom/pan/detail panel
+            if (!window.__bezierLoaded) {
+                window.initBezierWaterfall([SESSION_ID], {
+                    chartContainerId: 'bezier-chart',
+                });
+                window.__bezierLoaded = true;
+            }
         } else {
             waterfall.style.display = 'none';
             gantt.style.display = '';
+            if (bezier) bezier.style.display = 'none';
             window.renderGanttChart?.(SESSION_ID);
             window.resizeGanttChart?.();
         }

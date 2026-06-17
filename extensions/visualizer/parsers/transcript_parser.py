@@ -212,6 +212,11 @@ class TranscriptParser:
                     if duration_ms >= 100:  # only update if materially longer
                         text_bar.end_time = next_bar.start_time
                         text_bar.duration_ms = duration_ms
+                        # Real gap was resolved; the 100ms placeholder
+                        # the bar was created with is no longer in effect.
+                        # Clear the flag so the bezier view drops the
+                        # '未记录' label and uses the resolved width.
+                        text_bar.duration_unrecorded = False
                     break
 
     def parse_incremental(
@@ -270,9 +275,26 @@ class TranscriptParser:
         # Always track the most recent timestamp for next entry
         self._last_timestamp = timestamp
 
-        # Plain text messages (assistant/user) — exit early before the
-        # tool_use/tool_result branches below, so system-role lines like
-        # ``__background_complete__`` are simply skipped.
+        # ts_unrecorded: when the upstream record had no parseable
+        # timestamp the bar's time fields are unreliable. The bezier
+        # view labels all of them '未记录' when this flag is set.
+        ts_unrecorded = timestamp <= 0.0
+        # Model label is carried on the entry (Claude Code puts it next
+        # to the role, not inside individual content blocks). Forwarded
+        # to per-block helpers so LLM bars carry it.
+        entry_model = entry.get("model") if isinstance(entry, dict) else None
+
+        # System role (compact / away_summary / local_command / etc.):
+        # emit a single CUSTOM bar carrying the subtype and optional
+        # text payload. Previously dropped here, which made bezier view
+        # unable to surface these points in the timeline.
+        if role == "system":
+            bar = self._system_bar(entry, timestamp, ts_unrecorded=ts_unrecorded)
+            return [bar] if bar else []
+
+        # Unknown roles (e.g. synthetic ``__background_complete__``
+        # sentinels from the upstream writer) are still skipped — they
+        # carry no payload worth surfacing.
         if role not in ("assistant", "user"):
             return []
 
@@ -284,16 +306,20 @@ class TranscriptParser:
                     continue
                 btype = block.get("type", "")
                 if btype == "tool_use":
-                    bar = self._tool_use_bar(block, timestamp)
+                    bar = self._tool_use_bar(block, timestamp, ts_unrecorded=ts_unrecorded)
                     if bar:
                         bars.append(bar)
                 elif btype == "tool_result":
-                    bar = self._tool_result_bar(block, timestamp)
+                    bar = self._tool_result_bar(block, timestamp, ts_unrecorded=ts_unrecorded)
                     if bar:
                         bars.append(bar)
                 elif btype == "text":
                     # LLM text generation bar
-                    bar = self._text_bar(block, timestamp)
+                    bar = self._text_bar(
+                        block, timestamp,
+                        model=entry_model,
+                        ts_unrecorded=ts_unrecorded,
+                    )
                     if bar:
                         bars.append(bar)
             return bars
@@ -302,10 +328,12 @@ class TranscriptParser:
         text = content if isinstance(content, str) else ""
         if not text:
             return []
-        return [self._message_bar(role, text, timestamp)]
+        return [self._message_bar(role, text, timestamp, ts_unrecorded=ts_unrecorded)]
 
 
-    def _tool_use_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
+    def _tool_use_bar(
+        self, block: dict[str, Any], ts: float, *, ts_unrecorded: bool = False,
+    ) -> TimelineBar | None:
         """Create a bar for a tool_use block."""
         tool_name = block.get("name", "unknown")
         tool_use_id = block.get("id") or block.get("tool_use_id", "")
@@ -327,11 +355,14 @@ class TranscriptParser:
             status=BarStatus.RUNNING,
             detail={"tool_use_id": tool_use_id, "params": block.get("input", {})},
             color=self._TOOL_COLORS.get(tool_name),
+            ts_unrecorded=ts_unrecorded,
         )
         bar.category = self._categorizer.categorize(bar)
         return bar
 
-    def _tool_result_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
+    def _tool_result_bar(
+        self, block: dict[str, Any], ts: float, *, ts_unrecorded: bool = False,
+    ) -> TimelineBar | None:
         """Create a bar for a tool_result block."""
         tool_use_id = block.get("tool_use_id", "")
         pending = self._pending_tools.pop(tool_use_id, None)
@@ -357,10 +388,24 @@ class TranscriptParser:
                 "excerpt": excerpt,
                 "parent_id": pending["id"] if pending else None,
             },
+            ts_unrecorded=ts_unrecorded,
         )
 
-    def _text_bar(self, block: dict[str, Any], ts: float) -> TimelineBar | None:
-        """Create a bar for assistant text generation."""
+    def _text_bar(
+        self,
+        block: dict[str, Any],
+        ts: float,
+        *,
+        model: str | None = None,
+        ts_unrecorded: bool = False,
+    ) -> TimelineBar | None:
+        """Create a bar for assistant text generation.
+
+        ``duration_unrecorded=True`` is set at creation: the 100 ms
+        placeholder is a synthetic span, not a real measurement. The
+        backfill pass in ``_pair_llm_text_durations`` clears the flag
+        when it resolves a real gap to the next bar.
+        """
         text = block.get("text", "")
         if not text:
             return None
@@ -374,10 +419,20 @@ class TranscriptParser:
             duration_ms=100,
             status=BarStatus.SUCCESS,
             detail={"text_preview": text[:200]},
+            model=model,
+            duration_unrecorded=True,
+            ts_unrecorded=ts_unrecorded,
         )
 
-    def _message_bar(self, role: str, text: str, ts: float) -> TimelineBar:
-        """Create a generic message bar."""
+    def _message_bar(
+        self, role: str, text: str, ts: float, *, ts_unrecorded: bool = False,
+    ) -> TimelineBar:
+        """Create a generic message bar.
+
+        ``duration_unrecorded=True`` always: plain-text messages have
+        no real duration. The bezier view renders the bar at minimum
+        visible width and labels the duration '未记录'.
+        """
         self._bar_counter += 1
         return TimelineBar(
             id=f"msg-{self._bar_counter}",
@@ -388,4 +443,51 @@ class TranscriptParser:
             duration_ms=50,
             status=BarStatus.SUCCESS,
             detail={"text_preview": text[:200]},
+            user_role=role if role in ("user", "assistant") else None,
+            user_text=text[:200] if role == "user" else None,
+            duration_unrecorded=True,
+            ts_unrecorded=ts_unrecorded,
+        )
+
+    def _system_bar(
+        self, entry: dict[str, Any], ts: float, *, ts_unrecorded: bool = False,
+    ) -> TimelineBar | None:
+        """Create a bar for a system-injected event.
+
+        System entries (compact, away_summary, local_command, etc.)
+        carry a ``subtype`` discriminator and an optional text payload
+        in the content field. We emit a point-in-time bar (zero real
+        duration) so the bezier view can render the marker without
+        inflating the timeline.
+        """
+        # Subtype: prefer explicit 'subtype', fall back to 'type' for
+        # older transcripts that used the latter.
+        subtype = (
+            entry.get("subtype")
+            or entry.get("type")
+            or "system"
+        )
+        content = entry.get("content", "")
+        if isinstance(content, list):
+            # Join text blocks if a list payload
+            content = "\n".join(
+                b.get("text", "") for b in content
+                if isinstance(b, dict) and b.get("text")
+            )
+        system_text = content[:200] if isinstance(content, str) else None
+
+        self._bar_counter += 1
+        return TimelineBar(
+            id=f"sys-{self._bar_counter}",
+            type=BarType.CUSTOM,
+            label=f"system:{subtype}",
+            start_time=ts,
+            end_time=ts,
+            duration_ms=0,
+            status=BarStatus.SUCCESS,
+            detail={"subtype": subtype, "text_preview": system_text or ""},
+            user_role="system",
+            system_text=system_text,
+            duration_unrecorded=True,
+            ts_unrecorded=ts_unrecorded,
         )

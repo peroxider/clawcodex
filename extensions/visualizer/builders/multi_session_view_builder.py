@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
+from datetime import datetime
 from typing import Any
 
 from .operation_categorizer import OperationCategorizer
@@ -336,6 +337,29 @@ class MultiSessionViewBuilder:
                 "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
                 "detail": bar.detail,
                 "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
+                # Bezier-view extension: ISO-8601 absolute timestamp for
+                # the EventDetailPanel. Computed here (not stored on the
+                # bar) so the parser stays free of presentation concerns.
+                # ``bar.absolute_time`` takes precedence when the parser
+                # has already filled it (e.g. tests injecting pre-stamped
+                # bars), otherwise we derive from start_time. None when
+                # the bar has no parseable timestamp.
+                "absoluteTime": (
+                    bar.absolute_time
+                    if bar.absolute_time
+                    else (
+                        datetime.fromtimestamp(bar.start_time).isoformat()
+                        if bar.start_time > 0
+                        else None
+                    )
+                ),
+                "durationUnrecorded": bar.duration_unrecorded,
+                "durationHeuristic": bar.duration_heuristic,
+                "tsUnrecorded": bar.ts_unrecorded,
+                "model": bar.model,
+                "userRole": bar.user_role,
+                "userText": bar.user_text,
+                "systemText": bar.system_text,
             })
         return ticks
 
@@ -390,6 +414,22 @@ class MultiSessionViewBuilder:
                 "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
                 "detail": bar.detail,
                 "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
+                "absoluteTime": (
+                    bar.absolute_time
+                    if bar.absolute_time
+                    else (
+                        datetime.fromtimestamp(bar.start_time).isoformat()
+                        if bar.start_time > 0
+                        else None
+                    )
+                ),
+                "durationUnrecorded": bar.duration_unrecorded,
+                "durationHeuristic": bar.duration_heuristic,
+                "tsUnrecorded": bar.ts_unrecorded,
+                "model": bar.model,
+                "userRole": bar.user_role,
+                "userText": bar.user_text,
+                "systemText": bar.system_text,
             })
         return ticks
 

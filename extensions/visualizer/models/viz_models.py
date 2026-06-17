@@ -182,6 +182,60 @@ class TimelineBar(BaseModel):
         "Filled by OperationCategorizer; consumed by the multi-session waterfall legend.",
     )
 
+    # ---- Bezier-timeline extension fields (P1) ----
+    # All Optional, all default-initialised so existing callers and serialised
+    # payloads are byte-compatible. Populated by transcript_parser where
+    # upstream data is available; the multi-session view builder also
+    # computes ``absolute_time`` from ``start_time`` at serialisation time.
+    user_role: str | None = Field(
+        default=None,
+        description="For user-message bars: 'user' (prompt) or 'system' (subtype).",
+    )
+    user_text: str | None = Field(
+        default=None,
+        description="Resolved user-prompt text (joined from text blocks / bare string).",
+    )
+    system_text: str | None = Field(
+        default=None,
+        description="Resolved system-injected text (away_summary body, etc.).",
+    )
+    model: str | None = Field(
+        default=None,
+        description="Model label carried on the assistant record (e.g. 'claude-opus-4-7').",
+    )
+    absolute_time: str | None = Field(
+        default=None,
+        description="ISO-8601 string of ``start_time``; computed by the builder at serialisation time.",
+    )
+    duration_unrecorded: bool = Field(
+        default=False,
+        description="True when no real duration was stamped (placeholder ms only). "
+        "The bezier view renders the bar at minimum visible width and labels the duration '未记录'.",
+    )
+    duration_heuristic: bool = Field(
+        default=False,
+        description="True when the duration was synthesised from a heuristic (next-bar gap). "
+        "The bezier view labels the duration '估算'.",
+    )
+    ts_unrecorded: bool = Field(
+        default=False,
+        description="True when the underlying record had no parseable timestamp. "
+        "The bezier view labels all time fields '未记录'.",
+    )
+    input_text: str | None = Field(
+        default=None,
+        description="For LLM events: the user prompt (or prior tool result) that triggered this turn. "
+        "Reserved for a future parentUuid-chain resolver; v1 always None.",
+    )
+    token_in: int | None = Field(
+        default=None,
+        description="Input tokens consumed in this turn. v1 always None (parser does not yet extract per-event usage).",
+    )
+    token_out: int | None = Field(
+        default=None,
+        description="Output tokens generated in this turn. v1 always None.",
+    )
+
     model_config = {
         "json_schema_extra": {
             "example": {
