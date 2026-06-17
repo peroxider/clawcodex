@@ -1,0 +1,90 @@
+"""Dreaming — F-100 background memory consolidation subsystem.
+
+Mirrors the upstream ``claude-code-best/src/services/autoDream/`` stack:
+
+* :mod:`clawcodex_ext.dreaming.config` — enable + thresholds.
+* :mod:`clawcodex_ext.dreaming.paths` — auto-memory path re-exports.
+* :mod:`clawcodex_ext.dreaming.lock` — mtime-as-lastConsolidatedAt
+  file lock inside the auto-memory dir.
+* :mod:`clawcodex_ext.dreaming.prompt` — 4-phase consolidation prompt
+  builder.
+* :mod:`clawcodex_ext.dreaming.runner` — placeholder for the actual
+  LLM-backed "forked agent" (Phase A stub; real wiring in a follow-up).
+* :mod:`clawcodex_ext.dreaming.service` — main loop / gates / dispatch.
+
+Public surface intentionally re-exports the consolidated API so callers
+can ``from clawcodex_ext.dreaming import …`` without picking modules.
+"""
+from __future__ import annotations
+
+from clawcodex_ext.dreaming.config import (
+    DEFAULT_DREAM_CONFIG,
+    DreamConfig,
+    get_dream_config,
+    is_auto_dream_enabled,
+    set_dream_config,
+)
+from clawcodex_ext.dreaming.lock import (
+    HOLDER_STALE_MS,
+    LOCK_FILE_NAME,
+    list_sessions_touched_since,
+    read_last_consolidated_at,
+    record_consolidation,
+    rollback_consolidation_lock,
+    try_acquire_consolidation_lock,
+)
+from clawcodex_ext.dreaming.paths import (
+    get_auto_mem_entrypoint,
+    get_auto_mem_path,
+    is_auto_memory_enabled,
+    is_kairos_active,
+    project_transcript_dir,
+)
+from clawcodex_ext.dreaming.prompt import (
+    DREAM_PROMPT_PREFIX,
+    build_consolidation_prompt,
+)
+from clawcodex_ext.dreaming.runner import (
+    DreamRunResult,
+    run_dream_consolidation,
+)
+from clawcodex_ext.dreaming.service import (
+    execute_auto_dream,
+    init_auto_dream,
+    kill_dream_task,
+    manual_dream,
+)
+
+__all__ = [
+    # config
+    "DEFAULT_DREAM_CONFIG",
+    "DreamConfig",
+    "get_dream_config",
+    "is_auto_dream_enabled",
+    "set_dream_config",
+    # paths
+    "get_auto_mem_entrypoint",
+    "get_auto_mem_path",
+    "is_auto_memory_enabled",
+    "is_kairos_active",
+    "project_transcript_dir",
+    # lock
+    "HOLDER_STALE_MS",
+    "LOCK_FILE_NAME",
+    "list_sessions_touched_since",
+    "read_last_consolidated_at",
+    "record_consolidation",
+    "rollback_consolidation_lock",
+    "try_acquire_consolidation_lock",
+    # prompt
+    "DREAM_PROMPT_PREFIX",
+    "build_consolidation_prompt",
+    # runner
+    "DreamRunResult",
+    "run_dream_consolidation",
+    # service
+    "execute_auto_dream",
+    "init_auto_dream",
+    "kill_dream_task",
+    "manual_dream",
+]

@@ -13,6 +13,7 @@ live alongside this ``__init__.py``:
 * ``local_shell`` — Chunk B / WI-1.4 + WI-2.1.
 * ``local_agent`` — Chunk B / WI-1.5 + Chunk C / WI-2.3 (full lifecycle).
 * ``in_process_teammate`` — Chunk F / WI-6.2.
+* ``dream`` — F-100.
 * ``progress`` — Chunk C / WI-2.4.
 * ``stop_task`` — Chunk E / WI-5.1.
 
@@ -30,6 +31,7 @@ from __future__ import annotations
 # (rather than ``import *``) so removing a future task type is a
 # localized edit.
 from src.task_registry import register_task
+from src.tasks.dream import DreamTask, DreamTaskState
 from src.tasks.in_process_teammate import (
     InProcessTeammateTask,
     InProcessTeammateTaskState,
@@ -42,8 +44,11 @@ from src.tasks.local_shell import LocalShellTask, LocalShellTaskState
 register_task(LocalShellTask())
 register_task(LocalAgentTask())
 register_task(InProcessTeammateTask())
+register_task(DreamTask())
 
 __all__ = [
+    "DreamTask",
+    "DreamTaskState",
     "InProcessTeammateTask",
     "InProcessTeammateTaskState",
     "LocalAgentTask",
