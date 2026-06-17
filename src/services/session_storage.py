@@ -15,6 +15,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,40 @@ CONTENT_DIR_NAME = "content"
 LARGE_CONTENT_THRESHOLD = 10_000  # 10KB — store separately
 DEFAULT_RETENTION_DAYS = 30
 MAX_FLUSH_BATCH = 50
+
+# F-11: sessionStorage 容量限制
+# Prevents unbounded memory growth from tracking too many session
+# directories in long-running daemon/swarm processes.
+MAX_CACHED_SESSION_FILES = 1000
+
+# Module-level LRU cache: session_id → session_dir path.
+# Entries are registered when a SessionStorage is initialized, and
+# evicted in FIFO order when the cap is reached.
+_session_file_cache: OrderedDict[str, Path] = OrderedDict()
+
+
+def register_session_file(session_id: str, dir_path: Path) -> None:
+    """Register a session directory in the LRU cache.
+
+    When the cache exceeds MAX_CACHED_SESSION_FILES, the oldest
+    entry is evicted.  This is a no-op if *session_id* is already
+    registered (its insertion order is not promoted).
+    """
+    if session_id in _session_file_cache:
+        return
+    if len(_session_file_cache) >= MAX_CACHED_SESSION_FILES:
+        _session_file_cache.popitem(last=False)
+    _session_file_cache[session_id] = dir_path
+
+
+def get_cached_session_dirs() -> dict[str, Path]:
+    """Return a copy of the current cache (session_id → dir_path)."""
+    return dict(_session_file_cache)
+
+
+def clear_session_cache() -> None:
+    """Clear the entire cache (e.g. during testing or config reload)."""
+    _session_file_cache.clear()
 
 
 @dataclass
@@ -106,6 +141,9 @@ class SessionStorage:
         # from the on-disk transcript so a resumed session inherits
         # the de-dup baseline instead of re-appending everything.
         self._flushed_uuids: set[str] | None = None
+
+        # F-11: Register in the session file LRU cache.
+        register_session_file(self.session_id, self._session_dir)
 
     @property
     def session_dir(self) -> Path:
@@ -436,6 +474,8 @@ class SessionStorage:
         """Delete this session's directory."""
         if self._session_dir.exists():
             shutil.rmtree(self._session_dir, ignore_errors=True)
+        # F-11: Evict from the LRU cache.
+        _session_file_cache.pop(self.session_id, None)
 
 
 def _atomic_write(path: Path, content: str) -> None:
