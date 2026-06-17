@@ -17,10 +17,32 @@
         </div>
     </div>
 
+    {# P6 — ECharts ↔ Bezier view toggle. The strip is anchored to the
+       right of the top bar in CSS (ms-reference-toolbar). The hint
+       text is shown only when the bezier view is active, so users
+       discover the keyboard / scroll semantics on first switch. #}
+    <div class="ms-reference-toolbar">
+        <div class="view-toggle" role="tablist" aria-label="view mode">
+            <button class="view-toggle-btn active" data-view="echarts"
+                    onclick="switchMultiView('echarts')">📊 ECharts</button>
+            <button class="view-toggle-btn" data-view="bezier"
+                    onclick="switchMultiView('bezier')">🌊 贝塞尔</button>
+        </div>
+        <div class="ms-bezier-hint" id="ms-bezier-hint" hidden>
+            滚轮缩放 (1×-40×,光标锚定) · Alt+滚轮平移 · 拖拽平移 · 点击事件查看详情 · Esc 关闭弹层
+        </div>
+    </div>
+
     <div class="ms-chart-container ms-reference-canvas"
          id="ms-chart"
          data-visual-mode="reference"
-         style="width:100%; height:100%;">
+         style="width:100%; height:calc(100% - 92px);">
+    </div>
+
+    {# P6 — bezier view container, hidden until switchMultiView('bezier'). #}
+    <div class="bezier-waterfall-shell ms-chart-container"
+         id="bezier-chart"
+         style="width:100%; height:calc(100% - 92px); display:none; overflow:auto;">
     </div>
 
     <div class="ms-reference-empty" id="ms-reference-empty" hidden>
@@ -43,20 +65,74 @@
 
 {% block scripts %}
 <script src="/static/js/multi_session_view.js?v=20260611-reference-align"></script>
+<script src="/static/js/bezier_waterfall.js?v=20260617-bezier"></script>
 <script>
+    // Track the active session id list so switchMultiView() can
+    // re-init the bezier instance on first toggle. Reload via the
+    // input field updates this + re-renders both views.
+    let currentSessionIds = [];
+    window.__multiBezierLoaded = false;
+    window.__multiWaterfallLoaded = false;
+
+    // Persist the active view in ?view=... so a refresh / shared
+    // link lands on the same surface.
+    function persistMultiViewParam(view) {
+        try {
+            const url = new URL(window.location.href);
+            if (view === 'echarts') url.searchParams.delete('view');
+            else url.searchParams.set('view', view);
+            window.history.replaceState({}, '', url);
+        } catch (_) { /* non-fatal */ }
+    }
+
+    function switchMultiView(view) {
+        document.querySelectorAll('.view-toggle-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.view === view);
+        });
+        persistMultiViewParam(view);
+        const echart = document.getElementById('ms-chart');
+        const bezier = document.getElementById('bezier-chart');
+        const hint   = document.getElementById('ms-bezier-hint');
+        const empty  = document.getElementById('ms-reference-empty');
+        if (view === 'echarts') {
+            echart.style.display = '';
+            bezier.style.display = 'none';
+            if (hint) hint.hidden = true;
+        } else {
+            echart.style.display = 'none';
+            bezier.style.display = '';
+            if (hint) hint.hidden = !currentSessionIds.length;
+            if (!currentSessionIds.length) return;
+            if (!window.__multiBezierLoaded) {
+                window.initBezierWaterfall(currentSessionIds, {
+                    chartContainerId: 'bezier-chart',
+                });
+                window.__multiBezierLoaded = true;
+            }
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         document.body.classList.add('ms-reference-page');
         const params = new URLSearchParams(window.location.search);
         const fromUrl = params.get('session_ids') || '';
+        const viewParam = params.get('view');
         const input = document.getElementById('ms-session-ids');
         if (fromUrl) {
+            currentSessionIds = fromUrl.split(',').map(s => s.trim()).filter(Boolean);
             input.value = fromUrl;
-            initMultiSessionView(fromUrl.split(',').map(s => s.trim()).filter(Boolean));
+            initMultiSessionView(currentSessionIds);
+            window.__multiWaterfallLoaded = true;
         } else {
+            currentSessionIds = [];
             input.value = '';
-            document.getElementById('ms-reference-empty').hidden = false;
+            const empty = document.getElementById('ms-reference-empty');
+            empty.hidden = false;
             document.getElementById('ms-chart').innerHTML = '';
         }
+        // Honour ?view=echarts | ?view=bezier after initial load so a
+        // shared link lands on the right surface. Default is echarts.
+        if (viewParam === 'bezier') switchMultiView('bezier');
     });
 
     function reloadMultiSession() {
@@ -70,7 +146,17 @@
         url.searchParams.set('session_ids', ids.join(','));
         window.history.replaceState({}, '', url);
         document.getElementById('ms-reference-empty').hidden = true;
+        currentSessionIds = ids;
         initMultiSessionView(ids);
+        window.__multiWaterfallLoaded = true;
+        // The bezier view fetched the previous session list on first
+        // activation; reset the guard so a fresh fetch happens for
+        // the new list. (Bezier view is closed; reopening will reload.)
+        window.__multiBezierLoaded = false;
+        const activeViewBtn = document.querySelector('.view-toggle-btn.active');
+        if (activeViewBtn && activeViewBtn.dataset.view === 'bezier') {
+            switchMultiView('bezier');
+        }
     }
 </script>
 {% endblock %}

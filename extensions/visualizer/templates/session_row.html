@@ -9,6 +9,8 @@
             <div class="view-toggle" role="tablist">
                 <button class="view-toggle-btn active" data-view="waterfall"
                         onclick="switchView('waterfall')">🌊 瀑布</button>
+                <button class="view-toggle-btn" data-view="bezier"
+                        onclick="switchView('bezier')">🌊 贝塞尔</button>
                 <button class="view-toggle-btn" data-view="gantt"
                         onclick="switchView('gantt')">📊 Gantt</button>
             </div>
@@ -117,55 +119,88 @@
     const urlParams = new URLSearchParams(window.location.search);
     const _viewParam = urlParams.get('view');
     const initialView = (_viewParam === 'gantt' || _viewParam === 'bezier') ? _viewParam : 'waterfall';
-    // Track which views have been initialised so re-toggling (P6 will
-    // wire the button) doesn't re-fetch / re-render unnecessarily. The
-    // bezier skeleton stores its own instance, but the guard keeps the
-    // entry path symmetric across views.
+    // Track which views have been initialised so re-toggling doesn't
+    // re-fetch / re-render unnecessarily. The bezier skeleton stores
+    // its own instance, but the guard keeps the entry path symmetric.
     window.__bezierLoaded = false;
+    window.__waterfallLoaded = false;
+
+    // Live-tailing gate. P6 design: bezier view disables live tail
+    // (v1 doesn't render incoming events). The WebSocket is opened on
+    // demand whenever a non-bezier view becomes active and closed
+    // when the user switches to bezier. We track the active state in
+    // window.__liveTailActive so we don't double-connect.
+    window.__liveTailActive = false;
+    function enableLiveTail() {
+        if (window.__liveTailActive) return;
+        connectLiveTail(SESSION_ID);
+        window.__liveTailActive = true;
+    }
+    function disableLiveTail() {
+        if (!window.__liveTailActive) return;
+        if (window.vizWs && typeof window.vizWs.disconnect === 'function') {
+            window.vizWs.disconnect();
+        }
+        window.__liveTailActive = false;
+    }
+
+    // Persist the active view in the URL so a page refresh / shared
+    // link lands on the same view. Drop the param for the default
+    // (waterfall) so the canonical URL stays clean.
+    function persistViewParam(view) {
+        try {
+            const url = new URL(window.location.href);
+            if (view === 'waterfall') url.searchParams.delete('view');
+            else url.searchParams.set('view', view);
+            window.history.replaceState({}, '', url);
+        } catch (_) { /* ignore — non-fatal */ }
+    }
 
     function switchView(view) {
         document.querySelectorAll('.view-toggle-btn').forEach(b => {
             b.classList.toggle('active', b.dataset.view === view);
         });
+        persistViewParam(view);
         const waterfall = document.getElementById('waterfall-chart');
         const gantt = document.getElementById('gantt-chart');
         const bezier = document.getElementById('bezier-chart');
+        const legendBar = document.getElementById('ms-legend-bar');
         if (view === 'waterfall') {
             waterfall.style.display = '';
             gantt.style.display = 'none';
             if (bezier) bezier.style.display = 'none';
+            // ECharts view owns the legend bar; bezier view clears it.
+            if (legendBar) legendBar.style.display = '';
             if (!window.__waterfallLoaded) {
-                // Single-session waterfall: render into the page's own chart
-                // div and populate the page-level #ms-legend-bar above it.
-                // The HTML legend bar carries the 5-pill category counts
-                // (Read/Write/Bash/Agent/Other); the stats_bar beneath the
-                // header carries the top-level numbers (Total Ops / Avg
-                // Duration / ...). The two surfaces are intentionally
-                // separate so a user can scan category distribution without
-                // re-rendering the chart.
                 initMultiSessionView([SESSION_ID], {
                     chartContainerId: 'waterfall-chart',
                     legendContainerId: 'ms-legend-bar',
                 });
                 window.__waterfallLoaded = true;
             }
+            enableLiveTail();
         } else if (view === 'bezier') {
             waterfall.style.display = 'none';
             gantt.style.display = 'none';
             if (bezier) bezier.style.display = '';
-            // P2 skeleton entry — P3+ will add zoom/pan/detail panel
+            // Hide the ECharts legend bar — the bezier view renders
+            // its own 8-category colour cues via the bar fills.
+            if (legendBar) legendBar.style.display = 'none';
             if (!window.__bezierLoaded) {
                 window.initBezierWaterfall([SESSION_ID], {
                     chartContainerId: 'bezier-chart',
                 });
                 window.__bezierLoaded = true;
             }
+            disableLiveTail();
         } else {
             waterfall.style.display = 'none';
             gantt.style.display = '';
             if (bezier) bezier.style.display = 'none';
+            if (legendBar) legendBar.style.display = '';
             window.renderGanttChart?.(SESSION_ID);
             window.resizeGanttChart?.();
+            enableLiveTail();
         }
     }
 
@@ -178,7 +213,8 @@
         if (typeof window.loadSessionDetail === 'function') {
             window.loadSessionDetail(SESSION_ID);
         }
-        connectLiveTail(SESSION_ID);
+        // Live tail is gated by switchView() above — if the initial
+        // view is bezier, the socket stays closed.
 
         // Wire the drawer's close button (avoids inline onclick so
         // closeTurnDrawer can stay inside the IIFE in multi_session_view.js).

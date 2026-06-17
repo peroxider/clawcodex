@@ -16,6 +16,48 @@
     --ms-role-verify: #f85149;
     --ms-role-edit: #f778ba;
     --ms-role-execute: #58a6ff;
+
+    /* ------------------------------------------------------------
+     * P7 — Bezier waterfall design tokens
+     * 19 vars consolidated from the Next.js globals.css:48-115
+     * reference. Mirrored in the JS via
+     * BezierWaterfall._readCategoryColors() so theme changes
+     * propagate without restarting the view.
+     *
+     *   Layout / surface
+     *   --bezier-bg / --bezier-fg / --bezier-border / --bezier-muted
+     *   --bezier-track / --bezier-track-border / --bezier-radius
+     *
+     *   Connector curves (default / selected-spawn /
+     *   selected-merge / hover)
+     *   --bezier-connector / --bezier-connector-active /
+     *   --bezier-connector-merge-active / --bezier-connector-hover
+     *
+     *   8 category colours (read / execute / write / orchestrate /
+     *   llm / user / system / other). Identical hexes to
+     *   clawcodex_sessions_analysis/app/globals.css:48-115 and to
+     *   OperationCategory colors in viz_models.py:85-94 so the
+     *   ECharts / Bezier views stay visually consistent.
+     * ------------------------------------------------------------ */
+    --bezier-bg:                #101b26;
+    --bezier-fg:                #c3cedb;
+    --bezier-border:            #26384a;
+    --bezier-muted:             #738294;
+    --bezier-track:             #0d1117;
+    --bezier-track-border:      rgba(48, 54, 61, 0.4);
+    --bezier-connector:         #6e7681;
+    --bezier-connector-active:  #f778ba;
+    --bezier-connector-merge-active: #58a6ff;
+    --bezier-connector-hover:   #79c0ff;
+    --bezier-cat-read:          #3fb950;
+    --bezier-cat-execute:       #58a6ff;
+    --bezier-cat-write:         #d29922;
+    --bezier-cat-orchestrate:   #f778ba;
+    --bezier-cat-llm:           #79c0ff;
+    --bezier-cat-user:          #bc8cff;
+    --bezier-cat-system:        #8b949e;
+    --bezier-cat-other:         #6e7681;
+    --bezier-radius:            0.5rem;
 }
 
 body.ms-reference-page {
@@ -305,6 +347,44 @@ body.ms-reference-page .container {
     .ms-reference-summary,
     .ms-reference-status {
         font-size: 12px;
+    }
+}
+
+/* ----------------------------------------------------------------- *
+ *  P6 — ECharts ↔ Bezier toolbar (multi_session.html)
+ *  Sits below the existing .ms-reference-topbar (model / summary /
+ *  status widgets). Anchors the view toggle on the left and shows
+ *  a one-line hint when the bezier view is active.
+ * ----------------------------------------------------------------- */
+.ms-reference-toolbar {
+    position: absolute;
+    z-index: 2;
+    top: 56px;
+    left: 17px;
+    right: 17px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+}
+.ms-bezier-hint {
+    color: var(--ms-muted, #738294);
+    font-size: 11px;
+    padding: 0 8px;
+    border-left: 1px solid var(--ms-border, #26384a);
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (max-width: 900px) {
+    .ms-reference-toolbar {
+        top: 50px;
+        gap: 8px;
+    }
+    .ms-bezier-hint {
+        font-size: 10px;
     }
 }
 
@@ -740,9 +820,9 @@ body.ms-reference-page .container {
 .bezier-row-track {
     position: relative;
     height: 22px;
-    background: rgba(13, 17, 23, 0.4);
-    border-top: 1px solid rgba(48, 54, 61, 0.4);
-    border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+    background: color-mix(in srgb, var(--bezier-track, #0d1117) 40%, transparent);
+    border-top: 1px solid var(--bezier-track-border, rgba(48, 54, 61, 0.4));
+    border-bottom: 1px solid var(--bezier-track-border, rgba(48, 54, 61, 0.4));
 }
 
 .bezier-event-bar {
@@ -821,4 +901,368 @@ body.ms-reference-page .container {
     animation: turn-drawer-spin 0.8s linear infinite;
     margin-right: 6px;
     vertical-align: -1px;
+}
+
+/* ------------------------------------------------------------------ */
+/* P4 — EventDetailPanel (.bezier-backdrop center modal)              */
+/* Ported from clawcodex_sessions_analysis components/                */
+/* event-detail-panel.tsx. Mounts on document.body, NOT #bezier-chart,*/
+/* so the modal doesn't scroll with the timeline.                     */
+/* ------------------------------------------------------------------ */
+.bezier-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+    animation: bezier-backdrop-fade 120ms ease-out;
+}
+@keyframes bezier-backdrop-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.bezier-event-panel {
+    position: relative;
+    width: 420px;
+    max-width: 85vw;
+    max-height: calc(100vh - 48px);
+    background: var(--ms-panel, #152333);
+    color: var(--ms-text, #c3cedb);
+    border: 1px solid var(--ms-border, #26384a);
+    border-radius: 0.5rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: bezier-panel-pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes bezier-panel-pop {
+    from { transform: translateY(8px) scale(0.98); opacity: 0; }
+    to   { transform: translateY(0)   scale(1);    opacity: 1; }
+}
+
+.bezier-event-panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--ms-panel, #152333);
+    border-bottom: 1px solid var(--ms-border, #26384a);
+    flex-shrink: 0;
+}
+.bezier-event-panel-header-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.bezier-event-panel-header-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ms-text, #c3cedb);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bezier-event-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 18px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--ms-text, #c3cedb);
+    border: 1px solid var(--ms-border, #26384a);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.bezier-event-pill.is-error {
+    color: #f85149;
+    border-color: rgba(248, 81, 73, 0.4);
+    background: rgba(248, 81, 73, 0.08);
+}
+.bezier-event-pill.is-muted {
+    color: var(--ms-muted, #738294);
+}
+.bezier-event-close {
+    background: transparent;
+    border: 0;
+    color: var(--ms-muted, #738294);
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 0 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+.bezier-event-close:hover {
+    color: var(--ms-text, #c3cedb);
+    background: rgba(255, 255, 255, 0.06);
+}
+.bezier-event-close:focus-visible {
+    outline: 2px solid var(--text-accent, #58a6ff);
+    outline-offset: 1px;
+}
+
+.bezier-event-panel-body {
+    overflow-y: auto;
+    padding: 12px 16px 18px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.bezier-event-section {
+    margin-top: 14px;
+}
+.bezier-event-section:first-child {
+    margin-top: 0;
+}
+.bezier-event-section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ms-muted, #738294);
+    margin: 0 0 6px;
+    font-weight: 600;
+}
+
+.bezier-event-row {
+    display: flex;
+    gap: 10px;
+    padding: 4px 0;
+    align-items: baseline;
+}
+.bezier-event-row-label {
+    flex: 0 0 90px;
+    color: var(--ms-muted, #738294);
+    font-size: 11px;
+}
+.bezier-event-row-value {
+    flex: 1;
+    min-width: 0;
+    color: var(--ms-text, #c3cedb);
+    word-break: break-word;
+    font-variant-numeric: tabular-nums;
+}
+.bezier-event-row-value code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+.bezier-event-row.is-pill .bezier-event-row-value {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.bezier-event-code {
+    position: relative;
+    background: var(--ms-canvas, #0d1117);
+    border: 1px solid var(--ms-border, #26384a);
+    border-radius: 4px;
+    padding: 8px 10px;
+    margin-top: 4px;
+    overflow: hidden;
+}
+.bezier-event-code pre {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--ms-text, #c3cedb);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 14em;
+    overflow: auto;
+}
+.bezier-event-code.is-collapsed pre {
+    max-height: 8em;
+    mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+}
+.bezier-event-code-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.bezier-event-code-btn {
+    background: transparent;
+    border: 1px solid var(--ms-border, #26384a);
+    color: var(--ms-muted, #738294);
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 1.4;
+}
+.bezier-event-code-btn:hover {
+    color: var(--ms-text, #c3cedb);
+    border-color: var(--ms-muted, #738294);
+}
+.bezier-event-code-btn:focus-visible {
+    outline: 2px solid var(--text-accent, #58a6ff);
+    outline-offset: 1px;
+}
+.bezier-event-code-btn.is-copied {
+    color: #3fb950;
+    border-color: rgba(63, 185, 80, 0.4);
+}
+
+.bezier-event-empty {
+    color: var(--ms-muted, #738294);
+    font-style: italic;
+    padding: 2px 0;
+}
+
+.bezier-event-resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    z-index: 3;
+    /* Visible grip dot in the middle */
+    background-image: radial-gradient(
+        circle,
+        var(--ms-muted, #738294) 0,
+        var(--ms-muted, #738294) 1px,
+        transparent 1.5px,
+        transparent 4px
+    );
+    background-size: 4px 4px;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 100ms ease;
+}
+.bezier-event-panel:hover .bezier-event-resize {
+    opacity: 0.6;
+}
+.bezier-event-resize:hover,
+.bezier-event-resize:focus-visible {
+    opacity: 1;
+    outline: none;
+}
+.bezier-event-resize.is-dragging {
+    opacity: 1;
+    background-color: rgba(88, 166, 255, 0.15);
+}
+
+/* ------------------------------------------------------------------ */
+/* P5 — Sub-agent row + bezier connector SVG + tooltip                */
+/* Ported from clawcodex_sessions_analysis components/                */
+/* workflow-panel.tsx:205-307 + globals.css:48-115 colour tokens.     */
+/* (The bezier colour tokens live in the consolidated :root at the   */
+/* top of this file — see P7. JS reads them via                      */
+/* BezierWaterfall._readCategoryColors() so theme changes propagate.) */
+/* ------------------------------------------------------------------ */
+
+/* Sub-agent row — indented, slightly muted to keep the parent
+   session row as the dominant signal. Sits between the parent
+   row's track and the next session row, with a thin border on top
+   to visually separate the cascade. */
+.bezier-subagent-row {
+    background: color-mix(in srgb, var(--bezier-bg, #101b26) 50%, transparent);
+    border-top: 1px dashed color-mix(in srgb, var(--bezier-muted, #738294) 25%, transparent);
+    margin-bottom: 2px;
+}
+.bezier-subagent-row .bezier-row-track {
+    background: color-mix(in srgb, var(--bezier-track, #0d1117) 55%, transparent);
+    height: 18px;
+    border-top: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--bezier-track-border, rgba(48, 54, 61, 0.4)) 88%, transparent);
+}
+.bezier-subagent-bar {
+    top: 2px;
+    height: 12px;
+    filter: saturate(0.85);
+}
+.bezier-role-pill {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 16px;
+    font-weight: 600;
+    color: #0d1117;
+    background: #6e7681; /* default — overridden inline by roleColor */
+    white-space: nowrap;
+}
+
+/* Connector SVG layer — absolute over the body, paints on top of
+   rows but with pointer-events: none on the root so bar clicks pass
+   through. Hit-area + focusable paths re-enable pointer-events:stroke
+   in the JS. */
+.bezier-connector-svg {
+    /* Layout (position/top/left/width/height/z-index/pointer-events)
+       is set inline by the JS. The CSS here only handles class-based
+       styling of the path elements. */
+    overflow: visible;
+}
+.bezier-connector-svg .bezier-connector-hitarea {
+    transition: stroke-width 150ms ease-out;
+}
+.bezier-connector-svg .bezier-connector-hitarea:focus {
+    outline: none;
+}
+.bezier-connector-svg .bezier-connector-hitarea:focus-visible {
+    outline: 2px solid var(--text-accent, #58a6ff);
+    outline-offset: 1px;
+}
+
+/* Connector tooltip — sibling of the SVG inside the .bezier-waterfall
+   panel. Positioned at the curve's midpoint; flips to the left side
+   when the curve sits past 85% of the canvas width. */
+.bezier-connector-tooltip {
+    z-index: 6;
+    max-width: 280px;
+    padding: 4px 8px;
+    background: var(--bezier-bg, #101b26);
+    color: var(--bezier-fg, #c3cedb);
+    border: 1px solid var(--bezier-border, #26384a);
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    font-size: 11px;
+    line-height: 1.4;
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 120ms ease-out;
+}
+.bezier-connector-tooltip-head {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+}
+.bezier-connector-tooltip-arrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+}
+.bezier-connector-tooltip-meta {
+    color: var(--ms-muted, #738294);
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+}
+.bezier-connector-tooltip-hint {
+    color: var(--ms-muted, #738294);
+    opacity: 0.7;
+    margin-top: 1px;
 }
