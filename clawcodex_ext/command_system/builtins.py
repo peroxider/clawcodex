@@ -31,6 +31,7 @@ from src.command_system.export_command import EXPORT_COMMAND
 from src.command_system.output_style_command import OUTPUT_STYLE_COMMAND
 from src.command_system.statusline import STATUSLINE_COMMAND
 from src.command_system.security_review import SECURITY_REVIEW_COMMAND
+from clawcodex_ext.goal.command import GOAL_COMMAND
 
 
 # Official Claude Code /init prompts (Simplified)
@@ -1312,6 +1313,7 @@ def get_builtin_commands() -> list[Command]:
         OUTPUT_STYLE_COMMAND,
         STATUSLINE_COMMAND,
         SECURITY_REVIEW_COMMAND,
+        GOAL_COMMAND,
     ]
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
     if is_buddy_command_enabled():

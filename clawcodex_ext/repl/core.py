@@ -1012,6 +1012,24 @@ class ClawcodexREPL:
                 f" (advisor: {adv_in} in / {adv_out} out)"
                 if (adv_in or adv_out) else ""
             )
+            # F-9 / `/goal`: surface the active long-running goal as a
+            # compact pill next to the token counts. We pull directly
+            # from the registry singleton rather than the
+            # ``tool_context`` field to keep the read path the same as
+            # the TUI ``status_line`` widget. Hidden entirely when no
+            # goal is in flight so the toolbar stays quiet for users
+            # who haven't enabled ``/goal``.
+            goal_part = ""
+            try:
+                from clawcodex_ext.goal.registry import get_goal_registry
+                from clawcodex_ext.goal.prompts import format_pill
+                _sid = getattr(self.tool_context, "session_id", None)
+                if _sid:
+                    _state = get_goal_registry().get(_sid)
+                    if _state is not None:
+                        goal_part = f" · goal: {format_pill(_state)}"
+            except Exception:
+                goal_part = ""
             # USD cost — directional estimate based on the upstream
             # model's published per-token price. Proxies (litellm,
             # openrouter, bedrock) may charge different rates; the
@@ -1049,7 +1067,9 @@ class ClawcodexREPL:
                 f"tokens: {self._stats_input_tokens} in / "
                 f"{self._stats_output_tokens} out"
                 f"{advisor_tokens}"
-                f"{cost_part} "
+                f"{cost_part}"
+                f"{goal_part}"
+                f" "
             )
         except Exception:
             # Never let the toolbar break the input prompt.

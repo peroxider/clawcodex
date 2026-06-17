@@ -111,6 +111,13 @@ class AppState:
     focused_dialog: FocusedDialog = FocusedDialog.PROMPT
     usage: dict[str, int] = field(default_factory=lambda: {"input_tokens": 0, "output_tokens": 0})
     last_error: str | None = None
+    # F-9 / `/goal`: mirror of ``GoalController.get_pill_state()``.
+    # ``None`` ⇒ no goal active (segment hidden). When set, the
+    # ``StatusLine`` widget reactively renders the pill on the next
+    # ``watch_goal`` redraw. The field is plain (not a ``reactive``)
+    # because AppState is plain dataclass — the status_line reads it
+    # through the standard Textual ``watch_*`` subscription.
+    goal: dict | None = None
 
     _subscribers: list[Callable[[], None]] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)

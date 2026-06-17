@@ -354,6 +354,28 @@ async def run_query_as_agent_loop(
             mu = getattr(msg, "usage", None) or {}
             usage["input_tokens"] += mu.get("input_tokens", 0)
             usage["output_tokens"] += mu.get("output_tokens", 0)
+            # F-9: feed the running usage total into the ``/goal``
+            # state machine. The registry's ``record_usage`` is a
+            # no-op when no active goal exists, so we can call it on
+            # every turn without first consulting the registry. The
+            # controller watches for the cumulative token crossing
+            # ``token_budget`` and flips the goal to ``budget_limited``
+            # at the right moment, injecting the wrap-up prompt.
+            if main_session_id:
+                try:
+                    from clawcodex_ext.goal.registry import get_goal_registry
+                    get_goal_registry().record_usage(
+                        main_session_id,
+                        {
+                            "input_tokens": usage["input_tokens"],
+                            "output_tokens": usage["output_tokens"],
+                        },
+                    )
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "F-9 record_usage failed; goal budget tracking "
+                        "may drift this turn"
+                    )
             # Capture text content and tool_use events.
             text_parts: list[str] = []
             content = msg.content

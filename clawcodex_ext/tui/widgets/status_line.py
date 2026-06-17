@@ -46,6 +46,12 @@ class StatusLine(Static):
     is_thinking: reactive[bool] = reactive(False)
     queued: reactive[int] = reactive(0)
     permission_mode: reactive[str] = reactive("")
+    # F-9 / `/goal`: an optional pill dict keyed by the
+    # ``GoalController.get_pill_state()`` shape. When ``None`` (the
+    # default) the goal segment is suppressed entirely; ``agent_bridge``
+    # pushes a fresh value after each turn completion so the widget
+    # reactively redraws.
+    goal: reactive[dict | None] = reactive(None)
 
     def __init__(
         self,
@@ -130,6 +136,9 @@ class StatusLine(Static):
         self._redraw()
 
     def watch_permission_mode(self, _: str) -> None:
+        self._redraw()
+
+    def watch_goal(self, _: dict | None) -> None:
         self._redraw()
 
     def _redraw(self) -> None:
@@ -219,7 +228,17 @@ class StatusLine(Static):
             except Exception:
                 pass
         right = " · ".join(right_bits)
-        return Text(f"{left}    {middle}    {cwd}    {right}")
+        # F-9 / `/goal`: append the goal pill to the right segment
+        # when an active goal exists. ``goal`` is a dict produced by
+        # ``GoalController.get_pill_state()``; we use the pre-formatted
+        # ``pill`` text the controller embeds so the rendering stays
+        # consistent with the REPL ``_bottom_toolbar``.
+        goal_pill_text = ""
+        if self.goal:
+            pill = self.goal.get("pill")
+            if isinstance(pill, str) and pill:
+                goal_pill_text = f" · {pill}"
+        return Text(f"{left}    {middle}    {cwd}    {right}{goal_pill_text}")
 
     def _display_cwd(self) -> str:
         try:

@@ -11,6 +11,7 @@ from src.tool_system.build_tool import Tool
 from clawcodex_ext.tool_system.tools.progress_report import ProgressReportTool
 from clawcodex_ext.tool_system.tools.task_directives import TaskDirectivesTool
 from clawcodex_ext.tool_system.tools.task_inspect import TaskInspectTool
+from clawcodex_ext.goal.tool import GoalTool
 from clawcodex_ext.tool_system.tools.create_agent_tool import make_create_agent_tool
 
 EXTENSION_TOOLS: list[Tool] = [
@@ -18,6 +19,7 @@ EXTENSION_TOOLS: list[Tool] = [
     TaskDirectivesTool,
     TaskInspectTool,
     make_create_agent_tool(),
+    GoalTool,
 ]
 
 __all__ = [

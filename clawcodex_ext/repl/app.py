@@ -593,9 +593,25 @@ class ClawCodexExtREPL(ClawcodexREPL):
         controller = getattr(self, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
+        # F-9: also start the ``/goal`` controller so it knows a new
+        # assistant turn is about to begin. Auto-continuation is
+        # driven from ``on_assistant_turn_complete`` in the
+        # ``finally`` block, parallel to the away-summary path.
+        goal_controller = getattr(self, "_goal_controller", None)
+        if goal_controller is not None:
+            try:
+                goal_controller.on_run_start()
+            except Exception:
+                pass
         try:
             return super().chat(user_input, max_turns=max_turns)
         finally:
             if controller is not None:
                 controller.on_run_finish()
                 controller.on_assistant_turn_complete()
+            if goal_controller is not None:
+                try:
+                    goal_controller.on_run_finish()
+                    goal_controller.on_assistant_turn_complete()
+                except Exception:
+                    pass

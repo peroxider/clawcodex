@@ -98,7 +98,7 @@ class CommandEngine:
 
     registry: CommandRegistry
     workspace_root: Path
-    context: CommandContext
+    context: CommandContext | None = None
     _command_hooks: list[Callable[[str, CommandResult], None]] = field(
         default_factory=list
     )
@@ -227,11 +227,23 @@ class CommandEngine:
         # Substitute the null surface when none was wired (SDK /
         # non-interactive). Done here, once, so command bodies never see a
         # ``None`` ui. Idempotent: a real surface sets ``ui`` at startup.
-        if self.context.ui is None:
-            self.context.ui = NullUIHost()
+        ctx = self.context
+        if ctx is None:
+            # Lazy default context for callers (e.g. unit tests) that
+            # did not supply one. Constructed on demand so the engine
+            # still works in headless smoke checks.
+            from clawcodex_ext.command_system.types import CommandContext
+
+            ctx = CommandContext(
+                workspace_root=self.workspace_root,
+                cwd=self.workspace_root,
+            )
+            self.context = ctx
+        if ctx.ui is None:
+            ctx.ui = NullUIHost()
 
         try:
-            outcome = await command.run(args, self.context)
+            outcome = await command.run(args, ctx)
         except InteractiveUnavailableError as e:
             # Expected on the null surface — a clean, typed message rather
             # than a stack trace.

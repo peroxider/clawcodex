@@ -60,9 +60,16 @@ class CommandContext:
     """Context passed to command execution."""
     workspace_root: Path
     cwd: Path
-    conversation: Any  # Will be type hinted properly later
-    cost_tracker: Any
-    history: Any
+    # ``conversation``, ``cost_tracker``, and ``history`` default to
+    # ``None`` so unit-test / SDK callers that don't construct the
+    # full REPL surface can still build a ``CommandContext`` with
+    # just the workspace + tool_context / ui handles. Commands that
+    # actually need to read conversation history (e.g. ``/resume``)
+    # are expected to ``getattr(context, "conversation", None)`` and
+    # degrade gracefully when ``None``.
+    conversation: Any = None  # Will be type hinted properly later
+    cost_tracker: Any = None
+    history: Any = None
     config: dict[str, Any] = field(default_factory=dict)
     # Optional handles for commands that need to read or mutate
     # cross-session state. Default to None so existing call sites that
