@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 
@@ -680,4 +681,131 @@ class TestStage5Telemetry:
             storage.append("events", event.to_dict())
             # After first append, the events/ subdir exists.
             assert (base / "events").exists()
+
+
+class TestStage5ExtDreaming:
+    """F-100: 移植 Dreaming 后台记忆整合系统 — Phase A.
+
+    验证 ``clawcodex_ext/dreaming/`` 子系统的 public surface 可加载,
+    并锁定与上游 ``claude-code-best`` 对齐的常量/默认值. 子模块覆盖:
+    config / paths / lock / prompt / runner / service.
+    """
+
+    def test_dreaming_package_imports(self):
+        """Top-level package re-exports the consolidated public API."""
+        import clawcodex_ext.dreaming as dreaming_mod
+
+        for name in (
+            # config
+            "DreamConfig", "DEFAULT_DREAM_CONFIG",
+            "get_dream_config", "set_dream_config", "is_auto_dream_enabled",
+            # paths
+            "get_auto_mem_entrypoint", "get_auto_mem_path",
+            "is_auto_memory_enabled", "is_kairos_active", "project_transcript_dir",
+            # lock
+            "HOLDER_STALE_MS", "LOCK_FILE_NAME",
+            "list_sessions_touched_since", "read_last_consolidated_at",
+            "record_consolidation", "rollback_consolidation_lock",
+            "try_acquire_consolidation_lock",
+            # prompt
+            "DREAM_PROMPT_PREFIX", "build_consolidation_prompt",
+            # runner
+            "DreamRunResult", "run_dream_consolidation",
+            # service
+            "execute_auto_dream", "init_auto_dream",
+            "kill_dream_task", "manual_dream",
+        ):
+            assert hasattr(dreaming_mod, name), f"dreaming missing {name!r}"
+
+    def test_dreaming_paths_re_exports(self):
+        """paths.py re-exports upstream memdir helpers + clawcodex additions."""
+        from clawcodex_ext.dreaming import paths as paths_mod
+        from src.memdir.paths import (
+            get_auto_mem_entrypoint,
+            get_auto_mem_path,
+            is_auto_memory_enabled,
+        )
+
+        # Upstream re-exports must be the *same* object (no shadow copy).
+        assert paths_mod.get_auto_mem_entrypoint is get_auto_mem_entrypoint
+        assert paths_mod.get_auto_mem_path is get_auto_mem_path
+        assert paths_mod.is_auto_memory_enabled is is_auto_memory_enabled
+
+        # clawcodex-specific additions — all callable.
+        assert callable(paths_mod.is_kairos_active)
+        assert callable(paths_mod.project_transcript_dir)
+
+        # KAIROS is upstream-only — default off unless CLAWCODEX_KAIROS=1.
+        # is_kairos_active() is best-effort, no external side effect.
+        if "CLAWCODEX_KAIROS" not in os.environ:
+            assert paths_mod.is_kairos_active() is False
+
+    def test_dreaming_lock_constants(self):
+        """lock.py exposes the file lock filename + stale timeout."""
+        from clawcodex_ext.dreaming import lock as lock_mod
+
+        # Filename matches the upstream consolidation lock file.
+        assert lock_mod.LOCK_FILE_NAME == ".consolidate-lock"
+        # 60 minutes — matches upstream HOLDER_STALE_MS.
+        assert lock_mod.HOLDER_STALE_MS == 60 * 60 * 1000
+        # Public lock helpers are callable.
+        for fn in (
+            lock_mod.try_acquire_consolidation_lock,
+            lock_mod.rollback_consolidation_lock,
+            lock_mod.read_last_consolidated_at,
+            lock_mod.record_consolidation,
+            lock_mod.list_sessions_touched_since,
+        ):
+            assert callable(fn)
+
+    def test_dreaming_config_defaults(self):
+        """DEFAULT_DREAM_CONFIG matches the documented thresholds (24h / 5 sessions)."""
+        from clawcodex_ext.dreaming import (
+            DEFAULT_DREAM_CONFIG,
+            DreamConfig,
+            get_dream_config,
+            is_auto_dream_enabled,
+        )
+
+        assert isinstance(DEFAULT_DREAM_CONFIG, DreamConfig)
+        assert DEFAULT_DREAM_CONFIG.min_hours == 24.0
+        assert DEFAULT_DREAM_CONFIG.min_sessions == 5
+        # get_dream_config returns a DreamConfig (not None).
+        assert isinstance(get_dream_config(), DreamConfig)
+        # is_auto_dream_enabled is callable; value depends on env, don't assert.
+        assert callable(is_auto_dream_enabled)
+
+    def test_dreaming_runner_factory_swap(self):
+        """runner.py exposes a swap point + stable result dataclass."""
+        from clawcodex_ext.dreaming.runner import (
+            DreamRunResult,
+            run_dream_consolidation,
+            set_dream_runner_factory,
+        )
+
+        # Result dataclass has stable defaults — stub has same shape as real.
+        result = DreamRunResult()
+        assert result.files_touched == []
+        assert result.usage == {}
+        assert result.summary == ""
+
+        # set_dream_runner_factory(None) is a valid no-op (clear to built-in stub).
+        set_dream_runner_factory(None)
+        assert callable(set_dream_runner_factory)
+        assert callable(run_dream_consolidation)
+
+    def test_dreaming_service_exports(self):
+        """service.py exposes the gate-chain entry points + kill path."""
+        from clawcodex_ext.dreaming.service import (
+            execute_auto_dream,
+            init_auto_dream,
+            kill_dream_task,
+            manual_dream,
+        )
+
+        # All four symbols are wired and callable.
+        assert callable(init_auto_dream)
+        assert callable(execute_auto_dream)
+        assert callable(kill_dream_task)
+        assert callable(manual_dream)
 

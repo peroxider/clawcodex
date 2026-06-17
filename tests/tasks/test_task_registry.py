@@ -193,14 +193,26 @@ def test_get_task_by_type_dispatches_correctly() -> None:
     assert agent_task.type == "local_agent"
 
 
+def test_get_task_by_type_dream_registered_f100() -> None:
+    """F-100: ``DreamTask`` is registered at import time via
+    ``src.tasks.__init__``'s centralized registration. This unlocks
+    the prior ``dream is None`` invariant.
+    """
+    from src.tasks import dream  # noqa: F401  (triggers registration)
+
+    dream_task = get_task_by_type("dream")
+    assert dream_task is not None
+    assert dream_task.type == "dream"
+    assert dream_task.name == "DreamTask"
+
+
 def test_get_task_by_type_unknown_returns_none() -> None:
     """Out-of-scope chapter task types stay unregistered (per plan §3:
-    RemoteAgent / Workflow / Monitor / Dream are deferred). Chunk-F
-    registered ``in_process_teammate`` so it's no longer in this list.
+    RemoteAgent / Workflow / Monitor are deferred; ``dream`` is now
+    registered as of F-100, so it's not in this list).
     """
-    # ``dream`` is out-of-scope (chapter §3 / plan §3 — deferred).
-    assert get_task_by_type("dream") is None
-    # And so are remote_agent / monitor_mcp / local_workflow.
+    # ``dream`` is now registered (F-100) — moved to its own test above.
+    # Still-unregistered: remote_agent / monitor_mcp / local_workflow.
     assert get_task_by_type("remote_agent") is None
     assert get_task_by_type("monitor_mcp") is None
     assert get_task_by_type("local_workflow") is None
