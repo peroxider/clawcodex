@@ -10,11 +10,14 @@ querySource might be typed as `any`, producing many unique source values.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Optional
 
-# Maximum number of source entries before oldest eviction
-MAX_SOURCE_ENTRIES = 50
+# F-12: Maximum number of source entries before oldest eviction.
+# Set to a large value (10 000) so normal usage is unaffected while
+# still bounding memory in long-running daemon/swarm scenarios.
+MAX_SOURCE_ENTRIES = 10_000
 
 
 @dataclass
@@ -33,30 +36,37 @@ class CacheWarningState:
 class CacheWarning:
     """Cache warning manager with LRU-style eviction.
 
-    Maintains a dictionary of cache warning states keyed by source string.
-    When capacity is reached, the oldest entry (FIFO) is evicted before
-    inserting the new entry.
+    Maintains an OrderedDict of cache warning states keyed by source string.
+    When capacity is reached during an *insert* of a new source, the oldest
+    entry (FIFO) is evicted before inserting the new entry.  Updating an
+    already-existing source does NOT trigger eviction.
 
     Note:
         This class is not thread-safe. Callers must ensure serialized access.
     """
 
     def __init__(self) -> None:
-        self.cache_warning_state_by_source: dict[str, CacheWarningState] = {}
+        self.cache_warning_state_by_source: OrderedDict[str, CacheWarningState] = OrderedDict()
 
     def update(self, source: str, state: CacheWarningState) -> None:
         """Update or insert a cache warning state for a source.
 
-        If the cache has reached capacity, the oldest entry is evicted
-        before inserting the new state.
+        If *source* already exists, the state is replaced in-place without
+        affecting the eviction order.  If *source* is new and the cache has
+        reached capacity, the oldest entry is evicted first.
 
         Args:
             source: The source identifier for this warning state.
             state: The cache warning state to store.
         """
+        # Update existing — no eviction, preserve insertion order.
+        if source in self.cache_warning_state_by_source:
+            self.cache_warning_state_by_source[source] = state
+            return
+
+        # Insert — evict oldest if at capacity.
         if len(self.cache_warning_state_by_source) >= MAX_SOURCE_ENTRIES:
-            oldest_key = next(iter(self.cache_warning_state_by_source))
-            del self.cache_warning_state_by_source[oldest_key]
+            self.cache_warning_state_by_source.popitem(last=False)
         self.cache_warning_state_by_source[source] = state
 
     def get(self, source: str) -> Optional[CacheWarningState]:
