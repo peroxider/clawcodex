@@ -1362,7 +1362,7 @@ CronTask due
 | **G7** | **Analytics 遥测事件预留** - fire/missed/expired 事件点预留 Optional[Callable] | ✅ 完成 |
 | G8 | inFlight 防重复触发 — 异步 IO 期间用 in_flight Set 防止同一任务二次触发 | ✅ 完成 |
 | G9 | SDK daemon 模式（`dir`/`lockIdentity`）— 可选脱离 session state 独立运行 | ⏳ 待设计 |
-| G10 | `cronToHuman(utc)` UTC 模式 — `cron_to_human()` 增加 `utc` 参数 | ⏳ 待设计 |
+| **G10** | **`cronToHuman(utc)` UTC 模式 — `cron_to_human()` 增加 `utc` 参数，实际偏移到本地时区 | ✅ 完成 |
 | **D1** | **sourceId 级 Active-Run 去重（CCB 第1层）** — `create_queued_run()` 在 storage lock 下按 `source_id` 扫描活跃 run，防止高频任务堆积 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
 | **D2** | **PID 活体检测（CCB 第2层）** — `os.kill(pid, 0)` + `/proc/<pid>/comm` 白名单检测原进程存活，死进程自动 recover | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
 | **D3** | **inFlight 防重复触发（CCB 第3层）** — scheduler 内 `_in_flight` Set + Lock 防止异步 IO 期间二次发射 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |

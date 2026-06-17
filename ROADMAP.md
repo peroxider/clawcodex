@@ -59,8 +59,8 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-13 | 记忆作用域隔离 | 四种作用域(user/project/agent/team)过滤加载 | Agent 只带入相关长期背景，减少无关上下文 | ✅ 已完成 | 已完成 | py 代码、memory 文件 |
-| AR-F-11 | sessionStorage 容量限制 | LRU 限制 existingSessionFiles 数量 | 长期运行 daemon 不易 OOM | 📋 规划中→F-11 | 2 天 | py LRU、测试 |
-| AR-F-12 | cacheWarning 容量限制 | source entries LRU 限制 | 长期运行不易内存泄漏 | 📋 规划中→F-12 | 2 天 | py LRU、测试 |
+| AR-F-11 | sessionStorage 容量限制 | LRU 限制 existingSessionFiles 数量 | 长期运行 daemon 不易 OOM | ✅ 已完成 | 已完成 | py LRU、测试 |
+| AR-F-12 | cacheWarning 容量限制 | source entries LRU 限制 | 长期运行不易内存泄漏 | ✅ 已完成 | 已完成 | py LRU、测试 |
 | AR-F-4  | 结构化输出增强 (Outlines) | Token 预算、工具决策结构化、压缩策略 | Agent 决策更稳，JSON 错误更少 | ✅ 已完成 → F-4 | 已完成 | py adapter、schema、测试 |
 | AR-F-9  | /goal 命令（目标管理） | 目标管理、进度跟踪 | 用户可设置和管理 Agent 目标 | 📋 规划中→F-9 | — | CLI 命令、UI |
 
@@ -150,8 +150,8 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
-| AR-F-11 | sessionStorage LRU 限制 | LRU 限制 existingSessionFiles 数量 | 用户长期运行 daemon 不易 OOM | 📋 规划中 → F-11 | 2 天 | py LRU、测试 |
-| AR-F-12 | cacheWarning 容量限制 | cacheWarning source entries LRU | 用户长期运行不易内存泄漏 | 📋 规划中 → F-12 | 2 天 | py LRU、测试 |
+| AR-F-11 | sessionStorage LRU 限制 | LRU 限制 existingSessionFiles 数量 | 用户长期运行 daemon 不易 OOM | ✅ 已完成 | 已完成 | py LRU、测试 |
+| AR-F-12 | cacheWarning 容量限制 | cacheWarning source entries LRU | 用户长期运行不易内存泄漏 | ✅ 已完成 | 已完成 | py LRU、测试 |
 | AR-F-4  | Outlines 集成与稳定性 | Token 预算、工具决策结构化、压缩策略 | 用户感知为 Agent 决策更稳定、JSON 解析错误更少 | 📋 规划中 → F-4 | 3 周 | py adapter、Pydantic schema、测试 |
 | AR-F-45 | Tool-call 审计旁路 | 编排场景工具调用审计流 | 用户可审查无人值守任务实际操作 | ✅ 已完成 → F-45 | 已完成 | ndjson audit、py sink |
 | AR-F-51 | AgentRunner 空转检测 | 空转循环检测与自动终止 | 用户不会因 Agent 空转浪费 token 和时间 | ✅ 已完成 → F-51 | 已完成 | py 检测代码、配置、测试 |

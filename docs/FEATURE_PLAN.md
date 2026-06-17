@@ -1782,7 +1782,7 @@ clawcodex attach cicd-agent
 ---
 
 ### 2.10 sessionStorage 容量限制（F-11）
-**状态**: ⏳ 待实现
+**状态**: ✅ 已完成
 **目标**: 防止长时间运行的 daemon/swarm 会话导致内存泄漏
 
 #### 2.10.1 功能说明
@@ -8542,8 +8542,8 @@ clawcodex_ext/community_radar/
 | F-4 | 结构化输出增强 | §2.3 | 📋 适配器完成 |
 | F-9 | /goal 目标管理 | §2.6 | ⏳ 待实现 |
 | F-10 | ExecuteExtraTool | §2.7 | 🔄 规划中 |
-| F-11 | sessionStorage 容量 | §2.10 | 🔄 规划中 |
-| F-12 | cacheWarning 容量 | §2.11 | 🔄 规划中 |
+| F-11 | sessionStorage 容量 | §2.10 | ✅ 已完成 |
+| F-12 | cacheWarning 容量 | §2.11 | ✅ 已完成 |
 | F-13 | 记忆作用域隔离 | §2.5 | ✅ 完成 |
 | F-16 | Auto 模式 | §2.13 | 📋 规划中 |
 | F-18 | CreateAgentTool | §2.9 | ✅ 已完成 |
