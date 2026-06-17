@@ -115,9 +115,11 @@ def test_session_gate_blocks_when_too_few(tmp_path: Path) -> None:
 
 
 def test_lock_already_held_blocks(tmp_path: Path) -> None:
-    # Pre-acquire the lock with our own PID, fresh mtime → live holder.
+    # Pre-acquire the lock with a FOREIGN live PID, fresh mtime → blocked.
+    # ``os.getppid()`` is the test runner's parent — guaranteed alive
+    # and never our own PID (a self-PID would self-acquire per F-100/100.4).
     lock_path = tmp_path / LOCK_FILE_NAME
-    lock_path.write_text(str(os.getpid()))
+    lock_path.write_text(str(os.getppid()))
     now = time.time()
     os.utime(lock_path, (now, now))
     reg = _init(force_min_hours=0, force_min_sessions=0)

@@ -32,5 +32,6 @@ def init_skills_ext() -> None:
     Registers clawcodex-native skills that are not part of upstream.
     Called by SkillRegistryExt when loading skills from clawscodex paths.
     """
-    from .bundled import register_convert_pos_skill
+    from .bundled import register_convert_pos_skill, register_dream_skill
     register_convert_pos_skill()
+    register_dream_skill()

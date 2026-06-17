@@ -205,3 +205,118 @@ class TestRuntimeCommandsWithRuntimeContext:
         assert "test-model" in result_text, "output should show current model"
         # 列表
         assert "Providers:" in result_text, "output should contain 'Providers:'"
+
+
+# ---------------------------------------------------------------------------
+# F-100 / 100.4 — /dream slash skill
+# ---------------------------------------------------------------------------
+
+
+class TestDreamCommandRegistration:
+    """``register_dream_skill`` wires ``/dream`` as a LocalCommand in the
+    global command registry (F-100 / 100.4)."""
+
+    def test_register_dream_skill_adds_dream(self):
+        """register_dream_skill adds a LocalCommand named ``dream``."""
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.types import CommandType
+        from extensions.skills_ext.bundled.dream import register_dream_skill
+
+        get_command_registry().clear()
+        register_dream_skill()
+
+        cmd = get_command_registry().get("dream")
+        assert cmd is not None, "dream command should be registered"
+        assert cmd.command_type == CommandType.LOCAL, (
+            f"expected LOCAL, got {cmd.command_type}"
+        )
+
+
+class TestDreamCommandExecution:
+    """``/dream`` subcommands run via execute_command_sync (F-100 / 100.4)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_dream_service(self):
+        """Reset the dream service's closure-scoped runner state.
+
+        The ``_service._runner`` module-level singleton carries a
+        :class:`RuntimeTaskRegistry` reference. Tests in
+        ``tests/dreaming/`` populate that registry; the stage-3d
+        ``/dream status`` test must observe an empty registry even
+        when the full suite runs ``tests/dreaming/`` first.
+        """
+        from clawcodex_ext.dreaming import service as _service
+
+        _service._runner = None
+        yield
+        _service._runner = None
+
+    def _ensure_registered(self):
+        from clawcodex_ext.command_system import get_command_registry
+        from extensions.skills_ext.bundled.dream import register_dream_skill
+
+        get_command_registry().clear()
+        register_dream_skill()
+
+    def test_dream_no_args_shows_help(self):
+        """``/dream`` with no args returns the usage help text."""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "dream", "", _build_context(runtime_context=False)
+        )
+        assert success is True, f"expected success, got error={error!r}"
+        assert result_text is not None, "expected result text"
+        assert "Usage:" in result_text
+        assert "run" in result_text
+        assert "status" in result_text
+
+    def test_dream_help_subcommand(self):
+        """``/dream help`` returns the same usage."""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, _ = execute_command_sync(
+            "dream", "help", _build_context(runtime_context=False)
+        )
+        assert success is True
+        assert "Usage:" in result_text
+
+    def test_dream_status_no_init(self):
+        """``/dream status`` works even when the dream service was not
+        initialized (returns the empty-state message)."""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, _ = execute_command_sync(
+            "dream", "status", _build_context(runtime_context=False)
+        )
+        assert success is True
+        assert "No dream tasks in flight" in result_text
+
+    def test_dream_unknown_subcommand_does_not_crash(self):
+        """``/dream frobnicate`` returns a clean warning, not a stack trace."""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, _ = execute_command_sync(
+            "dream", "frobnicate", _build_context(runtime_context=False)
+        )
+        # Engine treats unknown-subcommand as a successful help render.
+        assert success is True
+        assert "Unknown subcommand" in result_text
+        assert "frobnicate" in result_text
+
+    def test_dream_command_no_unknown_command(self):
+        """``/dream`` must not return ``Unknown command`` (F-100/100.4 验收 #5)."""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "dream", "", _build_context(runtime_context=False)
+        )
+        assert success is True, (
+            f"should not return Unknown command; got error={error!r}, "
+            f"result_text={result_text!r}"
+        )

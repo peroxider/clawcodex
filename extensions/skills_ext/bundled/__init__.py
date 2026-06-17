@@ -1,8 +1,9 @@
 """
-Bundled Skill Extension - SOP Converter
+Bundled Skill Extension — SOP Converter + Dreaming.
 
 Mirrors the src/skills/bundled/ pattern for clawcodex-specific bundled skills.
-SOP conversion skill registered here for skills_ext integration.
+SOP conversion skill + F-100 ``/dream`` skill registered here for skills_ext
+integration.
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from typing import Any, Callable
 
 from src.skills.bundled_skills import BundledSkillDefinition, register_bundled_skill
 from extensions.pos_converter.convert_pos_skill import get_prompt_for_command
+
+from .dream import register_dream_skill
 
 
 def register_convert_pos_skill() -> None:
@@ -40,4 +43,5 @@ def register_convert_pos_skill() -> None:
 
 __all__ = [
     "register_convert_pos_skill",
+    "register_dream_skill",
 ]

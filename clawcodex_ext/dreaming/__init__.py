@@ -24,6 +24,14 @@ from clawcodex_ext.dreaming.config import (
     is_auto_dream_enabled,
     set_dream_config,
 )
+from clawcodex_ext.dreaming.cron_integration import (
+    DREAM_DEFAULT_CRON,
+    DREAM_PERMANENT_PROMPT,
+    DREAM_PERMANENT_TASK_ID,
+    install_and_wire_dream,
+    install_dream_permanent_cron_task,
+    wire_dream_fire_handler,
+)
 from clawcodex_ext.dreaming.lock import (
     HOLDER_STALE_MS,
     LOCK_FILE_NAME,
@@ -50,6 +58,7 @@ from clawcodex_ext.dreaming.runner import (
 )
 from clawcodex_ext.dreaming.service import (
     execute_auto_dream,
+    get_active_registry,
     init_auto_dream,
     kill_dream_task,
     manual_dream,
@@ -58,10 +67,16 @@ from clawcodex_ext.dreaming.service import (
 __all__ = [
     # config
     "DEFAULT_DREAM_CONFIG",
+    "DREAM_DEFAULT_CRON",
+    "DREAM_PERMANENT_PROMPT",
+    "DREAM_PERMANENT_TASK_ID",
     "DreamConfig",
     "get_dream_config",
+    "install_and_wire_dream",
+    "install_dream_permanent_cron_task",
     "is_auto_dream_enabled",
     "set_dream_config",
+    "wire_dream_fire_handler",
     # paths
     "get_auto_mem_entrypoint",
     "get_auto_mem_path",
@@ -84,6 +99,7 @@ __all__ = [
     "run_dream_consolidation",
     # service
     "execute_auto_dream",
+    "get_active_registry",
     "init_auto_dream",
     "kill_dream_task",
     "manual_dream",

@@ -82,6 +82,11 @@ class _AutoDreamRunner:
     config: DreamConfig
     last_session_scan_at: int = 0
     runner: Optional[Callable[..., Any]] = None  # assigned in init_auto_dream
+    # Stash the registry the closure was initialized with so the
+    # ``/dream`` skill and ``manual_dream`` can route task registration
+    # back to the *same* registry the user wired up — without callers
+    # having to thread the registry through every public entry point.
+    registry: Any = None
 
 
 _runner: _AutoDreamRunner | None = None
@@ -108,12 +113,13 @@ def init_auto_dream(
     """
     global _runner
     cfg = config or get_dream_config()
-    _runner = _AutoDreamRunner(config=cfg, runner=None)
 
     if registry is None:
         from src.task_registry import RuntimeTaskRegistry
 
         registry = RuntimeTaskRegistry()
+
+    _runner = _AutoDreamRunner(config=cfg, runner=None, registry=registry)
 
     async def run(
         context: Any = None,
@@ -131,6 +137,21 @@ def init_auto_dream(
         )
 
     _runner.runner = run
+
+
+def get_active_registry() -> Any:
+    """Return the registry the dream service was initialized with.
+
+    Falls back to a fresh :class:`RuntimeTaskRegistry` when the
+    service has not been initialized — useful for read-only paths
+    like the ``/dream status`` skill, which should still work even
+    if no one has called :func:`init_auto_dream` yet.
+    """
+    if _runner is not None and getattr(_runner, "registry", None) is not None:
+        return _runner.registry
+    from src.task_registry import RuntimeTaskRegistry
+
+    return RuntimeTaskRegistry()
 
 
 # ---------------------------------------------------------------------------
@@ -316,14 +337,20 @@ async def execute_auto_dream(
     No-op until :func:`init_auto_dream` has been called. Per-turn
     cost when enabled: one stat (lock mtime) + one scan if the time
     gate opened.
+
+    If *registry* is omitted, falls back to the registry the service
+    was initialized with (so :func:`manual_dream` and other callers
+    can fire-and-forget without threading the registry through).
     """
     if _runner is None or _runner.runner is None:
         _log.debug("execute_auto_dream: not initialized, no-op")
         return
     if registry is None:
-        from src.task_registry import RuntimeTaskRegistry
+        registry = _runner.registry
+        if registry is None:
+            from src.task_registry import RuntimeTaskRegistry
 
-        registry = RuntimeTaskRegistry()
+            registry = RuntimeTaskRegistry()
     await _runner.runner(
         context,
         current_session_id,

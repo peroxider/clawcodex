@@ -1992,10 +1992,10 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | 100.1 | `DreamTask` 任务类实现（`src/tasks/dream/`）：扫描未关联 / 低信号 auto-memory → 总结 → 写回 | P2 | ✅ 完成（Phase A） |
 | 100.2 | `autoDream` consolidate 服务（`clawcodex_ext/dreaming/`）：周期性合并 / 去重 / 索引 | P2 | ✅ 完成（Phase A，runner 为 stub） |
 | 100.3 | `consolidationLock` 互斥锁（基于 `clawcodex_ext/cron_system/dist_lock.py`）防并发 consolidate | P2 | ✅ 完成（Phase A，自带 PID + mtime） |
-| 100.4 | `/dream` slash skill 实现（替换 `bundles.py:36` 悬空引用） | P2 | 📋 待实现（Phase C） |
-| 100.5 | 接入 `clawcodex_ext/cron_system` 作为 permanent cron 任务（catch-up / morning-checkin / dream 三件套） | P2 | 📋 待实现（Phase D） |
+| 100.4 | `/dream` slash skill 实现（替换 `bundles.py:36` 悬空引用） | P2 | ✅ 完成（Phase C，LocalCommand + `run`/`once`/`status`/`help` 子命令） |
+| 100.5 | 接入 `clawcodex_ext/cron_system` 作为 permanent cron 任务（catch-up / morning-checkin / dream 三件套） | P2 | ✅ 完成（Phase D，`install_dream_permanent_cron_task` + `wire_dream_fire_handler` + `install_and_wire_dream`） |
 | 100.6 | 解锁 `tests/tasks/test_task_registry.py:202` 不变量：`get_task_by_type("dream")` 不再是 `None` | P2 | ✅ 完成（Phase A） |
-| 100.7 | 单元测试 + E2E（手动触发 + 调度触发） + 稳定性门禁 | P2 | 🟡 部分完成（Phase A 单测全过；E2E 待 Phase D 调度后补） |
+| 100.7 | 单元测试 + E2E（手动触发 + 调度触发） + 稳定性门禁 | P2 | ✅ 完成（单测 76 + cron 集成 11 + dream skill 13 + E2E 6 = 106；stage3d 6 + stage5 6 = 12 门禁；E2E 覆盖 slash/调度/幂等/真 scheduler tick/runner 真集成） |
 
 ### 实施进度
 
@@ -2003,9 +2003,9 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 |------|------|:--------:|:----:|
 | Phase A | 子特性 100.1+100.2+100.3+100.6：DreamTask + autoDream 主循环 + consolidationLock + 解锁 test 不变量（runner 是 stub：可由 `set_dream_runner_factory` 在生产 wiring 时替换） | 2天 | ✅ 完成 |
 | Phase B | 子特性 100.3：consolidationLock（基于已有 `dist_lock.py`，加 30min TTL） | 0.5天 | 📋 待实现 |
-| Phase C | 子特性 100.4：`/dream` slash skill + TUI 状态展示 | 0.5天 | 📋 待实现 |
-| Phase D | 子特性 100.5：cron 永久任务注册（`install_permanent_cron_tasks`） | 0.5天 | 📋 待实现 |
-| Phase E | 子特性 100.6+100.7：测试 + 门禁 | 1天 | 📋 待实现 |
+| Phase C | 子特性 100.4：`/dream` slash skill + TUI 状态展示 | 0.5天 | ✅ 完成（`LocalCommand` 注册 + `run`/`once`/`status`/`help` 子命令 + 13 单测 + stage3d 6 测；TUI 状态展示按决定 #4 留待后续增量） |
+| Phase D | 子特性 100.5：cron 永久任务注册（`install_permanent_cron_tasks`） | 0.5天 | ✅ 完成（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream` + 本地 fire handler 拦截 + 11 单测 + cron_system 集成无回归） |
+| Phase E | 子特性 100.6+100.7：测试 + 门禁 | 1天 | ✅ 完成（E2E `tests/dreaming/test_e2e_dreaming.py` 6 个场景: slash run / slash status / manual_dream force / cron fire + wire / install 幂等 / 真 scheduler tick；runner 真集成通过 recording_factory 端到端验证） |
 
 ### 验收标准
 

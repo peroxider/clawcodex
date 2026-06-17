@@ -55,14 +55,40 @@ def test_acquire_lock_first_time_returns_zero_prior(memory_dir: Path) -> None:
     assert int(lock_path.read_text()) == os.getpid()
 
 
-def test_acquire_lock_blocked_by_live_pid(memory_dir: Path) -> None:
+def test_acquire_lock_blocked_by_foreign_live_pid(memory_dir: Path) -> None:
+    """A foreign live PID (the parent process) holds the lock → blocked.
+
+    We use ``os.getppid()`` (the test runner's parent) which is
+    guaranteed alive during the test and never our own PID.
+    """
     lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
-    # Write a live PID + fresh mtime.
+    foreign_pid = os.getppid()
+    assert foreign_pid != os.getpid(), "parent PID must differ from ours"
+    lock_path.write_text(str(foreign_pid), encoding="utf-8")
+    now = time.time()
+    os.utime(lock_path, (now, now))
+    result = lock_mod.try_acquire_consolidation_lock()
+    assert result is None  # blocked by foreign live PID
+
+
+def test_acquire_lock_self_pid_returns_prior_mtime(memory_dir: Path) -> None:
+    """If the lock is already held by our own PID, return the prior mtime
+    (not ``None``) — self-acquisition is a no-op for the lock file.
+
+    This is the F-100/100.4 contract: ``record_consolidation`` (called
+    by the manual ``/dream`` path) pre-stamps the lock with our own
+    PID; the subsequent ``try_acquire_consolidation_lock`` inside the
+    dream service must NOT block on that self-stamp.
+    """
+    lock_path = memory_dir / lock_mod.LOCK_FILE_NAME
     lock_path.write_text(str(os.getpid()), encoding="utf-8")
     now = time.time()
     os.utime(lock_path, (now, now))
     result = lock_mod.try_acquire_consolidation_lock()
-    assert result is None  # blocked
+    # We already hold the lock — return the prior mtime.
+    assert result is not None
+    # The body is still our PID (no re-write).
+    assert int(lock_path.read_text()) == os.getpid()
 
 
 def test_acquire_lock_reclaims_dead_pid(memory_dir: Path) -> None:

@@ -84,6 +84,11 @@ def try_acquire_consolidation_lock() -> int | None:
     * Success → mtime stays at now.
     * Failure → :func:`rollback_consolidation_lock` rewinds mtime.
     * Crash → mtime stuck, dead PID → next process reclaims.
+    * **Self-acquisition** — if the lock is already held by our own
+      PID (e.g. :func:`record_consolidation` was called optimistically
+      by the manual ``/dream`` path), return the pre-acquire mtime
+      without re-writing. The PID is the same, the intent is the
+      same, and blocking here would make manual /dream a no-op.
     """
     path = _lock_path()
     mtime_ms: int | None = None
@@ -101,6 +106,10 @@ def try_acquire_consolidation_lock() -> int | None:
             holder_pid = parsed if parsed > 0 else None
         except (OSError, ValueError):
             holder_pid = None
+
+    # Self-acquisition short-circuit — see docstring.
+    if holder_pid == os.getpid():
+        return mtime_ms or 0
 
     if mtime_ms is not None and _now_ms() - mtime_ms < HOLDER_STALE_MS:
         if holder_pid is not None and _pid_is_alive(holder_pid):
