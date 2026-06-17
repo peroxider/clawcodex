@@ -345,12 +345,13 @@ from src.repl.live_status import LiveStatus
 
 try:
     from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
-    from clawcodex_ext.cron_system.runs import finalize_cron_run
+    from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
     _HAS_CRON = True
 except ImportError:
     _HAS_CRON = False
     attach_cron_runtime = None  # type: ignore[assignment]
     replace_cron_tools = None  # type: ignore[assignment]
+    claim_cron_run = None  # type: ignore[assignment]
     finalize_cron_run = None  # type: ignore[assignment]
 
 _CRON_WAKE = object()
@@ -2254,12 +2255,7 @@ class ClawcodexREPL:
                     task_id = entry.get("task_id", "")
                     run_id = entry.get("run_id", "")
                     if task_id and task_id in self._cron_active_tasks:
-                        if run_id and finalize_cron_run is not None:
-                            finalize_cron_run(
-                                self.tool_context.workspace_root,
-                                run_id,
-                                "cancelled",
-                            )
+                        self._finalize_cron_run(run_id, "cancelled")
                         continue
                     if prompt:
                         if task_id and run_id:
@@ -2283,21 +2279,52 @@ class ClawcodexREPL:
         task_id = first_line[idx + len(sep):].strip()
         return task_id if task_id else None
 
-    def _finalize_cron_task(self, task_id: str) -> None:
+    def _claim_cron_task(self, task_id: str) -> str | None:
         active = getattr(self, "_cron_active_tasks", None)
         if active is None:
-            return
-        run_id = active.pop(task_id, None)
+            return None
+        run_id = active.get(task_id)
+        if not run_id:
+            return None
+        if claim_cron_run is None:
+            return run_id
+        try:
+            claimed = claim_cron_run(self.tool_context.workspace_root, run_id)
+        except Exception:
+            return run_id
+        return claimed.id if claimed is not None else run_id
+
+    def _finalize_cron_run(
+        self,
+        run_id: str | None,
+        status: str,
+        *,
+        error: str | None = None,
+    ) -> None:
         if not run_id or finalize_cron_run is None:
             return
         try:
             finalize_cron_run(
                 self.tool_context.workspace_root,
                 run_id,
-                "completed",
+                status,  # type: ignore[arg-type]
+                error=error,
             )
         except Exception:
             pass
+
+    def _finalize_cron_task(
+        self,
+        task_id: str,
+        status: str = "completed",
+        *,
+        error: str | None = None,
+    ) -> None:
+        active = getattr(self, "_cron_active_tasks", None)
+        if active is None:
+            return
+        run_id = active.pop(task_id, None)
+        self._finalize_cron_run(run_id, status, error=error)
 
     def _queued_count(self) -> int:
         with self._queued_prompts_lock:
@@ -3102,9 +3129,35 @@ class ClawcodexREPL:
                     continue
 
                 _cron_task_id = self._extract_cron_task_id(user_input)
-                self.chat(user_input)
                 if _cron_task_id:
-                    self._finalize_cron_task(_cron_task_id)
+                    self._claim_cron_task(_cron_task_id)
+                try:
+                    _chat_success = self.chat(user_input)
+                except KeyboardInterrupt:
+                    if _cron_task_id:
+                        self._finalize_cron_task(_cron_task_id, "cancelled")
+                    raise
+                except SystemExit:
+                    if _cron_task_id:
+                        self._finalize_cron_task(_cron_task_id, "cancelled")
+                    raise
+                except Exception as exc:
+                    if _cron_task_id:
+                        self._finalize_cron_task(
+                            _cron_task_id,
+                            "failed",
+                            error=f"{type(exc).__name__}: {exc}",
+                        )
+                    raise
+                if _cron_task_id:
+                    if _chat_success is False:
+                        self._finalize_cron_task(
+                            _cron_task_id,
+                            "failed",
+                            error="Scheduled task execution returned without completing.",
+                        )
+                    else:
+                        self._finalize_cron_task(_cron_task_id)
 
             except asyncio.CancelledError:
                 # Safety net: app.exit() returns normally, so this path
@@ -4205,12 +4258,12 @@ class ClawcodexREPL:
                         self.session.save_transcript()
                     except Exception:
                         pass
-                    return
+                    return True
                 # User pressed ESC/Ctrl+C during direct stream — skip the
                 # engine path entirely instead of falling through.
                 if (self._direct_abort_controller is not None
                         and self._direct_abort_controller.signal.aborted):
-                    return
+                    return False
                 if _background_requested_direct:
                     raise BackgroundEscape()
 
@@ -4619,6 +4672,7 @@ class ClawcodexREPL:
 
         except BackgroundEscape:
             self._handle_background_escape()
+            return False
         except Exception as e:
             error_str = str(e)
 
@@ -4641,6 +4695,9 @@ class ClawcodexREPL:
                 self.console.print(f"\n[red]Error: {e}[/red]")
                 import traceback
                 traceback.print_exc()
+            return False
+
+        return True
 
     def _print_resume_hint(self) -> None:
         """Print a hint showing the session ID for ``--resume``, matching CCB's
