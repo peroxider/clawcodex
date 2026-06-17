@@ -345,11 +345,13 @@ from src.repl.live_status import LiveStatus
 
 try:
     from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
+    from clawcodex_ext.cron_system.runs import finalize_cron_run
     _HAS_CRON = True
 except ImportError:
     _HAS_CRON = False
     attach_cron_runtime = None  # type: ignore[assignment]
     replace_cron_tools = None  # type: ignore[assignment]
+    finalize_cron_run = None  # type: ignore[assignment]
 
 _CRON_WAKE = object()
 
@@ -611,6 +613,7 @@ class ClawcodexREPL:
         )
         if _HAS_CRON:
             attach_cron_runtime(self.tool_context, autostart=True)
+        self._cron_active_tasks: dict[str, str] = {}
         self.tool_context.ask_user = self._ask_user_questions
         # Permission handler with status control for proper input handling
         self._current_status = None
@@ -2215,9 +2218,17 @@ class ClawcodexREPL:
         not a new user request. This prevents the LLM from asking
         clarifying questions (e.g. "when should I remind you?")
         instead of directly executing the prompt.
+
+        Accumulation guard: if a task_id is already being processed
+        (present in ``_cron_active_tasks``), the duplicate prompt is
+        discarded and its run is finalized as "cancelled". This prevents
+        outbox pile-up when a recurring task's interval is shorter than
+        its execution time.
         """
         if not _HAS_CRON:
             return
+        if not hasattr(self, "_cron_active_tasks"):
+            self._cron_active_tasks = {}
         outbox = getattr(self.tool_context, "outbox", None)
         if not outbox:
             return
@@ -2229,7 +2240,18 @@ class ClawcodexREPL:
                 if etype == "cron_prompt":
                     prompt = (entry.get("prompt") or "").strip()
                     task_id = entry.get("task_id", "")
+                    run_id = entry.get("run_id", "")
+                    if task_id and task_id in self._cron_active_tasks:
+                        if run_id and finalize_cron_run is not None:
+                            finalize_cron_run(
+                                self.tool_context.workspace_root,
+                                run_id,
+                                "cancelled",
+                            )
+                        continue
                     if prompt:
+                        if task_id and run_id:
+                            self._cron_active_tasks[task_id] = run_id
                         drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
                 elif etype == "cron_missed":
                     notification = (entry.get("notification") or "").strip()
@@ -2237,6 +2259,33 @@ class ClawcodexREPL:
                         drained.append(notification)
         for text in drained:
             self._enqueue_prompt(text)
+
+    def _extract_cron_task_id(self, user_input: str) -> str | None:
+        first_line = user_input.split("\n", 1)[0]
+        if not first_line.startswith("✻ Running scheduled task"):
+            return None
+        sep = " · "
+        idx = first_line.find(sep)
+        if idx == -1:
+            return None
+        task_id = first_line[idx + len(sep):].strip()
+        return task_id if task_id else None
+
+    def _finalize_cron_task(self, task_id: str) -> None:
+        active = getattr(self, "_cron_active_tasks", None)
+        if active is None:
+            return
+        run_id = active.pop(task_id, None)
+        if not run_id or finalize_cron_run is None:
+            return
+        try:
+            finalize_cron_run(
+                self.tool_context.workspace_root,
+                run_id,
+                "completed",
+            )
+        except Exception:
+            pass
 
     def _queued_count(self) -> int:
         with self._queued_prompts_lock:
@@ -2947,7 +2996,10 @@ class ClawcodexREPL:
                     self.handle_command(user_input)
                     continue
 
+                _cron_task_id = self._extract_cron_task_id(user_input)
                 self.chat(user_input)
+                if _cron_task_id:
+                    self._finalize_cron_task(_cron_task_id)
 
             except asyncio.CancelledError:
                 # Safety net: app.exit() returns normally, so this path

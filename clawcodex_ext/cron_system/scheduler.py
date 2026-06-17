@@ -193,8 +193,6 @@ class CronScheduler:
                         "fire_at": timestamp,
                     }
                 )
-                # Phase C-2: surface fire-callback failures by marking
-                # the run as failed instead of silently claiming success.
                 try:
                     if self.on_fire_task is not None:
                         self.on_fire_task(task, run)
@@ -208,8 +206,6 @@ class CronScheduler:
                         "failed",
                         error=f"{type(exc).__name__}: {exc}",
                     )
-                else:
-                    finalize_cron_run(self.workspace_root, run.id, "completed")
             finally:
                 self._in_flight_remove(task.id)
         mark_cron_tasks_fired(

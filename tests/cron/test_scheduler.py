@@ -60,7 +60,12 @@ def test_check_once_prefers_task_callback_over_prompt_callback(tmp_path) -> None
     assert fired[0][1].task_id == task.id
 
 
-def test_check_once_finalizes_run_after_fire(tmp_path) -> None:
+def test_check_once_keeps_run_queued_until_external_finalize(tmp_path) -> None:
+    """After fire, the run stays in "queued" status. D1 dedup blocks
+    subsequent ticks for the same task until the run is externally
+    finalized (by the REPL after chat() completes)."""
+    from clawcodex_ext.cron_system.runs import finalize_cron_run
+
     fired: list[str] = []
     task = add_cron_task(
         tmp_path, cron="*/5 * * * *", prompt="ping", recurring=True, created_at=1_000
@@ -69,17 +74,27 @@ def test_check_once_finalizes_run_after_fire(tmp_path) -> None:
     scheduler = CronScheduler(tmp_path, on_fire=fired.append)
 
     first_due = scheduler.check_once(at_ms=3_000)
+    assert [item.id for item in first_due] == [task.id]
+    assert fired == ["ping"]
+    runs = read_cron_runs(tmp_path)
+    assert len(runs) == 1
+    assert runs[0].status == "queued"
+
     write_cron_tasks(
         tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)]
     )
     second_due = scheduler.check_once(at_ms=5_000)
+    assert second_due == []
+    assert fired == ["ping"]
 
-    assert [item.id for item in first_due] == [task.id]
-    assert [item.id for item in second_due] == [task.id]
+    finalize_cron_run(tmp_path, runs[0].id, "completed")
+
+    write_cron_tasks(
+        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=6_000)]
+    )
+    third_due = scheduler.check_once(at_ms=7_000)
+    assert [item.id for item in third_due] == [task.id]
     assert fired == ["ping", "ping"]
-    runs = read_cron_runs(tmp_path)
-    assert len(runs) == 2
-    assert all(r.status == "completed" for r in runs)
 
 
 def test_notify_missed_once_reports_and_removes_due_one_shot(tmp_path) -> None:
@@ -166,7 +181,7 @@ def test_check_once_fires_due_session_recurring(tmp_path) -> None:
     # run is recorded on disk regardless of task durability
     runs = read_cron_runs(tmp_path)
     assert len(runs) == 1
-    assert runs[0].status == "completed"
+    assert runs[0].status == "queued"
     # session_store's recurring task is kept and rescheduled
     survivors = read_session_cron_tasks(session_store)
     assert len(survivors) == 1
