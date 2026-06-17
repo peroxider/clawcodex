@@ -246,6 +246,28 @@ class REPLScreen(Screen):
         if text.startswith("/"):
             if app.handle_local_slash_command(text, self.transcript):
                 return
+        # F-89: expand @agent-name mentions in TUI.
+        try:
+            from src.agent.load_agents_dir import (
+                get_agent_definitions_with_overrides,
+            )
+            from src.agent.agent_definitions import get_built_in_agents
+            from src.command_system.input_processing import (
+                expand_agent_mentions,
+                format_at_mention_attachments,
+            )
+
+            cwd = str(getattr(app, "workspace_root", None) or ".")
+            agents = list(get_agent_definitions_with_overrides(cwd)) or list(
+                get_built_in_agents()
+            )
+            agent_attachments = expand_agent_mentions(text, agents)
+            if agent_attachments:
+                extra = format_at_mention_attachments(agent_attachments)
+                if extra:
+                    text = f"{extra}\n{text}"
+        except Exception:
+            pass  # best-effort
         self.transcript.append_user(text)
         self.status_bar.set_busy()
         self.status_bar.bump_turn()

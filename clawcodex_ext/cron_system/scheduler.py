@@ -59,6 +59,17 @@ class CronScheduler:
     # store is process-local; only the lock-owning process fires session
     # tasks (see ``check_once`` lock gate in Phase B-2).
     session_store: MutableMapping[str, CronTask | dict] | None = None
+    # F-22-G9: optional daemon-mode overrides. When provided, the
+    # scheduler operates independently of the bootstrap session state:
+    #   - dir_override — overrides workspace_root for all file I/O
+    #     (tasks, locks, jitter config, run storage).
+    #   - lock_identity — overrides session_id as the lock owner
+    #     identity, enabling headless/daemon schedulers to coexist
+    #     without sharing a session.
+    # Both default to None, preserving the existing bootstrap-dependent
+    # behaviour.
+    dir_override: Path | None = None
+    lock_identity: str | None = None
 
     _thread: threading.Thread | None = field(default=None, init=False)
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
@@ -85,10 +96,21 @@ class CronScheduler:
     _previous_sigterm: signal._HANDLER | None = field(default=None, init=False)
     _previous_sigint: signal._HANDLER | None = field(default=None, init=False)
 
+    def __post_init__(self) -> None:
+        """F-22-G9: apply daemon-mode overrides.
+
+        When ``dir_override`` is set, replace ``workspace_root`` so that
+        *all* downstream I/O (tasks, locks, jitter config, runs) uses the
+        overridden path without requiring per-method changes.
+        """
+        if self.dir_override is not None:
+            self.workspace_root = self.dir_override
+
     def start(self) -> bool:
         if self._thread and self._thread.is_alive():
             return True
-        lock = CronTaskLock(self.workspace_root, self.session_id)
+        lock_owner = self.lock_identity if self.lock_identity is not None else self.session_id
+        lock = CronTaskLock(self.workspace_root, lock_owner)
         if not lock.acquire():
             return False
         self._lock = lock
@@ -365,7 +387,8 @@ class AsyncCronScheduler(CronScheduler):
 
         # Acquire the filesystem lock synchronously; it's fast and
         # needs no I/O loop.
-        lock = CronTaskLock(self.workspace_root, self.session_id)
+        lock_owner = self.lock_identity if self.lock_identity is not None else self.session_id
+        lock = CronTaskLock(self.workspace_root, lock_owner)
         if not lock.acquire():
             return False
         self._lock = lock

@@ -280,7 +280,31 @@ def run_headless(options: HeadlessOptions) -> int:
         # explicitly).
         try:
             for user_msg in inputs:
-                session.conversation.add_user_message(user_msg.text)
+                # F-89: expand @agent-name mentions before sending to LLM.
+                text = user_msg.text
+                try:
+                    from src.agent.load_agents_dir import (
+                        get_agent_definitions_with_overrides,
+                    )
+                    from src.agent.agent_definitions import get_built_in_agents
+                    from src.command_system.input_processing import (
+                        expand_agent_mentions,
+                        format_at_mention_attachments,
+                    )
+
+                    cwd = str(workspace_root)
+                    agents = list(get_agent_definitions_with_overrides(cwd)) or list(
+                        get_built_in_agents()
+                    )
+                    agent_attachments = expand_agent_mentions(text, agents)
+                    if agent_attachments:
+                        extra = format_at_mention_attachments(agent_attachments)
+                        if extra:
+                            text = f"{extra}\n{text}"
+                except Exception:
+                    pass  # best-effort: agent expansion failure is non-fatal
+
+                session.conversation.add_user_message(text)
 
                 on_event = _build_event_bridge(writer, aggregate_tool_events)
                 # F-37: if an external on_event callback was provided

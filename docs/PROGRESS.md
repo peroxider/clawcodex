@@ -64,7 +64,7 @@
 |----|------|--------|------|------|
 | F-1 | Orchestrator 自主模式 | P0 | ✅ 完成 | Symphony 集成 |
 | F-2 | Team 成员管理 (Phase-7) | P1 | 🔄 进行中 | members 数组，SendMessage 消息交互 + resume_agent 恢复已完成，TeamCreate/TeamDelete 待实现 |
-| F-3 | MCP 协议扩展 | P1 | ✅ 基础完成 | Stdio/HTTP/SSE/WS |
+| F-3 | MCP 协议扩展 | P1 | ✅ 已完成 | Stdio/HTTP/SSE/WS 基础 + 资源缓存 / Batch 工具 / Progress 通知 (`clawcodex_ext/mcp_ext.py`) |
 | F-4 | 结构化输出集成 | P2 | ✅ 已完成 | Outlines 适配器已完整实现并迁移至 clawcodex_ext/agent/，src/ 仅留 facade |
 | F-5 | Voice Mode | P2 | ⏳ →F-64 | 已合并至 F-64（Voice Mode 语音输入） |
 | F-6 | Computer Use | P0 | ⏳ →F-61 | 已合并至 F-61（Computer Use 屏幕操控） |
@@ -141,7 +141,7 @@
 | F-86 | Kairos/Brief 调度 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-88 | Explore/Plan Agent | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-89 | @agent-name 多入口统一支持 | P1 | ✅ 基础完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI 内部 `@agent-name` 引用自动解析。 |
+| F-89 | @agent-name 多入口统一支持 | P1 | ✅ 已完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI/Headless/API 四入口 `@agent-name` 引用统一自动解析。 |
 | F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 5 模型 / 4 解析器 / 7 构建器 |
 | F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 15 REST 端点 + WebSocket live tail |
 | F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
@@ -436,17 +436,17 @@
 | 入口 | `@agent-name` 支持 | 代码位置 |
 |------|-------------------|----------|
 | REPL | ✅ 支持 | `clawcodex_ext/repl/core.py:3035` |
-| Headless | ❌ 不支持 | `src/entrypoints/headless.py` 无调用 |
-| API 层 | ❌ 不支持 | `extensions/api/query_loop.py` / `session.py` 无调用 |
-| TUI | ❌ 不支持 | `clawcodex_ext/frontend/tui.py` 无调用 |
+| Headless | ✅ 支持 | `clawcodex_ext/entrypoints/headless.py:282-307` |
+| API 层 | ✅ 支持（通过 headless 委托） | `extensions/api/query.py` → `run_headless()` |
+| TUI | ✅ 支持 | `clawcodex_ext/tui/screens/repl.py:249-270` |
 
 ### 实施阶段
 
 | 阶段 | 入口 | 改动点 | 工作量 | 状态 |
 |------|------|--------|--------|------|
-| Phase 1 | Headless | `headless.py` 在 `_run_headless()` 前插入 `expand_agent_mentions()` | ~5 行 | 📋 待开始 |
-| Phase 2 | API 层 | `extensions/api/query_loop.py` 或 `session.py` 在 `chat()` 入口增加 | ~10 行 | 📋 待开始 |
-| Phase 3 | TUI | `clawcodex_ext/frontend/tui.py` 在输入处理后增加 | ~5 行 | 📋 待开始 |
+| Phase 1 | Headless | `headless.py` 在 `_run_headless()` 前插入 `expand_agent_mentions()` | ~5 行 | ✅ 已完成 |
+| Phase 2 | API 层 | 自动覆盖——API 通过 `run_headless_session` 委托给 headless | ~10 行 | ✅ 已完成（继承 headless） |
+| Phase 3 | TUI | `clawcodex_ext/tui/screens/repl.py` 在 `on_prompt_submitted` 中增加 | ~5 行 | ✅ 已完成 |
 
 ### 验收标准
 
@@ -1361,7 +1361,7 @@ CronTask due
 | **G6** | **工具 Prompt 指引增强** - CronCreate/List/Delete 的 prompt 字段补充最佳实践说明 | ✅ 完成 |
 | **G7** | **Analytics 遥测事件预留** - fire/missed/expired 事件点预留 Optional[Callable] | ✅ 完成 |
 | G8 | inFlight 防重复触发 — 异步 IO 期间用 in_flight Set 防止同一任务二次触发 | ✅ 完成 |
-| G9 | SDK daemon 模式（`dir`/`lockIdentity`）— 可选脱离 session state 独立运行 | ⏳ 待设计 |
+| **G9** | **SDK daemon 模式（`dir`/`lockIdentity`）— `CronScheduler` + `AsyncCronScheduler` 增加 `dir_override`/`lock_identity` 可选参数，`__post_init__` 自动覆盖 `workspace_root`，未提供时回退 bootstrap state | ✅ 完成 |
 | **G10** | **`cronToHuman(utc)` UTC 模式 — `cron_to_human()` 增加 `utc` 参数，实际偏移到本地时区 | ✅ 完成 |
 | **D1** | **sourceId 级 Active-Run 去重（CCB 第1层）** — `create_queued_run()` 在 storage lock 下按 `source_id` 扫描活跃 run，防止高频任务堆积 | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |
 | **D2** | **PID 活体检测（CCB 第2层）** — `os.kill(pid, 0)` + `/proc/<pid>/comm` 白名单检测原进程存活，死进程自动 recover | 📋 设计完成 | 设计要点见 FEATURE_PLAN §5.11.12；代码已有零散实现需集成验证 |

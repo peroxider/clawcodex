@@ -356,3 +356,75 @@ def test_in_flight_dedup_across_file_and_session(tmp_path) -> None:
     scheduler.check_once(at_ms=3_000)
     # Should fire once, not twice
     assert fired == ["dup"]
+
+
+def test_daemon_mode_dir_override(tmp_path: Path) -> None:
+    """F-22-G9: dir_override redirects all file I/O."""
+    import time
+
+    alt_root = tmp_path / "daemon-workspace"
+    alt_root.mkdir()
+
+    fired: list[str] = []
+    scheduler = CronScheduler(
+        workspace_root=tmp_path,  # original root — should be overridden
+        on_fire=fired.append,
+        dir_override=alt_root,
+        lock_identity="daemon-001",
+    )
+    # __post_init__ should have replaced workspace_root
+    assert scheduler.workspace_root == alt_root
+    assert scheduler.lock_identity == "daemon-001"
+
+    # Add a task via the normal file path (using alt_root)
+    from clawcodex_ext.cron_system.tasks import add_cron_task
+    from dataclasses import replace
+
+    now = int(time.time() * 1000)
+    task = add_cron_task(alt_root, cron="* * * * *", prompt="daemon-ping", created_at=now)
+    due_task = replace(task, next_fire_at=now - 1000)
+    from clawcodex_ext.cron_system.tasks import write_cron_tasks
+    write_cron_tasks(alt_root, [due_task])
+
+    # check_once should find the task in alt_root, not tmp_path
+    fired.clear()
+    scheduler.check_once()
+    assert fired == ["daemon-ping"]
+
+    # tmp_path should have no tasks (all I/O went to alt_root)
+    from clawcodex_ext.cron_system.tasks import read_all_cron_tasks
+    assert read_all_cron_tasks(tmp_path, None) == []
+
+
+def test_daemon_mode_no_override_falls_back(tmp_path: Path) -> None:
+    """F-22-G9: when dir_override/lock_identity are None, existing
+    behaviour is preserved."""
+    fired: list[str] = []
+    scheduler = CronScheduler(
+        workspace_root=tmp_path,
+        on_fire=fired.append,
+        dir_override=None,
+        lock_identity=None,
+    )
+    assert scheduler.workspace_root == tmp_path
+    assert scheduler.lock_identity is None
+    # session_id should still be auto-generated
+    assert scheduler.session_id is not None
+
+
+def test_daemon_mode_async_scheduler(tmp_path: Path) -> None:
+    """F-22-G9: AsyncCronScheduler respects dir_override and lock_identity."""
+    alt_root = tmp_path / "async-daemon-workspace"
+    alt_root.mkdir()
+
+    from clawcodex_ext.cron_system.scheduler import AsyncCronScheduler
+
+    fired: list[str] = []
+    scheduler = AsyncCronScheduler(
+        workspace_root=tmp_path,
+        on_fire=fired.append,
+        dir_override=alt_root,
+        lock_identity="async-daemon",
+    )
+    assert scheduler.workspace_root == alt_root
+    assert scheduler.lock_identity == "async-daemon"

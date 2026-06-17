@@ -1135,11 +1135,11 @@ Message 类型体系 (src/types/messages.py)
 > 详见 [ARCHIVED_FEATURES.md §十七（MCP 协议扩展）](./ARCHIVED_FEATURES.md#十七mcp-协议扩展) 与对应进度归档 [ARCHIVED_PROGRESS.md F-3](./ARCHIVED_PROGRESS.md#f-3-mcp-协议扩展)。
 
 #### 2.4.1 待增强
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| MCP 资源缓存 | P2 | 减少重复获取 |
-| MCP Batch 工具调用 | P2 | 批量工具执行 |
-| MCP Progress 通知 | P3 | 长任务进度报告 |
+| 功能 | 优先级 | 说明 | 状态 |
+|------|--------|------|:----:|
+| MCP 资源缓存 | P2 | 减少重复获取 — LRU 缓存 + TTL (`clawcodex_ext/mcp_ext.py`) | ✅ 完成 |
+| MCP Batch 工具调用 | P2 | 批量工具执行 — `McpBatchCallTool` (`clawcodex_ext/mcp_ext.py`) | ✅ 完成 |
+| MCP Progress 通知 | P3 | 长任务进度报告 — `extract_mcp_progress()` + wrapper (`clawcodex_ext/mcp_ext.py`) | ✅ 完成 |
 
 ---
 
