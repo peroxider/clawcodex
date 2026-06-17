@@ -185,9 +185,9 @@ Examples:
     permissions_group.add_argument(
         '--permission-mode',
         dest='permission_mode',
-        choices=('default', 'plan', 'acceptEdits', 'bypassPermissions', 'dontAsk'),
+        choices=('default', 'plan', 'acceptEdits', 'bypassPermissions', 'dontAsk', 'auto'),
         default=None,
-        help='Initial permission mode (default: default)',
+        help='Initial permission mode (default: default). "auto" uses LLM classifier.',
     )
 
     # Subcommands are intercepted in ``main`` before argparse runs so that a

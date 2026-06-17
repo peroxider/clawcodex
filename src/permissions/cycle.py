@@ -11,6 +11,9 @@ __all__ = [
     "register_cycle_step",
     "get_next_permission_mode",
     "cycle_permission_mode",
+    "can_cycle_to_auto",
+    "get_auto_mode_availability_reason",
+    "PROTECTED_DIRECTORIES",
 ]
 
 

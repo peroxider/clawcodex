@@ -25,12 +25,14 @@ class PermissionModePickerScreen(DialogScreen[str | None]):
     footer_hint = "Enter to select · Esc to cancel"
 
     # Ordered cycle as defined in permissions/cycle.py:get_next_permission_mode
+    # Auto mode is not part of the Shift+Tab cycle but can be selected manually.
     MODES = [
         ("default", "Default", "Ask before running each tool"),
         ("acceptEdits", "Accept edits", "Auto-approve file edit operations"),
         ("plan", "Plan mode", "Auto-approve read-only operations"),
         ("bypassPermissions", "Bypass permissions", "Run all tools without prompting"),
         ("dontAsk", "Don't ask", "Never prompt, auto-approve everything"),
+        ("auto", "Auto mode", "LLM-based intelligent auto-approval"),
     ]
 
     def __init__(

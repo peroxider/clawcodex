@@ -484,6 +484,16 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
 def _bash_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     if isinstance(output, dict):
+        # Handle permission denied or other error messages
+        if "error" in output and not output.get("stdout") and not output.get("stderr"):
+            error_msg = output["error"]
+            return {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": error_msg,
+                "is_error": True,
+            }
+        
         # ``run_in_background: true`` responses carry a task id + a canned
         # message instead of stdout/stderr -- hand it through verbatim so the
         # model sees something actionable.

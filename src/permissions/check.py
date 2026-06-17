@@ -161,7 +161,13 @@ def has_permissions_to_use_tool(
                 )
             return result
 
-        decision = auto_mode_classify(tool.name, tool_input, context)
+        import sys
+        _this_module = sys.modules[__name__]
+        decision = _this_module.auto_mode_classify(tool.name, tool_input, context)
+        log.info(
+            "Auto mode classify: tool=%s, allow=%s, reason=%s",
+            tool.name, decision.allow, decision.reason,
+        )
         if decision.allow:
             return PermissionAllowDecision(
                 behavior="allow",
@@ -171,9 +177,18 @@ def has_permissions_to_use_tool(
                     reason=decision.reason,
                 ),
             )
+        deny_msg = (
+            f"[AUTO MODE DENIED] The {tool.name} tool was blocked by the "
+            f"auto-mode classifier and was NOT executed. "
+            f"Reason: {decision.reason}. "
+            f"Do NOT assume the operation succeeded. "
+            f"Inform the user that auto mode denied this operation and suggest "
+            f"they run with --permission-mode default to approve manually."
+        )
+        log.info("Auto mode DENIED: %s", deny_msg)
         return PermissionDenyDecision(
             behavior="deny",
-            message=f"Auto-mode classifier blocked {tool.name}: {decision.reason}",
+            message=deny_msg,
             decision_reason=ClassifierDecisionReason(
                 classifier="auto-mode",
                 reason=decision.reason,
