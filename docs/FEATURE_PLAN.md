@@ -1149,49 +1149,243 @@ Message 类型体系 (src/types/messages.py)
 > 详细设计与验证记录已归档至 [ARCHIVED_FEATURES.md §二十一.7 F-13 Agent 记忆作用域隔离](./ARCHIVED_FEATURES.md#二十一7-f-13-agent-记忆作用域隔离)。
 
 ### 2.6 /goal 命令（目标管理）（F-9）
-**状态**: ⏳ 待实现
-**目标**: 支持长时间运行任务的目标管理
+**状态**: ✅ 设计完成（参考实现：claude-code-best@`3e3e1de81bf89857`）
+**目标**: 为长时间运行任务提供持久化目标、自动续跑、token 用量监控与恢复能力，避免用户需要反复输入“继续”。
+
+> 本功能参考上游 claude-code-best 的 `/goal` 实现（PR #1261，commit `3e3e1de81bf89857`）详细设计，并在 clawcodex 中以 Python 方式落地。
 
 #### 2.6.1 功能说明
-支持长时间任务的目标状态管理与 token 用量追踪：
+`/goal` 是一个 local-jsx slash 命令，用于设置、查看或控制驱动多轮自动续跑的目标。支持以下用法：
 
-| 子命令 | 功能 |
-|--------|------|
-| `/goal set <goal>` | 设置当前任务目标 |
-| `/goal clear` | 清除目标 |
-| `/goal pause` | 暂停目标追踪 |
-| `/goal resume` | 恢复目标追踪 |
-| `/goal complete` | 标记目标完成 |
-
-#### 2.6.2 核心机制
-| 机制 | 说明 |
+| 命令 | 功能 |
 |------|------|
-| Goal 状态机 | `active` / `paused` / `budget_limited` / `complete` |
-| Token 用量追踪 | 自动追踪当前 session 的 token 消耗 |
-| Continuation Prompt | 目标状态自动注入到 continuation prompt |
-| session-scoped 隔离 | 按 sessionId 管理独立的目标状态 |
+| `/goal` 或 `/goal status` | 显示当前目标状态（目标、状态、已用时间、token、续跑轮数） |
+| `/goal <objective>` | 设置新的目标；若当前已有未完结目标，弹出确认对话框 |
+| `/goal clear` | 清除当前目标并持久化 tombstone，停止自动续跑 |
+| `/goal pause` | 暂停自动续跑，保留目标状态 |
+| `/goal resume` | 从 `paused` 恢复为 `active`，并重置 `blockedAttempts` |
+| `/goal continue` | 在达到最大续跑轮数（`max_turns`）后重置计数器并继续 |
+| `/goal complete` | 手动将目标标记为完成 |
 
-#### 2.6.3 实现文件
-| 文件 | 位置 | 状态 |
-|------|------|------|
-| Goal 命令 | `commands/goal/goal.ts` | 待实现 |
-| Goal 状态管理 | `services/goal/goalState.ts` | 待实现 |
-| Goal 工具 | `packages/builtin-tools/src/tools/GoalTool/` | 待实现 |
+约束：
+- 目标文本最长 **4000 字符**；超长时应提示用户把详细说明写入文件，用简短 objective 引用。
+- 设置新目标时，若已存在非 `complete` 的目标，必须弹出 `GoalReplaceConfirmDialog` 让用户确认替换，避免误覆盖进度。
+- `/goal` 命令不是 `bridgeSafe`（含交互式对话框）。
+
+#### 2.6.2 状态机
+目标在内存中以 `Map<sessionId, GoalState>` 维护，状态流转如下：
+
+```
+              setGoal()
+                 │
+                 ▼
+        ┌─────────────────┐
+        │     active      │◄─────────────────────────────┐
+        └────────┬────────┘                              │
+                 │ pauseGoal()                           │ resumeGoal()
+                 ▼                                       │
+        ┌─────────────────┐      continueGoalFromMaxTurns()│
+        │     paused      │───────────────────────────────┘
+        └─────────────────┘      (仅在 max_turns 时)
+
+active ──► complete         completeGoal()
+active ──► budget_limited   tokensUsed >= tokenBudget
+active ──► usage_limited    markUsageLimited()（如限流/断网后）
+active ──► blocked          同一 blocker 连续 3 次
+active ──► max_turns        turnsExecuted >= MAX_GOAL_TURNS
+```
+
+状态定义：
+
+| 状态 | 含义 | 是否终态 |
+|------|------|----------|
+| `active` | 正在自动续跑 | 否 |
+| `paused` | 用户手动暂停 | 否 |
+| `blocked` | 连续 3 次同一原因受阻 | 是 |
+| `budget_limited` | token 预算耗尽 | 是 |
+| `usage_limited` | 用量/限流导致无法继续 | 是 |
+| `max_turns` | 达到最大续跑轮数上限 | 是（用户可 `continue` 解除） |
+| `complete` | 目标已完成 | 是 |
+
+#### 2.6.3 核心机制
+
+##### 2.6.3.1 自动续跑（`useGoalContinuation`）
+在 REPL/主循环挂载一个 hook，当当前轮次完成（`isLoading` 从 true 变为 false）且满足以下条件时，自动向消息队列注入一条 continuation prompt：
+
+1. `GOAL` feature flag 开启。
+2. 存在 `active` 状态的目标。
+3. 本轮正常结束，非用户中断（`wasAborted === false`）。
+4. 没有交互式 local-jsx UI 占用中。
+5. 不在 plan mode。
+6. 消息队列中没有用户消息（用户输入优先）。
+7. `turnsExecuted < MAX_GOAL_TURNS`（默认 **150**）。
+
+注入参数：
+- `mode: 'prompt'`, `priority: 'now'`, `isMeta: true`
+- `origin: 'goal-continuation'` 或 `'goal-budget-limit'`
+- `skipSlashCommands: true`
+
+达到 `MAX_GOAL_TURNS` 后，目标进入 `max_turns` 状态，停止自动注入；用户可通过 `/goal continue` 重置计数器。
+
+##### 2.6.3.2 Token 用量追踪
+每次模型调用产生 usage 后，在 `cost-tracker` 中汇总以下 token 类型并调用 `updateGoalTokens(delta)`：
+
+- `input_tokens`
+- `output_tokens`
+- `cache_read_input_tokens`
+- `cache_creation_input_tokens`
+
+仅当目标状态为 `active` 时累计；跨越 `tokenBudget` 后状态自动变为 `budget_limited`，并注入一次 `budget_limit` 提示词要求模型停止实质性工作、给出进度摘要。
+
+##### 2.6.3.3 Blocked 审计
+模型调用 `GoalTool` 报告 `blocked` 时，不立即改变状态。只有在 **连续 3 次同一原因**（大小写不敏感）受阻后，才将目标置为 `blocked`；不同原因会重置计数器。`pause` / `resume` 也会重置 `blockedAttempts` 和 `lastBlockReason`。
+
+##### 2.6.3.4 Completion 审计
+提示词要求模型在标记完成前执行严格的 Completion Audit：
+
+1. 从 objective 和引用文件中推导具体需求。
+2. 保持原始 scope，不得围绕“已完成内容”重新定义成功。
+3. 对每个显式需求提供权威证据（测试输出、文件内容、命令结果）。
+4. 仅当测试/清单真正覆盖需求时才将其视为证据。
+5. 不确定或间接证据视为“未完成”。
+6. 审计必须**证明完成**，而非“未找到剩余工作”。
+
+##### 2.6.3.5 计时
+使用 `startTime`、`pausedAt`、`accumulatedActiveMs` 计算实际活跃时间，暂停期间不计入。UI 显示格式为 `Xm Ys` 或 `Ys`。
 
 #### 2.6.4 数据模型
 ```typescript
-interface GoalState {
-  sessionId: UUID
-  goal: string
-  status: 'active' | 'paused' | 'budget_limited' | 'complete'
-  createdAt: Date
-  updatedAt: Date
-  tokenUsage: {
-    current: number
-    threshold: number
-  }
+type GoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'max_turns'
+  | 'complete'
+
+type GoalState = {
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
+  blockedAttempts: number
+  lastBlockReason: string | null
+  createdAt: number
+  updatedAt: number
+  turnsExecuted: number
 }
 ```
+
+常量：
+- `MAX_GOAL_TURNS = 150`
+- `BLOCKED_CONSECUTIVE_THRESHOLD = 3`
+- `MAX_OBJECTIVE_CHARS = 4000`
+
+#### 2.6.5 提示词注入
+所有 goal 相关 steering prompt 包裹在 XML tag 中，便于模型识别系统注入的指导：
+
+| 类型 | Tag | 触发时机 |
+|------|-----|----------|
+| continuation | `<goal-steering type="continuation">` | 每轮 idle 后自动续跑 |
+| budget_limit | `<goal-steering type="budget_limit">` | token 预算耗尽时一次性注入 |
+| objective_updated | `<goal-steering type="objective_updated">` | 用户通过 `/goal <new>` 替换目标时 |
+| active-goal context | `<active-goal ...>` | 紧凑的系统提示词上下文块 |
+
+`/goal <objective>` 设置目标时还会向 meta messages 注入：
+```xml
+<goal-objective-updated>
+${trimmed}
+</goal-objective-updated>
+```
+
+#### 2.6.6 持久化与 `--resume` 恢复
+目标状态通过 `goalStorage.ts` 桥接到 JSONL transcript，实现跨进程恢复。
+
+**为什么需要 transcript 持久化**
+
+`/goal` 的“自动续跑”是由 REPL/主循环内存中的 `GoalState` 驱动的。当进程正常退出或异常断开（终端关闭、SSH 断开、系统休眠）后重新启动，`claude-code --resume` 会从 JSONL transcript 重建会话上下文。如果 goal 状态只保存在内存里，恢复后将丢失目标，导致：
+
+- 用户必须重新输入 `/goal <objective>`；
+- 已经消耗的 token、续跑轮数、活跃时间全部清零；
+- 可能误把未完成的任务当作普通对话继续。
+
+因此，goal 状态需要与会话消息一起写入 transcript，并在 `--resume` 时原样恢复。
+
+**持久化写入规则**
+
+- 每次状态变更（`set/pause/resume/complete/token update/blocked/max_turns`）调用 `persistCurrentGoal()`。
+- 写入 `GoalMetadataEntry`：`{ type: 'goal', sessionId, state, timestamp }`。
+- `/goal clear` 写入 `GoalClearedEntry`：`{ type: 'goal-cleared', sessionId, timestamp }`，防止 `--resume` 复活旧目标。
+
+**读取与恢复规则**
+
+- `ResumeConversation` / session restore 路径调用 `hydrateGoalFromTranscript()`。
+- 读取 transcript 时按时间顺序扫描；对于同一 `sessionId`，最新的 `goal` entry 为权威状态。
+- 如果最新相关 entry 是 `goal-cleared`，则无论前面有多少 `goal` entry，都认为当前无目标。
+- 恢复后的 `GoalState` 通过 `_setGoalFromPersistedState()` 回填到内存 `Map<sessionId, GoalState>`，从而继续驱动 `useGoalContinuation` 自动续跑。
+
+**落地到 clawcodex 的对应关系**
+
+clawcodex 的会话持久化同样基于 JSONL transcript（`~/.clawcodex/transcripts/<agent_id>.jsonl`）。/goal 功能落地时：
+
+- 在 `extensions/api/session.py` 或等价的 session store 中新增 `goal` / `goal-cleared` entry 类型；
+- 状态变更时追加写入 transcript（append-only，与 claude-code-best 保持一致）；
+- `--resume` / `clawcodex-dev session resume` 时扫描最新 `goal` entry 并恢复状态机；
+- 若 entry 为 `goal-cleared` 或不存在，则重置为无目标。
+
+#### 2.6.7 实现文件
+| 文件 | 上游位置 | 职责 |
+|------|----------|------|
+| Goal 命令 | `src/commands/goal/goal.tsx` | `/goal` 子命令解析、UI 回调、状态转换 |
+| 命令注册 | `src/commands/goal/index.ts` | 注册为 `local-jsx` slash command |
+| 替换确认对话框 | `src/commands/goal/GoalReplaceConfirmDialog.tsx` | 目标覆盖二次确认 |
+| 状态机 | `src/services/goal/goalState.ts` | 纯内存状态、流转、计时 |
+| 持久化桥接 | `src/services/goal/goalStorage.ts` | 连接状态机与 JSONL transcript |
+| 审计常量 | `src/services/goal/goalAudit.ts` | Completion/Blocked 审计规则、终态判断 |
+| 提示词模板 | `src/services/goal/prompts.ts` | continuation / budget_limit / objective_updated / context block |
+| Goal 工具 | `packages/builtin-tools/src/tools/GoalTool/GoalTool.ts` | 模型查询/更新目标状态（`get/update`） |
+| Goal 工具常量 | `packages/builtin-tools/src/tools/GoalTool/constants.ts` | 工具名 `goal` |
+| Goal 工具提示 | `packages/builtin-tools/src/tools/GoalTool/prompt.ts` | 工具描述与 prompt |
+| 自动续跑 Hook | `src/hooks/useGoalContinuation.ts` | REPL 中驱动自动续跑 |
+| Token 追踪 | `src/cost-tracker.ts` | 将 usage 同步到 goal tokens |
+| Transcript 存储 | `src/utils/sessionStorage.ts` | 读写 `goal` / `goal-cleared` JSONL entries |
+| 状态栏 | `src/components/StatusLine.tsx` | `GoalPill` 展示当前目标摘要 |
+| 类型定义 | `src/types/logs.ts` | `GoalState` / `GoalStatus` / `GoalMetadataEntry` / `GoalClearedEntry` |
+| Feature flag | `scripts/defines.ts` | `GOAL` 特性开关 |
+
+#### 2.6.8 UI 展示
+状态栏 `GoalPill` 在 `feature('GOAL')` 开启且存在目标时显示：
+
+```
+[Active · 实现 dashboard · 12.3k/200k]
+```
+
+颜色规则：
+- `active`：绿色
+- `paused` / `budget_limited` / `usage_limited`：黄色
+- `blocked`：红色
+- `complete`：青色
+- `max_turns`：默认色
+
+目标文本超过 30 字符时截断显示。
+
+#### 2.6.9 测试覆盖
+| 测试 | 位置 | 覆盖点 |
+|------|------|--------|
+| 状态机单元测试 | `src/services/goal/__tests__/goalState.test.ts` | set/pause/resume/complete/clear、token 累计、budget_limited、blocked 3 次、max_turns、计时 |
+| 集成测试 | `tests/integration/goal-lifecycle.test.ts` | 完整生命周期、提示词内容、审计规则一致性、终态判断 |
+
+关键验收标准：
+- `/goal <objective>` 后目标状态为 `active`，并立即触发一轮查询（`shouldQuery: true`）。
+- token 累计达到预算后自动转为 `budget_limited` 并注入 wrap-up prompt。
+- 同一 blocker 连续 3 次才转 `blocked`。
+- `max_turns` 后停止自动续跑，`/goal continue` 可恢复。
+- `--resume` 能正确恢复目标状态；`/goal clear` 后恢复不再复活旧目标。
+- 断网/限流时状态默认进入 `paused` 或 `usage_limited`，支持后续 `resume`。
 
 ---
 
