@@ -102,6 +102,22 @@ class BaseProvider(ABC):
         """
         pass
 
+    async def chat_async(
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        **kwargs
+    ) -> ChatResponse:
+        """Async chat completion. Default: runs ``chat()`` in a thread pool.
+
+        Providers that have a native async API (e.g. httpx.AsyncClient)
+        should override this with a true async implementation.
+        """
+        import asyncio
+        return await asyncio.to_thread(
+            self.chat, messages, tools=tools, **kwargs
+        )
+
     def chat_stream_response(
         self,
         messages: list[MessageInput],

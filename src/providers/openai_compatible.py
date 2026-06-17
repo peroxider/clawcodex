@@ -434,6 +434,14 @@ class OpenAICompatibleProvider(BaseProvider):
         # Convert messages
         provider_messages = self._prepare_messages(messages)
 
+        # OpenAI uses a system message in the messages array rather than
+        # a top-level ``system`` parameter (which is Anthropic-specific).
+        # Pop it from kwargs and inject at the front so callers that pass
+        # ``system=...`` (e.g. compact, re-rank) work transparently.
+        system_prompt: str | None = kwargs.pop("system", None)
+        if system_prompt:
+            provider_messages.insert(0, {"role": "system", "content": system_prompt})
+
         # Convert tools to OpenAI format
         extra_kwargs: dict[str, Any] = {}
         if tools:
@@ -504,6 +512,11 @@ class OpenAICompatibleProvider(BaseProvider):
         # Convert messages
         provider_messages = self._prepare_messages(messages)
 
+        # Handle system prompt (OpenAI uses a system message in the messages array)
+        system_prompt: str | None = kwargs.pop("system", None)
+        if system_prompt:
+            provider_messages.insert(0, {"role": "system", "content": system_prompt})
+
         # Convert tools to OpenAI format
         extra_kwargs: dict[str, Any] = {}
         if tools:
@@ -564,6 +577,11 @@ class OpenAICompatibleProvider(BaseProvider):
 
         model = self._get_model(**kwargs)
         provider_messages = self._prepare_messages(messages)
+
+        # Handle system prompt (OpenAI uses a system message in the messages array)
+        system_prompt: str | None = kwargs.pop("system", None)
+        if system_prompt:
+            provider_messages.insert(0, {"role": "system", "content": system_prompt})
 
         extra_kwargs: dict[str, Any] = {}
         if tools:
