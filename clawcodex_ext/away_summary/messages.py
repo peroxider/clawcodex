@@ -46,4 +46,4 @@ def format_away_summary_for_display(message_or_text: Any) -> str:
     if text.startswith("[AWAY SUMMARY]"):
         parts = text.split("\n\n", 1)
         text = parts[1] if len(parts) > 1 else text
-    return "Recap\n" + text.strip()
+    return "Recapitulate\n" + text.strip()

@@ -433,6 +433,8 @@ def _canonical_system_style(style: str) -> str:
     key = style.strip().lower()
     if key in ("red", "error", "danger"):
         return "error"
+    if key == "light":
+        return "light"
     return "muted"
 
 

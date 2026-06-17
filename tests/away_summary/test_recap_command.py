@@ -63,7 +63,7 @@ def test_recap_command_generates_summary(tmp_path, monkeypatch) -> None:
 
     ctx = _context(tmp_path)
     result = cmd._call_impl("", ctx)  # type: ignore[operator]
-    assert "Recap" in result.value
+    assert "Recapitulate" in result.value
     assert "manual recap" in result.value
     assert ctx.conversation.messages[-1].subtype == "away_summary"
     assert ctx.session.saved == 1

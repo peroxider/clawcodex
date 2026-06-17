@@ -718,6 +718,18 @@ class ClawcodexREPL:
             "/skills",
             "/init",
             "/tui",
+            # TUI-only commands — listed here so the "unknown command → palette"
+            # intercept (line 3056) does NOT swallow them before the TUI-only
+            # handler (line 3089) can print the proper message.
+            "/diff",
+            "/mcp",
+            "/tasks",
+            "/rewind",
+            "/repl",
+            "/effort",
+            "/history",
+            "/idle",
+            "/theme",
         ]
         self._built_in_commands = list(self._original_built_ins)
 
@@ -1448,7 +1460,7 @@ class ClawcodexREPL:
 
     @staticmethod
     def _is_recap_text(text: str) -> bool:
-        return text.strip().startswith(("Recap\n", "Away Summary\n"))
+        return text.strip().startswith(("Recapitulate\n", "Away Summary\n"))
 
     def _get_slash_command_words(self) -> list[str]:
         words = list(self._built_in_commands)
@@ -3059,11 +3071,11 @@ class ClawcodexREPL:
                 self._show_slash_palette(query=query)
                 return
 
-        # First, try the new command system
+        # ── New-command-system try path ──────────────────────────────────
         if raw.startswith("/"):
             parts = raw[1:].split(maxsplit=1)
             cmd_name = parts[0].lower()
-            args = parts[1] if len(parts) > 1 else ""
+            args_raw = parts[1] if len(parts) > 1 else ""
 
             # Check if this command exists in the new command system
             # but skip the ones we handle specially
@@ -3077,20 +3089,44 @@ class ClawcodexREPL:
                 'context', 'compact',  # These need special handling
                 'permission',  # REPL-native permission mode command
                 'tui',  # handoff to Textual TUI
-                # TUI-only commands (not implemented in REPL, show placeholder):
-                'repl', 'effort', 'history', 'idle', 'theme',
-                'diff', 'mcp', 'tasks', 'rewind',
+                # TUI-only commands — keep only the truly TUI-specific ones here
+                'repl', 'theme',
                 # F-43 runtime commands: /provider and /model are routed via
                 # the new command system (clawcodex_ext/cli/runtime_commands.py)
                 # and work in both REPL and TUI; do NOT mark them TUI-only.
                 ''
             }
 
-            # Handle TUI-only commands that don't exist in REPL
-            if cmd_name in ('repl', 'effort', 'history', 'idle', 'theme',
-                           'diff', 'mcp', 'tasks', 'rewind'):
+            # Handle truly TUI-only commands (/repl, /theme)
+            if cmd_name in ('repl', 'theme'):
                 self.console.print(f"[dim]/{cmd_name} is only available in the Textual TUI. Use /tui to switch.[/dim]")
                 return
+
+            # ── REPL-native implementations for Phase-2/3 commands ──────
+            if cmd_name == 'diff':
+                self._handle_repl_diff()
+                return
+            if cmd_name == 'mcp':
+                self._handle_repl_mcp()
+                return
+            if cmd_name == 'tasks':
+                self._handle_repl_tasks()
+                return
+            if cmd_name == 'rewind':
+                self._handle_repl_rewind()
+                return
+            if cmd_name == 'effort':
+                self._handle_repl_effort(args_raw)
+                return
+            if cmd_name == 'history':
+                self._handle_repl_history()
+                return
+            if cmd_name == 'idle':
+                self._handle_repl_idle()
+                return
+
+            # Alias for the remaining downstream code that uses `args`
+            args = args_raw
 
             # Handle /init through the new command system (PromptCommand path)
             if cmd_name == 'init':
@@ -3289,6 +3325,168 @@ class ClawcodexREPL:
                 if self._try_run_skill_slash(raw):
                     return
             self.console.print(f"[red]Unknown command: {command}[/red]")
+
+    # ── REPL-native handlers for Phase-2/3 commands ────────────────────
+
+    def _handle_repl_diff(self) -> None:
+        """Show pending file diffs as formatted text."""
+        files: list[tuple[str, str, str]] = []  # (path, patch, summary)
+        # Collect diffs from conversation's last tool results
+        for msg in reversed(self.session.conversation.messages):
+            content = msg.content
+            if isinstance(content, list):
+                for block in content:
+                    item_type = getattr(block, 'type', None)
+                    if item_type == "tool_result":
+                        result_text = getattr(block, 'content', None) or ""
+                        if isinstance(result_text, str) and "patch" in result_text.lower():
+                            # Try to extract file path + patch from structured edit result
+                            result_data = getattr(block, 'content', None)
+                            if isinstance(result_data, str):
+                                files.append(("(inline)", result_data, ""))
+            if files:
+                break  # Only look at the last tool result batch
+
+        if not files:
+            # Fall back: show git diff for workspace
+            try:
+                from src.utils.git import get_session_diff
+                diff = get_session_diff(cwd=str(self.tool_context.workspace_root))
+                if diff.files_changed:
+                    self.console.print(f"\n[bold cyan]Pending changes[/bold cyan] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
+                    self.console.print(diff.patch[:4000] + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else ""))
+                    self.console.print()
+                    return
+            except Exception:
+                pass
+            self.console.print("[dim]No pending diffs to display.[/dim]")
+            return
+
+        self.console.print(f"\n[bold cyan]Diff — {len(files)} file(s) changed[/bold cyan]")
+        for path, patch, _summary in files[:10]:
+            self.console.print(f"  [bold]{path}[/bold]")
+            lines = patch.splitlines()
+            for line in lines[:30]:
+                if line.startswith("+"):
+                    self.console.print(f"    [green]{line}[/green]")
+                elif line.startswith("-"):
+                    self.console.print(f"    [red]{line}[/red]")
+                elif line.startswith("@@"):
+                    self.console.print(f"    [cyan]{line}[/cyan]")
+            if len(lines) > 30:
+                self.console.print(f"    [dim]… {len(lines) - 30} more lines[/dim]")
+        self.console.print()
+
+    def _handle_repl_mcp(self) -> None:
+        """List configured MCP servers."""
+        try:
+            from src.config import load_config
+            cfg = load_config() or {}
+            raw = cfg.get("mcp_servers") or cfg.get("mcpServers") or {}
+        except Exception:
+            raw = {}
+
+        servers: list[dict[str, str]] = []
+        if isinstance(raw, dict):
+            for server_id, entry in raw.items():
+                name = entry.get("name", server_id) if isinstance(entry, dict) else server_id
+                status = entry.get("status", "disconnected") if isinstance(entry, dict) else "disconnected"
+                tools = entry.get("tools", []) if isinstance(entry, dict) else []
+                servers.append({"id": str(server_id), "name": str(name), "status": str(status), "tools": str(len(tools))})
+
+        if not servers:
+            self.console.print("[dim]No MCP servers configured.[/dim]")
+            return
+
+        self.console.print(f"\n[bold cyan]MCP Servers ({len(servers)})[/bold cyan]")
+        for s in servers:
+            status_style = "green" if s["status"] == "connected" else "yellow" if s["status"] in ("connecting", "running") else "dim"
+            self.console.print(f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]")
+        self.console.print()
+
+    def _handle_repl_tasks(self) -> None:
+        """Show background task snapshot."""
+        tasks = self._collect_task_entries()
+        if not tasks:
+            self.console.print("[dim]No active tasks.[/dim]")
+            return
+        self._render_task_snapshot()
+
+    def _handle_repl_rewind(self) -> None:
+        """List conversation messages and let user rewind to a chosen turn."""
+        msgs = self.session.conversation.messages
+        user_msgs = [(i, m) for i, m in enumerate(msgs) if m.role == "user"]
+
+        if not user_msgs:
+            self.console.print("[dim]Nothing to rewind — no user messages in conversation.[/dim]")
+            return
+
+        self.console.print(f"\n[bold cyan]Conversation history ({len(user_msgs)} user turns)[/bold cyan]")
+        for idx, (orig_idx, msg) in enumerate(user_msgs):
+            text = self._flatten_message_content(msg.content)
+            preview = text[:80].replace("\n", " ")
+            self.console.print(f"  [bold]{idx + 1}[/bold]  {preview}[dim]…[/dim]" if len(text) > 80 else f"  [bold]{idx + 1}[/bold]  {preview}")
+
+        self.console.print()
+        choice = self._safe_input("Rewind to turn (number) or leave empty to cancel: ").strip()
+        if not choice:
+            self.console.print("[dim]Rewind cancelled.[/dim]")
+            return
+
+        try:
+            target = int(choice) - 1
+            if target < 0 or target >= len(user_msgs):
+                self.console.print("[red]Invalid turn number.[/red]")
+                return
+            orig_idx = user_msgs[target][0]
+            # Truncate conversation to before this message
+            self.session.conversation.messages = msgs[:orig_idx]
+            self._engine_messages = []
+            self.console.print(f"[green]Rewound to turn {target + 1}.[/green]")
+        except (ValueError, IndexError):
+            self.console.print("[red]Invalid input. Use a number from the list.[/red]")
+
+    def _handle_repl_effort(self, args: str) -> None:
+        """Show or set reasoning effort level."""
+        current = getattr(self, "_effort", None)
+        args = args.strip()
+
+        if not args:
+            self.console.print(f"\n[bold cyan]Reasoning effort[/bold cyan]  [dim]current:[/dim] {current or '[green]auto[/green]'}")
+            self.console.print("  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]")
+            self.console.print()
+            return
+
+        valid = {"auto", "low", "medium", "high"}
+        if args.lower() in valid:
+            self._effort = args.lower()
+            self.console.print(f"[green]Reasoning effort set to {self._effort}.[/green]")
+        else:
+            self.console.print(f"[red]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/red]")
+
+    def _handle_repl_history(self) -> None:
+        """Show recent session history."""
+        events = list(self.history_log.events)
+        if not events:
+            self.console.print("[dim]No history events recorded this session.[/dim]")
+            return
+
+        self.console.print(f"\n[bold cyan]Session History ({len(events)} events)[/bold cyan]")
+        for ev in events[-20:]:  # Show last 20
+            self.console.print(f"  [bold]{ev.title}[/bold]")
+            if ev.detail:
+                self.console.print(f"    [dim]{ev.detail[:120]}[/dim]")
+        self.console.print()
+
+    def _handle_repl_idle(self) -> None:
+        """Show idle / away-summary configuration."""
+        self.console.print("\n[bold cyan]Idle / Away Configuration[/bold cyan]")
+        self.console.print("  [dim]Idle-return prompts are managed via the away-summary feature.[/dim]")
+        self.console.print("  [dim]Use /tui to access the interactive idle config dialog.[/dim]")
+        self.console.print("  [dim]To clear the conversation and reset idle state: /clear[/dim]")
+        self.console.print()
+
+    # ── End of REPL-native handlers ─────────────────────────────────────
 
     def _handle_permission_command(self, args: str = "") -> None:
         """Handle the /permission command.

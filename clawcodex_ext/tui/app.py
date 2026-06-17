@@ -1216,12 +1216,12 @@ class ClawCodexTUI(App):
                 if self._repl_screen is not None:
                     display_text = (
                         text.strip()
-                        if text.strip().startswith(("Recap", "Away Summary"))
+                        if text.strip().startswith(("Recapitulate", "Recap", "Away Summary"))
                         else format_away_summary_for_display(text)
                     )
                     self._repl_screen.transcript.append_system(
                         display_text,
-                        style="muted",
+                        style="light",
                         render="markdown",
                     )
 
@@ -1274,7 +1274,7 @@ class ClawCodexTUI(App):
                 if subtype == "away_summary" and self._repl_screen is not None:
                     self._repl_screen.transcript.append_system(
                         format_away_summary_for_display(msg),
-                        style="muted",
+                        style="light",
                         render="markdown",
                     )
                 continue

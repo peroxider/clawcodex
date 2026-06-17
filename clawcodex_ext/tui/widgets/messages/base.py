@@ -52,6 +52,9 @@ class SystemMessage(BaseRow):
     SystemMessage.-muted > Static {
         color: $text-muted;
     }
+    SystemMessage.-light > Static {
+        color: $text-disabled;
+    }
     """
 
     def __init__(
@@ -67,6 +70,8 @@ class SystemMessage(BaseRow):
         self._render_mode = render
         if style == "error":
             self.add_class("-error")
+        elif style == "light":
+            self.add_class("-light")
         else:
             self.add_class("-muted")
 

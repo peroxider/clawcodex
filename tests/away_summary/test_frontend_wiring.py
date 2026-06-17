@@ -135,9 +135,9 @@ def test_repl_auto_recap_display_prints_immediately(monkeypatch) -> None:
 
     controller = getattr(repl, "_away_summary_controller", None)
     assert controller is not None
-    controller.display("Recap\nauto recap")
+    controller.display("Recapitulate\nauto recap")
 
-    assert repl.local_command_output == [("Recap\nauto recap", "recap")]
+    assert repl.local_command_output == [("Recapitulate\nauto recap", "recap")]
     assert rendered == []
 
 
@@ -172,7 +172,7 @@ def test_repl_background_recap_output_renders_markdown() -> None:
     repl = ClawcodexREPL.__new__(ClawcodexREPL)
     repl.console = RecordingConsole()
 
-    repl._enqueue_background_output("Recap\n- **auto recap**")
+    repl._enqueue_background_output("Recapitulate\n- **auto recap**")
     repl._drain_background_outputs()
 
     assert any(isinstance(item, Markdown) for item in rendered)
@@ -299,7 +299,7 @@ async def test_tui_replays_recap_history_after_screen_mount(tmp_path) -> None:
 
     assert "hello" in rendered
     assert "hi" in rendered
-    assert "Recap" in rendered
+    assert "Recapitulate" in rendered
     assert "manual recap" in rendered
 
 
@@ -345,10 +345,10 @@ async def test_tui_executes_recap_slash_command(monkeypatch, tmp_path) -> None:
         for _ in range(20):
             await pilot.pause()
             rendered = _snapshot_text(screen.transcript)
-            if "Recap" in rendered:
+            if "Recapitulate" in rendered:
                 break
 
-    assert "Recap" in rendered
+    assert "Recapitulate" in rendered
     assert "recap" in rendered
     assert conv.messages[-1].subtype == "away_summary"
     assert session.saved >= 1
@@ -425,10 +425,10 @@ def test_tui_away_summary_display_posts_to_ui_thread(monkeypatch, tmp_path) -> N
     app._away_summary_controller.display("auto recap")
 
     assert posted
-    assert rendered == [("Recap\nauto recap", "muted", "markdown")]
+    assert rendered == [("Recapitulate\nauto recap", "light", "markdown")]
 
     app._away_summary_controller.display("Recap\nsecond recap")
-    assert rendered[-1] == ("Recap\nsecond recap", "muted", "markdown")
+    assert rendered[-1] == ("Recap\nsecond recap", "light", "markdown")
 
     app._away_summary_controller.display("Away Summary\nlegacy recap")
-    assert rendered[-1] == ("Away Summary\nlegacy recap", "muted", "markdown")
+    assert rendered[-1] == ("Away Summary\nlegacy recap", "light", "markdown")

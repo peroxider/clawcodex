@@ -299,7 +299,7 @@ async def test_append_system_can_render_away_summary_markdown(tmp_path):
     async with app.run_test() as pilot:
         await pilot.pause()
         t = app.screen.query_one(Transcript)
-        t.append_system("Recap\n- **done**", style="muted", render="markdown")
+        t.append_system("Recapitulate\n- **done**", style="light", render="markdown")
         await pilot.pause()
         row = _rows(t)[-1]
 

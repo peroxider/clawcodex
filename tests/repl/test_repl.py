@@ -227,7 +227,7 @@ class TestREPL(unittest.TestCase):
         repl = ClawcodexREPL.__new__(ClawcodexREPL)
         repl.console = Mock()
 
-        repl._print_local_command_text("Recap\n- **done**", command="recap")
+        repl._print_local_command_text("Recapitulate\n- **done**", command="recap")
 
         self.assertTrue(any(
             args and isinstance(args[0], Markdown)
