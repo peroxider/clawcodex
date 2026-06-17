@@ -276,6 +276,23 @@ async def resolve_hook_permission_decision(
     tool_use_id: str,
 ) -> dict[str, Any]:
     if hook_permission_result is None:
+        # 只在 auto 模式下进行完整权限检查（包括分类器）
+        if getattr(tool_use_context.permission_context, "mode", None) == "auto":
+            try:
+                from src.permissions.check import has_permissions_to_use_tool
+
+                full_check = has_permissions_to_use_tool(
+                    tool, tool_input, tool_use_context.permission_context, tool_use_context=tool_use_context
+                )
+                if hasattr(full_check, "behavior"):
+                    if full_check.behavior == "deny":
+                        return {"behavior": "deny", "message": getattr(full_check, "message", "Permission denied")}
+                    if full_check.behavior == "allow":
+                        return {"behavior": "allow"}
+            except ImportError:
+                pass
+        
+        # 其他模式保持原有逻辑
         if can_use_tool is not None and callable(can_use_tool):
             try:
                 import asyncio
@@ -297,6 +314,7 @@ async def resolve_hook_permission_decision(
                 logger.debug("can_use_tool error: %s", e)
         return {"behavior": "allow"}
 
+    # hook_permission_result is NOT None
     if isinstance(hook_permission_result, dict):
         behavior = hook_permission_result.get("behavior")
     else:
@@ -332,19 +350,17 @@ async def resolve_hook_permission_decision(
             return {"behavior": "allow", "input": hook_input}
 
         try:
-            from src.permissions.check import check_rule_based_permissions
+            from src.permissions.check import has_permissions_to_use_tool
 
-            rule_check = check_rule_based_permissions(
+            full_check = has_permissions_to_use_tool(
                 tool, hook_input, tool_use_context.permission_context, tool_use_context=tool_use_context
             )
-            if rule_check is None:
-                return {"behavior": "allow", "input": hook_input}
-            if isinstance(rule_check, dict):
-                return {**rule_check, "input": hook_input}
-            if hasattr(rule_check, "behavior"):
-                if rule_check.behavior == "deny":
-                    return {"behavior": "deny", "message": getattr(rule_check, "message", "Denied by rule"), "input": hook_input}
-                if rule_check.behavior == "ask" and can_use_tool is not None:
+            
+            if hasattr(full_check, "behavior"):
+                if full_check.behavior == "deny":
+                    msg = getattr(full_check, "message", "Permission denied")
+                    return {"behavior": "deny", "message": msg, "input": hook_input}
+                if full_check.behavior == "ask" and can_use_tool is not None:
                     import inspect
                     if inspect.iscoroutinefunction(can_use_tool):
                         decision = await can_use_tool(

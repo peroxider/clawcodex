@@ -3,11 +3,14 @@
 Mirrors ``typescript/src/utils/permissions/getNextPermissionMode.ts``. The TS
 reference has an Anthropic-internal ``USER_TYPE === 'ant'`` branch and a
 ``TRANSCRIPT_CLASSIFIER``-gated ``auto`` cycle target; we omit both — Python
-exposes the public cycle only. Once the LLM auto-mode classifier lands in
-Python, ``canCycleToAuto`` will get its own implementation here.
+exposes the public cycle only. Auto mode is available via explicit
+`--permission-mode auto` CLI flag or through programmatic activation.
 """
 
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from src.permissions.types import PermissionMode, ToolPermissionContext
 from src.permissions.updates import apply_permission_update
@@ -106,3 +109,111 @@ def cycle_permission_mode(
         ),
     )
     return next_mode, next_context
+
+
+PROTECTED_DIRECTORIES: tuple[str, ...] = (
+    ".git",
+    ".vscode",
+    ".clawcodex",
+    ".idea",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+)
+
+
+def _is_in_protected_directory(cwd: str | Path | None) -> bool:
+    """Check if current working directory is inside a protected location."""
+    if cwd is None:
+        return False
+    cwd_path = Path(cwd).resolve()
+    for protected in PROTECTED_DIRECTORIES:
+        if protected in cwd_path.parts:
+            return True
+        protected_path = cwd_path / protected
+        if protected_path.exists():
+            return True
+    return False
+
+
+def _has_recent_dangerous_operations(
+    denial_tracker: Any | None = None,
+) -> bool:
+    """Check if there have been recent denied dangerous operations."""
+    if denial_tracker is None:
+        try:
+            from src.permissions.check import get_denial_tracker
+            denial_tracker = get_denial_tracker()
+        except Exception:
+            return False
+    dangerous_tools = ("Bash", "Write", "Edit")
+    for tool in dangerous_tools:
+        if denial_tracker.get_denial_count(tool) >= 3:
+            return True
+    return False
+
+
+def can_cycle_to_auto(
+    context: ToolPermissionContext,
+    *,
+    check_protected_directory: bool = True,
+    check_danger_history: bool = True,
+) -> bool:
+    """Check if auto mode is available and safe to activate.
+
+    Auto mode is not part of the Shift+Tab cycle because it requires
+    explicit activation and safety checks. This function validates:
+    1. Current permission configuration allows auto mode
+    2. Not operating in a protected directory (.git, .vscode, etc.)
+    3. No recent dangerous operation denials
+
+    Args:
+        context: Current permission context
+        check_protected_directory: Whether to check for protected dirs
+        check_danger_history: Whether to check denial history
+
+    Returns:
+        True if auto mode can be safely activated
+    """
+    if context.mode == "auto":
+        return True
+    if check_protected_directory:
+        cwd = getattr(context, "cwd", None)
+        if _is_in_protected_directory(cwd):
+            return False
+    if check_danger_history:
+        if _has_recent_dangerous_operations():
+            return False
+    return True
+
+
+def get_auto_mode_availability_reason(
+    context: ToolPermissionContext,
+) -> str | None:
+    """Return human-readable reason why auto mode is unavailable.
+
+    Args:
+        context: Current permission context
+
+    Returns:
+        None if auto mode is available, otherwise the blocking reason
+    """
+    if context.mode == "auto":
+        return None
+    cwd = getattr(context, "cwd", None)
+    if _is_in_protected_directory(cwd):
+        return "Working directory is inside a protected location (.git, .vscode, etc.)"
+    if _has_recent_dangerous_operations():
+        return "Recent dangerous operations were denied (auto mode paused for safety)"
+    return None
+
+
+__all__ = [
+    "register_cycle_step",
+    "get_next_permission_mode",
+    "cycle_permission_mode",
+    "can_cycle_to_auto",
+    "get_auto_mode_availability_reason",
+    "PROTECTED_DIRECTORIES",
+]
