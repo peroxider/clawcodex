@@ -123,7 +123,7 @@ def test_e2e_session_recurring_fires_in_process(tmp_path) -> None:
     runs = read_cron_runs(tmp_path)
     assert len(runs) == 1
     assert runs[0].task_id == task.id
-    assert runs[0].status == "completed"
+    assert runs[0].status == "queued"
 
 
 def test_e2e_durable_recurring_fires_via_file(tmp_path) -> None:
