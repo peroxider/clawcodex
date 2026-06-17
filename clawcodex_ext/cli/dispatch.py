@@ -488,6 +488,23 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     # Select frontend by name; dispatch stays as the thin orchestration layer.
     if args.print:
+        # F-97 telemetry notice — shown once on stderr for headless/CLI mode
+        # so users know when collection + reporting are active.
+        try:
+            from telemetry.config import load_config as _load_telemetry_cfg
+
+            _tc = _load_telemetry_cfg()
+            if _tc.enabled and _tc.reporting.reporting_enabled:
+                print(
+                    "Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure",
+                    file=sys.stderr,
+                )
+                print(
+                    "Collects usage data & error reports; may be uploaded periodically.",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
         profile_checkpoint("mode_dispatch_print")
         profile_checkpoint("phase4_dispatch")
         frontend = get_frontend("headless")

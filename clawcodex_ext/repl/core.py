@@ -2865,11 +2865,34 @@ class ClawcodexREPL:
         table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style="bold blue"))
 
         footer = Text("/help  •  /tools  •  /tui  •  /stream  •  /exit", style="dim")
-        body = Group(
-            table,
-            Text(""),
-            Align.center(footer),
-        )
+
+        # F-97 telemetry notice — show when both stats collection and error
+        # reporting are enabled.  Best-effort & swallowed on failure so a
+        # misconfigured telemetry package never blocks REPL startup.
+        try:
+            from telemetry.config import load_config as _load_telemetry_cfg
+
+            _tc = _load_telemetry_cfg()
+            if _tc.enabled and _tc.reporting.reporting_enabled:
+                telemetry_notice = Group(
+                    Align.center(
+                        Text(
+                            "Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure",
+                            style="dim italic",
+                        )
+                    ),
+                    Align.center(
+                        Text(
+                            "Collects usage data & error reports; may be uploaded periodically.",
+                            style="dim italic",
+                        )
+                    ),
+                )
+                body = Group(table, telemetry_notice, Text(""), Align.center(footer))
+            else:
+                body = Group(table, Text(""), Align.center(footer))
+        except Exception:
+            body = Group(table, Text(""), Align.center(footer))
         header = Panel(
             body,
             border_style="bright_black",

@@ -156,29 +156,68 @@ def run_flush(argv: Sequence[str] | None = None) -> int:
 
 
 def run_enable(argv: Sequence[str] | None = None) -> int:
-    cfg = load_config()
-    target = _asdict(cfg)
-    _print(
-        "Tip (F-97-K): you can also drop the equivalent settings into a "
-        "TOML file the loader probes automatically:"
-    )
-    _print("  - <cwd>/telemetry.toml  (standalone)")
-    _print("  - <repo>/pyproject.toml  [tool.clawcodex.telemetry] table")
-    _print("See telemetry.toml.example in the repo root for the full key set.")
-    _print("")
-    _print(
-        "Add the following snippet to your merged config (e.g. "
-        "~/.clawcodex/config.json or <repo>/.claude/config.json) and "
-        "restart clawcodex:"
-    )
-    _print("")
-    _print(json.dumps({"telemetry": target}, indent=2))
+    """Enable telemetry (stats + error reporting) and persist to global config."""
+    try:
+        from src.config import load_config as _load_src_config
+        from src.config import save_config as _save_src_config
+
+        cfg = _load_src_config()
+        telemetry_section: dict[str, Any] = dict(cfg.get("telemetry", {}))
+        telemetry_section["enabled"] = True
+        reporting_section: dict[str, Any] = dict(
+            telemetry_section.get("reporting", {})
+        )
+        reporting_section["reporting_enabled"] = True
+        telemetry_section["reporting"] = reporting_section
+        cfg["telemetry"] = telemetry_section
+        _save_src_config(cfg)
+        _print(
+            "Telemetry enabled: stats collection ✓ · error reporting ✓\n"
+            "Run \"/telemetry status\" to verify."
+        )
+    except Exception as exc:
+        _print(f"telemetry: failed to enable — {exc}")
+        _print("You can manually add the following to your merged config:")
+        _print("")
+        _print(json.dumps({
+            "telemetry": {
+                "enabled": True,
+                "reporting": {"reporting_enabled": True},
+            }
+        }, indent=2))
+        return 1
     return 0
 
 
 def run_disable(argv: Sequence[str] | None = None) -> int:
-    _print("Set `telemetry.enabled` to false in your merged config:")
-    _print(json.dumps({"telemetry": {"enabled": False}}, indent=2))
+    """Disable telemetry and persist to global config."""
+    try:
+        from src.config import load_config as _load_src_config
+        from src.config import save_config as _save_src_config
+
+        cfg = _load_src_config()
+        telemetry_section: dict[str, Any] = dict(cfg.get("telemetry", {}))
+        telemetry_section["enabled"] = False
+        # reporting_enabled is moot when enabled=False, but set it too
+        # for consistency so the next user-run /telemetry status shows a
+        # clean state.
+        reporting_section: dict[str, Any] = dict(
+            telemetry_section.get("reporting", {})
+        )
+        reporting_section["reporting_enabled"] = False
+        telemetry_section["reporting"] = reporting_section
+        cfg["telemetry"] = telemetry_section
+        _save_src_config(cfg)
+        _print(
+            "Telemetry disabled.\n"
+            "Run \"/telemetry status\" to verify."
+        )
+    except Exception as exc:
+        _print(f"telemetry: failed to disable — {exc}")
+        _print("You can manually set the following in your merged config:")
+        _print("")
+        _print(json.dumps({"telemetry": {"enabled": False}}, indent=2))
+        return 1
     return 0
 
 

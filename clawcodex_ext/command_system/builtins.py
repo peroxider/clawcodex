@@ -1089,13 +1089,76 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
         )
 
 
-# Command definitions
-HELP_COMMAND = LocalCommand(
-    name="help",
-    description="Show available commands",
-    aliases=["?"],
-    argument_hint="[search_query]",
+def telemetry_command_call(args: str, context: CommandContext) -> LocalCommandResult:
+    """
+    Handle /telemetry command — show & manage telemetry configuration.
+
+    Delegates to the F-97 telemetry.cli module, capturing its stdout
+    output into the command result.  Best-effort: failures (missing
+    telemetry package, config errors) return a clear text message
+    instead of crashing.
+
+    Subcommands (mirror ``telemetry.cli.main``):
+      status   — show config, recorder kind, today's summary (default)
+      preview  — dry-run the reporter output for today
+      flush    — run the aggregator and emit to reporters
+      enable   — print the config snippet to enable telemetry
+      disable  — print the config snippet to disable telemetry
+    """
+    import io
+    import sys
+
+    # Preserve real stdout/stderr so we can restore them
+    real_stdout = sys.stdout
+    real_stderr = sys.stderr
+
+    buf = io.StringIO()
+    try:
+        sys.stdout = buf
+        sys.stderr = buf
+
+        from telemetry.cli import main as _telemetry_main
+
+        # Split the slash-command args into argv-style tokens
+        argv = args.split() if args else []
+        exit_code = _telemetry_main(argv)
+    except ImportError:
+        return LocalCommandResult(
+            type="text",
+            value=(
+                "Telemetry package not available. "
+                "Ensure ``telemetry`` is installed and on the Python path."
+            ),
+        )
+    except Exception as exc:
+        return LocalCommandResult(
+            type="text",
+            value=f"Telemetry command failed: {exc}",
+        )
+    finally:
+        sys.stdout = real_stdout
+        sys.stderr = real_stderr
+
+    output = buf.getvalue().strip()
+    if not output:
+        output = "(no output)"
+
+    if exit_code != 0:
+        output = f"(exit code {exit_code})\n{output}"
+
+    return LocalCommandResult(type="text", value=output)
+
+
+# Command definitions (sorted alphabetically by variable name)
+# /advisor's is_enabled gate needs module-level import.
+from src.utils.advisor import can_user_configure_advisor as _can_user_configure_advisor
+
+ADVISOR_COMMAND = LocalCommand(
+    name="advisor",
+    description="Configure the advisor model (server-side on 1P Anthropic, client-side on any provider)",
+    argument_hint="[<model> [--client] | --no-client | off]",
     supports_non_interactive=True,
+    is_enabled=lambda: _can_user_configure_advisor(None),
 )
 
 CLEAR_COMMAND = LocalCommand(
@@ -1105,23 +1168,9 @@ CLEAR_COMMAND = LocalCommand(
     supports_non_interactive=False,
 )
 
-EXIT_COMMAND = LocalCommand(
-    name="exit",
-    description="Exit the application",
-    aliases=["quit", "q"],
-    supports_non_interactive=True,
-)
-
-SKILLS_COMMAND = LocalCommand(
-    name="skills",
-    description="List available skills",
-    argument_hint="",
-    supports_non_interactive=True,
-)
-
-COST_COMMAND = LocalCommand(
-    name="cost",
-    description="Show session cost and usage",
+COMPACT_COMMAND = LocalCommand(
+    name="compact",
+    description="Compact conversation to save context space",
     argument_hint="",
     supports_non_interactive=True,
 )
@@ -1133,9 +1182,9 @@ CONTEXT_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
-COMPACT_COMMAND = LocalCommand(
-    name="compact",
-    description="Compact conversation to save context space",
+COST_COMMAND = LocalCommand(
+    name="cost",
+    description="Show session cost and usage",
     argument_hint="",
     supports_non_interactive=True,
 )
@@ -1154,21 +1203,19 @@ CRON_DELETE_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
-# /advisor — server-side reviewer tool. Python port of
-# typescript/src/commands/advisor.ts. The `is_enabled` callable is read by
-# the help-listing and command-availability checks. We pass ``provider=None``
-# at command-list time because the registry doesn't know what provider is
-# active; the env-disable check still applies. Per-request provider gating
-# is enforced inside ``_call_model_sync`` so the user can't accidentally
-# silence the API by toggling /advisor under a non-first-party provider.
-from src.utils.advisor import can_user_configure_advisor as _can_user_configure_advisor
-
-ADVISOR_COMMAND = LocalCommand(
-    name="advisor",
-    description="Configure the advisor model (server-side on 1P Anthropic, client-side on any provider)",
-    argument_hint="[<model> [--client] | --no-client | off]",
+EXIT_COMMAND = LocalCommand(
+    name="exit",
+    description="Exit the application",
+    aliases=["quit", "q"],
     supports_non_interactive=True,
-    is_enabled=lambda: _can_user_configure_advisor(None),
+)
+
+HELP_COMMAND = LocalCommand(
+    name="help",
+    description="Show available commands",
+    aliases=["?"],
+    argument_hint="[search_query]",
+    supports_non_interactive=True,
 )
 
 INIT_COMMAND = PromptCommand(
@@ -1178,6 +1225,20 @@ INIT_COMMAND = PromptCommand(
     progress_message="analyzing your codebase",
     content_length=0,
     source="builtin",
+)
+
+SKILLS_COMMAND = LocalCommand(
+    name="skills",
+    description="List available skills",
+    argument_hint="",
+    supports_non_interactive=True,
+)
+
+TELEMETRY_COMMAND = LocalCommand(
+    name="telemetry",
+    description="Show & manage telemetry (stats collection & error reporting)",
+    argument_hint="[status|preview|flush|enable|disable]",
+    supports_non_interactive=True,
 )
 
 
@@ -1225,22 +1286,24 @@ COMPACT_COMMAND.set_call(compact_command_call)
 CRON_LIST_COMMAND.set_call(cron_list_command_call)
 CRON_DELETE_COMMAND.set_call(cron_delete_command_call)
 ADVISOR_COMMAND.set_call(advisor_command_call)
+TELEMETRY_COMMAND.set_call(telemetry_command_call)
 
 
 def get_builtin_commands() -> list[Command]:
     """Get all built-in commands."""
     cmds: list[Command] = [
-        HELP_COMMAND,
+        ADVISOR_COMMAND,
         CLEAR_COMMAND,
-        EXIT_COMMAND,
-        SKILLS_COMMAND,
-        COST_COMMAND,
-        CONTEXT_COMMAND,
         COMPACT_COMMAND,
+        CONTEXT_COMMAND,
+        COST_COMMAND,
         CRON_LIST_COMMAND,
         CRON_DELETE_COMMAND,
-        ADVISOR_COMMAND,
+        EXIT_COMMAND,
+        HELP_COMMAND,
         INIT_COMMAND,
+        SKILLS_COMMAND,
+        TELEMETRY_COMMAND,
         # Upstream interactive/prompt commands (b24b8cb)
         MODEL_COMMAND,
         EFFORT_COMMAND,
