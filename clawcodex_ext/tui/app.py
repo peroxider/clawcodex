@@ -1280,7 +1280,10 @@ class ClawCodexTUI(App):
                 continue
             if role == "assistant":
                 text = _flatten_message_text(content)
-                if text:
+                # Suppress NO_CONTENT_MESSAGE placeholder injected for empty
+                # assistant responses — matches live-chat behaviour.
+                from src.types.messages import NO_CONTENT_MESSAGE
+                if text and text != NO_CONTENT_MESSAGE:
                     self._post_to_screen(AssistantMessage(text=text, agent_name=agent_type))
                 # Replay tool_use / tool_result / thinking blocks from the content list.
                 if isinstance(content, list):
