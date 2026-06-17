@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from clawcodex_ext.cron_system.parser import compute_next_cron_run, cron_to_human, parse_cron_expression
+
+
+def _local_offset() -> int:
+    """Return the local UTC offset in hours."""
+    now = datetime.now(timezone.utc)
+    off = now.astimezone().utcoffset()
+    assert off is not None
+    return int(off.total_seconds() // 3600)
 
 
 def test_parse_cron_expression_supports_common_forms() -> None:
@@ -36,4 +44,33 @@ def test_cron_to_human_common_strings() -> None:
     assert cron_to_human("* * * * *") == "Every minute"
     assert cron_to_human("*/10 * * * *") == "Every 10 minutes"
     assert cron_to_human("0 9 * * *") == "Daily at 09:00"
-    assert cron_to_human("0 9 * * *", utc=True) == "Daily at 09:00 UTC"
+
+
+def test_cron_to_human_utc_offset() -> None:
+    """With utc=True, hours are offset from UTC to local timezone."""
+    offset = _local_offset()
+    expected_hour = (9 + offset) % 24
+    assert cron_to_human("0 9 * * *", utc=True) == f"Daily at {expected_hour:02d}:00 UTC"
+
+    expected_hour_15 = (15 + offset) % 24
+    assert cron_to_human("0 15 * * 1") == "Weekly on day 1 at 15:00"
+    assert cron_to_human("0 15 * * 1", utc=True) == f"Weekly on day 1 at {expected_hour_15:02d}:00 UTC"
+
+    expected_hour_22 = (22 + offset) % 24
+    assert cron_to_human("0 22 15 * *") == "Monthly on day 15 at 22:00"
+    assert cron_to_human("0 22 15 * *", utc=True) == f"Monthly on day 15 at {expected_hour_22:02d}:00 UTC"
+
+
+def test_cron_to_human_utc_interval_patterns() -> None:
+    """Interval-based patterns get the suffix but no hour offset (no specific hour)."""
+    assert cron_to_human("* * * * *", utc=True) == "Every minute UTC"
+    assert cron_to_human("*/5 * * * *", utc=True) == "Every 5 minutes UTC"
+    assert cron_to_human("0 * * * *", utc=True) == "Hourly at minute 0 UTC"
+    assert cron_to_human("0 */2 * * *", utc=True) == "Every 2 hours at minute 0 UTC"
+
+
+def test_cron_to_human_utc_wraps_midnight() -> None:
+    """Hour 0 UTC wraps to local (e.g. UTC+8 → hour 8)."""
+    offset = _local_offset()
+    expected_hour = (0 + offset) % 24
+    assert cron_to_human("0 0 * * *", utc=True) == f"Daily at {expected_hour:02d}:00 UTC"

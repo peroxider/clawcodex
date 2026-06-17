@@ -83,6 +83,17 @@ def compute_next_cron_run(fields: CronFields, from_time: datetime) -> datetime |
     return None
 
 
+def _local_utc_offset_hours() -> int:
+    """Return the local timezone offset from UTC in hours (e.g. 8 for UTC+8, -5 for UTC-5).
+
+    Uses DST-aware local timezone from the system clock.
+    """
+    now = datetime.now(timezone.utc)
+    local_offset = now.astimezone().utcoffset()
+    assert local_offset is not None
+    return int(local_offset.total_seconds() // 3600)
+
+
 def cron_to_human(cron: str, utc: bool = False) -> str:
     fields = parse_cron_expression(cron)
     if fields is None:
@@ -90,6 +101,13 @@ def cron_to_human(cron: str, utc: bool = False) -> str:
 
     suffix = " UTC" if utc else ""
     minutes, hours, dom, months, dow = cron.split()
+
+    # When utc=True, offset the cron hour from UTC to local timezone.
+    local_offset = _local_utc_offset_hours() if utc else 0
+
+    def _offset_hour(h: int) -> int:
+        return (h + local_offset) % 24
+
     if cron == "* * * * *":
         return f"Every minute{suffix}"
     if hours == "*" and dom == "*" and months == "*" and dow == "*":
@@ -101,11 +119,14 @@ def cron_to_human(cron: str, utc: bool = False) -> str:
         if hours.startswith("*/"):
             return f"Every {hours[2:]} hours at minute {minutes}{suffix}"
         if hours.isdigit():
-            return f"Daily at {int(hours):02d}:{int(minutes):02d}{suffix}"
+            h = _offset_hour(int(hours))
+            return f"Daily at {h:02d}:{int(minutes):02d}{suffix}"
     if months == "*" and dow == "*" and minutes.isdigit() and hours.isdigit() and dom.isdigit():
-        return f"Monthly on day {int(dom)} at {int(hours):02d}:{int(minutes):02d}{suffix}"
+        h = _offset_hour(int(hours))
+        return f"Monthly on day {int(dom)} at {h:02d}:{int(minutes):02d}{suffix}"
     if months == "*" and dom == "*" and minutes.isdigit() and hours.isdigit() and dow.isdigit():
-        return f"Weekly on day {int(dow)} at {int(hours):02d}:{int(minutes):02d}{suffix}"
+        h = _offset_hour(int(hours))
+        return f"Weekly on day {int(dow)} at {h:02d}:{int(minutes):02d}{suffix}"
     return f"Cron schedule {cron}{suffix}"
 
 
