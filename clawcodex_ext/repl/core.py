@@ -324,7 +324,7 @@ from src.tool_system.protocol import ToolCall
 from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
 from src.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import StreamEvent
-from src.types.messages import AssistantMessage, SystemMessage, UserMessage
+from src.types.messages import NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
 from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from src.utils.abort_controller import AbortController
 
@@ -2853,6 +2853,43 @@ class ClawcodexREPL:
             return "\n".join(p for p in parts if p).strip()
         return str(content)
 
+    def _format_history_line(self, msg: Any) -> str | None:
+        """Render one message for the /load history preview.
+
+        Returns None for messages the snapshot should hide: meta /
+        virtual system injections, the ``[No content]`` placeholder
+        that ``create_assistant_message`` injects for empty
+        responses, the ``[AWAY SUMMARY]`` system injection, and any
+        other message whose flattened content is empty.
+        """
+        if getattr(msg, "isMeta", False) or getattr(msg, "isVirtual", False):
+            return None
+        # AWAY SUMMARY uses subtype="away_summary" with isMeta=False,
+        # so the isMeta check above does not catch it. Mirror
+        # clawcodex_ext/away_summary/fingerprint.py:81-83 detection.
+        if msg.role == "system" and getattr(msg, "subtype", None) == "away_summary":
+            return None
+        text = self._flatten_message_content(msg.content).strip()
+        if not text:
+            return None
+        # Same convention as core.py:2809-2814 and tui/app.py:1283-1286:
+        # hide the no-content placeholder injected for empty responses.
+        if text == NO_CONTENT_MESSAGE:
+            return None
+        # Belt-and-braces: if subtype was lost on disk round-trip,
+        # content-prefix still catches the AWAY SUMMARY injection.
+        if text.startswith("[AWAY SUMMARY]"):
+            return None
+        role_colors = {
+            "user": "blue",
+            "assistant": "green",
+            "system": "magenta",
+        }
+        role_color = role_colors.get(msg.role, "yellow")
+        preview = text[:100].replace("\n", " ")
+        suffix = "..." if len(text) > 100 else ""
+        return f"[{role_color}]{msg.role}[/{role_color}]: {preview}{suffix}"
+
     def _print_startup_header(self):
         from src import __version__
 
@@ -4712,9 +4749,11 @@ class ClawcodexREPL:
         if restored_cost > 0:
             self.console.print(f"[dim]Restored cost: ${restored_cost:.4f}[/dim]")
 
-        # Show conversation history
+        # Show last 5 messages; meta/virtual injections and empty turns are skipped.
         if loaded_session.conversation.messages:
             self.console.print("\n[bold]Conversation History:[/bold]")
-            for msg in loaded_session.conversation.messages[-5:]:  # Show last 5 messages
-                role_color = "blue" if msg.role == "user" else "green"
-                self.console.print(f"[{role_color}]{msg.role}[/{role_color}]: {msg.content[:100]}...")
+            for msg in loaded_session.conversation.messages[-5:]:
+                line = self._format_history_line(msg)
+                if line is None:
+                    continue
+                self.console.print(line)
