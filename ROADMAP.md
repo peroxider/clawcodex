@@ -2,8 +2,8 @@
 
 > 文档路径: `ROADMAP.md`
 > 信息来源: `docs/ARCHIVED_FEATURES.md`、`docs/FEATURE_PLAN.md`
-> 版本: v4.0
-> 更新日期: 2026-06-08
+> 版本: v4.1
+> 更新日期: 2026-06-19
 
 ---
 
@@ -24,6 +24,7 @@
 | ✅ 已完成 | 已实现并在归档文档中记录 |
 | 🟡 进行中 | 核心模块或设计已存在,但端到端链路尚未收敛 |
 | 📋 规划中 | 已有设计或明确需求,待实施 |
+| ⏳ 待开始 | 有明确需求但尚未开始实施 |
 | 🔭 长期规划 | 战略方向明确,仍需拆解设计 |
 
 ---
@@ -46,11 +47,11 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 
 ## 2. 底层特性 (Infrastructure Features)
 
-### 2.1 IR-1 Agent 可运行底座（→ FEATURE_PLAN §2.1~§2.14 各节）
+### 2.1 IR-1 Agent 可运行底座（→ FEATURE_PLAN §2.1~§2.16 各节）
 
 **抽象需求**: Agent 应当作为可独立运行的最小软件单元存在,具备完整的会话生命周期、工具发现与执行、模型灵活切换、终端与远程交互、后台与恢复能力。
 
-#### SR-1.1 会话与上下文管理（→ FEATURE_PLAN §2.3 结构化输出（F-4）、§2.5 F-13 记忆隔离、§2.6 /goal（F-9）、§2.10 sessionStorage（F-11）、§2.11 F-12 cacheWarning）
+#### SR-1.1 会话与上下文管理（→ FEATURE_PLAN §2.3 结构化输出（F-4）、§2.5 F-13 记忆隔离、§2.6 /goal（F-9）、§2.10 sessionStorage（F-11）、§2.11 F-12 cacheWarning、§2.16 Dreaming（F-100））
 
 让 Agent 在任何时刻都能进入、继续、恢复、隔离、切换会话,且不丢失关键上下文。
 
@@ -73,7 +74,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-17 | 工具按需加载 (Bundle) | Bare / Default / ClawCodex / All 模式 | 用户感知为上下文更轻,工具列表更聚焦 | ✅ 已完成 → F-17 | 已完成 | py registry、bundle 配置 |
-| AR-F-10 | ExecuteExtraTool 延迟执行 | 大量工具的按需发现与调用 | 用户可在工具很多时按需调用额外工具 | 🔄 规划中 → F-10 | — | py 工具、动态注册逻辑 |
+| AR-F-10 | ExecuteExtraTool 延迟执行 | 大量工具的按需发现与调用 | 用户可在工具很多时按需调用额外工具 | ⏳ 待开始 → F-10 | — | py 工具、动态注册逻辑 |
 | AR-F-23 | Skills System Extension | 下游技能扩展层、bundle、路径、hook、cache | 用户可安装和调用 ClawCodex 专属 skill,且不破坏上游同步 | ✅ 已完成 → F-23 | 已完成 | py 代码、skill bundle、配置 |
 | AR-F-22 | Cron Fallback 工具 | 旧版 Cron 工具兼容入口 | 老用户能继续使用熟悉的 cron 工具调用方式 | ✅ 已完成 → F-22（Cron Fallback 部分） | 已完成 | py 工具代码、fallback 路由 |
 | AR-F-3  | MCP 扩展功能(缓存/批处理/进度) | MCP 资源缓存、Batch 调用、Progress 通知 | 用户感知为外部资源加载更快、MCP 调用更高效、长任务有进度反馈 | ✅ 基础完成 → F-3 | 已完成 | py 缓存模块、批处理代码、通知代码、测试 |
@@ -88,7 +89,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-43 | CLI 模型供应商与模型切换设计 | model list/set/current、provider list/set/test、配置存储(含加密)、Token 计数追踪 | 用户可通过命令查看、设置和切换模型与 provider，看到准确的上下文和成本提示 | ✅ 已完成 → F-43 | 已完成 | py CLI 代码、JSON 配置、Token 计数器 |
 | AR-LT-7 | LiteLLM 适配器 | 统一 100+ 模型接口的适配层、替代重复 Provider | 用户可通过统一配置切换更多模型，新增模型更快 | ✅ 已完成 → R-7 | 已完成 | py 适配器、配置开关、兼容测试 |
 
-#### SR-1.4 权限与前端交互（→ FEATURE_PLAN §2.13 Auto 模式（F-16）、§3.2 F-46 permission_mode、§3.3 F-47 Permission Schema）
+#### SR-1.4 权限与前端交互（→ FEATURE_PLAN §2.13 Auto 模式（F-16）、§2.15 Ctrl+C/B 中断响应（F-99）、§3.3 F-47 Permission Schema）
 
 让用户能在不同自动化程度下与 Agent 交互,并保证权限边界清晰可审计。
 
@@ -104,8 +105,9 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-21 | REPL Ctrl+B 后台运行 | REPL 中把当前任务后台化 | 用户可像 TUI 一样在 REPL 中把长任务放到后台 | 📋 规划中 → F-21 | 1 周 | py REPL 代码、快捷键、测试 |
 | AR-F-16 | Auto 模式 (LLM Classifier) | LLM 分类器自动判断工具调用 + Cache + 危险动作 fallback | 用户在长任务中减少重复确认,同时保留安全边界 | ✅ 已完成 → F-16 | 已完成 | py classifier、cache、权限集成、fallback、测试 |
 | AR-F-89 | @agent-name 多入口统一支持 | `expand_agent_mentions()` 从 REPL 扩展到 Headless/API/TUI | 用户在所有入口中均可使用 `@agent-<type>` 委托任务给指定 Agent | ✅ 已完成 → F-89 | 已完成 | py 输入预处理、3 个入口各 5-10 行接线、测试 |
+| AR-F-99 | Ctrl+C/B 即时中断响应 | httpx read_timeout=5s 注入、传输连接关闭、工具阶段 FIRST_COMPLETED 可取消 | 用户 Ctrl+C/B 在 <500ms（直连）/<5s（代理）内生效 | 📋 设计完成 → F-99 | 3 天 | py provider 配置、abort 增强、工具调度、测试 |
 
-#### SR-1.5 后台、恢复与远程桥接（→ FEATURE_PLAN §4.2.1 F-55 SOP 分组策略增强（已完成）、§6 会话恢复增强）
+#### SR-1.5 后台、恢复与远程桥接（→ FEATURE_PLAN §4.2.1 F-55 SOP 分组策略增强（已完成）、§6 会话恢复增强、§2.16 Dreaming 后台记忆整合（F-100））
 
 让用户可以在后台安全运行 Agent、跨进程恢复、并通过远程方式接入。
 
@@ -115,12 +117,13 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-23 | Bridge 多 Session 桥接 | Graceful Shutdown、多 Session Daemon、轮询/WS 协议、Remote Bridge、跨进程 HTTP client、REPL attach | 用户可管理多个长期运行 session,远程连接和控制 Agent | ✅ 已完成 → F-23 | 已完成 | py daemon/协议/bridge 代码、HTTP client |
 | AR-F-7  | Remote WebUI 远程控制 | WebUI Docker 镜像、远程控制 API、鉴权与安全 | 用户可通过浏览器远程查看/启动/接管 Agent | 🔭 长期规划 → F-7 | 9-11 周 | Docker 镜像、py API、鉴权配置 |
 | AR-F-55 | SOP 分组策略增强 | SOP 分组策略增强（已完成） | 用户可使用增强的 SOP 分组策略 | ✅ 已完成 → F-55 | 已完成 | py 分组策略、测试 |
+| AR-F-100 | Dreaming 后台记忆整合 | DreamTask 后台探索、autoDream 自动 consolidate auto-memory、`/dream` slash skill | Agent 可在空闲时自我整合记忆，跨 session 积累长期经验 | 🟡 部分完成（主体已落地，Phase B 待补）→ F-100 | 2-3 天 | py dream task、autoDream、skill |
 
 ### 2.2 IR-2 可观测、可调度与可维护底座（→ FEATURE_PLAN §2.1 进度汇报（F-20）、§2.8 工具统计（F-75）、§五 F-22 定时任务、§1.3.3 F-45、§1.3.1 F-51、§1.3.2 F-54、§4.1 F-48）
 
 **抽象需求**: Agent 系统应支持任务进度上报、定时任务调度、长期运行稳定,并具备工具使用统计与策略优化的能力,确保无人值守场景下不失控、不沉默失败。
 
-#### SR-2.1 任务进度与可观测（→ FEATURE_PLAN §2.1 Agent 进度汇报（F-20）、§1.3.2 F-54 运行期可观测性、§八 Multi-Session 可视化分析平台（F-91~F-95））
+#### SR-2.1 任务进度与可观测（→ FEATURE_PLAN §2.1 Agent 进度汇报（F-20）、§1.3.2 F-54 运行期可观测性、§八 Multi-Session 可视化分析平台（F-91~F-95）、§九 F-97 独立遥测系统）
 
 让用户和 Manager Agent 能清晰看到 Worker 状态、长任务阶段产出,并支持审计与回溯。提供 Web 可视化界面查看 Session 甘特图、操作时序、异常检测和多 Session 对比。
 
@@ -131,7 +134,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-40 | ProgressReporter Sink 协议重构 | per-session 独立 sink、CompositeProgressSink 多 issue 汇聚过滤 | 用户在多会话、多 issue 并发时看到正确的独立进度 | ✅ 已完成 → F-40 | 已完成 | py sink 协议、event log、测试 |
 | AR-F-38 | Progress event log | ndjson 事件流、阶段完成/错误/warning | 用户可通过 CLI tail 看到阶段进度 | ✅ 已完成 → F-38 | 已完成 | ndjson event log、CLI 渲染 |
 | AR-F-45 | 编排场景 ndjson 审计 | 编排场景下工具调用审计流 | 用户可审查无人值守任务实际操作 | ✅ 已完成 → F-45 | 已完成 | ndjson audit、py sink |
-| AR-F-54 | 运行期可观测性 | stuck-run debug 诊断 | 用户可诊断 Agent 卡住原因 | 📋 规划中 → F-54 | — | py 诊断工具、测试 |
+| AR-F-54 | 运行期可观测性 | stuck-run debug 诊断（control_socket + debug_log 已落地） | 用户可诊断 Agent 卡住原因 | 🟡 进行中 → F-54（control_socket + debug.ndjson 已落地；仪表盘/query-runner heartbeat/CLI 诊断字段待补齐） | — | py 诊断工具、debug.ndjson、测试 |
 | AR-F-91~95 | Multi-Session 可视化分析平台（Visualizer） | 独立 FastAPI app + Jinja2 + ECharts CDN；15 个 API 端点 + WebSocket live tail；甘特图/异常检测/多 session 对比/多 Agent 瀑布视图；4 个解析器 + 10 个构建器；SSRF 保护导入/PNG-SVG-JSON-PDF 导出；分享链接管理（TTL 7 天）；`clawcodex viz` CLI 子命令；F-38/F-45/F-54 协同链接 | 用户可通过浏览器可视化查看 Session 执行甘特图、操作时序分布、异常检测报告，支持单 Session 调试到数十个 Session 批量对比 | ✅ 已完成 → F-91~F-95 | 已完成 | py FastAPI app、Jinja2 模板、JS 前端、CLI、110 测试 |
 | AR-F-96 | 单 Session 会话时间线分析器（Session Analyzer） | 完全 Python 栈 FastAPI app（无 React/Next 依赖），替代 sessions-v0-dev；Jinja2 模板 + HTMX 1.9 + Alpine.js 3.13；OKLCH 设计令牌；Pydantic v2 数据模型（camelCase 字段别名）；JSONL 解析器 + 侧链分组（isSidechain 还原 Claude Code 的子 agent）；5 类工具分类（read/execute/write/orchestrate/other）；自适应时间轴刻度；22 子 agent 演示数据（6 评审 + 16 核对、328 调用）；HTMX 部分路由（`/sa/sessions/{import,sample,delete}` + `/sa/htmx/sessions/{id}/row`）；视觉回归（结构化 HTML 快照 + 哈希比对） | 用户可在浏览器内加载 Claude Code 会话 JSONL 文件，按时间线查看主 agent 和子 agent 的工具调用，悬停查看详情，按图例筛选，演示模式自动加载确定性样例 | ✅ 已完成 → F-96 | 已完成 | py FastAPI app、Jinja2 模板、JS bridge、CLI、141+ 测试（5 测试模块 + 视觉回归） |
 | AR-F-97 | 独立遥测系统（Issue-based Telemetry） | `telemetry/` 包：JSONL 存储/rotate/retention、`DailyAggregator`、redaction + error fingerprint（16 字符 fingerprint + `crashes/` JSONL）、`IssueReporter` GitHub/Gitee/GitCode create/update/find/cursor 去重；CLI 子命令（status/preview/flush/enable/disable）；`AnalyticsTelemetrySink` 14-way EventType 桥接；TOML 配置加载（`pyproject.toml` 优先）；Schema v1→v2 迁移；7 入口埋点（CLI/REPL/TUI/Headless/Orchestrator/Print/全局崩溃） | 用户启用后，系统自动记录每日使用统计与崩溃摘要，通过 Issue 上报脱敏 daily summary，可在本地查看和手动触发上报 | ✅ 已完成 → F-97 | 已完成 | py telemetry 包、recorder、aggregator、redactor、IssueReporter、CLI、130+ 测试 |
@@ -152,10 +155,10 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-11 | sessionStorage LRU 限制 | LRU 限制 existingSessionFiles 数量 | 用户长期运行 daemon 不易 OOM | ✅ 已完成 | 已完成 | py LRU、测试 |
 | AR-F-12 | cacheWarning 容量限制 | cacheWarning source entries LRU | 用户长期运行不易内存泄漏 | ✅ 已完成 | 已完成 | py LRU、测试 |
-| AR-F-4  | Outlines 集成与稳定性 | Token 预算、工具决策结构化、压缩策略 | 用户感知为 Agent 决策更稳定、JSON 解析错误更少 | 📋 规划中 → F-4 | 3 周 | py adapter、Pydantic schema、测试 |
+| AR-F-4  | Outlines 集成与稳定性 | Token 预算、工具决策结构化、压缩策略 | 用户感知为 Agent 决策更稳定、JSON 解析错误更少 | ✅ 已完成 → F-4 | 已完成 | py adapter、Pydantic schema、测试 |
 | AR-F-45 | Tool-call 审计旁路 | 编排场景工具调用审计流 | 用户可审查无人值守任务实际操作 | ✅ 已完成 → F-45 | 已完成 | ndjson audit、py sink |
 | AR-F-51 | AgentRunner 空转检测 | 空转循环检测与自动终止 | 用户不会因 Agent 空转浪费 token 和时间 | ✅ 已完成 → F-51 | 已完成 | py 检测代码、配置、测试 |
-| AR-F-48 | src/ 核心路径二开修改解耦方案 | 架构解耦、二开边界隔离 | 用户可安全且更解耦二开扩展 | ✅ 已完成 → F-48 | 已完成 | py 解耦方案、文档 |
+| AR-F-48 | src/ 核心路径二开修改解耦方案 | 架构解耦方案设计（Phase 0-3 已设计，Phase 4-9 待实施） | 用户可安全且更解耦二开扩展 | 📋 设计完成 → F-48 | 已完成（方案） | py 解耦方案、文档 |
 | AR-R-1~5 | 依赖库替代 (pydantic-settings / frontmatter / tree-sitter-bash / GitPython / Pluggy) | 配置加载、frontmatter 解析、Bash AST、git 操作、插件系统标准化 | 系统更稳定、配置更规范、命令识别更准、git 更稳、扩展更规范 | ✅ 已完成 → R-1~R-5 | 已完成 | py 依赖替换、兼容测试 |
 | AR-F-22 | Daemon Soak 测试 | 长期运行不 OOM、不丢事件 | 用户在长值守中不丢会话 | 📋 规划中 → F-22 | 1 周 | py soak 测试、监控 |
 
@@ -194,7 +197,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-1  | 多渠道 Clarification 系统 | Local Dashboard 提问 UI、CLI Queue 通道、Tracker 评论通道、跨通道 Clarification 队列、Operator 优先裁决、超时升级、去重与过期拒绝 | Agent 不确定时主动询问用户，用户可从多渠道回答，系统统一管理、自动裁决、超时升级 | ✅ 已完成 → F-1 | 已完成 | py UI、CLI、tracker、queue、状态机、配置 |
-| AR-F-39 | Issue 重跑系统（label/comment/CLI） | `agent:retry/follow-up/blocked` label、`/agent retry/follow-up/unblock` comment 命令、CLI `issue retry --mode`、comment parser + bot 确认、max retries 限频、maintainer/author 角色校验、audit.jsonl 审计、Operator Hint 注入 | 用户可通过 label/comment/CLI 三种入口重跑任务，具备限频、角色校验、审计和生产级安全措施 | ✅ 已完成 → F-39 | 已完成,真实环境待继续验证 | py tracker、registry、comment parser、bot、CLI、audit、限频、权限 |
+| AR-F-39 | Issue 重跑系统（label/comment/CLI） | `agent:retry/follow-up/blocked` label、`/agent retry/follow-up/unblock` comment 命令、CLI `issue retry --mode`、comment parser + bot 确认、max retries 限频、maintainer/author 角色校验、audit.jsonl 审计、Operator Hint 注入 | 用户可通过 label/comment/CLI 三种入口重跑任务，具备限频、角色校验、审计和生产级安全措施 | ✅ 已完成 → F-39（Sub-A~F 已完成；真实环境端到端待验证） | 已完成,真实环境待继续验证 | py tracker、registry、comment parser、bot、CLI、audit、限频、权限 |
 | AR-F-49 | Takeover 接管 | 终止 Agent 并进入 REPL 接管 workspace | 用户可在自动化失控或复杂场景下手动接手 | ✅ 已完成 → F-49 | 已完成 | py CLI、REPL attach |
 | AR-F-78 | Issue 语义澄清流程 | Agent 主动识别不明确 issue、生成澄清问题列表、等待用户回答后继续执行 | 用户可为不明确的 issue 提供澄清，Agent 根据回答调整执行 | ✅ 已完成 → F-78 | 已完成 | py 澄清流程、问题生成、等待机制 |
 
@@ -205,7 +208,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-38 | Verification Gate 与报告系统 | commit/push 前 test/build/lint/hooks 验证、`.reports/{id}.md/.json` 双写、PR Body 模板(Issue/Branch/Commit/Verification/Report)、PR 汇总评论合并、PhaseComplete ndjson event log、`issue tail` CLI 渲染 | 用户看到未验证通过的代码不会被自动推送、可阅读/机读本次修改摘要、Reviewer 打开 PR 即可看到 Agent 工作产物、不会被多条重复 bot 评论干扰、可通过 CLI 查看阶段进度 | ✅ 已完成 → F-38 | 已完成 | py git_sync、workflow 配置、writer、模板、tracker update、comment 逻辑、ndjson event log、CLI 渲染 |
-| AR-F-37 | PR Review 自动修复闭环 | PullRequestFeedback 模型(inline/summary/CI)、GitHub/Gitee/GitCode review comments API、CI checks/pipelines 解析、Review Follow-up Poller、Review-fix Prompt Builder(最小修改)、同 PR 分支 follow-up sync(追加 commit+push)、Feedback 幂等 Store、评论回复、处理摘要(自动处理/需人工确认) | 用户/Reviewer 看到 Agent 自动处理 review 评论和 CI 失败、在原 PR 追加修复 commit、对同一条评论不反复修复、可追踪处理边界 | ✅ 已完成 → F-37 | 已完成 | py dataclass、repo client、解析器、poller、prompt builder、git_sync mode、JSON store、tracker reply、摘要 |
+| AR-F-37 | PR Review 自动修复闭环 | PullRequestFeedback 模型(inline/summary/CI)、GitHub/Gitee/GitCode review comments API、CI checks/pipelines 解析、Review Follow-up Poller、Review-fix Prompt Builder(最小修改)、同 PR 分支 follow-up sync(追加 commit+push)、Feedback 幂等 Store、评论回复、处理摘要(自动处理/需人工确认) | 用户/Reviewer 看到 Agent 自动处理 review 评论和 CI 失败、在原 PR 追加修复 commit、对同一条评论不反复修复、可追踪处理边界 | 🟡 进行中 → F-37（核心链路已验证，review Feedback Service 已落地；真实环境待继续验证） | 已完成（核心） | py dataclass、repo client、解析器、poller、prompt builder、git_sync mode、JSON store、tracker reply、摘要 |
 
 #### SR-3.4 多 Agent 编排与 A2A 协作（→ FEATURE_PLAN §1.3.4 F-41 Coordinator、§2.2 Team 管理（F-2）、§2.14 Agent 间交互（F-80））
 
@@ -229,7 +232,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-18 | CreateAgentTool 动态工具创建 | AgentToolSpec dataclass、bash/http/python 3 种 call_type、命令/HTTP/函数/防注入 4 种 validator、Factory 构造注册工具、call handlers、工具持久化与自动加载、CreateAgentTool 对外工具 | 用户可让 Agent 根据 CLI/API 规范动态创建和调用新工具，重启后工具仍可用 | ✅ 已完成 → F-18 | 已完成 | py dataclass、call_type handler、validator、factory、loader、tool 入口 |
 | AR-F-50 | SOP 转换器固化 | OpenAPI JSON/URL 解析、方法列表解析、Skill Grouper 原子接口分组、Agent Builder 生成 Agent 定义、`/convert-pos-to-agent` Skill、Agent 持久化、`--agent` CLI 参数指定、default_agent 配置、daemon 模式、attach 重连 | 用户可把 CI/CD/数据分析等专业系统一键转为可运行的业务 Agent，支持长期值守和重连 | ✅ 已完成 → F-50 | 已完成 | py parser、grouper、builder、skill、Agent JSON、CLI、daemon、attach 协议 |
 | AR-F-52 | SDK→Tool 注册 | Python SDK 方法注册为 Tool | 用户可让 Agent 调用 Python SDK 接口扩展能力 | ✅ 已完成 → F-52 | 已完成 | py SDK 工具、schema、测试 |
-| AR-F-53 | Tool→CLI 命令映射 | Tool 自动暴露为 CLI 斜杠命令 | 用户可通过 CLI 斜杠命令调用注册的工具 | 📋 设计完成 → F-53 | — | py CLI 命令映射、schema、测试 |
+| AR-F-53 | Tool→CLI 命令映射 | Tool 自动暴露为 CLI 斜杠命令 | 用户可通过 CLI 斜杠命令调用注册的工具 | 📋 规划中 → F-53 | — | py CLI 命令映射、schema、测试 |
 
 #### SR-4.2 远程启动与自动值守（→ FEATURE_PLAN §7.1 F-82 Remote Control Server + F-90 Hermes Gateway 参考实现）
 
@@ -261,7 +264,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 
 ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主规划、自主开发、自主验证并安全地更新自己,形成长期自我进化闭环。
 
-#### SR-5.1 开源社区新特性雷达（→ FEATURE_PLAN 🔭 待补充设计）
+#### SR-5.1 开源社区新特性雷达（→ FEATURE_PLAN §十 开源社区新特性雷达（SR-5.1））
 
 持续抓取开源 Agent 项目(Claude Code、Aider、SWE-agent、OpenHands、AutoGen、CrewAI、LangGraph 等)的 release/commit/PR/issue,抽取候选特性并按分类与评分去重整理。
 
@@ -310,6 +313,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-5.4.4 | Installer / Update CLI | `clawcodex update --candidate ...` CLI 命令、安装脚本、签名校验 | 用户一条命令升级到指定候选版本，安装不被中间人攻击 | 🔭 长期规划 | 1.5 周 | py CLI、安装脚本、py sigstore |
 | AR-5.4.5 | Health Check & Safe Rollback | 更新后自动 smoke 检查、配置兼容检查、回滚点创建、版本保留、rollback CLI | 用户升级失败时不会陷入不可用状态，可一键回滚 | 🔭 长期规划 | 2 周 | py health check、snapshot、rollback CLI、metadata |
 | AR-5.4.6 | Release Notes Generator | 从 PR/报告/测试结果生成发布说明、Markdown release notes、JSON manifest | 用户可理解这次更新新增了什么、风险是什么 | 🔭 长期规划 | 1 周 | Markdown release notes、JSON manifest |
+
 #### SR-5.5 经验沉淀与策略优化（→ FEATURE_PLAN 🔭 待补充设计）
 
 把自开发结果与失败模式沉淀为可审计的策略,持续优化 prompt、skill、工具集和路线图。
@@ -416,7 +420,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | P0 | SR-2.2 Cron 端到端收敛 | AR-F-22（cron runtime 收敛/遗留功能补齐） |
 | P0 | SR-3.3 PR review follow-up 闭环 | AR-F-37（PR Review 自动修复闭环） |
 | P1 | SR-4.1 CreateAgentTool MVP | AR-F-18（AgentToolSpec / call_type / validator / Factory / 持久化/加载） |
-| P1 | SR-1.4 REPL/TUI/headless 一致化 | AR-1.4.9（阶段间不重启 runtime）+ AR-F-89（@agent-name 统一支持） + SR-1.4 hook |
+| P1 | SR-1.4 F-99 Ctrl+C/B 响应优化 | AR-F-99（httpx read_timeout / 传输关闭 / 工具可取消） |
 | P1 | SR-1.4 Auto 权限模式 | AR-F-16（LLM Classifier + Cache + 危险动作 fallback） |
 | P2 | SR-2.3 稳定性补强 | AR-F-11 / AR-F-12 / AR-F-4 / AR-F-51 |
 
@@ -425,7 +429,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | 优先级 | 交付目标 | 涉及 SR/AR |
 |--------|----------|------------|
 | P0 | SR-4.1 SOP MVP | AR-F-50（SOP 转换器固化：OpenAPI 解析/Skill Grouper/Agent Builder/CLI） |
-| P1 | SR-4.3 业务 Agent 长期运行 | AR-NS-1 / AR-NS-2 / AR-NS-3 |
+| P1 | SR-1.5 F-100 Dreaming | AR-F-100（Dreaming 后台记忆整合 Phase B 补齐） |
 | P1 | SR-4.2 Autonomy Status | AR-F-22（Cron 驱动巡检与自治状态） |
 | P1 | SR-4.2 Away Summary | AR-F-26（Away Summary 服务 + `/recap` Skill） |
 | P2 | SR-3.4 A2A 协议雏形 | AR-F-2（A2A 协议化 Agent 互联） |
@@ -492,16 +496,18 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | 社区特性信息噪声 | 未来规划特性 | 过多无价值候选导致路线图漂移 | SR-5.1 趋势评分 + SR-5.2 User Review Gate,未审批不进入开发队列 |
 | 自开发质量不稳定 | 未来规划特性 | Agent 生成 PR 质量不足 | SR-5.3 Self-Test Matrix + 多 Agent review + verification gate + rollback |
 | 多 Agent 并发污染 workspace | 场景特性 / 未来规划特性 | SR-3.4 并发写同一工作区导致冲突 | SR-3.4 Shared/Sequential 策略、SR-5.3 worktree isolation、lock 与审计 |
+| F-99 中断响应交叉影响 | 底层特性 | httpx read_timeout 误伤正常慢 chunk；传输层依赖内部 API | 方案 1 配置非侵入式(不覆盖已传 timeout)；方案 2 Windows 跳过；方案 3 仅影响工具批处理阶段 |
 
 ---
 
 ## 9. 下一步行动
 
 1. **优先收敛 Cron 端到端行为**:把 `clawcodex_ext/cron_system/*` 接入真实 REPL/TUI/headless runtime,完成 SR-2.2 中 scheduled fire → query pipeline → run store 的 smoke。
-2. **启动 PR Review Feedback 闭环**:先实现统一 `PullRequestFeedback` 模型和 GitHub/Gitee/GitCode feedback API(AR-F-37 PR Review 自动修复闭环),再接入 Orchestrator poller。
-3. **并行推进 CreateAgentTool MVP**:先交付安全 spec/validator/factory/persistence(AR-F-18),为 SR-4.1 SOP 和长期社区能力吸收打基础。
-4. **补齐自动值守观测入口**:把 cron runs、orchestrator issue、team members、verification report 汇总到 SR-4.2 Autonomy Status(AR-F-22)统一输出。
-5. **为未来规划特性做最小闭环试点**:先以"每周生成 Agent 社区新特性 digest(AR-5.1.1~3) + 手动审批 proposal(AR-5.2.5)"为最小可用版本,不直接自动改代码。
+2. **推进 F-37 PR Review 闭环真实环境验证**:在 GitHub/ GitCode 上完成端到端 review → auto-fix → push 链路。
+3. **实施 F-99 Ctrl+C/B 中断响应优化**:P0 方案 1(httpx read_timeout=5s)在先,方案 2/3 逐步补齐。
+4. **补齐 F-100 Dreaming Phase B**:完成 autoDream 自动 consolidate auto-memory 和 `/dream` slash skill 的稳定化与测试。
+5. **补齐自动值守观测入口**:把 cron runs、orchestrator issue、team members、verification report 汇总到 SR-4.2 Autonomy Status(AR-F-22)统一输出。
+6. **为未来规划特性做最小闭环试点**:先以"每周生成 Agent 社区新特性 digest(AR-5.1.1~3) + 手动审批 proposal(AR-5.2.5)"为最小可用版本,不直接自动改代码。
 
 ---
 
@@ -511,16 +517,20 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 > F-1（Orchestrator 主循环，属于 §1 整体）、F-7（Remote WebUI，🔭 长期规划）、
 > F-15（Shift+Tab 权限循环）、F-17（工具按需加载）、F-21（后台运行与恢复）、
 > F-23（Skills System/Bridge）、F-26（Away Summary）、F-29（Manager 监督工具）、
-> F-31（TUI 状态区）、F-34（Runtime Protocol）、F-91~F-95（Visualizer 可视化分析平台）
+> F-31（TUI 状态区）、F-34（Runtime Protocol）、F-91~F-95（Visualizer 可视化分析平台）、
+> F-99（中断响应优化）、F-100（Dreaming 后台记忆整合）
 > ——均为早期已完成功能或长期规划，
 > 纳入 ARCHIVED_FEATURES.md 归档记录。
 
 | 类别 | 抽象需求 (IR) | 系统需求 (SR) | 组件需求 (AR) | 说明 |
 |------|---------------|---------------|---------------|------|
-| 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~98 | 保持原有细粒度分解（含新增 AR-F-91~95） |
+| 底层特性 | 2 (IR-1, IR-2) | 9 (SR-1.1 ~ SR-1.5, SR-2.1 ~ SR-2.4) | ~102 | 保持原有细粒度分解（新增 AR-F-99、AR-F-100） |
 | 场景特性 | 2 (IR-3, IR-4) | 7 (SR-3.1 ~ SR-3.4, SR-4.1 ~ SR-4.3) | ~23 | 合并后每 AR 对应一个独立 F-N |
 | 未来规划特性 | 1 (IR-5) | 5 (SR-5.1 ~ SR-5.5) | ~28 | 合并后每 AR 对应一个特性模块 |
-| **合计** | **5** | **21** | **~149** | 较原 368 减少 ~59% |
+| **合计** | **5** | **21** | **~153** | 较原 368 减少 ~58% |
 
 每个 IR 下挂 4~5 个 SR,平均每 SR 下挂 3~7 个 AR（合并后）。
+
 ---
+
+*ROADMAP v4.1 — 与 PROGRESS.md 及 FEATURE_PLAN.md 保持同步* 
