@@ -4,17 +4,46 @@ from __future__ import annotations
 
 import sys
 
-from clawcodex_ext.cli.model_cmd.errors import ModelCommandError
+from clawcodex_ext.cli.model_cmd.errors import ModelCommandError, UnknownModelError
 from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
 from clawcodex_ext.cli.model_cmd.resolver import resolve
 from clawcodex_ext.cli.model_cmd.store import ModelStore
 from clawcodex_ext.cli.subcommand_registry import register
 
 
+_USAGE = (
+    "usage: clawcodex model [list [--provider NAME] | show [NAME] "
+    "[--provider NAME] | current | use NAME [--provider NAME]]\n\n"
+    "Subcommands:\n"
+    "  (no args)              Show current provider and model.\n"
+    "  list [--provider P]    List available models (optionally for one provider).\n"
+    "  show [NAME] [--provider P]\n"
+    "                         Show a model. NAME omitted => current.\n"
+    "  current                Same as no-args (alias).\n"
+    "  use NAME [--provider P]\n"
+    "                         Persist a new default model.\n"
+    "  help, --help, -h       Print this help.\n"
+    "  --list, ls             Same as no-args + list (REPL-equivalent view).\n"
+)
+
+
 @register("model")
 def run_model_command(args: list[str]) -> int:
-    command = args[0] if args else "current"
-    rest = args[1:] if args else []
+    # No args => current state (mirrors `/model` and `git status` zero-arg idiom).
+    if not args:
+        print(format_model_current())
+        return 0
+
+    command = args[0]
+    rest = args[1:]
+
+    # Top-level help / list flags — handled before subcommand dispatch.
+    if command in ("help", "--help", "-h"):
+        print(_USAGE)
+        return 0
+    if command in ("--list", "ls"):
+        print(_format_model_explore())
+        return 0
 
     try:
         if command == "list":
@@ -28,9 +57,9 @@ def run_model_command(args: list[str]) -> int:
         if command == "current":
             print(format_model_current())
             return 0
-        if command == "use" and rest:
-            model, provider, scope = _parse_use_args(rest)
-            messages = use_model(model, provider=provider, scope=scope)
+        if command == "use":
+            model, provider = _parse_use_args(rest)
+            messages = use_model(model, provider=provider)
             print("\n".join(messages))
             return 0
     except ModelCommandError as exc:
@@ -40,8 +69,13 @@ def run_model_command(args: list[str]) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    print("usage: clawcodex model [list [--provider NAME]|show [NAME] [--provider NAME]|current|use NAME [--provider NAME] [--scope user]]", file=sys.stderr)
+    print(_USAGE, file=sys.stderr)
     return 2
+
+
+def _format_model_explore() -> str:
+    """Combined ``current + list`` view, mirroring what ``/model`` shows in the REPL."""
+    return format_model_current() + "\n\n" + format_model_list()
 
 
 def format_model_list(provider: str | None = None) -> str:
@@ -64,33 +98,53 @@ def format_model_show(model: str | None = None, provider: str | None = None) -> 
         model = current.model
         provider = provider or current.provider
     elif provider is None:
-        provider = registry.infer_provider_for_model(model)
-    registry.validate_model(model, provider)
-    return "\n".join([f"Model: {model}", f"Provider: {provider}"])
+        try:
+            provider = registry.infer_provider_for_model(model)
+        except UnknownModelError:
+            raise UnknownModelError(
+                f"{model} (use 'clawcodex model list' to see available models, "
+                f"or pass --provider NAME to specify a provider)"
+            ) from None
+    try:
+        registry.validate_model(model, provider)
+    except UnknownModelError:
+        raise UnknownModelError(
+            f"Model {model} is not available for provider {provider}. "
+            f"Use 'clawcodex model list' to see available models, "
+            f"or pass --provider NAME to try a different provider."
+        ) from None
+    return format_current_pair(model, provider)
 
 
 def format_model_current() -> str:
     resolution = resolve()
-    return "\n".join(
-        [
-            f"provider: {resolution.provider} [{resolution.provider_source}]",
-            f"model: {resolution.model} [{resolution.model_source}]",
-        ]
-    )
+    return format_current_pair(resolution.model, resolution.provider)
 
 
-def use_model(model: str, *, provider: str | None = None, scope: str = "user") -> list[str]:
+def format_current_pair(model: str, provider: str) -> str:
+    """Single canonical ``provider: …\\nmodel: …`` rendering.
+
+    Used by both ``format_model_current`` and ``format_model_show`` so the
+    CLI has exactly one shape for "what's the active model?" output.  No
+    source labels — those are debugging info, not for end users.
+    """
+    return "\n".join([f"provider: {provider}", f"model: {model}"])
+
+
+def use_model(model: str, *, provider: str | None = None) -> list[str]:
     registry = ModelRegistry()
     if provider is None:
         provider = registry.infer_provider_for_model(model)
     registry.validate_model(model, provider)
 
     store = ModelStore(registry)
-    store.set_default_provider(provider, scope=scope)
-    store.set_default_model(provider, model, scope=scope)
+    store.set_default_provider(provider)
+    store.set_default_model(provider, model)
     return [
         f"Default provider set to: {provider}",
         f"Default model for {provider} set to: {model}",
+        "(persisted to config; takes effect on next REPL launch — "
+        "use /model inside the REPL to switch immediately)",
     ]
 
 
@@ -113,32 +167,43 @@ def _parse_show_args(args: list[str]) -> tuple[str | None, str | None]:
     idx = 0
     while idx < len(args):
         token = args[idx]
-        if token == "--provider" and idx + 1 < len(args):
+        if token == "--provider":
+            if idx + 1 >= len(args):
+                raise ModelCommandError("--provider requires a value")
             provider = args[idx + 1]
             idx += 2
             continue
+        if token.startswith("--"):
+            raise ModelCommandError(f"Unknown argument: {token}")
         if model is None:
             model = token
             idx += 1
             continue
-        raise ModelCommandError(f"Unknown argument: {token}")
+        raise ModelCommandError(f"Unexpected positional argument: {token}")
     return model, provider
 
 
-def _parse_use_args(args: list[str]) -> tuple[str, str | None, str]:
-    model = args[0]
+def _parse_use_args(args: list[str]) -> tuple[str, str | None]:
     provider = None
-    scope = "user"
-    idx = 1
+    model: str | None = None
+    idx = 0
     while idx < len(args):
         token = args[idx]
-        if token == "--provider" and idx + 1 < len(args):
+        if token == "--provider":
+            if idx + 1 >= len(args):
+                raise ModelCommandError("--provider requires a value")
             provider = args[idx + 1]
             idx += 2
             continue
-        if token == "--scope" and idx + 1 < len(args):
-            scope = args[idx + 1]
-            idx += 2
+        if token.startswith("--"):
+            raise ModelCommandError(f"Unknown argument: {token}")
+        if model is None:
+            model = token
+            idx += 1
             continue
-        raise ModelCommandError(f"Unknown argument: {token}")
-    return model, provider, scope
+        raise ModelCommandError(f"Unexpected positional argument: {token}")
+    if model is None:
+        raise ModelCommandError(
+            "model NAME is required. Example: clawcodex model use claude-sonnet-4-6"
+        )
+    return model, provider

@@ -206,26 +206,9 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
             from src.config import set_default_provider as _set_dp
 
             _set_dp(provider)
-        try:
-            ModelStore(registry).set_default_model(provider, model)
-        except Exception:
-            from src.config import get_provider_config, set_api_key
-
-            current_cfg = get_provider_config(provider)
-            base_url = current_cfg.get("base_url") if current_cfg else None
-            if not base_url:
-                try:
-                    from src.providers import PROVIDER_INFO
-
-                    base_url = PROVIDER_INFO[provider]["default_base_url"]
-                except (KeyError, ImportError):
-                    base_url = ""
-            set_api_key(
-                provider,
-                api_key=(current_cfg or {}).get("api_key", ""),
-                base_url=base_url,
-                default_model=model,
-            )
+        # ``persist_unknown`` skips registry validation and tolerates a missing
+        # provider config (it falls back to the registry default base URL).
+        ModelStore(registry).set_default_model_persist_unknown(provider, model)
 
     # ---- Runtime switch (always, regardless of persistence) ----
     runtime = _runtime(context)

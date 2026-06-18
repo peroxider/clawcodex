@@ -11,30 +11,64 @@ from clawcodex_ext.cli.provider_cmd.errors import ProviderCommandError
 from clawcodex_ext.cli.subcommand_registry import register
 
 
+_USAGE = (
+    "usage: clawcodex provider [list | show [NAME] | current | use NAME | unset]\n\n"
+    "Subcommands:\n"
+    "  (no args)          Show current provider and model.\n"
+    "  list               List all known providers with auth + default-model info.\n"
+    "  show [NAME]        Show a provider. NAME omitted => current.\n"
+    "  current            Same as no-args (alias).\n"
+    "  use NAME           Persist a new default provider.\n"
+    "  unset              Reset to the built-in default (anthropic).\n"
+    "  help, --help, -h   Print this help.\n"
+    "  --all, ls          Same as no-args + list (REPL-equivalent view).\n"
+)
+
+
 @register("provider")
 def run_provider_command(args: list[str]) -> int:
-    command = args[0] if args else "current"
-    rest = args[1:] if args else []
+    # No args => current state (mirrors `/provider` and `git config --get` zero-arg idiom).
+    if not args:
+        print(format_provider_current())
+        return 0
+
+    command = args[0]
+    rest = args[1:]
+
+    # Top-level help / list flags — handled before subcommand dispatch.
+    if command in ("help", "--help", "-h"):
+        print(_USAGE)
+        return 0
+    if command in ("--all", "ls"):
+        print(_format_provider_explore())
+        return 0
 
     try:
         if command == "list":
+            _reject_unknown_args(rest)
             print(format_provider_list())
             return 0
         if command == "show":
+            _reject_unknown_args(rest)
             name = rest[0] if rest else None
             print(format_provider_show(name))
             return 0
         if command == "current":
+            _reject_unknown_args(rest)
             print(format_provider_current())
             return 0
-        if command == "use" and rest:
-            provider, scope = _parse_use_args(rest)
-            ModelStore().set_default_provider(provider, scope=scope)
+        if command == "use":
+            provider = _parse_use_args(rest)
+            ModelStore().set_default_provider(provider)
             print(f"Default provider set to: {provider}")
+            print(
+                "(persisted to config; takes effect on next REPL launch — "
+                "use /provider inside the REPL to switch immediately)"
+            )
             return 0
         if command == "unset":
-            scope = _parse_scope(rest)
-            provider = ModelStore().unset_default_provider(scope=scope)
+            _reject_unknown_args(rest)
+            provider = ModelStore().unset_default_provider()
             print(f"Default provider reset to: {provider}")
             return 0
     except ProviderCommandError as exc:
@@ -44,8 +78,13 @@ def run_provider_command(args: list[str]) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    print("usage: clawcodex provider [list|show [NAME]|current|use NAME [--scope user]|unset]", file=sys.stderr)
+    print(_USAGE, file=sys.stderr)
     return 2
+
+
+def _format_provider_explore() -> str:
+    """Combined ``current + list`` view, mirroring what ``/provider`` shows in the REPL."""
+    return format_provider_current() + "\n\n" + format_provider_list()
 
 
 def format_provider_list() -> str:
@@ -77,28 +116,31 @@ def format_provider_show(name: str | None = None) -> str:
 
 def format_provider_current() -> str:
     resolution = resolve()
+    # Mirror ``format_model_current``: clean ``provider: …\nmodel: …``,
+    # no source labels.  Debugging source info is available via
+    # ``run_model_command``'s debug log, not in the user-facing output.
     return "\n".join(
         [
-            f"provider: {resolution.provider} [{resolution.provider_source}]",
-            f"model: {resolution.model} [{resolution.model_source}]",
+            f"provider: {resolution.provider}",
+            f"model: {resolution.model}",
         ]
     )
 
 
-def _parse_use_args(args: list[str]) -> tuple[str, str]:
+def _parse_use_args(args: list[str]) -> str:
+    if not args:
+        raise ProviderCommandError(
+            "provider NAME is required. Example: clawcodex provider use anthropic"
+        )
     provider = args[0]
-    scope = _parse_scope(args[1:])
-    return provider, scope
+    _reject_unknown_args(args[1:])
+    if provider.startswith("--"):
+        raise ProviderCommandError(f"Unknown argument: {provider}")
+    return provider
 
 
-def _parse_scope(args: list[str]) -> str:
-    scope = "user"
-    idx = 0
-    while idx < len(args):
-        token = args[idx]
-        if token == "--scope" and idx + 1 < len(args):
-            scope = args[idx + 1]
-            idx += 2
-            continue
-        raise ProviderCommandError(f"Unknown argument: {token}")
-    return scope
+def _reject_unknown_args(args: list[str]) -> None:
+    for token in args:
+        if token.startswith("--"):
+            raise ProviderCommandError(f"Unknown argument: {token}")
+        raise ProviderCommandError(f"Unexpected positional argument: {token}")
