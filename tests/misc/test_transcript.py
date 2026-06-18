@@ -132,6 +132,16 @@ def test_writer_append_is_terminated_with_newline(tmp_path: Path) -> None:
     assert path.read_bytes().endswith(b"\n")
 
 
+def test_writer_tolerates_platform_without_o_cloexec(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delattr(os, "O_CLOEXEC", raising=False)
+    path = tmp_path / "windows.jsonl"
+
+    with TranscriptWriter(path) as writer:
+        writer.append({"k": 1})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"k": 1}
+
+
 def test_writer_close_is_idempotent(tmp_path: Path) -> None:
     w = TranscriptWriter(tmp_path / "x.jsonl")
     w.close()
