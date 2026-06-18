@@ -252,6 +252,9 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertTrue(registry.has("compact"))
         self.assertTrue(registry.has("cron-list"))
         self.assertTrue(registry.has("cron-delete"))
+        self.assertTrue(registry.has("cron-status"))
+        self.assertTrue(registry.has("cron-runs"))
+        self.assertTrue(registry.has("cron-run"))
         self.assertTrue(registry.has("init"))
 
     def test_cron_list_uses_injected_tool_runtime(self):
@@ -347,13 +350,142 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertIsNone(result)
         self.assertIn("CronDelete", error or "")
 
-    def test_cron_commands_report_missing_runtime(self):
-        """Test cron commands fail clearly without injected runtime handles."""
+    def test_cron_list_without_runtime_reads_persistent_tasks(self):
+        """Test that /cron-list falls back to persistent cron storage."""
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="persistent ping",
+            durable=True,
+        )
+
         success, result, error = execute_command_sync("cron-list", "", self.context)
 
-        self.assertFalse(success)
-        self.assertIsNone(result)
-        self.assertIn("Cron runtime is not available", error or "")
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn(task.id, result or "")
+        self.assertIn("persistent ping", result or "")
+
+    def test_cron_list_without_runtime_reports_empty_storage(self):
+        """Test that /cron-list works without injected runtime handles."""
+        success, result, error = execute_command_sync("cron-list", "", self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertEqual("No scheduled cron jobs.", result)
+
+    def test_cron_delete_without_runtime_removes_persistent_task(self):
+        """Test that /cron-delete can remove durable cron tasks without runtime handles."""
+        from clawcodex_ext.cron_system.tasks import add_cron_task, read_all_cron_tasks
+
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="persistent ping",
+            durable=True,
+        )
+
+        success, result, error = execute_command_sync("cron-delete", task.id, self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn(task.id, result or "")
+        self.assertEqual([], read_all_cron_tasks(self.workspace_root))
+
+    def test_cron_delete_without_runtime_reports_missing_task(self):
+        """Test that /cron-delete reports unknown persistent ids clearly."""
+        success, result, error = execute_command_sync("cron-delete", "missing", self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("No scheduled cron job found", result or "")
+        self.assertIn("missing", result or "")
+
+    def test_cron_status_and_runs_work_without_runtime(self):
+        """Test status views read the persistent cron ledger directly."""
+        success, status, status_error = execute_command_sync("cron-status", "--deep", self.context)
+        runs_success, runs, runs_error = execute_command_sync("cron-runs", "", self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(status_error)
+        self.assertIn("Autonomy status", status or "")
+        self.assertIn("Cron jobs", status or "")
+        self.assertIn("Scheduled-task runs", status or "")
+        self.assertTrue(runs_success)
+        self.assertIsNone(runs_error)
+        self.assertEqual("No scheduled-task runs.", runs)
+
+    def test_cron_run_queues_manual_fire_in_outbox(self):
+        """Test that /cron-run creates a run and queues it for REPL execution."""
+        from types import SimpleNamespace
+
+        from clawcodex_ext.cron_system.runs import read_cron_runs
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_context=SimpleNamespace(outbox=[]),
+        )
+
+        success, result, error = execute_command_sync("cron-run", task.id, context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("Queued for execution in this session", result or "")
+        runs = read_cron_runs(self.workspace_root)
+        self.assertEqual(1, len(runs))
+        self.assertEqual("queued", runs[0].status)
+        self.assertEqual(
+            [
+                {
+                    "type": "cron_prompt",
+                    "prompt": "manual ping",
+                    "task_id": task.id,
+                    "run_id": runs[0].id,
+                }
+            ],
+            context.tool_context.outbox,
+        )
+
+    def test_cron_run_alias_and_duplicate_active_run(self):
+        """Test /cron-fire alias and duplicate active-run message."""
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+
+        first_success, _, first_error = execute_command_sync("cron-fire", task.id, self.context)
+        second_success, second_result, second_error = execute_command_sync("cron-run", task.id, self.context)
+
+        self.assertTrue(first_success)
+        self.assertIsNone(first_error)
+        self.assertTrue(second_success)
+        self.assertIsNone(second_error)
+        self.assertIn("previous run is still queued or running", second_result or "")
+
+    def test_cron_run_reports_missing_task(self):
+        """Test manual fire reports unknown task ids clearly."""
+        success, result, error = execute_command_sync("cron-run", "missing", self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("No scheduled cron job found", result or "")
+        self.assertIn("missing", result or "")
 
     def test_skills_command_with_project_root(self):
         """Test that /skills command can find project skills."""
