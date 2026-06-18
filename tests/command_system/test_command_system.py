@@ -226,6 +226,7 @@ class TestBuiltinCommands(unittest.TestCase):
         self.conversation = MockConversation()
         self.cost_tracker = CostTracker()
         self.history = HistoryLog()
+        self.runtimes = []
 
         self.context = create_command_context(
             workspace_root=self.workspace_root,
@@ -236,7 +237,20 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test fixtures."""
+        for runtime in self.runtimes:
+            scheduler = getattr(runtime.tool_context, "cron_scheduler", None)
+            if scheduler is not None:
+                scheduler.stop()
         self.tmpdir.cleanup()
+
+    def _build_runtime(self):
+        from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
+
+        runtime = RuntimeContext.build(
+            RuntimeOptions(workspace_root=self.workspace_root, skip_permissions=True),
+        )
+        self.runtimes.append(runtime)
+        return runtime
 
     def test_register_builtin_commands(self):
         """Test registering built-in commands."""
@@ -259,11 +273,7 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def test_cron_list_uses_injected_tool_runtime(self):
         """Test that /cron-list reads jobs from the injected cron runtime."""
-        from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
-
-        runtime = RuntimeContext.build(
-            RuntimeOptions(workspace_root=self.workspace_root, skip_permissions=True),
-        )
+        runtime = self._build_runtime()
         create_tool = runtime.tool_registry.get("CronCreate")
         self.assertIsNotNone(create_tool)
         created = create_tool.call(
@@ -288,11 +298,7 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def test_cron_delete_uses_injected_tool_runtime(self):
         """Test that /cron-delete deletes through the injected cron runtime."""
-        from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
-
-        runtime = RuntimeContext.build(
-            RuntimeOptions(workspace_root=self.workspace_root, skip_permissions=True),
-        )
+        runtime = self._build_runtime()
         create_tool = runtime.tool_registry.get("CronCreate")
         list_tool = runtime.tool_registry.get("CronList")
         self.assertIsNotNone(create_tool)
@@ -320,12 +326,9 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def test_cron_delete_honors_tool_permission_context(self):
         """Test that /cron-delete dispatches through permission checks."""
-        from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
         from src.permissions.types import ToolPermissionContext
 
-        runtime = RuntimeContext.build(
-            RuntimeOptions(workspace_root=self.workspace_root, skip_permissions=True),
-        )
+        runtime = self._build_runtime()
         create_tool = runtime.tool_registry.get("CronCreate")
         self.assertIsNotNone(create_tool)
         created = create_tool.call(
@@ -376,8 +379,8 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual("No scheduled cron jobs.", result)
 
-    def test_cron_delete_without_runtime_removes_persistent_task(self):
-        """Test that /cron-delete can remove durable cron tasks without runtime handles."""
+    def test_cron_delete_without_runtime_fails_closed(self):
+        """Test that /cron-delete does not mutate persistent tasks without runtime permissions."""
         from clawcodex_ext.cron_system.tasks import add_cron_task, read_all_cron_tasks
 
         task = add_cron_task(
@@ -391,17 +394,8 @@ class TestBuiltinCommands(unittest.TestCase):
 
         self.assertTrue(success)
         self.assertIsNone(error)
-        self.assertIn(task.id, result or "")
-        self.assertEqual([], read_all_cron_tasks(self.workspace_root))
-
-    def test_cron_delete_without_runtime_reports_missing_task(self):
-        """Test that /cron-delete reports unknown persistent ids clearly."""
-        success, result, error = execute_command_sync("cron-delete", "missing", self.context)
-
-        self.assertTrue(success)
-        self.assertIsNone(error)
-        self.assertIn("No scheduled cron job found", result or "")
-        self.assertIn("missing", result or "")
+        self.assertIn("Cron runtime is required", result or "")
+        self.assertEqual([task.id], [stored.id for stored in read_all_cron_tasks(self.workspace_root)])
 
     def test_cron_status_and_runs_work_without_runtime(self):
         """Test status views read the persistent cron ledger directly."""
@@ -419,11 +413,11 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def test_cron_run_queues_manual_fire_in_outbox(self):
         """Test that /cron-run creates a run and queues it for REPL execution."""
-        from types import SimpleNamespace
-
         from clawcodex_ext.cron_system.runs import read_cron_runs
         from clawcodex_ext.cron_system.tasks import add_cron_task
 
+        runtime = self._build_runtime()
+        runtime.tool_context.outbox = []
         task = add_cron_task(
             self.workspace_root,
             cron="*/5 * * * *",
@@ -435,7 +429,8 @@ class TestBuiltinCommands(unittest.TestCase):
             conversation=self.conversation,
             cost_tracker=self.cost_tracker,
             history=self.history,
-            tool_context=SimpleNamespace(outbox=[]),
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
         )
 
         success, result, error = execute_command_sync("cron-run", task.id, context)
@@ -458,10 +453,54 @@ class TestBuiltinCommands(unittest.TestCase):
             context.tool_context.outbox,
         )
 
+    def test_cron_run_tolerates_outbox_append_failure(self):
+        """Test manual fire still succeeds when the active outbox cannot be used."""
+        from clawcodex_ext.cron_system.runs import read_cron_runs
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        class BrokenOutbox:
+            def append(self, item):
+                raise RuntimeError("outbox full")
+
+        runtime = self._build_runtime()
+        runtime.tool_context.outbox = BrokenOutbox()
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
+        )
+
+        success, result, error = execute_command_sync("cron-run", task.id, context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("Queued, but no active cron outbox", result or "")
+        runs = read_cron_runs(self.workspace_root)
+        self.assertEqual(1, len(runs))
+        self.assertEqual("queued", runs[0].status)
+
     def test_cron_run_alias_and_duplicate_active_run(self):
         """Test /cron-fire alias and duplicate active-run message."""
         from clawcodex_ext.cron_system.tasks import add_cron_task
 
+        runtime = self._build_runtime()
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
+        )
         task = add_cron_task(
             self.workspace_root,
             cron="*/5 * * * *",
@@ -469,8 +508,8 @@ class TestBuiltinCommands(unittest.TestCase):
             durable=True,
         )
 
-        first_success, _, first_error = execute_command_sync("cron-fire", task.id, self.context)
-        second_success, second_result, second_error = execute_command_sync("cron-run", task.id, self.context)
+        first_success, _, first_error = execute_command_sync("cron-fire", task.id, context)
+        second_success, second_result, second_error = execute_command_sync("cron-run", task.id, context)
 
         self.assertTrue(first_success)
         self.assertIsNone(first_error)
@@ -480,12 +519,73 @@ class TestBuiltinCommands(unittest.TestCase):
 
     def test_cron_run_reports_missing_task(self):
         """Test manual fire reports unknown task ids clearly."""
-        success, result, error = execute_command_sync("cron-run", "missing", self.context)
+        runtime = self._build_runtime()
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
+        )
+
+        success, result, error = execute_command_sync("cron-run", "missing", context)
 
         self.assertTrue(success)
         self.assertIsNone(error)
         self.assertIn("No scheduled cron job found", result or "")
         self.assertIn("missing", result or "")
+
+    def test_cron_run_without_runtime_fails_closed(self):
+        """Test manual fire does not queue runs without runtime permissions."""
+        from clawcodex_ext.cron_system.runs import read_cron_runs
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+
+        success, result, error = execute_command_sync("cron-run", task.id, self.context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("Cron runtime is required", result or "")
+        self.assertEqual([], read_cron_runs(self.workspace_root))
+
+    def test_cron_run_respects_cron_kill_switch(self):
+        """Test manual fire follows CLAWCODEX_DISABLE_CRON."""
+        import os
+        from unittest.mock import patch
+
+        from clawcodex_ext.cron_system.runs import read_cron_runs
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+
+        runtime = self._build_runtime()
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
+        )
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+
+        with patch.dict(os.environ, {"CLAWCODEX_DISABLE_CRON": "1"}):
+            success, result, error = execute_command_sync("cron-run", task.id, context)
+
+        self.assertTrue(success)
+        self.assertIsNone(error)
+        self.assertIn("Cron is disabled", result or "")
+        self.assertEqual([], read_cron_runs(self.workspace_root))
 
     def test_skills_command_with_project_root(self):
         """Test that /skills command can find project skills."""

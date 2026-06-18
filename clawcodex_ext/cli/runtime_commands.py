@@ -35,7 +35,11 @@ def register_runtime_commands(registry: Any | None = None) -> None:
         reg.register(command)
 
 
-def _format_configured_model_list() -> str:
+def format_model_list(provider: str | None = None) -> str:
+    return _format_configured_model_list(provider)
+
+
+def _format_configured_model_list(provider: str | None = None) -> str:
     """Show models only for providers with API keys in config.
 
     Reads ``~/.clawcodex/config.json`` and filters the full model list
@@ -56,7 +60,7 @@ def _format_configured_model_list() -> str:
         configured = [
             name
             for name in registry.provider_names()
-            if get_provider_config(name)
+            if (provider is None or name == provider) and get_provider_config(name)
         ]
         # Also include providers that exist only in config but aren't
         # known to ModelRegistry (e.g. completely custom providers).
@@ -67,7 +71,7 @@ def _format_configured_model_list() -> str:
         if gp and gp.exists():
             raw = json.loads(gp.read_text())
             for p in (raw.get("providers") or {}):
-                if p not in configured and p not in registry.provider_names():
+                if (provider is None or p == provider) and p not in configured and p not in registry.provider_names():
                     configured.append(p)
     except Exception:
         configured = []
@@ -168,7 +172,8 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
 
     if not tokens:
         current = _format_runtime_current(context)
-        lines = [current, "", _format_configured_model_list()] if current else [_format_configured_model_list()]
+        model_list = format_model_list()
+        lines = [current, "", model_list] if current else [model_list]
         return _text("\n".join(lines))
 
     try:
@@ -195,8 +200,7 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         registry.validate_model(model, provider)
     except (UnknownModelError, ProviderMismatchError):
         model_known = _model_is_in_config_models(model, provider)
-        if not model_known:
-            warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
+        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
 
     # ---- Persist unknown model to config so it's available next session ----
     if not model_known:
