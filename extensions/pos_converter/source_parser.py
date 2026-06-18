@@ -46,6 +46,7 @@ class SourceOperation:
     source_code: str = ""            # 完整源码片段，嵌入技能参考
     class_name: str | None = None    # 所属类名（用于 IO_RELATION 的 ClassName.methodName 命名）
     file_stem: str = ""              # 源文件名（不含 .py，用于顶层函数去歧义）
+    has_docstring: bool = False     # 原始 docstring 是否非空
 
 
 @dataclass
@@ -84,7 +85,17 @@ class SourceCodeParser:
     _EXCLUDE_DIRS = frozenset({
         "__pycache__", ".git", "node_modules", ".venv", "venv",
         ".tox", ".egg-info", "dist", "build", "__pycache__",
+        "test", "tests", "example", "examples",
     })
+
+    # Patterns appended to user exclude_patterns for test/example filtering.
+    # target  exact-name dirs, test_*/example_* prefix dirs, *_test/*_tests/
+    # *_example/*_examples suffix dirs — without matching unrelated names
+    # like "latest" or "attest" that a bare "*test*" glob would catch.
+    _DEFAULT_EXCLUDE_PATTERNS = [
+        "test_*", "*_test", "*_tests",
+        "example_*", "*_example", "*_examples",
+    ]
 
     def __init__(
         self,
@@ -92,10 +103,12 @@ class SourceCodeParser:
         *,
         exclude_patterns: list[str] | None = None,
         max_depth: int | None = None,
+        extern_only: bool = True,
     ) -> None:
         self._source_dir = Path(source_dir).resolve()
-        self._exclude_patterns = exclude_patterns or []
+        self._exclude_patterns = (exclude_patterns or []) + self._DEFAULT_EXCLUDE_PATTERNS
         self._max_depth = max_depth
+        self._extern_only = extern_only
         self._parsed: list[SourceComponent] | None = None
 
     # ---- public API -------------------------------------------------------
@@ -190,14 +203,49 @@ class SourceCodeParser:
             all_deps.update(file_deps)
 
             # Extract class definitions
+            file_ops: list[SourceOperation] = []
             for node in ast.iter_child_nodes(tree):
                 if isinstance(node, ast.ClassDef):
                     ops = self._extract_class(py_file, node, lines)
-                    all_ops.extend(ops)
+                    file_ops.extend(ops)
 
             # Extract top-level functions
             top_ops = self._extract_top_functions(py_file, tree, lines)
-            all_ops.extend(top_ops)
+            file_ops.extend(top_ops)
+
+            # Apply extern_only filtering per-file
+            if self._extern_only:
+                exported = self._parse_all_export(tree)
+                if exported is not None:
+                    # __all__ defined: filter by name + docstring
+                    # Exclude dunder methods (__init__, __call__, etc.) —
+                    # Python protocol methods, not standalone external interfaces.
+                    file_ops = [
+                        op for op in file_ops
+                        if op.name != "main"
+                        and not op.name.startswith("__")
+                        and not op.name.startswith("test")
+                        and op.has_docstring
+                        and (
+                            (op.class_name is not None and op.class_name in exported)
+                            or (op.class_name is None and op.name in exported)
+                        )
+                    ]
+                else:
+                    # No __all__: filter by docstring only
+                    # Exclude dunder methods (__init__, __call__, etc.) —
+                    # Python protocol methods, not standalone external interfaces.
+                    # Exclude test* — test methods are never external API.
+                    # Exclude main — CLI entry points, not library API.
+                    file_ops = [
+                        op for op in file_ops
+                        if op.name != "main"
+                        and not op.name.startswith("__")
+                        and not op.name.startswith("test")
+                        and op.has_docstring
+                    ]
+
+            all_ops.extend(file_ops)
 
         # Build a component for this directory
         if all_ops:
@@ -316,6 +364,8 @@ class SourceCodeParser:
         # Source code snippet
         source_code = self._get_source_code(lines, node)
 
+        has_doc = bool(docstring and docstring.strip())
+
         return SourceOperation(
             name=node.name,
             description=description or node.name,
@@ -323,6 +373,7 @@ class SourceCodeParser:
             return_type=return_type,
             source_code=source_code,
             file_stem=file_path.stem if file_path else "",
+            has_docstring=has_doc,
         )
 
     # ---- docstring parsing ------------------------------------------------
@@ -356,6 +407,28 @@ class SourceCodeParser:
             return description, params
 
         return description, []
+
+    @staticmethod
+    def _parse_all_export(tree: ast.Module) -> set[str] | None:
+        """解析模块 AST 中的 __all__，返回导出名称集合或 None。
+
+        如果 __all__ 是动态求值（非列表/元组字面量）则返回 None。
+        如果模块没有定义 __all__ 则返回 None。
+        """
+        for node in ast.iter_child_nodes(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "__all__":
+                    value = node.value
+                    if isinstance(value, (ast.List, ast.Tuple)):
+                        names: set[str] = set()
+                        for elt in value.elts:
+                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                                names.add(elt.value)
+                        return names
+                    return None  # dynamic __all__, can't parse
+        return None
 
     def _get_first_paragraph(self, text: str) -> str:
         """提取文本首段（遇到空行截断）。"""

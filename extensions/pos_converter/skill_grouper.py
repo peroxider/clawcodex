@@ -506,6 +506,10 @@ class SkillGrouper:
                     segs = [s for s in sub_keys[0].split("/") if s]
                     skill_name = "_".join(segs[-2:]).replace("-", "_").replace(" ", "_").lower() if len(segs) >= 2 else f"{skill_name}_2"
 
+                # Tag merged groups so users can distinguish them from
+                # single-path groups at a glance.
+                skill_name = skill_name + "_merged"
+
                 # Build shared description listing all merged paths.
                 shared_desc = "Auto-grouped from paths: " + ", ".join(sub_keys)
                 for sk in sub_keys:
