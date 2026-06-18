@@ -187,18 +187,16 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         provider = _current_provider_name(context) or "anthropic"
 
     # ---- Check if the model is known for this provider ----
+    # Also check the config's ``models`` list: a model previously persisted
+    # (e.g. via /model <unknown-name>) is treated as "known" so the second
+    # invocation doesn't re-warn the user.
     model_known = True
     try:
         registry.validate_model(model, provider)
-    except UnknownModelError:
-        model_known = False
-        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
-    except ProviderMismatchError:
-        model_known = False
-        warnings.append(
-            f"Warning: model '{model}' not listed for provider '{provider}' "
-            f"— proceeding anyway"
-        )
+    except (UnknownModelError, ProviderMismatchError):
+        model_known = _model_is_in_config_models(model, provider)
+        if not model_known:
+            warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
 
     # ---- Persist unknown model to config so it's available next session ----
     if not model_known:
@@ -314,3 +312,20 @@ def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str |
 
 def _text(value: str) -> LocalCommandResult:
     return LocalCommandResult(type="text", value=value)
+
+
+def _model_is_in_config_models(model: str, provider: str) -> bool:
+    """Check whether *model* is in the config's ``models`` list for *provider*.
+
+    Used to avoid re-warning about a model that was already persisted by a
+    previous ``/model <unknown>`` invocation.
+    """
+    try:
+        from src.config import get_provider_config
+
+        pc = get_provider_config(provider)
+        if not pc:
+            return False
+        return model in (pc.get("models") or [])
+    except Exception:
+        return False

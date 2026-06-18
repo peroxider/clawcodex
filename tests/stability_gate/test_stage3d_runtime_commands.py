@@ -494,7 +494,7 @@ class TestModelProviderFallback:
         from clawcodex_ext.command_system.builtins import execute_command_sync
 
         success, result_text, error = execute_command_sync(
-            "model", "unknown-model", context
+            "model", "truly-unknown-model-xyz", context
         )
         assert success is True, f"expected success, got error={error!r}"
         # 应回退到 openai，而非 anthropic
@@ -504,6 +504,10 @@ class TestModelProviderFallback:
         # 不应包含 "anthropic"
         assert "anthropic" not in (result_text or "").lower(), (
             f"should not fall back to anthropic, got {result_text!r}"
+        )
+        # 应包含 unknown model 警告
+        assert "unknown model" in (result_text or "").lower(), (
+            f"expected unknown model warning, got {result_text!r}"
         )
 
     def test_known_model_stays_on_current_provider(self):
