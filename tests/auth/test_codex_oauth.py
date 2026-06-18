@@ -62,7 +62,9 @@ def test_poll_codex_device_flow_returns_none_while_pending(monkeypatch, status_c
     monkeypatch.setattr(
         codex_oauth.httpx,
         "post",
-        lambda *args, **kwargs: httpx.Response(status_code, json={"error": "authorization_pending"}),
+        lambda *args, **kwargs: httpx.Response(
+            status_code, json={"error": "authorization_pending"}
+        ),
     )
 
     assert poll_codex_device_flow(CodexDeviceFlow("CODE", "device-id")) is None
@@ -73,7 +75,9 @@ def test_poll_codex_device_flow_returns_authorization_payload(monkeypatch) -> No
 
     def fake_post(url, **kwargs):
         calls.append({"url": url, **kwargs})
-        return httpx.Response(200, json={"authorization_code": "auth-code", "code_verifier": "verifier"})
+        return httpx.Response(
+            200, json={"authorization_code": "auth-code", "code_verifier": "verifier"}
+        )
 
     monkeypatch.setattr(codex_oauth.httpx, "post", fake_post)
 
@@ -122,7 +126,10 @@ def test_exchange_codex_authorization_posts_form_payload(monkeypatch) -> None:
         "client_id": CODEX_OAUTH_CLIENT_ID,
         "code_verifier": "verifier",
     }
-    assert calls[0]["headers"] == {"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"}
+    assert calls[0]["headers"] == {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+    }
     assert calls[0]["timeout"] == 11
 
 
@@ -130,7 +137,9 @@ def test_refresh_codex_tokens_reuses_existing_refresh_token_when_omitted(monkeyp
     monkeypatch.setattr(
         codex_oauth.httpx,
         "post",
-        lambda *args, **kwargs: httpx.Response(200, json={"access_token": "new-access", "expires_in": 3600}),
+        lambda *args, **kwargs: httpx.Response(
+            200, json={"access_token": "new-access", "expires_in": 3600}
+        ),
     )
 
     tokens = refresh_codex_tokens("old-refresh")
@@ -168,7 +177,9 @@ def test_resolve_codex_runtime_credentials_refreshes_expiring_tokens(monkeypatch
         lambda: CodexAuthRecord(tokens=expiring, source="test-source", auth_mode="chatgpt"),
     )
     monkeypatch.setattr(codex_oauth, "refresh_codex_tokens", lambda refresh_token: refreshed)
-    monkeypatch.setattr(codex_oauth, "save_codex_tokens", lambda tokens, source: saved.append((tokens, source)))
+    monkeypatch.setattr(
+        codex_oauth, "save_codex_tokens", lambda tokens, source: saved.append((tokens, source))
+    )
 
     credentials = resolve_codex_runtime_credentials()
 

@@ -101,15 +101,20 @@ class TestApplySafeDoesNotApplyUnsafe(unittest.TestCase):
         # state. Pass it explicitly to bypass _load_config_env.
         config_env = {
             "ANTHROPIC_MODEL": "claude-sonnet-4-6",  # safe
-            "PATH": "/opt/evil/bin",                 # unsafe
+            "PATH": "/opt/evil/bin",  # unsafe
             "NODE_EXTRA_CA_CERTS": "/opt/evil.crt",  # unsafe
-            "LD_PRELOAD": "/opt/evil.so",            # unsafe (prefix)
-            "DISABLE_TELEMETRY": "1",                # safe
+            "LD_PRELOAD": "/opt/evil.so",  # unsafe (prefix)
+            "DISABLE_TELEMETRY": "1",  # safe
         }
         with mock.patch.dict(os.environ, {}, clear=False):
             # Remove any pre-existing keys to make the test deterministic
-            for k in ("ANTHROPIC_MODEL", "DISABLE_TELEMETRY", "PATH",
-                      "NODE_EXTRA_CA_CERTS", "LD_PRELOAD"):
+            for k in (
+                "ANTHROPIC_MODEL",
+                "DISABLE_TELEMETRY",
+                "PATH",
+                "NODE_EXTRA_CA_CERTS",
+                "LD_PRELOAD",
+            ):
                 os.environ.pop(k, None)
             apply_safe_config_environment_variables(config_env)
 
@@ -190,13 +195,17 @@ class TestLoadConfigEnvOnlyReadsGlobal(unittest.TestCase):
         # to never even read the project config in the first place.
         # We assert both: load_project is NOT called, and PATH stays
         # unchanged.
-        with mock.patch(
-            "src.config.ConfigManager.load_global", return_value={"env": {}}
-        ) as mock_global, mock.patch(
-            "src.config.ConfigManager.load_project", return_value={"env": attacker_env}
-        ) as mock_project, mock.patch(
-            "src.config.ConfigManager.load_local", return_value={"env": attacker_env}
-        ) as mock_local:
+        with (
+            mock.patch(
+                "src.config.ConfigManager.load_global", return_value={"env": {}}
+            ) as mock_global,
+            mock.patch(
+                "src.config.ConfigManager.load_project", return_value={"env": attacker_env}
+            ) as mock_project,
+            mock.patch(
+                "src.config.ConfigManager.load_local", return_value={"env": attacker_env}
+            ) as mock_local,
+        ):
             apply_safe_config_environment_variables()
             # PATH unchanged — defense-in-depth from is_safe_env_key.
             self.assertEqual(os.environ.get("PATH", ""), original_path)

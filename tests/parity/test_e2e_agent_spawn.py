@@ -3,6 +3,7 @@
 Simulates: AgentTool dispatched → child agent context created → result returned.
 Tests the agent tool dispatch, subagent context creation, and tool filtering.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -74,10 +75,13 @@ class TestE2EAgentToolDispatch(unittest.TestCase):
     def test_agent_dispatch_no_provider_returns_error(self) -> None:
         """Agent tool without provider returns error."""
         result = self.registry.dispatch(
-            ToolCall(name="Agent", input={
-                "description": "search task",
-                "prompt": "Search for hello",
-            }),
+            ToolCall(
+                name="Agent",
+                input={
+                    "description": "search task",
+                    "prompt": "Search for hello",
+                },
+            ),
             self.ctx,
         )
         self.assertTrue(result.is_error)
@@ -109,9 +113,12 @@ class TestE2EAgentContextCreation(unittest.TestCase):
         )
         parent.todos = [{"content": "parent todo"}]
 
-        child = create_subagent_context(parent, SubagentContextOverrides(
-            agent_type="Explore",
-        ))
+        child = create_subagent_context(
+            parent,
+            SubagentContextOverrides(
+                agent_type="Explore",
+            ),
+        )
 
         # Isolated collections
         self.assertEqual(child.todos, [])
@@ -135,10 +142,13 @@ class TestE2EAgentContextCreation(unittest.TestCase):
             query_tracking=QueryChainTracking(chain_id="test", depth=0),
             messages=[],
         )
-        child = create_subagent_context(parent, SubagentContextOverrides(
-            agent_id="agent-123",
-            agent_type="general-purpose",
-        ))
+        child = create_subagent_context(
+            parent,
+            SubagentContextOverrides(
+                agent_id="agent-123",
+                agent_type="general-purpose",
+            ),
+        )
         self.assertEqual(child.agent_id, "agent-123")
         self.assertEqual(child.agent_type, "general-purpose")
 
@@ -165,31 +175,55 @@ class TestE2EAgentToolFiltering(unittest.TestCase):
 
     def test_disallowed_tools_filtered(self) -> None:
         """ALL_AGENT_DISALLOWED_TOOLS are removed from agent toolkits."""
-        all_tools = [_make_tool(name) for name in [
-            "Read", "Edit", "Agent", "AskUserQuestion", "TaskOutput",
-            "ExitPlanMode", "EnterPlanMode", "Bash", "Brief", "TaskStop",
-        ]]
+        all_tools = [
+            _make_tool(name)
+            for name in [
+                "Read",
+                "Edit",
+                "Agent",
+                "AskUserQuestion",
+                "TaskOutput",
+                "ExitPlanMode",
+                "EnterPlanMode",
+                "Bash",
+                "Brief",
+                "TaskStop",
+            ]
+        ]
         filtered = filter_tools_for_agent(tools=all_tools, is_built_in=True, is_async=False)
         filtered_names = {t.name for t in filtered}
 
         for disallowed in ALL_AGENT_DISALLOWED_TOOLS:
             self.assertNotIn(
-                disallowed, filtered_names,
+                disallowed,
+                filtered_names,
                 f"Disallowed tool '{disallowed}' should be filtered out",
             )
 
     def test_async_agent_whitelist(self) -> None:
         """Async agents only get ASYNC_AGENT_ALLOWED_TOOLS."""
-        all_tools = [_make_tool(name) for name in [
-            "Read", "Edit", "Bash", "Write", "Glob", "Grep",
-            "WebSearch", "WebFetch", "Agent", "AskUserQuestion",
-        ]]
+        all_tools = [
+            _make_tool(name)
+            for name in [
+                "Read",
+                "Edit",
+                "Bash",
+                "Write",
+                "Glob",
+                "Grep",
+                "WebSearch",
+                "WebFetch",
+                "Agent",
+                "AskUserQuestion",
+            ]
+        ]
         filtered = filter_tools_for_agent(tools=all_tools, is_built_in=True, is_async=True)
         filtered_names = {t.name for t in filtered}
 
         for name in filtered_names:
             self.assertIn(
-                name, ASYNC_AGENT_ALLOWED_TOOLS,
+                name,
+                ASYNC_AGENT_ALLOWED_TOOLS,
                 f"Async agent should only have allowed tools, but has '{name}'",
             )
 

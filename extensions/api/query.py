@@ -91,7 +91,9 @@ class SessionComplete:
     reason: str
 
 
-QueryEvent = TextDelta | ToolCallEvent | ToolResultEvent | TurnComplete | PhaseComplete | SessionComplete
+QueryEvent = (
+    TextDelta | ToolCallEvent | ToolResultEvent | TurnComplete | PhaseComplete | SessionComplete
+)
 
 
 class QueryRunner:

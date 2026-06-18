@@ -8,6 +8,7 @@ from typing import Any
 
 class EffortLevel(Enum):
     """Effort levels that control thinking depth and token budgets."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

@@ -46,6 +46,7 @@ def _make_context(
 def _fake_first_party_provider(model: str = "claude-opus-4-6") -> MagicMock:
     """Create a provider mock that the `/advisor` gate accepts."""
     from src.providers.anthropic_provider import AnthropicProvider
+
     provider = MagicMock(spec=AnthropicProvider)
     provider.has_custom_endpoint.return_value = False
     provider.model = model
@@ -57,6 +58,7 @@ class _FakeStore:
 
     def __init__(self, initial=None) -> None:
         from src.state.app_state import AppState
+
         self.state = initial if initial is not None else AppState()
         self.writes: list = []
 
@@ -90,6 +92,7 @@ class _IsolatedEnv:
 
     def __enter__(self):
         import src.config as cfg_mod
+
         self._tmp = Path(tempfile.mkdtemp(prefix="advisor_test_"))
         # Save and override the module-level config-path constants.
         # We can't use patch.object for plain Path constants reliably
@@ -103,16 +106,19 @@ class _IsolatedEnv:
 
         os.environ.pop("CLAUDE_CODE_DISABLE_ADVISOR_TOOL", None)
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
         return self
 
     def __exit__(self, *a):
         import src.config as cfg_mod
+
         cfg_mod.GLOBAL_CONFIG_FILE = self._saved_global_path
         cfg_mod.HISTORY_FILE = self._saved_history_path
         cfg_mod.GLOBAL_CONFIG_DIR = self._saved_global_path.parent
         cfg_mod._default_manager = None
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
 
 
@@ -122,9 +128,7 @@ class TestAdvisorCommandGate(unittest.TestCase):
 
     def test_refuses_when_env_disabled(self) -> None:
         with _IsolatedEnv():
-            with patch.dict(
-                os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False
-            ):
+            with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False):
                 ctx = _make_context(provider=_fake_first_party_provider())
                 res = advisor_command_call("anthropic:claude-opus-4-6", ctx)
                 self.assertIn("disabled", res.value.lower())
@@ -156,9 +160,7 @@ class TestAdvisorCommandStorePath(unittest.TestCase):
     def test_set_advisor_model(self) -> None:
         with _IsolatedEnv():
             store = _FakeStore()
-            ctx = _make_context(
-                store=store, provider=_fake_first_party_provider("claude-opus-4-6")
-            )
+            ctx = _make_context(store=store, provider=_fake_first_party_provider("claude-opus-4-6"))
             res = advisor_command_call("anthropic:claude-opus-4-6", ctx)
             self.assertIn("Advisor set to anthropic:claude-opus-4-6", res.value)
             # Two writes — model AND provider land separately on the store.
@@ -169,10 +171,13 @@ class TestAdvisorCommandStorePath(unittest.TestCase):
     def test_unset_clears_when_set(self) -> None:
         with _IsolatedEnv():
             from src.state.app_state import AppState
-            store = _FakeStore(initial=AppState(
-                advisor_model="claude-opus-4-6",
-                advisor_provider="anthropic",
-            ))
+
+            store = _FakeStore(
+                initial=AppState(
+                    advisor_model="claude-opus-4-6",
+                    advisor_provider="anthropic",
+                )
+            )
             ctx = _make_context(store=store, provider=_fake_first_party_provider())
             res = advisor_command_call("unset", ctx)
             self.assertIn("disabled", res.value.lower())
@@ -203,10 +208,13 @@ class TestAdvisorCommandStorePath(unittest.TestCase):
     def test_no_arg_shows_client_side_for_unsupported_base(self) -> None:
         with _IsolatedEnv():
             from src.state.app_state import AppState
-            store = _FakeStore(initial=AppState(
-                advisor_model="claude-opus-4-6",
-                advisor_provider="anthropic",
-            ))
+
+            store = _FakeStore(
+                initial=AppState(
+                    advisor_model="claude-opus-4-6",
+                    advisor_provider="anthropic",
+                )
+            )
             provider = _fake_first_party_provider("claude-opus-4-5")
             ctx = _make_context(store=store, provider=provider)
             res = advisor_command_call("", ctx)
@@ -258,6 +266,7 @@ class TestAdvisorCommandSettingsPath(unittest.TestCase):
             self.assertIn("Advisor set to anthropic:claude-opus-4-6", res.value)
             # Read back via the settings stack (fresh load).
             from src.settings.settings import get_settings, invalidate_settings_cache
+
             invalidate_settings_cache()
             self.assertEqual(get_settings().advisor_model, "claude-opus-4-6")
 
@@ -269,6 +278,7 @@ class TestAdvisorCommandSettingsPath(unittest.TestCase):
             res = advisor_command_call("off", ctx)
             self.assertIn("disabled", res.value.lower())
             from src.settings.settings import get_settings, invalidate_settings_cache
+
             invalidate_settings_cache()
             self.assertEqual(get_settings().advisor_model, "")
 
@@ -278,6 +288,7 @@ class TestAdvisorCommandSettingsPath(unittest.TestCase):
         # be invisible to _call_model_sync until process restart.
         with _IsolatedEnv():
             from src.settings.settings import get_settings
+
             # Prime the cache.
             self.assertEqual(get_settings().advisor_model, "")
             ctx = _make_context(provider=_fake_first_party_provider())
@@ -297,6 +308,7 @@ class TestAdvisorCommandStorePathInvalidatesCache(unittest.TestCase):
         with _IsolatedEnv():
             from src.settings.settings import get_settings
             from src.state.app_state import create_app_state_store, replace_state
+
             store = create_app_state_store()
             # Prime cache.
             self.assertEqual(get_settings().advisor_model, "")

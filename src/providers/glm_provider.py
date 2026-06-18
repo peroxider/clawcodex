@@ -18,9 +18,7 @@ class GLMProvider(OpenAICompatibleProvider):
     GLM models on z.ai require the 'zai/' prefix in model names.
     """
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize GLM provider.
 
         Args:

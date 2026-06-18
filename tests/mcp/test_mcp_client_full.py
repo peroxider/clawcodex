@@ -1,4 +1,5 @@
 import asyncio
+import builtins
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,6 +18,8 @@ from src.services.mcp.types import (
     ScopedMcpServerConfig,
     ServerCapabilities,
 )
+
+BaseExceptionGroup = getattr(builtins, "BaseExceptionGroup", None)
 
 
 class TestMcpClientReconnection:
@@ -185,6 +188,8 @@ class TestExceptionGroupUnwrap:
         assert _unwrap_exception_group_message(exc) == "port 1 closed"
 
     def test_unwraps_single_subexception(self):
+        if BaseExceptionGroup is None:
+            pytest.skip("BaseExceptionGroup requires Python 3.11+")
         try:
             inner_exc = ConnectionRefusedError("nobody home")
             raise BaseExceptionGroup("unhandled errors", [inner_exc])
@@ -192,6 +197,8 @@ class TestExceptionGroupUnwrap:
             assert _unwrap_exception_group_message(eg) == "nobody home"
 
     def test_recurses_through_nested_groups(self):
+        if BaseExceptionGroup is None:
+            pytest.skip("BaseExceptionGroup requires Python 3.11+")
         try:
             inner = TimeoutError("connect timed out")
             mid = BaseExceptionGroup("inner group", [inner])
@@ -416,6 +423,4 @@ class TestSessionExpiryRetry:
         assert all(not isinstance(r, Exception) for r in results), results
         # But reconnect was called exactly once — the lock + epoch suppressed
         # the stampede.
-        assert len(reconnect_calls) == 1, (
-            f"expected 1 reconnect, got {len(reconnect_calls)}"
-        )
+        assert len(reconnect_calls) == 1, f"expected 1 reconnect, got {len(reconnect_calls)}"

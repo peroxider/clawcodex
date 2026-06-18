@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AwsCredentials:
     """AWS session credentials."""
+
     access_key_id: str
     secret_access_key: str
     session_token: str = ""
@@ -29,7 +30,9 @@ class AwsAuth:
         access_key = os.environ.get("AWS_ACCESS_KEY_ID")
         secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
         session_token = os.environ.get("AWS_SESSION_TOKEN", "")
-        region = self.region or os.environ.get("AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
+        region = self.region or os.environ.get(
+            "AWS_REGION", os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        )
 
         if access_key and secret_key:
             return AwsCredentials(
@@ -42,6 +45,7 @@ class AwsAuth:
         # Try boto3 if available
         try:
             import boto3
+
             session = boto3.Session()
             creds = session.get_credentials()
             if creds:

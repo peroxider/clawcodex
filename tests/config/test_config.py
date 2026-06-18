@@ -73,18 +73,9 @@ class TestDefaultConfig(unittest.TestCase):
     def test_default_models(self):
         """Test default models for providers."""
         config = get_default_config()
-        self.assertEqual(
-            config["providers"]["anthropic"]["default_model"],
-            "claude-sonnet-4-6"
-        )
-        self.assertEqual(
-            config["providers"]["openai"]["default_model"],
-            "gpt-5.4"
-        )
-        self.assertEqual(
-            config["providers"]["glm"]["default_model"],
-            "zai/glm-5"
-        )
+        self.assertEqual(config["providers"]["anthropic"]["default_model"], "claude-sonnet-4-6")
+        self.assertEqual(config["providers"]["openai"]["default_model"], "gpt-5.4")
+        self.assertEqual(config["providers"]["glm"]["default_model"], "zai/glm-5")
 
 
 class TestLoadSaveConfig(unittest.TestCase):
@@ -107,9 +98,9 @@ class TestLoadSaveConfig(unittest.TestCase):
                         "glm": {
                             "api_key": "test_key",
                             "base_url": "https://example.com",
-                            "default_model": "glm-4"
+                            "default_model": "glm-4",
                         }
-                    }
+                    },
                 }
 
                 save_config(config)
@@ -117,10 +108,7 @@ class TestLoadSaveConfig(unittest.TestCase):
                 loaded = load_config()
 
                 self.assertEqual(loaded["default_provider"], "glm")
-                self.assertEqual(
-                    loaded["providers"]["glm"]["api_key"],
-                    "test_key"
-                )
+                self.assertEqual(loaded["providers"]["glm"]["api_key"], "test_key")
 
     def test_load_config_returns_dict(self):
         """Test that loading config returns a valid dict."""
@@ -191,10 +179,7 @@ class TestSetAPIKey(unittest.TestCase):
 
                 _reset_manager()
                 config = load_config()
-                self.assertEqual(
-                    config["providers"]["glm"]["api_key"],
-                    "new_api_key"
-                )
+                self.assertEqual(config["providers"]["glm"]["api_key"], "new_api_key")
 
     def test_set_api_key_with_options(self):
         """Test setting API key with base URL and model."""
@@ -205,23 +190,14 @@ class TestSetAPIKey(unittest.TestCase):
                     "glm",
                     "new_api_key",
                     base_url="https://custom.url",
-                    default_model="custom-model"
+                    default_model="custom-model",
                 )
 
                 _reset_manager()
                 config = load_config()
-                self.assertEqual(
-                    config["providers"]["glm"]["api_key"],
-                    "new_api_key"
-                )
-                self.assertEqual(
-                    config["providers"]["glm"]["base_url"],
-                    "https://custom.url"
-                )
-                self.assertEqual(
-                    config["providers"]["glm"]["default_model"],
-                    "custom-model"
-                )
+                self.assertEqual(config["providers"]["glm"]["api_key"], "new_api_key")
+                self.assertEqual(config["providers"]["glm"]["base_url"], "https://custom.url")
+                self.assertEqual(config["providers"]["glm"]["default_model"], "custom-model")
 
 
 class TestDefaultProvider(unittest.TestCase):
@@ -253,5 +229,5 @@ class TestDefaultProvider(unittest.TestCase):
                 self.assertEqual(provider, "anthropic")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

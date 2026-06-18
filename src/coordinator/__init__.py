@@ -14,6 +14,7 @@ parity-snapshot metadata. The chapter-10 coordinator pattern lives in:
 
 Parity-snapshot metadata still exposed (the parity audit reads it).
 """
+
 from __future__ import annotations
 
 import json
@@ -30,12 +31,14 @@ from src.coordinator.mode import (
 from src.coordinator.prompt import get_coordinator_system_prompt
 from src.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
 
-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'coordinator.json'
+SNAPSHOT_PATH = (
+    Path(__file__).resolve().parent.parent / "reference_data" / "subsystems" / "coordinator.json"
+)
 _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
 
-ARCHIVE_NAME = _SNAPSHOT['archive_name']
-MODULE_COUNT = _SNAPSHOT['module_count']
-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
+ARCHIVE_NAME = _SNAPSHOT["archive_name"]
+MODULE_COUNT = _SNAPSHOT["module_count"]
+SAMPLE_FILES = tuple(_SNAPSHOT["sample_files"])
 PORTING_NOTE = (
     f"Python coordinator package for '{ARCHIVE_NAME}' "
     f"({MODULE_COUNT} archived module reference(s)). "

@@ -19,6 +19,7 @@ When/if the team decides to migrate FROM ``query()`` TO
 re-ported into this module (Phases B/C/D/E equivalents). That
 migration is tracked as a separate follow-up ticket.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -128,12 +129,18 @@ async def streaming_query(
                     return
                 yield event
         except PromptTooLongError as e:
-            if cfg.reactive_compact_enabled and state.compact_retries < MAX_REACTIVE_COMPACT_RETRIES:
+            if (
+                cfg.reactive_compact_enabled
+                and state.compact_retries < MAX_REACTIVE_COMPACT_RETRIES
+            ):
                 state.compact_retries += 1
-                yield QueryEvent(type="reactive_compact", data={
-                    "retry": state.compact_retries,
-                    "token_gap": e.token_gap,
-                })
+                yield QueryEvent(
+                    type="reactive_compact",
+                    data={
+                        "retry": state.compact_retries,
+                        "token_gap": e.token_gap,
+                    },
+                )
                 if compact_fn:
                     try:
                         compacted = await compact_fn(state.messages, state.system_prompt)
@@ -162,11 +169,14 @@ async def streaming_query(
 
         if turn.stop_reason in ("end_turn", "stop_sequence", "") and not turn.tool_uses:
             state.is_done = True
-            yield QueryEvent(type="turn_complete", data={
-                "turn": state.turn_count,
-                "stop_reason": turn.stop_reason,
-                "text": turn.text_content,
-            })
+            yield QueryEvent(
+                type="turn_complete",
+                data={
+                    "turn": state.turn_count,
+                    "stop_reason": turn.stop_reason,
+                    "text": turn.text_content,
+                },
+            )
 
             if cfg.stop_hooks_enabled and on_stop_hooks:
                 try:
@@ -181,28 +191,38 @@ async def streaming_query(
             if turn.text_content:
                 assistant_msg["content"].append({"type": "text", "text": turn.text_content})
             for tu in turn.tool_uses:
-                assistant_msg["content"].append({
-                    "type": "tool_use",
-                    "id": tu["id"],
-                    "name": tu["name"],
-                    "input": tu["input"],
-                })
+                assistant_msg["content"].append(
+                    {
+                        "type": "tool_use",
+                        "id": tu["id"],
+                        "name": tu["name"],
+                        "input": tu["input"],
+                    }
+                )
             state.messages.append(assistant_msg)
 
-            yield QueryEvent(type="tool_execution_start", data={
-                "tool_uses": turn.tool_uses,
-            })
+            yield QueryEvent(
+                type="tool_execution_start",
+                data={
+                    "tool_uses": turn.tool_uses,
+                },
+            )
 
             if on_tool_uses:
                 tool_results = await on_tool_uses(turn.tool_uses, tools, context)
                 if tool_results:
-                    state.messages.append({
-                        "role": "user",
-                        "content": tool_results,
-                    })
-                    yield QueryEvent(type="tool_results_appended", data={
-                        "count": len(tool_results),
-                    })
+                    state.messages.append(
+                        {
+                            "role": "user",
+                            "content": tool_results,
+                        }
+                    )
+                    yield QueryEvent(
+                        type="tool_results_appended",
+                        data={
+                            "count": len(tool_results),
+                        },
+                    )
 
             if cfg.stop_hooks_enabled and on_stop_hooks:
                 try:
@@ -213,16 +233,22 @@ async def streaming_query(
             continue
 
         state.is_done = True
-        yield QueryEvent(type="turn_complete", data={
-            "turn": state.turn_count,
-            "stop_reason": turn.stop_reason,
-            "text": turn.text_content,
-        })
+        yield QueryEvent(
+            type="turn_complete",
+            data={
+                "turn": state.turn_count,
+                "stop_reason": turn.stop_reason,
+                "text": turn.text_content,
+            },
+        )
 
-    yield QueryEvent(type="query_complete", data={
-        "turns": state.turn_count,
-        "total_usage": state.total_usage.to_dict(),
-    })
+    yield QueryEvent(
+        type="query_complete",
+        data={
+            "turns": state.turn_count,
+            "total_usage": state.total_usage.to_dict(),
+        },
+    )
 
 
 async def _run_model_turn(
@@ -259,9 +285,12 @@ async def _run_model_turn(
         if abort_signal is not None and getattr(abort_signal, "aborted", False):
             return
         if isinstance(event, MessageStart):
-            yield QueryEvent(type="message_start", data={
-                "model": event.model,
-            })
+            yield QueryEvent(
+                type="message_start",
+                data={
+                    "model": event.model,
+                },
+            )
 
         elif isinstance(event, TextDelta):
             turn.text_content += event.text
@@ -278,10 +307,13 @@ async def _run_model_turn(
                 "input": {},
             }
             tool_use_json_parts = []
-            yield QueryEvent(type="tool_use_start", data={
-                "id": event.id,
-                "name": event.name,
-            })
+            yield QueryEvent(
+                type="tool_use_start",
+                data={
+                    "id": event.id,
+                    "name": event.name,
+                },
+            )
 
         elif isinstance(event, ToolUseDelta):
             tool_use_json_parts.append(event.partial_json)

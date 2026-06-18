@@ -5,6 +5,7 @@ The TS implementation is a stub that returns null (not implemented).
 We match that behavior here to avoid aggressively trimming tool results
 that the model may need to reference later in the conversation.
 """
+
 from __future__ import annotations
 
 from typing import Any

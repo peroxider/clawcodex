@@ -8,6 +8,7 @@ Each parser is fail-open: invalid values log a debug warning and return
 ``None`` (or an empty list) rather than raising, so a single malformed
 frontmatter field never prevents a config file from loading.
 """
+
 from __future__ import annotations
 
 import logging
@@ -126,12 +127,14 @@ def parse_hooks(value: Any, *, owner_name: str) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         logger.debug(
             "%s hooks: expected dict, got %s; dropping",
-            owner_name, type(value).__name__,
+            owner_name,
+            type(value).__name__,
         )
         return None
 
     try:
         from src.hooks.hook_types import ALL_HOOK_EVENTS
+
         valid_events = set(ALL_HOOK_EVENTS)
     except Exception:
         valid_events = set()
@@ -140,34 +143,40 @@ def parse_hooks(value: Any, *, owner_name: str) -> dict[str, Any] | None:
         if valid_events and event_name not in valid_events:
             logger.debug(
                 "%s hooks: unknown event %r; dropping all hooks",
-                owner_name, event_name,
+                owner_name,
+                event_name,
             )
             return None
         if not isinstance(matchers, list):
             logger.debug(
                 "%s hooks.%s: expected list of matchers, got %s",
-                owner_name, event_name, type(matchers).__name__,
+                owner_name,
+                event_name,
+                type(matchers).__name__,
             )
             return None
         for matcher in matchers:
             if not isinstance(matcher, dict):
                 logger.debug(
                     "%s hooks.%s: matcher must be a dict",
-                    owner_name, event_name,
+                    owner_name,
+                    event_name,
                 )
                 return None
             inner = matcher.get("hooks")
             if not isinstance(inner, list):
                 logger.debug(
                     "%s hooks.%s.hooks: required list missing or wrong type",
-                    owner_name, event_name,
+                    owner_name,
+                    event_name,
                 )
                 return None
             for cmd in inner:
                 if not isinstance(cmd, dict) or "type" not in cmd:
                     logger.debug(
                         "%s hooks.%s.hooks[]: each entry needs a `type` field",
-                        owner_name, event_name,
+                        owner_name,
+                        event_name,
                     )
                     return None
     return value

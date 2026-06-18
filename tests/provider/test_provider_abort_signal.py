@@ -24,6 +24,7 @@ object that mimics the SDK's surface (``__enter__`` / ``__exit__`` /
 ``text_stream`` / ``response.close()``). We don't exercise the real
 Anthropic SDK — that would require a live API key.
 """
+
 from __future__ import annotations
 
 import threading

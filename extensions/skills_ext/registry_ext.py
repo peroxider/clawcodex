@@ -48,6 +48,7 @@ class SkillRegistryExt:
         """
         if loader_module is None:
             import importlib
+
             loader_module = importlib.import_module("src.skills.loader")
         self._loader = loader_module
         self._callbacks: list[SkillRegistrationCallback] = []
@@ -324,6 +325,7 @@ class SkillRegistryExt:
     def get_available_bundle_names(self) -> list[str]:
         """Return all known bundle names."""
         from .bundles import ALL_BUNDLE_NAMES
+
         return ALL_BUNDLE_NAMES
 
     def clear_cache(self) -> None:

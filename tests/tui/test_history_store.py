@@ -49,9 +49,7 @@ def test_rotation_caps_entries(tmp_path):
 def test_corrupt_lines_are_skipped(tmp_path):
     path = tmp_path / "history.jsonl"
     path.write_text(
-        '{"prompt": "ok", "ts": 1}\n'
-        "this is garbage\n"
-        '{"prompt": "ok2", "ts": 2}\n',
+        '{"prompt": "ok", "ts": 1}\nthis is garbage\n{"prompt": "ok2", "ts": 2}\n',
         encoding="utf-8",
     )
     store = HistoryStore(path)

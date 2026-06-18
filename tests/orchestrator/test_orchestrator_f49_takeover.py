@@ -21,6 +21,7 @@ Uses ``unittest.TestCase`` (the resolver / parser are sync) and
 Patches ``extensions.orchestrator.issue_registry``'s default path
 so the test does not touch the user's real ``~/.clawcodex``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -182,7 +183,8 @@ class TestTakeoverDispatch(unittest.TestCase):
         # The dispatcher passes the resolved registry path and the
         # ``--workspace`` argument through unchanged.
         self.assertEqual(
-            captured.get("workspace"), args.workspace,
+            captured.get("workspace"),
+            args.workspace,
         )
 
     def test_dispatch_passes_registry_path_through(self) -> None:
@@ -227,7 +229,10 @@ class TestResolveTarget(unittest.TestCase):
             registry_path = Path(tmp) / "registry.json"
             _write_registry(registry_path, _make_record())
             result = _resolve_target(
-                registry_path, None, "owner/repo#42", None,
+                registry_path,
+                None,
+                "owner/repo#42",
+                None,
             )
         self.assertIsNotNone(result)
         assert result is not None
@@ -240,10 +245,14 @@ class TestResolveTarget(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             registry_path = Path(tmp) / "registry.json"
             _write_registry(
-                registry_path, _make_record(run_id=None),
+                registry_path,
+                _make_record(run_id=None),
             )
             result = _resolve_target(
-                registry_path, None, "owner/repo#42", None,
+                registry_path,
+                None,
+                "owner/repo#42",
+                None,
             )
         self.assertIsNone(result)
 
@@ -251,17 +260,24 @@ class TestResolveTarget(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             registry_path = Path(tmp) / "registry.json"
             _write_registry(
-                registry_path, _make_record(workspace_path=None),
+                registry_path,
+                _make_record(workspace_path=None),
             )
             result = _resolve_target(
-                registry_path, None, "owner/repo#42", None,
+                registry_path,
+                None,
+                "owner/repo#42",
+                None,
             )
         self.assertIsNone(result)
 
     def test_resolve_via_run_id_with_workspace(self) -> None:
         """--run + --workspace bypasses the registry entirely."""
         result = _resolve_target(
-            None, Path("/w"), None, "run-xyz",
+            None,
+            Path("/w"),
+            None,
+            "run-xyz",
         )
         self.assertIsNotNone(result)
         assert result is not None
@@ -271,7 +287,10 @@ class TestResolveTarget(unittest.TestCase):
 
     def test_resolve_returns_none_when_registry_missing(self) -> None:
         result = _resolve_target(
-            Path("/nonexistent/registry.json"), None, "X", None,
+            Path("/nonexistent/registry.json"),
+            None,
+            "X",
+            None,
         )
         self.assertIsNone(result)
 
@@ -280,7 +299,10 @@ class TestResolveTarget(unittest.TestCase):
             registry_path = Path(tmp) / "registry.json"
             _write_registry(registry_path, _make_record())
             result = _resolve_target(
-                registry_path, None, "MISSING", None,
+                registry_path,
+                None,
+                "MISSING",
+                None,
             )
         self.assertIsNone(result)
 
@@ -293,7 +315,10 @@ class TestResolveTarget(unittest.TestCase):
     ) -> None:
         """--workspace overrides the resolved workspace_root."""
         result = _resolve_target(
-            None, Path("/default"), None, "run-xyz",
+            None,
+            Path("/default"),
+            None,
+            "run-xyz",
         )
         assert result is not None
         self.assertEqual(result.workspace_path, Path("/default"))
@@ -306,7 +331,10 @@ class TestResolveTarget(unittest.TestCase):
         _resolve_target treats ``workspace_root`` as authoritative.
         """
         result = _resolve_target(
-            None, Path("/explicit"), None, "run-xyz",
+            None,
+            Path("/explicit"),
+            None,
+            "run-xyz",
         )
         assert result is not None
         self.assertEqual(result.workspace_path, Path("/explicit"))
@@ -335,7 +363,9 @@ class TestRunTakeoverStub(unittest.TestCase):
         err = io.StringIO()
         with redirect_stderr(err):
             args = argparse.Namespace(
-                id=None, run="r-1", workspace=None,
+                id=None,
+                run="r-1",
+                workspace=None,
             )
             rc = _run_takeover(None, None, args)
         self.assertEqual(rc, 2)
@@ -349,7 +379,9 @@ class TestRunTakeoverStub(unittest.TestCase):
             err = io.StringIO()
             with redirect_stderr(err):
                 args = argparse.Namespace(
-                    id="MISSING", run=None, workspace=None,
+                    id="MISSING",
+                    run=None,
+                    workspace=None,
                 )
                 rc = _run_takeover(registry_path, Path(tmp), args)
         self.assertEqual(rc, 1)
@@ -369,7 +401,9 @@ class TestRunTakeoverStub(unittest.TestCase):
             err = io.StringIO()
             with redirect_stderr(err):
                 args = argparse.Namespace(
-                    id=None, run="r-1", workspace="/w",
+                    id=None,
+                    run="r-1",
+                    workspace="/w",
                 )
                 rc = _run_takeover(None, Path("/w"), args)
         self.assertEqual(rc, 0)
@@ -381,7 +415,9 @@ class TestRunTakeoverStub(unittest.TestCase):
 
 
 async def _wait_for_clients(
-    cs: ControlSocket, expected: int = 1, timeout: float = 2.0,
+    cs: ControlSocket,
+    expected: int = 1,
+    timeout: float = 2.0,
 ) -> None:
     """Poll until the server has registered ``expected`` clients.
 
@@ -402,7 +438,8 @@ async def _wait_for_clients(
 
 
 async def _drain_one(
-    cs: ControlSocket, timeout: float = 2.0,
+    cs: ControlSocket,
+    timeout: float = 2.0,
 ) -> ControlCommand | None:
     """Read at most one command from the control socket's queue.
 
@@ -410,10 +447,12 @@ async def _drain_one(
     else ``None``. Mirrors the helper at
     ``test_orchestrator_f49_control_socket.py``.
     """
+
     async def _next() -> ControlCommand | None:
         async for cmd in cs.poll_commands():
             return cmd
         return None
+
     try:
         return await asyncio.wait_for(_next(), timeout=timeout)
     except asyncio.TimeoutError:
@@ -512,7 +551,9 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
                         workspace=None,
                     )
                     rc = await _run_takeover_async(
-                        registry_path, tmp_path, args,
+                        registry_path,
+                        tmp_path,
+                        args,
                     )
             self.assertEqual(rc, 0)
             # No socket → no pause, no quiet period.
@@ -566,7 +607,9 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
                             workspace=None,
                         )
                         rc = await _run_takeover_async(
-                            registry_path, tmp_path, args,
+                            registry_path,
+                            tmp_path,
+                            args,
                         )
                         # Drain the queue (sender closed, so the
                         # server's read loop has already discarded
@@ -619,7 +662,9 @@ class TestRunTakeoverFullFlow(unittest.IsolatedAsyncioTestCase):
                             workspace=str(workspace),
                         )
                         rc = await _run_takeover_async(
-                            None, tmp_path, args,
+                            None,
+                            tmp_path,
+                            args,
                         )
                         first = await _drain_one(cs)
                         second = await _drain_one(cs)
@@ -678,7 +723,8 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
                 sessions_dir,
             ):
                 storage = SessionStorage(
-                    session_id=run_id, sessions_dir=sessions_dir,
+                    session_id=run_id,
+                    sessions_dir=sessions_dir,
                 )
                 storage.init_metadata(
                     model="claude-sonnet-4-20250514",
@@ -688,20 +734,24 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
                 storage.write_raw(
                     message_to_dict(
                         UserMessage(
-                            content=[{
-                                "type": "text",
-                                "text": "fix the bug in takeover",
-                            }],
+                            content=[
+                                {
+                                    "type": "text",
+                                    "text": "fix the bug in takeover",
+                                }
+                            ],
                         ),
                     ),
                 )
                 storage.write_raw(
                     message_to_dict(
                         AssistantMessage(
-                            content=[{
-                                "type": "text",
-                                "text": "Reading the relevant file.",
-                            }],
+                            content=[
+                                {
+                                    "type": "text",
+                                    "text": "Reading the relevant file.",
+                                }
+                            ],
                             model="claude-sonnet-4-20250514",
                         ),
                     ),
@@ -737,7 +787,9 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
                             workspace=str(workspace),
                         )
                         rc = await _run_takeover_async(
-                            None, tmp_path, args,
+                            None,
+                            tmp_path,
+                            args,
                         )
                         # Drain the two control commands the
                         # sender wrote to the queue.

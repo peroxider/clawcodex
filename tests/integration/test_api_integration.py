@@ -2,6 +2,7 @@
 
 Validates the streaming API client pipeline end-to-end with mocked HTTP.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +38,9 @@ class TestApiStreamingPipeline(unittest.TestCase):
         events_collected = []
 
         async def mock_stream():
-            yield MessageStart(model="claude-sonnet-4-6", usage=NonNullableUsage(input_tokens=10, output_tokens=0))
+            yield MessageStart(
+                model="claude-sonnet-4-6", usage=NonNullableUsage(input_tokens=10, output_tokens=0)
+            )
             yield TextDelta(text="Hello", index=0)
             yield ContentBlockStop(index=0)
             yield MessageDelta(stop_reason="end_turn")
@@ -49,7 +52,9 @@ class TestApiStreamingPipeline(unittest.TestCase):
 
         asyncio.run(run())
         types = [type(e).__name__ for e in events_collected]
-        self.assertEqual(types, ["MessageStart", "TextDelta", "ContentBlockStop", "MessageDelta", "MessageStop"])
+        self.assertEqual(
+            types, ["MessageStart", "TextDelta", "ContentBlockStop", "MessageDelta", "MessageStop"]
+        )
 
     def test_usage_tracking_through_stream(self) -> None:
         """UsageEvent accumulates input/output tokens."""
@@ -102,6 +107,7 @@ class TestApiRetryIntegration(unittest.TestCase):
             return await with_retry(op, RetryOptions(max_retries=5, model="test"))
 
         from src.services.api.retry import CannotRetryError
+
         with self.assertRaises(CannotRetryError):
             asyncio.run(run())
 
@@ -111,11 +117,13 @@ class TestApiErrorClassification(unittest.TestCase):
 
     def test_retryable_errors(self) -> None:
         from src.services.api.errors import categorize_retryable_api_error
+
         self.assertTrue(categorize_retryable_api_error(RateLimitError("", status=429)).retryable)
         self.assertTrue(categorize_retryable_api_error(OverloadedError("", status=529)).retryable)
 
     def test_non_retryable_errors(self) -> None:
         from src.services.api.errors import categorize_retryable_api_error
+
         self.assertFalse(categorize_retryable_api_error(ValueError("bad input")).retryable)
         self.assertFalse(categorize_retryable_api_error(PromptTooLongError("too long")).retryable)
 

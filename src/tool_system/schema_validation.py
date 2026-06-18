@@ -34,7 +34,9 @@ def _as_set(values: Iterable[str] | None) -> set[str]:
     return set(values or [])
 
 
-def validate_json_schema(value: Any, schema: Mapping[str, Any], *, root_name: str = "input") -> None:
+def validate_json_schema(
+    value: Any, schema: Mapping[str, Any], *, root_name: str = "input"
+) -> None:
     issues: list[ValidationIssue] = []
     _validate(value, schema, path=root_name, issues=issues)
     if issues:
@@ -44,7 +46,9 @@ def validate_json_schema(value: Any, schema: Mapping[str, Any], *, root_name: st
         raise ToolInputError(rendered)
 
 
-def _validate(value: Any, schema: Mapping[str, Any], *, path: str, issues: list[ValidationIssue]) -> None:
+def _validate(
+    value: Any, schema: Mapping[str, Any], *, path: str, issues: list[ValidationIssue]
+) -> None:
     if "oneOf" in schema:
         options = schema.get("oneOf") or []
         if any(_is_valid(value, opt) for opt in options):
@@ -100,7 +104,9 @@ def _validate(value: Any, schema: Mapping[str, Any], *, path: str, issues: list[
             return
 
 
-def _validate_object(value: dict[str, Any], schema: Mapping[str, Any], *, path: str, issues: list[ValidationIssue]) -> None:
+def _validate_object(
+    value: dict[str, Any], schema: Mapping[str, Any], *, path: str, issues: list[ValidationIssue]
+) -> None:
     required = _as_set(schema.get("required"))
     properties = schema.get("properties") or {}
     additional = schema.get("additionalProperties", True)
@@ -150,4 +156,3 @@ def build_schema_not_sent_hint(tool: Any) -> str:
         "is loaded on demand. Call the ToolSearchTool first with this tool's "
         "name to retrieve the schema, then re-issue the call."
     )
-

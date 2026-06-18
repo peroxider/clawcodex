@@ -111,9 +111,9 @@ class TestHasTextBlocks:
         assert has_text_blocks(msg) is True
 
     def test_no_text_block(self):
-        msg = AssistantMessage(content=[
-            ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"})
-        ])
+        msg = AssistantMessage(
+            content=[ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"})]
+        )
         assert has_text_blocks(msg) is False
 
 
@@ -176,12 +176,16 @@ class TestCalculateMessagesToKeepIndex:
         """Result doesn't split tool_use/tool_result pairs."""
         msgs = [
             UserMessage(content="hello"),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(tool_use_id="t1", content="file contents"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(tool_use_id="t1", content="file contents"),
+                ]
+            ),
             AssistantMessage(content=[TextBlock(text="done")]),
         ]
         # last_summarized_index=0 means start_index=1 (right between tool_use and tool_result)
@@ -202,12 +206,16 @@ class TestAdjustIndex:
     def test_adjusts_for_tool_pair(self):
         msgs = [
             UserMessage(content="hello"),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(tool_use_id="t1", content="result"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(tool_use_id="t1", content="result"),
+                ]
+            ),
             AssistantMessage(content=[TextBlock(text="done")]),
         ]
         # Index 2 is the tool_result — should adjust back to include the tool_use

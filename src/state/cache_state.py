@@ -178,9 +178,7 @@ def evaluate_prompt_cache_1h_eligibility(
     """
     latches = get_beta_header_latches()
     if latches.prompt_cache_1h_eligible is None:
-        latches.prompt_cache_1h_eligible = is_ant_user or (
-            is_subscriber and not is_using_overage
-        )
+        latches.prompt_cache_1h_eligible = is_ant_user or (is_subscriber and not is_using_overage)
     return latches.prompt_cache_1h_eligible
 
 
@@ -232,9 +230,12 @@ def should_use_global_cache_scope(
     server on every cold-start request.
     """
     import os
-    enabled = os.environ.get(
-        "CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE", ""
-    ).strip().lower() in {"1", "true", "yes"}
+
+    enabled = os.environ.get("CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     if not enabled:
         return False
     if has_mcp_tools:
@@ -256,6 +257,7 @@ def is_first_party_provider(provider: BaseProvider) -> bool:
     # Local import to avoid a circular dependency: providers package may
     # import from state in the future, and we don't want to lock that.
     from src.providers.anthropic_provider import AnthropicProvider
+
     if not isinstance(provider, AnthropicProvider):
         return False
     # Public ``has_custom_endpoint`` method on AnthropicProvider so we

@@ -106,9 +106,7 @@ def _run_bash_with_abort(
         _base_env["PATH"] = f"{_conda_bin}:{_base_env.get('PATH', '')}"
     popen_kwargs["env"] = _base_env
     if _sys_mod.platform == "win32":
-        popen_kwargs["creationflags"] = getattr(
-            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
-        )
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     else:
         popen_kwargs["start_new_session"] = True
 
@@ -164,6 +162,7 @@ def _run_bash_with_abort(
         interrupted=interrupted,
         timed_out=timed_out,
     )
+
 
 _HARDCODED_DANGEROUS_PATTERNS = [
     re.compile(r"\bsudo\b", re.IGNORECASE),
@@ -336,7 +335,9 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     cwd_fd, cwd_path = _tempfile.mkstemp(prefix="clawcodex-bash-cwd-", suffix=".txt")
     _os.close(cwd_fd)
     try:
-        wrapped = f"{{ {command}\n}}; __rc=$?; pwd > {shlex.quote(cwd_path)} 2>/dev/null; exit $__rc"
+        wrapped = (
+            f"{{ {command}\n}}; __rc=$?; pwd > {shlex.quote(cwd_path)} 2>/dev/null; exit $__rc"
+        )
         # Spawn bash in its own session/process group so we can kill the
         # whole subtree (e.g. ``find /`` that itself forks helpers) when
         # ESC fires. Mirrors TS ``ShellCommand`` (typescript/src/utils/
@@ -396,13 +397,9 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             #     decoupled from whatever signal Popen actually reports
             #     (which would be ``-9`` on Unix after our SIGKILL).
             existing_stderr = run_result.stderr or ""
-            timeout_marker = (
-                f"Command timed out after {format_duration(timeout_s * 1000)}"
-            )
+            timeout_marker = f"Command timed out after {format_duration(timeout_s * 1000)}"
             stderr_with_marker = (
-                f"{timeout_marker} {existing_stderr}"
-                if existing_stderr
-                else timeout_marker
+                f"{timeout_marker} {existing_stderr}" if existing_stderr else timeout_marker
             )
             return ToolResult(
                 name=BASH_TOOL_NAME,
@@ -451,7 +448,10 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     stderr = truncate_output(completed_stderr)
 
     interpretation = interpret_command_result(
-        command, completed_returncode, completed_stdout, completed_stderr,
+        command,
+        completed_returncode,
+        completed_stdout,
+        completed_stderr,
     )
 
     output: dict[str, Any] = {
@@ -465,6 +465,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     # Use the un-truncated stdout to avoid splitting a base64 string mid-stream.
     # Matches TS BashTool isImage flag set in mapToolResultToToolResultBlockParam.
     from .image_output import is_image_output as _is_image_output
+
     if completed_stdout and _is_image_output(completed_stdout):
         output["isImage"] = True
         # Keep the raw data URI in stdout so the mapper can build the image block.
@@ -493,7 +494,7 @@ def _bash_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
                 "content": error_msg,
                 "is_error": True,
             }
-        
+
         # ``run_in_background: true`` responses carry a task id + a canned
         # message instead of stdout/stderr -- hand it through verbatim so the
         # model sees something actionable.
@@ -509,6 +510,7 @@ def _bash_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
         # of base64 noise. Mirrors TS BashTool/utils.ts buildImageToolResult.
         if output.get("isImage"):
             from .image_output import build_image_tool_result as _build_img
+
             blocks = _build_img(output.get("stdout", ""))
             if blocks is not None:
                 return {

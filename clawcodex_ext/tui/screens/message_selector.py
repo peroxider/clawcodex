@@ -106,9 +106,7 @@ class MessageSelectorScreen(DialogScreen[tuple[int, SelectorAction]]):
             return
         self._resolve(idx, "restore")
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss((-1, "cancel"))
 
     def _resolve(self, index: int, action: SelectorAction) -> None:

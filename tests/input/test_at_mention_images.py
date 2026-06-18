@@ -75,7 +75,8 @@ class TestExpandAtMentionsImages(unittest.TestCase):
         _, atts = expand_at_mentions(f"see @{mis}", cwd=str(self.tmp))
         self.assertEqual(atts[0]["kind"], "image")
         self.assertEqual(
-            atts[0]["media_type"], "image/jpeg",
+            atts[0]["media_type"],
+            "image/jpeg",
             "magic-byte sniffing should override the .png extension",
         )
 
@@ -214,7 +215,8 @@ class TestImageAttachmentCompressionFallback(unittest.TestCase):
         oversized = self.tmp / "oversized.png"
         Image.frombytes("RGB", (4000, 4000), rng).save(oversized, format="PNG")
         self.assertGreater(
-            oversized.stat().st_size, API_IMAGE_MAX_BASE64_SIZE,
+            oversized.stat().st_size,
+            API_IMAGE_MAX_BASE64_SIZE,
             "test setup: random-noise PNG must exceed the API cap for the "
             "compression branch to engage",
         )
@@ -222,7 +224,8 @@ class TestImageAttachmentCompressionFallback(unittest.TestCase):
         self.assertIsNotNone(att)
         b64_len = len(att["base64"])
         self.assertLessEqual(
-            b64_len, API_IMAGE_MAX_BASE64_SIZE,
+            b64_len,
+            API_IMAGE_MAX_BASE64_SIZE,
             f"Compression fallback failed to bring base64 under the API "
             f"limit: {b64_len} > {API_IMAGE_MAX_BASE64_SIZE}",
         )
@@ -264,9 +267,11 @@ class TestImageAttachmentCompressionFallback(unittest.TestCase):
         ip_proc.compress_image_to_token_budget = fake_compress
         try:
             att = ip_mod._try_build_image_attachment(str(png), "tiny.png")
-            self.assertIsNone(att,
+            self.assertIsNone(
+                att,
                 "Both resize and compress oversize -> attachment must be "
-                "dropped to avoid the API rejecting the next turn")
+                "dropped to avoid the API rejecting the next turn",
+            )
         finally:
             ip_proc.maybe_resize_image = real_resize
             ip_proc.compress_image_to_token_budget = real_compress
@@ -281,9 +286,7 @@ class TestEndToEndAtImageMention(unittest.TestCase):
     def _compose(self, user_text: str) -> dict:
         _, atts = expand_at_mentions(user_text, cwd=str(self.tmp))
         attachment_text = format_at_mention_attachments(atts)
-        text_part = (
-            f"{attachment_text}\n\n{user_text}" if attachment_text else user_text
-        )
+        text_part = f"{attachment_text}\n\n{user_text}" if attachment_text else user_text
         image_blocks = build_image_content_blocks(atts)
         um = UserMessage(content=[TextBlock(text=text_part), *image_blocks])
         return normalize_messages_for_api([um])[0]

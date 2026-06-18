@@ -100,7 +100,5 @@ ExitPlanModeTool: Tool = build_tool(
     # Surface the first ~200 chars of the proposed plan so a future
     # classifier can spot prompt-injection text being shipped through
     # plan-mode exit.
-    to_auto_classifier_input=lambda input_data: (
-        ((input_data or {}).get("plan") or "")[:200]
-    ),
+    to_auto_classifier_input=lambda input_data: ((input_data or {}).get("plan") or "")[:200],
 )

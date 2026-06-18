@@ -173,6 +173,17 @@ extend-exclude = [
 # a repo-wide style cleanup. Formatting is still checked on changed files in CI.
 select = ["E9", "F63", "F7", "F82"]
 
+[tool.ruff.lint.per-file-ignores]
+# These ``src`` modules are intentional lazy facades for implementations that
+# now live under ``clawcodex_ext``. Their public names are materialized via
+# module-level ``__getattr__``, so Ruff cannot see them as static definitions.
+"src/command_system/*.py" = ["F822"]
+"src/context_system/prompt_assembly.py" = ["F822"]
+"src/entrypoints/*.py" = ["F822"]
+"src/permissions/cycle.py" = ["F822"]
+"src/repl/*.py" = ["F822"]
+"src/tui/**/*.py" = ["F822"]
+
 [tool.coverage.run]
 branch = true
 source = ["src", "clawcodex_ext", "extensions"]

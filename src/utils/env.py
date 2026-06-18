@@ -10,6 +10,7 @@ The canonical truthy set matches the TS spirit (``"1"``, ``"true"``,
 constant frozenset rather than membership tests against a tuple gives
 O(1) lookup and pins the set to "exactly these values."
 """
+
 from __future__ import annotations
 
 import os

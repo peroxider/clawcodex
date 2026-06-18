@@ -20,23 +20,25 @@ def _sse_response(events: list[tuple[str | None, str]]) -> bytes:
     out: list[str] = []
     for eid, data in events:
         if eid is not None:
-            out.append(f'id: {eid}')
-        out.append(f'data: {data}')
-        out.append('')  # blank line terminates the event
-    return ('\n'.join(out) + '\n').encode('utf-8')
+            out.append(f"id: {eid}")
+        out.append(f"data: {data}")
+        out.append("")  # blank line terminates the event
+    return ("\n".join(out) + "\n").encode("utf-8")
 
 
 @pytest.mark.asyncio
 async def test_basic_event_dispatch():
-    body = _sse_response([
-        ('1', 'first'),
-        ('2', 'second'),
-    ])
+    body = _sse_response(
+        [
+            ("1", "first"),
+            ("2", "second"),
+        ]
+    )
 
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            headers={'content-type': 'text/event-stream'},
+            headers={"content-type": "text/event-stream"},
             content=body,
         )
 
@@ -45,7 +47,7 @@ async def test_basic_event_dispatch():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         sse = SSETransport(
-            url='https://api.test/stream',
+            url="https://api.test/stream",
             client=client,
         )
         sse.set_on_data(received_data.append)
@@ -58,23 +60,23 @@ async def test_basic_event_dispatch():
             await asyncio.sleep(0.02)
         await sse.aclose()
 
-    assert received_data == ['first', 'second']
-    assert [e.event_id for e in received_events] == ['1', '2']
+    assert received_data == ["first", "second"]
+    assert [e.event_id for e in received_events] == ["1", "2"]
 
 
 @pytest.mark.asyncio
 async def test_get_last_sequence_num_tracks_event_id():
-    body = _sse_response([('100', 'a'), ('200', 'b'), ('300', 'c')])
+    body = _sse_response([("100", "a"), ("200", "b"), ("300", "c")])
 
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            headers={'content-type': 'text/event-stream'},
+            headers={"content-type": "text/event-stream"},
             content=body,
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        sse = SSETransport(url='https://api.test/stream', client=client)
+        sse = SSETransport(url="https://api.test/stream", client=client)
         sse.set_on_data(lambda _: None)
         await sse.connect()
         for _ in range(50):
@@ -90,19 +92,19 @@ async def test_get_last_sequence_num_tracks_event_id():
 async def test_last_event_id_passed_on_reconnect():
     """Per Risk #21: SSETransport must pass Last-Event-ID on reconnect."""
     request_headers: list[dict] = []
-    body = _sse_response([('5', 'x')])
+    body = _sse_response([("5", "x")])
 
     def handler(req: httpx.Request) -> httpx.Response:
         request_headers.append({k.lower(): v for k, v in req.headers.items()})
         return httpx.Response(
             200,
-            headers={'content-type': 'text/event-stream'},
+            headers={"content-type": "text/event-stream"},
             content=body,
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         sse = SSETransport(
-            url='https://api.test/stream',
+            url="https://api.test/stream",
             client=client,
             reconnect_delay_seconds=0.01,
             reconnect_budget=2,
@@ -118,20 +120,20 @@ async def test_last_event_id_passed_on_reconnect():
 
     # First request: no Last-Event-ID. Second: has '5'.
     assert len(request_headers) >= 2
-    assert request_headers[0].get('last-event-id') is None
-    assert request_headers[1].get('last-event-id') == '5'
+    assert request_headers[0].get("last-event-id") is None
+    assert request_headers[1].get("last-event-id") == "5"
 
 
 @pytest.mark.asyncio
 async def test_reconnect_budget_exhausted_fires_close():
     def handler(req: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError('refused')
+        raise httpx.ConnectError("refused")
 
     received_close: list[int | None] = []
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         sse = SSETransport(
-            url='https://api.test/stream',
+            url="https://api.test/stream",
             client=client,
             reconnect_delay_seconds=0.01,
             reconnect_budget=2,
@@ -155,22 +157,22 @@ async def test_get_auth_headers_called_on_each_connect():
     def auth_headers() -> dict[str, str]:
         nonlocal call_count
         call_count += 1
-        return {'Authorization': f'Bearer tok-{call_count}'}
+        return {"Authorization": f"Bearer tok-{call_count}"}
 
     captured_auth: list[str] = []
-    body = _sse_response([('1', 'x')])
+    body = _sse_response([("1", "x")])
 
     def handler(req: httpx.Request) -> httpx.Response:
-        captured_auth.append(req.headers.get('authorization', ''))
+        captured_auth.append(req.headers.get("authorization", ""))
         return httpx.Response(
             200,
-            headers={'content-type': 'text/event-stream'},
+            headers={"content-type": "text/event-stream"},
             content=body,
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         sse = SSETransport(
-            url='https://api.test/stream',
+            url="https://api.test/stream",
             client=client,
             get_auth_headers=auth_headers,
             reconnect_delay_seconds=0.01,
@@ -191,18 +193,18 @@ async def test_get_auth_headers_called_on_each_connect():
 
 @pytest.mark.asyncio
 async def test_close_terminates_loop():
-    body = _sse_response([('1', 'x')])
+    body = _sse_response([("1", "x")])
 
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            headers={'content-type': 'text/event-stream'},
+            headers={"content-type": "text/event-stream"},
             content=body,
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         sse = SSETransport(
-            url='https://api.test/stream',
+            url="https://api.test/stream",
             client=client,
             reconnect_delay_seconds=10,  # would block reconnect for ages
         )

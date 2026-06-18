@@ -65,7 +65,9 @@ def _exit_worktree_call(tool_input: dict[str, Any], context: ToolContext) -> Too
     context.cwd = context.workspace_root
     return ToolResult(
         name="ExitWorktree",
-        output={"message": f"Exited worktree session ({old}). Returned to {context.workspace_root}."},
+        output={
+            "message": f"Exited worktree session ({old}). Returned to {context.workspace_root}."
+        },
     )
 
 

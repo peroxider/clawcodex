@@ -116,6 +116,7 @@ def _default_map_result_to_api(name: str) -> Callable[[Any, str], dict[str, Any]
             "tool_use_id": tool_use_id,
             "content": content,
         }
+
     return _map
 
 
@@ -192,7 +193,8 @@ def build_tool(
         is_read_only=is_read_only or TOOL_DEFAULTS["is_read_only"],
         is_destructive=is_destructive or TOOL_DEFAULTS["is_destructive"],
         check_permissions=check_permissions or TOOL_DEFAULTS["check_permissions"],
-        to_auto_classifier_input=to_auto_classifier_input or TOOL_DEFAULTS["to_auto_classifier_input"],
+        to_auto_classifier_input=to_auto_classifier_input
+        or TOOL_DEFAULTS["to_auto_classifier_input"],
         validate_input=validate_input,
         user_facing_name=user_facing_name or (lambda _input: name),
         get_path=get_path,

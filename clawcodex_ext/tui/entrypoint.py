@@ -119,9 +119,7 @@ def _run_tui_with_app(
             model=model,
         )
     else:
-        provider_name = options.provider_name or getattr(
-            provider, "provider_name", "unknown"
-        )
+        provider_name = options.provider_name or getattr(provider, "provider_name", "unknown")
 
     # Build tool registry + context if not injected
     if tool_registry is None:
@@ -165,8 +163,7 @@ def _run_tui_with_app(
 
             console = Console()
             console.print(
-                f"[yellow]Session not found: {resume_session_id}. "
-                "Starting new session.[/yellow]"
+                f"[yellow]Session not found: {resume_session_id}. Starting new session.[/yellow]"
             )
             used_session = Session.create(provider_name, model_label)
     else:
@@ -277,11 +274,11 @@ def _register_tui_signal_save(session: Session) -> None:
             return
         try:
             import sys
+
             if sys.stdout.isatty():
                 from rich.console import Console
-                Console().print(
-                    f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]"
-                )
+
+                Console().print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
         except Exception:
             pass
 

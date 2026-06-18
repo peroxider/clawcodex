@@ -3,6 +3,7 @@
 25 tests validating that Python modules expose the same interfaces and behaviors
 as their TypeScript counterparts across all R2 work streams.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -61,9 +62,16 @@ class TestApiClientStreamsEvents(unittest.TestCase):
 
     def test_all_stream_event_types_exist(self) -> None:
         types = [
-            TextDelta, ToolUseStart, ToolUseDelta, ThinkingDelta,
-            MessageStart, MessageDelta, MessageStop, ContentBlockStop,
-            UsageEvent, ErrorEvent,
+            TextDelta,
+            ToolUseStart,
+            ToolUseDelta,
+            ThinkingDelta,
+            MessageStart,
+            MessageDelta,
+            MessageStop,
+            ContentBlockStop,
+            UsageEvent,
+            ErrorEvent,
         ]
         for t in types:
             self.assertTrue(hasattr(t, "type"), f"{t.__name__} missing 'type'")
@@ -103,6 +111,7 @@ class TestApiClientStreamsEvents(unittest.TestCase):
 # 2. Retry: exponential backoff
 # ---------------------------------------------------------------------------
 
+
 class TestApiRetryExponentialBackoff(unittest.TestCase):
     def test_backoff_doubles(self) -> None:
         d1 = _compute_backoff_ms(1, base_delay_ms=1000)
@@ -124,6 +133,7 @@ class TestApiRetryExponentialBackoff(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 3. Fallback model switch
 # ---------------------------------------------------------------------------
+
 
 class TestApiFallbackModelSwitch(unittest.TestCase):
     def test_fallback_triggers_on_overloaded(self) -> None:
@@ -168,6 +178,7 @@ class TestApiFallbackModelSwitch(unittest.TestCase):
 # 4. Query loop streaming flow
 # ---------------------------------------------------------------------------
 
+
 class TestQueryLoopStreamingFlow(unittest.TestCase):
     def test_streaming_query_yields_events(self) -> None:
         from src.query.streaming import QueryConfig, QueryEvent, streaming_query
@@ -206,9 +217,11 @@ class TestQueryLoopStreamingFlow(unittest.TestCase):
 # 5. Reactive compact
 # ---------------------------------------------------------------------------
 
+
 class TestQueryReactiveCompact(unittest.TestCase):
     def test_reactive_compact_result_fields(self) -> None:
         from src.services.compact.reactive_compact import ReactiveCompactResult
+
         r = ReactiveCompactResult(
             compacted=True,
             messages=[],
@@ -221,6 +234,7 @@ class TestQueryReactiveCompact(unittest.TestCase):
 
     def test_is_withheld_prompt_too_long(self) -> None:
         from src.services.compact.reactive_compact import is_withheld_prompt_too_long
+
         self.assertTrue(is_withheld_prompt_too_long(Exception("prompt_too_long error")))
         self.assertTrue(is_withheld_prompt_too_long(Exception("Prompt is too long")))
         self.assertFalse(is_withheld_prompt_too_long(Exception("random error")))
@@ -229,6 +243,7 @@ class TestQueryReactiveCompact(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 6. Token budget
 # ---------------------------------------------------------------------------
+
 
 class TestQueryTokenBudget(unittest.TestCase):
     def test_streaming_query_respects_max_turns(self) -> None:
@@ -265,6 +280,7 @@ class TestQueryTokenBudget(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 7. Stop hooks
 # ---------------------------------------------------------------------------
+
 
 class TestQueryStopHooks(unittest.TestCase):
     def test_stop_hooks_fire_at_end_of_turn(self) -> None:
@@ -306,6 +322,7 @@ class TestQueryStopHooks(unittest.TestCase):
 # 8. Tool execution pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestToolExecutionPipeline(unittest.TestCase):
     def test_tool_execution_imports(self) -> None:
         from src.services.tool_execution.tool_execution import (
@@ -313,16 +330,19 @@ class TestToolExecutionPipeline(unittest.TestCase):
             MessageUpdateLazy,
             run_tool_use,
         )
+
         self.assertTrue(callable(run_tool_use))
         m = MessageUpdateLazy()
         self.assertIsNone(m.message)
 
     def test_streaming_executor_imports(self) -> None:
         from src.services.tool_execution.streaming_executor import StreamingToolExecutor
+
         self.assertTrue(hasattr(StreamingToolExecutor, "add_tool"))
 
     def test_tool_hooks_imports(self) -> None:
         from src.services.tool_execution.tool_hooks import run_pre_tool_use_hooks
+
         self.assertTrue(callable(run_pre_tool_use_hooks))
 
 
@@ -330,44 +350,82 @@ class TestToolExecutionPipeline(unittest.TestCase):
 # 9. Bash parser top commands
 # ---------------------------------------------------------------------------
 
+
 class TestBashParserTopCommands(unittest.TestCase):
     def test_parse_simple_commands(self) -> None:
         from src.permissions.bash_parser.parser import parse_command
 
         commands = [
-            "ls -la", "cat file.txt", "echo hello", "grep pattern file",
-            "find . -name '*.py'", "wc -l", "sort file.txt",
-            "mkdir -p dir", "rm -f temp", "cp a b",
-            "mv old new", "touch file", "head -10 f",
-            "tail -5 f", "diff a b", "git status",
-            "git log --oneline", "git diff", "pwd", "whoami",
-            "date", "env", "ps aux", "which python",
-            "du -sh .", "df -h", "id", "hostname",
-            "curl http://example.com", "wget http://example.com",
-            "pip install pkg", "npm install", "yarn add pkg",
-            "python script.py", "node app.js", "chmod 755 file",
-            "chown user file", "sed -i 's/a/b/g' file",
-            "awk '{print $1}' file", "tar -xzf archive.tar.gz",
-            "zip out.zip file", "unzip archive.zip",
-            "docker ps", "kubectl get pods",
-            "make build", "cargo build", "go build",
-            "tee output.txt", "xargs echo",
-            "jq '.key' file.json", "tr 'a-z' 'A-Z'",
-            "cut -d: -f1", "paste a b",
+            "ls -la",
+            "cat file.txt",
+            "echo hello",
+            "grep pattern file",
+            "find . -name '*.py'",
+            "wc -l",
+            "sort file.txt",
+            "mkdir -p dir",
+            "rm -f temp",
+            "cp a b",
+            "mv old new",
+            "touch file",
+            "head -10 f",
+            "tail -5 f",
+            "diff a b",
+            "git status",
+            "git log --oneline",
+            "git diff",
+            "pwd",
+            "whoami",
+            "date",
+            "env",
+            "ps aux",
+            "which python",
+            "du -sh .",
+            "df -h",
+            "id",
+            "hostname",
+            "curl http://example.com",
+            "wget http://example.com",
+            "pip install pkg",
+            "npm install",
+            "yarn add pkg",
+            "python script.py",
+            "node app.js",
+            "chmod 755 file",
+            "chown user file",
+            "sed -i 's/a/b/g' file",
+            "awk '{print $1}' file",
+            "tar -xzf archive.tar.gz",
+            "zip out.zip file",
+            "unzip archive.zip",
+            "docker ps",
+            "kubectl get pods",
+            "make build",
+            "cargo build",
+            "go build",
+            "tee output.txt",
+            "xargs echo",
+            "jq '.key' file.json",
+            "tr 'a-z' 'A-Z'",
+            "cut -d: -f1",
+            "paste a b",
         ]
         for cmd in commands:
             result = parse_command(cmd)
             self.assertIsNotNone(result, f"Failed to parse: {cmd}")
-            self.assertIn(result.kind, ("simple", "compound", "too-complex"),
-                          f"Unexpected kind for: {cmd}")
+            self.assertIn(
+                result.kind, ("simple", "compound", "too-complex"), f"Unexpected kind for: {cmd}"
+            )
 
     def test_parse_pipes(self) -> None:
         from src.permissions.bash_parser.parser import parse_command
+
         result = parse_command("cat file.txt | grep hello | wc -l")
         self.assertIsNotNone(result)
 
     def test_parse_and_or(self) -> None:
         from src.permissions.bash_parser.parser import parse_command
+
         result = parse_command("mkdir -p dir && cd dir && ls")
         self.assertIsNotNone(result)
 
@@ -376,9 +434,11 @@ class TestBashParserTopCommands(unittest.TestCase):
 # 10. Bash permission matrix
 # ---------------------------------------------------------------------------
 
+
 class TestBashPermissionMatrix(unittest.TestCase):
     def test_safe_commands_classified_safe(self) -> None:
         from src.permissions.bash_security import analyze_bash_command
+
         safe_cmds = ["echo hello", "pwd", "whoami", "date", "true"]
         for cmd in safe_cmds:
             result = analyze_bash_command(cmd)
@@ -386,13 +446,17 @@ class TestBashPermissionMatrix(unittest.TestCase):
 
     def test_read_only_commands(self) -> None:
         from src.permissions.bash_security import analyze_bash_command
+
         ro_cmds = ["cat file.txt", "ls -la", "grep pattern file", "find . -name '*.py'"]
         for cmd in ro_cmds:
             result = analyze_bash_command(cmd)
-            self.assertIn(result.safety, ("safe", "read_only"), f"Expected safe/read_only for: {cmd}")
+            self.assertIn(
+                result.safety, ("safe", "read_only"), f"Expected safe/read_only for: {cmd}"
+            )
 
     def test_write_commands(self) -> None:
         from src.permissions.bash_security import analyze_bash_command
+
         write_cmds = ["cp a b", "mv old new", "mkdir -p dir", "touch file"]
         for cmd in write_cmds:
             result = analyze_bash_command(cmd)
@@ -400,20 +464,26 @@ class TestBashPermissionMatrix(unittest.TestCase):
 
     def test_dangerous_commands(self) -> None:
         from src.permissions.bash_security import analyze_bash_command
+
         dangerous_cmds = ["sudo rm -rf /", "chmod 777 /etc/passwd"]
         for cmd in dangerous_cmds:
             result = analyze_bash_command(cmd)
-            self.assertIn(result.safety, ("dangerous", "destructive", "unknown"),
-                          f"Expected dangerous/destructive for: {cmd}")
+            self.assertIn(
+                result.safety,
+                ("dangerous", "destructive", "unknown"),
+                f"Expected dangerous/destructive for: {cmd}",
+            )
 
 
 # ---------------------------------------------------------------------------
 # 11. Filesystem protected paths
 # ---------------------------------------------------------------------------
 
+
 class TestFilesystemProtectedPaths(unittest.TestCase):
     def test_dangerous_files_blocked(self) -> None:
         from src.permissions.filesystem import DANGEROUS_FILES, check_path_safety_for_auto_edit
+
         for filename in DANGEROUS_FILES:
             # Some entries like ".docker/config.json" include subdirs that are
             # caught by the directory check (e.g. .docker is not in DANGEROUS_DIRECTORIES)
@@ -426,6 +496,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 
     def test_dangerous_directories_blocked(self) -> None:
         from src.permissions.filesystem import check_path_safety_for_auto_edit
+
         dirs = [".git", ".ssh", ".gnupg", ".config", ".vscode"]
         for d in dirs:
             path = f"/home/user/{d}/some_file.txt"
@@ -434,6 +505,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 
     def test_env_files_blocked(self) -> None:
         from src.permissions.filesystem import check_path_safety_for_auto_edit
+
         env_files = [".env", ".env.local", ".env.production"]
         for f in env_files:
             path = f"/project/{f}"
@@ -442,6 +514,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 
     def test_lockfiles_blocked(self) -> None:
         from src.permissions.filesystem import check_path_safety_for_auto_edit
+
         lockfiles = ["package-lock.json", "yarn.lock", "poetry.lock"]
         for f in lockfiles:
             path = f"/project/{f}"
@@ -450,6 +523,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 
     def test_normal_files_allowed(self) -> None:
         from src.permissions.filesystem import check_path_safety_for_auto_edit
+
         safe_files = ["app.py", "index.ts", "README.md", "Dockerfile"]
         for f in safe_files:
             path = f"/project/src/{f}"
@@ -458,6 +532,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 
     def test_unc_paths_blocked(self) -> None:
         from src.permissions.filesystem import check_read_permission_for_path
+
         # On macOS, // resolves to / via Path.resolve(); use \\\\ for true UNC
         result = check_read_permission_for_path("\\\\server\\share\\file.txt")
         if os.name == "nt":
@@ -470,6 +545,7 @@ class TestFilesystemProtectedPaths(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 12. Permission setup multi-source
 # ---------------------------------------------------------------------------
+
 
 class TestPermissionSetupMultiSource(unittest.TestCase):
     def test_multi_source_merge(self) -> None:
@@ -490,9 +566,8 @@ class TestPermissionSetupMultiSource(unittest.TestCase):
             )
             self.assertIsNotNone(result.context)
             # Should have allow + deny rules
-            total_rules = (
-                len(result.context.always_allow_rules)
-                + len(result.context.always_deny_rules)
+            total_rules = len(result.context.always_allow_rules) + len(
+                result.context.always_deny_rules
             )
             self.assertGreaterEqual(total_rules, 2)
 
@@ -513,10 +588,15 @@ class TestPermissionSetupMultiSource(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             settings = os.path.join(td, "settings.json")
             with open(settings, "w") as f:
-                json.dump({"permissions": {
-                    "allow": ["Read(file.txt)"],
-                    "deny": ["Read"],
-                }}, f)
+                json.dump(
+                    {
+                        "permissions": {
+                            "allow": ["Read(file.txt)"],
+                            "deny": ["Read"],
+                        }
+                    },
+                    f,
+                )
 
             result = setup_permissions(user_settings_path=settings)
             self.assertGreater(len(result.shadowed_rules), 0)
@@ -525,6 +605,7 @@ class TestPermissionSetupMultiSource(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 13. System prompt sections
 # ---------------------------------------------------------------------------
+
 
 class TestSystemPromptSections(unittest.TestCase):
     def test_prompt_assembly_functions_exist(self) -> None:
@@ -535,11 +616,13 @@ class TestSystemPromptSections(unittest.TestCase):
             get_user_context,
             prepend_user_context,
         )
+
         self.assertTrue(callable(fetch_system_prompt_parts))
         self.assertTrue(callable(append_system_context))
 
     def test_append_system_context(self) -> None:
         from src.context_system.prompt_assembly import append_system_context
+
         result = append_system_context(
             ["You are helpful."],
             {"gitStatus": "On branch main, 2 files modified"},
@@ -549,6 +632,7 @@ class TestSystemPromptSections(unittest.TestCase):
 
     def test_system_prompt_parts_dataclass(self) -> None:
         from src.context_system.models import SystemPromptParts
+
         parts = SystemPromptParts(
             default_system_prompt=["identity section"],
             user_context={"claudeMd": "test"},
@@ -562,13 +646,16 @@ class TestSystemPromptSections(unittest.TestCase):
 # 14. Config inheritance
 # ---------------------------------------------------------------------------
 
+
 class TestConfigInheritance(unittest.TestCase):
     def test_config_manager_exists(self) -> None:
         from src.config import ConfigManager
+
         self.assertTrue(hasattr(ConfigManager, "get"))
 
     def test_deep_merge_precedence(self) -> None:
         from src.config import _deep_merge
+
         base = {"a": 1, "nested": {"x": 1, "y": 2}}
         override = {"a": 99, "nested": {"x": 99}, "b": 3}
         result = _deep_merge(base, override)
@@ -582,10 +669,12 @@ class TestConfigInheritance(unittest.TestCase):
 # 15. Settings validation
 # ---------------------------------------------------------------------------
 
+
 class TestSettingsValidation(unittest.TestCase):
     def test_valid_settings_no_errors(self) -> None:
         from src.settings.types import SettingsSchema
         from src.settings.validation import validate_settings
+
         settings = SettingsSchema()
         errors = validate_settings(settings)
         self.assertEqual(len(errors), 0)
@@ -593,6 +682,7 @@ class TestSettingsValidation(unittest.TestCase):
     def test_invalid_effort_rejected(self) -> None:
         from src.settings.types import SettingsSchema
         from src.settings.validation import validate_settings
+
         settings = SettingsSchema(effort="ultra")
         errors = validate_settings(settings)
         effort_errors = [e for e in errors if e.field == "effort"]
@@ -601,6 +691,7 @@ class TestSettingsValidation(unittest.TestCase):
     def test_invalid_max_turns_rejected(self) -> None:
         from src.settings.types import SettingsSchema
         from src.settings.validation import validate_settings
+
         settings = SettingsSchema(max_turns=-1)
         errors = validate_settings(settings)
         mt_errors = [e for e in errors if e.field == "max_turns"]
@@ -610,6 +701,7 @@ class TestSettingsValidation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 16. Session storage roundtrip
 # ---------------------------------------------------------------------------
+
 
 class TestSessionStorageRoundtrip(unittest.TestCase):
     def test_write_flush_read_cycle(self) -> None:
@@ -647,31 +739,37 @@ class TestSessionStorageRoundtrip(unittest.TestCase):
 # 17. Process user input routing
 # ---------------------------------------------------------------------------
 
+
 class TestProcessUserInputRouting(unittest.TestCase):
     def test_slash_command_detection(self) -> None:
         from src.command_system.input_processing import parse_user_input
+
         result = parse_user_input("/help")
         self.assertEqual(result.input_type, "command")
         self.assertEqual(result.command_name, "help")
 
     def test_text_input(self) -> None:
         from src.command_system.input_processing import parse_user_input
+
         result = parse_user_input("write me a function")
         self.assertEqual(result.input_type, "text")
 
     def test_empty_input(self) -> None:
         from src.command_system.input_processing import parse_user_input
+
         result = parse_user_input("")
         self.assertEqual(result.input_type, "empty")
 
     def test_escaped_command(self) -> None:
         from src.command_system.input_processing import parse_user_input
+
         result = parse_user_input("\\/help")
         self.assertEqual(result.input_type, "text")
         self.assertTrue(result.is_escaped_command)
 
     def test_file_mentions(self) -> None:
         from src.command_system.input_processing import parse_user_input
+
         result = parse_user_input("look at @./src/main.py")
         self.assertGreater(len(result.file_mentions), 0)
 
@@ -680,9 +778,11 @@ class TestProcessUserInputRouting(unittest.TestCase):
 # 18. Messages normalize roundtrip
 # ---------------------------------------------------------------------------
 
+
 class TestMessagesNormalizeRoundtrip(unittest.TestCase):
     def test_normalize_user_message(self) -> None:
         from src.types.messages import UserMessage, normalize_messages_for_api
+
         msg = UserMessage(content="Hello!")
         api_msgs = normalize_messages_for_api([msg])
         self.assertEqual(len(api_msgs), 1)
@@ -691,6 +791,7 @@ class TestMessagesNormalizeRoundtrip(unittest.TestCase):
     def test_normalize_assistant_message(self) -> None:
         from src.types.content_blocks import TextBlock
         from src.types.messages import AssistantMessage, normalize_messages_for_api
+
         msg = AssistantMessage(content=[TextBlock(text="Hi there")])
         api_msgs = normalize_messages_for_api([msg])
         self.assertEqual(len(api_msgs), 1)
@@ -702,6 +803,7 @@ class TestMessagesNormalizeRoundtrip(unittest.TestCase):
             message_from_dict,
             message_to_dict,
         )
+
         original = UserMessage(content="Round trip test")
         d = message_to_dict(original)
         restored = message_from_dict(d)
@@ -717,13 +819,18 @@ class TestMessagesNormalizeRoundtrip(unittest.TestCase):
             UserMessage,
             normalize_messages_for_api,
         )
-        assistant = AssistantMessage(content=[
-            TextBlock(text="Using tool"),
-            ToolUseBlock(id="tu_1", name="Bash", input={"command": "ls"}),
-        ])
-        user = UserMessage(content=[
-            ToolResultBlock(tool_use_id="tu_1", content="file1\nfile2"),
-        ])
+
+        assistant = AssistantMessage(
+            content=[
+                TextBlock(text="Using tool"),
+                ToolUseBlock(id="tu_1", name="Bash", input={"command": "ls"}),
+            ]
+        )
+        user = UserMessage(
+            content=[
+                ToolResultBlock(tool_use_id="tu_1", content="file1\nfile2"),
+            ]
+        )
         api_msgs = normalize_messages_for_api([assistant, user])
         self.assertEqual(len(api_msgs), 2)
 
@@ -732,15 +839,18 @@ class TestMessagesNormalizeRoundtrip(unittest.TestCase):
 # 19. Token estimation accuracy
 # ---------------------------------------------------------------------------
 
+
 class TestTokenEstimationAccuracy(unittest.TestCase):
     def test_count_tokens_basic(self) -> None:
         from src.token_estimation import count_tokens
+
         tokens = count_tokens("Hello, world!")
         self.assertGreater(tokens, 0)
         self.assertLess(tokens, 50)
 
     def test_rough_estimation_reasonable(self) -> None:
         from src.token_estimation import rough_token_count_estimation
+
         text = "a" * 400
         estimate = rough_token_count_estimation(text, bytes_per_token=4)
         self.assertEqual(estimate, 100)
@@ -748,6 +858,7 @@ class TestTokenEstimationAccuracy(unittest.TestCase):
     def test_message_estimation(self) -> None:
         from src.token_estimation import rough_token_count_estimation_for_messages
         from src.types.messages import UserMessage, AssistantMessage
+
         messages = [
             UserMessage(content="Hello, world! " * 100),
             AssistantMessage(content="Hi there! " * 50),
@@ -759,6 +870,7 @@ class TestTokenEstimationAccuracy(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 20. Hook registry lifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestHookRegistryLifecycle(unittest.TestCase):
     def test_register_fire_deregister(self) -> None:
@@ -783,13 +895,16 @@ class TestHookRegistryLifecycle(unittest.TestCase):
 
         asyncio.run(run())
 
+
 # ---------------------------------------------------------------------------
 # 22. Skills 3-layer loading
 # ---------------------------------------------------------------------------
 
+
 class TestSkills3LayerLoading(unittest.TestCase):
     def test_get_skills_path_layers(self) -> None:
         from src.skills.loader import get_skills_path
+
         # Policy settings
         policy_path = get_skills_path("policySettings")
         self.assertIn("skills", policy_path)
@@ -804,6 +919,7 @@ class TestSkills3LayerLoading(unittest.TestCase):
 
     def test_skill_model_exists(self) -> None:
         from src.skills.model import Skill
+
         self.assertIn("name", Skill.__dataclass_fields__)
         self.assertIn("description", Skill.__dataclass_fields__)
         self.assertIn("content", Skill.__dataclass_fields__)
@@ -812,6 +928,7 @@ class TestSkills3LayerLoading(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 23. Reactive compact recovery
 # ---------------------------------------------------------------------------
+
 
 class TestReactiveCompactRecovery(unittest.TestCase):
     def test_emergency_drop_reduces_messages(self) -> None:
@@ -827,6 +944,7 @@ class TestReactiveCompactRecovery(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 24. File state cache isolation
 # ---------------------------------------------------------------------------
+
 
 class TestFileStateCacheIsolation(unittest.TestCase):
     def test_clone_does_not_affect_parent(self) -> None:
@@ -857,6 +975,7 @@ class TestFileStateCacheIsolation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 25. File history undo
 # ---------------------------------------------------------------------------
+
 
 class TestFileHistoryUndo(unittest.TestCase):
     def test_edit_undo_restores_original(self) -> None:

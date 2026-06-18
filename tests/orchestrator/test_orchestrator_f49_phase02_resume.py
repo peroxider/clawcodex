@@ -22,6 +22,7 @@ exercises the full integration surface described in
 Patches ``SESSIONS_DIR`` to a tmp dir so the test does not touch
 the user's real ``~/.clawcodex/sessions``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,19 +63,22 @@ def _write_orchestrator_turn(
             },
         )
     asst_msg = AssistantMessage(
-        content=asst_content, model="claude-sonnet-4-20250514",
+        content=asst_content,
+        model="claude-sonnet-4-20250514",
     )
     storage.write_raw(message_to_dict(asst_msg))
 
     # Synthetic tool_result so the LLM transcript is well-formed.
     if tool_name is not None:
         result_msg = UserMessage(
-            content=[{
-                "type": "tool_result",
-                "tool_use_id": "tool-1",
-                "content": "[file contents]",
-                "is_error": False,
-            }],
+            content=[
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tool-1",
+                    "content": "[file contents]",
+                    "is_error": False,
+                }
+            ],
         )
         storage.write_raw(message_to_dict(result_msg))
 
@@ -95,7 +99,8 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             # 1. Orchestrator side: write the transcript the way
             #    AgentRunner does in ``_flush_turn_transcript``.
             storage = SessionStorage(
-                session_id=run_id, sessions_dir=sessions_dir,
+                session_id=run_id,
+                sessions_dir=sessions_dir,
             )
             storage.init_metadata(
                 model="claude-sonnet-4-20250514",
@@ -128,12 +133,14 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
                 # only on the JSONL round-trip, which is the F-49
                 # contract.
                 from src.agent.session import Session
+
                 session = Session.resume(run_id)
                 self.assertIsNotNone(session)
                 assert session is not None
                 self.assertEqual(session.session_id, run_id)
                 self.assertEqual(
-                    session.model, "claude-sonnet-4-20250514",
+                    session.model,
+                    "claude-sonnet-4-20250514",
                 )
 
                 result = resume_session(run_id)
@@ -142,7 +149,8 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             assert result.metadata is not None
             self.assertEqual(result.metadata.session_id, run_id)
             self.assertEqual(
-                result.metadata.model, "claude-sonnet-4-20250514",
+                result.metadata.model,
+                "claude-sonnet-4-20250514",
             )
             # 2 turns = 2 user + 2 assistant + 1 tool_result user = 5
             self.assertEqual(result.message_count, 5)
@@ -152,12 +160,17 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(
                 roles,
                 [
-                    "user", "assistant", "user", "user", "assistant",
+                    "user",
+                    "assistant",
+                    "user",
+                    "user",
+                    "assistant",
                 ],
             )
             # Tool-use block must be preserved through the round-trip.
             asst_turns = [
-                m for m in result.messages
+                m
+                for m in result.messages
                 if m.role == "assistant"
                 and any(
                     getattr(b, "type", None) == "tool_use"
@@ -167,8 +180,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             ]
             self.assertEqual(len(asst_turns), 1)
             tool_block = next(
-                b for b in asst_turns[0].content
-                if getattr(b, "type", None) == "tool_use"
+                b for b in asst_turns[0].content if getattr(b, "type", None) == "tool_use"
             )
             self.assertEqual(tool_block.name, "Read")
             self.assertEqual(tool_block.id, "tool-1")
@@ -188,6 +200,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
                 # session_id file does not exist (see
                 # ``Session.load`` at src/agent/session.py:121).
                 from src.agent.session import Session
+
                 session = Session.resume("nonexistent-run-id")
                 self.assertIsNone(session)
 
@@ -209,7 +222,8 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             run_id = "run-orphan"
 
             storage = SessionStorage(
-                session_id=run_id, sessions_dir=sessions_dir,
+                session_id=run_id,
+                sessions_dir=sessions_dir,
             )
             storage.init_metadata(
                 model="claude-sonnet-4-20250514",
@@ -245,10 +259,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.message_count, 2)
             self.assertTrue(result.has_warnings)
             self.assertTrue(
-                any(
-                    "orphan" in w.lower()
-                    for w in result.warnings
-                ),
+                any("orphan" in w.lower() for w in result.warnings),
                 f"expected orphan warning, got {result.warnings}",
             )
 

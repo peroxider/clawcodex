@@ -6,6 +6,7 @@ typescript/src/tools/AgentTool/loadAgentsDir.ts:228-254.
 Built-in agents are never dropped — they're trusted regardless of MCP
 availability.
 """
+
 from __future__ import annotations
 
 from collections.abc import Iterable

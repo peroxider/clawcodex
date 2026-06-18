@@ -12,6 +12,7 @@ from .types import SettingsSchema
 @dataclass
 class SettingsDiff:
     """Represents differences between two SettingsSchema instances."""
+
     changed_keys: list[str] = field(default_factory=list)
     old_values: dict[str, Any] = field(default_factory=dict)
     new_values: dict[str, Any] = field(default_factory=dict)

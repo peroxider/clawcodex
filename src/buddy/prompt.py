@@ -9,6 +9,7 @@ Plus :func:`format_companion_intro_attachments` — renders companion-intro
 into a ``<system-reminder>`` block. Kept separate from at-mention formatting
 so neither's scope creeps into the other.
 """
+
 from __future__ import annotations
 
 from typing import Any, Iterable
@@ -55,26 +56,28 @@ def build_companion_intro_attachment(
     companion = get_companion()
     if companion is None:
         return []
-    if load_config().get('companion_muted', False):
+    if load_config().get("companion_muted", False):
         return []
 
     for msg in messages or []:
         try:
             if not isinstance(msg, AttachmentMessage):
                 continue
-            for att in (msg.attachments or []):
+            for att in msg.attachments or []:
                 if not isinstance(att, dict):
                     continue
-                if att.get('kind') == 'companion_intro' and att.get('name') == companion.name:
+                if att.get("kind") == "companion_intro" and att.get("name") == companion.name:
                     return []
         except Exception:
             continue
 
-    return [{
-        'kind': 'companion_intro',
-        'name': companion.name,
-        'species': companion.species,
-    }]
+    return [
+        {
+            "kind": "companion_intro",
+            "name": companion.name,
+            "species": companion.species,
+        }
+    ]
 
 
 def format_companion_intro_attachments(
@@ -85,18 +88,18 @@ def format_companion_intro_attachments(
     for att in attachments:
         if not isinstance(att, dict):
             continue
-        if att.get('kind') != 'companion_intro':
+        if att.get("kind") != "companion_intro":
             continue
         text = companion_intro_text(
-            att.get('name', ''),
-            att.get('species', ''),
+            att.get("name", ""),
+            att.get("species", ""),
         )
         blocks.append(f"<system-reminder>\n{text}\n</system-reminder>")
-    return '\n\n'.join(blocks)
+    return "\n\n".join(blocks)
 
 
 __all__ = [
-    'build_companion_intro_attachment',
-    'companion_intro_text',
-    'format_companion_intro_attachments',
+    "build_companion_intro_attachment",
+    "companion_intro_text",
+    "format_companion_intro_attachments",
 ]

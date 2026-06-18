@@ -238,6 +238,5 @@ def test_stdlib_server_logs_received_requests(tmp_path, caplog):
             assert _request("GET", f"{base_url}/health").status == 200
 
     assert any(
-        "Remote API request received: GET /health" in record.message
-        for record in caplog.records
+        "Remote API request received: GET /health" in record.message for record in caplog.records
     )

@@ -17,6 +17,7 @@ async test pattern, per ``test_orchestrator_f49_control_socket.py``)
 and ``tempfile.TemporaryDirectory`` for socket + workspace
 isolation.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -64,7 +65,9 @@ async def _open_client(
 
 
 async def _wait_for_clients(
-    cs: ControlSocket, expected: int = 1, timeout: float = 2.0,
+    cs: ControlSocket,
+    expected: int = 1,
+    timeout: float = 2.0,
 ) -> None:
     """Poll until the server has registered ``expected`` clients.
 
@@ -84,7 +87,9 @@ async def _wait_for_clients(
 
 
 async def _send_client_cmd(
-    writer: asyncio.StreamWriter, verb: str, payload: str = "",
+    writer: asyncio.StreamWriter,
+    verb: str,
+    payload: str = "",
 ) -> None:
     writer.write(
         (json.dumps({"cmd": verb, "payload": payload}) + "\n").encode("utf-8"),
@@ -93,12 +98,14 @@ async def _send_client_cmd(
 
 
 async def _drain_one(
-    cs: ControlSocket, timeout: float = 2.0,
+    cs: ControlSocket,
+    timeout: float = 2.0,
 ) -> ControlCommand | None:
     async def _next() -> ControlCommand | None:
         async for cmd in cs.poll_commands():
             return cmd
         return None
+
     return await asyncio.wait_for(_next(), timeout=timeout)
 
 
@@ -162,9 +169,16 @@ class TestAttachCLIDispatch(unittest.TestCase):
         parser = argparse.ArgumentParser()
         sub = parser.add_subparsers(dest="root")
         add_issue_parser(sub)
-        args = parser.parse_args([
-            "issue", "attach", "--run", "run-1", "--workspace", "/tmp/ws",
-        ])
+        args = parser.parse_args(
+            [
+                "issue",
+                "attach",
+                "--run",
+                "run-1",
+                "--workspace",
+                "/tmp/ws",
+            ]
+        )
         self.assertEqual(args.run, "run-1")
         self.assertEqual(args.workspace, "/tmp/ws")
 
@@ -172,13 +186,17 @@ class TestAttachCLIDispatch(unittest.TestCase):
         from extensions.orchestrator.cli import issue as cli_issue
 
         with patch.object(
-            cli_issue, "_run_attach", return_value=0,
+            cli_issue,
+            "_run_attach",
+            return_value=0,
         ) as mock_attach:
             rc = cli_issue.run(
                 argparse.Namespace(
                     issue_subcommand="attach",
-                    id="ISSUE-1", run=None,
-                    workspace=None, workflow=None,
+                    id="ISSUE-1",
+                    run=None,
+                    workspace=None,
+                    workflow=None,
                 ),
             )
         self.assertEqual(rc, 0)
@@ -200,7 +218,8 @@ class TestAttachErrorPaths(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    None, ws_root,
+                    None,
+                    ws_root,
                     _build_args(identifier=None, run_id=None),
                 )
             self.assertEqual(rc, 2)
@@ -213,7 +232,8 @@ class TestAttachErrorPaths(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    None, ws_root,
+                    None,
+                    ws_root,
                     _build_args(identifier=None, run_id="run-1"),
                 )
             self.assertEqual(rc, 2)
@@ -223,14 +243,17 @@ class TestAttachErrorPaths(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id=None,
+                tmp_path,
+                "ISSUE-1",
+                run_id=None,
             )
             ws_root = tmp_path / "ws"
             ws_root.mkdir()
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    registry_path, ws_root,
+                    registry_path,
+                    ws_root,
                     _build_args(identifier="ISSUE-1"),
                 )
             self.assertEqual(rc, 1)
@@ -240,7 +263,9 @@ class TestAttachErrorPaths(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id=None,
+                tmp_path,
+                "ISSUE-1",
+                run_id=None,
                 workspace_path=str(tmp_path / "ws"),
             )
             ws_root = tmp_path / "ws"
@@ -248,7 +273,8 @@ class TestAttachErrorPaths(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    registry_path, ws_root,
+                    registry_path,
+                    ws_root,
                     _build_args(identifier="ISSUE-1"),
                 )
             self.assertEqual(rc, 1)
@@ -257,7 +283,9 @@ class TestAttachErrorPaths(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id="run-1",
+                tmp_path,
+                "ISSUE-1",
+                run_id="run-1",
                 workspace_path=None,
             )
             ws_root = tmp_path / "ws"
@@ -265,7 +293,8 @@ class TestAttachErrorPaths(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    registry_path, ws_root,
+                    registry_path,
+                    ws_root,
                     _build_args(identifier="ISSUE-1"),
                 )
             self.assertEqual(rc, 1)
@@ -276,14 +305,17 @@ class TestAttachErrorPaths(unittest.TestCase):
             ws_root = tmp_path / "ws"
             ws_root.mkdir()
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id="run-1",
+                tmp_path,
+                "ISSUE-1",
+                run_id="run-1",
                 workspace_path=str(ws_root),
             )
             # Note: we do NOT create the .run_control/.sock file
             buf = io.StringIO()
             with redirect_stderr(buf):
                 rc = _run_attach(
-                    registry_path, ws_root,
+                    registry_path,
+                    ws_root,
                     _build_args(identifier="ISSUE-1"),
                 )
             self.assertEqual(rc, 1)
@@ -315,14 +347,17 @@ class TestAttachErrorPaths(unittest.TestCase):
                 return 0
 
             try:
-                with patch.object(sys.stdout, "isatty", return_value=False), \
-                     patch.object(sys.stdin, "isatty", return_value=False), \
-                     patch(
-                         "extensions.orchestrator.cli.attach._run_tail_fallback",
-                         new=_fake_fallback,
-                     ):
+                with (
+                    patch.object(sys.stdout, "isatty", return_value=False),
+                    patch.object(sys.stdin, "isatty", return_value=False),
+                    patch(
+                        "extensions.orchestrator.cli.attach._run_tail_fallback",
+                        new=_fake_fallback,
+                    ),
+                ):
                     rc = _run_attach(
-                        None, ws_root,
+                        None,
+                        ws_root,
                         _build_args(
                             identifier=None,
                             run_id="run-1",
@@ -349,11 +384,16 @@ class TestAttachResolve(unittest.TestCase):
             ws_root = tmp_path / "ws"
             ws_root.mkdir()
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id="run-1",
+                tmp_path,
+                "ISSUE-1",
+                run_id="run-1",
                 workspace_path=str(ws_root),
             )
             target = _resolve_attach_target(
-                registry_path, ws_root, "ISSUE-1", None,
+                registry_path,
+                ws_root,
+                "ISSUE-1",
+                None,
             )
             self.assertIsNotNone(target)
             assert target is not None
@@ -367,7 +407,10 @@ class TestAttachResolve(unittest.TestCase):
             ws_root = tmp_path / "ws"
             ws_root.mkdir()
             target = _resolve_attach_target(
-                None, ws_root, None, "run-1",
+                None,
+                ws_root,
+                None,
+                "run-1",
             )
             self.assertIsNotNone(target)
             assert target is not None
@@ -379,10 +422,15 @@ class TestAttachResolve(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             registry_path = _seed_registry(
-                tmp_path, "ISSUE-1", run_id=None,
+                tmp_path,
+                "ISSUE-1",
+                run_id=None,
             )
             target = _resolve_attach_target(
-                registry_path, Path(tmp) / "ws", "MISSING", None,
+                registry_path,
+                Path(tmp) / "ws",
+                "MISSING",
+                None,
             )
             self.assertIsNone(target)
 
@@ -443,9 +491,12 @@ class TestAttachSocketIO(unittest.IsolatedAsyncioTestCase):
         # at run_async() time. To test the renderer without launching
         # a terminal, we drive the frame through the message API
         # and assert AttachMessage carries the frame.
-        msg = AttachMessage({
-            "type": "TextDelta", "data": {"content": "hello"},
-        })
+        msg = AttachMessage(
+            {
+                "type": "TextDelta",
+                "data": {"content": "hello"},
+            }
+        )
         self.assertEqual(msg.frame["data"]["content"], "hello")
 
     async def test_attach_message_preserves_all_three_event_types(self) -> None:
@@ -488,18 +539,22 @@ class TestAttachSocketIO(unittest.IsolatedAsyncioTestCase):
                 reader, writer = await _open_client(sock_path)
                 await _wait_for_clients(cs, expected=1)
                 # Send a couple of events from the server side.
-                await cs.send_event({
-                    "type": "TextDelta",
-                    "data": {"content": "hello"},
-                })
-                await cs.send_event({
-                    "type": "ToolCallEvent",
-                    "data": {
-                        "tool_name": "Read",
-                        "tool_use_id": "A",
-                        "params": {"path": "/x"},
-                    },
-                })
+                await cs.send_event(
+                    {
+                        "type": "TextDelta",
+                        "data": {"content": "hello"},
+                    }
+                )
+                await cs.send_event(
+                    {
+                        "type": "ToolCallEvent",
+                        "data": {
+                            "tool_name": "Read",
+                            "tool_use_id": "A",
+                            "params": {"path": "/x"},
+                        },
+                    }
+                )
                 # Close the server-side so reader.readline() returns
                 # b"" (EOF) after the two events are drained.
                 await cs.stop()
@@ -511,16 +566,23 @@ class TestAttachSocketIO(unittest.IsolatedAsyncioTestCase):
 
                 try:
                     buf = io.StringIO()
-                    with redirect_stdout(buf), \
-                         patch.object(
-                             sys.stdin, "isatty", return_value=True,
-                         ), \
-                         patch.object(
-                             loop, "run_in_executor",
-                             side_effect=_fake_executor,
-                         ):
+                    with (
+                        redirect_stdout(buf),
+                        patch.object(
+                            sys.stdin,
+                            "isatty",
+                            return_value=True,
+                        ),
+                        patch.object(
+                            loop,
+                            "run_in_executor",
+                            side_effect=_fake_executor,
+                        ),
+                    ):
                         rc = await _run_tail_fallback(
-                            reader, writer, "ISSUE-1 (run run-1)",
+                            reader,
+                            writer,
+                            "ISSUE-1 (run run-1)",
                         )
                     self.assertEqual(rc, 0)
                     out = buf.getvalue()
@@ -565,19 +627,30 @@ class TestAttachSocketIO(unittest.IsolatedAsyncioTestCase):
                 async def _fake_executor(_executor, func, *args):  # type: ignore
                     return next(responses, "")
 
-                with patch.object(
-                    sys.stdout, "isatty", return_value=False,
-                ), patch.object(
-                    sys.stdin, "isatty", return_value=False,
-                ), patch.object(
-                    loop, "run_in_executor",
-                    side_effect=_fake_executor,
+                with (
+                    patch.object(
+                        sys.stdout,
+                        "isatty",
+                        return_value=False,
+                    ),
+                    patch.object(
+                        sys.stdin,
+                        "isatty",
+                        return_value=False,
+                    ),
+                    patch.object(
+                        loop,
+                        "run_in_executor",
+                        side_effect=_fake_executor,
+                    ),
                 ):
                     buf = io.StringIO()
                     with redirect_stdout(buf):
                         task = asyncio.create_task(
                             _run_tail_fallback(
-                                reader, writer, "ISSUE-1",
+                                reader,
+                                writer,
+                                "ISSUE-1",
                             ),
                         )
                         # Drain the queued "pause" command from the

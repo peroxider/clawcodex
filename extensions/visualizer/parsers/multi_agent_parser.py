@@ -78,8 +78,14 @@ class MultiAgentParser:
         caller (MultiSessionViewBuilder) renders the root as a session
         row, not an agent row.
         """
-        sessions_root = Path(sessions_dir) if sessions_dir else (Path.home() / ".clawcodex" / "sessions")
-        transcripts_root = Path(transcripts_dir) if transcripts_dir else (Path.home() / ".clawcodex" / "transcripts")
+        sessions_root = (
+            Path(sessions_dir) if sessions_dir else (Path.home() / ".clawcodex" / "sessions")
+        )
+        transcripts_root = (
+            Path(transcripts_dir)
+            if transcripts_dir
+            else (Path.home() / ".clawcodex" / "transcripts")
+        )
 
         nodes: list[AgentTreeNode] = []
 
@@ -240,6 +246,7 @@ class MultiAgentParser:
         # minutes (same window the SessionMetadataParser uses).
         try:
             from time import time as _now
+
             mtime = path.stat().st_mtime
             status = BarStatus.RUNNING if (_now() - mtime < 300) else BarStatus.SUCCESS
         except OSError:

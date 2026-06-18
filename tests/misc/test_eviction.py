@@ -7,6 +7,7 @@ Covers:
 * Real sweeper thread can be started/stopped without leaking the
   daemon.
 """
+
 from __future__ import annotations
 
 import threading
@@ -35,8 +36,11 @@ def _make_terminal_notified(reg: RuntimeTaskRegistry) -> LocalAgentTaskState:
     tests."""
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="done", registry=reg)
     # Manually mark ``notified=True`` — the production path does this
@@ -73,8 +77,11 @@ def test_schedule_eviction_noop_for_running_state() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     state = register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     out = schedule_eviction(state)
     assert out.evict_after is None
@@ -115,8 +122,11 @@ def test_not_eligible_when_not_notified() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="done", registry=reg)
     # ``notified`` left at False (deliberately).
@@ -129,8 +139,11 @@ def test_not_eligible_when_running() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     state = register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     assert is_eligible_for_eviction(state, now=time.time() + 1e9) is False
 
@@ -154,8 +167,11 @@ def test_sweep_once_removes_eligible_entries() -> None:
     # ``c`` is still running — should NOT be swept.
     c_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=c_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=c_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     far_future = max(a.evict_after, b.evict_after) + 100
 
@@ -173,8 +189,11 @@ def test_sweep_once_keeps_unnotified_terminal_entries() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="done", registry=reg)
     # Leave ``notified=False``.

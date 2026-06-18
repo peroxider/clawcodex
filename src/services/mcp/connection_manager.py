@@ -163,9 +163,7 @@ class MCPConnectionManager:
                 # atomic under one lock acquisition.
                 config = get_mcp_config_by_name(name)
                 if config is None:
-                    failed = FailedMCPServer(
-                        name=name, error=f"No config for {name!r}"
-                    )
+                    failed = FailedMCPServer(name=name, error=f"No config for {name!r}")
                     self._state[name] = failed
                     self._tools.pop(name, None)
                     return failed
@@ -197,9 +195,7 @@ class MCPConnectionManager:
                 if isinstance(conn, ConnectedMCPServer):
                     self._clients[name] = client
                     tools_raw = await client.list_tools()
-                    self._tools[name] = wrap_mcp_tools_for_server(
-                        conn, tools_raw, client
-                    )
+                    self._tools[name] = wrap_mcp_tools_for_server(conn, tools_raw, client)
                 else:
                     self._tools.pop(name, None)
                 return conn
@@ -237,9 +233,7 @@ class MCPConnectionManager:
             self._tools.pop(name, None)
         return removed
 
-    async def trigger_oauth(
-        self, name: str, *, open_browser: bool = True
-    ) -> MCPServerConnection:
+    async def trigger_oauth(self, name: str, *, open_browser: bool = True) -> MCPServerConnection:
         """Initiate the OAuth flow for a server currently in needs-auth.
 
         Returns the resulting ``MCPServerConnection`` — Connected on
@@ -247,18 +241,14 @@ class MCPConnectionManager:
         failure.
         """
         if self._auth_provider is None:
-            return FailedMCPServer(
-                name=name, error="No auth provider configured"
-            )
+            return FailedMCPServer(name=name, error="No auth provider configured")
         config = get_mcp_config_by_name(name)
         if config is None:
             return FailedMCPServer(name=name, error=f"No config for {name!r}")
         inner = config.config
         server_url = getattr(inner, "url", None)
         if not server_url:
-            return FailedMCPServer(
-                name=name, error="OAuth flow requires an HTTP/SSE/WS server URL"
-            )
+            return FailedMCPServer(name=name, error="OAuth flow requires an HTTP/SSE/WS server URL")
         async with self._lock_for(name):
             result = await self._auth_provider.acquire_token(
                 server_name=name,
@@ -290,9 +280,7 @@ class MCPConnectionManager:
             async with self._lock_for(name):
                 await self._drop_client(name)
 
-    async def bootstrap_all_servers(
-        self, *, batch_size: int = 5
-    ) -> dict[str, MCPServerConnection]:
+    async def bootstrap_all_servers(self, *, batch_size: int = 5) -> dict[str, MCPServerConnection]:
         """Connect to every enabled MCP server in the merged config.
 
         Critic FU#5: canonical runtime mount point. Replaces the older
@@ -312,6 +300,7 @@ class MCPConnectionManager:
         connect attempt. Failed servers retain a ``FailedMCPServer``.
         """
         from .config import get_all_mcp_configs  # local import: avoid cycle
+
         configs, _errors = get_all_mcp_configs()
 
         sem = asyncio.Semaphore(max(1, batch_size))
@@ -348,7 +337,8 @@ class MCPConnectionManager:
         except Exception as exc:  # pragma: no cover - shutdown variance
             logger.debug(
                 "MCP connection_manager: client.close raised for %r: %s",
-                name, exc,
+                name,
+                exc,
             )
 
 
@@ -380,13 +370,13 @@ async def bootstrap_mcp_runtime(
     if prefetch_claudeai:
         try:
             from .claudeai import fetch_claudeai_mcp_configs_if_eligible  # local: cycle
-            await fetch_claudeai_mcp_configs_if_eligible(
-                auth_provider=auth_provider
-            )
+
+            await fetch_claudeai_mcp_configs_if_eligible(auth_provider=auth_provider)
         except Exception as exc:  # pragma: no cover - non-fatal
             logger.warning(
                 "MCP bootstrap: claudeai prefetch failed (%s); continuing "
-                "without web-configured connectors.", exc,
+                "without web-configured connectors.",
+                exc,
             )
     manager = MCPConnectionManager(auth_provider=auth_provider)
     await manager.bootstrap_all_servers(batch_size=batch_size)

@@ -14,6 +14,7 @@ The Textual import is deferred to inside the TTY branch of
 ``_run_attach`` so the fallback path never pays the cost of
 importing the heavy TUI stack.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -85,7 +86,9 @@ def _resolve_attach_target(
 
 
 async def _send_cmd(
-    writer: asyncio.StreamWriter, verb: str, payload: str = "",
+    writer: asyncio.StreamWriter,
+    verb: str,
+    payload: str = "",
 ) -> None:
     """Send one newline-delimited JSON control command.
 
@@ -135,7 +138,10 @@ def _run_attach(
         return 2
 
     target = _resolve_attach_target(
-        registry_path, workspace_root, issue_id, run_id,
+        registry_path,
+        workspace_root,
+        issue_id,
+        run_id,
     )
     if target is None:
         if issue_id:
@@ -151,11 +157,7 @@ def _run_attach(
             )
         return 1
 
-    sock_path = (
-        target.workspace_path
-        / ".run_control"
-        / f"{target.run_id}.sock"
-    )
+    sock_path = target.workspace_path / ".run_control" / f"{target.run_id}.sock"
     if not sock_path.exists():
         print(
             f"error: socket not found at {sock_path}. "
@@ -198,16 +200,14 @@ def _run_attach(
         return asyncio.run(_driver())
     except ConnectionRefusedError:
         print(
-            f"error: connection refused at {sock_path} — "
-            f"the agent process may have just exited",
+            f"error: connection refused at {sock_path} — the agent process may have just exited",
             file=sys.stderr,
         )
         return 1
     except FileNotFoundError:
         # Race: the .sock was unlinked between exists() and open.
         print(
-            f"error: socket vanished at {sock_path} — "
-            f"the agent may have just exited",
+            f"error: socket vanished at {sock_path} — the agent may have just exited",
             file=sys.stderr,
         )
         return 1
@@ -359,7 +359,9 @@ class AttachApp:
 
         if self._real_app is None:
             self._real_app = self._build_textual_app()(
-                self._reader, self._writer, self._issue_label,
+                self._reader,
+                self._writer,
+                self._issue_label,
             )
         return self._real_app.run_async()
 
@@ -397,7 +399,8 @@ class AttachApp:
                 yield _tw.Static("[dim]Esc to cancel[/]")
 
             async def on_input_submitted(
-                self, event: _tw.Input.Submitted,
+                self,
+                event: _tw.Input.Submitted,
             ) -> None:
                 value = event.value
                 if value:
@@ -448,8 +451,7 @@ class AttachApp:
                 # Best-effort detach so the runner cleans up the session.
                 try:
                     self._writer.write(
-                        (json.dumps({"cmd": "detach", "payload": ""}) + "\n")
-                        .encode("utf-8"),
+                        (json.dumps({"cmd": "detach", "payload": ""}) + "\n").encode("utf-8"),
                     )
                 except Exception:
                     pass
@@ -459,7 +461,8 @@ class AttachApp:
                     pass
 
             def on__real_attach_message(
-                self, message: _RealAttachMessage,
+                self,
+                message: _RealAttachMessage,
             ) -> None:
                 self._render_frame(message.frame)
 
@@ -480,10 +483,7 @@ class AttachApp:
                 elif t == "ToolResultEvent":
                     err = data.get("result", {}).get("is_error")
                     tag = "[red]ERR[/]" if err else "[green]OK[/]"
-                    log.write(
-                        f"  {tag} {data.get('tool_name')} "
-                        f"(id={data.get('tool_use_id')})"
-                    )
+                    log.write(f"  {tag} {data.get('tool_name')} (id={data.get('tool_use_id')})")
                 elif t == "__disconnected__":
                     log.write(
                         "[bold yellow]⚠ socket closed — agent has exited[/]",
@@ -536,7 +536,8 @@ class AttachApp:
                         continue
                     app.post_message(_RealAttachMessage(frame))
             except (
-                asyncio.IncompleteReadError, ConnectionResetError,
+                asyncio.IncompleteReadError,
+                ConnectionResetError,
             ):
                 app.post_message(
                     _RealAttachMessage({"type": "__disconnected__"}),

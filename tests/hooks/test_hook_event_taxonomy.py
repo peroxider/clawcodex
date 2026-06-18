@@ -31,21 +31,39 @@ from src.hooks.registry import AsyncHookRegistry
 
 
 CHAPTER_BIG_FIVE = (
-    "PreToolUse", "PostToolUse", "Stop", "SessionStart", "UserPromptSubmit",
+    "PreToolUse",
+    "PostToolUse",
+    "Stop",
+    "SessionStart",
+    "UserPromptSubmit",
 )
 
 # Chapter §"Reference table — remaining events" plus the four lifecycle
 # events promoted to first-class in Phase 1.
 CHAPTER_OTHER_EVENTS = (
-    "PostToolUseFailure", "PermissionDenied", "PermissionRequest",
-    "SessionEnd", "Setup",
-    "SubagentStart", "SubagentStop",
-    "PreCompact", "PostCompact",
-    "Notification", "Elicitation", "ElicitationResult",
-    "ConfigChange", "InstructionsLoaded", "CwdChanged", "FileChanged",
-    "TaskCreated", "TaskCompleted", "TeammateIdle",
-    "WorktreeCreate", "WorktreeRemove",
-    "StopFailure", "PostSampling",
+    "PostToolUseFailure",
+    "PermissionDenied",
+    "PermissionRequest",
+    "SessionEnd",
+    "Setup",
+    "SubagentStart",
+    "SubagentStop",
+    "PreCompact",
+    "PostCompact",
+    "Notification",
+    "Elicitation",
+    "ElicitationResult",
+    "ConfigChange",
+    "InstructionsLoaded",
+    "CwdChanged",
+    "FileChanged",
+    "TaskCreated",
+    "TaskCompleted",
+    "TeammateIdle",
+    "WorktreeCreate",
+    "WorktreeRemove",
+    "StopFailure",
+    "PostSampling",
 )
 
 
@@ -96,12 +114,16 @@ class TestEventTaxonomy:
     @pytest.mark.asyncio
     async def test_first_class_settings_json_loads_to_snapshot(self, tmp_path):
         settings_path = tmp_path / "settings.json"
-        settings_path.write_text(json.dumps({
-            "hooks": {
-                "SessionStart": [{"type": "command", "command": "echo start"}],
-                "FileChanged": [{"type": "command", "command": "echo fc"}],
-            }
-        }))
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "SessionStart": [{"type": "command", "command": "echo start"}],
+                        "FileChanged": [{"type": "command", "command": "echo fc"}],
+                    }
+                }
+            )
+        )
         snapshot = load_hooks_from_settings(settings_path)
         assert "SessionStart" in snapshot.hooks
         assert "FileChanged" in snapshot.hooks

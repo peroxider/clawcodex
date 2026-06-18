@@ -4,6 +4,7 @@ Verifies the spawn-writer-and-reaper round-trip lands a typed
 ``LocalShellTaskState`` on ``context.runtime_tasks`` and keeps the legacy
 ``context.background_bash_tasks`` view in lockstep for back-compat.
 """
+
 from __future__ import annotations
 
 import time
@@ -169,6 +170,7 @@ def test_taskstop_routes_via_runtime_tasks(tmp_path: Path) -> None:
     task_id = result["backgroundTaskId"]
 
     import asyncio
+
     # Post Chunk D / WI-4.0, ``TaskStopTool.call`` is async.
     stop = asyncio.run(TaskStopTool.call({"task_id": task_id}, ctx)).output
     assert stop["task_id"] == task_id

@@ -16,6 +16,7 @@ SendMessage's dispatch chain still has explicit branches for them
 (``NotImplementedError`` stubs preserving TS dispatch order so a
 future implementation is a localized body change).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -48,9 +49,9 @@ def parse_address(to: str) -> ParsedAddress:
     they reach this helper.
     """
     if to.startswith("bridge:"):
-        return ParsedAddress(scheme="bridge", target=to[len("bridge:"):])
+        return ParsedAddress(scheme="bridge", target=to[len("bridge:") :])
     if to.startswith("uds:"):
-        return ParsedAddress(scheme="uds", target=to[len("uds:"):])
+        return ParsedAddress(scheme="uds", target=to[len("uds:") :])
     return ParsedAddress(scheme="other", target=to)
 
 

@@ -26,10 +26,7 @@ def test_renderable_text_handles_rich_text() -> None:
 
 
 def test_renderable_text_handles_tuple() -> None:
-    assert (
-        _renderable_text((Text("a"), "b", Text("c")))
-        == "a\nb\nc"
-    )
+    assert _renderable_text((Text("a"), "b", Text("c"))) == "a\nb\nc"
 
 
 def test_renderable_text_handles_none() -> None:
@@ -177,9 +174,7 @@ async def test_transcript_search_filters_on_typing() -> None:
         input_widget.value = "alph"
         # The Input.Changed message would normally fire here; trigger
         # the screen's handler directly to keep the test sync.
-        screen.on_input_changed(
-            type("E", (), {"value": "alph"})()
-        )
+        screen.on_input_changed(type("E", (), {"value": "alph"})())
         await pilot.pause()
         assert screen._matches == [0, 1]
 

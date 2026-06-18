@@ -87,7 +87,7 @@ class TestCompressionPipelineLayers(unittest.TestCase):
             budget_dir=self.budget_dir,
             max_result_tokens=1_000,
             snip_keep_recent=100,  # high to prevent snip
-            mc_keep_recent=100,    # high to prevent mc
+            mc_keep_recent=100,  # high to prevent mc
         )
         result = asyncio.run(run_compression_pipeline(messages, config=config))
         self.assertIn("tool_result_budget", result.layers_applied)
@@ -153,9 +153,13 @@ class TestCompressionPipelineLayers(unittest.TestCase):
             provider=provider,
             model="test-model",
         )
-        result = asyncio.run(run_compression_pipeline(
-            messages, input_token_count=5_000, config=config,
-        ))
+        result = asyncio.run(
+            run_compression_pipeline(
+                messages,
+                input_token_count=5_000,
+                config=config,
+            )
+        )
         self.assertNotIn("autocompact", result.layers_applied)
         provider.chat_async.assert_not_called()
 
@@ -207,12 +211,14 @@ class TestCompressionPipelineAutocompact(unittest.TestCase):
 
     def _make_provider(self, summary: str = "Compacted summary"):
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content=summary,
-            model="test",
-            usage={"input_tokens": 100, "output_tokens": 50},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content=summary,
+                model="test",
+                usage={"input_tokens": 100, "output_tokens": 50},
+                finish_reason="stop",
+            )
+        )
         return provider
 
     def test_layer5_autocompact_fires_above_threshold(self):
@@ -230,9 +236,13 @@ class TestCompressionPipelineAutocompact(unittest.TestCase):
             model="test-model",
         )
         threshold = get_auto_compact_threshold(200_000)
-        result = asyncio.run(run_compression_pipeline(
-            messages, input_token_count=threshold + 100, config=config,
-        ))
+        result = asyncio.run(
+            run_compression_pipeline(
+                messages,
+                input_token_count=threshold + 100,
+                config=config,
+            )
+        )
         self.assertIn("autocompact", result.layers_applied)
         self.assertIsNotNone(result.autocompact_result)
         self.assertEqual(result.autocompact_result.trigger, "auto")
@@ -240,9 +250,7 @@ class TestCompressionPipelineAutocompact(unittest.TestCase):
 
     def test_layer5_forwards_read_file_state_to_attachments(self):
         """read_file_state on PipelineConfig produces post-compact file attachments."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("print('hello')")
             f.flush()
             tmp_path = f.name
@@ -262,17 +270,20 @@ class TestCompressionPipelineAutocompact(unittest.TestCase):
                 read_file_state={tmp_path: {"timestamp": time.time()}},
             )
             threshold = get_auto_compact_threshold(200_000)
-            result = asyncio.run(run_compression_pipeline(
-                messages, input_token_count=threshold + 100, config=config,
-            ))
+            result = asyncio.run(
+                run_compression_pipeline(
+                    messages,
+                    input_token_count=threshold + 100,
+                    config=config,
+                )
+            )
             self.assertIn("autocompact", result.layers_applied)
             self.assertIsNotNone(result.autocompact_result)
             attachments = result.autocompact_result.attachments
             self.assertGreaterEqual(len(attachments), 1)
-            self.assertTrue(any(
-                tmp_path in m.content for m in attachments
-                if isinstance(m.content, str)
-            ))
+            self.assertTrue(
+                any(tmp_path in m.content for m in attachments if isinstance(m.content, str))
+            )
         finally:
             os.unlink(tmp_path)
 

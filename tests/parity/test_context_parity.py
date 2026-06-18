@@ -7,6 +7,7 @@ Verifies:
 - Context assembly order matches
 - Memory file levels match
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,7 +47,8 @@ class TestSystemPromptPartsParity(unittest.TestCase):
         parts = SystemPromptParts.__dataclass_fields__
         for field_name in expected:
             self.assertIn(
-                field_name, parts,
+                field_name,
+                parts,
                 f"SystemPromptParts missing field '{field_name}'",
             )
 
@@ -111,6 +113,7 @@ class TestContextAssemblyOrderParity(unittest.TestCase):
         expected = self.snapshot["context_assembly_order"]
         # Verify the Python functions exist in the expected order
         from src.context_system import prompt_assembly
+
         for func_name in expected:
             self.assertTrue(
                 hasattr(prompt_assembly, func_name),

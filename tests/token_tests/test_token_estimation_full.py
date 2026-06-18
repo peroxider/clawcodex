@@ -21,7 +21,11 @@ class TestEstimateToolSchema:
         assert tokens > 0
 
     def test_large_schema(self):
-        schema = {"name": "Bash", "description": "Execute command " * 100, "input_schema": {"type": "object", "properties": {"cmd": {"type": "string"}}}}
+        schema = {
+            "name": "Bash",
+            "description": "Execute command " * 100,
+            "input_schema": {"type": "object", "properties": {"cmd": {"type": "string"}}},
+        }
         tokens = estimate_tool_schema_tokens(schema)
         assert tokens > 50
 

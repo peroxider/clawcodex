@@ -26,9 +26,20 @@ def _run_cli_env(env_override: dict[str, str], *args: str) -> subprocess.Complet
     # 保留 PATH 和 Python 路径确保能启动
     # Windows 上 Path.home() 使用 USERPROFILE / HOMEDRIVE+HOMEPATH
     # asyncio / _overlapped 需要 SYSTEMROOT (Winsock catalog)
-    for keep in ("PATH", "PYTHONPATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
-                 "SYSTEMROOT", "WINDIR", "COMSPEC",
-                 "LANG", "LC_ALL", "TERM"):
+    for keep in (
+        "PATH",
+        "PYTHONPATH",
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "SYSTEMROOT",
+        "WINDIR",
+        "COMSPEC",
+        "LANG",
+        "LC_ALL",
+        "TERM",
+    ):
         if keep in env_override:
             continue
         if keep in base_env:
@@ -54,8 +65,7 @@ class TestStage3cCliEnvironment:
         }
         proc = _run_cli_env(env, "--help")
         assert proc.returncode == 0, (
-            f"--help with no HOME failed: rc={proc.returncode}, "
-            f"stderr={proc.stderr!r}"
+            f"--help with no HOME failed: rc={proc.returncode}, stderr={proc.stderr!r}"
         )
 
     def test_cli_version_no_home(self):
@@ -67,8 +77,7 @@ class TestStage3cCliEnvironment:
         }
         proc = _run_cli_env(env, "--version")
         assert proc.returncode == 0, (
-            f"--version with no HOME failed: rc={proc.returncode}, "
-            f"stderr={proc.stderr!r}"
+            f"--version with no HOME failed: rc={proc.returncode}, stderr={proc.stderr!r}"
         )
 
     def test_cli_help_empty_env(self):
@@ -81,8 +90,7 @@ class TestStage3cCliEnvironment:
         }
         proc = _run_cli_env(env, "--help")
         assert proc.returncode == 0, (
-            f"--help with empty LANG failed: rc={proc.returncode}, "
-            f"stderr={proc.stderr!r}"
+            f"--help with empty LANG failed: rc={proc.returncode}, stderr={proc.stderr!r}"
         )
 
     def test_cli_invalid_subcommand_no_traceback(self):
@@ -90,9 +98,7 @@ class TestStage3cCliEnvironment:
         env = {"HOME": os.environ.get("HOME", "/tmp"), "PATH": os.environ.get("PATH", "/usr/bin")}
         proc = _run_cli_env(env, "nonexistent-cmd-that-should-not-exist")
         # stderr 不应含 Python traceback
-        assert "Traceback" not in proc.stderr, (
-            f"invalid command produced traceback:\n{proc.stderr}"
-        )
+        assert "Traceback" not in proc.stderr, f"invalid command produced traceback:\n{proc.stderr}"
 
 
 class TestStage3cCliSignal:
@@ -119,6 +125,7 @@ class TestStage3cCliSignal:
         )
         # 给子进程一点时间启动
         import time
+
         time.sleep(0.3)
         # 发送 SIGINT
         if sys.platform != "win32":
@@ -132,9 +139,7 @@ class TestStage3cCliSignal:
 
         stdout, stderr = proc.communicate(timeout=10)
         # 退出码不应是 -6 (SIGABRT) — 那只在严重的 Python 内部损坏时出现
-        assert proc.returncode != -6, (
-            f"SIGINT caused SIGABRT (-6): stderr={stderr!r}"
-        )
+        assert proc.returncode != -6, f"SIGINT caused SIGABRT (-6): stderr={stderr!r}"
 
     def test_cli_help_no_traceback_on_normal_exit(self):
         """正常 --help 退出不产生任何 traceback。"""
@@ -142,9 +147,5 @@ class TestStage3cCliSignal:
             {"HOME": os.environ.get("HOME", "/tmp"), "PATH": os.environ.get("PATH", "/usr/bin")},
             "--help",
         )
-        assert "Traceback" not in proc.stderr, (
-            f"normal --help produced traceback:\n{proc.stderr}"
-        )
-        assert "Error:" not in proc.stderr, (
-            f"normal --help produced error:\n{proc.stderr}"
-        )
+        assert "Traceback" not in proc.stderr, f"normal --help produced traceback:\n{proc.stderr}"
+        assert "Error:" not in proc.stderr, f"normal --help produced error:\n{proc.stderr}"

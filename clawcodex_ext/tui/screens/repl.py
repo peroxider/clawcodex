@@ -22,14 +22,15 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 _log_lock = threading.Lock()
 
+
 def _log(msg: str) -> None:
     with _log_lock:
-        with open('/tmp/tui_flow.log', 'a') as f:
-            f.write(msg + '\n')
+        with open("/tmp/tui_flow.log", "a") as f:
+            f.write(msg + "\n")
 
 
 def _configured_accept_suggestion_key() -> str:
@@ -55,6 +56,7 @@ def _configured_accept_suggestion_tab_alias() -> bool:
         return bool(getattr(get_settings(), "accept_suggestion_tab_alias", True))
     except Exception:
         return True
+
 
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -88,6 +90,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 from textual.binding import Binding
+
 
 class REPLScreen(Screen):
     """Composes the interactive TUI layout."""
@@ -178,6 +181,7 @@ class REPLScreen(Screen):
         # Set the initial permission mode on the status bar.
         try:
             from src.permissions.modes import to_external_permission_mode
+
             ctx = getattr(app, "tool_context", None)
             if ctx is not None and ctx.permission_context is not None:
                 mode = to_external_permission_mode(ctx.permission_context.mode or "default")
@@ -218,15 +222,11 @@ class REPLScreen(Screen):
         if hasattr(app, "action_cycle_permission_mode"):
             app.action_cycle_permission_mode()
 
-    def on_permission_mode_cycle_requested(
-        self, _: PermissionModeCycleRequested
-    ) -> None:
+    def on_permission_mode_cycle_requested(self, _: PermissionModeCycleRequested) -> None:
         """Handle Shift+Tab posted from PromptInput."""
         self.action_cycle_permission_mode()
 
-    def on_permission_mode_changed(
-        self, message: PermissionModeChanged
-    ) -> None:
+    def on_permission_mode_changed(self, message: PermissionModeChanged) -> None:
         """Handle a mode change posted by the runtime permission
         controller. Updates the status bar and appends a transcript
         line so the user sees the new mode regardless of which entry
@@ -234,9 +234,7 @@ class REPLScreen(Screen):
         ``permissions_command`` registry path).
         """
         self.status_bar.set_permission_mode(message.mode)
-        self.transcript.append_system(
-            f"Permission mode: {message.mode}", style="muted"
-        )
+        self.transcript.append_system(f"Permission mode: {message.mode}", style="muted")
 
     # ---- prompt submission ----
     def on_prompt_submitted(self, message: PromptSubmitted) -> None:
@@ -339,9 +337,7 @@ class REPLScreen(Screen):
         self.prompt_input.focus_input()
 
     # ---- AskUserQuestion modal handlers ----
-    def on_ask_user_question_requested(
-        self, message: AskUserQuestionRequested
-    ) -> None:
+    def on_ask_user_question_requested(self, message: AskUserQuestionRequested) -> None:
         app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
         state = getattr(app, "app_state", None)
         if state is None:

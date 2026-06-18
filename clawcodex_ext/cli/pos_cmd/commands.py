@@ -29,8 +29,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from clawcodex_ext.cli.subcommand_registry import register
+
+if TYPE_CHECKING:
+    from extensions.pos_converter.skill_grouper import MappingRule
 
 
 @register("pos")
@@ -51,14 +55,19 @@ def run_pos_command(args: list[str]) -> int:
     return 2
 
 
-def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool]:
+def _parse_convert_args(
+    args: list[str],
+) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool]:
     """Parse ``pos convert`` arguments.
 
     Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods).
     """
     if not args:
         print("error: missing <sdk_spec> argument", file=sys.stderr)
-        print("usage: clawcodex pos convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>] [--preview] [--all]", file=sys.stderr)
+        print(
+            "usage: clawcodex pos convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>] [--preview] [--all]",
+            file=sys.stderr,
+        )
         raise SystemExit(2)
 
     sdk_spec = args[0]
@@ -96,7 +105,9 @@ def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str, 
             try:
                 max_groups = int(args[i + 1])
             except ValueError:
-                print(f"error: --max-groups requires an integer, got: {args[i + 1]}", file=sys.stderr)
+                print(
+                    f"error: --max-groups requires an integer, got: {args[i + 1]}", file=sys.stderr
+                )
                 raise SystemExit(2)
             i += 2
         elif token == "--mapping-rules" and i + 1 < len(args):
@@ -118,13 +129,39 @@ def _parse_convert_args(args: list[str]) -> tuple[str, str, str, str, str, str, 
             print(f"error: unknown argument: {token}", file=sys.stderr)
             raise SystemExit(2)
 
-    return sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods
+    return (
+        sdk_spec,
+        output_dir,
+        requirements,
+        agent_name,
+        strategy,
+        skills_dir,
+        max_groups,
+        mapping_rules_file,
+        llm_provider,
+        llm_model,
+        preview,
+        all_methods,
+    )
 
 
 def _handle_convert(args: list[str]) -> int:
     """Handle ``pos convert`` — convert an SOP spec into an Agent."""
     try:
-        sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods = _parse_convert_args(args)
+        (
+            sdk_spec,
+            output_dir,
+            requirements,
+            agent_name,
+            strategy,
+            skills_dir,
+            max_groups,
+            mapping_rules_file,
+            llm_provider,
+            llm_model,
+            preview,
+            all_methods,
+        ) = _parse_convert_args(args)
     except SystemExit:
         return 2
 
@@ -132,7 +169,20 @@ def _handle_convert(args: list[str]) -> int:
 
     # Auto-detection: if sdk_spec is an existing directory, use SourceCodeParser
     if sdk_path.is_dir():
-        return _handle_convert_from_source(sdk_path, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods)
+        return _handle_convert_from_source(
+            sdk_path,
+            output_dir,
+            requirements,
+            agent_name,
+            strategy,
+            skills_dir,
+            max_groups,
+            mapping_rules_file,
+            llm_provider,
+            llm_model,
+            preview,
+            all_methods,
+        )
 
     # Legacy path: sdk_spec is a comma-separated spec string
     from extensions.pos_converter.convert_pos_skill import convert_pos_to_agent
@@ -198,8 +248,18 @@ def _handle_convert_from_source(
     interfaces (docstring-required) are kept.
     """
     from extensions.pos_converter.source_parser import SourceCodeParser
-    from extensions.pos_converter.skill_grouper import GroupStrategy, group_source_components, SkillSpec, MappingRule, MatchType
-    from extensions.pos_converter.agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
+    from extensions.pos_converter.skill_grouper import (
+        GroupStrategy,
+        group_source_components,
+        SkillSpec,
+        MappingRule,
+        MatchType,
+    )
+    from extensions.pos_converter.agent_md_writer import (
+        AgentMarkdownWriter,
+        AgentComponentInfo,
+        WorkflowStage,
+    )
 
     parser = SourceCodeParser(str(sdk_path), extern_only=not all_methods)
     components = parser.parse()
@@ -226,7 +286,10 @@ def _handle_convert_from_source(
     if group_strategy == GroupStrategy.LLM_SEMANTIC:
         llm_provider_obj = _create_llm_provider(llm_provider_name, llm_model)
         if llm_provider_obj is None:
-            print("warning: LLM_SEMANTIC requires a configured LLM provider; falling back to keyword match strategy", file=sys.stderr)
+            print(
+                "warning: LLM_SEMANTIC requires a configured LLM provider; falling back to keyword match strategy",
+                file=sys.stderr,
+            )
             group_strategy = GroupStrategy.KEYWORD_MATCH
 
     group_result = group_source_components(
@@ -270,7 +333,9 @@ def _handle_convert_from_source(
             print(f"   Filter: --all (all public methods)")
         print(f"   Source Components: {len(components)}")
         print(f"   Grouped Skills: {len(grouped_skills)}")
-        print(f"   Agent file count: {total_agents} ({len(grouped_skills)} + {overview_count} overview)")
+        print(
+            f"   Agent file count: {total_agents} ({len(grouped_skills)} + {overview_count} overview)"
+        )
         if len(components) != len(grouped_skills):
             reduction = 100 - int(len(grouped_skills) / len(components) * 100)
             print(f"   Agent 缩减率: {reduction}% ({len(components)} → {total_agents})")
@@ -343,7 +408,9 @@ def _handle_convert_from_source(
     print(f"   Strategy: {group_strategy.name}")
     if len(components) != len(grouped_skills):
         reduction = 100 - int(len(grouped_skills) / len(components) * 100)
-        print(f"   Agent reduction: {reduction}% ({len(components)} components → {total_agents} agents)")
+        print(
+            f"   Agent reduction: {reduction}% ({len(components)} components → {total_agents} agents)"
+        )
     for i, skill in enumerate(grouped_skills):
         print(f"     Agent {i + 1}: {skill.name}-agent")
         print(f"       Description: {skill.description}")
@@ -398,9 +465,13 @@ def _load_mapping_rules(file_path: str) -> list[MappingRule]:
         if path.suffix in (".yaml", ".yml"):
             try:
                 import yaml
+
                 data = yaml.safe_load(raw)
             except ImportError:
-                print("error: PyYAML not installed, use JSON format for mapping rules", file=sys.stderr)
+                print(
+                    "error: PyYAML not installed, use JSON format for mapping rules",
+                    file=sys.stderr,
+                )
                 raise SystemExit(2)
         else:
             data = json.loads(raw)
@@ -424,7 +495,10 @@ def _load_mapping_rules(file_path: str) -> list[MappingRule]:
         method_pattern = entry.get("method_pattern", "")
         skill_name = entry.get("skill_name", "")
         if not method_pattern or not skill_name:
-            print(f"warning: skipping mapping rule entry missing method_pattern or skill_name: {entry}", file=sys.stderr)
+            print(
+                f"warning: skipping mapping rule entry missing method_pattern or skill_name: {entry}",
+                file=sys.stderr,
+            )
             continue
         rules.append(
             MappingRule(
@@ -500,13 +574,15 @@ def _write_output_files(
     # --- .atomcode/skills/<name>/SKILL.md — loadable by skill system ---
     skills_for_writer = []
     for skill in result["skills"]:
-        skills_for_writer.append({
-            "name": skill["name"],
-            "description": skill["description"],
-            "allowed_tools": skill["tools"],
-            "parameters": [],
-            "source_code": "",
-        })
+        skills_for_writer.append(
+            {
+                "name": skill["name"],
+                "description": skill["description"],
+                "allowed_tools": skill["tools"],
+                "parameters": [],
+                "source_code": "",
+            }
+        )
     if skills_for_writer:
         skill_paths = writer.write_skills(skills_for_writer, base)
         for sp in skill_paths:
@@ -515,6 +591,7 @@ def _write_output_files(
     # --- Legacy compat: skills/pos-<name>-<skill>/SKILL.md (deprecated) ---
     # TODO: remove in next major version; users should migrate to .atomcode/skills/
     import warnings
+
     warnings.warn(
         "The `skills/` output directory is deprecated and will be removed "
         "in a future release. Use `.atomcode/skills/` instead.",

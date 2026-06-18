@@ -8,6 +8,7 @@ Telemetry IssueReporter 端到端模拟测试。
 
 所有 HTTP 调用被 MockClient 替代，不产生真实网络请求。
 """
+
 from __future__ import annotations
 
 import json
@@ -25,12 +26,17 @@ _HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 # 移除脚本所在目录 (tests/) 以防遮蔽 stdlib 模块 (如 tests/token/)
 _tests_dir = str((_HERE / "tests").resolve())
-sys.path = [str(_HERE)] + [p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir]
+sys.path = [str(_HERE)] + [
+    p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir
+]
+
+
 # ---------------------------------------------------------------------------
 # 1. Mock HTTP 客户端（模拟 GitHub Issue API）
 # ---------------------------------------------------------------------------
 class _MockPlatform:
     """模拟 RepositoryIssueClient 的 platform 属性。"""
+
     open_state = "open"
 
 
@@ -39,16 +45,18 @@ class MockIssueClient:
 
     def __init__(self) -> None:
         self.platform = _MockPlatform()
-        self.created: list[dict[str, Any]] = []       # 记录 create_issue 调用
-        self.updated: list[dict[str, Any]] = []       # 记录 update_issue_body 调用
-        self.find_titles: list[str] = []              # 记录 find_issue_by_title 调用
+        self.created: list[dict[str, Any]] = []  # 记录 create_issue 调用
+        self.updated: list[dict[str, Any]] = []  # 记录 update_issue_body 调用
+        self.find_titles: list[str] = []  # 记录 find_issue_by_title 调用
         self._existing: dict[str, Any] | None = None  # 模拟已存在的 Issue
 
     def set_existing(self, issue: dict[str, Any] | None) -> None:
         """设置 find_issue_by_title 的返回值，模拟 Issue 已存在场景。"""
         self._existing = issue
 
-    async def find_issue_by_title(self, title: str, *, state: str = "open") -> dict[str, Any] | None:
+    async def find_issue_by_title(
+        self, title: str, *, state: str = "open"
+    ) -> dict[str, Any] | None:
         self.find_titles.append(title)
         return self._existing
 
@@ -96,70 +104,88 @@ def build_events_for_day(storage: Any, date: str) -> None:
     from telemetry.events import TelemetryEvent, EventType
 
     # 2a. SESSION_START × 2
-    for i, (platform, provider, model) in enumerate([
-        ("Linux", "anthropic", "claude-sonnet-4"),
-        ("macOS", "openai", "gpt-4o"),
-    ]):
-        storage.append("events", TelemetryEvent(
-            type=EventType.SESSION_START,
-            session_id=f"sess-{i}",
-            timestamp=time.time() - (i * 300),
-            fields={
-                "entrypoint": "cli",
-                "platform": platform,
-                "provider": provider,
-                "model": model,
-                "client_type": "cli",
-                "is_non_interactive": False,
-                "app_version": "0.1.0",
-            },
-        ).to_dict(), date=date)
+    for i, (platform, provider, model) in enumerate(
+        [
+            ("Linux", "anthropic", "claude-sonnet-4"),
+            ("macOS", "openai", "gpt-4o"),
+        ]
+    ):
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.SESSION_START,
+                session_id=f"sess-{i}",
+                timestamp=time.time() - (i * 300),
+                fields={
+                    "entrypoint": "cli",
+                    "platform": platform,
+                    "provider": provider,
+                    "model": model,
+                    "client_type": "cli",
+                    "is_non_interactive": False,
+                    "app_version": "0.1.0",
+                },
+            ).to_dict(),
+            date=date,
+        )
 
     # 2b. COMMAND_RUN × 3
     for cmd, success, dur in [
-        ("print",         True,  2.5),
-        ("agent",         True,  45.0),
-        ("print",         False, 0.8),
+        ("print", True, 2.5),
+        ("agent", True, 45.0),
+        ("print", False, 0.8),
     ]:
-        storage.append("events", TelemetryEvent(
-            type=EventType.COMMAND_RUN,
-            session_id="sess-0",
-            timestamp=time.time(),
-            fields={
-                "command_name": cmd,
-                "success": success,
-                "duration_s": dur,
-                "exit_status": 0 if success else 1,
-            },
-        ).to_dict(), date=date)
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.COMMAND_RUN,
+                session_id="sess-0",
+                timestamp=time.time(),
+                fields={
+                    "command_name": cmd,
+                    "success": success,
+                    "duration_s": dur,
+                    "exit_status": 0 if success else 1,
+                },
+            ).to_dict(),
+            date=date,
+        )
 
     # 2c. TOOL_SUMMARY × 2
     for tool, success, dur in [
-        ("Bash",           True,  3.0),
-        ("ReadFile",       True,  0.5),
+        ("Bash", True, 3.0),
+        ("ReadFile", True, 0.5),
     ]:
-        storage.append("events", TelemetryEvent(
-            type=EventType.TOOL_SUMMARY,
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.TOOL_SUMMARY,
+                session_id="sess-0",
+                timestamp=time.time(),
+                fields={
+                    "tool_name": tool,
+                    "success": success,
+                    "duration_s": dur,
+                },
+            ).to_dict(),
+            date=date,
+        )
+
+    # 2d. ERROR × 1
+    storage.append(
+        "crashes",
+        TelemetryEvent(
+            type=EventType.ERROR,
             session_id="sess-0",
             timestamp=time.time(),
             fields={
-                "tool_name": tool,
-                "success": success,
-                "duration_s": dur,
+                "error_class": "ValueError",
+                "fingerprint": "abc1234567890def",
+                "stacktrace": ["ValueError: invalid input", "  File main.py:42"],
             },
-        ).to_dict(), date=date)
-
-    # 2d. ERROR × 1
-    storage.append("crashes", TelemetryEvent(
-        type=EventType.ERROR,
-        session_id="sess-0",
-        timestamp=time.time(),
-        fields={
-            "error_class": "ValueError",
-            "fingerprint": "abc1234567890def",
-            "stacktrace": ["ValueError: invalid input", "  File main.py:42"],
-        },
-    ).to_dict(), date=date)
+        ).to_dict(),
+        date=date,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +243,10 @@ def main() -> int:
             issue_title="ClawCodex Telemetry Inbox",
         )
         reporter = IssueReporter(
-            storage=storage, redactor=redactor, config=config, client=client,
+            storage=storage,
+            redactor=redactor,
+            config=config,
+            client=client,
         )
         print(f"  config valid: {reporter._valid_config()}")
 
@@ -272,12 +301,15 @@ def main() -> int:
 
         # 模拟已存在的 Issue body（包含 7/15 数据块）
         from telemetry.reporters.issue import _wrap_date_block
+
         existing_body = f"Intro\n\n{_wrap_date_block(rendered, date)}"
-        client2.set_existing({
-            "number": "1",
-            "title": "ClawCodex Telemetry Inbox",
-            "body": existing_body,
-        })
+        client2.set_existing(
+            {
+                "number": "1",
+                "title": "ClawCodex Telemetry Inbox",
+                "body": existing_body,
+            }
+        )
 
         # 为新一天写入事件
         build_events_for_day(storage, date2)
@@ -285,8 +317,10 @@ def main() -> int:
         rendered2 = reporter.render(summary2, date2)
 
         reporter2 = IssueReporter(
-            storage=storage, redactor=redactor,
-            config=config, client=client2,
+            storage=storage,
+            redactor=redactor,
+            config=config,
+            client=client2,
         )
         ok3 = reporter2.emit(rendered2, date=date2)
         assert ok3, "更新 emit 失败"
@@ -304,8 +338,10 @@ def main() -> int:
         print("\n--- 步骤 8: Secret scan 阻断测试 ---")
         client3 = MockIssueClient()
         reporter3 = IssueReporter(
-            storage=storage, redactor=redactor,
-            config=config, client=client3,
+            storage=storage,
+            redactor=redactor,
+            config=config,
+            client=client3,
         )
         leaked = "This contains AKIAIOSFODNN7EXAMPLE key\n"
         ok4 = reporter3.emit(leaked, date=date)

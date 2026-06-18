@@ -105,12 +105,14 @@ class StateJournalWriter:
         message: str = "",
     ) -> None:
         """Write a ``type: "issue_status"`` event."""
-        self.write_event({
-            "type": "issue_status",
-            "issue_id": issue_id,
-            "status": status,
-            "message": message,
-        })
+        self.write_event(
+            {
+                "type": "issue_status",
+                "issue_id": issue_id,
+                "status": status,
+                "message": message,
+            }
+        )
 
     def write_verification(
         self,
@@ -119,12 +121,14 @@ class StateJournalWriter:
         result: str = "",
     ) -> None:
         """Write a ``type: "verification"`` event."""
-        self.write_event({
-            "type": "verification",
-            "issue_id": issue_id,
-            "verification_status": verification_status,
-            "result": result,
-        })
+        self.write_event(
+            {
+                "type": "verification",
+                "issue_id": issue_id,
+                "verification_status": verification_status,
+                "result": result,
+            }
+        )
 
     def write_pr_status(
         self,
@@ -151,12 +155,14 @@ class StateJournalWriter:
         session_path: str = "",
     ) -> None:
         """Write a ``type: "session_ref"`` event."""
-        self.write_event({
-            "type": "session_ref",
-            "issue_id": issue_id,
-            "session_id": session_id,
-            "session_path": session_path,
-        })
+        self.write_event(
+            {
+                "type": "session_ref",
+                "issue_id": issue_id,
+                "session_id": session_id,
+                "session_path": session_path,
+            }
+        )
 
     def write_error(
         self,
@@ -164,11 +170,13 @@ class StateJournalWriter:
         error: str,
     ) -> None:
         """Write a ``type: "error"`` event."""
-        self.write_event({
-            "type": "error",
-            "issue_id": issue_id,
-            "error": error,
-        })
+        self.write_event(
+            {
+                "type": "error",
+                "issue_id": issue_id,
+                "error": error,
+            }
+        )
 
     def write_complete(
         self,
@@ -177,9 +185,11 @@ class StateJournalWriter:
         message: str = "",
     ) -> None:
         """Write a ``type: "complete"`` event."""
-        self.write_event({
-            "type": "complete",
-            "issue_id": issue_id,
-            "overall_status": overall_status,
-            "message": message,
-        })
+        self.write_event(
+            {
+                "type": "complete",
+                "issue_id": issue_id,
+                "overall_status": overall_status,
+                "message": message,
+            }
+        )

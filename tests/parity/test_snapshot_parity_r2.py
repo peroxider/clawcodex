@@ -8,6 +8,7 @@ Compare deterministic outputs for fixed inputs across 6 categories:
 5. Bash command classification
 6. Permission rule matching
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,6 +33,7 @@ from src.types.messages import (
 # ---------------------------------------------------------------------------
 # 1. System prompt generation snapshot
 # ---------------------------------------------------------------------------
+
 
 class TestSystemPromptSnapshot(unittest.TestCase):
     """Deterministic system prompt output for fixed context."""
@@ -77,6 +79,7 @@ class TestSystemPromptSnapshot(unittest.TestCase):
 # 2. Message normalization snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestMessageNormalizationSnapshot(unittest.TestCase):
     """Deterministic API message output for fixed message sequence."""
 
@@ -114,8 +117,9 @@ class TestMessageNormalizationSnapshot(unittest.TestCase):
         api_msgs = normalize_messages_for_api(msgs)
         for i in range(len(api_msgs) - 1):
             self.assertNotEqual(
-                api_msgs[i]["role"], api_msgs[i + 1]["role"],
-                f"Adjacent messages {i} and {i+1} have same role",
+                api_msgs[i]["role"],
+                api_msgs[i + 1]["role"],
+                f"Adjacent messages {i} and {i + 1} have same role",
             )
 
     def test_tool_use_block_structure(self) -> None:
@@ -151,6 +155,7 @@ class TestMessageNormalizationSnapshot(unittest.TestCase):
 # 3. Token estimation snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestTokenEstimationSnapshot(unittest.TestCase):
     """Deterministic token estimates for fixed messages."""
 
@@ -160,8 +165,8 @@ class TestTokenEstimationSnapshot(unittest.TestCase):
         # Fixed inputs → deterministic outputs
         cases = [
             ("Hello, world!", 4, 3),  # 13 chars / 4 = 3
-            ("a" * 100, 4, 25),       # 100 / 4 = 25
-            ("", 4, 0),               # empty = 0
+            ("a" * 100, 4, 25),  # 100 / 4 = 25
+            ("", 4, 0),  # empty = 0
             ('{"key": "value"}', 2, 8),  # 16 chars / 2 = 8 (JSON)
         ]
         for text, bpt, expected in cases:
@@ -196,6 +201,7 @@ class TestTokenEstimationSnapshot(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 4. Cost calculation snapshot
 # ---------------------------------------------------------------------------
+
 
 class TestCostCalculationSnapshot(unittest.TestCase):
     """Deterministic cost calculation for fixed usage."""
@@ -244,6 +250,7 @@ class TestCostCalculationSnapshot(unittest.TestCase):
 # 5. Bash command classification snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestBashClassificationSnapshot(unittest.TestCase):
     """Deterministic classification for a fixed set of commands."""
 
@@ -284,6 +291,7 @@ class TestBashClassificationSnapshot(unittest.TestCase):
 # 6. Permission rule matching snapshot
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionRuleMatchingSnapshot(unittest.TestCase):
     """Deterministic permission rule parsing and matching."""
 
@@ -302,7 +310,9 @@ class TestPermissionRuleMatchingSnapshot(unittest.TestCase):
         for rule_str, expected_tool, expected_content in test_cases:
             parsed = permission_rule_value_from_string(rule_str)
             self.assertEqual(parsed.tool_name, expected_tool, f"Tool mismatch for: {rule_str}")
-            self.assertEqual(parsed.rule_content, expected_content, f"Content mismatch for: {rule_str}")
+            self.assertEqual(
+                parsed.rule_content, expected_content, f"Content mismatch for: {rule_str}"
+            )
 
             # Roundtrip
             serialized = permission_rule_value_to_string(parsed)
@@ -314,16 +324,17 @@ class TestPermissionRuleMatchingSnapshot(unittest.TestCase):
         from src.permissions.bash_security import is_dangerous_bash_permission
 
         dangerous_cases = [
-            ("Bash", None, True),     # wildcard
-            ("Bash", "*", True),      # explicit wildcard
-            ("Bash", "python", True), # code execution
-            ("Bash", "node", True),   # code execution
-            ("Bash", "sudo", True),   # elevated privilege
+            ("Bash", None, True),  # wildcard
+            ("Bash", "*", True),  # explicit wildcard
+            ("Bash", "python", True),  # code execution
+            ("Bash", "node", True),  # code execution
+            ("Bash", "sudo", True),  # elevated privilege
         ]
         for tool_name, content, expected in dangerous_cases:
             result = is_dangerous_bash_permission(tool_name, content)
             self.assertEqual(
-                result, expected,
+                result,
+                expected,
                 f"is_dangerous_bash_permission({tool_name!r}, {content!r}) = {result}, expected {expected}",
             )
 
@@ -334,13 +345,14 @@ class TestPermissionRuleMatchingSnapshot(unittest.TestCase):
             ("Bash", "ls -la", False),
             ("Bash", "cat file.txt", False),
             ("Bash", "grep pattern", False),
-            ("Read", None, False),       # Not Bash tool
-            ("Write", "*", False),       # Not Bash tool
+            ("Read", None, False),  # Not Bash tool
+            ("Write", "*", False),  # Not Bash tool
         ]
         for tool_name, content, expected in safe_cases:
             result = is_dangerous_bash_permission(tool_name, content)
             self.assertEqual(
-                result, expected,
+                result,
+                expected,
                 f"is_dangerous_bash_permission({tool_name!r}, {content!r}) = {result}, expected {expected}",
             )
 

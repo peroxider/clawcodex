@@ -5,6 +5,7 @@ to merge per-error occurrences into ``top_error_fingerprints`` and crash
 summaries. It is intentionally short (16 hex chars) and stable across runs
 that hit the same exception class, location and message shape.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -55,9 +56,7 @@ def _pick_project_frame(
         filename = frame.filename or ""
         if not filename:
             continue
-        if project_roots and not any(
-            filename.startswith(root) for root in project_roots
-        ):
+        if project_roots and not any(filename.startswith(root) for root in project_roots):
             continue
         module = frame.name or "<unknown>"
         last_match = (filename, module, int(frame.lineno or 0))

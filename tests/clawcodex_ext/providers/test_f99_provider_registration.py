@@ -36,6 +36,7 @@ cancel-latency override so the bare upstream class never wins the
 ``get_provider_class("anthropic")`` lookup. They also pin that the
 ``minimax`` override is registered for symmetry.
 """
+
 from __future__ import annotations
 
 import importlib

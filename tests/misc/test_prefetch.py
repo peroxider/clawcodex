@@ -42,7 +42,8 @@ class TestStartReturnsImmediately(unittest.TestCase):
         self.assertIsInstance(handle, PrefetchHandle)
         self.assertEqual(handle.label, "keychain_prefetch")
         self.assertLess(
-            elapsed_ms, 200,
+            elapsed_ms,
+            200,
             f"start_keychain_prefetch took {elapsed_ms:.1f}ms — the call should "
             "return immediately (subprocess work happens in parallel)",
         )
@@ -87,27 +88,35 @@ class TestWaitAndRead(unittest.TestCase):
         # Synthesize a Popen-like that returns ('secret\n', '') with rc=0.
         class FakeProcess:
             returncode = 0
+
             def communicate(self, timeout=None):
                 return (b"secret\n", b"")
+
         handle = PrefetchHandle(process=FakeProcess(), label="test")  # type: ignore[arg-type]
         self.assertEqual(wait_and_read_keychain(handle), "secret")
 
     def test_wait_and_read_returns_none_on_nonzero_exit(self):
         class FakeProcess:
             returncode = 1
+
             def communicate(self, timeout=None):
                 return (b"", b"error: not found")
+
         handle = PrefetchHandle(process=FakeProcess(), label="test")  # type: ignore[arg-type]
         self.assertIsNone(wait_and_read_keychain(handle))
 
     def test_wait_and_read_returns_none_on_timeout(self):
         kills = []
+
         class FakeProcess:
             returncode = None
+
             def communicate(self, timeout=None):
                 raise subprocess.TimeoutExpired(cmd="x", timeout=timeout)
+
             def kill(self):
                 kills.append(True)
+
         handle = PrefetchHandle(process=FakeProcess(), label="test")  # type: ignore[arg-type]
         self.assertIsNone(wait_and_read_keychain(handle, timeout=0.001))
         self.assertEqual(kills, [True], "timed-out child must be killed")
@@ -126,6 +135,7 @@ class TestModuleLevelFireAndForget(unittest.TestCase):
         # Re-import to ensure module-level code re-runs in a clean way.
         import importlib
         import src.cli
+
         importlib.reload(src.cli)
         self.assertIsInstance(src.cli._keychain_handle, PrefetchHandle)
         self.assertIsInstance(src.cli._mdm_handle, PrefetchHandle)
@@ -142,6 +152,7 @@ class TestModuleLevelFireAndForget(unittest.TestCase):
 class TestProjectScanStub(unittest.TestCase):
     def test_project_scan_returns_handle(self):
         from pathlib import Path
+
         handle = start_project_scan(Path("/tmp"))
         self.assertIsInstance(handle, PrefetchHandle)
         self.assertEqual(handle.label, "project_scan")
@@ -160,11 +171,13 @@ class TestSingletonGetters(unittest.TestCase):
     def setUp(self):
         # Clear any prior singleton so each test starts fresh.
         import src.prefetch
+
         src.prefetch._singletons.clear()
 
     def tearDown(self):
         # Drain any spawned children before clearing the cache.
         import src.prefetch
+
         for handle in src.prefetch._singletons.values():
             if handle.process is not None:
                 try:
@@ -191,7 +204,8 @@ class TestSingletonGetters(unittest.TestCase):
             get_or_start_keychain_prefetch()
             get_or_start_keychain_prefetch()
             self.assertEqual(
-                mock_start.call_count, 1,
+                mock_start.call_count,
+                1,
                 "Singleton must fire underlying prefetch exactly once "
                 "even across multiple callers (cli.py + setup.py)",
             )

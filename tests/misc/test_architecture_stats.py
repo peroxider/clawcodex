@@ -42,9 +42,7 @@ class ArchitectureStatsTests(unittest.TestCase):
 
         stats = build_architecture_stats()
         self.assertEqual(len(stats.abstractions), 6)
-        for got, (expected_name, expected_pkg) in zip(
-            stats.abstractions, EXPECTED_ABSTRACTIONS
-        ):
+        for got, (expected_name, expected_pkg) in zip(stats.abstractions, EXPECTED_ABSTRACTIONS):
             self.assertEqual(got.name, expected_name)
             self.assertEqual(got.package, expected_pkg)
 

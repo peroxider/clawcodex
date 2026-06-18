@@ -58,6 +58,7 @@ async def run_tool_use(
     if tool is None:
         try:
             from src.tool_system.registry import ToolRegistry
+
             fallback_registry = ToolRegistry(tool_use_context.options.tools)
             tool = fallback_registry.get(tool_name)
         except Exception:
@@ -67,12 +68,14 @@ async def run_tool_use(
         logger.debug("Unknown tool %s: %s", tool_name, tool_use.id)
         yield MessageUpdateLazy(
             message=create_user_message(
-                content=[{
-                    "type": "tool_result",
-                    "content": f"<tool_use_error>Error: No such tool available: {tool_name}</tool_use_error>",
-                    "is_error": True,
-                    "tool_use_id": tool_use.id,
-                }],
+                content=[
+                    {
+                        "type": "tool_result",
+                        "content": f"<tool_use_error>Error: No such tool available: {tool_name}</tool_use_error>",
+                        "is_error": True,
+                        "tool_use_id": tool_use.id,
+                    }
+                ],
                 toolUseResult=f"Error: No such tool available: {tool_name}",
             ),
         )
@@ -110,12 +113,14 @@ async def run_tool_use(
         detailed = f"Error calling tool{tool_info}: {error_msg}"
         yield MessageUpdateLazy(
             message=create_user_message(
-                content=[{
-                    "type": "tool_result",
-                    "content": f"<tool_use_error>{detailed}</tool_use_error>",
-                    "is_error": True,
-                    "tool_use_id": tool_use.id,
-                }],
+                content=[
+                    {
+                        "type": "tool_result",
+                        "content": f"<tool_use_error>{detailed}</tool_use_error>",
+                        "is_error": True,
+                        "tool_use_id": tool_use.id,
+                    }
+                ],
                 toolUseResult=detailed,
             ),
         )
@@ -164,23 +169,29 @@ async def _check_permissions_and_call_tool(
             )
 
             validate_json_schema(
-                processed_input, tool.input_schema, root_name=tool.name,
+                processed_input,
+                tool.input_schema,
+                root_name=tool.name,
             )
         except Exception as schema_err:  # ToolInputError or any subclass
             msg = str(schema_err)
             if getattr(tool, "should_defer", False):
                 msg = msg + build_schema_not_sent_hint(tool)
-            resulting_messages.append(MessageUpdateLazy(
-                message=create_user_message(
-                    content=[{
-                        "type": "tool_result",
-                        "content": f"<tool_use_error>{msg}</tool_use_error>",
-                        "is_error": True,
-                        "tool_use_id": tool_use_id,
-                    }],
-                    toolUseResult=f"Error: {msg}",
-                ),
-            ))
+            resulting_messages.append(
+                MessageUpdateLazy(
+                    message=create_user_message(
+                        content=[
+                            {
+                                "type": "tool_result",
+                                "content": f"<tool_use_error>{msg}</tool_use_error>",
+                                "is_error": True,
+                                "tool_use_id": tool_use_id,
+                            }
+                        ],
+                        toolUseResult=f"Error: {msg}",
+                    ),
+                )
+            )
             return resulting_messages
 
     # ----- Step 4 — Semantic validation (`validate_input`).
@@ -189,17 +200,21 @@ async def _check_permissions_and_call_tool(
             validation = tool.validate_input(processed_input, tool_use_context)
             if hasattr(validation, "result") and not validation.result:
                 msg = getattr(validation, "message", "Validation failed")
-                resulting_messages.append(MessageUpdateLazy(
-                    message=create_user_message(
-                        content=[{
-                            "type": "tool_result",
-                            "content": f"<tool_use_error>{msg}</tool_use_error>",
-                            "is_error": True,
-                            "tool_use_id": tool_use_id,
-                        }],
-                        toolUseResult=f"Error: {msg}",
-                    ),
-                ))
+                resulting_messages.append(
+                    MessageUpdateLazy(
+                        message=create_user_message(
+                            content=[
+                                {
+                                    "type": "tool_result",
+                                    "content": f"<tool_use_error>{msg}</tool_use_error>",
+                                    "is_error": True,
+                                    "tool_use_id": tool_use_id,
+                                }
+                            ],
+                            toolUseResult=f"Error: {msg}",
+                        ),
+                    )
+                )
                 return resulting_messages
         except Exception as e:
             logger.debug("Validation error for %s: %s", tool.name, e)
@@ -229,27 +244,51 @@ async def _check_permissions_and_call_tool(
             processed_input,
             tool_use_id,
         ):
-            result_type = result.get("type") if isinstance(result, dict) else getattr(result, "type", None)
+            result_type = (
+                result.get("type") if isinstance(result, dict) else getattr(result, "type", None)
+            )
 
             if result_type == "message":
-                msg = result.get("message") if isinstance(result, dict) else getattr(result, "message", None)
+                msg = (
+                    result.get("message")
+                    if isinstance(result, dict)
+                    else getattr(result, "message", None)
+                )
                 if msg:
-                    resulting_messages.append(msg if isinstance(msg, MessageUpdateLazy) else MessageUpdateLazy(message=msg))
+                    resulting_messages.append(
+                        msg
+                        if isinstance(msg, MessageUpdateLazy)
+                        else MessageUpdateLazy(message=msg)
+                    )
             elif result_type == "hookPermissionResult":
-                hook_permission_result = result.get("hookPermissionResult") if isinstance(result, dict) else getattr(result, "hook_permission_result", None)
+                hook_permission_result = (
+                    result.get("hookPermissionResult")
+                    if isinstance(result, dict)
+                    else getattr(result, "hook_permission_result", None)
+                )
             elif result_type == "hookUpdatedInput":
-                processed_input = result.get("updatedInput") if isinstance(result, dict) else getattr(result, "updated_input", processed_input)
+                processed_input = (
+                    result.get("updatedInput")
+                    if isinstance(result, dict)
+                    else getattr(result, "updated_input", processed_input)
+                )
             elif result_type == "preventContinuation":
                 should_prevent_continuation = True
             elif result_type == "stopReason":
-                stop_reason = result.get("stopReason") if isinstance(result, dict) else getattr(result, "stop_reason", None)
+                stop_reason = (
+                    result.get("stopReason")
+                    if isinstance(result, dict)
+                    else getattr(result, "stop_reason", None)
+                )
             elif result_type == "stop":
-                resulting_messages.append(MessageUpdateLazy(
-                    message=create_user_message(
-                        content=[_create_tool_result_stop(tool_use_id)],
-                        toolUseResult=f"Error: {stop_reason or 'stopped'}",
-                    ),
-                ))
+                resulting_messages.append(
+                    MessageUpdateLazy(
+                        message=create_user_message(
+                            content=[_create_tool_result_stop(tool_use_id)],
+                            toolUseResult=f"Error: {stop_reason or 'stopped'}",
+                        ),
+                    )
+                )
                 return resulting_messages
     except Exception as e:
         logger.debug("Pre-tool hook error: %s", e)
@@ -267,19 +306,25 @@ async def _check_permissions_and_call_tool(
     if permission_decision.get("behavior") != "allow":
         error_message = permission_decision.get("message", "Permission denied")
         if should_prevent_continuation and not error_message:
-            error_message = f"Execution stopped by PreToolUse hook{': ' + stop_reason if stop_reason else ''}"
+            error_message = (
+                f"Execution stopped by PreToolUse hook{': ' + stop_reason if stop_reason else ''}"
+            )
 
-        resulting_messages.append(MessageUpdateLazy(
-            message=create_user_message(
-                content=[{
-                    "type": "tool_result",
-                    "content": error_message,
-                    "is_error": True,
-                    "tool_use_id": tool_use_id,
-                }],
-                toolUseResult=f"Error: {error_message}",
-            ),
-        ))
+        resulting_messages.append(
+            MessageUpdateLazy(
+                message=create_user_message(
+                    content=[
+                        {
+                            "type": "tool_result",
+                            "content": error_message,
+                            "is_error": True,
+                            "tool_use_id": tool_use_id,
+                        }
+                    ],
+                    toolUseResult=f"Error: {error_message}",
+                ),
+            )
+        )
         return resulting_messages
 
     updated_input = permission_decision.get("updatedInput")
@@ -318,6 +363,7 @@ async def _check_permissions_and_call_tool(
         from src.services.tool_execution.tool_result_persistence import (
             compute_block_chars,
         )
+
         tool_result_block = process_tool_result_block(
             tool,
             result.data,
@@ -330,16 +376,20 @@ async def _check_permissions_and_call_tool(
             tool_result_block,
         )
 
-        resulting_messages.append(MessageUpdateLazy(
-            message=create_user_message(
-                content=[tool_result_block],
-                toolUseResult=result.data if not tool_use_context.agent_id else None,
-            ),
-            context_modifier=ContextModifier(
-                tool_use_id=tool_use_id,
-                modify_context=result.context_modifier,
-            ) if result.context_modifier else None,
-        ))
+        resulting_messages.append(
+            MessageUpdateLazy(
+                message=create_user_message(
+                    content=[tool_result_block],
+                    toolUseResult=result.data if not tool_use_context.agent_id else None,
+                ),
+                context_modifier=ContextModifier(
+                    tool_use_id=tool_use_id,
+                    modify_context=result.context_modifier,
+                )
+                if result.context_modifier
+                else None,
+            )
+        )
 
         try:
             from src.services.tool_execution.tool_hooks import run_post_tool_use_hooks
@@ -364,26 +414,33 @@ async def _check_permissions_and_call_tool(
 
         if should_prevent_continuation:
             from src.types.messages import create_attachment_message
-            resulting_messages.append(MessageUpdateLazy(
-                message=create_attachment_message({
-                    "type": "hook_stopped_continuation",
-                    "message": stop_reason or "Execution stopped by hook",
-                    "hook_name": f"PreToolUse:{tool.name}",
-                    "tool_use_id": tool_use_id,
-                    "hook_event": "PreToolUse",
-                }),
-            ))
+
+            resulting_messages.append(
+                MessageUpdateLazy(
+                    message=create_attachment_message(
+                        {
+                            "type": "hook_stopped_continuation",
+                            "message": stop_reason or "Execution stopped by hook",
+                            "hook_name": f"PreToolUse:{tool.name}",
+                            "tool_use_id": tool_use_id,
+                            "hook_event": "PreToolUse",
+                        }
+                    ),
+                )
+            )
 
         return resulting_messages
 
     except AbortError:
         content = _create_tool_result_stop(tool_use_id)
-        resulting_messages.append(MessageUpdateLazy(
-            message=create_user_message(
-                content=[content],
-                toolUseResult=CANCEL_MESSAGE,
-            ),
-        ))
+        resulting_messages.append(
+            MessageUpdateLazy(
+                message=create_user_message(
+                    content=[content],
+                    toolUseResult=CANCEL_MESSAGE,
+                ),
+            )
+        )
         return resulting_messages
 
     except Exception as error:
@@ -396,7 +453,10 @@ async def _check_permissions_and_call_tool(
         classified = classify_tool_error(error)
         logger.error(
             "Tool %s failed (%dms) classified=%s: %s",
-            tool.name, duration_ms, classified, error,
+            tool.name,
+            duration_ms,
+            classified,
+            error,
         )
 
         error_content = _format_error(error)
@@ -410,12 +470,14 @@ async def _check_permissions_and_call_tool(
         if duration_ms is not None and duration_ms >= 0:
             error_block["duration_ms"] = int(duration_ms)
 
-        resulting_messages.append(MessageUpdateLazy(
-            message=create_user_message(
-                content=[error_block],
-                toolUseResult=f"Error: {error_content}",
-            ),
-        ))
+        resulting_messages.append(
+            MessageUpdateLazy(
+                message=create_user_message(
+                    content=[error_block],
+                    toolUseResult=f"Error: {error_content}",
+                ),
+            )
+        )
 
         try:
             from src.services.tool_execution.tool_hooks import run_post_tool_use_failure_hooks
@@ -504,6 +566,7 @@ def classify_tool_error(error: Exception) -> str:
         return str(error.telemetry_message)[:200]
     if isinstance(error, OSError) and hasattr(error, "errno"):
         import errno as errno_mod
+
         code = errno_mod.errorcode.get(error.errno, "")
         if code:
             return f"Error:{code}"

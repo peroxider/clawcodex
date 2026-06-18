@@ -124,9 +124,7 @@ class TranscriptView(VerticalScroll):
     # invoke these helpers directly (a few tests do; no production
     # caller does), and the symmetric guard above keeps the transition
     # logic correct ahead of the wiring.
-    def append_thinking_chunk(
-        self, chunk: str, *, redacted: bool = False
-    ) -> None:
+    def append_thinking_chunk(self, chunk: str, *, redacted: bool = False) -> None:
         if not chunk:
             return
         # We re-use ``_active_assistant`` for thinking too; the
@@ -271,9 +269,7 @@ class TranscriptView(VerticalScroll):
         if kind == "start":
             if tool_use_id in self._advisor_rows:
                 return
-            row = AssistantAdvisorMessage(
-                tool_use_id=tool_use_id, advisor_model=advisor_model
-            )
+            row = AssistantAdvisorMessage(tool_use_id=tool_use_id, advisor_model=advisor_model)
             self._advisor_rows[tool_use_id] = row
             self.mount(row)
             row.mark_running()
@@ -283,9 +279,7 @@ class TranscriptView(VerticalScroll):
             row = self._advisor_rows.pop(tool_use_id, None)
             if row is None:
                 # Result without a start — mount fresh and finalise.
-                row = AssistantAdvisorMessage(
-                    tool_use_id=tool_use_id, advisor_model=advisor_model
-                )
+                row = AssistantAdvisorMessage(tool_use_id=tool_use_id, advisor_model=advisor_model)
                 self.mount(row)
             if error_code:
                 row.mark_error(error_code)
@@ -396,16 +390,10 @@ class TranscriptView(VerticalScroll):
             if row is self._active_assistant:
                 idx += 1
                 continue
-            if (
-                isinstance(row, AssistantToolUseMessage)
-                and row.tool_use_id in self._tool_rows
-            ):
+            if isinstance(row, AssistantToolUseMessage) and row.tool_use_id in self._tool_rows:
                 idx += 1
                 continue
-            if (
-                isinstance(row, AssistantAdvisorMessage)
-                and row.tool_use_id in self._advisor_rows
-            ):
+            if isinstance(row, AssistantAdvisorMessage) and row.tool_use_id in self._advisor_rows:
                 idx += 1
                 continue
             try:

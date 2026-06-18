@@ -38,6 +38,7 @@ is later wrapped in ``asyncio.TaskGroup``, the catches need
 loop is a flat await; flagged here so a future TaskGroup refactor
 remembers to update.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -124,7 +125,7 @@ def append_capped_message(prev: list[T] | None, item: T) -> list[T]:
     if prev is None or len(prev) == 0:
         return [item]
     if len(prev) >= TEAMMATE_MESSAGES_UI_CAP:
-        return list(prev[-(TEAMMATE_MESSAGES_UI_CAP - 1):]) + [item]
+        return list(prev[-(TEAMMATE_MESSAGES_UI_CAP - 1) :]) + [item]
     return list(prev) + [item]
 
 
@@ -169,16 +170,16 @@ class InProcessTeammateTaskState(TaskStateBase):
     type: Literal["in_process_teammate"] = "in_process_teammate"  # type: ignore[assignment]
     identity: TeammateIdentity = field(
         default_factory=lambda: TeammateIdentity(
-            agent_id="", agent_name="", team_name="",
+            agent_id="",
+            agent_name="",
+            team_name="",
         )
     )
     prompt: str = ""
     model: str | None = None
     selected_agent: Any = None  # AgentDefinition; loose to avoid cycles
     abort_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
-    current_work_abort_event: asyncio.Event | None = field(
-        default=None, repr=False, compare=False
-    )
+    current_work_abort_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
     awaiting_plan_approval: bool = False
     # TODO (Phase 9): tighten to ``permissions.types.PermissionMode``
     # Literal once the permission-forwarding bridge lands. Loose-typed
@@ -223,14 +224,10 @@ def check_abort_events(state: InProcessTeammateTaskState) -> None:
     """
     abort = state.abort_event
     if abort is not None and abort.is_set():
-        raise TeammateAbortedError(
-            f"teammate {state.identity.agent_id!r} kill event fired"
-        )
+        raise TeammateAbortedError(f"teammate {state.identity.agent_id!r} kill event fired")
     current_work = state.current_work_abort_event
     if current_work is not None and current_work.is_set():
-        raise CurrentWorkAbortedError(
-            f"teammate {state.identity.agent_id!r} current-work redirect"
-        )
+        raise CurrentWorkAbortedError(f"teammate {state.identity.agent_id!r} current-work redirect")
 
 
 async def run_with_two_level_abort(
@@ -332,9 +329,7 @@ class InProcessTeammateTask:
     name: str = "InProcessTeammateTask"
     type: Literal["in_process_teammate"] = "in_process_teammate"
 
-    async def kill(
-        self, task_id: str, registry: "RuntimeTaskRegistry"
-    ) -> None:
+    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
         aborted_event: asyncio.Event | None = None
 
         def _kill(prev: TaskStateBase) -> TaskStateBase:
@@ -357,6 +352,7 @@ class InProcessTeammateTask:
                 aborted_event.set()
             except Exception:
                 import logging
+
                 logging.getLogger(__name__).exception(
                     "failed to set abort event for killed teammate %s", task_id
                 )

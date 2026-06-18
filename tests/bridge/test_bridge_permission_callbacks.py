@@ -10,38 +10,38 @@ from src.bridge.bridge_permission_callbacks import (
 
 
 def test_is_bridge_permission_response_accepts_allow() -> None:
-    assert is_bridge_permission_response({'behavior': 'allow'}) is True
+    assert is_bridge_permission_response({"behavior": "allow"}) is True
 
 
 def test_is_bridge_permission_response_accepts_deny() -> None:
-    assert is_bridge_permission_response({'behavior': 'deny', 'message': 'no'}) is True
+    assert is_bridge_permission_response({"behavior": "deny", "message": "no"}) is True
 
 
 def test_is_bridge_permission_response_rejects_missing_behavior() -> None:
-    assert is_bridge_permission_response({'message': 'no'}) is False
+    assert is_bridge_permission_response({"message": "no"}) is False
 
 
 def test_is_bridge_permission_response_rejects_invalid_behavior() -> None:
-    assert is_bridge_permission_response({'behavior': 'maybe'}) is False
+    assert is_bridge_permission_response({"behavior": "maybe"}) is False
 
 
 def test_is_bridge_permission_response_rejects_non_dict() -> None:
     assert is_bridge_permission_response(None) is False
-    assert is_bridge_permission_response('allow') is False
-    assert is_bridge_permission_response([{'behavior': 'allow'}]) is False
+    assert is_bridge_permission_response("allow") is False
+    assert is_bridge_permission_response([{"behavior": "allow"}]) is False
 
 
 def test_bridge_permission_response_typed_dict_usable() -> None:
-    resp: BridgePermissionResponse = {'behavior': 'allow'}
-    assert resp['behavior'] == 'allow'
+    resp: BridgePermissionResponse = {"behavior": "allow"}
+    assert resp["behavior"] == "allow"
 
     full: BridgePermissionResponse = {
-        'behavior': 'allow',
-        'updatedInput': {'foo': 1},
-        'updatedPermissions': [{'rule': 'x'}],
-        'message': 'ok',
+        "behavior": "allow",
+        "updatedInput": {"foo": 1},
+        "updatedPermissions": [{"rule": "x"}],
+        "message": "ok",
     }
-    assert full['updatedInput'] == {'foo': 1}
+    assert full["updatedInput"] == {"foo": 1}
 
 
 def test_protocol_accepts_duck_typed_impl() -> None:
@@ -62,5 +62,5 @@ def test_protocol_accepts_duck_typed_impl() -> None:
 
     impl = _Fake()
     # All four methods must be present.
-    for method in ('send_request', 'send_response', 'cancel_request', 'on_response'):
+    for method in ("send_request", "send_response", "cancel_request", "on_response"):
         assert hasattr(impl, method)

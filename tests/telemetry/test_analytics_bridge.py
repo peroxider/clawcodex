@@ -5,6 +5,7 @@ Covers the 14-way ``AnalyticsEvent`` → ``TelemetryEvent`` mapping in
 scrubs ``prompt``/``output``/secrets from the data dict, and the
 idempotent :func:`install_analytics_bridge` lifecycle.
 """
+
 from __future__ import annotations
 
 import os

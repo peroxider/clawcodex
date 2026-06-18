@@ -9,6 +9,7 @@ The actual spawn / run loop lives in ``clawcodex_ext.dreaming.service``
 the state machine and the polymorphic ``kill`` dispatch target used
 by the chapter-10 ``stop_task`` wiring.
 """
+
 from __future__ import annotations
 
 from src.task_registry import register_task

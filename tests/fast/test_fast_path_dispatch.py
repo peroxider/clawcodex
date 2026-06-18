@@ -79,7 +79,7 @@ def _run_clawcodex_subcommand(*argv: str) -> tuple[int, dict]:
             f"subcommand {argv!r} produced no module report; "
             f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
         )
-    report = json.loads(report_line[len("__MODULE_REPORT__:"):])
+    report = json.loads(report_line[len("__MODULE_REPORT__:") :])
     return rc, report
 
 
@@ -90,12 +90,8 @@ def test_mcp_list_does_not_load_tui_or_repl():
     # configured) but the fast-path acceptance is about the import graph,
     # not the exit code.
     assert report["entrypoint_target"], "expected mcp entrypoint module to load"
-    assert not report["tui_app"], (
-        "fast-path mcp must NOT load src.tui.app"
-    )
-    assert not report["repl_core"], (
-        "fast-path mcp must NOT load src.repl.core"
-    )
+    assert not report["tui_app"], "fast-path mcp must NOT load src.tui.app"
+    assert not report["repl_core"], "fast-path mcp must NOT load src.repl.core"
 
 
 def test_mcp_help_does_not_load_tui_or_repl():

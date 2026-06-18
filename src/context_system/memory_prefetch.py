@@ -54,8 +54,7 @@ def _log_deprecation_once() -> None:
         return
     _DEPRECATION_LOGGED = True
     logger.debug(
-        "src.context_system.memory_prefetch is deprecated; "
-        "import from src.memdir instead."
+        "src.context_system.memory_prefetch is deprecated; import from src.memdir instead."
     )
 
 

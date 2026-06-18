@@ -52,15 +52,11 @@ class TestParseFrontmatterYaml(unittest.TestCase):
         self.assertEqual(out.body, "body")
 
     def test_inline_list(self) -> None:
-        out = parse_frontmatter(
-            "---\nallowed-tools: [Bash, Read]\n---\nbody"
-        )
+        out = parse_frontmatter("---\nallowed-tools: [Bash, Read]\n---\nbody")
         self.assertEqual(out.frontmatter["allowed-tools"], ["Bash", "Read"])
 
     def test_hyphen_list(self) -> None:
-        out = parse_frontmatter(
-            "---\nallowed-tools:\n  - Bash\n  - Read\n---\nbody"
-        )
+        out = parse_frontmatter("---\nallowed-tools:\n  - Bash\n  - Read\n---\nbody")
         self.assertEqual(out.frontmatter["allowed-tools"], ["Bash", "Read"])
 
     def test_nested_dict_hooks(self) -> None:
@@ -83,14 +79,7 @@ class TestParseFrontmatterYaml(unittest.TestCase):
         self.assertEqual(post[0]["hooks"][0]["type"], "command")
 
     def test_multiline_string_block(self) -> None:
-        text = (
-            "---\n"
-            "description: |\n"
-            "  multi\n"
-            "  line\n"
-            "---\n"
-            "body"
-        )
+        text = "---\ndescription: |\n  multi\n  line\n---\nbody"
         out = parse_frontmatter(text)
         # YAML's ``|`` keeps interior newlines; the trailing newline is
         # stripped because ``parse_frontmatter`` joins with ``\n`` and the
@@ -98,9 +87,7 @@ class TestParseFrontmatterYaml(unittest.TestCase):
         self.assertEqual(out.frontmatter["description"], "multi\nline")
 
     def test_quoted_string(self) -> None:
-        out = parse_frontmatter(
-            '---\ndescription: "value with: colon"\n---\nbody'
-        )
+        out = parse_frontmatter('---\ndescription: "value with: colon"\n---\nbody')
         self.assertEqual(out.frontmatter["description"], "value with: colon")
 
     def test_empty_frontmatter(self) -> None:
@@ -127,9 +114,7 @@ class TestParseFrontmatterYaml(unittest.TestCase):
 
 class TestDescriptionFallbacks(unittest.TestCase):
     def test_first_non_empty_line_used(self) -> None:
-        out = _extract_description_from_markdown(
-            "\n\nFirst line text\nSecond\n", "default"
-        )
+        out = _extract_description_from_markdown("\n\nFirst line text\nSecond\n", "default")
         self.assertEqual(out, "First line text")
 
     def test_heading_stripped(self) -> None:
@@ -144,9 +129,7 @@ class TestDescriptionFallbacks(unittest.TestCase):
 
     def test_default_when_blank(self) -> None:
         self.assertEqual(_extract_description_from_markdown("", "fallback"), "fallback")
-        self.assertEqual(
-            _extract_description_from_markdown("\n\n  \n", "fallback"), "fallback"
-        )
+        self.assertEqual(_extract_description_from_markdown("\n\n  \n", "fallback"), "fallback")
 
     def test_coerce_description_uses_frontmatter(self) -> None:
         desc, has = _coerce_description("explicit", "ignored", "name")
@@ -298,11 +281,7 @@ class TestParseSkillFrontmatterFields(unittest.TestCase):
     def test_hooks_round_trip(self) -> None:
         fm = {
             "description": "hi",
-            "hooks": {
-                "PostToolUse": [
-                    {"hooks": [{"type": "command", "command": "./x.sh"}]}
-                ]
-            },
+            "hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": "./x.sh"}]}]},
         }
         parsed = parse_skill_frontmatter_fields(fm, "body", "x")
         self.assertIsNotNone(parsed["hooks"])
@@ -355,6 +334,7 @@ class TestParseSkillFrontmatterFields(unittest.TestCase):
 class TestLoadSkillsWithFrontmatter(unittest.TestCase):
     def test_skill_carries_hooks_and_shell(self, *, tmp_path=None) -> None:
         import tempfile
+
         with tempfile.TemporaryDirectory() as t:
             base = Path(t)
             sk = base / "demo"
@@ -378,9 +358,7 @@ class TestLoadSkillsWithFrontmatter(unittest.TestCase):
             self.assertEqual(s.shell, "powershell")
             self.assertIsNotNone(s.hooks)
             self.assertIn("PostToolUse", s.hooks)
-            self.assertEqual(
-                s.hooks["PostToolUse"][0]["hooks"][0]["command"], "./fmt.sh"
-            )
+            self.assertEqual(s.hooks["PostToolUse"][0]["hooks"][0]["command"], "./fmt.sh")
 
 
 if __name__ == "__main__":

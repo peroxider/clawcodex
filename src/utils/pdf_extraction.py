@@ -8,6 +8,7 @@ image reads.
 Requires ``pdftoppm`` on ``PATH``. If absent, ``extract_pdf_pages`` raises
 ``PdfExtractionUnavailable`` with an install hint.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -38,6 +39,7 @@ class PdfExtractionFailed(Exception):
 @dataclass(frozen=True)
 class PdfPageExtractionResult:
     """Result of extracting PDF pages to JPEG images."""
+
     output_dir: Path
     page_count: int
     file_size: int
@@ -51,6 +53,7 @@ def _have_pdftoppm() -> bool:
 def _log_pdf_event(success: bool, **fields: Any) -> None:
     try:
         from src.services.analytics.events import EventType, log_event
+
         log_event(
             EventType.IMAGE_PROCESSING,
             subtype="pdf_page_extraction",
@@ -124,9 +127,7 @@ def extract_pdf_pages(
     except subprocess.TimeoutExpired as e:
         _log_pdf_event(False, error="timeout", file_size=file_size)
         shutil.rmtree(out_dir, ignore_errors=True)
-        raise PdfExtractionFailed(
-            f"pdftoppm timed out after {_PDFTOPPM_TIMEOUT_S}s"
-        ) from e
+        raise PdfExtractionFailed(f"pdftoppm timed out after {_PDFTOPPM_TIMEOUT_S}s") from e
 
     image_paths = sorted(out_dir.glob("page-*.jpg"))
     _log_pdf_event(

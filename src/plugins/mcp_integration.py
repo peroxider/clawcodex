@@ -50,12 +50,14 @@ def wrap_mcp_server_as_plugin(
 
     mcp_tools: list[McpPluginTool] = []
     for tool in tools:
-        mcp_tools.append(McpPluginTool(
-            name=tool.get("name", ""),
-            description=tool.get("description", ""),
-            input_schema=tool.get("inputSchema", {}),
-            server_name=server_name,
-        ))
+        mcp_tools.append(
+            McpPluginTool(
+                name=tool.get("name", ""),
+                description=tool.get("description", ""),
+                input_schema=tool.get("inputSchema", {}),
+                server_name=server_name,
+            )
+        )
 
     wrapper = McpPluginWrapper(
         plugin=plugin,

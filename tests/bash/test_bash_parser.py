@@ -196,7 +196,9 @@ class TestClassifyCommand(unittest.TestCase):
         self.assertEqual(classify_command(["/usr/bin/ls"]), CommandSafety.READ_ONLY)
 
     def test_full_path_python(self) -> None:
-        self.assertEqual(classify_command(["/usr/bin/python3", "script.py"]), CommandSafety.DANGEROUS)
+        self.assertEqual(
+            classify_command(["/usr/bin/python3", "script.py"]), CommandSafety.DANGEROUS
+        )
 
 
 class TestGetCommandSafety(unittest.TestCase):

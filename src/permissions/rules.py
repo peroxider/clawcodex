@@ -27,11 +27,13 @@ def get_allow_rules(context: ToolPermissionContext) -> list[PermissionRule]:
     rules: list[PermissionRule] = []
     for source in PERMISSION_RULE_SOURCES:
         for rule_string in context.always_allow_rules.get(source, []):
-            rules.append(PermissionRule(
-                source=source,
-                rule_behavior="allow",
-                rule_value=permission_rule_value_from_string(rule_string),
-            ))
+            rules.append(
+                PermissionRule(
+                    source=source,
+                    rule_behavior="allow",
+                    rule_value=permission_rule_value_from_string(rule_string),
+                )
+            )
     return rules
 
 
@@ -39,11 +41,13 @@ def get_deny_rules(context: ToolPermissionContext) -> list[PermissionRule]:
     rules: list[PermissionRule] = []
     for source in PERMISSION_RULE_SOURCES:
         for rule_string in context.always_deny_rules.get(source, []):
-            rules.append(PermissionRule(
-                source=source,
-                rule_behavior="deny",
-                rule_value=permission_rule_value_from_string(rule_string),
-            ))
+            rules.append(
+                PermissionRule(
+                    source=source,
+                    rule_behavior="deny",
+                    rule_value=permission_rule_value_from_string(rule_string),
+                )
+            )
     return rules
 
 
@@ -51,11 +55,13 @@ def get_ask_rules(context: ToolPermissionContext) -> list[PermissionRule]:
     rules: list[PermissionRule] = []
     for source in PERMISSION_RULE_SOURCES:
         for rule_string in context.always_ask_rules.get(source, []):
-            rules.append(PermissionRule(
-                source=source,
-                rule_behavior="ask",
-                rule_value=permission_rule_value_from_string(rule_string),
-            ))
+            rules.append(
+                PermissionRule(
+                    source=source,
+                    rule_behavior="ask",
+                    rule_value=permission_rule_value_from_string(rule_string),
+                )
+            )
     return rules
 
 

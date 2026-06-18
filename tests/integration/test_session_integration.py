@@ -2,6 +2,7 @@
 
 Full session lifecycle: create → write → flush → resume → verify.
 """
+
 from __future__ import annotations
 
 import json
@@ -145,13 +146,15 @@ class TestSessionLifecycle(unittest.TestCase):
 
             # Create message with large content
             large_content = "x" * 200_000
-            storage.write_raw({
-                "role": "user",
-                "type": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": "tu_big", "content": large_content},
-                ],
-            })
+            storage.write_raw(
+                {
+                    "role": "user",
+                    "type": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "tu_big", "content": large_content},
+                    ],
+                }
+            )
             storage.flush()
 
             # Verify transcript has reference, not full content

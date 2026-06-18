@@ -73,9 +73,7 @@ class TestRuntimeCommandsRegistration:
         register_runtime_commands(None)
         cmd = get_command_registry().get("model")
         assert cmd is not None, "model command should be registered"
-        assert cmd.command_type == CommandType.LOCAL, (
-            f"expected LOCAL, got {cmd.command_type}"
-        )
+        assert cmd.command_type == CommandType.LOCAL, f"expected LOCAL, got {cmd.command_type}"
 
     def test_register_runtime_commands_adds_provider(self):
         """register_runtime_commands 为全局 registry 添加 provider LocalCommand。"""
@@ -88,9 +86,7 @@ class TestRuntimeCommandsRegistration:
         register_runtime_commands(None)
         cmd = get_command_registry().get("provider")
         assert cmd is not None, "provider command should be registered"
-        assert cmd.command_type == CommandType.LOCAL, (
-            f"expected LOCAL, got {cmd.command_type}"
-        )
+        assert cmd.command_type == CommandType.LOCAL, f"expected LOCAL, got {cmd.command_type}"
 
 
 # ---------------------------------------------------------------------------
@@ -139,12 +135,8 @@ class TestRuntimeCommandsWithoutRuntimeContext:
         self._ensure_registered()
         from clawcodex_ext.command_system.builtins import execute_command_sync
 
-        success, _, error = execute_command_sync(
-            "model", "", _build_context(runtime_context=False)
-        )
-        assert success is True, (
-            f"should not return Unknown command; got error={error!r}"
-        )
+        success, _, error = execute_command_sync("model", "", _build_context(runtime_context=False))
+        assert success is True, f"should not return Unknown command; got error={error!r}"
 
     def test_provider_no_args_without_context_no_unknown_command(self):
         """/provider 不报 Unknown command。"""
@@ -154,9 +146,7 @@ class TestRuntimeCommandsWithoutRuntimeContext:
         success, _, error = execute_command_sync(
             "provider", "", _build_context(runtime_context=False)
         )
-        assert success is True, (
-            f"should not return Unknown command; got error={error!r}"
-        )
+        assert success is True, f"should not return Unknown command; got error={error!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -227,9 +217,7 @@ class TestDreamCommandRegistration:
 
         cmd = get_command_registry().get("dream")
         assert cmd is not None, "dream command should be registered"
-        assert cmd.command_type == CommandType.LOCAL, (
-            f"expected LOCAL, got {cmd.command_type}"
-        )
+        assert cmd.command_type == CommandType.LOCAL, f"expected LOCAL, got {cmd.command_type}"
 
 
 class TestDreamCommandExecution:
@@ -317,8 +305,7 @@ class TestDreamCommandExecution:
             "dream", "", _build_context(runtime_context=False)
         )
         assert success is True, (
-            f"should not return Unknown command; got error={error!r}, "
-            f"result_text={result_text!r}"
+            f"should not return Unknown command; got error={error!r}, result_text={result_text!r}"
         )
 
 
@@ -364,8 +351,7 @@ class TestRuntimeCommandsRaceCondition:
         cmd = reg.get("model")
         assert cmd is not None, "model command must survive build_command_suggestions"
         assert cmd.command_type == CommandType.LOCAL, (
-            f"expected LOCAL after build_command_suggestions, "
-            f"got {cmd.command_type}"
+            f"expected LOCAL after build_command_suggestions, got {cmd.command_type}"
         )
 
     def test_build_command_suggestions_does_not_overwrite_provider(self):
@@ -390,8 +376,7 @@ class TestRuntimeCommandsRaceCondition:
         cmd = reg.get("provider")
         assert cmd is not None, "provider command must survive build_command_suggestions"
         assert cmd.command_type == CommandType.LOCAL, (
-            f"expected LOCAL after build_command_suggestions, "
-            f"got {cmd.command_type}"
+            f"expected LOCAL after build_command_suggestions, got {cmd.command_type}"
         )
 
     def test_model_executable_after_build_command_suggestions(self):
@@ -416,8 +401,7 @@ class TestRuntimeCommandsRaceCondition:
             "model", "", _build_context(runtime_context=False)
         )
         assert success is True, (
-            f"should be executable after build_command_suggestions; "
-            f"got error={error!r}"
+            f"should be executable after build_command_suggestions; got error={error!r}"
         )
         assert "Models:" in (result_text or "")
 
@@ -443,8 +427,7 @@ class TestRuntimeCommandsRaceCondition:
             "provider", "", _build_context(runtime_context=False)
         )
         assert success is True, (
-            f"should be executable after build_command_suggestions; "
-            f"got error={error!r}"
+            f"should be executable after build_command_suggestions; got error={error!r}"
         )
         assert "Providers:" in (result_text or "")
 
@@ -536,9 +519,7 @@ class TestModelProviderFallback:
 
         from clawcodex_ext.command_system.builtins import execute_command_sync
 
-        success, result_text, error = execute_command_sync(
-            "model", "another-model", context
-        )
+        success, result_text, error = execute_command_sync("model", "another-model", context)
         assert success is True, f"expected success, got error={error!r}"
         # provider 应保持 openai（another-model 在当前 provider 列表中）
         assert "provider: openai" in (result_text or ""), (

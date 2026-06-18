@@ -72,7 +72,9 @@ class SplitFrontmatterTests(unittest.TestCase):
         self.assertEqual(body, text)
 
     def test_missing_frontmatter_logs_warning(self) -> None:
-        with self.assertLogs("extensions.orchestrator.local_tracker.parser", level="WARNING") as captured:
+        with self.assertLogs(
+            "extensions.orchestrator.local_tracker.parser", level="WARNING"
+        ) as captured:
             _split_frontmatter("no frontmatter at all\n")
         self.assertTrue(any("no YAML frontmatter" in line for line in captured.output))
 
@@ -104,9 +106,7 @@ class ParseMarkdownIssueTests(unittest.TestCase):
             self.assertEqual(document.issue.identifier, "F-40")
             self.assertEqual(document.issue.state, "open")
             self.assertEqual(document.issue.priority, 1)
-            self.assertEqual(
-                document.issue.branch_name, "dev-decoupling-refactor-58ea488"
-            )
+            self.assertEqual(document.issue.branch_name, "dev-decoupling-refactor-58ea488")
             self.assertEqual(
                 document.metadata.get("base_branch"),
                 "dev-decoupling-refactor-58ea488",

@@ -7,6 +7,7 @@ contract end-to-end against a synthetic stream fake — Minimax-specific
 network plumbing isn't exercised, but the abort wiring is what we
 care about.
 """
+
 from __future__ import annotations
 
 import threading
@@ -80,9 +81,7 @@ def test_pre_aborted_signal_short_circuits_before_request() -> None:
 
     provider = MinimaxProvider(api_key="test", model="MiniMax-M2.7")
     provider._ensure_client = MagicMock(  # type: ignore[method-assign]
-        side_effect=AssertionError(
-            "_ensure_client should not be called when abort is pre-tripped"
-        )
+        side_effect=AssertionError("_ensure_client should not be called when abort is pre-tripped")
     )
 
     with pytest.raises(AbortError):

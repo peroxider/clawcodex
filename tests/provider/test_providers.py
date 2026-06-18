@@ -125,9 +125,7 @@ class TestAnthropicProvider(unittest.TestCase):
 
         self.assertEqual(response.content, "Hello!")
         mock_client.messages.create.assert_called_once()
-        self.assertEqual(
-            mock_client.messages.create.call_args.kwargs["messages"], messages
-        )
+        self.assertEqual(mock_client.messages.create.call_args.kwargs["messages"], messages)
 
     @patch("src.providers.anthropic_provider.anthropic.Anthropic")
     def test_chat_stream_response_with_tool_use(self, mock_anthropic):
@@ -196,8 +194,10 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
     def test_cache_creation_input_tokens_forwarded(self):
         provider = AnthropicProvider(api_key="test")
         usage = MagicMock(
-            input_tokens=10, output_tokens=5,
-            cache_creation_input_tokens=1234, cache_read_input_tokens=0,
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=1234,
+            cache_read_input_tokens=0,
             cache_creation=None,
         )
         cr = provider._build_chat_response(self._make_response(usage))
@@ -206,8 +206,10 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
     def test_cache_read_input_tokens_forwarded(self):
         provider = AnthropicProvider(api_key="test")
         usage = MagicMock(
-            input_tokens=10, output_tokens=5,
-            cache_creation_input_tokens=0, cache_read_input_tokens=9876,
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=9876,
             cache_creation=None,
         )
         cr = provider._build_chat_response(self._make_response(usage))
@@ -215,10 +217,12 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
 
     def test_missing_cache_fields_default_to_zero(self):
         """Older SDK responses without cache fields → graceful 0."""
+
         class OldUsage:
             def __init__(self):
                 self.input_tokens = 10
                 self.output_tokens = 5
+
         provider = AnthropicProvider(api_key="test")
         cr = provider._build_chat_response(self._make_response(OldUsage()))
         self.assertEqual(cr.usage["cache_creation_input_tokens"], 0)
@@ -229,8 +233,10 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
         """SDK ``int | None`` → forward 0 instead of None."""
         provider = AnthropicProvider(api_key="test")
         usage = MagicMock(
-            input_tokens=10, output_tokens=5,
-            cache_creation_input_tokens=None, cache_read_input_tokens=None,
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=None,
+            cache_read_input_tokens=None,
             cache_creation=None,
         )
         cr = provider._build_chat_response(self._make_response(usage))
@@ -241,11 +247,14 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
         """``cache_creation`` sub-object's 5m/1h breakdown → nested dict."""
         provider = AnthropicProvider(api_key="test")
         cache_creation = MagicMock(
-            ephemeral_5m_input_tokens=100, ephemeral_1h_input_tokens=200,
+            ephemeral_5m_input_tokens=100,
+            ephemeral_1h_input_tokens=200,
         )
         usage = MagicMock(
-            input_tokens=10, output_tokens=5,
-            cache_creation_input_tokens=300, cache_read_input_tokens=0,
+            input_tokens=10,
+            output_tokens=5,
+            cache_creation_input_tokens=300,
+            cache_read_input_tokens=0,
             cache_creation=cache_creation,
         )
         cr = provider._build_chat_response(self._make_response(usage))
@@ -257,8 +266,10 @@ class TestAnthropicUsageForwarding(unittest.TestCase):
     def test_existing_input_output_tokens_regression(self):
         provider = AnthropicProvider(api_key="test")
         usage = MagicMock(
-            input_tokens=42, output_tokens=17,
-            cache_creation_input_tokens=0, cache_read_input_tokens=0,
+            input_tokens=42,
+            output_tokens=17,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
             cache_creation=None,
         )
         cr = provider._build_chat_response(self._make_response(usage))
@@ -333,9 +344,7 @@ class TestOpenAIProvider(unittest.TestCase):
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "Hello!"
         mock_response.model = "gpt-4"
-        mock_response.usage = MagicMock(
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        )
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai.return_value = mock_client
@@ -357,9 +366,7 @@ class TestOpenAIProvider(unittest.TestCase):
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = "Hello!"
         mock_response.model = "gpt-4"
-        mock_response.usage = MagicMock(
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        )
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai.return_value = mock_client
@@ -370,9 +377,7 @@ class TestOpenAIProvider(unittest.TestCase):
 
         self.assertEqual(response.content, "Hello!")
         mock_client.chat.completions.create.assert_called_once()
-        self.assertEqual(
-            mock_client.chat.completions.create.call_args.kwargs["messages"], messages
-        )
+        self.assertEqual(mock_client.chat.completions.create.call_args.kwargs["messages"], messages)
 
     @patch("src.providers.openai_provider.OpenAI")
     def test_chat_stream_response_rebuilds_tool_calls(self, mock_openai):
@@ -452,9 +457,7 @@ class TestGLMProvider(unittest.TestCase):
         mock_response.choices[0].message.content = "Hello!"
         mock_response.choices[0].message.reasoning_content = None
         mock_response.model = "glm-4.5"
-        mock_response.usage = MagicMock(
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        )
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         mock_zhipu.return_value = mock_client
@@ -478,9 +481,7 @@ class TestGLMProvider(unittest.TestCase):
         mock_response.choices[0].message.content = "Answer"
         mock_response.choices[0].message.reasoning_content = "Thinking..."
         mock_response.model = "glm-4.5"
-        mock_response.usage = MagicMock(
-            prompt_tokens=10, completion_tokens=5, total_tokens=15
-        )
+        mock_response.usage = MagicMock(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         mock_response.choices[0].finish_reason = "stop"
         mock_client.chat.completions.create.return_value = mock_response
         mock_zhipu.return_value = mock_client

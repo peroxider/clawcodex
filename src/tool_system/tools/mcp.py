@@ -25,6 +25,7 @@ except ImportError:  # pragma: no cover
 # MCP client protocol
 # ---------------------------------------------------------------------------
 
+
 class MCPClient(Protocol):
     def call_tool(self, tool_name: str, args: dict[str, Any]) -> Any: ...
     def list_tools(self) -> list[str]: ...
@@ -62,6 +63,7 @@ Notes:
 # Input schema validation (ported from TS MCPTool.ts validateInput, using
 # jsonschema instead of AJV)
 # ---------------------------------------------------------------------------
+
 
 def _validate_mcp_input(tool_input: dict[str, Any], context: ToolContext) -> ValidationResult:
     """Validate MCP tool input.
@@ -118,6 +120,7 @@ def validate_mcp_tool_input_schema(
 #     mapToolResultToToolResultBlockParam)
 # ---------------------------------------------------------------------------
 
+
 def _mcp_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Format MCP result for the API.
 
@@ -166,6 +169,7 @@ def _mcp_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
 # Call implementation
 # ---------------------------------------------------------------------------
 
+
 def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     server = tool_input["server"]
     tool_name = tool_input["tool"]
@@ -179,7 +183,9 @@ def _mcp_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     client = context.mcp_clients.get(server)
     if client is None:
-        return ToolResult(name="MCP", output={"error": f"mcp server not connected: {server}"}, is_error=True)
+        return ToolResult(
+            name="MCP", output={"error": f"mcp server not connected: {server}"}, is_error=True
+        )
 
     out = client.call_tool(tool_name, args)
     return ToolResult(name="MCP", output={"server": server, "tool": tool_name, "output": out})

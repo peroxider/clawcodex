@@ -13,6 +13,7 @@ pattern: a 50ms poll loop watches both the timeout and the
 :class:`RipgrepAbortedError` so callers can re-raise ``AbortError`` for
 the agent loop's cancel boundary. Glob and Grep do exactly that.
 """
+
 from __future__ import annotations
 
 import os
@@ -49,9 +50,7 @@ def _make_repo(tmp_path: Path, n_files: int = 200) -> Path:
     for i in range(n_files):
         sub = root / f"dir_{i // 20}"
         sub.mkdir(exist_ok=True)
-        (sub / f"file_{i}.txt").write_text(
-            "needle\n" * 50 + "haystack\n" * 1000
-        )
+        (sub / f"file_{i}.txt").write_text("needle\n" * 50 + "haystack\n" * 1000)
     return root
 
 
@@ -195,6 +194,7 @@ def test_ripgrep_unavailable_path_unchanged(tmp_path: Path) -> None:
     # Force the lookup cache to miss by clearing it, then point PATH at
     # an empty dir.
     from src.tool_system.utils import ripgrep as ripgrep_mod
+
     ripgrep_mod._rg_path = ripgrep_mod._SENTINEL  # reset cache
 
     empty = tmp_path / "empty_bin"

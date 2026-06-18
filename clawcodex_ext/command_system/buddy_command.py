@@ -8,6 +8,7 @@ Help/info argument parsing matches TypeScript via shared lists in
 ``src/constants/xml.py`` (``COMMON_HELP_ARGS``, ``COMMON_INFO_ARGS``).
 Notably ``?`` routes to INFO (status), not HELP.
 """
+
 from __future__ import annotations
 
 import time
@@ -17,18 +18,20 @@ from src.buddy.companion import companion_user_id, get_companion
 from src.buddy.feature import is_buddy_enabled
 from src.buddy.soul import create_stored_companion
 from src.command_system.types import (
-    CommandContext, LocalCommand, LocalCommandResult,
+    CommandContext,
+    LocalCommand,
+    LocalCommandResult,
 )
 from src.config import _get_default_manager, load_config
 from src.constants.xml import COMMON_HELP_ARGS, COMMON_INFO_ARGS
 
 
 PET_REACTIONS: tuple[str, ...] = (
-    'leans into the headpat',
-    'does a proud little bounce',
-    'emits a content beep',
-    'looks delighted',
-    'wiggles happily',
+    "leans into the headpat",
+    "does a proud little bounce",
+    "emits a content beep",
+    "looks delighted",
+    "wiggles happily",
 )
 
 _HELP_TEXT = (
@@ -56,12 +59,12 @@ def _title_case(s: str) -> str:
 
 def _save_companion(stored: dict) -> None:
     mgr = _get_default_manager()
-    mgr.set_global('companion', stored)
-    mgr.set_global('companion_muted', False)
+    mgr.set_global("companion", stored)
+    mgr.set_global("companion_muted", False)
 
 
 def _set_companion_muted(muted: bool) -> None:
-    _get_default_manager().set_global('companion_muted', muted)
+    _get_default_manager().set_global("companion_muted", muted)
 
 
 def buddy_command_call(args: str, context: CommandContext) -> LocalCommandResult:
@@ -75,36 +78,36 @@ def buddy_command_call(args: str, context: CommandContext) -> LocalCommandResult
     5. empty arg + no companion → hatch
     6. empty arg + companion exists → pet
     """
-    arg = (args or '').strip().lower()
+    arg = (args or "").strip().lower()
 
     if arg in COMMON_HELP_ARGS:
-        return LocalCommandResult(type='text', value=_HELP_TEXT)
+        return LocalCommandResult(type="text", value=_HELP_TEXT)
 
     if arg in COMMON_INFO_ARGS:
         companion = get_companion()
         if companion is None:
             return LocalCommandResult(
-                type='text',
-                value='No buddy hatched yet. Run /buddy to hatch one.',
+                type="text",
+                value="No buddy hatched yet. Run /buddy to hatch one.",
             )
         return LocalCommandResult(
-            type='text',
+            type="text",
             value=(
                 f"{companion.name} is your {_title_case(companion.rarity)} "
                 f"{companion.species}. {companion.personality}"
             ),
         )
 
-    if arg in ('mute', 'unmute'):
-        muted = arg == 'mute'
+    if arg in ("mute", "unmute"):
+        muted = arg == "mute"
         _set_companion_muted(muted)
         return LocalCommandResult(
-            type='text',
+            type="text",
             value=f"Buddy {'muted' if muted else 'unmuted'}.",
         )
 
-    if arg != '':
-        return LocalCommandResult(type='text', value=_HELP_TEXT)
+    if arg != "":
+        return LocalCommandResult(type="text", value=_HELP_TEXT)
 
     # Empty arg: hatch (first time) or pet (subsequent).
     companion = get_companion()
@@ -115,10 +118,11 @@ def buddy_command_call(args: str, context: CommandContext) -> LocalCommandResult
         companion = get_companion()
         if companion is None:
             return LocalCommandResult(
-                type='text', value='Failed to hatch companion (state error).',
+                type="text",
+                value="Failed to hatch companion (state error).",
             )
         return LocalCommandResult(
-            type='text',
+            type="text",
             value=(
                 f"{companion.name} the {companion.species} is now your buddy. "
                 f"Run /buddy again to pet them."
@@ -131,17 +135,17 @@ def buddy_command_call(args: str, context: CommandContext) -> LocalCommandResult
         PET_REACTIONS,
         f"{now_ms}:{companion.name}",
     )
-    _get_default_manager().set_global('companion_pet_at', now_ms)
+    _get_default_manager().set_global("companion_pet_at", now_ms)
     return LocalCommandResult(
-        type='text',
+        type="text",
         value=f"{companion.name} {reaction}",
     )
 
 
 BUDDY_COMMAND = LocalCommand(
-    name='buddy',
-    description='Hatch, pet, and manage your companion',
-    argument_hint='[status|mute|unmute|help]',
+    name="buddy",
+    description="Hatch, pet, and manage your companion",
+    argument_hint="[status|mute|unmute|help]",
     immediate=True,
 )
 BUDDY_COMMAND.set_call(buddy_command_call)
@@ -153,8 +157,8 @@ def is_buddy_command_enabled() -> bool:
 
 
 __all__ = [
-    'BUDDY_COMMAND',
-    'PET_REACTIONS',
-    'buddy_command_call',
-    'is_buddy_command_enabled',
+    "BUDDY_COMMAND",
+    "PET_REACTIONS",
+    "buddy_command_call",
+    "is_buddy_command_enabled",
 ]

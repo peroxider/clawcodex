@@ -49,15 +49,17 @@ def load_marketplace_index(index_path: str | Path) -> MarketplaceIndex:
 
     entries: list[MarketplaceEntry] = []
     for item in raw.get("plugins", []):
-        entries.append(MarketplaceEntry(
-            name=item.get("name", ""),
-            description=item.get("description", ""),
-            version=item.get("version", "1.0.0"),
-            repository=item.get("repository", ""),
-            author=item.get("author", ""),
-            downloads=item.get("downloads", 0),
-            tags=item.get("tags", []),
-        ))
+        entries.append(
+            MarketplaceEntry(
+                name=item.get("name", ""),
+                description=item.get("description", ""),
+                version=item.get("version", "1.0.0"),
+                repository=item.get("repository", ""),
+                author=item.get("author", ""),
+                downloads=item.get("downloads", 0),
+                tags=item.get("tags", []),
+            )
+        )
 
     _index = MarketplaceIndex(
         entries=entries,

@@ -177,9 +177,7 @@ class TranscriptSearch(ModalScreen[int | None]):
         self.dismiss(self._matches[self.match_index])
 
     # ---- option list events ----
-    def on_option_list_option_selected(
-        self, event: OptionList.OptionSelected
-    ) -> None:
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         if event.option.id is None:
             return
         try:
@@ -240,14 +238,10 @@ class TranscriptSearch(ModalScreen[int | None]):
         except Exception:
             return
         if not self.search_query:
-            status.update(
-                Text("Search transcript — type to filter, Enter to jump")
-            )
+            status.update(Text("Search transcript — type to filter, Enter to jump"))
             return
         if not self._matches:
-            status.update(
-                Text(f"no matches for '{self.search_query}'", style="dim")
-            )
+            status.update(Text(f"no matches for '{self.search_query}'", style="dim"))
             return
         status.update(
             Text(

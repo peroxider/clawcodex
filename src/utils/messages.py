@@ -103,7 +103,8 @@ def count_tool_calls(message: Message) -> int:
     if not isinstance(content, list):
         return 0
     return sum(
-        1 for b in content
+        1
+        for b in content
         if getattr(b, "type", None) == "tool_use"
         or (isinstance(b, dict) and b.get("type") == "tool_use")
     )
@@ -113,7 +114,7 @@ def get_messages_after_compact_boundary(messages: list[Message]) -> list[Message
     """Get messages after the last compact boundary."""
     for i in range(len(messages) - 1, -1, -1):
         if is_compact_boundary(messages[i]):
-            return messages[i + 1:]
+            return messages[i + 1 :]
     return list(messages)
 
 
@@ -259,10 +260,13 @@ def _ensure_tool_result_pairing(
                         existing = [{"type": "text", "text": existing}]
                     messages[i + 1]["content"] = synthetic_blocks + existing
                 else:
-                    messages.insert(i + 1, {
-                        "role": "user",
-                        "content": synthetic_blocks,
-                    })
+                    messages.insert(
+                        i + 1,
+                        {
+                            "role": "user",
+                            "content": synthetic_blocks,
+                        },
+                    )
                 break
 
 

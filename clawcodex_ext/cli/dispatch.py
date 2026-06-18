@@ -6,6 +6,8 @@ import os
 import sys
 import time
 import uuid
+from pathlib import Path
+from typing import Any
 
 
 def _telemetry_record_session(
@@ -31,8 +33,13 @@ def _telemetry_record_session(
 
 
 def _telemetry_record_end(
-    *, session_id: str, command_name: str, mode: str, success: bool,
-    duration_s: float, exit_status: int,
+    *,
+    session_id: str,
+    command_name: str,
+    mode: str,
+    success: bool,
+    duration_s: float,
+    exit_status: int,
 ) -> None:
     try:
         from telemetry import record_command_run, record_session_end
@@ -119,11 +126,14 @@ def run_cli(argv: list[str] | None = None) -> int:
     # disabled (~ns overhead). On exit the profiler writes a Markdown
     # report to ``$CLAUDE_CONFIG_DIR/startup-perf/{session_id}.txt``.
     from src.utils.startup_profiler import profile_checkpoint
+
     profile_checkpoint("cli_main_entry")
 
     import os
+
     if os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes"):
         import logging
+
         logging.basicConfig(
             level=logging.WARNING,
             format="%(asctime)s %(name)s %(message)s",
@@ -145,8 +155,9 @@ def run_cli(argv: list[str] | None = None) -> int:
     )
 
     # --version short-circuit (mirrors TS main.tsx pre-argparse fast-path)
-    if len(argv) == 2 and argv[1] in ('--version', '-v', '-V'):
+    if len(argv) == 2 and argv[1] in ("--version", "-v", "-V"):
         from src import __version__
+
         print(f"claw-codex version {__version__} (Python)")
         _telemetry_record_end(
             session_id=_telemetry_session_id,
@@ -177,7 +188,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     # ``_ARGCOMPLETE`` is unset; lazy import keeps ``--help`` under 5s.
     _maybe_argcomplete_top_level(argv)
     rest = argv[1:]
-    if rest and not rest[0].startswith('-'):
+    if rest and not rest[0].startswith("-"):
         token = rest[0]
         rest_args = rest[1:]
 
@@ -186,7 +197,7 @@ def run_cli(argv: list[str] | None = None) -> int:
 
         # F-97: each fast-path return is wrapped to record command_run
         # + session_end. The helper swallows any telemetry failure.
-        if token == 'login':
+        if token == "login":
             rc = src_cli.handle_login()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -197,7 +208,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'config':
+        if token == "config":
             rc = src_cli.show_config()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -210,6 +221,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             return rc
 
         from clawcodex_ext.cli.subcommand_registry import get_subcommand
+
         subcommand = get_subcommand(token)
         if subcommand is not None:
             rc = subcommand(rest_args)
@@ -223,8 +235,9 @@ def run_cli(argv: list[str] | None = None) -> int:
             )
             return rc
 
-        if token == 'mcp':
+        if token == "mcp":
             from src.entrypoints.mcp import run_mcp_subcommand
+
             rc = run_mcp_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -235,8 +248,9 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'daemon':
+        if token == "daemon":
             from src.entrypoints.daemon import run_daemon_subcommand
+
             rc = run_daemon_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -247,8 +261,9 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'doctor':
+        if token == "doctor":
             from src.entrypoints.doctor import run_doctor
+
             rc = run_doctor()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -259,8 +274,9 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'orchestrator':
+        if token == "orchestrator":
             from src.entrypoints.orchestrator import run_orchestrator_subcommand
+
             rc = run_orchestrator_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
@@ -271,19 +287,19 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'autonomy':
+        if token == "autonomy":
             from pathlib import Path
 
             from clawcodex_ext.cron_system.status import build_autonomy_runs, build_autonomy_status
 
-            deep = '--deep' in rest_args
-            filtered_args = [arg for arg in rest_args if arg != '--deep']
-            command = filtered_args[0] if filtered_args else 'status'
+            deep = "--deep" in rest_args
+            filtered_args = [arg for arg in rest_args if arg != "--deep"]
+            command = filtered_args[0] if filtered_args else "status"
             rc = 0
-            if command == 'status':
+            if command == "status":
                 print(build_autonomy_status(Path.cwd(), deep=deep))
                 rc = 0
-            elif command == 'runs':
+            elif command == "runs":
                 print(build_autonomy_runs(Path.cwd(), deep=deep))
                 rc = 0
             else:
@@ -298,7 +314,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 exit_status=rc,
             )
             return rc
-        if token == 'schedule':
+        if token == "schedule":
             from pathlib import Path
 
             from clawcodex_ext.cron_system.schedule import (
@@ -309,12 +325,12 @@ def run_cli(argv: list[str] | None = None) -> int:
             )
             from clawcodex_ext.cron_system.status import build_schedule_list
 
-            command = rest_args[0] if rest_args else 'list'
+            command = rest_args[0] if rest_args else "list"
             rc = 0
-            if command == 'list':
+            if command == "list":
                 print(build_schedule_list(Path.cwd()))
                 rc = 0
-            elif command == 'get' and len(rest_args) >= 2:
+            elif command == "get" and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 detail = get_cron_task_detail(cwd, rest_args[1])
                 if detail is None:
@@ -323,7 +339,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 else:
                     print(format_cron_task_detail(detail))
                     rc = 0
-            elif command == 'run' and len(rest_args) >= 2:
+            elif command == "run" and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 run = manual_fire_cron_task(cwd, rest_args[1], current_dir=cwd)
                 if run is None and get_cron_task_detail(cwd, rest_args[1]) is None:
@@ -346,18 +362,16 @@ def run_cli(argv: list[str] | None = None) -> int:
             return rc
 
     from clawcodex_ext.cli.parser import build_parser
+
     parser = build_parser()
     args = parser.parse_args(argv[1:])
     profile_checkpoint("argparse_done")
 
-    if getattr(args, 'prompt', None) and not getattr(args, 'print', False):
-        parser.error(
-            f"unknown command: {args.prompt} "
-            "(use -p/--print to send a prompt)"
-        )
+    if getattr(args, "prompt", None) and not getattr(args, "print", False):
+        parser.error(f"unknown command: {args.prompt} (use -p/--print to send a prompt)")
 
     # Resolve --continue: auto-detect the most recent session (S-R3).
-    if getattr(args, 'continue', None) and not getattr(args, 'resume', None):
+    if getattr(args, "continue", None) and not getattr(args, "resume", None):
         from src.services.session_storage import SessionStorage
 
         try:
@@ -396,11 +410,13 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     if args.version:
         from src import __version__
+
         print(f"claw-codex version {__version__} (Python)")
         return 0
 
     if args.config:
         import src.cli as src_cli
+
         return src_cli.show_config()
 
     # Plan-phase-1 wiring (ch02-bootstrap-refactoring-plan.md P1.5):
@@ -419,6 +435,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     # of ``init()`` (REPL, headless, etc.), not just the cli.py path.
     profile_checkpoint("phase0_end_phase2_start")
     from src.init import run_pre_action
+
     run_pre_action(args)
     profile_checkpoint("phase2_end_phase3_start")
 
@@ -439,34 +456,34 @@ def run_cli(argv: list[str] | None = None) -> int:
     explicit_tui: bool | None = None
     if args.tui:
         explicit_tui = True
-    elif getattr(args, 'legacy_repl', False) or args.no_tui:
+    elif getattr(args, "legacy_repl", False) or args.no_tui:
         explicit_tui = False
 
     # ``--resume`` without a SESSION_ID means "browse" mode.
     # REPL mode now has its own session browser, so no need to force TUI.
-    resume_val = getattr(args, 'resume', None)
-    resume_browse = (resume_val == 'browse')
+    resume_val = getattr(args, "resume", None)
+    resume_browse = resume_val == "browse"
 
     # Build RuntimeContext once from resolved args — shared by all frontends.
     runtime_opts = RuntimeOptions(
-        provider_name=getattr(args, 'provider', None),
-        model=getattr(args, 'model', None),
-        prompt=getattr(args, 'prompt', None),
-        output_format=getattr(args, 'output_format', 'text'),
-        input_format=getattr(args, 'input_format', 'text'),
-        include_partial_messages=getattr(args, 'include_partial_messages', False),
-        max_turns=getattr(args, 'max_turns', 20),
-        allowed_tools=tuple(_split_csv(getattr(args, 'allowed_tools', None))),
-        disallowed_tools=tuple(_split_csv(getattr(args, 'disallowed_tools', None))),
-        stream=getattr(args, 'stream', False),
-        permission_mode=getattr(args, '_resolved_permission_mode', 'default'),
-        is_bypass_permissions_mode_available=getattr(args, '_resolved_is_bypass_available', False),
-        skip_permissions=getattr(args, 'dangerously_skip_permissions', False),
-        resume_session_id=resume_val if resume_val and resume_val != 'browse' else None,
-        resume_browse=(resume_val == 'browse'),
-        fork_session_id=getattr(args, 'fork_session', None),
-        resume_session_at=_parse_resume_at(getattr(args, 'resume_session_at', None)),
-        verbose=getattr(args, 'verbose', False),
+        provider_name=getattr(args, "provider", None),
+        model=getattr(args, "model", None),
+        prompt=getattr(args, "prompt", None),
+        output_format=getattr(args, "output_format", "text"),
+        input_format=getattr(args, "input_format", "text"),
+        include_partial_messages=getattr(args, "include_partial_messages", False),
+        max_turns=getattr(args, "max_turns", 20),
+        allowed_tools=tuple(_split_csv(getattr(args, "allowed_tools", None))),
+        disallowed_tools=tuple(_split_csv(getattr(args, "disallowed_tools", None))),
+        stream=getattr(args, "stream", False),
+        permission_mode=getattr(args, "_resolved_permission_mode", "default"),
+        is_bypass_permissions_mode_available=getattr(args, "_resolved_is_bypass_available", False),
+        skip_permissions=getattr(args, "dangerously_skip_permissions", False),
+        resume_session_id=resume_val if resume_val and resume_val != "browse" else None,
+        resume_browse=(resume_val == "browse"),
+        fork_session_id=getattr(args, "fork_session", None),
+        resume_session_at=_parse_resume_at(getattr(args, "resume_session_at", None)),
+        verbose=getattr(args, "verbose", False),
     )
     try:
         ctx = RuntimeContext.build(runtime_opts)
@@ -556,6 +573,7 @@ def run_cli(argv: list[str] | None = None) -> int:
 # Agent resolution: --agent flag or auto-detect clawcodex-overview.md
 # ---------------------------------------------------------------------------
 
+
 def _resolve_startup_agent(args, ctx) -> None:
     """Resolve agent type from ``--agent`` flag or auto-detect.
 
@@ -603,14 +621,15 @@ def _resolve_startup_agent(args, ctx) -> None:
                 body = agent["system_prompt_body"].strip()
                 if body:
                     existing = getattr(ctx.options, "append_system_prompt", "")
-                    ctx.options.append_system_prompt = (
-                        f"{existing}\n\n{body}" if existing else body
-                    )
+                    ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
                 agent_name = agent.get("name", "unknown")
-                sub_count = len([
-                    s for s in agent.get("skills", [])
-                    if isinstance(s, str) and s.startswith("skill-")
-                ])
+                sub_count = len(
+                    [
+                        s
+                        for s in agent.get("skills", [])
+                        if isinstance(s, str) and s.startswith("skill-")
+                    ]
+                )
                 if sub_count:
                     print(f"⚡ Using agent: {agent_name} ({sub_count} sub-agents)", file=sys.stderr)
                 else:
@@ -628,9 +647,7 @@ def _resolve_startup_agent(args, ctx) -> None:
         body = agent["system_prompt_body"].strip()
         if body:
             existing = getattr(ctx.options, "append_system_prompt", "")
-            ctx.options.append_system_prompt = (
-                f"{existing}\n\n{body}" if existing else body
-            )
+            ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
 
         # Startup banner — show agent name and sub-agent count on stderr
         agent_name = agent.get("name", "unknown")
@@ -669,9 +686,7 @@ def _resolve_first_agent_in_dir(cwd: Path) -> dict[str, Any] | None:
             if not agent:
                 continue
             skills = agent.get("skills", [])
-            sub_skills = len(
-                [s for s in skills if isinstance(s, str) and s.startswith("skill-")]
-            )
+            sub_skills = len([s for s in skills if isinstance(s, str) and s.startswith("skill-")])
             body_len = len(agent.get("system_prompt_body", "") or "")
             score = sub_skills * 1000 + body_len
             if score > best_score:

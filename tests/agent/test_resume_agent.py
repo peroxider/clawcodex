@@ -7,6 +7,7 @@ Covers:
 * Concurrent resume callers → exactly one wins (atomic claim).
 * TranscriptReader is the consumer — replays count is reported.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,8 +32,11 @@ def _make_terminal_agent(ctx: ToolContext, terminal_status: str = "completed") -
     """Spawn → terminal. Returns the agent_id."""
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="initial",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="initial",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     if terminal_status == "completed":
         complete_agent_task(agent_id, result_text="done", registry=ctx.runtime_tasks)
@@ -50,9 +54,13 @@ def test_resume_terminal_agent_returns_resumed_true(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = _make_terminal_agent(ctx)
 
-    result = asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="wake up", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="wake up",
+            context=ctx,
+        )
+    )
     assert result.resumed is True
     assert result.agent_id == agent_id
 
@@ -66,9 +74,13 @@ def test_resume_carries_resume_prompt_into_fresh_state(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = _make_terminal_agent(ctx, terminal_status="failed")
 
-    asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="retry the failed work", context=ctx,
-    ))
+    asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="retry the failed work",
+            context=ctx,
+        )
+    )
     refreshed = ctx.runtime_tasks.get(agent_id)
     assert refreshed.prompt == "retry the failed work"
 
@@ -88,9 +100,13 @@ def test_resume_reads_transcript_via_transcript_reader(tmp_path: Path) -> None:
         w.append({"role": "assistant", "content": "hello"})
         w.append({"role": "user", "content": "follow-up"})
 
-    result = asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="continue", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="continue",
+            context=ctx,
+        )
+    )
     assert result.resumed is True
     assert result.replayed_message_count == 3
 
@@ -104,9 +120,13 @@ def test_resume_handles_missing_transcript_gracefully(tmp_path: Path) -> None:
     # Don't create the transcript file. ``register_async_agent``
     # populated ``output_file`` with the path, but no writes have
     # happened.
-    result = asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="x", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="x",
+            context=ctx,
+        )
+    )
     assert result.resumed is True
     assert result.replayed_message_count == 0
 
@@ -118,9 +138,13 @@ def test_resume_handles_missing_transcript_gracefully(tmp_path: Path) -> None:
 
 def test_resume_returns_noop_for_missing_task(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
-    result = asyncio.run(resume_agent_background(
-        agent_id="a-ghost", prompt="x", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id="a-ghost",
+            prompt="x",
+            context=ctx,
+        )
+    )
     assert result.resumed is False
     assert "not found" in result.reason.lower()
 
@@ -131,12 +155,19 @@ def test_resume_returns_noop_for_running_task(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
-    result = asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="x", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="x",
+            context=ctx,
+        )
+    )
     assert result.resumed is False
     assert "not terminal" in result.reason.lower()
 
@@ -160,9 +191,13 @@ def test_resume_returns_noop_for_non_local_agent_task(tmp_path: Path) -> None:
     )
     ctx.runtime_tasks.upsert(state)
 
-    result = asyncio.run(resume_agent_background(
-        agent_id="b-shell", prompt="x", context=ctx,
-    ))
+    result = asyncio.run(
+        resume_agent_background(
+            agent_id="b-shell",
+            prompt="x",
+            context=ctx,
+        )
+    )
     assert result.resumed is False
     assert "not local_agent" in result.reason
 
@@ -189,10 +224,14 @@ async def test_concurrent_resume_callers_only_one_wins(tmp_path: Path) -> None:
 
     results = await asyncio.gather(
         resume_agent_background(
-            agent_id=agent_id, prompt="A", context=ctx,
+            agent_id=agent_id,
+            prompt="A",
+            context=ctx,
         ),
         resume_agent_background(
-            agent_id=agent_id, prompt="B", context=ctx,
+            agent_id=agent_id,
+            prompt="B",
+            context=ctx,
         ),
     )
 
@@ -209,10 +248,9 @@ async def test_concurrent_resume_callers_only_one_wins(tmp_path: Path) -> None:
     # Both prove the second resume correctly did NOT fire — that's
     # what the race guard is for. Assert either is present.
     loser_reason = lost[0].reason.lower()
-    assert (
-        "another caller is resuming" in loser_reason
-        or "not terminal" in loser_reason
-    ), f"unexpected loser reason: {loser_reason!r}"
+    assert "another caller is resuming" in loser_reason or "not terminal" in loser_reason, (
+        f"unexpected loser reason: {loser_reason!r}"
+    )
 
     # Final state has the winner's prompt.
     #
@@ -242,16 +280,24 @@ def test_resume_resets_is_resuming_on_fresh_state(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = _make_terminal_agent(ctx)
 
-    asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="first-resume", context=ctx,
-    ))
+    asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="first-resume",
+            context=ctx,
+        )
+    )
     after_first = ctx.runtime_tasks.get(agent_id)
     assert after_first.is_resuming is False
 
     # Drive to terminal again, resume again — works because the
     # is_resuming flag was reset.
     complete_agent_task(agent_id, result_text="re-done", registry=ctx.runtime_tasks)
-    second = asyncio.run(resume_agent_background(
-        agent_id=agent_id, prompt="second-resume", context=ctx,
-    ))
+    second = asyncio.run(
+        resume_agent_background(
+            agent_id=agent_id,
+            prompt="second-resume",
+            context=ctx,
+        )
+    )
     assert second.resumed is True

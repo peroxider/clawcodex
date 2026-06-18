@@ -34,4 +34,4 @@ def AssistantSessionChooser(  # noqa: N802 — mirrors TS React component name
     return None
 
 
-__all__ = ['AssistantSessionChooser']
+__all__ = ["AssistantSessionChooser"]

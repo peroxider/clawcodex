@@ -21,6 +21,7 @@ the nested-transcript resolver have been installed::
 
 Idempotent — calling it more than once is safe (second call is a no-op).
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,6 +42,7 @@ def _telemetry_shutdown_flush() -> None:
     Swallows all exceptions so a misconfigured or broken telemetry
     subsystem never blocks the shutdown drain.
     """
+
     def _do_flush() -> None:
         try:
             from telemetry.recorder import get_recorder

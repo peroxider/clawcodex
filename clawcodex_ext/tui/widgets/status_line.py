@@ -157,12 +157,14 @@ class StatusLine(Static):
         # bottom_toolbar so both surfaces render identically.
         try:
             from src.utils.advisor import format_advisor_status
+
             # Pass the live provider instance when available so the
             # mode label (server/client/inactive) reflects what the
             # next request will actually do. Falls back to None (=
             # "client" default) when the instance isn't plumbed.
             advisor_seg = format_advisor_status(
-                self._provider_instance, self._model,
+                self._provider_instance,
+                self._model,
             )
         except Exception:
             advisor_seg = None
@@ -203,9 +205,8 @@ class StatusLine(Static):
                     format_cost_usd,
                 )
                 from src.settings.settings import get_settings
-                _adv_model = (
-                    getattr(get_settings(), "advisor_model", "") or ""
-                ).strip()
+
+                _adv_model = (getattr(get_settings(), "advisor_model", "") or "").strip()
                 _, _, total_cost = compute_session_cost(
                     worker_model=self._model,
                     worker_input_tokens=in_t,

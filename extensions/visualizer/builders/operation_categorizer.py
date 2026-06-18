@@ -34,18 +34,14 @@ class OperationCategorizer:
     """Rule-based mapper from TimelineBar to OperationCategory."""
 
     _TOOL_RULES: dict[OperationCategory, frozenset[str]] = {
-        OperationCategory.READ: frozenset(
-            {"Read", "Glob", "Grep", "WebFetch", "WebSearch", "LS"}
-        ),
+        OperationCategory.READ: frozenset({"Read", "Glob", "Grep", "WebFetch", "WebSearch", "LS"}),
         OperationCategory.EXECUTE: frozenset(
             {"Bash", "Execute", "TaskKill", "BashOutput", "KillShell", "Shell"}
         ),
         OperationCategory.WRITE: frozenset(
             {"Write", "Edit", "MultiEdit", "NotebookEdit", "TodoWrite", "Patch"}
         ),
-        OperationCategory.ORCHESTRATE: frozenset(
-            {"Agent", "Task", "SendMessage", "TeamCreate"}
-        ),
+        OperationCategory.ORCHESTRATE: frozenset({"Agent", "Task", "SendMessage", "TeamCreate"}),
     }
 
     def categorize(self, bar: TimelineBar) -> OperationCategory:

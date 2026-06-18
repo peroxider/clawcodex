@@ -38,4 +38,4 @@ async def get_organization_uuid() -> str | None:
     return info.organization_uuid
 
 
-__all__ = ['get_organization_uuid']
+__all__ = ["get_organization_uuid"]

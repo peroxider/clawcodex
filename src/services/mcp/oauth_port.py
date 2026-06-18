@@ -60,12 +60,14 @@ def find_available_port(env_override_name: str = "MCP_OAUTH_CALLBACK_PORT") -> i
                 return port
             logger.warning(
                 "%s=%r is out of range [1, 65535]; ignoring and allocating randomly",
-                env_override_name, raw,
+                env_override_name,
+                raw,
             )
         except ValueError:
             logger.warning(
                 "%s=%r is not an integer; ignoring and allocating randomly",
-                env_override_name, raw,
+                env_override_name,
+                raw,
             )
 
     # random.sample on a range avoids materializing a 16K-int list.
@@ -76,7 +78,10 @@ def find_available_port(env_override_name: str = "MCP_OAUTH_CALLBACK_PORT") -> i
     logger.warning(
         "OAuth port allocator exhausted %d attempts in range %d-%d; "
         "falling back to %d (may already be bound)",
-        _MAX_ATTEMPTS, _port_range().start, _port_range().stop - 1, _FALLBACK_PORT,
+        _MAX_ATTEMPTS,
+        _port_range().start,
+        _port_range().stop - 1,
+        _FALLBACK_PORT,
     )
     return _FALLBACK_PORT
 

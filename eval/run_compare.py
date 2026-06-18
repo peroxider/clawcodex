@@ -43,17 +43,13 @@ DEFAULT_OPENCLAUDE_REPO = CLAWCODEX_ROOT / "openclaude"
 DEFAULT_CLAWCODEX_REPO = CLAWCODEX_ROOT
 
 DEFAULT_DATASET_NAME = "SWE-bench/SWE-bench_Lite"
-DEFAULT_DATASET_LOCAL = (
-    "datasets/SWE-bench__SWE-bench_Lite__style-3__fs-oracle"
-)
+DEFAULT_DATASET_LOCAL = "datasets/SWE-bench__SWE-bench_Lite__style-3__fs-oracle"
 DEFAULT_PROMPT_STYLE = "style-3"
 DEFAULT_FILE_SOURCE = "oracle"
 DEFAULT_SPLIT = "test"
 
 # A handful of cheap, well-known instances for smoke runs.
-DEFAULT_SMOKE_INSTANCES: tuple[str, ...] = (
-    "astropy__astropy-12907",
-)
+DEFAULT_SMOKE_INSTANCES: tuple[str, ...] = ("astropy__astropy-12907",)
 
 # Where each agent's API server listens during a run.
 AGENT_PORTS: dict[str, int] = {
@@ -429,15 +425,21 @@ def _resolve_provider_settings(args: argparse.Namespace) -> dict[str, str]:
     preset = PROVIDER_PRESETS[args.provider]
     return {
         "model": args.model or preset.model,
-        "clawcodex_provider": (args.clawcodex_provider
-                               if args.clawcodex_provider is not None
-                               else preset.clawcodex_provider),
-        "openclaude_provider": (args.openclaude_provider
-                                if args.openclaude_provider is not None
-                                else preset.openclaude_provider),
-        "openclaude_base_url": (args.openclaude_base_url
-                                if args.openclaude_base_url is not None
-                                else preset.openclaude_base_url),
+        "clawcodex_provider": (
+            args.clawcodex_provider
+            if args.clawcodex_provider is not None
+            else preset.clawcodex_provider
+        ),
+        "openclaude_provider": (
+            args.openclaude_provider
+            if args.openclaude_provider is not None
+            else preset.openclaude_provider
+        ),
+        "openclaude_base_url": (
+            args.openclaude_base_url
+            if args.openclaude_base_url is not None
+            else preset.openclaude_base_url
+        ),
     }
 
 
@@ -703,9 +705,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             log_path=paths.server_logs[spec.name],
             env=env,
         ):
-            trace_dir = (
-                run_dir / "traces" / spec.name if args.capture_traces else None
-            )
+            trace_dir = run_dir / "traces" / spec.name if args.capture_traces else None
             _run_predictions(
                 spec=spec,
                 swebench_repo=swebench_repo,
@@ -887,9 +887,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Comma-separated instance ids when --scope=instances.",
     )
-    preset_help = "; ".join(
-        f"'{name}': {p.description}" for name, p in PROVIDER_PRESETS.items()
-    )
+    preset_help = "; ".join(f"'{name}': {p.description}" for name, p in PROVIDER_PRESETS.items())
     p_run.add_argument(
         "--provider",
         choices=sorted(PROVIDER_PRESETS),

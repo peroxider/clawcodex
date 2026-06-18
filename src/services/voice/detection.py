@@ -2,6 +2,7 @@
 
 Mirrors TypeScript voice/detection.ts — detects speech in audio streams.
 """
+
 from __future__ import annotations
 
 import time
@@ -20,6 +21,7 @@ class VoiceActivityState(str, Enum):
 @dataclass
 class VoiceActivityConfig:
     """Configuration for voice activity detection."""
+
     silence_threshold_db: float = -40.0
     speech_threshold_db: float = -25.0
     min_speech_duration_ms: float = 200.0

@@ -6,6 +6,7 @@ Verifies:
 - Per-tool properties (is_read_only, is_concurrency_safe) match ts_tool_properties.json
 - Schema has the required 'type' and 'properties' keys
 """
+
 from __future__ import annotations
 
 import json
@@ -47,10 +48,7 @@ class TestToolNameParity(unittest.TestCase):
 
     def test_no_extra_undocumented_tools(self) -> None:
         """All registered tools should be in the snapshot or explicitly documented."""
-        core_py_names = {
-            info["python_name"]
-            for info in self.snapshot["core_tools"].values()
-        }
+        core_py_names = {info["python_name"] for info in self.snapshot["core_tools"].values()}
         registered = {t.name for t in self.registry.list_tools()}
         extra = registered - core_py_names
         # Extra tools are acceptable (ClipboardRead, ClipboardWrite, etc.)
@@ -82,9 +80,16 @@ class TestToolAttributeParity(unittest.TestCase):
 
     def test_all_tools_have_callable_methods(self) -> None:
         callable_attrs = [
-            "call", "prompt", "description", "is_enabled",
-            "is_concurrency_safe", "is_read_only", "is_destructive",
-            "check_permissions", "map_result_to_api", "user_facing_name",
+            "call",
+            "prompt",
+            "description",
+            "is_enabled",
+            "is_concurrency_safe",
+            "is_read_only",
+            "is_destructive",
+            "check_permissions",
+            "map_result_to_api",
+            "user_facing_name",
         ]
         for tool in self.registry.list_tools():
             for attr in callable_attrs:
@@ -193,7 +198,8 @@ class TestToolPropertyParity(unittest.TestCase):
                 else:
                     continue
                 self.assertEqual(
-                    actual, expected_val,
+                    actual,
+                    expected_val,
                     f"Tool '{tool_name}'.{prop}({{}}) = {actual}, expected {expected_val}",
                 )
 

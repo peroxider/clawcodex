@@ -33,6 +33,7 @@ from src.types.messages import AssistantMessage, UserMessage
 
 class _Capture:
     """Holds the kwargs captured from a single ``chat_stream_response`` call."""
+
     api_messages: list = None
     call_kwargs: dict = None
 
@@ -83,24 +84,29 @@ class _Isolation:
 
     def enter(self) -> None:
         import src.config as cfg_mod
+
         self._saved_global = cfg_mod.GLOBAL_CONFIG_FILE
         self._saved_history = cfg_mod.HISTORY_FILE
         self._saved_dir = cfg_mod.GLOBAL_CONFIG_DIR
         from pathlib import Path as _P
+
         cfg_mod.GLOBAL_CONFIG_FILE = _P(self._tmp) / ".clawcodex" / "config.json"
         cfg_mod.HISTORY_FILE = _P(self._tmp) / ".clawcodex" / "history.jsonl"
         cfg_mod.GLOBAL_CONFIG_DIR = _P(self._tmp) / ".clawcodex"
         cfg_mod._default_manager = None
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
 
     def exit(self) -> None:
         import src.config as cfg_mod
+
         cfg_mod.GLOBAL_CONFIG_FILE = self._saved_global
         cfg_mod.HISTORY_FILE = self._saved_history
         cfg_mod.GLOBAL_CONFIG_DIR = self._saved_dir
         cfg_mod._default_manager = None
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
 
 
@@ -114,6 +120,7 @@ def _set_settings(**kwargs):
     import src.config as cfg_mod
     from src.config import ConfigManager
     from src.settings.settings import invalidate_settings_cache
+
     cfg_mod._default_manager = None
     mgr = ConfigManager()
     cfg = mgr.load_global()
@@ -166,6 +173,7 @@ class TestAdvisorActiveOnFirstPartyAnthropic(unittest.TestCase):
         class _FakeTool:
             name = "Bash"
             input_schema = {"type": "object", "properties": {}}
+
             def prompt(self) -> str:
                 return "fake bash tool"
 
@@ -230,10 +238,7 @@ class TestAdvisorActiveOnFirstPartyAnthropic(unittest.TestCase):
         )
         _run(provider, [UserMessage(content="hi"), prior, UserMessage(content="next")])
         # Inspect the assistant message in the API payload.
-        asst = next(
-            m for m in cap.api_messages
-            if m.get("role") == "assistant"
-        )
+        asst = next(m for m in cap.api_messages if m.get("role") == "assistant")
         types = [b["type"] for b in asst["content"]]
         self.assertIn("server_tool_use", types)
         self.assertIn("advisor_tool_result", types)
@@ -261,18 +266,18 @@ class TestAdvisorInactivePaths(unittest.TestCase):
         tools = cap.call_kwargs.get("tools") or []
         for t in tools:
             self.assertNotEqual(
-                t.get("type"), "advisor_20260301",
+                t.get("type"),
+                "advisor_20260301",
                 "server-side schema must not be sent when inactive",
             )
             self.assertNotEqual(
-                t.get("name"), "advisor",
+                t.get("name"),
+                "advisor",
                 "advisor tool must not appear in tools when inactive",
             )
         sysp = cap.call_kwargs.get("system", "") or ""
         if isinstance(sysp, list):
-            sysp_text = "\n".join(
-                b.get("text", "") for b in sysp if isinstance(b, dict)
-            )
+            sysp_text = "\n".join(b.get("text", "") for b in sysp if isinstance(b, dict))
         else:
             sysp_text = sysp
         self.assertNotIn("# Advisor Tool", sysp_text)
@@ -283,7 +288,8 @@ class TestAdvisorInactivePaths(unittest.TestCase):
         tools = cap.call_kwargs.get("tools") or []
         for t in tools:
             self.assertNotEqual(
-                t.get("type"), "advisor_20260301",
+                t.get("type"),
+                "advisor_20260301",
                 "server-side schema must not leak in client-side mode",
             )
 
@@ -293,7 +299,8 @@ class TestAdvisorInactivePaths(unittest.TestCase):
         tools = cap.call_kwargs.get("tools") or []
         advisor_tools = [t for t in tools if t.get("name") == "advisor"]
         self.assertEqual(
-            len(advisor_tools), 1,
+            len(advisor_tools),
+            1,
             "client-side mode must register the regular-tool advisor",
         )
         # Regular tool shape — no ``type`` discriminator, just name +
@@ -302,9 +309,7 @@ class TestAdvisorInactivePaths(unittest.TestCase):
         self.assertIn("input_schema", advisor_tools[0])
         sysp = cap.call_kwargs.get("system", "") or ""
         if isinstance(sysp, list):
-            sysp_text = "\n".join(
-                b.get("text", "") for b in sysp if isinstance(b, dict)
-            )
+            sysp_text = "\n".join(b.get("text", "") for b in sysp if isinstance(b, dict))
         else:
             sysp_text = sysp
         self.assertIn("# Advisor Tool", sysp_text)
@@ -318,9 +323,7 @@ class TestAdvisorInactivePaths(unittest.TestCase):
 
     def test_no_advisor_when_env_disabled(self) -> None:
         _set_settings(advisor_model="claude-opus-4-6", advisor_provider="anthropic")
-        with patch.dict(
-            os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False
-        ):
+        with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False):
             cap = _Capture()
             provider = _stub_provider_class(AnthropicProvider, cap)
             _run(provider, [UserMessage(content="x")])
@@ -399,9 +402,7 @@ class TestAdvisorInactivePaths(unittest.TestCase):
             ],
         )
         _run(provider, [UserMessage(content="hi"), prior, UserMessage(content="next")])
-        asst = next(
-            m for m in cap.api_messages if m.get("role") == "assistant"
-        )
+        asst = next(m for m in cap.api_messages if m.get("role") == "assistant")
         types = [b["type"] for b in asst["content"]]
         self.assertNotIn("server_tool_use", types)
         self.assertNotIn("advisor_tool_result", types)

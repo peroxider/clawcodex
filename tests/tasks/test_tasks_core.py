@@ -3,6 +3,7 @@
 Covers TaskType / TaskStatus shape, ``is_terminal_task_status``, prefixed
 ID generation, and ``TaskStateBase`` defaults.
 """
+
 from __future__ import annotations
 
 import re
@@ -94,11 +95,7 @@ def test_generate_task_id_uses_secrets_choice() -> None:
         if not isinstance(func, ast.Attribute):
             continue
         # ``random.choice(...)`` — banned in executable code.
-        if (
-            isinstance(func.value, ast.Name)
-            and func.value.id == "random"
-            and func.attr == "choice"
-        ):
+        if isinstance(func.value, ast.Name) and func.value.id == "random" and func.attr == "choice":
             pytest.fail(
                 "tasks_core.generate_task_id calls random.choice in "
                 "executable code — must be secrets.choice (CSPRNG) per "

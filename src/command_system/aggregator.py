@@ -61,6 +61,7 @@ def _load_skill_commands_cached(cwd: str) -> tuple[Command, ...]:
     """
     try:
         from ..skills.loader import get_all_skills
+
         skills = get_all_skills(project_root=cwd)
         return tuple(skill_to_prompt_command(s) for s in skills)
     except Exception as exc:  # noqa: BLE001 — skills are non-critical
@@ -108,9 +109,7 @@ def get_commands(
         # "append-gate", like buddy's is_buddy_command_enabled()), so it never
         # reaches this loop and never reserves its name.
         seen.add(cmd.name)
-        if not meets_availability_requirement(
-            cmd, is_claude_ai_subscriber, is_console_user
-        ):
+        if not meets_availability_requirement(cmd, is_claude_ai_subscriber, is_console_user):
             continue
         if not is_command_enabled(cmd):
             continue

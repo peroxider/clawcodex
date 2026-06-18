@@ -13,6 +13,7 @@ Telemetry 错误触发 Issue 推送 — 真实 E2E 测试。
 用法：
   python3 tests/telemetry/telemetry_issue_push_errors.py
 """
+
 from __future__ import annotations
 
 import json
@@ -30,7 +31,9 @@ from typing import Any
 _HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 _tests_dir = str((_HERE / "tests").resolve())
-sys.path = [str(_HERE)] + [p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir]
+sys.path = [str(_HERE)] + [
+    p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir
+]
 
 PLATFORM = "gitcode"
 OWNER = "chadwweng"
@@ -59,8 +62,12 @@ def check(cond: bool, msg: str) -> None:
 def build_recorder(tmpdir: str, token: str, client: Any = None):
     """Build a real _TelemetryRecorderImpl wired to GitCode IssueReporter."""
     from telemetry import (
-        TelemetryConfig, ReportingConfig, RedactionConfig,
-        LocalJsonlStorage, DailyAggregator, Redactor,
+        TelemetryConfig,
+        ReportingConfig,
+        RedactionConfig,
+        LocalJsonlStorage,
+        DailyAggregator,
+        Redactor,
         CompositeReporter,
     )
     from telemetry.recorder import _TelemetryRecorderImpl
@@ -90,19 +97,31 @@ def build_recorder(tmpdir: str, token: str, client: Any = None):
     if client is not None:
         reporters.add(client)
     else:
-        reporters.add(IssueReporter(
-            storage=storage, redactor=redactor, config=cfg.reporting,
-        ))
+        reporters.add(
+            IssueReporter(
+                storage=storage,
+                redactor=redactor,
+                config=cfg.reporting,
+            )
+        )
 
-    return _TelemetryRecorderImpl(
-        cfg=cfg, storage=storage, aggregator=agg,
-        redactor=redactor, reporters=reporters,
-    ), storage, cfg
+    return (
+        _TelemetryRecorderImpl(
+            cfg=cfg,
+            storage=storage,
+            aggregator=agg,
+            redactor=redactor,
+            reporters=reporters,
+        ),
+        storage,
+        cfg,
+    )
 
 
 def close_issue(token: str, issue_id: str) -> None:
     """Close the test Issue via GitCode API."""
     import httpx
+
     r = httpx.patch(
         f"https://api.gitcode.com/api/v5/repos/{OWNER}/{REPO}/issues/{issue_id}",
         params={"access_token": token},
@@ -124,6 +143,7 @@ def test_cli_error_record(tmpdir: str, token: str) -> dict[str, Any] | None:
     print("=" * 72)
 
     from telemetry.recorder import override_recorder, reset_recorder_for_tests
+
     reset_recorder_for_tests()
 
     # 跟踪 reporter emit
@@ -132,6 +152,7 @@ def test_cli_error_record(tmpdir: str, token: str) -> dict[str, Any] | None:
     class _TrackingReporter:
         def render(self, summary: dict, date: str) -> str:
             return ""
+
         def emit(self, rendered: str, *, date: str) -> bool:
             emitted.append((rendered, date))
             return True
@@ -171,14 +192,17 @@ def test_unhandled_exception_via_hooks(tmpdir: str, token: str) -> dict[str, Any
 
     from telemetry.recorder import override_recorder, reset_recorder_for_tests
     from telemetry.hooks import install_exception_hooks, uninstall_exception_hooks
+
     reset_recorder_for_tests()
 
     emitted: list[tuple[str, str]] = []
 
     class _TrackingReporter:
         last_rendered = ""
+
         def render(self, summary: dict, date: str) -> str:
             return ""
+
         def emit(self, rendered: str, *, date: str) -> bool:
             emitted.append((rendered, date))
             self.last_rendered = rendered
@@ -193,6 +217,7 @@ def test_unhandled_exception_via_hooks(tmpdir: str, token: str) -> dict[str, Any
         raise RuntimeError("simulated unhandled exception for telemetry test")
     except RuntimeError as exc:
         from telemetry.hooks import _emit as hook_emit
+
         hook_emit(exc)
 
     # hooks._emit 只 record_error，不应 emit
@@ -224,6 +249,7 @@ def test_shutdown_cleanup_only_on_error(tmpdir: str, token: str) -> dict[str, An
 
     from telemetry.recorder import override_recorder, reset_recorder_for_tests
     from clawcodex_ext.telemetry_lifecycle import _telemetry_shutdown_flush
+
     reset_recorder_for_tests()
 
     emitted: list[tuple[str, str]] = []
@@ -231,6 +257,7 @@ def test_shutdown_cleanup_only_on_error(tmpdir: str, token: str) -> dict[str, An
     class _TrackingReporter:
         def render(self, summary: dict, date: str) -> str:
             return ""
+
         def emit(self, rendered: str, *, date: str) -> bool:
             emitted.append((rendered, date))
             return True
@@ -251,7 +278,9 @@ def test_shutdown_cleanup_only_on_error(tmpdir: str, token: str) -> dict[str, An
     reset_recorder_for_tests()
 
     # ---- 3b: 有 error ----
-    recorder_err, storage_err, _ = build_recorder(tmpdir + "/err", token, client=_TrackingReporter())
+    recorder_err, storage_err, _ = build_recorder(
+        tmpdir + "/err", token, client=_TrackingReporter()
+    )
     override_recorder(recorder_err)
     emitted.clear()
 
@@ -265,6 +294,7 @@ def test_shutdown_cleanup_only_on_error(tmpdir: str, token: str) -> dict[str, An
     _telemetry_shutdown_flush()
     # daemon thread 异步执行，给 5s 窗口等它完成
     import time
+
     for _ in range(25):
         if emitted:
             break
@@ -285,6 +315,7 @@ def test_real_issue_push(tmpdir: str, token: str) -> None:
     print("=" * 72)
 
     from telemetry.recorder import override_recorder, reset_recorder_for_tests
+
     reset_recorder_for_tests()
 
     recorder, storage, _ = build_recorder(tmpdir, token)
@@ -309,6 +340,7 @@ def test_real_issue_push(tmpdir: str, token: str) -> None:
     if issue_id:
         # 从 API 验证 body 包含 error 信息
         import httpx
+
         r = httpx.get(
             f"https://api.gitcode.com/api/v5/repos/{OWNER}/{REPO}/issues/{issue_id}",
             params={"access_token": token},
@@ -335,7 +367,9 @@ def test_real_issue_push(tmpdir: str, token: str) -> None:
 # main
 # ---------------------------------------------------------------------------
 def main() -> int:
-    token = os.environ.get("CLAW_TELEMETRY_REPORTING_TOKEN") or os.environ.get("GITCODE_TOKEN") or ""
+    token = (
+        os.environ.get("CLAW_TELEMETRY_REPORTING_TOKEN") or os.environ.get("GITCODE_TOKEN") or ""
+    )
     if not token:
         print("❌ 需要设置 CLAW_TELEMETRY_REPORTING_TOKEN 或 GITCODE_TOKEN")
         return 1

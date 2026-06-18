@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompactResult:
     """Result of a compaction operation (command-handler facing)."""
+
     boundary_message: Message
     summary_message: Message
     tokens_saved: int
@@ -86,8 +87,7 @@ async def compact_conversation(
 
     # Apply the pipeline result to the conversation in place
     boundary_indices = [
-        i for i, m in enumerate(conversation.messages)
-        if is_compact_boundary_message(m)
+        i for i, m in enumerate(conversation.messages) if is_compact_boundary_message(m)
     ]
 
     if boundary_indices:

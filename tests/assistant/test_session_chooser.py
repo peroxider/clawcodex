@@ -31,7 +31,7 @@ def test_callbacks_are_not_invoked():
         cancel_calls.append(None)
 
     AssistantSessionChooser(
-        sessions=[{'id': 'sess_1'}, {'id': 'sess_2'}],
+        sessions=[{"id": "sess_1"}, {"id": "sess_2"}],
         on_select=on_select,
         on_cancel=on_cancel,
     )

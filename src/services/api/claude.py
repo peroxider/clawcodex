@@ -107,15 +107,19 @@ StreamEvent = Union[
 
 def split_system_prompt_prefix(system_prompt: str) -> tuple[str, str]:
     if system_prompt.startswith(CLI_SYSPROMPT_PREFIX):
-        return CLI_SYSPROMPT_PREFIX, system_prompt[len(CLI_SYSPROMPT_PREFIX):].lstrip()
+        return CLI_SYSPROMPT_PREFIX, system_prompt[len(CLI_SYSPROMPT_PREFIX) :].lstrip()
     return "", system_prompt
 
 
 def tool_to_api_schema(tool: Any) -> dict[str, Any]:
     schema: dict[str, Any] = {
         "name": tool.name,
-        "description": tool.description({}) if callable(tool.description) else str(tool.description),
-        "input_schema": dict(tool.input_schema) if tool.input_schema else {"type": "object", "properties": {}},
+        "description": tool.description({})
+        if callable(tool.description)
+        else str(tool.description),
+        "input_schema": dict(tool.input_schema)
+        if tool.input_schema
+        else {"type": "object", "properties": {}},
     }
     return schema
 
@@ -200,9 +204,7 @@ def add_cache_breakpoints(
             # Empty block list — wrap an empty text block so the marker
             # has somewhere to live. Matches TS, which always emits at
             # least one block for the marker message.
-            new_content = [
-                {"type": "text", "text": "", "cache_control": cache_control}
-            ]
+            new_content = [{"type": "text", "text": "", "cache_control": cache_control}]
         else:
             new_content = list(content[:-1])
             last_block = content[-1]
@@ -269,6 +271,7 @@ async def call_model(
         if client is None:
             try:
                 import anthropic
+
                 client = anthropic.AsyncAnthropic()
             except ImportError:
                 yield ErrorEvent(error="anthropic package not installed")
@@ -300,6 +303,7 @@ async def call_model(
         # query._call_model_sync's media_size handler.
         try:
             from src.utils.image_validation import ImageSizeError, validate_images_for_api
+
             validate_images_for_api(api_messages)
         except ImageSizeError as e:
             yield ErrorEvent(error=str(e))
@@ -353,8 +357,12 @@ async def call_model(
                         start_usage = NonNullableUsage(
                             input_tokens=getattr(usage_data, "input_tokens", 0),
                             output_tokens=getattr(usage_data, "output_tokens", 0),
-                            cache_creation_input_tokens=getattr(usage_data, "cache_creation_input_tokens", 0),
-                            cache_read_input_tokens=getattr(usage_data, "cache_read_input_tokens", 0),
+                            cache_creation_input_tokens=getattr(
+                                usage_data, "cache_creation_input_tokens", 0
+                            ),
+                            cache_read_input_tokens=getattr(
+                                usage_data, "cache_read_input_tokens", 0
+                            ),
                         )
                         update_usage(accumulated_usage, start_usage)
                         yield MessageStart(model=model_name, usage=start_usage)
@@ -384,7 +392,9 @@ async def call_model(
                     if delta_type == "text_delta":
                         yield TextDelta(text=getattr(delta, "text", ""), index=idx)
                     elif delta_type == "input_json_delta":
-                        yield ToolUseDelta(partial_json=getattr(delta, "partial_json", ""), index=idx)
+                        yield ToolUseDelta(
+                            partial_json=getattr(delta, "partial_json", ""), index=idx
+                        )
                     elif delta_type == "thinking_delta":
                         yield ThinkingDelta(text=getattr(delta, "thinking", ""), index=idx)
 

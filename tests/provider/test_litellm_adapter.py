@@ -147,21 +147,30 @@ class TestPrepareMessages:
 
     def test_prepare_anthropic_tool_use_for_litellm(self):
         provider = LiteLLMProvider(api_key="test")
-        prepared = provider._prepare_messages([
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "tool_use", "id": "call_1", "name": "Read", "input": {"file_path": "README.md"}}
-                ],
-            }
-        ])
+        prepared = provider._prepare_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "call_1",
+                            "name": "Read",
+                            "input": {"file_path": "README.md"},
+                        }
+                    ],
+                }
+            ]
+        )
         assert prepared[0]["tool_calls"][0]["function"]["name"] == "Read"
 
 
 class TestChatCompletion:
     def test_chat_passes_external_api_parameters(self, monkeypatch):
         fake_litellm = FakeLiteLLM(_message_response())
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm)
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+        )
 
         provider = LiteLLMProvider(
             api_key="sk-key",
@@ -185,23 +194,30 @@ class TestChatCompletion:
         ]
 
     def test_chat_converts_tools_and_tool_calls(self, monkeypatch):
-        fake_litellm = FakeLiteLLM(_message_response(
-            choices=[
-                {
-                    "message": {
-                        "content": "",
-                        "tool_calls": [
-                            {
-                                "id": "call_1",
-                                "function": {"name": "Read", "arguments": '{"file_path":"README.md"}'},
-                            }
-                        ],
-                    },
-                    "finish_reason": "tool_calls",
-                }
-            ]
-        ))
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm)
+        fake_litellm = FakeLiteLLM(
+            _message_response(
+                choices=[
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "function": {
+                                        "name": "Read",
+                                        "arguments": '{"file_path":"README.md"}',
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            )
+        )
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+        )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o", provider_name="openai")
         response = provider.chat(
@@ -221,13 +237,17 @@ class TestChatCompletion:
             usage=SimpleNamespace(prompt_tokens=3, completion_tokens=2, total_tokens=5),
             choices=[
                 SimpleNamespace(
-                    message=SimpleNamespace(content="object", reasoning_content=None, tool_calls=None),
+                    message=SimpleNamespace(
+                        content="object", reasoning_content=None, tool_calls=None
+                    ),
                     finish_reason="stop",
                 )
             ],
         )
         fake_litellm = FakeLiteLLM(response)
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm)
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+        )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
         result = provider.chat([{"role": "user", "content": "Hi"}])
@@ -238,45 +258,59 @@ class TestChatCompletion:
 
 class TestStreaming:
     def test_chat_stream_yields_text_chunks(self, monkeypatch):
-        fake_litellm = FakeLiteLLM([
-            {"choices": [{"delta": {"content": "Hel"}}]},
-            {"choices": [{"delta": {"content": "lo"}}]},
-        ])
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm)
+        fake_litellm = FakeLiteLLM(
+            [
+                {"choices": [{"delta": {"content": "Hel"}}]},
+                {"choices": [{"delta": {"content": "lo"}}]},
+            ]
+        )
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+        )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
         assert list(provider.chat_stream([{"role": "user", "content": "Hi"}])) == ["Hel", "lo"]
         assert fake_litellm.calls[0]["stream"] is True
 
-    def test_chat_stream_response_rebuilds_content_reasoning_tool_calls_and_usage(self, monkeypatch):
+    def test_chat_stream_response_rebuilds_content_reasoning_tool_calls_and_usage(
+        self, monkeypatch
+    ):
         tool_call_delta = SimpleNamespace(
             index=0,
             id="call_1",
             function=SimpleNamespace(name="Read", arguments='{"file_path":"README.md"}'),
         )
-        fake_litellm = FakeLiteLLM([
-            SimpleNamespace(
-                model="openai/gpt-4o",
-                usage=None,
-                choices=[
-                    SimpleNamespace(
-                        finish_reason=None,
-                        delta=SimpleNamespace(content="Hel", reasoning_content="Think", tool_calls=[]),
-                    )
-                ],
-            ),
-            SimpleNamespace(
-                model="openai/gpt-4o",
-                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
-                choices=[
-                    SimpleNamespace(
-                        finish_reason="tool_calls",
-                        delta=SimpleNamespace(content="lo", reasoning_content=None, tool_calls=[tool_call_delta]),
-                    )
-                ],
-            ),
-        ])
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm)
+        fake_litellm = FakeLiteLLM(
+            [
+                SimpleNamespace(
+                    model="openai/gpt-4o",
+                    usage=None,
+                    choices=[
+                        SimpleNamespace(
+                            finish_reason=None,
+                            delta=SimpleNamespace(
+                                content="Hel", reasoning_content="Think", tool_calls=[]
+                            ),
+                        )
+                    ],
+                ),
+                SimpleNamespace(
+                    model="openai/gpt-4o",
+                    usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+                    choices=[
+                        SimpleNamespace(
+                            finish_reason="tool_calls",
+                            delta=SimpleNamespace(
+                                content="lo", reasoning_content=None, tool_calls=[tool_call_delta]
+                            ),
+                        )
+                    ],
+                ),
+            ]
+        )
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+        )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
         text_chunks: list[str] = []
@@ -323,7 +357,9 @@ class TestBackwardCompatibility:
         assert isinstance(provider, BaseProvider)
 
     def test_missing_litellm_dependency_raises_clear_error(self, monkeypatch):
-        monkeypatch.setattr("extensions.providers_ext.litellm_provider.is_litellm_available", lambda: False)
+        monkeypatch.setattr(
+            "extensions.providers_ext.litellm_provider.is_litellm_available", lambda: False
+        )
         provider = LiteLLMProvider(api_key="test", model="gpt-4o")
 
         with pytest.raises(RuntimeError, match="LiteLLM is not installed"):

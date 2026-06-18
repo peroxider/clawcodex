@@ -63,6 +63,7 @@ def _lazy_init() -> None:
     _LAZY_INITIALIZED = True
     try:
         from .bundled import init_bundled_skills
+
         init_bundled_skills()
     except Exception:
         # Fail open: if a bundled-skill module is malformed at import
@@ -78,19 +79,24 @@ def validate_skill_definition(
     if not definition.name or not definition.name.strip():
         errors.append(SkillValidationError("name", "Skill name is required"))
     elif not VALID_NAME_RE.match(definition.name):
-        errors.append(SkillValidationError(
-            "name",
-            f"Skill name '{definition.name}' must match pattern: "
-            f"start with letter, contain only [a-zA-Z0-9_:-], max 64 chars",
-        ))
+        errors.append(
+            SkillValidationError(
+                "name",
+                f"Skill name '{definition.name}' must match pattern: "
+                f"start with letter, contain only [a-zA-Z0-9_:-], max 64 chars",
+            )
+        )
 
     if not definition.description or not definition.description.strip():
         errors.append(SkillValidationError("description", "Skill description is required"))
 
     if definition.context not in VALID_CONTEXTS:
-        errors.append(SkillValidationError(
-            "context", f"Invalid context '{definition.context}', must be one of: {', '.join(sorted(VALID_CONTEXTS))}"
-        ))
+        errors.append(
+            SkillValidationError(
+                "context",
+                f"Invalid context '{definition.context}', must be one of: {', '.join(sorted(VALID_CONTEXTS))}",
+            )
+        )
 
     for alias in definition.aliases:
         if not alias or not alias.strip():
@@ -106,9 +112,7 @@ def validate_skill(skill: Skill) -> list[SkillValidationError]:
     if not skill.description or not skill.description.strip():
         errors.append(SkillValidationError("description", "Skill description is required"))
     if skill.context not in VALID_CONTEXTS:
-        errors.append(SkillValidationError(
-            "context", f"Invalid context '{skill.context}'"
-        ))
+        errors.append(SkillValidationError("context", f"Invalid context '{skill.context}'"))
     return errors
 
 
@@ -217,6 +221,7 @@ def clear_bundled_skills() -> None:
     _LAZY_INITIALIZED = False
     try:
         from .bundled import reset_bundled_skills_init_flag
+
         reset_bundled_skills_init_flag()
     except Exception:
         # If the bundled package can't import, the lazy-init flag in

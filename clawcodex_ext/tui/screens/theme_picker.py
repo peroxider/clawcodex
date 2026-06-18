@@ -63,9 +63,7 @@ class ThemePickerScreen(DialogScreen[str | None]):
     def _post_mount(self) -> None:
         self._select.focus()
 
-    def on_select_list_option_highlighted(
-        self, event: SelectList.OptionHighlighted
-    ) -> None:
+    def on_select_list_option_highlighted(self, event: SelectList.OptionHighlighted) -> None:
         if self._on_preview is None:
             return
         try:
@@ -82,9 +80,7 @@ class ThemePickerScreen(DialogScreen[str | None]):
                 pass
         self.dismiss(value)
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         if self._on_preview is not None:
             try:
                 self._on_preview(None)

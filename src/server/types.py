@@ -21,11 +21,11 @@ class SessionState(str, Enum):
     serialize cleanly through ``~/.claude/server-sessions.json``.
     """
 
-    STARTING = 'starting'
-    RUNNING = 'running'
-    DETACHED = 'detached'
-    STOPPING = 'stopping'
-    STOPPED = 'stopped'
+    STARTING = "starting"
+    RUNNING = "running"
+    DETACHED = "detached"
+    STOPPING = "stopping"
+    STOPPED = "stopped"
 
 
 @dataclass(frozen=True)
@@ -39,8 +39,8 @@ class ServerConfig:
     """
 
     port: int = 0
-    host: str = '127.0.0.1'
-    auth_token: str = ''
+    host: str = "127.0.0.1"
+    auth_token: str = ""
     unix: str | None = None
     idle_timeout_ms: int = 0
     max_sessions: int | None = None
@@ -109,30 +109,28 @@ def validate_connect_response(payload: object) -> ConnectResponse:
     treats it as a dict; the TypedDict is documentation).
     """
     if not isinstance(payload, dict):
-        raise ValueError(
-            f'connect response must be an object, got {type(payload).__name__}'
-        )
-    sid = payload.get('session_id')
+        raise ValueError(f"connect response must be an object, got {type(payload).__name__}")
+    sid = payload.get("session_id")
     if not isinstance(sid, str) or not sid:
-        raise ValueError('connect response missing session_id (non-empty string)')
-    ws_url = payload.get('ws_url')
+        raise ValueError("connect response missing session_id (non-empty string)")
+    ws_url = payload.get("ws_url")
     if not isinstance(ws_url, str) or not ws_url:
-        raise ValueError('connect response missing ws_url (non-empty string)')
+        raise ValueError("connect response missing ws_url (non-empty string)")
     # work_dir is optional
-    work_dir = payload.get('work_dir')
+    work_dir = payload.get("work_dir")
     if work_dir is not None and not isinstance(work_dir, str):
-        raise ValueError('connect response work_dir must be a string when present')
-    out: ConnectResponse = {'session_id': sid, 'ws_url': ws_url}
+        raise ValueError("connect response work_dir must be a string when present")
+    out: ConnectResponse = {"session_id": sid, "ws_url": ws_url}
     if isinstance(work_dir, str):
-        out['work_dir'] = work_dir
+        out["work_dir"] = work_dir
     return out
 
 
 __all__ = [
-    'ConnectResponse',
-    'ServerConfig',
-    'SessionIndexEntry',
-    'SessionInfo',
-    'SessionState',
-    'validate_connect_response',
+    "ConnectResponse",
+    "ServerConfig",
+    "SessionIndexEntry",
+    "SessionInfo",
+    "SessionState",
+    "validate_connect_response",
 ]

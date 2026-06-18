@@ -42,6 +42,7 @@ class TestStage3Repl:
         assert ClawcodexREPL is not None
         # 验证构造签名可匹配
         import inspect
+
         sig = inspect.signature(ClawcodexREPL.__init__)
         assert "provider_name" in sig.parameters
         assert "permission_mode" in sig.parameters
@@ -89,6 +90,7 @@ class TestStage3Repl:
 
         # Check ClawcodexREPL (core.py)
         from src.repl.core import ClawcodexREPL
+
         core_src = inspect.getsource(ClawcodexREPL.__init__)
         assert "self._file_history" in core_src, (
             "ClawcodexREPL.__init__ must set self._file_history"
@@ -96,6 +98,7 @@ class TestStage3Repl:
 
         # Check ClawCodexExtREPL (app.py)
         from clawcodex_ext.repl.app import ClawCodexExtREPL
+
         app_src = inspect.getsource(ClawCodexExtREPL.__init__)
         assert "self._file_history" in app_src, (
             "ClawCodexExtREPL.__init__ must set self._file_history"
@@ -107,12 +110,12 @@ class TestStage3Repl:
         import inspect
 
         from src.repl.core import ClawcodexREPL
+
         chat_src = inspect.getsource(ClawcodexREPL.chat)
         # Count occurrences — one in each LiveStatus(...) call
         count = chat_src.count("history=self._file_history")
         assert count >= 2, (
-            f"Expected at least 2 ``history=self._file_history`` "
-            f"in chat(), found {count}"
+            f"Expected at least 2 ``history=self._file_history`` in chat(), found {count}"
         )
 
 

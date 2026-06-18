@@ -7,6 +7,7 @@ gives a cleaner error and avoids a wasted network round trip.
 
 Mirrors TS's ImageSizeError + validateImagesForAPI exports.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -144,6 +145,7 @@ def validate_images_for_api(messages: list[Any]) -> None:
         # Emit analytics for the failure (best-effort).
         try:
             from src.services.analytics.events import EventType, log_event
+
             log_event(
                 EventType.IMAGE_PROCESSING,
                 subtype="api_validation_failed",

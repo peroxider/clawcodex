@@ -86,9 +86,7 @@ def render_markdown(left: Summary, right: Summary) -> str:
     only_right = sorted(right.resolved_ids - left.resolved_ids)
     both = sorted(left.resolved_ids & right.resolved_ids)
     neither = sorted(
-        (left.submitted_ids | right.submitted_ids)
-        - left.resolved_ids
-        - right.resolved_ids
+        (left.submitted_ids | right.submitted_ids) - left.resolved_ids - right.resolved_ids
     )
 
     denom = max(left.total, right.total, 1)
@@ -102,9 +100,7 @@ def render_markdown(left: Summary, right: Summary) -> str:
     lines.append("")
     lines.append("## Top line")
     lines.append("")
-    lines.append(
-        f"| metric | {left.label} | {right.label} | Δ ({left.label} − {right.label}) |"
-    )
+    lines.append(f"| metric | {left.label} | {right.label} | Δ ({left.label} − {right.label}) |")
     lines.append("|---|---:|---:|---:|")
 
     def row(metric: str, l: int, r: int) -> str:
@@ -122,7 +118,9 @@ def render_markdown(left: Summary, right: Summary) -> str:
     lines.append("## Headline")
     lines.append("")
     if delta == 0:
-        lines.append(f"`{left.label}` and `{right.label}` resolved the same number of instances ({left.resolved}).")
+        lines.append(
+            f"`{left.label}` and `{right.label}` resolved the same number of instances ({left.resolved})."
+        )
     elif delta > 0:
         lines.append(
             f"`{left.label}` resolved **{delta} more** instance(s) than `{right.label}` "

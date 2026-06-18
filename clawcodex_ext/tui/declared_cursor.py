@@ -84,9 +84,7 @@ class DeclaredCursor:
         # Test seam: tests can replace this to capture emitted bytes.
         self._writer: Callable[[str], None] = self._default_writer
 
-    def declare(
-        self, owner: object, row: int, col: int
-    ) -> Callable[[], None]:
+    def declare(self, owner: object, row: int, col: int) -> Callable[[], None]:
         """Register an ``(owner, row, col)`` declaration.
 
         The most-recent declaration wins on the next emit. Returns an
@@ -94,9 +92,7 @@ class DeclaredCursor:
         """
 
         if row < 0 or col < 0:
-            raise ValueError(
-                f"row/col must be non-negative; got {row}, {col}"
-            )
+            raise ValueError(f"row/col must be non-negative; got {row}, {col}")
         decl = CursorDeclaration(owner=owner, row=row, col=col)
         with self._lock:
             # If an existing declaration for this owner exists, replace
@@ -117,9 +113,7 @@ class DeclaredCursor:
             if unregistered[0]:
                 return
             with self._lock:
-                self._declarations = [
-                    d for d in self._declarations if d.owner is not owner
-                ]
+                self._declarations = [d for d in self._declarations if d.owner is not owner]
                 self._pending_emit = True
             unregistered[0] = True
 
@@ -205,9 +199,7 @@ def get_default_declared_cursor() -> DeclaredCursor:
     return _DEFAULT
 
 
-def publish_cursor_position(
-    owner: object, row: int, col: int
-) -> Callable[[], None]:
+def publish_cursor_position(owner: object, row: int, col: int) -> Callable[[], None]:
     """Convenience: declare on the singleton and return the unregister."""
 
     return get_default_declared_cursor().declare(owner, row, col)

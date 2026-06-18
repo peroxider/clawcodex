@@ -84,6 +84,7 @@ class TestMcpTokenStore:
 
     def test_persistence(self):
         from pathlib import Path
+
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = Path(f.name)
             store1 = McpTokenStore(store_path=path)
@@ -113,9 +114,7 @@ class TestMcpAuthManager:
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             store = McpTokenStore(store_path=__import__("pathlib").Path(f.name))
             manager = McpAuthManager(token_store=store)
-            result = await manager.authenticate_token(
-                "server1", "my-token", expires_in=3600
-            )
+            result = await manager.authenticate_token("server1", "my-token", expires_in=3600)
             assert result.success is True
             assert result.token is not None
             assert not result.token.is_expired
@@ -128,11 +127,14 @@ class TestMcpAuthManager:
 
             assert manager.get_auth_headers("server1") is None
 
-            store.store_token("server1", TokenData(
-                access_token="test-token",
-                token_type="Bearer",
-                expires_at=time.time() + 3600,
-            ))
+            store.store_token(
+                "server1",
+                TokenData(
+                    access_token="test-token",
+                    token_type="Bearer",
+                    expires_at=time.time() + 3600,
+                ),
+            )
 
             headers = manager.get_auth_headers("server1")
             assert headers is not None
@@ -162,16 +164,22 @@ class TestMcpAuthManager:
             store = McpTokenStore(store_path=__import__("pathlib").Path(f.name))
             manager = McpAuthManager(token_store=store)
 
-            store.store_token("server1", TokenData(
-                access_token="test",
-                expires_at=time.time() - 100,
-            ))
+            store.store_token(
+                "server1",
+                TokenData(
+                    access_token="test",
+                    expires_at=time.time() - 100,
+                ),
+            )
             assert manager.needs_refresh("server1") is True
 
-            store.store_token("server2", TokenData(
-                access_token="test",
-                expires_at=time.time() + 3600,
-            ))
+            store.store_token(
+                "server2",
+                TokenData(
+                    access_token="test",
+                    expires_at=time.time() + 3600,
+                ),
+            )
             assert manager.needs_refresh("server2") is False
         os.unlink(f.name)
 

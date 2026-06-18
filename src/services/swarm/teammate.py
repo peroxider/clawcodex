@@ -3,6 +3,7 @@
 Mirrors TypeScript swarm/teammate.ts — manages the lifecycle of teammate
 processes including creation, monitoring, and termination.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ class TeammateStatus(str, Enum):
     so legacy callers don't break — the alias goes away in a follow-
     up sweep.
     """
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -38,6 +40,7 @@ class TeammateStatus(str, Enum):
 @dataclass
 class TeammateConfig:
     """Configuration for spawning a teammate."""
+
     prompt: str
     model: str = "claude-sonnet-4-6"
     cwd: str = ""
@@ -49,6 +52,7 @@ class TeammateConfig:
 @dataclass
 class Teammate:
     """A running or completed teammate instance."""
+
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     config: TeammateConfig = field(default_factory=lambda: TeammateConfig(prompt=""))
     status: TeammateStatus = TeammateStatus.PENDING
@@ -87,9 +91,7 @@ class TeammateManager:
     def spawn(self, config: TeammateConfig) -> Teammate:
         """Create and register a new teammate."""
         if self.active_count >= self._max_concurrent:
-            raise RuntimeError(
-                f"Max concurrent teammates ({self._max_concurrent}) reached"
-            )
+            raise RuntimeError(f"Max concurrent teammates ({self._max_concurrent}) reached")
         teammate = Teammate(config=config, status=TeammateStatus.RUNNING)
         self._teammates[teammate.id] = teammate
         logger.info("Spawned teammate %s with prompt: %s", teammate.id, config.prompt[:50])

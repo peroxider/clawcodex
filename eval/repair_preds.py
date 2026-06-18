@@ -8,6 +8,7 @@ fixes the bookkeeping deterministically.
 Usage:
     python eval/repair_preds.py <predictions.jsonl>
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,9 @@ def repair(path: Path) -> None:
 
     out_lines = [json.dumps(r, ensure_ascii=False) for r in rows]
     path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
-    print(f"  repaired {path}: changed {changes}/{len(rows)} rows; rescued {rescued} from empty/invalid")
+    print(
+        f"  repaired {path}: changed {changes}/{len(rows)} rows; rescued {rescued} from empty/invalid"
+    )
 
 
 if __name__ == "__main__":

@@ -111,7 +111,9 @@ class TestEnvVisibleToSubprocess:
             command='printf "DIR=%s" "$CLAUDE_PROJECT_DIR"',
         )
         result = await _execute_command_hook(
-            hook, {"hook_event": "PreToolUse"}, tool_use_context=ctx,
+            hook,
+            {"hook_event": "PreToolUse"},
+            tool_use_context=ctx,
         )
         assert result.exit_code == 0
         assert "DIR=/expected/path" in (result.stdout or "")
@@ -125,7 +127,9 @@ class TestEnvVisibleToSubprocess:
             skill_root="/path/to/skill",
         )
         result = await _execute_command_hook(
-            hook, {"hook_event": "PreToolUse"}, tool_use_context=ctx,
+            hook,
+            {"hook_event": "PreToolUse"},
+            tool_use_context=ctx,
         )
         assert result.exit_code == 0
         assert "ROOT=/path/to/skill" in (result.stdout or "")
@@ -138,7 +142,9 @@ class TestEnvVisibleToSubprocess:
             command='printf "FILE=%s" "$CLAUDE_ENV_FILE"',
         )
         result = await _execute_command_hook(
-            hook, {"hook_event": "SessionStart"}, tool_use_context=ctx,
+            hook,
+            {"hook_event": "SessionStart"},
+            tool_use_context=ctx,
         )
         assert result.exit_code == 0
         assert "hook-env" in (result.stdout or "")

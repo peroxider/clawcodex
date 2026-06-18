@@ -229,9 +229,7 @@ class TestParsePyvenvHome(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "pyvenv.cfg"
             p.write_text(
-                "home = /usr/local/bin\n"
-                "include-system-site-packages = false\n"
-                "version = 3.11.7\n",
+                "home = /usr/local/bin\ninclude-system-site-packages = false\nversion = 3.11.7\n",
                 encoding="utf-8",
             )
             self.assertEqual(_parse_pyvenv_home(p), "/usr/local/bin")
@@ -252,11 +250,7 @@ class TestParseCondaEnvName(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "environment.yml"
             p.write_text(
-                "name: myenv\n"
-                "channels:\n"
-                "  - defaults\n"
-                "dependencies:\n"
-                "  - python=3.11\n",
+                "name: myenv\nchannels:\n  - defaults\ndependencies:\n  - python=3.11\n",
                 encoding="utf-8",
             )
             self.assertEqual(_parse_conda_env_name(p), "myenv")
@@ -272,7 +266,9 @@ class TestDetectPythonInWorkspace(unittest.TestCase):
     """``_detect_python_in_workspace`` probe logic."""
 
     def test_nonexistent_workspace_returns_empty(self) -> None:
-        self.assertEqual(_detect_python_in_workspace(Path("/no/such/path"), [".python-version"]), "")
+        self.assertEqual(
+            _detect_python_in_workspace(Path("/no/such/path"), [".python-version"]), ""
+        )
 
     def test_none_workspace_returns_empty(self) -> None:
         self.assertEqual(_detect_python_in_workspace(None, [".python-version"]), "")
@@ -289,9 +285,7 @@ class TestDetectPythonInWorkspace(unittest.TestCase):
             py.write_text("#!/bin/sh\n", encoding="utf-8")
             (ws / "pyvenv.cfg").write_text(f"home = {venv_home}\n", encoding="utf-8")
             (ws / ".python-version").write_text("3.11.7\n", encoding="utf-8")
-            result = _detect_python_in_workspace(
-                ws, [".python-version", "pyvenv.cfg"]
-            )
+            result = _detect_python_in_workspace(ws, [".python-version", "pyvenv.cfg"])
             self.assertEqual(result, str(py))
 
     def test_pyenv_python_version_resolves(self) -> None:
@@ -356,12 +350,8 @@ class TestDetectPythonInWorkspace(unittest.TestCase):
         interpreter path (it has no direct ``bin/python3`` link)."""
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            (ws / "Pipfile").write_text(
-                '[packages]\nrequests = "*"\n', encoding="utf-8"
-            )
-            self.assertEqual(
-                _detect_python_in_workspace(ws, ["Pipfile"]), ""
-            )
+            (ws / "Pipfile").write_text('[packages]\nrequests = "*"\n', encoding="utf-8")
+            self.assertEqual(_detect_python_in_workspace(ws, ["Pipfile"]), "")
 
     def test_no_signals_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as d:
@@ -571,22 +561,14 @@ class TestLocalTrackerFrontmatterParse(unittest.TestCase):
                 encoding="utf-8",
             )
             doc = parse_markdown_issue(p)
-            self.assertEqual(
-                doc.issue.python_executable, "/opt/projX/.venv/bin/python"
-            )
+            self.assertEqual(doc.issue.python_executable, "/opt/projX/.venv/bin/python")
 
     def test_missing_frontmatter_field_yields_empty_string(self) -> None:
         """Backward compat: issues without the new field keep working."""
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "issue-7.md"
             p.write_text(
-                "---\n"
-                "id: 7\n"
-                "identifier: PROJ-7\n"
-                "title: Plain issue\n"
-                "state: open\n"
-                "---\n"
-                "Body.\n",
+                "---\nid: 7\nidentifier: PROJ-7\ntitle: Plain issue\nstate: open\n---\nBody.\n",
                 encoding="utf-8",
             )
             doc = parse_markdown_issue(p)
@@ -601,7 +583,7 @@ class TestLocalTrackerFrontmatterParse(unittest.TestCase):
                 "id: 9\n"
                 "identifier: PROJ-9\n"
                 "title: Empty override\n"
-                "python_executable: \"\"\n"
+                'python_executable: ""\n'
                 "---\n"
                 "Body.\n",
                 encoding="utf-8",

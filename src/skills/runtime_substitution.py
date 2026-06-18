@@ -220,8 +220,7 @@ def render_skill_prompt(
     if loaded_from == "mcp":
         if has_shell_blocks(content):
             logger.debug(
-                "skill %r is MCP-loaded; skipping inline shell execution "
-                "for %d blocks",
+                "skill %r is MCP-loaded; skipping inline shell execution for %d blocks",
                 slash_command_name,
                 len(find_shell_blocks(content)),
             )

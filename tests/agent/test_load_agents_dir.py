@@ -4,6 +4,7 @@ Mirrors the headline scenarios from
 typescript/src/tools/AgentTool/loadAgentsDir.test.ts plus the
 Python-specific cache + MCP filter behaviours.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,13 +31,7 @@ def _write_agent(
     frontmatter_parts = [f"name: {name}", f"description: {description}"]
     if extra_frontmatter:
         frontmatter_parts.append(extra_frontmatter)
-    content = (
-        "---\n"
-        + "\n".join(frontmatter_parts)
-        + "\n---\n"
-        + body
-        + "\n"
-    )
+    content = "---\n" + "\n".join(frontmatter_parts) + "\n---\n" + body + "\n"
     path.write_text(content, encoding="utf-8")
     return path
 

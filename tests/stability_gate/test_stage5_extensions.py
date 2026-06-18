@@ -375,11 +375,12 @@ class TestStage5ExtContextSystem:
         import pytest
         import importlib
         import sys
+
         # 安全地检查 git 是否已加载且来自 tests/ 目录
-        if 'git' in sys.modules:
-            git_mod = sys.modules['git']
-            git_file = getattr(git_mod, '__file__', '') or ''
-            if 'tests' in git_file and 'gitpython' not in git_file.lower():
+        if "git" in sys.modules:
+            git_mod = sys.modules["git"]
+            git_file = getattr(git_mod, "__file__", "") or ""
+            if "tests" in git_file and "gitpython" not in git_file.lower():
                 pass  # 可能被遮蔽 — 继续下面的 try
         try:
             import git  # noqa: F401
@@ -388,13 +389,15 @@ class TestStage5ExtContextSystem:
         # 防御性检查：如果 git 加载后没有 Repo 属性，说明被非 GitPython 的
         # 影子包覆盖了
         import git as _git_check
-        if not hasattr(_git_check, 'Repo'):
+
+        if not hasattr(_git_check, "Repo"):
             pytest.skip("PYTHONPATH 遮蔽：tests/ 下存在遮盖 GitPython 的目录")
         from clawcodex_ext.context_system._gitpython_adapter import (
             GitPythonProvider,
             GitContextSnapshot,
             is_gitpython_available,
         )
+
         assert GitPythonProvider is not None
         assert GitContextSnapshot is not None
         assert callable(is_gitpython_available)
@@ -454,9 +457,7 @@ class TestStage5Resilience:
         with tempfile.TemporaryDirectory() as tmpdir:
             bad_pkg = Path(tmpdir) / "bad_ext"
             bad_pkg.mkdir()
-            (bad_pkg / "__init__.py").write_text(
-                "this is not valid python =(", encoding="utf-8"
-            )
+            (bad_pkg / "__init__.py").write_text("this is not valid python =(", encoding="utf-8")
             sys.path.insert(0, tmpdir)
             try:
                 # 这应该抛 ImportError / SyntaxError 而不是 SystemExit
@@ -626,13 +627,9 @@ class TestStage5Telemetry:
         # Field-level: cwd / file_path keys get normalized to project
         # relative form (or path:<hash> when not under any project
         # root). Absolute paths in those fields must not survive.
-        redacted = redactor._redact_value(
-            "file_path", "/home/alice/secret.txt"
-        )
+        redacted = redactor._redact_value("file_path", "/home/alice/secret.txt")
         assert "/home/alice" not in str(redacted)
-        redacted_cwd = redactor._redact_value(
-            "cwd", "/home/alice/projects/secret"
-        )
+        redacted_cwd = redactor._redact_value("cwd", "/home/alice/projects/secret")
         assert "/home/alice" not in str(redacted_cwd)
 
     def test_telemetry_fingerprint_stable_across_runs(self):
@@ -697,23 +694,36 @@ class TestStage5ExtDreaming:
 
         for name in (
             # config
-            "DreamConfig", "DEFAULT_DREAM_CONFIG",
-            "get_dream_config", "set_dream_config", "is_auto_dream_enabled",
+            "DreamConfig",
+            "DEFAULT_DREAM_CONFIG",
+            "get_dream_config",
+            "set_dream_config",
+            "is_auto_dream_enabled",
             # paths
-            "get_auto_mem_entrypoint", "get_auto_mem_path",
-            "is_auto_memory_enabled", "is_kairos_active", "project_transcript_dir",
+            "get_auto_mem_entrypoint",
+            "get_auto_mem_path",
+            "is_auto_memory_enabled",
+            "is_kairos_active",
+            "project_transcript_dir",
             # lock
-            "HOLDER_STALE_MS", "LOCK_FILE_NAME",
-            "list_sessions_touched_since", "read_last_consolidated_at",
-            "record_consolidation", "rollback_consolidation_lock",
+            "HOLDER_STALE_MS",
+            "LOCK_FILE_NAME",
+            "list_sessions_touched_since",
+            "read_last_consolidated_at",
+            "record_consolidation",
+            "rollback_consolidation_lock",
             "try_acquire_consolidation_lock",
             # prompt
-            "DREAM_PROMPT_PREFIX", "build_consolidation_prompt",
+            "DREAM_PROMPT_PREFIX",
+            "build_consolidation_prompt",
             # runner
-            "DreamRunResult", "run_dream_consolidation",
+            "DreamRunResult",
+            "run_dream_consolidation",
             # service
-            "execute_auto_dream", "init_auto_dream",
-            "kill_dream_task", "manual_dream",
+            "execute_auto_dream",
+            "init_auto_dream",
+            "kill_dream_task",
+            "manual_dream",
         ):
             assert hasattr(dreaming_mod, name), f"dreaming missing {name!r}"
 
@@ -808,4 +818,3 @@ class TestStage5ExtDreaming:
         assert callable(execute_auto_dream)
         assert callable(kill_dream_task)
         assert callable(manual_dream)
-

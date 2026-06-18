@@ -96,9 +96,7 @@ def test_re_declaring_same_owner_replaces_in_place(
 # ------------------------------------------------------------------
 
 
-def test_flush_emits_csi_sequence(
-    cursor: DeclaredCursor, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_flush_emits_csi_sequence(cursor: DeclaredCursor, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAWCODEX_DISABLE_DECLARED_CURSOR", raising=False)
     buf: list[str] = []
     cursor.set_writer(_capture_writer(buf))

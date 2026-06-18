@@ -60,4 +60,3 @@ class TaskManager:
     def list(self) -> list[ManagedTask]:
         with self._lock:
             return list(self._tasks.values())
-

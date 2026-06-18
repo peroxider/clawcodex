@@ -2,6 +2,7 @@
 
 Mirrors TypeScript analytics/sink.ts — pluggable destinations for analytics events.
 """
+
 from __future__ import annotations
 
 import json

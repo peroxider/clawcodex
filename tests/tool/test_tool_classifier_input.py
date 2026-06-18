@@ -22,6 +22,7 @@ TaskOutput are gated by the ``is_todo_v2_enabled`` feature flag. The
 test imports them directly (bypassing registry filtering) so the
 classifier-input assertion runs regardless of flag state.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -71,143 +72,204 @@ from src.tool_system.tools import (
 # classifier must see.
 TOOLS_TABLE: list[tuple[Tool, dict[str, Any], object, str]] = [
     # File / read-side
-    (ReadTool, {"file_path": "/tmp/example.py"},
-     lambda v: v == "/tmp/example.py",
-     "Read should return file_path verbatim"),
-
+    (
+        ReadTool,
+        {"file_path": "/tmp/example.py"},
+        lambda v: v == "/tmp/example.py",
+        "Read should return file_path verbatim",
+    ),
     # Web
-    (WebFetchTool, {"url": "https://example.com", "prompt": "summarize page"},
-     lambda v: "https://example.com" in v and "summarize page" in v,
-     "WebFetch should include both url and prompt when prompt is set"),
-    (WebFetchTool, {"url": "https://example.com"},
-     lambda v: v == "https://example.com",
-     "WebFetch should fall back to url-only when prompt is absent"),
-    (WebSearchTool, {"query": "anthropic api docs"},
-     lambda v: v == "anthropic api docs",
-     "WebSearch should return the query verbatim"),
-
+    (
+        WebFetchTool,
+        {"url": "https://example.com", "prompt": "summarize page"},
+        lambda v: "https://example.com" in v and "summarize page" in v,
+        "WebFetch should include both url and prompt when prompt is set",
+    ),
+    (
+        WebFetchTool,
+        {"url": "https://example.com"},
+        lambda v: v == "https://example.com",
+        "WebFetch should fall back to url-only when prompt is absent",
+    ),
+    (
+        WebSearchTool,
+        {"query": "anthropic api docs"},
+        lambda v: v == "anthropic api docs",
+        "WebSearch should return the query verbatim",
+    ),
     # Interactive
-    (AskUserQuestionTool, {"questions": [{"question": "Are you sure?"}, {"question": "Why?"}]},
-     lambda v: "Are you sure?" in v and "Why?" in v,
-     "AskUserQuestion should join question text"),
-    (AskUserQuestionTool, {"questions": ["just a string"]},
-     lambda v: "just a string" in v,
-     "AskUserQuestion should tolerate plain string entries"),
-
+    (
+        AskUserQuestionTool,
+        {"questions": [{"question": "Are you sure?"}, {"question": "Why?"}]},
+        lambda v: "Are you sure?" in v and "Why?" in v,
+        "AskUserQuestion should join question text",
+    ),
+    (
+        AskUserQuestionTool,
+        {"questions": ["just a string"]},
+        lambda v: "just a string" in v,
+        "AskUserQuestion should tolerate plain string entries",
+    ),
     # Todo / Task
-    (TodoWriteTool, {"todos": [{"content": "a"}, {"content": "b"}]},
-     lambda v: v == "2 items",
-     "TodoWrite should report count, not contents"),
-    (TaskCreateTool, {"subject": "Fix auth bug", "description": "..."},
-     lambda v: v == "Fix auth bug",
-     "TaskCreate should return subject"),
-    (TaskGetTool, {"taskId": "T123"},
-     lambda v: v == "T123",
-     "TaskGet should return taskId"),
-    (TaskUpdateTool, {"taskId": "T1", "status": "in_progress", "subject": "Updated"},
-     lambda v: "T1" in v and "in_progress" in v and "Updated" in v,
-     "TaskUpdate should join taskId + status + subject"),
-    (TaskOutputTool, {"task_id": "T123"},
-     lambda v: v == "T123",
-     "TaskOutput should return task_id"),
-    (TaskStopTool, {"task_id": "T123"},
-     lambda v: v == "T123",
-     "TaskStop should prefer task_id"),
-    (TaskStopTool, {"shell_id": "S456"},
-     lambda v: v == "S456",
-     "TaskStop should fall back to shell_id (KillShell compat)"),
-    (TaskListTool, {},
-     lambda v: v == "",
-     "TaskList has no input; default empty string is correct"),
-
+    (
+        TodoWriteTool,
+        {"todos": [{"content": "a"}, {"content": "b"}]},
+        lambda v: v == "2 items",
+        "TodoWrite should report count, not contents",
+    ),
+    (
+        TaskCreateTool,
+        {"subject": "Fix auth bug", "description": "..."},
+        lambda v: v == "Fix auth bug",
+        "TaskCreate should return subject",
+    ),
+    (TaskGetTool, {"taskId": "T123"}, lambda v: v == "T123", "TaskGet should return taskId"),
+    (
+        TaskUpdateTool,
+        {"taskId": "T1", "status": "in_progress", "subject": "Updated"},
+        lambda v: "T1" in v and "in_progress" in v and "Updated" in v,
+        "TaskUpdate should join taskId + status + subject",
+    ),
+    (
+        TaskOutputTool,
+        {"task_id": "T123"},
+        lambda v: v == "T123",
+        "TaskOutput should return task_id",
+    ),
+    (TaskStopTool, {"task_id": "T123"}, lambda v: v == "T123", "TaskStop should prefer task_id"),
+    (
+        TaskStopTool,
+        {"shell_id": "S456"},
+        lambda v: v == "S456",
+        "TaskStop should fall back to shell_id (KillShell compat)",
+    ),
+    (TaskListTool, {}, lambda v: v == "", "TaskList has no input; default empty string is correct"),
     # Worktree / Plan
-    (EnterWorktreeTool, {"name": "wt-feature"},
-     lambda v: v == "wt-feature",
-     "EnterWorktree should return name"),
-    (ExitWorktreeTool, {},
-     lambda v: v == "",
-     "ExitWorktree default when action absent"),
-    (ExitPlanModeTool, {"plan": "step 1\nstep 2"},
-     lambda v: v.startswith("step 1"),
-     "ExitPlanMode should surface plan prefix"),
-    (EnterPlanModeTool, {},
-     lambda v: v == "",
-     "EnterPlanMode default (no input)"),
-
+    (
+        EnterWorktreeTool,
+        {"name": "wt-feature"},
+        lambda v: v == "wt-feature",
+        "EnterWorktree should return name",
+    ),
+    (ExitWorktreeTool, {}, lambda v: v == "", "ExitWorktree default when action absent"),
+    (
+        ExitPlanModeTool,
+        {"plan": "step 1\nstep 2"},
+        lambda v: v.startswith("step 1"),
+        "ExitPlanMode should surface plan prefix",
+    ),
+    (EnterPlanModeTool, {}, lambda v: v == "", "EnterPlanMode default (no input)"),
     # Cron
-    (CronCreateTool, {"cron": "0 * * * *", "prompt": "summarize logs"},
-     lambda v: "0 * * * *" in v and "summarize logs" in v,
-     "CronCreate should include schedule and prompt"),
-    (CronDeleteTool, {"id": "cron-abc"},
-     lambda v: v == "cron-abc",
-     "CronDelete should return id"),
-    (CronListTool, {},
-     lambda v: v == "",
-     "CronList has no input; default empty string is correct"),
-
+    (
+        CronCreateTool,
+        {"cron": "0 * * * *", "prompt": "summarize logs"},
+        lambda v: "0 * * * *" in v and "summarize logs" in v,
+        "CronCreate should include schedule and prompt",
+    ),
+    (CronDeleteTool, {"id": "cron-abc"}, lambda v: v == "cron-abc", "CronDelete should return id"),
+    (CronListTool, {}, lambda v: v == "", "CronList has no input; default empty string is correct"),
     # MCP
-    (ListMcpResourcesTool, {"server": "fileserver"},
-     lambda v: v == "fileserver",
-     "ListMcpResources should return server"),
-    (ReadMcpResourceTool, {"server": "fs", "uri": "file:///tmp/a"},
-     lambda v: "fs" in v and "file:///tmp/a" in v,
-     "ReadMcpResource should include server and uri"),
-    (MCPTool, {"server": "s1", "tool": "echo"},
-     lambda v: "s1" in v and "echo" in v,
-     "MCP should include server and tool"),
-
+    (
+        ListMcpResourcesTool,
+        {"server": "fileserver"},
+        lambda v: v == "fileserver",
+        "ListMcpResources should return server",
+    ),
+    (
+        ReadMcpResourceTool,
+        {"server": "fs", "uri": "file:///tmp/a"},
+        lambda v: "fs" in v and "file:///tmp/a" in v,
+        "ReadMcpResource should include server and uri",
+    ),
+    (
+        MCPTool,
+        {"server": "s1", "tool": "echo"},
+        lambda v: "s1" in v and "echo" in v,
+        "MCP should include server and tool",
+    ),
     # Config / Team / Brief
-    (ConfigTool, {"setting": "default_provider"},
-     lambda v: v == "default_provider",
-     "Config read should return setting key alone"),
-    (ConfigTool, {"setting": "default_provider", "value": "anthropic"},
-     lambda v: v == "default_provider = anthropic",
-     "Config write should return setting = value"),
-    (BriefTool, {"text": "deploy is done"},
-     lambda v: v == "deploy is done",
-     "Brief should return message body"),
-    (TeamCreateTool, {"team_name": "platform"},
-     lambda v: v == "platform",
-     "TeamCreate should return team_name"),
-    (TeamDeleteTool, {},
-     lambda v: v == "",
-     "TeamDelete has no input; default empty string is correct"),
-
+    (
+        ConfigTool,
+        {"setting": "default_provider"},
+        lambda v: v == "default_provider",
+        "Config read should return setting key alone",
+    ),
+    (
+        ConfigTool,
+        {"setting": "default_provider", "value": "anthropic"},
+        lambda v: v == "default_provider = anthropic",
+        "Config write should return setting = value",
+    ),
+    (
+        BriefTool,
+        {"text": "deploy is done"},
+        lambda v: v == "deploy is done",
+        "Brief should return message body",
+    ),
+    (
+        TeamCreateTool,
+        {"team_name": "platform"},
+        lambda v: v == "platform",
+        "TeamCreate should return team_name",
+    ),
+    (
+        TeamDeleteTool,
+        {},
+        lambda v: v == "",
+        "TeamDelete has no input; default empty string is correct",
+    ),
     # Messaging
-    (SendMessageTool, {"to": "alice", "message": "hello"},
-     lambda v: v == "to alice: hello",
-     "SendMessage plain text → 'to <to>: <message>'"),
-    (SendMessageTool, {"to": "bob", "message": {"type": "shutdown_request"}},
-     lambda v: v == "to bob: <shutdown_request>",
-     "SendMessage structured envelope → 'to <to>: <type>'"),
-    (SendUserMessageTool, {"message": "deployment done", "status": "normal"},
-     lambda v: v == "deployment done",
-     "SendUserMessage should return message body"),
-
+    (
+        SendMessageTool,
+        {"to": "alice", "message": "hello"},
+        lambda v: v == "to alice: hello",
+        "SendMessage plain text → 'to <to>: <message>'",
+    ),
+    (
+        SendMessageTool,
+        {"to": "bob", "message": {"type": "shutdown_request"}},
+        lambda v: v == "to bob: <shutdown_request>",
+        "SendMessage structured envelope → 'to <to>: <type>'",
+    ),
+    (
+        SendUserMessageTool,
+        {"message": "deployment done", "status": "normal"},
+        lambda v: v == "deployment done",
+        "SendUserMessage should return message body",
+    ),
     # Misc
-    (LSPTool, {"method": "textDocument/hover"},
-     lambda v: v == "textDocument/hover",
-     "LSP should return method"),
-    (SleepTool, {"seconds": 5},
-     lambda v: "5" in v,
-     "Sleep should surface the duration"),
-    (StructuredOutputTool, {"foo": "bar"},
-     lambda v: v == "",
-     "StructuredOutput has no security-relevant input shape; default empty is correct"),
-    (StatusTool, {},
-     lambda v: v == "",
-     "Status takes no input; default empty is correct"),
-    (ClipboardReadTool, {},
-     lambda v: v == "",
-     "ClipboardRead takes no input; default empty is correct"),
-    (ClipboardWriteTool, {"content": "hello"},
-     lambda v: v == "",
-     "ClipboardWrite default (kept until a TS counterpart appears)"),
+    (
+        LSPTool,
+        {"method": "textDocument/hover"},
+        lambda v: v == "textDocument/hover",
+        "LSP should return method",
+    ),
+    (SleepTool, {"seconds": 5}, lambda v: "5" in v, "Sleep should surface the duration"),
+    (
+        StructuredOutputTool,
+        {"foo": "bar"},
+        lambda v: v == "",
+        "StructuredOutput has no security-relevant input shape; default empty is correct",
+    ),
+    (StatusTool, {}, lambda v: v == "", "Status takes no input; default empty is correct"),
+    (
+        ClipboardReadTool,
+        {},
+        lambda v: v == "",
+        "ClipboardRead takes no input; default empty is correct",
+    ),
+    (
+        ClipboardWriteTool,
+        {"content": "hello"},
+        lambda v: v == "",
+        "ClipboardWrite default (kept until a TS counterpart appears)",
+    ),
 ]
 
 
 def _noop_call(tool_input: dict[str, Any], context: Any) -> Any:  # pragma: no cover
     from src.tool_system.protocol import ToolResult
+
     return ToolResult(name="Noop", output={})
 
 
@@ -218,11 +280,12 @@ class TestToAutoClassifierInputParity(unittest.TestCase):
         for tool, sample, predicate, description in TOOLS_TABLE:
             with self.subTest(tool=tool.name, description=description):
                 value = tool.to_auto_classifier_input(sample)
-                self.assertIsInstance(value, str, f"{tool.name}: result must be str (got {type(value).__name__})")
+                self.assertIsInstance(
+                    value, str, f"{tool.name}: result must be str (got {type(value).__name__})"
+                )
                 self.assertTrue(
                     predicate(value),
-                    f"{tool.name} ({description}): unexpected classifier "
-                    f"input. Got: {value!r}",
+                    f"{tool.name} ({description}): unexpected classifier input. Got: {value!r}",
                 )
 
     def test_default_is_empty_string(self) -> None:
@@ -248,15 +311,40 @@ class TestToolsWithTSCounterpartHaveOverride(unittest.TestCase):
     """
 
     EXPECTED_OVERRIDES = {
-        "Read", "WebFetch", "WebSearch", "AskUserQuestion",
-        "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate",
-        "TaskOutput", "TaskStop", "EnterWorktree", "ExitWorktree",
-        "ExitPlanMode", "CronCreate", "CronDelete",
-        "ListMcpResourcesTool", "ReadMcpResourceTool", "MCP",
-        "Config", "Brief", "TeamCreate", "SendMessage",
-        "SendUserMessage", "LSP", "Sleep", "ToolSearch",
-        "Edit", "Write", "Grep", "Glob", "NotebookEdit", "Bash",
-        "Skill", "Agent",
+        "Read",
+        "WebFetch",
+        "WebSearch",
+        "AskUserQuestion",
+        "TodoWrite",
+        "TaskCreate",
+        "TaskGet",
+        "TaskUpdate",
+        "TaskOutput",
+        "TaskStop",
+        "EnterWorktree",
+        "ExitWorktree",
+        "ExitPlanMode",
+        "CronCreate",
+        "CronDelete",
+        "ListMcpResourcesTool",
+        "ReadMcpResourceTool",
+        "MCP",
+        "Config",
+        "Brief",
+        "TeamCreate",
+        "SendMessage",
+        "SendUserMessage",
+        "LSP",
+        "Sleep",
+        "ToolSearch",
+        "Edit",
+        "Write",
+        "Grep",
+        "Glob",
+        "NotebookEdit",
+        "Bash",
+        "Skill",
+        "Agent",
     }
 
     def test_each_expected_tool_overrides_classifier_input(self) -> None:
@@ -275,6 +363,7 @@ class TestToolsWithTSCounterpartHaveOverride(unittest.TestCase):
         from src.tool_system.registry import ToolRegistry
         from src.tool_system.tools.tool_search import make_tool_search_tool
         from src.tool_system.tools.agent import make_agent_tool
+
         registry = ToolRegistry()
         for t in ALL_STATIC_TOOLS:
             registry.register(t)
@@ -336,11 +425,13 @@ class TestToolsWithTSCounterpartHaveOverride(unittest.TestCase):
                 empty_outputs.append((name, value))
 
         self.assertEqual(
-            missing, [],
+            missing,
+            [],
             f"Expected tools not in registry: {missing}",
         )
         self.assertEqual(
-            empty_outputs, [],
+            empty_outputs,
+            [],
             "These tools should override to_auto_classifier_input but "
             f"returned empty/falsy: {empty_outputs}",
         )

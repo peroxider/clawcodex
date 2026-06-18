@@ -18,9 +18,7 @@ REDIRECT_OPS = frozenset({">", ">>", "<", "<<", ">&", ">|", "<&", "&>", "&>>", "
 
 OPERATORS = ("&&", "||", ";;", ";", "&", "|&", "|")
 
-_OPERATOR_RE = re.compile(
-    r"(&&|\|\||;;|;|&|\|&|\|)"
-)
+_OPERATOR_RE = re.compile(r"(&&|\|\||;;|;|&|\|&|\|)")
 
 
 @dataclass
@@ -88,7 +86,7 @@ def _tokenize(command: str) -> list[str]:
             end = command.find("'", i + 1)
             if end == -1:
                 raise ValueError("unterminated single quote")
-            current += command[i + 1:end]
+            current += command[i + 1 : end]
             i = end + 1
             continue
 
@@ -132,7 +130,7 @@ def _tokenize(command: str) -> list[str]:
             continue
 
         for op in OPERATORS:
-            if command[i:i + len(op)] == op:
+            if command[i : i + len(op)] == op:
                 if current:
                     result.append(current)
                     current = ""
@@ -168,12 +166,12 @@ def _tokenize(command: str) -> list[str]:
                     result.append(current)
                     current = ""
                 if i + 1 < n:
-                    two = command[i:i + 2]
+                    two = command[i : i + 2]
                     if two in (">>", "<<", ">&", "<&", ">|"):
                         result.append(two)
                         i += 2
                         continue
-                    three = command[i:i + 3]
+                    three = command[i : i + 3]
                     if three in ("&>>", "&>", "<<<"):
                         result.append(three)
                         i += 3
@@ -246,7 +244,7 @@ def _parse_simple_command(tokens: list[str]) -> SimpleCommand | None:
             eq_pos = tok.index("=")
             name = tok[:eq_pos]
             if name.isidentifier():
-                env_vars[name] = tok[eq_pos + 1:]
+                env_vars[name] = tok[eq_pos + 1 :]
                 i += 1
                 continue
 

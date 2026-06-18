@@ -102,9 +102,9 @@ def get_transport_for_url(
         # and avoid httpx.URL.copy_with(path=) URL-encoding edge cases.
         sse_url_str = url_str
         if sse_url_str.startswith("wss://"):
-            sse_url_str = "https://" + sse_url_str[len("wss://"):]
+            sse_url_str = "https://" + sse_url_str[len("wss://") :]
         elif sse_url_str.startswith("ws://"):
-            sse_url_str = "http://" + sse_url_str[len("ws://"):]
+            sse_url_str = "http://" + sse_url_str[len("ws://") :]
         sse_url_str = sse_url_str.rstrip("/") + "/worker/events/stream"
         # SSETransport's auth-refresh callback is named `get_auth_headers`
         # (not `refresh_headers`). The factory adapts; renaming the

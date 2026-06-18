@@ -3,6 +3,7 @@
 Mirrors TypeScript ide/connection.ts — manages the lifecycle of IDE connections
 including connect, disconnect, and request/notification handling.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PendingRequest:
     """A pending JSON-RPC request awaiting a response."""
+
     id: int
     method: str
     future: asyncio.Future[Any]

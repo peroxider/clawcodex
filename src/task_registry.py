@@ -25,6 +25,7 @@ A future iteration may relax to fine-grained per-entry locking if profiling
 shows contention, but for now the single lock is adequate (gap analysis
 predicted tens of writes/sec at peak) and simpler to reason about.
 """
+
 from __future__ import annotations
 
 import inspect

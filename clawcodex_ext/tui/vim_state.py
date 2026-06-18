@@ -196,9 +196,7 @@ class TransitionContext:
 
 _OPERATOR_KEYS: dict[str, Operator] = {"d": "delete", "c": "change", "y": "yank"}
 _FIND_KEYS = frozenset({"f", "F", "t", "T"})
-_SIMPLE_MOTIONS = frozenset(
-    {"h", "j", "k", "l", "0", "^", "$", "w", "b", "e", "W", "B", "E"}
-)
+_SIMPLE_MOTIONS = frozenset({"h", "j", "k", "l", "0", "^", "$", "w", "b", "e", "W", "B", "E"})
 _TEXT_OBJ_SCOPES: dict[str, TextObjScope] = {"i": "inner", "a": "around"}
 
 
@@ -209,9 +207,7 @@ def _clamp_count(value: int) -> int:
 # ---- Top-level dispatch ---------------------------------------------------
 
 
-def transition(
-    state: CommandState, key: str, ctx: TransitionContext
-) -> TransitionResult:
+def transition(state: CommandState, key: str, ctx: TransitionContext) -> TransitionResult:
     """Dispatch ``(state, key)`` → ``TransitionResult``. Pure.
 
     Adding a 12th variant in the future trips the ``assert_never`` guard
@@ -305,9 +301,7 @@ def _from_idle(key: str, ctx: TransitionContext) -> TransitionResult:
             flipped: FindType = {"f": "F", "F": "f", "t": "T", "T": "t"}[find_type]
             find_type = flipped
         return TransitionResult(
-            execute=_find_executor(
-                ctx, find_type, char, count=1, update_last_find=False
-            )
+            execute=_find_executor(ctx, find_type, char, count=1, update_last_find=False)
         )
 
     # Immediate single-key commands.
@@ -320,9 +314,7 @@ def _from_idle(key: str, ctx: TransitionContext) -> TransitionResult:
     return TransitionResult()
 
 
-def _from_count(
-    digits: str, key: str, ctx: TransitionContext
-) -> TransitionResult:
+def _from_count(digits: str, key: str, ctx: TransitionContext) -> TransitionResult:
     """``CountState`` accumulates digits, then transitions on operator/motion."""
 
     if key.isdigit():
@@ -335,9 +327,7 @@ def _from_count(
     count = _clamp_count(int(digits))
 
     if key in _OPERATOR_KEYS:
-        return TransitionResult(
-            next=OperatorState(op=_OPERATOR_KEYS[key], count=count)
-        )
+        return TransitionResult(next=OperatorState(op=_OPERATOR_KEYS[key], count=count))
 
     if key in _FIND_KEYS:
         return TransitionResult(next=FindState(find=key, count=count))  # type: ignore[arg-type]
@@ -367,9 +357,7 @@ def _from_count(
     return TransitionResult(next=IdleState())
 
 
-def _from_operator(
-    op: Operator, count: int, key: str, ctx: TransitionContext
-) -> TransitionResult:
+def _from_operator(op: Operator, count: int, key: str, ctx: TransitionContext) -> TransitionResult:
     """``OperatorState`` waits for a motion, text-object, find, or self-repeat."""
 
     # Self-repeat (``dd`` / ``cc`` / ``yy``).
@@ -381,16 +369,12 @@ def _from_operator(
 
     # Count after operator → operatorCount.
     if key.isdigit() and key != "0":
-        return TransitionResult(
-            next=OperatorCountState(op=op, count=count, digits=key)
-        )
+        return TransitionResult(next=OperatorCountState(op=op, count=count, digits=key))
 
     # Text object scope.
     if key in _TEXT_OBJ_SCOPES:
         return TransitionResult(
-            next=OperatorTextObjState(
-                op=op, count=count, scope=_TEXT_OBJ_SCOPES[key]
-            )
+            next=OperatorTextObjState(op=op, count=count, scope=_TEXT_OBJ_SCOPES[key])
         )
 
     # Find motion under operator.
@@ -426,9 +410,7 @@ def _from_operator_count(
         new_digits = digits + key
         if int(new_digits) > MAX_VIM_COUNT:
             new_digits = str(MAX_VIM_COUNT)
-        return TransitionResult(
-            next=OperatorCountState(op=op, count=count, digits=new_digits)
-        )
+        return TransitionResult(next=OperatorCountState(op=op, count=count, digits=new_digits))
 
     motion_count = _clamp_count(int(digits))
     effective = _clamp_count(count * motion_count)
@@ -446,9 +428,7 @@ def _from_operator_count(
 
     if key in _TEXT_OBJ_SCOPES:
         return TransitionResult(
-            next=OperatorTextObjState(
-                op=op, count=effective, scope=_TEXT_OBJ_SCOPES[key]
-            )
+            next=OperatorTextObjState(op=op, count=effective, scope=_TEXT_OBJ_SCOPES[key])
         )
 
     return TransitionResult(next=IdleState())
@@ -474,9 +454,7 @@ def _from_operator_text_obj(
     obj_type = key
     return TransitionResult(
         next=IdleState(),
-        execute=_operator_text_obj_executor(
-            ctx, op, obj_type, scope, count=count
-        ),
+        execute=_operator_text_obj_executor(ctx, op, obj_type, scope, count=count),
     )
 
 
@@ -521,9 +499,7 @@ def _from_operator_g(
     return TransitionResult(next=IdleState())
 
 
-def _from_replace(
-    count: int, key: str, ctx: TransitionContext
-) -> TransitionResult:
+def _from_replace(count: int, key: str, ctx: TransitionContext) -> TransitionResult:
     """``ReplaceState`` — next key is the replacement character."""
 
     char = key
@@ -553,9 +529,7 @@ def _from_indent(
 # effectful buffer surface.
 
 
-def _motion_executor(
-    ctx: TransitionContext, motion: str, *, count: int
-) -> Callable[[], None]:
+def _motion_executor(ctx: TransitionContext, motion: str, *, count: int) -> Callable[[], None]:
     """Cursor-positioning motion executor.
 
     Distinct from operator-motion: a standalone motion lands the cursor
@@ -624,9 +598,7 @@ def _x_executor(ctx: TransitionContext, *, count: int) -> Callable[[], None]:
     return go
 
 
-def _toggle_case_executor(
-    ctx: TransitionContext, *, count: int
-) -> Callable[[], None]:
+def _toggle_case_executor(ctx: TransitionContext, *, count: int) -> Callable[[], None]:
     def go() -> None:
         from .vim_buffer import Cursor, VimBuffer
         from .vim_persistent import ToggleCaseChange
@@ -639,9 +611,7 @@ def _toggle_case_executor(
         end_col = min(cur.col + count, len(line))
         if end_col == cur.col:
             return
-        toggled = "".join(
-            c.upper() if c.islower() else c.lower() for c in line[cur.col:end_col]
-        )
+        toggled = "".join(c.upper() if c.islower() else c.lower() for c in line[cur.col : end_col])
         new_line = line[: cur.col] + toggled + line[end_col:]
         lines = list(buf.lines)
         lines[cur.row] = new_line
@@ -652,9 +622,7 @@ def _toggle_case_executor(
     return go
 
 
-def _line_op_executor(
-    ctx: TransitionContext, op: Operator, *, count: int
-) -> Callable[[], None]:
+def _line_op_executor(ctx: TransitionContext, op: Operator, *, count: int) -> Callable[[], None]:
     """``dd`` / ``yy`` / ``cc`` — line-wise op.
 
     Spans the deletion to also remove the inter-line newline so we don't
@@ -693,9 +661,7 @@ def _line_op_executor(
             ctx.set_text(buf.text)
             ctx.set_cursor(buf.cursor)
         ctx.set_register(affected, True)
-        ctx.record_change(
-            OperatorChange(op=op, motion=_OPERATOR_KEYS_INV[op], count=count)
-        )
+        ctx.record_change(OperatorChange(op=op, motion=_OPERATOR_KEYS_INV[op], count=count))
 
     return go
 
@@ -776,9 +742,7 @@ def _operator_find_executor(
         ctx.set_text(buf.text)
         ctx.set_cursor(buf.cursor)
         ctx.set_register(register_list[0], False)
-        ctx.record_change(
-            OperatorFindChange(op=op, find=find_type, char=char, count=count)
-        )
+        ctx.record_change(OperatorFindChange(op=op, find=find_type, char=char, count=count))
 
     return go
 
@@ -810,11 +774,7 @@ def _operator_text_obj_executor(
         ctx.set_text(buf.text)
         ctx.set_cursor(buf.cursor)
         ctx.set_register(register_list[0], False)
-        ctx.record_change(
-            OperatorTextObjChange(
-                op=op, obj_type=obj_type, scope=scope, count=count
-            )
-        )
+        ctx.record_change(OperatorTextObjChange(op=op, obj_type=obj_type, scope=scope, count=count))
 
     return go
 
@@ -853,9 +813,7 @@ def _find_executor(
     return go
 
 
-def _replace_executor(
-    ctx: TransitionContext, char: str, *, count: int
-) -> Callable[[], None]:
+def _replace_executor(ctx: TransitionContext, char: str, *, count: int) -> Callable[[], None]:
     def go() -> None:
         from .vim_buffer import Cursor, VimBuffer
         from .vim_persistent import ReplaceChange

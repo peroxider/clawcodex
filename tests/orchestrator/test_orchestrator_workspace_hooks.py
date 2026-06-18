@@ -29,9 +29,7 @@ class _Tracker(TrackerAdapter):
     async def fetch_candidate_issues(self) -> list[Issue]:
         return []
 
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         return {}
 
     async def create_comment(self, issue_id: str, body: str) -> None:
@@ -48,16 +46,12 @@ class _HookWorkspaceManager(WorkspaceManager):
         self.fail_before = False
         self.fail_after = False
 
-    async def run_before_run_hook(
-        self, workspace: Workspace, issue: Issue
-    ) -> None:
+    async def run_before_run_hook(self, workspace: Workspace, issue: Issue) -> None:
         self.events.append("before_run")
         if self.fail_before:
             raise WorkspaceHookError("before failed")
 
-    async def run_after_run_hook(
-        self, workspace: Workspace, issue: Issue
-    ) -> None:
+    async def run_after_run_hook(self, workspace: Workspace, issue: Issue) -> None:
         self.events.append("after_run")
         if self.fail_after:
             raise WorkspaceHookError("after failed")

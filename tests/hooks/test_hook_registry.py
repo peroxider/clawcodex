@@ -119,9 +119,15 @@ class TestAsyncHookRegistry:
         # cannot be overridden" semantic is enforced by ``apply_policy_cascade``
         # (Phase 2 / WI-2.3), not by priority. The sort order below reflects
         # priority, not security precedence.
-        config_plugin = HookConfig(type="command", command="echo plugin", source=HookSource.PLUGIN_HOOK)
-        config_settings = HookConfig(type="command", command="echo settings", source=HookSource.USER_SETTINGS)
-        config_policy = HookConfig(type="command", command="echo policy", source=HookSource.POLICY_SETTINGS)
+        config_plugin = HookConfig(
+            type="command", command="echo plugin", source=HookSource.PLUGIN_HOOK
+        )
+        config_settings = HookConfig(
+            type="command", command="echo settings", source=HookSource.USER_SETTINGS
+        )
+        config_policy = HookConfig(
+            type="command", command="echo policy", source=HookSource.POLICY_SETTINGS
+        )
 
         await registry.register("PreToolUse", config_plugin, HookSource.PLUGIN_HOOK)
         await registry.register("PreToolUse", config_settings, HookSource.USER_SETTINGS)

@@ -8,7 +8,7 @@ from src.server.lockfile import LockfileBusyError, ServerLockfile
 
 
 def test_acquire_release(tmp_path):
-    p = tmp_path / 'server.lock'
+    p = tmp_path / "server.lock"
     lock = ServerLockfile(p)
     lock.acquire()
     lock.release()
@@ -18,7 +18,7 @@ def test_acquire_release(tmp_path):
 
 def test_double_acquire_raises_busy(tmp_path):
     """Two ServerLockfile instances on the same path can't both hold it."""
-    p = tmp_path / 'server.lock'
+    p = tmp_path / "server.lock"
     lock1 = ServerLockfile(p)
     lock2 = ServerLockfile(p)
 
@@ -31,7 +31,7 @@ def test_double_acquire_raises_busy(tmp_path):
 
 
 def test_lock_releasable_for_subsequent_acquire(tmp_path):
-    p = tmp_path / 'server.lock'
+    p = tmp_path / "server.lock"
     lock1 = ServerLockfile(p)
     lock1.acquire()
     lock1.release()
@@ -42,7 +42,7 @@ def test_lock_releasable_for_subsequent_acquire(tmp_path):
 
 
 def test_context_manager(tmp_path):
-    p = tmp_path / 'server.lock'
+    p = tmp_path / "server.lock"
     with ServerLockfile(p):
         # Inside the context, another lockfile is busy.
         other = ServerLockfile(p)

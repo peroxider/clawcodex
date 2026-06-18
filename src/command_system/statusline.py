@@ -10,6 +10,7 @@ today — faithfully matching TS, where the command also only emits naming text 
 relies on a separately-registered agent. Porting ``tools/AgentTool/built-in/
 statuslineSetup.ts`` is a deferred follow-up.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,9 +21,7 @@ from src.agent.constants import AGENT_TOOL_NAME
 from .types import CommandContext, PromptCommand
 
 # TS: args.trim() || 'Configure my statusLine from my shell PS1 configuration'
-_DEFAULT_STATUSLINE_INSTRUCTION = (
-    "Configure my statusLine from my shell PS1 configuration"
-)
+_DEFAULT_STATUSLINE_INSTRUCTION = "Configure my statusLine from my shell PS1 configuration"
 
 
 @dataclass(frozen=True)

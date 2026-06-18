@@ -54,13 +54,16 @@ class TestSessionStartDateMemoization(unittest.TestCase):
         # case starts with a fresh value rather than leaking the date
         # captured by an earlier test.
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         _get_session_start_date_iso.cache_clear()
 
     def test_returns_date_only_format(self):
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         result = _get_session_start_date_iso()
         # Strict date-only: YYYY-MM-DD, no hh:mm:ss, no timezone
         import re
+
         self.assertRegex(
             result,
             r"^\d{4}-\d{2}-\d{2}$",
@@ -70,6 +73,7 @@ class TestSessionStartDateMemoization(unittest.TestCase):
     def test_memoized_returns_same_value(self):
         """Two consecutive calls return the SAME string (frozen at first call)."""
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         first = _get_session_start_date_iso()
         # Even if the wall clock advances mid-test, the cached value must hold.
         second = _get_session_start_date_iso()
@@ -85,6 +89,7 @@ class TestSessionStartDateMemoization(unittest.TestCase):
         message block. The lru_cache lives at module level by design.
         """
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         before = _get_session_start_date_iso()
         clear_context_caches()
         after = _get_session_start_date_iso()
@@ -93,6 +98,7 @@ class TestSessionStartDateMemoization(unittest.TestCase):
     def test_get_user_context_uses_session_start_date(self):
         """get_user_context() must use the memoized date, not _get_local_iso_date."""
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         clear_context_caches()
         ctx_a = _run(get_user_context())
         # Force a re-fetch after clearing the dict cache (but lru_cache survives).
@@ -117,12 +123,14 @@ class TestSystemPromptBlocks(unittest.TestCase):
 
     def setUp(self):
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         # Fresh date-cache per test so every case starts identical.
         _get_session_start_date_iso.cache_clear()
         clear_context_caches()
 
     def test_returns_list_of_dicts(self):
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
         self.assertIsInstance(blocks, list)
         for blk in blocks:
@@ -137,6 +145,7 @@ class TestSystemPromptBlocks(unittest.TestCase):
         caching — the fix is gap-#1's centerpiece.
         """
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
         marked = [b for b in blocks if "cache_control" in b]
         self.assertGreaterEqual(len(marked), 1)
@@ -149,12 +158,12 @@ class TestSystemPromptBlocks(unittest.TestCase):
         """The ``__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`` marker is its own block."""
         from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
-        boundary_blocks = [
-            b for b in blocks if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-        ]
+        boundary_blocks = [b for b in blocks if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY]
         self.assertEqual(
-            len(boundary_blocks), 1,
+            len(boundary_blocks),
+            1,
             f"Expected exactly one boundary-marker block, got {len(boundary_blocks)}",
         )
         # Boundary block does NOT carry cache_control — it's just a literal.
@@ -163,6 +172,7 @@ class TestSystemPromptBlocks(unittest.TestCase):
     def test_at_most_four_cache_control_markers(self):
         """Anthropic API allows up to 4 cache_control markers per request."""
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
         marked = [b for b in blocks if "cache_control" in b]
         self.assertLessEqual(len(marked), 4)
@@ -178,6 +188,7 @@ class TestSystemPromptBlocks(unittest.TestCase):
         are they sufficient.
         """
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         first = build_full_system_prompt_blocks(cwd="/tmp")
         second = build_full_system_prompt_blocks(cwd="/tmp")
         self.assertEqual(first, second)
@@ -186,20 +197,22 @@ class TestSystemPromptBlocks(unittest.TestCase):
         """GLOBAL-scope sections must precede the dynamic boundary marker."""
         from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
         boundary_idx = next(
-            i for i, b in enumerate(blocks)
-            if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+            i for i, b in enumerate(blocks) if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
         )
         # At least the intro should be before the boundary.
         before_boundary = blocks[:boundary_idx]
         self.assertGreater(
-            len(before_boundary), 0,
+            len(before_boundary),
+            0,
             "Expected at least one GLOBAL block before the boundary marker",
         )
 
     def test_custom_prompt_branch_returns_single_block(self):
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(
             cwd="/tmp",
             custom_system_prompt="You are a custom assistant.",
@@ -217,12 +230,14 @@ class TestCacheTtlSelector(unittest.TestCase):
     def setUp(self):
         from src.context_system.prompt_assembly import _get_session_start_date_iso
         from src.state.cache_state import reset_for_test_only
+
         _get_session_start_date_iso.cache_clear()
         reset_for_test_only()
         clear_context_caches()
 
     def test_default_ttl_is_5m_when_eligibility_unevaluated(self):
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         blocks = build_full_system_prompt_blocks(cwd="/tmp")
         marked = [b for b in blocks if "cache_control" in b]
         self.assertGreater(len(marked), 0)
@@ -232,10 +247,14 @@ class TestCacheTtlSelector(unittest.TestCase):
     def test_5m_ttl_when_eligible_but_query_source_not_in_allowlist(self):
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.state.cache_state import (
-            evaluate_prompt_cache_1h_eligibility, get_beta_header_latches,
+            evaluate_prompt_cache_1h_eligibility,
+            get_beta_header_latches,
         )
+
         evaluate_prompt_cache_1h_eligibility(
-            is_ant_user=True, is_subscriber=False, is_using_overage=False,
+            is_ant_user=True,
+            is_subscriber=False,
+            is_using_overage=False,
         )
         # Allowlist intentionally excludes "main".
         get_beta_header_latches().prompt_cache_1h_allowlist = ["other_source"]
@@ -247,10 +266,14 @@ class TestCacheTtlSelector(unittest.TestCase):
     def test_1h_ttl_when_eligible_and_in_allowlist(self):
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.state.cache_state import (
-            evaluate_prompt_cache_1h_eligibility, get_beta_header_latches,
+            evaluate_prompt_cache_1h_eligibility,
+            get_beta_header_latches,
         )
+
         evaluate_prompt_cache_1h_eligibility(
-            is_ant_user=True, is_subscriber=False, is_using_overage=False,
+            is_ant_user=True,
+            is_subscriber=False,
+            is_using_overage=False,
         )
         get_beta_header_latches().prompt_cache_1h_allowlist = ["main"]
         blocks = build_full_system_prompt_blocks(cwd="/tmp", query_source="main")
@@ -268,10 +291,14 @@ class TestCacheTtlSelector(unittest.TestCase):
         """
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.state.cache_state import (
-            evaluate_prompt_cache_1h_eligibility, get_beta_header_latches,
+            evaluate_prompt_cache_1h_eligibility,
+            get_beta_header_latches,
         )
+
         evaluate_prompt_cache_1h_eligibility(
-            is_ant_user=True, is_subscriber=False, is_using_overage=False,
+            is_ant_user=True,
+            is_subscriber=False,
+            is_using_overage=False,
         )
         get_beta_header_latches().prompt_cache_1h_allowlist = ["main"]
         blocks = build_full_system_prompt_blocks(cwd="/tmp", query_source="main")
@@ -287,6 +314,7 @@ class TestGlobalScopeEmission(unittest.TestCase):
         import os
         from src.context_system.prompt_assembly import _get_session_start_date_iso
         from src.state.cache_state import reset_for_test_only
+
         _get_session_start_date_iso.cache_clear()
         reset_for_test_only()
         clear_context_caches()
@@ -294,19 +322,22 @@ class TestGlobalScopeEmission(unittest.TestCase):
 
     def tearDown(self):
         import os
+
         os.environ.pop("CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE", None)
 
     def test_no_scope_field_when_env_disabled(self):
         """Default-OFF env: no block carries scope='global'."""
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.providers.anthropic_provider import AnthropicProvider
+
         provider = AnthropicProvider(api_key="test")
         blocks = build_full_system_prompt_blocks(cwd="/tmp", provider=provider)
         marked = [b for b in blocks if "cache_control" in b]
         self.assertGreater(len(marked), 0)
         for blk in marked:
             self.assertNotIn(
-                "scope", blk["cache_control"],
+                "scope",
+                blk["cache_control"],
                 "Default OFF: no block should carry scope='global'",
             )
 
@@ -315,25 +346,27 @@ class TestGlobalScopeEmission(unittest.TestCase):
         import os
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.providers.anthropic_provider import AnthropicProvider
+
         os.environ["CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE"] = "1"
         provider = AnthropicProvider(api_key="test")
         blocks = build_full_system_prompt_blocks(cwd="/tmp", provider=provider)
 
         # Locate the boundary marker; everything before it is GLOBAL-tier.
         from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+
         boundary_idx = next(
-            i for i, b in enumerate(blocks)
-            if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+            i for i, b in enumerate(blocks) if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
         )
         global_blocks = blocks[:boundary_idx]
-        post_boundary = blocks[boundary_idx + 1:]
+        post_boundary = blocks[boundary_idx + 1 :]
 
         # GLOBAL-tier marker carries scope='global'.
         global_marked = [b for b in global_blocks if "cache_control" in b]
         self.assertGreater(len(global_marked), 0)
         for blk in global_marked:
             self.assertEqual(
-                blk["cache_control"].get("scope"), "global",
+                blk["cache_control"].get("scope"),
+                "global",
                 "GLOBAL-tier block must carry scope='global' when env is enabled",
             )
 
@@ -341,7 +374,8 @@ class TestGlobalScopeEmission(unittest.TestCase):
         post_marked = [b for b in post_boundary if "cache_control" in b]
         for blk in post_marked:
             self.assertNotIn(
-                "scope", blk["cache_control"],
+                "scope",
+                blk["cache_control"],
                 "Non-GLOBAL tier must not carry scope='global'",
             )
 
@@ -350,16 +384,20 @@ class TestGlobalScopeEmission(unittest.TestCase):
         import os
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
         from src.providers.anthropic_provider import AnthropicProvider
+
         os.environ["CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE"] = "1"
         provider = AnthropicProvider(api_key="test")
         # Stub MCP server marker — bool(mcp_servers) drives has_mcp_tools.
         blocks = build_full_system_prompt_blocks(
-            cwd="/tmp", provider=provider, mcp_servers=[object()],
+            cwd="/tmp",
+            provider=provider,
+            mcp_servers=[object()],
         )
         marked = [b for b in blocks if "cache_control" in b]
         for blk in marked:
             self.assertNotIn(
-                "scope", blk["cache_control"],
+                "scope",
+                blk["cache_control"],
                 "MCP-loaded session must not emit scope='global'",
             )
 
@@ -367,6 +405,7 @@ class TestGlobalScopeEmission(unittest.TestCase):
         """Engine path may pass provider=None for synthetic/test calls."""
         import os
         from src.context_system.prompt_assembly import build_full_system_prompt_blocks
+
         os.environ["CLAUDE_CODE_ENABLE_GLOBAL_CACHE_SCOPE"] = "1"
         blocks = build_full_system_prompt_blocks(cwd="/tmp", provider=None)
         marked = [b for b in blocks if "cache_control" in b]
@@ -379,6 +418,7 @@ class TestAppendSystemContextBlocks(unittest.TestCase):
 
     def test_appends_context_as_new_block(self):
         from src.context_system.prompt_assembly import append_system_context_blocks
+
         blocks = [
             {"type": "text", "text": "intro"},
             {"type": "text", "text": "system", "cache_control": {"type": "ephemeral"}},
@@ -398,6 +438,7 @@ class TestAppendSystemContextBlocks(unittest.TestCase):
 
     def test_empty_context_returns_original_blocks(self):
         from src.context_system.prompt_assembly import append_system_context_blocks
+
         blocks = [{"type": "text", "text": "x"}]
         result = append_system_context_blocks(blocks, {})
         self.assertEqual(result, blocks)
@@ -429,10 +470,13 @@ class TestAppendSystemContext(unittest.TestCase):
         self.assertEqual(result, "")
 
     def test_multiple_context_entries(self):
-        result = append_system_context("Base", {
-            "gitStatus": "clean",
-            "envInfo": "macOS",
-        })
+        result = append_system_context(
+            "Base",
+            {
+                "gitStatus": "clean",
+                "envInfo": "macOS",
+            },
+        )
         self.assertIn("gitStatus: clean", result)
         self.assertIn("envInfo: macOS", result)
 
@@ -460,10 +504,13 @@ class TestPrependUserContext(unittest.TestCase):
 
     def test_multiple_context_keys(self):
         msgs = [UserMessage(content="q")]
-        result = prepend_user_context(msgs, {
-            "claudeMd": "Rule 1",
-            "currentDate": "2025-01-01",
-        })
+        result = prepend_user_context(
+            msgs,
+            {
+                "claudeMd": "Rule 1",
+                "currentDate": "2025-01-01",
+            },
+        )
         first_content = result[0].content
         self.assertIn("claudeMd", first_content)
         self.assertIn("currentDate", first_content)
@@ -491,11 +538,14 @@ class TestGetUserContext(unittest.TestCase):
     def test_includes_claude_md_when_present(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "CLAUDE.md").write_text("Test rule", encoding="utf-8")
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-                "CLAUDE_CODE_BARE_MODE": "",
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                    "CLAUDE_CODE_BARE_MODE": "",
+                },
+            ):
                 clear_memory_file_caches()
                 clear_context_caches()
                 result = _run(get_user_context(cwd=tmp))
@@ -537,10 +587,13 @@ class TestFetchSystemPromptParts(unittest.TestCase):
         clear_memory_file_caches()
 
     def test_returns_system_prompt_parts(self):
-        with patch.dict(os.environ, {
-            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
-            "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
+                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
+            },
+        ):
             result = _run(fetch_system_prompt_parts())
             self.assertIsInstance(result, SystemPromptParts)
             self.assertIsInstance(result.default_system_prompt, list)
@@ -548,20 +601,28 @@ class TestFetchSystemPromptParts(unittest.TestCase):
             self.assertIsInstance(result.system_context, dict)
 
     def test_custom_prompt_skips_default(self):
-        with patch.dict(os.environ, {
-            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
-        }):
-            result = _run(fetch_system_prompt_parts(
-                custom_system_prompt="Custom prompt",
-            ))
+        with patch.dict(
+            os.environ,
+            {
+                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
+            },
+        ):
+            result = _run(
+                fetch_system_prompt_parts(
+                    custom_system_prompt="Custom prompt",
+                )
+            )
             self.assertEqual(result.default_system_prompt, [])
             self.assertEqual(result.system_context, {})
 
     def test_user_context_has_date(self):
-        with patch.dict(os.environ, {
-            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
-            "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
+                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
+            },
+        ):
             result = _run(fetch_system_prompt_parts())
             self.assertIn("currentDate", result.user_context)
 

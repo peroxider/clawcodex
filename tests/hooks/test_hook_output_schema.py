@@ -60,9 +60,14 @@ class TestParseHookOutput:
         assert "schema validation" in err.lower()
 
     def test_unknown_field_rejected(self):
-        out, err = parse_hook_output(json.dumps({
-            "decision": "allow", "stowaway": 1,
-        }))
+        out, err = parse_hook_output(
+            json.dumps(
+                {
+                    "decision": "allow",
+                    "stowaway": 1,
+                }
+            )
+        )
         assert out is None
         assert err is not None
         assert "schema validation" in err.lower()
@@ -80,18 +85,26 @@ class TestParseHookOutput:
         assert err is not None
 
     def test_updated_input_round_trip(self):
-        out, err = parse_hook_output(json.dumps({
-            "updatedInput": {"command": "safer_cmd"},
-        }))
+        out, err = parse_hook_output(
+            json.dumps(
+                {
+                    "updatedInput": {"command": "safer_cmd"},
+                }
+            )
+        )
         assert err is None
         assert out is not None
         assert out.updatedInput == {"command": "safer_cmd"}
 
     def test_prevent_continuation_with_reason(self):
-        out, err = parse_hook_output(json.dumps({
-            "preventContinuation": True,
-            "stopReason": "verification failed",
-        }))
+        out, err = parse_hook_output(
+            json.dumps(
+                {
+                    "preventContinuation": True,
+                    "stopReason": "verification failed",
+                }
+            )
+        )
         assert err is None
         assert out is not None
         assert out.preventContinuation is True
@@ -114,8 +127,7 @@ class TestExecutorWiresSchema:
         assert result.permission_behavior is None
         # WARNING was logged about the failed validation.
         assert any(
-            "schema validation" in rec.message.lower() or
-            "failed schema" in rec.message.lower()
+            "schema validation" in rec.message.lower() or "failed schema" in rec.message.lower()
             for rec in caplog.records
         ), f"Expected schema-validation WARNING; saw: {[r.message for r in caplog.records]}"
 

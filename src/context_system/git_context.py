@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Return type — richer than the old GitContext
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GitContextSnapshot:
     """Structured git context for prompt injection."""
@@ -58,6 +59,7 @@ def clear_git_caches() -> None:
 # ---------------------------------------------------------------------------
 # Low-level git helpers
 # ---------------------------------------------------------------------------
+
 
 def _git_cmd(
     args: list[str],
@@ -107,6 +109,7 @@ def _get_default_branch(cwd: str) -> str:
 # is_git_repo — quick check
 # ---------------------------------------------------------------------------
 
+
 def get_is_git(cwd: str | None = None) -> bool:
     """Check if the CWD is inside a git repository. Memoized."""
     global _git_is_repo_cache
@@ -122,6 +125,7 @@ def get_is_git(cwd: str | None = None) -> bool:
 # ---------------------------------------------------------------------------
 # collect_git_context — main entry point (mirrors TS getGitStatus)
 # ---------------------------------------------------------------------------
+
 
 async def collect_git_context(
     cwd: str | None = None,
@@ -147,26 +151,48 @@ async def collect_git_context(
     loop = asyncio.get_event_loop()
 
     branch_fut = loop.run_in_executor(
-        None, _git_cmd, ["rev-parse", "--abbrev-ref", "HEAD"], target,
+        None,
+        _git_cmd,
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        target,
     )
     default_branch_fut = loop.run_in_executor(
-        None, _get_default_branch, target,
+        None,
+        _get_default_branch,
+        target,
     )
     status_fut = loop.run_in_executor(
-        None, _git_cmd, ["status", "--short"], target,
+        None,
+        _git_cmd,
+        ["status", "--short"],
+        target,
     )
     commits_fut = loop.run_in_executor(
-        None, _git_cmd, ["log", "--oneline", "-n", "5"], target,
+        None,
+        _git_cmd,
+        ["log", "--oneline", "-n", "5"],
+        target,
     )
     user_fut = loop.run_in_executor(
-        None, _git_cmd, ["config", "user.name"], target,
+        None,
+        _git_cmd,
+        ["config", "user.name"],
+        target,
     )
     root_fut = loop.run_in_executor(
-        None, _git_cmd, ["rev-parse", "--show-toplevel"], target,
+        None,
+        _git_cmd,
+        ["rev-parse", "--show-toplevel"],
+        target,
     )
 
     branch, default_branch, status, commits, user_name, repo_root = await asyncio.gather(
-        branch_fut, default_branch_fut, status_fut, commits_fut, user_fut, root_fut,
+        branch_fut,
+        default_branch_fut,
+        status_fut,
+        commits_fut,
+        user_fut,
+        root_fut,
     )
 
     status_truncated = False
@@ -191,6 +217,7 @@ async def collect_git_context(
 # ---------------------------------------------------------------------------
 # format_git_status — format for system context injection
 # ---------------------------------------------------------------------------
+
 
 def format_git_status(ctx: GitContextSnapshot) -> str:
     """

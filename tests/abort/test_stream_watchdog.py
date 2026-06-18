@@ -161,8 +161,10 @@ class TestWatchdogIntegrationWithProvider(unittest.TestCase):
         # 50 ms idle deadline so the watchdog fires before slow_text_stream
         # finishes its 300 ms sleep. Env var is the wire that the watchdog
         # actually reads at instantiation, so we drive it from there.
-        with _patch.dict(os.environ, {"CLAUDE_STREAM_IDLE_TIMEOUT_MS": "50"}), \
-             _patch.object(provider, "chat", return_value=fallback_response) as mock_chat:
+        with (
+            _patch.dict(os.environ, {"CLAUDE_STREAM_IDLE_TIMEOUT_MS": "50"}),
+            _patch.object(provider, "chat", return_value=fallback_response) as mock_chat,
+        ):
             result = provider.chat_stream_response(
                 messages=[{"role": "user", "content": "hi"}],
                 tools=None,

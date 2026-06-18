@@ -99,9 +99,7 @@ class DialogScreen(ModalScreen[T], Generic[T]):
             if self.title_text:
                 yield Static(Text(self.title_text), id="dialog-title", markup=False)
             if self.subtitle_text:
-                yield Static(
-                    Text(self.subtitle_text), id="dialog-subtitle", markup=False
-                )
+                yield Static(Text(self.subtitle_text), id="dialog-subtitle", markup=False)
             body = Vertical(id="dialog-body")
             with body:
                 for widget in self.build_body():

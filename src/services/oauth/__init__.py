@@ -7,4 +7,4 @@ mirror ``typescript/src/services/oauth/``.
 
 from src.services.oauth.client import get_organization_uuid
 
-__all__ = ['get_organization_uuid']
+__all__ = ["get_organization_uuid"]

@@ -26,10 +26,12 @@ from src.providers.openai_compatible import (
 
 class TestAnthropicDocumentBlockToOpenAI(unittest.TestCase):
     def test_valid_block_translates_to_file(self) -> None:
-        out = _anthropic_document_block_to_openai({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf", "data": "ABCD"},
-        })
+        out = _anthropic_document_block_to_openai(
+            {
+                "type": "document",
+                "source": {"type": "base64", "media_type": "application/pdf", "data": "ABCD"},
+            }
+        )
         self.assertIsNotNone(out)
         self.assertEqual(out["type"], "file")
         self.assertEqual(out["file"]["filename"], "document.pdf")
@@ -38,12 +40,15 @@ class TestAnthropicDocumentBlockToOpenAI(unittest.TestCase):
     def test_non_document_block_returns_none(self) -> None:
         # An image block must NOT be claimed by the document translator,
         # otherwise the multimodal dispatcher would emit the wrong shape.
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "image",
-            "source": {"type": "base64", "media_type": "image/png", "data": "XYZ"},
-        }))
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "text", "text": "hi"}))
+        self.assertIsNone(
+            _anthropic_document_block_to_openai(
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": "XYZ"},
+                }
+            )
+        )
+        self.assertIsNone(_anthropic_document_block_to_openai({"type": "text", "text": "hi"}))
 
     def test_missing_source_returns_none(self) -> None:
         self.assertIsNone(_anthropic_document_block_to_openai({"type": "document"}))
@@ -51,16 +56,22 @@ class TestAnthropicDocumentBlockToOpenAI(unittest.TestCase):
     def test_url_source_returns_none(self) -> None:
         """Anthropic supports url-based document blocks too; we only
         translate base64 form here (data URI requires raw bytes)."""
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "document",
-            "source": {"type": "url", "url": "https://example.com/doc.pdf"},
-        }))
+        self.assertIsNone(
+            _anthropic_document_block_to_openai(
+                {
+                    "type": "document",
+                    "source": {"type": "url", "url": "https://example.com/doc.pdf"},
+                }
+            )
+        )
 
     def test_missing_media_type_defaults_to_pdf(self) -> None:
-        out = _anthropic_document_block_to_openai({
-            "type": "document",
-            "source": {"type": "base64", "data": "ABCD"},
-        })
+        out = _anthropic_document_block_to_openai(
+            {
+                "type": "document",
+                "source": {"type": "base64", "data": "ABCD"},
+            }
+        )
         self.assertIsNotNone(out)
         self.assertEqual(out["file"]["file_data"], "data:application/pdf;base64,ABCD")
 
@@ -69,20 +80,32 @@ class TestAnthropicDocumentBlockToOpenAI(unittest.TestCase):
         ``data`` would produce ``data:application/pdf;base64,`` which
         the server rejects with a confusing error. Returning None lets
         the upstream serializer surface the malformed shape instead."""
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf", "data": ""},
-        }))
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "document",
-            "source": {"type": "base64", "media_type": "application/pdf"},
-        }))
+        self.assertIsNone(
+            _anthropic_document_block_to_openai(
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": ""},
+                }
+            )
+        )
+        self.assertIsNone(
+            _anthropic_document_block_to_openai(
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": "application/pdf"},
+                }
+            )
+        )
 
     def test_non_dict_source_returns_none(self) -> None:
-        self.assertIsNone(_anthropic_document_block_to_openai({
-            "type": "document",
-            "source": "not-a-dict",
-        }))
+        self.assertIsNone(
+            _anthropic_document_block_to_openai(
+                {
+                    "type": "document",
+                    "source": "not-a-dict",
+                }
+            )
+        )
 
 
 class TestConverterDocumentIntegration(unittest.TestCase):
@@ -90,11 +113,20 @@ class TestConverterDocumentIntegration(unittest.TestCase):
 
     def test_user_message_with_document_translates(self) -> None:
         messages = [
-            {"role": "user", "content": [
-                {"type": "text", "text": "Summarise this PDF"},
-                {"type": "document",
-                 "source": {"type": "base64", "media_type": "application/pdf", "data": "PDFB64"}},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Summarise this PDF"},
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": "PDFB64",
+                        },
+                    },
+                ],
+            },
         ]
         out = _convert_anthropic_messages_to_openai(messages)
         self.assertEqual(len(out), 1)
@@ -109,12 +141,23 @@ class TestConverterDocumentIntegration(unittest.TestCase):
         Pins that the multimodal dispatcher doesn't accidentally route
         both through the same translator."""
         messages = [
-            {"role": "user", "content": [
-                {"type": "image",
-                 "source": {"type": "base64", "media_type": "image/png", "data": "IMG"}},
-                {"type": "document",
-                 "source": {"type": "base64", "media_type": "application/pdf", "data": "DOC"}},
-            ]},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": "IMG"},
+                    },
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": "DOC",
+                        },
+                    },
+                ],
+            },
         ]
         out = _convert_anthropic_messages_to_openai(messages)
         blocks = out[0]["content"]
@@ -126,15 +169,31 @@ class TestConverterDocumentIntegration(unittest.TestCase):
         ``role=tool`` (text body / placeholder) + synthetic ``role=user``
         carrying the ``file`` content block."""
         messages = [
-            {"role": "assistant", "content": [
-                {"type": "tool_use", "id": "tu_doc", "name": "Read", "input": {}},
-            ]},
-            {"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": "tu_doc", "content": [
-                    {"type": "document",
-                     "source": {"type": "base64", "media_type": "application/pdf", "data": "PDF"}},
-                ]},
-            ]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "tu_doc", "name": "Read", "input": {}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_doc",
+                        "content": [
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": "PDF",
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
         ]
         out = _convert_anthropic_messages_to_openai(messages)
         self.assertEqual(out[0]["role"], "assistant")
@@ -153,16 +212,32 @@ class TestConverterDocumentIntegration(unittest.TestCase):
 
     def test_tool_result_with_text_and_document_splits(self) -> None:
         messages = [
-            {"role": "assistant", "content": [
-                {"type": "tool_use", "id": "tu_2", "name": "Read", "input": {}},
-            ]},
-            {"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": "tu_2", "content": [
-                    {"type": "text", "text": "Here is the PDF"},
-                    {"type": "document",
-                     "source": {"type": "base64", "media_type": "application/pdf", "data": "PDF2"}},
-                ]},
-            ]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "tu_2", "name": "Read", "input": {}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_2",
+                        "content": [
+                            {"type": "text", "text": "Here is the PDF"},
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": "PDF2",
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
         ]
         out = _convert_anthropic_messages_to_openai(messages)
         tool_msgs = [m for m in out if m.get("role") == "tool"]
@@ -183,17 +258,39 @@ class TestConverterDocumentIntegration(unittest.TestCase):
         a single synthetic user message containing BOTH translated
         blocks, in order."""
         messages = [
-            {"role": "assistant", "content": [
-                {"type": "tool_use", "id": "tu_mix", "name": "Read", "input": {}},
-            ]},
-            {"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": "tu_mix", "content": [
-                    {"type": "image",
-                     "source": {"type": "base64", "media_type": "image/png", "data": "I"}},
-                    {"type": "document",
-                     "source": {"type": "base64", "media_type": "application/pdf", "data": "D"}},
-                ]},
-            ]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "tu_mix", "name": "Read", "input": {}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tu_mix",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": "I",
+                                },
+                            },
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "application/pdf",
+                                    "data": "D",
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
         ]
         out = _convert_anthropic_messages_to_openai(messages)
         user_msgs = [m for m in out if m.get("role") == "user"]

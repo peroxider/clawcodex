@@ -17,6 +17,7 @@ This module is intentionally synchronous and pure — its only state is
 can construct a redactor against a temp dir and assert behaviour without
 monkey-patching.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -156,9 +157,7 @@ class Redactor:
         for line in tb:
             if not line:
                 continue
-            if self.project_roots and not any(
-                marker in line for marker in self.project_roots
-            ):
+            if self.project_roots and not any(marker in line for marker in self.project_roots):
                 # Keep the first line of the traceback (exception line);
                 # drop frames that don't mention any project root.
                 if line.startswith("Traceback") or "Error" in line.split(":")[0]:
@@ -273,9 +272,7 @@ class Redactor:
                 hits.append(pattern.pattern)
         return hits
 
-    def truncate_stacktrace(
-        self, exc: BaseException | None
-    ) -> list[str]:
+    def truncate_stacktrace(self, exc: BaseException | None) -> list[str]:
         """Public wrapper around the private ``_truncate_stacktrace``."""
         return self._truncate_stacktrace(exc)
 

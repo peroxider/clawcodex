@@ -47,11 +47,7 @@ class TestLoadApiKey:
             assert info.source == "env"
 
     def test_from_config(self):
-        mock_config = {
-            "providers": {
-                "anthropic": {"api_key": "sk-ant-config-key-12345678901234"}
-            }
-        }
+        mock_config = {"providers": {"anthropic": {"api_key": "sk-ant-config-key-12345678901234"}}}
         with patch.dict(os.environ, {}, clear=False):
             # Clear ANTHROPIC_API_KEY if set
             env = dict(os.environ)
@@ -101,6 +97,7 @@ class TestOAuthFlow:
 
     def test_oauth_tokens_expiry(self):
         import time
+
         tokens = OAuthTokens(access_token="test", expires_at=time.time() - 100)
         assert tokens.is_expired is True
 

@@ -3,6 +3,7 @@
 16 tests validating end-to-end flows match TypeScript behavior.
 Each test simulates a complete conversation or permission flow using mocks.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,6 +40,7 @@ from src.types.messages import (
 # ---------------------------------------------------------------------------
 # 1. Single tool conversation flow
 # ---------------------------------------------------------------------------
+
 
 class TestConversationFlowSingleTool(unittest.TestCase):
     """User → tool_use → tool_result → end_turn."""
@@ -77,6 +79,7 @@ class TestConversationFlowSingleTool(unittest.TestCase):
 # 2. Multi-tool conversation flow
 # ---------------------------------------------------------------------------
 
+
 class TestConversationFlowMultiTool(unittest.TestCase):
     """Multiple concurrent tool calls in a single turn."""
 
@@ -90,10 +93,12 @@ class TestConversationFlowMultiTool(unittest.TestCase):
             ],
             stop_reason="tool_use",
         )
-        tool_results = create_user_message([
-            ToolResultBlock(tool_use_id="tu_1", content="content of a"),
-            ToolResultBlock(tool_use_id="tu_2", content="content of b"),
-        ])
+        tool_results = create_user_message(
+            [
+                ToolResultBlock(tool_use_id="tu_1", content="content of a"),
+                ToolResultBlock(tool_use_id="tu_2", content="content of b"),
+            ]
+        )
         final_msg = create_assistant_message("Both files read successfully.")
 
         messages = [user_msg, assistant_msg, tool_results, final_msg]
@@ -102,15 +107,14 @@ class TestConversationFlowMultiTool(unittest.TestCase):
         self.assertEqual(len(api_msgs), 4)
         # Both tool results in one user message
         user_result_content = api_msgs[2]["content"]
-        tool_results_blocks = [
-            b for b in user_result_content if b.get("type") == "tool_result"
-        ]
+        tool_results_blocks = [b for b in user_result_content if b.get("type") == "tool_result"]
         self.assertEqual(len(tool_results_blocks), 2)
 
 
 # ---------------------------------------------------------------------------
 # 3. Error recovery flow
 # ---------------------------------------------------------------------------
+
 
 class TestConversationFlowErrorRecovery(unittest.TestCase):
     """API error → retry → success."""
@@ -143,6 +147,7 @@ class TestConversationFlowErrorRecovery(unittest.TestCase):
 # 4. Max output tokens escalation
 # ---------------------------------------------------------------------------
 
+
 class TestConversationFlowMaxOutputTokens(unittest.TestCase):
     """Max tokens reached → stop_reason=max_tokens."""
 
@@ -161,6 +166,7 @@ class TestConversationFlowMaxOutputTokens(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 5. Abort / user interrupt
 # ---------------------------------------------------------------------------
+
 
 class TestConversationFlowAbort(unittest.TestCase):
     """User interrupt → AbortError → cancellation message."""
@@ -191,6 +197,7 @@ class TestConversationFlowAbort(unittest.TestCase):
 # 6. Compact boundary flow
 # ---------------------------------------------------------------------------
 
+
 class TestConversationFlowCompactBoundary(unittest.TestCase):
     """Context too large → compact → continue."""
 
@@ -203,6 +210,7 @@ class TestConversationFlowCompactBoundary(unittest.TestCase):
 
         # A compact boundary should be identifiable
         from src.utils.messages import is_compact_boundary
+
         self.assertTrue(is_compact_boundary(summary))
 
     def test_compact_preserves_recent_messages(self) -> None:
@@ -223,17 +231,20 @@ class TestConversationFlowCompactBoundary(unittest.TestCase):
 # 7. Permission flow: deny
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionFlowDeny(unittest.TestCase):
     """Dangerous command → deny."""
 
     def test_dangerous_bash_triggers_ask(self) -> None:
         from src.permissions.bash_security import check_bash_command_safety
+
         result = check_bash_command_safety("sudo rm -rf /")
         self.assertIsNotNone(result)
         self.assertEqual(result.behavior, "ask")
 
     def test_chmod_triggers_ask(self) -> None:
         from src.permissions.bash_security import check_bash_command_safety
+
         result = check_bash_command_safety("chmod 777 /etc/passwd")
         self.assertIsNotNone(result)
         self.assertEqual(result.behavior, "ask")
@@ -243,11 +254,13 @@ class TestPermissionFlowDeny(unittest.TestCase):
 # 8. Permission flow: ask
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionFlowAsk(unittest.TestCase):
     """Unknown or complex command → ask for confirmation."""
 
     def test_complex_command_triggers_ask(self) -> None:
         from src.permissions.bash_security import check_bash_command_safety
+
         # Complex piped command with eval-like construct
         result = check_bash_command_safety("eval $(echo 'rm -rf /')")
         if result is not None:
@@ -255,6 +268,7 @@ class TestPermissionFlowAsk(unittest.TestCase):
 
     def test_unknown_binary_triggers_ask(self) -> None:
         from src.permissions.bash_security import analyze_bash_command
+
         result = analyze_bash_command("custom_binary --dangerous-flag")
         # Unknown commands should be flagged
         self.assertIn(result.safety, ("unknown", "safe", "read_only"))
@@ -264,11 +278,13 @@ class TestPermissionFlowAsk(unittest.TestCase):
 # 9. Permission flow: allow
 # ---------------------------------------------------------------------------
 
+
 class TestPermissionFlowAllow(unittest.TestCase):
     """Safe command → auto-allow (no permission check needed)."""
 
     def test_safe_commands_pass(self) -> None:
         from src.permissions.bash_security import check_bash_command_safety
+
         safe_cmds = ["echo hello", "pwd", "whoami", "date"]
         for cmd in safe_cmds:
             result = check_bash_command_safety(cmd)
@@ -276,6 +292,7 @@ class TestPermissionFlowAllow(unittest.TestCase):
 
     def test_read_only_commands_pass(self) -> None:
         from src.permissions.bash_security import check_bash_command_safety
+
         ro_cmds = ["cat file.txt", "ls -la", "grep pattern file"]
         for cmd in ro_cmds:
             result = check_bash_command_safety(cmd)
@@ -285,6 +302,7 @@ class TestPermissionFlowAllow(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 10. Agent flow: sync child
 # ---------------------------------------------------------------------------
+
 
 class TestAgentFlowSync(unittest.TestCase):
     """Agent tool → sync child → result aggregation."""
@@ -296,11 +314,13 @@ class TestAgentFlowSync(unittest.TestCase):
             PLAN_AGENT,
             get_built_in_agents,
         )
+
         agents = get_built_in_agents()
         self.assertGreater(len(agents), 0)
 
     def test_run_agent_params_complete(self) -> None:
         from src.agent.run_agent import RunAgentParams, RunAgentResult
+
         # Verify all required fields
         self.assertIn("parent_context", RunAgentParams.__dataclass_fields__)
         self.assertIn("agent_definition", RunAgentParams.__dataclass_fields__)
@@ -309,6 +329,7 @@ class TestAgentFlowSync(unittest.TestCase):
 
     def test_subagent_context_isolation(self) -> None:
         from src.agent.subagent_context import SubagentContextOverrides
+
         overrides = SubagentContextOverrides(share_permission_handler=False)
         self.assertFalse(overrides.share_permission_handler)
 
@@ -317,16 +338,19 @@ class TestAgentFlowSync(unittest.TestCase):
 # 11. Agent flow: background
 # ---------------------------------------------------------------------------
 
+
 class TestAgentFlowBackground(unittest.TestCase):
     """Agent tool → background async → notification."""
 
     def test_async_agent_allowed_tools(self) -> None:
         from src.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
+
         self.assertIsInstance(ASYNC_AGENT_ALLOWED_TOOLS, (list, tuple, set, frozenset))
         self.assertGreater(len(ASYNC_AGENT_ALLOWED_TOOLS), 0)
 
     def test_agent_tool_schema_supports_background(self) -> None:
         from src.tool_system.tools.agent import AGENT_INPUT_SCHEMA
+
         self.assertIn("run_in_background", AGENT_INPUT_SCHEMA["properties"])
 
 
@@ -334,11 +358,13 @@ class TestAgentFlowBackground(unittest.TestCase):
 # 12. Hook flow: PreToolUse block
 # ---------------------------------------------------------------------------
 
+
 class TestHookFlowPretoolBlock(unittest.TestCase):
     """PreToolUse hook blocks execution."""
 
     def test_pre_tool_use_result_block(self) -> None:
         from src.services.tool_execution.tool_hooks import PreToolUseResult
+
         result = PreToolUseResult(
             type="block",
             message="Blocked by policy hook",
@@ -371,11 +397,13 @@ class TestHookFlowPretoolBlock(unittest.TestCase):
 # 13. Hook flow: PreToolUse modify
 # ---------------------------------------------------------------------------
 
+
 class TestHookFlowPretoolModify(unittest.TestCase):
     """PreToolUse hook modifies tool input."""
 
     def test_pre_tool_use_result_modify(self) -> None:
         from src.services.tool_execution.tool_hooks import PreToolUseResult
+
         result = PreToolUseResult(
             type="modify",
             updated_input={"command": "ls -la --safe"},
@@ -403,6 +431,7 @@ class TestHookFlowPretoolModify(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # 14. Session flow: save → resume
 # ---------------------------------------------------------------------------
+
 
 class TestSessionFlowSaveResume(unittest.TestCase):
     """Session save → resume → continue."""
@@ -443,16 +472,19 @@ class TestSessionFlowSaveResume(unittest.TestCase):
 # 15. Command flow: /compact
 # ---------------------------------------------------------------------------
 
+
 class TestCommandFlowCompact(unittest.TestCase):
     """/compact → compaction → continue."""
 
     def test_compact_command_exists(self) -> None:
         from src.command_system.builtins import COMPACT_COMMAND
+
         self.assertEqual(COMPACT_COMMAND.name, "compact")
         self.assertTrue(COMPACT_COMMAND.supports_non_interactive)
 
     def test_compact_conversation_interface(self) -> None:
         from src.services.compact.compact import CompactContext, compact_conversation
+
         self.assertTrue(callable(compact_conversation))
         self.assertIn("messages", CompactContext.__dataclass_fields__)
 
@@ -461,11 +493,13 @@ class TestCommandFlowCompact(unittest.TestCase):
 # 16. Command flow: /model switch
 # ---------------------------------------------------------------------------
 
+
 class TestCommandFlowModelSwitch(unittest.TestCase):
     """/model → switch → new model used."""
 
     def test_model_aliases_resolve(self) -> None:
         from src.models.aliases import resolve_alias
+
         # Known aliases should resolve
         result = resolve_alias("sonnet")
         self.assertIsNotNone(result)
@@ -473,11 +507,13 @@ class TestCommandFlowModelSwitch(unittest.TestCase):
 
     def test_model_capabilities_exist(self) -> None:
         from src.models.capabilities import get_model_capabilities
+
         caps = get_model_capabilities("claude-sonnet-4-6")
         self.assertIsNotNone(caps)
 
     def test_model_validation(self) -> None:
         from src.models.validation import validate_model_name
+
         self.assertTrue(validate_model_name("claude-sonnet-4-6"))
         self.assertFalse(validate_model_name(""))
 

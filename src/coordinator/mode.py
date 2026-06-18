@@ -17,6 +17,7 @@ the ~370-line system prompt body which lives in
   ``workerToolsContext`` user-message block the chapter §"Worker
   Context" describes.
 """
+
 from __future__ import annotations
 
 import logging
@@ -95,25 +96,29 @@ def match_session_mode(session_mode: SessionMode | None) -> str | None:
 # string that TS's ``SYNTHETIC_OUTPUT_TOOL_NAME`` resolves to (per
 # ``SyntheticOutputTool.ts:20``); the apparent mismatch with the TS
 # constant name is intentional — pin the bytes the model sees.
-INTERNAL_WORKER_TOOLS: Final[frozenset[str]] = frozenset({
-    "TeamCreate",
-    "TeamDelete",
-    "SendMessage",
-    "StructuredOutput",
-})
+INTERNAL_WORKER_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "TeamCreate",
+        "TeamDelete",
+        "SendMessage",
+        "StructuredOutput",
+    }
+)
 
 # The coordinator gets Agent/SendMessage/TaskStop plus three lightweight
 # read-only tools so simple queries (read a file, search the web) don't
 # force a worker spawn. Writing tools (Edit/Write/Bash/Grep) stay off
 # so meaningful work still requires delegation.
-_COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset({
-    "Agent",
-    "SendMessage",
-    "TaskStop",
-    "Read",
-    "WebSearch",
-    "WebFetch",
-})
+_COORDINATOR_ALLOWED_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "Agent",
+        "SendMessage",
+        "TaskStop",
+        "Read",
+        "WebSearch",
+        "WebFetch",
+    }
+)
 
 
 def filter_coordinator_tools(all_tools: Iterable["Tool"]) -> list["Tool"]:
@@ -197,9 +202,7 @@ def get_coordinator_user_context(
 
     parts = [f"Workers spawned via Agent have access to these tools: {worker_tools}"]
 
-    mcp_server_names = sorted(
-        {getattr(c, "name", "") for c in (mcp_clients or [])} - {""}
-    )
+    mcp_server_names = sorted({getattr(c, "name", "") for c in (mcp_clients or [])} - {""})
     if mcp_server_names:
         parts.append(
             "Workers also have access to MCP tools from connected MCP "

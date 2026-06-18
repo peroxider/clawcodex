@@ -53,7 +53,8 @@ class GanttDataBuilder:
         if negative:
             logger.warning(
                 "gantt: dropped %d negative-length bars (end<start) for session %s",
-                len(negative), session.session_id,
+                len(negative),
+                session.session_id,
             )
         bars = kept
         if not bars:
@@ -71,7 +72,9 @@ class GanttDataBuilder:
                 logger.info(
                     "gantt: session %s has %d/%d zero-length bars (likely "
                     "pending placeholders or stalled data feed)",
-                    session.session_id, zero_count, len(bars),
+                    session.session_id,
+                    zero_count,
+                    len(bars),
                 )
 
         # Compute time offset
@@ -85,22 +88,28 @@ class GanttDataBuilder:
         series_data: list[list[Any]] = []
         for bar in bars:
             cat_idx = category_map.get(self._category_for_bar(bar), 0)
-            start = bar.start_time - base_time if self.time_mode == TimeMode.RELATIVE else bar.start_time
+            start = (
+                bar.start_time - base_time
+                if self.time_mode == TimeMode.RELATIVE
+                else bar.start_time
+            )
             end = bar.end_time - base_time if self.time_mode == TimeMode.RELATIVE else bar.end_time
 
             color = bar.color or self._color_for_bar(bar)
-            series_data.append([
-                cat_idx,
-                round(start * 1000),  # ms for ECharts
-                round(end * 1000),
-                bar.duration_ms,
-                bar.label,
-                bar.id,
-                bar.status.value,
-                color,
-                bar.detail,
-                bar.type.value,
-            ])
+            series_data.append(
+                [
+                    cat_idx,
+                    round(start * 1000),  # ms for ECharts
+                    round(end * 1000),
+                    bar.duration_ms,
+                    bar.label,
+                    bar.id,
+                    bar.status.value,
+                    color,
+                    bar.detail,
+                    bar.type.value,
+                ]
+            )
 
         # Default Gantt bounds follow the actual visible bars. Session
         # metadata can extend long after the final agent/tool event, which

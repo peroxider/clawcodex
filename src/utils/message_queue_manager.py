@@ -12,6 +12,7 @@ The queue is process-global (one per Python process) for parity with
 the TS module-singleton shape. A single ``threading.RLock`` guards the
 deque; reads and writes are short.
 """
+
 from __future__ import annotations
 
 import threading
@@ -41,7 +42,9 @@ _lock = threading.RLock()
 _queue: deque[PendingNotification] = deque()
 
 
-def enqueue_pending_notification(*, value: str, mode: NotificationMode = "task-notification") -> None:
+def enqueue_pending_notification(
+    *, value: str, mode: NotificationMode = "task-notification"
+) -> None:
     """Push a notification onto the global queue.
 
     Mirrors TS ``enqueuePendingNotification``. Idempotency is the

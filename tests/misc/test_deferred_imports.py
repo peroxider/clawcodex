@@ -46,8 +46,7 @@ def test_importing_anthropic_provider_does_not_import_anthropic():
     )
     assert rc == 0, f"subprocess failed: {stderr}"
     assert "anthropic_loaded: False" in stdout, (
-        f"importing src.providers.anthropic_provider triggered the SDK; "
-        f"stdout={stdout!r}"
+        f"importing src.providers.anthropic_provider triggered the SDK; stdout={stdout!r}"
     )
 
 
@@ -66,9 +65,7 @@ def test_first_access_to_anthropic_attribute_loads_sdk():
         """
     )
     assert rc == 0, f"subprocess failed: {stderr}"
-    assert "before:False after:True" in stdout, (
-        f"lazy load did not fire; stdout={stdout!r}"
-    )
+    assert "before:False after:True" in stdout, f"lazy load did not fire; stdout={stdout!r}"
 
 
 def test_unknown_attribute_still_raises_attribute_error():
@@ -118,8 +115,10 @@ def test_chat_method_resolves_anthropic_at_call_time():
     mock_response.content = [text_block]
     mock_response.model = "claude-sonnet-4-20250514"
     mock_response.usage = MagicMock(
-        input_tokens=1, output_tokens=1,
-        cache_creation_input_tokens=0, cache_read_input_tokens=0,
+        input_tokens=1,
+        output_tokens=1,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
         cache_creation=None,
     )
     mock_response.stop_reason = "end_turn"

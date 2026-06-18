@@ -71,10 +71,12 @@ def save_to_session_storage(session: Any) -> None:
         storage.update_metadata(cost=cost_block)
         # transcript.jsonl gets a dedicated cost-block entry (type="cost_block"
         # so read_messages() skips it, but read_transcript() returns it)
-        storage.write_raw({
-            "type": "cost_block",
-            "cost": cost_block,
-        })
+        storage.write_raw(
+            {
+                "type": "cost_block",
+                "cost": cost_block,
+            }
+        )
         storage.flush()
     except Exception:
         pass  # Best-effort; not critical if this fails.

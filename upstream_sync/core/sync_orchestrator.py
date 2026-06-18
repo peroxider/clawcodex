@@ -74,6 +74,7 @@ class SyncOrchestrator:
             self.hooks.pre_apply(self.cfg.patches.directory, self.cfg.patches.series_file)
         if self.engine is None:
             from upstream_sync.core.patch_engine import create_engine
+
             self.engine = create_engine(self.cfg.patches)
         result = self.engine.apply_all(
             self.cfg.patches.directory,

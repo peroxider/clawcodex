@@ -4,7 +4,9 @@ import pytest
 
 from clawcodex_ext.cli.model_cmd.errors import UnknownModelError
 from clawcodex_ext.cli.model_cmd.store import ModelStore
-from clawcodex_ext.cli.provider_cmd.errors import UnsupportedScopeError as ProviderUnsupportedScopeError
+from clawcodex_ext.cli.provider_cmd.errors import (
+    UnsupportedScopeError as ProviderUnsupportedScopeError,
+)
 from clawcodex_ext.cli.model_cmd.errors import UnsupportedScopeError as ModelUnsupportedScopeError
 
 
@@ -106,7 +108,9 @@ def test_set_default_model_persist_unknown_accepts_unknown_model(monkeypatch) ->
     assert calls[0]["default_model"] == "totally-bogus-model-xyz"
 
 
-def test_set_default_model_persist_unknown_falls_back_when_provider_config_missing(monkeypatch) -> None:
+def test_set_default_model_persist_unknown_falls_back_when_provider_config_missing(
+    monkeypatch,
+) -> None:
     """When get_provider_config raises ValueError (no provider entry), fall back to registry default base URL."""
     from src.providers import PROVIDER_INFO
 
@@ -132,4 +136,3 @@ def test_set_default_model_persist_unknown_rejects_project_scope() -> None:
     """``scope != "user"`` is still rejected for the convenience method."""
     with pytest.raises(ModelUnsupportedScopeError):
         ModelStore().set_default_model_persist_unknown("glm", "x", scope="project")
-

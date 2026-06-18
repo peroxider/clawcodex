@@ -54,12 +54,8 @@ class TestConstants(unittest.TestCase):
         import re
         from pathlib import Path
 
-        expected_sha = (
-            "35a8fb57145324fe579360bbe94086f432187092ed1c53e3f147254f3afc674b"
-        )
-        actual_sha = hashlib.sha256(
-            ADVISOR_TOOL_INSTRUCTIONS.encode("utf-8")
-        ).hexdigest()
+        expected_sha = "35a8fb57145324fe579360bbe94086f432187092ed1c53e3f147254f3afc674b"
+        actual_sha = hashlib.sha256(ADVISOR_TOOL_INSTRUCTIONS.encode("utf-8")).hexdigest()
         self.assertEqual(
             actual_sha,
             expected_sha,
@@ -139,6 +135,7 @@ class TestIsAdvisorEnabled(unittest.TestCase):
 
     def _fake_first_party_provider(self) -> MagicMock:
         from src.providers.anthropic_provider import AnthropicProvider
+
         provider = MagicMock(spec=AnthropicProvider)
         provider.has_custom_endpoint.return_value = False
         # spec'd MagicMock + isinstance check requires the spec class to
@@ -151,34 +148,26 @@ class TestIsAdvisorEnabled(unittest.TestCase):
         self.assertFalse(is_advisor_enabled(None))
 
     def test_disabled_by_env_var(self) -> None:
-        with patch.dict(
-            os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False
-        ):
+        with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False):
             provider = MagicMock()
             self.assertFalse(is_advisor_enabled(provider))
 
     def test_truthy_env_values_disable(self) -> None:
         for v in ["1", "true", "TRUE", "yes", "On"]:
-            with patch.dict(
-                os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": v}, clear=False
-            ):
+            with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": v}, clear=False):
                 with self.subTest(env=v):
                     self.assertFalse(is_advisor_enabled(MagicMock()))
 
     def test_enabled_for_first_party_anthropic(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CLAUDE_CODE_DISABLE_ADVISOR_TOOL", None)
-            with patch(
-                "src.state.cache_state.is_first_party_provider", return_value=True
-            ):
+            with patch("src.state.cache_state.is_first_party_provider", return_value=True):
                 self.assertTrue(is_advisor_enabled(MagicMock()))
 
     def test_disabled_for_third_party_provider(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CLAUDE_CODE_DISABLE_ADVISOR_TOOL", None)
-            with patch(
-                "src.state.cache_state.is_first_party_provider", return_value=False
-            ):
+            with patch("src.state.cache_state.is_first_party_provider", return_value=False):
                 self.assertFalse(is_advisor_enabled(MagicMock()))
 
 
@@ -193,9 +182,7 @@ class TestCanUserConfigureAdvisor(unittest.TestCase):
             self.assertTrue(can_user_configure_advisor(None))
 
     def test_disabled_by_env_var_even_without_provider(self) -> None:
-        with patch.dict(
-            os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False
-        ):
+        with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False):
             self.assertFalse(can_user_configure_advisor(None))
 
     def test_enabled_with_third_party_provider(self) -> None:
@@ -204,9 +191,7 @@ class TestCanUserConfigureAdvisor(unittest.TestCase):
         # advisor model is configured) so we no longer reject upfront.
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CLAUDE_CODE_DISABLE_ADVISOR_TOOL", None)
-            with patch(
-                "src.state.cache_state.is_first_party_provider", return_value=False
-            ):
+            with patch("src.state.cache_state.is_first_party_provider", return_value=False):
                 self.assertTrue(can_user_configure_advisor(MagicMock()))
 
 
@@ -216,9 +201,7 @@ class TestIsAdvisorBlock(unittest.TestCase):
 
     def test_advisor_server_tool_use_detected(self) -> None:
         self.assertTrue(
-            is_advisor_block(
-                {"type": "server_tool_use", "name": "advisor", "id": "srv_1"}
-            )
+            is_advisor_block({"type": "server_tool_use", "name": "advisor", "id": "srv_1"})
         )
 
     def test_non_advisor_server_tool_use_rejected(self) -> None:
@@ -226,9 +209,7 @@ class TestIsAdvisorBlock(unittest.TestCase):
         # be misidentified as advisor blocks — they have their own
         # round-trip semantics.
         self.assertFalse(
-            is_advisor_block(
-                {"type": "server_tool_use", "name": "web_search", "id": "srv_2"}
-            )
+            is_advisor_block({"type": "server_tool_use", "name": "web_search", "id": "srv_2"})
         )
 
     def test_plain_blocks_rejected(self) -> None:
@@ -317,9 +298,7 @@ class TestStripAdvisorBlocks(unittest.TestCase):
         out = strip_advisor_blocks(msgs)
         types = [b["type"] for b in out[0]["content"]]
         self.assertIn("text", types)
-        self.assertTrue(
-            any(b.get("text") == "[Advisor response]" for b in out[0]["content"])
-        )
+        self.assertTrue(any(b.get("text") == "[Advisor response]" for b in out[0]["content"]))
 
     def test_inserts_placeholder_when_only_blank_text_remains(self) -> None:
         msgs = [
@@ -336,9 +315,7 @@ class TestStripAdvisorBlocks(unittest.TestCase):
             }
         ]
         out = strip_advisor_blocks(msgs)
-        self.assertTrue(
-            any(b.get("text") == "[Advisor response]" for b in out[0]["content"])
-        )
+        self.assertTrue(any(b.get("text") == "[Advisor response]" for b in out[0]["content"]))
 
     def test_no_placeholder_when_substantive_text_remains(self) -> None:
         msgs = [

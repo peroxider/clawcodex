@@ -503,8 +503,7 @@ class RemoteAPIService:
                 )
                 sequence_number += 1
             output_items = [
-                message_item if item["id"] == message_item["id"] else item
-                for item in output_items
+                message_item if item["id"] == message_item["id"] else item for item in output_items
             ]
             result = RemoteRunResult(
                 text=text,
@@ -769,9 +768,7 @@ class RemoteAPIService:
             "previous_response_id": previous_response_id,
             "conversation": conversation,
             "session_id": (
-                base.session_id
-                if base is not None and base.session_id
-                else response_id
+                base.session_id if base is not None and base.session_id else response_id
             ),
             "messages": messages,
             "input_items": input_items,
@@ -1146,9 +1143,7 @@ def _response_tool_result_item(
     # permits either a string or content-part array here; use the array form
     # so tool output renders in Open WebUI and remains safe on the next turn.
     actual_output = (
-        event.result.get("output", "")
-        if isinstance(event.result, dict)
-        else event.result
+        event.result.get("output", "") if isinstance(event.result, dict) else event.result
     )
     return {
         "id": f"fco_{suffix}_{output_index}",
@@ -1196,9 +1191,7 @@ def _responses_usage(usage: dict[str, Any]) -> dict[str, Any]:
             )
         },
         "output_tokens": output_tokens,
-        "output_tokens_details": {
-            "reasoning_tokens": _int_usage(usage, "reasoning_tokens")
-        },
+        "output_tokens_details": {"reasoning_tokens": _int_usage(usage, "reasoning_tokens")},
         "total_tokens": input_tokens + output_tokens,
     }
 

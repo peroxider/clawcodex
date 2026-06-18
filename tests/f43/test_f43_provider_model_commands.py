@@ -334,7 +334,9 @@ def test_model_show_uses_current_format(monkeypatch) -> None:
     """``model show NAME`` and ``model current`` produce the same canonical shape."""
     monkeypatch.delenv("CLAWCODEX_PROVIDER", raising=False)
     monkeypatch.delenv("CLAWCODEX_MODEL", raising=False)
-    monkeypatch.setattr("clawcodex_ext.cli.model_cmd.resolver.get_default_provider", lambda: "anthropic")
+    monkeypatch.setattr(
+        "clawcodex_ext.cli.model_cmd.resolver.get_default_provider", lambda: "anthropic"
+    )
     monkeypatch.setattr(
         "clawcodex_ext.cli.model_cmd.resolver.get_provider_config",
         lambda provider: {"default_model": "claude-sonnet-4-6"},
@@ -347,5 +349,3 @@ def test_model_show_uses_current_format(monkeypatch) -> None:
     assert out_show == out_current
     assert "[" not in out_show  # no source labels
     assert out_show.splitlines() == ["provider: anthropic", "model: claude-sonnet-4-6"]
-
-

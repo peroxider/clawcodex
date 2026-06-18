@@ -109,29 +109,19 @@ class TestRepositoryIssueClientClose(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["state"], "closed")
 
     async def test_close_returns_false_when_number_missing(self) -> None:
-        client = RepositoryIssueClient(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
-        with patch.object(
-            client, "_request_json", new=AsyncMock()
-        ) as mock:
-            result = await client.close_pull_request(
-                PullRequestRef(number=None, url=None)
-            )
+        client = RepositoryIssueClient(platform="github", owner="o", repo="r", api_key="dummy")
+        with patch.object(client, "_request_json", new=AsyncMock()) as mock:
+            result = await client.close_pull_request(PullRequestRef(number=None, url=None))
         self.assertFalse(result)
         mock.assert_not_called()
 
     async def test_close_treats_422_as_success(self) -> None:
-        client = RepositoryIssueClient(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
+        client = RepositoryIssueClient(platform="github", owner="o", repo="r", api_key="dummy")
         with patch.object(
             client,
             "_request_json",
             new=AsyncMock(
-                side_effect=RepositoryTrackerError(
-                    "request_failed status=422 body=merged"
-                )
+                side_effect=RepositoryTrackerError("request_failed status=422 body=merged")
             ),
         ):
             result = await client.close_pull_request(
@@ -140,16 +130,12 @@ class TestRepositoryIssueClientClose(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
 
     async def test_close_returns_false_on_other_4xx_5xx(self) -> None:
-        client = RepositoryIssueClient(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
+        client = RepositoryIssueClient(platform="github", owner="o", repo="r", api_key="dummy")
         with patch.object(
             client,
             "_request_json",
             new=AsyncMock(
-                side_effect=RepositoryTrackerError(
-                    "request_failed status=500 body=server error"
-                )
+                side_effect=RepositoryTrackerError("request_failed status=500 body=server error")
             ),
         ):
             result = await client.close_pull_request(
@@ -158,17 +144,13 @@ class TestRepositoryIssueClientClose(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result)
 
     async def test_close_uses_form_data_for_access_token_platforms(self) -> None:
-        client = RepositoryIssueClient(
-            platform="gitcode", owner="o", repo="r", api_key="dummy"
-        )
+        client = RepositoryIssueClient(platform="gitcode", owner="o", repo="r", api_key="dummy")
         with patch.object(
             client,
             "_request_json",
             new=AsyncMock(return_value={"number": 7, "state": "closed"}),
         ) as mock:
-            result = await client.close_pull_request(
-                PullRequestRef(number="7")
-            )
+            result = await client.close_pull_request(PullRequestRef(number="7"))
         self.assertTrue(result)
         args, kwargs = mock.call_args
         # Gitee/GitCode use form-data not JSON.
@@ -183,17 +165,13 @@ class TestRepositoryIssueClientClose(unittest.IsolatedAsyncioTestCase):
 
 class TestRepositoryTrackerAdapterClose(unittest.IsolatedAsyncioTestCase):
     async def test_delegate_to_client(self) -> None:
-        adapter = RepositoryTrackerAdapter(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
+        adapter = RepositoryTrackerAdapter(platform="github", owner="o", repo="r", api_key="dummy")
         with patch.object(
             adapter.client,
             "close_pull_request",
             new=AsyncMock(return_value=True),
         ) as mock:
-            result = await adapter.close_pull_request(
-                PullRequestRef(number="7")
-            )
+            result = await adapter.close_pull_request(PullRequestRef(number="7"))
         self.assertTrue(result)
         mock.assert_awaited_once()
 
@@ -207,9 +185,7 @@ class TestLocalTrackerAdapterClose(unittest.IsolatedAsyncioTestCase):
     async def test_local_close_is_noop_success(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             adapter = LocalTrackerAdapter(issues_path=tmp)
-            result = await adapter.close_pull_request(
-                PullRequestRef(number="9")
-            )
+            result = await adapter.close_pull_request(PullRequestRef(number="9"))
             self.assertTrue(result)
 
 
@@ -695,9 +671,7 @@ class TestScheduleRetryMaxTurns(unittest.IsolatedAsyncioTestCase):
             retry = orch._state.retry_queue[0]
             self.assertEqual(retry.delay_seconds, 30.0)
             self.assertEqual(retry.error, "agent failed: max_turns_exceeded")
-            self.assertEqual(
-                orch._state.retry_attempts[session.issue.id], 1
-            )
+            self.assertEqual(orch._state.retry_attempts[session.issue.id], 1)
 
     async def test_schedule_retry_uses_max_turns_retry_delay_from_workflow(
         self,
@@ -706,9 +680,7 @@ class TestScheduleRetryMaxTurns(unittest.IsolatedAsyncioTestCase):
         workflow.agent.max_turns_retry_delay_ms and pass it through."""
         with tempfile.TemporaryDirectory() as tmp:
             reg = IssueRegistry(Path(tmp) / "registry.json")
-            workflow = WorkflowConfig.from_dict(
-                {"agent": {"max_turns_retry_delay_ms": 1234}}
-            )
+            workflow = WorkflowConfig.from_dict({"agent": {"max_turns_retry_delay_ms": 1234}})
             orch = _make_orchestrator_for_schedule_retry_test(
                 registry=reg,
                 workflow=workflow,

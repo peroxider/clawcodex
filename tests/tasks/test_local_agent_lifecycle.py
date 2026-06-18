@@ -11,6 +11,7 @@ Covers:
   with one line per message and ``finalize_agent_tool.total_tokens``
   is no longer hard-coded to 0.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -67,12 +68,18 @@ def test_register_async_agent_replaces_existing_entry() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="first", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="first",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     state2 = register_async_agent(
-        agent_id=agent_id, description="second", prompt="y",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="second",
+        prompt="y",
+        agent_type="general-purpose",
+        registry=reg,
     )
     assert state2.description == "second"
     assert reg.get(agent_id).description == "second"
@@ -87,8 +94,11 @@ def test_queue_and_drain_pending_messages_fifo() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
 
     assert queue_pending_message(agent_id, "first", reg) is True
@@ -104,8 +114,11 @@ def test_queue_pending_refuses_terminal_state() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="done", registry=reg)
     # Terminal — refuse the queue write.
@@ -117,8 +130,11 @@ def test_drain_on_empty_queue_is_safe() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     assert drain_pending_messages(agent_id, reg) == []
 
@@ -132,8 +148,11 @@ def test_complete_agent_task_flips_status() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="all good", registry=reg)
     state = reg.get(agent_id)
@@ -147,8 +166,11 @@ def test_fail_agent_task_records_error() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     fail_agent_task(agent_id, error="boom", registry=reg)
     state = reg.get(agent_id)
@@ -162,12 +184,16 @@ def test_kill_async_agent_flips_status_and_signals_event() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     state = register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     # Inject an asyncio.Event that the kill helper should signal.
     event = asyncio.Event()
     from dataclasses import replace
+
     reg.upsert(replace(state, abort_event=event))
 
     kill_async_agent(agent_id, reg)
@@ -181,8 +207,11 @@ def test_terminal_guard_prevents_re_completion() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="first", registry=reg)
     fail_agent_task(agent_id, error="late", registry=reg)
@@ -204,8 +233,11 @@ def test_update_agent_progress_sets_snapshot() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     p = AgentProgress(tool_use_count=3, token_count=1000)
     update_agent_progress(agent_id, p, reg)
@@ -218,8 +250,11 @@ def test_update_agent_progress_preserves_existing_summary() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     seeded = AgentProgress(tool_use_count=1, summary="research phase")
     update_agent_progress(agent_id, seeded, reg)
@@ -235,8 +270,11 @@ def test_update_agent_progress_noop_after_terminal() -> None:
     reg = RuntimeTaskRegistry()
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     complete_agent_task(agent_id, result_text="done", registry=reg)
     update_agent_progress(agent_id, AgentProgress(tool_use_count=99), reg)
@@ -249,14 +287,14 @@ def test_update_agent_progress_noop_after_terminal() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_terminal(
-    ctx: ToolContext, task_id: str, timeout_s: float = 2.0
-) -> str:
+def _wait_for_terminal(ctx: ToolContext, task_id: str, timeout_s: float = 2.0) -> str:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         state = ctx.runtime_tasks.get(task_id)
         if isinstance(state, LocalAgentTaskState) and state.status in (
-            "completed", "failed", "killed",
+            "completed",
+            "failed",
+            "killed",
         ):
             return state.status
         time.sleep(0.02)
@@ -366,10 +404,12 @@ def test_async_agent_finalize_total_tokens_is_no_longer_zero(tmp_path: Path) -> 
 
     tracker = ProgressTracker()
     msgs = []
+
     async def _collect():
         async for m in _fake(None):
             msgs.append(m)
             update_progress_from_message(tracker, m)
+
     asyncio.run(_collect())
 
     final = finalize_agent_tool(

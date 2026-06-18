@@ -72,11 +72,13 @@ def _message_tool_calls_to_tool_uses(tool_calls: Any) -> list[dict[str, Any]] | 
         if not name:
             continue
 
-        tool_uses.append({
-            "id": _get_attr_or_item(tool_call, "id", f"tool_call_{index}"),
-            "name": name,
-            "input": parsed_arguments,
-        })
+        tool_uses.append(
+            {
+                "id": _get_attr_or_item(tool_call, "id", f"tool_call_{index}"),
+                "name": name,
+                "input": parsed_arguments,
+            }
+        )
 
     return tool_uses or None
 
@@ -285,11 +287,13 @@ class LiteLLMProvider(BaseProvider):
                 parsed_arguments = json.loads(item["arguments"]) if item["arguments"] else {}
             except Exception:
                 parsed_arguments = {}
-            tool_uses.append({
-                "id": item["id"] or f"tool_call_{index}",
-                "name": item["name"],
-                "input": parsed_arguments,
-            })
+            tool_uses.append(
+                {
+                    "id": item["id"] or f"tool_call_{index}",
+                    "name": item["name"],
+                    "input": parsed_arguments,
+                }
+            )
 
         return ChatResponse(
             content="".join(content_parts),

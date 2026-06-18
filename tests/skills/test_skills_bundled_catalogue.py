@@ -131,7 +131,8 @@ class TestLoopSkillParser(unittest.TestCase):
         ):
             out = parse_loop_args(token)
             self.assertEqual(
-                out, ParsedLoopArgs(mode="fixed-maintenance", interval=expect),
+                out,
+                ParsedLoopArgs(mode="fixed-maintenance", interval=expect),
                 f"failed for token={token!r}",
             )
 
@@ -219,9 +220,7 @@ class TestDebugSkill(unittest.TestCase):
 
     def test_debug_prompt_includes_user_issue(self) -> None:
         ctx = ToolContext(workspace_root=self.root)
-        out = SkillTool.call(
-            {"skill": "debug", "args": "auth keeps failing"}, ctx
-        ).output
+        out = SkillTool.call({"skill": "debug", "args": "auth keeps failing"}, ctx).output
         self.assertIn("auth keeps failing", out["prompt"])
 
 

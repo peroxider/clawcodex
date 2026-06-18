@@ -36,6 +36,7 @@ from extensions.orchestrator.workspace import Workspace, WorkspaceConfig, Worksp
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _git(args: list[str], cwd: Path) -> None:
     subprocess.run(
         ["git", *args],
@@ -119,6 +120,7 @@ class _Session:
 # Round scaffolding
 # ---------------------------------------------------------------------------
 
+
 async def _make_round(
     tmp: Path,
     *,
@@ -154,7 +156,8 @@ async def _make_round(
 
     # Simulate agent_runner posting a placeholder comment (Option A).
     placeholder = await tracker.create_comment(
-        issue_id, "## ClawCodex Run Summary\n\n⏳ Run in progress.",
+        issue_id,
+        "## ClawCodex Run Summary\n\n⏳ Run in progress.",
     )
     assert placeholder is not None, "placeholder comment must be created"
 
@@ -181,6 +184,7 @@ async def _make_round(
 # ---------------------------------------------------------------------------
 # Round 1: empty verification — success path
 # ---------------------------------------------------------------------------
+
 
 class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
     async def test_round1(self) -> None:
@@ -209,7 +213,10 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
             issue = ctx["issue"]
             tracker = ctx["tracker"]
 
-            (workspace.path / "README.md").write_text("main branch\n\n[![build](https://example.com/badge.svg)](https://example.com)\n", encoding="utf-8")
+            (workspace.path / "README.md").write_text(
+                "main branch\n\n[![build](https://example.com/badge.svg)](https://example.com)\n",
+                encoding="utf-8",
+            )
 
             result = await ctx["service"].sync(session)
             self.assertIsNotNone(result)
@@ -234,8 +241,14 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
             # and "local" for owner/repo (since LocalTrackerAdapter has no remote metadata).
             home = Path(os.environ["HOME"])
             persistent_md = (
-                home / ".clawcodex" / "reports" / "LocalTrackerAdapter" / "local" / "local"
-                / "e2e-1" / f"{session.run_id}.md"
+                home
+                / ".clawcodex"
+                / "reports"
+                / "LocalTrackerAdapter"
+                / "local"
+                / "local"
+                / "e2e-1"
+                / f"{session.run_id}.md"
             )
             persistent_json = persistent_md.with_suffix(".json")
             workspace_md = workspace.path / ".reports" / f"{session.run_id}.md"
@@ -268,7 +281,8 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
             # verified via tracker.update_pull_request assertions.
             self.assertIsNone(result.pull_request, "LocalTracker: no remote PR")
             commit_files = _git_output(
-                ["show", "--name-only", "--pretty="], workspace.path,
+                ["show", "--name-only", "--pretty="],
+                workspace.path,
             )
             self.assertIn("README.md", commit_files)
             # File was changed from the seed ("main branch\n") — verify the change
@@ -281,7 +295,9 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
 
             # 6. exactly ONE summary comment in the ndjson (placeholder + update, no new one)
             comments = await tracker.fetch_issue_comments(issue.id)
-            self.assertEqual(len(comments), 1, f"expected 1 comment, got {len(comments)}: {comments}")
+            self.assertEqual(
+                len(comments), 1, f"expected 1 comment, got {len(comments)}: {comments}"
+            )
             self.assertEqual(comments[0].id, session.summary_comment_id)
             comment_body = comments[0].body or ""
             # Summary comment header
@@ -310,6 +326,7 @@ class TestRound1EmptyVerification(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # Round 2: failing test_command — verification_failed, no push, no PR
 # ---------------------------------------------------------------------------
+
 
 class TestRound2VerificationFailure(unittest.IsolatedAsyncioTestCase):
     async def test_round2(self) -> None:
@@ -376,6 +393,7 @@ class TestRound2VerificationFailure(unittest.IsolatedAsyncioTestCase):
 # Round 3: pre_commit hook modifies files — auto-amend
 # ---------------------------------------------------------------------------
 
+
 class TestRound3PreCommitAmend(unittest.IsolatedAsyncioTestCase):
     async def test_round3(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_str:
@@ -383,7 +401,7 @@ class TestRound3PreCommitAmend(unittest.IsolatedAsyncioTestCase):
             # pre_commit hook writes a sentinel file; git_sync should amend it in.
             formatter = (
                 f"{sys.executable} -c "
-                "\"from pathlib import Path; "
+                '"from pathlib import Path; '
                 "Path('formatted.txt').write_text('formatted by pre_commit hook\\n')\""
             )
             ctx = await _make_round(
@@ -414,14 +432,16 @@ class TestRound3PreCommitAmend(unittest.IsolatedAsyncioTestCase):
 
             # The amend step should have added formatted.txt into the same commit.
             files_in_commit = _git_output(
-                ["show", "--name-only", "--pretty="], workspace.path,
+                ["show", "--name-only", "--pretty="],
+                workspace.path,
             )
             self.assertIn("formatted.txt", files_in_commit)
             self.assertIn("README.md", files_in_commit)
 
             # Only one commit on the branch (no separate "amend" commit).
             commit_count = _git_output(
-                ["rev-list", "--count", "main..HEAD"], workspace.path,
+                ["rev-list", "--count", "main..HEAD"],
+                workspace.path,
             )
             self.assertEqual(commit_count, "1", f"expected 1 commit, got {commit_count}")
 
@@ -435,6 +455,7 @@ class TestRound3PreCommitAmend(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 # Round 4 (bonus): pre_push hook that modifies workspace must raise HookFailedError
 # ---------------------------------------------------------------------------
+
 
 class TestRound4PrePushDirtyHook(unittest.IsolatedAsyncioTestCase):
     """Verify pre_push hook that dirties workspace raises HookFailedError.
@@ -453,7 +474,7 @@ class TestRound4PrePushDirtyHook(unittest.IsolatedAsyncioTestCase):
             tmp = Path(tmp_str)
             dirty_hook = (
                 f"{sys.executable} -c "
-                "\"from pathlib import Path; "
+                '"from pathlib import Path; '
                 "Path('dirty.txt').write_text('pre_push dirtied the workspace\\n')\""
             )
             ctx = await _make_round(
@@ -488,7 +509,9 @@ class TestRound4PrePushDirtyHook(unittest.IsolatedAsyncioTestCase):
                 _git_output(["ls-remote", "--heads", "origin", branch_name], workspace.path),
                 "",
             )
-            print(f"\n[Round 4 PASS] pre_push hook that dirtied workspace raised HookFailedError, no push")
+            print(
+                f"\n[Round 4 PASS] pre_push hook that dirtied workspace raised HookFailedError, no push"
+            )
 
 
 if __name__ == "__main__":

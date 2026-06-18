@@ -1,4 +1,5 @@
 """In-memory reporter used for tests and the CLI ``preview`` subcommand."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -108,21 +109,13 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
     if exit_status_counts:
         lines.append(
             "- Exit status counts: "
-            + ", ".join(
-                f"{key}={value}" for key, value in sorted(exit_status_counts.items())
-            )
+            + ", ".join(f"{key}={value}" for key, value in sorted(exit_status_counts.items()))
         )
     if platforms:
-        lines.append(
-            "- Platforms: "
-            + ", ".join(f"{k} {v}" for k, v in sorted(platforms.items()))
-        )
+        lines.append("- Platforms: " + ", ".join(f"{k} {v}" for k, v in sorted(platforms.items())))
     providers = summary.get("providers", {}) or {}
     if providers:
-        lines.append(
-            "- Providers: "
-            + ", ".join(f"{k} {v}" for k, v in sorted(providers.items()))
-        )
+        lines.append("- Providers: " + ", ".join(f"{k} {v}" for k, v in sorted(providers.items())))
     lines.append("")
 
     top_commands = summary.get("top_commands", []) or []

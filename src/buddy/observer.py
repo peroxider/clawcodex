@@ -9,6 +9,7 @@ REPL has already prepended at-mention reminders and companion-intro to
 ``user_input``. The ``"/buddy"`` / companion-name match can therefore
 match against system-reminder text. This is parity-correct, not a bug.
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable, Iterable, Sequence
@@ -18,19 +19,19 @@ from src.config import load_config
 
 
 _DIRECT_REPLIES: tuple[str, ...] = (
-    'I am observing.',
-    'I am helping from the corner.',
-    'I saw that.',
-    'Still here.',
-    'Watching closely.',
+    "I am observing.",
+    "I am helping from the corner.",
+    "I saw that.",
+    "Still here.",
+    "Watching closely.",
 )
 
 _PET_REPLIES: tuple[str, ...] = (
-    'happy chirp',
-    'tiny victory dance',
-    'quietly approves',
-    'wiggles with joy',
-    'looks pleased',
+    "happy chirp",
+    "tiny victory dance",
+    "quietly approves",
+    "wiggles with joy",
+    "looks pleased",
 )
 
 
@@ -51,18 +52,18 @@ def _get_last_user_text(messages: Iterable[Any]) -> str | None:
     """Return the most recent user message's text, or None."""
     last_user = None
     for msg in messages:
-        m_type = getattr(msg, 'type', None)
+        m_type = getattr(msg, "type", None)
         if m_type is None and isinstance(msg, dict):
-            m_type = msg.get('type')
-        if m_type == 'user':
+            m_type = msg.get("type")
+        if m_type == "user":
             last_user = msg
 
     if last_user is None:
         return None
 
-    content = getattr(last_user, 'content', None)
+    content = getattr(last_user, "content", None)
     if content is None and isinstance(last_user, dict):
-        content = last_user.get('content')
+        content = last_user.get("content")
 
     if isinstance(content, str):
         stripped = content.strip()
@@ -71,13 +72,13 @@ def _get_last_user_text(messages: Iterable[Any]) -> str | None:
         parts: list[str] = []
         for block in content:
             if isinstance(block, dict):
-                if block.get('type') == 'text':
-                    parts.append(str(block.get('text', '')))
+                if block.get("type") == "text":
+                    parts.append(str(block.get("text", "")))
             else:
-                btype = getattr(block, 'type', None)
-                if btype == 'text':
-                    parts.append(str(getattr(block, 'text', '')))
-        joined = ' '.join(parts).strip()
+                btype = getattr(block, "type", None)
+                if btype == "text":
+                    parts.append(str(getattr(block, "text", "")))
+        joined = " ".join(parts).strip()
         return joined if joined else None
     return None
 
@@ -90,7 +91,7 @@ def fire_companion_observer(
     companion = get_companion()
     if companion is None:
         return
-    if load_config().get('companion_muted', False):
+    if load_config().get("companion_muted", False):
         return
 
     text = _get_last_user_text(messages)
@@ -100,21 +101,13 @@ def fire_companion_observer(
     lower = text.lower()
     companion_name_lower = companion.name.lower()
 
-    if '/buddy' in lower:
-        on_reaction(
-            _pick_deterministic(_PET_REPLIES, text + companion.name)
-        )
+    if "/buddy" in lower:
+        on_reaction(_pick_deterministic(_PET_REPLIES, text + companion.name))
         return
 
-    if (
-        companion_name_lower in lower
-        or 'buddy' in lower
-        or 'companion' in lower
-    ):
-        reply = _pick_deterministic(
-            _DIRECT_REPLIES, text + companion.personality
-        )
+    if companion_name_lower in lower or "buddy" in lower or "companion" in lower:
+        reply = _pick_deterministic(_DIRECT_REPLIES, text + companion.personality)
         on_reaction(f"{companion.name}: {reply}")
 
 
-__all__ = ['fire_companion_observer']
+__all__ = ["fire_companion_observer"]

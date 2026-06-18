@@ -48,9 +48,9 @@ def _build_bridge() -> tuple[AgentBridge, list, AppState]:
 
     post_calls: list = []
     app_state = AppState(model="test-model", provider="test-provider")
-    tool_context = __import__(
-        "src.tool_system.context", fromlist=["ToolContext"]
-    ).ToolContext(workspace_root="/tmp")
+    tool_context = __import__("src.tool_system.context", fromlist=["ToolContext"]).ToolContext(
+        workspace_root="/tmp"
+    )
     bridge = AgentBridge(
         post_message=lambda msg: post_calls.append(msg),
         session=Mock(),

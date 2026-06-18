@@ -67,7 +67,10 @@ class ToolRegistry:
                 )
 
         decision = has_permissions_to_use_tool(
-            tool, call.input, context.permission_context, tool_use_context=context,
+            tool,
+            call.input,
+            context.permission_context,
+            tool_use_context=context,
         )
 
         if decision.behavior == "deny":
@@ -85,7 +88,9 @@ class ToolRegistry:
                 raw_handler = context.permission_handler
 
                 def _adapted_handler(
-                    tn: str, msg: str, suggestions: Any,
+                    tn: str,
+                    msg: str,
+                    suggestions: Any,
                 ) -> tuple[bool, dict[str, Any] | None]:
                     allowed, _ = raw_handler(tn, msg, None)
                     return allowed, None
@@ -97,7 +102,9 @@ class ToolRegistry:
             if final.behavior == "deny":
                 return ToolResult(
                     name=tool.name,
-                    output={"error": getattr(final, "message", None) or "permission denied by user"},
+                    output={
+                        "error": getattr(final, "message", None) or "permission denied by user"
+                    },
                     is_error=True,
                     tool_use_id=call.tool_use_id,
                 )
@@ -196,10 +203,7 @@ def filter_tools_by_deny_rules(
     tools: Tools,
     permission_context: ToolPermissionContext,
 ) -> Tools:
-    return [
-        t for t in tools
-        if not permission_context.blocks(t.name)
-    ]
+    return [t for t in tools if not permission_context.blocks(t.name)]
 
 
 def get_tools(

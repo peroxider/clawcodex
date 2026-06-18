@@ -32,7 +32,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Callable, Iterable, Optional
+from typing import IO, Any, Callable, Iterable, Optional
 
 from src.agent import Session
 from src.cli_core import (
@@ -112,13 +112,9 @@ def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
 
     if options.output_format not in OUTPUT_FORMATS:
-        cli_error(
-            f"error: --output-format must be one of {', '.join(OUTPUT_FORMATS)}", 2
-        )
+        cli_error(f"error: --output-format must be one of {', '.join(OUTPUT_FORMATS)}", 2)
     if options.input_format not in INPUT_FORMATS:
-        cli_error(
-            f"error: --input-format must be one of {', '.join(INPUT_FORMATS)}", 2
-        )
+        cli_error(f"error: --input-format must be one of {', '.join(INPUT_FORMATS)}", 2)
     if options.input_format == "stream-json" and options.output_format != "stream-json":
         cli_error(
             "error: --input-format stream-json requires --output-format stream-json",
@@ -263,9 +259,7 @@ def run_headless(options: HeadlessOptions) -> int:
     # ``restore_sigint`` runs in the ``finally`` so we don't leak global
     # signal state to embedders.
     in_agent_loop = _InAgentLoopFlag()
-    restore_sigint = _install_sigint_handler(
-        abort_controller, in_agent_loop, stderr
-    )
+    restore_sigint = _install_sigint_handler(abort_controller, in_agent_loop, stderr)
     try:
         # Cancellation is caught at the for-loop level (not per-iteration)
         # so that a SIGINT landing on ANY cancellation point unwinds to one
@@ -291,14 +285,17 @@ def run_headless(options: HeadlessOptions) -> int:
                 _ext_cb = options.on_event
                 if _ext_cb is not None:
                     _internal_on_event = _on_event
+
                     def on_event(event: ToolEvent) -> None:
                         _internal_on_event(event)
                         try:
                             _ext_cb(event)
                         except Exception:
                             pass
+
                 on_text_chunk = None
                 if writer is not None and options.include_partial_messages:
+
                     def _emit_partial(chunk: str) -> None:
                         writer.write(PartialTextEvent(text=chunk))
 
@@ -318,12 +315,13 @@ def run_headless(options: HeadlessOptions) -> int:
                         # the loop; the adapter doesn't.
                         import asyncio as _asyncio
                         from src.outputStyles import resolve_output_style
+
                         _style_prompt = resolve_output_style(
                             getattr(tool_context, "output_style_name", None),
                             getattr(tool_context, "output_style_dir", None),
                         ).prompt
-                        effective_system_prompt = (
-                            build_effective_system_prompt(_style_prompt, tool_context)
+                        effective_system_prompt = build_effective_system_prompt(
+                            _style_prompt, tool_context
                         )
                         if options.append_system_prompt:
                             effective_system_prompt = (
@@ -345,42 +343,40 @@ def run_headless(options: HeadlessOptions) -> int:
                                 session.conversation.add_message(msg.role, msg.content)
                             except Exception:
                                 import logging
+
                                 logging.getLogger(__name__).exception(
-                                    "Failed to persist message into "
-                                    "conversation: role=%s",
+                                    "Failed to persist message into conversation: role=%s",
                                     getattr(msg, "role", "?"),
                                 )
                                 raise
 
-                        compat_result = _asyncio.run(run_query_as_agent_loop(
-                            initial_messages=list(session.conversation.messages),
-                            provider=provider,
-                            tool_registry=tool_registry,
-                            tool_context=tool_context,
-                            system_prompt=effective_system_prompt,
-                            max_turns=options.max_turns,
-                            on_event=on_event,
-                            on_text_chunk=on_text_chunk,
-                            on_message=_persist,
-                            # Critic C2: pass the OWNING controller so
-                            # the provider's chat_stream_response listens
-                            # on the same signal the SIGINT handler trips.
-                            # Passing only ``cancel_signal=signal`` would
-                            # force the adapter to mint a fresh controller
-                            # and break the mid-stream tear-down path.
-                            abort_controller=abort_controller,
-                        ))
+                        compat_result = _asyncio.run(
+                            run_query_as_agent_loop(
+                                initial_messages=list(session.conversation.messages),
+                                provider=provider,
+                                tool_registry=tool_registry,
+                                tool_context=tool_context,
+                                system_prompt=effective_system_prompt,
+                                max_turns=options.max_turns,
+                                on_event=on_event,
+                                on_text_chunk=on_text_chunk,
+                                on_message=_persist,
+                                # Critic C2: pass the OWNING controller so
+                                # the provider's chat_stream_response listens
+                                # on the same signal the SIGINT handler trips.
+                                # Passing only ``cancel_signal=signal`` would
+                                # force the adapter to mint a fresh controller
+                                # and break the mid-stream tear-down path.
+                                abort_controller=abort_controller,
+                            )
+                        )
                         # Re-wrap into legacy AgentLoopResult shape so
                         # downstream usage/num_turns/response_text code
                         # stays untouched. ``usage if num_turns > 0
                         # else None`` preserves the dict|None contract.
                         result = AgentLoopResult(
                             response_text=compat_result.response_text,
-                            usage=(
-                                compat_result.usage
-                                if compat_result.num_turns > 0
-                                else None
-                            ),
+                            usage=(compat_result.usage if compat_result.num_turns > 0 else None),
                             num_turns=compat_result.num_turns,
                         )
                     finally:

@@ -89,9 +89,7 @@ def _format_task_list(tasks: list[dict[str, Any]]) -> str:
         owner = f" ({t['owner']})" if t.get("owner") else ""
         blocked_by = t.get("blockedBy") or []
         blocked = (
-            f" [blocked by {', '.join(f'#{bid}' for bid in blocked_by)}]"
-            if blocked_by
-            else ""
+            f" [blocked by {', '.join(f'#{bid}' for bid in blocked_by)}]" if blocked_by else ""
         )
         lines.append(f"#{t['id']} [{t['status']}] {t['subject']}{owner}{blocked}")
     return "\n".join(lines)
@@ -303,8 +301,7 @@ def _task_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolRes
     # Phase-2-or-later one-line cleanup** once we have confidence no
     # such transcripts remain in CI fixtures.
     all_tasks = [
-        t for t in context.tasks.values()
-        if not (t.get("metadata") or {}).get("_internal")
+        t for t in context.tasks.values() if not (t.get("metadata") or {}).get("_internal")
     ]
 
     # Build set of completed task IDs for resolved blocker filtering
@@ -371,7 +368,12 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     if task is None:
         return ToolResult(
             name="TaskUpdate",
-            output={"success": False, "taskId": task_id, "updatedFields": [], "error": "Task not found"},
+            output={
+                "success": False,
+                "taskId": task_id,
+                "updatedFields": [],
+                "error": "Task not found",
+            },
         )
 
     updated_fields: list[str] = []
@@ -389,7 +391,9 @@ def _task_update_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     if "status" in tool_input and tool_input["status"] is not None:
         status = tool_input["status"]
         if not isinstance(status, str) or status not in _TASK_STATUSES and status != "deleted":
-            raise ToolInputError("status must be pending|in_progress|completed|deleted when provided")
+            raise ToolInputError(
+                "status must be pending|in_progress|completed|deleted when provided"
+            )
         if status == "deleted":
             context.tasks.pop(task_id, None)
             # Cascade delete: remove this task's ID from all other tasks'

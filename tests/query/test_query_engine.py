@@ -142,7 +142,9 @@ class TestQueryEngine(unittest.TestCase):
            nested image content (the realistic Read-tool case).
         """
         from src.types.content_blocks import (
-            ImageBlock, TextBlock, ToolResultBlock,
+            ImageBlock,
+            TextBlock,
+            ToolResultBlock,
         )
 
         provider = MagicMock()
@@ -167,34 +169,42 @@ class TestQueryEngine(unittest.TestCase):
                 "data": "BBBB",
             },
         }
-        prior_user_with_nested = UserMessage(content=[
-            TextBlock(text="prior turn"),
-            ToolResultBlock(
-                tool_use_id="tool_use_prior",
-                content=[nested_image_dict],
-            ),
-        ])
+        prior_user_with_nested = UserMessage(
+            content=[
+                TextBlock(text="prior turn"),
+                ToolResultBlock(
+                    tool_use_id="tool_use_prior",
+                    content=[nested_image_dict],
+                ),
+            ]
+        )
 
-        engine = QueryEngine(QueryEngineConfig(
-            cwd=self.workspace,
-            provider=provider,
-            tool_registry=self.registry,
-            tools=self.registry.list_tools(),
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=10,
-            initial_messages=[prior_user_with_nested],
-        ))
+        engine = QueryEngine(
+            QueryEngineConfig(
+                cwd=self.workspace,
+                provider=provider,
+                tool_registry=self.registry,
+                tools=self.registry.list_tools(),
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=10,
+                initial_messages=[prior_user_with_nested],
+            )
+        )
 
         async def run():
-            async for _ in engine.submit_message([
-                TextBlock(text="describe this picture"),
-                ImageBlock(source={
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "AAAA",
-                }),
-            ]):
+            async for _ in engine.submit_message(
+                [
+                    TextBlock(text="describe this picture"),
+                    ImageBlock(
+                        source={
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "AAAA",
+                        }
+                    ),
+                ]
+            ):
                 pass
 
         _run(run())
@@ -206,10 +216,7 @@ class TestQueryEngine(unittest.TestCase):
         last_user = user_msgs[-1]
         self.assertIsInstance(last_user.content, list)
 
-        text_blocks = [
-            b for b in last_user.content
-            if isinstance(b, TextBlock)
-        ]
+        text_blocks = [b for b in last_user.content if isinstance(b, TextBlock)]
         # (1) text intent preserved
         texts = [b.text for b in text_blocks]
         self.assertIn("describe this picture", texts)
@@ -225,12 +232,14 @@ class TestQueryEngine(unittest.TestCase):
         def assert_no_images_in(blocks: list, where: str) -> None:
             for block in blocks:
                 self.assertNotIsInstance(
-                    block, ImageBlock,
+                    block,
+                    ImageBlock,
                     f"ImageBlock must be stripped after image_unsupported error ({where})",
                 )
                 if isinstance(block, dict):
                     self.assertNotEqual(
-                        block.get("type"), "image",
+                        block.get("type"),
+                        "image",
                         f"dict-shape image block must be stripped ({where})",
                     )
                 # Recurse into ToolResultBlock.content
@@ -270,14 +279,18 @@ class TestQueryEngine(unittest.TestCase):
 
         async def run():
             # Turn 1: image-bearing message → error.
-            async for _ in engine.submit_message([
-                TextBlock(text="describe"),
-                ImageBlock(source={
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "AAAA",
-                }),
-            ]):
+            async for _ in engine.submit_message(
+                [
+                    TextBlock(text="describe"),
+                    ImageBlock(
+                        source={
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "AAAA",
+                        }
+                    ),
+                ]
+            ):
                 pass
             # Turn 2: unrelated text-only request — MUST succeed.
             collected_text: list[str] = []
@@ -292,8 +305,9 @@ class TestQueryEngine(unittest.TestCase):
             return collected_text
 
         result = _run(run())
-        self.assertIn("Here is your blog app plan...", result,
-                      "second turn must succeed after image strip")
+        self.assertIn(
+            "Here is your blog app plan...", result, "second turn must succeed after image strip"
+        )
         # Provider was called twice (turn 1 errored, turn 2 succeeded).
         self.assertEqual(provider.chat.call_count, 2)
 
@@ -337,7 +351,8 @@ class TestQueryEngine(unittest.TestCase):
             content = m.get("content") if isinstance(m, dict) else getattr(m, "content", None)
             _collect_images(content, leaked)
         self.assertEqual(
-            leaked, [],
+            leaked,
+            [],
             "no image blocks may reach the provider on the post-strip turn; "
             f"found {len(leaked)} leaked image block(s): {leaked!r}",
         )
@@ -363,8 +378,10 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         self.context = ToolContext(workspace_root=self.workspace)
         # Reset the date lru_cache so tests start with a fresh capture.
         from src.context_system.prompt_assembly import _get_session_start_date_iso
+
         _get_session_start_date_iso.cache_clear()
         from src.context_system import clear_context_caches
+
         clear_context_caches()
 
     def tearDown(self):
@@ -373,6 +390,7 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
     def _make_engine_no_system_prompt(self, provider):
         """Production path: no system_prompt, no custom_system_prompt → blocks."""
         from src.query.engine import QueryEngine, QueryEngineConfig
+
         # Use AnthropicProvider so query.py forwards the list shape (rather
         # than flattening for non-Anthropic providers per query.py:251).
         config = QueryEngineConfig(
@@ -389,6 +407,7 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
     def test_engine_produces_block_list_with_cache_control(self):
         """End-to-end: engine builds the production prompt as block list."""
         from src.providers.anthropic_provider import AnthropicProvider
+
         # Patch the AnthropicProvider's SDK client so we don't need keys.
         provider = MagicMock(spec=AnthropicProvider)
         provider.model = "claude-sonnet-4-20250514"
@@ -426,22 +445,24 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         system_arg = call.kwargs.get("system")
         self.assertIsNotNone(system_arg, "system kwarg must be forwarded")
         self.assertIsInstance(
-            system_arg, list,
+            system_arg,
+            list,
             f"Expected block-list shape, got {type(system_arg).__name__}",
         )
         # At least one block must carry cache_control.
         marked = [b for b in system_arg if "cache_control" in b]
         self.assertGreaterEqual(
-            len(marked), 1,
+            len(marked),
+            1,
             "Engine must emit at least one cache_control marker",
         )
         # Boundary literal must be present.
         from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-        boundary_blocks = [
-            b for b in system_arg if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-        ]
+
+        boundary_blocks = [b for b in system_arg if b.get("text") == SYSTEM_PROMPT_DYNAMIC_BOUNDARY]
         self.assertEqual(
-            len(boundary_blocks), 1,
+            len(boundary_blocks),
+            1,
             "Engine must emit exactly one boundary-marker block",
         )
 
@@ -473,7 +494,8 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
                 content="ok",
                 model="claude-sonnet-4-20250514",
                 usage={
-                    "input_tokens": 10, "output_tokens": 5,
+                    "input_tokens": 10,
+                    "output_tokens": 5,
                     "cache_creation_input_tokens": 0,
                     "cache_read_input_tokens": 0,
                 },
@@ -510,7 +532,8 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
                 cc = blk.get("cache_control")
                 if cc:
                     self.assertNotIn(
-                        "scope", cc,
+                        "scope",
+                        cc,
                         "MCP-loaded session must not emit scope='global' — "
                         "WI-2.3 MCP gate must be threaded through the engine",
                     )
@@ -530,6 +553,7 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         """
         from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
         from src.providers.openai_provider import OpenAIProvider
+
         # Use a non-Anthropic provider mock — query.py routes through the
         # flatten path for these.
         provider = MagicMock(spec=OpenAIProvider)
@@ -562,7 +586,8 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         self.assertGreater(len(sys_msgs), 0, "expected system message")
         sys_content = sys_msgs[0].get("content", "")
         self.assertNotIn(
-            SYSTEM_PROMPT_DYNAMIC_BOUNDARY, sys_content,
+            SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
+            sys_content,
             "boundary literal must be filtered before reaching non-Anthropic providers",
         )
 
@@ -574,6 +599,7 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         Both must hold for cache reads to fire.
         """
         from src.providers.anthropic_provider import AnthropicProvider
+
         provider = MagicMock(spec=AnthropicProvider)
         provider.model = "claude-sonnet-4-20250514"
         provider.chat_stream_response.side_effect = NotImplementedError()
@@ -615,7 +641,8 @@ class TestEngineProducesCacheableSystemBlocks(unittest.TestCase):
         first_marked = [b for b in first_system if "cache_control" in b]
         second_marked = [b for b in second_system if "cache_control" in b]
         self.assertEqual(
-            first_marked, second_marked,
+            first_marked,
+            second_marked,
             "cache_control-marked blocks must be byte-identical across turns",
         )
 

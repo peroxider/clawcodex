@@ -274,9 +274,7 @@ class TestWorkspaceRepositoryClone(unittest.IsolatedAsyncioTestCase):
             await manager.cleanup(issue)
 
             with self.assertRaises(Exception):
-                await manager.create_for_issue(
-                    _Issue(id="2", identifier="ISSUE-2", title="Second")
-                )
+                await manager.create_for_issue(_Issue(id="2", identifier="ISSUE-2", title="Second"))
 
     async def test_shared_and_sequential_cleanup_preserves_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

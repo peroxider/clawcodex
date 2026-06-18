@@ -435,7 +435,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | P2 | SR-3.4 A2A 协议雏形 | AR-F-2（A2A 协议化 Agent 互联） |
 | P2 | SR-4.2 Remote Trigger MVP | AR-F-7（RemoteTrigger 远程启动与 WebUI） |
 
-### 6.3 长期:自升级闭环 
+### 6.3 长期:自升级闭环
 
 | 优先级 | 交付目标 | 涉及 SR/AR |
 |--------|----------|------------|
@@ -533,4 +533,4 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 ---
 
-*ROADMAP v4.1 — 与 PROGRESS.md 及 FEATURE_PLAN.md 保持同步* 
+*ROADMAP v4.1 — 与 PROGRESS.md 及 FEATURE_PLAN.md 保持同步*

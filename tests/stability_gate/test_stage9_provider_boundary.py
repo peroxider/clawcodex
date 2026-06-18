@@ -189,5 +189,6 @@ class TestStage9BaseProvider:
 
         p = _MinimalProvider(api_key="k", model="m")
         import pytest
+
         with pytest.raises(NotImplementedError):
             p.chat_stream_response([])

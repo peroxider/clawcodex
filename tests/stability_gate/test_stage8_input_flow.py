@@ -62,9 +62,7 @@ class _Host(App):
     def on_prompt_submitted(self, message: PromptSubmitted) -> None:
         self.submitted.append(message)
 
-    def on_permission_mode_cycle_requested(
-        self, message: PermissionModeCycleRequested
-    ) -> None:
+    def on_permission_mode_cycle_requested(self, message: PermissionModeCycleRequested) -> None:
         self.cycle_requests.append(message)
 
     def on_prompt_pasted(self, message: PromptPasted) -> None:
@@ -122,9 +120,7 @@ class TestStage8InputSubmit:
 
             # input 被替换为完整 option id；不应发出 PromptSubmitted
             assert pi._input.value == "/repl"
-            assert host.submitted == [], (
-                "弹层高亮时 Enter 优先 accept，不应发出 PromptSubmitted"
-            )
+            assert host.submitted == [], "弹层高亮时 Enter 优先 accept，不应发出 PromptSubmitted"
 
 
 class TestStage8InputChange:
@@ -142,9 +138,7 @@ class TestStage8InputChange:
             await pilot.pause()
 
             # 弹层应打开（无 -hidden class）
-            assert not pi._suggestions.has_class("-hidden"), (
-                "输入 / 前缀时应打开 slash 弹层"
-            )
+            assert not pi._suggestions.has_class("-hidden"), "输入 / 前缀时应打开 slash 弹层"
 
     async def test_non_slash_closes_slash_popup(self):
         async with _Host().run_test() as pilot:
@@ -163,9 +157,7 @@ class TestStage8InputChange:
             await pilot.pause()
 
             # 弹层应被关闭
-            assert pi._suggestions.has_class("-hidden"), (
-                "输入非 / 内容时应关闭 slash 弹层"
-            )
+            assert pi._suggestions.has_class("-hidden"), "输入非 / 内容时应关闭 slash 弹层"
 
 
 # ---------------------------------------------------------------------------
@@ -190,9 +182,7 @@ class TestStage8KeyBindings:
             await pilot.pause()
             await pilot.pause()
 
-            assert len(host.cycle_requests) == 1, (
-                "Shift+Tab 必须发出 PermissionModeCycleRequested"
-            )
+            assert len(host.cycle_requests) == 1, "Shift+Tab 必须发出 PermissionModeCycleRequested"
 
     async def test_ctrl_l_clears_draft(self):
         async with _Host().run_test() as pilot:
@@ -207,9 +197,7 @@ class TestStage8KeyBindings:
             await pilot.pause()
             await pilot.pause()
 
-            assert pi._input.value == "", (
-                "Ctrl+L 必须清空 draft (action_clear_draft → clear)"
-            )
+            assert pi._input.value == "", "Ctrl+L 必须清空 draft (action_clear_draft → clear)"
 
 
 # ---------------------------------------------------------------------------

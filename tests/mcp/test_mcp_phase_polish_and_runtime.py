@@ -52,7 +52,6 @@ from src.services.mcp.xaa import normalize_url, redact_tokens
 
 
 class TestConnectionManager:
-
     def test_snapshot_returns_empty_initially(self):
         mgr = MCPConnectionManager()
         assert mgr.snapshot() == {}
@@ -82,7 +81,6 @@ class TestConnectionManager:
 
 
 class TestNormalizationLength:
-
     def test_short_name_unchanged(self):
         assert normalize_name_for_mcp("github") == "github"
 
@@ -109,7 +107,6 @@ class TestNormalizationLength:
 
 
 class TestTruncateDescription:
-
     def test_none_passthrough(self):
         assert truncate_description(None) is None
 
@@ -137,7 +134,6 @@ class TestTruncateDescription:
 
 
 class TestTelemetry:
-
     def test_emit_uses_default_sink_when_unregistered(self):
         # Default sink just logs at DEBUG; smoke test that emit doesn't raise.
         emit(MCP_AUTH_REQUIRED, server="srv")
@@ -174,7 +170,6 @@ class TestTelemetry:
 
 
 class TestOfficialRegistry:
-
     def test_returns_false_when_prefetch_not_done(self):
         # Module-state may be set by other tests; verify the absent-URL path.
         assert is_official_mcp_url("https://x") is False or is_official_mcp_url("https://x") is True
@@ -193,7 +188,6 @@ class TestOfficialRegistry:
 
 
 class TestOutputStorage:
-
     def test_persist_and_message_round_trip(self):
         path = persist_binary_content(
             server_name="srv",
@@ -231,17 +225,12 @@ class TestOutputStorage:
 
 
 class TestXaaHelpers:
-
     def test_normalize_url_lowercases_host(self):
-        assert (
-            normalize_url("HTTPS://AUTH.EXAMPLE.COM/Token/")
-            == "https://auth.example.com/Token"
-        )
+        assert normalize_url("HTTPS://AUTH.EXAMPLE.COM/Token/") == "https://auth.example.com/Token"
 
     def test_normalize_url_strips_default_https_port(self):
         assert (
-            normalize_url("https://auth.example.com:443/token")
-            == "https://auth.example.com/token"
+            normalize_url("https://auth.example.com:443/token") == "https://auth.example.com/token"
         )
 
     def test_normalize_url_keeps_non_default_port(self):
@@ -269,7 +258,6 @@ class TestXaaHelpers:
 
 
 class TestClaudeai:
-
     @pytest.mark.asyncio
     async def test_disabled_when_env_var_unset(self, monkeypatch):
         monkeypatch.delenv("ENABLE_CLAUDEAI_MCP_SERVERS", raising=False)

@@ -159,9 +159,7 @@ def get_or_start_keychain_prefetch() -> PrefetchHandle:
         return handle
 
 
-def wait_and_read_keychain(
-    handle: PrefetchHandle, timeout: float = 5.0
-) -> str | None:
+def wait_and_read_keychain(handle: PrefetchHandle, timeout: float = 5.0) -> str | None:
     """Block until the prefetch child process exits; return stdout text.
 
     Returns ``None`` for the skipped-prefetch case (non-macOS or

@@ -44,7 +44,12 @@ def _send_user_message_call(tool_input: dict[str, Any], context: ToolContext) ->
 
     sent_at = datetime.now(timezone.utc).isoformat()
     context.outbox.append(
-        {"tool": "SendUserMessage", "status": status, "message": message, "attachments": resolved_attachments}
+        {
+            "tool": "SendUserMessage",
+            "status": status,
+            "message": message,
+            "attachments": resolved_attachments,
+        }
     )
     return ToolResult(
         name="SendUserMessage",

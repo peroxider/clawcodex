@@ -49,9 +49,7 @@ def _build_sdk_message_with_blocks(blocks: list[dict]) -> object:
         }
     ]
     for idx, block in enumerate(blocks):
-        events_raw.append(
-            {"type": "content_block_start", "index": idx, "content_block": block}
-        )
+        events_raw.append({"type": "content_block_start", "index": idx, "content_block": block})
         events_raw.append({"type": "content_block_stop", "index": idx})
     events_raw.append(
         {
@@ -138,8 +136,7 @@ class TestAdvisorBlockPreservation(unittest.TestCase):
         snapshot = _build_sdk_message_with_blocks(blocks)
         chat = self._provider()._build_chat_response(snapshot)
         result = next(
-            b for b in (chat.raw_content_blocks or [])
-            if b.get("type") == "advisor_tool_result"
+            b for b in (chat.raw_content_blocks or []) if b.get("type") == "advisor_tool_result"
         )
         # The opaque envelope MUST round-trip exactly — redacted
         # results are the whole reason advisor exists for sensitive
@@ -170,8 +167,7 @@ class TestAdvisorBlockPreservation(unittest.TestCase):
         snapshot = _build_sdk_message_with_blocks(blocks)
         chat = self._provider()._build_chat_response(snapshot)
         result = next(
-            b for b in (chat.raw_content_blocks or [])
-            if b.get("type") == "advisor_tool_result"
+            b for b in (chat.raw_content_blocks or []) if b.get("type") == "advisor_tool_result"
         )
         # The error_code is the only signal the UI uses to render
         # "Advisor unavailable (<code>)" — losing it would silently

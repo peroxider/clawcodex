@@ -10,6 +10,7 @@ This is a unit test against an isolated, REPL-shaped object so it
 catches the unwrap mistake without needing to boot the full REPL
 (which has heavy provider / I/O dependencies).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -24,9 +25,7 @@ from src.agent.load_agents_dir import clear_agent_definitions_cache
 from src.repl.core import ClawcodexREPL
 
 
-def _write_user_agent(
-    user_dir: Path, name: str = "critic", description: str = "reviewer"
-) -> None:
+def _write_user_agent(user_dir: Path, name: str = "critic", description: str = "reviewer") -> None:
     target = user_dir / "agents" / f"{name}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
@@ -40,6 +39,7 @@ class _FakeREPL:
     """Minimal stand-in for ``ClawcodexREPL`` that exposes only what
     ``ClawcodexREPL._available_agents`` reads from ``self``.
     """
+
     tool_context: Any
 
     _available_agents = ClawcodexREPL._available_agents

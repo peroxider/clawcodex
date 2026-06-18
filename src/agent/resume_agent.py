@@ -35,6 +35,7 @@ queue their messages onto the new running state via
 ``queue_pending_message`` (which by then sees the running entry the
 winner just registered).
 """
+
 from __future__ import annotations
 
 import logging
@@ -174,19 +175,22 @@ async def resume_agent_background(
 
     if state is None:
         return ResumeResult(
-            resumed=False, agent_id=agent_id,
+            resumed=False,
+            agent_id=agent_id,
             reason="task not found in runtime_tasks",
         )
 
     if not isinstance(state, LocalAgentTaskState):
         return ResumeResult(
-            resumed=False, agent_id=agent_id,
+            resumed=False,
+            agent_id=agent_id,
             reason=f"task type {state.type!r} is not local_agent",
         )
 
     if not is_terminal_task_status(state.status):
         return ResumeResult(
-            resumed=False, agent_id=agent_id,
+            resumed=False,
+            agent_id=agent_id,
             reason=f"task is {state.status!r}, not terminal",
         )
 
@@ -197,7 +201,8 @@ async def resume_agent_background(
         # winner with a fresh running state). Return a no-op so the
         # SendMessage caller knows to fall back to queueing.
         return ResumeResult(
-            resumed=False, agent_id=agent_id,
+            resumed=False,
+            agent_id=agent_id,
             reason="another caller is resuming; queue your message instead",
         )
 

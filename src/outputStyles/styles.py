@@ -23,4 +23,3 @@ BUILTIN_OUTPUT_STYLES: dict[str, OutputStyle] = {
         prompt="Respond with concise implementation details plus short educational notes when they improve understanding.",
     ),
 }
-

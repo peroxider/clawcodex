@@ -49,21 +49,28 @@ class TestHasHookForEvent:
         # when the legacy path actually has data).
         class MockCtx:
             options = type("Options", (), {"hooks": None})()
+
         assert not has_hook_for_event("PreToolUse", MockCtx())
 
     def test_with_hooks(self):
         class MockCtx:
-            options = type("Options", (), {
-                "hooks": {"PreToolUse": [{"type": "command", "command": "echo test"}]}
-            })()
+            options = type(
+                "Options",
+                (),
+                {"hooks": {"PreToolUse": [{"type": "command", "command": "echo test"}]}},
+            )()
+
         with pytest.warns(DeprecationWarning, match="options.hooks"):
             assert has_hook_for_event("PreToolUse", MockCtx())
 
     def test_wrong_event(self):
         class MockCtx:
-            options = type("Options", (), {
-                "hooks": {"PreToolUse": [{"type": "command", "command": "echo test"}]}
-            })()
+            options = type(
+                "Options",
+                (),
+                {"hooks": {"PreToolUse": [{"type": "command", "command": "echo test"}]}},
+            )()
+
         with pytest.warns(DeprecationWarning, match="options.hooks"):
             assert not has_hook_for_event("PostToolUse", MockCtx())
 
@@ -139,9 +146,7 @@ class TestExecuteCommandHook:
     @pytest.mark.asyncio
     async def test_timeout(self):
         hook = HookConfig(type="command", command="sleep 10", timeout=100)
-        result = await _execute_command_hook(
-            hook, {"hook_event": "PreToolUse"}, timeout_ms=100
-        )
+        result = await _execute_command_hook(hook, {"hook_event": "PreToolUse"}, timeout_ms=100)
         assert result.exit_code == -1
         assert result.blocking_error is not None
         assert "timed out" in result.blocking_error.lower()

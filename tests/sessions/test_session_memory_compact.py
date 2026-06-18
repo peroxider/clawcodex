@@ -116,8 +116,16 @@ class TestTrySessionMemoryCompaction(unittest.TestCase):
         self.assertEqual(to_keep, [])
 
     def test_basic_split(self):
-        msgs = [_user("q1"), _assistant("a1"), _user("q2"), _assistant("a2"),
-                _user("q3"), _assistant("a3"), _user("q4"), _assistant("a4")]
+        msgs = [
+            _user("q1"),
+            _assistant("a1"),
+            _user("q2"),
+            _assistant("a2"),
+            _user("q3"),
+            _assistant("a3"),
+            _user("q4"),
+            _assistant("a4"),
+        ]
         to_summarize, to_keep = try_session_memory_compaction(msgs, 4)
         self.assertEqual(len(to_summarize), 4)
         self.assertEqual(len(to_keep), 4)

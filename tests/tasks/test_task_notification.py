@@ -4,6 +4,7 @@ Covers the chapter's notification surface: byte-for-byte envelope
 parity with TS, ``notified`` flag check-and-set, idempotent enqueue,
 and the racy "completion fires between two sweeps" scenario.
 """
+
 from __future__ import annotations
 
 import time
@@ -73,7 +74,9 @@ def test_envelope_contains_all_chapter_required_tags() -> None:
 
 def test_envelope_summary_phrasing_completed() -> None:
     xml = build_task_notification_xml(
-        task_id="a1", description="my agent", status="completed",
+        task_id="a1",
+        description="my agent",
+        status="completed",
         output_file="/x",
     )
     assert '<summary>Agent "my agent" completed</summary>' in xml
@@ -81,15 +84,20 @@ def test_envelope_summary_phrasing_completed() -> None:
 
 def test_envelope_summary_phrasing_failed_with_error() -> None:
     xml = build_task_notification_xml(
-        task_id="a1", description="my agent", status="failed",
-        error="ValueError: bad", output_file="/x",
+        task_id="a1",
+        description="my agent",
+        status="failed",
+        error="ValueError: bad",
+        output_file="/x",
     )
-    assert 'failed: ValueError: bad' in xml
+    assert "failed: ValueError: bad" in xml
 
 
 def test_envelope_summary_phrasing_failed_no_error() -> None:
     xml = build_task_notification_xml(
-        task_id="a1", description="my agent", status="failed",
+        task_id="a1",
+        description="my agent",
+        status="failed",
         output_file="/x",
     )
     assert "failed: Unknown error" in xml
@@ -97,7 +105,9 @@ def test_envelope_summary_phrasing_failed_no_error() -> None:
 
 def test_envelope_summary_phrasing_killed() -> None:
     xml = build_task_notification_xml(
-        task_id="a1", description="my agent", status="killed",
+        task_id="a1",
+        description="my agent",
+        status="killed",
         output_file="/x",
     )
     assert '<summary>Agent "my agent" was stopped</summary>' in xml
@@ -105,7 +115,9 @@ def test_envelope_summary_phrasing_killed() -> None:
 
 def test_envelope_optional_sections_omitted_when_inputs_absent() -> None:
     xml = build_task_notification_xml(
-        task_id="a1", description="x", status="completed",
+        task_id="a1",
+        description="x",
+        status="completed",
         output_file="/x",
     )
     # Without final_message, no <result> tag.
@@ -181,8 +193,11 @@ def test_envelope_snapshot_with_tool_use_id() -> None:
 def _make_running(reg: RuntimeTaskRegistry) -> LocalAgentTaskState:
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="example", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="example",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     return reg.get(agent_id)
 
@@ -214,12 +229,18 @@ def test_enqueue_is_no_op_when_already_notified() -> None:
     state = _make_running(reg)
 
     enqueue_agent_notification(
-        task_id=state.id, description=state.description,
-        status="completed", output_file=state.output_file, registry=reg,
+        task_id=state.id,
+        description=state.description,
+        status="completed",
+        output_file=state.output_file,
+        registry=reg,
     )
     fired_again = enqueue_agent_notification(
-        task_id=state.id, description=state.description,
-        status="killed", output_file=state.output_file, registry=reg,
+        task_id=state.id,
+        description=state.description,
+        status="killed",
+        output_file=state.output_file,
+        registry=reg,
     )
     assert fired_again is False
     assert len(peek_pending_notifications()) == 1
@@ -238,14 +259,19 @@ def test_concurrent_completion_and_kill_produces_one_envelope() -> None:
     def emit(status: str) -> None:
         barrier.wait()  # both threads enter at the same instant
         enqueue_agent_notification(
-            task_id=state.id, description=state.description,
-            status=status, output_file=state.output_file, registry=reg,
+            task_id=state.id,
+            description=state.description,
+            status=status,
+            output_file=state.output_file,
+            registry=reg,
         )
 
     t1 = threading.Thread(target=emit, args=("completed",))
     t2 = threading.Thread(target=emit, args=("killed",))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     queue = peek_pending_notifications()
     assert len(queue) == 1, f"race produced {len(queue)} envelopes — dedup failed"
@@ -256,12 +282,18 @@ def test_drain_removes_envelopes_from_queue() -> None:
     a = _make_running(reg)
     b = _make_running(reg)
     enqueue_agent_notification(
-        task_id=a.id, description=a.description,
-        status="completed", output_file=a.output_file, registry=reg,
+        task_id=a.id,
+        description=a.description,
+        status="completed",
+        output_file=a.output_file,
+        registry=reg,
     )
     enqueue_agent_notification(
-        task_id=b.id, description=b.description,
-        status="failed", output_file=b.output_file, registry=reg,
+        task_id=b.id,
+        description=b.description,
+        status="failed",
+        output_file=b.output_file,
+        registry=reg,
     )
     drained = drain_pending_notifications()
     assert len(drained) == 2

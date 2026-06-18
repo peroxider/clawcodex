@@ -50,7 +50,7 @@ def _build_namespace(target_dir: str, base_dir: str) -> str:
     base = base_dir.rstrip(os.sep)
     if target_dir == base:
         return ""
-    rel = target_dir[len(base) + 1:]
+    rel = target_dir[len(base) + 1 :]
     return ":".join(rel.split(os.sep)) if rel else ""
 
 
@@ -100,9 +100,7 @@ def _extract_description_from_markdown(content: str, default: str) -> str:
     return default
 
 
-def _coerce_description(
-    raw: Any, markdown_content: str, resolved_name: str
-) -> tuple[str, bool]:
+def _coerce_description(raw: Any, markdown_content: str, resolved_name: str) -> tuple[str, bool]:
     """Return ``(description, has_user_specified_description)``.
 
     Precedence: explicit frontmatter ``description`` > first-line of
@@ -164,6 +162,7 @@ def _coerce_model(value: Any) -> str | None:
 
     try:
         from src.models.aliases import MODEL_ALIASES
+
         known_aliases = set(MODEL_ALIASES.keys())
     except Exception:
         known_aliases = set()
@@ -172,8 +171,16 @@ def _coerce_model(value: Any) -> str | None:
     looks_canonical = any(
         lower.startswith(prefix)
         for prefix in (
-            "claude-", "gpt-", "o1-", "o3-", "o4-",
-            "grok-", "gemini-", "deepseek-", "glm-", "qwen-",
+            "claude-",
+            "gpt-",
+            "o1-",
+            "o3-",
+            "o4-",
+            "grok-",
+            "gemini-",
+            "deepseek-",
+            "glm-",
+            "qwen-",
         )
     )
     if lower not in known_aliases and not looks_canonical:
@@ -232,8 +239,7 @@ def _coerce_shell(value: Any) -> str | None:
     if s in FRONTMATTER_SHELLS:
         return s
     logger.warning(
-        "skill frontmatter shell=%r is not recognized "
-        "(valid: %s); falling back to default",
+        "skill frontmatter shell=%r is not recognized (valid: %s); falling back to default",
         value,
         sorted(FRONTMATTER_SHELLS),
     )
@@ -269,6 +275,7 @@ def _coerce_hooks(value: Any, *, skill_name: str) -> dict | None:
 
     try:
         from src.hooks.hook_types import ALL_HOOK_EVENTS
+
         valid_events = set(ALL_HOOK_EVENTS)
     except Exception:
         valid_events = set()
@@ -328,9 +335,7 @@ def parse_skill_frontmatter_fields(
     )
 
     user_invocable = _coerce_bool(frontmatter.get("user-invocable", True), default=True)
-    disable_model = _coerce_bool(
-        frontmatter.get("disable-model-invocation", False), default=False
-    )
+    disable_model = _coerce_bool(frontmatter.get("disable-model-invocation", False), default=False)
 
     allowed_tools = _coerce_allowed_tools(frontmatter.get("allowed-tools"))
 
@@ -542,9 +547,7 @@ def load_skills_from_skills_dir(
     string to override (used by the legacy registry path).
     """
     resolved_loaded_from = (
-        loaded_from
-        if loaded_from is not None
-        else _SOURCE_TO_LOADED_FROM.get(source, "skills")
+        loaded_from if loaded_from is not None else _SOURCE_TO_LOADED_FROM.get(source, "skills")
     )
 
     skill_files = _find_skill_markdown_files(base_path)
@@ -564,9 +567,7 @@ def load_skills_from_skills_dir(
             continue
 
         skill_name = _get_skill_command_name(skill_file_path, base_path)
-        parsed = parse_skill_frontmatter_fields(
-            frontmatter, markdown_content, skill_name
-        )
+        parsed = parse_skill_frontmatter_fields(frontmatter, markdown_content, skill_name)
 
         skill = create_skill_command(
             skill_name=skill_name,
@@ -646,7 +647,9 @@ def _is_skills_policy_disabled() -> bool:
     multi-tenant machines.
     """
     return os.environ.get("CLAUDE_CODE_DISABLE_POLICY_SKILLS", "").lower() in (
-        "1", "true", "yes",
+        "1",
+        "true",
+        "yes",
     )
 
 
@@ -715,8 +718,7 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
     if _is_bare_mode():
         if not additional_dirs or plugin_only:
             logger.debug(
-                "[skills] bare mode active; skipping discovery "
-                "(additional_dirs=%d plugin_only=%s)",
+                "[skills] bare mode active; skipping discovery (additional_dirs=%d plugin_only=%s)",
                 len(additional_dirs),
                 plugin_only,
             )
@@ -725,9 +727,7 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
         bare_skills: list[Skill] = []
         for d in additional_dirs:
             skills_dir = str(Path(d) / ".claude" / "skills")
-            bare_skills.extend(
-                load_skills_from_skills_dir(skills_dir, "projectSettings")
-            )
+            bare_skills.extend(load_skills_from_skills_dir(skills_dir, "projectSettings"))
         unconditional = _split_conditional(bare_skills)
         _skill_dir_cache[cwd] = unconditional
         return list(unconditional)
@@ -739,26 +739,20 @@ def get_skill_dir_commands(cwd: str) -> list[Skill]:
 
     managed_skills: list[Skill] = []
     if not _is_skills_policy_disabled():
-        managed_skills = load_skills_from_skills_dir(
-            managed_skills_dir, "policySettings"
-        )
+        managed_skills = load_skills_from_skills_dir(managed_skills_dir, "policySettings")
 
     user_skills: list[Skill] = []
     project_skills: list[Skill] = []
     if not plugin_only:
         user_skills = load_skills_from_skills_dir(user_skills_dir, "userSettings")
         for d in project_skills_dirs:
-            project_skills.extend(
-                load_skills_from_skills_dir(d, "projectSettings")
-            )
+            project_skills.extend(load_skills_from_skills_dir(d, "projectSettings"))
 
     additional_skills: list[Skill] = []
     if not plugin_only:
         for d in additional_dirs:
             skills_dir = str(Path(d) / ".claude" / "skills")
-            additional_skills.extend(
-                load_skills_from_skills_dir(skills_dir, "projectSettings")
-            )
+            additional_skills.extend(load_skills_from_skills_dir(skills_dir, "projectSettings"))
 
     all_skills = managed_skills + user_skills + project_skills + additional_skills
 
@@ -779,11 +773,7 @@ def _dedup_by_realpath(skills: list[Skill]) -> list[Skill]:
     seen: dict[str, Skill] = {}
     out: list[Skill] = []
     for skill in skills:
-        skill_md = (
-            str(Path(skill.base_dir) / "SKILL.md")
-            if skill.base_dir
-            else None
-        )
+        skill_md = str(Path(skill.base_dir) / "SKILL.md") if skill.base_dir else None
         identity = _get_file_identity(skill_md) if skill_md else None
         if identity is None:
             out.append(skill)
@@ -791,8 +781,7 @@ def _dedup_by_realpath(skills: list[Skill]) -> list[Skill]:
         existing = seen.get(identity)
         if existing is not None:
             logger.debug(
-                "[skills] dropping duplicate %r from %s "
-                "(same SKILL.md already loaded from %s)",
+                "[skills] dropping duplicate %r from %s (same SKILL.md already loaded from %s)",
                 skill.name,
                 skill.source,
                 existing.source,
@@ -839,6 +828,7 @@ def _is_path_gitignored(path: str, cwd: str) -> bool:
     keep working.
     """
     import subprocess
+
     try:
         result = subprocess.run(
             ["git", "check-ignore", path],
@@ -963,9 +953,7 @@ def _compile_path_spec(patterns: list[str]):
     try:
         import pathspec
     except ImportError:  # pragma: no cover — pathspec is a hard dep
-        logger.debug(
-            "pathspec not installed; conditional `paths:` matching disabled"
-        )
+        logger.debug("pathspec not installed; conditional `paths:` matching disabled")
         return None
     # Prefer the modern ``gitignore`` pattern factory (pathspec >= 1.0)
     # which subsumes the legacy ``gitwildmatch`` and emits no deprecation
@@ -1091,9 +1079,7 @@ def _load_dirs_as(
 ) -> list[Skill]:
     skills: list[Skill] = []
     for d in dirs:
-        skills.extend(
-            load_skills_from_skills_dir(str(d), source, loaded_from=loaded_from)
-        )
+        skills.extend(load_skills_from_skills_dir(str(d), source, loaded_from=loaded_from))
     return skills
 
 
@@ -1124,9 +1110,7 @@ def get_all_skills(
     clear_skill_registry()
 
     cwd = (
-        str(Path(project_root).expanduser().resolve())
-        if project_root is not None
-        else os.getcwd()
+        str(Path(project_root).expanduser().resolve()) if project_root is not None else os.getcwd()
     )
 
     # 1-3: Managed + user + project disk skills via the unified TS-port loader
@@ -1166,6 +1150,7 @@ def get_all_skills(
     builders = None
     try:
         from .mcp_skill_builders import get_mcp_skill_builders
+
         builders = get_mcp_skill_builders()
     except Exception:
         builders = None
@@ -1230,9 +1215,7 @@ def get_registered_skill(name: str) -> Skill | None:
 # (and downstream tests) imported `load_skills_from_dir` directly. Keep
 # the surface the same but route through the unified
 # `load_skills_from_skills_dir` so behaviour matches the registry.
-def load_skills_from_dir(
-    base_dir: str | Path, *, loaded_from: str = "skills"
-) -> list[Skill]:
+def load_skills_from_dir(base_dir: str | Path, *, loaded_from: str = "skills") -> list[Skill]:
     return load_skills_from_skills_dir(
         str(Path(base_dir).expanduser().resolve()),
         source="userSettings",

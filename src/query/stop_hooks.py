@@ -139,10 +139,12 @@ async def _handle_stop_hooks_generator(
                         hook_count += 1
                     progress_data = getattr(msg, "data", None)
                     if isinstance(progress_data, dict) and progress_data.get("command"):
-                        hook_infos.append(StopHookInfo(
-                            command=progress_data["command"],
-                            prompt_text=progress_data.get("prompt_text"),
-                        ))
+                        hook_infos.append(
+                            StopHookInfo(
+                                command=progress_data["command"],
+                                prompt_text=progress_data.get("prompt_text"),
+                            )
+                        )
 
                 if hasattr(msg, "type") and msg.type == "attachment":
                     attachments = getattr(msg, "attachments", [])
@@ -152,17 +154,17 @@ async def _handle_stop_hooks_generator(
                             att_type = attachment.get("type", "")
                             if att_type == "hook_non_blocking_error":
                                 hook_errors.append(
-                                    attachment.get("stderr") or f"Exit code {attachment.get('exit_code')}"
+                                    attachment.get("stderr")
+                                    or f"Exit code {attachment.get('exit_code')}"
                                 )
                                 has_output = True
                             elif att_type == "hook_error_during_execution":
                                 hook_errors.append(attachment.get("content", ""))
                                 has_output = True
                             elif att_type == "hook_success":
-                                if (
-                                    (attachment.get("stdout") or "").strip()
-                                    or (attachment.get("stderr") or "").strip()
-                                ):
+                                if (attachment.get("stdout") or "").strip() or (
+                                    attachment.get("stderr") or ""
+                                ).strip():
                                     has_output = True
 
             if hook_result.get("blocking_error"):
@@ -184,13 +186,15 @@ async def _handle_stop_hooks_generator(
             if hook_result.get("prevent_continuation"):
                 prevented_continuation = True
                 stop_reason = hook_result.get("stop_reason") or "Stop hook prevented continuation"
-                yield create_attachment_message({
-                    "type": "hook_stopped_continuation",
-                    "message": stop_reason,
-                    "hook_name": "Stop",
-                    "tool_use_id": stop_hook_tool_use_id,
-                    "hook_event": "Stop",
-                })
+                yield create_attachment_message(
+                    {
+                        "type": "hook_stopped_continuation",
+                        "message": stop_reason,
+                        "hook_name": "Stop",
+                        "tool_use_id": stop_hook_tool_use_id,
+                        "hook_event": "Stop",
+                    }
+                )
 
             if abort_ctrl and abort_ctrl.signal.aborted:
                 yield create_user_interruption_message(tool_use=False)
@@ -202,7 +206,11 @@ async def _handle_stop_hooks_generator(
             yield create_stop_hook_summary_message(
                 hook_count=hook_count,
                 hook_infos=[
-                    {"command": h.command, "prompt_text": h.prompt_text, "duration_ms": h.duration_ms}
+                    {
+                        "command": h.command,
+                        "prompt_text": h.prompt_text,
+                        "duration_ms": h.duration_ms,
+                    }
                     for h in hook_infos
                 ],
                 hook_errors=hook_errors,
@@ -234,7 +242,9 @@ async def _handle_stop_hooks_generator(
 
 def _get_permission_mode(tool_use_context: Any) -> str | None:
     try:
-        app_state = tool_use_context.get_app_state() if hasattr(tool_use_context, "get_app_state") else None
+        app_state = (
+            tool_use_context.get_app_state() if hasattr(tool_use_context, "get_app_state") else None
+        )
         if app_state:
             return getattr(getattr(app_state, "tool_permission_context", None), "mode", None)
     except Exception:

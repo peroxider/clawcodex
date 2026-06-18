@@ -33,7 +33,7 @@ import os
 logger = logging.getLogger(__name__)
 
 
-_ENV_TOKEN = 'CLAUDE_TRUSTED_DEVICE_TOKEN'
+_ENV_TOKEN = "CLAUDE_TRUSTED_DEVICE_TOKEN"
 
 
 def get_trusted_device_token() -> str | None:
@@ -84,14 +84,14 @@ async def enroll_trusted_device() -> None:
     sees the gap.
     """
     logger.debug(
-        '[trusted-device] enroll_trusted_device is a no-op stub — '
-        'Phase 10 keychain integration not yet ported'
+        "[trusted-device] enroll_trusted_device is a no-op stub — "
+        "Phase 10 keychain integration not yet ported"
     )
 
 
 __all__ = [
-    'clear_trusted_device_token',
-    'clear_trusted_device_token_cache',
-    'enroll_trusted_device',
-    'get_trusted_device_token',
+    "clear_trusted_device_token",
+    "clear_trusted_device_token_cache",
+    "enroll_trusted_device",
+    "get_trusted_device_token",
 ]

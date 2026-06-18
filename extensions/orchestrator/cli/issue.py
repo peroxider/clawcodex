@@ -53,15 +53,16 @@ from extensions.orchestrator.cli.takeover import (  # noqa: E402,F401
 # Parser registration
 # ---------------------------------------------------------------------------
 
+
 def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
     """Register ``issue`` sub-subcommands."""
     issue_parser = subparsers.add_parser(
         "issue",
         help="Manage individual issues handled by the orchestrator",
         description="List, show, tail, stop, pause, resume, takeover, clarify, "
-                    "inject, or view workspace of issues managed by the orchestrator. "
-                    "All issue-level commands use --id for self-describing parameters "
-                    "and are designed to be idempotent.",
+        "inject, or view workspace of issues managed by the orchestrator. "
+        "All issue-level commands use --id for self-describing parameters "
+        "and are designed to be idempotent.",
     )
     issue_sub = issue_parser.add_subparsers(
         dest="issue_subcommand",
@@ -73,7 +74,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "list",
         help="List all issues with their status",
         description="Display all issues known to the orchestrator, optionally "
-                    "filtered by status. Idempotent (pure read).",
+        "filtered by status. Idempotent (pure read).",
     )
     list_parser.add_argument(
         "--status",
@@ -100,7 +101,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "show",
         help="Show details for a specific issue",
         description="Display issue metadata: status, branch, PR, token usage, "
-                    "and workspace path. Idempotent (pure read).",
+        "and workspace path. Idempotent (pure read).",
     )
     show_parser.add_argument(
         "--id",
@@ -129,7 +130,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "tail",
         help="Tail tool call logs for a running issue in real-time",
         description="Stream tool call events from a running issue's event log. "
-                    "Idempotent (pure read, non-destructive).",
+        "Idempotent (pure read, non-destructive).",
     )
     tail_parser.add_argument(
         "--id",
@@ -158,9 +159,9 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "transcript",
         help="Print a session transcript for an issue or run",
         description="Read the full session transcript from "
-                    "~/.clawcodex/sessions/{run_id}/transcript.jsonl and "
-                    "print it as text. Idempotent (pure read, suitable for "
-                    "piping).",
+        "~/.clawcodex/sessions/{run_id}/transcript.jsonl and "
+        "print it as text. Idempotent (pure read, suitable for "
+        "piping).",
     )
     transcript_parser.add_argument(
         "--id",
@@ -259,8 +260,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "stop",
         help="Force-terminate a running agent for an issue",
         description="Write a stop control command for the orchestrator to pick up "
-                    "on its next poll cycle. The agent will be marked as failed. "
-                    "Idempotent: stopping an already-stopped issue succeeds silently.",
+        "on its next poll cycle. The agent will be marked as failed. "
+        "Idempotent: stopping an already-stopped issue succeeds silently.",
     )
     stop_parser.add_argument(
         "--id",
@@ -275,8 +276,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "pause",
         help="Pause a running agent at the next tool call boundary",
         description="Write a pause control command. The agent will complete its "
-                    "current tool call then pause (no new tool calls until resume). "
-                    "Idempotent: pausing an already-paused issue succeeds silently.",
+        "current tool call then pause (no new tool calls until resume). "
+        "Idempotent: pausing an already-paused issue succeeds silently.",
     )
     pause_parser.add_argument(
         "--id",
@@ -297,7 +298,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "resume",
         help="Resume a paused agent",
         description="Write a resume control command to allow the agent to continue. "
-                    "Idempotent: resuming a running (non-paused) issue succeeds silently.",
+        "Idempotent: resuming a running (non-paused) issue succeeds silently.",
     )
     resume_parser.add_argument(
         "--id",
@@ -381,10 +382,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         type=str,
         default=None,
         metavar="WORKSPACE",
-        help=(
-            "Workspace path (overrides the registry; "
-            "required for --run)"
-        ),
+        help=("Workspace path (overrides the registry; required for --run)"),
     )
 
     # --- issue clarify ---
@@ -392,9 +390,9 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "clarify",
         help="Answer a clarification request from the orchestrator",
         description="Record an operator answer for a pending clarification. "
-                    "The orchestrator picks up the answer on its next poll cycle. "
-                    "Idempotent: answering an already-answered clarification "
-                    "updates the answer in place.",
+        "The orchestrator picks up the answer on its next poll cycle. "
+        "Idempotent: answering an already-answered clarification "
+        "updates the answer in place.",
     )
     clarify_parser.add_argument(
         "--id",
@@ -420,8 +418,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "inject",
         help="Inject operator hints into a running agent",
         description="Write a hint to .operator_hints.md in the issue workspace. "
-                    "The agent reads and displays these hints at each tool call boundary. "
-                    "Idempotent: re-injecting the same hint is a no-op.",
+        "The agent reads and displays these hints at each tool call boundary. "
+        "Idempotent: re-injecting the same hint is a no-op.",
     )
     inject_parser.add_argument(
         "--id",
@@ -455,8 +453,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "workspace",
         help="View and modify files in an issue's workspace",
         description="List, view, or edit files in an issue's workspace directory. "
-                    "Use with caution — concurrent edits may conflict with agent changes. "
-                    "Idempotent: listing and viewing are pure reads; editing overwrites.",
+        "Use with caution — concurrent edits may conflict with agent changes. "
+        "Idempotent: listing and viewing are pure reads; editing overwrites.",
     )
     ws_parser.add_argument(
         "--id",
@@ -492,7 +490,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "review",
         help="Approve or reject a completed issue's changes (LocalTracker)",
         description="Review a LocalTracker issue after agent completes git commit. "
-                    "Approve to mark as completed, or reject to inject feedback and retry.",
+        "Approve to mark as completed, or reject to inject feedback and retry.",
     )
     review_parser.add_argument(
         "--id",
@@ -531,8 +529,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "feedback",
         help="List, approve, or dismiss pending PR review feedback",
         description="Manage pending PR review feedback items. Use --list to show pending items, "
-                    "--approve to trigger follow-up for pending feedback, or --dismiss to remove "
-                    "feedback without processing.",
+        "--approve to trigger follow-up for pending feedback, or --dismiss to remove "
+        "feedback without processing.",
     )
     feedback_parser.add_argument(
         "--id",
@@ -584,7 +582,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "diff",
         help="Show code changes for a completed or pending_review issue",
         description="Display a summary or full diff of changes made by the agent. "
-                    "Shows stats by default, use --full for complete diff output.",
+        "Shows stats by default, use --full for complete diff output.",
     )
     diff_parser.add_argument(
         "--id",
@@ -616,10 +614,10 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "retry",
         help="Retry/follow-up/unblock an issue via the CLI fallback",
         description="Operator-driven fallback for F-39 intents when label / "
-                    "comment paths are inconvenient. Records the action in "
-                    "~/.clawcodex/orchestrator/audit.jsonl and updates the "
-                    "local issue registry so the next daemon poll picks up "
-                    "the new intent.",
+        "comment paths are inconvenient. Records the action in "
+        "~/.clawcodex/orchestrator/audit.jsonl and updates the "
+        "local issue registry so the next daemon poll picks up "
+        "the new intent.",
     )
     retry_parser.add_argument(
         "--id",
@@ -634,9 +632,9 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         choices=["reset", "followup", "unblock"],
         required=True,
         help="Intent mode: 'reset' clears state and re-runs (agent:retry), "
-             "'followup' appends a commit to the existing branch "
-             "(agent:follow-up), 'unblock' rolls an abandoned issue back "
-             "to pending so the daemon reconsiders it.",
+        "'followup' appends a commit to the existing branch "
+        "(agent:follow-up), 'unblock' rolls an abandoned issue back "
+        "to pending so the daemon reconsiders it.",
     )
     retry_parser.add_argument(
         "--reason",
@@ -649,7 +647,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "--force",
         action="store_true",
         help="Bypass the max_retries_per_issue rate limit (CLI-only "
-             "override; logged as a high-priority audit entry).",
+        "override; logged as a high-priority audit entry).",
     )
     retry_parser.add_argument(
         "--max-retries",
@@ -657,25 +655,23 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         default=3,
         metavar="N",
         help="Operator override for max_retries_per_issue (default: 3). "
-             "Has no effect unless --force is also set; the audit "
-             "log records both the configured limit and the actual "
-             "retry_count when --force triggers a bypass.",
+        "Has no effect unless --force is also set; the audit "
+        "log records both the configured limit and the actual "
+        "retry_count when --force triggers a bypass.",
     )
     retry_parser.add_argument(
         "--operator",
         type=str,
         default=None,
         metavar="LOGIN",
-        help="Operator login recorded in audit.jsonl "
-             "(defaults to $USER / os.getlogin())",
+        help="Operator login recorded in audit.jsonl (defaults to $USER / os.getlogin())",
     )
     retry_parser.add_argument(
         "--workspace",
         type=str,
         default=None,
         metavar="PATH",
-        help="Explicit workspace root path "
-             "(optional auto-detection override)",
+        help="Explicit workspace root path (optional auto-detection override)",
     )
     retry_parser.add_argument(
         "--workflow",
@@ -690,8 +686,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         "init",
         help="Scaffold an issue card from the issue-card.template.md",
         description="Copy the packaged issue-card.template.md to the specified "
-                    "output path and optionally replace <...> placeholders. "
-                    "Useful for local-tracker workflows where issues are *.md files.",
+        "output path and optionally replace <...> placeholders. "
+        "Useful for local-tracker workflows where issues are *.md files.",
     )
     init_parser.add_argument(
         "--id",
@@ -754,7 +750,8 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Upstream issue / document URL",
     )
     init_parser.add_argument(
-        "--output", "--out",
+        "--output",
+        "--out",
         default="./issue.md",
         metavar="FILE",
         help="Output file path (default: ./issue.md)",
@@ -770,6 +767,7 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
 # Run dispatch
 # ---------------------------------------------------------------------------
 
+
 def run(args: argparse.Namespace) -> int:
     """Dispatch to the appropriate issue subcommand."""
     cmd = args.issue_subcommand
@@ -779,6 +777,7 @@ def run(args: argparse.Namespace) -> int:
         get_registry_path,
         get_workspace_root,
     )
+
     ws = get_workspace_root(
         workspace_arg=getattr(args, "workspace", None),
         workflow_path=getattr(args, "workflow", None),
@@ -833,10 +832,12 @@ def run(args: argparse.Namespace) -> int:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+
 def _control_path() -> Path:
     """Path to the orchestrator control directory."""
     from pathlib import Path
     import os
+
     base = Path(os.environ.get("CLAWCODEX_WORKSPACE_ROOT", Path.home() / ".clawcodex"))
     return base / ".orchestrator_control"
 
@@ -844,6 +845,7 @@ def _control_path() -> Path:
 def _write_control(cmd: str, issue_id: str, extra: str = "") -> int:
     """Write a control command to be picked up by the orchestrator on next poll."""
     from pathlib import Path
+
     control_dir = _control_path()
     control_dir.mkdir(parents=True, exist_ok=True)
 
@@ -863,6 +865,7 @@ def _write_control(cmd: str, issue_id: str, extra: str = "") -> int:
 # issue list
 # ---------------------------------------------------------------------------
 
+
 def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
     """List all issues with status. Idempotent — pure read."""
     if not registry_path or not registry_path.exists():
@@ -875,6 +878,7 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
                 get_live_projects,
                 print_multi_project_hint,
             )
+
             live = get_live_projects()
             if len(live) > 1:
                 print_multi_project_hint(live, "orchestrator issue list")
@@ -884,6 +888,7 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
             get_workspace_root,
             list_orchestrator_projects,
         )
+
         workspace_root = get_workspace_root(workspace_arg=ws, workflow_path=wf)
         projects = list_orchestrator_projects()
 
@@ -901,7 +906,14 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
     from extensions.orchestrator.issue_registry import IssueRegistry
 
     registry = IssueRegistry(registry_path)
-    counts: dict[str, int] = {"PENDING": 0, "RUNNING": 0, "SYNCED": 0, "COMPLETED": 0, "FAILED": 0, "ABANDONED": 0}
+    counts: dict[str, int] = {
+        "PENDING": 0,
+        "RUNNING": 0,
+        "SYNCED": 0,
+        "COMPLETED": 0,
+        "FAILED": 0,
+        "ABANDONED": 0,
+    }
     records = list(registry._records.values())
 
     # Filter by status
@@ -922,7 +934,7 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
 
     print(f"Issues ({len(records)} total)")
     print(f"  {'STATUS':<15} {'ISSUE ID':<20} {'TURN/TOOL':<9} {'LAST EVENT':<18} {'BRANCH':<30}")
-    print(f"  {'-'*15} {'-'*20} {'-'*9} {'-'*18} {'-'*30}")
+    print(f"  {'-' * 15} {'-' * 20} {'-' * 9} {'-' * 18} {'-' * 30}")
     for r in records:
         s = _get_status_str(r.status)
         branch = r.branch_name or "-"
@@ -944,6 +956,7 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
 # issue show
 # ---------------------------------------------------------------------------
 
+
 def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
     """Show details for a specific issue. Idempotent — pure read."""
     issue_id = getattr(args, "id", None) or getattr(args, "issue_id", None)
@@ -956,6 +969,7 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 1
 
     from extensions.orchestrator.issue_registry import IssueRegistry
+
     registry = IssueRegistry(registry_path)
     record = registry.get_by_issue_ref(issue_id)
     if record is None:
@@ -963,6 +977,7 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 1
 
     import time
+
     created = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created_at))
     updated = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.updated_at))
 
@@ -976,17 +991,19 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
     print(f"  PR URL         : {record.pr_url or '-'}")
     print(f"  Attempts       : {record.attempt_count}")
     print(f"  Run ID         : {getattr(record, 'run_id', None) or '-'}")
-    print(f"  Turns / Tools  : {getattr(record, 'run_turn_count', 0)} / {getattr(record, 'run_tool_count', 0)}")
+    print(
+        f"  Turns / Tools  : {getattr(record, 'run_turn_count', 0)} / {getattr(record, 'run_tool_count', 0)}"
+    )
     print(f"  Last Event     : {getattr(record, 'run_last_event', None) or '-'}")
     print(f"  Last Tool      : {getattr(record, 'run_last_tool', None) or '-'}")
     print(f"  Output Chars   : {getattr(record, 'run_output_len', 0)}")
-    deadline = getattr(record, 'run_timeout_deadline_at', None)
+    deadline = getattr(record, "run_timeout_deadline_at", None)
     if deadline:
         deadline_text = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(deadline))
     else:
         deadline_text = "-"
     print(f"  Timeout By     : {deadline_text}")
-    workspace_dirty = getattr(record, 'run_workspace_dirty', None)
+    workspace_dirty = getattr(record, "run_workspace_dirty", None)
     dirty_text = "-" if workspace_dirty is None else str(workspace_dirty).lower()
     print(f"  Workspace Dirty: {dirty_text}")
     print(f"  Debug Log      : {getattr(record, 'debug_log_path', None) or '-'}")
@@ -1031,6 +1048,7 @@ def _resolve_issue_workspace_path(issue_id: str) -> Path | None:
         metadata_file = wd / ".metadata"
         if metadata_file.exists():
             import json
+
             try:
                 metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
                 if metadata.get("issue_id") == issue_id:
@@ -1064,6 +1082,7 @@ def _resolve_tail_run_id(
         return None
     try:
         from extensions.orchestrator.issue_registry import IssueRegistry
+
         registry = IssueRegistry(registry_path)
         record = registry.get(issue_id)
         if record is None:
@@ -1097,13 +1116,13 @@ def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
     run_id = _resolve_tail_run_id(registry_path, issue_id, run_id)
     if not run_id:
         print(
-            f"No session run found for issue {issue_id or '?'} "
-            f"(registry has no run_id recorded).",
+            f"No session run found for issue {issue_id or '?'} (registry has no run_id recorded).",
             file=sys.stderr,
         )
         return 1
 
     from src.services.session_storage import SESSIONS_DIR
+
     transcript_path = SESSIONS_DIR / run_id / "transcript.jsonl"
     if not transcript_path.exists():
         print(
@@ -1207,7 +1226,8 @@ def _msg_references_tool(msg: dict, tool_use_id: str) -> bool:
 
 
 def _print_message(
-    msg: dict, tool_use_id_filter: str | None = None,
+    msg: dict,
+    tool_use_id_filter: str | None = None,
 ) -> None:
     """Print one Message dict from transcript.jsonl in human-readable form.
 
@@ -1311,8 +1331,7 @@ def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int
     run_id = _resolve_tail_run_id(registry_path, issue_id, run_id)
     if not run_id:
         print(
-            f"No session run found for issue {issue_id or '?'} "
-            f"(registry has no run_id recorded).",
+            f"No session run found for issue {issue_id or '?'} (registry has no run_id recorded).",
             file=sys.stderr,
         )
         return 1
@@ -1354,7 +1373,8 @@ def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int
                 continue
 
             if tool_use_id_filter and not _msg_references_tool(
-                msg, tool_use_id_filter,
+                msg,
+                tool_use_id_filter,
             ):
                 continue
 
@@ -1371,6 +1391,7 @@ def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int
 # issue stop
 # ---------------------------------------------------------------------------
 
+
 def _run_stop(args: argparse.Namespace) -> int:
     """Stop a running issue agent. Idempotent — already-stopped → success."""
     issue_id = getattr(args, "id", None)
@@ -1384,6 +1405,7 @@ def _run_stop(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # issue pause
 # ---------------------------------------------------------------------------
+
 
 def _run_pause(args: argparse.Namespace) -> int:
     """Pause a running issue agent. Idempotent — already-paused → success."""
@@ -1400,6 +1422,7 @@ def _run_pause(args: argparse.Namespace) -> int:
 # issue resume
 # ---------------------------------------------------------------------------
 
+
 def _run_resume(args: argparse.Namespace) -> int:
     """Resume a paused issue agent. Idempotent — running → success."""
     issue_id = getattr(args, "id", None)
@@ -1413,6 +1436,7 @@ def _run_resume(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # issue clarify
 # ---------------------------------------------------------------------------
+
 
 def _run_clarify(args: argparse.Namespace) -> int:
     """Answer a clarification request. Idempotent — re-answering updates in place."""
@@ -1445,6 +1469,7 @@ def _run_clarify(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # issue inject
 # ---------------------------------------------------------------------------
+
 
 def _run_inject(args: argparse.Namespace) -> int:
     """Inject operator hints. Idempotent — listing/removal are safe."""
@@ -1482,6 +1507,7 @@ def _run_inject(args: argparse.Namespace) -> int:
 def _parse_hints_file(hints_file: Path) -> list[tuple[float, str]]:
     """Parse hints file into list of (timestamp, hint) tuples."""
     import time
+
     if not hints_file.exists():
         return []
 
@@ -1499,6 +1525,7 @@ def _parse_hints_file(hints_file: Path) -> list[tuple[float, str]]:
                 if len(parts) > 1:
                     ts_str = parts[1].rstrip(") ---")
                     from datetime import datetime
+
                     dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
                     ts = dt.timestamp()
                 else:
@@ -1523,6 +1550,7 @@ def _parse_hints_file(hints_file: Path) -> list[tuple[float, str]]:
 def _inject_hint(issue_id: str, hints_file: Path, hint: str) -> int:
     """Append a hint to the .operator_hints.md file."""
     import time
+
     hints = _parse_hints_file(hints_file)
     next_num = len(hints) + 1
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -1550,6 +1578,7 @@ def _list_hints(issue_id: str, hints_file: Path) -> int:
     print(f"Hints for issue {issue_id}:")
     for i, (ts, hint) in enumerate(hints, 1):
         import time
+
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
         preview = hint[:60].replace("\n", " ")
         print(f"  #{i}: [{ts_str}] {preview}")
@@ -1566,6 +1595,7 @@ def _remove_hint(issue_id: str, hints_file: Path, hint_num: int) -> int:
     hints.pop(hint_num - 1)
     # Rebuild file
     import time
+
     content = ""
     for i, (ts, hint) in enumerate(hints, 1):
         ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
@@ -1580,6 +1610,7 @@ def _remove_hint(issue_id: str, hints_file: Path, hint_num: int) -> int:
 # ---------------------------------------------------------------------------
 # issue workspace
 # ---------------------------------------------------------------------------
+
 
 def _run_workspace(args: argparse.Namespace) -> int:
     """View or modify workspace files. Workspace listing/view are pure reads."""
@@ -1678,6 +1709,7 @@ def _workspace_edit_file(issue_id: str, ws_path: Path, filename: str, content: s
 # issue review
 # ---------------------------------------------------------------------------
 
+
 def _tracker_from_workflow_arg(args: argparse.Namespace) -> Any | None:
     workflow_path = getattr(args, "workflow", None)
     if not workflow_path:
@@ -1713,7 +1745,10 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 1
 
     if record.status != IssueStatus.PENDING_REVIEW:
-        print(f"Issue {issue_id} is not pending review (status: {record.status.value}).", file=sys.stderr)
+        print(
+            f"Issue {issue_id} is not pending review (status: {record.status.value}).",
+            file=sys.stderr,
+        )
         print("Only issues with 'pending_review' status can be reviewed.", file=sys.stderr)
         return 1
 
@@ -1732,6 +1767,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
 
         # Inject feedback as clarification request to trigger retry
         from extensions.orchestrator.clarification_queue import ClarificationQueue
+
         queue = ClarificationQueue()
         question = f"[Human Review Rejected] {feedback}"
         resolved = queue.inject_feedback(issue_id, question)
@@ -1747,7 +1783,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
         _write_control("retry", issue_id, feedback)
 
         print(f"Issue {issue_id} rejected with feedback:")
-        print(f"  \"{feedback}\"")
+        print(f'  "{feedback}"')
         print(f"Feedback queued — orchestrator will retry this issue.")
         return 0
 
@@ -1765,10 +1801,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
         try:
             _verify_registry = IssueRegistry(registry_path)
             _verify_record = _verify_registry._records.get(issue_id)
-            if (
-                _verify_record is not None
-                and _verify_record.status != IssueStatus.COMPLETED
-            ):
+            if _verify_record is not None and _verify_record.status != IssueStatus.COMPLETED:
                 # Daemon (or another writer) overwrote between our
                 # save and re-read; force the completion back.
                 _verify_registry.mark_completed(issue_id)
@@ -1802,6 +1835,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
 # issue feedback
 # ---------------------------------------------------------------------------
 
+
 def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
     """List, approve, or dismiss pending PR review feedback."""
     issue_id = getattr(args, "id", None)
@@ -1814,6 +1848,7 @@ def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 1
 
     from extensions.orchestrator.issue_registry import IssueRegistry
+
     registry = IssueRegistry(registry_path)
     record = registry.get(issue_id)
     if record is None:
@@ -1861,9 +1896,11 @@ def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
 # issue diff
 # ---------------------------------------------------------------------------
 
+
 def _run_diff(registry_path: Path | None, args: argparse.Namespace) -> int:
     """Show code changes for an issue using git diff."""
     from pathlib import Path
+
     issue_id = getattr(args, "id", None)
     if not issue_id:
         print("error: --id is required", file=sys.stderr)
@@ -1874,6 +1911,7 @@ def _run_diff(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 1
 
     from extensions.orchestrator.issue_registry import IssueRegistry
+
     registry = IssueRegistry(registry_path)
     record = registry.get(issue_id)
     if record is None:
@@ -1891,7 +1929,10 @@ def _run_diff(registry_path: Path | None, args: argparse.Namespace) -> int:
         workspace_root = os.environ.get("CLAWCODEX_WORKSPACE_ROOT")
 
     if not workspace_root:
-        print("Cannot resolve workspace root. Set CLAWCODEX_WORKSPACE_ROOT or use --workspace.", file=sys.stderr)
+        print(
+            "Cannot resolve workspace root. Set CLAWCODEX_WORKSPACE_ROOT or use --workspace.",
+            file=sys.stderr,
+        )
         return 1
 
     ws_path = Path(workspace_root)
@@ -1916,6 +1957,7 @@ def _run_diff(registry_path: Path | None, args: argparse.Namespace) -> int:
             metadata_file = wd / ".metadata"
             if metadata_file.exists():
                 import json
+
                 try:
                     metadata = json.loads(metadata_file.read_text())
                     if metadata.get("issue_id") == issue_id:
@@ -2074,6 +2116,7 @@ def _fetch_agent_summary(issue_id: str, ws_path: Path) -> str | None:
 def _has_origin(ws_path: Path) -> bool:
     """Check if the workspace has an origin remote."""
     import subprocess
+
     result = subprocess.run(
         ["git", "rev-parse", "--abbrev-ref", "origin/HEAD"],
         cwd=str(ws_path),
@@ -2109,7 +2152,7 @@ def _show_diff_non_git(ws_path: Path, issue_id: str, args: argparse.Namespace) -
         return 0
 
     print(f"  {'FILE':<50} {'SIZE':>10}")
-    print(f"  {'-'*50} {'-'*10}")
+    print(f"  {'-' * 50} {'-' * 10}")
 
     for name, _, size in sorted(files):
         size_str = _format_size(size)
@@ -2120,7 +2163,11 @@ def _show_diff_non_git(ws_path: Path, issue_id: str, args: argparse.Namespace) -
 
     print(f"\n  {len(files)} files, {len(dirs)} directories")
     print("\n  Note: This workspace is not a git repository — no diff available.")
-    print("  Use 'clawcodex orchestrator issue workspace --id {} --cat <file>' to view file contents.".format(issue_id))
+    print(
+        "  Use 'clawcodex orchestrator issue workspace --id {} --cat <file>' to view file contents.".format(
+            issue_id
+        )
+    )
     return 0
 
 
@@ -2138,9 +2185,10 @@ def _format_size(size: int) -> str:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_status_str(status) -> str:
     """Normalize status to string."""
-    if hasattr(status, 'value'):
+    if hasattr(status, "value"):
         return status.value
     return str(status)
 
@@ -2243,8 +2291,7 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 2
     mode = getattr(args, "mode", None)
     if mode not in {"reset", "followup", "unblock"}:
-        print(f"error: --mode must be reset|followup|unblock, got {mode!r}",
-              file=sys.stderr)
+        print(f"error: --mode must be reset|followup|unblock, got {mode!r}", file=sys.stderr)
         return 2
     reason = getattr(args, "reason", "") or ""
     force = bool(getattr(args, "force", False))
@@ -2292,8 +2339,10 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
     else:
         if mode == "reset":
             registry.mark_intent(
-                registry_issue_id, Intent.RETRY,
-                source="cli", command=f"cli:reset:{reason[:64]}",
+                registry_issue_id,
+                Intent.RETRY,
+                source="cli",
+                command=f"cli:reset:{reason[:64]}",
             )
             registry.reset_for_retry(registry_issue_id)
             tracker = _tracker_from_workflow_arg(args)
@@ -2315,8 +2364,10 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
             action = "marked for reset"
         elif mode == "followup":
             registry.mark_intent(
-                registry_issue_id, Intent.FOLLOWUP,
-                source="cli", command=f"cli:followup:{reason[:64]}",
+                registry_issue_id,
+                Intent.FOLLOWUP,
+                source="cli",
+                command=f"cli:followup:{reason[:64]}",
             )
             action = "marked for follow-up"
         else:  # mode == "unblock"
@@ -2362,6 +2413,7 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
 
 # ── issue init ───────────────────────────────────────────────────────
 
+
 def _run_init(args: argparse.Namespace) -> int:
     """Scaffold an issue card from the issue-card.template.md."""
     # Locate template
@@ -2377,7 +2429,9 @@ def _run_init(args: argparse.Namespace) -> int:
             break
 
     if tpl is None:
-        print("✗ Cannot locate issue-card.template.md — your install may be corrupt.", file=sys.stderr)
+        print(
+            "✗ Cannot locate issue-card.template.md — your install may be corrupt.", file=sys.stderr
+        )
         return 1
 
     # Determine output path

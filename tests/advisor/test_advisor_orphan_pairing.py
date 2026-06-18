@@ -64,9 +64,7 @@ class TestOrphanServerToolUseStripping(unittest.TestCase):
         ]
         out = ensure_tool_result_pairing(msgs)
         types = [b["type"] for b in out[0]["content"]]
-        self.assertEqual(
-            types, ["server_tool_use", "advisor_tool_result", "text"]
-        )
+        self.assertEqual(types, ["server_tool_use", "advisor_tool_result", "text"])
 
     def test_orphan_mcp_use_stripped(self) -> None:
         # TS strips mcp_tool_use orphans by the same rule — port both
@@ -107,9 +105,7 @@ class TestOrphanServerToolUseStripping(unittest.TestCase):
             },
         ]
         out = ensure_tool_result_pairing(msgs)
-        self.assertEqual(
-            out[0]["content"], [{"type": "text", "text": "[Tool use interrupted]"}]
-        )
+        self.assertEqual(out[0]["content"], [{"type": "text", "text": "[Tool use interrupted]"}])
 
     def test_normal_tool_use_unaffected_by_orphan_pass(self) -> None:
         # Regular client-side tool_use orphans are handled by the

@@ -77,7 +77,9 @@ def persist_binary_content(
     except OSError as exc:
         logger.warning(
             "MCP output_storage: failed to write blob for %s/%s: %s",
-            server_name, tool_name, exc,
+            server_name,
+            tool_name,
+            exc,
         )
         raise
     return path
@@ -86,8 +88,7 @@ def persist_binary_content(
 def get_binary_blob_saved_message(path: Path, original_size: int) -> str:
     """Return a one-line, model-facing summary pointing at the saved file."""
     return (
-        f"[binary content saved to {path}; {original_size} bytes; "
-        f"access via the file at that path]"
+        f"[binary content saved to {path}; {original_size} bytes; access via the file at that path]"
     )
 
 

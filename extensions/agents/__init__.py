@@ -12,6 +12,7 @@ it defaults registrations to ``source="extensions"``. Extensions can also
 use :class:`clawcodex_ext.agent.registry.AgentRegistry` directly when they
 need full control.
 """
+
 from __future__ import annotations
 
 from typing import Callable

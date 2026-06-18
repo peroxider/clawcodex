@@ -3,6 +3,7 @@
 Mirrors TypeScript utils/deepLink.ts — parses and constructs deep links
 for sharing prompts, sessions, and configurations.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -17,6 +18,7 @@ DEEP_LINK_HOST = "app"
 @dataclass
 class DeepLink:
     """A parsed deep link."""
+
     action: str
     params: dict[str, str] = field(default_factory=dict)
 

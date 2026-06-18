@@ -1,4 +1,5 @@
 """WI-6.2 + sub-WI-6.2.a tests — InProcessTeammateTaskState + abort hooks."""
+
 from __future__ import annotations
 
 import asyncio
@@ -32,7 +33,9 @@ def _make_running_state(task_id: str = "t1abc1234") -> InProcessTeammateTaskStat
         start_time=0.0,
         output_file="/tmp/x",
         identity=TeammateIdentity(
-            agent_id=task_id, agent_name="alice", team_name="my-team",
+            agent_id=task_id,
+            agent_name="alice",
+            team_name="my-team",
         ),
         prompt="x",
         abort_event=asyncio.Event(),

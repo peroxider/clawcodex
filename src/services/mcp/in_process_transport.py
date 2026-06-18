@@ -101,11 +101,7 @@ class InProcessTransport(McpTransport):
 
     @property
     def is_connected(self) -> bool:
-        return (
-            not self._closed
-            and self._peer is not None
-            and not self._peer._closed
-        )
+        return not self._closed and self._peer is not None and not self._peer._closed
 
 
 def create_linked_transport_pair() -> tuple[InProcessTransport, InProcessTransport]:

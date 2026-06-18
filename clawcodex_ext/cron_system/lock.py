@@ -91,11 +91,13 @@ def register_lock_cleanup(callback: Callable[[], Any]) -> Callable[[], None]:
     """Register a process-exit cleanup callback. Returns an unregister fn."""
     _cleanup_callbacks.append(callback)
     _ensure_atexit_registered()
+
     def _unregister() -> None:
         try:
             _cleanup_callbacks.remove(callback)
         except ValueError:
             pass
+
     return _unregister
 
 
@@ -130,6 +132,7 @@ def _ensure_atexit_registered() -> None:
         if threading_current_main():
             for sig in (signal.SIGTERM, signal.SIGINT):
                 prev = signal.getsignal(sig)
+
                 # Wrap any prior handler so we still call it after cleanup.
                 def _make(prev_handler, sig_value):
                     def _handler(signum, frame):
@@ -142,7 +145,9 @@ def _ensure_atexit_registered() -> None:
                                 prev_handler(signum, frame)
                             except Exception:  # pragma: no cover
                                 pass
+
                     return _handler
+
                 signal.signal(sig, _make(prev, sig))
     except (ValueError, OSError):  # pragma: no cover - non-main thread
         pass
@@ -151,6 +156,7 @@ def _ensure_atexit_registered() -> None:
 
 def threading_current_main() -> bool:
     import threading
+
     return threading.current_thread() is threading.main_thread()
 
 
@@ -204,9 +210,7 @@ class CronTaskLock:
             if existing and existing.get("sessionId") == self.session_id:
                 # Refresh in place (non-exclusive write is fine — we
                 # already own it).
-                tmp = self.path.with_name(
-                    f"{self.path.name}.{os.getpid()}.refresh.tmp"
-                )
+                tmp = self.path.with_name(f"{self.path.name}.{os.getpid()}.refresh.tmp")
                 tmp.write_text(encoded, encoding="utf-8")
                 os.replace(tmp, self.path)
                 self.acquired = True
@@ -289,11 +293,7 @@ class CronTaskLock:
         pid_dead = isinstance(pid, int) and not _pid_is_alive(pid)
         # F-22-G5: PID identity check (PID alive but not ClawCodex).
         pid_foreign = False
-        if (
-            self.validate_pid_identity
-            and isinstance(pid, int)
-            and _pid_is_alive(pid)
-        ):
+        if self.validate_pid_identity and isinstance(pid, int) and _pid_is_alive(pid):
             validator = _DEFAULT_PID_VALIDATOR or _default_pid_validator
             pid_foreign = not validator(pid)
         if age_stale or pid_dead or pid_foreign:

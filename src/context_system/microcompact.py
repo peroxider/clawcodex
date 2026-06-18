@@ -39,17 +39,19 @@ IMAGE_TOKEN_SIZE = 2000
 CLEARED_MESSAGE = "[Old tool result content cleared]"
 
 # Tools eligible for microcompact (same as TypeScript COMPACTABLE_TOOLS)
-COMPACTABLE_TOOL_NAMES: frozenset[str] = frozenset([
-    "Read",
-    "Bash",
-    "Shell",
-    "Grep",
-    "Glob",
-    "WebSearch",
-    "WebFetch",
-    "Edit",
-    "Write",
-])
+COMPACTABLE_TOOL_NAMES: frozenset[str] = frozenset(
+    [
+        "Read",
+        "Bash",
+        "Shell",
+        "Grep",
+        "Glob",
+        "WebSearch",
+        "WebFetch",
+        "Edit",
+        "Write",
+    ]
+)
 
 # ---------------------------------------------------------------------------
 # Time-based microcompact configuration
@@ -63,6 +65,7 @@ DEFAULT_KEEP_RECENT = 5
 
 class TimeBasedMCConfig:
     """Configuration for time-based microcompact."""
+
     __slots__ = ("enabled", "gap_threshold_minutes", "keep_recent")
 
     def __init__(
@@ -221,11 +224,13 @@ def strip_images_from_typed_messages(messages: list[Message]) -> list[Message]:
                         new_nested.append(item)
                 if nested_changed:
                     changed = True
-                    new_content.append(ToolResultBlock(
-                        tool_use_id=block.tool_use_id,
-                        content=new_nested,
-                        is_error=block.is_error,
-                    ))
+                    new_content.append(
+                        ToolResultBlock(
+                            tool_use_id=block.tool_use_id,
+                            content=new_nested,
+                            is_error=block.is_error,
+                        )
+                    )
                 else:
                     new_content.append(block)
             elif isinstance(block, dict):
@@ -350,18 +355,17 @@ def microcompact_typed_messages(
 
         for block in msg.content:
             if isinstance(block, ToolResultBlock):
-                if (
-                    block.tool_use_id in clear_set
-                    and block.content != CLEARED_MESSAGE
-                ):
+                if block.tool_use_id in clear_set and block.content != CLEARED_MESSAGE:
                     saved = count_tool_result_tokens(block)
                     tokens_saved += saved
                     changed = True
-                    new_content.append(ToolResultBlock(
-                        tool_use_id=block.tool_use_id,
-                        content=CLEARED_MESSAGE,
-                        is_error=block.is_error,
-                    ))
+                    new_content.append(
+                        ToolResultBlock(
+                            tool_use_id=block.tool_use_id,
+                            content=CLEARED_MESSAGE,
+                            is_error=block.is_error,
+                        )
+                    )
                 else:
                     new_content.append(block)
             elif isinstance(block, dict) and block.get("type") == "tool_result":

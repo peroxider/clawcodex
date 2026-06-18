@@ -14,6 +14,7 @@ tool sees its own controller. These tests verify that:
 2. The executor's own ``self._tool_use_context.abort_controller`` is
    never mutated during execution.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -66,7 +67,9 @@ class TestPerToolAbortControllerIsolation(unittest.IsolatedAsyncioTestCase):
         parent = AbortController()
         ctx = _make_context([tool], parent)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         msg = create_assistant_message(content="hi")
@@ -89,7 +92,9 @@ class TestPerToolAbortControllerIsolation(unittest.IsolatedAsyncioTestCase):
         parent = AbortController()
         ctx = _make_context([tool], parent)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         msg = create_assistant_message(content="hi")

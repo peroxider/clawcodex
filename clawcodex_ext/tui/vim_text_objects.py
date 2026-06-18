@@ -210,9 +210,7 @@ def _paragraph(buffer: VimBuffer, at: Cursor, *, inner: bool) -> Range | None:
 # ---- Quoted ----------------------------------------------------------------
 
 
-def _quoted(
-    buffer: VimBuffer, at: Cursor, *, quote: str, inner: bool
-) -> Range | None:
+def _quoted(buffer: VimBuffer, at: Cursor, *, quote: str, inner: bool) -> Range | None:
     """``i"``: text between matching quotes on the same line.
 
     Multi-line quote pairs are out of scope (rare in practice; ``vim``

@@ -56,7 +56,9 @@ def test_client_is_recreated_when_access_token_changes(monkeypatch) -> None:
         return credentials.pop(0) if credentials else FakeCredentials(api_key="second")
 
     monkeypatch.setattr("src.providers.openai_codex_provider.OpenAI", FakeOpenAI)
-    monkeypatch.setattr("src.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve)
+    monkeypatch.setattr(
+        "src.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve
+    )
 
     provider = OpenAICodexProvider()
 
@@ -80,24 +82,28 @@ def test_chat_uses_codex_responses_api(monkeypatch) -> None:
     class FakeResponses:
         def create(self, **kwargs):
             requests.append(kwargs)
-            return iter([
-                SimpleNamespace(type="response.output_text.delta", delta="codex "),
-                SimpleNamespace(type="response.output_text.delta", delta="reply"),
-                SimpleNamespace(
-                    type="response.completed",
-                    response=SimpleNamespace(
-                        output=[
-                            SimpleNamespace(
-                                type="message",
-                                content=[SimpleNamespace(type="output_text", text="codex reply")],
-                            )
-                        ],
-                        usage=SimpleNamespace(input_tokens=5, output_tokens=3, total_tokens=8),
-                        status="completed",
-                        model="gpt-5.3-codex",
+            return iter(
+                [
+                    SimpleNamespace(type="response.output_text.delta", delta="codex "),
+                    SimpleNamespace(type="response.output_text.delta", delta="reply"),
+                    SimpleNamespace(
+                        type="response.completed",
+                        response=SimpleNamespace(
+                            output=[
+                                SimpleNamespace(
+                                    type="message",
+                                    content=[
+                                        SimpleNamespace(type="output_text", text="codex reply")
+                                    ],
+                                )
+                            ],
+                            usage=SimpleNamespace(input_tokens=5, output_tokens=3, total_tokens=8),
+                            status="completed",
+                            model="gpt-5.3-codex",
+                        ),
                     ),
-                ),
-            ])
+                ]
+            )
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
@@ -110,10 +116,12 @@ def test_chat_uses_codex_responses_api(monkeypatch) -> None:
         lambda *args, **kwargs: FakeCredentials(api_key="access-token"),
     )
 
-    response = OpenAICodexProvider(model="gpt-5.3-codex").chat([
-        {"role": "system", "content": "You are helpful."},
-        {"role": "user", "content": "hello"},
-    ])
+    response = OpenAICodexProvider(model="gpt-5.3-codex").chat(
+        [
+            {"role": "system", "content": "You are helpful."},
+            {"role": "user", "content": "hello"},
+        ]
+    )
 
     assert response.content == "codex reply"
     assert response.model == "gpt-5.3-codex"
@@ -135,22 +143,24 @@ def test_chat_filters_internal_runtime_kwargs(monkeypatch) -> None:
     class FakeResponses:
         def create(self, **kwargs):
             requests.append(kwargs)
-            return iter([
-                SimpleNamespace(
-                    type="response.completed",
-                    response=SimpleNamespace(
-                        output=[
-                            SimpleNamespace(
-                                type="message",
-                                content=[SimpleNamespace(type="output_text", text="ok")],
-                            )
-                        ],
-                        usage=None,
-                        status="completed",
-                        model="gpt-5.3-codex",
-                    ),
-                )
-            ])
+            return iter(
+                [
+                    SimpleNamespace(
+                        type="response.completed",
+                        response=SimpleNamespace(
+                            output=[
+                                SimpleNamespace(
+                                    type="message",
+                                    content=[SimpleNamespace(type="output_text", text="ok")],
+                                )
+                            ],
+                            usage=None,
+                            status="completed",
+                            model="gpt-5.3-codex",
+                        ),
+                    )
+                ]
+            )
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
@@ -179,35 +189,37 @@ def test_chat_parses_codex_responses_function_calls(monkeypatch) -> None:
     class FakeResponses:
         def create(self, **kwargs):
             requests.append(kwargs)
-            return iter([
-                SimpleNamespace(
-                    type="response.output_item.done",
-                    item=SimpleNamespace(
-                        type="function_call",
-                        id="fc_1",
-                        call_id="call_1",
-                        name="Bash",
-                        arguments='{"command":"pwd"}',
+            return iter(
+                [
+                    SimpleNamespace(
+                        type="response.output_item.done",
+                        item=SimpleNamespace(
+                            type="function_call",
+                            id="fc_1",
+                            call_id="call_1",
+                            name="Bash",
+                            arguments='{"command":"pwd"}',
+                        ),
                     ),
-                ),
-                SimpleNamespace(
-                    type="response.completed",
-                    response=SimpleNamespace(
-                        output=[
-                            SimpleNamespace(
-                                type="function_call",
-                                id="fc_1",
-                                call_id="call_1",
-                                name="Bash",
-                                arguments='{"command":"pwd"}',
-                            )
-                        ],
-                        usage=None,
-                        status="requires_action",
-                        model="gpt-5.3-codex",
+                    SimpleNamespace(
+                        type="response.completed",
+                        response=SimpleNamespace(
+                            output=[
+                                SimpleNamespace(
+                                    type="function_call",
+                                    id="fc_1",
+                                    call_id="call_1",
+                                    name="Bash",
+                                    arguments='{"command":"pwd"}',
+                                )
+                            ],
+                            usage=None,
+                            status="requires_action",
+                            model="gpt-5.3-codex",
+                        ),
                     ),
-                ),
-            ])
+                ]
+            )
 
     class FakeOpenAI:
         def __init__(self, **kwargs):
@@ -271,6 +283,8 @@ def test_get_available_models_falls_back_when_not_authenticated(monkeypatch) -> 
     def fake_resolve(*args, **kwargs):
         raise RuntimeError("not authenticated")
 
-    monkeypatch.setattr("src.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve)
+    monkeypatch.setattr(
+        "src.providers.openai_codex_provider.resolve_codex_runtime_credentials", fake_resolve
+    )
 
     assert OpenAICodexProvider().get_available_models() == CODEX_FALLBACK_MODELS

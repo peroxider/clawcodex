@@ -20,13 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 class TimerHandle(Protocol):
-    def cancel(self) -> None:
-        ...
+    def cancel(self) -> None: ...
 
 
 class TimerFactory(Protocol):
-    def call_later(self, seconds: float, callback: Callable[[], None]) -> TimerHandle:
-        ...
+    def call_later(self, seconds: float, callback: Callable[[], None]) -> TimerHandle: ...
 
 
 class ThreadingTimerFactory:

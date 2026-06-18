@@ -55,6 +55,7 @@ def __getattr__(name: str):
         try:
             import anthropic as _module
         except ModuleNotFoundError:  # pragma: no cover
+
             class _MissingAnthropic:
                 class Anthropic:  # type: ignore[no-redef]
                     def __init__(self, *args, **kwargs):
@@ -62,6 +63,7 @@ def __getattr__(name: str):
                             "anthropic package is not installed. "
                             "Install optional dependencies to use AnthropicProvider."
                         )
+
             _module = _MissingAnthropic()  # type: ignore[assignment]
         globals()["anthropic"] = _module
         return _module
@@ -109,8 +111,10 @@ def _extract_usage_dict(usage: Any) -> dict[str, Any]:
     cache_creation = getattr(usage, "cache_creation", None)
     if cache_creation is not None:
         result["cache_creation"] = {
-            "ephemeral_5m_input_tokens": getattr(cache_creation, "ephemeral_5m_input_tokens", 0) or 0,
-            "ephemeral_1h_input_tokens": getattr(cache_creation, "ephemeral_1h_input_tokens", 0) or 0,
+            "ephemeral_5m_input_tokens": getattr(cache_creation, "ephemeral_5m_input_tokens", 0)
+            or 0,
+            "ephemeral_1h_input_tokens": getattr(cache_creation, "ephemeral_1h_input_tokens", 0)
+            or 0,
         }
 
     return result
@@ -119,9 +123,7 @@ def _extract_usage_dict(usage: Any) -> dict[str, Any]:
 class AnthropicProvider(BaseProvider):
     """Anthropic Claude provider."""
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize Anthropic provider.
 
         Args:
@@ -215,11 +217,13 @@ class AnthropicProvider(BaseProvider):
                 if text_val is not None:
                     content_text += str(text_val)
             elif block_type == "tool_use":
-                tool_uses.append({
-                    "id": str(getattr(block, "id", "")),
-                    "name": str(getattr(block, "name", "")),
-                    "input": dict(getattr(block, "input", {})),
-                })
+                tool_uses.append(
+                    {
+                        "id": str(getattr(block, "id", "")),
+                        "name": str(getattr(block, "name", "")),
+                        "input": dict(getattr(block, "input", {})),
+                    }
+                )
 
         usage = getattr(response, "usage", None)
         return ChatResponse(
@@ -232,10 +236,7 @@ class AnthropicProvider(BaseProvider):
         )
 
     def chat(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
@@ -273,10 +274,7 @@ class AnthropicProvider(BaseProvider):
         return self._build_chat_response(response)
 
     def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -316,7 +314,7 @@ class AnthropicProvider(BaseProvider):
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
         abort_signal: "AbortSignal | None" = None,
-        **kwargs
+        **kwargs,
     ) -> ChatResponse:
         """Stream Anthropic text chunks and return the final structured response.
 
@@ -364,9 +362,7 @@ class AnthropicProvider(BaseProvider):
             don't double-pass them.
             """
             forwarded = {
-                k: v
-                for k, v in kwargs.items()
-                if k not in ["model", "max_tokens", "tools"]
+                k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
             }
             return self.chat(
                 messages,
@@ -381,14 +377,19 @@ class AnthropicProvider(BaseProvider):
         watchdog_fired = False
         final_message = None
         try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=max_tokens,
-                messages=anthropic_messages,
-                **({"system": system} if system else {}),
-                **extra_kwargs,
-                **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
-            ) as stream, guard.attach(stream):
+            with (
+                client.messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=anthropic_messages,
+                    **({"system": system} if system else {}),
+                    **extra_kwargs,
+                    **{
+                        k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
+                    },
+                ) as stream,
+                guard.attach(stream),
+            ):
                 # ``guard.attach`` registered the close-on-abort listener
                 # (see ``_stream_abort.py`` for the race-safe ordering
                 # and the close-via-stream.response.close mechanism).

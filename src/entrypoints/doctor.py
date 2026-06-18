@@ -22,6 +22,7 @@ def run_doctor() -> int:
     print("================")
     try:
         from src import __version__
+
         print(f"version:       {__version__}")
     except Exception:  # pragma: no cover
         print("version:       (unknown)")
@@ -32,6 +33,7 @@ def run_doctor() -> int:
         try:
             import asyncio
             from src.services.mcp.doctor import run_diagnostics
+
             print("")
             print("MCP diagnostics")
             print("---------------")

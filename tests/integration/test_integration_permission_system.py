@@ -40,6 +40,7 @@ from src.tool_system.registry import ToolRegistry
 class TestImportAllModules(unittest.TestCase):
     def test_import_permissions_package(self) -> None:
         import src.permissions
+
         self.assertTrue(hasattr(src.permissions, "has_permissions_to_use_tool"))
 
     def test_import_types(self) -> None:
@@ -50,40 +51,49 @@ class TestImportAllModules(unittest.TestCase):
             PermissionPassthroughResult,
             ToolPermissionContext,
         )
+
         ctx = ToolPermissionContext()
         self.assertEqual(ctx.mode, "default")
 
     def test_import_modes(self) -> None:
         from src.permissions.modes import permission_mode_title
+
         self.assertIsInstance(permission_mode_title("default"), str)
 
     def test_import_rule_parser(self) -> None:
         from src.permissions.rule_parser import permission_rule_value_from_string
+
         rv = permission_rule_value_from_string("Bash")
         self.assertEqual(rv.tool_name, "Bash")
 
     def test_import_rules(self) -> None:
         from src.permissions.rules import get_allow_rules
+
         self.assertIsInstance(get_allow_rules(ToolPermissionContext()), list)
 
     def test_import_check(self) -> None:
         from src.permissions.check import has_permissions_to_use_tool
+
         self.assertTrue(callable(has_permissions_to_use_tool))
 
     def test_import_filesystem(self) -> None:
         from src.permissions.filesystem import DANGEROUS_FILES
+
         self.assertGreater(len(DANGEROUS_FILES), 0)
 
     def test_import_bash_security(self) -> None:
         from src.permissions.bash_security import DANGEROUS_BASH_PATTERNS
+
         self.assertGreater(len(DANGEROUS_BASH_PATTERNS), 0)
 
     def test_import_handler(self) -> None:
         from src.permissions.handler import handle_permission_ask
+
         self.assertTrue(callable(handle_permission_ask))
 
     def test_import_loader(self) -> None:
         from src.permissions.loader import settings_to_rules
+
         self.assertTrue(callable(settings_to_rules))
 
 
@@ -111,7 +121,9 @@ class _MockToolForPerm:
         return self._is_mcp
 
     def check_permissions(
-        self, tool_input: dict[str, Any], context: Any,
+        self,
+        tool_input: dict[str, Any],
+        context: Any,
     ) -> PermissionResult:
         if self._perm_result is not None:
             return self._perm_result

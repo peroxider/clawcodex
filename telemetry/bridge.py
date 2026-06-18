@@ -20,6 +20,7 @@ forwards events into the live recorder. When telemetry is disabled
 the live recorder is :class:`_NullRecorder` and the bridge is a no-op
 pass-through, so this is safe to leave installed permanently.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -234,10 +235,7 @@ class AnalyticsTelemetrySink(AnalyticsSink):
 
         if type_name == "error":
             message = _coerce_str(
-                data.pop("message", None)
-                or data.pop("error", None)
-                or data.pop("msg", None)
-                or ""
+                data.pop("message", None) or data.pop("error", None) or data.pop("msg", None) or ""
             )
             error_class = _coerce_str(data.pop("error_class", "")) or "AnalyticsError"
             fields = {

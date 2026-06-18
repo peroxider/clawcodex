@@ -2,6 +2,7 @@
 
 Mirrors TypeScript bridge/transport.ts — abstract transport for bridge communication.
 """
+
 from __future__ import annotations
 
 import json
@@ -13,6 +14,7 @@ from typing import Any, AsyncGenerator, Callable
 @dataclass
 class BridgeMessage:
     """A message sent over the bridge transport."""
+
     type: str
     payload: dict[str, Any]
     id: str = ""

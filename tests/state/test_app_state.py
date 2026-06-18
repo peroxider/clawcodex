@@ -184,9 +184,7 @@ class TestEndToEndStore(unittest.TestCase):
     def test_setstate_triggers_bootstrap_mirror(self) -> None:
         store = create_app_state_store()
 
-        store.set_state(
-            lambda prev: replace_state(prev, main_loop_model="claude-opus-4")
-        )
+        store.set_state(lambda prev: replace_state(prev, main_loop_model="claude-opus-4"))
 
         self.assertEqual(get_main_loop_model_override(), "claude-opus-4")
 
@@ -215,9 +213,7 @@ class TestEndToEndStore(unittest.TestCase):
         store = create_app_state_store()
         store.subscribe(listener)
 
-        store.set_state(
-            lambda prev: replace_state(prev, main_loop_model="claude-opus-4")
-        )
+        store.set_state(lambda prev: replace_state(prev, main_loop_model="claude-opus-4"))
 
         # Listener sees the mirror — proves onChange ran first
         self.assertEqual(order, ["listener_sees:claude-opus-4"])

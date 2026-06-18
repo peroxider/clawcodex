@@ -1,4 +1,5 @@
 """WI-6.4 tests — ``is_team_lead`` predicate (4 truth cases)."""
+
 from __future__ import annotations
 
 from pathlib import Path

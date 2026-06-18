@@ -33,12 +33,14 @@ def _session(start: float, end: float, *bars: TimelineBar) -> SessionVizData:
         end_time=end,
     )
     viz.timeline = list(bars)
-    viz.agent_tree = [AgentTreeNode(
-        agent_id="primary",
-        name="primary-agent",
-        parent_id=None,
-        session_ref="s",
-    )]
+    viz.agent_tree = [
+        AgentTreeNode(
+            agent_id="primary",
+            name="primary-agent",
+            parent_id=None,
+            session_ref="s",
+        )
+    ]
     return viz
 
 
@@ -49,7 +51,9 @@ class TestAgentTreeLayoutEmpty:
         assert viz.agent_layout_summary == {}
 
     def test_no_agent_calls_leaves_root_alone(self):
-        viz = _session(0, 100,
+        viz = _session(
+            0,
+            100,
             _bar("Read", 5, 10),
             _bar("Bash", 15, 25),
         )
@@ -62,10 +66,18 @@ class TestAgentTreeLayoutEmpty:
 
 class TestAgentTreeLayoutSingleSubagent:
     def test_synthesizes_subagent_from_agent_call(self):
-        viz = _session(0, 100,
+        viz = _session(
+            0,
+            100,
             _bar("Read", 5, 10),
-            _bar("Agent", 30, 40, subagent_type="review",
-                 subagent_description="防作弊", isAgentInvocation=True),
+            _bar(
+                "Agent",
+                30,
+                40,
+                subagent_type="review",
+                subagent_description="防作弊",
+                isAgentInvocation=True,
+            ),
             _bar("Write", 50, 60),
         )
         AgentTreeLayout().layout(viz)
@@ -80,11 +92,25 @@ class TestAgentTreeLayoutSingleSubagent:
         assert sub.role_color == "#7c3aed"
 
     def test_layout_summary_counts(self):
-        viz = _session(0, 200,
-            _bar("Agent", 30, 40, subagent_type="review",
-                 subagent_description="A", isAgentInvocation=True),
-            _bar("Agent", 80, 90, subagent_type="verify",
-                 subagent_description="B", isAgentInvocation=True),
+        viz = _session(
+            0,
+            200,
+            _bar(
+                "Agent",
+                30,
+                40,
+                subagent_type="review",
+                subagent_description="A",
+                isAgentInvocation=True,
+            ),
+            _bar(
+                "Agent",
+                80,
+                90,
+                subagent_type="verify",
+                subagent_description="B",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         summary = viz.agent_layout_summary
@@ -96,10 +122,33 @@ class TestAgentTreeLayoutSingleSubagent:
 
 class TestAgentTreeLayoutMultipleSubagents:
     def test_depth_y_stacked(self):
-        viz = _session(0, 300,
-            _bar("Agent", 30, 40, subagent_type="review", subagent_description="A", isAgentInvocation=True),
-            _bar("Agent", 80, 90, subagent_type="verify", subagent_description="B", isAgentInvocation=True),
-            _bar("Agent", 150, 160, subagent_type="verify", subagent_description="C", isAgentInvocation=True),
+        viz = _session(
+            0,
+            300,
+            _bar(
+                "Agent",
+                30,
+                40,
+                subagent_type="review",
+                subagent_description="A",
+                isAgentInvocation=True,
+            ),
+            _bar(
+                "Agent",
+                80,
+                90,
+                subagent_type="verify",
+                subagent_description="B",
+                isAgentInvocation=True,
+            ),
+            _bar(
+                "Agent",
+                150,
+                160,
+                subagent_type="verify",
+                subagent_description="C",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         subs = [n for n in viz.agent_tree if n.parent_id]
@@ -117,9 +166,17 @@ class TestAgentTreeLayoutRobustness:
 
     def test_preserves_existing_root_node(self):
         """An explicit root node should be kept even when we synthesize subs."""
-        viz = _session(0, 100,
-            _bar("Agent", 30, 40, subagent_type="review",
-                 subagent_description="X", isAgentInvocation=True),
+        viz = _session(
+            0,
+            100,
+            _bar(
+                "Agent",
+                30,
+                40,
+                subagent_type="review",
+                subagent_description="X",
+                isAgentInvocation=True,
+            ),
         )
         original_root = viz.agent_tree[0]
         AgentTreeLayout().layout(viz)
@@ -127,9 +184,17 @@ class TestAgentTreeLayoutRobustness:
         assert any(n.agent_id == original_root.agent_id for n in viz.agent_tree)
 
     def test_is_agent_invocation_snake_case_also_recognized(self):
-        viz = _session(0, 100,
-            _bar("Task", 30, 40, is_agent_invocation=True,
-                 subagent_type="verify", subagent_description="Y"),
+        viz = _session(
+            0,
+            100,
+            _bar(
+                "Task",
+                30,
+                40,
+                is_agent_invocation=True,
+                subagent_type="verify",
+                subagent_description="Y",
+            ),
         )
         AgentTreeLayout().layout(viz)
         assert len([n for n in viz.agent_tree if n.parent_id]) == 1

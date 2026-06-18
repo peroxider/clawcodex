@@ -8,9 +8,7 @@ from .aliases import MODEL_ALIASES
 from .configs import MODEL_CONFIGS
 
 # Pattern for valid Claude model IDs
-_CLAUDE_PATTERN = re.compile(
-    r"^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$"
-)
+_CLAUDE_PATTERN = re.compile(r"^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$")
 
 
 def validate_model_name(name: str) -> bool:

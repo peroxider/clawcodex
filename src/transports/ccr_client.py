@@ -94,7 +94,7 @@ class CCRClient:
         options: CCRClientOptions | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        self._base_url = base_url.rstrip('/')
+        self._base_url = base_url.rstrip("/")
         self._options = options or CCRClientOptions()
         self._http = http_client
         self._owned_http = http_client is None
@@ -140,9 +140,9 @@ class CCRClient:
         self._epoch = epoch
         self._initialized = True
         loop = asyncio.get_running_loop()
-        self._uploader_task = loop.create_task(self._uploader_loop(), name='ccr-uploader')
+        self._uploader_task = loop.create_task(self._uploader_loop(), name="ccr-uploader")
         if self._options.heartbeat_interval_seconds > 0:
-            self._heartbeat_task = loop.create_task(self._heartbeat_loop(), name='ccr-heartbeat')
+            self._heartbeat_task = loop.create_task(self._heartbeat_loop(), name="ccr-heartbeat")
 
     def close(self) -> None:
         """Cancel uploader + heartbeat, drop pending writes."""
@@ -204,63 +204,63 @@ class CCRClient:
         if self._closed:
             return
         asyncio.get_running_loop().create_task(
-            self._safe_put('/worker', json={'state': state}),
-            name='ccr-report-state',
+            self._safe_put("/worker", json={"state": state}),
+            name="ccr-report-state",
         )
 
     def report_metadata(self, metadata: dict[str, Any]) -> None:
         if self._closed:
             return
         asyncio.get_running_loop().create_task(
-            self._safe_put('/worker', json={'external_metadata': metadata}),
-            name='ccr-report-metadata',
+            self._safe_put("/worker", json={"external_metadata": metadata}),
+            name="ccr-report-metadata",
         )
 
     def report_delivery(self, event_id: str, status: str) -> None:
         """POST ``/worker/events/{event_id}/delivery``."""
         if self._closed:
             return
-        path = f'/worker/events/{event_id}/delivery'
+        path = f"/worker/events/{event_id}/delivery"
         asyncio.get_running_loop().create_task(
-            self._safe_post(path, json={'status': status}),
-            name='ccr-report-delivery',
+            self._safe_post(path, json={"status": status}),
+            name="ccr-report-delivery",
         )
 
     # ─── Internal: HTTP helpers ───────────────────────────────────────
 
     def _headers(self) -> dict[str, str]:
-        h: dict[str, str] = {'Content-Type': 'application/json'}
+        h: dict[str, str] = {"Content-Type": "application/json"}
         if self._options.get_auth_headers is not None:
             h.update(self._options.get_auth_headers())
         if self._epoch is not None:
-            h['X-Worker-Epoch'] = str(self._epoch)
+            h["X-Worker-Epoch"] = str(self._epoch)
         return h
 
     async def _safe_post(self, path: str, json: dict[str, Any]) -> None:
         if self._http is None:
             return
-        url = f'{self._base_url}{path}'
+        url = f"{self._base_url}{path}"
         try:
             resp = await self._http.post(url, json=json, headers=self._headers())
         except (httpx.HTTPError, httpx.TimeoutException) as exc:
-            logger.debug('[ccr] POST %s failed: %s', path, exc)
+            logger.debug("[ccr] POST %s failed: %s", path, exc)
             return
         await self._handle_response(resp)
 
     async def _safe_put(self, path: str, json: dict[str, Any]) -> None:
         if self._http is None:
             return
-        url = f'{self._base_url}{path}'
+        url = f"{self._base_url}{path}"
         try:
             resp = await self._http.put(url, json=json, headers=self._headers())
         except (httpx.HTTPError, httpx.TimeoutException) as exc:
-            logger.debug('[ccr] PUT %s failed: %s', path, exc)
+            logger.debug("[ccr] PUT %s failed: %s", path, exc)
             return
         await self._handle_response(resp)
 
     async def _handle_response(self, resp: httpx.Response) -> None:
         if resp.status_code == 409:
-            logger.debug('[ccr] 409 epoch superseded')
+            logger.debug("[ccr] 409 epoch superseded")
             cb = self._options.on_epoch_mismatch
             if cb is not None:
                 try:
@@ -268,12 +268,10 @@ class CCRClient:
                 except EpochSupersededError:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug('[ccr] on_epoch_mismatch callback raised: %s', exc)
-            raise EpochSupersededError(
-                'CCR worker epoch superseded (409)'
-            )
+                    logger.debug("[ccr] on_epoch_mismatch callback raised: %s", exc)
+            raise EpochSupersededError("CCR worker epoch superseded (409)")
         if resp.status_code >= 500:
-            logger.debug('[ccr] server error %d', resp.status_code)
+            logger.debug("[ccr] server error %d", resp.status_code)
 
     # ─── Internal: uploader + heartbeat loops ─────────────────────────
 
@@ -330,18 +328,18 @@ class CCRClient:
         """
         if self._http is None:
             return False
-        url = f'{self._base_url}/worker/events'
+        url = f"{self._base_url}/worker/events"
         try:
             resp = await self._http.post(
                 url,
-                json={'events': batch},
+                json={"events": batch},
                 headers=self._headers(),
             )
         except (httpx.HTTPError, httpx.TimeoutException) as exc:
-            logger.debug('[ccr] batch POST failed: %s', exc)
+            logger.debug("[ccr] batch POST failed: %s", exc)
             return False
         if resp.status_code == 409:
-            logger.debug('[ccr] batch POST: 409 epoch superseded')
+            logger.debug("[ccr] batch POST: 409 epoch superseded")
             cb = self._options.on_epoch_mismatch
             if cb is not None:
                 try:
@@ -349,10 +347,10 @@ class CCRClient:
                 except EpochSupersededError:
                     raise
                 except Exception as exc:  # noqa: BLE001
-                    logger.debug('[ccr] on_epoch_mismatch callback raised: %s', exc)
-            raise EpochSupersededError('CCR worker epoch superseded (409)')
+                    logger.debug("[ccr] on_epoch_mismatch callback raised: %s", exc)
+            raise EpochSupersededError("CCR worker epoch superseded (409)")
         if resp.status_code >= 500:
-            logger.debug('[ccr] batch POST 5xx: %d', resp.status_code)
+            logger.debug("[ccr] batch POST 5xx: %d", resp.status_code)
             return False
         return True
 
@@ -367,18 +365,18 @@ class CCRClient:
                 await asyncio.sleep(max(0.1, interval + delta))
             except asyncio.CancelledError:
                 return
-            await self._safe_post('/worker/heartbeat', json={})
+            await self._safe_post("/worker/heartbeat", json={})
 
 
 __all__ = [
-    'CCRClient',
-    'CCRClientOptions',
-    'DEFAULT_HEARTBEAT_INTERVAL_SECONDS',
-    'DEFAULT_MAX_BATCH_SIZE',
-    'DEFAULT_MAX_RETRIES_PER_BATCH',
-    'DEFAULT_PRODUCER_TIMEOUT_SECONDS',
-    'DEFAULT_QUEUE_MAX_SIZE',
-    'DEFAULT_RETRY_BACKOFF_SECONDS',
-    'GetAuthHeaders',
-    'OnEpochMismatch',
+    "CCRClient",
+    "CCRClientOptions",
+    "DEFAULT_HEARTBEAT_INTERVAL_SECONDS",
+    "DEFAULT_MAX_BATCH_SIZE",
+    "DEFAULT_MAX_RETRIES_PER_BATCH",
+    "DEFAULT_PRODUCER_TIMEOUT_SECONDS",
+    "DEFAULT_QUEUE_MAX_SIZE",
+    "DEFAULT_RETRY_BACKOFF_SECONDS",
+    "GetAuthHeaders",
+    "OnEpochMismatch",
 ]

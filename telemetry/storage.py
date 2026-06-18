@@ -19,6 +19,7 @@ Three directories are managed by default:
 * ``reporter_errors/`` — JSONL rows describing remote reporter failures
   without storing rendered report bodies.
 """
+
 from __future__ import annotations
 
 import json
@@ -105,9 +106,7 @@ class LocalJsonlStorage:
         surrounding caller MUST NOT treat a ``False`` as fatal.
         """
         if kind not in ("events", "crashes", "reporter_blocked", "reporter_errors"):
-            raise ValueError(
-                f"append() only writes JSONL kinds; got {kind!r}"
-            )
+            raise ValueError(f"append() only writes JSONL kinds; got {kind!r}")
         effective_date = date or utc_date(utc_now())
         path = self._path_for(kind, effective_date)
         try:

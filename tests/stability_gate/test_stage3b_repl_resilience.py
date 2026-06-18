@@ -47,9 +47,7 @@ class TestStage3bToolErrorClassification:
 
     def test_read_file_not_found_not_recoverable(self):
         """Read 工具的 File not found（非 skills 路径）不可恢复。"""
-        result = _is_recoverable_tool_error(
-            "Read", {"error": "File not found: /tmp/x.txt"}
-        )
+        result = _is_recoverable_tool_error("Read", {"error": "File not found: /tmp/x.txt"})
         assert result is False
 
     def test_read_skill_path_is_recoverable(self):
@@ -115,8 +113,7 @@ class TestStage3bConversationBoundary:
             assert "🎉" in msgs[1]["content"]
         else:
             assert any(
-                isinstance(b, dict) and "🎉" in b.get("text", "")
-                for b in msgs[1]["content"]
+                isinstance(b, dict) and "🎉" in b.get("text", "") for b in msgs[1]["content"]
             )
 
     def test_conversation_empty_get_messages(self):

@@ -5,6 +5,7 @@ the TS buddy command. ``PET_REACTIONS`` lives in
 ``src/command_system/buddy_command.py`` because it's live (re-seeded on
 every pet via ``time.time()``) rather than persistent.
 """
+
 from __future__ import annotations
 
 import time
@@ -14,21 +15,37 @@ from src.buddy.types import StoredCompanion
 
 
 NAME_PREFIXES: tuple[str, ...] = (
-    'Byte', 'Echo', 'Glint', 'Miso', 'Nova',
-    'Pixel', 'Rune', 'Static', 'Vector', 'Whisk',
+    "Byte",
+    "Echo",
+    "Glint",
+    "Miso",
+    "Nova",
+    "Pixel",
+    "Rune",
+    "Static",
+    "Vector",
+    "Whisk",
 )
 
 NAME_SUFFIXES: tuple[str, ...] = (
-    'bean', 'bit', 'bud', 'dot', 'ling',
-    'loop', 'moss', 'patch', 'puff', 'spark',
+    "bean",
+    "bit",
+    "bud",
+    "dot",
+    "ling",
+    "loop",
+    "moss",
+    "patch",
+    "puff",
+    "spark",
 )
 
 PERSONALITIES: tuple[str, ...] = (
-    'Curious and quietly encouraging',
-    'A patient little watcher with strong debugging instincts',
-    'Playful, observant, and suspicious of flaky tests',
-    'Calm under pressure and fond of clean diffs',
-    'A tiny terminal gremlin who likes successful builds',
+    "Curious and quietly encouraging",
+    "A patient little watcher with strong debugging instincts",
+    "Playful, observant, and suspicious of flaky tests",
+    "Calm under pressure and fond of clean diffs",
+    "A tiny terminal gremlin who likes successful builds",
 )
 
 
@@ -51,13 +68,15 @@ def create_stored_companion(user_id: str) -> StoredCompanion:
     suffix = _pick_deterministic(NAME_SUFFIXES, f"{user_id}:suffix")
     personality = _pick_deterministic(PERSONALITIES, f"{user_id}:personality")
     return {
-        'name': f"{prefix}{suffix}",
-        'personality': f"{personality}.",
-        'hatched_at': int(time.time() * 1000),
+        "name": f"{prefix}{suffix}",
+        "personality": f"{personality}.",
+        "hatched_at": int(time.time() * 1000),
     }
 
 
 __all__ = [
-    'NAME_PREFIXES', 'NAME_SUFFIXES', 'PERSONALITIES',
-    'create_stored_companion',
+    "NAME_PREFIXES",
+    "NAME_SUFFIXES",
+    "PERSONALITIES",
+    "create_stored_companion",
 ]

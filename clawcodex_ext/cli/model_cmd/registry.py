@@ -20,9 +20,7 @@ from clawcodex_ext.cli.provider_cmd.errors import UnknownProviderError
 _DISCOVERY_HOOKS: dict[str, list[Callable[[], list[str]]]] = {}
 
 
-def register_discovery_hook(
-    provider: str, hook: Callable[[], list[str]]
-) -> None:
+def register_discovery_hook(provider: str, hook: Callable[[], list[str]]) -> None:
     """Register a callable that returns extra models for *provider* at runtime.
 
     The hook is called each time ``available_models()`` is invoked for this
@@ -58,9 +56,7 @@ class ModelRegistry:
         self.provider_info = provider_info
         # If no custom hooks dict, reference the global registry so any
         # import-time registration is visible to every ModelRegistry instance.
-        self._discovery_hooks = (
-            _DISCOVERY_HOOKS if discovery_hooks is None else discovery_hooks
-        )
+        self._discovery_hooks = _DISCOVERY_HOOKS if discovery_hooks is None else discovery_hooks
 
     def provider_names(self) -> list[str]:
         return list(self.provider_info.keys())
@@ -131,9 +127,7 @@ class ModelRegistry:
                     matches.append((model, prov))
         return matches
 
-    def suggest_models(
-        self, name: str, provider: str | None = None, n: int = 3
-    ) -> list[str]:
+    def suggest_models(self, name: str, provider: str | None = None, n: int = 3) -> list[str]:
         """Return up to *n* close-matching model names for "Did you mean ...?".
 
         Compares *name* against each model's first dash-separated segment
@@ -163,9 +157,7 @@ class ModelRegistry:
                 short_to_fulls.setdefault(short, []).append(model)
 
         short_candidates = list(short_to_fulls.keys())
-        short_matches = difflib.get_close_matches(
-            name, short_candidates, n=n, cutoff=0.6
-        )
+        short_matches = difflib.get_close_matches(name, short_candidates, n=n, cutoff=0.6)
 
         # Expand short matches back to full model names (preserve registry order).
         full_suggestions: list[str] = []

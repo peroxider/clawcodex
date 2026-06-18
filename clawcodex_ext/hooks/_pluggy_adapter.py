@@ -231,6 +231,7 @@ class HookPluginAdapter:
             return None
 
         import subprocess
+
         try:
             result = subprocess.run(
                 self.config.command,

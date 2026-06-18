@@ -87,12 +87,14 @@ def _get_hooks_from_options_legacy(tool_use_context: Any) -> dict[str, list[Hook
                 configs = []
                 for h in hook_list:
                     if isinstance(h, dict):
-                        configs.append(HookConfig(
-                            type=h.get("type", "command"),
-                            command=h.get("command", ""),
-                            timeout=h.get("timeout"),
-                            matcher=h.get("matcher"),
-                        ))
+                        configs.append(
+                            HookConfig(
+                                type=h.get("type", "command"),
+                                command=h.get("command", ""),
+                                timeout=h.get("timeout"),
+                                matcher=h.get("matcher"),
+                            )
+                        )
                     elif isinstance(h, HookConfig):
                         configs.append(h)
                 result[event_name] = configs
@@ -194,7 +196,9 @@ def _env_file_for_event(event_name: str) -> str:
         return ""
     home = os.path.expanduser("~")
     return os.path.join(
-        home, ".clawcodex", "hook-env",
+        home,
+        ".clawcodex",
+        "hook-env",
         f"{event_name}.{os.getpid()}.{time.time_ns()}",
     )
 
@@ -236,7 +240,7 @@ async def _execute_command_hook(
                         f"Hook \"{command}\" has shell: 'powershell' but no "
                         "PowerShell executable (pwsh or powershell) was found "
                         "on PATH. Install PowerShell, or remove "
-                        "\"shell\": \"powershell\" to use bash."
+                        '"shell": "powershell" to use bash.'
                     ),
                     exit_code=-1,
                     duration_ms=duration_ms,
@@ -328,12 +332,15 @@ async def _execute_command_hook(
         # dropped (exit code is still honored).
         if stdout:
             from src.hooks.output_schema import parse_hook_output  # local import: pydantic
+
             parsed, err = parse_hook_output(stdout)
             if err is not None:
                 logger.warning(
                     "Hook %r emitted output that failed schema validation; "
                     "dropping decision payload. error=%s stdout=%r",
-                    command, err, stdout[:200],
+                    command,
+                    err,
+                    stdout[:200],
                 )
             elif parsed is not None:
                 if parsed.decision is not None:
@@ -413,7 +420,12 @@ async def _run_hooks_for_event(
         )
 
         if result.blocking_error:
-            yield {"blocking_error": {"blocking_error": result.blocking_error, "command": result.command}}
+            yield {
+                "blocking_error": {
+                    "blocking_error": result.blocking_error,
+                    "command": result.command,
+                }
+            }
 
         if result.permission_behavior is not None:
             yield {
@@ -439,26 +451,30 @@ async def _run_hooks_for_event(
 
         if result.exit_code is not None and result.exit_code != 0 and result.exit_code != 2:
             yield {
-                "message": create_attachment_message({
-                    "type": "hook_non_blocking_error",
-                    "hook_event": event,
-                    "exit_code": result.exit_code,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "duration_ms": result.duration_ms,
-                    "command": result.command,
-                }),
+                "message": create_attachment_message(
+                    {
+                        "type": "hook_non_blocking_error",
+                        "hook_event": event,
+                        "exit_code": result.exit_code,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "duration_ms": result.duration_ms,
+                        "command": result.command,
+                    }
+                ),
             }
         elif result.exit_code == 0:
             yield {
-                "message": create_attachment_message({
-                    "type": "hook_success",
-                    "hook_event": event,
-                    "stdout": result.stdout,
-                    "stderr": result.stderr,
-                    "duration_ms": result.duration_ms,
-                    "command": result.command,
-                }),
+                "message": create_attachment_message(
+                    {
+                        "type": "hook_success",
+                        "hook_event": event,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "duration_ms": result.duration_ms,
+                        "command": result.command,
+                    }
+                ),
             }
 
 
@@ -500,7 +516,9 @@ async def execute_post_tool_hooks(
         "tool_name": tool_name,
         "tool_use_id": tool_use_id,
         "tool_input": tool_input,
-        "tool_response": str(tool_response) if not isinstance(tool_response, (str, dict, list)) else tool_response,
+        "tool_response": str(tool_response)
+        if not isinstance(tool_response, (str, dict, list))
+        else tool_response,
     }
 
     abort_signal = None

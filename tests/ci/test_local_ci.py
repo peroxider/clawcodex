@@ -112,6 +112,22 @@ def test_build_steps_skips_lint_when_package_scope_has_no_python_files(tmp_path,
     assert lint_step.skip_reason == "no changed Python files"
 
 
+def test_chunked_commands_split_long_file_lists(monkeypatch):
+    local_ci = _load_module(monkeypatch)
+
+    commands = local_ci._chunked_commands(
+        ["python", "-m", "ruff", "check"],
+        ["a.py", "b" * 20 + ".py", "c.py"],
+        max_command_chars=32,
+    )
+
+    assert commands == [
+        ["python", "-m", "ruff", "check", "a.py"],
+        ["python", "-m", "ruff", "check", "b" * 20 + ".py"],
+        ["python", "-m", "ruff", "check", "c.py"],
+    ]
+
+
 def test_preflight_runs_package_smoke_for_non_docs_only_changes(monkeypatch):
     preflight = _load_preflight(monkeypatch)
 

@@ -12,6 +12,7 @@ Plugin agents intentionally drop ``permission_mode``, ``hooks``, and
 beyond install-time trust and must come from user-controlled settings,
 not third-party plugin manifests.
 """
+
 from __future__ import annotations
 
 import logging
@@ -52,7 +53,9 @@ def _scan_md_files(directory: str) -> list[tuple[str, str]]:
 
 
 def _build_namespaced_agent_type(
-    plugin_name: str, namespace: str, base_name: str,
+    plugin_name: str,
+    namespace: str,
+    base_name: str,
 ) -> str:
     parts = [plugin_name]
     if namespace:
@@ -80,7 +83,9 @@ def load_plugin_agents(plugins: list[LoadedPlugin]) -> list[AgentDefinition]:
                 except (OSError, PermissionError, UnicodeDecodeError) as exc:
                     logger.debug(
                         "plugin %s: failed to read %s: %s",
-                        plugin.name, file_path, exc,
+                        plugin.name,
+                        file_path,
+                        exc,
                     )
                     continue
                 parsed = parse_frontmatter(content)
@@ -96,7 +101,9 @@ def load_plugin_agents(plugins: list[LoadedPlugin]) -> list[AgentDefinition]:
                 namespaced = replace(
                     agent,
                     agent_type=_build_namespaced_agent_type(
-                        plugin.name, namespace, agent.agent_type,
+                        plugin.name,
+                        namespace,
+                        agent.agent_type,
                     ),
                     source="plugin",
                     # Strip elevated capabilities: plugins cannot grant

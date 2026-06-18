@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 from src.permissions.types import PermissionMode, ToolPermissionContext
 from src.permissions.updates import apply_permission_update
@@ -29,7 +30,7 @@ from src.permissions.types import PermissionUpdateSetMode
 _CYCLE_TABLE: list[tuple[str, str]] = [
     ("default", "acceptEdits"),
     ("acceptEdits", "plan"),
-    ("plan", "bypassPermissions"),   # guarded by is_bypass_permissions_mode_available
+    ("plan", "bypassPermissions"),  # guarded by is_bypass_permissions_mode_available
 ]
 
 
@@ -144,6 +145,7 @@ def _has_recent_dangerous_operations(
     if denial_tracker is None:
         try:
             from src.permissions.check import get_denial_tracker
+
             denial_tracker = get_denial_tracker()
         except Exception:
             return False

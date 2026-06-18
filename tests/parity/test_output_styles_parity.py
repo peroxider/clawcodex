@@ -22,10 +22,7 @@ from src.outputStyles.styles import BUILTIN_OUTPUT_STYLES
 # when intentionally changing a built-in; CI failure here means an
 # unintentional drift.
 _EXPECTED_PROMPTS = {
-    "default": (
-        "Respond clearly, concisely, and focus on the user's "
-        "requested engineering task."
-    ),
+    "default": ("Respond clearly, concisely, and focus on the user's requested engineering task."),
     "explanatory": (
         "Respond with concise implementation details plus short educational "
         "notes when they improve understanding."

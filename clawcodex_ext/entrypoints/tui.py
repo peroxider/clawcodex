@@ -71,9 +71,7 @@ def run_tui(options: TUIOptions) -> int:
     # Build provider ------------------------------------------------------
     if options.provider_factory is not None:
         provider = options.provider_factory()
-        provider_name = options.provider_name or getattr(
-            provider, "provider_name", "unknown"
-        )
+        provider_name = options.provider_name or getattr(provider, "provider_name", "unknown")
     else:
         provider_name = options.provider_name or get_default_provider()
         try:
@@ -116,9 +114,7 @@ def run_tui(options: TUIOptions) -> int:
         workspace_root=workspace_root,
         permission_context=ToolPermissionContext(
             mode=options.permission_mode or "default",  # type: ignore[arg-type]
-            is_bypass_permissions_mode_available=bool(
-                options.is_bypass_permissions_mode_available
-            ),
+            is_bypass_permissions_mode_available=bool(options.is_bypass_permissions_mode_available),
         ),
     )
     if options.permission_mode == "bypassPermissions":
@@ -244,6 +240,7 @@ def should_use_tui(explicit: bool | None) -> bool:
 def _textual_available() -> bool:
     try:
         import textual  # noqa: F401
+
         return True
     except Exception:
         return False

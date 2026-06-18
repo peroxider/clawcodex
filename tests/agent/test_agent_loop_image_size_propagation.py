@@ -22,16 +22,16 @@ from src.utils.image_validation import ImageSizeError
 
 pytestmark = pytest.mark.skip(
     reason="_call_provider_for_turn was removed during query consolidation "
-           "(agent_loop.py deleted). ImageSizeError propagation is now "
-           "handled inside the query() loop."
+    "(agent_loop.py deleted). ImageSizeError propagation is now "
+    "handled inside the query() loop."
 )
 
 
 class TestImageSizeErrorPropagation(unittest.TestCase):
-
     def _call_provider_for_turn(self, *args, **kwargs):
         """Stub replacement — the real function was deleted during refactoring."""
         raise NotImplementedError("_call_provider_for_turn no longer exists")
+
     def _make_provider(self, stream_exc: Exception, chat_response: Any = None) -> MagicMock:
         provider = MagicMock()
         provider.chat_stream_response.side_effect = stream_exc
@@ -48,7 +48,7 @@ class TestImageSizeErrorPropagation(unittest.TestCase):
         oversize = ImageSizeError([(6 * 1024 * 1024, 5 * 1024 * 1024)])
         provider = self._make_provider(oversize)
         with self.assertRaises(ImageSizeError):
-            _call_provider_for_turn(
+            self._call_provider_for_turn(
                 provider=provider,
                 api_messages=[{"role": "user", "content": "x"}],
                 call_kwargs={},
@@ -69,7 +69,7 @@ class TestImageSizeErrorPropagation(unittest.TestCase):
             tool_uses=None,
         )
         provider = self._make_provider(NotImplementedError(), chat_response=ok)
-        response, streamed = _call_provider_for_turn(
+        response, streamed = self._call_provider_for_turn(
             provider=provider,
             api_messages=[{"role": "user", "content": "x"}],
             call_kwargs={},
@@ -92,7 +92,7 @@ class TestImageSizeErrorPropagation(unittest.TestCase):
             tool_uses=None,
         )
         provider = self._make_provider(RuntimeError("stream blew up"), chat_response=ok)
-        response, streamed = _call_provider_for_turn(
+        response, streamed = self._call_provider_for_turn(
             provider=provider,
             api_messages=[{"role": "user", "content": "x"}],
             call_kwargs={},

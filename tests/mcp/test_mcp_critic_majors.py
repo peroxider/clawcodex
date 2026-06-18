@@ -60,7 +60,6 @@ from src.services.mcp.xaa import (
 
 
 class TestXaaTokenExchange:
-
     @pytest.mark.asyncio
     async def test_happy_path_returns_access_token(self):
         call_log: list[dict[str, Any]] = []
@@ -176,6 +175,7 @@ class TestXaaTokenExchange:
     async def test_slack_style_200_with_error_body_normalized(self):
         """Step 1: vendor 200+error body should be promoted via
         ``normalize_oauth_error_body`` and raise (not silently advance)."""
+
         async def fake_post(self, url, *, data=None, headers=None, **kw):
             return httpx.Response(
                 200,
@@ -220,14 +220,15 @@ def _build_jwt_with_exp(exp: int) -> str:
     """Build a minimal unsigned JWT with the given exp claim. Only the
     payload is read by the helper; the signature is unused."""
     header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
-    payload = base64.urlsafe_b64encode(
-        json.dumps({"exp": exp, "sub": "user"}).encode()
-    ).rstrip(b"=").decode()
+    payload = (
+        base64.urlsafe_b64encode(json.dumps({"exp": exp, "sub": "user"}).encode())
+        .rstrip(b"=")
+        .decode()
+    )
     return f"{header}.{payload}.SIGNATURE"
 
 
 class TestXaaIdpLogin:
-
     def test_jwt_exp_decoded_from_payload(self):
         from src.services.mcp.xaa_idp_login import jwt_exp as _jwt_exp
 
@@ -269,7 +270,6 @@ class TestXaaIdpLogin:
 
 
 class TestOutputValidationTruncation:
-
     def test_short_content_not_truncated(self):
         blocks = [{"type": "text", "text": "small payload"}]
         out, truncated = truncate_mcp_content_if_needed(blocks)
@@ -313,7 +313,6 @@ class TestOutputValidationTruncation:
 
 
 class TestToolWrapperInputValidation:
-
     def _build_tool(self, schema: dict[str, Any], client=None):
         mcp_tool = McpToolSchema(
             name="my_tool",
@@ -327,9 +326,11 @@ class TestToolWrapperInputValidation:
         from src.tool_system.context import ToolContext
 
         client = MagicMock()
-        client.call_tool = AsyncMock(return_value=McpToolResult(
-            content=[{"type": "text", "text": "ok"}],
-        ))
+        client.call_tool = AsyncMock(
+            return_value=McpToolResult(
+                content=[{"type": "text", "text": "ok"}],
+            )
+        )
         tool = self._build_tool(
             {
                 "type": "object",
@@ -346,9 +347,9 @@ class TestToolWrapperInputValidation:
         from src.tool_system.context import ToolContext
 
         client = MagicMock()
-        client.call_tool = AsyncMock(side_effect=AssertionError(
-            "server should not be called when validation fails"
-        ))
+        client.call_tool = AsyncMock(
+            side_effect=AssertionError("server should not be called when validation fails")
+        )
         tool = self._build_tool(
             {
                 "type": "object",
@@ -388,7 +389,6 @@ class TestToolWrapperInputValidation:
 
 
 class TestConnectionManagerWriteMethods:
-
     @pytest.mark.asyncio
     async def test_reconnect_drops_old_client_and_calls_connect(self):
         mgr = MCPConnectionManager()
@@ -409,15 +409,19 @@ class TestConnectionManagerWriteMethods:
         async def fake_connect(name, conf, *, auth_provider=None):
             return new_client, new_conn
 
-        with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect,
-        ), patch(
-            "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
-            return_value=[],
+        with (
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                return_value=[],
+            ),
         ):
             result = await mgr.reconnect_mcp_server("srv")
 
@@ -453,20 +457,26 @@ class TestConnectionManagerWriteMethods:
         async def fake_connect(name, conf, *, auth_provider=None):
             return new_client, new_conn
 
-        with patch(
-            "src.services.mcp.connection_manager.is_mcp_server_disabled",
-            return_value=True,
-        ), patch(
-            "src.services.mcp.connection_manager.set_mcp_server_enabled",
-        ) as mock_set, patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect,
-        ), patch(
-            "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
-            return_value=[],
+        with (
+            patch(
+                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                return_value=True,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.set_mcp_server_enabled",
+            ) as mock_set,
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                return_value=[],
+            ),
         ):
             result = await mgr.toggle_mcp_server("srv")
 
@@ -481,12 +491,15 @@ class TestConnectionManagerWriteMethods:
         mgr._clients["srv"] = old_client
         mgr._tools["srv"] = []
 
-        with patch(
-            "src.services.mcp.connection_manager.is_mcp_server_disabled",
-            return_value=False,
-        ), patch(
-            "src.services.mcp.connection_manager.set_mcp_server_enabled",
-        ) as mock_set:
+        with (
+            patch(
+                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                return_value=False,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.set_mcp_server_enabled",
+            ) as mock_set,
+        ):
             result = await mgr.toggle_mcp_server("srv")
 
         mock_set.assert_called_with("srv", False)
@@ -504,9 +517,7 @@ class TestConnectionManagerWriteMethods:
     @pytest.mark.asyncio
     async def test_trigger_oauth_uses_auth_provider(self):
         provider = MagicMock()
-        provider.acquire_token = AsyncMock(return_value=MagicMock(
-            success=True, error=None
-        ))
+        provider.acquire_token = AsyncMock(return_value=MagicMock(success=True, error=None))
         mgr = MCPConnectionManager(auth_provider=provider)
         config = ScopedMcpServerConfig(
             config=McpHTTPServerConfig(url="https://example.com/mcp"),
@@ -520,15 +531,19 @@ class TestConnectionManagerWriteMethods:
             assert auth_provider is provider
             return new_client, new_conn
 
-        with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect,
-        ), patch(
-            "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
-            return_value=[],
+        with (
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                return_value=[],
+            ),
         ):
             result = await mgr.trigger_oauth("srv", open_browser=False)
         provider.acquire_token.assert_awaited_once()
@@ -541,7 +556,6 @@ class TestConnectionManagerWriteMethods:
 
 
 class TestInProcessTransport:
-
     @pytest.mark.asyncio
     async def test_send_receive_round_trip(self):
         a, b = create_linked_transport_pair()
@@ -592,9 +606,10 @@ class TestInProcessTransport:
 
 
 class TestBinaryContentPersistence:
-
     def test_image_block_persists_to_tempfile_and_returns_path_reference(
-        self, tmp_path, monkeypatch,
+        self,
+        tmp_path,
+        monkeypatch,
     ):
         """An MCP server returning an image block should NOT inject the
         raw base64 (or the old '[image content]' placeholder) into the
@@ -609,7 +624,9 @@ class TestBinaryContentPersistence:
             {"type": "image", "data": pixel, "mimeType": "image/png"},
         ]
         text = _flatten_content_blocks_to_text(
-            blocks, server_name="vision", tool_name="screenshot",
+            blocks,
+            server_name="vision",
+            tool_name="screenshot",
         )
         assert "Here is the image:" in text
         assert "binary content saved to" in text
@@ -671,7 +688,8 @@ class TestPolicyFilterReadsExtra:
         settings = SettingsSchema(extra={"disable_all_mcp": True})
         configs = {
             "a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
         }
         with patch(
@@ -690,10 +708,12 @@ class TestPolicyFilterReadsExtra:
         settings = SettingsSchema(extra={"allow_managed_only_mcp": True})
         configs = {
             "user_a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
             "ent_a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="enterprise",
+                config=McpStdioServerConfig(command="echo"),
+                scope="enterprise",
             ),
         }
         with patch(
@@ -713,7 +733,8 @@ class TestPolicyFilterReadsExtra:
         settings = SettingsSchema(extra={"disableAllMcp": True})
         configs = {
             "a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
         }
         with patch(
@@ -730,7 +751,8 @@ class TestPolicyFilterReadsExtra:
         settings = SettingsSchema()  # nothing set
         configs = {
             "a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
         }
         with patch(

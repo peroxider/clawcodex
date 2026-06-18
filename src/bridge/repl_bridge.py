@@ -179,14 +179,12 @@ class BridgeCoreParams:
     on_state_change: OnStateChange | None = None
 
     # Config getters
-    get_poll_interval_config: Callable[[], PollIntervalConfig] = (
-        lambda: DEFAULT_POLL_CONFIG
-    )
+    get_poll_interval_config: Callable[[], PollIntervalConfig] = lambda: DEFAULT_POLL_CONFIG
     get_current_title: Callable[[], str] | None = None
 
     # Identity for the env registration
     max_sessions: int = 1
-    spawn_mode: str = 'single-session'  # 'single-session' | 'same-dir' | 'worktree'
+    spawn_mode: str = "single-session"  # 'single-session' | 'same-dir' | 'worktree'
     bridge_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     # MVP scope: perpetual mode is not yet supported.
@@ -235,7 +233,7 @@ async def init_bridge_core(
     http_client: httpx.AsyncClient | None = None,
     api_client: BridgeApiClient | None = None,
     spawner: SessionSpawner | None = None,
-    runner_version: str = 'py-bridge-mvp',
+    runner_version: str = "py-bridge-mvp",
 ) -> ReplBridgeHandle | None:
     """Set up the env-based bridge: register → create session → start poll loop.
 
@@ -283,26 +281,22 @@ async def init_bridge_core(
         reuse_environment_id=pointer.environment_id if pointer else None,
     )
     try:
-        registration = await api_client.register_bridge_environment(
-            bridge_config
-        )
+        registration = await api_client.register_bridge_environment(bridge_config)
     except BridgeFatalError as err:
-        logger.error('[bridge:repl] Registration failed: %s', err)
-        _fire_state(params.on_state_change, 'failed',
-                    f'Registration failed: {err}')
+        logger.error("[bridge:repl] Registration failed: %s", err)
+        _fire_state(params.on_state_change, "failed", f"Registration failed: {err}")
         if params.perpetual:
             clear_pointer(params.dir)
         return None
-    environment_id = registration['environment_id']
-    environment_secret = registration['environment_secret']
-    logger.debug(
-        '[bridge:repl] Registered environment_id=%s', environment_id
-    )
+    environment_id = registration["environment_id"]
+    environment_secret = registration["environment_secret"]
+    logger.debug("[bridge:repl] Registered environment_id=%s", environment_id)
     if pointer is not None and environment_id != pointer.environment_id:
         logger.info(
-            '[bridge:repl] Perpetual: server did not resurrect env '
-            '(pointer=%s, got=%s); creating fresh session',
-            pointer.environment_id, environment_id,
+            "[bridge:repl] Perpetual: server did not resurrect env "
+            "(pointer=%s, got=%s); creating fresh session",
+            pointer.environment_id,
+            environment_id,
         )
         clear_pointer(params.dir)
         pointer = None
@@ -317,51 +311,51 @@ async def init_bridge_core(
         for candidate in candidates:
             try:
                 await api_client.reconnect_session(
-                    environment_id, candidate,
+                    environment_id,
+                    candidate,
                 )
             except Exception as err:  # noqa: BLE001
                 logger.debug(
-                    '[bridge:repl] reconnect_session(%s) failed: %s',
-                    candidate, err,
+                    "[bridge:repl] reconnect_session(%s) failed: %s",
+                    candidate,
+                    err,
                 )
                 continue
             session_id = pointer.session_id
             logger.debug(
-                '[bridge:repl] Reconnected pointer session_id=%s',
+                "[bridge:repl] Reconnected pointer session_id=%s",
                 session_id,
             )
             break
         if session_id is None:
             logger.info(
-                '[bridge:repl] Pointer session no longer reachable; '
-                'creating fresh session',
+                "[bridge:repl] Pointer session no longer reachable; creating fresh session",
             )
             clear_pointer(params.dir)
             pointer = None
     if session_id is None:
         try:
-            session_id = await params.create_session({
-                'environment_id': environment_id,
-                'title': params.title,
-                'gitRepoUrl': params.git_repo_url,
-                'branch': params.branch,
-            })
+            session_id = await params.create_session(
+                {
+                    "environment_id": environment_id,
+                    "title": params.title,
+                    "gitRepoUrl": params.git_repo_url,
+                    "branch": params.branch,
+                }
+            )
         except Exception as err:  # noqa: BLE001
-            logger.error('[bridge:repl] Session creation threw: %s', err)
+            logger.error("[bridge:repl] Session creation threw: %s", err)
             session_id = None
     if session_id is None:
-        _fire_state(params.on_state_change, 'failed',
-                    'Session creation failed')
+        _fire_state(params.on_state_change, "failed", "Session creation failed")
         if params.perpetual:
             clear_pointer(params.dir)
         try:
             await api_client.deregister_environment(environment_id)
         except Exception as err:  # noqa: BLE001
-            logger.debug(
-                '[bridge:repl] Deregister-after-create-fail failed: %s', err
-            )
+            logger.debug("[bridge:repl] Deregister-after-create-fail failed: %s", err)
         return None
-    logger.debug('[bridge:repl] Created session_id=%s', session_id)
+    logger.debug("[bridge:repl] Created session_id=%s", session_id)
     if params.perpetual:
         write_pointer(
             params.dir,
@@ -374,11 +368,13 @@ async def init_bridge_core(
 
     # ── 3. Build the spawner (if not test-injected) ────────────────────
     if spawner is None:
-        spawner = create_session_spawner(SessionSpawnerDeps(
-            exec_path='claude',  # caller-overridable in future
-            verbose=False,
-            sandbox=False,
-        ))
+        spawner = create_session_spawner(
+            SessionSpawnerDeps(
+                exec_path="claude",  # caller-overridable in future
+                verbose=False,
+                sandbox=False,
+            )
+        )
 
     # ── 4. State machine + poll loop ──────────────────────────────────
     state = _BridgeState(
@@ -395,10 +391,10 @@ async def init_bridge_core(
     if params.perpetual:
         asyncio.create_task(
             state._pointer_mtime_refresh_loop(),
-            name='bridge-pointer-mtime-refresh',
+            name="bridge-pointer-mtime-refresh",
         )
 
-    _fire_state(params.on_state_change, 'ready')
+    _fire_state(params.on_state_change, "ready")
 
     return ReplBridgeHandle(
         bridge_session_id=session_id,
@@ -449,7 +445,7 @@ class _BridgeState:
     def start_poll_loop(self) -> None:
         self.poll_task = asyncio.create_task(
             self._poll_loop(),
-            name=f'bridge-poll-{self.environment_id}',
+            name=f"bridge-poll-{self.environment_id}",
         )
 
     async def _poll_loop(self) -> None:
@@ -460,13 +456,12 @@ class _BridgeState:
                 if self.active_session is not None:
                     # At capacity for the MVP — single session at a time.
                     # Sleep at the at-capacity interval, then re-check.
-                    await self._sleep_or_cancel(
-                        cfg.poll_interval_ms_at_capacity / 1000.0
-                    )
+                    await self._sleep_or_cancel(cfg.poll_interval_ms_at_capacity / 1000.0)
                     continue
 
                 work = await self.api.poll_for_work(
-                    self.environment_id, self.environment_secret,
+                    self.environment_id,
+                    self.environment_secret,
                 )
                 if work is None:
                     await self._sleep_or_cancel(interval)
@@ -480,31 +475,29 @@ class _BridgeState:
                     # scratch + create a fresh session, then keep polling.
                     # Bounded by ``max_env_recreation_attempts`` to avoid
                     # infinite loops on a permanently-broken backend.
-                    if self.env_recreation_attempts >= (
-                        self.params.max_env_recreation_attempts
-                    ):
+                    if self.env_recreation_attempts >= (self.params.max_env_recreation_attempts):
                         logger.error(
-                            '[bridge:repl] Env recreation exhausted '
-                            '(%s attempts); giving up: %s',
-                            self.env_recreation_attempts, err,
+                            "[bridge:repl] Env recreation exhausted (%s attempts); giving up: %s",
+                            self.env_recreation_attempts,
+                            err,
                         )
                         _fire_state(
-                            self.params.on_state_change, 'failed',
-                            f'Env recreation exhausted ({err.status})',
+                            self.params.on_state_change,
+                            "failed",
+                            f"Env recreation exhausted ({err.status})",
                         )
                         return
                     self.env_recreation_attempts += 1
                     logger.warning(
-                        '[bridge:repl] Environment lost (%s); '
-                        'recreating (attempt %s/%s)',
+                        "[bridge:repl] Environment lost (%s); recreating (attempt %s/%s)",
                         err.status,
                         self.env_recreation_attempts,
                         self.params.max_env_recreation_attempts,
                     )
                     _fire_state(
-                        self.params.on_state_change, 'reconnecting',
-                        f'Env recreation attempt '
-                        f'{self.env_recreation_attempts}',
+                        self.params.on_state_change,
+                        "reconnecting",
+                        f"Env recreation attempt {self.env_recreation_attempts}",
                     )
                     if await self._recreate_environment():
                         # Reset the attempt counter on success — a future
@@ -512,22 +505,25 @@ class _BridgeState:
                         # this one's budget.
                         self.env_recreation_attempts = 0
                         _fire_state(
-                            self.params.on_state_change, 'ready',
+                            self.params.on_state_change,
+                            "ready",
                         )
                         continue
                     # Recreation itself failed; loop will retry on next
                     # iteration (the attempt counter persists).
                     await self._sleep_or_cancel(interval)
                     continue
-                logger.error('[bridge:repl] Poll fatal error: %s', err)
+                logger.error("[bridge:repl] Poll fatal error: %s", err)
                 _fire_state(
-                    self.params.on_state_change, 'failed', str(err),
+                    self.params.on_state_change,
+                    "failed",
+                    str(err),
                 )
                 return
             except (asyncio.CancelledError, KeyboardInterrupt):
                 raise
             except Exception as err:  # noqa: BLE001
-                logger.warning('[bridge:repl] Poll loop error: %s', err)
+                logger.warning("[bridge:repl] Poll loop error: %s", err)
                 await self._sleep_or_cancel(interval)
 
     async def _sleep_or_cancel(self, seconds: float) -> None:
@@ -565,30 +561,26 @@ class _BridgeState:
                     self.bridge_config,
                 )
             except Exception as err:  # noqa: BLE001
-                logger.warning(
-                    '[bridge:repl] Re-register failed: %s', err
-                )
+                logger.warning("[bridge:repl] Re-register failed: %s", err)
                 return False
         finally:
             self.bridge_config.reuse_environment_id = prior_reuse
-        new_env_id = registration['environment_id']
-        new_env_secret = registration['environment_secret']
+        new_env_id = registration["environment_id"]
+        new_env_secret = registration["environment_secret"]
 
         # ── Strategy-1: in-place reconnect ──────────────────────────
-        if (
-            new_env_id == prior_env_id
-            and prior_session_id is not None
-            and had_active_session
-        ):
+        if new_env_id == prior_env_id and prior_session_id is not None and had_active_session:
             try:
                 await self.api.reconnect_session(
-                    new_env_id, prior_session_id,
+                    new_env_id,
+                    prior_session_id,
                 )
             except Exception as err:  # noqa: BLE001
                 logger.info(
-                    '[bridge:repl] Strategy-1 reconnect refused '
-                    '(session=%s): %s — falling back to Strategy-2',
-                    prior_session_id, err,
+                    "[bridge:repl] Strategy-1 reconnect refused "
+                    "(session=%s): %s — falling back to Strategy-2",
+                    prior_session_id,
+                    err,
                 )
             else:
                 # Server accepted the reconnect. Stop the old work item
@@ -600,9 +592,9 @@ class _BridgeState:
                 self.environment_secret = new_env_secret
                 await self._update_pointer(session_id=prior_session_id)
                 logger.info(
-                    '[bridge:repl] Strategy-1 reconnect succeeded: '
-                    'env=%s session=%s (preserved)',
-                    new_env_id, prior_session_id,
+                    "[bridge:repl] Strategy-1 reconnect succeeded: env=%s session=%s (preserved)",
+                    new_env_id,
+                    prior_session_id,
                 )
                 return True
 
@@ -612,9 +604,7 @@ class _BridgeState:
             try:
                 self.active_session.kill()
             except Exception as err:  # noqa: BLE001
-                logger.debug(
-                    '[bridge:repl] kill during recreation: %s', err
-                )
+                logger.debug("[bridge:repl] kill during recreation: %s", err)
             self.active_session = None
             self.active_work_id = None
             self.active_session_id = None
@@ -624,35 +614,33 @@ class _BridgeState:
         try:
             await self.params.archive_session(archive_id)
         except Exception as err:  # noqa: BLE001
-            logger.debug(
-                '[bridge:repl] archive of prior session failed '
-                'during recreation: %s', err
-            )
+            logger.debug("[bridge:repl] archive of prior session failed during recreation: %s", err)
         self.environment_id = new_env_id
         self.environment_secret = new_env_secret
         try:
-            new_session_id = await self.params.create_session({
-                'environment_id': self.environment_id,
-                'title': self.params.title,
-                'gitRepoUrl': self.params.git_repo_url,
-                'branch': self.params.branch,
-            })
+            new_session_id = await self.params.create_session(
+                {
+                    "environment_id": self.environment_id,
+                    "title": self.params.title,
+                    "gitRepoUrl": self.params.git_repo_url,
+                    "branch": self.params.branch,
+                }
+            )
         except Exception as err:  # noqa: BLE001
             logger.warning(
-                '[bridge:repl] create_session during recreation '
-                'failed: %s', err,
+                "[bridge:repl] create_session during recreation failed: %s",
+                err,
             )
             return False
         if new_session_id is None:
-            logger.warning(
-                '[bridge:repl] create_session during recreation returned None'
-            )
+            logger.warning("[bridge:repl] create_session during recreation returned None")
             return False
         self.initial_session_id = new_session_id
         await self._update_pointer(session_id=new_session_id)
         logger.info(
-            '[bridge:repl] Environment recreated: env=%s session=%s',
-            self.environment_id, new_session_id,
+            "[bridge:repl] Environment recreated: env=%s session=%s",
+            self.environment_id,
+            new_session_id,
         )
         return True
 
@@ -699,44 +687,41 @@ class _BridgeState:
             await self.api.reconnect_session(self.environment_id, session_id)
         except Exception as err:  # noqa: BLE001
             logger.warning(
-                '[bridge:repl] v2 token refresh via reconnect_session '
-                'failed for sessionId=%s: %s', session_id, err,
+                "[bridge:repl] v2 token refresh via reconnect_session failed for sessionId=%s: %s",
+                session_id,
+                err,
             )
 
     async def _process_work(self, work: dict[str, Any]) -> None:
         """Handle one work item from the poll."""
-        work_id = work.get('id')
+        work_id = work.get("id")
         if not isinstance(work_id, str):
-            logger.warning('[bridge:repl] Work missing id: %s', work)
+            logger.warning("[bridge:repl] Work missing id: %s", work)
             return
-        data = work.get('data') or {}
+        data = work.get("data") or {}
         if not isinstance(data, dict):
-            logger.warning('[bridge:repl] Work missing data: %s', work)
+            logger.warning("[bridge:repl] Work missing data: %s", work)
             return
-        work_type = data.get('type')
-        if work_type == 'healthcheck':
+        work_type = data.get("type")
+        if work_type == "healthcheck":
             # Acknowledge and move on.
             await self._safe_ack(work_id, self.environment_secret)
             return
-        if work_type != 'session':
-            logger.warning(
-                '[bridge:repl] Unknown work type: %s', work_type
-            )
+        if work_type != "session":
+            logger.warning("[bridge:repl] Unknown work type: %s", work_type)
             return
 
         # Decode the work secret to get the session token + URL.
         try:
-            secret = decode_work_secret(work.get('secret') or '')
+            secret = decode_work_secret(work.get("secret") or "")
         except Exception as err:  # noqa: BLE001
-            logger.error(
-                '[bridge:repl] Failed to decode work secret: %s', err
-            )
+            logger.error("[bridge:repl] Failed to decode work secret: %s", err)
             await self._safe_stop_work(work_id, force=True)
             return
 
-        session_id = data.get('id')
+        session_id = data.get("id")
         if not isinstance(session_id, str):
-            logger.warning('[bridge:repl] Work session.id missing')
+            logger.warning("[bridge:repl] Work session.id missing")
             return
 
         # Acknowledge — claims the work item so the server doesn't
@@ -748,8 +733,8 @@ class _BridgeState:
         use_ccr_v2 = bool(secret.use_code_sessions)
         if not use_ccr_v2:
             logger.warning(
-                '[bridge:repl] v1 (session-ingress) transport not yet '
-                'implemented in Phase 6 MVP — v2 only. Stopping work.'
+                "[bridge:repl] v1 (session-ingress) transport not yet "
+                "implemented in Phase 6 MVP — v2 only. Stopping work."
             )
             await self._safe_stop_work(work_id, force=True)
             return
@@ -761,18 +746,19 @@ class _BridgeState:
 
         # Spawn the child.
         spawn_opts: SessionSpawnOpts = {
-            'session_id': session_id,
-            'sdk_url': sdk_url,
-            'access_token': secret.session_ingress_token,
-            'use_ccr_v2': use_ccr_v2,
-            'worker_epoch': 0,
+            "session_id": session_id,
+            "sdk_url": sdk_url,
+            "access_token": secret.session_ingress_token,
+            "use_ccr_v2": use_ccr_v2,
+            "worker_epoch": 0,
         }
         try:
             self.active_session = self.spawner.spawn(
-                spawn_opts, self.params.dir,
+                spawn_opts,
+                self.params.dir,
             )
         except Exception as err:  # noqa: BLE001
-            logger.error('[bridge:repl] Spawn failed: %s', err)
+            logger.error("[bridge:repl] Spawn failed: %s", err)
             await self._safe_stop_work(work_id, force=True)
             return
         self.active_work_id = work_id
@@ -791,23 +777,26 @@ class _BridgeState:
         # ``exp`` claim via ``schedule`` rather than ``schedule_from_expires_in``.
         try:
             self.active_token_refresh.schedule(
-                session_id, secret.session_ingress_token,
+                session_id,
+                secret.session_ingress_token,
             )
         except Exception as err:  # noqa: BLE001
             logger.debug(
-                '[bridge:repl] schedule refresh failed (likely '
-                'undecodable JWT — child uses initial token): %s', err
+                "[bridge:repl] schedule refresh failed (likely "
+                "undecodable JWT — child uses initial token): %s",
+                err,
             )
-        _fire_state(self.params.on_state_change, 'connected')
+        _fire_state(self.params.on_state_change, "connected")
         logger.debug(
-            '[bridge:repl] Spawned session_id=%s work_id=%s',
-            session_id, work_id,
+            "[bridge:repl] Spawned session_id=%s work_id=%s",
+            session_id,
+            work_id,
         )
 
         # Wait for the session to complete, then clean up.
         asyncio.create_task(
             self._await_session_done(work_id),
-            name=f'bridge-session-await-{session_id}',
+            name=f"bridge-session-await-{session_id}",
         )
 
     def _build_token_refresh_scheduler(self) -> TokenRefreshScheduler:
@@ -816,6 +805,7 @@ class _BridgeState:
         v1: writes the fresh token to the child's stdin.
         v2: calls ``reconnect_session`` to notify the server.
         """
+
         def on_refresh(_session_id: str, fresh_token: str) -> None:
             session = self.active_session
             if session is None:
@@ -823,10 +813,7 @@ class _BridgeState:
             try:
                 session.update_access_token(fresh_token)
             except Exception as err:  # noqa: BLE001
-                logger.warning(
-                    '[bridge:repl] update_access_token via stdin '
-                    'failed: %s', err
-                )
+                logger.warning("[bridge:repl] update_access_token via stdin failed: %s", err)
             # v2: trigger server re-dispatch so it picks up the new JWT.
             # _safe_reconnect_for_refresh is async; fire-and-forget via
             # create_task so on_refresh stays sync (TokenRefreshScheduler
@@ -834,7 +821,7 @@ class _BridgeState:
             if self.active_session is not None:
                 asyncio.create_task(
                     self._safe_reconnect_for_refresh(_session_id),
-                    name='bridge-reconnect-for-refresh',
+                    name="bridge-reconnect-for-refresh",
                 )
 
         async def get_access_token() -> str | None:
@@ -849,7 +836,7 @@ class _BridgeState:
         return TokenRefreshScheduler(
             get_access_token=get_access_token,
             on_refresh=on_refresh,
-            label='repl-bridge',
+            label="repl-bridge",
         )
 
     async def _await_session_done(self, work_id: str) -> None:
@@ -858,13 +845,9 @@ class _BridgeState:
         try:
             status = await self.active_session.wait_done()
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:repl] wait_done raised: %s', err
-            )
-            status = 'failed'
-        logger.debug(
-            '[bridge:repl] Session done (status=%s)', status
-        )
+            logger.warning("[bridge:repl] wait_done raised: %s", err)
+            status = "failed"
+        logger.debug("[bridge:repl] Session done (status=%s)", status)
         # Cancel the JWT refresh scheduler — the session is done so any
         # pending refresh would write to a dead stdin.
         if self.active_token_refresh is not None:
@@ -879,23 +862,29 @@ class _BridgeState:
     async def _safe_ack(self, work_id: str, session_token: str) -> None:
         try:
             await self.api.acknowledge_work(
-                self.environment_id, work_id, session_token,
+                self.environment_id,
+                work_id,
+                session_token,
             )
         except Exception as err:  # noqa: BLE001
             logger.warning(
-                '[bridge:repl] ack failed for work_id=%s: %s',
-                work_id, err,
+                "[bridge:repl] ack failed for work_id=%s: %s",
+                work_id,
+                err,
             )
 
     async def _safe_stop_work(self, work_id: str, *, force: bool) -> None:
         try:
             await self.api.stop_work(
-                self.environment_id, work_id, force,
+                self.environment_id,
+                work_id,
+                force,
             )
         except Exception as err:  # noqa: BLE001
             logger.warning(
-                '[bridge:repl] stop_work failed for work_id=%s: %s',
-                work_id, err,
+                "[bridge:repl] stop_work failed for work_id=%s: %s",
+                work_id,
+                err,
             )
 
     # ── Public handle methods (MVP) ────────────────────────────────────
@@ -919,23 +908,29 @@ class _BridgeState:
         # the child stdin. The real wire format is more elaborate (see
         # message_mappers.to_sdk_messages) and is wired in Phase 6 full.
         import json
+
         for msg in messages:
             try:
-                line = json.dumps({
-                    'type': 'user',
-                    'message': {
-                        'role': 'user',
-                        'content': getattr(msg, 'content', ''),
-                    },
-                    'uuid': getattr(msg, 'uuid', None),
-                }) + '\n'
+                line = (
+                    json.dumps(
+                        {
+                            "type": "user",
+                            "message": {
+                                "role": "user",
+                                "content": getattr(msg, "content", ""),
+                            },
+                            "uuid": getattr(msg, "uuid", None),
+                        }
+                    )
+                    + "\n"
+                )
                 self.active_session.write_stdin(line)
             except Exception as err:  # noqa: BLE001
                 self.dropped_batch_count += 1
                 logger.warning(
-                    '[bridge:repl] write_messages failed '
-                    '(dropped_batch_count=%s): %s',
-                    self.dropped_batch_count, err,
+                    "[bridge:repl] write_messages failed (dropped_batch_count=%s): %s",
+                    self.dropped_batch_count,
+                    err,
                 )
 
     def write_sdk_messages(self, messages: list[dict[str, Any]]) -> None:
@@ -943,22 +938,24 @@ class _BridgeState:
         if self.active_session is None:
             return
         import json
+
         for msg in messages:
             try:
-                self.active_session.write_stdin(json.dumps(msg) + '\n')
+                self.active_session.write_stdin(json.dumps(msg) + "\n")
             except Exception as err:  # noqa: BLE001
                 self.dropped_batch_count += 1
                 logger.warning(
-                    '[bridge:repl] write_sdk_messages failed '
-                    '(dropped_batch_count=%s): %s',
-                    self.dropped_batch_count, err,
+                    "[bridge:repl] write_sdk_messages failed (dropped_batch_count=%s): %s",
+                    self.dropped_batch_count,
+                    err,
                 )
 
     def send_control_request(self, request: dict[str, Any]) -> None:
         if self.active_session is None:
             return
         import json
-        self.active_session.write_stdin(json.dumps(request) + '\n')
+
+        self.active_session.write_stdin(json.dumps(request) + "\n")
 
     def send_control_response(self, response: dict[str, Any]) -> None:
         # Phase 6 full port: route via api.send_permission_response_event
@@ -967,16 +964,23 @@ class _BridgeState:
         if self.active_session is None:
             return
         import json
-        self.active_session.write_stdin(json.dumps(response) + '\n')
+
+        self.active_session.write_stdin(json.dumps(response) + "\n")
 
     def send_cancel_request(self, request_id: str) -> None:
         if self.active_session is None:
             return
         import json
-        self.active_session.write_stdin(json.dumps({
-            'type': 'control_cancel_request',
-            'request_id': request_id,
-        }) + '\n')
+
+        self.active_session.write_stdin(
+            json.dumps(
+                {
+                    "type": "control_cancel_request",
+                    "request_id": request_id,
+                }
+            )
+            + "\n"
+        )
 
     def send_result(self) -> None:
         # MVP: no-op. The child emits its own result message when it
@@ -1012,19 +1016,18 @@ class _BridgeState:
             try:
                 self.active_session.kill()
             except Exception as err:  # noqa: BLE001
-                logger.warning('[bridge:repl] kill failed: %s', err)
+                logger.warning("[bridge:repl] kill failed: %s", err)
             # Give it a brief grace, then force.
             try:
                 await asyncio.wait_for(
-                    self.active_session.wait_done(), timeout=2.0,
+                    self.active_session.wait_done(),
+                    timeout=2.0,
                 )
             except asyncio.TimeoutError:
                 try:
                     self.active_session.force_kill()
                 except Exception as err:  # noqa: BLE001
-                    logger.warning(
-                        '[bridge:repl] force_kill failed: %s', err
-                    )
+                    logger.warning("[bridge:repl] force_kill failed: %s", err)
 
         # Stop any active work.
         if self.active_work_id is not None:
@@ -1034,9 +1037,7 @@ class _BridgeState:
         try:
             await self.params.archive_session(self.initial_session_id)
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:repl] archive_session failed: %s', err
-            )
+            logger.warning("[bridge:repl] archive_session failed: %s", err)
         if self.params.perpetual:
             clear_pointer(self.params.dir)
 
@@ -1044,9 +1045,7 @@ class _BridgeState:
         try:
             await self.api.deregister_environment(self.environment_id)
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:repl] deregister failed: %s', err
-            )
+            logger.warning("[bridge:repl] deregister failed: %s", err)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -1054,8 +1053,8 @@ class _BridgeState:
 
 def _validated_spawn_mode(mode: str) -> Any:
     """Cast a user-supplied spawn-mode string to the Literal type."""
-    if mode not in ('single-session', 'worktree', 'same-dir'):
-        raise ValueError(f'Invalid spawn_mode: {mode!r}')
+    if mode not in ("single-session", "worktree", "same-dir"):
+        raise ValueError(f"Invalid spawn_mode: {mode!r}")
     return mode
 
 
@@ -1072,14 +1071,12 @@ def _fire_state(
         else:
             cb(state, detail)
     except Exception as err:  # noqa: BLE001
-        logger.warning(
-            '[bridge:repl] on_state_change raised: %s', err
-        )
+        logger.warning("[bridge:repl] on_state_change raised: %s", err)
 
 
 __all__ = [
-    'BridgeCoreParams',
-    'BridgeState',
-    'ReplBridgeHandle',
-    'init_bridge_core',
+    "BridgeCoreParams",
+    "BridgeState",
+    "ReplBridgeHandle",
+    "init_bridge_core",
 ]

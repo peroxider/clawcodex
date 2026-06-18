@@ -21,6 +21,7 @@ isolation. Patches ``src.services.session_storage.SESSIONS_DIR`` to
 the tmp dir so the test does not pollute the user's real
 ``~/.clawcodex/sessions``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -176,7 +177,8 @@ class TestResolveRunId(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             registry_path = Path(tmp) / "registry.json"
             _write_registry(
-                registry_path, _make_record(run_id=None),
+                registry_path,
+                _make_record(run_id=None),
             )
             result = _resolve_run_id(registry_path, "owner/repo#42", None)
         self.assertIsNone(result)
@@ -192,7 +194,9 @@ class TestResolveRunId(unittest.TestCase):
 
     def test_resolve_returns_none_when_registry_missing(self) -> None:
         result = _resolve_run_id(
-            Path("/nonexistent/registry.json"), "X", None,
+            Path("/nonexistent/registry.json"),
+            "X",
+            None,
         )
         self.assertIsNone(result)
 
@@ -221,7 +225,9 @@ class _StubBlock:
 class TestRenderSummary(unittest.TestCase):
     def test_renders_metadata_and_message_count(self) -> None:
         md = type(
-            "MD", (), {
+            "MD",
+            (),
+            {
                 "model": "claude-sonnet-4-20250514",
                 "cwd": "/work",
                 "title": "orchestrator-X",
@@ -229,9 +235,15 @@ class TestRenderSummary(unittest.TestCase):
             },
         )()
         result = type(
-            "R", (), {
-                "messages": [], "metadata": md, "warnings": [],
-                "success": True, "message_count": 0, "has_warnings": False,
+            "R",
+            (),
+            {
+                "messages": [],
+                "metadata": md,
+                "warnings": [],
+                "success": True,
+                "message_count": 0,
+                "has_warnings": False,
             },
         )()
         text = _render_summary("ISSUE-1", result)
@@ -242,17 +254,29 @@ class TestRenderSummary(unittest.TestCase):
 
     def test_renders_text_block_snippets(self) -> None:
         msgs = [
-            _StubMessage("user", [
-                _StubBlock("text", text="  hello world  "),
-            ]),
-            _StubMessage("assistant", [
-                _StubBlock("text", text="thinking..."),
-            ]),
+            _StubMessage(
+                "user",
+                [
+                    _StubBlock("text", text="  hello world  "),
+                ],
+            ),
+            _StubMessage(
+                "assistant",
+                [
+                    _StubBlock("text", text="thinking..."),
+                ],
+            ),
         ]
         result = type(
-            "R", (), {
-                "messages": msgs, "metadata": None, "warnings": [],
-                "success": True, "message_count": 2, "has_warnings": False,
+            "R",
+            (),
+            {
+                "messages": msgs,
+                "metadata": None,
+                "warnings": [],
+                "success": True,
+                "message_count": 2,
+                "has_warnings": False,
             },
         )()
         text = _render_summary("X", result)
@@ -261,17 +285,29 @@ class TestRenderSummary(unittest.TestCase):
 
     def test_renders_tool_use_and_tool_result_blocks(self) -> None:
         msgs = [
-            _StubMessage("assistant", [
-                _StubBlock("tool_use", name="Read", id="t1"),
-            ]),
-            _StubMessage("user", [
-                _StubBlock("tool_result", tool_use_id="t1"),
-            ]),
+            _StubMessage(
+                "assistant",
+                [
+                    _StubBlock("tool_use", name="Read", id="t1"),
+                ],
+            ),
+            _StubMessage(
+                "user",
+                [
+                    _StubBlock("tool_result", tool_use_id="t1"),
+                ],
+            ),
         ]
         result = type(
-            "R", (), {
-                "messages": msgs, "metadata": None, "warnings": [],
-                "success": True, "message_count": 2, "has_warnings": False,
+            "R",
+            (),
+            {
+                "messages": msgs,
+                "metadata": None,
+                "warnings": [],
+                "success": True,
+                "message_count": 2,
+                "has_warnings": False,
             },
         )()
         text = _render_summary("X", result)
@@ -281,14 +317,23 @@ class TestRenderSummary(unittest.TestCase):
     def test_truncates_long_text_snippet(self) -> None:
         long_text = "x" * 200
         msgs = [
-            _StubMessage("user", [
-                _StubBlock("text", text=long_text),
-            ]),
+            _StubMessage(
+                "user",
+                [
+                    _StubBlock("text", text=long_text),
+                ],
+            ),
         ]
         result = type(
-            "R", (), {
-                "messages": msgs, "metadata": None, "warnings": [],
-                "success": True, "message_count": 1, "has_warnings": False,
+            "R",
+            (),
+            {
+                "messages": msgs,
+                "metadata": None,
+                "warnings": [],
+                "success": True,
+                "message_count": 1,
+                "has_warnings": False,
             },
         )()
         text = _render_summary("X", result)
@@ -299,10 +344,15 @@ class TestRenderSummary(unittest.TestCase):
 
     def test_includes_warnings(self) -> None:
         result = type(
-            "R", (), {
-                "messages": [], "metadata": None,
+            "R",
+            (),
+            {
+                "messages": [],
+                "metadata": None,
                 "warnings": ["orphan tool_use fixed"],
-                "success": True, "message_count": 0, "has_warnings": True,
+                "success": True,
+                "message_count": 0,
+                "has_warnings": True,
             },
         )()
         text = _render_summary("X", result)
@@ -328,7 +378,8 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
         from src.services.session_storage import SessionStorage
 
         storage = SessionStorage(
-            session_id=run_id, sessions_dir=sessions_dir,
+            session_id=run_id,
+            sessions_dir=sessions_dir,
         )
         storage.init_metadata(
             model="claude-sonnet-4-20250514",
@@ -349,7 +400,10 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
         storage.flush()
 
     def _write_assistant_turn(
-        self, storage, text: str, tool_name: str | None = None,
+        self,
+        storage,
+        text: str,
+        tool_name: str | None = None,
     ) -> None:
         from src.services.session_storage import SessionStorage
         from src.types.messages import AssistantMessage, message_to_dict
@@ -357,8 +411,7 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
         content: list[dict] = [{"type": "text", "text": text}]
         if tool_name is not None:
             content.append(
-                {"type": "tool_use", "id": "tool-1", "name": tool_name,
-                 "input": {"path": "/x.py"}},
+                {"type": "tool_use", "id": "tool-1", "name": tool_name, "input": {"path": "/x.py"}},
             )
         msg = AssistantMessage(content=content, model="claude-sonnet-4-20250514")
         storage.write_raw(message_to_dict(msg))
@@ -372,14 +425,17 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
 
             run_id = "run-roundtrip"
             _write_registry(
-                registry_path, _make_record(run_id=run_id),
+                registry_path,
+                _make_record(run_id=run_id),
             )
 
             # Orchestrator writes a few messages.
             storage = self._build_storage(sessions_dir, run_id)
             self._write_user_prompt(storage, "fix the bug")
             self._write_assistant_turn(
-                storage, "I'll read the file first.", tool_name="Read",
+                storage,
+                "I'll read the file first.",
+                tool_name="Read",
             )
 
             from src.services.session_storage import SESSIONS_DIR as _real
@@ -393,7 +449,8 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
                 buf = io.StringIO()
                 with redirect_stdout(buf):
                     args = argparse.Namespace(
-                        id="owner/repo#42", run=None,
+                        id="owner/repo#42",
+                        run=None,
                     )
                     rc = _run_resume_session(registry_path, args)
             self.assertEqual(rc, 0)
@@ -411,10 +468,12 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
 
             err = io.StringIO()
             with redirect_stdout(err):
-                with redirect_stdout(sys.stderr) if False else \
-                        __import__("contextlib").nullcontext():
+                with (
+                    redirect_stdout(sys.stderr) if False else __import__("contextlib").nullcontext()
+                ):
                     pass
             from contextlib import redirect_stderr
+
             with redirect_stderr(err):
                 args = argparse.Namespace(id="owner/repo#42", run=None)
                 rc = _run_resume_session(registry_path, args)

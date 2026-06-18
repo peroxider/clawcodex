@@ -101,15 +101,17 @@ def test_stream_json_reader_parses_string_content():
 
 
 def test_stream_json_reader_parses_block_list_content():
-    line = json.dumps({
-        "type": "user",
-        "message": {
-            "content": [
-                {"type": "text", "text": "part one"},
-                {"type": "text", "text": "part two"},
-            ]
-        },
-    })
+    line = json.dumps(
+        {
+            "type": "user",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "part one"},
+                    {"type": "text", "text": "part two"},
+                ]
+            },
+        }
+    )
     msgs = _read_lines([line])
     assert len(msgs) == 1
     assert msgs[0].text == "part one\npart two"
@@ -122,16 +124,20 @@ def test_stream_json_reader_accepts_bare_prompt_shape():
 
 
 def test_stream_json_reader_skips_invalid_json_and_non_user_events():
-    msgs = _read_lines([
-        "not json",
-        json.dumps({"type": "system", "message": {"content": "ignored"}}),
-        json.dumps({"type": "user", "message": {"content": "ok"}}),
-    ])
+    msgs = _read_lines(
+        [
+            "not json",
+            json.dumps({"type": "system", "message": {"content": "ignored"}}),
+            json.dumps({"type": "user", "message": {"content": "ok"}}),
+        ]
+    )
     assert [m.text for m in msgs] == ["ok"]
 
 
 def test_stream_json_reader_skips_blank_lines():
-    stream = io.StringIO("\n\n" + json.dumps({"type": "user", "message": {"content": "x"}}) + "\n\n")
+    stream = io.StringIO(
+        "\n\n" + json.dumps({"type": "user", "message": {"content": "x"}}) + "\n\n"
+    )
     msgs = list(StreamJsonReader(stream))
     assert len(msgs) == 1
 

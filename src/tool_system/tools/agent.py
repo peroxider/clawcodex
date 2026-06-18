@@ -8,6 +8,7 @@ Supports three modes:
    immediately and can later query results via SendMessage.
 3. **Fork** — Inherits parent context for prompt cache sharing (future).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -89,7 +90,7 @@ AGENT_INPUT_SCHEMA: dict[str, Any] = {
         "isolation": {
             "type": "string",
             "description": (
-                "Isolation mode. \"worktree\" creates a temporary git worktree "
+                'Isolation mode. "worktree" creates a temporary git worktree '
                 "so the agent works on an isolated copy of the repo."
             ),
             "enum": ["worktree"],
@@ -132,6 +133,7 @@ def make_agent_tool(
             per-call resolver). When ``None`` the prompt advertises every
             discovered agent unfiltered.
     """
+
     def _get_agent_definitions(context: ToolContext) -> list[AgentDefinition]:
         """Resolve agents visible to this call.
 
@@ -149,8 +151,10 @@ def make_agent_tool(
         # Coordinator mode: inject WORKER_AGENT so
         # ``subagent_type: "worker"`` resolves correctly.
         from src.coordinator.mode import is_coordinator_mode
+
         if is_coordinator_mode():
             from src.coordinator.worker_agent import get_coordinator_agents
+
             return get_coordinator_agents()
         cwd = str(context.cwd or context.workspace_root)
         agents = get_agent_definitions_with_overrides(cwd)
@@ -191,9 +195,7 @@ def make_agent_tool(
         # - subagent_type omitted, fork gate on → implicit fork via FORK_AGENT.
         # - subagent_type omitted, fork gate off → default to general-purpose.
         agent_definitions = _get_agent_definitions(context)
-        is_fork_path = (
-            subagent_type is None and is_fork_subagent_enabled(context)
-        )
+        is_fork_path = subagent_type is None and is_fork_subagent_enabled(context)
 
         if is_fork_path:
             # Recursive-fork guard. Primary check: querySource on the parent's
@@ -201,7 +203,9 @@ def make_agent_tool(
             # boilerplate tag. Either one trips means we are already inside a
             # fork child, so refuse to spawn another.
             parent_query_source = getattr(context.options, "query_source", None)
-            if parent_query_source == f"agent:builtin:{FORK_SUBAGENT_TYPE}" or is_in_fork_child(context.messages):
+            if parent_query_source == f"agent:builtin:{FORK_SUBAGENT_TYPE}" or is_in_fork_child(
+                context.messages
+            ):
                 raise ToolInputError(
                     "Fork is not available inside a forked worker. "
                     "Complete your task directly using your tools."
@@ -212,14 +216,12 @@ def make_agent_tool(
             if agent_def is None:
                 available = [a.agent_type for a in agent_definitions]
                 raise ToolInputError(
-                    f"Unknown subagent_type: {subagent_type}. "
-                    f"Available: {', '.join(available)}"
+                    f"Unknown subagent_type: {subagent_type}. Available: {', '.join(available)}"
                 )
         else:
             # Default to general-purpose
             agent_def = (
-                find_agent_by_type(agent_definitions, "general-purpose")
-                or agent_definitions[0]
+                find_agent_by_type(agent_definitions, "general-purpose") or agent_definitions[0]
                 if agent_definitions
                 else None
             )
@@ -234,6 +236,7 @@ def make_agent_tool(
         # ``uuid4().hex`` so SendMessage / TaskStop dispatch keys are
         # uniform across types.
         from src.tasks_core import generate_task_id  # local import — see _launch_async_agent
+
         agent_id = generate_task_id("local_agent")
         start_time = time.time()
         is_async = run_in_background
@@ -297,9 +300,7 @@ def make_agent_tool(
             if worktree_cwd is not None:
                 parent_cwd_str = str(context.cwd or context.workspace_root)
                 notice_text = build_worktree_notice(parent_cwd_str, worktree_cwd)
-                forked_pair = list(forked_pair) + [
-                    create_user_message(content=notice_text)
-                ]
+                forked_pair = list(forked_pair) + [create_user_message(content=notice_text)]
 
             fork_context_messages = list(context.messages) + forked_pair
             fork_use_exact_tools = True
@@ -411,13 +412,15 @@ def make_agent_tool(
         # leave a persistent record (nested under the parent session).
         parent_sid = get_session_id()
         transcript_path_str: str | None = get_agent_transcript_path(
-            agent_id, parent_session_id=parent_sid,
+            agent_id,
+            parent_session_id=parent_sid,
         )
         transcript_writer: TranscriptWriter | None = None
         if transcript_path_str:
             try:
                 transcript_writer = TranscriptWriter(
-                    transcript_path_str, parent_session_id=parent_sid,
+                    transcript_path_str,
+                    parent_session_id=parent_sid,
                 )
             except Exception:
                 logger.exception(
@@ -459,12 +462,13 @@ def make_agent_tool(
             nonlocal last_assistant, transcript_writer
             loop = asyncio.new_event_loop()
             try:
+
                 async def _go() -> None:
                     # The inner ``async def`` shadows ``transcript_writer``
                     # at function scope; without its own ``nonlocal`` the
                     # reassignment below would create a new local and
                     # raise ``UnboundLocalError`` on the read above.
-                    nonlocal transcript_writer
+                    nonlocal last_assistant, messages_for_finalize, transcript_writer
                     async for message in run_agent(run_params):
                         messages_for_finalize.append(message)
                         if isinstance(message, AssistantMessage):
@@ -476,14 +480,10 @@ def make_agent_tool(
                         # see what the subagent is doing.
                         try:
                             content = (
-                                message.content
-                                if isinstance(message, AssistantMessage)
-                                else None
+                                message.content if isinstance(message, AssistantMessage) else None
                             )
                             if isinstance(content, str) and content.strip():
-                                sys.stderr.write(
-                                    f"  ⎿ [{agent_type}] {content.strip()[:200]}\n"
-                                )
+                                sys.stderr.write(f"  ⎿ [{agent_type}] {content.strip()[:200]}\n")
                                 sys.stderr.flush()
                             elif isinstance(content, list):
                                 for block in content:
@@ -524,6 +524,7 @@ def make_agent_tool(
                                 except Exception:
                                     pass
                                 transcript_writer = None
+
                 loop.run_until_complete(_go())
             finally:
                 loop.close()
@@ -537,6 +538,7 @@ def make_agent_tool(
                     # worker thread with its own event loop. Mirrors
                     # the previous ``_sync_collect_agent_messages`` shape.
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                         future = pool.submit(_stream_collect)
                         future.result()
@@ -557,7 +559,8 @@ def make_agent_tool(
                     transcript_writer.close()
                 except Exception:
                     logger.exception(
-                        "failed to close sync agent transcript for %s", agent_id,
+                        "failed to close sync agent transcript for %s",
+                        agent_id,
                     )
 
         # Finalize result. ``last_assistant_msg`` skips the second
@@ -569,7 +572,9 @@ def make_agent_tool(
             "agent_type": agent_type,
         }
         result = finalize_agent_tool(
-            messages_for_finalize, agent_id, metadata,
+            messages_for_finalize,
+            agent_id,
+            metadata,
             last_assistant_msg=last_assistant,
             transcript_path=transcript_path_str,
         )
@@ -667,7 +672,9 @@ def make_agent_tool(
         if agent_name is not None:
             try:
                 context.agent_name_registry.claim_or_raise(
-                    agent_name, agent_id, context.runtime_tasks,
+                    agent_name,
+                    agent_id,
+                    context.runtime_tasks,
                 )
             except AgentNameAlreadyClaimedError as exc:
                 raise ToolInputError(str(exc)) from exc
@@ -685,9 +692,7 @@ def make_agent_tool(
         # the same path the lifecycle helpers committed to.
         registered = context.runtime_tasks.get(agent_id)
         transcript_path = (
-            registered.output_file
-            if isinstance(registered, LocalAgentTaskState)
-            else ""
+            registered.output_file if isinstance(registered, LocalAgentTaskState) else ""
         )
 
         async def _background_lifecycle() -> None:
@@ -696,7 +701,9 @@ def make_agent_tool(
             transcript: TranscriptWriter | None = None
             if transcript_path:
                 try:
-                    transcript = TranscriptWriter(transcript_path, parent_session_id=get_session_id())
+                    transcript = TranscriptWriter(
+                        transcript_path, parent_session_id=get_session_id()
+                    )
                 except OSError:
                     # Transcript open failure must not abort the run —
                     # downstream Chunk D / Chunk F will degrade
@@ -718,9 +725,7 @@ def make_agent_tool(
                         try:
                             update_progress_from_message(tracker, message)
                         except Exception:
-                            logger.exception(
-                                "progress tracker update failed for %s", agent_id
-                            )
+                            logger.exception("progress tracker update failed for %s", agent_id)
                         # Persist to disk per WI-2.2. Synchronous IO
                         # outside the registry lock — A6/C5 contract is
                         # preserved (no ``await`` under the registry's
@@ -741,7 +746,9 @@ def make_agent_tool(
                         "agent_type": agent_type,
                     }
                     result = finalize_agent_tool(
-                        messages, agent_id, metadata,
+                        messages,
+                        agent_id,
+                        metadata,
                         progress=tracker,
                         transcript_path=transcript_path or None,
                     )
@@ -778,7 +785,10 @@ def make_agent_tool(
                     )
                     logger.info(
                         "Async agent %s (%s) finished: %d messages, %d tokens",
-                        agent_id, agent_type, len(messages), result.total_tokens,
+                        agent_id,
+                        agent_type,
+                        len(messages),
+                        result.total_tokens,
                     )
                 except Exception as exc:
                     partial = extract_partial_result(messages)
@@ -799,7 +809,8 @@ def make_agent_tool(
                     )
                     logger.exception(
                         "Async agent %s (%s) failed",
-                        agent_id, agent_type,
+                        agent_id,
+                        agent_type,
                     )
             finally:
                 if transcript is not None:
@@ -813,6 +824,7 @@ def make_agent_tool(
         if running_loop is not None:
             running_loop.create_task(_background_lifecycle())
         else:
+
             def _runner(_stop_event: Any) -> None:
                 asyncio.run(_background_lifecycle())
 
@@ -889,7 +901,9 @@ def make_agent_tool(
                             text_parts.append(text.strip())
             elif isinstance(content, str) and content.strip():
                 text_parts.append(content.strip())
-            rendered = "\n\n".join(text_parts).strip() or "(Subagent completed with no textual output.)"
+            rendered = (
+                "\n\n".join(text_parts).strip() or "(Subagent completed with no textual output.)"
+            )
             return {
                 "type": "tool_result",
                 "tool_use_id": tool_use_id,
@@ -909,7 +923,9 @@ def make_agent_tool(
         is_destructive=lambda _input: True,
         search_hint="agent spawn subagent delegate task",
         to_auto_classifier_input=lambda input_data: (input_data or {}).get("prompt", "")[:200],
-        get_activity_description=lambda input_data: (input_data or {}).get("description", "Running agent") if input_data else None,
+        get_activity_description=lambda input_data: (
+            (input_data or {}).get("description", "Running agent") if input_data else None
+        ),
     )
 
 
@@ -1043,7 +1059,7 @@ async def _collect_agent_messages(params: RunAgentParams) -> list[Any]:
     from src.types.messages import Message, AssistantMessage
     from src.types.content_blocks import TextBlock, ToolUseBlock
 
-    agent_type = getattr(params.agent_definition, 'agent_type', 'agent')
+    agent_type = getattr(params.agent_definition, "agent_type", "agent")
     messages: list[Message] = []
     async for msg in run_agent(params):
         messages.append(msg)

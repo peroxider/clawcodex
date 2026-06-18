@@ -4,6 +4,7 @@ The Phase A runner is intentionally a stub. Tests cover the stub
 contract (callback invocation, no-op result) and the factory swap
 mechanism.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -66,6 +67,7 @@ def test_factory_swap_replaces_stub() -> None:
                 usage={"output_tokens": 42},
                 summary="custom",
             )
+
         return runner
 
     set_dream_runner_factory(factory)
@@ -89,6 +91,7 @@ def test_factory_runner_exception_raises_dream_runner_unavailable() -> None:
     def bad_factory():
         def runner(_prompt, _on_message):
             raise RuntimeError("LLM exploded")
+
         return runner
 
     set_dream_runner_factory(bad_factory)
@@ -100,6 +103,7 @@ def test_clear_factory_restores_stub() -> None:
     def factory():
         def runner(_prompt, _on_message):
             return DreamRunResult(summary="custom")
+
         return runner
 
     set_dream_runner_factory(factory)

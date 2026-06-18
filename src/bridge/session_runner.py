@@ -60,26 +60,46 @@ MAX_STDERR_LINES = 10
 # ── Environment sanitizer ─────────────────────────────────────────────────
 
 
-CHILD_ENV_ALLOWLIST: frozenset[str] = frozenset({
-    # System / shell
-    'PATH', 'HOME', 'USERPROFILE', 'HOMEPATH', 'HOMEDRIVE',
-    'USERNAME', 'USER', 'LOGNAME',
-    'TEMP', 'TMP', 'TMPDIR',
-    'SYSTEMROOT', 'SYSTEMDRIVE', 'COMSPEC', 'WINDIR',
-    'LANG', 'LC_ALL', 'LC_CTYPE',
-    # Node.js runtime
-    'NODE_OPTIONS', 'NODE_PATH', 'NODE_ENV',
-    # OpenClaude session / bridge (non-secret)
-    'CLAUDE_CODE_ENVIRONMENT_KIND',
-    'CLAUDE_CODE_FORCE_SANDBOX',
-    'CLAUDE_CODE_BUBBLEWRAP',
-    'CLAUDE_CODE_ENTRYPOINT',
-    'CLAUDE_CODE_COORDINATOR_MODE',
-    'CLAUDE_CODE_PERMISSIONS_VERSION',
-    'CLAUDE_CODE_PERMISSIONS_SETTING',
-    # Display / terminal
-    'TERM', 'COLORTERM', 'FORCE_COLOR', 'NO_COLOR',
-})
+CHILD_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # System / shell
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "HOMEPATH",
+        "HOMEDRIVE",
+        "USERNAME",
+        "USER",
+        "LOGNAME",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "COMSPEC",
+        "WINDIR",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        # Node.js runtime
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_ENV",
+        # OpenClaude session / bridge (non-secret)
+        "CLAUDE_CODE_ENVIRONMENT_KIND",
+        "CLAUDE_CODE_FORCE_SANDBOX",
+        "CLAUDE_CODE_BUBBLEWRAP",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "CLAUDE_CODE_COORDINATOR_MODE",
+        "CLAUDE_CODE_PERMISSIONS_VERSION",
+        "CLAUDE_CODE_PERMISSIONS_SETTING",
+        # Display / terminal
+        "TERM",
+        "COLORTERM",
+        "FORCE_COLOR",
+        "NO_COLOR",
+    }
+)
 """Safe variables that the child needs to function. Everything else
 must not be inherited — the child authenticates exclusively via
 ``CLAUDE_CODE_SESSION_ACCESS_TOKEN``. Mirrors TS allowlist on
@@ -115,15 +135,15 @@ def build_child_env(
       running under a bridge orchestrator.
     """
     env = {k: v for k, v in parent_env.items() if k in CHILD_ENV_ALLOWLIST}
-    env['CLAUDE_CODE_ENVIRONMENT_KIND'] = 'bridge'
+    env["CLAUDE_CODE_ENVIRONMENT_KIND"] = "bridge"
     if opts.sandbox:
-        env['CLAUDE_CODE_FORCE_SANDBOX'] = '1'
-    env['CLAUDE_CODE_SESSION_ACCESS_TOKEN'] = opts.access_token
-    env['CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2'] = '1'
+        env["CLAUDE_CODE_FORCE_SANDBOX"] = "1"
+    env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] = opts.access_token
+    env["CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2"] = "1"
     if opts.use_ccr_v2:
-        env['CLAUDE_CODE_USE_CCR_V2'] = '1'
+        env["CLAUDE_CODE_USE_CCR_V2"] = "1"
         if opts.worker_epoch is not None:
-            env['CLAUDE_CODE_WORKER_EPOCH'] = str(opts.worker_epoch)
+            env["CLAUDE_CODE_WORKER_EPOCH"] = str(opts.worker_epoch)
     return env
 
 
@@ -134,31 +154,31 @@ def safe_filename_id(value: str) -> str:
     any character that could cause path traversal (``../``, ``/``) or
     other filesystem issues, replacing with underscores.
     """
-    return ''.join(c if c.isalnum() or c in '_-' else '_' for c in value)
+    return "".join(c if c.isalnum() or c in "_-" else "_" for c in value)
 
 
 # ── Activity extraction ───────────────────────────────────────────────────
 
 
 TOOL_VERBS: dict[str, str] = {
-    'Read': 'Reading',
-    'Write': 'Writing',
-    'Edit': 'Editing',
-    'MultiEdit': 'Editing',
-    'Bash': 'Running',
-    'Glob': 'Searching',
-    'Grep': 'Searching',
-    'WebFetch': 'Fetching',
-    'WebSearch': 'Searching',
-    'Task': 'Running task',
-    'FileReadTool': 'Reading',
-    'FileWriteTool': 'Writing',
-    'FileEditTool': 'Editing',
-    'GlobTool': 'Searching',
-    'GrepTool': 'Searching',
-    'BashTool': 'Running',
-    'NotebookEditTool': 'Editing notebook',
-    'LSP': 'LSP',
+    "Read": "Reading",
+    "Write": "Writing",
+    "Edit": "Editing",
+    "MultiEdit": "Editing",
+    "Bash": "Running",
+    "Glob": "Searching",
+    "Grep": "Searching",
+    "WebFetch": "Fetching",
+    "WebSearch": "Searching",
+    "Task": "Running task",
+    "FileReadTool": "Reading",
+    "FileWriteTool": "Writing",
+    "FileEditTool": "Editing",
+    "GlobTool": "Searching",
+    "GrepTool": "Searching",
+    "BashTool": "Running",
+    "NotebookEditTool": "Editing notebook",
+    "LSP": "LSP",
 }
 """Tool name → human-readable verb for the status display. Mirrors TS
 ``TOOL_VERBS`` on ``sessionRunner.ts:133-152``."""
@@ -166,23 +186,23 @@ TOOL_VERBS: dict[str, str] = {
 
 def _tool_summary(name: str, tool_input: dict[str, Any]) -> str:
     verb = TOOL_VERBS.get(name, name)
-    target: str = ''
-    for key in ('file_path', 'filePath', 'pattern'):
+    target: str = ""
+    for key in ("file_path", "filePath", "pattern"):
         raw = tool_input.get(key)
         if isinstance(raw, str):
             target = raw
             break
     if not target:
-        cmd = tool_input.get('command')
+        cmd = tool_input.get("command")
         if isinstance(cmd, str):
             target = cmd[:60]
     if not target:
-        for key in ('url', 'query'):
+        for key in ("url", "query"):
             raw = tool_input.get(key)
             if isinstance(raw, str):
                 target = raw
                 break
-    return f'{verb} {target}' if target else verb
+    return f"{verb} {target}" if target else verb
 
 
 def _input_preview(tool_input: dict[str, Any]) -> str:
@@ -192,7 +212,7 @@ def _input_preview(tool_input: dict[str, Any]) -> str:
             parts.append(f'{key}="{val[:100]}"')
         if len(parts) >= 3:
             break
-    return ' '.join(parts)
+    return " ".join(parts)
 
 
 def extract_activities(
@@ -215,79 +235,79 @@ def extract_activities(
 
     activities: list[SessionActivity] = []
     now = _now_ms()
-    msg_type = parsed.get('type')
+    msg_type = parsed.get("type")
 
-    if msg_type == 'assistant':
-        message = parsed.get('message')
+    if msg_type == "assistant":
+        message = parsed.get("message")
         if not isinstance(message, dict):
             return []
-        content = message.get('content')
+        content = message.get("content")
         if not isinstance(content, list):
             return []
         for block in content:
             if not isinstance(block, dict):
                 continue
-            block_type = block.get('type')
-            if block_type == 'tool_use':
-                name = block.get('name') or 'Tool'
+            block_type = block.get("type")
+            if block_type == "tool_use":
+                name = block.get("name") or "Tool"
                 if not isinstance(name, str):
-                    name = 'Tool'
-                tool_input = block.get('input') or {}
+                    name = "Tool"
+                tool_input = block.get("input") or {}
                 if not isinstance(tool_input, dict):
                     tool_input = {}
-                activities.append(SessionActivity(
-                    type='tool_start',
-                    summary=_tool_summary(name, tool_input),
-                    timestamp=now,
-                ))
-                on_debug(
-                    f'[bridge:activity] sessionId={session_id} '
-                    f'tool_use name={name} {_input_preview(tool_input)}'
-                )
-            elif block_type == 'text':
-                text = block.get('text') or ''
-                if isinstance(text, str) and len(text) > 0:
-                    activities.append(SessionActivity(
-                        type='text',
-                        summary=text[:80],
+                activities.append(
+                    SessionActivity(
+                        type="tool_start",
+                        summary=_tool_summary(name, tool_input),
                         timestamp=now,
-                    ))
-                    on_debug(
-                        f'[bridge:activity] sessionId={session_id} '
-                        f'text "{text[:100]}"'
                     )
-    elif msg_type == 'result':
-        subtype = parsed.get('subtype')
-        if subtype == 'success':
-            activities.append(SessionActivity(
-                type='result',
-                summary='Session completed',
-                timestamp=now,
-            ))
-            on_debug(
-                f'[bridge:activity] sessionId={session_id} '
-                f'result subtype=success'
+                )
+                on_debug(
+                    f"[bridge:activity] sessionId={session_id} "
+                    f"tool_use name={name} {_input_preview(tool_input)}"
+                )
+            elif block_type == "text":
+                text = block.get("text") or ""
+                if isinstance(text, str) and len(text) > 0:
+                    activities.append(
+                        SessionActivity(
+                            type="text",
+                            summary=text[:80],
+                            timestamp=now,
+                        )
+                    )
+                    on_debug(f'[bridge:activity] sessionId={session_id} text "{text[:100]}"')
+    elif msg_type == "result":
+        subtype = parsed.get("subtype")
+        if subtype == "success":
+            activities.append(
+                SessionActivity(
+                    type="result",
+                    summary="Session completed",
+                    timestamp=now,
+                )
             )
+            on_debug(f"[bridge:activity] sessionId={session_id} result subtype=success")
         elif isinstance(subtype, str) and subtype:
-            errors = parsed.get('errors')
+            errors = parsed.get("errors")
             error_summary = (
-                errors[0] if isinstance(errors, list) and errors and isinstance(errors[0], str)
-                else f'Error: {subtype}'
+                errors[0]
+                if isinstance(errors, list) and errors and isinstance(errors[0], str)
+                else f"Error: {subtype}"
             )
-            activities.append(SessionActivity(
-                type='error',
-                summary=error_summary,
-                timestamp=now,
-            ))
+            activities.append(
+                SessionActivity(
+                    type="error",
+                    summary=error_summary,
+                    timestamp=now,
+                )
+            )
             on_debug(
-                f'[bridge:activity] sessionId={session_id} '
+                f"[bridge:activity] sessionId={session_id} "
                 f'result subtype={subtype} error="{error_summary}"'
             )
         else:
-            on_debug(
-                f'[bridge:activity] sessionId={session_id} '
-                f'result subtype=undefined'
-            )
+            on_debug(f"[bridge:activity] sessionId={session_id} result subtype=undefined")
 
     return activities
 
@@ -299,21 +319,17 @@ def _extract_user_message_text(msg: dict[str, Any]) -> str | None:
     Returns the trimmed text if this looks like a real human-authored
     message, otherwise ``None`` so the caller keeps waiting.
     """
-    if (
-        msg.get('parent_tool_use_id') is not None
-        or msg.get('isSynthetic')
-        or msg.get('isReplay')
-    ):
+    if msg.get("parent_tool_use_id") is not None or msg.get("isSynthetic") or msg.get("isReplay"):
         return None
-    message = msg.get('message')
-    content = message.get('content') if isinstance(message, dict) else None
+    message = msg.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
     text: str | None = None
     if isinstance(content, str):
         text = content
     elif isinstance(content, list):
         for block in content:
-            if isinstance(block, dict) and block.get('type') == 'text':
-                raw = block.get('text')
+            if isinstance(block, dict) and block.get("type") == "text":
+                raw = block.get("text")
                 if isinstance(raw, str):
                     text = raw
                     break
@@ -362,9 +378,7 @@ class SessionSpawnerDeps:
     permission_mode: str | None = None
     on_debug: Callable[[str], None] = lambda msg: logger.debug(msg)  # noqa: E731
     on_activity: Callable[[str, SessionActivity], None] | None = None
-    on_permission_request: (
-        Callable[[str, PermissionRequest, str], None] | None
-    ) = None
+    on_permission_request: Callable[[str, PermissionRequest, str], None] | None = None
 
 
 def create_session_spawner(deps: SessionSpawnerDeps) -> SessionSpawner:
@@ -413,8 +427,8 @@ class _SpawnedSession:
         self._working_dir = working_dir
         # ``session_id`` and ``access_token`` are typed dict keys in the
         # SessionSpawnOpts TypedDict.
-        self._session_id: str = opts['session_id']
-        self._access_token: str = opts['access_token']
+        self._session_id: str = opts["session_id"]
+        self._access_token: str = opts["access_token"]
 
         self._activities: deque[SessionActivity] = deque(maxlen=MAX_ACTIVITIES)
         self._last_stderr: deque[str] = deque(maxlen=MAX_STDERR_LINES)
@@ -516,22 +530,18 @@ class _SpawnedSession:
             return
         if process.returncode is not None:
             return
-        sig_name = 'SIGKILL' if force else 'SIGTERM'
+        sig_name = "SIGKILL" if force else "SIGTERM"
         self._deps.on_debug(
-            f'[bridge:session] Sending {sig_name} to '
-            f'sessionId={self._session_id} pid={process.pid}'
+            f"[bridge:session] Sending {sig_name} to sessionId={self._session_id} pid={process.pid}"
         )
         try:
-            if sys.platform == 'win32':
+            if sys.platform == "win32":
                 process.kill() if force else process.terminate()
             else:
-                process.send_signal(
-                    signal.SIGKILL if force else signal.SIGTERM
-                )
+                process.send_signal(signal.SIGKILL if force else signal.SIGTERM)
         except (ProcessLookupError, OSError) as err:
             self._deps.on_debug(
-                f'[bridge:session] {sig_name.lower()} failed '
-                f'(already exited?): {err}'
+                f"[bridge:session] {sig_name.lower()} failed (already exited?): {err}"
             )
 
     def write_stdin(self, data: str) -> None:
@@ -544,12 +554,9 @@ class _SpawnedSession:
             return
         if self._process.stdin.is_closing():
             return
-        self._deps.on_debug(
-            f'[bridge:ws] sessionId={self._session_id} '
-            f'>>> {debug_truncate(data)}'
-        )
+        self._deps.on_debug(f"[bridge:ws] sessionId={self._session_id} >>> {debug_truncate(data)}")
         try:
-            self._process.stdin.write(data.encode('utf-8'))
+            self._process.stdin.write(data.encode("utf-8"))
         except (BrokenPipeError, ConnectionResetError, OSError, RuntimeError) as err:
             # Broaden vs ``(BrokenPipeError, ConnectionResetError)``:
             # ``asyncio.StreamWriter.write`` on a closed transport can
@@ -557,9 +564,7 @@ class _SpawnedSession:
             # some Python versions, and OSError covers other write-side
             # failures (ENOMEM during enlargement, etc.) that we don't
             # want to surface as crashes.
-            self._deps.on_debug(
-                f'[bridge:session] write_stdin failed: {err}'
-            )
+            self._deps.on_debug(f"[bridge:session] write_stdin failed: {err}")
 
     def update_access_token(self, token: str) -> None:
         """Send a fresh OAuth token via stdin without restarting the child.
@@ -570,14 +575,18 @@ class _SpawnedSession:
         the new token.
         """
         self._access_token = token
-        payload = json.dumps({
-            'type': 'update_environment_variables',
-            'variables': {'CLAUDE_CODE_SESSION_ACCESS_TOKEN': token},
-        }) + '\n'
+        payload = (
+            json.dumps(
+                {
+                    "type": "update_environment_variables",
+                    "variables": {"CLAUDE_CODE_SESSION_ACCESS_TOKEN": token},
+                }
+            )
+            + "\n"
+        )
         self.write_stdin(payload)
         self._deps.on_debug(
-            f'[bridge:session] Sent token refresh via stdin for '
-            f'sessionId={self._session_id}'
+            f"[bridge:session] Sent token refresh via stdin for sessionId={self._session_id}"
         )
 
     # ── Internal: spawn + parse pipeline ──────────────────────────────
@@ -594,7 +603,7 @@ class _SpawnedSession:
             self._done_future = asyncio.get_running_loop().create_future()
         self._start_task = asyncio.create_task(
             self._spawn_and_wait(),
-            name=f'session-{self._session_id}',
+            name=f"session-{self._session_id}",
         )
 
     async def _spawn_and_wait(self) -> None:
@@ -612,7 +621,7 @@ class _SpawnedSession:
             # ``wait_done()`` awaiters with 'failed' so they don't hang
             # forever during shutdown.
             if self._done_future is not None and not self._done_future.done():
-                self._done_future.set_result('failed')
+                self._done_future.set_result("failed")
 
     async def _spawn_and_wait_inner(self) -> None:
         debug_file = self._resolve_debug_file()
@@ -621,21 +630,19 @@ class _SpawnedSession:
             self._deps.env,
             BuildChildEnvOpts(
                 access_token=self._access_token,
-                use_ccr_v2=bool(self._opts.get('use_ccr_v2')),
-                worker_epoch=self._opts.get('worker_epoch'),
+                use_ccr_v2=bool(self._opts.get("use_ccr_v2")),
+                worker_epoch=self._opts.get("worker_epoch"),
                 sandbox=self._deps.sandbox,
             ),
         )
         self._deps.on_debug(
-            f'[bridge:session] Spawning sessionId={self._session_id} '
-            f'sdkUrl={self._opts["sdk_url"]} '
-            f'accessToken={"present" if self._access_token else "MISSING"}'
+            f"[bridge:session] Spawning sessionId={self._session_id} "
+            f"sdkUrl={self._opts['sdk_url']} "
+            f"accessToken={'present' if self._access_token else 'MISSING'}"
         )
-        self._deps.on_debug(
-            f'[bridge:session] Child args: {" ".join(args)}'
-        )
+        self._deps.on_debug(f"[bridge:session] Child args: {' '.join(args)}")
         if debug_file:
-            self._deps.on_debug(f'[bridge:session] Debug log: {debug_file}')
+            self._deps.on_debug(f"[bridge:session] Debug log: {debug_file}")
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -648,17 +655,12 @@ class _SpawnedSession:
                 env=env,
             )
         except (FileNotFoundError, PermissionError, OSError) as err:
-            self._deps.on_debug(
-                f'[bridge:session] sessionId={self._session_id} '
-                f'spawn error: {err}'
-            )
-            self._resolve_done('failed')
+            self._deps.on_debug(f"[bridge:session] sessionId={self._session_id} spawn error: {err}")
+            self._resolve_done("failed")
             return
 
         self._process = process
-        self._deps.on_debug(
-            f'[bridge:session] sessionId={self._session_id} pid={process.pid}'
-        )
+        self._deps.on_debug(f"[bridge:session] sessionId={self._session_id} pid={process.pid}")
 
         # Open the transcript only after the child is up — avoids leaking
         # a file handle when the spawn fails or the task is cancelled
@@ -688,47 +690,46 @@ class _SpawnedSession:
         status: SessionDoneStatus
         if returncode == -signal.SIGTERM or returncode == -signal.SIGINT:
             self._deps.on_debug(
-                f'[bridge:session] sessionId={self._session_id} '
-                f'interrupted signal={-returncode} pid={process.pid}'
+                f"[bridge:session] sessionId={self._session_id} "
+                f"interrupted signal={-returncode} pid={process.pid}"
             )
-            status = 'interrupted'
+            status = "interrupted"
         elif returncode == 0:
             self._deps.on_debug(
-                f'[bridge:session] sessionId={self._session_id} '
-                f'completed exit_code=0 pid={process.pid}'
+                f"[bridge:session] sessionId={self._session_id} "
+                f"completed exit_code=0 pid={process.pid}"
             )
-            status = 'completed'
+            status = "completed"
         else:
             self._deps.on_debug(
-                f'[bridge:session] sessionId={self._session_id} '
-                f'failed exit_code={returncode} pid={process.pid}'
+                f"[bridge:session] sessionId={self._session_id} "
+                f"failed exit_code={returncode} pid={process.pid}"
             )
-            status = 'failed'
+            status = "failed"
         self._resolve_done(status)
 
     async def _read_stdout(self) -> None:
         if self._process is None or self._process.stdout is None:
             return
         async for raw in self._iter_lines(self._process.stdout):
-            line = raw.decode('utf-8', errors='replace').rstrip('\r\n')
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
             if self._transcript_file is not None:
                 try:
-                    self._transcript_file.write(line + '\n')
+                    self._transcript_file.write(line + "\n")
                 except (OSError, ValueError) as err:
-                    self._deps.on_debug(
-                        f'[bridge:session] Transcript write error: {err}'
-                    )
+                    self._deps.on_debug(f"[bridge:session] Transcript write error: {err}")
                     self._transcript_file = None
 
             self._deps.on_debug(
-                f'[bridge:ws] sessionId={self._session_id} '
-                f'<<< {debug_truncate(line)}'
+                f"[bridge:ws] sessionId={self._session_id} <<< {debug_truncate(line)}"
             )
             if self._deps.verbose:
-                sys.stderr.write(line + '\n')
+                sys.stderr.write(line + "\n")
 
             extracted = extract_activities(
-                line, self._session_id, self._deps.on_debug,
+                line,
+                self._session_id,
+                self._deps.on_debug,
             )
             for activity in extracted:
                 self._activities.append(activity)
@@ -737,9 +738,7 @@ class _SpawnedSession:
                     try:
                         self._deps.on_activity(self._session_id, activity)
                     except Exception as err:  # noqa: BLE001
-                        self._deps.on_debug(
-                            f'[bridge:session] on_activity raised: {err}'
-                        )
+                        self._deps.on_debug(f"[bridge:session] on_activity raised: {err}")
 
             self._detect_control_request_and_first_user(line)
 
@@ -747,9 +746,9 @@ class _SpawnedSession:
         if self._process is None or self._process.stderr is None:
             return
         async for raw in self._iter_lines(self._process.stderr):
-            line = raw.decode('utf-8', errors='replace').rstrip('\r\n')
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
             if self._deps.verbose:
-                sys.stderr.write(line + '\n')
+                sys.stderr.write(line + "\n")
             self._last_stderr.append(line)
 
     @staticmethod
@@ -778,12 +777,12 @@ class _SpawnedSession:
         if not isinstance(parsed, dict):
             return
 
-        msg_type = parsed.get('type')
-        if msg_type == 'control_request':
-            request = parsed.get('request')
+        msg_type = parsed.get("type")
+        if msg_type == "control_request":
+            request = parsed.get("request")
             if (
                 isinstance(request, dict)
-                and request.get('subtype') == 'can_use_tool'
+                and request.get("subtype") == "can_use_tool"
                 and self._deps.on_permission_request is not None
             ):
                 try:
@@ -793,43 +792,43 @@ class _SpawnedSession:
                         self._access_token,
                     )
                 except Exception as err:  # noqa: BLE001
-                    self._deps.on_debug(
-                        f'[bridge:session] on_permission_request raised: {err}'
-                    )
+                    self._deps.on_debug(f"[bridge:session] on_permission_request raised: {err}")
         elif (
-            msg_type == 'user'
+            msg_type == "user"
             and not self._first_user_message_seen
-            and self._opts.get('on_first_user_message') is not None
+            and self._opts.get("on_first_user_message") is not None
         ):
             text = _extract_user_message_text(parsed)
             if text:
                 self._first_user_message_seen = True
-                cb = self._opts['on_first_user_message']
+                cb = self._opts["on_first_user_message"]
                 try:
                     cb(text)
                 except Exception as err:  # noqa: BLE001
-                    self._deps.on_debug(
-                        f'[bridge:session] on_first_user_message raised: {err}'
-                    )
+                    self._deps.on_debug(f"[bridge:session] on_first_user_message raised: {err}")
 
     # ── Helpers ────────────────────────────────────────────────────────
 
     def _build_args(self, debug_file: str | None) -> list[str]:
         args = [
             *self._deps.script_args,
-            '--print',
-            '--sdk-url', self._opts['sdk_url'],
-            '--session-id', self._session_id,
-            '--input-format', 'stream-json',
-            '--output-format', 'stream-json',
-            '--replay-user-messages',
+            "--print",
+            "--sdk-url",
+            self._opts["sdk_url"],
+            "--session-id",
+            self._session_id,
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--replay-user-messages",
         ]
         if self._deps.verbose:
-            args.append('--verbose')
+            args.append("--verbose")
         if debug_file:
-            args.extend(['--debug-file', debug_file])
+            args.extend(["--debug-file", debug_file])
         if self._deps.permission_mode:
-            args.extend(['--permission-mode', self._deps.permission_mode])
+            args.extend(["--permission-mode", self._deps.permission_mode])
         return args
 
     def _resolve_debug_file(self) -> str | None:
@@ -842,19 +841,14 @@ class _SpawnedSession:
         """
         safe_id = safe_filename_id(self._session_id)
         if self._deps.debug_file is not None:
-            ext_idx = self._deps.debug_file.rfind('.')
+            ext_idx = self._deps.debug_file.rfind(".")
             if ext_idx > 0:
                 return (
-                    f'{self._deps.debug_file[:ext_idx]}'
-                    f'-{safe_id}'
-                    f'{self._deps.debug_file[ext_idx:]}'
+                    f"{self._deps.debug_file[:ext_idx]}-{safe_id}{self._deps.debug_file[ext_idx:]}"
                 )
-            return f'{self._deps.debug_file}-{safe_id}'
-        if self._deps.verbose or os.environ.get('USER_TYPE') == 'ant':
-            return str(
-                Path(tempfile.gettempdir()) / 'claude'
-                / f'bridge-session-{safe_id}.log'
-            )
+            return f"{self._deps.debug_file}-{safe_id}"
+        if self._deps.verbose or os.environ.get("USER_TYPE") == "ant":
+            return str(Path(tempfile.gettempdir()) / "claude" / f"bridge-session-{safe_id}.log")
         return None
 
     def _open_transcript_if_needed(self, debug_file: str | None) -> None:
@@ -871,26 +865,20 @@ class _SpawnedSession:
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
         except OSError as err:
-            self._deps.on_debug(
-                f'[bridge:session] Transcript dir mkdir failed: {err}'
-            )
+            self._deps.on_debug(f"[bridge:session] Transcript dir mkdir failed: {err}")
             return
-        self._transcript_path = str(
-            target_dir / f'bridge-transcript-{safe_id}.jsonl'
-        )
+        self._transcript_path = str(target_dir / f"bridge-transcript-{safe_id}.jsonl")
         try:
             self._transcript_file = open(  # noqa: SIM115  closed in _close_transcript
-                self._transcript_path, 'a', encoding='utf-8',
+                self._transcript_path,
+                "a",
+                encoding="utf-8",
             )
         except OSError as err:
-            self._deps.on_debug(
-                f'[bridge:session] Transcript open failed: {err}'
-            )
+            self._deps.on_debug(f"[bridge:session] Transcript open failed: {err}")
             self._transcript_file = None
             return
-        self._deps.on_debug(
-            f'[bridge:session] Transcript log: {self._transcript_path}'
-        )
+        self._deps.on_debug(f"[bridge:session] Transcript log: {self._transcript_path}")
 
     def _close_transcript(self) -> None:
         if self._transcript_file is not None:
@@ -920,15 +908,15 @@ def _now_ms() -> int:
 
 
 __all__ = [
-    'CHILD_ENV_ALLOWLIST',
-    'MAX_ACTIVITIES',
-    'MAX_STDERR_LINES',
-    'TOOL_VERBS',
-    'BuildChildEnvOpts',
-    'PermissionRequest',
-    'SessionSpawnerDeps',
-    'build_child_env',
-    'create_session_spawner',
-    'extract_activities',
-    'safe_filename_id',
+    "CHILD_ENV_ALLOWLIST",
+    "MAX_ACTIVITIES",
+    "MAX_STDERR_LINES",
+    "TOOL_VERBS",
+    "BuildChildEnvOpts",
+    "PermissionRequest",
+    "SessionSpawnerDeps",
+    "build_child_env",
+    "create_session_spawner",
+    "extract_activities",
+    "safe_filename_id",
 ]

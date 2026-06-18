@@ -12,6 +12,7 @@ every fresh context, so readers can drop the defensive checks and a
 forgotten plumbing call no longer regresses ESC propagation into a
 silent "the controller is None" landmine.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

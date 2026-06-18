@@ -106,11 +106,13 @@ class BackupManager:
             if backup_dir.is_dir() and backup_dir.name.startswith("backup_"):
                 timestamp_str = backup_dir.name.replace("backup_", "")
                 files = list(backup_dir.rglob("*"))
-                backups.append({
-                    "path": backup_dir,
-                    "timestamp": timestamp_str,
-                    "file_count": len([f for f in files if f.is_file()]),
-                })
+                backups.append(
+                    {
+                        "path": backup_dir,
+                        "timestamp": timestamp_str,
+                        "file_count": len([f for f in files if f.is_file()]),
+                    }
+                )
 
         return backups
 

@@ -23,10 +23,10 @@ Examples:
 """,
     )
 
-    parser.add_argument('prompt', nargs='?', help='Prompt to send in non-interactive mode')
-    parser.add_argument('--version', action='store_true', help='Show version information')
-    parser.add_argument('--config', action='store_true', help='Show current configuration')
-    parser.add_argument('--stream', action='store_true', help='Enable live rendering in REPL')
+    parser.add_argument("prompt", nargs="?", help="Prompt to send in non-interactive mode")
+    parser.add_argument("--version", action="store_true", help="Show version information")
+    parser.add_argument("--config", action="store_true", help="Show current configuration")
+    parser.add_argument("--stream", action="store_true", help="Enable live rendering in REPL")
 
     # ---- Interactive UI selection ----
     #
@@ -38,109 +38,111 @@ Examples:
     # no-op aliases for back-compat (they already select the default).
     ui_group = parser.add_mutually_exclusive_group()
     ui_group.add_argument(
-        '--tui',
-        action='store_true',
-        help='Use the Textual in-app TUI (opt-in; default is the inline REPL)',
+        "--tui",
+        action="store_true",
+        help="Use the Textual in-app TUI (opt-in; default is the inline REPL)",
     )
     ui_group.add_argument(
-        '--legacy-repl',
-        dest='legacy_repl',
-        action='store_true',
-        help='Use the inline prompt_toolkit + rich REPL (this is the default)',
+        "--legacy-repl",
+        dest="legacy_repl",
+        action="store_true",
+        help="Use the inline prompt_toolkit + rich REPL (this is the default)",
     )
     ui_group.add_argument(
-        '--no-tui',
-        dest='no_tui',
-        action='store_true',
-        help='Alias for --legacy-repl (kept for backward compatibility)',
+        "--no-tui",
+        dest="no_tui",
+        action="store_true",
+        help="Alias for --legacy-repl (kept for backward compatibility)",
     )
 
     # ---- Non-interactive / print mode (Phase 1 parity) ----
     noninteractive = parser.add_argument_group("non-interactive mode")
     noninteractive.add_argument(
-        '-p', '--print',
-        action='store_true',
-        help='Print response and exit (useful for pipes)',
+        "-p",
+        "--print",
+        action="store_true",
+        help="Print response and exit (useful for pipes)",
     )
     noninteractive.add_argument(
-        '--output-format',
-        choices=('text', 'json', 'stream-json'),
-        default='text',
-        help='Output format for --print mode (default: text)',
+        "--output-format",
+        choices=("text", "json", "stream-json"),
+        default="text",
+        help="Output format for --print mode (default: text)",
     )
     noninteractive.add_argument(
-        '--input-format',
-        choices=('text', 'stream-json'),
-        default='text',
-        help='Input format for --print mode (default: text)',
+        "--input-format",
+        choices=("text", "stream-json"),
+        default="text",
+        help="Input format for --print mode (default: text)",
     )
     noninteractive.add_argument(
-        '--include-partial-messages',
-        action='store_true',
-        help='Include incremental assistant text chunks in stream-json output',
+        "--include-partial-messages",
+        action="store_true",
+        help="Include incremental assistant text chunks in stream-json output",
     )
     noninteractive.add_argument(
-        '--max-turns',
+        "--max-turns",
         type=int,
         default=20,
-        help='Maximum number of agent tool turns (default: 20)',
+        help="Maximum number of agent tool turns (default: 20)",
     )
     noninteractive.add_argument(
-        '--model',
+        "--model",
         type=str,
         default=None,
-        help='Override the model used for this run',
+        help="Override the model used for this run",
     )
     noninteractive.add_argument(
-        '--provider',
+        "--provider",
         type=str,
         default=None,
-        help='Override the provider (anthropic, openai, openai-codex, glm, minimax, openrouter, deepseek)',
+        help="Override the provider (anthropic, openai, openai-codex, glm, minimax, openrouter, deepseek)",
     )
     noninteractive.add_argument(
-        '--allowed-tools',
+        "--allowed-tools",
         type=str,
         default=None,
-        help='Comma-separated list of tools allowed to run',
+        help="Comma-separated list of tools allowed to run",
     )
     noninteractive.add_argument(
-        '--disallowed-tools',
+        "--disallowed-tools",
         type=str,
         default=None,
-        help='Comma-separated list of tools that must NOT run',
+        help="Comma-separated list of tools that must NOT run",
     )
     noninteractive.add_argument(
-        '--resume',
-        nargs='?',
+        "--resume",
+        nargs="?",
         default=None,
-        const='browse',
-        metavar='SESSION_ID',
-        help='Resume a previous session by session ID; without SESSION_ID, browse sessions',
+        const="browse",
+        metavar="SESSION_ID",
+        help="Resume a previous session by session ID; without SESSION_ID, browse sessions",
     )
     noninteractive.add_argument(
-        '-c', '--continue',
-        action='store_true',
+        "-c",
+        "--continue",
+        action="store_true",
         default=None,
-        help='Resume the most recent session (alias for --resume with auto-detected latest)',
+        help="Resume the most recent session (alias for --resume with auto-detected latest)",
     )
     noninteractive.add_argument(
-        '--fork-session',
+        "--fork-session",
         type=str,
         default=None,
-        metavar='SESSION_ID',
-        help='Create a new session ID but preserve conversation history from the given session',
+        metavar="SESSION_ID",
+        help="Create a new session ID but preserve conversation history from the given session",
     )
     noninteractive.add_argument(
-        '--resume-session-at',
+        "--resume-session-at",
         type=str,
         default=None,
-        metavar='MSG_INDEX',
-        help='Resume a session at a specific message index (0-based); requires --resume or --continue',
+        metavar="MSG_INDEX",
+        help="Resume a session at a specific message index (0-based); requires --resume or --continue",
     )
     noninteractive.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Emit verbose diagnostics to stderr',
+        "--verbose",
+        action="store_true",
+        help="Emit verbose diagnostics to stderr",
     )
 
     # ---- Permissions ----
@@ -150,42 +152,41 @@ Examples:
     # ``typescript/src/main.tsx:970``.
     permissions_group = parser.add_argument_group("permissions")
     permissions_group.add_argument(
-        '--dangerously-skip-permissions',
-        dest='dangerously_skip_permissions',
-        action='store_true',
+        "--dangerously-skip-permissions",
+        dest="dangerously_skip_permissions",
+        action="store_true",
         help=(
-            'Bypass all permission checks. Recommended only for sandboxes '
-            'with no internet access.'
+            "Bypass all permission checks. Recommended only for sandboxes with no internet access."
         ),
     )
     permissions_group.add_argument(
-        '--allow-dangerously-skip-permissions',
-        dest='allow_dangerously_skip_permissions',
-        action='store_true',
+        "--allow-dangerously-skip-permissions",
+        dest="allow_dangerously_skip_permissions",
+        action="store_true",
         help=(
-            'Enable bypassing all permission checks as an option, without it '
-            'being enabled by default. Recommended only for sandboxes with '
-            'no internet access.'
+            "Enable bypassing all permission checks as an option, without it "
+            "being enabled by default. Recommended only for sandboxes with "
+            "no internet access."
         ),
     )
     # ---- Agent type selection ----
     parser.add_argument(
-        '--agent',
+        "--agent",
         type=str,
         default=None,
-        nargs='?',
-        const='auto',
-        metavar='AGENT_TYPE',
+        nargs="?",
+        const="auto",
+        metavar="AGENT_TYPE",
         help=(
-            'Start with a specific agent type. Without a value, auto-detect '
-            'clawcodex-overview.md in .claude/agents/. Default: general-purpose agent.'
+            "Start with a specific agent type. Without a value, auto-detect "
+            "clawcodex-overview.md in .claude/agents/. Default: general-purpose agent."
         ),
     )
 
     permissions_group.add_argument(
-        '--permission-mode',
-        dest='permission_mode',
-        choices=('default', 'plan', 'acceptEdits', 'bypassPermissions', 'dontAsk', 'auto'),
+        "--permission-mode",
+        dest="permission_mode",
+        choices=("default", "plan", "acceptEdits", "bypassPermissions", "dontAsk", "auto"),
         default=None,
         help='Initial permission mode (default: default). "auto" uses LLM classifier.',
     )
@@ -195,7 +196,7 @@ Examples:
     # Listing them here purely for ``--help`` documentation.
     commands_group = parser.add_argument_group("subcommands")
     commands_group.add_argument(
-        '--_commands_doc',
+        "--_commands_doc",
         help=argparse.SUPPRESS,
     )
     parser.epilog = (parser.epilog or "") + (

@@ -78,9 +78,7 @@ def _drop_oldest_messages(
     drop_count = max(1, int(len(messages) * fraction))
     candidate_index = drop_count
 
-    candidate_index = adjust_index_to_preserve_api_invariants(
-        messages, candidate_index
-    )
+    candidate_index = adjust_index_to_preserve_api_invariants(messages, candidate_index)
 
     if candidate_index <= 0:
         return list(messages)
@@ -94,10 +92,12 @@ def build_post_compact_messages(
 ) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
 
-    result.append({
-        "role": "user",
-        "content": summary_text,
-    })
+    result.append(
+        {
+            "role": "user",
+            "content": summary_text,
+        }
+    )
 
     api_messages = normalize_messages_for_api(remaining_messages)
 
@@ -122,15 +122,19 @@ def build_post_compact_messages(
     if pending_tool_ids:
         tool_results = []
         for tool_id in pending_tool_ids:
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tool_id,
-                "content": "[Result from before context compaction]",
-            })
-        result.append({
-            "role": "user",
-            "content": tool_results,
-        })
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": "[Result from before context compaction]",
+                }
+            )
+        result.append(
+            {
+                "role": "user",
+                "content": tool_results,
+            }
+        )
 
     _ensure_alternating_roles(result)
 
@@ -184,7 +188,8 @@ async def reactive_compact(
 
     logger.info(
         "Reactive compact triggered: %d tokens, %d messages",
-        tokens_before, len(messages),
+        tokens_before,
+        len(messages),
     )
 
     ctx = CompactContext(
@@ -225,7 +230,10 @@ async def reactive_compact(
         if tokens_after < tokens_before * 0.7:
             logger.info(
                 "Emergency drop: %d -> %d messages, %d -> %d tokens",
-                len(messages), len(truncated), tokens_before, tokens_after,
+                len(messages),
+                len(truncated),
+                tokens_before,
+                tokens_after,
             )
             return ReactiveCompactResult(
                 compacted=True,

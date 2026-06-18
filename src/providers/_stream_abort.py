@@ -33,6 +33,7 @@ block. The provider keeps full control over fallbacks (e.g.
 Anthropic's ``StreamWatchdog`` non-streaming recovery) — the guard
 just owns the listener lifecycle.
 """
+
 from __future__ import annotations
 
 import sys

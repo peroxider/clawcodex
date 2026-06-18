@@ -20,6 +20,7 @@ Constraints:
 3. **Idempotent start.** ``start_eviction_sweeper`` is safe to call
    multiple times; only the first call spawns the thread.
 """
+
 from __future__ import annotations
 
 import logging
@@ -128,7 +129,8 @@ def sweep_once(
                 dropped.append(state.id)
                 logger.debug(
                     "evicted terminal task %s (status=%s, notified=True)",
-                    state.id, state.status,
+                    state.id,
+                    state.status,
                 )
     return dropped
 
@@ -156,7 +158,7 @@ def start_eviction_sweeper(
     is treated as a re-bind (stop the old thread, start a new one);
     test fixtures construct fresh registries per test.
     """
-    global _sweeper_thread, _sweeper_registry
+    global _sweeper_stop, _sweeper_thread, _sweeper_registry
     with _sweeper_lock:
         if _sweeper_thread is not None and _sweeper_thread.is_alive():
             if _sweeper_registry is registry:
@@ -165,9 +167,8 @@ def start_eviction_sweeper(
             _sweeper_stop.set()
             _sweeper_thread.join(timeout=2.0)
             _sweeper_thread = None
-        _sweeper_stop = threading.Event()  # noqa: F841 (rebound below)
         # Replace the module-level event with a fresh one for the new run.
-        globals()["_sweeper_stop"] = _sweeper_stop
+        _sweeper_stop = threading.Event()
         _sweeper_registry = registry
         thread = threading.Thread(
             target=_sweeper_loop,

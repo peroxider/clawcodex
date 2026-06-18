@@ -2,6 +2,7 @@
 
 Mirrors typescript/src/tools/AgentTool/agentToolUtils.ts.
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ResolvedAgentTools:
     """Result of resolving agent tools against available tools."""
+
     has_wildcard: bool
     valid_tools: list[str]
     invalid_tools: list[str]
@@ -115,16 +117,10 @@ def resolve_agent_tools(
             disallowed_set.add(tool_name)
 
     # Filter by disallowed list
-    allowed_available_tools = [
-        t for t in filtered_available_tools
-        if t.name not in disallowed_set
-    ]
+    allowed_available_tools = [t for t in filtered_available_tools if t.name not in disallowed_set]
 
     # If tools is None or ['*'], allow all tools (after filtering)
-    has_wildcard = (
-        agent_tools is None
-        or (len(agent_tools) == 1 and agent_tools[0] == "*")
-    )
+    has_wildcard = agent_tools is None or (len(agent_tools) == 1 and agent_tools[0] == "*")
     if has_wildcard:
         return ResolvedAgentTools(
             has_wildcard=True,
@@ -176,6 +172,7 @@ def resolve_agent_tools(
 @dataclass
 class AgentToolResult:
     """Result data from a completed agent run."""
+
     agent_id: str
     agent_type: str
     content: list[dict[str, Any]]
@@ -406,6 +403,7 @@ def _resolve_total_tokens(
                 ProgressTracker,
                 total_tokens_from_tracker,
             )
+
             if isinstance(progress, ProgressTracker):
                 return total_tokens_from_tracker(progress)
         except ImportError:
@@ -463,5 +461,5 @@ def _extract_rule_content(tool_spec: str) -> str | None:
     """Extract rule content from a spec like 'Tool(arg1, arg2)'."""
     paren_idx = tool_spec.find("(")
     if paren_idx != -1 and tool_spec.endswith(")"):
-        return tool_spec[paren_idx + 1:-1].strip()
+        return tool_spec[paren_idx + 1 : -1].strip()
     return None

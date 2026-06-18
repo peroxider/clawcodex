@@ -41,21 +41,13 @@ class TestParseMcpConfig:
         assert result.config["test-server"].command == "python"
 
     def test_valid_http_config(self) -> None:
-        config = {
-            "mcpServers": {
-                "remote": {"type": "http", "url": "https://example.com/mcp"}
-            }
-        }
+        config = {"mcpServers": {"remote": {"type": "http", "url": "https://example.com/mcp"}}}
         result = parse_mcp_config(config, expand_vars=False)
         assert result.config is not None
         assert isinstance(result.config["remote"], McpHTTPServerConfig)
 
     def test_valid_sse_config(self) -> None:
-        config = {
-            "mcpServers": {
-                "sse-server": {"type": "sse", "url": "https://example.com/sse"}
-            }
-        }
+        config = {"mcpServers": {"sse-server": {"type": "sse", "url": "https://example.com/sse"}}}
         result = parse_mcp_config(config, expand_vars=False)
         assert result.config is not None
         assert isinstance(result.config["sse-server"], McpSSEServerConfig)
@@ -80,11 +72,7 @@ class TestParseMcpConfig:
 
     def test_env_var_expansion(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("MY_CMD", "python3")
-        config = {
-            "mcpServers": {
-                "test": {"command": "${MY_CMD}", "args": []}
-            }
-        }
+        config = {"mcpServers": {"test": {"command": "${MY_CMD}", "args": []}}}
         result = parse_mcp_config(config, expand_vars=True)
         assert result.config is not None
         server = result.config["test"]
@@ -148,14 +136,10 @@ class TestGetMcpServerSignature:
 class TestDedupPluginMcpServers:
     def test_no_duplicates(self) -> None:
         plugin_servers = {
-            "p1": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="a"), scope="project"
-            )
+            "p1": ScopedMcpServerConfig(config=McpStdioServerConfig(command="a"), scope="project")
         }
         manual_servers = {
-            "m1": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="b"), scope="user"
-            )
+            "m1": ScopedMcpServerConfig(config=McpStdioServerConfig(command="b"), scope="user")
         }
         result, suppressed = dedup_plugin_mcp_servers(plugin_servers, manual_servers)
         assert len(result) == 1
@@ -163,12 +147,8 @@ class TestDedupPluginMcpServers:
 
     def test_duplicate_removed(self) -> None:
         config = McpStdioServerConfig(command="same")
-        plugin_servers = {
-            "plugin-s": ScopedMcpServerConfig(config=config, scope="project")
-        }
-        manual_servers = {
-            "manual-s": ScopedMcpServerConfig(config=config, scope="user")
-        }
+        plugin_servers = {"plugin-s": ScopedMcpServerConfig(config=config, scope="project")}
+        manual_servers = {"manual-s": ScopedMcpServerConfig(config=config, scope="user")}
         result, suppressed = dedup_plugin_mcp_servers(plugin_servers, manual_servers)
         assert len(result) == 0
         assert len(suppressed) == 1
@@ -205,7 +185,9 @@ class TestAddRemoveMcpConfig:
         data = json.loads((tmp_path / ".mcp.json").read_text())
         assert "to-remove" not in data["mcpServers"]
 
-    def test_remove_nonexistent_raises(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_remove_nonexistent_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(ValueError, match="No MCP server found"):
             remove_mcp_config("nope", "project")

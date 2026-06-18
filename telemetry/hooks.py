@@ -8,6 +8,7 @@ id (the bootstrap session id if available, else a fresh uuid4).
 The wrappers always defer to the previous hook so the interpreter's
 default behavior (traceback to stderr, exit code, etc.) is preserved.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -166,9 +167,7 @@ def uninstall_exception_hooks() -> None:
         except Exception:  # noqa: BLE001
             pass
         try:
-            threading.excepthook = _PREVIOUS_HOOKS.get(
-                "threading.excepthook", threading.excepthook
-            )
+            threading.excepthook = _PREVIOUS_HOOKS.get("threading.excepthook", threading.excepthook)
         except Exception:  # noqa: BLE001
             pass
         _PREVIOUS_HOOKS.clear()

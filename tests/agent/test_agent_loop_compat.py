@@ -4,6 +4,7 @@ Verifies that the canonical query() loop can be driven through an
 AgentLoopResult-shaped interface so the headless and TUI production
 paths can migrate off the legacy run_agent_loop.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,14 +52,16 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
             tool_uses=None,
         )
 
-        result = _run(run_query_as_agent_loop(
-            initial_messages=[UserMessage(content="Hi")],
-            provider=provider,
-            tool_registry=self.registry,
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=5,
-        ))
+        result = _run(
+            run_query_as_agent_loop(
+                initial_messages=[UserMessage(content="Hi")],
+                provider=provider,
+                tool_registry=self.registry,
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=5,
+            )
+        )
 
         self.assertIsInstance(result, AgentLoopRunResult)
         self.assertEqual(result.response_text, "Hello from query()")
@@ -79,21 +82,25 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 5},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "tool_1",
-                "name": "Bash",
-                "input": {"command": "true", "description": "noop"},
-            }],
+            tool_uses=[
+                {
+                    "id": "tool_1",
+                    "name": "Bash",
+                    "input": {"command": "true", "description": "noop"},
+                }
+            ],
         )
 
-        result = _run(run_query_as_agent_loop(
-            initial_messages=[UserMessage(content="Hi")],
-            provider=provider,
-            tool_registry=self.registry,
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=2,
-        ))
+        result = _run(
+            run_query_as_agent_loop(
+                initial_messages=[UserMessage(content="Hi")],
+                provider=provider,
+                tool_registry=self.registry,
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=2,
+            )
+        )
 
         self.assertIsNotNone(result.terminal)
         self.assertEqual(result.terminal.reason, "max_turns")
@@ -108,11 +115,13 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
                 model="test",
                 usage={"input_tokens": 10, "output_tokens": 5},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "tool_1",
-                    "name": "Bash",
-                    "input": {"command": "true", "description": "noop"},
-                }],
+                tool_uses=[
+                    {
+                        "id": "tool_1",
+                        "name": "Bash",
+                        "input": {"command": "true", "description": "noop"},
+                    }
+                ],
             ),
             ChatResponse(
                 content="Done.",
@@ -128,15 +137,17 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
         def collector(event):
             events.append(event)
 
-        result = _run(run_query_as_agent_loop(
-            initial_messages=[UserMessage(content="Run something")],
-            provider=provider,
-            tool_registry=self.registry,
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=5,
-            on_event=collector,
-        ))
+        result = _run(
+            run_query_as_agent_loop(
+                initial_messages=[UserMessage(content="Run something")],
+                provider=provider,
+                tool_registry=self.registry,
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=5,
+                on_event=collector,
+            )
+        )
 
         # Should have at least one tool_use event and at least one
         # tool_result event.
@@ -151,6 +162,7 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
         ``AgentRunFinished(error="Cancelled by user")``). Without this
         the cutover regressed headless to exit 0 with no signal."""
         from src.utils.abort_controller import AbortError
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.return_value = ChatResponse(
@@ -165,15 +177,17 @@ class TestAgentLoopCompatAdapter(unittest.TestCase):
         cancel.abort("user_interrupt")
 
         with self.assertRaises(AbortError):
-            _run(run_query_as_agent_loop(
-                initial_messages=[UserMessage(content="Hi")],
-                provider=provider,
-                tool_registry=self.registry,
-                tool_context=self.context,
-                system_prompt="You are helpful.",
-                max_turns=5,
-                cancel_signal=cancel.signal,
-            ))
+            _run(
+                run_query_as_agent_loop(
+                    initial_messages=[UserMessage(content="Hi")],
+                    provider=provider,
+                    tool_registry=self.registry,
+                    tool_context=self.context,
+                    system_prompt="You are helpful.",
+                    max_turns=5,
+                    cancel_signal=cancel.signal,
+                )
+            )
 
 
 class TestLiveStreamingAndPersistence(unittest.TestCase):
@@ -216,6 +230,7 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
                 finish_reason="end_turn",
                 tool_uses=None,
             )
+
         provider.chat_stream_response.side_effect = fake_stream
 
         chunks: list[str] = []
@@ -223,15 +238,17 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
         def collector(text: str) -> None:
             chunks.append(text)
 
-        result = _run(run_query_as_agent_loop(
-            initial_messages=[UserMessage(content="say hi")],
-            provider=provider,
-            tool_registry=self.registry,
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=2,
-            on_text_chunk=collector,
-        ))
+        result = _run(
+            run_query_as_agent_loop(
+                initial_messages=[UserMessage(content="say hi")],
+                provider=provider,
+                tool_registry=self.registry,
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=2,
+                on_text_chunk=collector,
+            )
+        )
 
         self.assertEqual(result.terminal.reason, "completed")
         # Three live chunks fired by the provider — proving the
@@ -253,11 +270,13 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
                 model="test",
                 usage={"input_tokens": 10, "output_tokens": 5},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "tool_1",
-                    "name": "Bash",
-                    "input": {"command": "true", "description": "noop"},
-                }],
+                tool_uses=[
+                    {
+                        "id": "tool_1",
+                        "name": "Bash",
+                        "input": {"command": "true", "description": "noop"},
+                    }
+                ],
             ),
             ChatResponse(
                 content="Done.",
@@ -273,21 +292,24 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
         def keep_full(msg) -> None:
             persisted.append(msg)
 
-        result = _run(run_query_as_agent_loop(
-            initial_messages=[UserMessage(content="run noop")],
-            provider=provider,
-            tool_registry=self.registry,
-            tool_context=self.context,
-            system_prompt="You are helpful.",
-            max_turns=5,
-            on_message=keep_full,
-        ))
+        result = _run(
+            run_query_as_agent_loop(
+                initial_messages=[UserMessage(content="run noop")],
+                provider=provider,
+                tool_registry=self.registry,
+                tool_context=self.context,
+                system_prompt="You are helpful.",
+                max_turns=5,
+                on_message=keep_full,
+            )
+        )
 
         self.assertEqual(result.terminal.reason, "completed")
         # We expect at least: assistant turn 1 (with tool_use),
         # user (with tool_result), assistant turn 2 (text).
         from src.types.messages import AssistantMessage as _AM, UserMessage as _UM
         from src.types.content_blocks import ToolUseBlock, ToolResultBlock
+
         assistants = [m for m in persisted if isinstance(m, _AM)]
         self.assertGreaterEqual(len(assistants), 2)
         # First assistant must carry a ToolUseBlock — proving full
@@ -296,13 +318,13 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
         self.assertTrue(
             isinstance(first_blocks, list)
             and any(isinstance(b, ToolUseBlock) for b in first_blocks),
-            "Full ToolUseBlock structure must be persisted, not "
-            "just text. Got: %r" % first_blocks,
+            "Full ToolUseBlock structure must be persisted, not just text. Got: %r" % first_blocks,
         )
         # A user-message with tool_result must also be persisted
         # so the next API call can pair tool_use IDs.
         users_with_tool_result = [
-            m for m in persisted
+            m
+            for m in persisted
             if isinstance(m, _UM)
             and isinstance(m.content, list)
             and any(isinstance(b, ToolResultBlock) for b in m.content)

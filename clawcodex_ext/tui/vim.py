@@ -116,9 +116,7 @@ class VimState:
             self._notify_mode_listeners()
 
     # ---- mode change subscription (Round 2 / WI-R2.1) ----
-    def add_mode_listener(
-        self, callback: Callable[[Mode], None]
-    ) -> Callable[[], None]:
+    def add_mode_listener(self, callback: Callable[[Mode], None]) -> Callable[[], None]:
         """Subscribe to mode changes.
 
         Returns an unsubscribe callable; calling it removes the listener.

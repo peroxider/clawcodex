@@ -6,14 +6,26 @@ sees in its conversation flow. Keep names byte-identical to the TS
 source so prompt-cache stability holds across TS↔Python interop and
 snapshot tests pin the surface.
 """
+
 from __future__ import annotations
 
 from typing import Final
 
-COMMON_HELP_ARGS: tuple[str, ...] = ('help', '-h', '--help')
+COMMON_HELP_ARGS: tuple[str, ...] = ("help", "-h", "--help")
 COMMON_INFO_ARGS: tuple[str, ...] = (
-    'list', 'show', 'display', 'current', 'view', 'get', 'check',
-    'describe', 'print', 'version', 'about', 'status', '?',
+    "list",
+    "show",
+    "display",
+    "current",
+    "view",
+    "get",
+    "check",
+    "describe",
+    "print",
+    "version",
+    "about",
+    "status",
+    "?",
 )
 
 TASK_NOTIFICATION_TAG: Final[str] = "task-notification"

@@ -87,14 +87,9 @@ def _sanitize_path_key(key: str) -> str:
     # reject for defense in depth.
     normalized = unicodedata.normalize("NFKC", key)
     if normalized != key and (
-        ".." in normalized
-        or "/" in normalized
-        or "\\" in normalized
-        or "\0" in normalized
+        ".." in normalized or "/" in normalized or "\\" in normalized or "\0" in normalized
     ):
-        raise PathTraversalError(
-            f'Unicode-normalized traversal in path key: "{key}"'
-        )
+        raise PathTraversalError(f'Unicode-normalized traversal in path key: "{key}"')
 
     # Backslash (Windows separator used as traversal vector).
     if "\\" in key:
@@ -131,9 +126,7 @@ def get_team_mem_path() -> str:
     is load-bearing for the prefix-attack check
     (``team-evil/`` must not match ``team/``).
     """
-    return unicodedata.normalize(
-        "NFC", os.path.join(get_auto_mem_path(), "team") + os.sep
-    )
+    return unicodedata.normalize("NFC", os.path.join(get_auto_mem_path(), "team") + os.sep)
 
 
 def get_team_mem_entrypoint() -> str:
@@ -190,9 +183,7 @@ def _realpath_deepest_existing(absolute_path: str) -> str:
                     ) from exc
                 # Otherwise: walk up and try the parent.
             elif code == errno.ELOOP:
-                raise PathTraversalError(
-                    f'Symlink loop detected in path: "{current}"'
-                ) from exc
+                raise PathTraversalError(f'Symlink loop detected in path: "{current}"') from exc
             elif code == errno.ENAMETOOLONG:
                 # Treat like ENOENT — walk up to find an ancestor.
                 pass
@@ -204,7 +195,7 @@ def _realpath_deepest_existing(absolute_path: str) -> str:
                 ) from exc
 
         # Walk up. Pop the deepest non-existing segment onto the tail.
-        tail.append(current[len(parent) + len(os.sep):])
+        tail.append(current[len(parent) + len(os.sep) :])
         current = parent
 
 
@@ -271,17 +262,13 @@ def validate_team_mem_write_path(file_path: str) -> str:
     resolved = os.path.abspath(file_path)
     team_dir = get_team_mem_path()
     if not resolved.startswith(team_dir):
-        raise PathTraversalError(
-            f'Path escapes team memory directory: "{file_path}"'
-        )
+        raise PathTraversalError(f'Path escapes team memory directory: "{file_path}"')
 
     # Second pass: resolve symlinks on the deepest existing ancestor
     # and verify real-path containment.
     real_path = _realpath_deepest_existing(resolved)
     if not _is_real_path_within_team_dir(real_path):
-        raise PathTraversalError(
-            f'Path escapes team memory directory via symlink: "{file_path}"'
-        )
+        raise PathTraversalError(f'Path escapes team memory directory via symlink: "{file_path}"')
     return resolved
 
 
@@ -298,13 +285,9 @@ def validate_team_mem_key(relative_key: str) -> str:
 
     resolved = os.path.abspath(full_path)
     if not resolved.startswith(team_dir):
-        raise PathTraversalError(
-            f'Key escapes team memory directory: "{relative_key}"'
-        )
+        raise PathTraversalError(f'Key escapes team memory directory: "{relative_key}"')
 
     real_path = _realpath_deepest_existing(resolved)
     if not _is_real_path_within_team_dir(real_path):
-        raise PathTraversalError(
-            f'Key escapes team memory directory via symlink: "{relative_key}"'
-        )
+        raise PathTraversalError(f'Key escapes team memory directory via symlink: "{relative_key}"')
     return resolved

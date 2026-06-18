@@ -78,9 +78,7 @@ class DiffDialogScreen(DialogScreen[str | None]):
 
     def build_body(self) -> Iterator[Widget]:
         if not self._files:
-            yield Static(
-                Text("No changes to display.", style="dim"), markup=False
-            )
+            yield Static(Text("No changes to display.", style="dim"), markup=False)
             return
         options = [
             SelectOption(
@@ -104,9 +102,7 @@ class DiffDialogScreen(DialogScreen[str | None]):
             self._refresh_summary(0)
 
     # ---- select events ----
-    def on_select_list_option_highlighted(
-        self, event: SelectList.OptionHighlighted
-    ) -> None:
+    def on_select_list_option_highlighted(self, event: SelectList.OptionHighlighted) -> None:
         idx = int(event.option.value)
         if idx == self._active or idx < 0 or idx >= len(self._files):
             return
@@ -123,9 +119,7 @@ class DiffDialogScreen(DialogScreen[str | None]):
             return
         self.dismiss(self._files[idx].path)
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)
 
     def _refresh_summary(self, idx: int) -> None:

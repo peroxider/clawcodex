@@ -22,11 +22,10 @@ from src.bridge.repl_bridge_transport import (
 def _sse_body(events: list[tuple[str, str]]) -> bytes:
     out: list[str] = []
     for eid, data in events:
-        out.append(f'id: {eid}')
-        out.append(f'data: {data}')
-        out.append('')
-    return ('\n'.join(out) + '\n').encode('utf-8')
-
+        out.append(f"id: {eid}")
+        out.append(f"data: {data}")
+        out.append("")
+    return ("\n".join(out) + "\n").encode("utf-8")
 
 
 @pytest.mark.asyncio
@@ -34,16 +33,17 @@ async def test_v2_transport_reads_sse_and_writes_to_ccr():
     received_writes: list[dict] = []
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.url.path.endswith('/worker/events/stream'):
+        if req.url.path.endswith("/worker/events/stream"):
             return httpx.Response(
                 200,
-                headers={'content-type': 'text/event-stream'},
-                content=_sse_body([('1', '{"type":"user","uuid":"u1"}')]),
+                headers={"content-type": "text/event-stream"},
+                content=_sse_body([("1", '{"type":"user","uuid":"u1"}')]),
             )
-        if req.url.path.endswith('/worker/events'):
+        if req.url.path.endswith("/worker/events"):
             import json
+
             body = json.loads(req.content)
-            received_writes.extend(body.get('events', []))
+            received_writes.extend(body.get("events", []))
             return httpx.Response(200, json={})
         # Heartbeat / state / delivery — all 200 OK.
         return httpx.Response(200, json={})
@@ -54,13 +54,15 @@ async def test_v2_transport_reads_sse_and_writes_to_ccr():
     # Create transport with mocked HTTP. We have to inject the client
     # into BOTH the SSE and CCR layers, so we patch them after
     # construction.
-    transport = await create_v2_repl_transport(V2TransportOptions(
-        session_url='https://api.test/v1/code/sessions/cse_abc',
-        ingress_token='tok',
-        session_id='cse_abc',
-        epoch=1,
-        heartbeat_interval_seconds=0,
-    ))
+    transport = await create_v2_repl_transport(
+        V2TransportOptions(
+            session_url="https://api.test/v1/code/sessions/cse_abc",
+            ingress_token="tok",
+            session_id="cse_abc",
+            epoch=1,
+            heartbeat_interval_seconds=0,
+        )
+    )
     transport._sse._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     transport._sse._owned_client = True
     transport._ccr._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -72,7 +74,7 @@ async def test_v2_transport_reads_sse_and_writes_to_ccr():
         transport.connect()
         await asyncio.wait_for(connected.wait(), timeout=2.0)
         # Write something via the v2 transport.
-        await transport.write({'type': 'assistant', 'uuid': 'a1'})
+        await transport.write({"type": "assistant", "uuid": "a1"})
         await transport.flush()
         # Wait for the SSE stream to deliver the user message.
         for _ in range(100):
@@ -80,7 +82,7 @@ async def test_v2_transport_reads_sse_and_writes_to_ccr():
                 break
             await asyncio.sleep(0.02)
         assert any('"type":"user"' in d for d in received_data)
-        assert any(e.get('uuid') == 'a1' for e in received_writes)
+        assert any(e.get("uuid") == "a1" for e in received_writes)
     finally:
         await transport.aclose()
 
@@ -90,26 +92,28 @@ async def test_v2_transport_409_fires_on_close_with_4090():
     """When CCR returns 409 epoch-mismatch, on_close fires with 4090."""
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.url.path.endswith('/worker/events/stream'):
+        if req.url.path.endswith("/worker/events/stream"):
             return httpx.Response(
                 200,
-                headers={'content-type': 'text/event-stream'},
+                headers={"content-type": "text/event-stream"},
                 content=_sse_body([]),
             )
-        if req.url.path.endswith('/worker/events'):
-            return httpx.Response(409, json={'error': 'epoch superseded'})
+        if req.url.path.endswith("/worker/events"):
+            return httpx.Response(409, json={"error": "epoch superseded"})
         return httpx.Response(200, json={})
 
     close_codes: list[int | None] = []
     connected = asyncio.Event()
 
-    transport = await create_v2_repl_transport(V2TransportOptions(
-        session_url='https://api.test/v1/code/sessions/cse',
-        ingress_token='tok',
-        session_id='cse',
-        epoch=1,
-        heartbeat_interval_seconds=0,
-    ))
+    transport = await create_v2_repl_transport(
+        V2TransportOptions(
+            session_url="https://api.test/v1/code/sessions/cse",
+            ingress_token="tok",
+            session_id="cse",
+            epoch=1,
+            heartbeat_interval_seconds=0,
+        )
+    )
     transport._sse._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     transport._sse._owned_client = True
     transport._ccr._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -120,7 +124,7 @@ async def test_v2_transport_409_fires_on_close_with_4090():
     try:
         transport.connect()
         await asyncio.wait_for(connected.wait(), timeout=2.0)
-        await transport.write({'type': 'user', 'uuid': 'u1'})
+        await transport.write({"type": "user", "uuid": "u1"})
         # Wait for the uploader to hit 409 and fire the epoch-mismatch handler.
         for _ in range(200):
             if WS_CLOSE_EPOCH_MISMATCH in close_codes:
@@ -137,21 +141,23 @@ async def test_v2_transport_outbound_only_skips_sse():
     """outbound_only=True: set_on_data is no-op; get_last_sequence_num returns 0."""
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.url.path.endswith('/worker/events/stream'):
+        if req.url.path.endswith("/worker/events/stream"):
             # Should NOT be hit when outbound_only=True.
-            raise AssertionError('SSE stream opened in outbound_only mode')
+            raise AssertionError("SSE stream opened in outbound_only mode")
         return httpx.Response(200, json={})
 
     connected = asyncio.Event()
 
-    transport = await create_v2_repl_transport(V2TransportOptions(
-        session_url='https://api.test/v1/code/sessions/cse',
-        ingress_token='tok',
-        session_id='cse',
-        epoch=1,
-        outbound_only=True,
-        heartbeat_interval_seconds=0,
-    ))
+    transport = await create_v2_repl_transport(
+        V2TransportOptions(
+            session_url="https://api.test/v1/code/sessions/cse",
+            ingress_token="tok",
+            session_id="cse",
+            epoch=1,
+            outbound_only=True,
+            heartbeat_interval_seconds=0,
+        )
+    )
     transport._ccr._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     transport._ccr._owned_http = True
 
@@ -171,26 +177,28 @@ async def test_v2_transport_dropped_batch_count_passthrough():
     """Transport's dropped_batch_count delegates to CCRClient."""
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.url.path.endswith('/worker/events/stream'):
+        if req.url.path.endswith("/worker/events/stream"):
             return httpx.Response(
                 200,
-                headers={'content-type': 'text/event-stream'},
+                headers={"content-type": "text/event-stream"},
                 content=_sse_body([]),
             )
         # All writes return 503 → drops accumulate.
-        if req.url.path.endswith('/worker/events'):
+        if req.url.path.endswith("/worker/events"):
             return httpx.Response(503)
         return httpx.Response(200, json={})
 
     connected = asyncio.Event()
 
-    transport = await create_v2_repl_transport(V2TransportOptions(
-        session_url='https://api.test/v1/code/sessions/cse',
-        ingress_token='tok',
-        session_id='cse',
-        epoch=1,
-        heartbeat_interval_seconds=0,
-    ))
+    transport = await create_v2_repl_transport(
+        V2TransportOptions(
+            session_url="https://api.test/v1/code/sessions/cse",
+            ingress_token="tok",
+            session_id="cse",
+            epoch=1,
+            heartbeat_interval_seconds=0,
+        )
+    )
     transport._sse._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     transport._sse._owned_client = True
     transport._ccr._http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
@@ -201,7 +209,7 @@ async def test_v2_transport_dropped_batch_count_passthrough():
     try:
         transport.connect()
         await asyncio.wait_for(connected.wait(), timeout=2.0)
-        await transport.write({'type': 'user', 'uuid': 'u1'})
+        await transport.write({"type": "user", "uuid": "u1"})
         for _ in range(200):
             if transport.dropped_batch_count > 0:
                 break

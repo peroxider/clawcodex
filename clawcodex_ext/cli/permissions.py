@@ -23,6 +23,7 @@ def resolve_permission_state(args) -> None:
         has_allow_bypass_permissions_mode,
         initial_permission_mode_from_cli,
     )
+
     # F-47: plumb ``settings.permissions.default_mode`` into the mode
     # resolver. Import lazily so the CLI module stays importable in tests
     # that never touch settings (e.g. permission-only unit tests).
@@ -31,9 +32,9 @@ def resolve_permission_state(args) -> None:
     except Exception:  # pragma: no cover - defensive
         _get_settings = None
 
-    dangerously = bool(getattr(args, 'dangerously_skip_permissions', False))
-    allow_dangerously = bool(getattr(args, 'allow_dangerously_skip_permissions', False))
-    permission_mode_cli = getattr(args, 'permission_mode', None)
+    dangerously = bool(getattr(args, "dangerously_skip_permissions", False))
+    allow_dangerously = bool(getattr(args, "allow_dangerously_skip_permissions", False))
+    permission_mode_cli = getattr(args, "permission_mode", None)
 
     # Safety gate first -- refuse to run as root outside a sandbox.
     enforce_dangerous_skip_permissions_safety(
@@ -62,11 +63,7 @@ def resolve_permission_state(args) -> None:
         settings_default_mode=settings_default_mode,
     )
 
-    is_bypass_available = (
-        dangerously
-        or allow_dangerously
-        or has_allow_bypass_permissions_mode()
-    )
+    is_bypass_available = dangerously or allow_dangerously or has_allow_bypass_permissions_mode()
 
     # Stash on args so downstream entrypoints don't need to re-derive.
     args._resolved_permission_mode = mode

@@ -43,6 +43,7 @@ Important:
 # Input validation (ported from TS SkillTool/SkillTool.ts validateInput)
 # ---------------------------------------------------------------------------
 
+
 def _validate_skill_input(tool_input: dict[str, Any], context: ToolContext) -> ValidationResult:
     """Validate skill input before execution.
 
@@ -61,7 +62,7 @@ def _validate_skill_input(tool_input: dict[str, Any], context: ToolContext) -> V
 
     if not skill or not isinstance(skill, str):
         return ValidationResult.fail(
-            'Missing skill name. Pass the slash command name as the skill parameter '
+            "Missing skill name. Pass the slash command name as the skill parameter "
             '(e.g., skill: "commit" for /commit, skill: "review-pr" for /review-pr).',
             error_code=1,
         )
@@ -114,6 +115,7 @@ def _validate_skill_input(tool_input: dict[str, Any], context: ToolContext) -> V
 #     mapToolResultToToolResultBlockParam)
 # ---------------------------------------------------------------------------
 
+
 def _skill_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Format the skill result for the API.
 
@@ -155,6 +157,7 @@ def _skill_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Call implementation
 # ---------------------------------------------------------------------------
+
 
 def _skill_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     skill_name = tool_input.get("skill")
@@ -317,26 +320,36 @@ def _build_context_modifier(skill: Any) -> Any:
     return _modifier
 
 
-def _run_legacy_python_skill(name: str, skill_input: dict[str, Any], context: ToolContext) -> ToolResult:
+def _run_legacy_python_skill(
+    name: str, skill_input: dict[str, Any], context: ToolContext
+) -> ToolResult:
     skills_dir = _get_skills_dir()
     if skills_dir is None:
-        return ToolResult(name="Skill", output={"error": "no skills directory found"}, is_error=True)
+        return ToolResult(
+            name="Skill", output={"error": "no skills directory found"}, is_error=True
+        )
 
     py_path = skills_dir / f"{name}.py"
     if not py_path.exists():
-        return ToolResult(name="Skill", output={"error": f"legacy skill not found: {name}"}, is_error=True)
+        return ToolResult(
+            name="Skill", output={"error": f"legacy skill not found: {name}"}, is_error=True
+        )
 
     module_name = f"_clawcodex_skill_{name}"
     spec = importlib.util.spec_from_file_location(module_name, py_path)
     if spec is None or spec.loader is None:
-        return ToolResult(name="Skill", output={"error": f"cannot load skill: {name}"}, is_error=True)
+        return ToolResult(
+            name="Skill", output={"error": f"cannot load skill: {name}"}, is_error=True
+        )
 
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
     spec.loader.exec_module(mod)
     run_fn = getattr(mod, "run", None)
     if not callable(run_fn):
-        return ToolResult(name="Skill", output={"error": f"skill has no run() function: {name}"}, is_error=True)
+        return ToolResult(
+            name="Skill", output={"error": f"skill has no run() function: {name}"}, is_error=True
+        )
 
     result = run_fn(skill_input, context)
     return ToolResult(name="Skill", output={"output": result})

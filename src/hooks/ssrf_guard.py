@@ -7,18 +7,22 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-BLOCKED_HOSTS = frozenset({
-    "localhost",
-    "localhost.localdomain",
-    "metadata.google.internal",
-    "metadata.google",
-})
+BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "localhost.localdomain",
+        "metadata.google.internal",
+        "metadata.google",
+    }
+)
 
-CLOUD_METADATA_IPS = frozenset({
-    "169.254.169.254",
-    "169.254.170.2",
-    "fd00:ec2::254",
-})
+CLOUD_METADATA_IPS = frozenset(
+    {
+        "169.254.169.254",
+        "169.254.170.2",
+        "fd00:ec2::254",
+    }
+)
 
 
 def _is_private_ip(ip_str: str) -> bool:

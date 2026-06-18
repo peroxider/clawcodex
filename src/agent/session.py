@@ -39,6 +39,7 @@ from .conversation import Conversation
 @dataclass
 class Session:
     """Session manager with persistence."""
+
     session_id: str
     provider: str
     model: str
@@ -78,7 +79,7 @@ class Session:
             "cost": cost_block,
         }
 
-        with open(session_file, 'w') as f:
+        with open(session_file, "w") as f:
             json.dump(session_data, f, indent=2)
 
         self.updated_at = datetime.now().isoformat()
@@ -90,6 +91,7 @@ class Session:
         # persistence concerns.
         try:
             from extensions.agent.session_persist import save_to_session_storage
+
             save_to_session_storage(self)
         except ImportError:
             pass
@@ -108,19 +110,20 @@ class Session:
         """
         try:
             from extensions.agent.session_persist import save_to_session_storage
+
             save_to_session_storage(self)
         except ImportError:
             pass
 
     @classmethod
-    def load(cls, session_id: str) -> Optional['Session']:
+    def load(cls, session_id: str) -> Optional["Session"]:
         """Load session from disk."""
         session_file = Path.home() / ".clawcodex" / "sessions" / session_id / "session.json"
 
         if not session_file.exists():
             return None
 
-        with open(session_file, 'r') as f:
+        with open(session_file, "r") as f:
             data = json.load(f)
 
         return cls(
@@ -129,11 +132,11 @@ class Session:
             model=data["model"],
             conversation=Conversation.from_dict(data["conversation"]),
             created_at=data["created_at"],
-            updated_at=data["updated_at"]
+            updated_at=data["updated_at"],
         )
 
     @classmethod
-    def create(cls, provider: str, model: str) -> 'Session':
+    def create(cls, provider: str, model: str) -> "Session":
         """Create a new session using the bootstrap singleton's session ID.
 
         Previously this generated its own strftime-based ID, producing
@@ -150,7 +153,7 @@ class Session:
         )
 
     @classmethod
-    def resume(cls, session_id: str) -> Optional['Session']:
+    def resume(cls, session_id: str) -> Optional["Session"]:
         """Resume a session: update bootstrap identity, restore cost,
         reconstruct the per-conversation record from disk.
 
@@ -191,6 +194,7 @@ class Session:
             # persistence concerns.
             try:
                 from extensions.agent.session_persist import load_from_session_storage
+
                 data = load_from_session_storage(session_id)
                 if data is not None:
                     loaded = cls(
@@ -240,8 +244,6 @@ class Session:
         return loaded
 
 
-
-
 def _snapshot_cost_block() -> dict:
     """Build the cost block written by ``Session.save``.
 
@@ -252,8 +254,7 @@ def _snapshot_cost_block() -> dict:
     return {
         "total_cost_usd": get_total_cost_usd(),
         "total_api_duration": get_total_api_duration(),
-        "total_api_duration_without_retries":
-            get_total_api_duration_without_retries(),
+        "total_api_duration_without_retries": get_total_api_duration_without_retries(),
         "total_tool_duration": get_total_tool_duration(),
         "total_lines_added": get_total_lines_added(),
         "total_lines_removed": get_total_lines_removed(),

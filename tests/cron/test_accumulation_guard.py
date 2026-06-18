@@ -50,15 +50,11 @@ def test_recurring_task_no_outbox_accumulation(tmp_path) -> None:
     scheduler.check_once(at_ms=3_000)
     assert len(outbox) == 1
 
-    write_cron_tasks(
-        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)]
-    )
+    write_cron_tasks(tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)])
     scheduler.check_once(at_ms=63_000)
     assert len(outbox) == 1
 
-    write_cron_tasks(
-        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=64_000)]
-    )
+    write_cron_tasks(tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=64_000)])
     scheduler.check_once(at_ms=123_000)
     assert len(outbox) == 1
 
@@ -105,9 +101,7 @@ def test_new_trigger_fires_after_previous_completes(tmp_path) -> None:
 
     finalize_cron_run(tmp_path, runs[0].id, "completed")
 
-    write_cron_tasks(
-        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)]
-    )
+    write_cron_tasks(tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)])
     scheduler.check_once(at_ms=5_000)
     assert len(outbox) == 2
     runs = read_cron_runs(tmp_path)

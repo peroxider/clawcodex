@@ -25,6 +25,7 @@ Wired via :func:`register_dream_skill`, called from
 :func:`extensions.skills_ext.init_skills_ext` so the command lands
 in the global command registry during skills_ext initialization.
 """
+
 from __future__ import annotations
 
 import logging
@@ -140,8 +141,7 @@ def _dream_status() -> LocalCommandResult:
             sessions = getattr(t, "sessions_reviewing", 0)
             turns = len(getattr(t, "turns", []) or [])
             lines.append(
-                f"- {tid}  status={status}  phase={phase}  "
-                f"sessions={sessions}  turns={turns}"
+                f"- {tid}  status={status}  phase={phase}  sessions={sessions}  turns={turns}"
             )
         except Exception:
             lines.append(f"- (malformed task: {t!r})")

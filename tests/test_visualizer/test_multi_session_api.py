@@ -46,12 +46,14 @@ def two_sessions_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def app(two_sessions_dir: Path):
     from extensions.visualizer.server import create_app
+
     return create_app(sessions_dir=two_sessions_dir, allow_import=False)
 
 
 @pytest.fixture
 def client(app):
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
@@ -78,10 +80,7 @@ class TestMultiSessionAPI:
         assert ys == [0, 1]
 
     def test_too_many_sessions_rejected(self, client):
-        resp = client.get(
-            "/api/viz/multi-session"
-            "?sessions=a,b,c,d,e,f"
-        )
+        resp = client.get("/api/viz/multi-session?sessions=a,b,c,d,e,f")
         assert resp.status_code == 400
 
     def test_empty_sessions_rejected(self, client):
@@ -94,9 +93,7 @@ class TestMultiSessionAPI:
 
     def test_partial_match_succeeds_for_found(self, client):
         """If some sessions are missing, we still return the found ones."""
-        resp = client.get(
-            "/api/viz/multi-session?sessions=ms-session-a,nope-1,nope-2"
-        )
+        resp = client.get("/api/viz/multi-session?sessions=ms-session-a,nope-1,nope-2")
         assert resp.status_code == 200
         data = resp.json()
         # Only ms-session-a is in the payload
@@ -110,8 +107,14 @@ class TestMultiSessionAPI:
         # BACKGROUND no longer rolled into OTHER. Order is fixed by
         # _LEGEND_CATEGORIES in multi_session_view_builder.py.
         assert cats == [
-            "read", "execute", "write", "orchestrate",
-            "llm_text", "turn", "background", "other",
+            "read",
+            "execute",
+            "write",
+            "orchestrate",
+            "llm_text",
+            "turn",
+            "background",
+            "other",
         ]
 
     def test_time_range_is_non_negative(self, client):

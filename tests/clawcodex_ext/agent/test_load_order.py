@@ -10,6 +10,7 @@ priority sequence
 and that custom agents from these tiers can override built-in
 ``agent_type`` slots.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -56,12 +57,7 @@ def _write_md(directory: Path, name: str, *, description: str, body: str) -> Pat
     directory.mkdir(parents=True, exist_ok=True)
     file_path = directory / f"{name}.md"
     file_path.write_text(
-        f"---\n"
-        f"description: {description}\n"
-        f"tools:\n"
-        f"  - Read\n"
-        f"---\n\n"
-        f"{body}\n",
+        f"---\ndescription: {description}\ntools:\n  - Read\n---\n\n{body}\n",
         encoding="utf-8",
     )
     return file_path

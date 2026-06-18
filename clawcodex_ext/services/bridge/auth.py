@@ -2,6 +2,7 @@
 
 Mirrors TypeScript bridge/auth.ts — token-based auth for bridge sessions.
 """
+
 from __future__ import annotations
 
 import time
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 @dataclass
 class BridgeToken:
     """An authentication token for bridge sessions."""
+
     token: str
     expires_at: float = 0.0
     scope: str = "session"

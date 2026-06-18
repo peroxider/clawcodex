@@ -70,9 +70,7 @@ class TestLoadFromConfigManager:
     def test_load_from_config_manager(self):
         from src.config import ConfigManager
 
-        settings = load_settings_from_config_manager(
-            config_manager=ConfigManager()
-        )
+        settings = load_settings_from_config_manager(config_manager=ConfigManager())
         assert settings.default_provider == "anthropic"
         assert isinstance(settings.providers, dict)
 
@@ -91,4 +89,5 @@ class TestBackwardCompatibility:
             is_pydantic_settings_available,
             load_settings_from_config_manager,
         )
+
         assert is_pydantic_settings_available() is True

@@ -27,12 +27,14 @@ logger = logging.getLogger(__name__)
 # Configuration thresholds (mirroring TS constants)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SessionMemoryCompactConfig:
     """Token-based thresholds for session memory compaction.
 
     Matches TypeScript DEFAULT_SM_COMPACT_CONFIG.
     """
+
     min_tokens: int = 10_000
     min_text_block_messages: int = 5
     max_tokens: int = 40_000
@@ -44,6 +46,7 @@ DEFAULT_SM_COMPACT_CONFIG = SessionMemoryCompactConfig()
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def has_text_blocks(message: Message) -> bool:
     """Check if a message contains meaningful text content."""
@@ -114,6 +117,7 @@ def _get_message_id(message: Message) -> str | None:
 # Core API: adjust index to preserve invariants
 # ---------------------------------------------------------------------------
 
+
 def adjust_index_to_preserve_api_invariants(
     messages: list[Message],
     index: int,
@@ -149,10 +153,7 @@ def adjust_index_to_preserve_api_invariants(
                         tool_use_ids_in_kept.add(block.get("id", ""))
 
         # Only look for tool_uses NOT already in the kept range
-        needed_ids = set(
-            tid for tid in all_tool_result_ids
-            if tid not in tool_use_ids_in_kept
-        )
+        needed_ids = set(tid for tid in all_tool_result_ids if tid not in tool_use_ids_in_kept)
 
         # Find the assistant message(s) with matching tool_use blocks
         i = adjusted - 1
@@ -193,6 +194,7 @@ def adjust_index_to_preserve_api_invariants(
 # Core API: calculate messages to keep (token-based)
 # ---------------------------------------------------------------------------
 
+
 def calculate_messages_to_keep_index(
     messages: list[Message],
     last_summarized_index: int,
@@ -215,11 +217,7 @@ def calculate_messages_to_keep_index(
         config = DEFAULT_SM_COMPACT_CONFIG
 
     # Start from the message after last_summarized_index
-    start_index = (
-        last_summarized_index + 1
-        if last_summarized_index >= 0
-        else len(messages)
-    )
+    start_index = last_summarized_index + 1 if last_summarized_index >= 0 else len(messages)
 
     # Calculate current tokens and text-block message count
     total_tokens = 0
@@ -234,14 +232,12 @@ def calculate_messages_to_keep_index(
         return adjust_index_to_preserve_api_invariants(messages, start_index)
 
     # Check if we already meet both minimums
-    if (
-        total_tokens >= config.min_tokens
-        and text_block_count >= config.min_text_block_messages
-    ):
+    if total_tokens >= config.min_tokens and text_block_count >= config.min_text_block_messages:
         return adjust_index_to_preserve_api_invariants(messages, start_index)
 
     # Find the floor: don't expand past the last compact boundary
     from ...compact_service.messages import is_compact_boundary_message
+
     floor = 0
     for i in range(len(messages) - 1, -1, -1):
         if is_compact_boundary_message(messages[i]):
@@ -259,10 +255,7 @@ def calculate_messages_to_keep_index(
         if total_tokens >= config.max_tokens:
             break
 
-        if (
-            total_tokens >= config.min_tokens
-            and text_block_count >= config.min_text_block_messages
-        ):
+        if total_tokens >= config.min_tokens and text_block_count >= config.min_text_block_messages:
             break
 
     return adjust_index_to_preserve_api_invariants(messages, start_index)
@@ -271,6 +264,7 @@ def calculate_messages_to_keep_index(
 # ---------------------------------------------------------------------------
 # Legacy count-based API (backward compatibility)
 # ---------------------------------------------------------------------------
+
 
 def try_session_memory_compaction(
     messages: list[Message],
@@ -336,14 +330,17 @@ class SessionMemory:
 
     def add(self, fact: str, source: str = "conversation") -> None:
         import time
+
         for entry in self._entries:
             if entry.fact.lower().strip() == fact.lower().strip():
                 return
-        self._entries.append(SessionMemoryEntry(
-            fact=fact,
-            source=source,
-            timestamp=time.time(),
-        ))
+        self._entries.append(
+            SessionMemoryEntry(
+                fact=fact,
+                source=source,
+                timestamp=time.time(),
+            )
+        )
 
     def add_from_llm_response(self, response_text: str) -> int:
         added = 0
@@ -362,10 +359,7 @@ class SessionMemory:
 
     def deduplicate_against(self, existing_context: str) -> None:
         existing_lower = existing_context.lower()
-        self._entries = [
-            e for e in self._entries
-            if e.fact.lower().strip() not in existing_lower
-        ]
+        self._entries = [e for e in self._entries if e.fact.lower().strip() not in existing_lower]
 
     def format_memory(self) -> str:
         if not self._entries:

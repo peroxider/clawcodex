@@ -76,11 +76,7 @@ def jittered_next_cron_run_ms(
 
     # Recurring forward jitter: cap proportional to interval between fires.
     next_after = compute_next_cron_run(fields, next_run + _one_second())
-    interval = (
-        datetime_to_ms(next_after) - base_ms
-        if next_after is not None
-        else 0
-    )
+    interval = datetime_to_ms(next_after) - base_ms if next_after is not None else 0
     return base_ms + recurring_jitter_ms(task_id, interval, cfg)
 
 
@@ -119,6 +115,7 @@ def one_shot_jittered_next_cron_run_ms(
 
 def _one_second():
     from datetime import timedelta
+
     return timedelta(seconds=1)
 
 

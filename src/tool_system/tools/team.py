@@ -40,7 +40,11 @@ def _team_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     context.team = team
     return ToolResult(
         name="TeamCreate",
-        output={"team_name": team_name, "team_file_path": str(team_file), "lead_agent_id": lead_agent_id},
+        output={
+            "team_name": team_name,
+            "team_file_path": str(team_file),
+            "lead_agent_id": lead_agent_id,
+        },
     )
 
 
@@ -79,7 +83,10 @@ def _team_delete_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
             team_file.unlink()
         except Exception:
             pass
-    return ToolResult(name="TeamDelete", output={"success": True, "message": "Team deleted", "team_name": team_name})
+    return ToolResult(
+        name="TeamDelete",
+        output={"success": True, "message": "Team deleted", "team_name": team_name},
+    )
 
 
 TeamDeleteTool: Tool = build_tool(

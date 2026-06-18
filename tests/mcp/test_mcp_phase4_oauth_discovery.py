@@ -39,7 +39,6 @@ _VALID_PRM = {
 
 
 class TestDiscoverOauthMetadata:
-
     @pytest.mark.asyncio
     async def test_escape_hatch_short_circuits_chain(self):
         client = MagicMock()

@@ -19,6 +19,7 @@ from ...types.messages import Message
 @dataclass
 class ApiRound:
     """One assistant response plus its tool-result user messages."""
+
     assistant: Message | None = None
     tool_results: list[Message] = field(default_factory=list)
 

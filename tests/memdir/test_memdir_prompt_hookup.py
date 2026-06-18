@@ -15,9 +15,7 @@ from unittest.mock import patch
 
 class DefaultSystemPromptHookupTest(unittest.TestCase):
     def setUp(self):
-        self._saved_override = os.environ.get(
-            "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"
-        )
+        self._saved_override = os.environ.get("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
         self._tmp = tempfile.TemporaryDirectory()
         os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._tmp.name
 
@@ -25,9 +23,7 @@ class DefaultSystemPromptHookupTest(unittest.TestCase):
         if self._saved_override is None:
             os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
         else:
-            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = (
-                self._saved_override
-            )
+            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._saved_override
         self._tmp.cleanup()
 
     def test_memory_section_present_in_default_prompt(self):
@@ -45,18 +41,14 @@ class DefaultSystemPromptHookupTest(unittest.TestCase):
 
 class SdkCustomPromptHookupTest(unittest.TestCase):
     def setUp(self):
-        self._saved_override = os.environ.get(
-            "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"
-        )
+        self._saved_override = os.environ.get("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
         self._tmp = tempfile.TemporaryDirectory()
 
     def tearDown(self):
         if self._saved_override is None:
             os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
         else:
-            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = (
-                self._saved_override
-            )
+            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._saved_override
         self._tmp.cleanup()
 
     def test_no_override_no_memory_in_custom_prompt(self):
@@ -64,6 +56,7 @@ class SdkCustomPromptHookupTest(unittest.TestCase):
         from src.context_system.prompt_assembly import (
             build_full_system_prompt,
         )
+
         prompt = build_full_system_prompt(
             custom_system_prompt="Custom prompt body",
             use_cache=False,
@@ -76,6 +69,7 @@ class SdkCustomPromptHookupTest(unittest.TestCase):
         from src.context_system.prompt_assembly import (
             build_full_system_prompt,
         )
+
         prompt = build_full_system_prompt(
             custom_system_prompt="Custom prompt body",
             append_system_prompt="APPEND",
@@ -97,9 +91,7 @@ class MemorySectionContentTest(unittest.TestCase):
     (subject to truncation)."""
 
     def setUp(self):
-        self._saved_override = os.environ.get(
-            "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"
-        )
+        self._saved_override = os.environ.get("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
         self._tmp = tempfile.TemporaryDirectory()
         os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._tmp.name
         Path(self._tmp.name, "MEMORY.md").write_text(
@@ -111,15 +103,14 @@ class MemorySectionContentTest(unittest.TestCase):
         if self._saved_override is None:
             os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
         else:
-            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = (
-                self._saved_override
-            )
+            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._saved_override
         self._tmp.cleanup()
 
     def test_memory_md_content_in_prompt(self):
         from src.context_system.prompt_assembly import (
             build_full_system_prompt,
         )
+
         prompt = build_full_system_prompt(use_cache=False)
         self.assertIn("project_kickoff.md", prompt)
         self.assertIn("kickoff on 2026-04-01", prompt)

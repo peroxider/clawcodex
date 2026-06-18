@@ -77,6 +77,7 @@ def test_handle_rate_limit_error_assistant_message_shape():
     ``isApiErrorMessage`` flag so the query loop's image-unsupported
     recovery path doesn't accidentally re-strip it."""
     from src.types.messages import AssistantMessage
+
     msg = handle_rate_limit_error("429")
     assert isinstance(msg, AssistantMessage)
     assert msg.isApiErrorMessage is True

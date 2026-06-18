@@ -65,7 +65,9 @@ class TestGetToolSearchMode(unittest.TestCase):
             self.assertEqual(mode, ToolSearchMode.TST)
 
     def test_true_is_tst(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.TST)
 
     def test_false_is_standard(self):
@@ -73,11 +75,16 @@ class TestGetToolSearchMode(unittest.TestCase):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.STANDARD)
 
     def test_auto_is_tst_auto(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "auto", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "auto", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.TST_AUTO)
 
     def test_auto_0_is_tst(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "auto:0", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ,
+            {"ENABLE_TOOL_SEARCH": "auto:0", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""},
+        ):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.TST)
 
     def test_auto_100_is_standard(self):
@@ -85,14 +92,20 @@ class TestGetToolSearchMode(unittest.TestCase):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.STANDARD)
 
     def test_auto_50_is_tst_auto(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "auto:50", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ,
+            {"ENABLE_TOOL_SEARCH": "auto:50", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""},
+        ):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.TST_AUTO)
 
     def test_kill_switch(self):
-        with patch.dict(os.environ, {
-            "ENABLE_TOOL_SEARCH": "true",
-            "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "true",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "ENABLE_TOOL_SEARCH": "true",
+                "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "true",
+            },
+        ):
             self.assertEqual(get_tool_search_mode(), ToolSearchMode.STANDARD)
 
 
@@ -147,7 +160,9 @@ class TestIsToolSearchToolAvailable(unittest.TestCase):
 
 class TestIsToolSearchEnabledOptimistic(unittest.TestCase):
     def test_tst_mode(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             self.assertTrue(is_tool_search_enabled_optimistic())
 
     def test_standard_mode(self):
@@ -160,36 +175,44 @@ class TestExtractDiscoveredToolNames(unittest.TestCase):
         self.assertEqual(extract_discovered_tool_names([]), set())
 
     def test_tool_reference_in_user_message(self):
-        msgs = [{
-            "type": "user",
-            "content": [{
-                "type": "tool_result",
-                "tool_use_id": "123",
+        msgs = [
+            {
+                "type": "user",
                 "content": [
-                    {"type": "tool_reference", "tool_name": "mcp__tool_x"},
-                    {"type": "text", "text": "Found tool"},
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "123",
+                        "content": [
+                            {"type": "tool_reference", "tool_name": "mcp__tool_x"},
+                            {"type": "text", "text": "Found tool"},
+                        ],
+                    }
                 ],
-            }],
-        }]
+            }
+        ]
         result = extract_discovered_tool_names(msgs)
         self.assertIn("mcp__tool_x", result)
 
     def test_no_tool_reference(self):
-        msgs = [{
-            "type": "user",
-            "content": [{"type": "text", "text": "hello"}],
-        }]
+        msgs = [
+            {
+                "type": "user",
+                "content": [{"type": "text", "text": "hello"}],
+            }
+        ]
         result = extract_discovered_tool_names(msgs)
         self.assertEqual(result, set())
 
     def test_compact_boundary_carries_tools(self):
-        msgs = [{
-            "type": "system",
-            "subtype": "compact_boundary",
-            "compact_metadata": {
-                "pre_compact_discovered_tools": ["mcp__tool_a", "mcp__tool_b"],
-            },
-        }]
+        msgs = [
+            {
+                "type": "system",
+                "subtype": "compact_boundary",
+                "compact_metadata": {
+                    "pre_compact_discovered_tools": ["mcp__tool_a", "mcp__tool_b"],
+                },
+            }
+        ]
         result = extract_discovered_tool_names(msgs)
         self.assertIn("mcp__tool_a", result)
         self.assertIn("mcp__tool_b", result)
@@ -206,7 +229,9 @@ class TestFilterToolsForRequest(unittest.TestCase):
             self.assertEqual(len(result), 2)
 
     def test_tst_mode_filters_undiscovered(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             tools = [
                 _make_tool("Read"),
                 _make_tool("ToolSearch"),
@@ -219,20 +244,26 @@ class TestFilterToolsForRequest(unittest.TestCase):
             self.assertNotIn("mcp_tool", names)
 
     def test_discovered_tools_kept(self):
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             tools = [
                 _make_tool("Read"),
                 _make_tool("ToolSearch"),
                 _make_tool("mcp_tool", is_mcp=True),
             ]
-            messages = [{
-                "type": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": "123",
-                    "content": [{"type": "tool_reference", "tool_name": "mcp_tool"}],
-                }],
-            }]
+            messages = [
+                {
+                    "type": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "123",
+                            "content": [{"type": "tool_reference", "tool_name": "mcp_tool"}],
+                        }
+                    ],
+                }
+            ]
             result = filter_tools_for_request(tools, "claude-sonnet-4-6", messages=messages)
             names = [t.name for t in result]
             self.assertIn("mcp_tool", names)

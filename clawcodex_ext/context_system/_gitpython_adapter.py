@@ -47,6 +47,7 @@ def is_gitpython_available() -> bool:
 @AdapterRegistry.register("gitpython", env_var="CLAW_USE_GITPYTHON", dependency="git")
 class GitContextSnapshot:
     """Structured git context for prompt injection."""
+
     def __init__(
         self,
         available: bool,

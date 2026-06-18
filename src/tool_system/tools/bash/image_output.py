@@ -7,6 +7,7 @@ a shell command (e.g. ``matplotlib.savefig`` printed to stdout) emits a
 ``data:image/...;base64,...`` string, the Bash tool surfaces it as an image
 content block to the model instead of garbage text.
 """
+
 from __future__ import annotations
 
 import base64
@@ -85,6 +86,7 @@ def build_image_tool_result(stdout: str) -> list[dict[str, Any]] | None:
             detect_image_format_from_buffer,
             maybe_resize_image,
         )
+
         detected = detect_image_format_from_buffer(raw_bytes)
         try:
             result = maybe_resize_image(raw_bytes, len(raw_bytes), format_hint=detected)

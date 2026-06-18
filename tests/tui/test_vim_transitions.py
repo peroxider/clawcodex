@@ -237,9 +237,7 @@ def test_operator_self_repeat_is_line_op():
     """``dd`` enters line-wise delete."""
 
     ctx = _FakeCtx(text="line one\nline two", cursor=Cursor(0, 0))
-    result = transition(
-        OperatorState(op="delete", count=1), "d", ctx.as_transition_context()
-    )
+    result = transition(OperatorState(op="delete", count=1), "d", ctx.as_transition_context())
     assert result.next == IdleState()
     assert result.execute is not None
     result.execute()
@@ -256,9 +254,7 @@ def test_operator_count_after_d_enters_operator_count():
 def test_operator_text_obj_scope():
     ctx = _FakeCtx().as_transition_context()
     result = transition(OperatorState(op="delete", count=1), "i", ctx)
-    assert result.next == OperatorTextObjState(
-        op="delete", count=1, scope="inner"
-    )
+    assert result.next == OperatorTextObjState(op="delete", count=1, scope="inner")
 
 
 def test_operator_find_state():
@@ -269,18 +265,14 @@ def test_operator_find_state():
 
 def test_operator_motion_executes_operator_motion():
     ctx = _FakeCtx(text="hello world", cursor=Cursor(0, 0))
-    result = transition(
-        OperatorState(op="delete", count=1), "w", ctx.as_transition_context()
-    )
+    result = transition(OperatorState(op="delete", count=1), "w", ctx.as_transition_context())
     assert result.next == IdleState()
     assert result.execute is not None
     result.execute()
     assert ctx.text == "world"
     assert ctx.register_content == "hello "
     # Recorded change supports dot-repeat
-    assert any(
-        isinstance(c, OperatorChange) and c.motion == "w" for c in ctx.changes_recorded
-    )
+    assert any(isinstance(c, OperatorChange) and c.motion == "w" for c in ctx.changes_recorded)
 
 
 # ---- OperatorCount state --------------------------------------------------
@@ -306,9 +298,7 @@ def test_operator_count_multiplies_counts():
 
 def test_operator_count_accumulates_digits():
     ctx = _FakeCtx().as_transition_context()
-    result = transition(
-        OperatorCountState(op="delete", count=3, digits="2"), "5", ctx
-    )
+    result = transition(OperatorCountState(op="delete", count=3, digits="2"), "5", ctx)
     assert result.next == OperatorCountState(op="delete", count=3, digits="25")
 
 
@@ -330,9 +320,7 @@ def test_operator_count_multiplication_saturates():
 
 def test_find_state_executes_motion():
     ctx = _FakeCtx(text="hello world", cursor=Cursor(0, 0))
-    result = transition(
-        FindState(find="f", count=1), "o", ctx.as_transition_context()
-    )
+    result = transition(FindState(find="f", count=1), "o", ctx.as_transition_context())
     assert result.next == IdleState()
     result.execute()  # type: ignore[misc]
     assert ctx.cursor == Cursor(0, 4)
@@ -340,7 +328,7 @@ def test_find_state_executes_motion():
 
 
 def test_operator_find_executes_delete_through_char():
-    ctx = _FakeCtx(text="change me\"end", cursor=Cursor(0, 0))
+    ctx = _FakeCtx(text='change me"end', cursor=Cursor(0, 0))
     result = transition(
         OperatorFindState(op="change", count=1, find="f"),
         '"',
@@ -354,9 +342,7 @@ def test_operator_find_executes_delete_through_char():
 
 def test_replace_state_replaces_char():
     ctx = _FakeCtx(text="hello", cursor=Cursor(0, 1))
-    result = transition(
-        ReplaceState(count=1), "X", ctx.as_transition_context()
-    )
+    result = transition(ReplaceState(count=1), "X", ctx.as_transition_context())
     assert result.next == IdleState()
     result.execute()  # type: ignore[misc]
     assert ctx.text == "hXllo"
@@ -375,9 +361,7 @@ def test_g_gg_goes_to_buffer_start():
 
 def test_operator_g_dgg_deletes_to_top():
     ctx = _FakeCtx(text="line one\nline two\nline three", cursor=Cursor(2, 0))
-    result = transition(
-        OperatorGState(op="delete", count=1), "g", ctx.as_transition_context()
-    )
+    result = transition(OperatorGState(op="delete", count=1), "g", ctx.as_transition_context())
     assert result.next == IdleState()
     result.execute()  # type: ignore[misc]
     # Deletes lines 0..2 inclusive — everything.
@@ -388,9 +372,7 @@ def test_operator_g_dgg_sets_linewise_register():
     """``dgg`` records the register as linewise."""
 
     ctx = _FakeCtx(text="line one\nline two", cursor=Cursor(1, 0))
-    result = transition(
-        OperatorGState(op="delete", count=1), "g", ctx.as_transition_context()
-    )
+    result = transition(OperatorGState(op="delete", count=1), "g", ctx.as_transition_context())
     result.execute()  # type: ignore[misc]
     assert ctx.register_linewise is True
 
@@ -400,9 +382,7 @@ def test_operator_g_dgg_sets_linewise_register():
 
 def test_indent_state_double_arrow_indents():
     ctx = _FakeCtx(text="hello", cursor=Cursor(0, 0))
-    result = transition(
-        IndentState(dir=">", count=1), ">", ctx.as_transition_context()
-    )
+    result = transition(IndentState(dir=">", count=1), ">", ctx.as_transition_context())
     assert result.next == IdleState()
     result.execute()  # type: ignore[misc]
     assert ctx.text == "  hello"

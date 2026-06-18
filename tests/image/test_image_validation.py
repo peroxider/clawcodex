@@ -1,4 +1,5 @@
 """Tests for src.utils.image_validation — port of TS imageValidation.ts."""
+
 from __future__ import annotations
 
 import unittest
@@ -52,9 +53,11 @@ class TestValidateImagesForAPI(unittest.TestCase):
         self.assertEqual(len(cm.exception.oversized), 2)
 
     def test_mixed_image_and_text_within_limit_passes(self) -> None:
-        validate_images_for_api([
-            _msg([_text_block("hi"), _img_block(1000), _text_block("bye")]),
-        ])
+        validate_images_for_api(
+            [
+                _msg([_text_block("hi"), _img_block(1000), _text_block("bye")]),
+            ]
+        )
 
     def test_handles_nested_tool_result_with_image(self) -> None:
         """Image blocks inside content lists are detected regardless of where
@@ -101,10 +104,12 @@ class TestValidateImagesForAPI(unittest.TestCase):
     def test_tool_result_with_string_content_does_not_crash(self) -> None:
         """Defensive: a tool_result whose ``content`` is a plain string
         (no images) must not trip the new recursion."""
-        msgs = [{
-            "role": "user",
-            "content": [{"type": "tool_result", "tool_use_id": "x", "content": "ok"}],
-        }]
+        msgs = [
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "x", "content": "ok"}],
+            }
+        ]
         validate_images_for_api(msgs)  # should not raise
 
     def test_deeply_nested_tool_results_hit_depth_limit_not_recursion_error(self) -> None:
@@ -133,13 +138,18 @@ class TestValidateImagesForAPI(unittest.TestCase):
     def test_within_depth_limit_image_still_caught(self) -> None:
         """Sanity check the depth cap doesn't reject normal-depth tool_results."""
         # Realistic shape: single tool_result containing an image.
-        msgs = [{
-            "role": "user",
-            "content": [{
-                "type": "tool_result", "tool_use_id": "x",
-                "content": [_img_block(API_IMAGE_MAX_BASE64_SIZE + 1)],
-            }],
-        }]
+        msgs = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "x",
+                        "content": [_img_block(API_IMAGE_MAX_BASE64_SIZE + 1)],
+                    }
+                ],
+            }
+        ]
         with self.assertRaises(ImageSizeError):
             validate_images_for_api(msgs)
 

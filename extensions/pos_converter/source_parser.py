@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParamSpec:
     """一个操作参数的规范描述。"""
+
     name: str
     type_hint: str | None = None
     default: Any | None = None
@@ -39,26 +40,28 @@ class ParamSpec:
 @dataclass
 class SourceOperation:
     """组件内的一个可被 Agent 调用的操作。"""
+
     name: str
-    description: str                 # 方法 docstring 首段
+    description: str  # 方法 docstring 首段
     parameters: list[ParamSpec] = field(default_factory=list)
     return_type: str | None = None
-    source_code: str = ""            # 完整源码片段，嵌入技能参考
-    class_name: str | None = None    # 所属类名（用于 IO_RELATION 的 ClassName.methodName 命名）
-    file_stem: str = ""              # 源文件名（不含 .py，用于顶层函数去歧义）
-    has_docstring: bool = False     # 原始 docstring 是否非空
+    source_code: str = ""  # 完整源码片段，嵌入技能参考
+    class_name: str | None = None  # 所属类名（用于 IO_RELATION 的 ClassName.methodName 命名）
+    file_stem: str = ""  # 源文件名（不含 .py，用于顶层函数去歧义）
+    has_docstring: bool = False  # 原始 docstring 是否非空
 
 
 @dataclass
 class SourceComponent:
     """一个从 Python 源码提取的「组件」——对应一个模块目录或一个类。"""
-    name: str                        # "VideoOperations"
-    file_path: str                   # "组件/视频算子/video_ops/video_operations.py"
-    description: str                 # docstring 首段
+
+    name: str  # "VideoOperations"
+    file_path: str  # "组件/视频算子/video_ops/video_operations.py"
+    description: str  # docstring 首段
     operations: list[SourceOperation] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)  # import 列表（去重本地文件）
-    input_schema: dict = field(default_factory=dict)       # {name: type_hint}
-    output_schema: dict = field(default_factory=dict)      # {name: type_hint}
+    input_schema: dict = field(default_factory=dict)  # {name: type_hint}
+    output_schema: dict = field(default_factory=dict)  # {name: type_hint}
 
 
 # ---------------------------------------------------------------------------
@@ -82,19 +85,36 @@ class SourceCodeParser:
         最大递归深度（None 表示不限制）。
     """
 
-    _EXCLUDE_DIRS = frozenset({
-        "__pycache__", ".git", "node_modules", ".venv", "venv",
-        ".tox", ".egg-info", "dist", "build", "__pycache__",
-        "test", "tests", "example", "examples",
-    })
+    _EXCLUDE_DIRS = frozenset(
+        {
+            "__pycache__",
+            ".git",
+            "node_modules",
+            ".venv",
+            "venv",
+            ".tox",
+            ".egg-info",
+            "dist",
+            "build",
+            "__pycache__",
+            "test",
+            "tests",
+            "example",
+            "examples",
+        }
+    )
 
     # Patterns appended to user exclude_patterns for test/example filtering.
     # target  exact-name dirs, test_*/example_* prefix dirs, *_test/*_tests/
     # *_example/*_examples suffix dirs — without matching unrelated names
     # like "latest" or "attest" that a bare "*test*" glob would catch.
     _DEFAULT_EXCLUDE_PATTERNS = [
-        "test_*", "*_test", "*_tests",
-        "example_*", "*_example", "*_examples",
+        "test_*",
+        "*_test",
+        "*_tests",
+        "example_*",
+        "*_example",
+        "*_examples",
     ]
 
     def __init__(
@@ -119,9 +139,7 @@ class SourceCodeParser:
             return self._parsed
 
         if not self._source_dir.is_dir():
-            raise NotADirectoryError(
-                f"Source path is not a directory: {self._source_dir}"
-            )
+            raise NotADirectoryError(f"Source path is not a directory: {self._source_dir}")
 
         components: list[SourceComponent] = []
         self._walk_module(self._source_dir, depth=0, components=components)
@@ -186,9 +204,7 @@ class SourceCodeParser:
 
         py_files = sorted(dir_path.glob("*.py"))
         for py_file in py_files:
-            if py_file.name in ("__init__.py",) or self._should_exclude(
-                py_file.name
-            ):
+            if py_file.name in ("__init__.py",) or self._should_exclude(py_file.name):
                 continue
             try:
                 source = py_file.read_text(encoding="utf-8")
@@ -221,7 +237,8 @@ class SourceCodeParser:
                     # Exclude dunder methods (__init__, __call__, etc.) —
                     # Python protocol methods, not standalone external interfaces.
                     file_ops = [
-                        op for op in file_ops
+                        op
+                        for op in file_ops
                         if op.name != "main"
                         and not op.name.startswith("__")
                         and not op.name.startswith("test")
@@ -238,7 +255,8 @@ class SourceCodeParser:
                     # Exclude test* — test methods are never external API.
                     # Exclude main — CLI entry points, not library API.
                     file_ops = [
-                        op for op in file_ops
+                        op
+                        for op in file_ops
                         if op.name != "main"
                         and not op.name.startswith("__")
                         and not op.name.startswith("test")
@@ -255,9 +273,7 @@ class SourceCodeParser:
             components.append(
                 SourceComponent(
                     name=component_name,
-                    file_path=str(dir_path.relative_to(
-                        self._source_dir.parent
-                    )),
+                    file_path=str(dir_path.relative_to(self._source_dir.parent)),
                     description=package_desc or f"Module: {dir_path.name}",
                     operations=all_ops,
                     dependencies=sorted(all_deps),
@@ -277,6 +293,7 @@ class SourceCodeParser:
             return True
         for pattern in self._exclude_patterns:
             import fnmatch
+
             if fnmatch.fnmatch(name, pattern):
                 return True
         return False
@@ -378,9 +395,7 @@ class SourceCodeParser:
 
     # ---- docstring parsing ------------------------------------------------
 
-    def _parse_docstring(
-        self, docstring: str | None
-    ) -> tuple[str, list[ParamSpec]]:
+    def _parse_docstring(self, docstring: str | None) -> tuple[str, list[ParamSpec]]:
         """解析 docstring，提取首段描述和参数列表。
 
         兼容 Google / NumPy / reST 三种格式，降级取纯文本首段。
@@ -454,14 +469,10 @@ class SourceCodeParser:
                 in_args = True
                 continue
             if in_args:
-                if not stripped or stripped.startswith(
-                    ("returns:", "raises:", "yields:")
-                ):
+                if not stripped or stripped.startswith(("returns:", "raises:", "yields:")):
                     break
                 # Match "name (type): description" or "name: description"
-                match = re.match(
-                    r"^(\w+)\s*(?:\(([^)]*)\))?\s*:\s*(.*)", stripped
-                )
+                match = re.match(r"^(\w+)\s*(?:\(([^)]*)\))?\s*:\s*(.*)", stripped)
                 if match:
                     name, type_str, desc = match.groups()
                     params.append(
@@ -501,9 +512,7 @@ class SourceCodeParser:
                     name, rest = match.groups()
                     desc = rest.strip()
                     # Check if next lines are continuation of description
-                    params.append(
-                        ParamSpec(name=name, type_hint=desc if desc else None)
-                    )
+                    params.append(ParamSpec(name=name, type_hint=desc if desc else None))
                 elif params:
                     # Continuation of previous param's description
                     pass
@@ -537,9 +546,7 @@ class SourceCodeParser:
     def _infer_params(self, args: ast.arguments) -> list[ParamSpec]:
         """从 AST arguments 节点提取参数列表。"""
         params: list[ParamSpec] = []
-        defaults = [None] * (
-            len(args.args) - len(args.defaults)
-        ) + list(args.defaults)
+        defaults = [None] * (len(args.args) - len(args.defaults)) + list(args.defaults)
 
         for i, arg in enumerate(args.args):
             if arg.arg == "self" or arg.arg == "cls":

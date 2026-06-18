@@ -24,9 +24,7 @@ class DeepSeekProvider(OpenAICompatibleProvider):
 
     DEFAULT_BASE_URL = "https://api.deepseek.com"
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize DeepSeek provider.
 
         Args:
@@ -51,8 +49,10 @@ class DeepSeekProvider(OpenAICompatibleProvider):
             "base_url": self.base_url or self.DEFAULT_BASE_URL,
         }
         import os
+
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx
+
             kwargs["http_client"] = httpx.Client(verify=False)
         return OpenAI(**kwargs)
 

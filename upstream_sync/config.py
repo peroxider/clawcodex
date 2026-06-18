@@ -81,7 +81,7 @@ class PatchConfig(BaseModel):
 class SyncConfig(BaseModel):
     """High-level sync strategy thresholds."""
 
-    impact_threshold_auto: str = "low"      # below this → auto-resolve
+    impact_threshold_auto: str = "low"  # below this → auto-resolve
     impact_threshold_agent: str = "medium"  # below this → agent-assisted
     report_formats: list[str] = ["json", "markdown"]
 
@@ -92,6 +92,6 @@ class ProjectConfig(BaseModel):
     project_name: str
     source_lang: str = "python"
     upstream: UpstreamConfig
-    layers: list[LayerConfig]           # arbitrary number of layers
+    layers: list[LayerConfig]  # arbitrary number of layers
     patches: PatchConfig
     sync: SyncConfig

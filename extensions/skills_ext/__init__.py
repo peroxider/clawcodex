@@ -33,5 +33,6 @@ def init_skills_ext() -> None:
     Called by SkillRegistryExt when loading skills from clawscodex paths.
     """
     from .bundled import register_convert_pos_skill, register_dream_skill
+
     register_convert_pos_skill()
     register_dream_skill()

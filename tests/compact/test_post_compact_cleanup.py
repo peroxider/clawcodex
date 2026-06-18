@@ -53,6 +53,7 @@ class TestRunPostCompactCleanup(unittest.TestCase):
 
     def test_handles_failing_cache(self):
         """Failing cache doesn't break cleanup of others."""
+
         def bad_clear():
             raise RuntimeError("boom")
 

@@ -4,13 +4,15 @@ from dataclasses import replace
 from typing import Any
 
 from clawcodex_ext.cron_system.models import CronJitterConfig
-from clawcodex_ext.cron_system.notifications import \
-    build_missed_task_notification
+from clawcodex_ext.cron_system.notifications import build_missed_task_notification
 from clawcodex_ext.cron_system.runs import read_cron_runs
 from clawcodex_ext.cron_system.scheduler import CronScheduler
-from clawcodex_ext.cron_system.tasks import (add_cron_task, read_cron_tasks,
-                                             read_session_cron_tasks,
-                                             write_cron_tasks)
+from clawcodex_ext.cron_system.tasks import (
+    add_cron_task,
+    read_cron_tasks,
+    read_session_cron_tasks,
+    write_cron_tasks,
+)
 
 
 def test_check_once_fires_due_one_shot_and_deletes_it(tmp_path) -> None:
@@ -80,18 +82,14 @@ def test_check_once_keeps_run_queued_until_external_finalize(tmp_path) -> None:
     assert len(runs) == 1
     assert runs[0].status == "queued"
 
-    write_cron_tasks(
-        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)]
-    )
+    write_cron_tasks(tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=4_000)])
     second_due = scheduler.check_once(at_ms=5_000)
     assert second_due == []
     assert fired == ["ping"]
 
     finalize_cron_run(tmp_path, runs[0].id, "completed")
 
-    write_cron_tasks(
-        tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=6_000)]
-    )
+    write_cron_tasks(tmp_path, [replace(read_cron_tasks(tmp_path)[0], next_fire_at=6_000)])
     third_due = scheduler.check_once(at_ms=7_000)
     assert [item.id for item in third_due] == [task.id]
     assert fired == ["ping", "ping"]
@@ -281,13 +279,9 @@ def test_fire_callback_exception_marks_run_failed(tmp_path) -> None:
     def boom(prompt: str) -> None:
         raise RuntimeError("upstream glitch")
 
-    task = add_cron_task(
-        tmp_path, cron="*/5 * * * *", prompt="x", recurring=True, created_at=1_000
-    )
+    task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="x", recurring=True, created_at=1_000)
     write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
-    scheduler = _make_scheduler(
-        tmp_path, session_store=None, on_fire=boom, lock_acquired=True
-    )
+    scheduler = _make_scheduler(tmp_path, session_store=None, on_fire=boom, lock_acquired=True)
     scheduler.check_once(at_ms=3_000)
     runs = read_cron_runs(tmp_path)
     assert len(runs) == 1

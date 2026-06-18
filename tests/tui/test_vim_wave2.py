@@ -182,9 +182,7 @@ def test_find_next_forward_wrap() -> None:
 
 def test_find_next_forward_no_wrap_returns_none() -> None:
     buf = VimBuffer("foo bar foo")
-    hit = find_next(
-        buf, pattern="foo", after=Cursor(0, 10), wrap=False
-    )
+    hit = find_next(buf, pattern="foo", after=Cursor(0, 10), wrap=False)
     assert hit is None
 
 
@@ -307,9 +305,7 @@ def test_backward_then_n_continues_backward() -> None:
 
 def test_search_with_regex_special_chars() -> None:
     buf = VimBuffer("class Foo:\n  def bar():\n    pass")
-    hit = find_next(
-        buf, pattern=r"^\s+def\s+\w+", after=Cursor(0, 0)
-    )
+    hit = find_next(buf, pattern=r"^\s+def\s+\w+", after=Cursor(0, 0))
     # Search across newlines — multi-line pattern. Python's re by
     # default doesn't span newlines without DOTALL or MULTILINE; our
     # impl walks line-by-line so ``^`` matches at line start.

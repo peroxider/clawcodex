@@ -16,6 +16,7 @@ anything into :class:`clawcodex_ext.agent.registry.AgentRegistry`. The
 caller (typically ``get_agent_definitions_with_overrides``) is
 responsible for routing the returned list into the merge pipeline.
 """
+
 from __future__ import annotations
 
 import logging

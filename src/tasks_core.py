@@ -13,6 +13,7 @@ stores ``TaskStateBase`` subclasses is implemented in ``src.task_registry``;
 its ``update`` mutator MUST be a synchronous pure function — never ``await``
 inside it. See ``RuntimeTaskRegistry.update`` for enforcement.
 """
+
 from __future__ import annotations
 
 import secrets

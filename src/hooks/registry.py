@@ -26,7 +26,9 @@ class RegisteredHook:
     @property
     def dedup_key(self) -> str:
         if self.config.type == "command":
-            return f"{self.event}:{self.config.type}:{self.config.command}:{self.config.matcher or ''}"
+            return (
+                f"{self.event}:{self.config.type}:{self.config.command}:{self.config.matcher or ''}"
+            )
         elif self.config.type == "http":
             return f"{self.event}:{self.config.type}:{self.config.url or ''}:{self.config.matcher or ''}"
         elif self.config.type == "prompt":
@@ -94,10 +96,7 @@ class AsyncHookRegistry:
             hooks = list(self._hooks.get(event, []))
 
         if tool_name is not None:
-            hooks = [
-                h for h in hooks
-                if _matches_tool(h.config.matcher, tool_name)
-            ]
+            hooks = [h for h in hooks if _matches_tool(h.config.matcher, tool_name)]
 
         return hooks
 
@@ -120,9 +119,7 @@ class AsyncHookRegistry:
             removed = 0
             for event in ALL_HOOK_EVENTS:
                 before = len(self._hooks[event])
-                self._hooks[event] = [
-                    h for h in self._hooks[event] if h.source != source
-                ]
+                self._hooks[event] = [h for h in self._hooks[event] if h.source != source]
                 removed += before - len(self._hooks[event])
             return removed
 

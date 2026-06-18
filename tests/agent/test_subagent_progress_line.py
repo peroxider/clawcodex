@@ -10,6 +10,7 @@ The helper lives in ``src.tool_system.tools.agent``; these tests pin the
 formatter contract so a future refactor can't silently regress back to the
 placeholder string.
 """
+
 from __future__ import annotations
 
 from src.tool_system.tools.agent import _format_subagent_tool_use
@@ -33,18 +34,14 @@ def test_bash_includes_command() -> None:
 
 
 def test_bash_flattens_multiline_command() -> None:
-    line = _format_subagent_tool_use(
-        "worker", "Bash", {"command": "echo a\necho b"}
-    )
+    line = _format_subagent_tool_use("worker", "Bash", {"command": "echo a\necho b"})
     # Newlines collapse so the line stays single-row in the terminal.
     assert "\n" not in line[:-1]  # only the trailing newline counts
     assert "echo a echo b" in line
 
 
 def test_grep_includes_pattern_and_path() -> None:
-    line = _format_subagent_tool_use(
-        "general-purpose", "Grep", {"pattern": "TODO", "path": "src"}
-    )
+    line = _format_subagent_tool_use("general-purpose", "Grep", {"pattern": "TODO", "path": "src"})
     assert line == "  ⎿ [general-purpose] Grep(TODO · src)\n"
 
 

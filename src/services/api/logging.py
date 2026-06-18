@@ -42,19 +42,25 @@ def accumulate_usage(
         return NonNullableUsage(
             input_tokens=accumulated.input_tokens + delta.input_tokens,
             output_tokens=accumulated.output_tokens + delta.output_tokens,
-            cache_creation_input_tokens=accumulated.cache_creation_input_tokens + delta.cache_creation_input_tokens,
-            cache_read_input_tokens=accumulated.cache_read_input_tokens + delta.cache_read_input_tokens,
+            cache_creation_input_tokens=accumulated.cache_creation_input_tokens
+            + delta.cache_creation_input_tokens,
+            cache_read_input_tokens=accumulated.cache_read_input_tokens
+            + delta.cache_read_input_tokens,
         )
 
     return NonNullableUsage(
         input_tokens=accumulated.input_tokens + delta.get("input_tokens", 0),
         output_tokens=accumulated.output_tokens + delta.get("output_tokens", 0),
-        cache_creation_input_tokens=accumulated.cache_creation_input_tokens + delta.get("cache_creation_input_tokens", 0),
-        cache_read_input_tokens=accumulated.cache_read_input_tokens + delta.get("cache_read_input_tokens", 0),
+        cache_creation_input_tokens=accumulated.cache_creation_input_tokens
+        + delta.get("cache_creation_input_tokens", 0),
+        cache_read_input_tokens=accumulated.cache_read_input_tokens
+        + delta.get("cache_read_input_tokens", 0),
     )
 
 
-def update_usage(target: NonNullableUsage, source: dict[str, int] | NonNullableUsage | None) -> None:
+def update_usage(
+    target: NonNullableUsage, source: dict[str, int] | NonNullableUsage | None
+) -> None:
     if source is None:
         return
     if isinstance(source, NonNullableUsage):

@@ -1,5 +1,5 @@
-"""Facade — context_system/prompt_assembly.py has been moved to clawcodex_ext (lazy proxy).
-"""
+"""Facade — context_system/prompt_assembly.py has been moved to clawcodex_ext (lazy proxy)."""
+
 from __future__ import annotations
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
 def __getattr__(name: str):
     """Lazy import from clawcodex_ext.context_system.prompt_assembly on first access."""
     import clawcodex_ext.context_system.prompt_assembly as _mod
+
     if name in _mod.__dict__:
         val = _mod.__dict__[name]
         globals()[name] = val

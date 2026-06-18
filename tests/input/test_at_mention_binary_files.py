@@ -232,8 +232,7 @@ class TestPdfAtMention(unittest.TestCase):
         self._write("nuly.dat", payload)
         _, atts = expand_at_mentions("@nuly.dat", cwd=self.cwd)
         self.assertEqual(len(atts), 1)
-        self.assertEqual(atts[0]["kind"], "binary",
-                         "NUL-heavy decode must NOT inline as kind=file")
+        self.assertEqual(atts[0]["kind"], "binary", "NUL-heavy decode must NOT inline as kind=file")
         rendered = _render(atts)
         self.assertNotIn(b"\x00", rendered)
 
@@ -255,8 +254,11 @@ class TestPdfAtMention(unittest.TestCase):
         self._write("noisy.bad", payload)
         _, atts = expand_at_mentions("@noisy.bad", cwd=self.cwd)
         self.assertEqual(len(atts), 1)
-        self.assertEqual(atts[0]["kind"], "binary",
-                         "decoded text with high U+FFFD fraction must NOT inline as kind=file")
+        self.assertEqual(
+            atts[0]["kind"],
+            "binary",
+            "decoded text with high U+FFFD fraction must NOT inline as kind=file",
+        )
         rendered = _render(atts)
         self.assertNotIn(b"\xef\xbf\xbd", rendered)
 
@@ -272,6 +274,7 @@ class TestPdfAtMention(unittest.TestCase):
         except ImportError:  # pragma: no cover
             self.skipTest("Pillow required")
         import io
+
         buf = io.BytesIO()
         Image.new("RGB", (1, 1), (255, 0, 0)).save(buf, format="PNG")
         self._write("pixel.png", buf.getvalue())

@@ -42,6 +42,7 @@ this WI; the chapter-11 follow-up ticket will land a cleanup policy.
 This module DOES expose ``get_agent_transcript_path`` / ``ensure_transcript_dir``
 so the future GC has a stable target to walk.
 """
+
 from __future__ import annotations
 
 import json
@@ -287,6 +288,7 @@ def _extract_ts_epoch(message: Any) -> float | None:
         iso = iso[:-1] + "+00:00"
     try:
         from datetime import datetime
+
         dt = datetime.fromisoformat(iso)
     except (TypeError, ValueError):
         return None

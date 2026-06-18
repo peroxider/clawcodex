@@ -43,11 +43,15 @@ class TestDiagnosticReport:
         assert report.unhealthy_count == 0
 
     def test_mixed_report(self):
-        report = DiagnosticReport(servers=[
-            ServerDiagnostic(name="s1", scope="user", transport_type="stdio", status="healthy"),
-            ServerDiagnostic(name="s2", scope="user", transport_type="http", status="failed"),
-            ServerDiagnostic(name="s3", scope="project", transport_type="sse", status="healthy"),
-        ])
+        report = DiagnosticReport(
+            servers=[
+                ServerDiagnostic(name="s1", scope="user", transport_type="stdio", status="healthy"),
+                ServerDiagnostic(name="s2", scope="user", transport_type="http", status="failed"),
+                ServerDiagnostic(
+                    name="s3", scope="project", transport_type="sse", status="healthy"
+                ),
+            ]
+        )
         assert report.total_count == 3
         assert report.healthy_count == 2
         assert report.unhealthy_count == 1
@@ -58,16 +62,18 @@ class TestDiagnosticReport:
         assert "No MCP servers configured" in text
 
     def test_format_report_with_servers(self):
-        report = DiagnosticReport(servers=[
-            ServerDiagnostic(
-                name="my-server",
-                scope="project",
-                transport_type="stdio",
-                status="healthy",
-                latency_ms=150,
-                capabilities={"tools": True, "prompts": False},
-            ),
-        ])
+        report = DiagnosticReport(
+            servers=[
+                ServerDiagnostic(
+                    name="my-server",
+                    scope="project",
+                    transport_type="stdio",
+                    status="healthy",
+                    latency_ms=150,
+                    capabilities={"tools": True, "prompts": False},
+                ),
+            ]
+        )
         text = report.format_report()
         assert "my-server" in text
         assert "healthy" in text.lower() or "✓" in text

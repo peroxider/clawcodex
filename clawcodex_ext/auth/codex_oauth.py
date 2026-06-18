@@ -29,7 +29,9 @@ CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 120
 
 
 class CodexAuthError(RuntimeError):
-    def __init__(self, message: str, *, code: str = "codex_auth_error", relogin_required: bool = False):
+    def __init__(
+        self, message: str, *, code: str = "codex_auth_error", relogin_required: bool = False
+    ):
         super().__init__(message)
         self.code = code
         self.relogin_required = relogin_required
@@ -72,7 +74,9 @@ def start_codex_device_flow(*, timeout_seconds: float = 15.0) -> CodexDeviceFlow
             timeout=timeout_seconds,
         )
     except Exception as exc:
-        raise CodexAuthError(f"Failed to request Codex device code: {exc}", code="device_code_request_failed") from exc
+        raise CodexAuthError(
+            f"Failed to request Codex device code: {exc}", code="device_code_request_failed"
+        ) from exc
     if response.status_code != 200:
         raise CodexAuthError(
             f"Codex device code request returned status {response.status_code}.",
@@ -82,9 +86,13 @@ def start_codex_device_flow(*, timeout_seconds: float = 15.0) -> CodexDeviceFlow
     user_code = data.get("user_code")
     device_auth_id = data.get("device_auth_id")
     if not isinstance(user_code, str) or not user_code:
-        raise CodexAuthError("Codex device code response is missing user_code.", code="device_code_incomplete")
+        raise CodexAuthError(
+            "Codex device code response is missing user_code.", code="device_code_incomplete"
+        )
     if not isinstance(device_auth_id, str) or not device_auth_id:
-        raise CodexAuthError("Codex device code response is missing device_auth_id.", code="device_code_incomplete")
+        raise CodexAuthError(
+            "Codex device code response is missing device_auth_id.", code="device_code_incomplete"
+        )
     return CodexDeviceFlow(
         user_code=user_code,
         device_auth_id=device_auth_id,
@@ -93,7 +101,9 @@ def start_codex_device_flow(*, timeout_seconds: float = 15.0) -> CodexDeviceFlow
     )
 
 
-def poll_codex_device_flow(flow: CodexDeviceFlow, *, timeout_seconds: float = 15.0) -> dict[str, str] | None:
+def poll_codex_device_flow(
+    flow: CodexDeviceFlow, *, timeout_seconds: float = 15.0
+) -> dict[str, str] | None:
     try:
         response = httpx.post(
             CODEX_DEVICE_TOKEN_URL,
@@ -102,7 +112,9 @@ def poll_codex_device_flow(flow: CodexDeviceFlow, *, timeout_seconds: float = 15
             timeout=timeout_seconds,
         )
     except Exception as exc:
-        raise CodexAuthError(f"Codex device auth polling failed: {exc}", code="device_code_poll_failed") from exc
+        raise CodexAuthError(
+            f"Codex device auth polling failed: {exc}", code="device_code_poll_failed"
+        ) from exc
     if response.status_code in {403, 404}:
         return None
     if response.status_code != 200:
@@ -114,9 +126,15 @@ def poll_codex_device_flow(flow: CodexDeviceFlow, *, timeout_seconds: float = 15
     authorization_code = data.get("authorization_code")
     code_verifier = data.get("code_verifier")
     if not isinstance(authorization_code, str) or not authorization_code:
-        raise CodexAuthError("Codex device auth response is missing authorization_code.", code="device_code_incomplete_exchange")
+        raise CodexAuthError(
+            "Codex device auth response is missing authorization_code.",
+            code="device_code_incomplete_exchange",
+        )
     if not isinstance(code_verifier, str) or not code_verifier:
-        raise CodexAuthError("Codex device auth response is missing code_verifier.", code="device_code_incomplete_exchange")
+        raise CodexAuthError(
+            "Codex device auth response is missing code_verifier.",
+            code="device_code_incomplete_exchange",
+        )
     return {"authorization_code": authorization_code, "code_verifier": code_verifier}
 
 
@@ -141,7 +159,11 @@ def exchange_codex_authorization(
 
 def refresh_codex_tokens(refresh_token: str, *, timeout_seconds: float = 20.0) -> CodexOAuthTokens:
     if not refresh_token.strip():
-        raise CodexAuthError("Codex auth is missing refresh_token.", code="codex_auth_missing_refresh_token", relogin_required=True)
+        raise CodexAuthError(
+            "Codex auth is missing refresh_token.",
+            code="codex_auth_missing_refresh_token",
+            relogin_required=True,
+        )
     return _token_request(
         {
             "grant_type": "refresh_token",
@@ -153,7 +175,9 @@ def refresh_codex_tokens(refresh_token: str, *, timeout_seconds: float = 20.0) -
     )
 
 
-def login_codex_device_flow(*, console: Any | None = None, timeout_seconds: float = 15 * 60) -> CodexOAuthTokens:
+def login_codex_device_flow(
+    *, console: Any | None = None, timeout_seconds: float = 15 * 60
+) -> CodexOAuthTokens:
     flow = start_codex_device_flow()
     _print(console, "To continue, follow these steps:\n")
     _print(console, "  1. Open this URL in your browser:")
@@ -171,7 +195,9 @@ def login_codex_device_flow(*, console: Any | None = None, timeout_seconds: floa
         tokens = exchange_codex_authorization(result["authorization_code"], result["code_verifier"])
         save_codex_tokens(tokens, source="device-code")
         return tokens
-    raise CodexAuthError("Codex login timed out.", code="device_code_timeout", relogin_required=True)
+    raise CodexAuthError(
+        "Codex login timed out.", code="device_code_timeout", relogin_required=True
+    )
 
 
 def resolve_codex_runtime_credentials(
@@ -221,12 +247,17 @@ def get_codex_auth_status() -> CodexAuthStatus:
     )
 
 
-def _token_request(data: dict[str, str], *, timeout_seconds: float, error_code: str) -> CodexOAuthTokens:
+def _token_request(
+    data: dict[str, str], *, timeout_seconds: float, error_code: str
+) -> CodexOAuthTokens:
     try:
         response = httpx.post(
             CODEX_OAUTH_TOKEN_URL,
             data=data,
-            headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+            },
             timeout=timeout_seconds,
         )
     except Exception as exc:
@@ -243,7 +274,11 @@ def _token_request(data: dict[str, str], *, timeout_seconds: float, error_code: 
                 error = error.get("code") or error.get("type")
             if isinstance(description, str) and description:
                 message = f"Codex token request failed: {description}"
-            if isinstance(error, str) and error in {"invalid_grant", "invalid_token", "invalid_request"}:
+            if isinstance(error, str) and error in {
+                "invalid_grant",
+                "invalid_token",
+                "invalid_request",
+            }:
                 relogin_required = True
         except Exception:
             pass
@@ -252,9 +287,17 @@ def _token_request(data: dict[str, str], *, timeout_seconds: float, error_code: 
     access_token = payload.get("access_token")
     refresh_token = payload.get("refresh_token") or data.get("refresh_token")
     if not isinstance(access_token, str) or not access_token.strip():
-        raise CodexAuthError("Codex token response is missing access_token.", code=f"{error_code}_missing_access_token", relogin_required=True)
+        raise CodexAuthError(
+            "Codex token response is missing access_token.",
+            code=f"{error_code}_missing_access_token",
+            relogin_required=True,
+        )
     if not isinstance(refresh_token, str) or not refresh_token.strip():
-        raise CodexAuthError("Codex token response is missing refresh_token.", code=f"{error_code}_missing_refresh_token", relogin_required=True)
+        raise CodexAuthError(
+            "Codex token response is missing refresh_token.",
+            code=f"{error_code}_missing_refresh_token",
+            relogin_required=True,
+        )
     expires_at = None
     expires_in = payload.get("expires_in")
     if isinstance(expires_in, (int, float)):

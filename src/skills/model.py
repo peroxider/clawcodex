@@ -70,6 +70,7 @@ class Skill:
             content = f"Base directory for this skill: {self.base_dir}\n\n{content}"
         if args:
             from .argument_substitution import substitute_arguments
+
             content = substitute_arguments(
                 content,
                 args,

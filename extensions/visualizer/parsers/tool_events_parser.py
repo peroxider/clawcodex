@@ -35,6 +35,7 @@ class ToolEventsParser:
         # at module level would therefore re-enter this module mid-init
         # and crash with a circular-import error. Defer until first use.
         from ..builders.operation_categorizer import OperationCategorizer
+
         self._categorizer = OperationCategorizer()
 
     def parse_file(self, path: Path | str) -> list[TimelineBar]:
@@ -65,7 +66,13 @@ class ToolEventsParser:
         turn = entry.get("turn", 0)
 
         self._bar_counter += 1
-        status = BarStatus.SUCCESS if approved is True else BarStatus.ERROR if approved is False else BarStatus.WARNING
+        status = (
+            BarStatus.SUCCESS
+            if approved is True
+            else BarStatus.ERROR
+            if approved is False
+            else BarStatus.WARNING
+        )
 
         bar = TimelineBar(
             id=f"tev-{self._bar_counter}",

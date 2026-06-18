@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CollapseCommit:
     """One collapse operation: the archived message UUIDs and their summary."""
+
     archived: list[str]  # UUIDs of messages that were collapsed
     summary: str
 
@@ -47,6 +48,7 @@ class ContextCollapseStore:
     Each commit records a set of archived message UUIDs and the summary
     that replaces them in the projected view.
     """
+
     commits: list[CollapseCommit] = field(default_factory=list)
     _enabled: bool = True
 

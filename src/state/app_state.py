@@ -259,6 +259,7 @@ def _on_advisor_model_change(old: AppState, new: AppState) -> None:
     # write.
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     try:
         mgr = cfg_mod._get_default_manager()
         cfg = mgr.load_global()
@@ -299,6 +300,7 @@ def _on_advisor_provider_change(old: AppState, new: AppState) -> None:
         return
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     try:
         mgr = cfg_mod._get_default_manager()
         cfg = mgr.load_global()
@@ -332,6 +334,7 @@ def _on_advisor_client_mode_change(old: AppState, new: AppState) -> None:
         return
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     try:
         mgr = cfg_mod._get_default_manager()
         cfg = mgr.load_global()

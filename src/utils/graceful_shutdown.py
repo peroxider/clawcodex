@@ -133,9 +133,7 @@ def reset_for_test_only() -> None:
     discipline used by ``bootstrap.state.reset_state_for_tests``.
     """
     if os.environ.get("PYTEST_CURRENT_TEST") is None:
-        raise RuntimeError(
-            "reset_for_test_only can only be called in tests"
-        )
+        raise RuntimeError("reset_for_test_only can only be called in tests")
     global _shutdown_started, _setup_done
     with _cleanups_lock:
         _cleanups.clear()

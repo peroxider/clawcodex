@@ -127,6 +127,7 @@ class RuntimeContext:
         session = None
         if options.resume_session_id:
             from clawcodex_ext.agent.session_ext import resume_session_with_tail
+
             session, _tail_follower = resume_session_with_tail(
                 options.resume_session_id,
             )
@@ -134,6 +135,7 @@ class RuntimeContext:
         # Fork session: load existing history into a new session (S-R4-F)
         if options.fork_session_id and not options.resume_session_id:
             from src.agent import Session as AgentSession
+
             old_session = AgentSession.resume(options.fork_session_id)
             if old_session is not None:
                 # Create a brand new session
@@ -143,9 +145,7 @@ class RuntimeContext:
                 )
                 # Copy conversation messages from old session
                 if old_session.conversation and old_session.conversation.messages:
-                    new_session.conversation.messages = list(
-                        old_session.conversation.messages
-                    )
+                    new_session.conversation.messages = list(old_session.conversation.messages)
                 session = new_session
 
         # S-R4-AT: truncate conversation to a specific message index
@@ -154,7 +154,7 @@ class RuntimeContext:
             if session.conversation and session.conversation.messages:
                 total = len(session.conversation.messages)
                 if 0 <= idx < total:
-                    session.conversation.messages = session.conversation.messages[:idx + 1]
+                    session.conversation.messages = session.conversation.messages[: idx + 1]
 
         runtime = cls(
             provider=provider,
@@ -183,6 +183,7 @@ class RuntimeContext:
             registry.validate_provider(provider_name)
         except UnknownProviderError:
             import sys
+
             print(
                 f"Warning: provider '{provider_name}' is not in the built-in list — "
                 f"proceeding anyway",

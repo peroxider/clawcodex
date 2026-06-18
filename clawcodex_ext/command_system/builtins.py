@@ -205,6 +205,7 @@ def skills_command_call(args: str, context: CommandContext) -> LocalCommandResul
     """
     try:
         from src.skills.loader import get_all_skills
+
         # Pass project_root to find skills in project directories
         skills = get_all_skills(project_root=context.cwd or context.workspace_root)
     except Exception:
@@ -269,7 +270,10 @@ def _call_cron_tool(
 
 
 def _has_cron_tool_runtime(context: CommandContext) -> bool:
-    return getattr(context, "tool_registry", None) is not None and getattr(context, "tool_context", None) is not None
+    return (
+        getattr(context, "tool_registry", None) is not None
+        and getattr(context, "tool_context", None) is not None
+    )
 
 
 def _cron_runtime_required_result(action: str) -> LocalCommandResult:
@@ -471,8 +475,8 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
         elif hasattr(context.conversation, "messages"):
             # Fall back for simple mock conversations
             for msg in context.conversation.messages:
-                role = getattr(msg, 'role', 'unknown')
-                content = getattr(msg, 'content', '')
+                role = getattr(msg, "role", "unknown")
+                content = getattr(msg, "content", "")
                 conversation_api.append({"role": role, "content": content})
 
         # Get system prompt from config
@@ -503,6 +507,7 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
                 loop = None
             if loop and loop.is_running():
                 import concurrent.futures
+
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     claude_md_content = pool.submit(asyncio.run, _load()).result(timeout=10)
             else:
@@ -545,6 +550,7 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
         return LocalCommandResult(type="text", value=markdown)
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         return LocalCommandResult(type="text", value=f"Context analysis failed: {e}")
 
@@ -596,13 +602,16 @@ async def _compact_async(args: str, context: CommandContext) -> LocalCommandResu
                 post_compact_count=result.post_compact_count,
                 tokens_saved=result.tokens_saved,
                 trigger=result.trigger,
-                summary_preview=result.summary_text[:200] if len(result.summary_text) > 200 else result.summary_text,
+                summary_preview=result.summary_text[:200]
+                if len(result.summary_text) > 200
+                else result.summary_text,
             ),
         )
     except ValueError as e:
         return LocalCommandResult(type="text", value=str(e))
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         return LocalCommandResult(
             type="text",
@@ -629,6 +638,7 @@ def _read_current_advisor_model(context: CommandContext) -> str | None:
             pass
     try:
         from src.settings.settings import get_settings
+
         configured = (get_settings().advisor_model or "").strip()
         return configured or None
     except Exception:
@@ -648,6 +658,7 @@ def _write_advisor_model(context: CommandContext, value: str | None) -> None:
     store = getattr(context, "app_state_store", None)
     if store is not None:
         from src.state.app_state import replace_state
+
         store.set_state(lambda s: replace_state(s, advisor_model=value or None))
         return
     # No reactive store — write straight to settings + invalidate cache
@@ -657,6 +668,7 @@ def _write_advisor_model(context: CommandContext, value: str | None) -> None:
     # via ``load_config()`` / ``_get_default_manager().get_merged()``.
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
     settings_section = cfg.get("settings")
@@ -681,6 +693,7 @@ def _read_current_advisor_provider(context: CommandContext) -> str:
             pass
     try:
         from src.settings.settings import get_settings
+
         return (getattr(get_settings(), "advisor_provider", "") or "").strip()
     except Exception:
         return ""
@@ -694,12 +707,12 @@ def _write_advisor_provider(context: CommandContext, value: str | None) -> None:
     store = getattr(context, "app_state_store", None)
     if store is not None:
         from src.state.app_state import replace_state
-        store.set_state(
-            lambda s: replace_state(s, advisor_provider=(normalized or None))
-        )
+
+        store.set_state(lambda s: replace_state(s, advisor_provider=(normalized or None)))
         return
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
     settings_section = cfg.get("settings")
@@ -717,6 +730,7 @@ def _list_configured_providers() -> list[str]:
     user-supplied provider prefix refers to a real entry."""
     try:
         from src import config as cfg_mod
+
         mgr = cfg_mod._get_default_manager()
         cfg = mgr.load_global()
         providers = cfg.get("providers")
@@ -739,6 +753,7 @@ def _read_current_advisor_client_mode(context: CommandContext) -> bool:
             pass
     try:
         from src.settings.settings import get_settings
+
         return bool(getattr(get_settings(), "advisor_client_mode", False))
     except Exception:
         return False
@@ -750,10 +765,12 @@ def _write_advisor_client_mode(context: CommandContext, value: bool) -> None:
     store = getattr(context, "app_state_store", None)
     if store is not None:
         from src.state.app_state import replace_state
+
         store.set_state(lambda s: replace_state(s, advisor_client_mode=bool(value)))
         return
     from src import config as cfg_mod
     from src.settings.settings import invalidate_settings_cache
+
     mgr = cfg_mod._get_default_manager()
     cfg = mgr.load_global()
     settings_section = cfg.get("settings")
@@ -810,10 +827,7 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
     if not can_user_configure_advisor(provider):
         return LocalCommandResult(
             type="text",
-            value=(
-                "Advisor is disabled by the CLAUDE_CODE_DISABLE_ADVISOR_TOOL "
-                "env var."
-            ),
+            value=("Advisor is disabled by the CLAUDE_CODE_DISABLE_ADVISOR_TOOL env var."),
         )
 
     # Tokenize raw args so flag handling is order-insensitive. A
@@ -874,18 +888,15 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
                     "are set.)"
                 )
             providers = _list_configured_providers()
-            providers_hint = (
-                f"Configured providers: {', '.join(providers)}.\n"
-                if providers else ""
-            )
+            providers_hint = f"Configured providers: {', '.join(providers)}.\n" if providers else ""
             return (
                 "Advisor: not set\n"
                 f"{providers_hint}"
-                "Use \"/advisor <provider>:<model>\" to enable, e.g.:\n"
-                '  /advisor anthropic:claude-opus-4-7   (direct Anthropic)\n'
-                '  /advisor openai:claude-opus-4-7      (via openai-compat, '
-                'e.g. litellm)\n'
-                '  /advisor openrouter:anthropic/claude-opus-4.1'
+                'Use "/advisor <provider>:<model>" to enable, e.g.:\n'
+                "  /advisor anthropic:claude-opus-4-7   (direct Anthropic)\n"
+                "  /advisor openai:claude-opus-4-7      (via openai-compat, "
+                "e.g. litellm)\n"
+                "  /advisor openrouter:anthropic/claude-opus-4.1"
                 f"{partial}"
             )
         mode = decide_advisor_mode(
@@ -917,15 +928,13 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
     if not arg and force_client_flag is False:
         if not current_client_mode:
             return LocalCommandResult(
-                type="text", value="Advisor client mode already off.",
+                type="text",
+                value="Advisor client mode already off.",
             )
         _write_advisor_client_mode(context, False)
         return LocalCommandResult(
             type="text",
-            value=(
-                "Advisor client mode disabled. "
-                "Server-side will be used when applicable."
-            ),
+            value=("Advisor client mode disabled. Server-side will be used when applicable."),
         )
 
     # --client alone (no model) → just turn on the forced-client flag.
@@ -937,13 +946,14 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
                 type="text",
                 value=(
                     "Cannot force client mode: advisor is not fully "
-                    "configured. Use \"/advisor <provider>:<model> "
-                    "--client\" together."
+                    'configured. Use "/advisor <provider>:<model> '
+                    '--client" together.'
                 ),
             )
         if current_client_mode:
             return LocalCommandResult(
-                type="text", value="Advisor client mode already on.",
+                type="text",
+                value="Advisor client mode already on.",
             )
         _write_advisor_client_mode(context, True)
         return LocalCommandResult(
@@ -970,26 +980,25 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
                 else (previous_model or previous_provider or "?")
             )
             return LocalCommandResult(
-                type="text", value=f"Advisor disabled (was {prior}).",
+                type="text",
+                value=f"Advisor disabled (was {prior}).",
             )
         return LocalCommandResult(
-            type="text", value="Advisor already unset.",
+            type="text",
+            value="Advisor already unset.",
         )
 
     # Parse <provider>:<model> — provider must be a known config key.
     raw = arg
     if ":" not in raw:
         providers = _list_configured_providers()
-        providers_hint = (
-            f" Configured providers: {', '.join(providers)}."
-            if providers else ""
-        )
+        providers_hint = f" Configured providers: {', '.join(providers)}." if providers else ""
         return LocalCommandResult(
             type="text",
             value=(
                 "Advisor requires explicit <provider>:<model> syntax.\n"
                 f"Got: {raw!r}.{providers_hint}\n"
-                'Example: /advisor anthropic:claude-opus-4-7'
+                "Example: /advisor anthropic:claude-opus-4-7"
             ),
         )
     provider_part, model_part = raw.split(":", 1)
@@ -1022,7 +1031,8 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
         resolved = resolve_model(model_part)
     except Exception as e:
         return LocalCommandResult(
-            type="text", value=f"Invalid advisor model: {e}",
+            type="text",
+            value=f"Invalid advisor model: {e}",
         )
     if not validate_model_name(resolved):
         return LocalCommandResult(
@@ -1042,9 +1052,7 @@ def advisor_command_call(args: str, context: CommandContext) -> LocalCommandResu
     # mismatches immediately (e.g., they expected server-side but the
     # main model doesn't qualify).
     effective_client_mode = (
-        force_client_flag
-        if force_client_flag is not None
-        else current_client_mode
+        force_client_flag if force_client_flag is not None else current_client_mode
     )
     chosen_mode = decide_advisor_mode(
         provider,
@@ -1091,6 +1099,7 @@ def compact_command_call(args: str, context: CommandContext) -> LocalCommandResu
             return asyncio.run(_compact_async(args, context))
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             return _sync_compact_fallback(context)
 
@@ -1133,10 +1142,7 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
         compacted, saved = microcompact_messages(stripped)
 
         # Find boundary position
-        boundary_indices = [
-            i for i, m in enumerate(messages)
-            if is_compact_boundary_message(m)
-        ]
+        boundary_indices = [i for i, m in enumerate(messages) if is_compact_boundary_message(m)]
 
         if boundary_indices:
             insert_pos = max(boundary_indices) + 1
@@ -1144,7 +1150,9 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
             insert_pos = 0
 
         # Create simple text summary
-        summary_parts = [f"Conversation had {len(after_boundary)} messages ({pre_tokens:,} tokens)."]
+        summary_parts = [
+            f"Conversation had {len(after_boundary)} messages ({pre_tokens:,} tokens)."
+        ]
         summary_text = "\n".join(summary_parts)
 
         boundary = create_compact_boundary_message(
@@ -1371,7 +1379,9 @@ TELEMETRY_COMMAND = LocalCommand(
 
 
 # Synchronous versions for REPL integration
-def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> tuple[bool, str | None, str | None]:
+def execute_command_sync(
+    cmd_name: str, args: str, context: CommandContext
+) -> tuple[bool, str | None, str | None]:
     """
     Execute a command synchronously.
 
@@ -1381,7 +1391,9 @@ def execute_command_sync(cmd_name: str, args: str, context: CommandContext) -> t
     cmd = get_command_registry().get(cmd_name)
     if cmd is None:
         for builtin_cmd in get_builtin_commands():
-            if builtin_cmd.name.lower() == cmd_name.lower() or cmd_name.lower() in [a.lower() for a in builtin_cmd.aliases]:
+            if builtin_cmd.name.lower() == cmd_name.lower() or cmd_name.lower() in [
+                a.lower() for a in builtin_cmd.aliases
+            ]:
                 cmd = builtin_cmd
                 break
 
@@ -1448,6 +1460,7 @@ def get_builtin_commands() -> list[Command]:
         SECURITY_REVIEW_COMMAND,
     ]
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
+
     if is_buddy_command_enabled():
         cmds.append(BUDDY_COMMAND)
     return cmds

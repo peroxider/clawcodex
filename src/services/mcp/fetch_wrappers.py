@@ -60,7 +60,9 @@ def _env_float(name: str, default: float) -> float:
         pass
     logger.warning(
         "%s=%r is not a positive float; using default %s",
-        name, raw, default,
+        name,
+        raw,
+        default,
     )
     return default
 

@@ -2,6 +2,7 @@
 
 Mirrors the behaviors covered by ``typescript/src/utils/permissions/PermissionUpdate.ts``.
 """
+
 from __future__ import annotations
 
 import json
@@ -270,18 +271,26 @@ class TestExtractRules(unittest.TestCase):
         self.assertEqual(extract_rules(None), [])
 
     def test_has_rules_true_only_with_addRules(self) -> None:
-        self.assertTrue(has_rules([
-            PermissionUpdateAddRules(
-                rules=(PermissionRuleValue(tool_name="Read"),),
-                behavior="allow",
-            ),
-        ]))
-        self.assertFalse(has_rules([
-            PermissionUpdateReplaceRules(
-                rules=(PermissionRuleValue(tool_name="Read"),),
-                behavior="allow",
-            ),
-        ]))
+        self.assertTrue(
+            has_rules(
+                [
+                    PermissionUpdateAddRules(
+                        rules=(PermissionRuleValue(tool_name="Read"),),
+                        behavior="allow",
+                    ),
+                ]
+            )
+        )
+        self.assertFalse(
+            has_rules(
+                [
+                    PermissionUpdateReplaceRules(
+                        rules=(PermissionRuleValue(tool_name="Read"),),
+                        behavior="allow",
+                    ),
+                ]
+            )
+        )
 
 
 class TestCreateReadRuleSuggestion(unittest.TestCase):
@@ -335,9 +344,12 @@ class TestPersistPermissionUpdate(unittest.TestCase):
             rules=(PermissionRuleValue(tool_name="Read"),),
             behavior="allow",
         )
-        self.assertFalse(persist_permission_update(
-            update, settings_path_for_destination=self._resolver,
-        ))
+        self.assertFalse(
+            persist_permission_update(
+                update,
+                settings_path_for_destination=self._resolver,
+            )
+        )
 
     def test_addRules_writes_file(self) -> None:
         update = PermissionUpdateAddRules(
@@ -345,9 +357,12 @@ class TestPersistPermissionUpdate(unittest.TestCase):
             rules=(PermissionRuleValue(tool_name="Read"),),
             behavior="allow",
         )
-        self.assertTrue(persist_permission_update(
-            update, settings_path_for_destination=self._resolver,
-        ))
+        self.assertTrue(
+            persist_permission_update(
+                update,
+                settings_path_for_destination=self._resolver,
+            )
+        )
         self.assertEqual(
             self._read(),
             {"permissions": {"allow": ["Read"]}},
@@ -422,7 +437,8 @@ class TestPersistPermissionUpdate(unittest.TestCase):
             ),
         ]
         results = persist_permission_updates(
-            updates, settings_path_for_destination=self._resolver,
+            updates,
+            settings_path_for_destination=self._resolver,
         )
         self.assertEqual(results, [True, False])
 

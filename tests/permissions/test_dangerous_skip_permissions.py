@@ -191,11 +191,10 @@ def test_headless_run_skip_permissions_sets_bypass_mode(tmp_path, monkeypatch):
         def list_tools(self):
             return []
 
+    monkeypatch.setattr(headless_mod, "get_provider_class", lambda n: _FakeProvider)
     monkeypatch.setattr(
-        headless_mod, "get_provider_class", lambda n: _FakeProvider
-    )
-    monkeypatch.setattr(
-        headless_mod, "get_provider_config",
+        headless_mod,
+        "get_provider_config",
         lambda n: {"api_key": "x", "default_model": "fake"},
     )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
@@ -252,11 +251,10 @@ def test_headless_run_default_mode_keeps_auto_deny_handler(tmp_path, monkeypatch
         def list_tools(self):
             return []
 
+    monkeypatch.setattr(headless_mod, "get_provider_class", lambda n: _FakeProvider)
     monkeypatch.setattr(
-        headless_mod, "get_provider_class", lambda n: _FakeProvider
-    )
-    monkeypatch.setattr(
-        headless_mod, "get_provider_config",
+        headless_mod,
+        "get_provider_config",
         lambda n: {"api_key": "x", "default_model": "fake"},
     )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")

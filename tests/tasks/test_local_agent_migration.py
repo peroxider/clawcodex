@@ -6,6 +6,7 @@ dict), assigns a prefixed agent_id (``a<8>``), and the lifecycle update
 through ``runtime_tasks.update`` produces ``completed`` / ``failed`` /
 ``killed`` terminals via the chapter-10 vocabulary.
 """
+
 from __future__ import annotations
 
 import time
@@ -20,14 +21,14 @@ from src.types.content_blocks import TextBlock
 from src.types.messages import AssistantMessage
 
 
-def _wait_for_terminal(
-    ctx: ToolContext, task_id: str, timeout_s: float = 2.0
-) -> str:
+def _wait_for_terminal(ctx: ToolContext, task_id: str, timeout_s: float = 2.0) -> str:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         state = ctx.runtime_tasks.get(task_id)
         if isinstance(state, LocalAgentTaskState) and state.status in (
-            "completed", "failed", "killed",
+            "completed",
+            "failed",
+            "killed",
         ):
             return state.status
         time.sleep(0.02)

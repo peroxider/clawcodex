@@ -42,15 +42,20 @@ ISSUE_STATUSES: tuple[str, ...] = (
 )
 
 STATUS_META: dict[str, dict[str, str]] = {
-    "queued":              {"label": "Queued",             "color": "#6e7681", "icon": "◷", "group": "active"},
-    "pending":             {"label": "Pending",            "color": "#d29922", "icon": "○", "group": "active"},
-    "running":             {"label": "Running",            "color": "#58a6ff", "icon": "◉", "group": "active"},
-    "synced":              {"label": "Synced",             "color": "#a371f7", "icon": "⇄", "group": "active"},
-    "pending_review":      {"label": "Review",             "color": "#79c0ff", "icon": "◎", "group": "active"},
-    "completed":           {"label": "Completed",          "color": "#3fb950", "icon": "✓", "group": "terminal"},
-    "failed":              {"label": "Failed",             "color": "#f85149", "icon": "✗", "group": "terminal"},
-    "abandoned":           {"label": "Abandoned",          "color": "#8b949e", "icon": "⊘", "group": "terminal"},
-    "verification_failed": {"label": "Verify Failed",      "color": "#db6d28", "icon": "⚠", "group": "terminal"},
+    "queued": {"label": "Queued", "color": "#6e7681", "icon": "◷", "group": "active"},
+    "pending": {"label": "Pending", "color": "#d29922", "icon": "○", "group": "active"},
+    "running": {"label": "Running", "color": "#58a6ff", "icon": "◉", "group": "active"},
+    "synced": {"label": "Synced", "color": "#a371f7", "icon": "⇄", "group": "active"},
+    "pending_review": {"label": "Review", "color": "#79c0ff", "icon": "◎", "group": "active"},
+    "completed": {"label": "Completed", "color": "#3fb950", "icon": "✓", "group": "terminal"},
+    "failed": {"label": "Failed", "color": "#f85149", "icon": "✗", "group": "terminal"},
+    "abandoned": {"label": "Abandoned", "color": "#8b949e", "icon": "⊘", "group": "terminal"},
+    "verification_failed": {
+        "label": "Verify Failed",
+        "color": "#db6d28",
+        "icon": "⚠",
+        "group": "terminal",
+    },
 }
 
 ACTIVE_STATUSES = {s for s, m in STATUS_META.items() if m["group"] == "active"}
@@ -61,13 +66,14 @@ TERMINAL_STATUSES = {s for s, m in STATUS_META.items() if m["group"] == "termina
 # Parser
 # ---------------------------------------------------------------------------
 
+
 def add_dashboard_parser(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "dashboard",
         help="Launch standalone LiveView dashboard UI",
         description="Start an HTTP server with a web dashboard for real-time "
-                    "orchestrator monitoring. Streams running sessions, tool calls, "
-                    "and LLM responses.",
+        "orchestrator monitoring. Streams running sessions, tool calls, "
+        "and LLM responses.",
     )
     parser.add_argument(
         "--port",
@@ -86,9 +92,9 @@ def add_dashboard_parser(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         metavar="PATH",
         help="Workspace root to read registry/event logs from. "
-             "If omitted, uses $CLAWCODEX_WORKSPACE_ROOT, falls back to the "
-             "latest metadata under ~/.clawcodex/orchestrator/*/metadata.json, "
-             "and finally ~/.clawcodex/workspace.",
+        "If omitted, uses $CLAWCODEX_WORKSPACE_ROOT, falls back to the "
+        "latest metadata under ~/.clawcodex/orchestrator/*/metadata.json, "
+        "and finally ~/.clawcodex/workspace.",
     )
     parser.add_argument(
         "--no-browser",
@@ -100,6 +106,7 @@ def add_dashboard_parser(subparsers: argparse._SubParsersAction) -> None:
 # ---------------------------------------------------------------------------
 # Workspace resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_workspace_root(explicit: str | None = None) -> Path:
     """Resolve the workspace root in priority order.
@@ -140,6 +147,7 @@ def _resolve_workspace_root(explicit: str | None = None) -> Path:
 # ---------------------------------------------------------------------------
 # State aggregation
 # ---------------------------------------------------------------------------
+
 
 def _safe_read_json(path: Path) -> dict[str, Any] | None:
     try:
@@ -190,40 +198,48 @@ def _gather_issue_metadata(workspace: Path) -> dict[str, Any]:
         workspace_short = ""
         if workspace_path:
             try:
-                workspace_short = "/" + str(Path(workspace_path).relative_to(workspace)) if workspace in Path(workspace_path).parents else workspace_path
+                workspace_short = (
+                    "/" + str(Path(workspace_path).relative_to(workspace))
+                    if workspace in Path(workspace_path).parents
+                    else workspace_path
+                )
             except Exception:
                 workspace_short = workspace_path
 
-        issues.append({
-            "issue_id": issue_id,
-            "identifier": record.get("issue_identifier") or issue_id,
-            "status": status,
-            "branch_name": record.get("branch_name"),
-            "commit_sha": record.get("commit_sha"),
-            "pr_number": record.get("pr_number"),
-            "pr_url": record.get("pr_url"),
-            "base_branch": record.get("base_branch") or "main",
-            "workspace_path": workspace_path,
-            "workspace_short": workspace_short,
-            "workspace_strategy": record.get("workspace_strategy"),
-            "attempt_count": int(record.get("attempt_count") or 0),
-            "retry_count": int(record.get("retry_count") or 0),
-            "sequence_index": record.get("sequence_index"),
-            "intent": record.get("intent") or "none",
-            "report_path": record.get("report_path"),
-            "verification_status": record.get("verification_status"),
-            "clarification_status": record.get("clarification_status"),
-            "created_at": created_at,
-            "updated_at": updated_at,
-            "age_seconds": age_seconds,
-            "idle_seconds": idle_seconds,
-        })
+        issues.append(
+            {
+                "issue_id": issue_id,
+                "identifier": record.get("issue_identifier") or issue_id,
+                "status": status,
+                "branch_name": record.get("branch_name"),
+                "commit_sha": record.get("commit_sha"),
+                "pr_number": record.get("pr_number"),
+                "pr_url": record.get("pr_url"),
+                "base_branch": record.get("base_branch") or "main",
+                "workspace_path": workspace_path,
+                "workspace_short": workspace_short,
+                "workspace_strategy": record.get("workspace_strategy"),
+                "attempt_count": int(record.get("attempt_count") or 0),
+                "retry_count": int(record.get("retry_count") or 0),
+                "sequence_index": record.get("sequence_index"),
+                "intent": record.get("intent") or "none",
+                "report_path": record.get("report_path"),
+                "verification_status": record.get("verification_status"),
+                "clarification_status": record.get("clarification_status"),
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "age_seconds": age_seconds,
+                "idle_seconds": idle_seconds,
+            }
+        )
 
     # Sort: active statuses first, then by most recent activity.
-    issues.sort(key=lambda i: (
-        0 if i["status"] in ACTIVE_STATUSES else 1,
-        -int(i["updated_at"] or 0),
-    ))
+    issues.sort(
+        key=lambda i: (
+            0 if i["status"] in ACTIVE_STATUSES else 1,
+            -int(i["updated_at"] or 0),
+        )
+    )
 
     return {
         "issues": issues,
@@ -300,6 +316,7 @@ def build_state_snapshot(workspace: Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
+
 
 class DashboardState:
     """Per-process shared state for the dashboard HTTP server."""
@@ -1135,6 +1152,7 @@ def _build_dashboard_html() -> str:
 # HTTP server
 # ---------------------------------------------------------------------------
 
+
 class DashboardHandler(BaseHTTPRequestHandler):
     """HTTP handler serving the dashboard UI, JSON snapshots, and SSE events."""
 
@@ -1178,7 +1196,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/issue/"):
-            issue_id = path[len("/api/issue/"):]
+            issue_id = path[len("/api/issue/") :]
             snap = self.state.refresh_snapshot(force=True)
             for issue in snap["issues"]["issues"]:
                 if issue["issue_id"] == issue_id:
@@ -1188,11 +1206,13 @@ class DashboardHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/health":
-            self._send_json({
-                "ok": True,
-                "workspace": str(self.state.workspace),
-                "ts": time.time(),
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "workspace": str(self.state.workspace),
+                    "ts": time.time(),
+                }
+            )
             return
 
         if path == "/events":
@@ -1255,6 +1275,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def run(args: argparse.Namespace) -> int:
     """Execute the orchestrator dashboard command."""
     port: int = args.port
@@ -1270,7 +1291,9 @@ def run(args: argparse.Namespace) -> int:
     print(f"[dashboard] Workspace : {workspace}")
     print(f"[dashboard] Starting LiveView dashboard on http://{host}:{port}")
     if not workspace.exists():
-        print(f"[dashboard] Note: workspace does not exist yet — UI will render empty until it is created.")
+        print(
+            f"[dashboard] Note: workspace does not exist yet — UI will render empty until it is created."
+        )
 
     try:
         server = ThreadingHTTPServer((host, port), DashboardHandler)
@@ -1279,6 +1302,7 @@ def run(args: argparse.Namespace) -> int:
         if not no_browser:
             try:
                 import webbrowser
+
                 webbrowser.open(f"http://{host}:{port}")
             except Exception:
                 pass

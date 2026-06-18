@@ -73,14 +73,19 @@ class ClawcodexMinimaxProvider(MinimaxProvider):
 
         final_message: Any = None
         try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=max_tokens,
-                messages=minimax_messages,
-                **({"system": system} if system else {}),
-                **extra_kwargs,
-                **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
-            ) as stream, guard.attach(stream):
+            with (
+                client.messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=minimax_messages,
+                    **({"system": system} if system else {}),
+                    **extra_kwargs,
+                    **{
+                        k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
+                    },
+                ) as stream,
+                guard.attach(stream),
+            ):
                 # The only behavioral change vs. the parent: route
                 # the synchronous ``text_stream`` iteration through
                 # the worker-thread + 100ms queue-poll drain so a

@@ -95,23 +95,18 @@ class TestPrependBaseDirHeader:
 
 class TestSubstituteSkillDir:
     def test_replaces_placeholder(self) -> None:
-        result = substitute_skill_dir(
-            "Path: ${CLAUDE_SKILL_DIR}/script.sh", "/abs/skill"
-        )
+        result = substitute_skill_dir("Path: ${CLAUDE_SKILL_DIR}/script.sh", "/abs/skill")
         assert result == "Path: /abs/skill/script.sh"
 
     def test_replaces_all_occurrences(self) -> None:
-        result = substitute_skill_dir(
-            "${CLAUDE_SKILL_DIR} | ${CLAUDE_SKILL_DIR}", "/x"
-        )
+        result = substitute_skill_dir("${CLAUDE_SKILL_DIR} | ${CLAUDE_SKILL_DIR}", "/x")
         assert result == "/x | /x"
 
     def test_no_base_dir_leaves_placeholder(self) -> None:
         # Bundled skills (no base_dir) keep the literal placeholder
         # rather than emitting a stray empty-string substitution.
         assert (
-            substitute_skill_dir("Path: ${CLAUDE_SKILL_DIR}", None)
-            == "Path: ${CLAUDE_SKILL_DIR}"
+            substitute_skill_dir("Path: ${CLAUDE_SKILL_DIR}", None) == "Path: ${CLAUDE_SKILL_DIR}"
         )
 
     def test_normalizes_backslashes(self) -> None:
@@ -124,10 +119,7 @@ class TestSubstituteSkillDir:
 
 class TestSubstituteSessionId:
     def test_replaces_placeholder(self) -> None:
-        assert (
-            substitute_session_id("S=${CLAUDE_SESSION_ID}", "abc-123")
-            == "S=abc-123"
-        )
+        assert substitute_session_id("S=${CLAUDE_SESSION_ID}", "abc-123") == "S=abc-123"
 
     def test_unknown_session_substitutes_empty(self) -> None:
         # Matches TS' falsy-getSessionId() behavior.
@@ -242,9 +234,9 @@ def test_skilltool_invocation_substitutes_all_placeholders(
     prompt = out["prompt"]
 
     # All four expected substitutions:
-    assert prompt.startswith(
-        "Base directory for this skill:"
-    ), f"missing base-dir header in: {prompt!r}"
+    assert prompt.startswith("Base directory for this skill:"), (
+        f"missing base-dir header in: {prompt!r}"
+    )
     assert str(skill_dir.resolve()) in prompt or str(skill_dir) in prompt
     assert "Hi ada from" in prompt
     assert "(session S-12345)" in prompt
@@ -253,9 +245,7 @@ def test_skilltool_invocation_substitutes_all_placeholders(
     assert "${CLAUDE_SESSION_ID}" not in prompt
 
 
-def test_skilltool_unknown_session_id_renders_empty(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_skilltool_unknown_session_id_renders_empty(tmp_path: Path, isolated_home: Path) -> None:
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "sess" / "SKILL.md",

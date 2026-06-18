@@ -127,6 +127,7 @@ class TestCommandTypes(unittest.TestCase):
 
     def test_local_command_creation(self):
         """Test creating a LocalCommand."""
+
         def mock_call(args: str, context: CommandContext) -> LocalCommandResult:
             return LocalCommandResult(type="text", value=f"Called with: {args}")
 
@@ -395,7 +396,9 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertTrue(success)
         self.assertIsNone(error)
         self.assertIn("Cron runtime is required", result or "")
-        self.assertEqual([task.id], [stored.id for stored in read_all_cron_tasks(self.workspace_root)])
+        self.assertEqual(
+            [task.id], [stored.id for stored in read_all_cron_tasks(self.workspace_root)]
+        )
 
     def test_cron_status_and_runs_work_without_runtime(self):
         """Test status views read the persistent cron ledger directly."""
@@ -509,7 +512,9 @@ class TestBuiltinCommands(unittest.TestCase):
         )
 
         first_success, _, first_error = execute_command_sync("cron-fire", task.id, context)
-        second_success, second_result, second_error = execute_command_sync("cron-run", task.id, context)
+        second_success, second_result, second_error = execute_command_sync(
+            "cron-run", task.id, context
+        )
 
         self.assertTrue(first_success)
         self.assertIsNone(first_error)
@@ -810,6 +815,7 @@ class TestInitCommand(unittest.TestCase):
         """Test executing /init via execute_command_async."""
         # Register commands to global registry for this test
         from src.command_system import get_command_registry
+
         registry = get_command_registry()
         register_builtin_commands(registry)
 
@@ -824,6 +830,7 @@ class TestInitCommand(unittest.TestCase):
         """Test that sync execution returns error for /init (it's a PromptCommand)."""
         # Register commands to global registry for this test
         from src.command_system import get_command_registry
+
         registry = get_command_registry()
         register_builtin_commands(registry)
 

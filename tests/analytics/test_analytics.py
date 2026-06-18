@@ -1,4 +1,5 @@
 """Tests for Analytics subsystem."""
+
 from __future__ import annotations
 
 import json
@@ -48,11 +49,13 @@ class TestAnalyticsSinks(unittest.TestCase):
             sink = FileSink(path)
 
             for i in range(3):
-                sink.emit(AnalyticsEvent(
-                    type=EventType.TURN_START,
-                    session_id="test",
-                    data={"turn": i},
-                ))
+                sink.emit(
+                    AnalyticsEvent(
+                        type=EventType.TURN_START,
+                        session_id="test",
+                        data={"turn": i},
+                    )
+                )
             sink.flush()
 
             lines = path.read_text().strip().split("\n")

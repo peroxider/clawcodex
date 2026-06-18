@@ -9,6 +9,7 @@ from typing import Any
 @dataclass
 class AgentModelConfig:
     """Model configuration for an agent."""
+
     model: str = ""
     inherit_parent: bool = True
 

@@ -6,6 +6,7 @@ Covers:
 * Read tolerance of partial trailing lines and blank lines.
 * Envelope helpers (shutdown_request/response, plan_approval_response).
 """
+
 from __future__ import annotations
 
 import json
@@ -38,18 +39,31 @@ from src.services.swarm.mailbox import (
     "bad_name",
     [
         # Path-traversal payloads.
-        "..", "../etc/passwd", "../../etc/passwd", "evil/path",
+        "..",
+        "../etc/passwd",
+        "../../etc/passwd",
+        "evil/path",
         # Whitespace / control / null.
-        "with space", "name with\nbreaks", "\x00null-byte", "tab\there",
+        "with space",
+        "name with\nbreaks",
+        "\x00null-byte",
+        "tab\there",
         # Backslash (Windows-flavor traversal vector + just disallowed).
-        "name\\back", "back\\\\slash",
+        "name\\back",
+        "back\\\\slash",
         # Leading / trailing dots — disallowed even if no traversal,
         # to keep the whitelist crisp (per N1 fold-in).
-        ".alice", "alice.", ".", "..",
+        ".alice",
+        "alice.",
+        ".",
+        "..",
         # Empty / oversize.
-        "", "a" * 65, "a" * 100,
+        "",
+        "a" * 65,
+        "a" * 100,
         # Unicode is rejected by the ASCII-only whitelist.
-        "🙂unicode", "café",
+        "🙂unicode",
+        "café",
     ],
 )
 def test_recipient_traversal_rejected(tmp_path: Path, bad_name: str) -> None:
@@ -91,7 +105,9 @@ def test_inbox_path_isolated_per_team(tmp_path: Path) -> None:
 
 def test_write_and_read_round_trip(tmp_path: Path) -> None:
     msg = TeammateMessage(
-        from_="alice", text="hello bob", timestamp="2026-05-08T12:00:00Z",
+        from_="alice",
+        text="hello bob",
+        timestamp="2026-05-08T12:00:00Z",
         summary="greeting",
     )
     write_to_mailbox("bob", msg, team_name="t", workspace_root=tmp_path)
@@ -106,7 +122,9 @@ def test_write_and_read_round_trip(tmp_path: Path) -> None:
 def test_multiple_writes_preserve_order(tmp_path: Path) -> None:
     for i in range(5):
         msg = TeammateMessage(
-            from_="x", text=f"msg-{i}", timestamp="2026-05-08T12:00:00Z",
+            from_="x",
+            text=f"msg-{i}",
+            timestamp="2026-05-08T12:00:00Z",
         )
         write_to_mailbox("inbox", msg, team_name="t", workspace_root=tmp_path)
 
@@ -148,9 +166,7 @@ def test_reader_tolerates_partial_trailing_line(tmp_path: Path) -> None:
 def test_reader_skips_blank_lines(tmp_path: Path) -> None:
     path = get_inbox_path("alice", "t", tmp_path)
     path.write_text(
-        '{"from":"a","text":"x","timestamp":"t"}\n'
-        '\n\n'
-        '{"from":"b","text":"y","timestamp":"t"}\n',
+        '{"from":"a","text":"x","timestamp":"t"}\n\n\n{"from":"b","text":"y","timestamp":"t"}\n',
         encoding="utf-8",
     )
     messages = read_mailbox("alice", team_name="t", workspace_root=tmp_path)
@@ -169,7 +185,8 @@ def test_concurrent_writes_no_interleave(tmp_path: Path) -> None:
     def worker(idx: int) -> None:
         for j in range(n_writes):
             msg = TeammateMessage(
-                from_=f"t{idx}", text=f"thread-{idx}-msg-{j}",
+                from_=f"t{idx}",
+                text=f"thread-{idx}-msg-{j}",
                 timestamp="2026-05-08T12:00:00Z",
             )
             write_to_mailbox("inbox", msg, team_name="t", workspace_root=tmp_path)
@@ -224,8 +241,10 @@ def test_shutdown_rejected_envelope_shape() -> None:
 
 def test_plan_approval_response_envelope_shape() -> None:
     msg = create_plan_approval_response_message(
-        request_id="req-1", approved=True,
-        permission_mode="default", from_="team-lead",
+        request_id="req-1",
+        approved=True,
+        permission_mode="default",
+        from_="team-lead",
     )
     assert msg["type"] == "plan_approval_response"
     assert msg["approved"] is True
@@ -235,8 +254,10 @@ def test_plan_approval_response_envelope_shape() -> None:
 
 def test_plan_approval_rejection_carries_feedback() -> None:
     msg = create_plan_approval_response_message(
-        request_id="req-1", approved=False,
-        permission_mode="default", from_="team-lead",
+        request_id="req-1",
+        approved=False,
+        permission_mode="default",
+        from_="team-lead",
         feedback="needs more research",
     )
     assert msg["approved"] is False

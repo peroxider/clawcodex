@@ -59,7 +59,9 @@ DEFAULT_PATCH_ROOT = PROJECT / "patches" / "upstream"
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--commit", required=True, help="Upstream snapshot under src/upstream/{commit}")
+    parser.add_argument(
+        "--commit", required=True, help="Upstream snapshot under src/upstream/{commit}"
+    )
     parser.add_argument("--src", type=Path, default=DEFAULT_SRC, help="Downstream source tree")
     parser.add_argument("--upstream-root", type=Path, default=DEFAULT_UPSTREAM_ROOT)
     parser.add_argument("--patch-root", type=Path, default=DEFAULT_PATCH_ROOT)
@@ -74,7 +76,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         metavar="REL_PATH",
         help="Relative path (under src/) to preserve from the upstream base. "
-             "May be passed multiple times. These files produce no patch.",
+        "May be passed multiple times. These files produce no patch.",
     )
     parser.add_argument(
         "--preserve-file",

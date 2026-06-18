@@ -8,10 +8,10 @@ def test_subsystem_packages_preserve_legacy_metadata_for_porting_workspace() -> 
     from src import bridge, remote, server, upstreamproxy
 
     for pkg in (bridge, remote, server, upstreamproxy):
-        assert pkg.MODULE_COUNT > 0, f'{pkg.__name__}.MODULE_COUNT is 0/missing'
-        assert pkg.ARCHIVE_NAME, f'{pkg.__name__}.ARCHIVE_NAME is empty'
-        assert pkg.SAMPLE_FILES, f'{pkg.__name__}.SAMPLE_FILES is empty'
-        assert pkg.PORTING_NOTE, f'{pkg.__name__}.PORTING_NOTE is empty'
+        assert pkg.MODULE_COUNT > 0, f"{pkg.__name__}.MODULE_COUNT is 0/missing"
+        assert pkg.ARCHIVE_NAME, f"{pkg.__name__}.ARCHIVE_NAME is empty"
+        assert pkg.SAMPLE_FILES, f"{pkg.__name__}.SAMPLE_FILES is empty"
+        assert pkg.PORTING_NOTE, f"{pkg.__name__}.PORTING_NOTE is empty"
 
 
 def test_legacy_remote_runtime_emits_deprecation_warning() -> None:
@@ -21,13 +21,13 @@ def test_legacy_remote_runtime_emits_deprecation_warning() -> None:
     import sys
     import warnings
 
-    sys.modules.pop('scripts.audit.remote_runtime', None)
+    sys.modules.pop("scripts.audit.remote_runtime", None)
     with warnings.catch_warnings(record=True) as captured:
-        warnings.simplefilter('always')
-        importlib.import_module('scripts.audit.remote_runtime')
+        warnings.simplefilter("always")
+        importlib.import_module("scripts.audit.remote_runtime")
 
     assert any(
         issubclass(w.category, DeprecationWarning)
-        and 'scripts.audit.remote_runtime is a placeholder' in str(w.message)
+        and "scripts.audit.remote_runtime is a placeholder" in str(w.message)
         for w in captured
-    ), 'expected DeprecationWarning from scripts.audit.remote_runtime import'
+    ), "expected DeprecationWarning from scripts.audit.remote_runtime import"

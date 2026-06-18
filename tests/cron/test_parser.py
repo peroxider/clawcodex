@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from clawcodex_ext.cron_system.parser import compute_next_cron_run, cron_to_human, parse_cron_expression
+from clawcodex_ext.cron_system.parser import (
+    compute_next_cron_run,
+    cron_to_human,
+    parse_cron_expression,
+)
 
 
 def _local_offset() -> int:
@@ -54,11 +58,16 @@ def test_cron_to_human_utc_offset() -> None:
 
     expected_hour_15 = (15 + offset) % 24
     assert cron_to_human("0 15 * * 1") == "Weekly on day 1 at 15:00"
-    assert cron_to_human("0 15 * * 1", utc=True) == f"Weekly on day 1 at {expected_hour_15:02d}:00 UTC"
+    assert (
+        cron_to_human("0 15 * * 1", utc=True) == f"Weekly on day 1 at {expected_hour_15:02d}:00 UTC"
+    )
 
     expected_hour_22 = (22 + offset) % 24
     assert cron_to_human("0 22 15 * *") == "Monthly on day 15 at 22:00"
-    assert cron_to_human("0 22 15 * *", utc=True) == f"Monthly on day 15 at {expected_hour_22:02d}:00 UTC"
+    assert (
+        cron_to_human("0 22 15 * *", utc=True)
+        == f"Monthly on day 15 at {expected_hour_22:02d}:00 UTC"
+    )
 
 
 def test_cron_to_human_utc_interval_patterns() -> None:

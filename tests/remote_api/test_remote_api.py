@@ -98,9 +98,7 @@ def _sse_json_payloads(text: str) -> list[dict]:
     payloads: list[dict] = []
     for frame in text.split("\n\n"):
         data_lines = [
-            line.removeprefix("data: ")
-            for line in frame.splitlines()
-            if line.startswith("data: ")
+            line.removeprefix("data: ") for line in frame.splitlines() if line.startswith("data: ")
         ]
         if not data_lines or data_lines == ["[DONE]"]:
             continue
@@ -165,10 +163,13 @@ def test_optional_bearer_auth_protects_non_health_routes(tmp_path):
     missing = client.get("/v1/models")
     assert missing.status_code == 401
     assert missing.json()["error"]["code"] == "unauthorized"
-    assert client.get(
-        "/v1/models",
-        headers={"Authorization": "Bearer secret"},
-    ).status_code == 200
+    assert (
+        client.get(
+            "/v1/models",
+            headers={"Authorization": "Bearer secret"},
+        ).status_code
+        == 200
+    )
 
 
 def test_unknown_route_uses_compatible_error_payload(tmp_path):
@@ -292,10 +293,7 @@ def test_chat_stream_returns_openai_sse_chunks_without_tool_progress(tmp_path):
         "role": "assistant",
         "content": "",
     }
-    assert any(
-        payload["choices"][0]["delta"].get("content") == "hello"
-        for payload in payloads
-    )
+    assert any(payload["choices"][0]["delta"].get("content") == "hello" for payload in payloads)
     assert payloads[-1]["choices"][0]["finish_reason"] == "stop"
     assert "event: hermes.tool.progress" not in text
     assert "data: [DONE]" in text
@@ -390,14 +388,20 @@ def test_chat_history_preserves_developer_and_tool_messages(tmp_path):
 def test_rejects_empty_prompt_workspace_override_and_unsupported_content(tmp_path):
     client = _client(tmp_path, api_key="")
 
-    assert client.post(
-        "/v1/chat/completions",
-        json={"messages": []},
-    ).status_code == 400
-    assert client.post(
-        "/v1/chat/completions",
-        json={"cwd": "/tmp/other", "messages": [{"role": "user", "content": "hi"}]},
-    ).status_code == 400
+    assert (
+        client.post(
+            "/v1/chat/completions",
+            json={"messages": []},
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/v1/chat/completions",
+            json={"cwd": "/tmp/other", "messages": [{"role": "user", "content": "hi"}]},
+        ).status_code
+        == 400
+    )
     remote_image = client.post(
         "/v1/chat/completions",
         json={
@@ -635,9 +639,7 @@ async def test_openwebui_background_chat_requests_do_not_block_or_share_history(
     with patch("extensions.remote_api.core.RemoteAgentRunner", ConcurrentRunner):
         results = await asyncio.gather(
             *(
-                service.chat_completion(
-                    {"messages": [{"role": "user", "content": prompt}]}
-                )
+                service.chat_completion({"messages": [{"role": "user", "content": prompt}]})
                 for prompt in prompts
             )
         )
@@ -722,9 +724,7 @@ async def test_concurrent_same_conversation_serializes_history(tmp_path):
     service = RemoteAPIService(RemoteAPIConfig(workspace=tmp_path, api_key=""))
 
     with patch("extensions.remote_api.core.RemoteAgentRunner", SlowEchoRunner):
-        first = asyncio.create_task(
-            service.responses({"input": "first", "conversation": "shared"})
-        )
+        first = asyncio.create_task(service.responses({"input": "first", "conversation": "shared"}))
         await asyncio.sleep(0.005)
         second = asyncio.create_task(
             service.responses({"input": "second", "conversation": "shared"})
@@ -752,15 +752,11 @@ async def test_conversation_state_and_lock_maps_remain_bounded(tmp_path):
                 events=[RemoteTextDelta(prompt)],
             )
 
-    service = RemoteAPIService(
-        RemoteAPIConfig(workspace=tmp_path, api_key="", state_limit=3)
-    )
+    service = RemoteAPIService(RemoteAPIConfig(workspace=tmp_path, api_key="", state_limit=3))
 
     with patch("extensions.remote_api.core.RemoteAgentRunner", EchoRunner):
         for index in range(40):
-            await service.responses(
-                {"input": f"turn-{index}", "conversation": f"thread-{index}"}
-            )
+            await service.responses({"input": f"turn-{index}", "conversation": f"thread-{index}"})
 
     health = service.detailed_health()
     assert health["stored_responses"] == 3
@@ -870,13 +866,9 @@ def test_responses_stream_returns_sse(tmp_path):
     created_payload = next(
         payload for payload in payloads if payload.get("type") == "response.created"
     )
+    assert completed_payload["response"]["created_at"] == created_payload["response"]["created_at"]
     assert (
-        completed_payload["response"]["created_at"]
-        == created_payload["response"]["created_at"]
-    )
-    assert (
-        completed_payload["response"]["completed_at"]
-        >= created_payload["response"]["created_at"]
+        completed_payload["response"]["completed_at"] >= created_payload["response"]["created_at"]
     )
     completed_items = completed_payload["response"]["output"]
     assert [item["type"] for item in completed_items] == [
@@ -886,12 +878,8 @@ def test_responses_stream_returns_sse(tmp_path):
     ]
     assert [added_items[item["id"]] for item in completed_items] == [0, 1, 2]
     assert completed_items[2]["call_id"] == completed_items[0]["call_id"]
-    assert completed_items[2]["output"] == [
-        {"type": "input_text", "text": "ok"}
-    ]
-    assert completed_payload["response"]["usage"]["input_tokens_details"] == {
-        "cached_tokens": 0
-    }
+    assert completed_items[2]["output"] == [{"type": "input_text", "text": "ok"}]
+    assert completed_payload["response"]["usage"]["input_tokens_details"] == {"cached_tokens": 0}
     assert completed_payload["response"]["usage"]["output_tokens_details"] == {
         "reasoning_tokens": 0
     }
@@ -913,9 +901,7 @@ def test_responses_pairs_tool_result_without_id_by_tool_name(tmp_path):
         item for item in response.json()["output"] if item["type"] == "function_call"
     )
     function_output = next(
-        item
-        for item in response.json()["output"]
-        if item["type"] == "function_call_output"
+        item for item in response.json()["output"] if item["type"] == "function_call_output"
     )
     assert function_output["call_id"] == function_call["call_id"] == "tool-1"
 
@@ -933,22 +919,21 @@ def test_responses_accepts_plain_string_tool_result(tmp_path):
 
     assert response.status_code == 200
     function_output = next(
-        item
-        for item in response.json()["output"]
-        if item["type"] == "function_call_output"
+        item for item in response.json()["output"] if item["type"] == "function_call_output"
     )
     assert function_output["call_id"] == "tool-1"
-    assert function_output["output"] == [
-        {"type": "input_text", "text": "README contents"}
-    ]
+    assert function_output["output"] == [{"type": "input_text", "text": "README contents"}]
 
     # Open WebUI 0.9.6 iterates these parts and calls ``get`` on each one.
     # Keeping every part object-shaped prevents the next-turn parser crash.
-    assert "".join(
-        part.get("text", "")
-        for part in function_output["output"]
-        if part.get("type") == "input_text"
-    ) == "README contents"
+    assert (
+        "".join(
+            part.get("text", "")
+            for part in function_output["output"]
+            if part.get("type") == "input_text"
+        )
+        == "README contents"
+    )
 
 
 async def test_streaming_conversation_can_continue_on_second_turn(tmp_path):
@@ -1173,10 +1158,7 @@ async def test_closing_stream_cleans_up_active_run(tmp_path):
         finally:
             await stream.aclose()
 
-        frames = [
-            frame
-            async for frame in service.responses_sse_events({"input": "second"})
-        ]
+        frames = [frame async for frame in service.responses_sse_events({"input": "second"})]
 
     assert service.active_runs == 0
     assert any("response.completed" in frame for frame in frames)

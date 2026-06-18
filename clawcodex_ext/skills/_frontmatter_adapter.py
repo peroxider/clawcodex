@@ -86,13 +86,14 @@ def _fallback_parse(markdown: str) -> FrontmatterParseResult:
         return FrontmatterParseResult(frontmatter={}, body=markdown)
 
     fm_raw = "\n".join(lines[1:end_idx])
-    body = "\n".join(lines[end_idx + 1:])
+    body = "\n".join(lines[end_idx + 1 :])
 
     if not fm_raw.strip():
         return FrontmatterParseResult(frontmatter={}, body=body)
 
     try:
         import yaml
+
         parsed = yaml.safe_load(fm_raw)
     except Exception as e:
         logger.debug("fallback YAML parse failed: %s", e)
@@ -107,6 +108,6 @@ def _fallback_parse(markdown: str) -> FrontmatterParseResult:
 
 
 # Module-level registration (no class in this adapter)
-AdapterRegistry.register("frontmatter", env_var="CLAW_USE_FRONTMATTER_LIB", dependency="frontmatter")(
-    type("FrontmatterAdapter", (), {"is_available": staticmethod(is_frontmatter_available)})
-)
+AdapterRegistry.register(
+    "frontmatter", env_var="CLAW_USE_FRONTMATTER_LIB", dependency="frontmatter"
+)(type("FrontmatterAdapter", (), {"is_available": staticmethod(is_frontmatter_available)}))

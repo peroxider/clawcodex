@@ -2,6 +2,7 @@
 
 Mirrors typescript/src/tools/AgentTool/loadAgentsDir.ts and built-in/*.ts.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ class AgentDefinition:
 
     Mirrors the AgentDefinition interface from typescript/src/tools/AgentTool/loadAgentsDir.ts.
     """
+
     agent_type: str
     when_to_use: str
     tools: list[str] | None = None  # None or ['*'] means all tools
@@ -158,11 +160,11 @@ EXPLORE_AGENT = AgentDefinition(
     agent_type="Explore",
     when_to_use=(
         "Fast agent specialized for exploring codebases. Use this when you need to "
-        "quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code "
-        "for keywords (eg. \"API endpoints\"), or answer questions about the codebase "
-        "(eg. \"how do API endpoints work?\"). When calling this agent, specify the "
-        "desired thoroughness level: \"quick\" for basic searches, \"medium\" for "
-        "moderate exploration, or \"very thorough\" for comprehensive analysis across "
+        'quickly find files by patterns (eg. "src/components/**/*.tsx"), search code '
+        'for keywords (eg. "API endpoints"), or answer questions about the codebase '
+        '(eg. "how do API endpoints work?"). When calling this agent, specify the '
+        'desired thoroughness level: "quick" for basic searches, "medium" for '
+        'moderate exploration, or "very thorough" for comprehensive analysis across '
         "multiple locations and naming conventions."
     ),
     disallowed_tools=["Agent", "ExitPlanMode", "Edit", "Write", "NotebookEdit"],

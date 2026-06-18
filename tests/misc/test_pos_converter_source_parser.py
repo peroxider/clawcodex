@@ -72,8 +72,11 @@ class TestSourceOperation:
     def test_full(self) -> None:
         params = [ParamSpec(name="x", type_hint="int")]
         op = SourceOperation(
-            name="add", description="Add numbers", parameters=params,
-            return_type="int", source_code="def add(x): pass",
+            name="add",
+            description="Add numbers",
+            parameters=params,
+            return_type="int",
+            source_code="def add(x): pass",
         )
         assert op.name == "add"
         assert len(op.parameters) == 1
@@ -83,7 +86,9 @@ class TestSourceOperation:
 class TestSourceComponent:
     def test_minimal(self) -> None:
         comp = SourceComponent(
-            name="MathOps", file_path="math/ops.py", description="Math operations",
+            name="MathOps",
+            file_path="math/ops.py",
+            description="Math operations",
         )
         assert comp.name == "MathOps"
         assert comp.operations == []
@@ -143,7 +148,9 @@ class VideoProcessor:
 
         # Check transcode method
         transcode = next((op for op in comp.operations if op.name == "transcode"), None)
-        assert transcode is not None, f"transcode not found in {[op.name for op in comp.operations]}"
+        assert transcode is not None, (
+            f"transcode not found in {[op.name for op in comp.operations]}"
+        )
         assert "transcode" in transcode.description.lower()
         assert transcode.return_type == "bool"
 
@@ -400,6 +407,7 @@ class TestGroupStrategy:
     def test_strategy_dispatch_keyword(self) -> None:
         """KEYWORD_MATCH strategy uses _keyword_match_group()."""
         from extensions.pos_converter.sdk_parser import SdkMethod
+
         grouper = SkillGrouper(
             [SdkMethod(name="docker_build", description="Build image")],
             strategy=GroupStrategy.KEYWORD_MATCH,
@@ -442,8 +450,12 @@ class TestGroupStrategy:
                 parameters=[ParamSpec(name="path", type_hint="str")],
             ),
         ]
-        comp_a = SourceComponent(name="Reader", file_path="r.py", description="Reader", operations=ops_a)
-        comp_b = SourceComponent(name="Writer", file_path="w.py", description="Writer", operations=ops_b)
+        comp_a = SourceComponent(
+            name="Reader", file_path="r.py", description="Reader", operations=ops_a
+        )
+        comp_b = SourceComponent(
+            name="Writer", file_path="w.py", description="Writer", operations=ops_b
+        )
 
         result = group_source_components([comp_a, comp_b], strategy=GroupStrategy.IO_RELATION)
         # read_file and write_file share "str" anchor type → same group
@@ -457,14 +469,23 @@ class TestGroupStrategy:
 
     def test_io_relation_naming_with_types(self) -> None:
         """IO_RELATION group names include dominant type anchors."""
-        ops_a = [SourceOperation(
-            name="method_a", description="A",
-            parameters=[ParamSpec(name="x", type_hint="int"), ParamSpec(name="y", type_hint="str")],
-        )]
-        ops_b = [SourceOperation(
-            name="method_b", description="B",
-            parameters=[ParamSpec(name="x", type_hint="bool")],
-        )]
+        ops_a = [
+            SourceOperation(
+                name="method_a",
+                description="A",
+                parameters=[
+                    ParamSpec(name="x", type_hint="int"),
+                    ParamSpec(name="y", type_hint="str"),
+                ],
+            )
+        ]
+        ops_b = [
+            SourceOperation(
+                name="method_b",
+                description="B",
+                parameters=[ParamSpec(name="x", type_hint="bool")],
+            )
+        ]
         comp_a = SourceComponent(name="CompA", file_path="a.py", description="A", operations=ops_a)
         comp_b = SourceComponent(name="CompB", file_path="b.py", description="B", operations=ops_b)
 
@@ -486,20 +507,28 @@ class TestGroupStrategy:
     def test_io_relation_max_groups_merge(self) -> None:
         """max_io_groups forces merging of groups beyond the limit."""
         ops = []
-        for i, type_name in enumerate(["str", "int", "bool", "float", "Path", "dict", "list", "bytes", "tuple", "set"]):
-            ops.append(SourceOperation(
-                name=f"method_{type_name}",
-                description=f"Method using {type_name}",
-                parameters=[ParamSpec(name="x", type_hint=type_name)],
-            ))
+        for i, type_name in enumerate(
+            ["str", "int", "bool", "float", "Path", "dict", "list", "bytes", "tuple", "set"]
+        ):
+            ops.append(
+                SourceOperation(
+                    name=f"method_{type_name}",
+                    description=f"Method using {type_name}",
+                    parameters=[ParamSpec(name="x", type_hint=type_name)],
+                )
+            )
 
         comp = SourceComponent(
-            name="ManyTypes", file_path="m.py",
-            description="Many types", operations=ops,
+            name="ManyTypes",
+            file_path="m.py",
+            description="Many types",
+            operations=ops,
         )
 
         result = group_source_components(
-            [comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=5,
+            [comp],
+            strategy=GroupStrategy.IO_RELATION,
+            max_io_groups=5,
         )
         # 10 distinct types merged down to ≤ 5 groups
         assert len(result.skills) <= 5
@@ -509,16 +538,38 @@ class TestGroupStrategy:
     def test_io_relation_shared_type_merges(self) -> None:
         """Operations sharing a common type are grouped together."""
         ops = [
-            SourceOperation(name="op_a", description="A",
-                           parameters=[ParamSpec(name="x", type_hint="str"), ParamSpec(name="y", type_hint="int")]),
-            SourceOperation(name="op_b", description="B",
-                           parameters=[ParamSpec(name="x", type_hint="str"), ParamSpec(name="y", type_hint="bool")]),
-            SourceOperation(name="op_c", description="C",
-                           parameters=[ParamSpec(name="x", type_hint="str"), ParamSpec(name="y", type_hint="float")]),
+            SourceOperation(
+                name="op_a",
+                description="A",
+                parameters=[
+                    ParamSpec(name="x", type_hint="str"),
+                    ParamSpec(name="y", type_hint="int"),
+                ],
+            ),
+            SourceOperation(
+                name="op_b",
+                description="B",
+                parameters=[
+                    ParamSpec(name="x", type_hint="str"),
+                    ParamSpec(name="y", type_hint="bool"),
+                ],
+            ),
+            SourceOperation(
+                name="op_c",
+                description="C",
+                parameters=[
+                    ParamSpec(name="x", type_hint="str"),
+                    ParamSpec(name="y", type_hint="float"),
+                ],
+            ),
         ]
-        comp = SourceComponent(name="Shared", file_path="s.py", description="Shared type str", operations=ops)
+        comp = SourceComponent(
+            name="Shared", file_path="s.py", description="Shared type str", operations=ops
+        )
 
-        result = group_source_components([comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=2)
+        result = group_source_components(
+            [comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=2
+        )
         # All 3 ops share "str" anchor → should be in 1-2 groups
         assert len(result.skills) <= 2
         all_tools = {t for s in result.skills for t in s.allowed_tools}
@@ -530,33 +581,55 @@ class TestGroupStrategy:
         """Rebalancing redirects multi-type ops to diverse secondary anchors."""
         ops = []
         for i in range(50):
-            ops.append(SourceOperation(
-                name=f"op_str_path_{i}", description="Str+Path op",
-                parameters=[ParamSpec(name="x", type_hint="str"), ParamSpec(name="y", type_hint="Path")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_str_path_{i}",
+                    description="Str+Path op",
+                    parameters=[
+                        ParamSpec(name="x", type_hint="str"),
+                        ParamSpec(name="y", type_hint="Path"),
+                    ],
+                )
+            )
         for i in range(50):
-            ops.append(SourceOperation(
-                name=f"op_str_dict_{i}", description="Str+dict op",
-                parameters=[ParamSpec(name="x", type_hint="str"), ParamSpec(name="y", type_hint="dict")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_str_dict_{i}",
+                    description="Str+dict op",
+                    parameters=[
+                        ParamSpec(name="x", type_hint="str"),
+                        ParamSpec(name="y", type_hint="dict"),
+                    ],
+                )
+            )
         for i in range(10):
-            ops.append(SourceOperation(
-                name=f"op_int_{i}", description="Int op",
-                parameters=[ParamSpec(name="x", type_hint="int")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_int_{i}",
+                    description="Int op",
+                    parameters=[ParamSpec(name="x", type_hint="int")],
+                )
+            )
         for i in range(5):
-            ops.append(SourceOperation(
-                name=f"op_bool_{i}", description="Bool op",
-                parameters=[ParamSpec(name="x", type_hint="bool")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_bool_{i}",
+                    description="Bool op",
+                    parameters=[ParamSpec(name="x", type_hint="bool")],
+                )
+            )
 
         comp = SourceComponent(
-            name="BigSDK", file_path="b.py",
-            description="Big SDK with diverse secondary types", operations=ops,
+            name="BigSDK",
+            file_path="b.py",
+            description="Big SDK with diverse secondary types",
+            operations=ops,
         )
 
         result = group_source_components(
-            [comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=5,
+            [comp],
+            strategy=GroupStrategy.IO_RELATION,
+            max_io_groups=5,
         )
 
         assert len(result.skills) <= 5
@@ -572,18 +645,25 @@ class TestGroupStrategy:
         """Single-type ops stay in their anchor group, not forcibly scattered."""
         ops = []
         for _ in range(100):
-            ops.append(SourceOperation(
-                name=f"op_str_{_}", description="Str op",
-                parameters=[ParamSpec(name="x", type_hint="str")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_str_{_}",
+                    description="Str op",
+                    parameters=[ParamSpec(name="x", type_hint="str")],
+                )
+            )
 
         comp = SourceComponent(
-            name="OnlyStr", file_path="s.py",
-            description="All str ops", operations=ops,
+            name="OnlyStr",
+            file_path="s.py",
+            description="All str ops",
+            operations=ops,
         )
 
         result = group_source_components(
-            [comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=5,
+            [comp],
+            strategy=GroupStrategy.IO_RELATION,
+            max_io_groups=5,
         )
 
         assert len(result.skills) == 1
@@ -593,25 +673,35 @@ class TestGroupStrategy:
         """Utility (untyped) operations are dissolved into typed buckets."""
         typed_ops = []
         for t in ["str", "int", "bool", "float", "Path"]:
-            typed_ops.append(SourceOperation(
-                name=f"op_{t}", description=f"Op {t}",
-                parameters=[ParamSpec(name="x", type_hint=t)],
-            ))
+            typed_ops.append(
+                SourceOperation(
+                    name=f"op_{t}",
+                    description=f"Op {t}",
+                    parameters=[ParamSpec(name="x", type_hint=t)],
+                )
+            )
 
         untyped_ops = []
         for i in range(20):
-            untyped_ops.append(SourceOperation(
-                name=f"op_none_{i}", description="No type",
-                parameters=[ParamSpec(name="x")],
-            ))
+            untyped_ops.append(
+                SourceOperation(
+                    name=f"op_none_{i}",
+                    description="No type",
+                    parameters=[ParamSpec(name="x")],
+                )
+            )
 
         comp = SourceComponent(
-            name="MixedTypes", file_path="m.py",
-            description="Mixed typed/untyped", operations=typed_ops + untyped_ops,
+            name="MixedTypes",
+            file_path="m.py",
+            description="Mixed typed/untyped",
+            operations=typed_ops + untyped_ops,
         )
 
         result = group_source_components(
-            [comp], strategy=GroupStrategy.IO_RELATION, max_io_groups=5,
+            [comp],
+            strategy=GroupStrategy.IO_RELATION,
+            max_io_groups=5,
         )
 
         all_tools = {t for s in result.skills for t in s.allowed_tools}
@@ -620,9 +710,7 @@ class TestGroupStrategy:
         # With the dissolution design, untyped ops are distributed
         # round-robin across existing typed buckets — no standalone
         # "utility" group should exist when typed buckets are present.
-        utility_group = next(
-            (s for s in result.skills if "utility" in s.name), None
-        )
+        utility_group = next((s for s in result.skills if "utility" in s.name), None)
         assert utility_group is None, (
             f"Utility group should be dissolved, got: {[s.name for s in result.skills]}"
         )
@@ -662,7 +750,9 @@ class TestMappingRuleMatches:
         assert not rule.matches("check_status")
 
     def test_regex_match(self) -> None:
-        rule = MappingRule("video_encode|video_decode", "video_ops", "video_processing", match_type=MatchType.REGEX)
+        rule = MappingRule(
+            "video_encode|video_decode", "video_ops", "video_processing", match_type=MatchType.REGEX
+        )
         assert rule.matches("video_encode")
         assert rule.matches("video_decode")
         assert not rule.matches("audio_encode")
@@ -721,9 +811,13 @@ class TestKeywordMatch:
             SourceOperation(name="audio_mix", description="Mix audio"),
             SourceOperation(name="audio_record", description="Record audio"),
         ]
-        comp = SourceComponent(name="Media", file_path="media.py", description="Media ops", operations=ops)
+        comp = SourceComponent(
+            name="Media", file_path="media.py", description="Media ops", operations=ops
+        )
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=rules,
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=rules,
         )
         skill_names = [s.name for s in result.skills]
         assert "video_ops" in skill_names
@@ -740,9 +834,13 @@ class TestKeywordMatch:
             SourceOperation(name="audio_mix", description="Mix"),
             SourceOperation(name="audio_record", description="Record"),
         ]
-        comp = SourceComponent(name="Media", file_path="media.py", description="Media", operations=ops)
+        comp = SourceComponent(
+            name="Media", file_path="media.py", description="Media", operations=ops
+        )
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=[],
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=[],
         )
         skill_names = [s.name for s in result.skills]
         assert "video_ops" in skill_names
@@ -758,7 +856,9 @@ class TestKeywordMatch:
         ]
         comp = SourceComponent(name="Core", file_path="core.py", description="Core", operations=ops)
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=[],
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=[],
         )
         utility_skill = next(s for s in result.skills if s.name == "utility")
         assert "Core.init" in utility_skill.allowed_tools
@@ -772,9 +872,13 @@ class TestKeywordMatch:
             SourceOperation(name="audio_mix", description="Mix"),
             SourceOperation(name="cache_purge", description="Purge"),
         ]
-        comp = SourceComponent(name="Mixed", file_path="mixed.py", description="Mixed", operations=ops)
+        comp = SourceComponent(
+            name="Mixed", file_path="mixed.py", description="Mixed", operations=ops
+        )
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=[],
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=[],
         )
         all_tools = {t for s in result.skills for t in s.allowed_tools}
         assert len(all_tools) == 4
@@ -796,9 +900,13 @@ class TestKeywordMatch:
             SourceOperation(name="video_encode", description="Encode video"),
             SourceOperation(name="video_decode", description="Decode video"),
         ]
-        comp = SourceComponent(name="Mixed", file_path="mixed.py", description="Mixed ops", operations=ops)
+        comp = SourceComponent(
+            name="Mixed", file_path="mixed.py", description="Mixed ops", operations=ops
+        )
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=rules,
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=rules,
         )
         skill_names = [s.name for s in result.skills]
         assert "build_image" in skill_names
@@ -810,16 +918,26 @@ class TestKeywordMatch:
     def test_keyword_match_regex_rule(self) -> None:
         """Regex-type MappingRule matches pattern via regex search."""
         rules = [
-            MappingRule("video_encode|video_decode", "video_ops", "video_ops", "Video codec", MatchType.REGEX),
+            MappingRule(
+                "video_encode|video_decode",
+                "video_ops",
+                "video_ops",
+                "Video codec",
+                MatchType.REGEX,
+            ),
         ]
         ops = [
             SourceOperation(name="video_encode", description="Encode"),
             SourceOperation(name="video_decode", description="Decode"),
             SourceOperation(name="audio_mix", description="Mix"),
         ]
-        comp = SourceComponent(name="Codec", file_path="codec.py", description="Codec", operations=ops)
+        comp = SourceComponent(
+            name="Codec", file_path="codec.py", description="Codec", operations=ops
+        )
         result = group_source_components(
-            [comp], strategy=GroupStrategy.KEYWORD_MATCH, mapping_rules=rules,
+            [comp],
+            strategy=GroupStrategy.KEYWORD_MATCH,
+            mapping_rules=rules,
         )
         video_skill = next(s for s in result.skills if s.name == "video_ops")
         assert "Codec.video_encode" in video_skill.allowed_tools
@@ -828,6 +946,7 @@ class TestKeywordMatch:
     def test_keyword_match_with_sdk_methods(self) -> None:
         """KEYWORD_MATCH also works with SdkMethod data (backward compat)."""
         from extensions.pos_converter.sdk_parser import SdkMethod
+
         methods = [
             SdkMethod(name="docker_build", description="Build image"),
             SdkMethod(name="docker_push", description="Push image"),
@@ -853,10 +972,15 @@ class TestKeywordMatch:
         ops_b = [
             SourceOperation(name="docker_push", description="Push"),
         ]
-        comp_a = SourceComponent(name="Builder", file_path="b.py", description="Builder", operations=ops_a)
-        comp_b = SourceComponent(name="Pusher", file_path="p.py", description="Pusher", operations=ops_b)
+        comp_a = SourceComponent(
+            name="Builder", file_path="b.py", description="Builder", operations=ops_a
+        )
+        comp_b = SourceComponent(
+            name="Pusher", file_path="p.py", description="Pusher", operations=ops_b
+        )
         result = group_source_components(
-            [comp_a, comp_b], strategy=GroupStrategy.KEYWORD_MATCH,
+            [comp_a, comp_b],
+            strategy=GroupStrategy.KEYWORD_MATCH,
         )
         docker_skill = next((s for s in result.skills if s.name == "build_image"), None)
         assert docker_skill is not None
@@ -866,9 +990,11 @@ class TestKeywordMatch:
     def test_keyword_match_list_strategy_dispatch(self) -> None:
         """KEYWORD_MATCH in a strategy list is correctly dispatched."""
         from extensions.pos_converter.sdk_parser import SdkMethod
+
         methods = [SdkMethod(name="docker_build", description="Build")]
         grouper = SkillGrouper(
-            methods, strategy=[GroupStrategy.KEYWORD_MATCH],
+            methods,
+            strategy=[GroupStrategy.KEYWORD_MATCH],
         )
         skills = grouper.group()
         assert len(skills) > 0
@@ -911,7 +1037,12 @@ class TestAgentMarkdownWriter:
                 "description": "Transcode video to target format",
                 "allowed_tools": ["transcode"],
                 "parameters": [
-                    {"name": "input_path", "type_hint": "str", "required": True, "description": "Input file"}
+                    {
+                        "name": "input_path",
+                        "type_hint": "str",
+                        "required": True,
+                        "description": "Input file",
+                    }
                 ],
                 "source_code": "def transcode(path): pass",
             }
@@ -981,7 +1112,9 @@ class TestAgentMarkdownWriter:
             AgentComponentInfo(name="agent-a", description="Agent A", capabilities=["a"]),
         ]
         stages = [
-            WorkflowStage(name="Stage 1", order=1, responsible_agent="agent-a", output_type="result"),
+            WorkflowStage(
+                name="Stage 1", order=1, responsible_agent="agent-a", output_type="result"
+            ),
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             path = writer.write_workflow("test", "Test workflow", agents, stages, Path(tmpdir))
@@ -1121,11 +1254,17 @@ class TestAgentBuilder:
         """F-55: overview agent reflects grouped skills, not raw components."""
         ops_a = [SourceOperation(name="op_a", description="Op A")]
         ops_b = [SourceOperation(name="op_b", description="Op B")]
-        comp_a = SourceComponent(name="CompA", file_path="a.py", description="Comp A", operations=ops_a)
-        comp_b = SourceComponent(name="CompB", file_path="b.py", description="Comp B", operations=ops_b)
+        comp_a = SourceComponent(
+            name="CompA", file_path="a.py", description="Comp A", operations=ops_a
+        )
+        comp_b = SourceComponent(
+            name="CompB", file_path="b.py", description="Comp B", operations=ops_b
+        )
 
         # Simulate IO_RELATION: 2 components merged into 1 skill
-        skills = [SkillSpec(name="merged_skill", description="Merged", allowed_tools=["op_a", "op_b"])]
+        skills = [
+            SkillSpec(name="merged_skill", description="Merged", allowed_tools=["op_a", "op_b"])
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             builder = AgentBuilder(
                 skills=skills,
@@ -1148,10 +1287,18 @@ class TestAgentBuilder:
             SkillSpec(name="skill_b", description="Skill B", allowed_tools=["tool_b1"]),
         ]
         components = [
-            SourceComponent(name="CompA", file_path="a.py", description="A",
-                          operations=[SourceOperation(name="tool_a1", description="Tool A1")]),
-            SourceComponent(name="CompB", file_path="b.py", description="B",
-                          operations=[SourceOperation(name="tool_b1", description="Tool B1")]),
+            SourceComponent(
+                name="CompA",
+                file_path="a.py",
+                description="A",
+                operations=[SourceOperation(name="tool_a1", description="Tool A1")],
+            ),
+            SourceComponent(
+                name="CompB",
+                file_path="b.py",
+                description="B",
+                operations=[SourceOperation(name="tool_b1", description="Tool B1")],
+            ),
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             builder = AgentBuilder(
@@ -1167,7 +1314,9 @@ class TestAgentBuilder:
             assert len(result.markdown_files) >= 3  # agent + skills + overview
             # Find overview agent
             overview_files = [f for f in result.markdown_files if "clawcodex-overview" in f.name]
-            assert len(overview_files) >= 1, f"Expected overview agent, got: {[f.name for f in result.markdown_files]}"
+            assert len(overview_files) >= 1, (
+                f"Expected overview agent, got: {[f.name for f in result.markdown_files]}"
+            )
             overview_content = overview_files[0].read_text(encoding="utf-8")
             assert "skill_a-agent" in overview_content
             assert "skill_b-agent" in overview_content
@@ -1184,24 +1333,29 @@ class TestAutoGenerateRulesNaming:
         comps = []
         for fp in paths:
             name = Path(fp).stem if fp.endswith(".py") else Path(fp).name
-            comps.append(SourceComponent(
-                name=name, file_path=fp,
-                description=f"Component in {fp}",
-                operations=[SourceOperation(name="do_work", description="Work")],
-            ))
+            comps.append(
+                SourceComponent(
+                    name=name,
+                    file_path=fp,
+                    description=f"Component in {fp}",
+                    operations=[SourceOperation(name="do_work", description="Work")],
+                )
+            )
         return comps
 
     def test_merged_group_named_by_common_ancestor(self) -> None:
         """Merged group skill_name uses common ancestor, not one leaf's unique tag."""
         from extensions.pos_converter.skill_grouper import SkillGrouper, MappingRule
 
-        comps = self._make_components([
-            "proj/examples/permissions/perm_ops.py",
-            "proj/examples/rl_calculator/rl_ops.py",
-            "proj/examples/session/session_ops.py",
-            "proj/core/memory/mem_ops.py",
-            "proj/core/runner/runner_ops.py",
-        ])
+        comps = self._make_components(
+            [
+                "proj/examples/permissions/perm_ops.py",
+                "proj/examples/rl_calculator/rl_ops.py",
+                "proj/examples/session/session_ops.py",
+                "proj/core/memory/mem_ops.py",
+                "proj/core/runner/runner_ops.py",
+            ]
+        )
 
         rules = SkillGrouper._auto_generate_rules(comps, max_groups=4)
         skill_names = {r.skill_name for r in rules}
@@ -1209,18 +1363,22 @@ class TestAutoGenerateRulesNaming:
         # The examples/* paths should be merged into one group named
         # after their common ancestor "examples" + "_merged" suffix.
         # Single-path groups (memory, runner, session) stay un-suffixed.
-        assert "examples_merged" in skill_names, f"Expected 'examples_merged' in skill_names, got: {skill_names}"
+        assert "examples_merged" in skill_names, (
+            f"Expected 'examples_merged' in skill_names, got: {skill_names}"
+        )
 
     def test_merged_group_no_common_ancestor_fallback(self) -> None:
         """When sub_keys share no common segment, fallback to distinguishing pattern."""
         from extensions.pos_converter.skill_grouper import SkillGrouper, MappingRule
 
-        comps = self._make_components([
-            "proj/a_domain/ops.py",
-            "proj/b_domain/ops.py",
-            "proj/c_domain/ops.py",
-            "proj/d_domain/ops.py",
-        ])
+        comps = self._make_components(
+            [
+                "proj/a_domain/ops.py",
+                "proj/b_domain/ops.py",
+                "proj/c_domain/ops.py",
+                "proj/d_domain/ops.py",
+            ]
+        )
 
         rules = SkillGrouper._auto_generate_rules(comps, max_groups=2)
 
@@ -1275,9 +1433,11 @@ class TestAutoGenerateRulesNaming:
         """Single-path groups still use _best_distinguishing_pattern (unchanged)."""
         from extensions.pos_converter.skill_grouper import SkillGrouper
 
-        comps = self._make_components([
-            "proj/core/memory/mem_ops.py",
-        ])
+        comps = self._make_components(
+            [
+                "proj/core/memory/mem_ops.py",
+            ]
+        )
 
         rules = SkillGrouper._auto_generate_rules(comps, max_groups=10)
         # Single path group — should use distinguishing pattern
@@ -1317,16 +1477,24 @@ class TestLLMSemanticStrategy:
     def test_fallback_without_provider(self) -> None:
         """Without an LLM provider, LLM_SEMANTIC falls back to KEYWORD_MATCH."""
         ops = [
-            SourceOperation(name="encode", description="Encode video",
-                           parameters=[ParamSpec(name="data", type_hint="str")]),
-            SourceOperation(name="decode", description="Decode video",
-                           parameters=[ParamSpec(name="data", type_hint="bytes")]),
+            SourceOperation(
+                name="encode",
+                description="Encode video",
+                parameters=[ParamSpec(name="data", type_hint="str")],
+            ),
+            SourceOperation(
+                name="decode",
+                description="Decode video",
+                parameters=[ParamSpec(name="data", type_hint="bytes")],
+            ),
         ]
-        comp = SourceComponent(name="VideoOps", file_path="v.py",
-                               description="Video operations", operations=ops)
+        comp = SourceComponent(
+            name="VideoOps", file_path="v.py", description="Video operations", operations=ops
+        )
 
         result = group_source_components(
-            [comp], strategy=GroupStrategy.LLM_SEMANTIC,
+            [comp],
+            strategy=GroupStrategy.LLM_SEMANTIC,
             llm_provider=None,
         )
         assert len(result.skills) > 0
@@ -1336,26 +1504,43 @@ class TestLLMSemanticStrategy:
     def test_parse_valid_json_response(self) -> None:
         """_parse_llm_patterns correctly parses a patterns-based JSON response."""
         ops = [
-            SourceOperation(name="encode", description="Encode video",
-                           parameters=[ParamSpec(name="data", type_hint="str")]),
-            SourceOperation(name="decode", description="Decode video",
-                           parameters=[ParamSpec(name="data", type_hint="bytes")]),
-            SourceOperation(name="load", description="Load config",
-                           parameters=[ParamSpec(name="path", type_hint="Path")]),
+            SourceOperation(
+                name="encode",
+                description="Encode video",
+                parameters=[ParamSpec(name="data", type_hint="str")],
+            ),
+            SourceOperation(
+                name="decode",
+                description="Decode video",
+                parameters=[ParamSpec(name="data", type_hint="bytes")],
+            ),
+            SourceOperation(
+                name="load",
+                description="Load config",
+                parameters=[ParamSpec(name="path", type_hint="Path")],
+            ),
         ]
-        comp = SourceComponent(name="VideoOps", file_path="video/video_ops.py",
-                               description="Video operations", operations=ops)
-
-        grouper = SkillGrouper(
-            methods=[], strategy=GroupStrategy.LLM_SEMANTIC,
-            source_components=[comp], llm_provider=None,
+        comp = SourceComponent(
+            name="VideoOps",
+            file_path="video/video_ops.py",
+            description="Video operations",
+            operations=ops,
         )
 
-        raw_json = ('{"skills": ['
-                    '{"name": "video_processing", "description": "Video codec", '
-                    '"patterns": ["video"]}, '
-                    '{"name": "config_management", "description": "Config loading", '
-                    '"patterns": ["config"]}]}')
+        grouper = SkillGrouper(
+            methods=[],
+            strategy=GroupStrategy.LLM_SEMANTIC,
+            source_components=[comp],
+            llm_provider=None,
+        )
+
+        raw_json = (
+            '{"skills": ['
+            '{"name": "video_processing", "description": "Video codec", '
+            '"patterns": ["video"]}, '
+            '{"name": "config_management", "description": "Config loading", '
+            '"patterns": ["config"]}]}'
+        )
         dir_paths = ["video/video_ops.py"]
         rules = grouper._parse_llm_patterns(raw_json, dir_paths)
         assert rules is not None
@@ -1370,40 +1555,51 @@ class TestLLMSemanticStrategy:
 
     def test_parse_json_with_preamble(self) -> None:
         """_extract_json_from_raw tolerates LLM preamble text."""
-        raw = "Here is the grouping result:\n{\"skills\": [{\"name\": \"a\", \"description\": \"b\", \"tools\": []}]}\nHope this helps!"
+        raw = 'Here is the grouping result:\n{"skills": [{"name": "a", "description": "b", "tools": []}]}\nHope this helps!'
         result = SkillGrouper._extract_json_from_raw(raw)
         assert result is not None
         import json
+
         parsed = json.loads(result)
         assert "skills" in parsed
 
     def test_orphaned_tools_assigned_to_largest(self) -> None:
         """Unmatched dirs go through auto prefix inference in _keyword_match_group."""
         ops = [
-            SourceOperation(name="op_a", description="A",
-                           parameters=[ParamSpec(name="x", type_hint="str")]),
-            SourceOperation(name="op_b", description="B",
-                           parameters=[ParamSpec(name="x", type_hint="int")]),
-            SourceOperation(name="op_c", description="C",
-                           parameters=[ParamSpec(name="x", type_hint="bool")]),
+            SourceOperation(
+                name="op_a", description="A", parameters=[ParamSpec(name="x", type_hint="str")]
+            ),
+            SourceOperation(
+                name="op_b", description="B", parameters=[ParamSpec(name="x", type_hint="int")]
+            ),
+            SourceOperation(
+                name="op_c", description="C", parameters=[ParamSpec(name="x", type_hint="bool")]
+            ),
         ]
-        comp_a = SourceComponent(name="CompA", file_path="core/module_a.py",
-                                 description="Module A", operations=[ops[0]])
-        comp_b = SourceComponent(name="CompB", file_path="core/module_b.py",
-                                 description="Module B", operations=[ops[1]])
-        comp_c = SourceComponent(name="CompC", file_path="extra/module_c.py",
-                                 description="Module C", operations=[ops[2]])
+        comp_a = SourceComponent(
+            name="CompA", file_path="core/module_a.py", description="Module A", operations=[ops[0]]
+        )
+        comp_b = SourceComponent(
+            name="CompB", file_path="core/module_b.py", description="Module B", operations=[ops[1]]
+        )
+        comp_c = SourceComponent(
+            name="CompC", file_path="extra/module_c.py", description="Module C", operations=[ops[2]]
+        )
 
         grouper = SkillGrouper(
-            methods=[], strategy=GroupStrategy.LLM_SEMANTIC,
+            methods=[],
+            strategy=GroupStrategy.LLM_SEMANTIC,
             source_components=[comp_a, comp_b, comp_c],
-            max_io_groups=10, llm_provider=None,
+            max_io_groups=10,
+            llm_provider=None,
         )
 
         # LLM only covers "core" — "extra" is unmatched, handled by auto prefix.
-        raw_json = ('{"skills": ['
-                    '{"name": "core_group", "description": "Core modules", '
-                    '"patterns": ["core"]}]}')
+        raw_json = (
+            '{"skills": ['
+            '{"name": "core_group", "description": "Core modules", '
+            '"patterns": ["core"]}]}'
+        )
         dir_paths = ["core/module_a.py", "core/module_b.py", "extra/module_c.py"]
         rules = grouper._parse_llm_patterns(raw_json, dir_paths)
         assert rules is not None
@@ -1422,22 +1618,28 @@ class TestLLMSemanticStrategy:
     def test_invalid_tools_filtered(self) -> None:
         """LLM patterns that match no dirs are still valid (keyword handles matching)."""
         ops = [
-            SourceOperation(name="real_op", description="Real",
-                           parameters=[ParamSpec(name="x", type_hint="str")]),
+            SourceOperation(
+                name="real_op",
+                description="Real",
+                parameters=[ParamSpec(name="x", type_hint="str")],
+            ),
         ]
-        comp = SourceComponent(name="Comp", file_path="core/real.py",
-                               description="Test", operations=ops)
+        comp = SourceComponent(
+            name="Comp", file_path="core/real.py", description="Test", operations=ops
+        )
 
         grouper = SkillGrouper(
-            methods=[], strategy=GroupStrategy.LLM_SEMANTIC,
-            source_components=[comp], llm_provider=None,
+            methods=[],
+            strategy=GroupStrategy.LLM_SEMANTIC,
+            source_components=[comp],
+            llm_provider=None,
         )
 
         # LLM returns a pattern for a dir that exists + one that doesn't.
         # The non-matching pattern is harmless — keyword_match just won't match.
-        raw_json = ('{"skills": ['
-                    '{"name": "s1", "description": "d1", '
-                    '"patterns": ["core", "nonexistent"]}]}')
+        raw_json = (
+            '{"skills": [{"name": "s1", "description": "d1", "patterns": ["core", "nonexistent"]}]}'
+        )
         dir_paths = ["core/real.py"]
         rules = grouper._parse_llm_patterns(raw_json, dir_paths)
         assert rules is not None
@@ -1449,27 +1651,41 @@ class TestLLMSemanticStrategy:
         """_parse_llm_patterns handles many skills; LLM prompt tells LLM to respect max."""
         ops = []
         for i in range(6):
-            ops.append(SourceOperation(
-                name=f"op_{i}", description=f"Op {i}",
-                parameters=[ParamSpec(name="x", type_hint="str")],
-            ))
+            ops.append(
+                SourceOperation(
+                    name=f"op_{i}",
+                    description=f"Op {i}",
+                    parameters=[ParamSpec(name="x", type_hint="str")],
+                )
+            )
         comps = []
         for i in range(6):
-            comps.append(SourceComponent(
-                name=f"Comp{i}", file_path=f"dir_{i}/mod.py",
-                description=f"Module {i}", operations=[ops[i]],
-            ))
+            comps.append(
+                SourceComponent(
+                    name=f"Comp{i}",
+                    file_path=f"dir_{i}/mod.py",
+                    description=f"Module {i}",
+                    operations=[ops[i]],
+                )
+            )
 
         grouper = SkillGrouper(
-            methods=[], strategy=GroupStrategy.LLM_SEMANTIC,
-            source_components=comps, max_io_groups=3, llm_provider=None,
+            methods=[],
+            strategy=GroupStrategy.LLM_SEMANTIC,
+            source_components=comps,
+            max_io_groups=3,
+            llm_provider=None,
         )
 
         # LLM produces 6 skills with 1 pattern each.
-        raw_json = '{"skills": [' + ', '.join(
-            f'{{"name": "g{i}", "description": "Group {i}", "patterns": ["dir_{i}"]}}'
-            for i in range(6)
-        ) + ']}'
+        raw_json = (
+            '{"skills": ['
+            + ", ".join(
+                f'{{"name": "g{i}", "description": "Group {i}", "patterns": ["dir_{i}"]}}'
+                for i in range(6)
+            )
+            + "]}"
+        )
         dir_paths = [f"dir_{i}/mod.py" for i in range(6)]
         rules = grouper._parse_llm_patterns(raw_json, dir_paths)
         assert rules is not None
@@ -1478,8 +1694,10 @@ class TestLLMSemanticStrategy:
     def test_no_source_components_falls_back_to_static(self) -> None:
         """With no source_components, _group_with_llm falls back to _static_group."""
         grouper = SkillGrouper(
-            methods=[], strategy=GroupStrategy.LLM_SEMANTIC,
-            source_components=[], llm_provider=None,
+            methods=[],
+            strategy=GroupStrategy.LLM_SEMANTIC,
+            source_components=[],
+            llm_provider=None,
         )
         result = grouper._group_with_llm("")
         assert result == grouper._static_group()
@@ -1690,9 +1908,7 @@ class Processor:
             components = parser.parse()
 
         ops = [op for comp in components for op in comp.operations]
-        assert len(ops) == 0, (
-            f"Empty __all__ should yield no ops, got: {[op.name for op in ops]}"
-        )
+        assert len(ops) == 0, f"Empty __all__ should yield no ops, got: {[op.name for op in ops]}"
 
     def test_all_methods_flag(self) -> None:
         """extern_only=False (--all): all public methods included, regardless of docstring."""
@@ -2065,13 +2281,19 @@ class AudioMixer:
             skills_dir = tmp / "skills"
 
             # Run pos convert with --all (include all methods)
-            exit_code = run_pos_command([
-                "convert", str(proj),
-                "--strategy", "keyword",
-                "--out", str(out_dir),
-                "--skills", str(skills_dir),
-                "--all",
-            ])
+            exit_code = run_pos_command(
+                [
+                    "convert",
+                    str(proj),
+                    "--strategy",
+                    "keyword",
+                    "--out",
+                    str(out_dir),
+                    "--skills",
+                    str(skills_dir),
+                    "--all",
+                ]
+            )
             assert exit_code == 0, f"pos convert failed with exit code {exit_code}"
 
             # ── Verify agent files ──
@@ -2088,7 +2310,9 @@ class AudioMixer:
                 assert len(parts) >= 3, f"Agent {af.name} malformed frontmatter"
                 fm_text = parts[1]
                 assert "name:" in fm_text, f"Agent {af.name} missing 'name' in frontmatter"
-                assert "description:" in fm_text, f"Agent {af.name} missing 'description' in frontmatter"
+                assert "description:" in fm_text, (
+                    f"Agent {af.name} missing 'description' in frontmatter"
+                )
                 assert "tools:" in fm_text, f"Agent {af.name} missing 'tools' in frontmatter"
 
             # ── Verify skill files ──
@@ -2148,12 +2372,17 @@ class HiddenUtil:
                 full.write_text(content, encoding="utf-8")
 
             out_dir = tmp / "out"
-            exit_code = run_pos_command([
-                "convert", str(lib),
-                "--strategy", "keyword",
-                "--out", str(out_dir),
-                # No --all → default extern-only filtering
-            ])
+            exit_code = run_pos_command(
+                [
+                    "convert",
+                    str(lib),
+                    "--strategy",
+                    "keyword",
+                    "--out",
+                    str(out_dir),
+                    # No --all → default extern-only filtering
+                ]
+            )
             assert exit_code == 0
 
             # Verify agents were generated

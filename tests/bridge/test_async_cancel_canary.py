@@ -92,9 +92,7 @@ async def _combined_event_wait(*events: asyncio.Event) -> None:
         return
     tasks = [asyncio.create_task(e.wait()) for e in events]
     try:
-        done, pending = await asyncio.wait(
-            tasks, return_when=asyncio.FIRST_COMPLETED
-        )
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         for t in pending:
             t.cancel()
     finally:
@@ -193,15 +191,15 @@ async def test_generation_counter_invalidates_stale_callback() -> None:
         fired.append(value)
 
     g1 = guard.next_gen()
-    t1 = asyncio.create_task(maybe_apply(g1, 'first'))
+    t1 = asyncio.create_task(maybe_apply(g1, "first"))
 
     # User cancels/reschedules — bump generation.
     g2 = guard.next_gen()
-    t2 = asyncio.create_task(maybe_apply(g2, 'second'))
+    t2 = asyncio.create_task(maybe_apply(g2, "second"))
 
     await asyncio.gather(t1, t2)
     # Only the second (current-generation) callback should have fired.
-    assert fired == ['second']
+    assert fired == ["second"]
 
 
 @pytest.mark.asyncio
@@ -218,11 +216,11 @@ async def test_generation_counter_allows_multiple_in_order_callbacks() -> None:
 
     gen = guard.next_gen()
     await asyncio.gather(
-        maybe_apply(gen, 'a'),
-        maybe_apply(gen, 'b'),
-        maybe_apply(gen, 'c'),
+        maybe_apply(gen, "a"),
+        maybe_apply(gen, "b"),
+        maybe_apply(gen, "c"),
     )
-    assert sorted(fired) == ['a', 'b', 'c']
+    assert sorted(fired) == ["a", "b", "c"]
 
 
 @pytest.mark.asyncio

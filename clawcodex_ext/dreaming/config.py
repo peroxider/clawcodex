@@ -19,6 +19,7 @@ A/B gate). KAIROS branches stay available via
 :func:`clawcodex_ext.dreaming.paths.is_kairos_active` for follow-up
 work.
 """
+
 from __future__ import annotations
 
 import os

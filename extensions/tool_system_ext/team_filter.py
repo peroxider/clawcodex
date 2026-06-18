@@ -12,6 +12,7 @@ This module is pure (no I/O, no globals, no upstream-tool mutation)
 so it can be unit-tested in isolation and reused anywhere upstream
 or downstream assembles a tool list.
 """
+
 from __future__ import annotations
 
 from typing import Iterable, TypeVar
@@ -20,11 +21,13 @@ from typing import Iterable, TypeVar
 # ``src.coordinator.mode.INTERNAL_WORKER_TOOLS``. We intentionally do
 # not import that constant: coordinator mode is a separate axis (env
 # var), and we want this filter to be usable in any context.
-TEAM_ONLY_TOOL_NAMES: frozenset[str] = frozenset({
-    "SendMessage",
-    "TeamCreate",
-    "TeamDelete",
-})
+TEAM_ONLY_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "SendMessage",
+        "TeamCreate",
+        "TeamDelete",
+    }
+)
 
 
 _T = TypeVar("_T")
@@ -65,10 +68,7 @@ def filter_team_only_tools(
     """
     if has_team:
         return list(tools)
-    return [
-        t for t in tools
-        if getattr(t, name_attr, None) not in TEAM_ONLY_TOOL_NAMES
-    ]
+    return [t for t in tools if getattr(t, name_attr, None) not in TEAM_ONLY_TOOL_NAMES]
 
 
 __all__ = [

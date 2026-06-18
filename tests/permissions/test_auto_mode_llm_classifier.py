@@ -65,6 +65,7 @@ class TestClassificationCache(unittest.TestCase):
         cache.set("key1", result)
 
         import time
+
         time.sleep(0.15)
 
         retrieved = cache.get("key1")
@@ -73,12 +74,15 @@ class TestClassificationCache(unittest.TestCase):
     def test_cache_max_entries(self) -> None:
         cache = ClassificationCache(max_entries=2)
         for i in range(3):
-            cache.set(f"key{i}", LLMClassificationResult(
-                decision="AUTO_ALLOW",
-                reasoning="test",
-                confidence=0.9,
-                cache_key=f"key{i}",
-            ))
+            cache.set(
+                f"key{i}",
+                LLMClassificationResult(
+                    decision="AUTO_ALLOW",
+                    reasoning="test",
+                    confidence=0.9,
+                    cache_key=f"key{i}",
+                ),
+            )
         self.assertEqual(len(cache.entries), 2)
         self.assertIsNone(cache.get("key0"))
 
@@ -133,39 +137,27 @@ class TestDangerousEditPath(unittest.TestCase):
 
 class TestDangerousToolCall(unittest.TestCase):
     def test_bash_dangerous(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "Bash", {"command": "rm -rf /tmp"}
-        )
+        is_danger, reason = detect_dangerous_tool_call("Bash", {"command": "rm -rf /tmp"})
         self.assertTrue(is_danger)
 
     def test_bash_safe(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "Bash", {"command": "ls -la"}
-        )
+        is_danger, reason = detect_dangerous_tool_call("Bash", {"command": "ls -la"})
         self.assertFalse(is_danger)
 
     def test_write_dangerous(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "Write", {"file_path": ".git/config"}
-        )
+        is_danger, reason = detect_dangerous_tool_call("Write", {"file_path": ".git/config"})
         self.assertTrue(is_danger)
 
     def test_write_safe(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "Write", {"file_path": "/tmp/test.txt"}
-        )
+        is_danger, reason = detect_dangerous_tool_call("Write", {"file_path": "/tmp/test.txt"})
         self.assertFalse(is_danger)
 
     def test_mcp_tool_dangerous(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "mcp__server__tool", {}
-        )
+        is_danger, reason = detect_dangerous_tool_call("mcp__server__tool", {})
         self.assertTrue(is_danger)
 
     def test_read_safe(self) -> None:
-        is_danger, reason = detect_dangerous_tool_call(
-            "Read", {"file_path": "/etc/passwd"}
-        )
+        is_danger, reason = detect_dangerous_tool_call("Read", {"file_path": "/etc/passwd"})
         self.assertFalse(is_danger)
 
 
@@ -176,7 +168,9 @@ class TestLLMClassifier(unittest.TestCase):
     def test_cache_hit_returns_cached_result(self) -> None:
         get_cache().clear()
         mock_provider = MagicMock()
-        mock_provider.chat.return_value = MagicMock(content='{"decision": "AUTO_ALLOW", "reasoning": "test", "confidence": 0.9}')
+        mock_provider.chat.return_value = MagicMock(
+            content='{"decision": "AUTO_ALLOW", "reasoning": "test", "confidence": 0.9}'
+        )
 
         result1 = llm_classify_tool_call(
             "Bash", {"command": "echo hello"}, self.context, provider=mock_provider
@@ -195,9 +189,7 @@ class TestLLMClassifier(unittest.TestCase):
             "clawcodex_ext.providers.runtime.build_provider_from_config",
             side_effect=ImportError("No provider"),
         ):
-            result = llm_classify_tool_call(
-                "Bash", {"command": "ls"}, self.context, provider=None
-            )
+            result = llm_classify_tool_call("Bash", {"command": "ls"}, self.context, provider=None)
             self.assertEqual(result.decision, "ASK_USER")
 
     def test_json_response_parsed_correctly(self) -> None:
@@ -217,9 +209,7 @@ class TestLLMClassifier(unittest.TestCase):
     def test_non_json_response_fallback(self) -> None:
         get_cache().clear()
         mock_provider = MagicMock()
-        mock_provider.chat.return_value = MagicMock(
-            content="AUTO_ALLOW: This is safe."
-        )
+        mock_provider.chat.return_value = MagicMock(content="AUTO_ALLOW: This is safe.")
 
         result = llm_classify_tool_call(
             "Bash", {"command": "ls"}, self.context, provider=mock_provider
@@ -241,9 +231,7 @@ class TestAutoModeClassifyWithLLM(unittest.TestCase):
         self.assertTrue(result.allow)
 
     def test_safe_bash_allowed(self) -> None:
-        result = auto_mode_classify_with_llm(
-            "Bash", {"command": "ls -la"}, self.context
-        )
+        result = auto_mode_classify_with_llm("Bash", {"command": "ls -la"}, self.context)
         self.assertTrue(result.allow)
 
     def test_llm_override_for_uncertain(self) -> None:
@@ -300,6 +288,7 @@ class TestCanCycleToAuto(unittest.TestCase):
 
     def test_danger_history_blocks_auto(self) -> None:
         from src.permissions.check import get_denial_tracker, reset_denial_tracker
+
         reset_denial_tracker()
         tracker = get_denial_tracker()
         for _ in range(3):
@@ -313,6 +302,7 @@ class TestCanCycleToAuto(unittest.TestCase):
 
     def test_danger_history_check_disabled(self) -> None:
         from src.permissions.check import get_denial_tracker, reset_denial_tracker
+
         reset_denial_tracker()
         tracker = get_denial_tracker()
         for _ in range(5):
@@ -342,6 +332,7 @@ class TestAutoModeAvailabilityReason(unittest.TestCase):
 
     def test_danger_history_returns_reason(self) -> None:
         from src.permissions.check import get_denial_tracker, reset_denial_tracker
+
         reset_denial_tracker()
         tracker = get_denial_tracker()
         for _ in range(3):

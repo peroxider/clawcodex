@@ -12,6 +12,7 @@ FAST_MODE_MODEL = "claude-3-5-haiku-20241022"
 @dataclass
 class FastModeState:
     """Track fast mode on/off per session."""
+
     _enabled: bool = False
     _session_override: bool | None = None
 
@@ -58,6 +59,7 @@ def is_fast_mode_enabled(
         # late-import to avoid a top-level circular dependency between
         # state/cache_state.py and src.providers (used by is_first_party_provider).
         from src.state.cache_state import get_beta_header_latches
+
         latches = get_beta_header_latches()
         if not latches.fast_mode_header_latched:
             latches.fast_mode_header_latched = True

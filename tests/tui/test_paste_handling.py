@@ -304,9 +304,7 @@ async def test_paste_routes_through_subclassed_input():
         assert prompt.last_paste is not None
         assert prompt.last_paste.line_count == 3
         # And the host received the bubbled-up message.
-        assert any(
-            evt.info.text == "multi\nline\npaste" for evt in host.paste_events
-        )
+        assert any(evt.info.text == "multi\nline\npaste" for evt in host.paste_events)
 
 
 @pytest.mark.asyncio

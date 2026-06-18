@@ -59,9 +59,7 @@ class ProgressReporter:
         """
         self._current_task_id = task_id
         self._phase_count = 0
-        self._sink = (
-            self._build_sink(task_id) if task_id else None
-        )
+        self._sink = self._build_sink(task_id) if task_id else None
 
     # -- sink plumbing ---------------------------------------------------
 

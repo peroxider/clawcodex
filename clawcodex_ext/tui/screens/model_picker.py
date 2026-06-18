@@ -70,7 +70,5 @@ class ModelPickerScreen(DialogScreen[str | None]):
                 pass
         self.dismiss(model)
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)

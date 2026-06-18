@@ -22,11 +22,13 @@ def settings_to_rules(
     for behavior in ("allow", "deny", "ask"):
         behavior_list = permissions_data.get(behavior, [])
         for rule_string in behavior_list:
-            rules.append(PermissionRule(
-                source=source,
-                rule_behavior=behavior,  # type: ignore[arg-type]
-                rule_value=permission_rule_value_from_string(rule_string),
-            ))
+            rules.append(
+                PermissionRule(
+                    source=source,
+                    rule_behavior=behavior,  # type: ignore[arg-type]
+                    rule_value=permission_rule_value_from_string(rule_string),
+                )
+            )
     return rules
 
 

@@ -7,6 +7,7 @@ exercised by sub-agent and headless flows. Parity references:
 - bubble: ``typescript/src/utils/permissions/permissions.ts`` (escalation
   via interactiveHandler/coordinator) + book ch01:126, ch06:211-213.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -46,7 +47,9 @@ class _MockTool:
         return self._is_mcp
 
     def check_permissions(
-        self, tool_input: dict[str, Any], context: Any,
+        self,
+        tool_input: dict[str, Any],
+        context: Any,
     ) -> PermissionResult:
         if self._perm_result is not None:
             return self._perm_result
@@ -99,7 +102,8 @@ class TestAutoMode(unittest.TestCase):
             ),
         )
         ctx = ToolPermissionContext(
-            mode="auto", should_avoid_permission_prompts=True,
+            mode="auto",
+            should_avoid_permission_prompts=True,
         )
         tool = _MockTool(name="Read", perm_result=safety_ask)
         decision = has_permissions_to_use_tool(tool, {}, ctx)
@@ -147,7 +151,8 @@ class TestBubbleMode(unittest.TestCase):
         # mode should not interfere — it's only on ask decisions that need
         # human approval.
         ctx = ToolPermissionContext(
-            mode="bubble", always_allow_rules={"session": ["TestTool"]},
+            mode="bubble",
+            always_allow_rules={"session": ["TestTool"]},
         )
         tool = _MockTool(name="TestTool")
         decision = has_permissions_to_use_tool(tool, {}, ctx)
@@ -155,7 +160,8 @@ class TestBubbleMode(unittest.TestCase):
 
     def test_bubble_does_not_block_deny_decisions(self) -> None:
         ctx = ToolPermissionContext(
-            mode="bubble", always_deny_rules={"session": ["TestTool"]},
+            mode="bubble",
+            always_deny_rules={"session": ["TestTool"]},
         )
         tool = _MockTool(name="TestTool")
         decision = has_permissions_to_use_tool(tool, {}, ctx)
@@ -185,7 +191,8 @@ class TestModeOrderingInOuterFlow(unittest.TestCase):
         # In auto mode + should_avoid_prompts, the classifier still runs
         # first; when it allows, we don't fall through to the headless deny.
         ctx = ToolPermissionContext(
-            mode="auto", should_avoid_permission_prompts=True,
+            mode="auto",
+            should_avoid_permission_prompts=True,
         )
         tool = _MockTool(name="Read")
         decision = has_permissions_to_use_tool(tool, {}, ctx)
