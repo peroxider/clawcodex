@@ -48,9 +48,7 @@ class _EnvFixture(unittest.TestCase):
 
 class SanitizePathKeyTest(unittest.TestCase):
     def test_plain_key_accepted(self):
-        self.assertEqual(
-            _sanitize_path_key("feedback_testing.md"), "feedback_testing.md"
-        )
+        self.assertEqual(_sanitize_path_key("feedback_testing.md"), "feedback_testing.md")
 
     def test_nested_subdir_accepted(self):
         self.assertEqual(_sanitize_path_key("subdir/file.md"), "subdir/file.md")
@@ -144,9 +142,7 @@ class IsTeamMemPathTest(_EnvFixture):
 
     def test_traversal_rejected(self):
         # The .. should be normalized away, escaping the team dir.
-        escaping = os.path.join(
-            get_team_mem_path(), "..", "..", "etc", "passwd"
-        )
+        escaping = os.path.join(get_team_mem_path(), "..", "..", "etc", "passwd")
         self.assertFalse(is_team_mem_path(escaping))
 
     def test_empty_returns_false(self):
@@ -182,9 +178,7 @@ class ValidateTeamMemWritePathTest(_EnvFixture):
             validate_team_mem_write_path(path)
 
     def test_string_level_escape_rejected(self):
-        path = os.path.join(
-            get_team_mem_path(), "..", "..", "etc", "passwd"
-        )
+        path = os.path.join(get_team_mem_path(), "..", "..", "etc", "passwd")
         with self.assertRaises(PathTraversalError):
             validate_team_mem_write_path(path)
 
@@ -202,9 +196,7 @@ class ValidateTeamMemWritePathTest(_EnvFixture):
         Path(inside).write_text("content", encoding="utf-8")
         resolved = validate_team_mem_write_path(inside)
         # On macOS /var resolves to /private/var. Compare realpaths.
-        self.assertEqual(
-            os.path.realpath(resolved), os.path.realpath(inside)
-        )
+        self.assertEqual(os.path.realpath(resolved), os.path.realpath(inside))
 
 
 class ValidateTeamMemKeyTest(_EnvFixture):
@@ -260,15 +252,11 @@ class RealpathDeepestExistingTest(_EnvFixture):
         super().tearDown()
 
     def test_tail_rejoin_for_nonexistent_target(self):
-        tail_path = os.path.join(
-            get_team_mem_path(), "new_subdir", "file.md"
-        )
+        tail_path = os.path.join(get_team_mem_path(), "new_subdir", "file.md")
         result = _realpath_deepest_existing(tail_path)
         team_real = os.path.realpath(get_team_mem_path().rstrip(os.sep))
         self.assertTrue(result.startswith(team_real))
-        self.assertTrue(
-            result.endswith(os.path.join("new_subdir", "file.md"))
-        )
+        self.assertTrue(result.endswith(os.path.join("new_subdir", "file.md")))
 
     def test_existing_path_resolves_to_realpath(self):
         f = Path(get_team_mem_path()) / "real.md"

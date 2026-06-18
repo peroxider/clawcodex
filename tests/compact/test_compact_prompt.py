@@ -143,14 +143,10 @@ class TestGetCompactUserSummaryMessage:
         assert "without asking" in msg
 
     def test_transcript_path(self):
-        msg = get_compact_user_summary_message(
-            "Summary", transcript_path="/tmp/transcript.md"
-        )
+        msg = get_compact_user_summary_message("Summary", transcript_path="/tmp/transcript.md")
         assert "/tmp/transcript.md" in msg
         assert "full transcript" in msg
 
     def test_recent_messages_preserved(self):
-        msg = get_compact_user_summary_message(
-            "Summary", recent_messages_preserved=True
-        )
+        msg = get_compact_user_summary_message("Summary", recent_messages_preserved=True)
         assert "Recent messages are preserved" in msg

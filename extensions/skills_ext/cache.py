@@ -83,9 +83,7 @@ class SkillCache:
         Returns:
             Number of entries removed
         """
-        expired_keys = [
-            k for k, v in self._store.items() if v.is_expired()
-        ]
+        expired_keys = [k for k, v in self._store.items() if v.is_expired()]
         for key in expired_keys:
             del self._store[key]
         return len(expired_keys)

@@ -45,12 +45,16 @@ def _read_auth_signals() -> tuple[bool, bool, bool]:
     want to opt into 1h caching manually.
     """
     is_ant_user = os.environ.get("CLAUDE_CODE_USER_TYPE", "").strip().lower() == "ant"
-    is_subscriber = os.environ.get(
-        "CLAUDE_CODE_IS_CLAUDE_AI_SUBSCRIBER", ""
-    ).strip().lower() in {"1", "true", "yes"}
-    is_using_overage = os.environ.get(
-        "CLAUDE_CODE_IS_USING_OVERAGE", ""
-    ).strip().lower() in {"1", "true", "yes"}
+    is_subscriber = os.environ.get("CLAUDE_CODE_IS_CLAUDE_AI_SUBSCRIBER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    is_using_overage = os.environ.get("CLAUDE_CODE_IS_USING_OVERAGE", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     return is_ant_user, is_subscriber, is_using_overage
 
 

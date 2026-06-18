@@ -185,6 +185,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
     def _build_params(self, provider):
         from src.query.transitions import TerminalHolder
+
         params = QueryParams(
             messages=[UserMessage(content="Long task")],
             system_prompt="You are helpful.",
@@ -201,6 +202,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         """B.1: PTL error tagged in _call_model_sync should NOT yield
         through to the consumer; recovery (B.2) replaces it."""
         from unittest.mock import MagicMock
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
 
@@ -233,6 +235,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with unittest.mock.patch(
                 "src.services.compact.reactive_compact.reactive_compact",
                 side_effect=fake_reactive_compact,
@@ -246,12 +249,14 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         # the withheld message was suppressed and replaced by the recovery
         # output.
         ptl_messages = [
-            m for m in collected
+            m
+            for m in collected
             if isinstance(m, AssistantMessage)
             and getattr(m, "_api_error", None) == "prompt_too_long"
         ]
         self.assertEqual(
-            ptl_messages, [],
+            ptl_messages,
+            [],
             "PTL message must be withheld from stream during recovery",
         )
 
@@ -259,6 +264,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         """B.2: when reactive_compact succeeds, the loop continues and
         terminates as `completed` (not `prompt_too_long`)."""
         from unittest.mock import MagicMock
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.side_effect = [
@@ -286,6 +292,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with unittest.mock.patch(
                 "src.services.compact.reactive_compact.reactive_compact",
                 side_effect=fake_reactive_compact,
@@ -304,6 +311,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         surfaces the PTL message and exits with terminal `prompt_too_long`.
         (Single-iteration exit; covers the no-recovery-available path.)"""
         from unittest.mock import MagicMock
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.side_effect = lambda *a, **kw: (_ for _ in ()).throw(
@@ -328,6 +336,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with unittest.mock.patch(
                 "src.services.compact.reactive_compact.reactive_compact",
                 side_effect=fake_reactive_compact,
@@ -341,8 +350,12 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         self.assertEqual(holder.value.reason, "prompt_too_long")
         self.assertEqual(len(compact_calls), 1)
         # Last assistant message must be the surfaced PTL error.
-        ptl = [m for m in collected if isinstance(m, AssistantMessage)
-               and getattr(m, "_api_error", None) == "prompt_too_long"]
+        ptl = [
+            m
+            for m in collected
+            if isinstance(m, AssistantMessage)
+            and getattr(m, "_api_error", None) == "prompt_too_long"
+        ]
         self.assertEqual(len(ptl), 1)
 
     def test_ptl_one_shot_guard_post_compact_does_not_retry(self):
@@ -353,6 +366,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         terminal is `prompt_too_long` and the second PTL message IS
         surfaced (first one was withheld during the recovery attempt)."""
         from unittest.mock import MagicMock
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         # Both calls raise PTL — first triggers reactive_compact (which
@@ -378,6 +392,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with unittest.mock.patch(
                 "src.services.compact.reactive_compact.reactive_compact",
                 side_effect=fake_reactive_compact,
@@ -395,7 +410,8 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         # budget in the death-spiral pattern documented in chapter §"Death
         # Spiral Guard" point 1.
         self.assertEqual(
-            len(compact_calls), 1,
+            len(compact_calls),
+            1,
             "has_attempted_reactive_compact one-shot guard must prevent "
             "a second reactive_compact attempt within the same loop turn",
         )
@@ -407,6 +423,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         """B.1: media-size errors are tagged and withheld;
         B.2: recovery via reactive_compact succeeds, terminal `completed`."""
         from unittest.mock import MagicMock
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.side_effect = [
@@ -435,6 +452,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with unittest.mock.patch(
                 "src.services.compact.reactive_compact.reactive_compact",
                 side_effect=fake_reactive_compact,
@@ -445,9 +463,9 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
         _run(run())
 
         media_msgs = [
-            m for m in collected
-            if isinstance(m, AssistantMessage)
-            and getattr(m, "_api_error", None) == "media_size"
+            m
+            for m in collected
+            if isinstance(m, AssistantMessage) and getattr(m, "_api_error", None) == "media_size"
         ]
         self.assertEqual(media_msgs, [], "media-size message must be withheld")
         self.assertEqual(holder.value.reason, "completed")
@@ -490,14 +508,18 @@ class TestImageUnsupportedClassification(unittest.TestCase):
         provider.chat.side_effect = err
 
         messages = [
-            UserMessage(content=[
-                TextBlock(text="describe"),
-                ImageBlock(source={
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "AAAA",
-                }),
-            ])
+            UserMessage(
+                content=[
+                    TextBlock(text="describe"),
+                    ImageBlock(
+                        source={
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "AAAA",
+                        }
+                    ),
+                ]
+            )
         ]
         params = QueryParams(
             messages=messages,
@@ -519,12 +541,14 @@ class TestImageUnsupportedClassification(unittest.TestCase):
         _run(run())
 
         tagged = [
-            m for m in collected
+            m
+            for m in collected
             if isinstance(m, AssistantMessage)
             and getattr(m, "_api_error", None) == "image_unsupported"
         ]
         self.assertEqual(
-            len(tagged), 1,
+            len(tagged),
+            1,
             "exactly one image_unsupported-tagged AssistantMessage must reach the consumer",
         )
         self.assertTrue(tagged[0].isApiErrorMessage)
@@ -584,6 +608,7 @@ class TestPhaseBBlockingLimitPreemption(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             with patch.dict(os.environ, {"DISABLE_AUTO_COMPACT": "1"}):
                 async for _ in query(params, terminal_holder=holder):
                     pass
@@ -651,6 +676,7 @@ class TestPhaseBBlockingLimitPreemption(unittest.TestCase):
 
         async def run():
             from src.query.query import query
+
             async for msg in query(params, terminal_holder=holder):
                 collected.append(msg)
 
@@ -661,8 +687,7 @@ class TestPhaseBBlockingLimitPreemption(unittest.TestCase):
         # Verify the user-visible message mentions automatic compaction.
         msgs = [m for m in collected if isinstance(m, AssistantMessage)]
         self.assertTrue(
-            any("automatic compaction" in str(getattr(m, "content", ""))
-                for m in msgs),
+            any("automatic compaction" in str(getattr(m, "content", "")) for m in msgs),
             f"Expected 'automatic compaction' in surfaced message, got {msgs}",
         )
 

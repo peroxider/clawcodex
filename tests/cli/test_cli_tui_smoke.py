@@ -71,9 +71,9 @@ def test_cli_provider_list_exits_0():
     for name in ("anthropic", "openai"):
         assert name.lower().replace("-", "") in proc.stdout.lower().replace(
             "-", ""
-        ) or name.lower().replace("-", "") in proc.stderr.lower().replace(
-            "-", ""
-        ), f"Expected {name!r} in provider list output"
+        ) or name.lower().replace("-", "") in proc.stderr.lower().replace("-", ""), (
+            f"Expected {name!r} in provider list output"
+        )
 
 
 def test_cli_model_list_exits_0():

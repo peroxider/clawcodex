@@ -7,6 +7,7 @@ registry.
 Mirrors the observation side of the chapter-10 "Manager monitors Workers"
 pattern. The companion tool ``TaskDirectives`` handles message injection.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,6 +22,7 @@ from src.tool_system.protocol import ToolResult
 # Manager-only gate helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_manager_agent(context: ToolContext) -> bool:
     """Check whether the caller is a Manager Agent.
 
@@ -33,9 +35,9 @@ def _is_manager_agent(context: ToolContext) -> bool:
     # This works because tool filtering (Phase M4) hasn't been implemented
     # yet, so all tools are visible during Phase M1-M3 development.
     # Phase M4 will add proper visibility filtering.
-    available_tool_names = getattr(context, 'available_tool_names', None)
+    available_tool_names = getattr(context, "available_tool_names", None)
     if available_tool_names is not None:
-        return 'TaskDirectives' in available_tool_names
+        return "TaskDirectives" in available_tool_names
     # Fallback: allow all callers during early phases (Phase M1-M3).
     # Phase M4 will enforce the manager-only gate properly.
     return True
@@ -44,6 +46,7 @@ def _is_manager_agent(context: ToolContext) -> bool:
 # ---------------------------------------------------------------------------
 # Input validation helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_fields(fields: Any) -> list[str] | None:
     """Parse and validate the optional fields filter."""
@@ -54,9 +57,7 @@ def _parse_fields(fields: Any) -> list[str] | None:
     valid_fields = {"status", "progress", "pending_messages", "error", "result_text", "turn_count"}
     for f in fields:
         if not isinstance(f, str) or f not in valid_fields:
-            raise ToolInputError(
-                f"Invalid field {f!r}. Must be one of: {sorted(valid_fields)}"
-            )
+            raise ToolInputError(f"Invalid field {f!r}. Must be one of: {sorted(valid_fields)}")
     return list(fields)
 
 
@@ -72,35 +73,37 @@ def _build_worker_snapshot(
     }
 
     if fields is None or "pending_messages" in fields:
-        pending_count = len(state.pending_messages) if hasattr(state, 'pending_messages') else 0
+        pending_count = len(state.pending_messages) if hasattr(state, "pending_messages") else 0
         if summary_only:
             result["pending_messages"] = f"{pending_count} pending message(s)"
         else:
-            result["pending_messages"] = list(state.pending_messages) if hasattr(state, 'pending_messages') else []
+            result["pending_messages"] = (
+                list(state.pending_messages) if hasattr(state, "pending_messages") else []
+            )
 
     if fields is None or "progress" in fields:
-        if hasattr(state, 'progress') and state.progress is not None:
+        if hasattr(state, "progress") and state.progress is not None:
             p = state.progress
             result["progress"] = {
-                "summary": getattr(p, 'summary', None),
-                "tool_uses": getattr(p, 'total_tool_uses', 0),
+                "summary": getattr(p, "summary", None),
+                "tool_uses": getattr(p, "total_tool_uses", 0),
             }
         else:
             result["progress"] = {"summary": None, "tool_uses": 0}
 
     if fields is None or "error" in fields:
-        result["error"] = getattr(state, 'error', None)
+        result["error"] = getattr(state, "error", None)
 
     if fields is None or "result_text" in fields:
-        result["result_text"] = getattr(state, 'result_text', "") or ""
+        result["result_text"] = getattr(state, "result_text", "") or ""
 
     if fields is None or "turn_count" in fields:
-        result["turn_count"] = getattr(state, 'turn_count', 0)
+        result["turn_count"] = getattr(state, "turn_count", 0)
 
     # Last activity timestamp
-    if hasattr(state, 'last_activity') and state.last_activity:
+    if hasattr(state, "last_activity") and state.last_activity:
         result["last_activity"] = state.last_activity
-    elif hasattr(state, 'start_time') and state.start_time:
+    elif hasattr(state, "start_time") and state.start_time:
         result["last_activity"] = state.start_time
 
     return result
@@ -109,6 +112,7 @@ def _build_worker_snapshot(
 # ---------------------------------------------------------------------------
 # Tool call implementation
 # ---------------------------------------------------------------------------
+
 
 def _task_inspect_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     """Query runtime state of one or more Worker agents.
@@ -164,16 +168,20 @@ def _task_inspect_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
         for task_id in targets:
             state = runtime.get(task_id)
             if state is None:
-                workers.append({
-                    "task_id": task_id,
-                    "error": "task not found",
-                })
+                workers.append(
+                    {
+                        "task_id": task_id,
+                        "error": "task not found",
+                    }
+                )
                 continue
             if not isinstance(state, LocalAgentTaskState):
-                workers.append({
-                    "task_id": task_id,
-                    "error": f"task type {state.type} does not support inspection",
-                })
+                workers.append(
+                    {
+                        "task_id": task_id,
+                        "error": f"task type {state.type} does not support inspection",
+                    }
+                )
                 continue
             workers.append(_build_worker_snapshot(state, fields, summary_only))
 
@@ -186,6 +194,7 @@ def _task_inspect_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
 # ---------------------------------------------------------------------------
 # Auto-classifier helper
 # ---------------------------------------------------------------------------
+
 
 def _task_inspect_classifier_input(input_data: dict) -> str:
     """Mirror TS ``TaskInspectTool.toAutoClassifierInput``."""
@@ -217,7 +226,17 @@ TaskInspectTool: Tool = build_tool(
             },
             "fields": {
                 "type": "array",
-                "items": {"type": "string", "enum": ["status", "progress", "pending_messages", "error", "result_text", "turn_count"]},
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "status",
+                        "progress",
+                        "pending_messages",
+                        "error",
+                        "result_text",
+                        "turn_count",
+                    ],
+                },
                 "description": "Fields to return. Omit for all fields.",
             },
             "summary_only": {

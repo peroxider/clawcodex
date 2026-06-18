@@ -80,9 +80,7 @@ class TestStage4MessageTypes:
             AssistantMessage(
                 content=[
                     TextBlock(text="pong"),
-                    ToolUseBlock(
-                        id="t1", name="Read", input={"file_path": "/foo"}
-                    ),
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
                 ]
             ),
         ]
@@ -191,9 +189,14 @@ class TestStage4SubagentInParentSession:
         防止以后入口绕开 init()、resolver 永远为 None、子 agent 全部
         落 flat 的回归。
         """
-        transcript, init_callable, reset, original_resolver, original_warned, original_nested_flag = self._isolated_setup(
-            monkeypatch, tmp_path
-        )
+        (
+            transcript,
+            init_callable,
+            reset,
+            original_resolver,
+            original_warned,
+            original_nested_flag,
+        ) = self._isolated_setup(monkeypatch, tmp_path)
         try:
             assert transcript._transcript_path_resolver is None, (
                 "precondition: resolver must start cleared for this test"
@@ -210,6 +213,7 @@ class TestStage4SubagentInParentSession:
             transcript._transcript_path_resolver = None
             transcript._flat_fallback_warned = original_warned
             import clawcodex_ext
+
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
 
@@ -217,9 +221,14 @@ class TestStage4SubagentInParentSession:
         """``get_agent_transcript_path(agent_id, parent_session_id=sid)``
         返回 ``<HOME>/.clawcodex/sessions/<sid>/subagents/agent-<id>.jsonl``。
         """
-        transcript, init_callable, reset, original_resolver, original_warned, original_nested_flag = self._isolated_setup(
-            monkeypatch, tmp_path
-        )
+        (
+            transcript,
+            init_callable,
+            reset,
+            original_resolver,
+            original_warned,
+            original_nested_flag,
+        ) = self._isolated_setup(monkeypatch, tmp_path)
         try:
             init_callable()
             path = transcript.get_agent_transcript_path(
@@ -230,8 +239,7 @@ class TestStage4SubagentInParentSession:
             p = Path(path)
             # 文件名格式
             assert p.name == "agent-a1b2c3d4z.jsonl", (
-                f"unexpected filename; got {p.name!r}, "
-                f"want 'agent-a1b2c3d4z.jsonl'"
+                f"unexpected filename; got {p.name!r}, want 'agent-a1b2c3d4z.jsonl'"
             )
             # 倒一目录: subagents
             assert p.parent.name == "subagents", (
@@ -239,32 +247,33 @@ class TestStage4SubagentInParentSession:
             )
             # 倒二目录: parent_session_id
             assert p.parent.parent.name == "ses-stability-gate", (
-                f"grandparent must be the parent session id; "
-                f"got {p.parent.parent.name!r}"
+                f"grandparent must be the parent session id; got {p.parent.parent.name!r}"
             )
             # HOME 隔离断言: 路径必须在 tmp_path 之下
             try:
                 p.relative_to(tmp_path)
             except ValueError as exc:
-                raise AssertionError(
-                    f"path {p} escapes isolated tmp_path {tmp_path}: {exc}"
-                )
+                raise AssertionError(f"path {p} escapes isolated tmp_path {tmp_path}: {exc}")
         finally:
             transcript._transcript_path_resolver = None
             transcript._flat_fallback_warned = original_warned
             import clawcodex_ext
+
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
 
-    def test_subagent_path_shares_sessions_parent_with_main_session(
-        self, monkeypatch, tmp_path
-    ):
+    def test_subagent_path_shares_sessions_parent_with_main_session(self, monkeypatch, tmp_path):
         """子 agent path 与主 session 目录共享父路径
         ``~/.clawcodex/sessions/``，方便统一治理。
         """
-        transcript, init_callable, reset, original_resolver, original_warned, original_nested_flag = self._isolated_setup(
-            monkeypatch, tmp_path
-        )
+        (
+            transcript,
+            init_callable,
+            reset,
+            original_resolver,
+            original_warned,
+            original_nested_flag,
+        ) = self._isolated_setup(monkeypatch, tmp_path)
         try:
             init_callable()
             subagent_path = transcript.get_agent_transcript_path(
@@ -291,20 +300,24 @@ class TestStage4SubagentInParentSession:
             transcript._transcript_path_resolver = None
             transcript._flat_fallback_warned = original_warned
             import clawcodex_ext
+
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
 
-    def test_subagent_filename_is_agent_dash_id_jsonl(
-        self, monkeypatch, tmp_path
-    ):
+    def test_subagent_filename_is_agent_dash_id_jsonl(self, monkeypatch, tmp_path):
         """子 agent 文件名遵循 ``agent-<agent_id>.jsonl`` 格式。
 
         与 ``clawcodex_ext/transcript/nested_path.py:35`` 中的字面量
         ``f"agent-{agent_id}.jsonl"`` 同步——任何变更需要两边一起改。
         """
-        transcript, init_callable, reset, original_resolver, original_warned, original_nested_flag = self._isolated_setup(
-            monkeypatch, tmp_path
-        )
+        (
+            transcript,
+            init_callable,
+            reset,
+            original_resolver,
+            original_warned,
+            original_nested_flag,
+        ) = self._isolated_setup(monkeypatch, tmp_path)
         try:
             init_callable()
             for agent_id in ("a1", "agent-xyz", "a-b-c-9z"):
@@ -312,20 +325,19 @@ class TestStage4SubagentInParentSession:
                     agent_id, parent_session_id="ses-name-test"
                 )
                 from pathlib import Path
+
                 assert Path(path).name == f"agent-{agent_id}.jsonl", (
-                    f"agent_id={agent_id!r}: expected "
-                    f"agent-{agent_id}.jsonl suffix, got {path}"
+                    f"agent_id={agent_id!r}: expected agent-{agent_id}.jsonl suffix, got {path}"
                 )
         finally:
             transcript._transcript_path_resolver = None
             transcript._flat_fallback_warned = original_warned
             import clawcodex_ext
+
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
 
-    def test_flat_fallback_remains_writable_when_resolver_missing(
-        self, monkeypatch, tmp_path
-    ):
+    def test_flat_fallback_remains_writable_when_resolver_missing(self, monkeypatch, tmp_path):
         """兜底 flat 路径在 resolver 缺失时仍可写, 不污染主 session 目录。
 
         模拟某个未来入口漏走 init() 的回归场景——
@@ -364,6 +376,7 @@ class TestStage4SubagentInParentSession:
             transcript._transcript_path_resolver = original_resolver
             transcript._flat_fallback_warned = original_warned
             import clawcodex_ext
+
             clawcodex_ext._nested_transcript_initialized = original_nested_flag
             reset()
 
@@ -434,7 +447,9 @@ class TestStage4Resilience:
             conv = Conversation()
             conv.add_user_message("hello")
             conv.add_assistant_message("world")
-            session = Session(session_id="test-save-load", provider="test", model="test", conversation=conv)
+            session = Session(
+                session_id="test-save-load", provider="test", model="test", conversation=conv
+            )
             session.save()
             loaded = Session.load("test-save-load")
             assert loaded is not None

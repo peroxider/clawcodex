@@ -94,7 +94,9 @@ class InvalidAPIKeyError(Exception):
 
 
 def parse_prompt_too_long_token_counts(raw_message: str) -> tuple[int | None, int | None]:
-    match = re.search(r"prompt is too long[^0-9]*(\d+)\s*tokens?\s*>\s*(\d+)", raw_message, re.IGNORECASE)
+    match = re.search(
+        r"prompt is too long[^0-9]*(\d+)\s*tokens?\s*>\s*(\d+)", raw_message, re.IGNORECASE
+    )
     if match:
         return int(match.group(1)), int(match.group(2))
     return None, None

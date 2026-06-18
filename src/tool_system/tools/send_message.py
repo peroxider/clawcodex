@@ -41,6 +41,7 @@ from the leader but were written through some other path — covers
 the case where a future malicious / buggy code path bypasses the
 SendMessage gate entirely.
 """
+
 from __future__ import annotations
 
 import logging
@@ -132,9 +133,7 @@ def _err(message: str, **extra: Any) -> ToolResult:
     return ToolResult(name=SEND_MESSAGE_TOOL_NAME, output=out, is_error=True)
 
 
-def _resolve_in_process(
-    name_or_id: str, context: ToolContext
-) -> tuple[str, Any] | None:
+def _resolve_in_process(name_or_id: str, context: ToolContext) -> tuple[str, Any] | None:
     """Resolve ``to:`` against the in-process registries.
 
     Returns ``(agent_id, state_or_None)`` if a candidate is found
@@ -183,8 +182,7 @@ async def _route_in_process(
         # Running — queue and return.
         if not queue_pending_message(agent_id, message_text, context.runtime_tasks):
             return _err(
-                f"Failed to queue message for {to!r} (task may have "
-                f"transitioned to terminal)."
+                f"Failed to queue message for {to!r} (task may have transitioned to terminal)."
             )
         return _ok(
             f"Message queued for delivery to {to!r} at its next tool round.",
@@ -196,12 +194,13 @@ async def _route_in_process(
     from src.agent.resume_agent import resume_agent_background
 
     result = await resume_agent_background(
-        agent_id=agent_id, prompt=message_text, context=context,
+        agent_id=agent_id,
+        prompt=message_text,
+        context=context,
     )
     if result.resumed:
         return _ok(
-            f"Agent {to!r} was {state.status!r}; resumed it in the "
-            f"background with your message.",
+            f"Agent {to!r} was {state.status!r}; resumed it in the background with your message.",
             agent_id=agent_id,
             output_file=result.output_file,
             replayed_messages=result.replayed_message_count,
@@ -240,8 +239,11 @@ async def _route_team_mailbox(
 
     if to == "*":
         return _broadcast(
-            team_file=team_file, sender_name=sender_name,
-            message_text=message_text, summary=summary, context=context,
+            team_file=team_file,
+            sender_name=sender_name,
+            message_text=message_text,
+            summary=summary,
+            context=context,
         )
 
     # Sanity: confirm the recipient is on the team roster (defense-in-
@@ -256,12 +258,17 @@ async def _route_team_mailbox(
         )
 
     msg = TeammateMessage(
-        from_=sender_name, text=message_text, timestamp=make_iso_timestamp(),
+        from_=sender_name,
+        text=message_text,
+        timestamp=make_iso_timestamp(),
         summary=summary,
     )
     try:
         write_to_mailbox(
-            to, msg, team_name=team_name, workspace_root=context.workspace_root,
+            to,
+            msg,
+            team_name=team_name,
+            workspace_root=context.workspace_root,
         )
     except ValueError as exc:
         return _err(f"Invalid recipient: {exc}")
@@ -290,12 +297,15 @@ def _broadcast(
         if member.name.lower() == sender_name.lower():
             continue  # don't echo to self
         msg = TeammateMessage(
-            from_=sender_name, text=message_text,
-            timestamp=make_iso_timestamp(), summary=summary,
+            from_=sender_name,
+            text=message_text,
+            timestamp=make_iso_timestamp(),
+            summary=summary,
         )
         try:
             write_to_mailbox(
-                member.name, msg,
+                member.name,
+                msg,
                 team_name=team_file.team_name,
                 workspace_root=context.workspace_root,
             )
@@ -328,7 +338,8 @@ def _structured_message_to_envelope(
     if msg_type == "shutdown_request":
         return (
             create_shutdown_request_message(
-                request_id=request_id, from_=sender_name,
+                request_id=request_id,
+                from_=sender_name,
                 reason=message_obj.get("reason"),
             ),
             "",  # caller passes the original ``to``
@@ -338,18 +349,19 @@ def _structured_message_to_envelope(
         if approve:
             return (
                 create_shutdown_approved_message(
-                    request_id=request_id, from_=sender_name,
+                    request_id=request_id,
+                    from_=sender_name,
                 ),
                 "",  # caller passes the original ``to`` (typically team-lead)
             )
         reason = message_obj.get("reason")
         if not isinstance(reason, str) or not reason.strip():
-            raise ToolInputError(
-                "shutdown_response with approve=False requires a reason."
-            )
+            raise ToolInputError("shutdown_response with approve=False requires a reason.")
         return (
             create_shutdown_rejected_message(
-                request_id=request_id, from_=sender_name, reason=reason,
+                request_id=request_id,
+                from_=sender_name,
+                reason=reason,
             ),
             "",
         )
@@ -358,20 +370,18 @@ def _structured_message_to_envelope(
         # plan approvals (chapter §"Plan-mode lifecycle"; refactoring-
         # plan critic concern C3 sender-side check).
         if not is_team_lead(context):
-            raise ToolInputError(
-                "plan_approval_response can only be sent by the team lead."
-            )
+            raise ToolInputError("plan_approval_response can only be sent by the team lead.")
         approve = bool(message_obj.get("approve"))
-        permission_mode = str(
-            message_obj.get("permission_mode") or "default"
-        )
+        permission_mode = str(message_obj.get("permission_mode") or "default")
         feedback = message_obj.get("feedback")
         if feedback is not None and not isinstance(feedback, str):
             raise ToolInputError("plan_approval_response.feedback must be a string.")
         return (
             create_plan_approval_response_message(
-                request_id=request_id, approved=approve,
-                permission_mode=permission_mode, from_=sender_name,
+                request_id=request_id,
+                approved=approve,
+                permission_mode=permission_mode,
+                from_=sender_name,
                 feedback=feedback,
             ),
             "",
@@ -411,9 +421,7 @@ async def _send_message_call(tool_input: dict[str, Any], context: ToolContext) -
     # ``to`` validation: TS rejects '@' (the chapter has one team per
     # session, no fully-qualified addressing).
     if "@" in to and not to.startswith(("bridge:", "uds:")):
-        raise ToolInputError(
-            "'to' must be a bare teammate name or '*' — no '@' addressing."
-        )
+        raise ToolInputError("'to' must be a bare teammate name or '*' — no '@' addressing.")
 
     addr = parse_address(to)
 
@@ -447,21 +455,23 @@ async def _send_message_call(tool_input: dict[str, Any], context: ToolContext) -
             # Summary is required for plain-text messages per TS
             # validation; broadcast accepts no-summary because the UI
             # surfaces a generic broadcast indicator.
-            raise ToolInputError(
-                "'summary' is required for plain-text messages."
-            )
+            raise ToolInputError("'summary' is required for plain-text messages.")
 
         # Branch 3 — in-process.
         if to != "*":
             in_process_result = await _route_in_process(
-                to=to, message_text=message_text, context=context,
+                to=to,
+                message_text=message_text,
+                context=context,
             )
             if in_process_result is not None:
                 return in_process_result
 
         # Branch 4 — team mailbox / broadcast.
         mailbox_result = await _route_team_mailbox(
-            to=to, message_text=message_text, summary=summary,
+            to=to,
+            message_text=message_text,
+            summary=summary,
             context=context,
         )
         if mailbox_result is not None:
@@ -474,28 +484,26 @@ async def _send_message_call(tool_input: dict[str, Any], context: ToolContext) -
         )
 
     if not isinstance(raw_message, dict):
-        raise ToolInputError(
-            "'message' must be a string or a structured-protocol object."
-        )
+        raise ToolInputError("'message' must be a string or a structured-protocol object.")
 
     # Structured-protocol path — always routes via mailbox (no
     # in-process queue for protocol messages; the mailbox poller
     # translates them back into teammate state changes).
     envelope, _ = _structured_message_to_envelope(
-        message_obj=raw_message, sender_name=sender_name, context=context,
+        message_obj=raw_message,
+        sender_name=sender_name,
+        context=context,
     )
     if context.team is None:
-        raise ToolInputError(
-            "structured-protocol messages require an active team context."
-        )
+        raise ToolInputError("structured-protocol messages require an active team context.")
     team_file = read_team_file(context.workspace_root)
     if team_file is None:
         raise ToolInputError(
-            "structured-protocol messages require a team file; "
-            "TeamCreate hasn't run."
+            "structured-protocol messages require a team file; TeamCreate hasn't run."
         )
 
     import json as _json
+
     msg = TeammateMessage(
         from_=sender_name,
         text=_json.dumps(envelope, ensure_ascii=False),
@@ -503,15 +511,17 @@ async def _send_message_call(tool_input: dict[str, Any], context: ToolContext) -
     )
     try:
         write_to_mailbox(
-            to, msg, team_name=team_file.team_name,
+            to,
+            msg,
+            team_name=team_file.team_name,
             workspace_root=context.workspace_root,
         )
     except ValueError as exc:
         return _err(f"Invalid recipient: {exc}")
     return _ok(
-        f"Structured {raw_message.get('type')!r} envelope delivered to "
-        f"mailbox of {to!r}.",
-        recipient=to, envelope_type=raw_message.get("type"),
+        f"Structured {raw_message.get('type')!r} envelope delivered to mailbox of {to!r}.",
+        recipient=to,
+        envelope_type=raw_message.get("type"),
     )
 
 

@@ -3,6 +3,7 @@
 Mirrors TypeScript ide/types.ts — defines the contract between Claude Code
 and IDE extensions.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,6 +29,7 @@ class IDEDiagnosticSeverity(str, Enum):
 @dataclass
 class IDERange:
     """Line/column range in a file."""
+
     start_line: int
     start_character: int
     end_line: int
@@ -37,6 +39,7 @@ class IDERange:
 @dataclass
 class IDESelection:
     """Current editor selection from the IDE."""
+
     file_path: str
     text: str
     range: IDERange
@@ -46,6 +49,7 @@ class IDESelection:
 @dataclass
 class IDEDiagnostic:
     """A diagnostic (error/warning) from the IDE's language server."""
+
     file_path: str
     message: str
     severity: IDEDiagnosticSeverity = IDEDiagnosticSeverity.ERROR
@@ -57,6 +61,7 @@ class IDEDiagnostic:
 @dataclass
 class IDEConnection:
     """Represents a live connection to an IDE extension."""
+
     ide_type: IDEType = IDEType.UNKNOWN
     version: str = ""
     workspace_root: str = ""

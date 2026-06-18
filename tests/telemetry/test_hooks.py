@@ -1,4 +1,5 @@
 """Tests for the global exception hooks."""
+
 from __future__ import annotations
 
 import sys
@@ -68,6 +69,4 @@ def test_excepthook_invokes_recorder(tmp_path):
     assert captured.get("called") is True
     today = utc_date(utc_now())
     crashes = storage.read_day("crashes", today)
-    assert any(
-        row["fields"]["error_class"] == "RuntimeError" for row in crashes
-    )
+    assert any(row["fields"]["error_class"] == "RuntimeError" for row in crashes)

@@ -8,7 +8,11 @@ See: docs/UPSTREAM_SYNC_DESIGN-decoupling.md Section 6 (Agent 集成)
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from src.providers.base import BaseProvider
+    from src.tool_system.renderers import AgentLoopResult
 
 __all__ = ["AgentLoopProtocol"]
 
@@ -39,6 +43,8 @@ class AgentLoopProtocol(Protocol):
 
     def summarize_tool_result(self, name: str, output: object) -> str: ...  # pragma: no cover
 
-    def summarize_tool_use(self, name: str, tool_input: dict[str, object]) -> str: ...  # pragma: no cover
+    def summarize_tool_use(
+        self, name: str, tool_input: dict[str, object]
+    ) -> str: ...  # pragma: no cover
 
     def is_anthropic_provider(self, provider: "BaseProvider") -> bool: ...  # pragma: no cover

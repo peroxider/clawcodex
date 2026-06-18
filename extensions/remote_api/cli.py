@@ -1,9 +1,10 @@
-"""``clawcodex api`` CLI subcommand for the Remote Single-Run Agent API."""
+"""``clawcodex api`` CLI subcommand for the Hermes-compatible remote API."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 
@@ -22,7 +23,7 @@ def run_api(args: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="clawcodex api",
-        description="Run the ClawCodex Remote Single-Run Agent API",
+        description="Run the ClawCodex Hermes-compatible Remote Agent API",
     )
     subparsers = parser.add_subparsers(dest="command")
     serve = subparsers.add_parser("serve", help="Start the HTTP API server")
@@ -36,6 +37,21 @@ def run_api(args: list[str] | None = None) -> int:
     )
     serve.add_argument("--max-turns", type=int, default=20, help="Maximum agent tool turns")
     serve.add_argument(
+        "--permission-mode",
+        choices=["bypassPermissions", "dontAsk"],
+        default="bypassPermissions",
+        help=(
+            "Tool approval policy: bypass interactive approvals or deny tools "
+            "that require approval (default: bypassPermissions)"
+        ),
+    )
+    serve.add_argument(
+        "--state-limit",
+        type=int,
+        default=128,
+        help="Maximum in-memory Responses API entries (default: 128)",
+    )
+    serve.add_argument(
         "--timeout",
         type=float,
         default=600.0,
@@ -45,7 +61,7 @@ def run_api(args: list[str] | None = None) -> int:
         "--log-level",
         default="info",
         choices=["debug", "info", "warning", "error"],
-        help="Uvicorn logging level",
+        help="Logging level",
     )
 
     parsed = parser.parse_args(args)
@@ -68,10 +84,13 @@ def run_api(args: list[str] | None = None) -> int:
         provider=parsed.provider,
         model=parsed.model,
         max_turns=parsed.max_turns,
+        permission_mode=parsed.permission_mode,
         timeout_seconds=parsed.timeout,
+        state_limit=parsed.state_limit,
     )
     print(f"ClawCodex Remote Agent API starting at http://{parsed.host}:{parsed.port}")
     print(f"Workspace: {config.workspace}")
+    print(f"Permission mode: {config.permission_mode}")
     print("Press Ctrl+C to stop\n")
 
     try:

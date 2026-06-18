@@ -4,18 +4,24 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
-from clawcodex_ext.cron_system.models import (SCHEDULED_TASKS_RELATIVE_PATH,
-                                              CronJitterConfig, CronTask)
+from clawcodex_ext.cron_system.models import (
+    SCHEDULED_TASKS_RELATIVE_PATH,
+    CronJitterConfig,
+    CronTask,
+)
 from clawcodex_ext.cron_system.parser import parse_cron_expression
-from clawcodex_ext.cron_system.tasks import (add_cron_task, find_due_tasks,
-                                             find_missed_tasks,
-                                             mark_cron_tasks_fired,
-                                             prune_expired_recurring_tasks,
-                                             read_all_cron_tasks,
-                                             read_cron_tasks,
-                                             read_session_cron_tasks,
-                                             remove_cron_tasks,
-                                             write_cron_tasks)
+from clawcodex_ext.cron_system.tasks import (
+    add_cron_task,
+    find_due_tasks,
+    find_missed_tasks,
+    mark_cron_tasks_fired,
+    prune_expired_recurring_tasks,
+    read_all_cron_tasks,
+    read_cron_tasks,
+    read_session_cron_tasks,
+    remove_cron_tasks,
+    write_cron_tasks,
+)
 
 
 def test_add_list_delete_persisted_tasks(tmp_path) -> None:
@@ -302,9 +308,7 @@ def test_remove_missed_tasks_handles_session(tmp_path) -> None:
         created_at=1_000,
     )
     assert one_shot_session.id in session_store
-    remove_missed_tasks(
-        tmp_path, [one_shot_file, one_shot_session], session_store=session_store
-    )
+    remove_missed_tasks(tmp_path, [one_shot_file, one_shot_session], session_store=session_store)
     assert one_shot_session.id not in session_store
     # file task was also removed from disk
     assert one_shot_file.id not in {task.id for task in read_cron_tasks(tmp_path)}
@@ -345,8 +349,7 @@ def test_concurrent_session_mark_fired_does_not_duplicate(tmp_path) -> None:
     concurrent mark_fired + add doesn't corrupt the dict."""
     import threading
 
-    from clawcodex_ext.cron_system.tasks import (add_cron_task,
-                                                 mark_cron_tasks_fired)
+    from clawcodex_ext.cron_system.tasks import add_cron_task, mark_cron_tasks_fired
 
     session_store: dict[str, object] = {}
     add_cron_task(
@@ -362,9 +365,7 @@ def test_concurrent_session_mark_fired_does_not_duplicate(tmp_path) -> None:
     rec = read_session_cron_tasks(session_store)[0]
 
     def fire() -> None:
-        mark_cron_tasks_fired(
-            tmp_path, [rec], fired_at=2_000, session_store=session_store
-        )
+        mark_cron_tasks_fired(tmp_path, [rec], fired_at=2_000, session_store=session_store)
 
     def add_more(index: int) -> None:
         add_cron_task(

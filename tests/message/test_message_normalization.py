@@ -39,41 +39,49 @@ class TestMessageNormalization(unittest.TestCase):
         self.assertEqual(normalized[2]["content"][0]["type"], "tool_result")
 
     def test_filters_progress_messages(self):
-        normalized = normalize_messages_for_api([
-            create_user_message("before"),
-            ProgressMessage(content="working...", toolUseID="t1", parentToolUseID="t0"),
-            AssistantMessage(content=[TextBlock(text="done")]),
-        ])
+        normalized = normalize_messages_for_api(
+            [
+                create_user_message("before"),
+                ProgressMessage(content="working...", toolUseID="t1", parentToolUseID="t0"),
+                AssistantMessage(content=[TextBlock(text="done")]),
+            ]
+        )
 
         self.assertEqual(len(normalized), 2)
         self.assertEqual(normalized[0]["role"], "user")
         self.assertEqual(normalized[1]["role"], "assistant")
 
     def test_filters_system_messages(self):
-        normalized = normalize_messages_for_api([
-            create_user_message("before"),
-            SystemMessage(content="boundary", subtype="compact_boundary"),
-            create_user_message("after"),
-        ])
+        normalized = normalize_messages_for_api(
+            [
+                create_user_message("before"),
+                SystemMessage(content="boundary", subtype="compact_boundary"),
+                create_user_message("after"),
+            ]
+        )
 
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0]["role"], "user")
 
     def test_filters_virtual_messages(self):
-        normalized = normalize_messages_for_api([
-            create_user_message("before"),
-            create_user_message("virtual", isVirtual=True),
-            create_user_message("after"),
-        ])
+        normalized = normalize_messages_for_api(
+            [
+                create_user_message("before"),
+                create_user_message("virtual", isVirtual=True),
+                create_user_message("after"),
+            ]
+        )
 
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0]["role"], "user")
 
     def test_merges_consecutive_user_messages(self):
-        normalized = normalize_messages_for_api([
-            create_user_message("first"),
-            create_user_message("second"),
-        ])
+        normalized = normalize_messages_for_api(
+            [
+                create_user_message("first"),
+                create_user_message("second"),
+            ]
+        )
 
         self.assertEqual(len(normalized), 1)
         self.assertEqual(normalized[0]["role"], "user")

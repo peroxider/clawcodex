@@ -10,6 +10,7 @@ from .configs import get_model_config
 @dataclass(frozen=True)
 class ModelCapabilities:
     """Capabilities of a model."""
+
     thinking: bool = False
     tools: bool = True
     vision: bool = True

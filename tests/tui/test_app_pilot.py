@@ -63,9 +63,7 @@ async def test_app_boots_with_all_core_widgets(tmp_path):
 async def test_local_slash_help_is_handled_without_agent(tmp_path, monkeypatch):
     app = _make_app(tmp_path)
     calls: list[str] = []
-    monkeypatch.setattr(
-        ClawCodexTUI, "submit_to_agent", lambda self, text: calls.append(text)
-    )
+    monkeypatch.setattr(ClawCodexTUI, "submit_to_agent", lambda self, text: calls.append(text))
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -82,9 +80,7 @@ async def test_local_slash_help_is_handled_without_agent(tmp_path, monkeypatch):
 async def test_prompt_submission_dispatches_to_agent(tmp_path, monkeypatch):
     app = _make_app(tmp_path)
     calls: list[str] = []
-    monkeypatch.setattr(
-        ClawCodexTUI, "submit_to_agent", lambda self, text: calls.append(text)
-    )
+    monkeypatch.setattr(ClawCodexTUI, "submit_to_agent", lambda self, text: calls.append(text))
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -117,9 +113,7 @@ async def test_assistant_message_renders_into_transcript(tmp_path):
 @pytest.mark.asyncio
 async def test_local_slash_exit_quits_app(tmp_path, monkeypatch):
     app = _make_app(tmp_path)
-    monkeypatch.setattr(
-        ClawCodexTUI, "submit_to_agent", lambda self, text: None
-    )
+    monkeypatch.setattr(ClawCodexTUI, "submit_to_agent", lambda self, text: None)
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -137,9 +131,7 @@ async def test_local_slash_repl_is_alias_for_exit(tmp_path, monkeypatch):
     control to the outer loop; when booted via ``--tui`` it ends the
     process. This test locks in the exit semantics."""
     app = _make_app(tmp_path)
-    monkeypatch.setattr(
-        ClawCodexTUI, "submit_to_agent", lambda self, text: None
-    )
+    monkeypatch.setattr(ClawCodexTUI, "submit_to_agent", lambda self, text: None)
 
     async with app.run_test() as pilot:
         await pilot.pause()

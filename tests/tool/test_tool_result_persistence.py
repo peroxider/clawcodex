@@ -2,6 +2,7 @@
 
 Mirrors behaviors from typescript/src/utils/toolResultStorage.ts.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,20 +65,32 @@ class TestIsToolResultContentEmpty(unittest.TestCase):
         self.assertTrue(is_tool_result_content_empty([]))
 
     def test_text_blocks_all_empty(self) -> None:
-        self.assertTrue(is_tool_result_content_empty([
-            {"type": "text", "text": ""},
-            {"type": "text", "text": "  "},
-        ]))
+        self.assertTrue(
+            is_tool_result_content_empty(
+                [
+                    {"type": "text", "text": ""},
+                    {"type": "text", "text": "  "},
+                ]
+            )
+        )
 
     def test_text_block_with_content_is_not_empty(self) -> None:
-        self.assertFalse(is_tool_result_content_empty([
-            {"type": "text", "text": "hello"},
-        ]))
+        self.assertFalse(
+            is_tool_result_content_empty(
+                [
+                    {"type": "text", "text": "hello"},
+                ]
+            )
+        )
 
     def test_image_block_is_not_empty(self) -> None:
-        self.assertFalse(is_tool_result_content_empty([
-            {"type": "image", "source": {"data": "..."}},
-        ]))
+        self.assertFalse(
+            is_tool_result_content_empty(
+                [
+                    {"type": "image", "source": {"data": "..."}},
+                ]
+            )
+        )
 
     def test_non_empty_string(self) -> None:
         self.assertFalse(is_tool_result_content_empty("output"))
@@ -104,7 +117,7 @@ class TestGeneratePreview(unittest.TestCase):
         self.assertTrue(has_more)
 
     def test_falls_back_to_max_when_no_close_newline(self) -> None:
-        content = ("a" * 200)
+        content = "a" * 200
         preview, has_more = generate_preview(content, 100)
         self.assertEqual(len(preview), 100)
         self.assertTrue(has_more)
@@ -117,7 +130,8 @@ class TestPersistToolResult(unittest.TestCase):
 
     def test_persists_string_content(self) -> None:
         result = persist_tool_result(
-            "hello world", "tool-use-1",
+            "hello world",
+            "tool-use-1",
             tool_results_dir=self.results_dir,
         )
         self.assertIsInstance(result, PersistedToolResult)
@@ -132,7 +146,8 @@ class TestPersistToolResult(unittest.TestCase):
     def test_persists_text_block_list_as_json(self) -> None:
         content = [{"type": "text", "text": "block one"}]
         result = persist_tool_result(
-            content, "tool-use-2",
+            content,
+            "tool-use-2",
             tool_results_dir=self.results_dir,
         )
         self.assertIsInstance(result, PersistedToolResult)
@@ -145,7 +160,8 @@ class TestPersistToolResult(unittest.TestCase):
     def test_rejects_non_text_blocks(self) -> None:
         content = [{"type": "image", "source": {}}]
         result = persist_tool_result(
-            content, "tool-use-3",
+            content,
+            "tool-use-3",
             tool_results_dir=self.results_dir,
         )
         self.assertIsInstance(result, PersistToolResultError)
@@ -154,12 +170,14 @@ class TestPersistToolResult(unittest.TestCase):
     def test_idempotent_on_existing_file(self) -> None:
         # First call writes the file.
         persist_tool_result(
-            "first", "same-id",
+            "first",
+            "same-id",
             tool_results_dir=self.results_dir,
         )
         # Second call sees EEXIST and returns success without rewriting.
         result = persist_tool_result(
-            "second", "same-id",
+            "second",
+            "same-id",
             tool_results_dir=self.results_dir,
         )
         self.assertIsInstance(result, PersistedToolResult)
@@ -215,7 +233,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
     def test_small_content_unchanged(self) -> None:
         block = self._block("hello")
         out = maybe_persist_large_tool_result(
-            block, "MyTool",
+            block,
+            "MyTool",
             threshold=1000,
             tool_results_dir=self.results_dir,
         )
@@ -224,7 +243,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
     def test_empty_content_replaced_with_marker(self) -> None:
         block = self._block("")
         out = maybe_persist_large_tool_result(
-            block, "MyTool",
+            block,
+            "MyTool",
             threshold=1000,
             tool_results_dir=self.results_dir,
         )
@@ -233,7 +253,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
     def test_none_content_replaced_with_marker(self) -> None:
         block = self._block(None)
         out = maybe_persist_large_tool_result(
-            block, "MyTool",
+            block,
+            "MyTool",
             threshold=1000,
             tool_results_dir=self.results_dir,
         )
@@ -243,7 +264,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
         content = [{"type": "image", "source": {"data": "..."}}]
         block = self._block(content)
         out = maybe_persist_large_tool_result(
-            block, "ScreenshotTool",
+            block,
+            "ScreenshotTool",
             threshold=10,  # absurdly small — would persist if not for image
             tool_results_dir=self.results_dir,
         )
@@ -253,7 +275,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
         big = "x" * 5000
         block = self._block(big, tool_use_id="big-id")
         out = maybe_persist_large_tool_result(
-            block, "BashTool",
+            block,
+            "BashTool",
             threshold=1000,
             tool_results_dir=self.results_dir,
         )
@@ -271,7 +294,8 @@ class TestMaybePersistLargeToolResult(unittest.TestCase):
         content = "y" * 100
         block = self._block(content)
         out = maybe_persist_large_tool_result(
-            block, "MyTool",
+            block,
+            "MyTool",
             threshold=100,
             tool_results_dir=self.results_dir,
         )
@@ -300,7 +324,9 @@ class TestProcessToolResultBlock(unittest.TestCase):
             max_result_size_chars=30_000,
         )
         out = process_tool_result_block(
-            tool, big_output, "tu-1",
+            tool,
+            big_output,
+            "tu-1",
             tool_results_dir=self.results_dir,
         )
         self.assertIn(PERSISTED_OUTPUT_TAG, out["content"])
@@ -323,7 +349,9 @@ class TestProcessToolResultBlock(unittest.TestCase):
             max_result_size_chars=30_000,
         )
         out = process_tool_result_block(
-            tool, small, "tu-2",
+            tool,
+            small,
+            "tu-2",
             tool_results_dir=self.results_dir,
         )
         self.assertEqual(out["content"], small)
@@ -341,7 +369,9 @@ class TestProcessToolResultBlock(unittest.TestCase):
             call=_call,
         )
         out = process_tool_result_block(
-            tool, "", "tu-3",
+            tool,
+            "",
+            "tu-3",
             tool_results_dir=self.results_dir,
         )
         self.assertEqual(
@@ -376,7 +406,9 @@ class TestProcessToolResultBlock(unittest.TestCase):
             max_result_size_chars=float("inf"),
         )
         out = process_tool_result_block(
-            tool, huge_output, "tu-inf",
+            tool,
+            huge_output,
+            "tu-inf",
             tool_results_dir=self.results_dir,
         )
         # The persisted-output wrapper must NOT appear -- content passes through.

@@ -185,10 +185,12 @@ class TestStartupProfiler(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            mod = _fresh_profiler({
-                "CLAUDE_CODE_PROFILE_STARTUP": "1",
-                "CLAUDE_CONFIG_DIR": tmpdir,
-            })
+            mod = _fresh_profiler(
+                {
+                    "CLAUDE_CODE_PROFILE_STARTUP": "1",
+                    "CLAUDE_CONFIG_DIR": tmpdir,
+                }
+            )
             self.assertEqual(
                 mod._OUTPUT_DIR,  # type: ignore[attr-defined]
                 Path(tmpdir) / "startup-perf",

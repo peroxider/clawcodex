@@ -2,6 +2,7 @@
 
 Mirrors typescript/src/tools/AgentTool/forkSubagent.ts behavior.
 """
+
 from __future__ import annotations
 
 import os
@@ -51,9 +52,7 @@ class TestForkConstants(unittest.TestCase):
 
     def test_fork_placeholder_result(self) -> None:
         # TS: forkSubagent.ts:93
-        self.assertEqual(
-            FORK_PLACEHOLDER_RESULT, "Fork started — processing in background"
-        )
+        self.assertEqual(FORK_PLACEHOLDER_RESULT, "Fork started — processing in background")
 
     def test_fork_agent_type(self) -> None:
         self.assertEqual(FORK_AGENT.agent_type, "fork")
@@ -165,16 +164,12 @@ class TestIsInForkChild(unittest.TestCase):
         self.assertFalse(is_in_fork_child(None))
 
     def test_user_message_with_tag_returns_true(self) -> None:
-        msg = create_user_message(
-            content=[TextBlock(text=f"<{FORK_BOILERPLATE_TAG}> rules ...")]
-        )
+        msg = create_user_message(content=[TextBlock(text=f"<{FORK_BOILERPLATE_TAG}> rules ...")])
         self.assertTrue(is_in_fork_child([msg]))
 
     def test_assistant_message_with_tag_returns_false(self) -> None:
         # Only user messages are scanned, mirroring TS guard.
-        msg = AssistantMessage(
-            content=[TextBlock(text=f"<{FORK_BOILERPLATE_TAG}>")]
-        )
+        msg = AssistantMessage(content=[TextBlock(text=f"<{FORK_BOILERPLATE_TAG}>")])
         self.assertFalse(is_in_fork_child([msg]))
 
     def test_user_message_text_block_without_tag(self) -> None:

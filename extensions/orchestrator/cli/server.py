@@ -14,17 +14,21 @@ All commands are idempotent:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import logging
 import os
 import signal
 import sys
 import time
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Parser registration
 # ---------------------------------------------------------------------------
+
 
 def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
     """Register ``server`` sub-subcommands (status | stop | start)."""
@@ -32,8 +36,8 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         "server",
         help="Manage the orchestrator daemon process",
         description="Start, stop, or check the status of the orchestrator daemon. "
-                    "All commands are idempotent — running them multiple times "
-                    "has no ill effect.",
+        "All commands are idempotent — running them multiple times "
+        "has no ill effect.",
     )
     server_sub = server_parser.add_subparsers(
         dest="server_subcommand",
@@ -45,7 +49,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         "status",
         help="Show orchestrator daemon status",
         description="Display whether the orchestrator daemon is running, its PID, "
-                    "uptime, workspace root, and project slug. Idempotent (pure read).",
+        "uptime, workspace root, and project slug. Idempotent (pure read).",
     )
     status_parser.add_argument(
         "--workspace",
@@ -67,7 +71,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         "stop",
         help="Stop the orchestrator daemon gracefully",
         description="Send SIGTERM to the orchestrator process and clean up metadata. "
-                    "Idempotent: if the daemon is already stopped, exits 0 silently.",
+        "Idempotent: if the daemon is already stopped, exits 0 silently.",
     )
     stop_parser.add_argument(
         "--workspace",
@@ -99,7 +103,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         "--all",
         action="store_true",
         help="Stop all running orchestrator daemons and clean up all stale metadata. "
-             "Useful after test suites or when multiple workflows were started.",
+        "Useful after test suites or when multiple workflows were started.",
     )
 
     # --- server start ---
@@ -107,7 +111,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         "start",
         help="Start the orchestrator daemon",
         description="Launch the orchestrator with a workflow file. "
-                    "Idempotent: if the daemon is already running, shows status instead.",
+        "Idempotent: if the daemon is already running, shows status instead.",
     )
     start_parser.add_argument(
         "--workflow",
@@ -133,6 +137,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
 # Run dispatch
 # ---------------------------------------------------------------------------
 
+
 def run(args: argparse.Namespace) -> int:
     """Dispatch to the appropriate server subcommand."""
     cmd = args.server_subcommand
@@ -150,6 +155,7 @@ def run(args: argparse.Namespace) -> int:
 # Implementation
 # ---------------------------------------------------------------------------
 
+
 def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
     """Resolve orchestrator metadata.
 
@@ -162,7 +168,11 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
 
     # 0. 多项目歧义检测：无显式参数且有多个存活项目时提示
     if not getattr(args, "workspace", None) and not getattr(args, "workflow", None):
-        from extensions.orchestrator.workspace_locator import get_live_projects, print_multi_project_hint
+        from extensions.orchestrator.workspace_locator import (
+            get_live_projects,
+            print_multi_project_hint,
+        )
+
         live = get_live_projects()
         if len(live) > 1:
             subcmd = getattr(args, "server_subcommand", "server")
@@ -179,6 +189,7 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
         metadata_path = Path.home() / ".clawcodex" / "orchestrator" / slug / "metadata.json"
         if metadata_path.exists():
             import json
+
             try:
                 data = json.loads(metadata_path.read_text(encoding="utf-8"))
                 return metadata_path, data
@@ -191,6 +202,7 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
                 mf = md_dir / "metadata.json"
                 if mf.exists():
                     import json
+
                     try:
                         data = json.loads(mf.read_text(encoding="utf-8"))
                         if data.get("workspace_root") == str(workspace_root):
@@ -202,6 +214,7 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
     latest = _find_latest_metadata()
     if latest and latest.exists():
         import json
+
         try:
             data = json.loads(latest.read_text(encoding="utf-8"))
             return latest, data
@@ -213,8 +226,11 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
 
 def _slug_from_workspace(ws_str: str) -> str:
     """Generate a deterministic slug from a workspace path string."""
-    parts = [p for p in ws_str.strip().replace("/", "-").replace("\\", "-").split("-")
-             if p and p not in ("tmp", ".clawcodex", "~")]
+    parts = [
+        p
+        for p in ws_str.strip().replace("/", "-").replace("\\", "-").split("-")
+        if p and p not in ("tmp", ".clawcodex", "~")
+    ]
     return "-".join(parts[-3:]) if parts else "default"
 
 
@@ -243,6 +259,7 @@ def _format_uptime(started_at: float) -> str:
 # ---------------------------------------------------------------------------
 # server status
 # ---------------------------------------------------------------------------
+
 
 def _run_status(args: argparse.Namespace) -> int:
     """Show orchestrator daemon status. Idempotent — pure read."""
@@ -287,6 +304,7 @@ def _run_status(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # server stop
 # ---------------------------------------------------------------------------
+
 
 def _run_stop_all(args: argparse.Namespace) -> int:
     """Stop all running orchestrator daemons and clean up all stale metadata.
@@ -364,7 +382,9 @@ def _run_stop_all(args: argparse.Namespace) -> int:
                     break
                 time.sleep(0.2)
             else:
-                print(f"    ⚠ Process did not exit within {timeout}s timeout. Remove --force or kill manually: kill -9 {pid}")
+                print(
+                    f"    ⚠ Process did not exit within {timeout}s timeout. Remove --force or kill manually: kill -9 {pid}"
+                )
                 errors += 1
                 # Still clean up metadata
         else:
@@ -419,7 +439,9 @@ def _run_stop(args: argparse.Namespace) -> int:
         print(f"  Process {pid} already exited.")
     except PermissionError:
         print(f"  Permission denied: cannot signal PID {pid}.", file=sys.stderr)
-        print(f"  Try running with elevated privileges or kill manually: kill {pid}", file=sys.stderr)
+        print(
+            f"  Try running with elevated privileges or kill manually: kill {pid}", file=sys.stderr
+        )
         return 1
 
     # If not force, wait for graceful shutdown
@@ -448,6 +470,7 @@ def _run_stop(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # server start
 # ---------------------------------------------------------------------------
+
 
 def _run_start(args: argparse.Namespace) -> int:
     """Start the orchestrator daemon. Idempotent — already-running → show status."""
@@ -508,6 +531,7 @@ def _run_orchestrator(
 
     # Load prompt into WorkflowStore so PromptBuilder can use it
     from ..workflow_store import get_workflow_store
+
     get_workflow_store().load(workflow_path)
 
     try:
@@ -596,9 +620,7 @@ def _run_orchestrator(
 
         async def _run_with_dashboard() -> None:
             """Run orchestrator with a concurrent dashboard status loop."""
-            dashboard_task = asyncio.create_task(
-                _dashboard_loop(subsystem.status_dashboard, port)
-            )
+            dashboard_task = asyncio.create_task(_dashboard_loop(subsystem.status_dashboard, port))
             try:
                 await _run()
             finally:

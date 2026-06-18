@@ -18,6 +18,7 @@ Two divergences from TS, both deliberate and matching the already-shipped skills
     with visible error text (DEV-2: surface as visible errors, not silent drops, without
     crashing). See src/skills/runtime_substitution.py:140-157.
 """
+
 from __future__ import annotations
 
 import logging

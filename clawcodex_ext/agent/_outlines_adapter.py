@@ -121,6 +121,7 @@ class OutlinesStructuredOutput:
 
 class TokenBudgetAnalysis(BaseModel):
     """Token budget analysis structured output."""
+
     current_usage: int
     threshold: int
     should_compact: bool
@@ -131,6 +132,7 @@ class TokenBudgetAnalysis(BaseModel):
 
 class ToolCallDecision(BaseModel):
     """Agent tool call decision structured output."""
+
     should_call_tool: bool
     tool_name: str | None = None
     reasoning: str

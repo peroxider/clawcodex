@@ -1,0 +1,118 @@
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_target:
+        description: testpypi or pypi
+        required: true
+        default: testpypi
+      tag:
+        description: Release tag, for example v0.5.0
+        required: true
+
+jobs:
+  publish:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dependencies
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Build, verify, and publish package
+        env:
+          TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
+          RELEASE_TARGET: ${{ inputs.release_target }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          RELEASE_TARGET="${RELEASE_TARGET:-testpypi}"
+          RELEASE_TAG="${RELEASE_TAG:-$(git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)}"
+          git fetch --tags --force
+          if ! git rev-parse -q --verify "refs/tags/${RELEASE_TAG}^{commit}" >/dev/null; then
+            echo "Release tag ${RELEASE_TAG} does not exist; create and push the tag before publishing." >&2
+            exit 1
+          fi
+          TAG_SHA="$(git rev-list -n 1 "$RELEASE_TAG")"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [ "$TAG_SHA" != "$HEAD_SHA" ]; then
+            git checkout --detach "$RELEASE_TAG"
+          fi
+          RELEASE_TARGET_SHA="$(git rev-parse HEAD)"
+          python -m ruff check \
+            scripts/ci/docs_check.py \
+            scripts/ci/gitcode_release.py \
+            scripts/ci/preflight.py \
+            scripts/ci/supply_chain_audit.py \
+            scripts/ci/env_loader.py \
+            scripts/ci/local_publish.py
+          python -m pytest \
+            tests/fast \
+            tests/config/test_config.py \
+            tests/config/test_config_system.py \
+            tests/config/test_effort.py \
+            tests/model \
+            tests/utils/test_combined_abort_signal.py \
+            tests/input/test_format.py \
+            tests/input/test_frontmatter_adapter.py \
+            tests/permissions/test_permission_modes.py \
+            tests/hooks/test_hook_config.py \
+            tests/skills/test_skills_frontmatter_yaml.py \
+            tests/bridge/test_jwt_utils.py \
+            tests/ci/test_gitcode_release.py \
+            tests/agent/test_agent_smoke_no_live_key.py \
+            tests/orchestrator/test_local_tracker_parser.py \
+            tests/orchestrator/test_orchestrator_f39_intent.py \
+            tests/orchestrator/test_orchestrator_f49_transcript.py \
+            tests/orchestrator/test_orchestrator_f49_resume.py \
+            tests/orchestrator/test_orchestrator_workspace_hooks.py \
+            tests/test_visualizer/test_orchestrator_link.py \
+            -q
+          rm -rf dist build
+          python -m build
+          python -m twine check dist/*
+          if [ "$RELEASE_TARGET" = "pypi" ]; then
+            if [ -z "$PYPI_TOKEN" ]; then
+              echo "PYPI_TOKEN is not set; skipping package upload."
+            else
+              python -m twine upload -u __token__ -p "$PYPI_TOKEN" dist/*
+            fi
+          else
+            if [ -z "$TEST_PYPI_TOKEN" ]; then
+              echo "TEST_PYPI_TOKEN is not set; skipping package upload."
+            else
+              python -m twine upload \
+                --repository-url https://test.pypi.org/legacy/ \
+                -u __token__ \
+                -p "$TEST_PYPI_TOKEN" \
+                dist/*
+            fi
+          fi
+          GITCODE_RELEASE_FLAGS=""
+          if [ "$RELEASE_TARGET" != "pypi" ]; then
+            GITCODE_RELEASE_FLAGS="--prerelease"
+          fi
+          python scripts/ci/gitcode_release.py \
+            --owner Gideon_Zhao \
+            --repo clawcodex \
+            --tag "$RELEASE_TAG" \
+            --target "$RELEASE_TARGET_SHA" \
+            --dist dist \
+            --body "Automated ClawCodex package release" \
+            $GITCODE_RELEASE_FLAGS

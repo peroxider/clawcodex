@@ -24,6 +24,7 @@ def resolve_managed_settings_path() -> Path | None:
 
     # Platform-specific defaults
     import platform
+
     system = platform.system()
 
     if system == "Darwin":

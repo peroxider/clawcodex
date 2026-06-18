@@ -13,14 +13,16 @@ from typing import Any
 
 class CacheScope(Enum):
     """Cache scope for prompt sections."""
-    GLOBAL = "global"       # Shared across sessions (e.g. identity)
-    SESSION = "session"     # Per-session (e.g. git context)
-    REQUEST = "request"     # Per-request (e.g. tools may change)
+
+    GLOBAL = "global"  # Shared across sessions (e.g. identity)
+    SESSION = "session"  # Per-session (e.g. git context)
+    REQUEST = "request"  # Per-request (e.g. tools may change)
 
 
 @dataclass
 class CachedSection:
     """A cached prompt section."""
+
     content: str
     scope: CacheScope
     cached_at: float = field(default_factory=time.time)
@@ -36,6 +38,7 @@ class CachedSection:
 @dataclass
 class SystemPromptSection:
     """A system prompt section with metadata."""
+
     id: str
     content: str
     cache_scope: CacheScope = CacheScope.SESSION
@@ -159,10 +162,7 @@ class SystemPromptCache:
 
     def get_cached_section_ids(self) -> list[str]:
         """Get list of cached (non-expired) section IDs."""
-        return [
-            k for k, v in self._cache.items()
-            if not v.is_expired
-        ]
+        return [k for k, v in self._cache.items() if not v.is_expired]
 
 
 def clear_system_prompt_sections() -> None:
@@ -187,6 +187,7 @@ def clear_system_prompt_sections() -> None:
     # block already comments on.
     try:
         from src.context_system.prompt_assembly import get_system_prompt_cache
+
         get_system_prompt_cache().invalidate_all()
     except ImportError:
         # prompt_assembly isn't always importable in minimal test contexts;

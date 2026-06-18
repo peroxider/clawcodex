@@ -21,6 +21,7 @@ The shrink is the SOLID part: TaskStop's single responsibility is now
 "map model input/output"; dispatch + per-type kill + timeout handling
 all live in the typed helper.
 """
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -118,8 +119,6 @@ Stops a running background task by its ID.
     # Mirrors TS TaskStopTool.toAutoClassifierInput, including the
     # KillShell-era ``shell_id`` fallback.
     to_auto_classifier_input=lambda input_data: (
-        (input_data or {}).get("task_id")
-        or (input_data or {}).get("shell_id")
-        or ""
+        (input_data or {}).get("task_id") or (input_data or {}).get("shell_id") or ""
     ),
 )

@@ -125,8 +125,7 @@ class RepositoryIssueClient:
             batch = [
                 issue
                 for issue in (
-                    _normalize_issue(item, active_states=active_states)
-                    for item in payload
+                    _normalize_issue(item, active_states=active_states) for item in payload
                 )
                 if issue is not None and _matches_assignee(issue, assignee)
             ]
@@ -278,7 +277,8 @@ class RepositoryIssueClient:
                     "update_issue: GitCode API does not support close via "
                     "state_event=close (known platform limitation). "
                     "issue_id=%s state=%s — ignoring.",
-                    issue_id, state,
+                    issue_id,
+                    state,
                 )
                 return
             raise
@@ -396,7 +396,10 @@ class RepositoryIssueClient:
         feedback: list[PullRequestFeedback] = []
         effective_issue_id = issue_id or pull_request.number
         for _name, fetcher in [
-            ("conversation", lambda: self._fetch_pull_request_conversation_feedback(effective_issue_id)),
+            (
+                "conversation",
+                lambda: self._fetch_pull_request_conversation_feedback(effective_issue_id),
+            ),
             ("inline", lambda: self._fetch_pull_request_inline_feedback(pull_request.number)),
             ("review", lambda: self._fetch_pull_request_review_feedback(pull_request.number)),
         ]:
@@ -406,12 +409,16 @@ class RepositoryIssueClient:
                 if _is_not_found_error(exc) and _name in {"inline", "review"}:
                     logger.debug(
                         "Skipping unsupported %s feedback endpoint for PR #%s: %s",
-                        _name, pull_request.number, exc,
+                        _name,
+                        pull_request.number,
+                        exc,
                     )
                     continue
                 logger.warning(
                     "Failed to fetch %s feedback for PR #%s: %s",
-                    _name, pull_request.number, exc,
+                    _name,
+                    pull_request.number,
+                    exc,
                 )
         if include_ci_failures:
             try:
@@ -424,7 +431,8 @@ class RepositoryIssueClient:
             except RepositoryTrackerError as exc:
                 logger.warning(
                     "Failed to fetch CI feedback for PR #%s: %s",
-                    pull_request.number, exc,
+                    pull_request.number,
+                    exc,
                 )
         return feedback
 
@@ -442,7 +450,9 @@ class RepositoryIssueClient:
             comment_id = feedback.id.split(":", 1)[1] if ":" in feedback.id else feedback.id
             endpoint = f"/repos/{self.owner}/{self.repo}/pulls/{pull_request.number}/comments/{comment_id}/replies"
         else:
-            endpoint = f"/repos/{self.owner}/{self.repo}/issues/{issue_id or pull_request.number}/comments"
+            endpoint = (
+                f"/repos/{self.owner}/{self.repo}/issues/{issue_id or pull_request.number}/comments"
+            )
         payload = {"body": body}
         result = await self._request_json(
             "POST",
@@ -564,9 +574,7 @@ class RepositoryIssueClient:
         comments = await self.fetch_comments(pr_number)
         return [
             feedback
-            for feedback in (
-                _normalize_conversation_feedback(comment) for comment in comments
-            )
+            for feedback in (_normalize_conversation_feedback(comment) for comment in comments)
             if feedback is not None
         ]
 
@@ -853,7 +861,9 @@ def _normalize_ci_feedback(
     summary = _string_value(output.get("summary") if isinstance(output, dict) else None)
     text = _string_value(output.get("text") if isinstance(output, dict) else None)
     description = _string_value(payload.get("description"))
-    details_url = _string_value(payload.get("details_url") or payload.get("html_url") or payload.get("target_url"))
+    details_url = _string_value(
+        payload.get("details_url") or payload.get("html_url") or payload.get("target_url")
+    )
     parts = [f"{name} reported {state}."]
     if description:
         parts.append(description)
@@ -920,11 +930,7 @@ def _int_value(value: Any) -> int | None:
 def _build_identifier(payload: dict[str, Any], issue_number: Any) -> str | None:
     if issue_number is None:
         return None
-    repo_name = (
-        payload.get("repository")
-        or payload.get("repo")
-        or payload.get("repository_name")
-    )
+    repo_name = payload.get("repository") or payload.get("repo") or payload.get("repository_name")
     if isinstance(repo_name, str) and repo_name.strip():
         return f"{repo_name}#{issue_number}"
     return f"#{issue_number}"

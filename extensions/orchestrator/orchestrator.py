@@ -10,7 +10,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .agent_runner import AgentRunner, AgentSession, RetryItem
 from .config.schema import WorkflowConfig
@@ -38,6 +38,9 @@ from .tracker import (
     merge_intents,
 )
 from .workspace import WorkspaceManager
+
+if TYPE_CHECKING:
+    from .tracker import CommandIntent
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +118,7 @@ class Orchestrator:
         # Write orchestrator metadata for CLI discovery
         self._metadata_started_at = time.time()
         from .workspace_locator import write_orchestrator_metadata
+
         write_orchestrator_metadata(
             workspace_root=workspace_root,
             workflow_path=self._workflow_path,
@@ -124,19 +128,27 @@ class Orchestrator:
         # Clarification handling (three-channel flow)
         clarification_queue_path = workspace_root / ".clawcodex_clarification_queue.json"
         from .clarification_queue import ClarificationQueue
+
         self._clarification_queue = ClarificationQueue(clarification_queue_path)
 
         from .clarification import ClarificationResolver, ClarificationConfig
+
         self._clarification_resolver = ClarificationResolver(
             clarification_queue=self._clarification_queue,
             tracker=tracker,
             config=ClarificationConfig(
                 enabled=getattr(workflow.agent, "clarification_enabled", True),
-                timeout_local_seconds=getattr(workflow.agent, "clarification_timeout_local", 30 * 60),
-                timeout_author_seconds=getattr(workflow.agent, "clarification_timeout_author", 72 * 3600),
+                timeout_local_seconds=getattr(
+                    workflow.agent, "clarification_timeout_local", 30 * 60
+                ),
+                timeout_author_seconds=getattr(
+                    workflow.agent, "clarification_timeout_author", 72 * 3600
+                ),
                 max_questions_per_issue=getattr(workflow.agent, "max_questions_per_issue", 3),
                 operator_priority=getattr(workflow.agent, "clarification_operator_priority", True),
-                simultaneous_grace_ms=getattr(workflow.agent, "clarification_simultaneous_grace_ms", 5000),
+                simultaneous_grace_ms=getattr(
+                    workflow.agent, "clarification_simultaneous_grace_ms", 5000
+                ),
                 escalation=getattr(workflow.agent, "clarification_escalation", "skip"),
             ),
         )
@@ -175,9 +187,7 @@ class Orchestrator:
             task_id=task_id,
             context=self._progress_context,
             workflow_phases=self.workflow.agent.phases,
-            fallback_to_phase_step=bool(
-                self.workflow.agent.fallback_to_phase_step
-            ),
+            fallback_to_phase_step=bool(self.workflow.agent.fallback_to_phase_step),
         )
         return CompositeProgressSink([inner])
 
@@ -185,9 +195,7 @@ class Orchestrator:
         if self.workflow.workspace.strategy != "sequential":
             return
         if self.workflow.agent.max_concurrent_agents != 1:
-            raise ValueError(
-                "workspace.strategy=sequential requires agent.max_concurrent_agents=1"
-            )
+            raise ValueError("workspace.strategy=sequential requires agent.max_concurrent_agents=1")
         over_limit_states = [
             state
             for state, limit in self.workflow.agent.max_concurrent_agents_by_state.items()
@@ -234,9 +242,11 @@ class Orchestrator:
 
     async def run(self) -> None:
         """Main polling loop. Runs until cancelled."""
-        logger.info("Orchestrator starting: interval=%sms max_concurrent=%s",
-                    self._state.poll_interval_ms,
-                    self._state.max_concurrent_agents)
+        logger.info(
+            "Orchestrator starting: interval=%sms max_concurrent=%s",
+            self._state.poll_interval_ms,
+            self._state.max_concurrent_agents,
+        )
 
         # F-97: best-effort session_start at the top of the polling
         # loop. The session id is the workflow root path's basename
@@ -325,6 +335,7 @@ class Orchestrator:
         try:
             from datetime import datetime, timezone
             import hashlib
+
             workspace = str(self._workspace_root) if self._workspace_root else ""
             day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             raw = f"orchestrator:{workspace}:{day}"
@@ -373,6 +384,7 @@ class Orchestrator:
         self._shutdown_event.set()
         # Clean up orchestrator metadata
         from .workspace_locator import clear_orchestrator_metadata
+
         clear_orchestrator_metadata(self._workspace_root)
 
     async def _poll_and_dispatch(self) -> None:
@@ -402,9 +414,7 @@ class Orchestrator:
                 logger.error("Failed to fetch candidate issues: %s", exc)
                 return
 
-            available_slots = (
-                self._state.max_concurrent_agents - len(self._state.running)
-            )
+            available_slots = self._state.max_concurrent_agents - len(self._state.running)
 
             # Pre-register all unregistered candidates with QUEUED status
             # so the dashboard / registry reflects the full backlog.
@@ -445,15 +455,9 @@ class Orchestrator:
                 # `command_intent_obj` may carry the comment author
                 # for F-39 Sub-F role checks; the bare `Command` value
                 # is in `command_intent_obj.command`.
-                command = (
-                    command_intent_obj.command
-                    if command_intent_obj is not None
-                    else None
-                )
+                command = command_intent_obj.command if command_intent_obj is not None else None
                 command_author = (
-                    command_intent_obj.author_login
-                    if command_intent_obj is not None
-                    else None
+                    command_intent_obj.author_login if command_intent_obj is not None else None
                 )
 
                 # F-39 Sub-F: role check. If a comment command is
@@ -465,13 +469,9 @@ class Orchestrator:
                 if (
                     command_intent_obj is not None
                     and intent in (Intent.RETRY, Intent.FOLLOWUP)
-                    and not self._is_command_author_eligible(
-                        issue, command_author
-                    )
+                    and not self._is_command_author_eligible(issue, command_author)
                 ):
-                    await self._reject_unauthorized_command(
-                        issue, command_intent_obj
-                    )
+                    await self._reject_unauthorized_command(issue, command_intent_obj)
                     continue
 
                 # F-39 Sub-F: rate limit on RETRY intent. If the issue
@@ -504,10 +504,7 @@ class Orchestrator:
                     # possibly cleared) label-based intent.
                     if command is Command.UNBLOCK:
                         record = self._registry.get(issue.id or "")
-                        if (
-                            record is not None
-                            and record.status is IssueStatus.ABANDONED
-                        ):
+                        if record is not None and record.status is IssueStatus.ABANDONED:
                             logger.info(
                                 "Issue %s unblocked, status reset to pending",
                                 issue.id,
@@ -530,7 +527,8 @@ class Orchestrator:
                             branch_name=getattr(issue, "branch_name", None) or "main",
                         )
                     self._registry.mark_intent(
-                        issue.id or "", intent,
+                        issue.id or "",
+                        intent,
                         source=("command" if command is not None else "label"),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
@@ -545,7 +543,8 @@ class Orchestrator:
                         issue.id,
                     )
                     self._registry.mark_intent(
-                        issue.id or "", intent,
+                        issue.id or "",
+                        intent,
                         source=("command" if command is not None else "label"),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
@@ -556,7 +555,8 @@ class Orchestrator:
                         issue.id,
                     )
                     self._registry.mark_intent(
-                        issue.id or "", intent,
+                        issue.id or "",
+                        intent,
                         source=("command" if command is not None else "label"),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
@@ -590,10 +590,7 @@ class Orchestrator:
         unresolved = [
             dependency
             for dependency in dependencies
-            if not (
-                self._registry.is_completed(dependency)
-                or self._registry.has_pr(dependency)
-            )
+            if not (self._registry.is_completed(dependency) or self._registry.has_pr(dependency))
         ]
         if unresolved:
             logger.info(
@@ -605,7 +602,8 @@ class Orchestrator:
         return True
 
     async def _resolve_intent(
-        self, issue: Issue,
+        self,
+        issue: Issue,
     ) -> tuple[Intent, "CommandIntent | None"]:
         """Resolve the current operator intent for an issue.
 
@@ -655,9 +653,7 @@ class Orchestrator:
         record = self._registry.get(issue_id)
         cursor = record.command_cursor if record is not None else None
         try:
-            return await self.tracker.fetch_issue_command_intent(
-                issue_id, cursor
-            )
+            return await self.tracker.fetch_issue_command_intent(issue_id, cursor)
         except Exception as exc:
             logger.warning(
                 "Failed to fetch issue command intent for %s: %s",
@@ -679,10 +675,7 @@ class Orchestrator:
         failure.
         """
         issue_id = issue.id or ""
-        body = (
-            f"## ClawCodex: 已受理 /agent {command.value}\n\n"
-            f"下一轮 poll 开始执行。\n"
-        )
+        body = f"## ClawCodex: 已受理 /agent {command.value}\n\n下一轮 poll 开始执行。\n"
         try:
             comment = await self.tracker.create_comment(issue_id, body)
         except Exception as exc:
@@ -736,9 +729,7 @@ class Orchestrator:
         metadata; we fall back to None for now and rely on the
         author check).
         """
-        if getattr(
-            self.workflow.agent, "allow_anyone_to_retry", False
-        ):
+        if getattr(self.workflow.agent, "allow_anyone_to_retry", False):
             return True
         if not author_login:
             # Fail-closed: if we don't know who wrote the command,
@@ -773,7 +764,8 @@ class Orchestrator:
         except Exception as exc:
             logger.warning(
                 "Failed to post unauthorized-command rejection for %s: %s",
-                issue_id, exc,
+                issue_id,
+                exc,
             )
         logger.info(
             "Issue %s command rejected: /agent %s by %s (not authorized)",
@@ -810,9 +802,7 @@ class Orchestrator:
           * Records a high-priority audit.jsonl entry.
         """
         issue_id = issue.id or ""
-        max_retries = getattr(
-            self.workflow.agent, "max_retries_per_issue", 3
-        )
+        max_retries = getattr(self.workflow.agent, "max_retries_per_issue", 3)
         record = self._registry.get(issue_id)
         current = record.retry_count if record else 0
         if current < max_retries:
@@ -826,7 +816,9 @@ class Orchestrator:
         # Rate limit hit; do the side-effects.
         logger.warning(
             "Issue %s retry rate limit hit: %d >= %d",
-            issue_id, current, max_retries,
+            issue_id,
+            current,
+            max_retries,
         )
         self._log_audit_event(
             issue_id=issue_id,
@@ -839,18 +831,15 @@ class Orchestrator:
         # post a comment. Failures here are logged but do not
         # change the verdict (False = reject).
         import asyncio
+
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = None
         if loop is not None and loop.is_running():
-            asyncio.create_task(
-                self._post_retry_rejection(issue_id, current, max_retries)
-            )
+            asyncio.create_task(self._post_retry_rejection(issue_id, current, max_retries))
         else:
-            asyncio.run(
-                self._post_retry_rejection(issue_id, current, max_retries)
-            )
+            asyncio.run(self._post_retry_rejection(issue_id, current, max_retries))
         return False
 
     async def _post_retry_rejection(
@@ -874,16 +863,15 @@ class Orchestrator:
         except Exception as exc:
             logger.warning(
                 "Failed to post retry-rejection comment for %s: %s",
-                issue_id, exc,
+                issue_id,
+                exc,
             )
         # Adding the rejection label is platform-specific. We use
         # `update_issue_state` as a no-op state-setter and try to
         # pass the label through the same channel; the adapter
         # implementations that support labels will route it.
         try:
-            update_labels = getattr(
-                self.tracker, "add_label", None
-            )
+            update_labels = getattr(self.tracker, "add_label", None)
             if callable(update_labels):
                 result = update_labels(issue_id, "agent:retry-rejected")
                 if hasattr(result, "__await__"):
@@ -891,7 +879,8 @@ class Orchestrator:
         except Exception as exc:
             logger.warning(
                 "Failed to add agent:retry-rejected label to %s: %s",
-                issue_id, exc,
+                issue_id,
+                exc,
             )
 
     def _log_audit_event(
@@ -913,12 +902,11 @@ class Orchestrator:
             import json
             import time
             from pathlib import Path
+
             log_path = Path.home() / ".clawcodex" / "orchestrator" / "audit.jsonl"
             payload = {
                 "ts": time.time(),
-                "ts_iso": time.strftime(
-                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
-                ),
+                "ts_iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "operator": author,
                 "issue_id": issue_id,
                 "mode": mode,
@@ -932,7 +920,8 @@ class Orchestrator:
                 handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
         except Exception as exc:
             logger.warning(
-                "Failed to write daemon audit log: %s", exc,
+                "Failed to write daemon audit log: %s",
+                exc,
             )
 
     async def _prepare_intent_reset(self, issue: Issue) -> None:
@@ -984,8 +973,7 @@ class Orchestrator:
                     )
             except Exception as exc:
                 logger.warning(
-                    "Issue %s retry: close_pull_request raised %s; "
-                    "continuing with local reset",
+                    "Issue %s retry: close_pull_request raised %s; continuing with local reset",
                     issue_id,
                     exc,
                 )
@@ -1113,7 +1101,9 @@ class Orchestrator:
         try:
             workspace = await self.workspace.create_for_issue(issue)
         except Exception as exc:
-            logger.error("Workspace creation failed for PR follow-up issue_id=%s: %s", issue.id, exc)
+            logger.error(
+                "Workspace creation failed for PR follow-up issue_id=%s: %s", issue.id, exc
+            )
             self._state.claimed.discard(issue.id or "")
             return
         start_commit_sha = await self.workspace.current_head(workspace.path)
@@ -1160,8 +1150,10 @@ class Orchestrator:
         # stop command can cancel a specific running issue.
         issue_id = issue.id or ""
         self._issue_tasks[issue_id] = task
+
         def _unregister_issue_task(t: asyncio.Task) -> None:
             self._issue_tasks.pop(issue_id, None)
+
         task.add_done_callback(_unregister_issue_task)
 
     async def _launch_issue(self, issue: Issue) -> None:
@@ -1191,7 +1183,9 @@ class Orchestrator:
         # Register as pending so restart won't re-launch this issue
         workspace_strategy = self.workflow.workspace.strategy
         branch_name = getattr(issue, "branch_name", None) or "main"
-        base_branch = getattr(issue, "base_branch", None) or self.workflow.workspace.base_branch or "main"
+        base_branch = (
+            getattr(issue, "base_branch", None) or self.workflow.workspace.base_branch or "main"
+        )
         integration_branch = self.workflow.workspace.integration_branch
         if workspace_strategy == "sequential" and integration_branch:
             branch_name = integration_branch
@@ -1210,9 +1204,7 @@ class Orchestrator:
         # path. In isolated / shared modes the per-issue workspace.path
         # is already the canonical location, so keep that.
         recorded_workspace_path = (
-            str(self._workspace_root)
-            if workspace_strategy == "sequential"
-            else str(workspace.path)
+            str(self._workspace_root) if workspace_strategy == "sequential" else str(workspace.path)
         )
         self._registry.register(
             issue_id=issue.id or "",
@@ -1237,8 +1229,7 @@ class Orchestrator:
                 self._state.claimed.discard(issue.id)
                 return
             active_states = [
-                s.strip().lower()
-                for s in (getattr(self.tracker, "active_states", None) or [])
+                s.strip().lower() for s in (getattr(self.tracker, "active_states", None) or [])
             ]
             is_active = (
                 refreshed_issue.state is not None
@@ -1400,9 +1391,7 @@ class Orchestrator:
                     # the kwarg: anything with ``on_phase_complete`` /
                     # ``on_turn_complete`` / ``on_session_complete``
                     # methods works.
-                    progress_sink = self._build_session_sink(
-                        session.issue.id or ""
-                    )
+                    progress_sink = self._build_session_sink(session.issue.id or "")
                     run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
                     session.timeout_deadline_at = time.time() + run_timeout_seconds
                     await asyncio.wait_for(
@@ -1427,9 +1416,7 @@ class Orchestrator:
                             if session.run_kind in ("agent_followup", "review_followup")
                             else "default"
                         )
-                        sync_result = await self.git_sync.sync(
-                            session, mode=sync_mode
-                        )
+                        sync_result = await self.git_sync.sync(session, mode=sync_mode)
                         if sync_result is not None:
                             self._registry.update_report(
                                 session.issue.id or "",
@@ -1442,12 +1429,8 @@ class Orchestrator:
                                 # dashboard / verification can
                                 # distinguish stagnation / loop from
                                 # a clean success path.
-                                session_end_reason=getattr(
-                                    session, "session_end_reason", None
-                                ),
-                                session_end_summary=getattr(
-                                    session, "session_end_summary", ""
-                                ),
+                                session_end_reason=getattr(session, "session_end_reason", None),
+                                session_end_summary=getattr(session, "session_end_summary", ""),
                             )
                             if session.run_kind == "review_followup":
                                 self._registry.mark_feedback_processed(
@@ -1462,17 +1445,11 @@ class Orchestrator:
                                 # existing pr_number / pr_url / status;
                                 # only the followup_attempt_count and
                                 # last_followup_commit_sha change.
-                                self._registry.increment_followup_attempt(
-                                    session.issue.id or ""
-                                )
+                                self._registry.increment_followup_attempt(session.issue.id or "")
                                 if sync_result.commit_sha:
-                                    record = self._registry.get(
-                                        session.issue.id or ""
-                                    )
+                                    record = self._registry.get(session.issue.id or "")
                                     if record is not None:
-                                        record.last_followup_commit_sha = (
-                                            sync_result.commit_sha
-                                        )
+                                        record.last_followup_commit_sha = sync_result.commit_sha
                                         self._registry._save()
                                 logger.info(
                                     "Issue %s followup committed: %s on %s",
@@ -1485,8 +1462,12 @@ class Orchestrator:
                                     session.issue.id or "",
                                     branch_name=sync_result.branch_name,
                                     commit_sha=sync_result.commit_sha,
-                                    pr_number=sync_result.pull_request.number if sync_result.pull_request else None,
-                                    pr_url=sync_result.pull_request.url if sync_result.pull_request else None,
+                                    pr_number=sync_result.pull_request.number
+                                    if sync_result.pull_request
+                                    else None,
+                                    pr_url=sync_result.pull_request.url
+                                    if sync_result.pull_request
+                                    else None,
                                 )
                             # F-44 review gate: after commit, await human review before completion.
                             # Triggered when GitSyncResult.pending_review is True (LocalTracker
@@ -1503,7 +1484,9 @@ class Orchestrator:
                                     await self._sync_tracker_issue_state(
                                         session.issue.id or "", "pending_review"
                                     )
-                                    self.status_dashboard.on_session_complete(session.issue.id or "")
+                                    self.status_dashboard.on_session_complete(
+                                        session.issue.id or ""
+                                    )
                                     self._state.completed.add(session.issue.id or "")
                                     self._state.pending_review.add(session.issue.id or "")
                                     # Do NOT cleanup workspace — human needs to review it
@@ -1521,12 +1504,8 @@ class Orchestrator:
                     verification_status=getattr(session, "verification_status", None),
                     verification_output=getattr(session, "verification_output", None),
                     summary_comment_id=getattr(session, "summary_comment_id", None),
-                    session_end_reason=getattr(
-                        session, "session_end_reason", None
-                    ),
-                    session_end_summary=getattr(
-                        session, "session_end_summary", ""
-                    ),
+                    session_end_reason=getattr(session, "session_end_reason", None),
+                    session_end_summary=getattr(session, "session_end_summary", ""),
                 )
                 if session.run_kind == "agent_followup":
                     record = self._registry.get(session.issue.id or "")
@@ -1539,15 +1518,9 @@ class Orchestrator:
                         branch_name=sync_result.branch_name,
                         commit_sha=sync_result.commit_sha,
                         pr_number=(
-                            sync_result.pull_request.number
-                            if sync_result.pull_request
-                            else None
+                            sync_result.pull_request.number if sync_result.pull_request else None
                         ),
-                        pr_url=(
-                            sync_result.pull_request.url
-                            if sync_result.pull_request
-                            else None
-                        ),
+                        pr_url=(sync_result.pull_request.url if sync_result.pull_request else None),
                     )
                 logger.warning(
                     "Post-commit sync failed issue_id=%s commit=%s: %s",
@@ -1639,9 +1612,7 @@ class Orchestrator:
                     session.issue.id,
                     exc,
                 )
-                session.status = (
-                    "before_run_failed" if not ran_agent else "failed"
-                )
+                session.status = "before_run_failed" if not ran_agent else "failed"
             finally:
                 if workspace_dirty is not None:
                     session.run_workspace_dirty = workspace_dirty
@@ -1666,9 +1637,7 @@ class Orchestrator:
                     self.status_dashboard.on_session_complete(session.issue.id or "")
                     self._state.completed.add(session.issue.id or "")
                     self._registry.mark_completed(session.issue.id or "")
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or "", "completed"
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or "", "completed")
                 elif session.status == "verification_failed":
                     self.status_dashboard.on_session_failed(
                         session.issue.id or "",
@@ -1709,9 +1678,7 @@ class Orchestrator:
                     # off to the inter-run retry queue with the longest
                     # configured base delay so the provider's rate window
                     # has a chance to reset before the next attempt.
-                    backoff_s = (
-                        self.workflow.agent.rate_limit_max_backoff_ms
-                    )
+                    backoff_s = self.workflow.agent.rate_limit_max_backoff_ms
                     logger.warning(
                         "Rate limit circuit open issue_id=%s — scheduling "
                         "inter-run retry with base delay %dms (session "
@@ -1801,10 +1768,10 @@ class Orchestrator:
         body_lines = [
             "## ClawCodex Run Summary",
             "",
-            f'- Run: `{getattr(session, "run_id", "unknown")}`',
-            f'- Status: `{getattr(session, "status", "unknown")}`',
-            f'- Turns: {getattr(session, "turn_count", 0)}',
-            f'- Tool calls: {getattr(session, "tool_count", 0)}',
+            f"- Run: `{getattr(session, 'run_id', 'unknown')}`",
+            f"- Status: `{getattr(session, 'status', 'unknown')}`",
+            f"- Turns: {getattr(session, 'turn_count', 0)}",
+            f"- Tool calls: {getattr(session, 'tool_count', 0)}",
         ]
         if getattr(session, "last_hook_error", None):
             body_lines.append(f"- Error: `{session.last_hook_error}`")
@@ -1812,7 +1779,9 @@ class Orchestrator:
         try:
             await self.tracker.update_comment(session.issue.id, comment_id, body)
         except Exception as exc:
-            logger.warning("Failed to update summary comment issue_id=%s: %s", session.issue.id, exc)
+            logger.warning(
+                "Failed to update summary comment issue_id=%s: %s", session.issue.id, exc
+            )
 
     async def _reply_to_processed_feedback(self, session: AgentSession) -> None:
         if not self.workflow.review_feedback.reply_to_comments:
@@ -1828,9 +1797,12 @@ class Orchestrator:
                 include_ci_failures=False,
             )
         except Exception as exc:
-            logger.warning("Failed to refresh feedback for replies issue_id=%s: %s", session.issue.id, exc)
+            logger.warning(
+                "Failed to refresh feedback for replies issue_id=%s: %s", session.issue.id, exc
+            )
             return
         from .review_feedback import REPLY_MARKER
+
         body = REPLY_MARKER
         for item in feedback:
             if item.id not in feedback_ids:
@@ -1866,7 +1838,9 @@ class Orchestrator:
                 include_ci_failures=self.workflow.review_feedback.include_ci_failures,
             )
         except Exception as exc:
-            logger.warning("Failed to fetch feedback for summary issue_id=%s: %s", session.issue.id, exc)
+            logger.warning(
+                "Failed to fetch feedback for summary issue_id=%s: %s", session.issue.id, exc
+            )
             all_feedback = []
 
         feedback_by_id = {item.id: item for item in all_feedback}
@@ -1904,7 +1878,11 @@ class Orchestrator:
             logger.info("review_followup control: issue %s already running, skipping", issue_id)
             return
 
-        feedback_ids = [fid.strip() for fid in extra.split(",") if fid.strip()] if extra else list(record.pending_feedback_ids)
+        feedback_ids = (
+            [fid.strip() for fid in extra.split(",") if fid.strip()]
+            if extra
+            else list(record.pending_feedback_ids)
+        )
         if not feedback_ids:
             logger.info("review_followup control: no feedback IDs for issue %s", issue_id)
             return
@@ -1931,11 +1909,15 @@ class Orchestrator:
                 if fid in feedback_by_id:
                     feedback_items.append(feedback_by_id[fid])
         except Exception as exc:
-            logger.error("review_followup control: failed to fetch feedback for issue %s: %s", issue_id, exc)
+            logger.error(
+                "review_followup control: failed to fetch feedback for issue %s: %s", issue_id, exc
+            )
             return
 
         if not feedback_items:
-            logger.info("review_followup control: no matching feedback found for issue %s", issue_id)
+            logger.info(
+                "review_followup control: no matching feedback found for issue %s", issue_id
+            )
             return
 
         followup = ReviewFollowup(
@@ -1949,7 +1931,8 @@ class Orchestrator:
         await self._launch_review_followup(followup)
         logger.info(
             "review_followup control: launched follow-up for issue %s with %d feedback items",
-            issue_id, len(feedback_items),
+            issue_id,
+            len(feedback_items),
         )
 
     async def _schedule_retry(
@@ -1984,11 +1967,7 @@ class Orchestrator:
             return
 
         # Exponential backoff capped at max_retry_backoff_ms
-        base_ms = (
-            delay_base_ms
-            if delay_base_ms is not None
-            else _FAILURE_RETRY_BASE_MS
-        )
+        base_ms = delay_base_ms if delay_base_ms is not None else _FAILURE_RETRY_BASE_MS
         max_ms = self.workflow.agent.max_retry_backoff_ms
         delay_ms = min(base_ms * (1 << (attempt - 1)), max_ms)
 
@@ -2104,15 +2083,16 @@ class Orchestrator:
             except Exception as exc:
                 logger.error("Failed to fetch retry issue %s: %s", retry.issue_id, exc)
                 # Put back at end of queue with extended delay
-                retry.delay_seconds = min(retry.delay_seconds * 2, self.workflow.agent.max_retry_backoff_ms / 1000.0)
+                retry.delay_seconds = min(
+                    retry.delay_seconds * 2, self.workflow.agent.max_retry_backoff_ms / 1000.0
+                )
                 retry.scheduled_at = now
                 remaining.append(retry)
                 continue
 
             # Check if issue is still in active states
             active_states = [
-                s.strip().lower()
-                for s in (getattr(self.tracker, "active_states", None) or [])
+                s.strip().lower() for s in (getattr(self.tracker, "active_states", None) or [])
             ]
             if issue.state and issue.state.strip().lower() not in active_states:
                 logger.info(
@@ -2212,7 +2192,11 @@ class Orchestrator:
                 record.status = IssueStatus.PENDING
                 record.attempt_count += 1
                 self._registry._save()
-            logger.info("Issue %s queued for retry (attempt %d)", issue_id, record.attempt_count if record else 1)
+            logger.info(
+                "Issue %s queued for retry (attempt %d)",
+                issue_id,
+                record.attempt_count if record else 1,
+            )
 
     def get_event_stream(self, issue_id: str) -> "asyncio.Queue | None":
         """Get the event queue for a running issue session (for CLI tail)."""

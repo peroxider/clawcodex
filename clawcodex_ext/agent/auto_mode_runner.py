@@ -37,23 +37,25 @@ def install_llm_auto_mode_classifier(
         True if installation succeeded, False otherwise
     """
     global _AUTO_MODE_CLASSIFIER_INSTALLED
-    
+
     if _AUTO_MODE_CLASSIFIER_INSTALLED:
         log.debug("LLM auto mode classifier already installed")
         return True
 
     try:
         import src.permissions.check as check_module
+
         _original_classify = check_module.auto_mode_classify
-        
+
         global _ORIGINAL_CLASSIFY
         _ORIGINAL_CLASSIFY = _original_classify
         log.info("Successfully saved original auto_mode_classify reference")
-        
+
         from clawcodex_ext.permissions.classifier import (
             auto_mode_classify_with_llm,
             get_cache,
         )
+
         log.info("Successfully imported LLM classifier components")
 
         cache = get_cache()
@@ -75,7 +77,7 @@ def install_llm_auto_mode_classifier(
             )
 
         check_module.auto_mode_classify = _llm_enhanced_auto_mode_classify
-        
+
         # Verify the patch worked
         if check_module.auto_mode_classify is _llm_enhanced_auto_mode_classify:
             _AUTO_MODE_CLASSIFIER_INSTALLED = True
@@ -91,6 +93,7 @@ def install_llm_auto_mode_classifier(
 
     except Exception as e:
         import traceback
+
         log.warning("Failed to install LLM auto mode classifier: %s", e)
         log.warning("Traceback: %s", traceback.format_exc())
         return False
@@ -103,7 +106,7 @@ def uninstall_llm_auto_mode_classifier() -> bool:
         True if uninstallation succeeded, False otherwise
     """
     global _AUTO_MODE_CLASSIFIER_INSTALLED
-    
+
     if not _AUTO_MODE_CLASSIFIER_INSTALLED:
         return True
 

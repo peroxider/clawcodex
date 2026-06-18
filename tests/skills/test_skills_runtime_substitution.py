@@ -57,21 +57,15 @@ class TestPrependBaseDirHeader(unittest.TestCase):
 
 class TestSubstituteSkillDir(unittest.TestCase):
     def test_replaces_placeholder(self) -> None:
-        out = substitute_skill_dir(
-            "cd ${CLAUDE_SKILL_DIR}/scripts", "/abs/skill"
-        )
+        out = substitute_skill_dir("cd ${CLAUDE_SKILL_DIR}/scripts", "/abs/skill")
         self.assertEqual(out, "cd /abs/skill/scripts")
 
     def test_replaces_multiple(self) -> None:
-        out = substitute_skill_dir(
-            "${CLAUDE_SKILL_DIR}/a ${CLAUDE_SKILL_DIR}/b", "/x"
-        )
+        out = substitute_skill_dir("${CLAUDE_SKILL_DIR}/a ${CLAUDE_SKILL_DIR}/b", "/x")
         self.assertEqual(out, "/x/a /x/b")
 
     def test_normalizes_backslashes(self) -> None:
-        out = substitute_skill_dir(
-            "${CLAUDE_SKILL_DIR}/script.ps1", r"C:\users\me\skill"
-        )
+        out = substitute_skill_dir("${CLAUDE_SKILL_DIR}/script.ps1", r"C:\users\me\skill")
         self.assertEqual(out, "C:/users/me/skill/script.ps1")
 
     def test_no_op_when_base_dir_missing(self) -> None:
@@ -368,7 +362,10 @@ class TestSkillToolRuntimeIntegration(unittest.TestCase):
         """AC#2: disk-loaded skill prepends the canonical header."""
         skills_dir = self.root / ".claude" / "skills"
         create_skill(
-            directory=skills_dir, name="hello", description="say hi", body="Hi!",
+            directory=skills_dir,
+            name="hello",
+            description="say hi",
+            body="Hi!",
         )
         ctx = ToolContext(workspace_root=self.root)
         out = SkillTool.call({"skill": "hello"}, ctx).output
@@ -385,7 +382,8 @@ class TestSkillToolRuntimeIntegration(unittest.TestCase):
         substitute in a real disk-loaded skill via SkillTool."""
         skills_dir = self.root / ".claude" / "skills"
         create_skill(
-            directory=skills_dir, name="echo",
+            directory=skills_dir,
+            name="echo",
             description="echo placeholders",
             body="DIR=${CLAUDE_SKILL_DIR}\nSID=${CLAUDE_SESSION_ID}",
         )
@@ -414,8 +412,11 @@ class TestSkillToolRuntimeIntegration(unittest.TestCase):
         """AC#4: arg substitution still works after header prepend."""
         skills_dir = self.root / ".claude" / "skills"
         create_skill(
-            directory=skills_dir, name="greet", description="greet",
-            arguments=["name"], body="Hello $name from $1",
+            directory=skills_dir,
+            name="greet",
+            description="greet",
+            arguments=["name"],
+            body="Hello $name from $1",
         )
         ctx = ToolContext(workspace_root=self.root)
         out = SkillTool.call({"skill": "greet", "args": "alice town"}, ctx).output
@@ -429,6 +430,7 @@ class TestSkillToolRuntimeIntegration(unittest.TestCase):
         # and a tracker executor. The MCP guard runs before any executor
         # call.
         called: list[str] = []
+
         def trk(cmd: str, inline: bool) -> str:
             called.append(cmd)
             return "x"

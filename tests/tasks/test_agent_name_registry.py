@@ -1,4 +1,5 @@
 """WI-6.1 tests — agent name registry + collision policy."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -110,9 +111,13 @@ def test_collision_with_running_agent_raises(tmp_path: Path) -> None:
     # Pre-populate the registry as if a running agent was already
     # registered.
     from src.tasks.local_agent import register_async_agent
+
     existing = register_async_agent(
-        agent_id="a-existing", description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-existing",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     ctx.agent_name_registry._mapping["researcher"] = existing.id
 
@@ -174,12 +179,18 @@ def test_concurrent_same_name_spawn_only_one_wins(tmp_path: Path) -> None:
     # Pre-register two RUNNING agents with distinct ids; the test
     # races their name claims.
     register_async_agent(
-        agent_id="a-1", description="x", prompt="x",
-        agent_type="general-purpose", registry=runtime,
+        agent_id="a-1",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=runtime,
     )
     register_async_agent(
-        agent_id="a-2", description="x", prompt="x",
-        agent_type="general-purpose", registry=runtime,
+        agent_id="a-2",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=runtime,
     )
 
     barrier = threading.Barrier(2)
@@ -195,14 +206,17 @@ def test_concurrent_same_name_spawn_only_one_wins(tmp_path: Path) -> None:
 
     t1 = threading.Thread(target=claim_thread, args=("first", "a-1"))
     t2 = threading.Thread(target=claim_thread, args=("second", "a-2"))
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     # Exactly one thread wins; the other raises.
     statuses = list(outcomes.values())
-    assert sorted(statuses) == ["ok", "raised"], (
-        f"expected one ok / one raised under literal race; got {outcomes}"
-    )
+    assert sorted(statuses) == [
+        "ok",
+        "raised",
+    ], f"expected one ok / one raised under literal race; got {outcomes}"
     # The registry holds the winner's binding.
     bound = name_registry.get("researcher")
     assert bound in {"a-1", "a-2"}
@@ -219,9 +233,13 @@ def test_collision_with_terminal_agent_overwrites(tmp_path: Path) -> None:
         complete_agent_task,
         register_async_agent,
     )
+
     existing = register_async_agent(
-        agent_id="a-old", description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-old",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     complete_agent_task("a-old", result_text="done", registry=ctx.runtime_tasks)
     ctx.agent_name_registry._mapping["researcher"] = existing.id

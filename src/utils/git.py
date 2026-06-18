@@ -158,11 +158,13 @@ def get_file_status(cwd: str | None = None) -> list[FileStatus]:
                 original = parts[i + 1]
                 i += 1
 
-        entries.append(FileStatus(
-            path=filepath,
-            status=status,
-            original_path=original,
-        ))
+        entries.append(
+            FileStatus(
+                path=filepath,
+                status=status,
+                original_path=original,
+            )
+        )
         i += 1
 
     return entries
@@ -201,6 +203,7 @@ def get_session_diff(
         if lines:
             summary = lines[-1]
             import re
+
             files_match = re.search(r"(\d+)\s+file", summary)
             ins_match = re.search(r"(\d+)\s+insertion", summary)
             del_match = re.search(r"(\d+)\s+deletion", summary)
@@ -233,6 +236,7 @@ def get_diff_against_branch(
         lines = stat_output.strip().splitlines()
         if lines:
             import re
+
             summary = lines[-1]
             files_match = re.search(r"(\d+)\s+file", summary)
             ins_match = re.search(r"(\d+)\s+insertion", summary)
@@ -294,13 +298,15 @@ def get_commit_attribution(
                 elif line.startswith("-") and not line.startswith("---"):
                     lines_removed += 1
 
-        results.append(CommitAttribution(
-            path=file_status.path,
-            modified_by_claude=is_claude,
-            modified_by_user=not is_claude,
-            lines_added=lines_added,
-            lines_removed=lines_removed,
-        ))
+        results.append(
+            CommitAttribution(
+                path=file_status.path,
+                modified_by_claude=is_claude,
+                modified_by_user=not is_claude,
+                lines_added=lines_added,
+                lines_removed=lines_removed,
+            )
+        )
 
     return results
 
@@ -316,12 +322,14 @@ def list_worktrees(cwd: str | None = None) -> list[Worktree]:
     for line in stdout.splitlines():
         if not line.strip():
             if current:
-                worktrees.append(Worktree(
-                    path=current.get("worktree", ""),
-                    branch=current.get("branch", "").replace("refs/heads/", ""),
-                    commit=current.get("HEAD"),
-                    is_bare="bare" in current,
-                ))
+                worktrees.append(
+                    Worktree(
+                        path=current.get("worktree", ""),
+                        branch=current.get("branch", "").replace("refs/heads/", ""),
+                        commit=current.get("HEAD"),
+                        is_bare="bare" in current,
+                    )
+                )
                 current = {}
             continue
 
@@ -335,12 +343,14 @@ def list_worktrees(cwd: str | None = None) -> list[Worktree]:
             current["bare"] = "true"
 
     if current:
-        worktrees.append(Worktree(
-            path=current.get("worktree", ""),
-            branch=current.get("branch", "").replace("refs/heads/", ""),
-            commit=current.get("HEAD"),
-            is_bare="bare" in current,
-        ))
+        worktrees.append(
+            Worktree(
+                path=current.get("worktree", ""),
+                branch=current.get("branch", "").replace("refs/heads/", ""),
+                commit=current.get("HEAD"),
+                is_bare="bare" in current,
+            )
+        )
 
     if worktrees:
         worktrees[0].is_main = True

@@ -30,11 +30,13 @@ def validate_manifest(manifest: dict[str, Any]) -> list[ManifestValidationError]
     name = manifest.get("name")
     if isinstance(name, str):
         if not VALID_PLUGIN_NAME_RE.match(name):
-            errors.append(ManifestValidationError(
-                "name",
-                f"Plugin name '{name}' is invalid. "
-                f"Must start with a letter, contain only [a-zA-Z0-9_-], max 64 chars.",
-            ))
+            errors.append(
+                ManifestValidationError(
+                    "name",
+                    f"Plugin name '{name}' is invalid. "
+                    f"Must start with a letter, contain only [a-zA-Z0-9_-], max 64 chars.",
+                )
+            )
     elif name is not None:
         errors.append(ManifestValidationError("name", "Plugin name must be a string"))
 
@@ -43,9 +45,11 @@ def validate_manifest(manifest: dict[str, Any]) -> list[ManifestValidationError]
         if not isinstance(version, str):
             errors.append(ManifestValidationError("version", "Version must be a string"))
         elif not VALID_VERSION_RE.match(version):
-            errors.append(ManifestValidationError(
-                "version", f"Version '{version}' is not valid semver (expected X.Y.Z)"
-            ))
+            errors.append(
+                ManifestValidationError(
+                    "version", f"Version '{version}' is not valid semver (expected X.Y.Z)"
+                )
+            )
 
     description = manifest.get("description")
     if description is not None and not isinstance(description, str):
@@ -67,23 +71,25 @@ def validate_manifest(manifest: dict[str, Any]) -> list[ManifestValidationError]
             valid_perms = {"read", "write", "execute", "network", "mcp"}
             for perm in permissions:
                 if perm not in valid_perms:
-                    errors.append(ManifestValidationError(
-                        "permissions", f"Unknown permission '{perm}'"
-                    ))
+                    errors.append(
+                        ManifestValidationError("permissions", f"Unknown permission '{perm}'")
+                    )
 
     dependencies = manifest.get("dependencies")
     if dependencies is not None:
         if not isinstance(dependencies, dict):
-            errors.append(ManifestValidationError(
-                "dependencies", "Dependencies must be a JSON object"
-            ))
+            errors.append(
+                ManifestValidationError("dependencies", "Dependencies must be a JSON object")
+            )
         else:
             for dep_name, dep_version in dependencies.items():
                 if not isinstance(dep_name, str) or not isinstance(dep_version, str):
-                    errors.append(ManifestValidationError(
-                        "dependencies",
-                        f"Dependency '{dep_name}' must have string name and version",
-                    ))
+                    errors.append(
+                        ManifestValidationError(
+                            "dependencies",
+                            f"Dependency '{dep_name}' must have string name and version",
+                        )
+                    )
 
     return errors
 

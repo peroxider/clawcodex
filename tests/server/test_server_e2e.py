@@ -33,7 +33,7 @@ pytestmark = pytest.mark.integration
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
@@ -84,14 +84,16 @@ def _make_fake_agent_factory(scripted_responses: list[dict]):
 @pytest.mark.asyncio
 async def test_e2e_create_session_and_exchange_message(tmp_path):
     config = ServerConfig(
-        host='127.0.0.1',
+        host="127.0.0.1",
         port=_free_port(),
         workspace=str(tmp_path),
     )
-    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / 'idx.json')
-    spawn = _make_fake_agent_factory([
-        {'type': 'assistant', 'uuid': 'a1', 'message': {'content': 'hi back'}},
-    ])
+    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / "idx.json")
+    spawn = _make_fake_agent_factory(
+        [
+            {"type": "assistant", "uuid": "a1", "message": {"content": "hi back"}},
+        ]
+    )
     server = DirectConnectServer(config=config, manager=manager, spawn_agent=spawn)
     await server.start()
 
@@ -100,14 +102,14 @@ async def test_e2e_create_session_and_exchange_message(tmp_path):
     try:
         # Step 1: POST /sessions via the client helper.
         cfg, work_dir = await create_direct_connect_session(
-            server_url=f'http://127.0.0.1:{config.port}',
+            server_url=f"http://127.0.0.1:{config.port}",
             cwd=str(tmp_path),
         )
-        assert cfg.session_id.startswith('ds_')
+        assert cfg.session_id.startswith("ds_")
         assert work_dir == str(tmp_path)
 
         # Session should be in the index.
-        idx = load_index(tmp_path / 'idx.json')
+        idx = load_index(tmp_path / "idx.json")
         assert cfg.session_id in idx
 
         # Step 2: open the WS via DirectConnectSessionManager.
@@ -123,16 +125,16 @@ async def test_e2e_create_session_and_exchange_message(tmp_path):
         try:
             # Step 3: send a user prompt; expect the scripted assistant
             # response to land via on_message.
-            await client.send_message('hello')
+            await client.send_message("hello")
 
             # Wait for the assistant message (with timeout).
             for _ in range(50):
                 if received_messages:
                     break
                 await asyncio.sleep(0.05)
-            assert received_messages, 'expected at least one assistant message'
-            assert received_messages[0]['type'] == 'assistant'
-            assert received_messages[0]['message']['content'] == 'hi back'
+            assert received_messages, "expected at least one assistant message"
+            assert received_messages[0]["type"] == "assistant"
+            assert received_messages[0]["message"]["content"] == "hi back"
         finally:
             await client.disconnect()
 
@@ -149,9 +151,11 @@ async def test_e2e_create_session_and_exchange_message(tmp_path):
 async def test_e2e_session_persists_across_index_reads(tmp_path):
     """After session create, the index has the entry; after stop, it's gone."""
     config = ServerConfig(
-        host='127.0.0.1', port=_free_port(), workspace=str(tmp_path),
+        host="127.0.0.1",
+        port=_free_port(),
+        workspace=str(tmp_path),
     )
-    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / 'idx.json')
+    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / "idx.json")
     server = DirectConnectServer(
         config=config,
         manager=manager,
@@ -162,15 +166,15 @@ async def test_e2e_session_persists_across_index_reads(tmp_path):
 
     try:
         cfg, _ = await create_direct_connect_session(
-            server_url=f'http://127.0.0.1:{config.port}',
+            server_url=f"http://127.0.0.1:{config.port}",
             cwd=str(tmp_path),
         )
         # Session is in the index.
-        assert cfg.session_id in load_index(tmp_path / 'idx.json')
+        assert cfg.session_id in load_index(tmp_path / "idx.json")
 
         # Stop it via the manager.
         await manager.stop_session(cfg.session_id)
-        assert cfg.session_id not in load_index(tmp_path / 'idx.json')
+        assert cfg.session_id not in load_index(tmp_path / "idx.json")
     finally:
         await server.stop()
         serve_task.cancel()
@@ -183,14 +187,15 @@ async def test_e2e_session_persists_across_index_reads(tmp_path):
 @pytest.mark.asyncio
 async def test_e2e_unauthorized_session_create_returns_401(tmp_path):
     config = ServerConfig(
-        host='127.0.0.1',
+        host="127.0.0.1",
         port=_free_port(),
-        auth_token='secret',
+        auth_token="secret",
         workspace=str(tmp_path),
     )
-    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / 'idx.json')
+    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / "idx.json")
     server = DirectConnectServer(
-        config=config, manager=manager,
+        config=config,
+        manager=manager,
         spawn_agent=_make_fake_agent_factory([]),
     )
     await server.start()
@@ -200,8 +205,8 @@ async def test_e2e_unauthorized_session_create_returns_401(tmp_path):
         # No auth_token passed; server requires one → 401.
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                f'http://127.0.0.1:{config.port}/sessions',
-                json={'cwd': str(tmp_path)},
+                f"http://127.0.0.1:{config.port}/sessions",
+                json={"cwd": str(tmp_path)},
             )
         assert resp.status_code == 401
     finally:
@@ -215,10 +220,11 @@ async def test_e2e_unauthorized_session_create_returns_401(tmp_path):
 
 @pytest.mark.asyncio
 async def test_e2e_unknown_route_returns_404(tmp_path):
-    config = ServerConfig(host='127.0.0.1', port=_free_port(), workspace=str(tmp_path))
-    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / 'idx.json')
+    config = ServerConfig(host="127.0.0.1", port=_free_port(), workspace=str(tmp_path))
+    manager = SessionManager(workspace=str(tmp_path), index_path=tmp_path / "idx.json")
     server = DirectConnectServer(
-        config=config, manager=manager,
+        config=config,
+        manager=manager,
         spawn_agent=_make_fake_agent_factory([]),
     )
     await server.start()
@@ -226,7 +232,7 @@ async def test_e2e_unknown_route_returns_404(tmp_path):
 
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(f'http://127.0.0.1:{config.port}/nope')
+            resp = await client.get(f"http://127.0.0.1:{config.port}/nope")
         assert resp.status_code == 404
     finally:
         await server.stop()

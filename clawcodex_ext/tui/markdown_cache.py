@@ -54,22 +54,22 @@ _DEFAULT_CODE_THEME = "monokai"
 # the fast-path check.
 _BLOCK_MARKDOWN_RE = re.compile(
     r"(^|\n)\s*("
-    r"#{1,6}\s"          # ATX heading
-    r"|[*+\-]\s"         # unordered list bullet
-    r"|\d+\.\s"          # ordered list bullet
-    r"|>\s"              # blockquote
-    r"|---"              # HR (or setext underline)
-    r"|\*\*\*"           # HR
-    r"|___"              # HR
+    r"#{1,6}\s"  # ATX heading
+    r"|[*+\-]\s"  # unordered list bullet
+    r"|\d+\.\s"  # ordered list bullet
+    r"|>\s"  # blockquote
+    r"|---"  # HR (or setext underline)
+    r"|\*\*\*"  # HR
+    r"|___"  # HR
     r")"
 )
 _INLINE_MARKDOWN_RE = re.compile(
     r"("
-    r"```"                    # fenced code block (open or close, anywhere)
+    r"```"  # fenced code block (open or close, anywhere)
     r"|\[[^\]]+\]\([^\)]+\)"  # inline link
-    r"|\*\*\w"                # bold open
-    r"|__\w"                  # bold open (alt)
-    r"|`[^`]"                 # inline code start
+    r"|\*\*\w"  # bold open
+    r"|__\w"  # bold open (alt)
+    r"|`[^`]"  # inline code start
     r")"
 )
 
@@ -217,8 +217,7 @@ class MarkdownCache:
             # Logged at DEBUG so the failure is observable without being noisy
             # in production.
             _logger.debug(
-                "Rich.Markdown render failed; falling back to Text for content "
-                "of length %d",
+                "Rich.Markdown render failed; falling back to Text for content of length %d",
                 len(content),
                 exc_info=True,
             )

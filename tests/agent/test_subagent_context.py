@@ -1,4 +1,5 @@
 """Tests for src/agent/subagent_context.py — context isolation."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,6 +28,7 @@ def _make_parent_context(**kwargs) -> ToolContext:
 
 
 # --- Default isolation ---
+
 
 class TestDefaultIsolation:
     def test_read_file_fingerprints_starts_empty(self):
@@ -90,6 +92,7 @@ class TestDefaultIsolation:
 
 # --- Abort controller ---
 
+
 class TestAbortController:
     def test_default_creates_child_linked_to_parent(self):
         parent = _make_parent_context()
@@ -125,6 +128,7 @@ class TestAbortController:
 
 
 # --- Permission context ---
+
 
 class TestPermissionContext:
     def test_default_avoids_permission_prompts(self):
@@ -179,6 +183,7 @@ class TestPermissionContext:
 
 # --- Query tracking ---
 
+
 class TestQueryTracking:
     def test_depth_incremented(self):
         parent = _make_parent_context()
@@ -209,6 +214,7 @@ class TestQueryTracking:
 
 
 # --- Overrides ---
+
 
 class TestOverrides:
     def test_agent_id_override(self):
@@ -306,6 +312,7 @@ class TestOverrides:
 
 # --- Workspace inheritance ---
 
+
 class TestWorkspaceInheritance:
     def test_workspace_root_inherited(self):
         parent = _make_parent_context()
@@ -323,6 +330,7 @@ class TestWorkspaceInheritance:
 
     def test_file_reading_limits_inherited(self):
         from src.tool_system.context import FileReadingLimits
+
         parent = _make_parent_context()
         parent.file_reading_limits = FileReadingLimits(max_tokens=1000)
 

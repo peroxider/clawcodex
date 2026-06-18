@@ -261,14 +261,16 @@ class TestRedirectUriLocalhost:
         async def fake_wait(*args, **kw):
             raise OAuthCallbackError("test-stop")
 
-        with patch(
-            "src.services.mcp.auth_provider.discover_oauth_metadata",
-            new=fake_discover,
-        ), patch.object(
-            provider._manager, "build_oauth_url", side_effect=fake_build
-        ), patch(
-            "src.services.mcp.auth_provider.wait_for_callback",
-            new=fake_wait,
+        with (
+            patch(
+                "src.services.mcp.auth_provider.discover_oauth_metadata",
+                new=fake_discover,
+            ),
+            patch.object(provider._manager, "build_oauth_url", side_effect=fake_build),
+            patch(
+                "src.services.mcp.auth_provider.wait_for_callback",
+                new=fake_wait,
+            ),
         ):
             await provider.acquire_token(
                 server_name="test",
@@ -278,8 +280,7 @@ class TestRedirectUriLocalhost:
 
         uri = captured["redirect_uri"]
         assert uri.startswith("http://localhost:"), (
-            f"redirect_uri must use 'localhost' literal (TS-canonical + "
-            f"plan A5); got {uri!r}"
+            f"redirect_uri must use 'localhost' literal (TS-canonical + plan A5); got {uri!r}"
         )
 
     def test_xaa_idp_login_builds_localhost_redirect_uri(self):

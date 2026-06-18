@@ -97,9 +97,7 @@ class ElicitationHandler:
         oauth_config = pending["oauth_config"]
         verifier = pending.get("verifier")
 
-        result = await self._auth_manager.exchange_code(
-            server_name, oauth_config, code, verifier
-        )
+        result = await self._auth_manager.exchange_code(server_name, oauth_config, code, verifier)
 
         if result.success:
             del self._pending_auth[server_name]

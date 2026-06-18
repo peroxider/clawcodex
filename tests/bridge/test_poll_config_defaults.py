@@ -80,10 +80,7 @@ def test_at_capacity_liveness_invariant_default() -> None:
     poll_interval_ms_at_capacity=600000 — invariant holds via the second clause.
     """
     cfg = DEFAULT_POLL_CONFIG
-    assert (
-        cfg.non_exclusive_heartbeat_interval_ms > 0
-        or cfg.poll_interval_ms_at_capacity > 0
-    )
+    assert cfg.non_exclusive_heartbeat_interval_ms > 0 or cfg.poll_interval_ms_at_capacity > 0
     assert (
         cfg.non_exclusive_heartbeat_interval_ms > 0
         or cfg.multisession_poll_interval_ms_at_capacity > 0

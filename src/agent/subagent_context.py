@@ -2,6 +2,7 @@
 
 Mirrors createSubagentContext() from typescript/src/utils/forkedAgent.ts.
 """
+
 from __future__ import annotations
 
 import copy
@@ -30,6 +31,7 @@ class SubagentContextOverrides:
     the parent. Use these options to override specific fields or opt-in to
     sharing specific callbacks.
     """
+
     # Override fields
     options: ToolUseOptions | None = None
     agent_id: str | None = None
@@ -111,7 +113,9 @@ def create_subagent_context(
     options = overrides.options if overrides.options is not None else parent_context.options
 
     # --- Messages ---
-    messages = overrides.messages if overrides.messages is not None else list(parent_context.messages)
+    messages = (
+        overrides.messages if overrides.messages is not None else list(parent_context.messages)
+    )
 
     # --- Query tracking with incremented depth ---
     parent_depth = parent_context.query_tracking.depth if parent_context.query_tracking else -1
@@ -129,16 +133,12 @@ def create_subagent_context(
     # --- Permission handler ---
     # Only share if explicitly opted in; otherwise no-op (None)
     permission_handler = (
-        parent_context.permission_handler
-        if overrides.share_permission_handler
-        else None
+        parent_context.permission_handler if overrides.share_permission_handler else None
     )
 
     # --- Set response length ---
     set_response_length = (
-        parent_context.set_response_length
-        if overrides.share_set_response_length
-        else None
+        parent_context.set_response_length if overrides.share_set_response_length else None
     )
 
     # --- Content replacement state ---

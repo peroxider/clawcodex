@@ -145,45 +145,62 @@ def apply_permission_update(
         rule_strings = [permission_rule_value_to_string(r) for r in update.rules]
         log.debug(
             "permission update: addRules behavior=%s dest=%s rules=%s",
-            update.behavior, update.destination, rule_strings,
+            update.behavior,
+            update.destination,
+            rule_strings,
         )
         existing = list(getattr(context, _ruleset_key(update.behavior)).get(update.destination, []))
         return _replace_ruleset(
-            context, update.behavior, update.destination, existing + rule_strings,
+            context,
+            update.behavior,
+            update.destination,
+            existing + rule_strings,
         )
 
     if isinstance(update, PermissionUpdateReplaceRules):
         rule_strings = [permission_rule_value_to_string(r) for r in update.rules]
         log.debug(
             "permission update: replaceRules behavior=%s dest=%s rules=%s",
-            update.behavior, update.destination, rule_strings,
+            update.behavior,
+            update.destination,
+            rule_strings,
         )
         return _replace_ruleset(
-            context, update.behavior, update.destination, rule_strings,
+            context,
+            update.behavior,
+            update.destination,
+            rule_strings,
         )
 
     if isinstance(update, PermissionUpdateRemoveRules):
         rule_strings = [permission_rule_value_to_string(r) for r in update.rules]
         log.debug(
             "permission update: removeRules behavior=%s dest=%s rules=%s",
-            update.behavior, update.destination, rule_strings,
+            update.behavior,
+            update.destination,
+            rule_strings,
         )
         existing = list(getattr(context, _ruleset_key(update.behavior)).get(update.destination, []))
         to_remove = set(rule_strings)
         filtered = [r for r in existing if r not in to_remove]
         return _replace_ruleset(
-            context, update.behavior, update.destination, filtered,
+            context,
+            update.behavior,
+            update.destination,
+            filtered,
         )
 
     if isinstance(update, PermissionUpdateAddDirectories):
         log.debug(
             "permission update: addDirectories dest=%s dirs=%s",
-            update.destination, list(update.directories),
+            update.destination,
+            list(update.directories),
         )
         new_dirs = dict(context.additional_working_directories)
         for path in update.directories:
             new_dirs[path] = AdditionalWorkingDirectory(
-                path=path, source=update.destination,  # type: ignore[arg-type]
+                path=path,
+                source=update.destination,  # type: ignore[arg-type]
             )
         return ToolPermissionContext(
             mode=context.mode,
@@ -357,7 +374,8 @@ def persist_permission_updates(
     """
     return [
         persist_permission_update(
-            u, settings_path_for_destination=settings_path_for_destination,
+            u,
+            settings_path_for_destination=settings_path_for_destination,
         )
         for u in updates
     ]

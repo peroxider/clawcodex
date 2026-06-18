@@ -60,8 +60,7 @@ class HistorySearchScreen(DialogScreen[str | None]):
     ) -> None:
         super().__init__()
         self._entries = [
-            e if isinstance(e, HistoryEntry) else HistoryEntry(prompt=str(e))
-            for e in entries
+            e if isinstance(e, HistoryEntry) else HistoryEntry(prompt=str(e)) for e in entries
         ]
         self._initial_query = initial_query
         self._on_select = on_select
@@ -188,9 +187,7 @@ def fuzzy_score(text: str, query: str) -> tuple[bool, int]:
     return True, max(0, 500 - gap)
 
 
-def _rank_entries(
-    entries: Sequence[HistoryEntry], query: str
-) -> list[tuple[HistoryEntry, int]]:
+def _rank_entries(entries: Sequence[HistoryEntry], query: str) -> list[tuple[HistoryEntry, int]]:
     scored: list[tuple[HistoryEntry, int]] = []
     for entry in entries:
         matched, score = fuzzy_score(entry.prompt, query)

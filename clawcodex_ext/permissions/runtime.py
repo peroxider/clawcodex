@@ -29,6 +29,7 @@ discarded when the surface exits. Two surfaces must never share a lock
 can't tell when to recreate the lock. The controller object makes the
 ownership explicit.
 """
+
 from __future__ import annotations
 
 import logging
@@ -221,9 +222,7 @@ class RuntimePermissionController:
         # other mode restores the snapshotted default handler so the
         # cycle can return cleanly.
         if target_mode == "bypassPermissions":
-            ctx.permission_handler = (
-                lambda _tn, _msg, _sug: (True, False)
-            )
+            ctx.permission_handler = lambda _tn, _msg, _sug: (True, False)
             ctx.allow_docs = True
         else:
             ctx.permission_handler = self._default_handler
@@ -234,9 +233,7 @@ class RuntimePermissionController:
         # which notifies the CCR bridge / SDK status stream.
         if self._store is not None:
             try:
-                self._store.set_state(
-                    lambda s: replace_state(s, permission_mode=target_mode)
-                )
+                self._store.set_state(lambda s: replace_state(s, permission_mode=target_mode))
             except Exception:
                 logger.exception(
                     "AppState.set_state raised during permission mode swap; "
@@ -250,9 +247,7 @@ class RuntimePermissionController:
             try:
                 self._notify(target_mode)
             except Exception:
-                logger.exception(
-                    "notify hook raised during permission mode swap"
-                )
+                logger.exception("notify hook raised during permission mode swap")
 
         return target_mode
 
@@ -267,6 +262,7 @@ def ToolPermissionContextFactory(  # type: ignore[no-redef]
     is_bypass_permissions_mode_available: bool,
 ) -> Any:
     from src.permissions.types import ToolPermissionContext
+
     return ToolPermissionContext(
         mode=mode,
         is_bypass_permissions_mode_available=is_bypass_permissions_mode_available,

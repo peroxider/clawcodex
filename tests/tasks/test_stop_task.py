@@ -6,6 +6,7 @@ dedicated test, plus the Python-specific ``kill_timeout``. Also
 covers the legacy ``task_manager`` fallback branch and the
 race-vs-natural-completion scenario.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -84,8 +85,11 @@ def test_not_running_when_task_already_completed(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     complete_agent_task(agent_id, result_text="done", registry=ctx.runtime_tasks)
 
@@ -98,20 +102,22 @@ def test_not_running_when_task_already_completed(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("terminal_status", ["completed", "failed", "killed"])
-def test_not_running_for_each_terminal_status(
-    tmp_path: Path, terminal_status: str
-) -> None:
+def test_not_running_for_each_terminal_status(tmp_path: Path, terminal_status: str) -> None:
     """All three chapter terminal statuses produce ``not_running``."""
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     # Force the terminal status in-place; we're not testing the
     # transition, just the dispatch behavior on a terminal entry.
     ctx.runtime_tasks.update(
-        agent_id, lambda prev: replace(prev, status=terminal_status)  # type: ignore[arg-type]
+        agent_id,
+        lambda prev: replace(prev, status=terminal_status),  # type: ignore[arg-type]
     )
 
     result = asyncio.run(stop_task(agent_id, ctx))
@@ -229,14 +235,15 @@ def test_kill_a_running_local_agent_flips_status(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     # Inject a fresh asyncio.Event so we can verify the signal propagates.
     event = asyncio.Event()
-    ctx.runtime_tasks.update(
-        agent_id, lambda prev: replace(prev, abort_event=event)
-    )
+    ctx.runtime_tasks.update(agent_id, lambda prev: replace(prev, abort_event=event))
 
     result = asyncio.run(stop_task(agent_id, ctx))
 
@@ -289,8 +296,11 @@ def test_race_natural_completion_wins_returns_not_running(tmp_path: Path) -> Non
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     # Natural completion lands first.
     complete_agent_task(agent_id, result_text="natural", registry=ctx.runtime_tasks)
@@ -318,8 +328,11 @@ def test_race_literal_concurrent_completion_and_stop(tmp_path: Path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
 
     barrier = threading.Barrier(2)
@@ -336,8 +349,10 @@ def test_race_literal_concurrent_completion_and_stop(tmp_path: Path) -> None:
 
     t1 = threading.Thread(target=_stop_thread)
     t2 = threading.Thread(target=_complete_thread)
-    t1.start(); t2.start()
-    t1.join(); t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     final = ctx.runtime_tasks.get(agent_id)
     # Only one of the terminal flips wins (atomic registry mutator).
@@ -366,9 +381,7 @@ def test_tool_layer_promotes_error_code_to_top_level(tmp_path: Path) -> None:
     from src.tool_system.tools.task_stop import TaskStopTool
 
     ctx = ToolContext(workspace_root=tmp_path)
-    result = asyncio.run(
-        TaskStopTool.call({"task_id": "missing"}, ctx)
-    )
+    result = asyncio.run(TaskStopTool.call({"task_id": "missing"}, ctx))
 
     assert result.is_error is True
     assert result.output["error_code"] == "not_found"

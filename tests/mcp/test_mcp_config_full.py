@@ -38,14 +38,18 @@ class TestVscodeDiscovery:
         vscode_dir = tmp_path / ".vscode"
         vscode_dir.mkdir()
         mcp_json = vscode_dir / "mcp.json"
-        mcp_json.write_text(json.dumps({
-            "servers": {
-                "test-server": {
-                    "command": "node",
-                    "args": ["server.js"],
+        mcp_json.write_text(
+            json.dumps(
+                {
+                    "servers": {
+                        "test-server": {
+                            "command": "node",
+                            "args": ["server.js"],
+                        }
+                    }
                 }
-            }
-        }))
+            )
+        )
 
         monkeypatch.setattr("src.services.mcp.config._get_cwd", lambda: str(tmp_path))
         servers, errors = discover_vscode_mcp_servers()
@@ -55,14 +59,18 @@ class TestVscodeDiscovery:
         vscode_dir = tmp_path / ".vscode"
         vscode_dir.mkdir()
         settings = vscode_dir / "settings.json"
-        settings.write_text(json.dumps({
-            "mcpServers": {
-                "settings-server": {
-                    "command": "python",
-                    "args": ["-m", "mcp_server"],
+        settings.write_text(
+            json.dumps(
+                {
+                    "mcpServers": {
+                        "settings-server": {
+                            "command": "python",
+                            "args": ["-m", "mcp_server"],
+                        }
+                    }
                 }
-            }
-        }))
+            )
+        )
 
         monkeypatch.setattr("src.services.mcp.config._get_cwd", lambda: str(tmp_path))
         servers, errors = discover_vscode_mcp_servers()
@@ -98,6 +106,7 @@ class TestChannelPermissions:
             ChannelPermission,
             ChannelPermissionManager,
         )
+
         manager = ChannelPermissionManager()
         assert manager.list_servers() == []
 
@@ -106,6 +115,7 @@ class TestChannelPermissions:
             ChannelPermission,
             ChannelPermissionManager,
         )
+
         manager = ChannelPermissionManager()
         perm = ChannelPermission(
             server_name="test",
@@ -122,6 +132,7 @@ class TestChannelPermissions:
             ChannelPermission,
             ChannelPermissionManager,
         )
+
         manager = ChannelPermissionManager()
         perm = ChannelPermission(
             server_name="test",
@@ -137,6 +148,7 @@ class TestChannelPermissions:
             ChannelPermission,
             ChannelPermissionManager,
         )
+
         manager = ChannelPermissionManager()
         perm = ChannelPermission(
             server_name="test",
@@ -169,6 +181,7 @@ class TestChannelPermissions:
             ChannelPermission,
             ChannelPermissionManager,
         )
+
         manager = ChannelPermissionManager()
         perm = ChannelPermission(server_name="test")
         manager.set_permission("test", perm)

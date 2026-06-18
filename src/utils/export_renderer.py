@@ -80,9 +80,7 @@ _SYNTHETIC_FIRST_TEXTS = frozenset(
     }
 )
 
-_SYSTEM_REMINDER_RE = re.compile(
-    r"<system-reminder\b[^>]*>.*?</system-reminder>", re.DOTALL
-)
+_SYSTEM_REMINDER_RE = re.compile(r"<system-reminder\b[^>]*>.*?</system-reminder>", re.DOTALL)
 
 
 def _internal_tag_regex(tag: str) -> "re.Pattern[str]":
@@ -339,9 +337,7 @@ def should_export_structured_message(msg: Any, msg_type: str) -> bool:
     content = extract_message_content(msg)
     if is_synthetic_content(content):
         return False
-    return has_exportable_structured_content(content) or not is_known_message_type(
-        msg_type
-    )
+    return has_exportable_structured_content(content) or not is_known_message_type(msg_type)
 
 
 # --------------------------------------------------------------------------- #
@@ -745,9 +741,7 @@ def render_messages_to_plain_text(messages: Any) -> str:
                     content_lines.append(str(block))
                     content_lines.append("")
                     continue
-                _plain_block_lines(
-                    _normalize_block(block), content_lines, is_tool_result_message
-                )
+                _plain_block_lines(_normalize_block(block), content_lines, is_tool_result_message)
         else:
             content_lines.append(str(content))
             content_lines.append("")

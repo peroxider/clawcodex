@@ -7,6 +7,7 @@ to every test, while mutations made by individual tests are
 reverted on teardown. Tests that *want* a clean slate can call
 :func:`AgentRegistry.clear` themselves.
 """
+
 from __future__ import annotations
 
 import pytest

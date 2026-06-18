@@ -33,6 +33,7 @@ These tests pin the parity at three layers:
 3. ``_bash_map_result_to_api`` only emits the ``<error>`` tag and
    ``is_error=True`` for the ESC path.
 """
+
 from __future__ import annotations
 
 import threading
@@ -134,10 +135,7 @@ def test_bash_map_result_to_api_timeout_emits_no_error_tag(tmp_path: Path) -> No
         "model to retry; for a timeout the duration marker is the signal."
     )
     assert "Command timed out after 30s" in block["content"]
-    assert (
-        "<error>Command was aborted before completion</error>"
-        not in block["content"]
-    ), (
+    assert "<error>Command was aborted before completion</error>" not in block["content"], (
         "the ``<error>`` tag is reserved for user-initiated abort (ESC). "
         "Emitting it on timeout collapses the two cases together and makes "
         "the model misread timeouts as user cancellations."
@@ -160,9 +158,7 @@ def test_bash_map_result_to_api_esc_emits_error_tag(tmp_path: Path) -> None:
     block = _bash_map_result_to_api(output, "call_e")
 
     assert block["is_error"] is True
-    assert (
-        "<error>Command was aborted before completion</error>" in block["content"]
-    )
+    assert "<error>Command was aborted before completion</error>" in block["content"]
 
 
 def test_bash_call_timeout_payload_shape(tmp_path: Path) -> None:

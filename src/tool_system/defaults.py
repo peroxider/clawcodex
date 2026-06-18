@@ -20,6 +20,7 @@ def build_default_registry(
     # Register extension tools (二开 tools that are not in upstream).
     try:
         from extensions.tool_system_ext.registration import EXTENSION_TOOLS
+
         for t in EXTENSION_TOOLS:
             registry.register(t)
     except ImportError:
@@ -39,6 +40,7 @@ def build_default_registry(
         try:
             from clawcodex_ext.tool_system.tools.create_agent_tool import load_persisted_agent_tools
             from clawcodex_ext.agent.tool_authoring.registry_ext import list_tools
+
             load_persisted_agent_tools()
             for tool in list_tools():
                 registry.register(tool)

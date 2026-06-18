@@ -8,15 +8,17 @@ from typing import Any
 
 # --- F-47: PermissionsConfig replaces the legacy `list[PermissionRule]` ---
 
-_PERMISSIONS_KNOWN_SUBKEYS: frozenset[str] = frozenset({
-    "allow",
-    "deny",
-    "ask",
-    "defaultMode",
-    "additionalDirectories",
-    "allowBypassPermissionsMode",
-    "rules",
-})
+_PERMISSIONS_KNOWN_SUBKEYS: frozenset[str] = frozenset(
+    {
+        "allow",
+        "deny",
+        "ask",
+        "defaultMode",
+        "additionalDirectories",
+        "allowBypassPermissionsMode",
+        "rules",
+    }
+)
 
 
 @dataclass
@@ -76,9 +78,7 @@ class PermissionsConfig:
         else:
             default_mode = None
 
-        additional = {
-            k: v for k, v in data.items() if k not in _PERMISSIONS_KNOWN_SUBKEYS
-        }
+        additional = {k: v for k, v in data.items() if k not in _PERMISSIONS_KNOWN_SUBKEYS}
 
         return cls(
             allow_bypass_permissions_mode=allow_bypass_permissions_mode,
@@ -103,6 +103,7 @@ class PermissionsConfig:
 @dataclass
 class ToolSettings:
     """Per-tool configuration."""
+
     enabled: bool = True
     allowed_commands: list[str] = field(default_factory=list)
     denied_commands: list[str] = field(default_factory=list)
@@ -112,6 +113,7 @@ class ToolSettings:
 @dataclass
 class OutputStyleSettings:
     """Output style configuration."""
+
     style: str = "default"  # "default" | "concise" | "verbose" | "markdown"
     max_width: int = 120
     show_thinking: bool = False
@@ -120,6 +122,7 @@ class OutputStyleSettings:
 @dataclass
 class CompactSettings:
     """Compaction settings."""
+
     auto_compact: bool = True
     threshold_tokens: int = 100_000
     max_compact_retries: int = 3
@@ -128,6 +131,7 @@ class CompactSettings:
 @dataclass
 class HookSettings:
     """Hook configuration."""
+
     enabled: bool = True
     timeout_ms: int = 30_000
     max_concurrent: int = 5
@@ -136,6 +140,7 @@ class HookSettings:
 @dataclass
 class McpServerSettings:
     """MCP server configuration."""
+
     command: str = ""
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
@@ -257,6 +262,7 @@ class SettingsSchema:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict."""
         import dataclasses
+
         d = dataclasses.asdict(self)
         extra = d.pop("extra", {})
         d.update(extra)
@@ -277,6 +283,7 @@ class SettingsSchema:
         ``PermissionsConfig``).
         """
         import dataclasses
+
         known_fields = {f.name for f in dataclasses.fields(cls)}
         known: dict[str, Any] = {}
         extra: dict[str, Any] = {}

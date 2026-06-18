@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock, RedactedThinkingBlock
+from src.types.content_blocks import (
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    ThinkingBlock,
+    RedactedThinkingBlock,
+)
 from src.types.messages import (
     AssistantMessage,
     Message,
@@ -66,7 +72,9 @@ class TestMessagePredicates:
         assert is_compact_boundary(msg) is True
 
     def test_is_tool_result_true(self):
-        msg = UserMessage(content=[ToolResultBlock(type="tool_result", tool_use_id="id1", content="ok")])
+        msg = UserMessage(
+            content=[ToolResultBlock(type="tool_result", tool_use_id="id1", content="ok")]
+        )
         assert is_tool_result(msg) is True
 
     def test_is_tool_result_false(self):
@@ -74,8 +82,13 @@ class TestMessagePredicates:
         assert is_tool_result(msg) is False
 
     def test_is_thinking_block_true(self):
-        assert is_thinking_block(ThinkingBlock(type="thinking", thinking="...", signature="sig")) is True
-        assert is_thinking_block(RedactedThinkingBlock(type="redacted_thinking", data="...")) is True
+        assert (
+            is_thinking_block(ThinkingBlock(type="thinking", thinking="...", signature="sig"))
+            is True
+        )
+        assert (
+            is_thinking_block(RedactedThinkingBlock(type="redacted_thinking", data="...")) is True
+        )
 
     def test_is_thinking_block_false(self):
         assert is_thinking_block(TextBlock(text="hello")) is False
@@ -96,11 +109,13 @@ class TestContentHelpers:
         assert count_tool_calls(msg) == 0
 
     def test_count_tool_calls_multiple(self):
-        msg = AssistantMessage(content=[
-            TextBlock(text="thinking"),
-            ToolUseBlock(type="tool_use", id="1", name="Read", input={}),
-            ToolUseBlock(type="tool_use", id="2", name="Write", input={}),
-        ])
+        msg = AssistantMessage(
+            content=[
+                TextBlock(text="thinking"),
+                ToolUseBlock(type="tool_use", id="1", name="Read", input={}),
+                ToolUseBlock(type="tool_use", id="2", name="Write", input={}),
+            ]
+        )
         assert count_tool_calls(msg) == 2
 
     def test_get_messages_after_compact_boundary(self):
@@ -154,6 +169,7 @@ class TestNormalizeEnhanced:
 
     def test_strips_progress_messages(self):
         from src.types.messages import ProgressMessage
+
         msgs = [
             create_user_message("hello"),
             ProgressMessage(toolUseID="t1", parentToolUseID="p1", data=None),
@@ -172,10 +188,14 @@ class TestNormalizeEnhanced:
         assert len(result) == 2
 
     def test_strips_thinking_blocks(self):
-        msgs = [AssistantMessage(content=[
-            ThinkingBlock(type="thinking", thinking="thought", signature="sig"),
-            TextBlock(text="visible"),
-        ])]
+        msgs = [
+            AssistantMessage(
+                content=[
+                    ThinkingBlock(type="thinking", thinking="thought", signature="sig"),
+                    TextBlock(text="visible"),
+                ]
+            )
+        ]
         result = normalize_messages_for_api_enhanced(
             [create_user_message("q")] + msgs,
             strip_thinking=True,
@@ -187,10 +207,12 @@ class TestNormalizeEnhanced:
     def test_preserves_thinking_blocks_when_disabled(self):
         msgs = [
             create_user_message("q"),
-            AssistantMessage(content=[
-                ThinkingBlock(type="thinking", thinking="thought", signature="sig"),
-                TextBlock(text="visible"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ThinkingBlock(type="thinking", thinking="thought", signature="sig"),
+                    TextBlock(text="visible"),
+                ]
+            ),
         ]
         result = normalize_messages_for_api_enhanced(msgs, strip_thinking=False)
         assistant_content = result[1]["content"]

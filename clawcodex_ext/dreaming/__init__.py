@@ -15,6 +15,7 @@ Mirrors the upstream ``claude-code-best/src/services/autoDream/`` stack:
 Public surface intentionally re-exports the consolidated API so callers
 can ``from clawcodex_ext.dreaming import …`` without picking modules.
 """
+
 from __future__ import annotations
 
 from clawcodex_ext.dreaming.config import (

@@ -12,6 +12,7 @@ shape (TS keeps spawn metadata + Popen handle + reaper bookkeeping on the
 state record). The ``kill`` method here is the polymorphic dispatch target
 for ``stop_task`` (Phase 5).
 """
+
 from __future__ import annotations
 
 import os
@@ -110,9 +111,7 @@ class LocalShellTask:
     name: str = "LocalShellTask"
     type: Literal["local_bash"] = "local_bash"
 
-    async def kill(
-        self, task_id: str, registry: "RuntimeTaskRegistry"
-    ) -> None:
+    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
         state = registry.get(task_id)
         if not is_local_shell_task(state):
             return

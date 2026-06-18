@@ -84,13 +84,17 @@ def _get_input_validator(server_name: str, tool_name: str, schema: dict[str, Any
     try:
         # Use Draft202012Validator (modern JSON Schema). MCP servers in the
         # wild emit schemas that may not declare $schema; tolerate that.
-        validator_cls = getattr(jsonschema, "Draft202012Validator", None) or jsonschema.Draft7Validator
+        validator_cls = (
+            getattr(jsonschema, "Draft202012Validator", None) or jsonschema.Draft7Validator
+        )
         validator = validator_cls(schema)
     except Exception as exc:
         logger.warning(
             "MCP %s/%s: failed to compile input schema validator (%s); "
             "falling back to passthrough validation",
-            server_name, tool_name, exc,
+            server_name,
+            tool_name,
+            exc,
         )
         return None
     _validator_cache[key] = validator
@@ -140,9 +144,7 @@ def _flatten_content_blocks_to_text(
                 blob = bytes(data)
             if blob:
                 try:
-                    path = persist_binary_content(
-                        server_name, tool_name, blob, content_type=mime
-                    )
+                    path = persist_binary_content(server_name, tool_name, blob, content_type=mime)
                     parts.append(get_binary_blob_saved_message(path, len(blob)))
                 except OSError:
                     parts.append(f"[image content; {len(blob)} bytes; failed to persist]")
@@ -155,13 +157,13 @@ def _flatten_content_blocks_to_text(
             # the model isn't fed multi-MB base64.
             blob_b64 = resource.get("blob") if isinstance(resource, dict) else None
             text = resource.get("text") if isinstance(resource, dict) else None
-            mime = (resource.get("mimeType") if isinstance(resource, dict) else None) or "application/octet-stream"
+            mime = (
+                resource.get("mimeType") if isinstance(resource, dict) else None
+            ) or "application/octet-stream"
             if isinstance(blob_b64, str) and blob_b64:
                 try:
                     blob = base64.b64decode(blob_b64, validate=False)
-                    path = persist_binary_content(
-                        server_name, tool_name, blob, content_type=mime
-                    )
+                    path = persist_binary_content(server_name, tool_name, blob, content_type=mime)
                     parts.append(get_binary_blob_saved_message(path, len(blob)))
                 except (OSError, ValueError):
                     parts.append(json.dumps(resource))
@@ -199,9 +201,7 @@ def wrap_mcp_tool(
         cleaned = re.sub(r"\s+", " ", hint).strip()
         search_hint = cleaned or None
 
-    always_load_val = bool(
-        mcp_tool.meta and mcp_tool.meta.get("anthropic/alwaysLoad") is True
-    )
+    always_load_val = bool(mcp_tool.meta and mcp_tool.meta.get("anthropic/alwaysLoad") is True)
 
     input_schema = mcp_tool.input_schema or {"type": "object", "properties": {}}
     # Compile the input-schema validator once at wrap time. Captured into
@@ -225,6 +225,7 @@ def wrap_mcp_tool(
             # Cannot await our coroutine on the active loop without
             # blocking; run it in a worker thread with its own loop.
             import concurrent.futures
+
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 future = pool.submit(asyncio.run, _async_call(args, ctx))
                 return future.result()
@@ -265,7 +266,8 @@ def wrap_mcp_tool(
             if was_truncated:
                 logger.info(
                     "MCP %s/%s: result exceeded token budget; truncated",
-                    server_name, mcp_tool.name,
+                    server_name,
+                    mcp_tool.name,
                 )
 
             # WI-8.3 + WI-8.4: render to text for the ToolResult.output
@@ -273,7 +275,9 @@ def wrap_mcp_tool(
             # of the token-budget truncation. Future work can preserve the
             # block list end-to-end when the API mapper accepts it.
             text_output = _flatten_content_blocks_to_text(
-                truncated_blocks if isinstance(truncated_blocks, list) else [
+                truncated_blocks
+                if isinstance(truncated_blocks, list)
+                else [
                     {"type": "text", "text": str(truncated_blocks)},
                 ],
                 server_name=server_name,
@@ -331,9 +335,7 @@ def wrap_mcp_tool(
                 is_error=True,
             )
 
-    def _check_permissions(
-        _input: dict[str, Any], _ctx: ToolContext
-    ) -> PermissionResult:
+    def _check_permissions(_input: dict[str, Any], _ctx: ToolContext) -> PermissionResult:
         return PermissionPassthroughResult()
 
     return build_tool(
@@ -368,6 +370,8 @@ def wrap_mcp_tools_for_server(
         except Exception as e:
             logger.warning(
                 "Failed to wrap MCP tool %s from server %s: %s",
-                mcp_tool.name, server.name, e,
+                mcp_tool.name,
+                server.name,
+                e,
             )
     return wrapped

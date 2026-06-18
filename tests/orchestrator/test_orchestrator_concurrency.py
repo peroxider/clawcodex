@@ -15,6 +15,7 @@ Covers the gaps the chapter calls out as the safety contract for
 - G17: result ordering matches submission order even when tools
   complete out of order.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -60,7 +61,8 @@ class TestClassifyConcurrencySafe(unittest.TestCase):
         # `inputSchema.safeParse` here; we can't always validate the
         # full schema, but anything that isn't even a dict is rejected.
         tool = build_tool(
-            name="X", input_schema={"type": "object", "properties": {}},
+            name="X",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="X", output=""),
             is_concurrency_safe=lambda _: True,
         )
@@ -73,7 +75,8 @@ class TestClassifyConcurrencySafe(unittest.TestCase):
             raise RuntimeError("classifier crashed")
 
         tool = build_tool(
-            name="X", input_schema={"type": "object", "properties": {}},
+            name="X",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="X", output=""),
             is_concurrency_safe=boom,
         )
@@ -83,7 +86,8 @@ class TestClassifyConcurrencySafe(unittest.TestCase):
 
     def test_classifier_true_passes_through(self):
         tool = build_tool(
-            name="X", input_schema={"type": "object", "properties": {}},
+            name="X",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="X", output=""),
             is_concurrency_safe=lambda _: True,
         )
@@ -101,8 +105,10 @@ class TestConcurrentExceptionsNotSwallowed(unittest.IsolatedAsyncioTestCase):
             raise RuntimeError("boom from inside call")
 
         tool = build_tool(
-            name="Boom", input_schema={"type": "object", "properties": {}},
-            call=boom, is_concurrency_safe=lambda _: True,
+            name="Boom",
+            input_schema={"type": "object", "properties": {}},
+            call=boom,
+            is_concurrency_safe=lambda _: True,
             is_read_only=lambda _: True,
         )
         ctx = _make_context([tool])
@@ -118,10 +124,12 @@ class TestConcurrentExceptionsNotSwallowed(unittest.IsolatedAsyncioTestCase):
         # for tool_use_id t1. Without G1 the runtime error was silently
         # dropped and the result list contained nothing.
         error_blocks = [
-            b for r in results
+            b
+            for r in results
             if hasattr(r, "content") and isinstance(r.content, list)
             for b in r.content
-            if isinstance(b, dict) and b.get("type") == "tool_result"
+            if isinstance(b, dict)
+            and b.get("type") == "tool_result"
             and b.get("tool_use_id") == "t1"
         ]
         self.assertTrue(error_blocks, "no tool_result emitted for failing tool")
@@ -141,14 +149,17 @@ class TestContextModifierApplication(unittest.IsolatedAsyncioTestCase):
             def modify(ctx):
                 applied.append(label)
                 return ctx
+
             return modify
 
         def call_with_modifier(label: str):
             def _call(_inp, _ctx):
                 return ToolResult(
-                    name=label, output="ok",
+                    name=label,
+                    output="ok",
                     context_modifier=make_modifier(label),
                 )
+
             return _call
 
         tools = [
@@ -184,12 +195,14 @@ class TestSubmissionOrderInvariant(unittest.IsolatedAsyncioTestCase):
     async def test_partition_groups_consecutive_safe_tools(self):
         """Sanity: partition_tool_calls produces the same shape as TS."""
         safe = build_tool(
-            name="Safe", input_schema={"type": "object", "properties": {}},
+            name="Safe",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="Safe", output=""),
             is_concurrency_safe=lambda _: True,
         )
         unsafe = build_tool(
-            name="Unsafe", input_schema={"type": "object", "properties": {}},
+            name="Unsafe",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="Unsafe", output=""),
             is_concurrency_safe=lambda _: False,
         )
@@ -219,12 +232,15 @@ class TestSubmissionOrderInvariant(unittest.IsolatedAsyncioTestCase):
             return ToolResult(name="Slow", output="slow")
 
         slow = build_tool(
-            name="Slow", input_schema={"type": "object", "properties": {}},
-            call=slow_call, is_concurrency_safe=lambda _: True,
+            name="Slow",
+            input_schema={"type": "object", "properties": {}},
+            call=slow_call,
+            is_concurrency_safe=lambda _: True,
             is_read_only=lambda _: True,
         )
         fast = build_tool(
-            name="Fast", input_schema={"type": "object", "properties": {}},
+            name="Fast",
+            input_schema={"type": "object", "properties": {}},
             call=lambda i, c: ToolResult(name="Fast", output="fast"),
             is_concurrency_safe=lambda _: True,
             is_read_only=lambda _: True,

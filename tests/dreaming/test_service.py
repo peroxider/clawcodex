@@ -4,6 +4,7 @@ Covers the gate chain: enabled → time → scan throttle → session →
 lock. Uses the built-in stub runner and a tmp-path memory dir to
 keep the tests hermetic.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,9 +34,7 @@ from src.task_registry import RuntimeTaskRegistry
 
 
 @pytest.fixture(autouse=True)
-def _reset_state(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def _reset_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Wipe config + runner factory + memory dir between tests.
 
     Also pins both ``project_transcript_dir`` references (one in
@@ -145,6 +144,7 @@ def test_happy_path_registers_dream_task_and_completes(tmp_path: Path) -> None:
                 usage={"output_tokens": 17},
                 summary="updated MEMORY.md",
             )
+
         return runner
 
     set_dream_runner_factory(factory)
@@ -231,6 +231,7 @@ def test_runner_unavailable_fails_task_and_rewinds_lock(tmp_path: Path) -> None:
     def bad_factory():
         def runner(_prompt, _on_message):
             raise RuntimeError("LLM down")
+
         return runner
 
     set_dream_runner_factory(bad_factory)
@@ -293,6 +294,7 @@ def test_kill_dream_task_no_op_on_completed(tmp_path: Path) -> None:
     )
     # Mark the task completed BEFORE kill.
     from src.tasks.dream import complete_dream_task
+
     complete_dream_task(task_id, reg)
 
     kill_dream_task(task_id, reg)  # must not raise, must not change anything

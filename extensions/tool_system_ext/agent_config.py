@@ -21,6 +21,7 @@ from .bundles import TOOL_BUNDLES, MODE_BUNDLES, ALL_BUNDLE_NAMES
 
 class ToolMode(Enum):
     """Tool loading mode for an agent."""
+
     BARE = "bare"
     DEFAULT = "default"
     ALL = "all"

@@ -136,13 +136,17 @@ class TestEditTool(ToolSystemTests):
         p = self.root / "d.txt"
         p.write_text("hello world", encoding="utf-8")
         with self.assertRaises(Exception):
-            EditTool.call({"file_path": str(p), "old_string": "world", "new_string": "you"}, self.ctx)
+            EditTool.call(
+                {"file_path": str(p), "old_string": "world", "new_string": "you"}, self.ctx
+            )
 
     def test_edit_replaces_unique(self) -> None:
         p = self.root / "e.txt"
         p.write_text("hello world", encoding="utf-8")
         ReadTool.call({"file_path": str(p), "limit": 10}, self.ctx)
-        out = EditTool.call({"file_path": str(p), "old_string": "world", "new_string": "you"}, self.ctx).output
+        out = EditTool.call(
+            {"file_path": str(p), "old_string": "world", "new_string": "you"}, self.ctx
+        ).output
         self.assertEqual(out["filePath"], str(p))
         self.assertEqual(p.read_text(encoding="utf-8"), "hello you")
 
@@ -152,7 +156,10 @@ class TestEditTool(ToolSystemTests):
         ReadTool.call({"file_path": str(p), "limit": 10}, self.ctx)
         with self.assertRaises(Exception):
             EditTool.call({"file_path": str(p), "old_string": "a", "new_string": "b"}, self.ctx)
-        EditTool.call({"file_path": str(p), "old_string": "a", "new_string": "b", "replace_all": True}, self.ctx)
+        EditTool.call(
+            {"file_path": str(p), "old_string": "a", "new_string": "b", "replace_all": True},
+            self.ctx,
+        )
         self.assertEqual(p.read_text(encoding="utf-8"), "b b b")
 
 
@@ -163,7 +170,9 @@ class TestGlobTool(ToolSystemTests):
         a.write_text("a", encoding="utf-8")
         time.sleep(0.01)
         b.write_text("b", encoding="utf-8")
-        out = GlobTool.call({"pattern": "*.py", "path": str(self.root), "limit": 10}, self.ctx).output
+        out = GlobTool.call(
+            {"pattern": "*.py", "path": str(self.root), "limit": 10}, self.ctx
+        ).output
         self.assertTrue(out["filenames"][0].endswith("x2.py"))
         self.assertTrue(out["filenames"][1].endswith("x1.py"))
 
@@ -179,7 +188,10 @@ class TestGrepTool(ToolSystemTests):
 
     def test_grep_content_mode_with_line_numbers(self) -> None:
         (self.root / "a.txt").write_text("hello\nhello\n", encoding="utf-8")
-        out = GrepTool.call({"pattern": "hello", "path": str(self.root), "output_mode": "content", "-n": True}, self.ctx).output
+        out = GrepTool.call(
+            {"pattern": "hello", "path": str(self.root), "output_mode": "content", "-n": True},
+            self.ctx,
+        ).output
         self.assertIn(":1:", out["content"])
 
 
@@ -199,6 +211,7 @@ class TestBashTool(ToolSystemTests):
         # the ``stdin=DEVNULL`` fix prevents. Returns the call's output dict.
         import os
         import pty
+
         if not hasattr(pty, "openpty"):  # pragma: no cover - non-POSIX
             self.skipTest("openpty unavailable")
         master, slave = pty.openpty()
@@ -240,6 +253,7 @@ class TestBashTool(ToolSystemTests):
         # ``npm create vite`` would otherwise hang waiting on the inherited
         # TTY. Verify by reading the captured log after the bg task reaps.
         import time
+
         res = self._run_bash_with_pty_parent_stdin(
             {
                 "command": "if [ -t 0 ]; then echo TTY; else echo NOTTY; fi",
@@ -281,9 +295,15 @@ class TestWebFetchTool(ToolSystemTests):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch.object(socket, "getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 0))]):
-            with patch("urllib.request.OpenerDirector.open", return_value=_Resp(html_doc.encode("utf-8"))):
-                out = WebFetchTool.call({"url": "https://example.com/", "prompt": "extract text"}, self.ctx).output
+        with patch.object(
+            socket, "getaddrinfo", return_value=[(None, None, None, None, ("93.184.216.34", 0))]
+        ):
+            with patch(
+                "urllib.request.OpenerDirector.open", return_value=_Resp(html_doc.encode("utf-8"))
+            ):
+                out = WebFetchTool.call(
+                    {"url": "https://example.com/", "prompt": "extract text"}, self.ctx
+                ).output
                 self.assertIn("Title", out["result"])
                 self.assertIn("Hello", out["result"])
 
@@ -314,8 +334,10 @@ class TestWebSearchTool(ToolSystemTests):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch(self._DDG_PKG_PATCH, return_value=None), \
-             patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))):
+        with (
+            patch(self._DDG_PKG_PATCH, return_value=None),
+            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
+        ):
             out = WebSearchTool.call({"query": "example"}, self.ctx).output
             self.assertEqual(out["query"], "example")
             self.assertIn("duration_seconds", out)
@@ -348,8 +370,10 @@ class TestWebSearchTool(ToolSystemTests):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch(self._DDG_PKG_PATCH, return_value=None), \
-             patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))):
+        with (
+            patch(self._DDG_PKG_PATCH, return_value=None),
+            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
+        ):
             out = WebSearchTool.call(
                 {"query": "test", "blocked_domains": ["example.com"]}, self.ctx
             ).output
@@ -376,8 +400,10 @@ class TestWebSearchTool(ToolSystemTests):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch(self._DDG_PKG_PATCH, return_value=None), \
-             patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))):
+        with (
+            patch(self._DDG_PKG_PATCH, return_value=None),
+            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
+        ):
             out = WebSearchTool.call(
                 {"query": "test", "allowed_domains": ["example.com"]}, self.ctx
             ).output
@@ -403,8 +429,10 @@ class TestWebSearchTool(ToolSystemTests):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch(self._DDG_PKG_PATCH, return_value=None), \
-             patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))):
+        with (
+            patch(self._DDG_PKG_PATCH, return_value=None),
+            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
+        ):
             out = WebSearchTool.call(
                 {"query": "test", "allowed_domains": ["example.com"]}, self.ctx
             ).output
@@ -435,7 +463,10 @@ class TestWebSearchTool(ToolSystemTests):
             "query": "python docs",
             "results": [
                 "**Python** -- The official docs (https://python.org)",
-                {"tool_use_id": "ddg-search", "content": [{"title": "Python", "url": "https://python.org"}]},
+                {
+                    "tool_use_id": "ddg-search",
+                    "content": [{"title": "Python", "url": "https://python.org"}],
+                },
             ],
             "duration_seconds": 0.5,
         }
@@ -476,9 +507,7 @@ class TestTaskStopTool(ToolSystemTests):
         # Post Chunk D / WI-4.0, ``TaskStopTool.call`` is async; drive it
         # via asyncio.run for this sync-style test. The dispatcher does
         # the same when called from a sync context (registry.dispatch).
-        out = asyncio.run(
-            TaskStopTool.call({"task_id": task.task_id}, self.ctx)
-        ).output
+        out = asyncio.run(TaskStopTool.call({"task_id": task.task_id}, self.ctx)).output
         self.assertTrue(out["stopped"])
 
 
@@ -491,9 +520,13 @@ class TestConfigTool(ToolSystemTests):
         with patch("src.config.get_config_path", return_value=cfg_path):
             get_out = ConfigTool.call({"setting": "default_provider"}, self.ctx).output
             self.assertEqual(get_out["operation"], "get")
-            set_out = ConfigTool.call({"setting": "default_provider", "value": "openai"}, self.ctx).output
+            set_out = ConfigTool.call(
+                {"setting": "default_provider", "value": "openai"}, self.ctx
+            ).output
             self.assertEqual(set_out["operation"], "set")
-            self.assertEqual(ConfigTool.call({"setting": "default_provider"}, self.ctx).output["value"], "openai")
+            self.assertEqual(
+                ConfigTool.call({"setting": "default_provider"}, self.ctx).output["value"], "openai"
+            )
 
 
 class TestMCPTool(ToolSystemTests):
@@ -592,16 +625,21 @@ class TestNewParityTools(ToolSystemTests):
         self.assertEqual(got["task"]["status"], "completed")
         # Post Chunk D / WI-4.1, ``TaskOutputTool.call`` is async.
         import asyncio as _asyncio
-        task_out = _asyncio.run(
-            TaskOutputTool.call({"task_id": task_id}, self.ctx)
-        ).output
+
+        task_out = _asyncio.run(TaskOutputTool.call({"task_id": task_id}, self.ctx)).output
         self.assertEqual(task_out["task"]["task_id"], task_id)
 
     def test_task_cascade_delete_removes_blockers(self) -> None:
         """Deleting a task removes its ID from blocks/blockedBy of all other tasks."""
-        t1 = TaskCreateTool.call({"subject": "T1", "description": "D1"}, self.ctx).output["task"]["id"]
-        t2 = TaskCreateTool.call({"subject": "T2", "description": "D2"}, self.ctx).output["task"]["id"]
-        t3 = TaskCreateTool.call({"subject": "T3", "description": "D3"}, self.ctx).output["task"]["id"]
+        t1 = TaskCreateTool.call({"subject": "T1", "description": "D1"}, self.ctx).output["task"][
+            "id"
+        ]
+        t2 = TaskCreateTool.call({"subject": "T2", "description": "D2"}, self.ctx).output["task"][
+            "id"
+        ]
+        t3 = TaskCreateTool.call({"subject": "T3", "description": "D3"}, self.ctx).output["task"][
+            "id"
+        ]
 
         # T2 is blocked by T1; T3 blocks T1
         TaskUpdateTool.call({"taskId": t2, "addBlockedBy": [t1]}, self.ctx)
@@ -623,7 +661,9 @@ class TestNewParityTools(ToolSystemTests):
 
     def test_task_list_filters_internal_tasks(self) -> None:
         """Tasks with metadata._internal=True should be hidden from TaskList."""
-        t1 = TaskCreateTool.call({"subject": "Visible", "description": "D1"}, self.ctx).output["task"]["id"]
+        t1 = TaskCreateTool.call({"subject": "Visible", "description": "D1"}, self.ctx).output[
+            "task"
+        ]["id"]
         t2 = TaskCreateTool.call(
             {"subject": "Internal", "description": "D2", "metadata": {"_internal": True}},
             self.ctx,
@@ -636,8 +676,12 @@ class TestNewParityTools(ToolSystemTests):
 
     def test_task_list_filters_resolved_blockers(self) -> None:
         """Completed tasks should be removed from blockedBy in TaskList output."""
-        t1 = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, self.ctx).output["task"]["id"]
-        t2 = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, self.ctx).output["task"]["id"]
+        t1 = TaskCreateTool.call({"subject": "Blocker", "description": "D1"}, self.ctx).output[
+            "task"
+        ]["id"]
+        t2 = TaskCreateTool.call({"subject": "Blocked", "description": "D2"}, self.ctx).output[
+            "task"
+        ]["id"]
 
         TaskUpdateTool.call({"taskId": t2, "addBlockedBy": [t1]}, self.ctx)
 
@@ -660,11 +704,13 @@ class TestTaskFormatting(ToolSystemTests):
 
     def test_format_task_created(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_created
+
         result = _format_task_created("abc123", "Fix auth bug")
         self.assertEqual(result, "Task #abc123 created successfully: Fix auth bug")
 
     def test_format_task_detail_with_deps(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_detail
+
         task = {
             "id": "1",
             "subject": "Fix bug",
@@ -682,10 +728,12 @@ class TestTaskFormatting(ToolSystemTests):
 
     def test_format_task_detail_none(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_detail
+
         self.assertEqual(_format_task_detail(None), "Task not found")
 
     def test_format_task_detail_no_deps(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_detail
+
         task = {
             "id": "1",
             "subject": "Simple task",
@@ -700,13 +748,21 @@ class TestTaskFormatting(ToolSystemTests):
 
     def test_format_task_list_empty(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_list
+
         self.assertEqual(_format_task_list([]), "No tasks found")
 
     def test_format_task_list_with_tasks(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_list
+
         tasks = [
             {"id": "1", "subject": "T1", "status": "pending", "blockedBy": []},
-            {"id": "2", "subject": "T2", "status": "in_progress", "owner": "agent-1", "blockedBy": ["1"]},
+            {
+                "id": "2",
+                "subject": "T2",
+                "status": "in_progress",
+                "owner": "agent-1",
+                "blockedBy": ["1"],
+            },
         ]
         result = _format_task_list(tasks)
         self.assertIn("#1 [pending] T1", result)
@@ -714,11 +770,13 @@ class TestTaskFormatting(ToolSystemTests):
 
     def test_format_task_updated_success(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_updated
+
         result = _format_task_updated(True, "1", ["status", "subject"])
         self.assertEqual(result, "Updated task #1 status, subject")
 
     def test_format_task_updated_failure(self) -> None:
         from src.tool_system.tools.tasks_v2 import _format_task_updated
+
         result = _format_task_updated(False, "1", [], error="Task not found")
         self.assertEqual(result, "Task not found")
 
@@ -792,6 +850,7 @@ class TestBriefAndAgentTools(ToolSystemTests):
 
     def test_agent_tool_requires_prompt(self) -> None:
         from src.tool_system.errors import ToolInputError
+
         reg = build_default_registry(include_user_tools=False)
         agent_tool = reg.get("Agent")
         ctx = ToolContext(workspace_root=self.root)

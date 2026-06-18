@@ -20,8 +20,8 @@ class _FakeHandle:
     def __init__(
         self,
         bridge_session_id: str,
-        environment_id: str = 'env-1',
-        session_ingress_url: str = 'https://api.example.com',
+        environment_id: str = "env-1",
+        session_ingress_url: str = "https://api.example.com",
     ) -> None:
         self.bridge_session_id = bridge_session_id
         self.environment_id = environment_id
@@ -46,13 +46,13 @@ def test_get_handle_default_none() -> None:
 
 
 def test_set_and_get_handle_round_trip() -> None:
-    h = _FakeHandle(bridge_session_id='cse_abc')
+    h = _FakeHandle(bridge_session_id="cse_abc")
     set_repl_bridge_handle(h)  # type: ignore[arg-type]
     assert get_repl_bridge_handle() is h
 
 
 def test_set_to_none_clears_handle() -> None:
-    h = _FakeHandle(bridge_session_id='cse_abc')
+    h = _FakeHandle(bridge_session_id="cse_abc")
     set_repl_bridge_handle(h)  # type: ignore[arg-type]
     set_repl_bridge_handle(None)
     assert get_repl_bridge_handle() is None
@@ -64,28 +64,28 @@ def test_get_self_bridge_compat_id_returns_none_when_no_handle() -> None:
 
 def test_get_self_bridge_compat_id_retags_cse_to_session() -> None:
     """``cse_uuid`` is rewritten to ``session_uuid`` for peer dedup."""
-    h = _FakeHandle(bridge_session_id='cse_abc123')
+    h = _FakeHandle(bridge_session_id="cse_abc123")
     set_repl_bridge_handle(h)  # type: ignore[arg-type]
-    assert get_self_bridge_compat_id() == 'session_abc123'
+    assert get_self_bridge_compat_id() == "session_abc123"
 
 
 def test_get_self_bridge_compat_id_idempotent_on_session_prefix() -> None:
-    h = _FakeHandle(bridge_session_id='session_xyz')
+    h = _FakeHandle(bridge_session_id="session_xyz")
     set_repl_bridge_handle(h)  # type: ignore[arg-type]
-    assert get_self_bridge_compat_id() == 'session_xyz'
+    assert get_self_bridge_compat_id() == "session_xyz"
 
 
 def test_get_self_bridge_compat_id_returns_input_for_unprefixed() -> None:
-    h = _FakeHandle(bridge_session_id='bare-uuid')
+    h = _FakeHandle(bridge_session_id="bare-uuid")
     set_repl_bridge_handle(h)  # type: ignore[arg-type]
-    assert get_self_bridge_compat_id() == 'bare-uuid'
+    assert get_self_bridge_compat_id() == "bare-uuid"
 
 
 def test_replacement_handle_overrides_previous() -> None:
     """Calling set with a new handle replaces the old one wholesale."""
-    h1 = _FakeHandle(bridge_session_id='cse_first')
-    h2 = _FakeHandle(bridge_session_id='cse_second')
+    h1 = _FakeHandle(bridge_session_id="cse_first")
+    h2 = _FakeHandle(bridge_session_id="cse_second")
     set_repl_bridge_handle(h1)  # type: ignore[arg-type]
     set_repl_bridge_handle(h2)  # type: ignore[arg-type]
     assert get_repl_bridge_handle() is h2
-    assert get_self_bridge_compat_id() == 'session_second'
+    assert get_self_bridge_compat_id() == "session_second"

@@ -37,6 +37,7 @@ This registry is *in-process* state. Call :meth:`AgentRegistry.clear` in
 tests, and avoid mutating it from concurrent threads without external
 synchronisation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -209,8 +210,10 @@ class AgentRegistry:
         if existing is not None and existing is not agent:
             logger.info(
                 "agent registry: %r (source=%s) overridden by %r (source=%s)",
-                existing.agent_type, existing.source,
-                agent.agent_type, agent.source,
+                existing.agent_type,
+                existing.source,
+                agent.agent_type,
+                agent.source,
             )
             try:
                 cls._definitions.remove(existing)

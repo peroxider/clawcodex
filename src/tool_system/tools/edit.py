@@ -49,7 +49,9 @@ def _apply_curly_double_quotes(s: str) -> str:
     result: list[str] = []
     for i, ch in enumerate(chars):
         if ch == '"':
-            result.append(_LEFT_DOUBLE_CURLY if _is_opening_context(chars, i) else _RIGHT_DOUBLE_CURLY)
+            result.append(
+                _LEFT_DOUBLE_CURLY if _is_opening_context(chars, i) else _RIGHT_DOUBLE_CURLY
+            )
         else:
             result.append(ch)
     return "".join(result)
@@ -67,7 +69,9 @@ def _apply_curly_single_quotes(s: str) -> str:
             if prev_letter and next_letter:
                 result.append(_RIGHT_SINGLE_CURLY)
             else:
-                result.append(_LEFT_SINGLE_CURLY if _is_opening_context(chars, i) else _RIGHT_SINGLE_CURLY)
+                result.append(
+                    _LEFT_SINGLE_CURLY if _is_opening_context(chars, i) else _RIGHT_SINGLE_CURLY
+                )
         else:
             result.append(ch)
     return "".join(result)
@@ -136,27 +140,28 @@ def _desanitize_match_string(match_string: str) -> tuple[str, list[tuple[str, st
 
 # -- Smart edit application ----------------------------------------------------
 
+
 def _apply_edit(original: str, old_string: str, new_string: str, replace_all: bool) -> str:
     if new_string != "":
         if replace_all:
             return original.replace(old_string, new_string)
         idx = original.index(old_string)
-        return original[:idx] + new_string + original[idx + len(old_string):]
+        return original[:idx] + new_string + original[idx + len(old_string) :]
 
-    strip_trailing_newline = (
-        not old_string.endswith("\n") and (old_string + "\n") in original
-    )
+    strip_trailing_newline = not old_string.endswith("\n") and (old_string + "\n") in original
     target = old_string + "\n" if strip_trailing_newline else old_string
     if replace_all:
         return original.replace(target, "")
     idx = original.index(target)
-    return original[:idx] + original[idx + len(target):]
+    return original[:idx] + original[idx + len(target) :]
 
 
 # -- Trailing whitespace stripping ---------------------------------------------
 
+
 def _strip_trailing_whitespace(s: str) -> str:
     import re
+
     return re.sub(r"[ \t]+(\r\n|\n|\r)", r"\1", s)
 
 
@@ -183,6 +188,7 @@ def _find_similar_file(file_path: str, cwd: Path) -> str | None:
 
 # -- Permissions ---------------------------------------------------------------
 
+
 def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> PermissionResult:
     file_path = tool_input.get("file_path")
     if not isinstance(file_path, str):
@@ -200,6 +206,7 @@ def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Perm
 
 # -- Result formatting ---------------------------------------------------------
 
+
 def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
     if not isinstance(result, dict):
         return {"type": "tool_result", "tool_use_id": tool_use_id, "content": str(result)}
@@ -213,6 +220,7 @@ def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
 
 
 # -- Main call -----------------------------------------------------------------
+
 
 def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     file_path = tool_input["file_path"]
@@ -233,12 +241,16 @@ def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     # Reject .ipynb files
     if path.suffix.lower() == ".ipynb":
-        raise ToolInputError("Cannot edit .ipynb files with Edit tool. Use the NotebookEdit tool instead.")
+        raise ToolInputError(
+            "Cannot edit .ipynb files with Edit tool. Use the NotebookEdit tool instead."
+        )
 
     # File creation (empty old_string)
     if old_string == "":
         if path.exists():
-            raise ToolInputError("old_string is empty but file already exists -- use non-empty old_string to edit")
+            raise ToolInputError(
+                "old_string is empty but file already exists -- use non-empty old_string to edit"
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_string, encoding="utf-8")
         context.mark_file_read(path)
@@ -303,7 +315,9 @@ def _edit_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     count = original.count(actual_old)
     if count > 1 and not replace_all:
-        raise ToolInputError(f"old_string found {count} times -- set replace_all=true or provide more context")
+        raise ToolInputError(
+            f"old_string found {count} times -- set replace_all=true or provide more context"
+        )
 
     updated = _apply_edit(original, actual_old, new_string, replace_all)
 
@@ -392,8 +406,12 @@ EditTool: Tool = build_tool(
     is_concurrency_safe=lambda _input: False,
     check_permissions=_check_permissions,
     get_path=lambda input_data: input_data.get("file_path", ""),
-    user_facing_name=lambda input_data: f"Edit: {(input_data or {}).get('file_path', '')}" if input_data else "Edit",
+    user_facing_name=lambda input_data: (
+        f"Edit: {(input_data or {}).get('file_path', '')}" if input_data else "Edit"
+    ),
     search_hint="edit modify replace change file",
     to_auto_classifier_input=_edit_classifier_input,
-    get_activity_description=lambda input_data: f"Editing {(input_data or {}).get('file_path', '')}" if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Editing {(input_data or {}).get('file_path', '')}" if input_data else None
+    ),
 )

@@ -43,16 +43,27 @@ def test_upstream_tui_entrypoint_uses_upstream_app(monkeypatch):
     fake_provider.provider_name = "anthropic"
 
     monkeypatch.setattr(tui_entrypoint, "get_default_provider", lambda: "anthropic")
-    monkeypatch.setattr(tui_entrypoint, "get_provider_config", lambda _: {"api_key": "test-key", "default_model": "claude-3-sonnet-20240229", "base_url": "https://api.anthropic.com"})
-    monkeypatch.setattr(tui_entrypoint, "get_provider_class", lambda _: Mock(return_value=fake_provider))
+    monkeypatch.setattr(
+        tui_entrypoint,
+        "get_provider_config",
+        lambda _: {
+            "api_key": "test-key",
+            "default_model": "claude-3-sonnet-20240229",
+            "base_url": "https://api.anthropic.com",
+        },
+    )
+    monkeypatch.setattr(
+        tui_entrypoint, "get_provider_class", lambda _: Mock(return_value=fake_provider)
+    )
 
     called = False
+
     def mock_init(self, **kwargs):
         nonlocal called
         called = True
         assert type(self) is ClawCodexTUI
         monkeypatch.setattr(self, "run", Mock(return_value=None))
-        object.__setattr__(self, '_exit_code', 0)
+        object.__setattr__(self, "_exit_code", 0)
 
     monkeypatch.setattr(ClawCodexTUI, "__init__", mock_init)
 

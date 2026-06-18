@@ -7,6 +7,7 @@ Verifies:
 - Sibling abort on Bash error
 - Three-tier abort hierarchy
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -74,11 +75,15 @@ class TestConcurrencyExecutionModel(unittest.TestCase):
             tool_use_context=ctx,
         )
         # Simulate one executing tool
-        executor._tools.append(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=True,
-        ))
+        executor._tools.append(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         self.assertTrue(executor._can_execute_tool(is_concurrency_safe=True))
 
     def test_non_concurrent_blocked_by_executing(self) -> None:
@@ -90,11 +95,15 @@ class TestConcurrencyExecutionModel(unittest.TestCase):
             can_use_tool=MagicMock(),
             tool_use_context=ctx,
         )
-        executor._tools.append(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=True,
-        ))
+        executor._tools.append(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         self.assertFalse(executor._can_execute_tool(is_concurrency_safe=False))
 
     def test_concurrent_blocked_by_non_concurrent(self) -> None:
@@ -106,11 +115,15 @@ class TestConcurrencyExecutionModel(unittest.TestCase):
             can_use_tool=MagicMock(),
             tool_use_context=ctx,
         )
-        executor._tools.append(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Edit", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=False,
-        ))
+        executor._tools.append(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Edit", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=False,
+            )
+        )
         self.assertFalse(executor._can_execute_tool(is_concurrency_safe=True))
 
 
@@ -119,9 +132,11 @@ class TestStreamingExecutorToolTracking(unittest.TestCase):
 
     def test_initial_status_queued(self) -> None:
         tracked = TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
+            id="1",
+            block=ToolUseBlock(id="1", name="Read", input={}),
             assistant_message=AssistantMessage(),
-            status="queued", is_concurrency_safe=True,
+            status="queued",
+            is_concurrency_safe=True,
         )
         self.assertEqual(tracked.status, "queued")
 
@@ -129,25 +144,31 @@ class TestStreamingExecutorToolTracking(unittest.TestCase):
         valid_transitions = ["queued", "executing", "completed", "yielded"]
         for status in valid_transitions:
             tracked = TrackedTool(
-                id="1", block=ToolUseBlock(id="1", name="Read", input={}),
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
                 assistant_message=AssistantMessage(),
-                status=status, is_concurrency_safe=True,
+                status=status,
+                is_concurrency_safe=True,
             )
             self.assertEqual(tracked.status, status)
 
     def test_tracked_tool_has_results_field(self) -> None:
         tracked = TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
+            id="1",
+            block=ToolUseBlock(id="1", name="Read", input={}),
             assistant_message=AssistantMessage(),
-            status="queued", is_concurrency_safe=True,
+            status="queued",
+            is_concurrency_safe=True,
         )
         self.assertIsNone(tracked.results)
 
     def test_tracked_tool_has_promise_field(self) -> None:
         tracked = TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
+            id="1",
+            block=ToolUseBlock(id="1", name="Read", input={}),
             assistant_message=AssistantMessage(),
-            status="queued", is_concurrency_safe=True,
+            status="queued",
+            is_concurrency_safe=True,
         )
         self.assertIsNone(tracked.promise)
 
@@ -165,11 +186,15 @@ class TestSiblingAbort(unittest.TestCase):
         )
         executor._has_errored = True
         executor._errored_tool_description = "Bash(ls)"
-        reason = executor._get_abort_reason(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=True,
-        ))
+        reason = executor._get_abort_reason(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         self.assertEqual(reason, "sibling_error")
 
     def test_discard_returns_streaming_fallback(self) -> None:
@@ -181,11 +206,15 @@ class TestSiblingAbort(unittest.TestCase):
             tool_use_context=ctx,
         )
         executor.discard()
-        reason = executor._get_abort_reason(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=True,
-        ))
+        reason = executor._get_abort_reason(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         self.assertEqual(reason, "streaming_fallback")
 
     def test_no_abort_reason_when_normal(self) -> None:
@@ -196,11 +225,15 @@ class TestSiblingAbort(unittest.TestCase):
             can_use_tool=MagicMock(),
             tool_use_context=ctx,
         )
-        reason = executor._get_abort_reason(TrackedTool(
-            id="1", block=ToolUseBlock(id="1", name="Read", input={}),
-            assistant_message=AssistantMessage(),
-            status="executing", is_concurrency_safe=True,
-        ))
+        reason = executor._get_abort_reason(
+            TrackedTool(
+                id="1",
+                block=ToolUseBlock(id="1", name="Read", input={}),
+                assistant_message=AssistantMessage(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         self.assertIsNone(reason)
 
 
@@ -221,11 +254,13 @@ class TestSyntheticErrorMessages(unittest.TestCase):
         )
         content = msg.content
         self.assertIsInstance(content, list)
-        self.assertTrue(any(
-            "Cancelled" in str(block.get("content", ""))
-            for block in content
-            if isinstance(block, dict)
-        ))
+        self.assertTrue(
+            any(
+                "Cancelled" in str(block.get("content", ""))
+                for block in content
+                if isinstance(block, dict)
+            )
+        )
 
     def test_user_interrupted_message(self) -> None:
         tools = [_make_tool("Read", concurrent=True)]
@@ -254,11 +289,13 @@ class TestSyntheticErrorMessages(unittest.TestCase):
         )
         content = msg.content
         self.assertIsInstance(content, list)
-        self.assertTrue(any(
-            "Streaming fallback" in str(block.get("content", ""))
-            for block in content
-            if isinstance(block, dict)
-        ))
+        self.assertTrue(
+            any(
+                "Streaming fallback" in str(block.get("content", ""))
+                for block in content
+                if isinstance(block, dict)
+            )
+        )
 
 
 class TestUnknownToolHandling(unittest.TestCase):
@@ -283,11 +320,13 @@ class TestUnknownToolHandling(unittest.TestCase):
         self.assertEqual(len(results), 1)
         # Should contain error message
         msg = results[0]
-        self.assertTrue(any(
-            "No such tool" in str(block.get("content", ""))
-            for block in msg.content
-            if isinstance(block, dict)
-        ))
+        self.assertTrue(
+            any(
+                "No such tool" in str(block.get("content", ""))
+                for block in msg.content
+                if isinstance(block, dict)
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -48,7 +48,12 @@ def auditor(project_cfg) -> LayerAuditor:
 
 class TestViolation:
     def test_repr(self, tmp_path):
-        v = Violation(file=tmp_path / "foo.py", forbidden_import="src.upstream", layer="capabilities", line_number=3)
+        v = Violation(
+            file=tmp_path / "foo.py",
+            forbidden_import="src.upstream",
+            layer="capabilities",
+            line_number=3,
+        )
         assert "foo.py" in repr(v)
         assert "capabilities" in repr(v)
 

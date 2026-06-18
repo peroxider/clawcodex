@@ -55,13 +55,11 @@ class TestInitRunsExactlyOnceAcrossEntries(unittest.TestCase):
     entry points each calling init() must run substeps once total."""
 
     def test_three_entry_points_run_substeps_once_each(self) -> None:
-        with mock.patch.object(
-            init_module, "apply_safe_config_environment_variables"
-        ) as mock_safe, mock.patch.object(
-            init_module, "setup_graceful_shutdown"
-        ) as mock_shutdown, mock.patch.object(
-            init_module, "start_api_preconnect"
-        ) as mock_preconnect:
+        with (
+            mock.patch.object(init_module, "apply_safe_config_environment_variables") as mock_safe,
+            mock.patch.object(init_module, "setup_graceful_shutdown") as mock_shutdown,
+            mock.patch.object(init_module, "start_api_preconnect") as mock_preconnect,
+        ):
             # Simulate three different entry points all calling init.
             def entry_repl() -> None:
                 init_module.init()
@@ -96,6 +94,7 @@ class TestFastPathSkipsInit(unittest.TestCase):
         with mock.patch("src.init.run_pre_action") as mock_pre_action:
             with mock.patch.object(sys, "argv", ["clawcodex", "--version"]):
                 from src import cli
+
                 cli.main()
             mock_pre_action.assert_not_called()
 
@@ -104,9 +103,7 @@ class TestFastPathSkipsInit(unittest.TestCase):
         # requires len(sys.argv) == 2). The args.version short-circuit
         # at cli.py:92-95 must also skip init.
         with mock.patch("src.init.run_pre_action") as mock_pre_action:
-            with mock.patch.object(
-                sys, "argv", ["clawcodex", "--version", "--debug"]
-            ):
+            with mock.patch.object(sys, "argv", ["clawcodex", "--version", "--debug"]):
                 # argparse rejects unknown flags, so use a known one
                 # that doesn't change behavior:
                 # ``--version`` alone, but force the pre-argparse
@@ -114,21 +111,21 @@ class TestFastPathSkipsInit(unittest.TestCase):
                 # Easiest: use ``--version`` + ``--legacy-repl`` (both
                 # parse, and ``args.version`` short-circuits first).
                 pass
-            with mock.patch.object(
-                sys, "argv", ["clawcodex", "--version", "--legacy-repl"]
-            ):
+            with mock.patch.object(sys, "argv", ["clawcodex", "--version", "--legacy-repl"]):
                 from src import cli
+
                 cli.main()
             mock_pre_action.assert_not_called()
 
     def test_post_argparse_config_short_circuit_skips_init(self) -> None:
         # Same property for --config short-circuit.
-        with mock.patch("src.init.run_pre_action") as mock_pre_action, \
-                mock.patch("src.cli.show_config", return_value=0):
-            with mock.patch.object(
-                sys, "argv", ["clawcodex", "--config", "--legacy-repl"]
-            ):
+        with (
+            mock.patch("src.init.run_pre_action") as mock_pre_action,
+            mock.patch("src.cli.show_config", return_value=0),
+        ):
+            with mock.patch.object(sys, "argv", ["clawcodex", "--config", "--legacy-repl"]):
                 from src import cli
+
                 cli.main()
             mock_pre_action.assert_not_called()
 
@@ -143,11 +140,14 @@ class TestPreActionRunsForDefaultInvocation(unittest.TestCase):
         # We patch the actual REPL launcher so the test doesn't drag
         # in the full provider/registry/etc. stack. _resolve_permission_state
         # is allowed to run because cli.start_repl reads args._resolved_*.
-        with mock.patch("src.init.run_pre_action") as mock_pre, \
-                mock.patch("src.cli.start_repl", return_value=0), \
-                mock.patch("src.entrypoints.tui.should_use_tui", return_value=False), \
-                mock.patch.object(sys, "argv", ["clawcodex"]):
+        with (
+            mock.patch("src.init.run_pre_action") as mock_pre,
+            mock.patch("src.cli.start_repl", return_value=0),
+            mock.patch("src.entrypoints.tui.should_use_tui", return_value=False),
+            mock.patch.object(sys, "argv", ["clawcodex"]),
+        ):
             from src import cli
+
             cli.main()
             mock_pre.assert_called_once()
 
@@ -161,14 +161,17 @@ class TestInitSafeEnvApplyBeforeUnsafe(unittest.TestCase):
     def test_safe_applied_unsafe_skipped(self) -> None:
         config_env = {
             "ANTHROPIC_MODEL": "claude-sonnet-4-6",  # safe
-            "PATH": "/opt/evil/bin",                 # unsafe
+            "PATH": "/opt/evil/bin",  # unsafe
         }
         original_path = os.environ.get("PATH", "")
-        with mock.patch(
-            "src.permissions.trust_boundary._load_config_env",
-            return_value=config_env,
-        ), mock.patch.object(init_module, "setup_graceful_shutdown"), \
-                mock.patch.object(init_module, "start_api_preconnect"):
+        with (
+            mock.patch(
+                "src.permissions.trust_boundary._load_config_env",
+                return_value=config_env,
+            ),
+            mock.patch.object(init_module, "setup_graceful_shutdown"),
+            mock.patch.object(init_module, "start_api_preconnect"),
+        ):
             os.environ.pop("ANTHROPIC_MODEL", None)
             try:
                 init_module.init()
@@ -210,6 +213,7 @@ def _run_in_subprocess(
     (returncode, stdout, stderr).
     """
     import signal as _signal
+
     env = dict(os.environ)
     env["PYTHONPATH"] = str(WORKTREE_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     proc = subprocess.Popen(
@@ -229,7 +233,11 @@ def _run_in_subprocess(
     except subprocess.TimeoutExpired:
         proc.kill()
         out, err = proc.communicate()
-    return proc.returncode, out.decode("utf-8", errors="replace"), err.decode("utf-8", errors="replace")
+    return (
+        proc.returncode,
+        out.decode("utf-8", errors="replace"),
+        err.decode("utf-8", errors="replace"),
+    )
 
 
 class TestSigtermPathRunsCleanups(unittest.TestCase):
@@ -250,9 +258,7 @@ class TestSigtermPathRunsCleanups(unittest.TestCase):
             print("LIVE", flush=True)
             """
         )
-        rc, out, err = _run_in_subprocess(
-            code, signal_after_ms=200, signal_name="SIGTERM"
-        )
+        rc, out, err = _run_in_subprocess(code, signal_after_ms=200, signal_name="SIGTERM")
         self.assertIn("DRAINED", out, msg=f"cleanup did not fire. err={err}")
         # 128+15 == 143 (SIGTERM exit code).
         self.assertEqual(rc, 143, msg=f"unexpected rc={rc}. out={out} err={err}")
@@ -274,9 +280,7 @@ class TestSigintDuringPrefetch(unittest.TestCase):
             print("LIVE", flush=True)
             """
         )
-        rc, out, err = _run_in_subprocess(
-            code, signal_after_ms=100, signal_name="SIGINT"
-        )
+        rc, out, err = _run_in_subprocess(code, signal_after_ms=100, signal_name="SIGINT")
         # SIGINT exit code is 128+2 == 130.
         self.assertEqual(rc, 130, msg=f"unexpected rc={rc}. out={out} err={err}")
 
@@ -295,9 +299,7 @@ class TestSigintBeforePrefetchStarted(unittest.TestCase):
             print("LIVE", flush=True)
             """
         )
-        rc, out, err = _run_in_subprocess(
-            code, signal_after_ms=50, signal_name="SIGINT"
-        )
+        rc, out, err = _run_in_subprocess(code, signal_after_ms=50, signal_name="SIGINT")
         self.assertEqual(rc, 130, msg=f"unexpected rc={rc}. err={err}")
         # No "cleanup error" lines should appear in stderr.
         self.assertNotIn("cleanup error", err)
@@ -342,9 +344,7 @@ class TestProfileCheckpointsRecorded(unittest.TestCase):
         finally:
             # Restore the latch's original state (read from env at
             # module-import). The autouse fixture also calls reset.
-            startup_profiler._PROFILING_ENABLED = (
-                startup_profiler._read_env_gate()
-            )
+            startup_profiler._PROFILING_ENABLED = startup_profiler._read_env_gate()
 
 
 if __name__ == "__main__":

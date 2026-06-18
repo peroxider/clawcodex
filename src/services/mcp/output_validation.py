@@ -89,7 +89,8 @@ def get_max_mcp_output_tokens() -> int:
     except ValueError:
         logger.warning(
             "MCP_MAX_OUTPUT_TOKENS=%r is not a positive integer; using default %d",
-            raw, DEFAULT_MAX_MCP_OUTPUT_TOKENS,
+            raw,
+            DEFAULT_MAX_MCP_OUTPUT_TOKENS,
         )
     return DEFAULT_MAX_MCP_OUTPUT_TOKENS
 
@@ -157,8 +158,7 @@ def mcp_content_needs_truncation(content: Any, max_tokens: int | None = None) ->
 
 
 _TRUNCATION_NOTICE = (
-    "\n\n[content truncated by MCP output limit; "
-    "raise MCP_MAX_OUTPUT_TOKENS to see more]"
+    "\n\n[content truncated by MCP output limit; raise MCP_MAX_OUTPUT_TOKENS to see more]"
 )
 
 
@@ -189,8 +189,7 @@ def truncate_mcp_content_if_needed(
             block_tokens = get_content_size_estimate([block])
             if running + block_tokens <= cap:
                 kept.append(
-                    block if isinstance(block, dict)
-                    else {"type": "text", "text": str(block)}
+                    block if isinstance(block, dict) else {"type": "text", "text": str(block)}
                 )
                 running += block_tokens
                 continue

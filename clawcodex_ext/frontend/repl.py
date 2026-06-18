@@ -21,6 +21,7 @@ class REPLFrontend(FrontendPlugin):
         if ctx.options.resume_browse and not session_id:
             from clawcodex_ext.repl.session_browser import browse_sessions_interactive
             from rich.console import Console
+
             console = Console()
             console.print("[dim]No session ID specified. Opening session browser...[/dim]")
             picked = browse_sessions_interactive(console=console)

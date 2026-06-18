@@ -26,5 +26,6 @@ def is_glob_pattern(s: str) -> bool:
 def expand_home(path: str) -> str:
     if path.startswith("~/") or path == "~":
         import os
+
         return os.path.expanduser(path)
     return path

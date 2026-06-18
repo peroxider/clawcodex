@@ -114,6 +114,7 @@ class TestResetGate(unittest.TestCase):
         # The reset is gated by PYTEST_CURRENT_TEST. The autouse fixture
         # sets it, so directly unsetting and calling reset must raise.
         import os
+
         saved = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
             with self.assertRaises(RuntimeError):

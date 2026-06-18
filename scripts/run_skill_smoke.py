@@ -100,9 +100,7 @@ def _print_listing(project: Path) -> None:
         print(f"{s.name:<30}  {s.loaded_from:<10}  {desc}")
 
 
-def _print_invocation(
-    skill_name: str, args: str, ctx: ToolContext
-) -> None:
+def _print_invocation(skill_name: str, args: str, ctx: ToolContext) -> None:
     result = SkillTool.call({"skill": skill_name, "args": args}, ctx)
     out = result.output
     head = f"--- /{skill_name}"
@@ -114,8 +112,10 @@ def _print_invocation(
         print(f"  ERROR: {out}")
         return
     prompt = out["prompt"]
-    preview = prompt if len(prompt) <= PREVIEW_CHARS else (
-        prompt[:PREVIEW_CHARS] + f"\n... [truncated, total {len(prompt)} chars]"
+    preview = (
+        prompt
+        if len(prompt) <= PREVIEW_CHARS
+        else (prompt[:PREVIEW_CHARS] + f"\n... [truncated, total {len(prompt)} chars]")
     )
     for line in preview.splitlines():
         print(f"  {line}")
@@ -160,9 +160,7 @@ def main() -> int:
         py_path = project / "src" / "foo.py"
         py_path.parent.mkdir(parents=True, exist_ok=True)
         py_path.write_text("# placeholder")
-        activated = activate_conditional_skills_for_paths(
-            [str(py_path)], str(project)
-        )
+        activated = activate_conditional_skills_for_paths([str(py_path)], str(project))
         print(f"  activated: {activated}")
         _print_invocation("lint-py", "", ctx)
 

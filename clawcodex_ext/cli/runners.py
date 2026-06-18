@@ -6,9 +6,7 @@ import time
 import uuid
 
 
-def _telemetry_session_record(
-    *, entrypoint: str, is_non_interactive: bool
-) -> tuple[str, float]:
+def _telemetry_session_record(*, entrypoint: str, is_non_interactive: bool) -> tuple[str, float]:
     """F-97: best-effort session_start helper. Returns (session_id, start_ts)."""
     sid = _telemetry_derive_session_id()
     start = time.monotonic()
@@ -16,6 +14,7 @@ def _telemetry_session_record(
         from telemetry import record_session_start
 
         import os
+
         record_session_start(
             session_id=sid,
             entrypoint=entrypoint,
@@ -28,8 +27,13 @@ def _telemetry_session_record(
 
 
 def _telemetry_session_end(
-    *, session_id: str, command_name: str, mode: str, success: bool,
-    duration_s: float, exit_status: int,
+    *,
+    session_id: str,
+    command_name: str,
+    mode: str,
+    success: bool,
+    duration_s: float,
+    exit_status: int,
 ) -> None:
     try:
         from telemetry import record_command_run, record_session_end
@@ -67,6 +71,7 @@ def _telemetry_derive_session_id() -> str:
 # Print mode
 # ----------------------------------------------------------------------
 
+
 def run_print_mode(args) -> int:
     """Delegate to the headless entrypoint."""
 
@@ -79,16 +84,17 @@ def run_print_mode(args) -> int:
     # of its own with entrypoint="cli"; we keep this branch distinct so
     # nested re-entry is observable in the recorder's per-day cache.
     sid, start = _telemetry_session_record(
-        entrypoint="print", is_non_interactive=True,
+        entrypoint="print",
+        is_non_interactive=True,
     )
 
     # Some combinations are invalid; report early with a helpful message.
-    if args.input_format == 'stream-json' and args.output_format != 'stream-json':
+    if args.input_format == "stream-json" and args.output_format != "stream-json":
         cli_error(
             "error: --input-format stream-json requires --output-format stream-json",
             2,
         )
-    if args.include_partial_messages and args.output_format != 'stream-json':
+    if args.include_partial_messages and args.output_format != "stream-json":
         cli_error(
             "error: --include-partial-messages requires --output-format stream-json",
             2,
@@ -128,6 +134,7 @@ def run_print_mode(args) -> int:
 # TUI mode
 # ----------------------------------------------------------------------
 
+
 def run_tui_mode(args) -> int:
     """Boot the Textual-based interactive TUI (Phase 11)."""
 
@@ -139,16 +146,17 @@ def run_tui_mode(args) -> int:
     # dispatch path in run_cli also emits one; the recorder de-dupes
     # session_id matching via the per-day cache.
     sid, start = _telemetry_session_record(
-        entrypoint="tui", is_non_interactive=False,
+        entrypoint="tui",
+        is_non_interactive=False,
     )
 
     allowed = _split_csv(args.allowed_tools)
     disallowed = _split_csv(args.disallowed_tools)
 
     # --resume without SESSION_ID means "browse" mode
-    resume_val = getattr(args, 'resume', None)
-    resume_session_id = None if resume_val == 'browse' else resume_val
-    resume_browse = resume_val == 'browse'
+    resume_val = getattr(args, "resume", None)
+    resume_session_id = None if resume_val == "browse" else resume_val
+    resume_browse = resume_val == "browse"
 
     options = TUIOptions(
         provider_name=args.provider,
@@ -180,10 +188,11 @@ def run_tui_mode(args) -> int:
 # Utility helpers
 # ----------------------------------------------------------------------
 
+
 def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
-    return [item.strip() for item in value.split(',') if item.strip()]
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _show_provider_defaults_table() -> None:
@@ -214,6 +223,7 @@ def _show_provider_defaults_table() -> None:
 # Login / Config (compatibility patch targets)
 # ----------------------------------------------------------------------
 
+
 def handle_login() -> int:
     """Interactive provider credential configuration."""
     from rich.console import Console
@@ -226,13 +236,10 @@ def handle_login() -> int:
 
     from src.config import get_provider_config, set_api_key, set_default_provider
     from src.providers import PROVIDER_INFO
+
     provider_names = list(PROVIDER_INFO.keys())
 
-    provider = Prompt.ask(
-        "Select LLM provider",
-        choices=provider_names,
-        default="anthropic"
-    )
+    provider = Prompt.ask("Select LLM provider", choices=provider_names, default="anthropic")
 
     info = PROVIDER_INFO[provider]
 
@@ -258,27 +265,18 @@ def handle_login() -> int:
         console.print(f"[green]Default provider set to: {provider}[/green]\n")
         return 0
 
-    api_key = Prompt.ask(
-        f"Enter {provider.upper()} API Key",
-        password=True
-    )
+    api_key = Prompt.ask(f"Enter {provider.upper()} API Key", password=True)
 
     if not api_key:
         console.print("\n[red]Error: API Key cannot be empty[/red]")
         return 1
 
     console.print(f"\n[dim]Default:[/dim] {info['default_base_url']}")
-    base_url = Prompt.ask(
-        f"{provider.upper()} Base URL",
-        default=info["default_base_url"]
-    )
+    base_url = Prompt.ask(f"{provider.upper()} Base URL", default=info["default_base_url"])
 
     console.print(f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}")
     console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
-    default_model = Prompt.ask(
-        f"{provider.upper()} Default Model",
-        default=info["default_model"]
-    )
+    default_model = Prompt.ask(f"{provider.upper()} Default Model", default=info["default_model"])
 
     set_api_key(provider, api_key=api_key, base_url=base_url, default_model=default_model)
     set_default_provider(provider)
@@ -362,7 +360,8 @@ def start_repl(
     # observable. The dispatch path in run_cli also emits one; the
     # recorder dedupes by session_id match in the per-day cache.
     sid, start = _telemetry_session_record(
-        entrypoint="repl", is_non_interactive=False,
+        entrypoint="repl",
+        is_non_interactive=False,
     )
 
     provider = get_default_provider()

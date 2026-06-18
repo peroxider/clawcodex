@@ -56,17 +56,17 @@ class TestQueryRunnerDebug(unittest.IsolatedAsyncioTestCase):
                 )
             )
 
-            with patch(
-                "extensions.capabilities.headless_runner.run_headless_session",
-                fake_run_headless_session,
-            ), patch("extensions.api.query.time.monotonic", fake_monotonic):
+            with (
+                patch(
+                    "extensions.capabilities.headless_runner.run_headless_session",
+                    fake_run_headless_session,
+                ),
+                patch("extensions.api.query.time.monotonic", fake_monotonic),
+            ):
                 async for event in runner.stream():
                     events.append(event)
 
-            rows = [
-                json.loads(line)
-                for line in debug_log.read_text(encoding="utf-8").splitlines()
-            ]
+            rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
             stages = [row["stage"] for row in rows]
 
         self.assertTrue(any(isinstance(event, ToolCallEvent) for event in events))
@@ -209,17 +209,12 @@ class TestQueryRunnerDebug(unittest.IsolatedAsyncioTestCase):
             ):
                 events = [event async for event in runner.stream()]
 
-            rows = [
-                json.loads(line)
-                for line in debug_log.read_text(encoding="utf-8").splitlines()
-            ]
+            rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
 
         result_event = next(event for event in events if isinstance(event, ToolResultEvent))
         self.assertEqual(result_event.tool_name, "Glob")
         headless_results = [
-            row
-            for row in rows
-            if row["stage"] == "headless.event" and row["kind"] == "tool_result"
+            row for row in rows if row["stage"] == "headless.event" and row["kind"] == "tool_result"
         ]
         self.assertEqual(headless_results[0]["tool"], "Glob")
         self.assertEqual(headless_results[0]["error"], "missing path")

@@ -12,6 +12,7 @@ from dataclasses import dataclass
 @dataclass
 class MappingRule:
     """A mapping rule: SDK method pattern → tool name → skill name."""
+
     method_pattern: str
     tool_name: str
     skill_name: str

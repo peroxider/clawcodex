@@ -55,6 +55,7 @@ def _run_async(coro):
     if loop is not None and loop.is_running():
         # Already in an async context — create a new thread
         import concurrent.futures
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(asyncio.run, coro)
             return future.result(timeout=10)
@@ -64,6 +65,7 @@ def _run_async(coro):
 
 def _build_workspace_section(root: Path, current: Path) -> str:
     from .workspace_snapshot import build_workspace_snapshot
+
     try:
         workspace = build_workspace_snapshot(root, cwd=current)
     except Exception:
@@ -86,6 +88,7 @@ def _build_workspace_section(root: Path, current: Path) -> str:
 
 def _build_git_section(cwd: str) -> str:
     from .git_context import collect_git_context, format_git_status
+
     try:
         ctx = _run_async(collect_git_context(cwd))
         if not ctx.available:
@@ -100,6 +103,7 @@ def _build_git_section(cwd: str) -> str:
 
 def _build_claude_md_section(cwd: str, root: Path) -> str:
     from .claude_md import get_claude_mds, get_memory_files
+
     try:
         memory_files = _run_async(get_memory_files(cwd=cwd))
         content = get_claude_mds(memory_files)

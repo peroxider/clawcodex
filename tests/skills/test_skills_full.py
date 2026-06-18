@@ -172,22 +172,26 @@ class TestSkillFromMcpTool:
 
 class TestGetBundledSkillByName:
     def test_find_by_name(self):
-        register_bundled_skill(BundledSkillDefinition(
-            name="finder",
-            description="Find things",
-            get_prompt_for_command=lambda a: a,
-        ))
+        register_bundled_skill(
+            BundledSkillDefinition(
+                name="finder",
+                description="Find things",
+                get_prompt_for_command=lambda a: a,
+            )
+        )
         skill = get_bundled_skill_by_name("finder")
         assert skill is not None
         assert skill.name == "finder"
 
     def test_find_by_alias(self):
-        register_bundled_skill(BundledSkillDefinition(
-            name="finder",
-            description="Find things",
-            get_prompt_for_command=lambda a: a,
-            aliases=["find", "search"],
-        ))
+        register_bundled_skill(
+            BundledSkillDefinition(
+                name="finder",
+                description="Find things",
+                get_prompt_for_command=lambda a: a,
+                aliases=["find", "search"],
+            )
+        )
         skill = get_bundled_skill_by_name("search")
         assert skill is not None
         assert skill.name == "finder"

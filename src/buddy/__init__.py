@@ -10,8 +10,8 @@ from src.buddy.prompt import (
 )
 
 __all__ = [
-    'is_buddy_enabled',
-    'build_companion_intro_attachment',
-    'companion_intro_text',
-    'format_companion_intro_attachments',
+    "is_buddy_enabled",
+    "build_companion_intro_attachment",
+    "companion_intro_text",
+    "format_companion_intro_attachments",
 ]

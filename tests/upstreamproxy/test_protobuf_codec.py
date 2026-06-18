@@ -13,32 +13,32 @@ from src.upstreamproxy.protobuf_codec import (
 
 class TestEncodeChunk:
     def test_empty_payload(self) -> None:
-        out = encode_chunk(b'')
+        out = encode_chunk(b"")
         assert out == bytes([0x0A, 0x00])
 
     def test_single_byte_payload(self) -> None:
-        out = encode_chunk(b'X')
-        assert out == bytes([0x0A, 0x01, ord('X')])
+        out = encode_chunk(b"X")
+        assert out == bytes([0x0A, 0x01, ord("X")])
 
     def test_one_byte_varint_127(self) -> None:
         """127 is the max value that fits in a single varint byte."""
-        out = encode_chunk(b'A' * 127)
+        out = encode_chunk(b"A" * 127)
         assert out[0] == 0x0A
         assert out[1] == 127  # one varint byte; high bit clear
-        assert out[2:] == b'A' * 127
+        assert out[2:] == b"A" * 127
 
     def test_two_byte_varint_128(self) -> None:
         """128 takes 2 varint bytes (high bit set on the first)."""
-        out = encode_chunk(b'B' * 128)
+        out = encode_chunk(b"B" * 128)
         assert out[0] == 0x0A
         assert out[1] == 0x80  # low 7 bits = 0, continuation bit set
         assert out[2] == 0x01  # high bits = 1, no continuation
-        assert out[3:] == b'B' * 128
+        assert out[3:] == b"B" * 128
 
     def test_three_byte_varint_16384(self) -> None:
         """16384 = 2^14 takes 3 varint bytes."""
         n = 16384
-        out = encode_chunk(b'C' * n)
+        out = encode_chunk(b"C" * n)
         assert out[0] == 0x0A
         assert out[1] == 0x80
         assert out[2] == 0x80
@@ -49,17 +49,17 @@ class TestEncodeChunk:
 class TestDecodeChunk:
     def test_decode_empty_keepalive(self) -> None:
         """Empty input is the server keepalive — return empty bytes."""
-        assert decode_chunk(b'') == b''
+        assert decode_chunk(b"") == b""
 
     def test_decode_zero_length_chunk(self) -> None:
         """0x0a 0x00 — well-formed chunk with empty payload."""
-        assert decode_chunk(bytes([0x0A, 0x00])) == b''
+        assert decode_chunk(bytes([0x0A, 0x00])) == b""
 
     def test_decode_single_byte(self) -> None:
-        assert decode_chunk(bytes([0x0A, 0x01, ord('X')])) == b'X'
+        assert decode_chunk(bytes([0x0A, 0x01, ord("X")])) == b"X"
 
     def test_decode_two_byte_varint(self) -> None:
-        payload = b'B' * 128
+        payload = b"B" * 128
         encoded = bytes([0x0A, 0x80, 0x01]) + payload
         assert decode_chunk(encoded) == payload
 
@@ -70,7 +70,7 @@ class TestDecodeChunk:
 
     def test_decode_truncated_payload_returns_none(self) -> None:
         """Declared length > remaining buffer."""
-        assert decode_chunk(bytes([0x0A, 0x05, ord('A'), ord('B')])) is None
+        assert decode_chunk(bytes([0x0A, 0x05, ord("A"), ord("B")])) is None
 
     def test_decode_truncated_varint_returns_none(self) -> None:
         """Continuation bit set on the last byte — varint never terminates."""
@@ -86,13 +86,15 @@ class TestDecodeChunk:
 
 
 class TestRoundTrip:
-    @pytest.mark.parametrize('size', [0, 1, 7, 127, 128, 16383, 16384, 65536])
+    @pytest.mark.parametrize("size", [0, 1, 7, 127, 128, 16383, 16384, 65536])
     def test_round_trip(self, size: int) -> None:
         original = bytes(range(256)) * (size // 256) + bytes(range(size % 256))
         # Adjust size: the construction above doesn't quite equal `size`
         # for sizes that aren't multiples of 256.
-        original = original[:size] if len(original) >= size else original + b'\x00' * (
-            size - len(original)
+        original = (
+            original[:size]
+            if len(original) >= size
+            else original + b"\x00" * (size - len(original))
         )
         assert len(original) == size
         encoded = encode_chunk(original)
@@ -101,9 +103,9 @@ class TestRoundTrip:
 
     def test_concat_chunks_decoded_independently(self) -> None:
         """Two chunks concatenated: decoder reads the first; second is leftover."""
-        a = encode_chunk(b'first')
-        b = encode_chunk(b'second')
-        assert decode_chunk(a + b) == b'first'
+        a = encode_chunk(b"first")
+        b = encode_chunk(b"second")
+        assert decode_chunk(a + b) == b"first"
         # Decoder doesn't return leftover; consumers split on encode.
 
 

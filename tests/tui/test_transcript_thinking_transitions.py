@@ -46,10 +46,7 @@ async def test_assistant_after_thinking_retires_thinking_row() -> None:
         # and a fresh AssistantTextMessage mounted.
         assert isinstance(transcript._active_assistant, AssistantTextMessage)
         # The thinking row's content stays in the buffer — finalised, not deleted.
-        assert any(
-            isinstance(row, AssistantThinkingMessage)
-            for row in transcript._mounted_rows
-        )
+        assert any(isinstance(row, AssistantThinkingMessage) for row in transcript._mounted_rows)
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 """Tests for src/agent/parse_agent_markdown.py."""
+
 from __future__ import annotations
 
 from textwrap import dedent

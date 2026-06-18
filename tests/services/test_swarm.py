@@ -1,4 +1,5 @@
 """Tests for Swarm/Teammates subsystem."""
+
 from __future__ import annotations
 
 import unittest

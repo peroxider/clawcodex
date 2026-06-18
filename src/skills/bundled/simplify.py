@@ -79,8 +79,7 @@ def register_simplify_skill() -> None:
         BundledSkillDefinition(
             name="simplify",
             description=(
-                "Review changed code for reuse, quality, and efficiency, "
-                "then fix any issues found."
+                "Review changed code for reuse, quality, and efficiency, then fix any issues found."
             ),
             user_invocable=True,
             get_prompt_for_command=_build_simplify_prompt,

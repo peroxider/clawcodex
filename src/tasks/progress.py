@@ -26,6 +26,7 @@ The new ``ProgressTracker`` is the *live* counter that
 reads the tracker's accumulated totals at the end instead of computing
 ``total_tokens=0``.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -41,10 +42,12 @@ MAX_RECENT_ACTIVITIES: int = 5
 # Tools whose tool_use entries should NOT appear in the recent-activities
 # preview. Mirrors TS LocalAgentTask.tsx:79-80 (omits StructuredOutput
 # / SyntheticOutput from preview because it's an internal tool).
-_PREVIEW_BLACKLIST: frozenset[str] = frozenset({
-    "StructuredOutput",
-    "SyntheticOutput",
-})
+_PREVIEW_BLACKLIST: frozenset[str] = frozenset(
+    {
+        "StructuredOutput",
+        "SyntheticOutput",
+    }
+)
 
 
 @dataclass

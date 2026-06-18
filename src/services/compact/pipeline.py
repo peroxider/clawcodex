@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CompressionResult:
     """Result of running the compression pipeline."""
+
     messages: list[Message]
     tokens_saved: int = 0
     layers_applied: list[str] = field(default_factory=list)
@@ -50,6 +51,7 @@ class CompressionResult:
 @dataclass
 class PipelineConfig:
     """Configuration for the compression pipeline."""
+
     # Layer 1: tool result budget
     budget_dir: Path | str | None = None
     max_result_tokens: int = 8_000

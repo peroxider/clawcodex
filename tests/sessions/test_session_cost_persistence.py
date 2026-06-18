@@ -52,6 +52,7 @@ class SaveCostBlockTests(unittest.TestCase):
 
     def _mk_tmpdir(self) -> str:
         import tempfile
+
         return tempfile.mkdtemp(prefix="ch03-r2-")
 
     def _read_saved(self, sid: str) -> dict:
@@ -90,9 +91,7 @@ class SaveCostBlockTests(unittest.TestCase):
         self.assertIn("claude-opus-4-7", mu)
         self.assertEqual(mu["claude-opus-4-7"]["input_tokens"], 100)
         self.assertEqual(mu["claude-opus-4-7"]["output_tokens"], 50)
-        self.assertAlmostEqual(
-            mu["claude-opus-4-7"]["cost_usd"], 0.0123, places=6
-        )
+        self.assertAlmostEqual(mu["claude-opus-4-7"]["cost_usd"], 0.0123, places=6)
 
     def test_save_emits_empty_model_usage_when_no_usage_recorded(self) -> None:
         sess = Session.create("anthropic", "claude-opus-4-7")

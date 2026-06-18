@@ -51,7 +51,9 @@ class TestApplyToolResultBudget(unittest.TestCase):
             _make_user_with_tool_result("t1", "small result"),
         ]
         result, saved = apply_tool_result_budget(
-            messages, self.budget_dir, max_result_tokens=10_000,
+            messages,
+            self.budget_dir,
+            max_result_tokens=10_000,
         )
         self.assertEqual(saved, 0)
         self.assertEqual(len(result), 2)
@@ -64,7 +66,9 @@ class TestApplyToolResultBudget(unittest.TestCase):
             _make_user_with_tool_result("t1", large_content),
         ]
         result, saved = apply_tool_result_budget(
-            messages, self.budget_dir, max_result_tokens=1_000,
+            messages,
+            self.budget_dir,
+            max_result_tokens=1_000,
         )
         self.assertGreater(saved, 0)
 
@@ -109,13 +113,17 @@ class TestApplyToolResultBudget(unittest.TestCase):
             _make_user_with_tool_result("t1", large_content),
         ]
         result1, saved1 = apply_tool_result_budget(
-            messages, self.budget_dir, max_result_tokens=1_000,
+            messages,
+            self.budget_dir,
+            max_result_tokens=1_000,
         )
         self.assertGreater(saved1, 0)
 
         # Run again with the already-replaced messages
         result2, saved2 = apply_tool_result_budget(
-            result1, self.budget_dir, max_result_tokens=1_000,
+            result1,
+            self.budget_dir,
+            max_result_tokens=1_000,
         )
         self.assertEqual(saved2, 0)
 
@@ -141,7 +149,9 @@ class TestApplyToolResultBudget(unittest.TestCase):
             _make_user_with_tool_result("t2", "y" * 50_000),
         ]
         result, saved = apply_tool_result_budget(
-            messages, self.budget_dir, max_result_tokens=1_000,
+            messages,
+            self.budget_dir,
+            max_result_tokens=1_000,
         )
         self.assertGreater(saved, 0)
 
@@ -178,6 +188,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
         from src.services.tool_execution.tool_result_persistence import (
             maybe_persist_large_tool_result,
         )
+
         block = {"type": "tool_result", "tool_use_id": "1", "content": "x" * 30_000}
         result = maybe_persist_large_tool_result(
             block,
@@ -193,6 +204,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
         from src.services.tool_execution.tool_result_persistence import (
             maybe_persist_large_tool_result,
         )
+
         block = {"type": "tool_result", "tool_use_id": "2", "content": "x" * 40_000}
         result = maybe_persist_large_tool_result(
             block,
@@ -207,8 +219,10 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
     def test_simulated_five_parallel_reads_at_40k(self):
         """Five 40K reads sum to exactly 200K — at-cap, not over → all pass."""
         from src.services.tool_execution.tool_result_persistence import (
-            compute_block_chars, maybe_persist_large_tool_result,
+            compute_block_chars,
+            maybe_persist_large_tool_result,
         )
+
         running = 0
         results = []
         for i in range(5):
@@ -231,6 +245,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
         from src.services.tool_execution.tool_result_persistence import (
             maybe_persist_large_tool_result,
         )
+
         block = {"type": "tool_result", "tool_use_id": "6", "content": "x" * 40_000}
         result = maybe_persist_large_tool_result(
             block,
@@ -245,12 +260,14 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
         from src.services.tool_execution.tool_result_persistence import (
             MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
         )
+
         self.assertEqual(MAX_TOOL_RESULTS_PER_MESSAGE_CHARS, 200_000)
 
     def test_compute_block_chars_returns_size(self):
         from src.services.tool_execution.tool_result_persistence import (
             compute_block_chars,
         )
+
         self.assertEqual(
             compute_block_chars({"content": "hello"}),
             5,
@@ -259,6 +276,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
     def test_tool_use_context_carries_aggregate_field(self):
         """``ToolContext.tool_result_chars_so_far`` defaults to 0."""
         from src.tool_system.context import ToolContext
+
         ctx = ToolContext(workspace_root=Path("/tmp"))
         self.assertEqual(ctx.tool_result_chars_so_far, 0)
 
@@ -283,6 +301,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
         """
         import ast
         from pathlib import Path
+
         query_src = Path(__file__).parent.parent / "src" / "query" / "query.py"
         tree = ast.parse(query_src.read_text())
 
@@ -308,7 +327,8 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
             target_assignments.append(node)
 
         self.assertGreater(
-            len(target_assignments), 0,
+            len(target_assignments),
+            0,
             "WI-5.1 per-turn reset missing from query.py — "
             "tool_use_context.tool_result_chars_so_far = 0 not found",
         )
@@ -325,9 +345,7 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
             while cursor is not None:
                 if isinstance(cursor, ast.While):
                     cond = cursor.test
-                    is_while_true = (
-                        isinstance(cond, ast.Constant) and cond.value is True
-                    )
+                    is_while_true = isinstance(cond, ast.Constant) and cond.value is True
                     if is_while_true:
                         return True
                 cursor = parent_of.get(cursor)
@@ -335,7 +353,8 @@ class TestPerMessageAggregateBudget(unittest.TestCase):
 
         in_loop = [a for a in target_assignments if _has_while_true_ancestor(a)]
         self.assertGreater(
-            len(in_loop), 0,
+            len(in_loop),
+            0,
             "Reset must be INSIDE a ``while True:`` loop body — "
             "otherwise it runs at most once at function entry and the "
             "counter grows across turns",
@@ -398,7 +417,8 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
 
         # Counter must reflect the block we just processed.
         self.assertGreater(
-            ctx.tool_result_chars_so_far, 0,
+            ctx.tool_result_chars_so_far,
+            0,
             "WI-5.1 critic B2: production path didn't increment the aggregate counter",
         )
 
@@ -453,14 +473,12 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
                 "tool_use_id": block_id,
                 "content": output,
             }
+
         fake_tool.map_result_to_api.side_effect = fake_map
 
         ctx = ToolContext(workspace_root=self.tool_results_dir)
 
-        blocks = [
-            ToolUseBlock(id=f"b{i}", name="Read", input={})
-            for i in range(6)
-        ]
+        blocks = [ToolUseBlock(id=f"b{i}", name="Read", input={}) for i in range(6)]
 
         # Patch ``compute_block_chars`` to sleep so the read-modify-write
         # path releases the GIL and the race window opens
@@ -480,14 +498,18 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
                 return await asyncio.to_thread(
                     _dispatch_single_tool, b, fake_registry, ctx, [fake_tool]
                 )
+
             return await asyncio.gather(*(dispatch_one(b) for b in blocks))
 
-        with _patch(
-            "src.services.tool_execution.tool_result_persistence.resolve_tool_results_dir",
-            return_value=self.tool_results_dir,
-        ), _patch(
-            "src.services.tool_execution.tool_result_persistence.compute_block_chars",
-            side_effect=slow_compute,
+        with (
+            _patch(
+                "src.services.tool_execution.tool_result_persistence.resolve_tool_results_dir",
+                return_value=self.tool_results_dir,
+            ),
+            _patch(
+                "src.services.tool_execution.tool_result_persistence.compute_block_chars",
+                side_effect=slow_compute,
+            ),
         ):
             results = asyncio.run(run_parallel())
 
@@ -509,12 +531,11 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
         # And at least one block must be persisted: the 240K total
         # exceeds the 200K cap by 40K.
         persisted_count = sum(
-            1
-            for pair in results
-            if "<persisted-output>" in pair[0].content[0].content
+            1 for pair in results if "<persisted-output>" in pair[0].content[0].content
         )
         self.assertGreater(
-            persisted_count, 0,
+            persisted_count,
+            0,
             "Critic B6: concurrent dispatch bypassed the WI-5.1 cap — "
             "240K of inline content reached the message instead of "
             "persisting the over-budget tail to disk",
@@ -559,9 +580,7 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
             "src.services.tool_execution.tool_result_persistence.resolve_tool_results_dir",
             return_value=self.tool_results_dir,
         ):
-            primary, extras = _dispatch_single_tool(
-                block, fake_registry, ctx, tools=[fake_tool]
-            )
+            primary, extras = _dispatch_single_tool(block, fake_registry, ctx, tools=[fake_tool])
 
         # No supplemental messages expected for this test.
         self.assertEqual(extras, [])
@@ -569,7 +588,8 @@ class TestProductionPathBudgetEnforcement(unittest.TestCase):
         # ``<persisted-output>`` wrapper, NOT the raw 30K output.
         content = primary.content[0].content
         self.assertIn(
-            "<persisted-output>", content,
+            "<persisted-output>",
+            content,
             "WI-5.1 critic B2: aggregate gate didn't fire on production path "
             "— large block returned inline instead of persisted",
         )

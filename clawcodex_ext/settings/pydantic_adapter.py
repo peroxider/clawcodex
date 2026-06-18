@@ -48,9 +48,13 @@ _USE_PYDANTIC_SETTINGS = env_switch("CLAW_USE_PYDANTIC_SETTINGS")
 # Pydantic Models for type-safe config
 # ---------------------------------------------------------------------------
 
-@AdapterRegistry.register("pydantic_settings", env_var="CLAW_USE_PYDANTIC_SETTINGS", dependency="pydantic_settings")
+
+@AdapterRegistry.register(
+    "pydantic_settings", env_var="CLAW_USE_PYDANTIC_SETTINGS", dependency="pydantic_settings"
+)
 class ProviderConfig(BaseModel):
     """Provider-specific configuration."""
+
     api_key: str = ""
     base_url: str = ""
     default_model: str = ""
@@ -58,6 +62,7 @@ class ProviderConfig(BaseModel):
 
 class SessionConfig(BaseModel):
     """Session configuration."""
+
     auto_save: bool = True
     max_history: int = 100
 
@@ -74,6 +79,7 @@ class ClawCodexSettings(BaseSettings):
 
     Environment variables use CLAWCODEX_ prefix.
     """
+
     model_config = SettingsConfigDict(
         env_prefix="CLAWCODEX_",
         env_file=".env",
@@ -116,6 +122,7 @@ class ClawCodexSettings(BaseSettings):
 # ---------------------------------------------------------------------------
 # Adapter functions
 # ---------------------------------------------------------------------------
+
 
 def load_settings_from_config_manager(
     config_manager: ConfigManager | None = None,
@@ -178,10 +185,12 @@ def invalidate_settings_cache() -> None:
 # Backward compatibility helpers
 # ---------------------------------------------------------------------------
 
+
 def is_pydantic_settings_available() -> bool:
     """Check if pydantic-settings is available."""
     try:
         from pydantic_settings import BaseSettings
+
         return True
     except ImportError:
         return False

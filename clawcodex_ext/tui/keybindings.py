@@ -49,9 +49,7 @@ class ChordTracker:
     def add_binding(self, keys: tuple[str, ...], action: str, description: str = "") -> None:
         if not keys:
             raise ValueError("chord keys cannot be empty")
-        self.bindings.append(
-            ChordBinding(keys=tuple(keys), action=action, description=description)
-        )
+        self.bindings.append(ChordBinding(keys=tuple(keys), action=action, description=description))
 
     def clear(self) -> None:
         self.bindings.clear()

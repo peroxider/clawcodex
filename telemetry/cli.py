@@ -13,6 +13,7 @@ Subcommand surface:
 * ``enable|disable`` — print the JSON snippet the user must paste into
   their merged config; do **not** mutate config files automatically.
 """
+
 from __future__ import annotations
 
 import json
@@ -164,27 +165,30 @@ def run_enable(argv: Sequence[str] | None = None) -> int:
         cfg = _load_src_config()
         telemetry_section: dict[str, Any] = dict(cfg.get("telemetry", {}))
         telemetry_section["enabled"] = True
-        reporting_section: dict[str, Any] = dict(
-            telemetry_section.get("reporting", {})
-        )
+        reporting_section: dict[str, Any] = dict(telemetry_section.get("reporting", {}))
         reporting_section["reporting_enabled"] = True
         telemetry_section["reporting"] = reporting_section
         cfg["telemetry"] = telemetry_section
         _save_src_config(cfg)
         _print(
             "Telemetry enabled: stats collection ✓ · error reporting ✓\n"
-            "Run \"/telemetry status\" to verify."
+            'Run "/telemetry status" to verify.'
         )
     except Exception as exc:
         _print(f"telemetry: failed to enable — {exc}")
         _print("You can manually add the following to your merged config:")
         _print("")
-        _print(json.dumps({
-            "telemetry": {
-                "enabled": True,
-                "reporting": {"reporting_enabled": True},
-            }
-        }, indent=2))
+        _print(
+            json.dumps(
+                {
+                    "telemetry": {
+                        "enabled": True,
+                        "reporting": {"reporting_enabled": True},
+                    }
+                },
+                indent=2,
+            )
+        )
         return 1
     return 0
 
@@ -201,17 +205,12 @@ def run_disable(argv: Sequence[str] | None = None) -> int:
         # reporting_enabled is moot when enabled=False, but set it too
         # for consistency so the next user-run /telemetry status shows a
         # clean state.
-        reporting_section: dict[str, Any] = dict(
-            telemetry_section.get("reporting", {})
-        )
+        reporting_section: dict[str, Any] = dict(telemetry_section.get("reporting", {}))
         reporting_section["reporting_enabled"] = False
         telemetry_section["reporting"] = reporting_section
         cfg["telemetry"] = telemetry_section
         _save_src_config(cfg)
-        _print(
-            "Telemetry disabled.\n"
-            "Run \"/telemetry status\" to verify."
-        )
+        _print('Telemetry disabled.\nRun "/telemetry status" to verify.')
     except Exception as exc:
         _print(f"telemetry: failed to disable — {exc}")
         _print("You can manually set the following in your merged config:")

@@ -38,7 +38,9 @@ def load_builtin_subcommands() -> None:
 
     # F-94-A: ``clawcodex viz`` subcommand for the Multi-Session Visualizer
     from extensions.visualizer.cli import register_viz_subcommand  # noqa: F401
+
     register_viz_subcommand()
 
     from extensions.remote_api.cli import register_api_subcommand
+
     register_api_subcommand()

@@ -45,12 +45,14 @@ class LayerAuditor:
                     imports = self._extract_imports(py_file)
                     for imp, lineno in imports:
                         if self._is_forbidden(imp, layer):
-                            violations.append(Violation(
-                                file=py_file,
-                                forbidden_import=imp,
-                                layer=layer.name,
-                                line_number=lineno,
-                            ))
+                            violations.append(
+                                Violation(
+                                    file=py_file,
+                                    forbidden_import=imp,
+                                    layer=layer.name,
+                                    line_number=lineno,
+                                )
+                            )
         return violations
 
     def report(self, violations: list[Violation]) -> str:
@@ -59,10 +61,7 @@ class LayerAuditor:
             return "No layer violations found."
         lines = [f"Found {len(violations)} layer violation(s):\n"]
         for v in violations:
-            lines.append(
-                f"  [{v.layer}] {v.file}:{v.line_number} "
-                f"imports '{v.forbidden_import}'"
-            )
+            lines.append(f"  [{v.layer}] {v.file}:{v.line_number} imports '{v.forbidden_import}'")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------

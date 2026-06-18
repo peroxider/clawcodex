@@ -89,12 +89,16 @@ class TestImports:
 class TestBasicIntegration:
     def test_cost_tracker_workflow(self):
         from src.services.cost_tracker import CostTracker
+
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 1000,
-            "output_tokens": 200,
-            "cache_read_input_tokens": 500,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 1000,
+                "output_tokens": 200,
+                "cache_read_input_tokens": 500,
+            },
+        )
         assert tracker.get_total_cost() > 0
         assert tracker.get_cache_savings() > 0
         summary = tracker.get_summary()
@@ -106,6 +110,7 @@ class TestBasicIntegration:
             create_budget_tracker,
             parse_token_budget,
         )
+
         budget = parse_token_budget("+500k do something")
         assert budget == 500000
 
@@ -185,13 +190,27 @@ class TestBasicIntegration:
 
         messages = [
             {"type": "user", "message": {"content": "Hello, help me write code"}},
-            {"type": "assistant", "message": {"content": [
-                {"type": "text", "text": "Sure, let me help you with that."},
-                {"type": "tool_use", "name": "Write", "input": {"file_path": "/tmp/test.py", "content": "print('hello')"}},
-            ]}},
-            {"type": "user", "message": {"content": [
-                {"type": "tool_result", "content": "File written successfully"},
-            ]}},
+            {
+                "type": "assistant",
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "Sure, let me help you with that."},
+                        {
+                            "type": "tool_use",
+                            "name": "Write",
+                            "input": {"file_path": "/tmp/test.py", "content": "print('hello')"},
+                        },
+                    ]
+                },
+            },
+            {
+                "type": "user",
+                "message": {
+                    "content": [
+                        {"type": "tool_result", "content": "File written successfully"},
+                    ]
+                },
+            },
         ]
         total = rough_token_count_estimation_for_messages(messages)
         assert total > 0

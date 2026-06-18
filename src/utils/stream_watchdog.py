@@ -90,11 +90,15 @@ class StreamWatchdog:
     the raise and decides whether to fall back.
     """
 
-    def __init__(self, stream: Any, *, timeout_s: float | None = None, abort_signal: "AbortSignal | None" = None) -> None:
+    def __init__(
+        self,
+        stream: Any,
+        *,
+        timeout_s: float | None = None,
+        abort_signal: "AbortSignal | None" = None,
+    ) -> None:
         self._stream = stream
-        self._timeout_s = (
-            timeout_s if timeout_s is not None else stream_idle_timeout_seconds()
-        )
+        self._timeout_s = timeout_s if timeout_s is not None else stream_idle_timeout_seconds()
         self._timer: threading.Timer | None = None
         # Event raised when the timer fires — consumer can check
         # ``watchdog.fired`` to distinguish a timeout from an SDK-side

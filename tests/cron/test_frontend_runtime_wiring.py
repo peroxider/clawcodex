@@ -38,7 +38,6 @@ class _Runtime:
     options: _Options
 
 
-
 def test_headless_keeps_injected_cron_tool(monkeypatch, tmp_path) -> None:
     from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
 

@@ -189,10 +189,7 @@ def test_on_permission_cycle_callback_invoked() -> None:
             # ``.value == "s-tab"``) and a ``handler`` callable.
             stab = None
             for binding in app.key_bindings.bindings:
-                if any(
-                    getattr(key, "value", None) == "s-tab"
-                    for key in binding.keys
-                ):
+                if any(getattr(key, "value", None) == "s-tab" for key in binding.keys):
                     stab = binding
                     break
             assert stab is not None, "s-tab binding not registered"
@@ -202,9 +199,7 @@ def test_on_permission_cycle_callback_invoked() -> None:
     # The legacy fallback's DeprecationWarning must NOT fire when
     # on_permission_cycle is set — the new path short-circuits the
     # binding before the legacy code runs.
-    deprecations = [
-        w for w in caught if issubclass(w.category, DeprecationWarning)
-    ]
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
     assert deprecations == [], (
         f"unexpected DeprecationWarning(s): {[str(w.message) for w in deprecations]}"
     )
@@ -247,6 +242,7 @@ def test_legacy_fallback_fires_deprecation_when_repl_matches() -> None:
             pass
 
     repl = _LegacyStubRepl()
+
     # Use a custom permission handler so the legacy code path
     # *reaches* the ``tool_context`` swap without raising. We don't
     # assert on the resulting mode (the handler isn't actually called
@@ -279,10 +275,7 @@ def test_legacy_fallback_fires_deprecation_when_repl_matches() -> None:
 
             stab = None
             for binding in app.key_bindings.bindings:
-                if any(
-                    getattr(key, "value", None) == "s-tab"
-                    for key in binding.keys
-                ):
+                if any(getattr(key, "value", None) == "s-tab" for key in binding.keys):
                     stab = binding
                     break
             assert stab is not None, "s-tab binding not registered"
@@ -296,8 +289,7 @@ def test_legacy_fallback_fires_deprecation_when_repl_matches() -> None:
     perm_deprecations = [
         w
         for w in caught
-        if issubclass(w.category, DeprecationWarning)
-        and "permission_cycle" in str(w.message)
+        if issubclass(w.category, DeprecationWarning) and "permission_cycle" in str(w.message)
     ]
     assert len(perm_deprecations) == 1, (
         f"expected exactly one DeprecationWarning, got {len(perm_deprecations)}: "
@@ -334,6 +326,7 @@ def test_history_defaults_to_inmemory() -> None:
         buf = status._input_buffer
         if buf is not None:
             from prompt_toolkit.history import InMemoryHistory
+
             assert isinstance(buf.history, InMemoryHistory)
     time.sleep(0.05)
 
@@ -344,6 +337,7 @@ def test_up_down_history_bindings_registered() -> None:
     These bindings are what enable history navigation
     during agent work."""
     import inspect
+
     src = inspect.getsource(LiveStatus._run_thread)
     assert '@bindings.add("up")' in src
     assert '@bindings.add("down")' in src

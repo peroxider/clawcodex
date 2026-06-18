@@ -4,6 +4,7 @@ Each test uses a FakeProvider that emits deterministic tool calls, then
 verifies the side effects (files created, edited, etc.) and the conversation
 state after the loop finishes.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,6 +25,7 @@ from src.tool_system.defaults import build_default_registry
 # ---------------------------------------------------------------------------
 # Fake providers — each drives a specific tool-call scenario
 # ---------------------------------------------------------------------------
+
 
 class _TextOnlyProvider:
     model = "fake"
@@ -56,11 +58,13 @@ class _ReadFileProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 6},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "r1",
-                    "name": "Read",
-                    "input": {"file_path": str(self._target)},
-                }],
+                tool_uses=[
+                    {
+                        "id": "r1",
+                        "name": "Read",
+                        "input": {"file_path": str(self._target)},
+                    }
+                ],
             )
         return ChatResponse(
             content="The file contains the expected content.",
@@ -90,11 +94,13 @@ class _WriteFileProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 6},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "w1",
-                    "name": "Write",
-                    "input": {"file_path": str(self._target), "content": self._content},
-                }],
+                tool_uses=[
+                    {
+                        "id": "w1",
+                        "name": "Write",
+                        "input": {"file_path": str(self._target), "content": self._content},
+                    }
+                ],
             )
         return ChatResponse(
             content="Done.",
@@ -110,6 +116,7 @@ class _WriteFileProvider:
 
 class _ReadWriteEditProvider:
     """Drives a 3-step flow: Read → Write new file → Edit existing file."""
+
     model = "fake"
 
     def __init__(self, workspace: Path):
@@ -124,11 +131,13 @@ class _ReadWriteEditProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 4},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "t1",
-                    "name": "Read",
-                    "input": {"file_path": str(self._ws / "source.txt")},
-                }],
+                tool_uses=[
+                    {
+                        "id": "t1",
+                        "name": "Read",
+                        "input": {"file_path": str(self._ws / "source.txt")},
+                    }
+                ],
             )
         if self._turn == 2:
             return ChatResponse(
@@ -136,11 +145,16 @@ class _ReadWriteEditProvider:
                 model=self.model,
                 usage={"input_tokens": 10, "output_tokens": 5},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "t2",
-                    "name": "Write",
-                    "input": {"file_path": str(self._ws / "output.txt"), "content": "new file\n"},
-                }],
+                tool_uses=[
+                    {
+                        "id": "t2",
+                        "name": "Write",
+                        "input": {
+                            "file_path": str(self._ws / "output.txt"),
+                            "content": "new file\n",
+                        },
+                    }
+                ],
             )
         if self._turn == 3:
             return ChatResponse(
@@ -148,15 +162,17 @@ class _ReadWriteEditProvider:
                 model=self.model,
                 usage={"input_tokens": 10, "output_tokens": 5},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "t3",
-                    "name": "Edit",
-                    "input": {
-                        "file_path": str(self._ws / "source.txt"),
-                        "old_string": "original",
-                        "new_string": "modified",
-                    },
-                }],
+                tool_uses=[
+                    {
+                        "id": "t3",
+                        "name": "Edit",
+                        "input": {
+                            "file_path": str(self._ws / "source.txt"),
+                            "old_string": "original",
+                            "new_string": "modified",
+                        },
+                    }
+                ],
             )
         return ChatResponse(
             content="All tasks complete.",
@@ -185,11 +201,13 @@ class _BashProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 4},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "b1",
-                    "name": "Bash",
-                    "input": {"command": self._command},
-                }],
+                tool_uses=[
+                    {
+                        "id": "b1",
+                        "name": "Bash",
+                        "input": {"command": self._command},
+                    }
+                ],
             )
         return ChatResponse(
             content="Done.",
@@ -205,6 +223,7 @@ class _BashProvider:
 
 class _GlobGrepProvider:
     """Drives Glob → Grep sequence."""
+
     model = "fake"
 
     def __init__(self, workspace: Path):
@@ -219,11 +238,13 @@ class _GlobGrepProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 4},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "g1",
-                    "name": "Glob",
-                    "input": {"pattern": "*.txt", "path": str(self._ws)},
-                }],
+                tool_uses=[
+                    {
+                        "id": "g1",
+                        "name": "Glob",
+                        "input": {"pattern": "*.txt", "path": str(self._ws)},
+                    }
+                ],
             )
         if self._turn == 2:
             return ChatResponse(
@@ -231,11 +252,13 @@ class _GlobGrepProvider:
                 model=self.model,
                 usage={"input_tokens": 10, "output_tokens": 5},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "g2",
-                    "name": "Grep",
-                    "input": {"pattern": "needle", "path": str(self._ws)},
-                }],
+                tool_uses=[
+                    {
+                        "id": "g2",
+                        "name": "Grep",
+                        "input": {"pattern": "needle", "path": str(self._ws)},
+                    }
+                ],
             )
         return ChatResponse(
             content="Found results.",
@@ -251,6 +274,7 @@ class _GlobGrepProvider:
 
 class _MultiToolParallelProvider:
     """Emits 2 parallel tool calls (Read + Bash) in a single turn."""
+
     model = "fake"
 
     def __init__(self, workspace: Path):
@@ -292,6 +316,7 @@ class _MultiToolParallelProvider:
 
 class _PermissionDeniedWriteProvider:
     """Attempts to write a .md file (should be blocked by default permissions)."""
+
     model = "fake"
 
     def __init__(self, workspace: Path):
@@ -306,11 +331,13 @@ class _PermissionDeniedWriteProvider:
                 model=self.model,
                 usage={"input_tokens": 5, "output_tokens": 4},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "d1",
-                    "name": "Write",
-                    "input": {"file_path": str(self._ws / "README.md"), "content": "hello"},
-                }],
+                tool_uses=[
+                    {
+                        "id": "d1",
+                        "name": "Write",
+                        "input": {"file_path": str(self._ws / "README.md"), "content": "hello"},
+                    }
+                ],
             )
         return ChatResponse(
             content="Permission was denied as expected.",
@@ -328,8 +355,12 @@ class _PermissionDeniedWriteProvider:
 # Helper
 # ---------------------------------------------------------------------------
 
-def _run(provider, workspace: Path, query: str, max_turns: int = 10, mode: str = "bypassPermissions") -> AgentLoopResult:
+
+def _run(
+    provider, workspace: Path, query: str, max_turns: int = 10, mode: str = "bypassPermissions"
+) -> AgentLoopResult:
     from src.permissions.types import ToolPermissionContext
+
     registry = build_default_registry(include_user_tools=False)
     ctx = ToolContext(
         workspace_root=workspace,
@@ -343,6 +374,7 @@ def _run(provider, workspace: Path, query: str, max_turns: int = 10, mode: str =
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestIntegrationTextOnly:
     def test_text_only_response(self, tmp_path):
@@ -422,7 +454,9 @@ class TestIntegrationParallelTools:
 
 class TestIntegrationPermissions:
     def test_write_md_blocked_by_default(self, tmp_path):
-        result = _run(_PermissionDeniedWriteProvider(tmp_path), tmp_path, "Write docs", mode="default")
+        result = _run(
+            _PermissionDeniedWriteProvider(tmp_path), tmp_path, "Write docs", mode="default"
+        )
         assert not (tmp_path / "README.md").exists()
         assert result.num_turns == 2
 
@@ -440,11 +474,13 @@ class TestIntegrationMaxTurns:
                     model=self.model,
                     usage={"input_tokens": 5, "output_tokens": 5},
                     finish_reason="tool_use",
-                    tool_uses=[{
-                        "id": f"inf{self._turn}",
-                        "name": "Bash",
-                        "input": {"command": f"echo turn-{self._turn}"},
-                    }],
+                    tool_uses=[
+                        {
+                            "id": f"inf{self._turn}",
+                            "name": "Bash",
+                            "input": {"command": f"echo turn-{self._turn}"},
+                        }
+                    ],
                 )
 
             def chat_stream_response(self, *a, **kw):
@@ -471,16 +507,21 @@ class TestIntegrationREPLChat:
         cfg_dir = home / ".clawcodex"
         cfg_dir.mkdir(parents=True, exist_ok=True)
         cfg_file = cfg_dir / "config.json"
-        cfg_file.write_text(json.dumps({
-            "default_provider": "glm",
-            "providers": {
-                "glm": {
-                    "api_key": "fake-key",
-                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
-                    "default_model": "glm-4.5",
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "default_provider": "glm",
+                    "providers": {
+                        "glm": {
+                            "api_key": "fake-key",
+                            "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                            "default_model": "glm-4.5",
+                        }
+                    },
                 }
-            },
-        }), encoding="utf-8")
+            ),
+            encoding="utf-8",
+        )
         return cfg_file
 
     def _redirect_global_config(self, config_file: Path):
@@ -491,6 +532,7 @@ class TestIntegrationREPLChat:
         the singleton is the equivalent that actually takes effect.
         """
         import src.config as config_module
+
         patcher = patch.object(config_module, "GLOBAL_CONFIG_FILE", config_file)
         patcher.start()
         config_module._default_manager = None
@@ -498,6 +540,7 @@ class TestIntegrationREPLChat:
 
     def _make_repl(self, *, provider_name: str = "glm"):
         from src.repl.core import ClawcodexREPL
+
         return ClawcodexREPL(
             provider_name=provider_name,
             stream=False,
@@ -515,7 +558,10 @@ class TestIntegrationREPLChat:
         old_cwd = Path.cwd()
         try:
             os.chdir(work)
-            with patch("src.repl.core.get_provider_class", return_value=lambda *a, **kw: _TextOnlyProvider()):
+            with patch(
+                "src.repl.core.get_provider_class",
+                return_value=lambda *a, **kw: _TextOnlyProvider(),
+            ):
                 repl = self._make_repl()
                 repl.chat("Hello")
             msgs = repl.session.conversation.get_messages()
@@ -525,6 +571,7 @@ class TestIntegrationREPLChat:
         finally:
             config_patcher.stop()
             import src.config as config_module
+
             config_module._default_manager = None
             os.chdir(old_cwd)
 
@@ -535,8 +582,10 @@ class TestIntegrationREPLChat:
         does not reliably use the patched ``get_provider_class`` through
         the ``ClawcodexREPL.chat() → query()`` pipeline.
         """
-        pytest.skip("REPL provider patching does not propagate through the "
-                    "query() pipeline; needs a dedicated fixture")
+        pytest.skip(
+            "REPL provider patching does not propagate through the "
+            "query() pipeline; needs a dedicated fixture"
+        )
         home = tmp_path / "home"
         work = tmp_path / "work"
         work.mkdir()
@@ -560,11 +609,13 @@ class TestIntegrationREPLChat:
                         model=self.model,
                         usage={"input_tokens": 5, "output_tokens": 5},
                         finish_reason="tool_use",
-                        tool_uses=[{
-                            "id": "repl1",
-                            "name": "Write",
-                            "input": {"file_path": str(target), "content": "repl-ok\n"},
-                        }],
+                        tool_uses=[
+                            {
+                                "id": "repl1",
+                                "name": "Write",
+                                "input": {"file_path": str(target), "content": "repl-ok\n"},
+                            }
+                        ],
                     )
                 return ChatResponse(
                     content="File created.",
@@ -590,5 +641,6 @@ class TestIntegrationREPLChat:
         finally:
             config_patcher.stop()
             import src.config as config_module
+
             config_module._default_manager = None
             os.chdir(old_cwd)

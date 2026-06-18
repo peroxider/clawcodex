@@ -34,8 +34,7 @@ _UNSAFE_KEY = "ANTHROPIC_API_KEY"
 class ExtractMdmSafeEnvTests(unittest.TestCase):
     def test_filters_to_safe_keys_only(self) -> None:
         payload = (
-            '{"env": {"' + _SAFE_KEY + '": "claude-opus-4-7", '
-            '"' + _UNSAFE_KEY + '": "sk-secret"}}'
+            '{"env": {"' + _SAFE_KEY + '": "claude-opus-4-7", "' + _UNSAFE_KEY + '": "sk-secret"}}'
         )
         result = extract_mdm_safe_env(payload)
         self.assertEqual(result, {_SAFE_KEY: "claude-opus-4-7"})
@@ -47,7 +46,7 @@ class ExtractMdmSafeEnvTests(unittest.TestCase):
         self.assertEqual(extract_mdm_safe_env(""), {})
 
     def test_returns_empty_dict_for_malformed_json(self) -> None:
-        self.assertEqual(extract_mdm_safe_env('{not valid json'), {})
+        self.assertEqual(extract_mdm_safe_env("{not valid json"), {})
 
     def test_returns_empty_dict_for_missing_env_key(self) -> None:
         self.assertEqual(extract_mdm_safe_env('{"other": 1}'), {})
@@ -108,9 +107,7 @@ class ApplySafeEnvExtraTests(unittest.TestCase):
             os.environ[_SAFE_KEY] = self._original
 
     def test_extra_env_applies_safe_keys(self) -> None:
-        apply_safe_config_environment_variables(
-            config_env={}, extra_env={_SAFE_KEY: "from-mdm"}
-        )
+        apply_safe_config_environment_variables(config_env={}, extra_env={_SAFE_KEY: "from-mdm"})
         self.assertEqual(os.environ.get(_SAFE_KEY), "from-mdm")
 
     def test_extra_env_ignores_unsafe_keys(self) -> None:
@@ -122,9 +119,7 @@ class ApplySafeEnvExtraTests(unittest.TestCase):
 
     def test_extra_env_loses_to_existing_environ(self) -> None:
         os.environ[_SAFE_KEY] = "from-env"
-        apply_safe_config_environment_variables(
-            config_env={}, extra_env={_SAFE_KEY: "from-mdm"}
-        )
+        apply_safe_config_environment_variables(config_env={}, extra_env={_SAFE_KEY: "from-mdm"})
         # setdefault: pre-existing wins
         self.assertEqual(os.environ.get(_SAFE_KEY), "from-env")
 
@@ -162,12 +157,8 @@ class InitConsumesPrefetchesTests(unittest.TestCase):
         mdm_payload: str | None,
     ):
         # Patch the symbols where init.py imported them — not at source.
-        keychain_patch = mock.patch(
-            "src.init.wait_and_read_keychain", return_value=keychain_value
-        )
-        mdm_patch = mock.patch(
-            "src.init.wait_and_read_mdm", return_value=mdm_payload
-        )
+        keychain_patch = mock.patch("src.init.wait_and_read_keychain", return_value=keychain_value)
+        mdm_patch = mock.patch("src.init.wait_and_read_mdm", return_value=mdm_payload)
         # Avoid spawning real Popens during the test.
         ks_patch = mock.patch(
             "src.init.get_or_start_keychain_prefetch",

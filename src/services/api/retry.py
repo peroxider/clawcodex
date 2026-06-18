@@ -122,11 +122,13 @@ async def with_retry(
                         retry_context.model = options.fallback_model
                         consecutive_529_errors = 0
                         if on_status:
-                            on_status(RetryStatusMessage(
-                                message=f"Falling back to {options.fallback_model} after {MAX_529_RETRIES} overloaded errors",
-                                attempt=attempt,
-                                error_type="fallback",
-                            ))
+                            on_status(
+                                RetryStatusMessage(
+                                    message=f"Falling back to {options.fallback_model} after {MAX_529_RETRIES} overloaded errors",
+                                    attempt=attempt,
+                                    error_type="fallback",
+                                )
+                            )
                         continue
                     raise CannotRetryError(error, retry_context) from error
             else:
@@ -142,12 +144,14 @@ async def with_retry(
                 wait_ms = _compute_backoff_ms(attempt)
 
             if on_status:
-                on_status(RetryStatusMessage(
-                    message=f"Retry attempt {attempt}: {classification.error_type} — waiting {wait_ms}ms",
-                    attempt=attempt,
-                    error_type=classification.error_type,
-                    wait_ms=wait_ms,
-                ))
+                on_status(
+                    RetryStatusMessage(
+                        message=f"Retry attempt {attempt}: {classification.error_type} — waiting {wait_ms}ms",
+                        attempt=attempt,
+                        error_type=classification.error_type,
+                        wait_ms=wait_ms,
+                    )
+                )
 
             await asyncio.sleep(wait_ms / 1000.0)
 

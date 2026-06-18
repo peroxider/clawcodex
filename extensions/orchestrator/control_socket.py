@@ -18,6 +18,7 @@ multiple concurrent clients. Incoming lines are newline-delimited JSON
     this socket — that lives in ``transcript.jsonl``. The socket carries
     small control + small event frames only (typical < 1 KB).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -112,10 +113,12 @@ class ControlSocket:
             except OSError as exc:
                 logger.warning(
                     "control_socket: could not unlink stale socket %s: %s",
-                    self._path, exc,
+                    self._path,
+                    exc,
                 )
         self._server = await asyncio.start_unix_server(
-            self._on_client_connected, path=str(self._path),
+            self._on_client_connected,
+            path=str(self._path),
         )
 
     async def stop(self) -> None:
@@ -156,7 +159,8 @@ class ControlSocket:
         except OSError as exc:
             logger.warning(
                 "control_socket: could not unlink %s on stop: %s",
-                self._path, exc,
+                self._path,
+                exc,
             )
 
     # ------------------------------------------------------------------
@@ -175,7 +179,8 @@ class ControlSocket:
         while not self._stopped:
             try:
                 cmd = await asyncio.wait_for(
-                    self._command_queue.get(), timeout=0.5,
+                    self._command_queue.get(),
+                    timeout=0.5,
                 )
                 yield cmd
             except asyncio.TimeoutError:
@@ -219,7 +224,9 @@ class ControlSocket:
     # ------------------------------------------------------------------
 
     def _on_client_connected(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Sync connection callback.
 
@@ -236,7 +243,9 @@ class ControlSocket:
         task.add_done_callback(self._read_tasks.discard)
 
     async def _read_loop(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
     ) -> None:
         """Per-connection read loop: newline-delimited JSON commands."""
         try:
@@ -249,7 +258,8 @@ class ControlSocket:
                 except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                     logger.warning(
                         "control_socket: malformed command on %s: %s",
-                        self._path, exc,
+                        self._path,
+                        exc,
                     )
                     continue
                 if not isinstance(payload, dict):
@@ -265,7 +275,8 @@ class ControlSocket:
                     )
                 except (KeyError, TypeError) as exc:
                     logger.warning(
-                        "control_socket: invalid command shape: %s", exc,
+                        "control_socket: invalid command shape: %s",
+                        exc,
                     )
                     continue
                 await self._command_queue.put(cmd)

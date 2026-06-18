@@ -40,7 +40,6 @@ from src.services.mcp.types import (
 
 
 class TestOAuthCallbackServer:
-
     @pytest.mark.asyncio
     async def test_successful_callback_returns_code_and_state(self):
         port = find_available_port()
@@ -55,9 +54,7 @@ class TestOAuthCallbackServer:
                     params={"code": "AUTH_CODE_123", "state": state},
                 )
 
-        listener_task = asyncio.create_task(
-            wait_for_callback(port, state, timeout=5)
-        )
+        listener_task = asyncio.create_task(wait_for_callback(port, state, timeout=5))
         client_task = asyncio.create_task(make_request())
         result = await listener_task
         await client_task
@@ -135,11 +132,8 @@ class TestOAuthCallbackServer:
 
 
 class TestAuthProviderHeaderLookup:
-
     def test_returns_none_when_no_token(self, tmp_path):
-        provider = McpAuthProvider(
-            token_store=McpTokenStore(store_path=tmp_path / "t.json")
-        )
+        provider = McpAuthProvider(token_store=McpTokenStore(store_path=tmp_path / "t.json"))
         assert provider.get_auth_headers("srv") is None
 
     def test_returns_bearer_when_token_present(self, tmp_path):
@@ -157,11 +151,8 @@ class TestAuthProviderHeaderLookup:
 
 
 class TestNeedsAuthCache:
-
     def test_mark_and_get_round_trip(self, tmp_path):
-        provider = McpAuthProvider(
-            token_store=McpTokenStore(store_path=tmp_path / "t.json")
-        )
+        provider = McpAuthProvider(token_store=McpTokenStore(store_path=tmp_path / "t.json"))
         provider.mark_needs_auth("srv", auth_url="https://x", reason="401")
         entry = provider.get_needs_auth_state("srv")
         assert entry is not None
@@ -170,18 +161,14 @@ class TestNeedsAuthCache:
         assert entry.is_fresh
 
     def test_clear_drops_entry(self, tmp_path):
-        provider = McpAuthProvider(
-            token_store=McpTokenStore(store_path=tmp_path / "t.json")
-        )
+        provider = McpAuthProvider(token_store=McpTokenStore(store_path=tmp_path / "t.json"))
         provider.mark_needs_auth("srv")
         provider.clear_needs_auth("srv")
         assert provider.get_needs_auth_state("srv") is None
 
     def test_expired_entry_returns_none_and_evicts(self, tmp_path, monkeypatch):
         """A cache entry older than AUTH_CACHE_TTL_S is auto-evicted."""
-        provider = McpAuthProvider(
-            token_store=McpTokenStore(store_path=tmp_path / "t.json")
-        )
+        provider = McpAuthProvider(token_store=McpTokenStore(store_path=tmp_path / "t.json"))
         provider.mark_needs_auth("srv")
         # Fast-forward by manipulating the cached_at directly.
         provider._needs_auth_cache["srv"].cached_at = time.time() - (AUTH_CACHE_TTL_S + 10)
@@ -191,7 +178,6 @@ class TestNeedsAuthCache:
 
 
 class TestIsOauthRequiredError:
-
     def test_httpx_401_is_oauth_required(self):
         response = httpx.Response(status_code=401, content=b"unauthorized")
         exc = httpx.HTTPStatusError("401", request=MagicMock(), response=response)
@@ -214,7 +200,6 @@ class TestIsOauthRequiredError:
 
 
 class TestClientConnectNeedsAuth:
-
     @pytest.mark.asyncio
     async def test_remote_config_returns_needs_auth_when_cached(self, tmp_path):
         """When the auth provider's cache says the server needs auth,
@@ -263,7 +248,6 @@ class TestClientConnectNeedsAuth:
 
 
 class TestIsRemoteConfig:
-
     def test_http_is_remote(self):
         assert _is_remote_config(McpHTTPServerConfig(url="https://x")) is True
 

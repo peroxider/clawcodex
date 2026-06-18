@@ -95,9 +95,7 @@ class TestValidateServerConfig:
             {"type": "http", "url": "https://x", "authServerMetadataUrl": 123}
         )
         assert config is None
-        assert any(
-            "authServerMetadataUrl must be a string" in e for e in errors
-        ), errors
+        assert any("authServerMetadataUrl must be a string" in e for e in errors), errors
 
     def test_stdio_empty_command_returns_error(self) -> None:
         config, errors = validate_server_config({"type": "stdio", "command": ""})
@@ -118,10 +116,7 @@ class TestValidateServerConfig:
         config, errors = validate_server_config({"type": "unknown_type"})
         assert config is None
         assert any(
-            "unknown transport type" in e
-            and "stdio" in e
-            and "sse" in e
-            and "http" in e
+            "unknown transport type" in e and "stdio" in e and "sse" in e and "http" in e
             for e in errors
         ), errors
 
@@ -166,9 +161,7 @@ class TestValidateServerConfig:
         assert isinstance(config, McpStdioServerConfig)
 
     def test_valid_sse(self) -> None:
-        config, errors = validate_server_config(
-            {"type": "sse", "url": "https://example.com/sse"}
-        )
+        config, errors = validate_server_config({"type": "sse", "url": "https://example.com/sse"})
         assert errors == []
         assert isinstance(config, McpSSEServerConfig)
 
@@ -182,9 +175,7 @@ class TestValidateServerConfig:
         )
         assert errors == []
         assert isinstance(config, McpHTTPServerConfig)
-        assert config.auth_server_metadata_url == (
-            "https://auth.example.com/.well-known/x"
-        )
+        assert config.auth_server_metadata_url == ("https://auth.example.com/.well-known/x")
 
     def test_valid_stdio_with_env(self) -> None:
         config, errors = validate_server_config(
@@ -234,18 +225,10 @@ class TestParseServerConfigBackCompat:
         assert parse_server_config({"type": "sdk"}) is None
 
     def test_existing_happy_paths_still_work(self) -> None:
-        assert (
-            parse_server_config({"type": "stdio", "command": "py"}) is not None
-        )
-        assert (
-            parse_server_config({"type": "sse", "url": "https://x"}) is not None
-        )
-        assert (
-            parse_server_config({"type": "http", "url": "https://x"}) is not None
-        )
-        assert (
-            parse_server_config({"type": "sdk", "name": "my-sdk-server"}) is not None
-        )
+        assert parse_server_config({"type": "stdio", "command": "py"}) is not None
+        assert parse_server_config({"type": "sse", "url": "https://x"}) is not None
+        assert parse_server_config({"type": "http", "url": "https://x"}) is not None
+        assert parse_server_config({"type": "sdk", "name": "my-sdk-server"}) is not None
         # implicit-stdio
         assert parse_server_config({"command": "py"}) is not None
 
@@ -345,9 +328,7 @@ class TestParseMcpConfigSurfacesValidationMessages:
         # 3 messages from the validator -> 3 ValidationError rows for this
         # server (plus possibly the suggestion-derived stuff). At minimum we
         # want one per field-error.
-        server_errors = [
-            e for e in result.errors if e.server_name == "multibroken"
-        ]
+        server_errors = [e for e in result.errors if e.server_name == "multibroken"]
         assert len(server_errors) >= 3, server_errors
         joined = " | ".join(e.message for e in server_errors)
         assert "command cannot be empty" in joined

@@ -31,6 +31,7 @@ This file pins the new behaviour:
 * When the helper runs off the main thread (or on a platform without
   SIGINT support), the install is a no-op and headless still works.
 """
+
 from __future__ import annotations
 
 import io
@@ -121,9 +122,7 @@ def _patch_provider_only(monkeypatch, *, on_chat=None):
         lambda name: {"api_key": "test-key", "default_model": "fake-model"},
     )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
-    monkeypatch.setattr(
-        headless_mod, "build_default_registry", lambda provider=None: _Registry()
-    )
+    monkeypatch.setattr(headless_mod, "build_default_registry", lambda provider=None: _Registry())
 
 
 def test_headless_mid_tool_cancel_emits_cancelled_result(
@@ -270,9 +269,7 @@ def test_headless_idle_sigint_during_stdin_read_emits_cancelled(
         def chat_stream(self, *_args, **_kwargs):
             raise NotImplementedError
 
-    monkeypatch.setattr(
-        headless_mod, "get_provider_class", lambda _name: _TextOnceProvider
-    )
+    monkeypatch.setattr(headless_mod, "get_provider_class", lambda _name: _TextOnceProvider)
 
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -398,9 +395,7 @@ def test_install_sigint_handler_off_main_thread_is_noop() -> None:
 
     def _thread_body() -> None:
         try:
-            restore = headless_mod._install_sigint_handler(
-                controller, in_loop, stderr
-            )
+            restore = headless_mod._install_sigint_handler(controller, in_loop, stderr)
             result["restore_callable"] = callable(restore)
             # Restore is a no-op when install was skipped; call it
             # anyway and ensure it doesn't raise.

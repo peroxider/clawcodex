@@ -36,4 +36,3 @@ def unified_diff_hunks(diff_lines: Iterable[str]) -> list[dict]:
     if current is not None:
         hunks.append(current)
     return hunks
-

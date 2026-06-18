@@ -17,6 +17,7 @@ from typing import Any, Callable, Iterable
 try:
     from prompt_toolkit.completion import Completer, Completion
 except ModuleNotFoundError:  # pragma: no cover
+
     class Completer:  # type: ignore[no-redef]
         pass
 
@@ -77,7 +78,7 @@ class AgentMentionCompleter(Completer):
             return
 
         token = match.group(1)  # e.g. ``"agent-explor"`` or ``"agent-"``
-        partial = token[len("agent-"):].lower()  # e.g. ``"explor"`` or ``""``
+        partial = token[len("agent-") :].lower()  # e.g. ``"explor"`` or ``""``
         replace_len = len(match.group(0))
 
         try:

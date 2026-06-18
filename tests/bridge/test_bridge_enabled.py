@@ -43,13 +43,13 @@ def test_is_ccr_mirror_enabled_false() -> None:
 
 def test_all_exports_present() -> None:
     expected = {
-        'check_bridge_min_version',
-        'get_bridge_disabled_reason',
-        'get_ccr_auto_connect_default',
-        'is_bridge_enabled',
-        'is_bridge_enabled_blocking',
-        'is_ccr_mirror_enabled',
-        'is_cse_shim_enabled',
-        'is_env_less_bridge_enabled',
+        "check_bridge_min_version",
+        "get_bridge_disabled_reason",
+        "get_ccr_auto_connect_default",
+        "is_bridge_enabled",
+        "is_bridge_enabled_blocking",
+        "is_ccr_mirror_enabled",
+        "is_cse_shim_enabled",
+        "is_env_less_bridge_enabled",
     }
     assert set(be.__all__) == expected

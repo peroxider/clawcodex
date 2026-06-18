@@ -12,6 +12,7 @@ process only:
 * ``CLAW_TELEMETRY_REPORTING_ENABLED=1`` — enable reporter emission
 * ``CLAW_TELEMETRY_STORAGE_DIR``    — override the storage root
 """
+
 from __future__ import annotations
 
 import logging
@@ -170,9 +171,7 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         reporting_enabled_raw,
         base.reporting.reporting_enabled,
     )
-    reporting_kind = str(
-        reporting_section.get("kind", base.reporting.kind) or base.reporting.kind
-    )
+    reporting_kind = str(reporting_section.get("kind", base.reporting.kind) or base.reporting.kind)
     reporting_platform = str(
         reporting_section.get("platform", base.reporting.platform) or base.reporting.platform
     )
@@ -184,9 +183,7 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         reporting_section.get("issue_title", base.reporting.issue_title)
         or base.reporting.issue_title
     )
-    reporting_mode = str(
-        reporting_section.get("mode", base.reporting.mode) or base.reporting.mode
-    )
+    reporting_mode = str(reporting_section.get("mode", base.reporting.mode) or base.reporting.mode)
     interval_raw = reporting_section.get("interval_hours", base.reporting.interval_hours)
     try:
         reporting_interval_hours = max(1, int(interval_raw))
@@ -223,15 +220,21 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
         try:
             redaction_cfg = RedactionConfig(
                 include_command_name=_coerce_bool(
-                    redaction_section.get("include_command_name", base.redaction.include_command_name),
+                    redaction_section.get(
+                        "include_command_name", base.redaction.include_command_name
+                    ),
                     base.redaction.include_command_name,
                 ),
                 include_command_args=_coerce_bool(
-                    redaction_section.get("include_command_args", base.redaction.include_command_args),
+                    redaction_section.get(
+                        "include_command_args", base.redaction.include_command_args
+                    ),
                     base.redaction.include_command_args,
                 ),
                 include_absolute_paths=_coerce_bool(
-                    redaction_section.get("include_absolute_paths", base.redaction.include_absolute_paths),
+                    redaction_section.get(
+                        "include_absolute_paths", base.redaction.include_absolute_paths
+                    ),
                     base.redaction.include_absolute_paths,
                 ),
                 include_stacktrace=_coerce_bool(
@@ -247,7 +250,9 @@ def load_config(cwd: str | os.PathLike[str] | None = None) -> TelemetryConfig:
                     base.redaction.include_outputs,
                 ),
                 stacktrace_max_lines=int(
-                    redaction_section.get("stacktrace_max_lines", base.redaction.stacktrace_max_lines)
+                    redaction_section.get(
+                        "stacktrace_max_lines", base.redaction.stacktrace_max_lines
+                    )
                 ),
                 secret_hash_salt=str(
                     redaction_section.get("secret_hash_salt", base.redaction.secret_hash_salt)

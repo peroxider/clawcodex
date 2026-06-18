@@ -6,6 +6,7 @@ tool to send instructions to Worker agents with priority queue support.
 Mirrors the intervention side of the chapter-10 "Manager monitors Workers"
 pattern. The companion tool ``TaskInspect`` handles state observation.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,6 +35,7 @@ _PRIORITY_PREFIX = {
 # ---------------------------------------------------------------------------
 # Priority-aware queue helper
 # ---------------------------------------------------------------------------
+
 
 def _queue_priority_message(
     task_id: str,
@@ -84,6 +86,7 @@ def _queue_priority_message(
 # Permission rules storage on task state
 # ---------------------------------------------------------------------------
 
+
 def _apply_permission_config(
     task_id: str,
     permission_mode: str | None,
@@ -130,6 +133,7 @@ def _apply_permission_config(
 # Tool call implementation
 # ---------------------------------------------------------------------------
 
+
 def _task_directives_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     """Inject directive messages into Worker agents.
 
@@ -161,9 +165,7 @@ def _task_directives_call(tool_input: dict[str, Any], context: ToolContext) -> T
 
     priority = str(tool_input.get("priority", "normal"))
     if priority not in _VALID_PRIORITIES:
-        raise ToolInputError(
-            f"priority must be one of: {sorted(_VALID_PRIORITIES)}"
-        )
+        raise ToolInputError(f"priority must be one of: {sorted(_VALID_PRIORITIES)}")
 
     reason = tool_input.get("reason")
     if reason is not None and not isinstance(reason, str):
@@ -173,7 +175,10 @@ def _task_directives_call(tool_input: dict[str, Any], context: ToolContext) -> T
     raw_permission_mode = tool_input.get("worker_permission_mode")
     permission_mode: str | None = None
     if raw_permission_mode is not None:
-        if not isinstance(raw_permission_mode, str) or raw_permission_mode not in _VALID_PERMISSION_MODES:
+        if (
+            not isinstance(raw_permission_mode, str)
+            or raw_permission_mode not in _VALID_PERMISSION_MODES
+        ):
             raise ToolInputError(
                 f"worker_permission_mode must be one of: {sorted(_VALID_PERMISSION_MODES)}"
             )
@@ -190,8 +195,7 @@ def _task_directives_call(tool_input: dict[str, Any], context: ToolContext) -> T
                     "each always_allow_rules entry must have 'tool' and 'pattern' fields"
                 )
         always_allow_rules = [
-            {"tool": str(r["tool"]), "pattern": str(r["pattern"])}
-            for r in raw_always_allow_rules
+            {"tool": str(r["tool"]), "pattern": str(r["pattern"])} for r in raw_always_allow_rules
         ]
 
     runtime = getattr(context, "runtime_tasks", None)
@@ -255,6 +259,7 @@ def _task_directives_call(tool_input: dict[str, Any], context: ToolContext) -> T
 # ---------------------------------------------------------------------------
 # Auto-classifier helper
 # ---------------------------------------------------------------------------
+
 
 def _task_directives_classifier_input(input_data: dict) -> str:
     """Mirror TS ``TaskDirectivesTool.toAutoClassifierInput``."""

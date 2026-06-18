@@ -7,6 +7,7 @@ Verifies:
 - Permission mode inheritance rules
 - Built-in agent types and constants match snapshot
 """
+
 from __future__ import annotations
 
 import json

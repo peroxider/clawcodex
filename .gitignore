@@ -14,6 +14,7 @@ lib/
 lib64/
 parts/
 sdist/
+clawcodex_dev_mind-*/
 var/
 wheels/
 *.egg-info/
@@ -44,12 +45,18 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
+coverage.json
+*.coverage
 htmlcov/
 .tox/
 .nox/
-
+.local-ci/
+.package-smoke/
+.release-smoke/
 # MyPy
 .mypy_cache/
+.ruff_cache/
 
 # OS files
 .DS_Store

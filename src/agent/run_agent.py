@@ -3,6 +3,7 @@
 Mirrors typescript/src/tools/AgentTool/runAgent.ts and forkedAgent.ts.
 Provides the core run_agent() async generator and filter_incomplete_tool_calls().
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,6 +40,7 @@ class RunAgentParams:
 
     Mirrors the parameters accepted by the runAgent() generator in TypeScript.
     """
+
     parent_context: ToolContext
     agent_definition: AgentDefinition
     prompt: str
@@ -69,6 +71,7 @@ class RunAgentParams:
 @dataclass
 class RunAgentResult:
     """Aggregated result of an agent run."""
+
     messages: list[Message]
     agent_id: str
     agent_type: str
@@ -139,9 +142,7 @@ def _build_permission_context(
         avoid_for_isolation = False
     else:
         avoid_for_isolation = is_async
-    should_avoid = (
-        parent_perm.should_avoid_permission_prompts or avoid_for_isolation
-    )
+    should_avoid = parent_perm.should_avoid_permission_prompts or avoid_for_isolation
 
     # Async-but-can-prompt agents wait for classifier / hooks before
     # interrupting the user. Sync agents and prompt-avoiding agents
@@ -179,7 +180,9 @@ def filter_incomplete_tool_calls(messages: list[Message]) -> list[Message]:
         if not isinstance(content, list):
             continue
         for block in content:
-            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            block_type = (
+                block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            )
             if block_type != "tool_result":
                 continue
             tool_use_id = (
@@ -197,15 +200,20 @@ def filter_incomplete_tool_calls(messages: list[Message]) -> list[Message]:
             if isinstance(content, list):
                 has_incomplete_tool_call = False
                 for block in content:
-                    block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+                    block_type = (
+                        block.get("type")
+                        if isinstance(block, dict)
+                        else getattr(block, "type", None)
+                    )
                     if block_type != "tool_use":
                         continue
                     tool_use_id = (
-                        block.get("id")
-                        if isinstance(block, dict)
-                        else getattr(block, "id", None)
+                        block.get("id") if isinstance(block, dict) else getattr(block, "id", None)
                     )
-                    if isinstance(tool_use_id, str) and tool_use_id not in tool_use_ids_with_results:
+                    if (
+                        isinstance(tool_use_id, str)
+                        and tool_use_id not in tool_use_ids_with_results
+                    ):
                         has_incomplete_tool_call = True
                         break
                 if has_incomplete_tool_call:
@@ -264,9 +272,8 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
             )
 
     # Build system prompt
-    system_prompt = (
-        params.system_prompt_override
-        or get_agent_system_prompt(agent_def, params.parent_system_prompt)
+    system_prompt = params.system_prompt_override or get_agent_system_prompt(
+        agent_def, params.parent_system_prompt
     )
 
     # Determine abort controller.
@@ -309,6 +316,7 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
     if params.query_source is not None:
         # Shallow-copy the parent options so we don't mutate them in place.
         from copy import copy as _shallow_copy
+
         options_override = _shallow_copy(params.parent_context.options)
         options_override.query_source = params.query_source
 

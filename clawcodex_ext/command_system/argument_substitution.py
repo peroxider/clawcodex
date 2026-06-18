@@ -74,11 +74,11 @@ def substitute_arguments(
 
     # Match $name or ${name} patterns that haven't been replaced
     # but be careful not to match escaped $
-    result = re.sub(r'(?<!\\)\$[a-zA-Z_][a-zA-Z0-9_]*', replace_remaining, result)
-    result = re.sub(r'(?<!\\)\$\{[a-zA-Z_][a-zA-Z0-9_]*\}', replace_remaining, result)
+    result = re.sub(r"(?<!\\)\$[a-zA-Z_][a-zA-Z0-9_]*", replace_remaining, result)
+    result = re.sub(r"(?<!\\)\$\{[a-zA-Z_][a-zA-Z0-9_]*\}", replace_remaining, result)
 
     # Unescape any escaped $ characters
-    result = result.replace(r'\$', '$')
+    result = result.replace(r"\$", "$")
 
     return result
 
@@ -108,13 +108,13 @@ def parse_argument_names(arguments_spec: str | list[str] | None) -> list[str]:
             return []
 
         # Handle [name, age] format
-        if spec.startswith('[') and spec.endswith(']'):
+        if spec.startswith("[") and spec.endswith("]"):
             spec = spec[1:-1].strip()
 
         if not spec:
             return []
 
         # Split by commas
-        return [name.strip() for name in spec.split(',') if name.strip()]
+        return [name.strip() for name in spec.split(",") if name.strip()]
 
     return []

@@ -20,9 +20,7 @@ from clawcodex_ext.cli.provider_cmd.errors import UnknownProviderError
 _DISCOVERY_HOOKS: dict[str, list[Callable[[], list[str]]]] = {}
 
 
-def register_discovery_hook(
-    provider: str, hook: Callable[[], list[str]]
-) -> None:
+def register_discovery_hook(provider: str, hook: Callable[[], list[str]]) -> None:
     """Register a callable that returns extra models for *provider* at runtime.
 
     The hook is called each time ``available_models()`` is invoked for this
@@ -58,9 +56,7 @@ class ModelRegistry:
         self.provider_info = provider_info
         # If no custom hooks dict, reference the global registry so any
         # import-time registration is visible to every ModelRegistry instance.
-        self._discovery_hooks = (
-            _DISCOVERY_HOOKS if discovery_hooks is None else discovery_hooks
-        )
+        self._discovery_hooks = _DISCOVERY_HOOKS if discovery_hooks is None else discovery_hooks
 
     def provider_names(self) -> list[str]:
         return list(self.provider_info.keys())
@@ -106,6 +102,72 @@ class ModelRegistry:
         if len(matches) > 1:
             raise AmbiguousModelError(model, matches)
         return matches[0]
+
+    def find_prefix_matches(
+        self, prefix: str, provider: str | None = None
+    ) -> list[tuple[str, str]]:
+        """Return ``(model, provider)`` tuples whose model name starts with ``prefix``.
+
+        When ``provider`` is given, only that provider is searched; otherwise
+        every known provider is searched.  The empty prefix yields no matches.
+        Used by ``/model`` to auto-correct short names like ``sonnet`` →
+        ``claude-sonnet-4-6`` when no exact match exists.
+        """
+        if not prefix:
+            return []
+        providers = [provider] if provider else self.provider_names()
+        matches: list[tuple[str, str]] = []
+        for prov in providers:
+            try:
+                self.validate_provider(prov)
+            except UnknownProviderError:
+                continue
+            for model in self.available_models(prov):
+                if model.startswith(prefix) and model != prefix:
+                    matches.append((model, prov))
+        return matches
+
+    def suggest_models(self, name: str, provider: str | None = None, n: int = 3) -> list[str]:
+        """Return up to *n* close-matching model names for "Did you mean ...?".
+
+        Compares *name* against each model's first dash-separated segment
+        ("family name" — e.g. ``claude-sonnet-4-6`` -> ``claude``) so single-
+        word typos like ``cluade`` -> ``claude-...`` surface with high
+        SequenceMatcher ratios.  Full model names are then expanded in
+        registry order, deduplicated, and truncated to *n*.
+
+        When ``provider`` is given, only that provider's models are searched;
+        otherwise the entire registry is searched.
+        """
+        import difflib
+
+        if not name:
+            return []
+        providers = [provider] if provider else self.provider_names()
+
+        # Build short-name -> full-model list mapping.
+        short_to_fulls: dict[str, list[str]] = {}
+        for prov in providers:
+            try:
+                self.validate_provider(prov)
+            except UnknownProviderError:
+                continue
+            for model in self.available_models(prov):
+                short = model.split("-", 1)[0] if "-" in model else model
+                short_to_fulls.setdefault(short, []).append(model)
+
+        short_candidates = list(short_to_fulls.keys())
+        short_matches = difflib.get_close_matches(name, short_candidates, n=n, cutoff=0.6)
+
+        # Expand short matches back to full model names (preserve registry order).
+        full_suggestions: list[str] = []
+        for short in short_matches:
+            for full in short_to_fulls[short]:
+                if full not in full_suggestions:
+                    full_suggestions.append(full)
+                    if len(full_suggestions) >= n:
+                        return full_suggestions
+        return full_suggestions
 
     def provider_statuses(self) -> list[ProviderStatus]:
         from src.config import get_provider_config

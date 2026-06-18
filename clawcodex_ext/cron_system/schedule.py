@@ -36,7 +36,11 @@ def get_cron_task_detail(
     task = _find_cron_task(workspace_root, task_id, session_store)
     if task is None:
         return None
-    runs = [run for run in read_cron_runs(workspace_root) if run.task_id == task.id or run.source_id == task.id]
+    runs = [
+        run
+        for run in read_cron_runs(workspace_root)
+        if run.task_id == task.id or run.source_id == task.id
+    ]
     last_run = runs[0] if runs else None
     return CronTaskDetail(
         id=task.id,
@@ -114,12 +118,20 @@ def _find_cron_task(
     task_id: str,
     session_store: MutableMapping[str, CronTask | dict[str, Any]] | None = None,
 ) -> CronTask | None:
-    return next((task for task in read_all_cron_tasks(workspace_root, session_store) if task.id == task_id), None)
+    return next(
+        (task for task in read_all_cron_tasks(workspace_root, session_store) if task.id == task_id),
+        None,
+    )
 
 
 def _format_last_run(detail: CronTaskDetail) -> str:
     if detail.last_run is not None:
-        value = detail.last_run.ended_at or detail.last_run.completed_at or detail.last_run.started_at or detail.last_run.queued_at
+        value = (
+            detail.last_run.ended_at
+            or detail.last_run.completed_at
+            or detail.last_run.started_at
+            or detail.last_run.queued_at
+        )
         return f"{_format_optional_ms(value)} ({detail.last_run.status})"
     return _format_optional_ms(detail.last_fired_at)
 

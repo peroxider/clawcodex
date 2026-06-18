@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..tracker import Comment, TrackerAdapter
 from .client import LinearGraphQLClient
 from .issue import Issue
+
+if TYPE_CHECKING:
+    from ..tracker import Intent, PullRequestRef
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +83,7 @@ class LinearAdapter(TrackerAdapter):
         self.assignee = assignee
         # F-39: same label conventions as the other adapters.
         from ..tracker import DEFAULT_INTENT_LABELS, intent_from_label_set
+
         self.intent_labels: dict[str, str] = (
             dict(intent_labels) if intent_labels else dict(DEFAULT_INTENT_LABELS)
         )
@@ -91,6 +95,7 @@ class LinearAdapter(TrackerAdapter):
         labels: list[str] | None,
     ) -> "Intent":
         from ..tracker import Intent
+
         return self._resolve_intent(labels, self.intent_labels) or Intent.NONE
 
     async def close_pull_request(
@@ -144,9 +149,7 @@ class LinearAdapter(TrackerAdapter):
             assignee_filter=assignee_filter,
         )
 
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         assignee_filter = await self._resolve_assignee_filter()
         issues = await self.client.fetch_issue_states_by_ids(
             issue_ids, assignee_filter=assignee_filter
@@ -184,9 +187,7 @@ class LinearAdapter(TrackerAdapter):
             _UPDATE_STATE_MUTATION,
             {"issueId": issue_id, "stateId": state_id},
         )
-        success = (
-            body.get("data", {}).get("issueUpdate", {}).get("success") is True
-        )
+        success = body.get("data", {}).get("issueUpdate", {}).get("success") is True
         if not success:
             raise LinearAdapterError("issue_update_failed")
 

@@ -2,9 +2,21 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.4
-> 更新日期: 2026-07
-> 上游同步: 58ea488 (dev-decoupling-refactor)
+> 版本: v3.7
+> 更新日期: 2026-07-07
+> 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.7 变更**：F-99 状态对齐 + F-90 remote_api 落地。
+>   - F-99 Ctrl+C/B 即时中断响应优化：从 📋 设计完成 → ✅ 已完成（FF470158 三方案组合全部落地：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
+>   - F-90 Hermes Gateway：从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
+>   - F-90 §7.1 PROGRESS.md 新增 F-90 实施跟踪：remote_api 作为 Hermes 兼容远程 Agent API 已完成。
+>
+> **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
+>   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
+>   - F-73 CI/CD 质量门禁与发布流水线进入“本地已完成 / 远端待验证”状态。
+>   - GitCode workflow 目标配置、preflight 差异门禁、docs/ruff/pytest/package/security/release helper 已落地。
+>   - `scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁，并标记 CodeCheck / TestPyPI / GitCode Release 等远端或破坏性步骤。
+>   - TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升链路已具备脚本与 workflow；真实远端执行待仓库 Pipeline、CodeCheck、Release 权限与 token 开通后继续验证。
 >
 > **v3.4 变更**：代码实现审计 — 修正 5 个 FEATURE_PLAN.md 状态与代码不对齐问题。
 >   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（与 PROGRESS.md 对齐，PullRequestFeedback/ReviewFeedbackService 全部落地）
@@ -64,7 +76,7 @@
 |----|------|--------|------|------|
 | F-1 | Orchestrator 自主模式 | P0 | ✅ 完成 | Symphony 集成 |
 | F-2 | Team 成员管理 (Phase-7) | P1 | 🔄 进行中 | members 数组，SendMessage 消息交互 + resume_agent 恢复已完成，TeamCreate/TeamDelete 待实现 |
-| F-3 | MCP 协议扩展 | P1 | ✅ 已完成 | Stdio/HTTP/SSE/WS 基础 + 资源缓存 / Batch 工具 / Progress 通知 (`clawcodex_ext/mcp_ext.py`) |
+| F-3 | MCP 协议扩展 | P1 | ✅ 基础完成 | Stdio/HTTP/SSE/WS |
 | F-4 | 结构化输出集成 | P2 | ✅ 已完成 | Outlines 适配器已完整实现并迁移至 clawcodex_ext/agent/，src/ 仅留 facade |
 | F-5 | Voice Mode | P2 | ⏳ →F-64 | 已合并至 F-64（Voice Mode 语音输入） |
 | F-6 | Computer Use | P0 | ⏳ →F-61 | 已合并至 F-61（Computer Use 屏幕操控） |
@@ -127,7 +139,7 @@
 | F-70 | Plugin 系统 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §4.3 |
 | F-71 | 内置工具补齐 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
-| F-73 | CI/CD 流水线 | P0 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
+| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-75 | 工具/Skill 调用统计（跨会话） | P2 | ⏳ 待开始 | 跨会话工具使用统计与策略优化；见 FEATURE_PLAN §4.8（F-75） |
 | F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ⏳ 待开始 | 三通道语义澄清（LLM/CLI/TUI），冲突裁决，离线澄清；见 FEATURE_PLAN §4.12（F-78） |
@@ -424,7 +436,7 @@
 
 ## F-89: @agent-name 多入口统一支持
 
-**状态**: 📋 设计完成 | **优先级**: P1
+**状态**: ✅ 已完成 | **优先级**: P1
 **规划文档**: `docs/FEATURE_PLAN.md` → `§3.4 @agent-name 多入口统一支持（F-89）`
 
 ### 目标
@@ -1540,32 +1552,26 @@ CronTask due
 
 ### F-90: Hermes Gateway OpenAI 兼容 API 参考实现
 
-**状态**: 📋 参考实现 | **优先级**: P2 | **对标**: CCB remote-control-server / OpenAI API 兼容层
-**来源**: `hermes-agent` 项目 `gateway/platforms/api_server.py`（4305 行，AGPL-3.0，aiohttp）
+**状态**: ✅ 已完成（2026-07-07，`extensions/remote_api/`） | **优先级**: P2 | **对标**: CCB remote-control-server / OpenAI API 兼容层
 
-本 F-Number 记录一个功能完整的开源参考实现，为 F-82 (Remote Control Server) 提供设计参考。hermes-agent 的 `hermes gateway run` 命令已完整实现以下功能：
+`extensions/remote_api/` 目前已实现 11 个模块共 2597 行，提供 Hermes 兼容的远程 Agent API，含：
 
-| 模块 | 状态（hermes-agent） | ClawCodex 参考价值 |
-|------|:-------------------:|-------------------|
-| Chat Completions `/v1/chat/completions` | ✅ 完整实现 | 消息规范化、SSE 流式、多模态兼容可直接迁移 |
-| Responses API `/v1/responses` | ✅ 完整实现 | `previous_response_id` 链式会话设计 |
-| Session 管理 `/api/sessions` | ✅ 完整实现 | CRUD + fork + chat + stream |
-| Runs 管理 `/v1/runs` + SSE events | ✅ 完整实现 | 异步执行 + SSE 生命周期事件 → F-82.5 直接参考 |
-| Cron Jobs `/api/jobs` | ✅ 完整实现 | CRUD + pause/resume/run |
-| 认证与安全 | ✅ 完整实现 | API_KEY 强制 + CORS + 密钥强度检测 + 端口冲突 |
-| Agent LRU 缓存 | ✅ 完整实现 | 128 个上限，1h TTL，线程安全 → 可复用 |
-| 客户端断连处理 | ✅ 完整实现 | ConnectionResetError → agent.interrupt() |
+| 模块 | 状态（clawcodex） | 文件 |
+|------|:----------------:|------|
+| Chat Completions `/v1/chat/completions` | ✅ 已完成 | `extensions/remote_api/core.py` |
+| Responses API `/v1/responses` | ✅ 已完成 | `extensions/remote_api/core.py` |
+| SSE 流式输出 | ✅ 已完成 | `extensions/remote_api/sse.py` |
+| Bearer 密钥认证 | ✅ 已完成 | `extensions/remote_api/auth.py` |
+| CLI `clawcodex api serve` 子命令 | ✅ 已完成 | `extensions/remote_api/cli.py` |
+| Agent runner 生命周期 | ✅ 已完成 | `extensions/remote_api/runner.py` |
+| 消息规范化 | ✅ 已完成 | `extensions/remote_api/normalization.py` |
+| stdlib 兼容服务器 | ✅ 已完成 | `extensions/remote_api/stdlib_server.py` |
+| 状态管理 | ✅ 已完成 | `extensions/remote_api/state.py` |
+| E2E 测试 | ✅ 已完成 | `tests/remote_api/` |
 
-**关键设计模式**（可直接迁移到 F-82）：
+> **参考来源**: `hermes-agent` 项目 `gateway/platforms/api_server.py`（4305 行，AGPL-3.0，aiohttp）
 
-| 模式 | 实现参考 | ClawCodex 适配建议 |
-|------|---------|-------------------|
-| SSE Tool Progress 事件 | `_write_sse_chat_completion()` 中推送 `hermes.tool.progress` 事件 | 复用事件 schema，替换 Agent 类型 |
-| 消息规范化 | `_normalize_chat_content()` 处理数组格式 content | 设为通用中间件 |
-| 会话连续性 | `X-Hermes-Session-Id` 头 + 指纹派生 `_derive_chat_session_id()` | 替换 SessionDB 实现 |
-| 孤儿 Run 清理 | 后台 `_sweep_orphaned_runs()` 定时器 | 可复用整套逻辑 |
-
-**启动流程**: `hermes gateway run` → `gateway/run.py:start_gateway()` → `APIServerAdapter.connect()` → aiohttp `TCPSite`
+> 以上 clawcodex 实现完成。F-90 的设计模式（SSE Tool Progress、消息规范化、会话连续性、孤儿 Run 清理）仍可为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 的未来实现提供参考。
 
 ### F-83: Ultraplan 高级规划模式
 
@@ -1790,21 +1796,29 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 
 ### F-73: CI/CD 质量门禁与 PyPI 发布流水线
 
-**状态**: ⏳ 待开始 | **优先级**: P0
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
+
+**落地摘要（2026-06-17）**:
+
+- 已新增 GitCode workflow 目标配置：`ci.yml`、`agent-smoke.yml`、`security.yml`、`release-preflight.yml`、`publish.yml`。
+- 已新增 `scripts/ci/` helper：preflight、docs check、supply-chain audit、GitCode Release 上传契约、local CI、本地发布 dry-run/执行入口。
+- 已新增 `.pre-commit-config.yaml` 与 `install.sh` best-effort hook 安装，提交前可做基础卫生检查。
+- 已新增 `scripts/ci/local_ci.py`，在 GitCode Pipeline 暂不可用时本地复现主要门禁；远端 CodeCheck、TestPyPI/PyPI 上传、GitCode Release 附件上传会明确标记为 remote-only 或 destructive skip。
+- 待仓库功能开通后继续验证：GitCode Pipeline 调度、GitCode CodeCheck action、GitCode Release 附件上传、TestPyPI token、生产 PyPI 手动晋升。
 
 | 编号 | 子特性 | 工具链 | 状态 | 预计工作量 |
 |:----:|--------|:------:|:----:|:----------:|
-| P73-A | ruff lint/format CI | `ruff` | ⏳ 待开始 | 1-2天 |
-| P73-B | pytest 测试流水线 | `pytest` | ⏳ 待开始 | 1-2天 |
-| P73-C | pre-commit 本地钩子 | `pre-commit` | ⏳ 待开始 | 1天 |
-| P73-D | PyPI 自动发布（tag push → build → twine → Release） | `build` + `twine` | ⏳ 待开始 | 2-3天 |
-| P73-E | 测试覆盖率门禁 | `pytest-cov` + Codecov | ⏳ 待开始 | 1-2天 |
-| P73-F | pyproject.toml 元数据规范 | 无 | ⏳ 待开始 | 1天 |
-| P73-G | mypy 类型检查（可选） | `mypy` | ⏳ 待开始 | 2-3天 |
+| P73-A | ruff lint/format CI | `ruff` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
+| P73-B | pytest 测试流水线 | `pytest` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
+| P73-C | pre-commit 本地钩子 | `pre-commit` | ✅ 已完成 | 1天 |
+| P73-D | PyPI 自动发布（tag push → build → twine → Release） | `build` + `twine` | 🟡 脚本与 workflow 已完成，TestPyPI/GitCode Release/PyPI 待远端验证 | 2-3天 |
+| P73-E | 测试覆盖率门禁 | `pytest-cov` + Codecov | 🟡 coverage 报告已接入，阈值暂不阻塞 | 1-2天 |
+| P73-F | pyproject.toml 元数据规范 | 无 | ✅ 已完成 | 1天 |
+| P73-G | mypy 类型检查（可选） | `mypy` | 🟡 advisory 已接入，阻塞化待历史基线修复 | 2-3天 |
 
 **估算总工时**: 1 周
 
-**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-73 CI/CD 质量门禁与 PyPI 发布流水线`
+**详细设计**: `docs/FEATURE_PLAN.md` → `§7.6 F-73 CI/CD 质量门禁与 PyPI 发布流水线`
 
 ### F-74: Sandbox / SSH Remote 沙箱远程执行
 
@@ -1831,7 +1845,7 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
-| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ⏳ 待开始 | 1周 |
+| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
 
 ### 实施建议顺序
@@ -1903,7 +1917,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 十二、REPL/Agent 中断响应优化（F-99）
 
-**状态**: 📋 设计完成 | **优先级**: P0
+**状态**: ✅ 已完成（2026-06-17） | **优先级**: P0
 
 **目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
 
@@ -1939,11 +1953,11 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 | 阶段 | 内容 | 预计工时 | 状态 |
 |------|------|:--------:|:----:|
-| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | 📋 待实现 |
-| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | 📋 待实现 |
-| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | 📋 待实现 |
-| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | 📋 待实现 |
-| Phase E | 稳定性门禁验证 | 0.5天 | 📋 待实现 |
+| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | ✅ 已完成 |
+| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | ✅ 已完成 |
+| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | ✅ 已完成 |
+| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | ✅ 已完成 |
+| Phase E | 稳定性门禁验证 | 0.5天 | ✅ 已完成 |
 
 ### 验收标准
 
@@ -1966,7 +1980,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 十三、Dreaming 后台记忆整合系统（F-100）
 
-**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+**状态**: 🟡 部分完成（主体已落地，Phase B 待补） | **优先级**: P2 | **登记日期**: 2026-06-17 | **完成日期**: 2026-06-18
 
 **目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。
 
@@ -2002,10 +2016,12 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | 阶段 | 内容 | 预计工时 | 状态 |
 |------|------|:--------:|:----:|
 | Phase A | 子特性 100.1+100.2+100.3+100.6：DreamTask + autoDream 主循环 + consolidationLock + 解锁 test 不变量（runner 是 stub：可由 `set_dream_runner_factory` 在生产 wiring 时替换） | 2天 | ✅ 完成 |
-| Phase B | 子特性 100.3：consolidationLock（基于已有 `dist_lock.py`，加 30min TTL） | 0.5天 | 📋 待实现 |
+| Phase B | 100.3 增强：consolidationLock TTL 过期清理（基于 Phase A 的 PID + mtime 锁，再叠加 30min TTL 过期）[^phase-b-scope] | 0.5天 | 📋 待实现 |
 | Phase C | 子特性 100.4：`/dream` slash skill + TUI 状态展示 | 0.5天 | ✅ 完成（`LocalCommand` 注册 + `run`/`once`/`status`/`help` 子命令 + 13 单测 + stage3d 6 测；TUI 状态展示按决定 #4 留待后续增量） |
 | Phase D | 子特性 100.5：cron 永久任务注册（`install_permanent_cron_tasks`） | 0.5天 | ✅ 完成（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream` + 本地 fire handler 拦截 + 11 单测 + cron_system 集成无回归） |
 | Phase E | 子特性 100.6+100.7：测试 + 门禁 | 1天 | ✅ 完成（E2E `tests/dreaming/test_e2e_dreaming.py` 6 个场景: slash run / slash status / manual_dream force / cron fire + wire / install 幂等 / 真 scheduler tick；runner 真集成通过 recording_factory 端到端验证） |
+
+[^phase-b-scope]: 子特性 100.3 在 Phase A 与 Phase B 出现两次但**范围不同**：**Phase A** 完成的是 consolidationLock **基础实现**（PID + mtime 锁，✅）；**Phase B** 计划的是 100.3 的 **TTL 增强**（30min 过期清理，📋）。当前锁功能已可工作，Phase B 仅为健壮性增量，缺它不会影响 F-100 主体功能。
 
 ### 验收标准
 

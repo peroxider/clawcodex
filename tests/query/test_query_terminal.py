@@ -15,6 +15,7 @@ blocking_limit, stop_hook_prevented, hook_stopped) are reachable
 only after later phases land their recovery / hook / guard
 infrastructure.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -102,14 +103,16 @@ class TestTerminalMaxTurns(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_001",
-                "name": "Write",
-                "input": {
-                    "file_path": str(self.workspace / "x.txt"),
-                    "content": "hi",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_001",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(self.workspace / "x.txt"),
+                        "content": "hi",
+                    },
+                }
+            ],
         )
 
         params = _make_params(workspace=self.workspace, provider=provider, max_turns=2)
@@ -167,29 +170,34 @@ class TestTerminalAbortedTools(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_001",
-                "name": "Write",
-                "input": {
-                    "file_path": str(self.workspace / "x.txt"),
-                    "content": "hi",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_001",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(self.workspace / "x.txt"),
+                        "content": "hi",
+                    },
+                }
+            ],
         )
 
         params = _make_params(workspace=self.workspace, provider=provider, abort=abort)
 
         async def aborting_runner(*args, **kwargs):
             from src.types.content_blocks import ToolResultBlock
+
             abort.abort("user_abort")
             return [
-                UserMessage(content=[
-                    ToolResultBlock(
-                        tool_use_id="toolu_001",
-                        content="aborted",
-                        is_error=True,
-                    ),
-                ]),
+                UserMessage(
+                    content=[
+                        ToolResultBlock(
+                            tool_use_id="toolu_001",
+                            content="aborted",
+                            is_error=True,
+                        ),
+                    ]
+                ),
             ]
 
         with patch(
@@ -245,6 +253,7 @@ class TestTerminalHolderDirectUsage(unittest.TestCase):
 
         async def consume():
             from src.query.query import query as query_gen
+
             async for _ in query_gen(params, terminal_holder=holder):
                 pass
 

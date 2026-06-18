@@ -26,7 +26,9 @@ _VCS_DIRS = {".git", ".svn", ".hg", ".bzr", ".jj", ".sl"}
 
 
 def _glob_via_ripgrep(
-    pattern: str, base_dir: str, abort_signal: AbortSignal | None = None,
+    pattern: str,
+    base_dir: str,
+    abort_signal: AbortSignal | None = None,
 ) -> list[str]:
     """Use ripgrep --files --glob for fast file discovery."""
     args = ["--files", "--hidden", "--glob", pattern]
@@ -152,7 +154,7 @@ GlobTool: Tool = build_tool(
             },
             "path": {
                 "type": "string",
-                "description": "The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided.",
+                "description": 'The directory to search in. If not specified, the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter "undefined" or "null" - simply omit it for the default behavior. Must be a valid directory path if provided.',
             },
             "limit": {
                 "type": "integer",
@@ -171,5 +173,7 @@ GlobTool: Tool = build_tool(
     search_hint="glob find files pattern match",
     to_auto_classifier_input=lambda input_data: (input_data or {}).get("pattern", ""),
     is_search_or_read_command=lambda _input: SearchOrReadResult(is_search=True),
-    get_activity_description=lambda input_data: f"Searching for {(input_data or {}).get('pattern', '')}" if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Searching for {(input_data or {}).get('pattern', '')}" if input_data else None
+    ),
 )

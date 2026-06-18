@@ -156,7 +156,7 @@ def _create_agent_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
         )
 
     add_tool(tool)
-    
+
     # Also register to the active ToolRegistry if available via context
     registry = getattr(context, "tool_registry", None)
     if registry is not None:
@@ -164,7 +164,7 @@ def _create_agent_call(tool_input: dict[str, Any], context: ToolContext) -> Tool
             registry.register(tool)
         except Exception as exc:
             logger.warning("Failed to register tool %s to active registry: %s", name, exc)
-    
+
     try:
         save_spec(spec)
     except Exception as exc:

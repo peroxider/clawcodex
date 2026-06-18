@@ -58,12 +58,14 @@ class TestPolicyFailClosed:
     ``MCP_POLICY_FAIL_OPEN=1``."""
 
     def test_settings_load_failure_drops_all_servers_by_default(
-        self, monkeypatch,
+        self,
+        monkeypatch,
     ):
         monkeypatch.delenv("MCP_POLICY_FAIL_OPEN", raising=False)
         configs = {
             "a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
         }
         with patch(
@@ -75,12 +77,14 @@ class TestPolicyFailClosed:
         assert any("failed closed" in n for n in notices)
 
     def test_operator_opt_in_restores_old_fail_open_behavior(
-        self, monkeypatch,
+        self,
+        monkeypatch,
     ):
         monkeypatch.setenv("MCP_POLICY_FAIL_OPEN", "1")
         configs = {
             "a": ScopedMcpServerConfig(
-                config=McpStdioServerConfig(command="echo"), scope="user",
+                config=McpStdioServerConfig(command="echo"),
+                scope="user",
             ),
         }
         with patch(
@@ -127,7 +131,9 @@ class TestKeyringBackendAllowlist:
                 McpTokenStore(store_path=tmp_path / "tokens.json")
 
     def test_plaintext_backend_allowed_with_explicit_opt_in(
-        self, monkeypatch, tmp_path,
+        self,
+        monkeypatch,
+        tmp_path,
     ):
         class _Plaintext:
             pass
@@ -208,7 +214,9 @@ class TestEscapeHatchScopeGating:
     async def test_enterprise_scope_escape_hatch_attempted(self):
         with patch(
             "src.services.mcp.auth_discovery._try_as_metadata",
-            new=AsyncMock(return_value={"issuer": "x", "authorization_endpoint": "y", "token_endpoint": "z"}),
+            new=AsyncMock(
+                return_value={"issuer": "x", "authorization_endpoint": "y", "token_endpoint": "z"}
+            ),
         ) as mock_try:
             result = await discover_oauth_metadata(
                 "https://server.example.com/mcp",
@@ -257,23 +265,25 @@ class TestPendingDuringReconnect:
         async def fake_connect(name, conf, *, auth_provider=None):
             # Sample the manager's state while the connect is in flight.
             current = mgr.get_state(name)
-            observed_states.append(
-                type(current).__name__ if current else "None"
-            )
+            observed_states.append(type(current).__name__ if current else "None")
             connect_done.set()
             new_client = MagicMock()
             new_client.list_tools = AsyncMock(return_value=[])
             return new_client, ConnectedMCPServer(name=name)
 
-        with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect,
-        ), patch(
-            "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
-            return_value=[],
+        with (
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                return_value=[],
+            ),
         ):
             await mgr.reconnect_mcp_server("srv")
 
@@ -290,7 +300,6 @@ class TestPendingDuringReconnect:
 
 
 class TestBootstrapMcpRuntime:
-
     @pytest.mark.asyncio
     async def test_returns_manager_with_connected_servers(self):
         config = ScopedMcpServerConfig(
@@ -306,24 +315,31 @@ class TestBootstrapMcpRuntime:
         async def fake_fetch(**kw):
             return {}
 
-        with patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect,
-        ), patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
-            return_value=[],
-        ), patch(
-            "src.services.mcp.config.get_all_mcp_configs",
-            return_value=({"srv1": config, "srv2": config}, []),
-        ), patch(
-            "src.services.mcp.connection_manager.is_mcp_server_disabled",
-            return_value=False,
-        ), patch(
-            "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
-            new=fake_fetch,
+        with (
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                return_value=[],
+            ),
+            patch(
+                "src.services.mcp.config.get_all_mcp_configs",
+                return_value=({"srv1": config, "srv2": config}, []),
+            ),
+            patch(
+                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                return_value=False,
+            ),
+            patch(
+                "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
+                new=fake_fetch,
+            ),
         ):
             manager = await bootstrap_mcp_runtime()
 
@@ -343,15 +359,19 @@ class TestBootstrapMcpRuntime:
         async def fake_fetch(**kw):
             return {}
 
-        with patch(
-            "src.services.mcp.config.get_all_mcp_configs",
-            return_value=({"disabled_srv": config}, []),
-        ), patch(
-            "src.services.mcp.connection_manager.is_mcp_server_disabled",
-            return_value=True,
-        ), patch(
-            "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
-            new=fake_fetch,
+        with (
+            patch(
+                "src.services.mcp.config.get_all_mcp_configs",
+                return_value=({"disabled_srv": config}, []),
+            ),
+            patch(
+                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                return_value=True,
+            ),
+            patch(
+                "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
+                new=fake_fetch,
+            ),
         ):
             manager = await bootstrap_mcp_runtime(prefetch_claudeai=False)
 
@@ -426,9 +446,11 @@ class TestContentBlocksOnMcpMeta:
         from src.tool_system.context import ToolContext
 
         client = MagicMock()
-        client.call_tool = AsyncMock(return_value=McpToolResult(
-            content=content_blocks,
-        ))
+        client.call_tool = AsyncMock(
+            return_value=McpToolResult(
+                content=content_blocks,
+            )
+        )
         mcp_tool = McpToolSchema(
             name="some_tool",
             description="A tool",
@@ -437,10 +459,12 @@ class TestContentBlocksOnMcpMeta:
         return wrap_mcp_tool("server", mcp_tool, client), MagicMock(spec=ToolContext)
 
     def test_mcp_meta_carries_content_blocks(self):
-        tool, ctx = self._make_tool([
-            {"type": "text", "text": "hello"},
-            {"type": "text", "text": "world"},
-        ])
+        tool, ctx = self._make_tool(
+            [
+                {"type": "text", "text": "hello"},
+                {"type": "text", "text": "world"},
+            ]
+        )
         result = tool.call({}, ctx)
         assert result.mcp_meta is not None
         blocks = result.mcp_meta.get("content_blocks")
@@ -456,10 +480,12 @@ class TestContentBlocksOnMcpMeta:
         assert result.mcp_meta["tool_name"] == "some_tool"
 
     def test_output_is_still_text_for_legacy_consumers(self):
-        tool, ctx = self._make_tool([
-            {"type": "text", "text": "hello"},
-            {"type": "text", "text": "world"},
-        ])
+        tool, ctx = self._make_tool(
+            [
+                {"type": "text", "text": "hello"},
+                {"type": "text", "text": "world"},
+            ]
+        )
         result = tool.call({}, ctx)
         # The legacy str-typed output is still text-flattened.
         assert isinstance(result.output, str)
@@ -473,7 +499,6 @@ class TestContentBlocksOnMcpMeta:
 
 
 class TestKwalletClassNames:
-
     def test_kwallet_real_class_names_in_allowlist(self):
         names = McpTokenStore._SAFE_BACKEND_CLASS_NAMES
         # The actual keyring.backends.kwallet symbols (verified against
@@ -501,7 +526,6 @@ class TestKwalletClassNames:
 
 
 class TestReconnectExceptionClearsPending:
-
     @pytest.mark.asyncio
     async def test_exception_replaces_pending_with_failed_state(self):
         mgr = MCPConnectionManager()
@@ -513,12 +537,15 @@ class TestReconnectExceptionClearsPending:
         async def fake_connect_raises(name, conf, *, auth_provider=None):
             raise RuntimeError("simulated connect crash")
 
-        with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect_raises,
+        with (
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect_raises,
+            ),
         ):
             with pytest.raises(RuntimeError, match="simulated"):
                 await mgr.reconnect_mcp_server("srv")
@@ -539,12 +566,15 @@ class TestReconnectExceptionClearsPending:
         async def fake_connect_cancels(name, conf, *, auth_provider=None):
             raise asyncio.CancelledError()
 
-        with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
-            return_value=config,
-        ), patch(
-            "src.services.mcp.connection_manager.connect_to_server",
-            new=fake_connect_cancels,
+        with (
+            patch(
+                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                return_value=config,
+            ),
+            patch(
+                "src.services.mcp.connection_manager.connect_to_server",
+                new=fake_connect_cancels,
+            ),
         ):
             with pytest.raises(asyncio.CancelledError):
                 await mgr.reconnect_mcp_server("srv")
@@ -562,7 +592,6 @@ class TestReconnectExceptionClearsPending:
 
 
 class TestSseTransportTimeouts:
-
     def test_sse_transport_uses_mcp_timeouts(self):
         """SseTransport._open should call sse_client with MCP-appropriate
         timeout and sse_read_timeout, plus the httpx factory adapter."""
@@ -597,6 +626,4 @@ class TestSseTransportTimeouts:
             # Wrapped client honors MCP timeouts.
             assert c.timeout.read == DEFAULT_READ_TIMEOUT_S
         finally:
-            asyncio.get_event_loop_policy().get_event_loop().run_until_complete(
-                c.aclose()
-            ) if False else None  # noqa: leak ok in sync test
+            asyncio.run(c.aclose())

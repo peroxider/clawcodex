@@ -9,6 +9,7 @@ The aggregator is the only place that turns raw per-event JSONL into the
 * be deterministic given the same input files (so the same data set
   produces the same summary).
 """
+
 from __future__ import annotations
 
 import logging

@@ -82,9 +82,7 @@ class ClawcodexAnthropicProvider(AnthropicProvider):
             review and future upstream sync.
             """
             forwarded = {
-                k: v
-                for k, v in kwargs.items()
-                if k not in ["model", "max_tokens", "tools"]
+                k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
             }
             return self.chat(
                 messages,
@@ -109,14 +107,19 @@ class ClawcodexAnthropicProvider(AnthropicProvider):
         watchdog_fired = False
         final_message: Any = None
         try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=max_tokens,
-                messages=anthropic_messages,
-                **({"system": system} if system else {}),
-                **extra_kwargs,
-                **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
-            ) as stream, guard.attach(stream):
+            with (
+                client.messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=anthropic_messages,
+                    **({"system": system} if system else {}),
+                    **extra_kwargs,
+                    **{
+                        k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
+                    },
+                ) as stream,
+                guard.attach(stream),
+            ):
                 # ``guard.attach`` registered the close-on-abort listener
                 # (see ``_stream_abort.py`` for the race-safe ordering
                 # and the close-via-stream.response.close mechanism).

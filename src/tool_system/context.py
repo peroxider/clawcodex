@@ -81,7 +81,9 @@ class ToolContext:
         default_factory=lambda: ToolPermissionContext(mode="bypassPermissions")
     )
     cwd: Path | None = None
-    read_file_fingerprints: dict[Path, tuple[int, int] | tuple[int, int, bool]] = field(default_factory=dict)
+    read_file_fingerprints: dict[Path, tuple[int, int] | tuple[int, int, bool]] = field(
+        default_factory=dict
+    )
     task_manager: TaskManager = field(default_factory=TaskManager)
     mcp_clients: dict[str, Any] = field(default_factory=dict)
     lsp_client: Any | None = None
@@ -274,7 +276,11 @@ class ToolContext:
 
     def mark_file_read(self, path: Path, *, partial: bool = False) -> None:
         stat = path.stat()
-        self.read_file_fingerprints[path.resolve()] = (int(stat.st_mtime), int(stat.st_size), partial)
+        self.read_file_fingerprints[path.resolve()] = (
+            int(stat.st_mtime),
+            int(stat.st_size),
+            partial,
+        )
 
     def was_file_read_and_unchanged(self, path: Path) -> bool:
         resolved = path.resolve()
@@ -327,15 +333,16 @@ class ToolContext:
         # operate outside ``workspace_root``.
         mode = self.permission_context.mode
         if mode == "bypassPermissions" or (
-            mode == "plan"
-            and self.permission_context.is_bypass_permissions_mode_available
+            mode == "plan" and self.permission_context.is_bypass_permissions_mode_available
         ):
             return p
         roots = self.allowed_roots()
         if any(_is_within(p, root) for root in roots):
             return p
         roots_str = ", ".join(str(r) for r in roots)
-        raise ToolPermissionError(f"path is outside allowed working directories: {p} (allowed: {roots_str})")
+        raise ToolPermissionError(
+            f"path is outside allowed working directories: {p} (allowed: {roots_str})"
+        )
 
     def ensure_tool_allowed(self, tool_name: str) -> None:
         if self.permission_context.blocks(tool_name):

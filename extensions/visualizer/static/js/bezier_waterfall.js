@@ -1,10 +1,11 @@
 /**
  * ClawCodex Visualizer — Bezier Waterfall View
  *
- * P4 — EventDetailPanel (5-body modal) on top of P3 zoom/pan.
+ * P4 — EventDetailDrawer (right-side slide-in, mirrors the waterfall
+ *   chart's .turn-drawer pattern) on top of P3 zoom/pan.
  *   Renders the 8-category timeline with a sticky time axis, ported
  *   from clawcodex_sessions_analysis (Next.js). Clicking an event
- *   bar opens a centered modal with one of 5 body types.
+ *   bar opens a side drawer with one of 5 body types.
  *
  * Scope of this file (P4):
  *   - Fetch /api/viz/multi-session?sessions=... and render 8 category bars
@@ -18,18 +19,16 @@
  *   - ResizeObserver on the scroll container; re-render on width change
  *   - ref-mirror pattern (zoomRef / containerWRef)
  *   - destroy() tears down all listeners + observers + cancels rAF
- *   - NEW: EventDetailPanel as .bezier-backdrop center modal
+ *   - EventDetailDrawer: pre-built #bezier-drawer markup, .open toggle
  *       · 5 body types: tool / tool-result / llm / user / system
  *       · click vs pan differentiated by panState.moved (no separate
  *         click handler / suppress flag needed)
- *       · Esc key closes; click on backdrop closes; X button closes
+ *       · Esc key closes; X button closes
  *       · Sticky header (category color dot + label + category pill +
- *         error pill + close)
+ *         error pill)
  *       · Time section: relative / duration / absolute
  *         (duration: 未记录 / 估算 / real ms — fixes Next.js
  *          event-detail-panel.tsx:84-108 missing "估算" label)
- *       · Resize handle on right edge: 280 ≤ width ≤ innerWidth*0.85,
- *         setPointerCapture + body.cursor = 'col-resize'
  *       · CodeBlock: 12-16 line preview + expand/collapse + copy
  *         (navigator.clipboard.writeText + execCommand fallback)
  *
@@ -135,10 +134,12 @@ const BezierWaterfall = (function() {
     // Pan threshold in CSS pixels — drags below this are treated as
     // clicks and don't engage the pan. Matches session-analyzer.tsx:105.
     const PAN_THRESHOLD_PX = 4;
-    // ---- P4 detail panel constants (ported from event-detail-panel.tsx:18-20) ----
-    const PANEL_DEFAULT_W   = 420;
-    const PANEL_MIN_W       = 280;
-    const PANEL_MAX_VW_FRAC = 0.85;
+    // ---- P5b narrowed sub-agent track layout ----
+    // Minimum fraction of the canvas width that a sub-agent track
+    // occupies. Ported from workflow-panel.tsx:46 (MIN_LANE_FRAC = 0.12).
+    // Narrow agent windows (e.g. a 3-second review in a 5-minute session)
+    // are widened to this fraction so the track stays visible.
+    const MIN_LANE_FRAC = 0.12;
     // CodeBlock default preview limits. LLM 12, others 16 — match
     // the Next.js <CodeBlock maxLines={...}> choices.
     const CODEBLOCK_MAX_LINES_LLM  = 12;
@@ -198,6 +199,16 @@ const BezierWaterfall = (function() {
         const m = Math.floor(totalSec / 60);
         const s = totalSec % 60;
         return m + ':' + String(s).padStart(2, '0');
+    }
+
+    // Mirror of clawcodex_sessions_analysis/lib/format.ts:formatTokens.
+    // Used by the sub-agent label to render the muted token size badge
+    // (workflow-panel.tsx:639-643). Returns "—" for falsy values so the
+    // label stays readable when stats are missing.
+    function formatTokens(n) {
+        if (!n) return '—';
+        if (n >= 1000) return Math.round(n / 1000) + 'K';
+        return String(n);
     }
 
     function buildTicks(durationMs, zoom) {
@@ -267,25 +278,31 @@ const BezierWaterfall = (function() {
     }
 
     function buildSection(title) {
-        const section = el('div', 'bezier-event-section');
-        section.appendChild(el('h4', null, title));
-        const content = el('div', 'bezier-event-section-content');
+        // Use the waterfall's .turn-drawer-section so the bezier drawer
+        // inherits the same spacing, borders, and section titles. The
+        // section content is a generic div (CodeBlock appends into it
+        // directly; appendRow nests a <dl>).
+        const section = el('section', 'turn-drawer-section');
+        if (title) section.appendChild(el('h4', null, title));
+        const content = el('div', 'turn-drawer-section-content');
         section.appendChild(content);
         return { section, content };
     }
 
     function appendRow(content, label, value, opts) {
+        // Match the waterfall's <dl><dt><dd> shape so rows pick up the
+        // shared .turn-drawer-section dl/dt/dd styles. Optional flag
+        // classes are scoped to the bezier drawer (no waterfall collision).
         opts = opts || {};
-        const row = el('div', 'bezier-event-row');
-        const l = el('span', 'bezier-event-row-label', label);
-        const v = el('span', 'bezier-event-row-value',
-            (value == null || value === '') ? '—' : String(value));
-        if (opts.mono)  v.classList.add('bezier-event-mono');
-        if (opts.muted) v.classList.add('bezier-event-muted');
-        if (opts.error) v.classList.add('bezier-event-error-text');
-        row.appendChild(l);
-        row.appendChild(v);
-        content.appendChild(row);
+        const dl = el('dl');
+        const dt = el('dt', null, label);
+        const dd = el('dd', null, (value == null || value === '') ? '—' : String(value));
+        if (opts.mono)  dd.classList.add('bezier-drawer-mono');
+        if (opts.muted) dd.classList.add('bezier-drawer-muted');
+        if (opts.error) dd.classList.add('bezier-drawer-error-text');
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+        content.appendChild(dl);
     }
 
     function appendCodeBlock(content, text, maxLines) {
@@ -392,11 +409,10 @@ const BezierWaterfall = (function() {
             this.rafId = null;
             this.zoomRef = { current: 1 };
             this.containerWRef = { current: 0 };
-            // ---- P4 detail panel state ----
+            // ---- P4 detail drawer state ----
             this.selectedEvent = null;       // currently-open tick (or null)
-            this.panelEl = null;             // detail panel root
-            this.backdropEl = null;          // full-screen backdrop
-            this.panelWidth = PANEL_DEFAULT_W;
+            this._drawerRefs = null;         // {drawer, body, title, catDot, pills, closeBtn}
+            this._drawerCloseWired = false;  // bound exactly once per instance
             this._tickByBarId = new Map();   // barId → tick, for click resolution
             // ---- P5 connector state ----
             // activeMap is rebuilt on every _render() and tracks the
@@ -410,6 +426,7 @@ const BezierWaterfall = (function() {
             this._connectorTipEl   = null;        // HTML tooltip sibling
             this._rowIndexById     = new Map();   // id (session or agent) -> flat row index
             this._agentById        = new Map();   // agentId -> agent row from data.agents
+            this._agentLayoutCache = null;            // Map<sessionId, layout[]> | null
             // Cleanup bookkeeping.
             this._listeners = [];
             this._observers = [];
@@ -463,6 +480,8 @@ const BezierWaterfall = (function() {
             this.container.innerHTML = '';
             // Reset tick lookup; the click path uses this Map.
             this._tickByBarId = new Map();
+            // Reset sub-agent layout cache; rebuilt by _getAgentLayout.
+            this._agentLayoutCache = null;
             // Build the flat row index for the P5 connector layer.
             // Done up front so the sub-agent row renderer and the SVG
             // path endpoints see the same row numbers.
@@ -545,6 +564,69 @@ const BezierWaterfall = (function() {
                 track.appendChild(this._renderEventBar(t));
             }
             row.appendChild(track);
+
+            // Spawn annotation — mirrors workflow-panel.tsx:518-526. The
+            // builder attaches a `spawnCallout` (x + label + subagentCount)
+            // when the session summary contains a spawn_time. Position is
+            // absolute so the pill drops below+right of the spawn dot and
+            // sits on top of the row band without disturbing the flow of
+            // the header / track below it.
+            const spawnCallout = session.spawnCallout;
+            if (spawnCallout && typeof spawnCallout.x === 'number') {
+                const pill = el('div', 'bezier-annotation bezier-spawn-annotation');
+                pill.style.left = Math.max(0, xToPx(spawnCallout.x, this.canvasWidth, this.durationSec) + 8) + 'px';
+                // dotY in the TS reference is HEADER_H + LANE_H/2 = 22 + 11 = 33;
+                // the +10 offsets the pill below the dot. Mirrored as-is
+                // so the visual cadence matches clawcodex_sessions_analysis.
+                pill.style.top = (HEADER_H + Math.floor(TRACK_H / 2) + 10) + 'px';
+                const arrow = el('span', 'bezier-annotation-arrow', '▼');
+                const timeText = el('span', 'bezier-annotation-time',
+                    formatClock((spawnCallout.x || 0) * 1000));
+                const sub = (typeof spawnCallout.subagentCount === 'number')
+                    ? spawnCallout.subagentCount : 0;
+                const label = el('span', 'bezier-annotation-label',
+                    'Workflow 派生 ' + sub + ' 子agent');
+                pill.appendChild(arrow);
+                pill.appendChild(timeText);
+                pill.appendChild(label);
+                track.appendChild(pill);
+            }
+
+            // Merge annotation — mirrors workflow-panel.tsx:528-540. The
+            // TS reference positions one merge pill per session panel,
+            // anchored to the panel-level mergeX (max joinX across the
+            // session's sub-agents). We compute the same value from
+            // this.data.agents since the bezier view flattens sessions
+            // and sub-agents into one vertical list. The pill anchors to
+            // the LEFT of the merge dot (translateX(-100%)) so it never
+            // overflows the canvas right edge.
+            const subAgents = ((this.data && this.data.agents) || [])
+                .filter((a) => a.parentSessionId === session.id);
+            if (subAgents.length > 0) {
+                let maxJoinX = 0;
+                let hasJoin = false;
+                for (const a of subAgents) {
+                    const jx = (typeof a.joinX === 'number') ? a.joinX : (a.spawnX || 0);
+                    if (jx > maxJoinX) maxJoinX = jx;
+                    hasJoin = true;
+                }
+                if (hasJoin) {
+                    const mergePx = xToPx(maxJoinX, this.canvasWidth, this.durationSec);
+                    const pill = el('div', 'bezier-annotation bezier-merge-annotation');
+                    pill.style.left = (mergePx - 8) + 'px';
+                    pill.style.top = (HEADER_H + Math.floor(TRACK_H / 2) + 36) + 'px';
+                    pill.style.transform = 'translateX(-100%)';
+                    const arrow = el('span', 'bezier-annotation-arrow', '▲');
+                    const timeText = el('span', 'bezier-annotation-time',
+                        formatClock(maxJoinX * 1000));
+                    const label = el('span', 'bezier-annotation-label', '汇合收工');
+                    pill.appendChild(arrow);
+                    pill.appendChild(timeText);
+                    pill.appendChild(label);
+                    track.appendChild(pill);
+                }
+            }
+
             return row;
         }
 
@@ -666,6 +748,92 @@ const BezierWaterfall = (function() {
             this._totalRows = rowIdx;
         }
 
+        // ----------------------------------------------------------------
+        // P5b — narrowed sub-agent track layout
+        // ----------------------------------------------------------------
+        //
+        // Port of workflow-panel.tsx:48-160 buildLayout(). Each sub-agent
+        // occupies a fraction of the canvas width corresponding to its
+        // active time window (spawnX → joinX). Windows narrower than
+        // MIN_LANE_FRAC are widened symmetrically so the track remains
+        // visible, clamped to the session's merge point (rightBound).
+        //
+        // Returns an array of {agent, startFrac, endFrac} objects.
+
+        _computeSubAgentLayout(agents) {
+            if (!agents || agents.length === 0) return [];
+            const dur = this.durationSec || 1;
+
+            // mergeFrac = rightmost boundary (max joinX across all agents,
+            // capped at 1.0). Lanes must not extend past this point.
+            let maxJoin = 0;
+            for (const a of agents) {
+                const jx = a.joinX != null ? a.joinX : (a.spawnX || 0);
+                if (jx > maxJoin) maxJoin = jx;
+            }
+            const mergeFrac = Math.min(1, maxJoin / dur) || 1;
+            const rightBound = Math.max(MIN_LANE_FRAC, mergeFrac);
+
+            const out = [];
+            for (const a of agents) {
+                const spawnX = a.spawnX || 0;
+                const joinX  = a.joinX != null ? a.joinX : spawnX;
+                let startFrac, endFrac;
+
+                if (!(a.ticks && a.ticks.length > 0)) {
+                    // No events: centre the min-width window on spawnX.
+                    const centre = dur > 0 ? Math.max(0, Math.min(1, spawnX / dur)) : rightBound / 2;
+                    startFrac = Math.max(0, centre - MIN_LANE_FRAC / 2);
+                    endFrac   = Math.min(rightBound, startFrac + MIN_LANE_FRAC);
+                } else {
+                    // Derive window from the actual tick data.
+                    let minT = Infinity, maxEnd = 0;
+                    for (const t of a.ticks) {
+                        if (t.x < minT) minT = t.x;
+                        const end = t.x + Math.max(t.w || 0, 0.001);
+                        if (end > maxEnd) maxEnd = end;
+                    }
+                    startFrac = dur > 0 ? Math.max(0, Math.min(1, (minT - 0.3) / dur)) : 0;
+                    endFrac   = dur > 0 ? Math.min(Math.max(0, Math.min(1, maxEnd / dur)), rightBound) : rightBound;
+
+                    if (endFrac - startFrac < MIN_LANE_FRAC) {
+                        const centre = (startFrac + endFrac) / 2;
+                        startFrac = Math.max(0, centre - MIN_LANE_FRAC / 2);
+                        endFrac   = startFrac + MIN_LANE_FRAC;
+                        if (endFrac > rightBound) {
+                            endFrac   = rightBound;
+                            startFrac = Math.max(0, endFrac - MIN_LANE_FRAC);
+                        }
+                    }
+                }
+
+                // Defensive swap if inverted.
+                if (startFrac > endFrac) {
+                    const tmp = startFrac; startFrac = endFrac; endFrac = tmp;
+                }
+
+                out.push({ agent: a, startFrac, endFrac });
+            }
+            return out;
+        }
+
+        // Cached lookup — returns the layout entry for a specific
+        // agent, computing (and caching) the full sibling layout if
+        // needed. Used by _renderConnectorPath and _renderConnectorTooltip
+        // so they can snap curve endpoints to the narrowed track edge
+        // without recomputing the entire layout on every edge.
+        _getAgentLayout(agent) {
+            if (!this._agentLayoutCache) this._agentLayoutCache = new Map();
+            const sid = agent.parentSessionId;
+            if (!this._agentLayoutCache.has(sid)) {
+                const siblings = ((this.data && this.data.agents) || [])
+                    .filter((a) => a.parentSessionId === sid);
+                this._agentLayoutCache.set(sid, this._computeSubAgentLayout(siblings));
+            }
+            const layout = this._agentLayoutCache.get(sid);
+            return layout.find((l) => l.agent.id === agent.id) || null;
+        }
+
         _renderSubAgentRow(agent) {
             const row = el('div', 'bezier-row bezier-subagent-row');
             row.dataset.agentId = agent.id;
@@ -678,17 +846,80 @@ const BezierWaterfall = (function() {
             if (agent.roleColor) pill.style.background = agent.roleColor;
             header.appendChild(pill);
             header.appendChild(el('span', 'bezier-row-name', agent.name || agent.id));
+            // TS reference (workflow-panel.tsx:617-644) renders the
+            // sub-agent label as a single inline group of badge +
+            // name + events.length + formatTokens(contextTokens). We
+            // keep the existing role pill + name + "次调用" meta, then
+            // append the badge + count + tokens cluster to mirror
+            // clawcodex_sessions_analysis without duplicating text.
+            const meta = el('span', 'bezier-subagent-meta');
+            if (agent.badge && agent.badge !== (agent.role || '执行')) {
+                const badge = el('span', 'bezier-subagent-badge '
+                    + (agent.isReview ? 'is-review' : 'is-default'));
+                badge.textContent = agent.badge;
+                meta.appendChild(badge);
+            }
+            if (agent.contextTokens) {
+                meta.appendChild(el('span', 'bezier-subagent-tokens',
+                    formatTokens(agent.contextTokens)));
+            }
+            if (meta.childNodes.length) {
+                header.appendChild(meta);
+            }
             if (agent.count) {
                 header.appendChild(el('span', 'bezier-row-meta', agent.count + ' 次调用'));
             }
             row.appendChild(header);
 
-            const track = el('div', 'bezier-row-track bezier-subagent-track');
-            track.style.width = this.canvasWidth + 'px';
+            // Compute this agent's narrowed track layout. The track
+            // occupies [startFrac, endFrac] of the canvas width rather
+            // than the full width, matching workflow-panel.tsx's
+            // buildLayout() with MIN_LANE_FRAC = 0.12.
+            const layout = this._getAgentLayout(agent);
+            const startFrac = layout ? layout.startFrac : 0;
+            const endFrac   = layout ? layout.endFrac   : 1;
+            const trackOffsetPx = startFrac * this.canvasWidth;
+            const trackWidth    = Math.max(1, (endFrac - startFrac) * this.canvasWidth);
+            const trackDurSec   = Math.max(0.001, (endFrac - startFrac) * this.durationSec);
+
+            const track = el('div', 'bezier-row-track bezier-narrowed-track');
+            track.style.width      = trackWidth + 'px';
+            track.style.marginLeft = trackOffsetPx + 'px';
+
             const ticks = agent.ticks || [];
             for (const t of ticks) {
-                const bar = this._renderEventBar(t);
+                const bar = el('div', 'bezier-event-bar bezier-cat-' + bezierCategoryOf(t));
+                if (t.status === 'error') bar.classList.add('bezier-status-error');
+                if (t.status === 'warning') bar.classList.add('bezier-status-warning');
+                if (t.durationUnrecorded) bar.classList.add('bezier-duration-unrecorded');
+                if (t.tsUnrecorded) bar.classList.add('bezier-ts-unrecorded');
+                if (t.durationHeuristic) bar.classList.add('bezier-duration-heuristic');
                 bar.classList.add('bezier-subagent-bar');
+                bar.dataset.barId = t.id || '';
+                if (t.id) this._tickByBarId.set(String(t.id), t);
+
+                // Position RELATIVE to the track's own time window
+                // (not global canvas), so events distribute correctly
+                // within the narrowed track.
+                const relX = t.x - (startFrac * this.durationSec);
+                const leftPx = Math.max(0, (relX / trackDurSec) * trackWidth);
+                let wPx = ((t.w || 0) / trackDurSec) * trackWidth;
+                if (t.durationUnrecorded) wPx = Math.max(MIN_BAR_PX, wPx);
+
+                bar.style.left  = leftPx + 'px';
+                bar.style.width = wPx + 'px';
+
+                const cat = bezierCategoryOf(t);
+                bar.style.background = (this._categoryColors && this._categoryColors[cat])
+                    || CATEGORY_COLORS[cat] || t.color || '#6e7681';
+
+                const timeStr = t.absoluteTime || (t.tsUnrecorded ? '未记录' : '');
+                const durStr = t.durationUnrecorded
+                    ? (t.durationHeuristic ? '估算' : '未记录')
+                    : ((t.w * 1000).toFixed(0) + 'ms');
+                bar.title = (t.label || bezierCategoryOf(t))
+                    + (timeStr ? ' · ' + timeStr : '') + ' · ' + durStr;
+
                 track.appendChild(bar);
             }
             row.appendChild(track);
@@ -741,8 +972,21 @@ const BezierWaterfall = (function() {
 
             const fromY = (fromMyY * ROW_H) + HEADER_H + (TRACK_H / 2);
             const toY   = (toMyY   * ROW_H) + HEADER_H + (TRACK_H / 2);
-            const fromX = xToPx(edge.from.x, this.canvasWidth, this.durationSec);
-            const toX   = xToPx(edge.to.x,   this.canvasWidth, this.durationSec);
+            let fromX = xToPx(edge.from.x, this.canvasWidth, this.durationSec);
+            let toX   = xToPx(edge.to.x,   this.canvasWidth, this.durationSec);
+
+            // Snap the sub-agent side X to the narrowed track edge.
+            // Spawn (fork): curve goes parent → sub-agent, so toX = LEFT edge.
+            // Merge (join): curve goes sub-agent → parent, so fromX = RIGHT edge.
+            const myLayout = this._getAgentLayout(agent);
+            if (myLayout) {
+                if (edge.type === 'fork') {
+                    toX = myLayout.startFrac * this.canvasWidth;
+                } else {
+                    fromX = myLayout.endFrac * this.canvasWidth;
+                }
+            }
+
             if (!isFinite(fromX) || !isFinite(toX)) return null;
 
             const role = edge.type === 'fork' ? 'spawn' : 'merge';
@@ -858,8 +1102,18 @@ const BezierWaterfall = (function() {
             const isSpawn = ref.role === 'spawn';
             const x0Raw = isSpawn ? agent.spawnX : agent.joinX;
             const x1Raw = isSpawn ? agent.joinX  : agent.spawnX;
-            const x0 = xToPx(x0Raw || 0, this.canvasWidth, this.durationSec);
-            const x1 = xToPx(x1Raw || 0, this.canvasWidth, this.durationSec);
+            let x0 = xToPx(x0Raw || 0, this.canvasWidth, this.durationSec);
+            let x1 = xToPx(x1Raw || 0, this.canvasWidth, this.durationSec);
+            // Snap sub-agent side to the narrowed track edge (matches
+            // _renderConnectorPath so the tooltip sits on the curve).
+            const tipLayout = this._getAgentLayout(agent);
+            if (tipLayout) {
+                if (isSpawn) {
+                    x1 = tipLayout.startFrac * this.canvasWidth;
+                } else {
+                    x0 = tipLayout.endFrac * this.canvasWidth;
+                }
+            }
             const y0 = (this._rowIndexById.get('s:' + agent.parentSessionId) * ROW_H)
                 + HEADER_H + (TRACK_H / 2);
             const y1 = (this._rowIndexById.get('a:' + agent.id) * ROW_H)
@@ -1165,7 +1419,9 @@ const BezierWaterfall = (function() {
         }
 
         // ----------------------------------------------------------------
-        // P4 — EventDetailPanel (center modal, 5 body types)
+        // P4 — EventDetailDrawer (right-side slide-in, mirrors the
+        // waterfall chart's .turn-drawer pattern). 5 body types share
+        // the same drawer; selection toggles the .open class.
         // ----------------------------------------------------------------
 
         // The 5 body types are keyed by `_eventKindOf(tick)`. Mapping
@@ -1208,82 +1464,95 @@ const BezierWaterfall = (function() {
             this._renderDetailPanel();
         }
 
-        // Build / show / hide the backdrop + panel. The panel and
-        // backdrop are children of document.body (NOT the chart
-        // container) so a modal stays put when the chart scrolls.
-        _renderDetailPanel() {
-            if (!this.selectedEvent) {
-                if (this.backdropEl && this.backdropEl.parentNode) {
-                    this.backdropEl.parentNode.removeChild(this.backdropEl);
+        // Lazily cache the static #bezier-drawer markup declared in
+        // session_row.html. Wire the close button + Escape key once
+        // per instance; subsequent calls just return the cached refs.
+        // Mirrors the waterfall's drawer pattern (close button + Esc
+        // + click-outside are all handled outside the chart code).
+        _ensureDrawer() {
+            if (this._drawerRefs) return this._drawerRefs;
+            const drawer = document.getElementById('bezier-drawer');
+            if (!drawer) {
+                console.warn('[bezier] #bezier-drawer not found in DOM');
+                return null;
+            }
+            const refs = {
+                drawer,
+                body: drawer.querySelector('#bezier-drawer-body'),
+                title: drawer.querySelector('#bezier-drawer-title'),
+                catDot: drawer.querySelector('#bezier-drawer-cat-dot'),
+                pills: drawer.querySelector('#bezier-drawer-pills'),
+                closeBtn: drawer.querySelector('.turn-drawer-close'),
+            };
+            if (refs.closeBtn) {
+                refs.closeBtn.addEventListener('click', () => this._closeDetailPanel());
+            }
+            // Esc key — bound at the instance level (not the document
+            // level) so multiple bezier instances don't double-fire.
+            // Use capture phase so we close before the waterfall's own
+            // Esc handler on a different drawer.
+            this._onDrawerKeydown = (e) => {
+                if (e.key === 'Escape' && this.selectedEvent) {
+                    e.stopPropagation();
+                    this._closeDetailPanel();
                 }
-                this.backdropEl = null;
-                this.panelEl = null;
-                document.body.style.overflow = '';
-                return;
-            }
-            if (!this.backdropEl) {
-                this.backdropEl = el('div', 'bezier-backdrop');
-                this.backdropEl.addEventListener('click', (e) => {
-                    if (e.target === this.backdropEl) this._closeDetailPanel();
-                });
-                document.body.appendChild(this.backdropEl);
-                // Lock body scroll while the panel is open so the
-                // chart behind the modal can't be scrolled.
-                document.body.style.overflow = 'hidden';
-            }
-            if (!this.panelEl) {
-                this.panelEl = el('aside', 'bezier-event-panel');
-                this.panelEl.setAttribute('role', 'dialog');
-                this.panelEl.setAttribute('aria-modal', 'true');
-                this.panelEl.setAttribute('aria-labelledby', 'bezier-event-title');
-                this.panelEl.style.width = this.panelWidth + 'px';
-                this.backdropEl.appendChild(this.panelEl);
-            }
-            // Rebuild content (cheap; panels are short).
-            this.panelEl.innerHTML = '';
-            this.panelEl.style.width = this.panelWidth + 'px';
-            this.panelEl.appendChild(this._buildPanelHeader(this.selectedEvent));
-            this.panelEl.appendChild(this._buildPanelBody(this.selectedEvent));
-            this.panelEl.appendChild(this._buildResizeHandle());
+            };
+            document.addEventListener('keydown', this._onDrawerKeydown, true);
+            this._drawerRefs = refs;
+            this._drawerCloseWired = true;
+            return refs;
         }
 
-        _buildPanelHeader(tick) {
+        // Build a single header pill (category or error). Pills are
+        // scoped to the bezier drawer (no collision with the waterfall
+        // legend bar) and inherit `--bezier-cat-*` theme colours.
+        _buildPill(text, color, opts) {
+            opts = opts || {};
+            const pill = el('span', 'bezier-drawer-pill', text);
+            if (color) {
+                pill.style.borderColor = color;
+                pill.style.color = color;
+            }
+            if (opts.error) pill.classList.add('bezier-drawer-pill-error');
+            return pill;
+        }
+
+        // Populate the pre-built drawer markup and toggle the .open
+        // class. When `selectedEvent` is null the drawer is hidden and
+        // its body is cleared; no DOM nodes are created or destroyed.
+        _renderDetailPanel() {
+            if (!this.selectedEvent) {
+                if (this._drawerRefs && this._drawerRefs.drawer) {
+                    this._drawerRefs.drawer.classList.remove('open');
+                    if (this._drawerRefs.body) this._drawerRefs.body.innerHTML = '';
+                }
+                return;
+            }
+            const refs = this._ensureDrawer();
+            if (!refs) return;
+            const tick = this.selectedEvent;
+            // Update the static header (cat dot + title + pills).
             const kind = this._eventKindOf(tick);
             const cat  = (kind === 'llm') ? 'llm' : bezierCategoryOf(tick);
-            // Use the live theme colours (read from --bezier-cat-*
-            // at construction time) so the header dot updates if the
-            // user toggles a theme. Falls back to CATEGORY_COLORS
-            // and the standard 'other' grey for safety.
             const colorMap = this._categoryColors || CATEGORY_COLORS;
-            const meta = { color: colorMap[cat] || CATEGORY_COLORS[cat] || '#6e7681',
-                           label: CATEGORY_LABELS[cat] || '其他' };
-
-            const header = el('div', 'bezier-event-panel-header');
-            const dot = el('span', 'bezier-event-cat-dot');
-            dot.style.background = meta.color;
-            header.appendChild(dot);
-
-            const title = el('span', 'bezier-event-panel-title', this._headerLabelOf(tick));
-            title.id = 'bezier-event-title';
-            header.appendChild(title);
-
-            const catPill = el('span', 'bezier-event-cat-pill', meta.label);
-            catPill.style.borderColor = meta.color;
-            catPill.style.color = meta.color;
-            header.appendChild(catPill);
-
-            if (this._isErrorOf(tick)) {
-                header.appendChild(el('span', 'bezier-event-error-pill', '错误'));
+            const catColor = colorMap[cat] || CATEGORY_COLORS[cat] || '#6e7681';
+            const catLabel = CATEGORY_LABELS[cat] || '其他';
+            if (refs.catDot) refs.catDot.style.background = catColor;
+            if (refs.title)  refs.title.textContent = this._headerLabelOf(tick);
+            if (refs.pills) {
+                refs.pills.innerHTML = '';
+                refs.pills.appendChild(this._buildPill(catLabel, catColor));
+                if (this._isErrorOf(tick)) {
+                    refs.pills.appendChild(this._buildPill('错误', null, { error: true }));
+                }
             }
-
-            const closeBtn = el('button', 'bezier-event-close');
-            closeBtn.type = 'button';
-            closeBtn.setAttribute('aria-label', '关闭详情面板');
-            closeBtn.textContent = '×';
-            closeBtn.addEventListener('click', () => this._closeDetailPanel());
-            header.appendChild(closeBtn);
-
-            return header;
+            // Rebuild the body. Cheap; the body is short.
+            if (refs.body) {
+                refs.body.innerHTML = '';
+                refs.body.appendChild(this._buildPanelBody(tick));
+            }
+            refs.drawer.classList.add('open');
+            refs.drawer.setAttribute('aria-hidden', 'false');
         }
 
         _buildPanelBody(tick) {
@@ -1441,45 +1710,20 @@ const BezierWaterfall = (function() {
             }
         }
 
-        // Resize handle on the right edge of the panel. setPointerCapture
-        // + body.cursor = 'col-resize' + prevValue restore mirrors
-        // event-detail-panel.tsx:439-527.
-        _buildResizeHandle() {
-            const handle = el('div', 'bezier-event-resize');
-            handle.setAttribute('role', 'separator');
-            handle.setAttribute('aria-orientation', 'vertical');
-            handle.setAttribute('aria-label', '拖拽调整宽度');
-            handle.setAttribute('aria-valuenow', String(this.panelWidth));
-            // Grip dot
-            handle.appendChild(el('span', 'bezier-event-resize-grip'));
-            let drag = null;
-            handle.addEventListener('pointerdown', (e) => {
-                e.preventDefault();
-                try { handle.setPointerCapture(e.pointerId); } catch (_) {}
-                drag = { startX: e.clientX, startW: this.panelWidth };
-            });
-            handle.addEventListener('pointermove', (e) => {
-                if (!drag) return;
-                const maxW = Math.max(PANEL_MIN_W, window.innerWidth * PANEL_MAX_VW_FRAC);
-                const delta = e.clientX - drag.startX;
-                const nextW = Math.max(PANEL_MIN_W, Math.min(maxW, drag.startW + delta));
-                this.panelWidth = nextW;
-                this.panelEl.style.width = nextW + 'px';
-                handle.setAttribute('aria-valuenow', String(nextW));
-            });
-            const endDrag = (e) => {
-                if (!drag) return;
-                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
-                drag = null;
-            };
-            handle.addEventListener('pointerup', endDrag);
-            handle.addEventListener('pointercancel', endDrag);
-            return handle;
-        }
+        // Resize handle removed: the side drawer uses the fixed width
+        // defined on .turn-drawer (420px / 92vw) from the waterfall
+        // chart. Resizing would shift the chart behind it; the existing
+        // width is tuned for both surfaces.
 
         destroy() {
             this._detachInteractions();
             this._destroyDetailPanel();
+            if (this._onDrawerKeydown) {
+                document.removeEventListener('keydown', this._onDrawerKeydown, true);
+                this._onDrawerKeydown = null;
+            }
+            this._drawerRefs = null;
+            this._drawerCloseWired = false;
             if (this.container) {
                 this.container.innerHTML = '';
                 this.container.classList.remove('bezier-waterfall');
@@ -1489,14 +1733,13 @@ const BezierWaterfall = (function() {
         }
 
         _destroyDetailPanel() {
-            if (this.backdropEl && this.backdropEl.parentNode) {
-                this.backdropEl.parentNode.removeChild(this.backdropEl);
+            if (this._drawerRefs && this._drawerRefs.drawer) {
+                this._drawerRefs.drawer.classList.remove('open');
+                this._drawerRefs.drawer.setAttribute('aria-hidden', 'true');
+                if (this._drawerRefs.body) this._drawerRefs.body.innerHTML = '';
             }
-            this.backdropEl = null;
-            this.panelEl = null;
             this.selectedEvent = null;
             this._tickByBarId = new Map();
-            document.body.style.overflow = '';
         }
     }
 
@@ -1568,14 +1811,12 @@ const BezierWaterfall = (function() {
         ZOOM_MIN: ZOOM_MIN,
         ZOOM_MAX: ZOOM_MAX,
         ZOOM_STEP: ZOOM_STEP,
-        PANEL_DEFAULT_W: PANEL_DEFAULT_W,
-        PANEL_MIN_W: PANEL_MIN_W,
-        PANEL_MAX_VW_FRAC: PANEL_MAX_VW_FRAC,
         // P5 — row layout constants
         ROW_H: ROW_H,
         HEADER_H: HEADER_H,
         TRACK_H: TRACK_H,
         SUBAGENT_INDENT_PX: SUBAGENT_INDENT_PX,
+        MIN_LANE_FRAC: MIN_LANE_FRAC,
         // P5 — connector constants
         CONNECTOR_STROKE_DEFAULT:  CONNECTOR_STROKE_DEFAULT,
         CONNECTOR_STROKE_HOVER:    CONNECTOR_STROKE_HOVER,

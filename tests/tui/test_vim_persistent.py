@@ -137,9 +137,7 @@ def test_replay_operator_text_obj_change():
     """ciw on word boundary."""
 
     ctx = _FakeCtx(text="hello world", cursor=Cursor(0, 6))
-    change = OperatorTextObjChange(
-        op="change", obj_type="w", scope="inner", count=1
-    )
+    change = OperatorTextObjChange(op="change", obj_type="w", scope="inner", count=1)
     replay(change, ctx.as_transition_context())
     assert ctx.text == "hello "
 
@@ -402,9 +400,7 @@ def test_characterwise_register_after_dw():
 def test_dot_repeat_after_3d2w_deletes_six_words():
     """3d2w → effective count 6 → dot-repeat re-deletes 6 words."""
 
-    ctx = _FakeCtx(
-        text="a b c d e f g h i j k l m", cursor=Cursor(0, 0)
-    )
+    ctx = _FakeCtx(text="a b c d e f g h i j k l m", cursor=Cursor(0, 0))
     txn = ctx.as_transition_context()
 
     # Manually drive 3 → d → 2 → w

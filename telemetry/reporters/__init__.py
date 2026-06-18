@@ -8,6 +8,7 @@ Public surface:
 * :class:`DryRunReporter`      — in-memory, used by tests + CLI preview
 * :class:`IssueReporter`       — opt-in GitHub/Gitee/GitCode issue upload
 """
+
 from __future__ import annotations
 
 from .base import CompositeReporter, Reporter

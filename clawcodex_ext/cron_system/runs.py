@@ -55,7 +55,9 @@ class CronRun:
         try:
             run_id = _first_value(data, "id", "runId", "run_id")
             task_id = _first_value(data, "task_id", "taskId", "sourceId", "source_id")
-            prompt = _first_value(data, "prompt", "sourceLabel", "source_label", "promptPreview", "prompt_preview")
+            prompt = _first_value(
+                data, "prompt", "sourceLabel", "source_label", "promptPreview", "prompt_preview"
+            )
             status = data["status"]
             if not isinstance(run_id, str) or not run_id:
                 return None
@@ -65,11 +67,26 @@ class CronRun:
                 return None
             if status not in ACTIVE_RUN_STATUSES and status not in TERMINAL_RUN_STATUSES:
                 return None
-            queued_at = int(data.get("queued_at") or data.get("queuedAt") or data.get("createdAt") or data.get("created_at") or 0)
+            queued_at = int(
+                data.get("queued_at")
+                or data.get("queuedAt")
+                or data.get("createdAt")
+                or data.get("created_at")
+                or 0
+            )
             source_id = _optional_str(data.get("source_id", data.get("sourceId"))) or task_id
-            source_label = _optional_str(data.get("source_label", data.get("sourceLabel"))) or prompt
-            prompt_preview = _optional_str(data.get("prompt_preview", data.get("promptPreview"))) or _truncate_prompt_preview(prompt)
-            completed_at = _optional_int(data.get("completed_at", data.get("completedAt", data.get("endedAt", data.get("ended_at")))))
+            source_label = (
+                _optional_str(data.get("source_label", data.get("sourceLabel"))) or prompt
+            )
+            prompt_preview = _optional_str(
+                data.get("prompt_preview", data.get("promptPreview"))
+            ) or _truncate_prompt_preview(prompt)
+            completed_at = _optional_int(
+                data.get(
+                    "completed_at",
+                    data.get("completedAt", data.get("endedAt", data.get("ended_at"))),
+                )
+            )
             ended_at = _optional_int(data.get("ended_at", data.get("endedAt"))) or completed_at
             runtime = data.get("runtime") or DEFAULT_RUNTIME
             if runtime not in {"automatic", "flow_step"}:
@@ -91,9 +108,14 @@ class CronRun:
                 prompt_preview=prompt_preview,
                 root_dir=_optional_str(data.get("root_dir", data.get("rootDir"))),
                 current_dir=_optional_str(data.get("current_dir", data.get("currentDir"))),
-                owner_key=_optional_str(data.get("owner_key", data.get("ownerKey"))) or DEFAULT_OWNER_KEY,
-                owner_process_id=_optional_int(data.get("owner_process_id", data.get("ownerProcessId"))),
-                owner_session_id=_optional_str(data.get("owner_session_id", data.get("ownerSessionId"))),
+                owner_key=_optional_str(data.get("owner_key", data.get("ownerKey")))
+                or DEFAULT_OWNER_KEY,
+                owner_process_id=_optional_int(
+                    data.get("owner_process_id", data.get("ownerProcessId"))
+                ),
+                owner_session_id=_optional_str(
+                    data.get("owner_session_id", data.get("ownerSessionId"))
+                ),
                 ended_at=ended_at,
             )
         except (KeyError, TypeError, ValueError):
@@ -178,7 +200,9 @@ def read_cron_runs(workspace_root: Path) -> list[CronRun]:
 def write_cron_runs(workspace_root: Path, runs: Iterable[CronRun]) -> None:
     path = runs_file_path(workspace_root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    sorted_runs = sorted(runs, key=lambda item: (item.queued_at, item.id), reverse=True)[:MAX_CRON_RUNS]
+    sorted_runs = sorted(runs, key=lambda item: (item.queued_at, item.id), reverse=True)[
+        :MAX_CRON_RUNS
+    ]
     payload = {
         "version": 2,
         "runs": [run.to_dict() for run in sorted_runs],
@@ -203,7 +227,9 @@ def get_active_run_for_source(
     owner_key: str | None = None,
 ) -> CronRun | None:
     for run in read_cron_runs(workspace_root):
-        if not _matches_active_source(run, trigger=trigger, source_id=source_id, owner_key=owner_key):
+        if not _matches_active_source(
+            run, trigger=trigger, source_id=source_id, owner_key=owner_key
+        ):
             continue
         if _is_stale_active_run(run):
             update_cron_run_status(
@@ -228,7 +254,9 @@ def create_queued_run(
         runs = read_cron_runs(workspace_root)
         updated_runs: list[CronRun] = []
         for run in runs:
-            if not _matches_active_source(run, trigger=params.trigger, source_id=source_id, owner_key=owner_key):
+            if not _matches_active_source(
+                run, trigger=params.trigger, source_id=source_id, owner_key=owner_key
+            ):
                 updated_runs.append(run)
                 continue
             if _is_stale_active_run(run):

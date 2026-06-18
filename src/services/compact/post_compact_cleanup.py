@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PostCompactContext:
     """Minimal context for post-compact cleanup."""
+
     # Caches to clear (name → clear callable)
     caches: dict[str, Callable[[], None]] = field(default_factory=dict)
     # Read-file state tracking

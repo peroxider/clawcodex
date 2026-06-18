@@ -58,9 +58,7 @@ async def test_tab_with_visible_ghost_accepts_suggestion():
         # Force the on_input_changed handler to refresh ghost.
         # ``Input.Changed`` only takes (input, value); cursor_position
         # is read off the input widget itself in the handler.
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         # Ghost is now visible.
         assert not prompt._ghost_suggestion.has_class("-hidden")
@@ -91,9 +89,7 @@ async def test_tab_with_no_ghost_falls_through_to_focus_next():
         await pilot.pause()
         prompt._input.value = "xyz"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         # No ghost visible — input is still "xyz" and ghost is hidden.
         assert prompt._ghost_suggestion.has_class("-hidden")
@@ -121,9 +117,7 @@ async def test_configured_accept_key_still_works():
         await pilot.pause()
         prompt._input.value = "git"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         assert not prompt._ghost_suggestion.has_class("-hidden")
 
@@ -144,9 +138,7 @@ async def test_ghost_hint_mentions_tab_alias():
         await pilot.pause()
         prompt._input.value = "git"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         # Render the ghost widget to a string to inspect the hint.
         # Rich ``Text.plain`` is the plain (no-style) view; ``str(Text)``
@@ -184,9 +176,7 @@ async def test_tab_alias_disabled_does_not_accept_ghost():
         await pilot.pause()
         prompt._input.value = "git"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         # Ghost is visible.
         assert not prompt._ghost_suggestion.has_class("-hidden")
@@ -213,9 +203,7 @@ async def test_tab_alias_disabled_hint_omits_tab():
         await pilot.pause()
         prompt._input.value = "git"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         ghost_text = prompt._ghost_suggestion.renderable
         plain = ghost_text.plain
@@ -234,9 +222,7 @@ async def test_configured_key_still_works_when_alias_disabled():
         await pilot.pause()
         prompt._input.value = "git"
         prompt._input.cursor_position = 3
-        prompt.on_input_changed(
-            type(prompt._input).Changed(prompt._input, prompt._input.value)
-        )
+        prompt.on_input_changed(type(prompt._input).Changed(prompt._input, prompt._input.value))
         await pilot.pause()
         assert not prompt._ghost_suggestion.has_class("-hidden")
 

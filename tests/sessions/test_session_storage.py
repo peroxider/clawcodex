@@ -111,9 +111,7 @@ class TestSessionStorage:
         large_content = "x" * (LARGE_CONTENT_THRESHOLD + 100)
         msg_dict = {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t1", "content": large_content}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": large_content}],
             "type": "user",
         }
         replaced = storage._replace_large_content(msg_dict)
@@ -130,9 +128,7 @@ class TestSessionStorage:
         storage = SessionStorage(sessions_dir=tmp_path)
         msg_dict = {
             "role": "user",
-            "content": [
-                {"type": "tool_result", "tool_use_id": "t1", "content": "short"}
-            ],
+            "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "short"}],
         }
         replaced = storage._replace_large_content(msg_dict)
         assert replaced["content"][0]["content"] == "short"

@@ -14,20 +14,21 @@ from src.server.types import SessionState
 def _make_manager(tmp_path, **overrides):
     return SessionManager(
         workspace=str(tmp_path),
-        index_path=tmp_path / 'idx.json',
+        index_path=tmp_path / "idx.json",
         **overrides,
     )
 
 
 def test_create_session_assigns_id_and_records_starting(tmp_path):
     mgr = _make_manager(tmp_path)
-    info = mgr.create_session(cwd='/tmp/work')
-    assert info.id.startswith('ds_')
+    info = mgr.create_session(cwd="/tmp/work")
+    assert info.id.startswith("ds_")
     assert info.status == SessionState.STARTING
-    assert info.work_dir == '/tmp/work'
+    assert info.work_dir == "/tmp/work"
     # Persisted to the index.
     from src.server.session_index import load_index
-    idx = load_index(tmp_path / 'idx.json')
+
+    idx = load_index(tmp_path / "idx.json")
     assert info.id in idx
 
 
@@ -41,7 +42,7 @@ def test_max_sessions_enforced(tmp_path):
     mgr = _make_manager(tmp_path, max_sessions=2)
     mgr.create_session()
     mgr.create_session()
-    with pytest.raises(RuntimeError, match='max_sessions'):
+    with pytest.raises(RuntimeError, match="max_sessions"):
         mgr.create_session()
 
 
@@ -66,13 +67,14 @@ async def test_stop_session_removes_from_index(tmp_path):
     await mgr.stop_session(info.id)
     assert mgr.get(info.id) is None
     from src.server.session_index import load_index
-    assert info.id not in load_index(tmp_path / 'idx.json')
+
+    assert info.id not in load_index(tmp_path / "idx.json")
 
 
 @pytest.mark.asyncio
 async def test_stop_unknown_session_is_noop(tmp_path):
     mgr = _make_manager(tmp_path)
-    await mgr.stop_session('does-not-exist')
+    await mgr.stop_session("does-not-exist")
 
 
 def test_active_session_ids_filters_stopped(tmp_path):
@@ -143,4 +145,4 @@ def test_touch_bumps_last_active_at(tmp_path):
 
 def test_touch_unknown_session_is_noop(tmp_path):
     mgr = _make_manager(tmp_path)
-    mgr.touch('not-a-session')  # should not raise
+    mgr.touch("not-a-session")  # should not raise

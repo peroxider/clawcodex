@@ -101,11 +101,15 @@ class TestDedupByRealpath(unittest.TestCase):
             link.symlink_to(sk)
 
             a = Skill(
-                name="x", description="x", source="userSettings",
+                name="x",
+                description="x",
+                source="userSettings",
                 base_dir=str(sk),
             )
             b = Skill(
-                name="x", description="x", source="projectSettings",
+                name="x",
+                description="x",
+                source="projectSettings",
                 base_dir=str(link),
             )
             out = _dedup_by_realpath([a, b])
@@ -115,7 +119,8 @@ class TestDedupByRealpath(unittest.TestCase):
     def test_different_files_both_kept(self) -> None:
         with tempfile.TemporaryDirectory() as t:
             d1, d2 = Path(t) / "a", Path(t) / "b"
-            d1.mkdir(); d2.mkdir()
+            d1.mkdir()
+            d2.mkdir()
             (d1 / "SKILL.md").write_text("body1")
             (d2 / "SKILL.md").write_text("body2")
             a = Skill(name="x", description="x", base_dir=str(d1))
@@ -162,16 +167,23 @@ class TestGetSkillDirCommandsBareAndPolicy(_IsolatedHomeMixin, unittest.TestCase
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._root = Path(self._tmp.name).resolve()
-        self._home = self._root / "_home"; self._home.mkdir()
-        self._managed = self._root / "_etc"; self._managed.mkdir()
-        self._project = self._root / "proj"; self._project.mkdir()
+        self._home = self._root / "_home"
+        self._home.mkdir()
+        self._managed = self._root / "_etc"
+        self._managed.mkdir()
+        self._project = self._root / "proj"
+        self._project.mkdir()
         self._isolate_env()
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
 
     def tearDown(self) -> None:
         self._env_patch.stop()
         self._tmp.cleanup()
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
 
     def _make_skill(self, parent: Path, name: str, body: str = "body") -> Path:
         skill_dir = parent / "skills" / name
@@ -230,16 +242,23 @@ class TestSymlinkDedup(_IsolatedHomeMixin, unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self._root = Path(self._tmp.name).resolve()
-        self._home = self._root / "_home"; self._home.mkdir()
-        self._managed = self._root / "_etc"; self._managed.mkdir()
-        self._project = self._root / "proj"; self._project.mkdir()
+        self._home = self._root / "_home"
+        self._home.mkdir()
+        self._managed = self._root / "_etc"
+        self._managed.mkdir()
+        self._project = self._root / "proj"
+        self._project.mkdir()
         self._isolate_env()
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
 
     def tearDown(self) -> None:
         self._env_patch.stop()
         self._tmp.cleanup()
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
 
     def test_symlink_to_project_skill_collapses_to_one(self) -> None:
         # AC#2: ~/.claude/skills/foo → <proj>/.claude/skills/foo
@@ -258,10 +277,12 @@ class TestSymlinkDedup(_IsolatedHomeMixin, unittest.TestCase):
 
 class TestConditionalPathsGitignoreSemantics(unittest.TestCase):
     def setUp(self) -> None:
-        clear_skill_caches(); clear_dynamic_skills()
+        clear_skill_caches()
+        clear_dynamic_skills()
 
     def tearDown(self) -> None:
-        clear_skill_caches(); clear_dynamic_skills()
+        clear_skill_caches()
+        clear_dynamic_skills()
 
     def test_compile_pathspec_handles_doublestar(self) -> None:
         spec = _compile_path_spec(["src/**/*.py"])
@@ -282,20 +303,14 @@ class TestConditionalPathsGitignoreSemantics(unittest.TestCase):
             sk = base / "skills" / "py-helper"
             sk.mkdir(parents=True)
             (sk / "SKILL.md").write_text(
-                "---\n"
-                "description: py helper\n"
-                "paths:\n"
-                "  - src/**/*.py\n"
-                "---\n"
-                "body\n"
+                "---\ndescription: py helper\npaths:\n  - src/**/*.py\n---\nbody\n"
             )
             # Loading puts the skill into _conditional_skills (because
             # paths is set), not into the returned list — that's the
             # contract callers rely on.
-            loaded = load_skills_from_skills_dir(
-                str(sk.parent), "projectSettings"
-            )
+            loaded = load_skills_from_skills_dir(str(sk.parent), "projectSettings")
             from src.skills.loader import _conditional_skills, _dynamic_skills
+
             # Manually move into conditional pool (simulates the
             # get_skill_dir_commands path):
             for s in loaded:
@@ -316,9 +331,7 @@ class TestConditionalPathsGitignoreSemantics(unittest.TestCase):
             _conditional_skills["py-helper"] = loaded[0]
             (base / "docs").mkdir()
             (base / "docs" / "x.md").write_text("doc")
-            activated = activate_conditional_skills_for_paths(
-                [str(base / "docs" / "x.md")], cwd
-            )
+            activated = activate_conditional_skills_for_paths([str(base / "docs" / "x.md")], cwd)
             self.assertNotIn("py-helper", activated)
 
 
@@ -332,13 +345,17 @@ class TestActivatedConditionalIsInvokableViaSkillTool(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
         self._tmp = tempfile.TemporaryDirectory()
         self._project = Path(self._tmp.name).resolve()
         # Isolate $HOME and managed-dir so user/managed discovery doesn't
         # contaminate the project under test.
-        self._home = self._project / "_home"; self._home.mkdir()
-        self._managed = self._project / "_etc"; self._managed.mkdir()
+        self._home = self._project / "_home"
+        self._home.mkdir()
+        self._managed = self._project / "_etc"
+        self._managed.mkdir()
         self._env_patch = patch.dict(
             os.environ,
             {
@@ -362,7 +379,9 @@ class TestActivatedConditionalIsInvokableViaSkillTool(unittest.TestCase):
     def tearDown(self) -> None:
         self._env_patch.stop()
         self._tmp.cleanup()
-        clear_skill_caches(); clear_dynamic_skills(); clear_skill_registry()
+        clear_skill_caches()
+        clear_dynamic_skills()
+        clear_skill_registry()
 
     def test_skilltool_can_invoke_activated_conditional(self) -> None:
         from src.skills.loader import get_all_skills, get_registered_skill
@@ -373,12 +392,7 @@ class TestActivatedConditionalIsInvokableViaSkillTool(unittest.TestCase):
         skill_dir = self._project / ".claude" / "skills" / "lint-py"
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(
-            "---\n"
-            "description: Lint Python files\n"
-            "paths:\n"
-            '  - "**/*.py"\n'
-            "---\n"
-            "Lint that file.\n"
+            '---\ndescription: Lint Python files\npaths:\n  - "**/*.py"\n---\nLint that file.\n'
         )
 
         # Pre-activation: the skill is held back (conditional).
@@ -390,9 +404,7 @@ class TestActivatedConditionalIsInvokableViaSkillTool(unittest.TestCase):
         (self._project / "src").mkdir()
         target = self._project / "src" / "foo.py"
         target.write_text("x = 1")
-        activated = activate_conditional_skills_for_paths(
-            [str(target)], str(self._project)
-        )
+        activated = activate_conditional_skills_for_paths([str(target)], str(self._project))
         self.assertIn("lint-py", activated)
 
         # The SkillTool path must now succeed for /lint-py — that is,
@@ -410,21 +422,29 @@ class TestActivatedConditionalIsInvokableViaSkillTool(unittest.TestCase):
 
 class TestDiscoverSkillDirsGitignore(unittest.TestCase):
     def setUp(self) -> None:
-        clear_skill_caches(); clear_dynamic_skills()
+        clear_skill_caches()
+        clear_dynamic_skills()
         self._tmp = tempfile.TemporaryDirectory()
         self._cwd = Path(self._tmp.name).resolve()
         # Initialize a real git repo so `git check-ignore` works.
         try:
             subprocess.run(
-                ["git", "init", "-q"], cwd=self._cwd, check=True, timeout=10,
+                ["git", "init", "-q"],
+                cwd=self._cwd,
+                check=True,
+                timeout=10,
             )
             subprocess.run(
                 ["git", "config", "user.email", "t@t.test"],
-                cwd=self._cwd, check=True, timeout=5,
+                cwd=self._cwd,
+                check=True,
+                timeout=5,
             )
             subprocess.run(
                 ["git", "config", "user.name", "t"],
-                cwd=self._cwd, check=True, timeout=5,
+                cwd=self._cwd,
+                check=True,
+                timeout=5,
             )
             self._git_ok = True
         except (FileNotFoundError, subprocess.SubprocessError):
@@ -432,7 +452,8 @@ class TestDiscoverSkillDirsGitignore(unittest.TestCase):
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
-        clear_skill_caches(); clear_dynamic_skills()
+        clear_skill_caches()
+        clear_dynamic_skills()
 
     def test_skips_gitignored_skills_dir(self) -> None:
         if not self._git_ok:
@@ -444,14 +465,10 @@ class TestDiscoverSkillDirsGitignore(unittest.TestCase):
         skills_dir = ignored_pkg / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "evil").mkdir()
-        (skills_dir / "evil" / "SKILL.md").write_text(
-            "---\ndescription: evil\n---\n"
-        )
+        (skills_dir / "evil" / "SKILL.md").write_text("---\ndescription: evil\n---\n")
         (ignored_pkg / "x.js").write_text("nop")
 
-        new_dirs = discover_skill_dirs_for_paths(
-            [str(ignored_pkg / "x.js")], str(self._cwd)
-        )
+        new_dirs = discover_skill_dirs_for_paths([str(ignored_pkg / "x.js")], str(self._cwd))
         self.assertNotIn(str(skills_dir), new_dirs)
 
     def test_loads_non_gitignored_skills_dir(self) -> None:
@@ -463,13 +480,9 @@ class TestDiscoverSkillDirsGitignore(unittest.TestCase):
         skills_dir = nested / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
         (skills_dir / "good").mkdir()
-        (skills_dir / "good" / "SKILL.md").write_text(
-            "---\ndescription: good\n---\n"
-        )
+        (skills_dir / "good" / "SKILL.md").write_text("---\ndescription: good\n---\n")
         (nested / "f.txt").write_text("x")
-        new_dirs = discover_skill_dirs_for_paths(
-            [str(nested / "f.txt")], str(self._cwd)
-        )
+        new_dirs = discover_skill_dirs_for_paths([str(nested / "f.txt")], str(self._cwd))
         self.assertIn(str(skills_dir), new_dirs)
 
 
@@ -487,7 +500,10 @@ class TestGitignoreCheckHelper(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             try:
                 subprocess.run(
-                    ["git", "init", "-q"], cwd=t, check=True, timeout=10,
+                    ["git", "init", "-q"],
+                    cwd=t,
+                    check=True,
+                    timeout=10,
                 )
             except subprocess.SubprocessError:
                 self.skipTest("git init failed")

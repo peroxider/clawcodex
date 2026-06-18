@@ -59,9 +59,7 @@ def test_single_string_content_message_wrapped_and_marked() -> None:
     assert out[0]["role"] == "user"
     content = out[0]["content"]
     assert isinstance(content, list)
-    assert content == [
-        {"type": "text", "text": "hi", "cache_control": {"type": "ephemeral"}}
-    ]
+    assert content == [{"type": "text", "text": "hi", "cache_control": {"type": "ephemeral"}}]
 
 
 def test_single_list_content_marker_on_last_block_only() -> None:

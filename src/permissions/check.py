@@ -43,9 +43,7 @@ class CheckPermissionsTool(Protocol):
     @property
     def is_mcp(self) -> bool: ...
 
-    def check_permissions(
-        self, tool_input: dict[str, Any], context: Any
-    ) -> PermissionResult: ...
+    def check_permissions(self, tool_input: dict[str, Any], context: Any) -> PermissionResult: ...
 
 
 @runtime_checkable
@@ -126,7 +124,10 @@ def has_permissions_to_use_tool(
        can't be bypassed by an earlier ``ask`` short-circuit.
     """
     result = has_permissions_to_use_tool_inner(
-        tool, tool_input, context, tool_use_context=tool_use_context,
+        tool,
+        tool_input,
+        context,
+        tool_use_context=tool_use_context,
     )
 
     if result.behavior != "ask":
@@ -162,11 +163,14 @@ def has_permissions_to_use_tool(
             return result
 
         import sys
+
         _this_module = sys.modules[__name__]
         decision = _this_module.auto_mode_classify(tool.name, tool_input, context)
         log.info(
             "Auto mode classify: tool=%s, allow=%s, reason=%s",
-            tool.name, decision.allow, decision.reason,
+            tool.name,
+            decision.allow,
+            decision.reason,
         )
         if decision.allow:
             return PermissionAllowDecision(
@@ -258,7 +262,9 @@ def has_permissions_to_use_tool_inner(
             return tool_permission_result
         return PermissionDenyDecision(
             behavior="deny",
-            message=getattr(tool_permission_result, "message", f"Permission denied for {tool.name}"),
+            message=getattr(
+                tool_permission_result, "message", f"Permission denied for {tool.name}"
+            ),
             decision_reason=getattr(tool_permission_result, "decision_reason", None),
         )
 
@@ -287,12 +293,8 @@ def has_permissions_to_use_tool_inner(
     ):
         return _coerce_to_ask_decision(tool_permission_result, tool.name)
 
-    should_bypass = (
-        context.mode == "bypassPermissions"
-        or (
-            context.mode == "plan"
-            and context.is_bypass_permissions_mode_available
-        )
+    should_bypass = context.mode == "bypassPermissions" or (
+        context.mode == "plan" and context.is_bypass_permissions_mode_available
     )
     if should_bypass:
         return PermissionAllowDecision(
@@ -396,7 +398,9 @@ def check_rule_based_permissions(
             return tool_permission_result
         return PermissionDenyDecision(
             behavior="deny",
-            message=getattr(tool_permission_result, "message", f"Permission denied for {tool.name}"),
+            message=getattr(
+                tool_permission_result, "message", f"Permission denied for {tool.name}"
+            ),
             decision_reason=getattr(tool_permission_result, "decision_reason", None),
         )
 
@@ -432,14 +436,17 @@ def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
         prefix = rule_content.split(":", 1)[0]
         suffix = rule_content.split(":", 1)[1]
         if suffix == "*":
+
             def _prefix_matcher(command: str) -> bool:
                 parts = command.strip().split(None, 1)
                 if not parts:
                     return False
                 cmd_name = parts[0].rsplit("/", 1)[-1]
                 return cmd_name == prefix
+
             return _prefix_matcher
         else:
+
             def _exact_prefix_matcher(command: str) -> bool:
                 parts = command.strip().split(None, 1)
                 if not parts:
@@ -449,6 +456,7 @@ def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
                     return False
                 rest = parts[1] if len(parts) > 1 else ""
                 return fnmatch.fnmatch(rest, suffix)
+
             return _exact_prefix_matcher
 
     if "*" in rule_content or "?" in rule_content:
@@ -490,6 +498,7 @@ def auto_mode_classify(
         file_path = tool_input.get("file_path", "")
         if file_path:
             from .filesystem import check_path_safety_for_auto_edit
+
             safety = check_path_safety_for_auto_edit(file_path)
             if safety is not None:
                 return AutoModeDecision(allow=False, reason="protected path")

@@ -8,6 +8,7 @@ The Protocol intentionally matches the shape used by
 fan-out with per-reporter exception isolation, never raise out of
 ``emit`` / ``render``.
 """
+
 from __future__ import annotations
 
 import logging

@@ -12,6 +12,7 @@ approximations — KAIROS is upstream-only for now and the transcript
 dir falls back to ``SessionStorage.SESSIONS_DIR`` when the per-cwd
 project dir is not yet registered.
 """
+
 from __future__ import annotations
 
 import os

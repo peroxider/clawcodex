@@ -11,6 +11,7 @@ These tests construct real ``Tool`` objects so
 batch. ``_dispatch_single_tool`` is patched out so we don't have
 to wire up a real registry.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -119,7 +120,9 @@ def concurrent_tools():
 
 @pytest.mark.asyncio
 async def test_first_completed_short_circuits_on_abort(
-    tool_context, fake_registry, concurrent_tools,
+    tool_context,
+    fake_registry,
+    concurrent_tools,
 ) -> None:
     """F-99: abort fires mid-batch → agent loop unblocks before slowest tool finishes.
 
@@ -146,7 +149,10 @@ async def test_first_completed_short_circuits_on_abort(
     with patch("src.query.query._dispatch_single_tool", side_effect=_fake_dispatch):
         trip_task = asyncio.create_task(_trip_abort_after_one())
         result = await _run_tools_partitioned(
-            blocks, fake_registry, ctx, concurrent_tools,
+            blocks,
+            fake_registry,
+            ctx,
+            concurrent_tools,
         )
         await trip_task
     elapsed = time.monotonic() - start
@@ -165,7 +171,9 @@ async def test_first_completed_short_circuits_on_abort(
 
 @pytest.mark.asyncio
 async def test_first_completed_no_abort_waits_for_all(
-    tool_context, fake_registry, concurrent_tools,
+    tool_context,
+    fake_registry,
+    concurrent_tools,
 ) -> None:
     """F-99: no abort → behaviour matches the pre-fix ``asyncio.gather`` path.
 
@@ -183,22 +191,24 @@ async def test_first_completed_no_abort_waits_for_all(
 
     with patch("src.query.query._dispatch_single_tool", side_effect=_fake_dispatch):
         result = await _run_tools_partitioned(
-            blocks, fake_registry, ctx, concurrent_tools,
+            blocks,
+            fake_registry,
+            ctx,
+            concurrent_tools,
         )
 
     assert len(result) == 3
     result_ids = {
-        b.tool_use_id
-        for msg in result
-        for b in msg.content
-        if isinstance(b, ToolResultBlock)
+        b.tool_use_id for msg in result for b in msg.content if isinstance(b, ToolResultBlock)
     }
     assert result_ids == {"t0", "t1", "t2"}
 
 
 @pytest.mark.asyncio
 async def test_first_completed_preserves_pairing_on_abort(
-    tool_context, fake_registry, concurrent_tools,
+    tool_context,
+    fake_registry,
+    concurrent_tools,
 ) -> None:
     """F-99: every ``tool_use`` gets a paired ``tool_result``, even on abort.
 
@@ -222,24 +232,26 @@ async def test_first_completed_preserves_pairing_on_abort(
     with patch("src.query.query._dispatch_single_tool", side_effect=_fake_dispatch):
         trip_task = asyncio.create_task(_trip_abort_immediately())
         result = await _run_tools_partitioned(
-            blocks, fake_registry, ctx, concurrent_tools,
+            blocks,
+            fake_registry,
+            ctx,
+            concurrent_tools,
         )
         await trip_task
 
     # Every tool_use_id from the input must have a paired tool_result
     # in the output (real or synthesised).
     paired_ids = {
-        b.tool_use_id
-        for msg in result
-        for b in msg.content
-        if isinstance(b, ToolResultBlock)
+        b.tool_use_id for msg in result for b in msg.content if isinstance(b, ToolResultBlock)
     }
     assert paired_ids == {"t0", "t1", "t2"}
 
 
 @pytest.mark.asyncio
 async def test_first_completed_single_tool_unchanged(
-    tool_context, fake_registry, concurrent_tools,
+    tool_context,
+    fake_registry,
+    concurrent_tools,
 ) -> None:
     """F-99: a single-tool batch uses the simple path (no FIRST_COMPLETED overhead).
 
@@ -255,14 +267,14 @@ async def test_first_completed_single_tool_unchanged(
 
     with patch("src.query.query._dispatch_single_tool", side_effect=_fake_dispatch):
         result = await _run_tools_partitioned(
-            blocks, fake_registry, ctx, concurrent_tools,
+            blocks,
+            fake_registry,
+            ctx,
+            concurrent_tools,
         )
 
     assert len(result) == 1
     paired_ids = {
-        b.tool_use_id
-        for msg in result
-        for b in msg.content
-        if isinstance(b, ToolResultBlock)
+        b.tool_use_id for msg in result for b in msg.content if isinstance(b, ToolResultBlock)
     }
     assert paired_ids == {"t0"}

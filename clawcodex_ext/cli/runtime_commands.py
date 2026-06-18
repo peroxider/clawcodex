@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from clawcodex_ext.cli.model_cmd.commands import format_model_list
 from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
 from clawcodex_ext.cli.model_cmd.store import ModelStore
 from clawcodex_ext.cli.model_cmd.errors import UnknownModelError, ProviderMismatchError
@@ -34,6 +33,106 @@ def register_runtime_commands(registry: Any | None = None) -> None:
     reg = registry or get_command_registry()
     for command in (_provider_command(), _model_command()):
         reg.register(command)
+
+
+def format_model_list(provider: str | None = None) -> str:
+    return _format_configured_model_list(provider)
+
+
+def _format_configured_model_list(provider: str | None = None) -> str:
+    """Show models only for providers with API keys in config.
+
+    Reads ``~/.clawcodex/config.json`` and filters the full model list
+    to only those providers the user has actually configured.  Falls
+    back to all known providers when no config is available (e.g. in
+    tests or CI).
+
+    For each configured provider, the displayed model list is the *union*
+    of:
+    1. Models known to the built-in ``ModelRegistry`` (``available_models``)
+    2. Models recorded in the config's ``models`` list (user's custom /
+       previously-used models outside the built-in registry)
+    """
+    registry = ModelRegistry()
+    try:
+        from src.config import get_provider_config
+
+        configured = [
+            name
+            for name in registry.provider_names()
+            if (provider is None or name == provider) and get_provider_config(name)
+        ]
+        # Also include providers that exist only in config but aren't
+        # known to ModelRegistry (e.g. completely custom providers).
+        import json, os
+        from src.config import get_global_config_path
+
+        gp = get_global_config_path()
+        if gp and gp.exists():
+            raw = json.loads(gp.read_text())
+            for p in raw.get("providers") or {}:
+                if (
+                    (provider is None or p == provider)
+                    and p not in configured
+                    and p not in registry.provider_names()
+                ):
+                    configured.append(p)
+    except Exception:
+        configured = []
+
+    if not configured:
+        # No config or all empty — fall back to showing all known providers
+        # so the user always sees something.
+        configured = list(registry.provider_names())
+
+    lines = ["Models:"]
+    for provider_name in configured:
+        try:
+            registry.validate_provider(provider_name)
+        except Exception:
+            pass  # Custom provider not in registry — still show it.
+
+        reg_models: list[str] = []
+        try:
+            reg_models = list(registry.available_models(provider_name) or [])
+        except Exception:
+            pass
+
+        # Merge in models from config's ``models`` list
+        cfg_models: list[str] = []
+        try:
+            from src.config import get_provider_config
+
+            pc = get_provider_config(provider_name)
+            if pc:
+                cfg_models = list(pc.get("models", []) or [])
+        except Exception:
+            pass
+
+        all_models = list(dict.fromkeys(reg_models + cfg_models))  # dedup, preserve order
+
+        lines.append(f"  {provider_name}:")
+        for model in all_models:
+            marker = " *" if model == registry.provider_default_model(provider_name) else ""
+            lines.append(f"    {model}{marker}")
+    return "\n".join(lines)
+
+
+_MODEL_USAGE = (
+    "Usage: /model [NAME [--provider NAME]]\n\n"
+    "Modes:\n"
+    "  (no args)              Show current provider/model + available models.\n"
+    "  NAME                   Switch to model NAME. Unique short prefixes auto-\n"
+    "                         match (e.g. 'gpt-4o-m' -> 'gpt-4o-mini'); ambiguous\n"
+    "                         prefixes list candidates; on typo, suggests\n"
+    "                         'Did you mean ...?'.\n"
+    "  NAME --provider P      Switch to NAME under provider P (skip inference).\n"
+    "  help, --help, -h       Print this help.\n\n"
+    "Persistence:\n"
+    "  Known model     runtime only - config unchanged.\n"
+    "  Unknown model   saved to config.json; will survive restart.\n"
+    "  If save fails   session only; not persisted.\n"
+)
 
 
 def _provider_command() -> LocalCommand:
@@ -75,6 +174,7 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
     except UnknownProviderError:
         warnings.append(f"Warning: unknown provider '{provider}' — proceeding anyway")
         from src.config import set_default_provider as _set_dp
+
         _set_dp(provider)
 
     runtime.swap_provider(provider)
@@ -92,9 +192,14 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
 def _model_call(args: str, context: Any) -> LocalCommandResult:
     tokens = args.split()
 
+    # Help subcommand - first-token check so /model --help still shows help.
+    if tokens and tokens[0] in ("help", "--help", "-h"):
+        return _text(_MODEL_USAGE)
+
     if not tokens:
         current = _format_runtime_current(context)
-        lines = [current, "", format_model_list()] if current else [format_model_list()]
+        model_list = format_model_list()
+        lines = [current, "", model_list] if current else [model_list]
         return _text("\n".join(lines))
 
     try:
@@ -104,50 +209,68 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
 
     warnings: list[str] = []
     registry = ModelRegistry()
-    if provider is None:
-        try:
-            provider = registry.infer_provider_for_model(model)
-        except UnknownModelError:
-            provider = "anthropic"
-            warnings.append(f"Warning: unknown model '{model}' — defaulting to provider 'anthropic'")
-    else:
-        try:
-            registry.validate_provider(provider)
-        except UnknownProviderError:
-            warnings.append(f"Warning: unknown provider '{provider}' — proceeding anyway")
 
+    # ---- Resolve provider ----
+    if provider is None:
+        # Use current runtime provider instead of infer_provider_for_model,
+        # so /model switches models under the user's current provider rather
+        # than silently jumping to whichever provider "owns" the model name.
+        provider = _current_provider_name(context) or "anthropic"
+
+    # ---- Try prefix matching / spelling suggestions on validation failure ----
+    # Unique prefix matches are auto-corrected with a Note; multiple matches
+    # are listed for the user to choose from; zero matches fall through to
+    # ``Did you mean ...?`` suggestions from difflib.
     try:
         registry.validate_model(model, provider)
-    except UnknownModelError:
-        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
-    except ProviderMismatchError:
-        warnings.append(f"Warning: model '{model}' not listed for provider '{provider}' — proceeding anyway")
-
-    store = ModelStore(registry)
-    try:
-        store.set_default_provider(provider)
-    except UnknownProviderError:
-        from src.config import set_default_provider as _set_dp
-        _set_dp(provider)
-    try:
-        store.set_default_model(provider, model)
     except (UnknownModelError, ProviderMismatchError):
-        from src.config import get_provider_config, set_api_key
-        current = get_provider_config(provider)
-        base_url = current.get("base_url")
-        if base_url is None:
-            try:
-                from src.providers import PROVIDER_INFO
-                base_url = PROVIDER_INFO[provider]["default_base_url"]
-            except (KeyError, ImportError):
-                base_url = ""
-        set_api_key(
-            provider,
-            api_key=current.get("api_key", ""),
-            base_url=base_url,
-            default_model=model,
-        )
+        prefix_matches = registry.find_prefix_matches(model, provider)
+        if len(prefix_matches) == 1:
+            resolved_model, resolved_provider = prefix_matches[0]
+            warnings.append(f"Note: matched '{model}' by prefix to '{resolved_model}'")
+            model = resolved_model
+            provider = resolved_provider
+        elif len(prefix_matches) > 1:
+            options = ", ".join(m[0] for m in prefix_matches)
+            warnings.append(
+                f"Multiple models start with '{model}': {options} - please be more specific"
+            )
+        else:
+            suggestions = registry.suggest_models(model, provider)
+            if suggestions:
+                warnings.append(f"Did you mean: {', '.join(suggestions)}?")
 
+    # ---- Check if the model is known for this provider ----
+    # Also check the config's ``models`` list: a model previously persisted
+    # (e.g. via /model <unknown-name>) is treated as "known" so the second
+    # invocation doesn't re-warn the user.
+    model_known = True
+    try:
+        registry.validate_model(model, provider)
+    except (UnknownModelError, ProviderMismatchError):
+        model_known = _model_is_in_config_models(model, provider)
+        if not model_known:
+            warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
+
+    # ---- Persist unknown model to config so it's available next session ----
+    if not model_known:
+        try:
+            ModelStore(registry).set_default_provider(provider)
+        except Exception:
+            from src.config import set_default_provider as _set_dp
+
+            _set_dp(provider)
+        # ``persist_unknown`` skips registry validation and tolerates a missing
+        # provider config (it falls back to the registry default base URL).
+        # Adjacent hint to the warning tells the user whether their switch
+        # will survive the next REPL launch.
+        try:
+            ModelStore(registry).set_default_model_persist_unknown(provider, model)
+            warnings.append("(saved to config; will survive restart)")
+        except Exception as exc:
+            warnings.append(f"(session only; not persisted: {exc})")
+
+    # ---- Runtime switch (always, regardless of persistence) ----
     runtime = _runtime(context)
     runtime.swap_provider(provider, model)  # type: ignore[union-attr]
     _sync_context(context, runtime)
@@ -189,6 +312,22 @@ def _runtime(context: Any) -> Any | None:
     return getattr(context, "runtime_context", None)
 
 
+def _current_provider_name(context: Any) -> str | None:
+    """Return the current provider name from the runtime context, or *None*.
+
+    Used as the fallback provider when ``infer_provider_for_model`` cannot
+    identify a model — avoids resetting to a hardcoded default that may
+    differ from the user's actual provider.
+    """
+    runtime = _runtime(context)
+    if runtime is not None:
+        return getattr(runtime, "provider_name", None)
+    # Fallback: try the command context's own provider name.
+    return getattr(context, "provider_name", None) or getattr(
+        getattr(context, "provider", None), "provider_name", None
+    )
+
+
 def _sync_context(context: Any, runtime: Any) -> None:
     context.provider = runtime.provider
     context.tool_registry = runtime.tool_registry
@@ -216,3 +355,20 @@ def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str |
 
 def _text(value: str) -> LocalCommandResult:
     return LocalCommandResult(type="text", value=value)
+
+
+def _model_is_in_config_models(model: str, provider: str) -> bool:
+    """Check whether *model* is in the config's ``models`` list for *provider*.
+
+    Used to avoid re-warning about a model that was already persisted by a
+    previous ``/model <unknown>`` invocation.
+    """
+    try:
+        from src.config import get_provider_config
+
+        pc = get_provider_config(provider)
+        if not pc:
+            return False
+        return model in (pc.get("models") or [])
+    except Exception:
+        return False

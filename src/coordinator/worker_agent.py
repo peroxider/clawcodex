@@ -18,6 +18,7 @@ in the future without re-editing.
 ``get_coordinator_agents()`` returns the canonical agent list for
 coordinator-mode sessions (matches ``workerAgent.ts:16-18``).
 """
+
 from __future__ import annotations
 
 from dataclasses import replace

@@ -51,6 +51,7 @@ _PROFILING_ENABLED: bool = False
 # from clobbering each other.
 _SESSION_ID: str = uuid.uuid4().hex[:12]
 
+
 # Output directory. Lazy-created on first write; never read at import time.
 # Honors ``CLAUDE_CONFIG_DIR`` (matches the codebase's existing config-dir
 # resolution at ``src/memdir/paths.py:108`` ``get_claude_config_home_dir``).
@@ -167,8 +168,7 @@ def _flush_on_exit() -> None:
         base = _phase_log[0][1]
         total_ms = (_phase_log[-1][1] - base) * 1000.0
         sys.stderr.write(
-            f"startup: {len(_phase_log)} phases, total {total_ms:.0f}ms; "
-            f"report → {out_path}\n"
+            f"startup: {len(_phase_log)} phases, total {total_ms:.0f}ms; report → {out_path}\n"
         )
     except Exception:
         # Never let profiler I/O block process exit.

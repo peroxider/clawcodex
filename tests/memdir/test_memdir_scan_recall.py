@@ -161,9 +161,7 @@ class FindRelevantMemoriesTest(unittest.TestCase):
             mock_resp = MagicMock()
             mock_resp.content = '{"selected_memories": ["a.md", "bogus.md"]}'
             mock_provider = MagicMock()
-            mock_provider.chat_async = MagicMock(
-                return_value=_async_return(mock_resp)
-            )
+            mock_provider.chat_async = MagicMock(return_value=_async_return(mock_resp))
 
             cancel = asyncio.Event()
             result = _run(
@@ -182,9 +180,7 @@ class FindRelevantMemoriesTest(unittest.TestCase):
             _write_memory_file(Path(tmp) / "a.md")
 
             mock_provider = MagicMock()
-            mock_provider.chat_async = MagicMock(
-                side_effect=RuntimeError("boom")
-            )
+            mock_provider.chat_async = MagicMock(side_effect=RuntimeError("boom"))
 
             cancel = asyncio.Event()
             result = _run(
@@ -221,9 +217,7 @@ class FindRelevantMemoriesTest(unittest.TestCase):
             mock_resp = MagicMock()
             mock_resp.content = '{"selected_memories": ["a.md", "b.md"]}'
             mock_provider = MagicMock()
-            mock_provider.chat_async = MagicMock(
-                return_value=_async_return(mock_resp)
-            )
+            mock_provider.chat_async = MagicMock(return_value=_async_return(mock_resp))
 
             cancel = asyncio.Event()
             result = _run(

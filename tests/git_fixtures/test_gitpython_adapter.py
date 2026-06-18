@@ -26,10 +26,15 @@ class TestGitPythonProvider:
         """Test provider with a valid git repository."""
         # Create a temp git repo
         import subprocess
+
         subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True
+        )
         subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=tmp_path, capture_output=True
+        )
 
         provider = GitPythonProvider(cwd=tmp_path)
         assert provider.is_git_repo() is True
@@ -37,6 +42,7 @@ class TestGitPythonProvider:
     def test_provider_with_invalid_repo(self):
         """Test provider with a non-git directory."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as non_git_dir:
             provider = GitPythonProvider(cwd=non_git_dir)
             assert provider.is_git_repo() is False
@@ -46,10 +52,15 @@ class TestCollectGitContext:
     def test_collect_git_context_valid_repo(self, tmp_path):
         """Test collecting git context from a valid repo."""
         import subprocess
+
         subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True
+        )
         subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "--allow-empty", "-m", "initial"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "initial"], cwd=tmp_path, capture_output=True
+        )
 
         clear_git_caches()
         ctx = collect_git_context_with_gitpython(str(tmp_path))
@@ -60,6 +71,7 @@ class TestCollectGitContext:
     def test_collect_git_context_invalid_repo(self):
         """Test collecting git context from a non-git directory."""
         import tempfile
+
         with tempfile.TemporaryDirectory() as non_git_dir:
             clear_git_caches()
             ctx = collect_git_context_with_gitpython(non_git_dir)
@@ -102,10 +114,15 @@ class TestBackwardCompatibility:
     def test_returns_git_context_snapshot(self, tmp_path):
         """Ensure adapter returns GitContextSnapshot type."""
         import subprocess
+
         subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"], cwd=tmp_path, capture_output=True
+        )
         subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, capture_output=True)
-        subprocess.run(["git", "commit", "--allow-empty", "-m", "init"], cwd=tmp_path, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"], cwd=tmp_path, capture_output=True
+        )
 
         clear_git_caches()
         ctx = collect_git_context_with_gitpython(str(tmp_path))

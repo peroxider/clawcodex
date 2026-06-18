@@ -3,6 +3,7 @@
 Simulates: Multiple concurrent-safe tools batched in parallel.
 Tests partition_tool_calls + run_tools orchestration with real tools.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -206,9 +207,14 @@ class TestE2ETodoWriteIntegration(unittest.TestCase):
         """Write a todo, then complete it — matches TS TodoWrite behavior."""
         # Add todo
         result1 = self.registry.dispatch(
-            ToolCall(name="TodoWrite", input={
-                "todos": [{"content": "Task 1", "status": "pending", "activeForm": "Doing task 1"}],
-            }),
+            ToolCall(
+                name="TodoWrite",
+                input={
+                    "todos": [
+                        {"content": "Task 1", "status": "pending", "activeForm": "Doing task 1"}
+                    ],
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(result1.is_error)
@@ -216,9 +222,14 @@ class TestE2ETodoWriteIntegration(unittest.TestCase):
 
         # Complete todo
         result2 = self.registry.dispatch(
-            ToolCall(name="TodoWrite", input={
-                "todos": [{"content": "Task 1", "status": "completed", "activeForm": "Done task 1"}],
-            }),
+            ToolCall(
+                name="TodoWrite",
+                input={
+                    "todos": [
+                        {"content": "Task 1", "status": "completed", "activeForm": "Done task 1"}
+                    ],
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(result2.is_error)

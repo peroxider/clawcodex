@@ -64,10 +64,12 @@ async def run_session_start_hooks(
         else:
             continue
 
-        results.append({
-            "hook": hook.config,
-            "result": result,
-        })
+        results.append(
+            {
+                "hook": hook.config,
+                "result": result,
+            }
+        )
 
     return results
 
@@ -101,10 +103,12 @@ async def run_session_end_hooks(
         else:
             continue
 
-        results.append({
-            "hook": hook.config,
-            "result": result,
-        })
+        results.append(
+            {
+                "hook": hook.config,
+                "result": result,
+            }
+        )
 
     return results
 
@@ -140,9 +144,11 @@ async def run_compact_hooks(
         else:
             continue
 
-        results.append({
-            "hook": hook.config,
-            "result": result,
-        })
+        results.append(
+            {
+                "hook": hook.config,
+                "result": result,
+            }
+        )
 
     return results

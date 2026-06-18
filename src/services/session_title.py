@@ -27,7 +27,7 @@ def auto_title_from_message(text: str) -> str:
     # Remove common prefixes
     for prefix in ("please ", "can you ", "help me ", "i need ", "i want "):
         if first_line.lower().startswith(prefix):
-            first_line = first_line[len(prefix):]
+            first_line = first_line[len(prefix) :]
             break
 
     # Capitalize first letter
@@ -36,7 +36,7 @@ def auto_title_from_message(text: str) -> str:
 
     # Truncate
     if len(first_line) > MAX_TITLE_LENGTH:
-        first_line = first_line[:MAX_TITLE_LENGTH - 3].rstrip() + "..."
+        first_line = first_line[: MAX_TITLE_LENGTH - 3].rstrip() + "..."
 
     return first_line or "Untitled session"
 
@@ -59,7 +59,11 @@ async def generate_llm_title(
             role = msg.get("role", "user")
             content = msg.get("content", "")
             if isinstance(content, list):
-                texts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+                texts = [
+                    b.get("text", "")
+                    for b in content
+                    if isinstance(b, dict) and b.get("type") == "text"
+                ]
                 content = " ".join(texts)
             if isinstance(content, str):
                 content = content[:200]
@@ -71,22 +75,24 @@ async def generate_llm_title(
         response = await client.messages.create(
             model=model,
             max_tokens=50,
-            messages=[{
-                "role": "user",
-                "content": (
-                    "Generate a concise 5-10 word title for this conversation. "
-                    "Return ONLY the title, no quotes or punctuation.\n\n"
-                    f"{summary}"
-                ),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Generate a concise 5-10 word title for this conversation. "
+                        "Return ONLY the title, no quotes or punctuation.\n\n"
+                        f"{summary}"
+                    ),
+                }
+            ],
         )
 
         if response.content and len(response.content) > 0:
             title = response.content[0].text.strip()
             # Clean up
-            title = title.strip('"\'')
+            title = title.strip("\"'")
             if len(title) > MAX_TITLE_LENGTH:
-                title = title[:MAX_TITLE_LENGTH - 3] + "..."
+                title = title[: MAX_TITLE_LENGTH - 3] + "..."
             return title
 
     except Exception as e:

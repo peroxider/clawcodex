@@ -49,7 +49,7 @@ def get_tool_name_for_permission_check(
 def get_mcp_display_name(full_name: str, server_name: str) -> str:
     prefix = f"mcp__{normalize_name_for_mcp(server_name)}__"
     if full_name.startswith(prefix):
-        return full_name[len(prefix):]
+        return full_name[len(prefix) :]
     return full_name
 
 
@@ -57,5 +57,5 @@ def extract_mcp_tool_display_name(user_facing_name: str) -> str:
     without_suffix = re.sub(r"\s*\(MCP\)\s*$", "", user_facing_name).strip()
     dash_index = without_suffix.find(" - ")
     if dash_index != -1:
-        return without_suffix[dash_index + 3:].strip()
+        return without_suffix[dash_index + 3 :].strip()
     return without_suffix

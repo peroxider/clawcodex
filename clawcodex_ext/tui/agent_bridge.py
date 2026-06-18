@@ -134,7 +134,9 @@ class AgentBridge:
         if self._tail_follower is not None:
             self._start_tail_follower()
 
-    def replace_runtime(self, *, provider: Any, tool_registry: ToolRegistry, tool_context: ToolContext) -> None:
+    def replace_runtime(
+        self, *, provider: Any, tool_registry: ToolRegistry, tool_context: ToolContext
+    ) -> None:
         self._provider = provider
         self._tool_registry = tool_registry
         self._tool_context = tool_context
@@ -185,14 +187,18 @@ class AgentBridge:
                     if msg_dict is None:
                         continue
                     # Detect background agent completion marker
-                    if (msg_dict.get("role") == "system" and
-                            msg_dict.get("content") == "__background_complete__"):
-                        self._post(AgentRunFinished(
-                            response_text="",
-                            num_turns=0,
-                            usage=None,
-                            error=None,
-                        ))
+                    if (
+                        msg_dict.get("role") == "system"
+                        and msg_dict.get("content") == "__background_complete__"
+                    ):
+                        self._post(
+                            AgentRunFinished(
+                                response_text="",
+                                num_turns=0,
+                                usage=None,
+                                error=None,
+                            )
+                        )
                         break
                     role = msg_dict.get("role", "")
                     content = msg_dict.get("content", "")
@@ -322,6 +328,7 @@ class AgentBridge:
             """Handle thinking content chunks from the provider."""
             ## _log(f'[agent_bridge] _on_thinking called with: {chunk[:50] if chunk else "empty"}...')
             from .messages import ThinkingChunk
+
             self._post(ThinkingChunk(text=chunk))
 
         try:
@@ -335,12 +342,14 @@ class AgentBridge:
             # run_agent_loop did this internally; the adapter doesn't.
             import asyncio as _asyncio
             from src.outputStyles import resolve_output_style
+
             _style_prompt = resolve_output_style(
                 getattr(self._tool_context, "output_style_name", None),
                 getattr(self._tool_context, "output_style_dir", None),
             ).prompt
             effective_system_prompt = build_effective_system_prompt(
-                _style_prompt, self._tool_context,
+                _style_prompt,
+                self._tool_context,
             )
             if self._append_system_prompt:
                 effective_system_prompt = (
@@ -360,6 +369,7 @@ class AgentBridge:
                     self._session.conversation.add_message(msg.role, msg.content)
                 except Exception:
                     import logging
+
                     logging.getLogger(__name__).exception(
                         "Failed to persist message into conversation: "
                         "role=%s; next-turn API may reject the call.",
@@ -371,30 +381,28 @@ class AgentBridge:
             ## _log(f'[agent_bridge] initial_messages count: {len(list(self._session.conversation.messages))}')
             ## _log(f'[agent_bridge] stream={self._stream}, _on_text={"_on_text" if self._stream else None}')
             try:
-                compat_result = _loop.run_until_complete(run_query_as_agent_loop(
-                    initial_messages=list(self._session.conversation.messages),
-                    provider=self._provider,
-                    tool_registry=self._tool_registry,
-                    tool_context=self._tool_context,
-                    system_prompt=effective_system_prompt,
-                    max_turns=self._max_turns,
-                    on_event=_on_event,
-                    on_text_chunk=_on_text if self._stream else None,
-                    on_thinking_chunk=_on_thinking if self._stream else None,
-                    on_message=_persist,
-                    abort_controller=controller,
-                ))
+                compat_result = _loop.run_until_complete(
+                    run_query_as_agent_loop(
+                        initial_messages=list(self._session.conversation.messages),
+                        provider=self._provider,
+                        tool_registry=self._tool_registry,
+                        tool_context=self._tool_context,
+                        system_prompt=effective_system_prompt,
+                        max_turns=self._max_turns,
+                        on_event=_on_event,
+                        on_text_chunk=_on_text if self._stream else None,
+                        on_thinking_chunk=_on_thinking if self._stream else None,
+                        on_message=_persist,
+                        abort_controller=controller,
+                    )
+                )
                 ## _log(f'[agent_bridge] run_query_as_agent_loop returned, response_text={compat_result.response_text[:100] if compat_result.response_text else "empty"}, num_turns={compat_result.num_turns}')
                 ## _log(f'[agent_bridge] result terminal: {compat_result.terminal}')
             finally:
                 _loop.close()
             result = AgentLoopResult(
                 response_text=compat_result.response_text,
-                usage=(
-                    compat_result.usage
-                    if compat_result.num_turns > 0
-                    else None
-                ),
+                usage=(compat_result.usage if compat_result.num_turns > 0 else None),
                 num_turns=compat_result.num_turns,
             )
 
@@ -552,6 +560,7 @@ class AgentBridge:
             extract_advisor_error_code,
             extract_advisor_result_text,
         )
+
         messages = getattr(self._session.conversation, "messages", None)
         if not messages:
             return
@@ -566,6 +575,7 @@ class AgentBridge:
         # with the model name attached.
         try:
             from src.settings.settings import get_settings
+
             advisor_model = (get_settings().advisor_model or "") or None
         except Exception:
             advisor_model = None
@@ -655,7 +665,8 @@ class AgentBridge:
                                 advisor_model=advisor_model,
                                 text=None if is_err else result_text,
                                 error_code=(
-                                    result_text[:120] if is_err and result_text
+                                    result_text[:120]
+                                    if is_err and result_text
                                     else ("error" if is_err else None)
                                 ),
                             )
@@ -673,7 +684,7 @@ class AgentBridge:
                     # Look for a matching advisor_tool_result anywhere
                     # later in the same assistant message.
                     result_block = None
-                    for later in content[i + 1:]:
+                    for later in content[i + 1 :]:
                         if (
                             isinstance(later, dict)
                             and later.get("type") == "advisor_tool_result"
@@ -762,9 +773,7 @@ class AgentBridge:
         return outcome["allowed"], outcome["enable"]
 
     # ---- ask_user bridge ----
-    def _ask_user_handler(
-        self, questions: list[dict[str, Any]]
-    ) -> dict[str, str]:
+    def _ask_user_handler(self, questions: list[dict[str, Any]]) -> dict[str, str]:
         """Called from the worker thread when ``AskUserQuestion`` runs.
 
         Posts :class:`AskUserQuestionRequested` to the UI, which pushes

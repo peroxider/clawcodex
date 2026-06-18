@@ -156,27 +156,24 @@ def _make_error(msg: str) -> ParsedArgs:
 
 
 def _parse_spawn_value(raw: str | None) -> SpawnMode | str:
-    if raw == 'session':
-        return 'single-session'
-    if raw == 'same-dir':
-        return 'same-dir'
-    if raw == 'worktree':
-        return 'worktree'
-    return (
-        '--spawn requires one of: session, same-dir, worktree (got: '
-        f'{raw or "<missing>"})'
-    )
+    if raw == "session":
+        return "single-session"
+    if raw == "same-dir":
+        return "same-dir"
+    if raw == "worktree":
+        return "worktree"
+    return f"--spawn requires one of: session, same-dir, worktree (got: {raw or '<missing>'})"
 
 
 def _parse_capacity_value(raw: str | None) -> int | str:
     if raw is None:
-        return '--capacity requires a positive integer (got: <missing>)'
+        return "--capacity requires a positive integer (got: <missing>)"
     try:
         n = int(raw)
     except ValueError:
-        return f'--capacity requires a positive integer (got: {raw})'
+        return f"--capacity requires a positive integer (got: {raw})"
     if n < 1:
-        return f'--capacity requires a positive integer (got: {raw})'
+        return f"--capacity requires a positive integer (got: {raw})"
     return n
 
 
@@ -204,63 +201,58 @@ def parse_args(args: list[str]) -> ParsedArgs:
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg in ('--help', '-h'):
+        if arg in ("--help", "-h"):
             out.help = True
-        elif arg in ('--verbose', '-v'):
+        elif arg in ("--verbose", "-v"):
             out.verbose = True
-        elif arg == '--sandbox':
+        elif arg == "--sandbox":
             out.sandbox = True
-        elif arg == '--no-sandbox':
+        elif arg == "--no-sandbox":
             out.sandbox = False
-        elif arg == '--debug-file' and i + 1 < len(args):
+        elif arg == "--debug-file" and i + 1 < len(args):
             i += 1
             out.debug_file = args[i]
-        elif arg.startswith('--debug-file='):
-            out.debug_file = arg[len('--debug-file='):]
-        elif arg == '--session-timeout' and i + 1 < len(args):
+        elif arg.startswith("--debug-file="):
+            out.debug_file = arg[len("--debug-file=") :]
+        elif arg == "--session-timeout" and i + 1 < len(args):
             i += 1
             out.session_timeout_ms = _int_seconds_to_ms(args[i])
-        elif arg.startswith('--session-timeout='):
-            out.session_timeout_ms = _int_seconds_to_ms(
-                arg[len('--session-timeout='):]
-            )
-        elif arg == '--permission-mode' and i + 1 < len(args):
+        elif arg.startswith("--session-timeout="):
+            out.session_timeout_ms = _int_seconds_to_ms(arg[len("--session-timeout=") :])
+        elif arg == "--permission-mode" and i + 1 < len(args):
             i += 1
             out.permission_mode = args[i]
-        elif arg.startswith('--permission-mode='):
-            out.permission_mode = arg[len('--permission-mode='):]
-        elif arg == '--name' and i + 1 < len(args):
+        elif arg.startswith("--permission-mode="):
+            out.permission_mode = arg[len("--permission-mode=") :]
+        elif arg == "--name" and i + 1 < len(args):
             i += 1
             out.name = args[i]
-        elif arg.startswith('--name='):
-            out.name = arg[len('--name='):]
-        elif arg in ('--session-id', '-c', '--continue') or arg.startswith(
-            '--session-id='
-        ):
+        elif arg.startswith("--name="):
+            out.name = arg[len("--name=") :]
+        elif arg in ("--session-id", "-c", "--continue") or arg.startswith("--session-id="):
             return _make_error(
-                f'{arg.split("=")[0]} is a KAIROS-only flag not yet '
-                'supported in the MVP'
+                f"{arg.split('=')[0]} is a KAIROS-only flag not yet supported in the MVP"
             )
-        elif arg == '--spawn' or arg.startswith('--spawn='):
+        elif arg == "--spawn" or arg.startswith("--spawn="):
             if out.spawn_mode is not None:
-                return _make_error('--spawn may only be specified once')
+                return _make_error("--spawn may only be specified once")
             raw: str | None
-            if arg.startswith('--spawn='):
-                raw = arg[len('--spawn='):]
+            if arg.startswith("--spawn="):
+                raw = arg[len("--spawn=") :]
             elif i + 1 < len(args):
                 i += 1
                 raw = args[i]
             else:
                 raw = None
             v = _parse_spawn_value(raw)
-            if isinstance(v, str) and v not in ('single-session', 'same-dir', 'worktree'):
+            if isinstance(v, str) and v not in ("single-session", "same-dir", "worktree"):
                 return _make_error(v)
             out.spawn_mode = v  # type: ignore[assignment]
-        elif arg == '--capacity' or arg.startswith('--capacity='):
+        elif arg == "--capacity" or arg.startswith("--capacity="):
             if out.capacity is not None:
-                return _make_error('--capacity may only be specified once')
-            if arg.startswith('--capacity='):
-                raw = arg[len('--capacity='):]
+                return _make_error("--capacity may only be specified once")
+            if arg.startswith("--capacity="):
+                raw = arg[len("--capacity=") :]
             elif i + 1 < len(args):
                 i += 1
                 raw = args[i]
@@ -271,12 +263,12 @@ def parse_args(args: list[str]) -> ParsedArgs:
                 out.capacity = cv
             else:
                 return _make_error(cv)
-        elif arg == '--create-session-in-dir':
+        elif arg == "--create-session-in-dir":
             out.create_session_in_dir = True
-        elif arg == '--no-create-session-in-dir':
+        elif arg == "--no-create-session-in-dir":
             out.create_session_in_dir = False
         else:
-            return _make_error(f'Unknown argument: {arg}')
+            return _make_error(f"Unknown argument: {arg}")
         i += 1
     return out
 
@@ -286,9 +278,7 @@ def _int_seconds_to_ms(value: str) -> int:
     try:
         n = int(value)
     except ValueError as err:
-        raise ValueError(
-            f'--session-timeout requires an integer (got: {value!r})'
-        ) from err
+        raise ValueError(f"--session-timeout requires an integer (got: {value!r})") from err
     return n * 1000
 
 
@@ -313,10 +303,16 @@ def is_connection_error(err: Exception) -> bool:
     return isinstance(
         err,
         (
-            ConnectionError, ConnectionRefusedError, ConnectionResetError,
-            ConnectionAbortedError, TimeoutError,
-            socket.timeout, socket.gaierror,
-            httpx.ConnectError, httpx.ConnectTimeout, httpx.NetworkError,
+            ConnectionError,
+            ConnectionRefusedError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+            TimeoutError,
+            socket.timeout,
+            socket.gaierror,
+            httpx.ConnectError,
+            httpx.ConnectTimeout,
+            httpx.NetworkError,
         ),
     )
 
@@ -420,10 +416,7 @@ class _BackoffTrack:
         return self.current_ms
 
     def is_given_up(self, now_ms: float) -> bool:
-        return (
-            self.give_up_at_ms is not None
-            and now_ms >= self.give_up_at_ms
-        )
+        return self.give_up_at_ms is not None and now_ms >= self.give_up_at_ms
 
 
 class _BridgeDaemon:
@@ -502,16 +495,17 @@ class _BridgeDaemon:
                 continue
             try:
                 work = await self.api.poll_for_work(
-                    self.environment_id, self.environment_secret,
+                    self.environment_id,
+                    self.environment_secret,
                 )
             except BridgeFatalError as err:
                 if is_expired_error_type(err.error_type) or err.status == 404:
                     logger.error(
-                        '[bridge:main] Environment expired/lost '
-                        '(MVP gives up): %s', err,
+                        "[bridge:main] Environment expired/lost (MVP gives up): %s",
+                        err,
                     )
                     raise BridgeHeadlessPermanentError(str(err)) from err
-                logger.error('[bridge:main] Poll fatal: %s', err)
+                logger.error("[bridge:main] Poll fatal: %s", err)
                 raise
             except (asyncio.CancelledError, KeyboardInterrupt):
                 raise
@@ -520,29 +514,24 @@ class _BridgeDaemon:
                 # errors get a longer initial delay (TCP/TLS handshake
                 # cost) and an independent give-up timer.
                 now_ms = _now_ms()
-                track = (
-                    self._conn_track
-                    if is_connection_error(err)
-                    else self._general_track
-                )
+                track = self._conn_track if is_connection_error(err) else self._general_track
                 delay_ms = track.fail(now_ms)
                 if track.is_given_up(now_ms):
-                    label = (
-                        'connection-error' if track is self._conn_track
-                        else 'general-error'
-                    )
+                    label = "connection-error" if track is self._conn_track else "general-error"
                     logger.error(
-                        '[bridge:main] %s track exceeded give-up '
-                        'threshold (%sms): %s',
-                        label, track.give_up_ms, err,
+                        "[bridge:main] %s track exceeded give-up threshold (%sms): %s",
+                        label,
+                        track.give_up_ms,
+                        err,
                     )
                     raise BridgeHeadlessPermanentError(
-                        f'{label} give-up: {err}',
+                        f"{label} give-up: {err}",
                     ) from err
                 logger.warning(
-                    '[bridge:main] Poll error (%s, sleeping %sms): %s',
-                    'conn' if track is self._conn_track else 'general',
-                    delay_ms, err,
+                    "[bridge:main] Poll error (%s, sleeping %sms): %s",
+                    "conn" if track is self._conn_track else "general",
+                    delay_ms,
+                    err,
                 )
                 await self._sleep_or_cancel(delay_ms / 1000.0)
                 continue
@@ -569,39 +558,40 @@ class _BridgeDaemon:
                 continue
             try:
                 await self.api.heartbeat_work(
-                    self.environment_id, work_id, session.access_token,
+                    self.environment_id,
+                    work_id,
+                    session.access_token,
                 )
             except Exception as err:  # noqa: BLE001
                 logger.warning(
-                    '[bridge:main] heartbeat work_id=%s failed: %s',
-                    work_id, err,
+                    "[bridge:main] heartbeat work_id=%s failed: %s",
+                    work_id,
+                    err,
                 )
 
     async def _process_work(self, work: dict[str, Any]) -> None:
-        work_id = work.get('id')
+        work_id = work.get("id")
         if not isinstance(work_id, str):
             return
         if work_id in self.completed_work_ids:
             # Stale redelivery — server hadn't yet processed stop_work.
             return
-        data = work.get('data') or {}
+        data = work.get("data") or {}
         if not isinstance(data, dict):
             return
-        work_type = data.get('type')
-        if work_type == 'healthcheck':
+        work_type = data.get("type")
+        if work_type == "healthcheck":
             await self._safe_ack(work_id, self.environment_secret)
             return
-        if work_type != 'session':
+        if work_type != "session":
             return
         try:
-            secret = decode_work_secret(work.get('secret') or '')
+            secret = decode_work_secret(work.get("secret") or "")
         except Exception as err:  # noqa: BLE001
-            logger.error(
-                '[bridge:main] decode_work_secret failed: %s', err
-            )
+            logger.error("[bridge:main] decode_work_secret failed: %s", err)
             await self._safe_stop_work(work_id, force=True)
             return
-        session_id = data.get('id')
+        session_id = data.get("id")
         if not isinstance(session_id, str):
             return
         await self._safe_ack(work_id, secret.session_ingress_token)
@@ -609,30 +599,29 @@ class _BridgeDaemon:
         # MVP: CCR v2 only. v1 work (use_code_sessions = False) is rejected.
         use_ccr_v2 = bool(secret.use_code_sessions)
         if not use_ccr_v2:
-            logger.warning(
-                '[bridge:main] v1 session-ingress not supported in MVP'
-            )
+            logger.warning("[bridge:main] v1 session-ingress not supported in MVP")
             await self._safe_stop_work(work_id, force=True)
             return
         sdk_url = build_ccr_v2_sdk_url(secret.api_base_url, session_id)
         spawn_opts: SessionSpawnOpts = {
-            'session_id': session_id,
-            'sdk_url': sdk_url,
-            'access_token': secret.session_ingress_token,
-            'use_ccr_v2': True,
-            'worker_epoch': 0,  # MVP: full port fetches via /worker/register
+            "session_id": session_id,
+            "sdk_url": sdk_url,
+            "access_token": secret.session_ingress_token,
+            "use_ccr_v2": True,
+            "worker_epoch": 0,  # MVP: full port fetches via /worker/register
         }
         worktree_paths: WorktreePaths | None = None
         working_dir = self.config.dir
-        if self.config.spawn_mode == 'worktree':
+        if self.config.spawn_mode == "worktree":
             worktree_paths = await create_agent_worktree(
-                self.config.dir, session_id,
+                self.config.dir,
+                session_id,
             )
             working_dir = worktree_paths.working_dir
         try:
             session = self.spawner.spawn(spawn_opts, working_dir)
         except Exception as err:  # noqa: BLE001
-            logger.error('[bridge:main] spawn failed: %s', err)
+            logger.error("[bridge:main] spawn failed: %s", err)
             if worktree_paths is not None:
                 await remove_agent_worktree(worktree_paths)
             await self._safe_stop_work(work_id, force=True)
@@ -644,6 +633,7 @@ class _BridgeDaemon:
         # session_compat_ids cached for future title/archive ops that
         # the MVP doesn't yet exercise — populated for forward compat.
         from src.bridge.session_id_compat import to_compat_session_id
+
         self.session_compat_ids[session_id] = to_compat_session_id(session_id)
         # Per-session timeout watchdog. ``--session-timeout SECONDS``
         # → ``config.session_timeout_ms`` (or None to disable). Mirrors
@@ -657,23 +647,26 @@ class _BridgeDaemon:
                     session_id,
                     self.config.session_timeout_ms / 1000.0,
                 ),
-                name=f'bridge-timer-{session_id}',
+                name=f"bridge-timer-{session_id}",
             )
             self.session_timer_tasks[session_id] = timer_task
         logger.info(
-            '[bridge:main] Spawned session_id=%s work_id=%s '
-            '(%s/%s active)',
-            session_id, work_id,
-            len(self.active_sessions), self.config.max_sessions,
+            "[bridge:main] Spawned session_id=%s work_id=%s (%s/%s active)",
+            session_id,
+            work_id,
+            len(self.active_sessions),
+            self.config.max_sessions,
         )
         # Fire-and-forget wait-done.
         asyncio.create_task(
             self._on_session_done(session_id),
-            name=f'bridge-await-{session_id}',
+            name=f"bridge-await-{session_id}",
         )
 
     async def _session_timeout_watchdog(
-        self, session_id: str, timeout_seconds: float,
+        self,
+        session_id: str,
+        timeout_seconds: float,
     ) -> None:
         """Kill the session after ``timeout_seconds`` if still active.
 
@@ -690,16 +683,15 @@ class _BridgeDaemon:
         if session is None:
             return
         logger.warning(
-            '[bridge:main] Session %s exceeded timeout %.1fs — killing',
-            session_id, timeout_seconds,
+            "[bridge:main] Session %s exceeded timeout %.1fs — killing",
+            session_id,
+            timeout_seconds,
         )
         self.timed_out_sessions.add(session_id)
         try:
             session.kill()
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:main] watchdog kill failed: %s', err
-            )
+            logger.warning("[bridge:main] watchdog kill failed: %s", err)
 
     async def _on_session_done(self, session_id: str) -> None:
         session = self.active_sessions.get(session_id)
@@ -708,10 +700,8 @@ class _BridgeDaemon:
         try:
             status = await session.wait_done()
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:main] wait_done(%s) raised: %s', session_id, err
-            )
-            status = 'failed'
+            logger.warning("[bridge:main] wait_done(%s) raised: %s", session_id, err)
+            status = "failed"
         # Cancel any pending timeout watchdog — session is done.
         timer = self.session_timer_tasks.pop(session_id, None)
         if timer is not None and not timer.done():
@@ -729,10 +719,12 @@ class _BridgeDaemon:
         # ``discard`` doesn't return a value; check membership first.
         was_timeout = session_id in self.timed_out_sessions
         self.timed_out_sessions.discard(session_id)
-        timeout_marker = ' (TIMEOUT)' if was_timeout else ''
+        timeout_marker = " (TIMEOUT)" if was_timeout else ""
         logger.info(
-            '[bridge:main] Session done session_id=%s status=%s%s',
-            session_id, status, timeout_marker,
+            "[bridge:main] Session done session_id=%s status=%s%s",
+            session_id,
+            status,
+            timeout_marker,
         )
 
     async def shutdown(self) -> None:
@@ -757,7 +749,7 @@ class _BridgeDaemon:
             try:
                 session.kill()
             except Exception as err:  # noqa: BLE001
-                logger.warning('[bridge:main] kill failed: %s', err)
+                logger.warning("[bridge:main] kill failed: %s", err)
 
         # Wait up to shutdown_grace_ms for the children to exit.
         if active_snapshot:
@@ -776,9 +768,7 @@ class _BridgeDaemon:
                     try:
                         session.force_kill()
                     except Exception as err:  # noqa: BLE001
-                        logger.warning(
-                            '[bridge:main] force_kill failed: %s', err
-                        )
+                        logger.warning("[bridge:main] force_kill failed: %s", err)
 
         # Stop all outstanding work items.
         for work_id in work_id_snapshot.values():
@@ -795,29 +785,30 @@ class _BridgeDaemon:
         try:
             await self.api.deregister_environment(self.environment_id)
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:main] deregister_environment failed: %s', err
-            )
+            logger.warning("[bridge:main] deregister_environment failed: %s", err)
 
     async def _safe_ack(self, work_id: str, session_token: str) -> None:
         try:
             await self.api.acknowledge_work(
-                self.environment_id, work_id, session_token,
+                self.environment_id,
+                work_id,
+                session_token,
             )
         except Exception as err:  # noqa: BLE001
-            logger.warning(
-                '[bridge:main] ack failed work_id=%s: %s', work_id, err
-            )
+            logger.warning("[bridge:main] ack failed work_id=%s: %s", work_id, err)
 
     async def _safe_stop_work(self, work_id: str, *, force: bool) -> None:
         try:
             await self.api.stop_work(
-                self.environment_id, work_id, force,
+                self.environment_id,
+                work_id,
+                force,
             )
         except Exception as err:  # noqa: BLE001
             logger.warning(
-                '[bridge:main] stop_work failed work_id=%s: %s',
-                work_id, err,
+                "[bridge:main] stop_work failed work_id=%s: %s",
+                work_id,
+                err,
             )
 
     async def _sleep_or_cancel(self, seconds: float) -> None:
@@ -835,13 +826,13 @@ async def bridge_main(
     *,
     api: BridgeApiClient | None = None,
     spawner: SessionSpawner | None = None,
-    get_access_token: Callable[[], str | None] = lambda: 'tok-placeholder',
-    runner_version: str = 'py-bridge-mvp',
-    base_url: str = 'https://api.anthropic.com',
-    machine_name: str = 'localhost',
-    branch: str = 'main',
+    get_access_token: Callable[[], str | None] = lambda: "tok-placeholder",
+    runner_version: str = "py-bridge-mvp",
+    base_url: str = "https://api.anthropic.com",
+    machine_name: str = "localhost",
+    branch: str = "main",
     git_repo_url: str | None = None,
-    working_dir: str = '.',
+    working_dir: str = ".",
     cancel_event: asyncio.Event | None = None,
 ) -> int:
     """End-to-end daemon entry: parse → register → run loop → shutdown.
@@ -858,16 +849,14 @@ async def bridge_main(
     """
     parsed = parse_args(args)
     if parsed.error is not None:
-        logger.error('[bridge:main] %s', parsed.error)
+        logger.error("[bridge:main] %s", parsed.error)
         return 1
     if parsed.help:
         _print_usage()
         return 0
 
-    spawn_mode = parsed.spawn_mode or 'single-session'
-    capacity = parsed.capacity or (
-        1 if spawn_mode == 'single-session' else 4
-    )
+    spawn_mode = parsed.spawn_mode or "single-session"
+    capacity = parsed.capacity or (1 if spawn_mode == "single-session" else 4)
 
     bridge_config = BridgeConfig(
         dir=working_dir,
@@ -879,8 +868,8 @@ async def bridge_main(
         verbose=parsed.verbose,
         sandbox=parsed.sandbox,
         bridge_id=str(uuid.uuid4()),
-        worker_type='claude_code',
-        environment_id='',  # filled by registration
+        worker_type="claude_code",
+        environment_id="",  # filled by registration
         api_base_url=base_url,
         session_ingress_url=base_url,
         debug_file=parsed.debug_file,
@@ -897,23 +886,27 @@ async def bridge_main(
     try:
         registration = await api.register_bridge_environment(bridge_config)
     except BridgeFatalError as err:
-        logger.error('[bridge:main] Registration failed: %s', err)
+        logger.error("[bridge:main] Registration failed: %s", err)
         return 2
-    environment_id = registration['environment_id']
-    environment_secret = registration['environment_secret']
+    environment_id = registration["environment_id"]
+    environment_secret = registration["environment_secret"]
     logger.info(
-        '[bridge:main] Registered environment_id=%s capacity=%s mode=%s',
-        environment_id, capacity, spawn_mode,
+        "[bridge:main] Registered environment_id=%s capacity=%s mode=%s",
+        environment_id,
+        capacity,
+        spawn_mode,
     )
 
     if spawner is None:
-        spawner = create_session_spawner(SessionSpawnerDeps(
-            exec_path='claude',
-            verbose=parsed.verbose,
-            sandbox=parsed.sandbox,
-            debug_file=parsed.debug_file,
-            permission_mode=parsed.permission_mode,
-        ))
+        spawner = create_session_spawner(
+            SessionSpawnerDeps(
+                exec_path="claude",
+                verbose=parsed.verbose,
+                sandbox=parsed.sandbox,
+                debug_file=parsed.debug_file,
+                permission_mode=parsed.permission_mode,
+            )
+        )
 
     if cancel_event is None:
         cancel_event = asyncio.Event()
@@ -929,7 +922,7 @@ async def bridge_main(
             cancel_event,
         )
     except BridgeHeadlessPermanentError as err:
-        logger.error('[bridge:main] Permanent error: %s', err)
+        logger.error("[bridge:main] Permanent error: %s", err)
         return 3
     return 0
 
@@ -943,7 +936,7 @@ def _install_signal_handlers(cancel_event: asyncio.Event) -> None:
     """
     import sys
 
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         return
     try:
         loop = asyncio.get_running_loop()
@@ -981,13 +974,13 @@ Note: --session-id / --continue (perpetual mode) are not yet supported.
 
 
 __all__ = [
-    'BackoffConfig',
-    'BridgeHeadlessPermanentError',
-    'DEFAULT_BACKOFF',
-    'ParsedArgs',
-    'bridge_main',
-    'is_connection_error',
-    'is_server_error',
-    'parse_args',
-    'run_bridge_loop',
+    "BackoffConfig",
+    "BridgeHeadlessPermanentError",
+    "DEFAULT_BACKOFF",
+    "ParsedArgs",
+    "bridge_main",
+    "is_connection_error",
+    "is_server_error",
+    "parse_args",
+    "run_bridge_loop",
 ]

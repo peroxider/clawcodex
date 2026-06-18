@@ -99,9 +99,7 @@ class TestG2JitterConfig:
     def test_env_vars_override_file(self, tmp_path: Path) -> None:
         config_path = tmp_path / ".claude" / "cron_jitter_config.json"
         config_path.parent.mkdir(parents=True)
-        config_path.write_text(
-            json.dumps({"recurringCapMs": 100_000}), encoding="utf-8"
-        )
+        config_path.write_text(json.dumps({"recurringCapMs": 100_000}), encoding="utf-8")
         env = {"CLAWCODEX_CRON_RECURRING_CAP_MS": "500000"}
         cfg = load_jitter_config(tmp_path, env=env)
         assert cfg.recurring_cap_ms == 500_000
@@ -125,9 +123,7 @@ class TestG2JitterConfig:
         cfg = jitter_config_from_dict("not a dict")
         assert cfg == validate_jitter_config(CronJitterConfig())
 
-    def test_scheduler_hot_reloads_jitter_per_tick(
-        self, tmp_path: Path
-    ) -> None:
+    def test_scheduler_hot_reloads_jitter_per_tick(self, tmp_path: Path) -> None:
         # F-22-G2 hot-reload: scheduler reloads the jitter config every
         # _THROTTLE_INTERVAL ticks (default 60) so live edits to
         # .claude/cron_jitter_config.json or CLAWCODEX_CRON_* env vars
@@ -159,9 +155,7 @@ class TestG2JitterConfig:
         assert call_count["n"] == 2
         assert scheduler.get_jitter_config().recurring_max_age_ms == 10_000
 
-    def test_prune_uses_live_max_age(
-        self, tmp_path: Path
-    ) -> None:
+    def test_prune_uses_live_max_age(self, tmp_path: Path) -> None:
         # F-22-G2: scheduler passes the live recurring_max_age_ms to
         # prune_expired_recurring_tasks so tightening the value mid-session
         # reaps stale tasks immediately.
@@ -239,9 +233,7 @@ class TestG1FeatureGate:
         def on_fire(prompt: str) -> None:
             fired.append(prompt)
 
-        scheduler = CronScheduler(
-            tmp_path, on_fire=on_fire, is_killed=killed.is_set
-        )
+        scheduler = CronScheduler(tmp_path, on_fire=on_fire, is_killed=killed.is_set)
         result = scheduler.check_once()
         assert result == []
         assert fired == []
@@ -250,9 +242,7 @@ class TestG1FeatureGate:
         from dataclasses import replace
 
         now = int(time.time() * 1000)
-        task = add_cron_task(
-            tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now
-        )
+        task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now)
         from clawcodex_ext.cron_system.tasks import write_cron_tasks
 
         due_task = replace(task, next_fire_at=now - 1000)
@@ -292,6 +282,7 @@ class TestG3OneShotJitter:
         result = one_shot_jittered_next_cron_run_ms("abc12345", fields, from_time)
         # Compute expected: 5 12 * * * from 11:00 → 12:05
         from clawcodex_ext.cron_system.parser import compute_next_cron_run
+
         expected = int(compute_next_cron_run(fields, from_time).timestamp() * 1000)
         assert result == expected
 
@@ -305,6 +296,7 @@ class TestG3OneShotJitter:
         result = one_shot_jittered_next_cron_run_ms("abc12345", fields, from_time)
         # Should be earlier than the exact fire time
         from clawcodex_ext.cron_system.parser import compute_next_cron_run
+
         exact = int(compute_next_cron_run(fields, from_time).timestamp() * 1000)
         assert result < exact
         # But not before the from_time (clamp)
@@ -348,13 +340,9 @@ class TestG4Permanent:
 
         ctx = ToolContext(workspace_root=tmp_path, crons={})
         with pytest.raises(ToolInputError, match="permanent"):
-            _cron_create_call(
-                {"cron": "0 9 * * *", "prompt": "x", "permanent": True}, ctx
-            )
+            _cron_create_call({"cron": "0 9 * * *", "prompt": "x", "permanent": True}, ctx)
 
-    def test_write_permanent_if_missing_creates_once(
-        self, tmp_path: Path
-    ) -> None:
+    def test_write_permanent_if_missing_creates_once(self, tmp_path: Path) -> None:
         task1, created1 = write_permanent_task_if_missing(
             tmp_path,
             cron="0 9 * * *",
@@ -373,30 +361,20 @@ class TestG4Permanent:
         assert created2 is False
         assert task2.id == task1.id
 
-    def test_write_permanent_rejects_overwrite_of_other(
-        self, tmp_path: Path
-    ) -> None:
-        write_permanent_task_if_missing(
-            tmp_path, cron="0 9 * * *", prompt="morning checkin"
-        )
+    def test_write_permanent_rejects_overwrite_of_other(self, tmp_path: Path) -> None:
+        write_permanent_task_if_missing(tmp_path, cron="0 9 * * *", prompt="morning checkin")
         # Different prompt → must not overwrite
         with pytest.raises(PermissionError):
-            write_permanent_task_if_missing(
-                tmp_path, cron="0 9 * * *", prompt="different prompt"
-            )
+            write_permanent_task_if_missing(tmp_path, cron="0 9 * * *", prompt="different prompt")
 
     def test_prune_skips_permanent(self, tmp_path: Path) -> None:
         from dataclasses import replace
 
         # Add a regular task
-        regular = add_cron_task(
-            tmp_path, cron="*/5 * * * *", prompt="ping", created_at=1_000
-        )
+        regular = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", created_at=1_000)
         # Mark it as expired
         write_cron_tasks_local = lambda tasks: _write_cron_tasks(tmp_path, tasks)
-        write_cron_tasks_local(
-            [replace(regular, expires_at=2_000, permanent=False)]
-        )
+        write_cron_tasks_local([replace(regular, expires_at=2_000, permanent=False)])
 
         # Add a permanent task
         perm, _ = write_permanent_task_if_missing(
@@ -412,6 +390,7 @@ class TestG4Permanent:
 
 def _write_cron_tasks(workspace_root: Path, tasks) -> None:
     from clawcodex_ext.cron_system.tasks import write_cron_tasks
+
     write_cron_tasks(workspace_root, tasks)
 
 
@@ -521,9 +500,7 @@ class TestG8InFlight:
         from dataclasses import replace
 
         now = int(time.time() * 1000)
-        task = add_cron_task(
-            tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now
-        )
+        task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now)
         from clawcodex_ext.cron_system.tasks import write_cron_tasks
 
         due_task = replace(task, next_fire_at=now - 1000)
@@ -542,9 +519,7 @@ class TestG8InFlight:
         from dataclasses import replace
 
         now = int(time.time() * 1000)
-        task = add_cron_task(
-            tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now
-        )
+        task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", created_at=now)
         from clawcodex_ext.cron_system.tasks import write_cron_tasks
 
         due_task = replace(task, next_fire_at=now - 1000)
@@ -580,6 +555,7 @@ class TestG8InFlight:
 class TestG6ToolPrompts:
     def test_cron_create_prompt_documents_jitter(self) -> None:
         from clawcodex_ext.cron_system.tools import CRON_CREATE_PROMPT
+
         text = CRON_CREATE_PROMPT
         assert "Jitter" in text
         assert "Recurring" in text or "recurring" in text
@@ -589,12 +565,14 @@ class TestG6ToolPrompts:
 
     def test_cron_list_prompt_documents_fields(self) -> None:
         from clawcodex_ext.cron_system.tools import CRON_LIST_PROMPT
+
         text = CRON_LIST_PROMPT
         assert "permanent" in text
         assert "id" in text.lower()
 
     def test_cron_delete_prompt_warns(self) -> None:
         from clawcodex_ext.cron_system.tools import CRON_DELETE_PROMPT
+
         text = CRON_DELETE_PROMPT
         assert "irreversible" in text or "removed" in text.lower()
         assert "CronList" in text
@@ -611,8 +589,10 @@ class TestG6ToolPrompts:
         ctx = ToolContext(workspace_root=tmp_path, crons={})
         with patch.dict(os.environ, {ENV_CLAWCODEX_DISABLE_CRON: "1"}):
             for tool in (CronCreateTool, CronListTool, CronDeleteTool):
-                result = tool.call(
-                    {"cron": "0 9 * * *", "prompt": "x"}, ctx
-                ) if tool.name == "CronCreate" else tool.call({}, ctx)
+                result = (
+                    tool.call({"cron": "0 9 * * *", "prompt": "x"}, ctx)
+                    if tool.name == "CronCreate"
+                    else tool.call({}, ctx)
+                )
                 assert result.output.get("disabled") is True
                 assert result.output.get("message") == CRON_DISABLED_MESSAGE

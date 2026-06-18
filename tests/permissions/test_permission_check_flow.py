@@ -40,9 +40,7 @@ class _MockTool:
     def is_mcp(self) -> bool:
         return self._is_mcp
 
-    def check_permissions(
-        self, tool_input: dict[str, Any], context: Any
-    ) -> PermissionResult:
+    def check_permissions(self, tool_input: dict[str, Any], context: Any) -> PermissionResult:
         if self._perm_result is not None:
             return self._perm_result
         return PermissionPassthroughResult()

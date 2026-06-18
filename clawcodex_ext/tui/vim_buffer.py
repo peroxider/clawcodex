@@ -167,11 +167,7 @@ class VimBuffer:
 
         # Rebuild ``self._lines`` with the spliced block in place of
         # ``range_``.
-        self._lines = (
-            self._lines[: r.start.row]
-            + new_block_lines
-            + self._lines[r.end.row + 1 :]
-        )
+        self._lines = self._lines[: r.start.row] + new_block_lines + self._lines[r.end.row + 1 :]
         if not self._lines:
             self._lines = [""]
         # Park cursor at the start of the replaced span (callers re-park
@@ -195,9 +191,7 @@ class VimBuffer:
         new_lines = new_block.splitlines()
         if not new_lines:
             new_lines = [""]
-        self._lines = (
-            self._lines[: cur.row] + new_lines + self._lines[cur.row + 1 :]
-        )
+        self._lines = self._lines[: cur.row] + new_lines + self._lines[cur.row + 1 :]
         # Advance cursor past the inserted text.
         if "\n" in text:
             tail = text.split("\n")[-1]

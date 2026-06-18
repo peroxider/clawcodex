@@ -133,9 +133,7 @@ def _run_rg_with_abort(
         "errors": "replace",
     }
     if sys.platform == "win32":
-        popen_kwargs["creationflags"] = getattr(
-            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
-        )
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     else:
         popen_kwargs["start_new_session"] = True
 
@@ -221,15 +219,16 @@ def ripgrep(
 
     if timed_out:
         partial = [line for line in stdout.splitlines() if line] if stdout else []
-        raise RipgrepTimeoutError(
-            f"ripgrep timed out after {effective_timeout}s", partial
-        )
+        raise RipgrepTimeoutError(f"ripgrep timed out after {effective_timeout}s", partial)
 
     if returncode >= 2:
         stderr_text = stderr.strip()
         if _is_eagain_error(stderr_text) and not single_thread:
             return ripgrep(
-                args, target, timeout=timeout, single_thread=True,
+                args,
+                target,
+                timeout=timeout,
+                single_thread=True,
                 abort_signal=abort_signal,
             )
         raise RuntimeError(f"ripgrep error (exit {returncode}): {stderr_text}")

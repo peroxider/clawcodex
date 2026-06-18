@@ -50,17 +50,17 @@ logger = logging.getLogger(__name__)
 
 
 # Env-var keys (centralized so tests can patch them in one place).
-ENV_ACCESS_TOKEN = 'CLAUDE_AI_OAUTH_ACCESS_TOKEN'
-ENV_REFRESH_TOKEN = 'CLAUDE_AI_OAUTH_REFRESH_TOKEN'
-ENV_EXPIRES_AT = 'CLAUDE_AI_OAUTH_EXPIRES_AT'
-ENV_SCOPES = 'CLAUDE_AI_OAUTH_SCOPES'
-ENV_ORG_UUID = 'CLAUDE_AI_ORG_UUID'
-ENV_SUBSCRIBER_OVERRIDE = 'CLAUDE_AI_SUBSCRIBER'
-ENV_REFRESH_FAILED = 'CLAUDE_AI_OAUTH_REFRESH_FAILED'
+ENV_ACCESS_TOKEN = "CLAUDE_AI_OAUTH_ACCESS_TOKEN"
+ENV_REFRESH_TOKEN = "CLAUDE_AI_OAUTH_REFRESH_TOKEN"
+ENV_EXPIRES_AT = "CLAUDE_AI_OAUTH_EXPIRES_AT"
+ENV_SCOPES = "CLAUDE_AI_OAUTH_SCOPES"
+ENV_ORG_UUID = "CLAUDE_AI_ORG_UUID"
+ENV_SUBSCRIBER_OVERRIDE = "CLAUDE_AI_SUBSCRIBER"
+ENV_REFRESH_FAILED = "CLAUDE_AI_OAUTH_REFRESH_FAILED"
 
 
-_PROFILE_SCOPE = 'user:profile'
-_INFERENCE_SCOPE = 'user:inference'
+_PROFILE_SCOPE = "user:profile"
+_INFERENCE_SCOPE = "user:inference"
 _REFRESH_BUFFER_SECONDS = 60.0
 """Refresh tokens within this window of expiry rather than waiting until
 they're stale. Matches TS ``checkAndRefreshOAuthTokenIfNeeded`` buffer.
@@ -95,7 +95,7 @@ def get_claude_ai_oauth_tokens() -> OAuthTokens | None:
     access_token = os.environ.get(ENV_ACCESS_TOKEN)
     if not access_token:
         return None
-    refresh_token = os.environ.get(ENV_REFRESH_TOKEN, '')
+    refresh_token = os.environ.get(ENV_REFRESH_TOKEN, "")
     expires_at_raw = os.environ.get(ENV_EXPIRES_AT)
     if expires_at_raw:
         try:
@@ -107,11 +107,11 @@ def get_claude_ai_oauth_tokens() -> OAuthTokens | None:
         # imported tokens). ``_is_near_or_past_expiry`` treats 0.0 as
         # not-expiring, so dev tokens don't trigger refresh warnings.
         expires_at = 0.0
-    scope = os.environ.get(ENV_SCOPES, '')
+    scope = os.environ.get(ENV_SCOPES, "")
     return OAuthTokens(
         access_token=access_token,
         refresh_token=refresh_token,
-        token_type='Bearer',
+        token_type="Bearer",
         expires_at=expires_at,
         scope=scope,
     )
@@ -204,16 +204,14 @@ async def check_and_refresh_oauth_token_if_needed() -> None:
     if not _is_near_or_past_expiry(tokens):
         return
     logger.warning(
-        '[auth:claude_ai] token near/past expiry but '
-        'check_and_refresh_oauth_token_if_needed is a no-op stub — '
-        'Phase 10 keychain refresh not yet ported. 401 expected; '
-        'handle_oauth_401_error is also a no-op (see its docstring).'
+        "[auth:claude_ai] token near/past expiry but "
+        "check_and_refresh_oauth_token_if_needed is a no-op stub — "
+        "Phase 10 keychain refresh not yet ported. 401 expected; "
+        "handle_oauth_401_error is also a no-op (see its docstring)."
     )
 
 
-async def handle_oauth_401_error(
-    *, stale_token: str | None = None
-) -> bool:
+async def handle_oauth_401_error(*, stale_token: str | None = None) -> bool:
     """**No-op stub** — returns truthiness but does NOT refresh tokens.
 
     Mirrors the *signature* of TS ``handleOAuth401Error``, but the
@@ -235,9 +233,9 @@ async def handle_oauth_401_error(
     has_token = get_claude_ai_oauth_tokens() is not None
     if has_token:
         logger.warning(
-            '[auth:claude_ai] handle_oauth_401_error called but is a '
-            'no-op stub — token not refreshed, caller will retry with '
-            'the same token. Phase 10 keychain refresh not yet ported.'
+            "[auth:claude_ai] handle_oauth_401_error called but is a "
+            "no-op stub — token not refreshed, caller will retry with "
+            "the same token. Phase 10 keychain refresh not yet ported."
         )
     return has_token
 
@@ -254,22 +252,22 @@ def _subscriber_override() -> bool | None:
     raw = os.environ.get(ENV_SUBSCRIBER_OVERRIDE)
     if raw is None:
         return None
-    return raw.lower() in ('1', 'true', 'yes', 'on')
+    return raw.lower() in ("1", "true", "yes", "on")
 
 
 __all__ = [
-    'ENV_ACCESS_TOKEN',
-    'ENV_EXPIRES_AT',
-    'ENV_ORG_UUID',
-    'ENV_REFRESH_FAILED',
-    'ENV_REFRESH_TOKEN',
-    'ENV_SCOPES',
-    'ENV_SUBSCRIBER_OVERRIDE',
-    'OAuthAccountInfo',
-    'check_and_refresh_oauth_token_if_needed',
-    'get_claude_ai_oauth_tokens',
-    'get_oauth_account_info',
-    'handle_oauth_401_error',
-    'has_profile_scope',
-    'is_claude_ai_subscriber',
+    "ENV_ACCESS_TOKEN",
+    "ENV_EXPIRES_AT",
+    "ENV_ORG_UUID",
+    "ENV_REFRESH_FAILED",
+    "ENV_REFRESH_TOKEN",
+    "ENV_SCOPES",
+    "ENV_SUBSCRIBER_OVERRIDE",
+    "OAuthAccountInfo",
+    "check_and_refresh_oauth_token_if_needed",
+    "get_claude_ai_oauth_tokens",
+    "get_oauth_account_info",
+    "handle_oauth_401_error",
+    "has_profile_scope",
+    "is_claude_ai_subscriber",
 ]

@@ -58,9 +58,7 @@ def _is_remote_config(config: Any) -> bool:
     Used to gate auth-provider lookups so stdio / SDK configs never pay
     the OAuth-cache lookup cost.
     """
-    return isinstance(
-        config, (McpHTTPServerConfig, McpSSEServerConfig, McpWebSocketServerConfig)
-    )
+    return isinstance(config, (McpHTTPServerConfig, McpSSEServerConfig, McpWebSocketServerConfig))
 
 
 def _unwrap_exception_group_message(exc: BaseException) -> str:
@@ -179,18 +177,14 @@ class McpClient:
             except asyncio.TimeoutError:
                 await transport.close()
                 elapsed = int((time.monotonic() - connect_start) * 1000)
-                logger.debug(
-                    "MCP server %r connection timed out after %dms", name, elapsed
-                )
+                logger.debug("MCP server %r connection timed out after %dms", name, elapsed)
                 return FailedMCPServer(
                     name=name,
                     error=f"Connection timed out after {timeout_ms}ms",
                     config=config,
                 )
 
-            self._receive_task = asyncio.get_event_loop().create_task(
-                self._receive_loop()
-            )
+            self._receive_task = asyncio.get_event_loop().create_task(self._receive_loop())
 
             init_result = await self._send_request(
                 "initialize",
@@ -232,7 +226,9 @@ class McpClient:
             server_type = getattr(config.config, "type", "stdio") or "stdio"
             logger.debug(
                 "MCP %r connected (transport: %s) in %dms",
-                name, server_type, elapsed,
+                name,
+                server_type,
+                elapsed,
             )
 
             self._name = name
@@ -253,9 +249,7 @@ class McpClient:
                 await self._transport.close()
             elapsed = int((time.monotonic() - connect_start) * 1000)
             error_msg = _unwrap_exception_group_message(e)
-            logger.debug(
-                "MCP %r connection failed after %dms: %s", name, elapsed, e
-            )
+            logger.debug("MCP %r connection failed after %dms: %s", name, elapsed, e)
 
             # Phase 4 WI-4.5 + Phase 6b WI-6.2: if the failure looks like
             # an OAuth-required signal (401 / WWW-Authenticate / "Unauthorized"),
@@ -267,9 +261,7 @@ class McpClient:
                     cached = self._auth_provider.get_needs_auth_state(name)
                     auth_url = cached.auth_url if cached else None
                     if cached is None:
-                        self._auth_provider.mark_needs_auth(
-                            name, reason=error_msg
-                        )
+                        self._auth_provider.mark_needs_auth(name, reason=error_msg)
                     return NeedsAuthMCPServer(
                         name=name,
                         config=config,
@@ -501,12 +493,17 @@ class McpClient:
                 logger.info(
                     "MCP %r tool %r: session expired (gen %d); piggybacking "
                     "on concurrent reconnect (now gen %d)",
-                    self._name, tool_name, gen_at_entry, self._session_generation,
+                    self._name,
+                    tool_name,
+                    gen_at_entry,
+                    self._session_generation,
                 )
                 return
             logger.info(
                 "MCP %r tool %r: session expired (gen %d); clearing cache + reconnecting",
-                self._name, tool_name, gen_at_entry,
+                self._name,
+                tool_name,
+                gen_at_entry,
             )
             if self._name is not None:
                 clear_connection_cache(self._name)
@@ -569,7 +566,9 @@ class McpClient:
             self._reconnect_attempt = attempt
             logger.debug(
                 "MCP %r reconnect attempt %d/%d",
-                self._name, attempt, max_attempts,
+                self._name,
+                attempt,
+                max_attempts,
             )
 
             await self.close()
@@ -721,7 +720,11 @@ async def connect_to_server(
     cache_key = _cache_key_for(name, config)
     if cache_key in _connection_cache:
         client, conn = _connection_cache[cache_key]
-        if isinstance(conn, ConnectedMCPServer) and client._transport and client._transport.is_connected:
+        if (
+            isinstance(conn, ConnectedMCPServer)
+            and client._transport
+            and client._transport.is_connected
+        ):
             return client, conn
 
     client = McpClient()

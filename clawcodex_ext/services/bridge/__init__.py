@@ -7,9 +7,14 @@ so this stub provides its own minimal ``BridgeSession`` / ``BridgeAuth``
 similar unit tests. New code targeting the CCR bridge should import
 from ``src.bridge`` directly.
 """
+
 from __future__ import annotations
 
-from clawcodex_ext.services.bridge.session import BridgeSession, BridgeSessionConfig, BridgeSessionState
+from clawcodex_ext.services.bridge.session import (
+    BridgeSession,
+    BridgeSessionConfig,
+    BridgeSessionState,
+)
 from clawcodex_ext.services.bridge.transport import BridgeTransport, WebSocketTransport
 from clawcodex_ext.services.bridge.auth import BridgeAuth, BridgeToken
 

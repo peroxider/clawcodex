@@ -24,26 +24,72 @@
             <button onclick="exportSession('svg')" class="btn">SVG</button>
         </div>
     </div>
-    <div class="session-meta" id="session-meta">
+    {# F-95 reference chrome — mirrors clawcodex_sessions_analysis
+       TopBar (model pill + summary + status) so the single-session
+       view reads the same way as the multi-session analysis shell. #}
+    <div class="ms-reference-topbar" id="ms-reference-topbar" aria-label="session summary">
+        <div class="ms-reference-model" id="ms-reference-model">加载中…</div>
+        <div class="ms-reference-summary" id="ms-reference-summary">
+            <span>—</span>
+        </div>
+        <div class="ms-reference-status" id="ms-reference-status">
+            <span class="ms-reference-dot"></span>
+        </div>
+    </div>
+    <div class="session-meta" id="session-meta" hidden>
         Loading...
     </div>
     {# F-96-E: Orchestrator issue association (hidden until populated by JS) #}
     <div class="session-orch-info" id="session-orch-info" style="display:none;"></div>
 </div>
 
-{# Include stats bar (container-only, rendered by gantt.js) #}
-{% with include_mode="container" %}
-  {% include "stats_bar.html" %}
-{% endwith %}
+{# Session info card (TS-style "本次加载 N 个文件 · 识别为 1 个会话").
+   Hidden until multi_session_view.js populates it from the API response. #}
+<div class="ms-session-card" id="ms-session-card" hidden>
+    <div class="ms-session-card-icon" aria-hidden="true">📄</div>
+    <div class="ms-session-card-body">
+        <div class="ms-session-card-line">
+            本次加载 <strong id="ms-session-card-files">—</strong> 个文件 ·
+            识别为 <strong id="ms-session-card-agents">—</strong>
+        </div>
+        <div class="ms-session-card-id">
+            会话 ID: <code id="ms-session-card-id">{{ session_id }}</code>
+        </div>
+    </div>
+</div>
 
 {# F-95 legend fix: explicit HTML legend bar for the single-session
    waterfall on session_row.html. multi_session_view.js's renderLegend()
-   populates this with the same 5-pill content (category · count) the
+   populates this with the same 8-pill content (category · count) the
    multi-page view shows, so both surfaces stay consistent. #}
 <div id="ms-legend-bar" class="ms-legend-bar"></div>
 
-{# Waterfall view (default) — wraps the new multi_session_view with 1 session #}
-<div class="ms-chart-container" id="waterfall-chart" style="width:100%; height:560px; margin-bottom:20px;">
+{# Zoom controls row — sits between the legend bar and the chart, mirroring
+   the clawcodex_sessions_analysis TopBar zoom widget (- / 100% / +). #}
+<div class="ms-zoom-row">
+    <div class="ms-zoom-controls" role="group" aria-label="zoom controls">
+        <button type="button" class="ms-zoom-btn" id="ms-zoom-out" aria-label="缩小">−</button>
+        <span class="ms-zoom-label" id="ms-zoom-label">100%</span>
+        <button type="button" class="ms-zoom-btn" id="ms-zoom-in" aria-label="放大">+</button>
+    </div>
+</div>
+
+{# Include stats bar (container-only, rendered by gantt.js). Hidden in the
+   default waterfall because the ms-session-card + ms-reference-topbar
+   already carry the same numbers in a denser layout. The gantt view
+   keeps it visible via a class toggle. #}
+<div id="stats-bar-wrap" hidden>
+{% with include_mode="container" %}
+  {% include "stats_bar.html" %}
+{% endwith %}
+</div>
+
+{# Waterfall view (default) — wraps the new multi_session_view with 1 session.
+   data-visual-mode="reference" enables the rich chrome layout (small gridLeft,
+   top-mounted model pill summary, dark track) so the single-session view
+   reads the same way as clawcodex_sessions_analysis. #}
+<div class="ms-chart-container" id="waterfall-chart" data-visual-mode="reference"
+     style="width:100%; height:560px; margin-bottom:20px;">
     <div class="empty-state">Loading waterfall view…</div>
 </div>
 
@@ -102,6 +148,27 @@
             <h4>Tool I/O</h4>
             <div id="turn-drawer-tools"><div class="turn-drawer-empty">Not loaded yet</div></div>
         </section>
+    </div>
+</aside>
+
+{# Side drawer for bezier event detail. Mirrors the waterfall turn-drawer
+   (same .turn-drawer styling, same slide-in transition, same close
+   affordance). The body is populated by bezier_waterfall.js when an
+   event bar is clicked; the header is replaced with a category dot +
+   title + category/error pills, but uses the same .turn-drawer-header
+   structure so the close button stays in the top-right corner. #}
+<aside id="bezier-drawer" class="turn-drawer" aria-hidden="true" role="dialog"
+       aria-labelledby="bezier-drawer-title">
+    <div class="turn-drawer-header">
+        <span class="bezier-drawer-cat-dot" id="bezier-drawer-cat-dot"
+              aria-hidden="true"></span>
+        <h3 id="bezier-drawer-title">Event Detail</h3>
+        <span class="bezier-drawer-pills" id="bezier-drawer-pills"></span>
+        <button type="button" class="turn-drawer-close"
+                aria-label="Close drawer">×</button>
+    </div>
+    <div class="turn-drawer-body" id="bezier-drawer-body">
+        <div class="turn-drawer-empty">Not loaded yet</div>
     </div>
 </aside>
 
@@ -165,12 +232,19 @@
         const gantt = document.getElementById('gantt-chart');
         const bezier = document.getElementById('bezier-chart');
         const legendBar = document.getElementById('ms-legend-bar');
+        const statsWrap = document.getElementById('stats-bar-wrap');
+        const sessionCard = document.getElementById('ms-session-card');
+        const zoomRow = document.querySelector('.ms-zoom-row');
         if (view === 'waterfall') {
             waterfall.style.display = '';
             gantt.style.display = 'none';
             if (bezier) bezier.style.display = 'none';
             // ECharts view owns the legend bar; bezier view clears it.
             if (legendBar) legendBar.style.display = '';
+            // TS-aligned chrome only shows on waterfall + bezier views.
+            if (sessionCard) sessionCard.hidden = false;
+            if (zoomRow) zoomRow.style.display = '';
+            if (statsWrap) statsWrap.hidden = true;
             if (!window.__waterfallLoaded) {
                 initMultiSessionView([SESSION_ID], {
                     chartContainerId: 'waterfall-chart',
@@ -186,6 +260,9 @@
             // Hide the ECharts legend bar — the bezier view renders
             // its own 8-category colour cues via the bar fills.
             if (legendBar) legendBar.style.display = 'none';
+            if (sessionCard) sessionCard.hidden = false;
+            if (zoomRow) zoomRow.style.display = 'none';  // bezier has its own zoom
+            if (statsWrap) statsWrap.hidden = true;
             if (!window.__bezierLoaded) {
                 window.initBezierWaterfall([SESSION_ID], {
                     chartContainerId: 'bezier-chart',
@@ -197,7 +274,11 @@
             waterfall.style.display = 'none';
             gantt.style.display = '';
             if (bezier) bezier.style.display = 'none';
-            if (legendBar) legendBar.style.display = '';
+            if (legendBar) legendBar.style.display = 'none';
+            // Gantt view uses the legacy stats bar; hide TS-aligned chrome.
+            if (sessionCard) sessionCard.hidden = true;
+            if (zoomRow) zoomRow.style.display = 'none';
+            if (statsWrap) statsWrap.hidden = false;
             window.renderGanttChart?.(SESSION_ID);
             window.resizeGanttChart?.();
             enableLiveTail();

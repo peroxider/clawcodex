@@ -24,6 +24,8 @@ def test_second_identity_cannot_acquire_live_lock(tmp_path) -> None:
 def test_stale_pid_lock_can_be_recovered(tmp_path) -> None:
     lock = CronTaskLock(tmp_path, "session-a")
     lock.path.parent.mkdir(parents=True)
-    lock.path.write_text(json.dumps({"sessionId": "old", "pid": -1, "acquiredAt": 1}), encoding="utf-8")
+    lock.path.write_text(
+        json.dumps({"sessionId": "old", "pid": -1, "acquiredAt": 1}), encoding="utf-8"
+    )
     assert lock.acquire() is True
     lock.release()

@@ -40,17 +40,21 @@ from src.settings.settings import invalidate_settings_cache
 class TestPermissionsDictLoadsIntoStruct:
     def test_permissions_dict_loads_into_struct(self, tmp_path):
         from src.config import ConfigManager
+
         global_path = tmp_path / "config.json"
         global_path.write_text(
             '{"settings": {"permissions": {"allowBypassPermissionsMode": true,'
             ' "defaultMode": "bypassPermissions"}}}'
         )
-        with patch("src.config.get_global_config_path", return_value=global_path), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=global_path),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             invalidate_settings_cache()
             mgr = ConfigManager(cwd=tmp_path)
             from src.settings.settings import load_settings
+
             settings = load_settings(config_manager=mgr)
         assert isinstance(settings.permissions, PermissionsConfig)
         assert settings.permissions.allow_bypass_permissions_mode is True
@@ -92,20 +96,22 @@ class TestDefaultModeResolvedFromPermissionsDict:
 class TestHasAllowBypassTrueAfterSettingsLoaded:
     def test_has_allow_bypass_true_after_settings_loaded(self, tmp_path):
         from src.config import ConfigManager
+
         global_path = tmp_path / "config.json"
         global_path.write_text(
             '{"settings": {"permissions": {"allowBypassPermissionsMode": true}}}'
         )
-        with patch("src.config.get_global_config_path", return_value=global_path), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=global_path),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             invalidate_settings_cache()
             mgr = ConfigManager(cwd=tmp_path)
             from src.settings.settings import load_settings
+
             settings = load_settings(config_manager=mgr)
-            with patch(
-                "src.settings.settings.get_settings", return_value=settings
-            ):
+            with patch("src.settings.settings.get_settings", return_value=settings):
                 assert has_allow_bypass_permissions_mode() is True
 
 
@@ -133,9 +139,7 @@ class TestLegacyExtraPermissionsFallback:
         # non-default value, it overrides the legacy ``extra`` path for
         # that field. (Default ``False`` is indistinguishable from
         # "unset" -- see ``_settings_perms_structured_is_explicit``.)
-        settings = SettingsSchema(
-            permissions=PermissionsConfig(allow_bypass_permissions_mode=True)
-        )
+        settings = SettingsSchema(permissions=PermissionsConfig(allow_bypass_permissions_mode=True))
         settings.extra = {"permissions": {"allowBypassPermissionsMode": False}}
         bag = _settings_perms(settings)
         assert bag.get("allowBypassPermissionsMode") is True
@@ -149,6 +153,7 @@ class TestLegacyExtraPermissionsFallback:
 class TestLegacyTopLevelPermissionModeIsIgnored:
     def test_legacy_top_level_permission_mode_is_ignored(self):
         from clawcodex_ext.cli.permissions import resolve_permission_state
+
         args = argparse.Namespace(
             dangerously_skip_permissions=False,
             allow_dangerously_skip_permissions=False,
@@ -163,12 +168,13 @@ class TestLegacyTopLevelPermissionModeIsIgnored:
             permission_mode="bypassPermissions",
             permissions=PermissionsConfig(allow_bypass_permissions_mode=True),
         )
-        with patch("src.settings.settings.get_settings", return_value=settings), \
-             patch(
-                 "src.permissions.dangerous_safety"
-                 ".enforce_dangerous_skip_permissions_safety",
-                 lambda **_kw: None,
-             ):
+        with (
+            patch("src.settings.settings.get_settings", return_value=settings),
+            patch(
+                "src.permissions.dangerous_safety.enforce_dangerous_skip_permissions_safety",
+                lambda **_kw: None,
+            ),
+        ):
             resolve_permission_state(args)
         # Legacy field is ignored: no override flows in, default mode is the
         # built-in fallback.
@@ -178,6 +184,7 @@ class TestLegacyTopLevelPermissionModeIsIgnored:
 
     def test_structured_default_mode_is_the_only_source(self):
         from clawcodex_ext.cli.permissions import resolve_permission_state
+
         args = argparse.Namespace(
             dangerously_skip_permissions=False,
             allow_dangerously_skip_permissions=False,
@@ -193,12 +200,13 @@ class TestLegacyTopLevelPermissionModeIsIgnored:
                 allow_bypass_permissions_mode=True,
             ),
         )
-        with patch("src.settings.settings.get_settings", return_value=settings), \
-             patch(
-                 "src.permissions.dangerous_safety"
-                 ".enforce_dangerous_skip_permissions_safety",
-                 lambda **_kw: None,
-             ):
+        with (
+            patch("src.settings.settings.get_settings", return_value=settings),
+            patch(
+                "src.permissions.dangerous_safety.enforce_dangerous_skip_permissions_safety",
+                lambda **_kw: None,
+            ),
+        ):
             resolve_permission_state(args)
         assert args._resolved_permission_mode == "bypassPermissions"
         assert args._resolved_is_bypass_available is True
@@ -209,12 +217,14 @@ class TestLegacyTopLevelPermissionModeIsIgnored:
 # ---------------------------------------------------------------------------
 class TestUnknownSubkeyPreserved:
     def test_unknown_subkey_preserved(self):
-        settings = SettingsSchema.from_dict({
-            "permissions": {
-                "myCustomFlag": 42,
-                "experimentalAuditChannel": "ndjson",
+        settings = SettingsSchema.from_dict(
+            {
+                "permissions": {
+                    "myCustomFlag": 42,
+                    "experimentalAuditChannel": "ndjson",
+                }
             }
-        })
+        )
         assert settings.permissions.additional == {
             "myCustomFlag": 42,
             "experimentalAuditChannel": "ndjson",
@@ -246,8 +256,6 @@ class TestDictShapeNoLongerCrashesValidation:
         assert isinstance(errors, list)
         assert all(e.field != "permissions[0].tool" for e in errors)
         # The bad-mode path (default_mode="bogus") is the only error.
-        s2 = SettingsSchema(
-            permissions=PermissionsConfig(default_mode="bogus")
-        )
+        s2 = SettingsSchema(permissions=PermissionsConfig(default_mode="bogus"))
         errors2 = validate_settings(s2)
         assert any(e.field == "permissions.defaultMode" for e in errors2)

@@ -59,6 +59,7 @@ def reset_get_memory_files_cache() -> None:
 # Configuration accessors (can be overridden for testing)
 # ---------------------------------------------------------------------------
 
+
 def _get_original_cwd() -> str:
     """Return the original CWD. Can be overridden via CLAUDE_CODE_ORIGINAL_CWD."""
     return os.environ.get("CLAUDE_CODE_ORIGINAL_CWD", os.getcwd())
@@ -151,6 +152,7 @@ def _resolve_include_path(path_str: str, base_dir: str) -> str | None:
 # Frontmatter path parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_frontmatter_paths(raw_content: str) -> tuple[str, list[str] | None]:
     """
     Parse frontmatter and extract `paths:` glob patterns.
@@ -194,6 +196,7 @@ def strip_html_comments(content: str) -> str:
 # ---------------------------------------------------------------------------
 # Core file processing
 # ---------------------------------------------------------------------------
+
 
 def _parse_memory_file_content(
     raw_content: str,
@@ -265,7 +268,10 @@ async def process_memory_file(
         return []
 
     info, include_paths = _parse_memory_file_content(
-        raw_content, file_path, mem_type, include_base_path=file_path,
+        raw_content,
+        file_path,
+        mem_type,
+        include_base_path=file_path,
     )
     if info is None or not info.content.strip():
         return []
@@ -281,8 +287,12 @@ async def process_memory_file(
         if is_external and not include_external:
             continue
         included = await process_memory_file(
-            inc_path, mem_type, processed_paths, include_external,
-            depth + 1, file_path,
+            inc_path,
+            mem_type,
+            processed_paths,
+            include_external,
+            depth + 1,
+            file_path,
         )
         result.extend(included)
 
@@ -311,7 +321,10 @@ async def process_md_rules(
             if not entry.is_file():
                 continue
             files = await process_memory_file(
-                str(entry), mem_type, processed_paths, include_external,
+                str(entry),
+                mem_type,
+                processed_paths,
+                include_external,
             )
             for f in files:
                 if conditional_rule and not f.globs:
@@ -339,6 +352,7 @@ def _path_in_working_path(path: str, working_path: str) -> bool:
 # ---------------------------------------------------------------------------
 # get_memory_files — main entry point (mirrors TS getMemoryFiles)
 # ---------------------------------------------------------------------------
+
 
 async def get_memory_files(
     cwd: str | None = None,
@@ -369,27 +383,47 @@ async def get_memory_files(
 
     # 1. Managed memory (/etc/claude-code/CLAUDE.md)
     managed_path = os.path.join("/etc", "claude-code", "CLAUDE.md")
-    result.extend(await process_memory_file(
-        managed_path, "Managed", processed_paths, include_external,
-    ))
+    result.extend(
+        await process_memory_file(
+            managed_path,
+            "Managed",
+            processed_paths,
+            include_external,
+        )
+    )
     # Managed rules
     managed_rules_dir = os.path.join("/etc", "claude-code", ".claude", "rules")
-    result.extend(await process_md_rules(
-        managed_rules_dir, "Managed", processed_paths, include_external,
-        conditional_rule=False,
-    ))
+    result.extend(
+        await process_md_rules(
+            managed_rules_dir,
+            "Managed",
+            processed_paths,
+            include_external,
+            conditional_rule=False,
+        )
+    )
 
     # 2. User memory (~/.claude/CLAUDE.md)
     user_claude_md = os.path.join(home, ".claude", "CLAUDE.md")
-    result.extend(await process_memory_file(
-        user_claude_md, "User", processed_paths, True,  # User can always include external
-    ))
+    result.extend(
+        await process_memory_file(
+            user_claude_md,
+            "User",
+            processed_paths,
+            True,  # User can always include external
+        )
+    )
     # User rules (~/.claude/rules/*.md)
     user_rules_dir = os.path.join(home, ".claude", "rules")
-    result.extend(await process_md_rules(
-        user_rules_dir, "User", processed_paths, True,
-        conditional_rule=False,
-    ))
+    result.extend(
+        await process_md_rules(
+            user_rules_dir,
+            "User",
+            processed_paths,
+            True,
+            conditional_rule=False,
+        )
+    )
 
     # 3. Project and Local files — walk from root to CWD
     dirs: list[str] = []
@@ -407,41 +441,76 @@ async def get_memory_files(
     for d in reversed(dirs):
         # Project: CLAUDE.md
         project_path = os.path.join(d, "CLAUDE.md")
-        result.extend(await process_memory_file(
-            project_path, "Project", processed_paths, include_external,
-        ))
+        result.extend(
+            await process_memory_file(
+                project_path,
+                "Project",
+                processed_paths,
+                include_external,
+            )
+        )
         # Project: .claude/CLAUDE.md
         dot_claude_path = os.path.join(d, ".claude", "CLAUDE.md")
-        result.extend(await process_memory_file(
-            dot_claude_path, "Project", processed_paths, include_external,
-        ))
+        result.extend(
+            await process_memory_file(
+                dot_claude_path,
+                "Project",
+                processed_paths,
+                include_external,
+            )
+        )
         # Project: .claude/rules/*.md
         rules_dir = os.path.join(d, ".claude", "rules")
-        result.extend(await process_md_rules(
-            rules_dir, "Project", processed_paths, include_external,
-            conditional_rule=False,
-        ))
+        result.extend(
+            await process_md_rules(
+                rules_dir,
+                "Project",
+                processed_paths,
+                include_external,
+                conditional_rule=False,
+            )
+        )
         # Local: CLAUDE.local.md
         local_path = os.path.join(d, "CLAUDE.local.md")
-        result.extend(await process_memory_file(
-            local_path, "Local", processed_paths, include_external,
-        ))
+        result.extend(
+            await process_memory_file(
+                local_path,
+                "Local",
+                processed_paths,
+                include_external,
+            )
+        )
 
     # 4. Additional directories (--add-dir)
     for add_dir in _get_additional_directories():
         project_path = os.path.join(add_dir, "CLAUDE.md")
-        result.extend(await process_memory_file(
-            project_path, "Project", processed_paths, include_external,
-        ))
+        result.extend(
+            await process_memory_file(
+                project_path,
+                "Project",
+                processed_paths,
+                include_external,
+            )
+        )
         dot_claude_path = os.path.join(add_dir, ".claude", "CLAUDE.md")
-        result.extend(await process_memory_file(
-            dot_claude_path, "Project", processed_paths, include_external,
-        ))
+        result.extend(
+            await process_memory_file(
+                dot_claude_path,
+                "Project",
+                processed_paths,
+                include_external,
+            )
+        )
         rules_dir = os.path.join(add_dir, ".claude", "rules")
-        result.extend(await process_md_rules(
-            rules_dir, "Project", processed_paths, include_external,
-            conditional_rule=False,
-        ))
+        result.extend(
+            await process_md_rules(
+                rules_dir,
+                "Project",
+                processed_paths,
+                include_external,
+                conditional_rule=False,
+            )
+        )
 
     _memory_files_cache = result
     _memory_files_cache_key = cache_key
@@ -452,6 +521,7 @@ async def get_memory_files(
 # ---------------------------------------------------------------------------
 # get_claude_mds — format memory files for injection (mirrors TS getClaudeMds)
 # ---------------------------------------------------------------------------
+
 
 def get_claude_mds(memory_files: list[MemoryFileInfo]) -> str:
     """
@@ -489,6 +559,7 @@ def _get_memory_type_description(mem_type: MemoryType) -> str:
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
+
 
 def get_large_memory_files(files: list[MemoryFileInfo]) -> list[MemoryFileInfo]:
     """Return memory files exceeding the recommended max size."""

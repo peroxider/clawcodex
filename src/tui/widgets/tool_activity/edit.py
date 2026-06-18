@@ -1,5 +1,5 @@
-"""Facade — tui/widgets/tool_activity/edit.py has been moved to clawcodex_ext (lazy proxy).
-"""
+"""Facade — tui/widgets/tool_activity/edit.py has been moved to clawcodex_ext (lazy proxy)."""
+
 from __future__ import annotations
 
 __all__ = [
@@ -9,6 +9,7 @@ __all__ = [
 
 def __getattr__(name: str):
     import clawcodex_ext.tui.widgets.tool_activity.edit as _mod
+
     if name in _mod.__dict__:
         val = _mod.__dict__[name]
         globals()[name] = val

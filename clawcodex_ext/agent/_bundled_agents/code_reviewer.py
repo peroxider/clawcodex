@@ -4,6 +4,7 @@ Demonstrates the @register + policy composition pattern: pick an
 identity template, attach one or more action norms, and stitch the
 final system prompt together with :func:`build_agent_prompt`.
 """
+
 from __future__ import annotations
 
 from clawcodex_ext.agent.policy import (

@@ -1,9 +1,11 @@
 """WI-9.1 tests — leader permission bridge."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -36,7 +38,8 @@ def _clear_callbacks() -> None:
 
 def test_create_permission_request_auto_generates_request_id() -> None:
     req = create_permission_request(
-        tool_name="Bash", tool_use_id="toolu_1",
+        tool_name="Bash",
+        tool_use_id="toolu_1",
         input={"command": "echo hi"},
     )
     assert req.request_id.startswith("perm-")
@@ -46,7 +49,8 @@ def test_create_permission_request_auto_generates_request_id() -> None:
 
 def test_create_permission_request_uses_supplied_id() -> None:
     req = create_permission_request(
-        tool_name="Bash", tool_use_id="toolu_1",
+        tool_name="Bash",
+        tool_use_id="toolu_1",
         input={"command": "echo hi"},
         request_id="req-fixed-1",
     )
@@ -55,7 +59,8 @@ def test_create_permission_request_uses_supplied_id() -> None:
 
 def test_to_envelope_shape() -> None:
     req = create_permission_request(
-        tool_name="Bash", tool_use_id="toolu_1",
+        tool_name="Bash",
+        tool_use_id="toolu_1",
         input={"command": "echo hi"},
         description="user typed yes",
         permission_suggestions=["Always allow"],
@@ -78,7 +83,8 @@ def test_register_and_dispatch_allow() -> None:
     fired: dict[str, Any] = {}
 
     register_permission_callback(
-        request_id="req-1", tool_use_id="toolu_1",
+        request_id="req-1",
+        tool_use_id="toolu_1",
         on_allow=lambda: fired.setdefault("allow", True),
         on_reject=lambda reason: fired.setdefault("reject", reason),
     )
@@ -93,7 +99,8 @@ def test_register_and_dispatch_reject() -> None:
     fired: dict[str, Any] = {}
 
     register_permission_callback(
-        request_id="req-2", tool_use_id="toolu_1",
+        request_id="req-2",
+        tool_use_id="toolu_1",
         on_allow=lambda: fired.setdefault("allow", True),
         on_reject=lambda reason: fired.setdefault("reject", reason),
     )
@@ -105,8 +112,10 @@ def test_register_and_dispatch_reject() -> None:
 def test_dispatch_unknown_request_id_returns_false() -> None:
     """A second decision for the same request (already fired) is a no-op."""
     register_permission_callback(
-        request_id="req-3", tool_use_id="toolu_1",
-        on_allow=lambda: None, on_reject=lambda reason: None,
+        request_id="req-3",
+        tool_use_id="toolu_1",
+        on_allow=lambda: None,
+        on_reject=lambda reason: None,
     )
     deliver_permission_decision("req-3", approved=True)  # consumes
     assert deliver_permission_decision("req-3", approved=True) is False
@@ -114,8 +123,10 @@ def test_dispatch_unknown_request_id_returns_false() -> None:
 
 def test_unregister_callback_returns_true_on_hit() -> None:
     register_permission_callback(
-        request_id="req-4", tool_use_id="toolu_1",
-        on_allow=lambda: None, on_reject=lambda reason: None,
+        request_id="req-4",
+        tool_use_id="toolu_1",
+        on_allow=lambda: None,
+        on_reject=lambda reason: None,
     )
     assert unregister_permission_callback("req-4") is True
     assert unregister_permission_callback("req-4") is False
@@ -126,7 +137,8 @@ def test_callback_exception_does_not_break_dispatch() -> None:
     ``deliver_permission_decision`` returns True (the callback fired)
     but logs the exception."""
     register_permission_callback(
-        request_id="req-5", tool_use_id="toolu_1",
+        request_id="req-5",
+        tool_use_id="toolu_1",
         on_allow=lambda: 1 / 0,  # raises ZeroDivisionError
         on_reject=lambda reason: None,
     )
@@ -142,7 +154,8 @@ def test_send_permission_request_writes_envelope_to_leader_mailbox(
     tmp_path: Path,
 ) -> None:
     req = create_permission_request(
-        tool_name="Bash", tool_use_id="toolu_xyz",
+        tool_name="Bash",
+        tool_use_id="toolu_xyz",
         input={"command": "rm -rf /"},
         description="dangerous",
     )

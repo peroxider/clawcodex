@@ -46,10 +46,7 @@ class TestOrchestratorAgentRunnerDebug(unittest.IsolatedAsyncioTestCase):
 
             assert session.debug_log_path is not None
             debug_log = Path(session.debug_log_path)
-            rows = [
-                json.loads(line)
-                for line in debug_log.read_text(encoding="utf-8").splitlines()
-            ]
+            rows = [json.loads(line) for line in debug_log.read_text(encoding="utf-8").splitlines()]
             stages = [row["stage"] for row in rows]
 
         self.assertEqual(session.status, "completed")

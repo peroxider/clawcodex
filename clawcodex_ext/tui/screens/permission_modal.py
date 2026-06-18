@@ -104,9 +104,7 @@ class PermissionModal(ModalScreen[bool]):
         # Phase-7: dispatch to per-tool renderer (Bash → command + rule;
         # Edit → inline diff; etc.). Falls back to a generic preview for
         # unknown tools.
-        input_preview = preview_for_tool(
-            self._request.tool_name, self._request.tool_input
-        )
+        input_preview = preview_for_tool(self._request.tool_name, self._request.tool_input)
         if input_preview is not None:
             panel.mount(Static(input_preview, markup=False))
         if self._request.suggestion:
@@ -163,9 +161,7 @@ def _preview_tool_input(tool_input: Any) -> RenderableType | None:
     return preview_for_tool(None, tool_input)
 
 
-def preview_for_tool(
-    tool_name: str | None, tool_input: Any
-) -> RenderableType | None:
+def preview_for_tool(tool_name: str | None, tool_input: Any) -> RenderableType | None:
     """Render a permission preview for ``tool_input`` under ``tool_name``.
 
     Specialized renderers live in ``_TOOL_RENDERERS``; unknown tools fall
@@ -233,9 +229,7 @@ def _render_bash(tool_input: Any) -> RenderableType | None:
     rule = tool_input.get("matched_permission_rule") or tool_input.get("rule")
     if rule:
         body_lines.append(Text())
-        body_lines.append(
-            Text("rule: ", style="dim").append(str(rule), style="bold cyan")
-        )
+        body_lines.append(Text("rule: ", style="dim").append(str(rule), style="bold cyan"))
 
     description = tool_input.get("description")
     if description:
@@ -261,9 +255,7 @@ def _render_edit(tool_input: Any) -> RenderableType | None:
 
     parts: list[RenderableType] = []
     if file_path:
-        parts.append(
-            Text("file: ", style="dim").append(str(file_path), style="bold")
-        )
+        parts.append(Text("file: ", style="dim").append(str(file_path), style="bold"))
     if old_string or new_string:
         diff = _format_inline_diff(old_string, new_string)
         if diff is not None:
@@ -289,9 +281,7 @@ def _render_write(tool_input: Any) -> RenderableType | None:
         return None
     parts: list[RenderableType] = []
     if file_path:
-        parts.append(
-            Text("write: ", style="dim").append(str(file_path), style="bold")
-        )
+        parts.append(Text("write: ", style="dim").append(str(file_path), style="bold"))
     if content:
         preview = str(content)
         if len(preview) > 400:
@@ -313,9 +303,7 @@ def _render_read(tool_input: Any) -> RenderableType | None:
     file_path = tool_input.get("file_path") or tool_input.get("path")
     if not file_path:
         return None
-    parts: list[RenderableType] = [
-        Text("read: ", style="dim").append(str(file_path), style="bold")
-    ]
+    parts: list[RenderableType] = [Text("read: ", style="dim").append(str(file_path), style="bold")]
     extras = []
     if tool_input.get("offset"):
         extras.append(f"offset={tool_input.get('offset')}")
@@ -342,15 +330,11 @@ def _format_inline_diff(
     for line in old_lines[:max_lines]:
         out.append(Text("- ", style="bold red").append(line, style="red"))
     if len(old_lines) > max_lines:
-        out.append(
-            Text(f"  … {len(old_lines) - max_lines} more removed lines", style="dim")
-        )
+        out.append(Text(f"  … {len(old_lines) - max_lines} more removed lines", style="dim"))
     for line in new_lines[:max_lines]:
         out.append(Text("+ ", style="bold green").append(line, style="green"))
     if len(new_lines) > max_lines:
-        out.append(
-            Text(f"  … {len(new_lines) - max_lines} more added lines", style="dim")
-        )
+        out.append(Text(f"  … {len(new_lines) - max_lines} more added lines", style="dim"))
     if not out:
         return None
     return Group(*out)

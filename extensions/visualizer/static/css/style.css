@@ -206,7 +206,7 @@ body {
 .sessions-list .session-row .cell-title { color: var(--text-primary); font-weight: 500; }
 
 /* Session detail */
-.session-header { margin-bottom: 20px; }
+.session-header { margin-bottom: 20px; position: relative; }
 .session-title-row { display: flex; justify-content: space-between; align-items: center; }
 .session-title-row h2 { font-size: 18px; }
 .session-actions { display: flex; gap: 8px; align-items: center; }

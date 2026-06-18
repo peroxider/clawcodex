@@ -47,17 +47,21 @@ def load_tools_from_dir(
             spec_dict = getattr(mod, "tool_spec", None)
             run_fn = getattr(mod, "run", None)
             if isinstance(spec_dict, dict) and callable(run_fn):
+
                 def _make_call(fn: Any) -> Any:
                     def _call(tool_input: dict[str, Any], context: Any) -> ToolResult:
                         result = fn(tool_input, context)
                         if isinstance(result, ToolResult):
                             return result
                         return ToolResult(name=spec_dict.get("name", ""), output=result)
+
                     return _call
 
                 t = build_tool(
                     name=spec_dict.get("name", py_file.stem),
-                    input_schema=spec_dict.get("input_schema", {"type": "object", "properties": {}}),
+                    input_schema=spec_dict.get(
+                        "input_schema", {"type": "object", "properties": {}}
+                    ),
                     call=_make_call(run_fn),
                     description=spec_dict.get("description", ""),
                 )

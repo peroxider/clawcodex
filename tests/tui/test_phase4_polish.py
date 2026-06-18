@@ -102,10 +102,7 @@ async def test_transcript_evicts_oldest_rows_above_cap():
         # Soft cap is 5; count should hover at or just below it.
         assert transcript.message_count <= 5
         # The latest message should still be present.
-        texts = [
-            getattr(child, "renderable", "")
-            for child in list(transcript.children)
-        ]
+        texts = [getattr(child, "renderable", "") for child in list(transcript.children)]
         # Rough sanity: no row should reference the earliest index 0.
         rendered = " ".join(str(t) for t in texts)
         assert "msg 9" in rendered or transcript.message_count == 5

@@ -174,9 +174,7 @@ class DoctorScreen(ModalScreen[None]):
                     )
                 )
             else:
-                rows.append(
-                    Text(f"sessions on disk: {count}", style="default")
-                )
+                rows.append(Text(f"sessions on disk: {count}", style="default"))
             rows.append(
                 Text(
                     "wiring: deferred (see ch13-phase8-audit-result.md)",
@@ -184,9 +182,7 @@ class DoctorScreen(ModalScreen[None]):
                 )
             )
         except Exception as exc:
-            rows.append(
-                Text(f"storage import failed: {exc}", style="red")
-            )
+            rows.append(Text(f"storage import failed: {exc}", style="red"))
         return Group(*rows)
 
 

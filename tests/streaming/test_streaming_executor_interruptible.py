@@ -60,6 +60,7 @@ def _make_context(
     )
     if captured is not None:
         if raise_setter:
+
             def _setter(v: bool) -> None:
                 captured.append(v)
                 raise RuntimeError("setter explodes")
@@ -87,7 +88,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         tool = _tool_with_interrupt("Read", "cancel")
         ctx = _make_context([tool], observed)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         executor.add_tool(
@@ -103,7 +106,8 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         # least True followed by a final False.
         self.assertIn(True, observed, f"observed sequence: {observed!r}")
         self.assertEqual(
-            observed[-1], False,
+            observed[-1],
+            False,
             f"final state must be False (empty executing set), got: {observed!r}",
         )
 
@@ -119,7 +123,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         block = _tool_with_interrupt("ReadBlock", "block")
         ctx = _make_context([cancel, block], observed)
         executor = StreamingToolExecutor(
-            [cancel, block], can_use_tool=_allow_all, tool_use_context=ctx,
+            [cancel, block],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         msg = create_assistant_message(content="hi")
@@ -132,10 +138,10 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         # While the block tool is in the executing set, the signal
         # MUST be False (the all-cancellable predicate fails). After
         # both complete, the executing set is empty → False.
-        self.assertIn(False, observed,
-                      f"False must appear in sequence, got: {observed!r}")
+        self.assertIn(False, observed, f"False must appear in sequence, got: {observed!r}")
         self.assertEqual(
-            observed[-1], False,
+            observed[-1],
+            False,
             f"final state must be False, got: {observed!r}",
         )
 
@@ -146,7 +152,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         tool = _tool_with_interrupt("Read", "cancel")
         ctx = _make_context([tool], observed)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         executor.add_tool(
@@ -158,7 +166,8 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
 
         # No tool left executing — last observed must be False.
         self.assertGreater(
-            len(observed), 0,
+            len(observed),
+            0,
             "setter must have been called at least once",
         )
         self.assertEqual(observed[-1], False)
@@ -169,7 +178,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         ctx = _make_context([tool])  # captured=None → no setter wired
         self.assertIsNone(ctx.set_has_interruptible_tool_in_progress)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         executor.add_tool(
@@ -191,7 +202,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         tool = _tool_with_interrupt("Read", "cancel")
         ctx = _make_context([tool], observed, raise_setter=True)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         executor.add_tool(
@@ -206,7 +219,8 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(msgs_seen, 0)
         # And the setter was called (and recorded its arg before raising).
         self.assertGreater(
-            len(observed), 0,
+            len(observed),
+            0,
             "setter must have been invoked before raising",
         )
 
@@ -222,7 +236,9 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         tool = _tool_with_interrupt("Known", "cancel")
         ctx = _make_context([tool], observed)
         executor = StreamingToolExecutor(
-            [tool], can_use_tool=_allow_all, tool_use_context=ctx,
+            [tool],
+            can_use_tool=_allow_all,
+            tool_use_context=ctx,
         )
 
         executor.add_tool(
@@ -237,7 +253,8 @@ class TestInterruptibleSignal(unittest.IsolatedAsyncioTestCase):
         # This documents that "completed before executing" doesn't
         # accidentally fire a True/False pair.
         self.assertEqual(
-            observed, [],
+            observed,
+            [],
             f"unknown-tool path should not publish, got: {observed!r}",
         )
 

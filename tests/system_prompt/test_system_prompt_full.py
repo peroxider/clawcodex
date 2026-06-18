@@ -173,7 +173,9 @@ class TestBuildFullSystemPrompt:
         tools_pos = prompt.index("# Using your tools")
         tone_pos = prompt.index("# Tone and style")
         efficiency_pos = prompt.index("# Communicating with the user")
-        assert intro_pos < system_pos < tasks_pos < actions_pos < tools_pos < tone_pos < efficiency_pos
+        assert (
+            intro_pos < system_pos < tasks_pos < actions_pos < tools_pos < tone_pos < efficiency_pos
+        )
 
     def test_dynamic_sections_after_static(self):
         """Dynamic sections (agents, MCP, etc.) come after static modules."""

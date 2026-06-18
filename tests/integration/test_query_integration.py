@@ -53,11 +53,13 @@ class TestQueryIntegrationToolCalls(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_int_001",
-                "name": "Write",
-                "input": {"file_path": file_path, "content": "integration test content"},
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_int_001",
+                    "name": "Write",
+                    "input": {"file_path": file_path, "content": "integration test content"},
+                }
+            ],
         )
         final_response = ChatResponse(
             content="File created successfully.",
@@ -84,8 +86,7 @@ class TestQueryIntegrationToolCalls(unittest.TestCase):
         self.assertGreaterEqual(len(assistants), 1)
 
         tool_results = [
-            m for m in collected
-            if isinstance(m, UserMessage) and isinstance(m.content, list)
+            m for m in collected if isinstance(m, UserMessage) and isinstance(m.content, list)
         ]
         self.assertGreaterEqual(len(tool_results), 1)
 
@@ -101,11 +102,13 @@ class TestQueryIntegrationToolCalls(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_int_002",
-                "name": "Read",
-                "input": {"file_path": file_path},
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_int_002",
+                    "name": "Read",
+                    "input": {"file_path": file_path},
+                }
+            ],
         )
         final_response = ChatResponse(
             content="The file contains pre-existing content.",
@@ -126,8 +129,10 @@ class TestQueryIntegrationToolCalls(unittest.TestCase):
         _run(run())
 
         tool_results = [
-            m for m in collected
-            if isinstance(m, UserMessage) and isinstance(m.content, list)
+            m
+            for m in collected
+            if isinstance(m, UserMessage)
+            and isinstance(m.content, list)
             and any(isinstance(b, ToolResultBlock) for b in m.content)
         ]
         self.assertGreaterEqual(len(tool_results), 1)
@@ -153,22 +158,26 @@ class TestQueryIntegrationToolCalls(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_multi_1",
-                "name": "Write",
-                "input": {"file_path": file1, "content": "file a"},
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_multi_1",
+                    "name": "Write",
+                    "input": {"file_path": file1, "content": "file a"},
+                }
+            ],
         )
         second_response = ChatResponse(
             content="Creating second file.",
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_multi_2",
-                "name": "Write",
-                "input": {"file_path": file2, "content": "file b"},
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_multi_2",
+                    "name": "Write",
+                    "input": {"file_path": file2, "content": "file b"},
+                }
+            ],
         )
         final_response = ChatResponse(
             content="Both files created.",
@@ -257,7 +266,8 @@ class TestQueryIntegrationErrors(unittest.TestCase):
         _run(run())
 
         error_msgs = [
-            m for m in collected
+            m
+            for m in collected
             if isinstance(m, AssistantMessage)
             and isinstance(m.content, str)
             and "error" in m.content.lower()

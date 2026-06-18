@@ -26,20 +26,21 @@ def install_permission_extensions() -> None:
     """
     from src.permissions.cycle import register_cycle_step
 
-    register_cycle_step(
-        "bypassPermissions", "dontAsk", after="bypassPermissions"
-    )
+    register_cycle_step("bypassPermissions", "dontAsk", after="bypassPermissions")
 
     try:
         from clawcodex_ext.agent.auto_mode_runner import install_llm_auto_mode_classifier
+
         success = install_llm_auto_mode_classifier(use_llm_for_uncertain=True)
         if not success:
             import logging
+
             log = logging.getLogger(__name__)
             log.warning("Auto mode LLM classifier installation returned False")
     except Exception as e:
         import logging
         import traceback
+
         log = logging.getLogger(__name__)
         log.warning("Auto mode LLM classifier not installed: %s", e)
         log.warning("Traceback: %s", traceback.format_exc())

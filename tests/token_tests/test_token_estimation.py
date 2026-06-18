@@ -48,7 +48,9 @@ class TestBytesPerTokenForFileType:
 class TestRoughTokenCountForFileType:
     def test_json_file(self):
         content = '{"key": "value"}'
-        assert rough_token_count_estimation_for_file_type(content, "json") == round(len(content) / 2)
+        assert rough_token_count_estimation_for_file_type(content, "json") == round(
+            len(content) / 2
+        )
 
     def test_python_file(self):
         content = "def foo(): pass"
@@ -141,25 +143,31 @@ class TestCountMessagesTokens:
         assert result > 0
 
     def test_tool_use_message(self):
-        messages = [{
-            "role": "assistant",
-            "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}],
-        }]
+        messages = [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "ls"}}],
+            }
+        ]
         result = count_messages_tokens(messages)
         assert result > 0
 
     def test_image_message(self):
-        messages = [{
-            "role": "user",
-            "content": [{"type": "image", "source": {}}],
-        }]
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "image", "source": {}}],
+            }
+        ]
         result = count_messages_tokens(messages)
         assert result >= 2000
 
     def test_thinking_message(self):
-        messages = [{
-            "role": "assistant",
-            "content": [{"type": "thinking", "thinking": "reasoning here"}],
-        }]
+        messages = [
+            {
+                "role": "assistant",
+                "content": [{"type": "thinking", "thinking": "reasoning here"}],
+            }
+        ]
         result = count_messages_tokens(messages)
         assert result > 0

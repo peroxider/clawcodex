@@ -18,6 +18,7 @@ Hermetic via autouse fixture: pins ``project_transcript_dir`` to a
 tmp path so session scans in the gate chain never read the real
 ``~/.clawcodex/sessions/`` directory.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -331,9 +332,7 @@ def test_e2e_real_scheduler_tick_fires_dream(tmp_path: Path) -> None:
     # next check_once() tick picks it up.
     tasks = read_cron_tasks(tmp_path)
     backdated = [
-        replace(t, next_fire_at=int(time.time() * 1000) - 1000)
-        if t.id == task.id
-        else t
+        replace(t, next_fire_at=int(time.time() * 1000) - 1000) if t.id == task.id else t
         for t in tasks
     ]
     write_cron_tasks(tmp_path, backdated)

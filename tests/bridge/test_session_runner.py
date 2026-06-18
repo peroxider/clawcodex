@@ -39,58 +39,63 @@ from src.bridge.session_runner import (
 
 def test_build_child_env_strips_non_allowlisted() -> None:
     parent = {
-        'PATH': '/usr/bin',
-        'ANTHROPIC_API_KEY': 'secret-key',
-        'CLAUDE_CODE_OAUTH_TOKEN': 'oauth-secret',
-        'DATABASE_PASSWORD': 'db-secret',
-        'HOME': '/Users/test',
+        "PATH": "/usr/bin",
+        "ANTHROPIC_API_KEY": "secret-key",
+        "CLAUDE_CODE_OAUTH_TOKEN": "oauth-secret",
+        "DATABASE_PASSWORD": "db-secret",
+        "HOME": "/Users/test",
     }
-    env = build_child_env(parent, BuildChildEnvOpts(access_token='tok'))
-    assert env['PATH'] == '/usr/bin'
-    assert env['HOME'] == '/Users/test'
-    assert 'ANTHROPIC_API_KEY' not in env
-    assert 'CLAUDE_CODE_OAUTH_TOKEN' not in env
-    assert 'DATABASE_PASSWORD' not in env
+    env = build_child_env(parent, BuildChildEnvOpts(access_token="tok"))
+    assert env["PATH"] == "/usr/bin"
+    assert env["HOME"] == "/Users/test"
+    assert "ANTHROPIC_API_KEY" not in env
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+    assert "DATABASE_PASSWORD" not in env
 
 
 def test_build_child_env_sets_required_bridge_vars() -> None:
-    env = build_child_env({}, BuildChildEnvOpts(access_token='tok-123'))
-    assert env['CLAUDE_CODE_ENVIRONMENT_KIND'] == 'bridge'
-    assert env['CLAUDE_CODE_SESSION_ACCESS_TOKEN'] == 'tok-123'
-    assert env['CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2'] == '1'
+    env = build_child_env({}, BuildChildEnvOpts(access_token="tok-123"))
+    assert env["CLAUDE_CODE_ENVIRONMENT_KIND"] == "bridge"
+    assert env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] == "tok-123"
+    assert env["CLAUDE_CODE_POST_FOR_SESSION_INGRESS_V2"] == "1"
 
 
 def test_build_child_env_sets_sandbox_flag_when_enabled() -> None:
     env = build_child_env(
-        {}, BuildChildEnvOpts(access_token='tok', sandbox=True),
+        {},
+        BuildChildEnvOpts(access_token="tok", sandbox=True),
     )
-    assert env['CLAUDE_CODE_FORCE_SANDBOX'] == '1'
+    assert env["CLAUDE_CODE_FORCE_SANDBOX"] == "1"
 
 
 def test_build_child_env_omits_sandbox_when_disabled() -> None:
     env = build_child_env(
-        {}, BuildChildEnvOpts(access_token='tok', sandbox=False),
+        {},
+        BuildChildEnvOpts(access_token="tok", sandbox=False),
     )
-    assert 'CLAUDE_CODE_FORCE_SANDBOX' not in env
+    assert "CLAUDE_CODE_FORCE_SANDBOX" not in env
 
 
 def test_build_child_env_sets_ccr_v2_with_epoch() -> None:
     env = build_child_env(
         {},
         BuildChildEnvOpts(
-            access_token='tok', use_ccr_v2=True, worker_epoch=7,
+            access_token="tok",
+            use_ccr_v2=True,
+            worker_epoch=7,
         ),
     )
-    assert env['CLAUDE_CODE_USE_CCR_V2'] == '1'
-    assert env['CLAUDE_CODE_WORKER_EPOCH'] == '7'
+    assert env["CLAUDE_CODE_USE_CCR_V2"] == "1"
+    assert env["CLAUDE_CODE_WORKER_EPOCH"] == "7"
 
 
 def test_build_child_env_omits_ccr_v2_when_disabled() -> None:
     env = build_child_env(
-        {}, BuildChildEnvOpts(access_token='tok', use_ccr_v2=False),
+        {},
+        BuildChildEnvOpts(access_token="tok", use_ccr_v2=False),
     )
-    assert 'CLAUDE_CODE_USE_CCR_V2' not in env
-    assert 'CLAUDE_CODE_WORKER_EPOCH' not in env
+    assert "CLAUDE_CODE_USE_CCR_V2" not in env
+    assert "CLAUDE_CODE_WORKER_EPOCH" not in env
 
 
 def test_build_child_env_overrides_access_token_from_parent() -> None:
@@ -99,21 +104,28 @@ def test_build_child_env_overrides_access_token_from_parent() -> None:
     """
     # The env var IS allowlist-eligible because it starts with the
     # allowlisted prefix? No — let's verify by including it in parent.
-    parent = {'CLAUDE_CODE_SESSION_ACCESS_TOKEN': 'parent-stale-tok'}
+    parent = {"CLAUDE_CODE_SESSION_ACCESS_TOKEN": "parent-stale-tok"}
     env = build_child_env(
-        parent, BuildChildEnvOpts(access_token='fresh-tok'),
+        parent,
+        BuildChildEnvOpts(access_token="fresh-tok"),
     )
-    assert env['CLAUDE_CODE_SESSION_ACCESS_TOKEN'] == 'fresh-tok'
+    assert env["CLAUDE_CODE_SESSION_ACCESS_TOKEN"] == "fresh-tok"
 
 
 def test_allowlist_contains_essential_vars() -> None:
     """Pin the allowlist contents — any removal is a behavior change."""
     must_have = {
-        'PATH', 'HOME', 'TMPDIR', 'LANG',
-        'NODE_OPTIONS', 'NODE_PATH', 'NODE_ENV',
-        'CLAUDE_CODE_ENVIRONMENT_KIND',
-        'CLAUDE_CODE_FORCE_SANDBOX',
-        'TERM', 'COLORTERM',
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "LANG",
+        "NODE_OPTIONS",
+        "NODE_PATH",
+        "NODE_ENV",
+        "CLAUDE_CODE_ENVIRONMENT_KIND",
+        "CLAUDE_CODE_FORCE_SANDBOX",
+        "TERM",
+        "COLORTERM",
     }
     for var in must_have:
         assert var in CHILD_ENV_ALLOWLIST
@@ -122,8 +134,11 @@ def test_allowlist_contains_essential_vars() -> None:
 def test_allowlist_excludes_secrets() -> None:
     """Defensive — secret-bearing vars must never enter the allowlist."""
     must_not = {
-        'ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN',
-        'CLAUDE_TRUSTED_DEVICE_TOKEN', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY',
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_TRUSTED_DEVICE_TOKEN",
+        "GITHUB_TOKEN",
+        "AWS_SECRET_ACCESS_KEY",
     }
     for var in must_not:
         assert var not in CHILD_ENV_ALLOWLIST
@@ -133,26 +148,29 @@ def test_allowlist_excludes_secrets() -> None:
 
 
 def test_safe_filename_id_preserves_alphanumeric() -> None:
-    assert safe_filename_id('abc123_XYZ-def') == 'abc123_XYZ-def'
+    assert safe_filename_id("abc123_XYZ-def") == "abc123_XYZ-def"
 
 
-@pytest.mark.parametrize('bad', [
-    '../etc/passwd',
-    'sess/with/slash',
-    'sess.with.dot',
-    'sess with space',
-    'sess%encoded',
-    'sess\nnewline',
-])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "../etc/passwd",
+        "sess/with/slash",
+        "sess.with.dot",
+        "sess with space",
+        "sess%encoded",
+        "sess\nnewline",
+    ],
+)
 def test_safe_filename_id_replaces_unsafe(bad: str) -> None:
     out = safe_filename_id(bad)
     # No unsafe chars survive.
     for ch in out:
-        assert ch.isalnum() or ch in '_-'
+        assert ch.isalnum() or ch in "_-"
 
 
 def test_safe_filename_id_handles_empty_string() -> None:
-    assert safe_filename_id('') == ''
+    assert safe_filename_id("") == ""
 
 
 # ── extract_activities ──────────────────────────────────────────────────
@@ -160,176 +178,190 @@ def test_safe_filename_id_handles_empty_string() -> None:
 
 def test_extract_activities_returns_empty_for_non_json() -> None:
     logs: list[str] = []
-    out = extract_activities('not json', 'sess-1', logs.append)
+    out = extract_activities("not json", "sess-1", logs.append)
     assert out == []
 
 
 def test_extract_activities_returns_empty_for_non_object_json() -> None:
-    out = extract_activities('123', 'sess-1', lambda _msg: None)
+    out = extract_activities("123", "sess-1", lambda _msg: None)
     assert out == []
 
 
 def test_extract_activities_emits_tool_start() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [
-                {
-                    'type': 'tool_use',
-                    'name': 'Read',
-                    'input': {'file_path': '/tmp/foo.py'},
-                },
-            ],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "Read",
+                        "input": {"file_path": "/tmp/foo.py"},
+                    },
+                ],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert len(out) == 1
-    assert out[0].type == 'tool_start'
-    assert out[0].summary == 'Reading /tmp/foo.py'
+    assert out[0].type == "tool_start"
+    assert out[0].summary == "Reading /tmp/foo.py"
 
 
 def test_extract_activities_uses_tool_name_when_verb_unknown() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [
-                {
-                    'type': 'tool_use',
-                    'name': 'CustomTool',
-                    'input': {'pattern': 'foo'},
-                },
-            ],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
-    assert out[0].summary == 'CustomTool foo'
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "CustomTool",
+                        "input": {"pattern": "foo"},
+                    },
+                ],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
+    assert out[0].summary == "CustomTool foo"
 
 
 def test_extract_activities_truncates_bash_command() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [
-                {
-                    'type': 'tool_use',
-                    'name': 'Bash',
-                    'input': {'command': 'x' * 200},
-                },
-            ],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "Bash",
+                        "input": {"command": "x" * 200},
+                    },
+                ],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     # Bash command truncated to 60 chars.
-    assert out[0].summary == 'Running ' + 'x' * 60
+    assert out[0].summary == "Running " + "x" * 60
 
 
 def test_extract_activities_emits_text() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [{'type': 'text', 'text': 'Hello world'}],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": "Hello world"}],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert len(out) == 1
-    assert out[0].type == 'text'
-    assert out[0].summary == 'Hello world'
+    assert out[0].type == "text"
+    assert out[0].summary == "Hello world"
 
 
 def test_extract_activities_truncates_text_to_80_chars() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [{'type': 'text', 'text': 'a' * 200}],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": "a" * 200}],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert len(out[0].summary) == 80
 
 
 def test_extract_activities_skips_empty_text() -> None:
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {'content': [{'type': 'text', 'text': ''}]},
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": ""}]},
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert out == []
 
 
 def test_extract_activities_emits_result_success() -> None:
-    line = json.dumps({'type': 'result', 'subtype': 'success'})
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps({"type": "result", "subtype": "success"})
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert len(out) == 1
-    assert out[0].type == 'result'
+    assert out[0].type == "result"
 
 
 def test_extract_activities_emits_result_error_with_message() -> None:
-    line = json.dumps({
-        'type': 'result',
-        'subtype': 'failure',
-        'errors': ['Something bad'],
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps(
+        {
+            "type": "result",
+            "subtype": "failure",
+            "errors": ["Something bad"],
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert len(out) == 1
-    assert out[0].type == 'error'
-    assert out[0].summary == 'Something bad'
+    assert out[0].type == "error"
+    assert out[0].summary == "Something bad"
 
 
 def test_extract_activities_emits_result_error_with_fallback() -> None:
-    line = json.dumps({'type': 'result', 'subtype': 'failure'})
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
-    assert out[0].summary == 'Error: failure'
+    line = json.dumps({"type": "result", "subtype": "failure"})
+    out = extract_activities(line, "sess-1", lambda _msg: None)
+    assert out[0].summary == "Error: failure"
 
 
 def test_extract_activities_ignores_unknown_types() -> None:
-    line = json.dumps({'type': 'something-else'})
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    line = json.dumps({"type": "something-else"})
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     assert out == []
 
 
 def test_extract_activities_multiple_blocks() -> None:
     """Multiple content blocks → multiple activities, in order."""
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {
-            'content': [
-                {'type': 'text', 'text': 'thinking...'},
-                {'type': 'tool_use', 'name': 'Bash', 'input': {'command': 'ls'}},
-            ],
-        },
-    })
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
-    assert [a.type for a in out] == ['text', 'tool_start']
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "thinking..."},
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+                ],
+            },
+        }
+    )
+    out = extract_activities(line, "sess-1", lambda _msg: None)
+    assert [a.type for a in out] == ["text", "tool_start"]
 
 
 # ── Integration: spawn a small Python child ─────────────────────────────
 
 
 _CHILD_SCRIPT_HELLO = (
-    'import sys, json, time\n'
+    "import sys, json, time\n"
     'sys.stdout.write(json.dumps({"type": "assistant", "message": '
     '{"content": [{"type": "text", "text": "hi from child"}]}}) + "\\n")\n'
-    'sys.stdout.flush()\n'
+    "sys.stdout.flush()\n"
     'sys.stdout.write(json.dumps({"type": "result", "subtype": "success"}) + "\\n")\n'
-    'sys.stdout.flush()\n'
-    'sys.exit(0)\n'
+    "sys.stdout.flush()\n"
+    "sys.exit(0)\n"
 )
 
 
 def _make_spawner(
     script_source: str = _CHILD_SCRIPT_HELLO,
     on_activity: Callable[[str, Any], None] | None = None,
-    on_permission_request: (
-        Callable[[str, PermissionRequest, str], None] | None
-    ) = None,
+    on_permission_request: (Callable[[str, PermissionRequest, str], None] | None) = None,
     verbose: bool = False,
 ) -> SessionSpawnerDeps:
     """Build a SessionSpawnerDeps that runs the supplied Python script
     as the child process via ``sys.executable -c <script>``."""
     return SessionSpawnerDeps(
         exec_path=sys.executable,
-        script_args=['-c', script_source],
-        env={'PATH': os.environ.get('PATH', '')},
+        script_args=["-c", script_source],
+        env={"PATH": os.environ.get("PATH", "")},
         verbose=verbose,
         sandbox=False,
         on_debug=lambda _msg: None,  # silent
@@ -340,9 +372,9 @@ def _make_spawner(
 
 def _make_opts(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        'session_id': 'cse_test123',
-        'sdk_url': 'wss://example.com/v2/session_ingress/ws/cse_test123',
-        'access_token': 'tok-test',
+        "session_id": "cse_test123",
+        "sdk_url": "wss://example.com/v2/session_ingress/ws/cse_test123",
+        "access_token": "tok-test",
     }
     base.update(overrides)
     return base
@@ -357,7 +389,7 @@ async def test_spawn_runs_child_to_completion() -> None:
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
     status = await asyncio.wait_for(handle.wait_done(), timeout=10.0)
-    assert status == 'completed'
+    assert status == "completed"
 
 
 @pytest.mark.asyncio
@@ -370,53 +402,44 @@ async def test_spawn_parses_activities_from_stdout() -> None:
     await asyncio.wait_for(handle.wait_done(), timeout=10.0)
 
     types = [a.type for _sid, a in captured]
-    assert 'text' in types
-    assert 'result' in types
+    assert "text" in types
+    assert "result" in types
     # Ring buffer also has them.
     activity_types = [a.type for a in handle.activities]
-    assert 'text' in activity_types
-    assert 'result' in activity_types
+    assert "text" in activity_types
+    assert "result" in activity_types
 
 
 @pytest.mark.asyncio
 async def test_spawn_fails_status_on_nonzero_exit() -> None:
-    script = (
-        'import sys\n'
-        'sys.stderr.write("boom\\n")\n'
-        'sys.exit(2)\n'
-    )
+    script = 'import sys\nsys.stderr.write("boom\\n")\nsys.exit(2)\n'
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
     status = await asyncio.wait_for(handle.wait_done(), timeout=10.0)
-    assert status == 'failed'
+    assert status == "failed"
     # Stderr captured.
-    assert any('boom' in line for line in handle.last_stderr)
+    assert any("boom" in line for line in handle.last_stderr)
 
 
 @pytest.mark.asyncio
 async def test_spawn_handles_invalid_executable() -> None:
     """A non-existent exec path resolves to 'failed' without raising."""
     deps = SessionSpawnerDeps(
-        exec_path='/no/such/binary/that/exists',
-        env={'PATH': ''},
+        exec_path="/no/such/binary/that/exists",
+        env={"PATH": ""},
         on_debug=lambda _msg: None,
     )
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
     status = await asyncio.wait_for(handle.wait_done(), timeout=5.0)
-    assert status == 'failed'
+    assert status == "failed"
 
 
 @pytest.mark.asyncio
 async def test_kill_interrupts_long_running_child() -> None:
     """SIGTERM is delivered as 'interrupted'."""
-    script = (
-        'import time, sys\n'
-        'sys.stdout.write("ready\\n")\n'
-        'sys.stdout.flush()\n'
-        'time.sleep(30)\n'
-    )
+    script = 'import time, sys\nsys.stdout.write("ready\\n")\nsys.stdout.flush()\ntime.sleep(30)\n'
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
@@ -424,20 +447,20 @@ async def test_kill_interrupts_long_running_child() -> None:
     await asyncio.sleep(0.2)
     handle.kill()  # type: ignore[attr-defined]
     status = await asyncio.wait_for(handle.wait_done(), timeout=10.0)
-    assert status == 'interrupted'
+    assert status == "interrupted"
 
 
 @pytest.mark.asyncio
 async def test_force_kill_terminates_unresponsive_child() -> None:
     """SIGKILL terminates a child ignoring SIGTERM."""
-    if sys.platform == 'win32':
-        pytest.skip('SIGKILL semantics differ on Windows')
+    if sys.platform == "win32":
+        pytest.skip("SIGKILL semantics differ on Windows")
     script = (
-        'import signal, time, sys\n'
-        'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+        "import signal, time, sys\n"
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
         'sys.stdout.write("ignoring SIGTERM\\n")\n'
-        'sys.stdout.flush()\n'
-        'time.sleep(30)\n'
+        "sys.stdout.flush()\n"
+        "time.sleep(30)\n"
     )
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
@@ -448,15 +471,15 @@ async def test_force_kill_terminates_unresponsive_child() -> None:
     await asyncio.sleep(0.2)
     handle.force_kill()  # type: ignore[attr-defined]
     status = await asyncio.wait_for(handle.wait_done(), timeout=10.0)
-    assert status == 'failed'  # SIGKILL → returncode = -9, not -SIGTERM/SIGINT
+    assert status == "failed"  # SIGKILL → returncode = -9, not -SIGTERM/SIGINT
 
 
 @pytest.mark.asyncio
 async def test_force_kill_is_idempotent() -> None:
     """Calling force_kill twice is a no-op the second time."""
-    if sys.platform == 'win32':
-        pytest.skip('SIGKILL semantics differ on Windows')
-    script = 'import time; time.sleep(30)\n'
+    if sys.platform == "win32":
+        pytest.skip("SIGKILL semantics differ on Windows")
+    script = "import time; time.sleep(30)\n"
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
@@ -472,13 +495,13 @@ async def test_update_access_token_writes_via_stdin() -> None:
     """The fresh token is delivered as an NDJSON line on stdin."""
     # Child echoes its stdin to stdout so we can verify the payload.
     script = (
-        'import sys\n'
-        'for line in sys.stdin:\n'
+        "import sys\n"
+        "for line in sys.stdin:\n"
         '    sys.stdout.write("ECHO " + line)\n'
-        '    sys.stdout.flush()\n'
+        "    sys.stdout.flush()\n"
         '    if "stop" in line:\n'
-        '        break\n'
-        'sys.exit(0)\n'
+        "        break\n"
+        "sys.exit(0)\n"
     )
     captured_lines: list[str] = []
 
@@ -487,8 +510,8 @@ async def test_update_access_token_writes_via_stdin() -> None:
 
     deps = SessionSpawnerDeps(
         exec_path=sys.executable,
-        script_args=['-c', script],
-        env={'PATH': os.environ.get('PATH', '')},
+        script_args=["-c", script],
+        env={"PATH": os.environ.get("PATH", "")},
         on_debug=lambda msg: captured_lines.append(msg),
         on_activity=on_activity,
     )
@@ -497,26 +520,26 @@ async def test_update_access_token_writes_via_stdin() -> None:
     # Wait for the child to be ready to read stdin.
     await asyncio.sleep(0.3)
 
-    handle.update_access_token('fresh-tok-XYZ')  # type: ignore[attr-defined]
+    handle.update_access_token("fresh-tok-XYZ")  # type: ignore[attr-defined]
     # Tell it to stop.
-    handle.write_stdin('stop\n')  # type: ignore[attr-defined]
+    handle.write_stdin("stop\n")  # type: ignore[attr-defined]
     status = await asyncio.wait_for(handle.wait_done(), timeout=5.0)
-    assert status == 'completed'
+    assert status == "completed"
 
     # Property reflects the new token.
-    assert handle.access_token == 'fresh-tok-XYZ'
+    assert handle.access_token == "fresh-tok-XYZ"
     # The debug log captured the stdin write that includes the token.
-    joined = '\n'.join(captured_lines)
-    assert 'fresh-tok-XYZ' in joined
-    assert 'update_environment_variables' in joined
+    joined = "\n".join(captured_lines)
+    assert "fresh-tok-XYZ" in joined
+    assert "update_environment_variables" in joined
 
 
 @pytest.mark.asyncio
 async def test_permission_request_fires_callback() -> None:
     """A ``control_request`` NDJSON line on stdout triggers the callback."""
     script = (
-        'import sys, json\n'
-        'sys.stdout.write(json.dumps({'
+        "import sys, json\n"
+        "sys.stdout.write(json.dumps({"
         '"type": "control_request",'
         '"request_id": "req-1",'
         '"request": {'
@@ -525,9 +548,9 @@ async def test_permission_request_fires_callback() -> None:
         '"input": {"command": "ls"},'
         '"tool_use_id": "tu-1"'
         '}}) + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
         'sys.stdout.write(json.dumps({"type": "result", "subtype": "success"}) + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
     )
     requests: list[tuple[str, dict[str, Any], str]] = []
 
@@ -541,29 +564,29 @@ async def test_permission_request_fires_callback() -> None:
 
     assert len(requests) == 1
     sid, req, tok = requests[0]
-    assert sid == 'cse_test123'
-    assert tok == 'tok-test'
-    assert req['request_id'] == 'req-1'
-    assert req['request']['subtype'] == 'can_use_tool'
+    assert sid == "cse_test123"
+    assert tok == "tok-test"
+    assert req["request_id"] == "req-1"
+    assert req["request"]["subtype"] == "can_use_tool"
 
 
 @pytest.mark.asyncio
 async def test_first_user_message_callback_fires_once() -> None:
     """``on_first_user_message`` fires on the first real user message only."""
     script = (
-        'import sys, json\n'
+        "import sys, json\n"
         # Synthetic — should be skipped.
         'sys.stdout.write(json.dumps({"type": "user", "isSynthetic": True, '
         '"message": {"content": "synthetic"}}) + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
         # Real — should fire.
         'sys.stdout.write(json.dumps({"type": "user", '
         '"message": {"content": "first real prompt"}}) + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
         # Second real — should NOT fire (already seen).
         'sys.stdout.write(json.dumps({"type": "user", '
         '"message": {"content": "second"}}) + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
     )
     calls: list[str] = []
     deps = _make_spawner(script_source=script)
@@ -575,7 +598,7 @@ async def test_first_user_message_callback_fires_once() -> None:
     handle.force_kill()  # type: ignore[attr-defined]
     await asyncio.wait_for(handle.wait_done(), timeout=5.0)
 
-    assert calls == ['first real prompt']
+    assert calls == ["first real prompt"]
 
 
 @pytest.mark.asyncio
@@ -587,12 +610,7 @@ async def test_kill_before_spawn_ready_still_terminates_child() -> None:
     Pre-fix, the kill silently no-op'd because ``_process`` was still
     None.
     """
-    script = (
-        'import time, sys\n'
-        'sys.stdout.write("ready\\n")\n'
-        'sys.stdout.flush()\n'
-        'time.sleep(30)\n'
-    )
+    script = 'import time, sys\nsys.stdout.write("ready\\n")\nsys.stdout.flush()\ntime.sleep(30)\n'
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
     handle = spawner.spawn(_make_opts(), os.getcwd())
@@ -600,7 +618,7 @@ async def test_kill_before_spawn_ready_still_terminates_child() -> None:
     # _process may still be None.
     handle.kill()  # type: ignore[attr-defined]
     status = await asyncio.wait_for(handle.wait_done(), timeout=10.0)
-    assert status == 'interrupted'
+    assert status == "interrupted"
 
 
 def test_session_activity_timestamp_is_milliseconds() -> None:
@@ -612,12 +630,14 @@ def test_session_activity_timestamp_is_milliseconds() -> None:
     """
     import time as _time
 
-    line = json.dumps({
-        'type': 'assistant',
-        'message': {'content': [{'type': 'text', 'text': 'now'}]},
-    })
+    line = json.dumps(
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": "now"}]},
+        }
+    )
     before_ms = int(_time.time() * 1000)
-    out = extract_activities(line, 'sess-1', lambda _msg: None)
+    out = extract_activities(line, "sess-1", lambda _msg: None)
     after_ms = int(_time.time() * 1000)
     assert len(out) == 1
     ts = out[0].timestamp
@@ -632,16 +652,20 @@ async def test_activity_ring_buffer_caps_at_max() -> None:
     # Emit MAX_ACTIVITIES + 5 text blocks.
     lines = []
     for i in range(MAX_ACTIVITIES + 5):
-        lines.append(json.dumps({
-            'type': 'assistant',
-            'message': {'content': [{'type': 'text', 'text': f't{i}'}]},
-        }))
+        lines.append(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {"content": [{"type": "text", "text": f"t{i}"}]},
+                }
+            )
+        )
     script = (
-        'import sys\n'
-        f'lines = {lines!r}\n'
-        'for ln in lines:\n'
+        "import sys\n"
+        f"lines = {lines!r}\n"
+        "for ln in lines:\n"
         '    sys.stdout.write(ln + "\\n")\n'
-        'sys.stdout.flush()\n'
+        "sys.stdout.flush()\n"
     )
     deps = _make_spawner(script_source=script)
     spawner = create_session_spawner(deps)
@@ -651,5 +675,5 @@ async def test_activity_ring_buffer_caps_at_max() -> None:
     assert len(handle.activities) == MAX_ACTIVITIES
     # The first 5 should have been evicted; last 10 remain.
     summaries = [a.summary for a in handle.activities]
-    assert 't0' not in summaries
-    assert f't{MAX_ACTIVITIES + 4}' in summaries
+    assert "t0" not in summaries
+    assert f"t{MAX_ACTIVITIES + 4}" in summaries

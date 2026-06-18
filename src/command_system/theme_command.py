@@ -46,6 +46,7 @@ module top) so a bare ``import src.command_system`` does not pull the heavy
 mirrors the local-import discipline already used in ``builtins.py`` (buddy) and
 ``app.py`` (config).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -107,9 +108,7 @@ class ThemeCommand(InteractiveCommand):
         if picked is None:
             # TS cancel: onDone("Theme picker dismissed", {display:"system"}).
             # A visible system line — NOT skip() (which /export uses for Esc).
-            return InteractiveOutcome(
-                message="Theme picker dismissed", display="system"
-            )
+            return InteractiveOutcome(message="Theme picker dismissed", display="system")
         set_theme(picked)  # persist (TS setTheme -> setThemeSetting -> saveGlobalConfig)
         # TS success: onDone("Theme set to …") with NO options => createUserMessage
         # (model-visible, shouldQuery=false). Faithful map = display="user".

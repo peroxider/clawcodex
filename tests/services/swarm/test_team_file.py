@@ -1,4 +1,5 @@
 """WI-6.4 tests — team file + members[] schema."""
+
 from __future__ import annotations
 
 import json
@@ -43,9 +44,7 @@ def test_legacy_team_file_no_members_treated_as_empty(tmp_path: Path) -> None:
     path = get_team_file_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(
-            {"team_name": "old", "lead_agent_id": "abc", "description": "legacy"}
-        ),
+        json.dumps({"team_name": "old", "lead_agent_id": "abc", "description": "legacy"}),
         encoding="utf-8",
     )
     loaded = read_team_file(tmp_path)
@@ -75,7 +74,8 @@ def test_add_member_replaces_existing_agent_id(tmp_path: Path) -> None:
 
 def test_remove_member_drops_only_target(tmp_path: Path) -> None:
     team = TeamFile(
-        team_name="t", lead_agent_id="abc",
+        team_name="t",
+        lead_agent_id="abc",
         members=(
             TeamMember(agent_id="a1", name="alice"),
             TeamMember(agent_id="a2", name="bob"),
@@ -87,7 +87,8 @@ def test_remove_member_drops_only_target(tmp_path: Path) -> None:
 
 def test_find_member_by_name_case_insensitive() -> None:
     team = TeamFile(
-        team_name="t", lead_agent_id="abc",
+        team_name="t",
+        lead_agent_id="abc",
         members=(TeamMember(agent_id="a1", name="Alice"),),
     )
     assert find_member_by_name(team, "alice") is not None
@@ -102,9 +103,7 @@ def test_team_create_writes_members_field(tmp_path: Path) -> None:
     from src.tool_system.tools.team import TeamCreateTool
 
     ctx = ToolContext(workspace_root=tmp_path)
-    TeamCreateTool.call(
-        {"team_name": "my-team", "description": "x"}, ctx
-    )
+    TeamCreateTool.call({"team_name": "my-team", "description": "x"}, ctx)
     raw = json.loads(get_team_file_path(tmp_path).read_text(encoding="utf-8"))
     assert raw["members"] == []
     assert raw["team_name"] == "my-team"

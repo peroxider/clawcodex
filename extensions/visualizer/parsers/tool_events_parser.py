@@ -1,6 +1,13 @@
 """Tool events NDJSON parser (F-91-B / F-45).
 
-Parses events.ndjson files produced by AgentRunner._append_tool_event_log.
+Parses ``events.ndjson`` files written by ``AgentRunner._append_tool_event_log``.
+In the new format the canonical location is::
+
+    ~/.clawcodex/tool-events/<run_id>/events.ndjson
+
+(per the F-45 contract). The parser is path-agnostic — the caller
+hands it an explicit ``path`` — so the only update is documentation
+of the default location. No format change to the on-disk file.
 """
 
 from __future__ import annotations
@@ -11,9 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import BarStatus, BarType, TimelineBar
-from ..builders.operation_categorizer import OperationCategorizer
 
 logger = logging.getLogger(__name__)
+
+# Canonical tool-events root in the new format (F-45).
+DEFAULT_TOOL_EVENTS_DIR = Path.home() / ".clawcodex" / "tool-events"
 
 
 class ToolEventsParser:
@@ -21,6 +30,12 @@ class ToolEventsParser:
 
     def __init__(self) -> None:
         self._bar_counter = 0
+        # Lazy import: ``builders/__init__.py`` imports ``TimelineBuilder``,
+        # which in turn imports this module. Importing OperationCategorizer
+        # at module level would therefore re-enter this module mid-init
+        # and crash with a circular-import error. Defer until first use.
+        from ..builders.operation_categorizer import OperationCategorizer
+
         self._categorizer = OperationCategorizer()
 
     def parse_file(self, path: Path | str) -> list[TimelineBar]:
@@ -51,7 +66,13 @@ class ToolEventsParser:
         turn = entry.get("turn", 0)
 
         self._bar_counter += 1
-        status = BarStatus.SUCCESS if approved is True else BarStatus.ERROR if approved is False else BarStatus.WARNING
+        status = (
+            BarStatus.SUCCESS
+            if approved is True
+            else BarStatus.ERROR
+            if approved is False
+            else BarStatus.WARNING
+        )
 
         bar = TimelineBar(
             id=f"tev-{self._bar_counter}",

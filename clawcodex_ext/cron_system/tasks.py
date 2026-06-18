@@ -67,7 +67,9 @@ def write_cron_tasks(workspace_root: Path, tasks: Iterable[CronTask]) -> None:
     tmp.replace(path)
 
 
-def read_session_cron_tasks(session_store: MutableMapping[str, CronTask | dict] | None) -> list[CronTask]:
+def read_session_cron_tasks(
+    session_store: MutableMapping[str, CronTask | dict] | None,
+) -> list[CronTask]:
     if session_store is None:
         return []
 
@@ -92,7 +94,9 @@ def read_session_cron_tasks(session_store: MutableMapping[str, CronTask | dict] 
     return tasks
 
 
-def write_session_cron_tasks(session_store: MutableMapping[str, CronTask | dict], tasks: Iterable[CronTask]) -> None:
+def write_session_cron_tasks(
+    session_store: MutableMapping[str, CronTask | dict], tasks: Iterable[CronTask]
+) -> None:
     session_store.clear()
     for task in sorted(tasks, key=lambda item: item.id):
         session_store[task.id] = task
@@ -210,10 +214,7 @@ def write_permanent_task_if_missing(
         filtered = [
             t
             for t in existing
-            if not (
-                t.cron.strip() == normalized_cron
-                and t.prompt.strip() == normalized_prompt
-            )
+            if not (t.cron.strip() == normalized_cron and t.prompt.strip() == normalized_prompt)
         ]
         timestamp = created_at if created_at is not None else now_ms()
         new_id = task_id or uuid.uuid4().hex[:8]
@@ -289,9 +290,7 @@ def mark_cron_tasks_fired(
                 if isinstance(value, CronTask):
                     next_session.append(value)
                 continue
-            task_obj = (
-                value if isinstance(value, CronTask) else CronTask.from_dict(value)
-            )
+            task_obj = value if isinstance(value, CronTask) else CronTask.from_dict(value)
             if task_obj is None:
                 continue
             if task_obj.id not in fired_by_id:
@@ -388,9 +387,7 @@ def find_missed_tasks(
     return [
         task
         for task in read_all_cron_tasks(workspace_root, session_store)
-        if not task.recurring
-        and task.next_fire_at is not None
-        and task.next_fire_at < timestamp
+        if not task.recurring and task.next_fire_at is not None and task.next_fire_at < timestamp
     ]
 
 
@@ -457,9 +454,7 @@ def prune_expired_recurring_tasks(
                 if isinstance(value, CronTask):
                     kept_session.append(value)
                 continue
-            task_obj = (
-                value if isinstance(value, CronTask) else CronTask.from_dict(value)
-            )
+            task_obj = value if isinstance(value, CronTask) else CronTask.from_dict(value)
             if task_obj is None:
                 continue
             if _is_kept(task_obj):

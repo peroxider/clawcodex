@@ -35,7 +35,9 @@ class ExportBuilder:
             return self._export_pdf(session)
         return self._export_json(session)
 
-    def export_comparison(self, comparison: ComparisonResult, fmt: ExportFormat) -> tuple[bytes, str, str]:
+    def export_comparison(
+        self, comparison: ComparisonResult, fmt: ExportFormat
+    ) -> tuple[bytes, str, str]:
         """Export a comparison to the given format."""
         if fmt == ExportFormat.JSON:
             data = comparison.model_dump_json(indent=2).encode("utf-8")
@@ -58,7 +60,7 @@ class ExportBuilder:
                 '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="100">'
                 '<rect width="100%" height="100%" fill="#11162a"/>'
                 '<text x="10" y="50" font-size="14" font-family="sans-serif" fill="#d7defa">'
-                'No timeline data</text></svg>'
+                "No timeline data</text></svg>"
             )
             return svg.encode("utf-8"), "image/svg+xml", f"{session.session_id}.svg"
 
@@ -80,7 +82,12 @@ class ExportBuilder:
             f'<text x="14" y="25" font-size="16" font-family="sans-serif" fill="#eef3ff">Session: {title}</text>',
         ]
 
-        colors = {"tool_call": "#91cc75", "llm_call": "#5470c6", "phase": "#ee6666", "custom": "#9a60b4"}
+        colors = {
+            "tool_call": "#91cc75",
+            "llm_call": "#5470c6",
+            "phase": "#ee6666",
+            "custom": "#9a60b4",
+        }
         for i, bar in enumerate(bars):
             y = header_height + i * row_height
             x = 10 + int((bar.start_time - base_time) / total_span * (width - 20))
@@ -127,21 +134,31 @@ class ExportBuilder:
             font = ImageFont.load_default()
             header_font = font
 
-        draw.text((10, 10), f"Session: {session.title or session.session_id[:8]}", fill="#333333", font=header_font)
+        draw.text(
+            (10, 10),
+            f"Session: {session.title or session.session_id[:8]}",
+            fill="#333333",
+            font=header_font,
+        )
 
         base_time = bars[0].start_time
         total_span = max(b.end_time for b in bars) - base_time
         if total_span <= 0:
             total_span = 1
 
-        colors = {"tool_call": "#91cc75", "llm_call": "#5470c6", "phase": "#ee6666", "custom": "#9a60b4"}
+        colors = {
+            "tool_call": "#91cc75",
+            "llm_call": "#5470c6",
+            "phase": "#ee6666",
+            "custom": "#9a60b4",
+        }
         for i, bar in enumerate(bars):
             y = header_height + i * row_height
             x = 10 + int((bar.start_time - base_time) / total_span * (width - 20))
             w = max(2, int(bar.duration_ms / 1000 / total_span * (width - 20)))
             color = colors.get(bar.type.value, "#9a60b4")
             # Convert hex to RGB
-            rgb = tuple(int(color[j:j+2], 16) for j in (1, 3, 5))
+            rgb = tuple(int(color[j : j + 2], 16) for j in (1, 3, 5))
             draw.rectangle([x, y, x + w, y + row_height - 4], fill=rgb)
             draw.text((x + 4, y + 4), bar.label[:20], fill="#ffffff", font=font)
 
@@ -189,7 +206,11 @@ class ExportBuilder:
                 if y < 50:
                     c.showPage()
                     y = height - 50
-                c.drawString(50, y, f"[{anomaly.severity.value}] {anomaly.type.value}: {anomaly.description[:80]}")
+                c.drawString(
+                    50,
+                    y,
+                    f"[{anomaly.severity.value}] {anomaly.type.value}: {anomaly.description[:80]}",
+                )
 
         c.save()
         return buf.getvalue(), "application/pdf", f"{session.session_id}.pdf"

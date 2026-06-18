@@ -39,6 +39,7 @@ def _slug_from_workspace(workspace_root: str | Path) -> str:
 # Workspace root resolution
 # ---------------------------------------------------------------------------
 
+
 def get_workspace_root(
     workspace_arg: str | None = None,
     workflow_path: str | None = None,
@@ -113,6 +114,7 @@ def get_registry_path(
 # Workflow parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_workspace_from_workflow(workflow_path: str | Path) -> Path | None:
     """Parse workspace.root from WORKFLOW.md YAML front matter."""
     try:
@@ -142,6 +144,7 @@ def _parse_workspace_from_workflow(workflow_path: str | Path) -> Path | None:
 # ---------------------------------------------------------------------------
 # Orchestrator metadata management
 # ---------------------------------------------------------------------------
+
 
 def _find_latest_metadata() -> Path | None:
     """Find the most recently modified orchestrator metadata file."""
@@ -192,6 +195,7 @@ def write_orchestrator_metadata(
     if workflow_path:
         try:
             import yaml
+
             content = Path(workflow_path).read_text(encoding="utf-8")
             if content.startswith("---"):
                 lines = content.splitlines()
@@ -283,13 +287,15 @@ def get_live_projects(projects: list[dict] | None = None) -> list[dict]:
         except OSError:
             continue  # Process not alive
 
-        live.append({
-            "workspace_root": p.get("workspace_root"),
-            "pid": pid,
-            "started_at": p.get("started_at"),
-            "project_slug": p.get("project_slug"),
-            "workflow_path": p.get("workflow_path"),
-        })
+        live.append(
+            {
+                "workspace_root": p.get("workspace_root"),
+                "pid": pid,
+                "started_at": p.get("started_at"),
+                "project_slug": p.get("project_slug"),
+                "workflow_path": p.get("workflow_path"),
+            }
+        )
 
     return live
 
@@ -326,11 +332,13 @@ def print_multi_project_hint(
         uptime_str = f"{uptime_s:.0f}s" if uptime_s < 120 else f"{uptime_s / 60:.0f}m"
         lines.append(f"     [{slug}]  pid={pid}  uptime={uptime_str}  workspace={ws}")
 
-    lines.extend([
-        "",
-        f"   Use --workspace <path> or --workflow <path> to target a specific project.",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            f"   Use --workspace <path> or --workflow <path> to target a specific project.",
+            "",
+        ]
+    )
 
     print("\n".join(lines), file=sys.stderr)
 
@@ -338,6 +346,7 @@ def print_multi_project_hint(
 # ---------------------------------------------------------------------------
 # CLI helper
 # ---------------------------------------------------------------------------
+
 
 def resolve_for_cli(
     workspace_arg: str | None,

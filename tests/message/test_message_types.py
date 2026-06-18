@@ -85,9 +85,13 @@ class TestMessageTypes(unittest.TestCase):
                 stop_reason="tool_use",
             ),
             SystemMessage(content="api retry", subtype="api_error"),
-            ProgressMessage(content="Working...", progress="phase-1", toolUseID="t1", parentToolUseID="t0"),
+            ProgressMessage(
+                content="Working...", progress="phase-1", toolUseID="t1", parentToolUseID="t0"
+            ),
             AttachmentMessage(
-                content=[ImageBlock(source={"type": "url", "url": "https://example.com/diagram.png"})],
+                content=[
+                    ImageBlock(source={"type": "url", "url": "https://example.com/diagram.png"})
+                ],
                 attachments=[{"name": "diagram.png", "kind": "image"}],
             ),
             Message(role="custom", content="custom message"),

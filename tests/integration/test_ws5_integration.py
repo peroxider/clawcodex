@@ -68,7 +68,9 @@ def _init_git_repo(path: str) -> None:
     """Initialize a git repo with an initial commit."""
     subprocess.run(["git", "init"], cwd=path, capture_output=True, check=True)
     subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=path, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Integration Test"], cwd=path, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Integration Test"], cwd=path, capture_output=True
+    )
     (Path(path) / "README.md").write_text("# Integration Test\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=path, capture_output=True)
     subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=path, capture_output=True)
@@ -77,6 +79,7 @@ def _init_git_repo(path: str) -> None:
 # ---------------------------------------------------------------------------
 # Smoke: Module imports
 # ---------------------------------------------------------------------------
+
 
 class TestWS5SmokeImports(unittest.TestCase):
     """All WS-5 modules import cleanly."""
@@ -118,6 +121,7 @@ class TestWS5SmokeImports(unittest.TestCase):
 # Smoke: Core type construction
 # ---------------------------------------------------------------------------
 
+
 class TestWS5SmokeTypes(unittest.TestCase):
     """Core WS-5 types construct correctly."""
 
@@ -146,6 +150,7 @@ class TestWS5SmokeTypes(unittest.TestCase):
 # Integration: Full CLAUDE.md → prompt pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestWS5IntegrationClaudeMdPipeline(unittest.TestCase):
     """CLAUDE.md files are loaded and formatted into the prompt correctly."""
 
@@ -163,13 +168,17 @@ class TestWS5IntegrationClaudeMdPipeline(unittest.TestCase):
         """A CLAUDE.md at workspace root appears in get_user_context()."""
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "CLAUDE.md").write_text(
-                "Always write tests for every change.", encoding="utf-8",
+                "Always write tests for every change.",
+                encoding="utf-8",
             )
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-                "CLAUDE_CODE_BARE_MODE": "",
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                    "CLAUDE_CODE_BARE_MODE": "",
+                },
+            ):
                 user_ctx = _run(get_user_context(cwd=tmp))
                 self.assertIn("currentDate", user_ctx)
                 if "claudeMd" in user_ctx:
@@ -227,7 +236,8 @@ class TestWS5IntegrationClaudeMdPipeline(unittest.TestCase):
             root = Path(tmp)
             (root / "shared.md").write_text("Shared config.", encoding="utf-8")
             (root / "CLAUDE.md").write_text(
-                f"Main rules.\n@{root / 'shared.md'}", encoding="utf-8",
+                f"Main rules.\n@{root / 'shared.md'}",
+                encoding="utf-8",
             )
 
             with patch.dict(os.environ, {"CLAUDE_CODE_ORIGINAL_CWD": tmp}):
@@ -256,6 +266,7 @@ class TestWS5IntegrationClaudeMdPipeline(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Integration: Git context → system context pipeline
 # ---------------------------------------------------------------------------
+
 
 class TestWS5IntegrationGitPipeline(unittest.TestCase):
     """Git context flows through to system context correctly."""
@@ -308,6 +319,7 @@ class TestWS5IntegrationGitPipeline(unittest.TestCase):
 # Integration: fetch_system_prompt_parts() full pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestWS5IntegrationPromptAssembly(unittest.TestCase):
     """fetch_system_prompt_parts() assembles all context correctly."""
 
@@ -327,12 +339,15 @@ class TestWS5IntegrationPromptAssembly(unittest.TestCase):
             _init_git_repo(tmp)
             (Path(tmp) / "CLAUDE.md").write_text("Integration test rule.", encoding="utf-8")
 
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-                "CLAUDE_CODE_BARE_MODE": "",
-                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "",
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                    "CLAUDE_CODE_BARE_MODE": "",
+                    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "",
+                },
+            ):
                 parts = _run(fetch_system_prompt_parts(cwd=tmp))
 
                 self.assertIsInstance(parts, SystemPromptParts)
@@ -350,9 +365,11 @@ class TestWS5IntegrationPromptAssembly(unittest.TestCase):
     def test_custom_system_prompt_skips_default_and_system(self):
         """Custom system prompt skips default prompt and system context."""
         with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true"}):
-            parts = _run(fetch_system_prompt_parts(
-                custom_system_prompt="My custom prompt",
-            ))
+            parts = _run(
+                fetch_system_prompt_parts(
+                    custom_system_prompt="My custom prompt",
+                )
+            )
             self.assertEqual(parts.default_system_prompt, [])
             self.assertEqual(parts.system_context, {})
             # User context still has date
@@ -371,10 +388,13 @@ class TestWS5IntegrationPromptAssembly(unittest.TestCase):
     def test_prepend_user_context_injects_reminder(self):
         """prepend_user_context adds system-reminder as first message."""
         original_msgs = [UserMessage(content="What does this code do?")]
-        result = prepend_user_context(original_msgs, {
-            "claudeMd": "Always explain thoroughly.",
-            "currentDate": "2025-06-01",
-        })
+        result = prepend_user_context(
+            original_msgs,
+            {
+                "claudeMd": "Always explain thoroughly.",
+                "currentDate": "2025-06-01",
+            },
+        )
         self.assertEqual(len(result), 2)
         # First message is the reminder
         reminder = result[0]
@@ -389,6 +409,7 @@ class TestWS5IntegrationPromptAssembly(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Integration: QueryEngine with context assembly
 # ---------------------------------------------------------------------------
+
 
 class TestWS5IntegrationQueryEngine(unittest.TestCase):
     """QueryEngine correctly uses fetch_system_prompt_parts."""
@@ -461,14 +482,18 @@ class TestWS5IntegrationQueryEngine(unittest.TestCase):
 
         # Create CLAUDE.md in workspace
         (self.workspace / "CLAUDE.md").write_text(
-            "Test rule: always be helpful.", encoding="utf-8",
+            "Test rule: always be helpful.",
+            encoding="utf-8",
         )
 
-        with patch.dict(os.environ, {
-            "CLAUDE_CODE_ORIGINAL_CWD": str(self.workspace),
-            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-            "CLAUDE_CODE_BARE_MODE": "",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "CLAUDE_CODE_ORIGINAL_CWD": str(self.workspace),
+                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                "CLAUDE_CODE_BARE_MODE": "",
+            },
+        ):
             config = QueryEngineConfig(
                 cwd=self.workspace,
                 provider=provider,
@@ -495,12 +520,12 @@ class TestWS5IntegrationQueryEngine(unittest.TestCase):
         messages = call_args.args[0] if call_args.args else call_args.kwargs.get("messages", [])
         # Messages should include a system-reminder with CLAUDE.md content
         all_content = " ".join(
-            m.get("content", "") if isinstance(m.get("content"), str) else ""
-            for m in messages
+            m.get("content", "") if isinstance(m.get("content"), str) else "" for m in messages
         )
         # The system-reminder with CLAUDE.md should be in the messages
         reminder_msgs = [
-            m for m in messages
+            m
+            for m in messages
             if m.get("role") == "user"
             and isinstance(m.get("content"), str)
             and "system-reminder" in m.get("content", "")
@@ -520,10 +545,13 @@ class TestWS5IntegrationQueryEngine(unittest.TestCase):
             tool_uses=None,
         )
 
-        with patch.dict(os.environ, {
-            "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
-            "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
+                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
+            },
+        ):
             config = QueryEngineConfig(
                 cwd=self.workspace,
                 provider=provider,
@@ -552,12 +580,15 @@ class TestWS5IntegrationQueryEngine(unittest.TestCase):
 # Integration: Tool search pipeline
 # ---------------------------------------------------------------------------
 
+
 class TestWS5IntegrationToolSearch(unittest.TestCase):
     """Tool search filtering integrates with the query pipeline."""
 
     def test_deferred_tools_filtered_in_tst_mode(self):
         """In TST mode, MCP tools are filtered out unless discovered."""
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             normal_tool = build_tool(
                 name="Read",
                 input_schema={"type": "object", "properties": {}},
@@ -584,31 +615,64 @@ class TestWS5IntegrationToolSearch(unittest.TestCase):
 
     def test_discovered_tools_restored_after_filter(self):
         """Previously discovered MCP tools are included in filtered results."""
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ, {"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}
+        ):
             tools = [
-                build_tool(name="Read", input_schema={"type": "object", "properties": {}}, call=lambda i, c: None),
-                build_tool(name="ToolSearch", input_schema={"type": "object", "properties": {}}, call=lambda i, c: None),
-                build_tool(name="mcp__jira__create", input_schema={"type": "object", "properties": {}}, call=lambda i, c: None, is_mcp=True),
+                build_tool(
+                    name="Read",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda i, c: None,
+                ),
+                build_tool(
+                    name="ToolSearch",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda i, c: None,
+                ),
+                build_tool(
+                    name="mcp__jira__create",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda i, c: None,
+                    is_mcp=True,
+                ),
             ]
             # Message history with discovered tool
-            messages = [{
-                "type": "user",
-                "content": [{
-                    "type": "tool_result",
-                    "tool_use_id": "123",
-                    "content": [{"type": "tool_reference", "tool_name": "mcp__jira__create"}],
-                }],
-            }]
+            messages = [
+                {
+                    "type": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "123",
+                            "content": [
+                                {"type": "tool_reference", "tool_name": "mcp__jira__create"}
+                            ],
+                        }
+                    ],
+                }
+            ]
             filtered = filter_tools_for_request(tools, "claude-sonnet-4-6", messages)
             names = [t.name for t in filtered]
             self.assertIn("mcp__jira__create", names)
 
     def test_standard_mode_keeps_all_tools(self):
         """In STANDARD mode, all tools are kept regardless of deferral."""
-        with patch.dict(os.environ, {"ENABLE_TOOL_SEARCH": "false", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""}):
+        with patch.dict(
+            os.environ,
+            {"ENABLE_TOOL_SEARCH": "false", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": ""},
+        ):
             tools = [
-                build_tool(name="Read", input_schema={"type": "object", "properties": {}}, call=lambda i, c: None),
-                build_tool(name="mcp__tool", input_schema={"type": "object", "properties": {}}, call=lambda i, c: None, is_mcp=True),
+                build_tool(
+                    name="Read",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda i, c: None,
+                ),
+                build_tool(
+                    name="mcp__tool",
+                    input_schema={"type": "object", "properties": {}},
+                    call=lambda i, c: None,
+                    is_mcp=True,
+                ),
             ]
             filtered = filter_tools_for_request(tools, "claude-sonnet-4-6", [])
             self.assertEqual(len(filtered), 2)
@@ -617,6 +681,7 @@ class TestWS5IntegrationToolSearch(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Integration: Memory prefetch
 # ---------------------------------------------------------------------------
+
 
 class TestWS5IntegrationMemoryPrefetch(unittest.TestCase):
     """Memory prefetch integrates with the file system."""
@@ -646,6 +711,7 @@ class TestWS5IntegrationMemoryPrefetch(unittest.TestCase):
 # Integration: Cache invalidation
 # ---------------------------------------------------------------------------
 
+
 class TestWS5IntegrationCacheInvalidation(unittest.TestCase):
     """Context caches clear correctly for post-compact scenarios."""
 
@@ -657,12 +723,15 @@ class TestWS5IntegrationCacheInvalidation(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "CLAUDE.md").write_text("Rule v1", encoding="utf-8")
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-                "CLAUDE_CODE_BARE_MODE": "",
-                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                    "CLAUDE_CODE_BARE_MODE": "",
+                    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "true",
+                },
+            ):
                 # First fetch
                 parts1 = _run(fetch_system_prompt_parts(cwd=tmp))
 
@@ -703,6 +772,7 @@ class TestWS5IntegrationCacheInvalidation(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Integration: Legacy backward compatibility
 # ---------------------------------------------------------------------------
+
 
 class TestWS5IntegrationBackwardCompat(unittest.TestCase):
     """Legacy build_context_prompt() still works through the new pipeline."""
@@ -748,6 +818,7 @@ class TestWS5IntegrationBackwardCompat(unittest.TestCase):
 # Smoke: End-to-end query with full context
 # ---------------------------------------------------------------------------
 
+
 class TestWS5SmokeEndToEnd(unittest.TestCase):
     """
     End-to-end smoke: workspace with git + CLAUDE.md → QueryEngine → response.
@@ -769,7 +840,8 @@ class TestWS5SmokeEndToEnd(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             _init_git_repo(tmp)
             (Path(tmp) / "CLAUDE.md").write_text(
-                "E2E rule: always explain your reasoning.", encoding="utf-8",
+                "E2E rule: always explain your reasoning.",
+                encoding="utf-8",
             )
             workspace = Path(tmp)
             registry = build_default_registry()
@@ -785,12 +857,15 @@ class TestWS5SmokeEndToEnd(unittest.TestCase):
                 tool_uses=None,
             )
 
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
-                "CLAUDE_CODE_BARE_MODE": "",
-                "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "",
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "",
+                    "CLAUDE_CODE_BARE_MODE": "",
+                    "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "",
+                },
+            ):
                 config = QueryEngineConfig(
                     cwd=workspace,
                     provider=provider,
@@ -814,9 +889,7 @@ class TestWS5SmokeEndToEnd(unittest.TestCase):
             # Content may be string or list of TextBlock
             content = assistants[0].content
             if isinstance(content, list):
-                text = " ".join(
-                    b.text for b in content if hasattr(b, "text")
-                )
+                text = " ".join(b.text for b in content if hasattr(b, "text"))
             else:
                 text = content
             self.assertIn("help you with that", text)

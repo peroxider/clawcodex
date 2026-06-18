@@ -27,8 +27,8 @@ def test_dashboard_three_sessions():
     # Simulate 3 running sessions
     for i, issue in enumerate(issues):
         session_status = SessionStatus(
-            issue_id=issue.id or f"issue-{i+1}",
-            issue_identifier=issue.identifier or f"TST-{i+100}",
+            issue_id=issue.id or f"issue-{i + 1}",
+            issue_identifier=issue.identifier or f"TST-{i + 100}",
             status="running",
             turn_count=0,
             max_turns=20,

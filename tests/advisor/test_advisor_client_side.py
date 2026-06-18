@@ -52,15 +52,11 @@ class TestDecideAdvisorMode(unittest.TestCase):
         return provider
 
     def test_inactive_when_no_advisor_model(self) -> None:
-        mode = decide_advisor_mode(
-            self._first_party_provider(), "claude-opus-4-6", ""
-        )
+        mode = decide_advisor_mode(self._first_party_provider(), "claude-opus-4-6", "")
         self.assertEqual(mode, ADVISOR_MODE_INACTIVE)
 
     def test_inactive_when_env_disabled(self) -> None:
-        with patch.dict(
-            os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False
-        ):
+        with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False):
             mode = decide_advisor_mode(
                 self._first_party_provider(),
                 "claude-opus-4-6",
@@ -160,9 +156,7 @@ class TestDecideAdvisorMode(unittest.TestCase):
         # provider, missing advisor_provider → INACTIVE. This guards
         # against the pre-rewrite hardcoded ``claude-`` → anthropic
         # inference silently routing to the wrong endpoint.
-        mode = decide_advisor_mode(
-            None, "claude-opus-4-6", "claude-opus-4-6"
-        )
+        mode = decide_advisor_mode(None, "claude-opus-4-6", "claude-opus-4-6")
         self.assertEqual(mode, ADVISOR_MODE_INACTIVE)
 
 
@@ -172,6 +166,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
 
     def test_strips_server_side_advisor_blocks(self) -> None:
         from src.types.messages import AssistantMessage, UserMessage
+
         msgs = [
             UserMessage(content="hi"),
             AssistantMessage(
@@ -210,12 +205,15 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         worker. Strip it so the advisor sees the conversation as if
         it's being asked to opine, not to ack a tool invocation."""
         from src.types.messages import AssistantMessage, UserMessage
+
         msgs = [
             UserMessage(content="task"),
-            AssistantMessage(content=[
-                {"type": "text", "text": "thinking about it"},
-                {"type": "tool_use", "id": "t1", "name": "advisor", "input": {}},
-            ]),
+            AssistantMessage(
+                content=[
+                    {"type": "text", "text": "thinking about it"},
+                    {"type": "tool_use", "id": "t1", "name": "advisor", "input": {}},
+                ]
+            ),
         ]
         out = build_advisor_forwarded_messages(msgs)
         for m in out:
@@ -228,11 +226,22 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         StatusLine widget."""
         from src.utils.advisor import format_advisor_status
         from unittest.mock import patch
+
         # Mock settings to return a configured advisor model.
-        with patch("src.utils.advisor._env_truthy", return_value=False), \
-             patch("src.settings.settings.get_settings") as get_s, \
-             patch("src.models.model.canonical_model_name", side_effect=lambda x: x):
-            fake = type("S", (), {"advisor_model": "claude-opus-4-7", "advisor_provider": "anthropic", "advisor_client_mode": False})()
+        with (
+            patch("src.utils.advisor._env_truthy", return_value=False),
+            patch("src.settings.settings.get_settings") as get_s,
+            patch("src.models.model.canonical_model_name", side_effect=lambda x: x),
+        ):
+            fake = type(
+                "S",
+                (),
+                {
+                    "advisor_model": "claude-opus-4-7",
+                    "advisor_provider": "anthropic",
+                    "advisor_client_mode": False,
+                },
+            )()
             get_s.return_value = fake
             out = format_advisor_status(None, "claude-haiku-4-5")
         self.assertIsNotNone(out)
@@ -250,9 +259,14 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
     def test_format_advisor_status_returns_none_when_unset(self) -> None:
         from src.utils.advisor import format_advisor_status
         from unittest.mock import patch
-        with patch("src.utils.advisor._env_truthy", return_value=False), \
-             patch("src.settings.settings.get_settings") as get_s:
-            fake = type("S", (), {"advisor_model": "", "advisor_provider": "", "advisor_client_mode": False})()
+
+        with (
+            patch("src.utils.advisor._env_truthy", return_value=False),
+            patch("src.settings.settings.get_settings") as get_s,
+        ):
+            fake = type(
+                "S", (), {"advisor_model": "", "advisor_provider": "", "advisor_client_mode": False}
+            )()
             get_s.return_value = fake
             out = format_advisor_status(None, "claude-haiku-4-5")
         self.assertIsNone(out)
@@ -261,10 +275,21 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         from src.utils.advisor import format_advisor_status
         from unittest.mock import patch
         import os
-        with patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False), \
-             patch("src.settings.settings.get_settings") as get_s, \
-             patch("src.models.model.canonical_model_name", side_effect=lambda x: x):
-            fake = type("S", (), {"advisor_model": "claude-opus-4-7", "advisor_provider": "anthropic", "advisor_client_mode": False})()
+
+        with (
+            patch.dict(os.environ, {"CLAUDE_CODE_DISABLE_ADVISOR_TOOL": "1"}, clear=False),
+            patch("src.settings.settings.get_settings") as get_s,
+            patch("src.models.model.canonical_model_name", side_effect=lambda x: x),
+        ):
+            fake = type(
+                "S",
+                (),
+                {
+                    "advisor_model": "claude-opus-4-7",
+                    "advisor_provider": "anthropic",
+                    "advisor_client_mode": False,
+                },
+            )()
             get_s.return_value = fake
             out = format_advisor_status(None, "claude-haiku-4-5")
         # Even with model set, env-disable → mode is INACTIVE → label shows
@@ -279,12 +304,15 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         the advisor thinks the worker just hit a tool failure and
         responds to that instead of the actual task."""
         from src.types.messages import AssistantMessage, UserMessage
+
         msgs = [
             UserMessage(content="real task"),
-            AssistantMessage(content=[
-                {"type": "text", "text": "my plan is X"},
-                {"type": "tool_use", "id": "t1", "name": "advisor", "input": {}},
-            ]),
+            AssistantMessage(
+                content=[
+                    {"type": "text", "text": "my plan is X"},
+                    {"type": "tool_use", "id": "t1", "name": "advisor", "input": {}},
+                ]
+            ),
         ]
         out = build_advisor_forwarded_messages(msgs)
         joined = "\n".join(m["content"] for m in out)
@@ -293,6 +321,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
 
     def test_returns_plain_dicts_safe_to_send(self) -> None:
         from src.types.messages import UserMessage
+
         out = build_advisor_forwarded_messages([UserMessage(content="hello")])
         self.assertTrue(all(isinstance(m, dict) for m in out))
 
@@ -308,10 +337,9 @@ class TestExecuteClientAdvisor(unittest.TestCase):
     def _make_anthropic_shaped_provider(self, content: str = "advice") -> MagicMock:
         """Mock that passes the isinstance check for AnthropicProvider."""
         from src.providers.anthropic_provider import AnthropicProvider
+
         provider = MagicMock(spec=AnthropicProvider)
-        provider.chat_stream_response = MagicMock(
-            return_value=MagicMock(content=content)
-        )
+        provider.chat_stream_response = MagicMock(return_value=MagicMock(content=content))
         return provider
 
     def _make_openai_shape_provider(self, content: str = "advice") -> MagicMock:
@@ -319,21 +347,16 @@ class TestExecuteClientAdvisor(unittest.TestCase):
         the function should detect it as OpenAI-shape and prepend a
         system-role message instead of passing system=kwarg."""
         provider = MagicMock()  # bare MagicMock, no spec
-        provider.chat_stream_response = MagicMock(
-            return_value=MagicMock(content=content)
-        )
+        provider.chat_stream_response = MagicMock(return_value=MagicMock(content=content))
         return provider
 
     def test_returns_text_on_success_anthropic(self) -> None:
         fake_provider = self._make_anthropic_shaped_provider("here is advice")
-        with patch(
-            "src.providers.get_provider_class", return_value=lambda **kw: fake_provider
-        ):
-            with patch(
-                "src.config.get_provider_config", return_value={"api_key": "test"}
-            ):
+        with patch("src.providers.get_provider_class", return_value=lambda **kw: fake_provider):
+            with patch("src.config.get_provider_config", return_value={"api_key": "test"}):
                 ok, text, _usage = execute_client_advisor(
-                    "claude-opus-4-6", [{"role": "user", "content": "hi"}],
+                    "claude-opus-4-6",
+                    [{"role": "user", "content": "hi"}],
                     advisor_provider="anthropic",
                 )
         self.assertTrue(ok)
@@ -349,14 +372,11 @@ class TestExecuteClientAdvisor(unittest.TestCase):
 
     def test_openai_shape_gets_system_as_first_message(self) -> None:
         fake_provider = self._make_openai_shape_provider("advice from openai")
-        with patch(
-            "src.providers.get_provider_class", return_value=lambda **kw: fake_provider
-        ):
-            with patch(
-                "src.config.get_provider_config", return_value={"api_key": "test"}
-            ):
+        with patch("src.providers.get_provider_class", return_value=lambda **kw: fake_provider):
+            with patch("src.config.get_provider_config", return_value={"api_key": "test"}):
                 ok, text, _usage = execute_client_advisor(
-                    "gpt-5.4", [{"role": "user", "content": "hi"}],
+                    "gpt-5.4",
+                    [{"role": "user", "content": "hi"}],
                     advisor_provider="openai",
                 )
         self.assertTrue(ok)
@@ -380,7 +400,8 @@ class TestExecuteClientAdvisor(unittest.TestCase):
     def test_returns_error_when_provider_unknown(self) -> None:
         # An unknown provider key (no Provider class registered) → fail-fast.
         ok, text, _usage = execute_client_advisor(
-            "claude-opus-4-7", [{"role": "user", "content": "hi"}],
+            "claude-opus-4-7",
+            [{"role": "user", "content": "hi"}],
             advisor_provider="totally-fake-zzz-9999",
         )
         self.assertFalse(ok)
@@ -388,17 +409,12 @@ class TestExecuteClientAdvisor(unittest.TestCase):
 
     def test_returns_error_when_provider_raises(self) -> None:
         fake_provider = self._make_anthropic_shaped_provider()
-        fake_provider.chat_stream_response = MagicMock(
-            side_effect=RuntimeError("network down")
-        )
-        with patch(
-            "src.providers.get_provider_class", return_value=lambda **kw: fake_provider
-        ):
-            with patch(
-                "src.config.get_provider_config", return_value={"api_key": "test"}
-            ):
+        fake_provider.chat_stream_response = MagicMock(side_effect=RuntimeError("network down"))
+        with patch("src.providers.get_provider_class", return_value=lambda **kw: fake_provider):
+            with patch("src.config.get_provider_config", return_value={"api_key": "test"}):
                 ok, text, _usage = execute_client_advisor(
-                    "claude-opus-4-6", [{"role": "user", "content": "hi"}],
+                    "claude-opus-4-6",
+                    [{"role": "user", "content": "hi"}],
                     advisor_provider="anthropic",
                 )
         self.assertFalse(ok)
@@ -406,14 +422,11 @@ class TestExecuteClientAdvisor(unittest.TestCase):
 
     def test_returns_error_when_response_empty(self) -> None:
         fake_provider = self._make_anthropic_shaped_provider("")
-        with patch(
-            "src.providers.get_provider_class", return_value=lambda **kw: fake_provider
-        ):
-            with patch(
-                "src.config.get_provider_config", return_value={"api_key": "test"}
-            ):
+        with patch("src.providers.get_provider_class", return_value=lambda **kw: fake_provider):
+            with patch("src.config.get_provider_config", return_value={"api_key": "test"}):
                 ok, text, _usage = execute_client_advisor(
-                    "claude-opus-4-6", [{"role": "user", "content": "hi"}],
+                    "claude-opus-4-6",
+                    [{"role": "user", "content": "hi"}],
                     advisor_provider="anthropic",
                 )
         self.assertFalse(ok)
@@ -425,6 +438,7 @@ class TestExecuteClientAdvisor(unittest.TestCase):
         # Anthropic model, passing ``advisor_provider="openai"`` should
         # build via the openai provider config (e.g. litellm).
         from src.providers.openai_provider import OpenAIProvider
+
         constructed = {}
 
         def _fake_openai_init(**kwargs: Any) -> Any:
@@ -456,26 +470,25 @@ class TestExecuteClientAdvisor(unittest.TestCase):
         self.assertEqual(text, "via openai litellm")
         self.assertEqual(constructed["kwargs"]["model"], "claude-opus-4-7")
         self.assertEqual(
-            constructed["kwargs"]["base_url"], "https://litellm.singula.ai",
+            constructed["kwargs"]["base_url"],
+            "https://litellm.singula.ai",
         )
 
     def test_falls_back_to_chat_when_stream_unimplemented(self) -> None:
         # Older / stub providers may not implement chat_stream_response.
         # The function should fall back to plain chat() gracefully.
         from src.providers.anthropic_provider import AnthropicProvider
+
         fake_provider = MagicMock(spec=AnthropicProvider)
         fake_provider.chat_stream_response = MagicMock(
             side_effect=NotImplementedError("no streaming"),
         )
         fake_provider.chat = MagicMock(return_value=MagicMock(content="fallback worked"))
-        with patch(
-            "src.providers.get_provider_class", return_value=lambda **kw: fake_provider
-        ):
-            with patch(
-                "src.config.get_provider_config", return_value={"api_key": "test"}
-            ):
+        with patch("src.providers.get_provider_class", return_value=lambda **kw: fake_provider):
+            with patch("src.config.get_provider_config", return_value={"api_key": "test"}):
                 ok, text, _usage = execute_client_advisor(
-                    "claude-opus-4-6", [{"role": "user", "content": "hi"}],
+                    "claude-opus-4-6",
+                    [{"role": "user", "content": "hi"}],
                     advisor_provider="anthropic",
                 )
         self.assertTrue(ok)
@@ -492,6 +505,7 @@ class TestAdvisorTool(unittest.TestCase):
     def setUp(self) -> None:
         import tempfile
         from pathlib import Path
+
         self._tmpdir = Path(tempfile.mkdtemp(prefix="advisor_tool_test_"))
 
     def test_is_hidden_from_default_pool(self) -> None:
@@ -504,6 +518,7 @@ class TestAdvisorTool(unittest.TestCase):
         ctx = ToolContext(workspace_root=self._tmpdir)
         ctx.messages = [{"role": "user", "content": "task"}]
         from src.settings.settings import get_settings
+
         # Patch settings to provide an advisor_model so the tool doesn't
         # short-circuit on the "no model configured" branch.
         fake_settings = MagicMock()
@@ -528,7 +543,11 @@ class TestAdvisorTool(unittest.TestCase):
         with patch("src.settings.settings.get_settings", return_value=fake_settings):
             with patch(
                 "src.utils.advisor.execute_client_advisor",
-                return_value=(False, "Advisor unavailable: foo", {"input_tokens": 0, "output_tokens": 0}),
+                return_value=(
+                    False,
+                    "Advisor unavailable: foo",
+                    {"input_tokens": 0, "output_tokens": 0},
+                ),
             ):
                 result = AdvisorTool.call({}, ctx)
         self.assertTrue(result.is_error)
@@ -589,9 +608,7 @@ class TestClientAdvisorToolSchema(unittest.TestCase):
         schema = build_client_advisor_tool_schema()
         props = schema["input_schema"].get("properties")
         self.assertEqual(props, {})
-        self.assertEqual(
-            schema["input_schema"].get("additionalProperties"), False
-        )
+        self.assertEqual(schema["input_schema"].get("additionalProperties"), False)
 
 
 if __name__ == "__main__":

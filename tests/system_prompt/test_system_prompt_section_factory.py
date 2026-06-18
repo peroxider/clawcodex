@@ -7,6 +7,7 @@ non-empty reason. The factory is the *only* surface that should be used
 when authoring new prompt sections — direct ``SystemPromptSection(...)``
 construction bypasses the convention.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -63,14 +64,18 @@ class TestDangerousFactory(unittest.TestCase):
     def test_dangerous_factory_rejects_empty_reason(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             DANGEROUS_uncachedSystemPromptSection(
-                "x", content="x", reason="",
+                "x",
+                content="x",
+                reason="",
             )
         self.assertIn("reason", str(ctx.exception).lower())
 
     def test_dangerous_factory_rejects_whitespace_reason(self) -> None:
         with self.assertRaises(ValueError):
             DANGEROUS_uncachedSystemPromptSection(
-                "x", content="x", reason="   \t \n  ",
+                "x",
+                content="x",
+                reason="   \t \n  ",
             )
 
     def test_dangerous_factory_default_scope_is_request(self) -> None:
@@ -78,7 +83,9 @@ class TestDangerousFactory(unittest.TestCase):
         cannot share the SESSION-scope cache slot — they recompute per turn.
         """
         section = DANGEROUS_uncachedSystemPromptSection(
-            "x", content="x", reason="varies turn-to-turn",
+            "x",
+            content="x",
+            reason="varies turn-to-turn",
         )
         self.assertEqual(section.cache_scope, CacheScope.REQUEST)
 

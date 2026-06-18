@@ -69,11 +69,7 @@ def ensure_export_filename_extension(
     """
     ext = extension_for_export_format(format)
     current_ext = os.path.splitext(filename)[1]
-    if (
-        format == "markdown"
-        and preserve_markdown_extension
-        and current_ext.lower() == ".markdown"
-    ):
+    if format == "markdown" and preserve_markdown_extension and current_ext.lower() == ".markdown":
         return filename
     if current_ext:
         base = filename[:-1] if current_ext == "." else filename[: -len(current_ext)]
@@ -193,15 +189,8 @@ def parse_export_args(args: str) -> ParsedExportArgs:
                 error = f"Unsupported export format: {value}. {SUPPORTED_FORMATS}"
                 break
             fmt = normalized
-        elif (
-            not token.quoted
-            and token.value.startswith("-")
-            and token.value != "-"
-        ):
-            error = (
-                f"Unsupported export option: {token.value}. "
-                "Supported options: --format, -f."
-            )
+        elif not token.quoted and token.value.startswith("-") and token.value != "-":
+            error = f"Unsupported export option: {token.value}. Supported options: --format, -f."
             break
         else:
             filename_tokens.append(token.value)

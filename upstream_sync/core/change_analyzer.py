@@ -24,7 +24,7 @@ class ModuleImpact:
     layer_name: str
     files_changed: list[str] = field(default_factory=list)
     patches_affected: list[str] = field(default_factory=list)
-    conflict_probability: str = "low"      # low | medium | high
+    conflict_probability: str = "low"  # low | medium | high
     estimated_effort_minutes: int = 0
     recommended_strategy: str = "fast-forward"  # fast-forward | rebase-patches | human-review
 
@@ -35,7 +35,7 @@ class ChangeReport:
 
     upstream_version: str
     previous_version: str
-    overall_impact: str = "low"            # low | medium | high
+    overall_impact: str = "low"  # low | medium | high
     statistics: dict = field(default_factory=dict)
     module_impacts: list[ModuleImpact] = field(default_factory=list)
     action_items: list[dict] = field(default_factory=list)
@@ -74,21 +74,24 @@ class ChangeAnalyzer:
         module_impacts: list[ModuleImpact] = []
         for layer in self.cfg.layers:
             layer_files = [
-                f for f in changed_files
-                if any(str(f).startswith(str(p)) for p in layer.paths)
+                f for f in changed_files if any(str(f).startswith(str(p)) for p in layer.paths)
             ]
             if layer_files:
                 affected_patches = self._find_affected_patches(layer_files)
                 conflict_prob = self._assess_conflict_probability(layer_files, affected_patches)
-                module_impacts.append(ModuleImpact(
-                    module_name=layer.name,
-                    layer_name=layer.name,
-                    files_changed=layer_files,
-                    patches_affected=affected_patches,
-                    conflict_probability=conflict_prob,
-                    estimated_effort_minutes=self._estimate_effort(conflict_prob, len(layer_files)),
-                    recommended_strategy=self._recommend_strategy(conflict_prob),
-                ))
+                module_impacts.append(
+                    ModuleImpact(
+                        module_name=layer.name,
+                        layer_name=layer.name,
+                        files_changed=layer_files,
+                        patches_affected=affected_patches,
+                        conflict_probability=conflict_prob,
+                        estimated_effort_minutes=self._estimate_effort(
+                            conflict_prob, len(layer_files)
+                        ),
+                        recommended_strategy=self._recommend_strategy(conflict_prob),
+                    )
+                )
 
         # 4. Assess overall impact
         overall = self._calculate_overall_impact(module_impacts)
@@ -174,15 +177,19 @@ class ChangeAnalyzer:
         items: list[dict] = []
         for imp in impacts:
             if imp.conflict_probability == "high":
-                items.append({
-                    "module": imp.module_name,
-                    "action": "human-review",
-                    "reason": f"High conflict probability with patches: {imp.patches_affected}",
-                })
+                items.append(
+                    {
+                        "module": imp.module_name,
+                        "action": "human-review",
+                        "reason": f"High conflict probability with patches: {imp.patches_affected}",
+                    }
+                )
             elif imp.patches_affected:
-                items.append({
-                    "module": imp.module_name,
-                    "action": "review-patches",
-                    "reason": f"Affected patches: {imp.patches_affected}",
-                })
+                items.append(
+                    {
+                        "module": imp.module_name,
+                        "action": "review-patches",
+                        "reason": f"Affected patches: {imp.patches_affected}",
+                    }
+                )
         return items

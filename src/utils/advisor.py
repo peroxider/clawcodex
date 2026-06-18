@@ -82,11 +82,7 @@ def model_supports_advisor(model: str | None) -> bool:
     can dogfood advisor on unreleased model strings.
     """
     m = (model or "").lower()
-    return (
-        "opus-4-6" in m
-        or "sonnet-4-6" in m
-        or os.environ.get("USER_TYPE") == "ant"
-    )
+    return "opus-4-6" in m or "sonnet-4-6" in m or os.environ.get("USER_TYPE") == "ant"
 
 
 def is_valid_advisor_model(model: str | None) -> bool:
@@ -95,11 +91,7 @@ def is_valid_advisor_model(model: str | None) -> bool:
     in the TS reference (typescript/src/utils/advisor.ts:99).
     """
     m = (model or "").lower()
-    return (
-        "opus-4-6" in m
-        or "sonnet-4-6" in m
-        or os.environ.get("USER_TYPE") == "ant"
-    )
+    return "opus-4-6" in m or "sonnet-4-6" in m or os.environ.get("USER_TYPE") == "ant"
 
 
 def is_advisor_enabled(provider: "BaseProvider | None") -> bool:
@@ -116,6 +108,7 @@ def is_advisor_enabled(provider: "BaseProvider | None") -> bool:
     # Local import to avoid a top-level cycle: cache_state may import from
     # providers in the future and we don't want to lock that.
     from src.state.cache_state import is_first_party_provider
+
     return is_first_party_provider(provider)
 
 
@@ -254,9 +247,7 @@ def strip_advisor_blocks(
             continue
         changed = True
         if not filtered or _content_is_only_placeholders(filtered):
-            filtered = list(filtered) + [
-                {"type": "text", "text": _ADVISOR_PLACEHOLDER_TEXT}
-            ]
+            filtered = list(filtered) + [{"type": "text", "text": _ADVISOR_PLACEHOLDER_TEXT}]
         new_msg = dict(msg)
         new_msg["content"] = filtered
         result.append(new_msg)
@@ -382,6 +373,7 @@ def decide_advisor_mode(
     advisor_routes = False
     try:
         from src.providers import get_provider_class
+
         get_provider_class(advisor_provider)
         advisor_routes = True
     except Exception:
@@ -488,6 +480,7 @@ def _tool_use_to_text(block: dict[str, Any]) -> str:
     as a single-line text summary the advisor can read without needing
     the underlying tool schemas."""
     import json as _json
+
     name = block.get("name", "?")
     raw_input = block.get("input", {})
     try:
@@ -731,7 +724,11 @@ def execute_client_advisor(
             model=advisor_model,
         )
     except Exception as e:  # noqa: BLE001 — surface as advisor failure
-        return (False, f"Advisor unavailable: failed to construct {advisor_provider!r} provider for {advisor_model!r}: {e}", _zero_usage)
+        return (
+            False,
+            f"Advisor unavailable: failed to construct {advisor_provider!r} provider for {advisor_model!r}: {e}",
+            _zero_usage,
+        )
 
     # System-prompt delivery is provider-specific:
     #   * Anthropic-shaped providers (AnthropicProvider / MinimaxProvider)

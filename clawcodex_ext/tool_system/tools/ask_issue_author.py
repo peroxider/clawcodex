@@ -64,6 +64,7 @@ def _ask_issue_author_call(
 
     if resolver is not None:
         import inspect
+
         if callable(resolver):
             # It's the ClarificationResolver
             result = resolver.request_clarification(
@@ -84,13 +85,15 @@ def _ask_issue_author_call(
             )
 
     # Fallback: append to outbox for orchestrator to pick up
-    context.outbox.append({
-        "tool": "AskIssueAuthor",
-        "question": question,
-        "options": options,
-        "context_summary": context_summary,
-        "issue_id": issue_id,
-    })
+    context.outbox.append(
+        {
+            "tool": "AskIssueAuthor",
+            "question": question,
+            "options": options,
+            "context_summary": context_summary,
+            "issue_id": issue_id,
+        }
+    )
 
     return ToolResult(
         name="AskIssueAuthor",

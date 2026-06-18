@@ -25,9 +25,20 @@ Call handlers (call_handlers/) dispatch to the actual implementation:
 """
 
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
-from clawcodex_ext.agent.tool_authoring.validators import ValidationError, validate_spec, register_python_function, list_python_functions
+from clawcodex_ext.agent.tool_authoring.validators import (
+    ValidationError,
+    validate_spec,
+    register_python_function,
+    list_python_functions,
+)
 from clawcodex_ext.agent.tool_authoring.factory import build_tool_from_spec, create_and_validate
-from clawcodex_ext.agent.tool_authoring.registry_ext import add_tool, get_tool, list_tools, remove_tool, clear
+from clawcodex_ext.agent.tool_authoring.registry_ext import (
+    add_tool,
+    get_tool,
+    list_tools,
+    remove_tool,
+    clear,
+)
 from clawcodex_ext.agent.tool_authoring.persistence import (
     save_spec,
     load_spec,

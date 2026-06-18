@@ -5,6 +5,7 @@ that lets shell commands (matplotlib, mermaid, etc.) emit images visible
 to the model. Port of TS BashTool/utils.ts:49-91 + integration in
 BashTool.tsx mapToolResultToToolResultBlockParam.
 """
+
 from __future__ import annotations
 
 import base64
@@ -99,12 +100,14 @@ class TestBuildImageToolResult(unittest.TestCase):
         """A high-res PNG that would exceed the API limit gets downscaled by
         ``maybe_resize_image`` and returned within IMAGE_TARGET_RAW_SIZE."""
         from src.utils.image_processor import IMAGE_TARGET_RAW_SIZE
+
         img = Image.effect_noise((3000, 2500), 96).convert("RGB")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         raw = buf.getvalue()
-        self.assertGreater(len(raw), IMAGE_TARGET_RAW_SIZE,
-                           "test image must be over the cap to exercise resize")
+        self.assertGreater(
+            len(raw), IMAGE_TARGET_RAW_SIZE, "test image must be over the cap to exercise resize"
+        )
         data_uri = f"data:image/png;base64,{base64.b64encode(raw).decode('ascii')}"
         result = build_image_tool_result(data_uri)
         self.assertIsNotNone(result)

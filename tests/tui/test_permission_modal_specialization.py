@@ -121,9 +121,7 @@ def test_edit_truncates_huge_diffs() -> None:
 
 
 def test_edit_only_path_no_diff_still_renders() -> None:
-    out = preview_for_tool(
-        "Edit", {"file_path": "f.py", "old_string": "", "new_string": ""}
-    )
+    out = preview_for_tool("Edit", {"file_path": "f.py", "old_string": "", "new_string": ""})
     text = _render(out)
     assert "f.py" in text
 

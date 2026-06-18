@@ -28,8 +28,7 @@ from src.repl.at_file_completer import (
 def _completions(completer: AtFileCompleter, text: str) -> list[tuple[str, int, str]]:
     doc = Document(text=text, cursor_position=len(text))
     return [
-        (c.text, c.start_position, c.display_text)
-        for c in completer.get_completions(doc, None)
+        (c.text, c.start_position, c.display_text) for c in completer.get_completions(doc, None)
     ]
 
 
@@ -121,9 +120,9 @@ def test_basename_substring_beats_path_substring():
     where only an ancestor directory matches."""
 
     paths = [
-        "src/repl/foo.py",         # basename ``foo.py`` matches
-        "src/foo/other.py",        # only ``foo`` directory matches
-        "src/repl/bar.py",         # no match
+        "src/repl/foo.py",  # basename ``foo.py`` matches
+        "src/foo/other.py",  # only ``foo`` directory matches
+        "src/repl/bar.py",  # no match
     ]
     ranked = _filter_candidates(paths, "foo", limit=10)
     assert ranked[0] == "src/repl/foo.py"
@@ -133,8 +132,8 @@ def test_basename_substring_beats_path_substring():
 
 def test_subsequence_match_falls_back_below_substring():
     paths = [
-        "src/foo/bar.py",          # substring "fb" not present
-        "fb.py",                   # substring match on basename
+        "src/foo/bar.py",  # substring "fb" not present
+        "fb.py",  # substring match on basename
     ]
     ranked = _filter_candidates(paths, "fb", limit=10)
     assert ranked[0] == "fb.py"
@@ -328,9 +327,12 @@ class TestAsyncIndexing:
             (tmp_path / f"f{i}.py").write_text("")
         c = AtFileCompleter(cwd=tmp_path)
         # Trigger the warm-up by reading from the index.
-        completions = list(c.get_completions(
-            Document("@"), None,
-        ))
+        completions = list(
+            c.get_completions(
+                Document("@"),
+                None,
+            )
+        )
         # By now the warm-up should have published at least one chunk
         # (or the synchronous fallback has). Both events should be set.
         assert c._index_queryable_event.is_set()
@@ -412,6 +414,7 @@ class TestScoreBoundRejection:
         # Sanity: confirm tier-2 candidates ARE tier-2 — q='foo' should
         # subsequence-match each but NOT substring-match basename or path.
         import os as _os
+
         for tp in tier2:
             assert "foo" not in _os.path.basename(tp).lower()
             assert "foo" not in tp.lower()
@@ -420,9 +423,11 @@ class TestScoreBoundRejection:
         # Instrument: count subsequence-score calls.
         call_count = [0]
         orig = af._subsequence_score
+
         def counting(text, query):
             call_count[0] += 1
             return orig(text, query)
+
         monkeypatch.setattr(af, "_subsequence_score", counting)
 
         result = _filter_candidates(paths, "foo", limit=15, bitmaps=bitmaps)
@@ -447,15 +452,18 @@ class TestScoreBoundRejection:
         SHOULD trigger ``_subsequence_score``.
         """
         import src.utils.at_file_completer as af
+
         # Only 3 candidates total, all tier-2 (subsequence-only).
         paths = ["xfxoxox.py", "yfybyoybyoy.py", "zfqzqozqozqz.py"]
         bitmaps = [_build_path_bitmap(p) for p in paths]
 
         call_count = [0]
         orig = af._subsequence_score
+
         def counting(text, query):
             call_count[0] += 1
             return orig(text, query)
+
         monkeypatch.setattr(af, "_subsequence_score", counting)
 
         result = _filter_candidates(paths, "foo", limit=15, bitmaps=bitmaps)

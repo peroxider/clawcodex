@@ -9,6 +9,7 @@ Divergence from TS: ``companion_user_id()`` reads ``config['user_id']`` only
 (skipping the TS ``oauthAccount.accountUuid`` fallback) because
 ``src/auth/claude_ai.py::OAuthAccountInfo`` does not yet expose ``account_uuid``.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -16,16 +17,28 @@ from dataclasses import dataclass
 from typing import Callable, Sequence, TypeVar
 
 from src.buddy.types import (
-    EYES, HATS, RARITIES, RARITY_WEIGHTS, SPECIES, STAT_NAMES,
-    CompanionBones, Companion, Eye, Hat, Rarity, Species, StatName,
+    EYES,
+    HATS,
+    RARITIES,
+    RARITY_WEIGHTS,
+    SPECIES,
+    STAT_NAMES,
+    CompanionBones,
+    Companion,
+    Eye,
+    Hat,
+    Rarity,
+    Species,
+    StatName,
 )
 from src.config import load_config
 
 
-SALT = 'friend-2026-401'
+SALT = "friend-2026-401"
 
 
 # --- Hash + PRNG -----------------------------------------------------
+
 
 def _hash_string(s: str) -> int:
     """FNV-1a 32-bit."""
@@ -54,14 +67,16 @@ def _mulberry32(seed: int) -> Callable[[], float]:
 
 # --- Roll ------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class Roll:
     """Result of a single roll: deterministic bones + an inspiration seed."""
+
     bones: CompanionBones
     inspiration_seed: int
 
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 def _pick(rng: Callable[[], float], items: Sequence[_T]) -> _T:
@@ -70,11 +85,11 @@ def _pick(rng: Callable[[], float], items: Sequence[_T]) -> _T:
 
 
 _RARITY_FLOOR: dict[Rarity, int] = {
-    'common': 5,
-    'uncommon': 15,
-    'rare': 25,
-    'epic': 35,
-    'legendary': 50,
+    "common": 5,
+    "uncommon": 15,
+    "rare": 25,
+    "epic": 35,
+    "legendary": 50,
 }
 
 
@@ -86,11 +101,12 @@ def _roll_rarity(rng: Callable[[], float]) -> Rarity:
         roll_val -= RARITY_WEIGHTS[r]
         if roll_val < 0:
             return r
-    return 'common'
+    return "common"
 
 
 def _roll_stats(
-    rng: Callable[[], float], rarity: Rarity,
+    rng: Callable[[], float],
+    rarity: Rarity,
 ) -> dict[StatName, int]:
     """One peak, one dump, rest scattered."""
     floor = _RARITY_FLOOR[rarity]
@@ -114,7 +130,7 @@ def _roll_from(rng: Callable[[], float]) -> Roll:
     rarity = _roll_rarity(rng)
     species: Species = _pick(rng, SPECIES)
     eye: Eye = _pick(rng, EYES)
-    hat: Hat = 'none' if rarity == 'common' else _pick(rng, HATS)
+    hat: Hat = "none" if rarity == "common" else _pick(rng, HATS)
     shiny = rng() < 0.01
     stats = _roll_stats(rng, rarity)
     bones = CompanionBones(
@@ -151,15 +167,17 @@ def roll_with_seed(seed: str) -> Roll:
 
 # --- User ID + companion --------------------------------------------
 
+
 def _get_or_create_user_id() -> str:
     """Read ``config['user_id']``, create if absent."""
     cfg = load_config()
-    existing = cfg.get('user_id')
+    existing = cfg.get("user_id")
     if isinstance(existing, str) and existing:
         return existing
     new_id = secrets.token_hex(32)
     from src.config import _get_default_manager
-    _get_default_manager().set_global('user_id', new_id)
+
+    _get_default_manager().set_global("user_id", new_id)
     return new_id
 
 
@@ -171,14 +189,14 @@ def companion_user_id() -> str:
 def get_companion() -> Companion | None:
     """Read the persisted soul, merge with regenerated bones."""
     cfg = load_config()
-    stored = cfg.get('companion')
+    stored = cfg.get("companion")
     if not isinstance(stored, dict):
         return None
     bones = roll(companion_user_id()).bones
     return Companion(
-        name=stored.get('name', ''),
-        personality=stored.get('personality', ''),
-        hatched_at=int(stored.get('hatched_at', 0)),
+        name=stored.get("name", ""),
+        personality=stored.get("personality", ""),
+        hatched_at=int(stored.get("hatched_at", 0)),
         rarity=bones.rarity,
         species=bones.species,
         eye=bones.eye,
@@ -195,7 +213,10 @@ def _reset_roll_cache_for_tests() -> None:
 
 
 __all__ = [
-    'Roll', 'SALT',
-    'companion_user_id', 'get_companion',
-    'roll', 'roll_with_seed',
+    "Roll",
+    "SALT",
+    "companion_user_id",
+    "get_companion",
+    "roll",
+    "roll_with_seed",
 ]

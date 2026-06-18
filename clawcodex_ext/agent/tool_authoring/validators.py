@@ -13,13 +13,29 @@ if TYPE_CHECKING:
 # Whitelists
 # ---------------------------------------------------------------------------
 
-ALLOWED_BASH_COMMANDS: frozenset[str] = frozenset({
-    "git", "gh", "glab", "curl", "wget", "kubectl", "docker", "npm", "pip",
-})
+ALLOWED_BASH_COMMANDS: frozenset[str] = frozenset(
+    {
+        "git",
+        "gh",
+        "glab",
+        "curl",
+        "wget",
+        "kubectl",
+        "docker",
+        "npm",
+        "pip",
+    }
+)
 
-ALLOWED_HTTP_METHODS: frozenset[str] = frozenset({
-    "GET", "POST", "PUT", "DELETE", "PATCH",
-})
+ALLOWED_HTTP_METHODS: frozenset[str] = frozenset(
+    {
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "PATCH",
+    }
+)
 
 # Python functions registered by the host application for agent use.
 # Maps name → callable. Extend via ``register_python_function()``.
@@ -39,6 +55,7 @@ def list_python_functions() -> frozenset[str]:
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+
 
 class ValidationError(ValueError):
     """Raised when an AgentToolSpec fails security validation."""
@@ -117,7 +134,4 @@ def _validate_python_impl(call_impl: str | dict) -> None:
         raise ValidationError("python call_impl function name cannot be empty")
     if name not in _PYTHON_FUNCTION_REGISTRY:
         available = ", ".join(sorted(_PYTHON_FUNCTION_REGISTRY.keys())) or "(none registered)"
-        raise ValidationError(
-            f"python function '{name}' is not registered. "
-            f"Available: {available}"
-        )
+        raise ValidationError(f"python function '{name}' is not registered. Available: {available}")

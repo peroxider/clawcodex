@@ -22,9 +22,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
 
     DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize OpenRouter provider.
 
         Args:
@@ -50,6 +48,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
         }
         # Optional ranking/attribution headers honored by OpenRouter.
         import os
+
         default_headers: dict[str, str] = {}
         referer = os.environ.get("OPENROUTER_HTTP_REFERER")
         title = os.environ.get("OPENROUTER_X_TITLE")
@@ -62,6 +61,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
 
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx
+
             kwargs["http_client"] = httpx.Client(verify=False)
         return OpenAI(**kwargs)
 

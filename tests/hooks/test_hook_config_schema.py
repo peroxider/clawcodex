@@ -34,24 +34,34 @@ class TestHookConfigFields:
         assert c.skill_root is None
 
     def test_parse_if_condition_snake_case(self):
-        c = _parse_hook_config({
-            "type": "command", "command": "echo x",
-            "if_condition": "Bash(git commit*)",
-        })
+        c = _parse_hook_config(
+            {
+                "type": "command",
+                "command": "echo x",
+                "if_condition": "Bash(git commit*)",
+            }
+        )
         assert c.if_condition == "Bash(git commit*)"
 
     def test_parse_if_condition_ts_native_alias(self):
         # TS-native key: ``if``. Same field, alternate name.
-        c = _parse_hook_config({
-            "type": "command", "command": "echo x",
-            "if": "Bash(git commit*)",
-        })
+        c = _parse_hook_config(
+            {
+                "type": "command",
+                "command": "echo x",
+                "if": "Bash(git commit*)",
+            }
+        )
         assert c.if_condition == "Bash(git commit*)"
 
     def test_parse_once_true(self):
-        c = _parse_hook_config({
-            "type": "command", "command": "echo x", "once": True,
-        })
+        c = _parse_hook_config(
+            {
+                "type": "command",
+                "command": "echo x",
+                "once": True,
+            }
+        )
         assert c.once is True
 
     def test_parse_once_default_false(self):
@@ -62,10 +72,13 @@ class TestHookConfigFields:
         # ``skill_root`` is set at registration time (Phase 3), not at parse
         # time. A settings.json entry that includes ``skill_root`` is
         # ignored — the field stays None.
-        c = _parse_hook_config({
-            "type": "command", "command": "echo x",
-            "skill_root": "/some/skill/dir",
-        })
+        c = _parse_hook_config(
+            {
+                "type": "command",
+                "command": "echo x",
+                "skill_root": "/some/skill/dir",
+            }
+        )
         assert c.skill_root is None
 
 
@@ -85,10 +98,17 @@ class TestSchemaValidation:
         assert "boolean" in once_errors[0].message.lower()
 
     def test_valid_config_no_errors(self):
-        cfg = {"PreToolUse": [{
-            "type": "command", "command": "x",
-            "if": "Bash(git*)", "once": True, "matcher": "Bash",
-        }]}
+        cfg = {
+            "PreToolUse": [
+                {
+                    "type": "command",
+                    "command": "x",
+                    "if": "Bash(git*)",
+                    "once": True,
+                    "matcher": "Bash",
+                }
+            ]
+        }
         errors = validate_hook_configs(cfg)
         # No new-field errors. Other validation (existing) may flag things
         # but our new fields should not.
@@ -100,14 +120,23 @@ class TestRoundTripFromSettingsJson:
     @pytest.mark.asyncio
     async def test_load_with_if_and_once_round_trip(self, tmp_path):
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"PreToolUse": [{
-                "type": "command", "command": "guard.sh",
-                "if": "Bash(git commit*)",
-                "once": True,
-                "matcher": "Bash",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "type": "command",
+                                "command": "guard.sh",
+                                "if": "Bash(git commit*)",
+                                "once": True,
+                                "matcher": "Bash",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         snapshot = load_hooks_from_settings(path)
         hook = snapshot.hooks["PreToolUse"][0]
         assert hook.if_condition == "Bash(git commit*)"

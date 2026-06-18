@@ -160,9 +160,10 @@ def test_commit_helper_renders_all_substitutions(
     assert "${CLAUDE_SESSION_ID}" not in prompt
 
     # (e) allowed-tools metadata propagated to the tool result.
-    assert out["allowedTools"] == ["Bash", "Read"], (
-        f"allowed-tools metadata didn't ride through: {out!r}"
-    )
+    assert out["allowedTools"] == [
+        "Bash",
+        "Read",
+    ], f"allowed-tools metadata didn't ride through: {out!r}"
     assert out["loadedFrom"] == "project"
 
 
@@ -216,12 +217,9 @@ def test_lint_py_not_invokable_until_activated(
     skills = get_all_skills(project_root=project_with_fixtures)
     names = {s.name for s in skills}
     assert "lint-py" not in names, (
-        f"conditional skill must NOT appear before path activation; "
-        f"got: {sorted(names)}"
+        f"conditional skill must NOT appear before path activation; got: {sorted(names)}"
     )
-    assert get_conditional_skill_count() >= 1, (
-        "conditional bucket should hold lint-py"
-    )
+    assert get_conditional_skill_count() >= 1, "conditional bucket should hold lint-py"
 
     # Activation with a non-matching path keeps it dormant.
     activated = activate_conditional_skills_for_paths(
@@ -234,12 +232,9 @@ def test_lint_py_not_invokable_until_activated(
     py_path = project_with_fixtures / "src" / "foo.py"
     py_path.parent.mkdir(parents=True, exist_ok=True)
     py_path.write_text("# placeholder")
-    activated = activate_conditional_skills_for_paths(
-        [str(py_path)], str(project_with_fixtures)
-    )
+    activated = activate_conditional_skills_for_paths([str(py_path)], str(project_with_fixtures))
     assert "lint-py" in activated, (
-        "conditional skill should activate on matching path; "
-        f"activated={activated}"
+        f"conditional skill should activate on matching path; activated={activated}"
     )
 
     # After activation, `get_all_skills` must return lint-py — the
@@ -270,9 +265,7 @@ def test_lint_py_after_activation_runs_shell_block_through_skilltool(
     py_path = project_with_fixtures / "src" / "foo.py"
     py_path.parent.mkdir(parents=True, exist_ok=True)
     py_path.write_text("# placeholder")
-    activate_conditional_skills_for_paths(
-        [str(py_path)], str(project_with_fixtures)
-    )
+    activate_conditional_skills_for_paths([str(py_path)], str(project_with_fixtures))
 
     ctx = ToolContext(workspace_root=project_with_fixtures)
     result = SkillTool.call({"skill": "lint-py"}, ctx)
@@ -310,9 +303,7 @@ def test_simplify_bundled_skill_invokable_through_skilltool(
     # Sanity: simplify is in the registry after init.
     skills = get_all_skills(project_root=project_with_fixtures)
     by_name = {s.name: s for s in skills}
-    assert "simplify" in by_name, (
-        f"bundled `simplify` missing after init; got: {sorted(by_name)}"
-    )
+    assert "simplify" in by_name, f"bundled `simplify` missing after init; got: {sorted(by_name)}"
     assert by_name["simplify"].loaded_from == "bundled"
 
     # Invoke through SkillTool — exercises the bundled `get_prompt_for_command`
@@ -354,9 +345,7 @@ def test_catalogue_lists_disk_and_bundled_skills_together(
     # unconditional listing — that's by design).
     assert "commit-helper" in names
     assert "frontend:add-component" in names
-    assert "lint-py" not in names, (
-        "lint-py is conditional and must not appear until activated"
-    )
+    assert "lint-py" not in names, "lint-py is conditional and must not appear until activated"
 
     # Bundled (DEV-5).
     assert "simplify" in names

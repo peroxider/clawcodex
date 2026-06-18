@@ -13,6 +13,7 @@ The intent is to mirror how ``_SHARED_PREFIX`` and
 expose them as named, importable constants so downstream authors do
 not have to copy-paste private strings.
 """
+
 from __future__ import annotations
 
 
@@ -165,6 +166,7 @@ TOOL_SET_TESTING: list[str] = [
 # ---------------------------------------------------------------------------
 # Combiner
 # ---------------------------------------------------------------------------
+
 
 def build_agent_prompt(
     *,

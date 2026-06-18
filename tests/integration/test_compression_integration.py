@@ -116,12 +116,14 @@ class TestEndToEndPipeline(unittest.TestCase):
         messages = _make_long_conversation(20)
 
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Comprehensive summary of the coding session.",
-            model="test",
-            usage={"input_tokens": 200, "output_tokens": 100},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Comprehensive summary of the coding session.",
+                model="test",
+                usage={"input_tokens": 200, "output_tokens": 100},
+                finish_reason="stop",
+            )
+        )
 
         tracking = AutoCompactTracking()
         config = PipelineConfig(
@@ -136,9 +138,13 @@ class TestEndToEndPipeline(unittest.TestCase):
             model="test-model",
             early_exit_tokens=999_999,
         )
-        result = asyncio.run(run_compression_pipeline(
-            messages, input_token_count=900_000, config=config,
-        ))
+        result = asyncio.run(
+            run_compression_pipeline(
+                messages,
+                input_token_count=900_000,
+                config=config,
+            )
+        )
         self.assertGreater(result.tokens_saved, 0)
         # Autocompact should have been attempted
         self.assertIn("autocompact", result.layers_applied)
@@ -188,12 +194,14 @@ class TestConversationContinuityAfterCompaction(unittest.TestCase):
         messages = _make_long_conversation(5)
 
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary: User was analyzing a codebase with Read tool.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary: User was analyzing a codebase with Read tool.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         ctx = CompactContext(
             provider=provider,
@@ -223,6 +231,7 @@ class TestBackwardCompatCompactService(unittest.TestCase):
         from src.compact_service.service import compact_conversation as old_compact
 
         from src.agent.conversation import Conversation
+
         conv = Conversation()
         conv.messages = [
             UserMessage(content="Hello world " * 50),
@@ -231,12 +240,14 @@ class TestBackwardCompatCompactService(unittest.TestCase):
         ]
 
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary of conversation.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary of conversation.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         result = asyncio.run(old_compact(conv, provider, "test-model"))
         # The mock LLM succeeds, so the summary is from the mock response
@@ -293,7 +304,9 @@ class TestLayerInteractions(unittest.TestCase):
 
         # Layer 1
         messages, saved1 = apply_tool_result_budget(
-            messages, self.budget_dir, max_result_tokens=500,
+            messages,
+            self.budget_dir,
+            max_result_tokens=500,
         )
 
         # Layer 2
@@ -301,7 +314,9 @@ class TestLayerInteractions(unittest.TestCase):
 
         # Layer 3
         messages, saved3 = microcompact_typed_messages(
-            messages, keep_recent=3, force=True,
+            messages,
+            keep_recent=3,
+            force=True,
         )
 
         total_saved = saved1 + saved2 + saved3

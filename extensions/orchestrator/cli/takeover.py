@@ -28,6 +28,7 @@ turn boundary; the operator's REPL then resumes the same
 
 Reads only; no orchestrator coupling beyond :class:`IssueRegistry`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -168,7 +169,8 @@ def _wait_for_quiet_period(seconds: float) -> None:
 
 
 def _spawn_resume_repl(
-    run_id: str, workspace_path: Path,
+    run_id: str,
+    workspace_path: Path,
 ) -> int:
     """Spawn ``python3 -m src.cli --resume <run_id> --workspace <ws>``
     and block on its exit code. The REPL inherits stdout/stderr so
@@ -179,16 +181,19 @@ def _spawn_resume_repl(
     try:
         return subprocess.call(
             [
-                "python3", "-m", "src.cli",
-                "--resume", run_id,
-                "--workspace", str(workspace_path),
+                "python3",
+                "-m",
+                "src.cli",
+                "--resume",
+                run_id,
+                "--workspace",
+                str(workspace_path),
             ],
             cwd=str(workspace_path),
         )
     except FileNotFoundError as exc:
         print(
-            f"error: failed to spawn REPL — {exc}. "
-            f"Check that `python3 -m src.cli` is on PATH.",
+            f"error: failed to spawn REPL — {exc}. Check that `python3 -m src.cli` is on PATH.",
             file=sys.stderr,
         )
         return 1
@@ -240,24 +245,23 @@ async def _run_takeover_async(
 
     if run_id and not workspace_root and not workspace_arg:
         print(
-            "error: --run requires --workspace "
-            "(or a resolved workspace root)",
+            "error: --run requires --workspace (or a resolved workspace root)",
             file=sys.stderr,
         )
         return 2
 
-    effective_workspace = (
-        Path(workspace_arg) if workspace_arg else workspace_root
-    )
+    effective_workspace = Path(workspace_arg) if workspace_arg else workspace_root
 
     target = _resolve_target(
-        registry_path, effective_workspace, issue_id, run_id,
+        registry_path,
+        effective_workspace,
+        issue_id,
+        run_id,
     )
     if target is None:
         if issue_id:
             print(
-                f"error: no active run found for issue {issue_id!r}. "
-                f"Nothing to take over.",
+                f"error: no active run found for issue {issue_id!r}. Nothing to take over.",
                 file=sys.stderr,
             )
         else:
@@ -267,11 +271,7 @@ async def _run_takeover_async(
             )
         return 1
 
-    sock_path = (
-        target.workspace_path
-        / ".run_control"
-        / f"{target.run_id}.sock"
-    )
+    sock_path = target.workspace_path / ".run_control" / f"{target.run_id}.sock"
 
     # Send pause + takeover if the socket is alive. The agent
     # might already have ended (socket cleaned up at
@@ -283,8 +283,7 @@ async def _run_takeover_async(
         sent = await _send_pause_and_takeover(sock_path)
         if sent:
             print(
-                f"Pausing agent for {target.issue_id} "
-                f"(run {target.run_id})…",
+                f"Pausing agent for {target.issue_id} (run {target.run_id})…",
                 file=sys.stderr,
             )
             _wait_for_quiet_period(_DEFAULT_TAKEOVER_QUIET_SECONDS)

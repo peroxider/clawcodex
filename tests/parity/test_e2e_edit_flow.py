@@ -3,6 +3,7 @@
 Simulates: User prompt → Read + Edit → permission check → result.
 Tests the full tool dispatch pipeline for the Edit and Write tools.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -43,11 +44,14 @@ class TestE2EEditFlow(unittest.TestCase):
 
         # Step 2: Edit
         edit_result = self.registry.dispatch(
-            ToolCall(name="Edit", input={
-                "file_path": str(self.test_file),
-                "old_string": "return 'hello'",
-                "new_string": "return 'world'",
-            }),
+            ToolCall(
+                name="Edit",
+                input={
+                    "file_path": str(self.test_file),
+                    "old_string": "return 'hello'",
+                    "new_string": "return 'world'",
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(edit_result.is_error)
@@ -63,11 +67,14 @@ class TestE2EEditFlow(unittest.TestCase):
         fresh_ctx = ToolContext(workspace_root=self.root)
         try:
             edit_result = self.registry.dispatch(
-                ToolCall(name="Edit", input={
-                    "file_path": str(self.test_file),
-                    "old_string": "return 'hello'",
-                    "new_string": "return 'world'",
-                }),
+                ToolCall(
+                    name="Edit",
+                    input={
+                        "file_path": str(self.test_file),
+                        "old_string": "return 'hello'",
+                        "new_string": "return 'world'",
+                    },
+                ),
                 fresh_ctx,
             )
             # Should error because file wasn't read first
@@ -79,11 +86,14 @@ class TestE2EEditFlow(unittest.TestCase):
         """Edit on a nonexistent file should fail."""
         try:
             result = self.registry.dispatch(
-                ToolCall(name="Edit", input={
-                    "file_path": str(self.root / "nonexistent.py"),
-                    "old_string": "hello",
-                    "new_string": "world",
-                }),
+                ToolCall(
+                    name="Edit",
+                    input={
+                        "file_path": str(self.root / "nonexistent.py"),
+                        "old_string": "hello",
+                        "new_string": "world",
+                    },
+                ),
                 self.ctx,
             )
             self.assertTrue(result.is_error)
@@ -99,11 +109,14 @@ class TestE2EEditFlow(unittest.TestCase):
         )
         # Edit
         self.registry.dispatch(
-            ToolCall(name="Edit", input={
-                "file_path": str(self.test_file),
-                "old_string": "return 'hello'",
-                "new_string": "return 'world'",
-            }),
+            ToolCall(
+                name="Edit",
+                input={
+                    "file_path": str(self.test_file),
+                    "old_string": "return 'hello'",
+                    "new_string": "return 'world'",
+                },
+            ),
             self.ctx,
         )
         content = self.test_file.read_text()
@@ -127,10 +140,13 @@ class TestE2EWriteFlow(unittest.TestCase):
         """Write tool creates a new file."""
         target = self.root / "new_file.py"
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={
-                "file_path": str(target),
-                "content": "print('hello')\n",
-            }),
+            ToolCall(
+                name="Write",
+                input={
+                    "file_path": str(target),
+                    "content": "print('hello')\n",
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(result.is_error)
@@ -141,14 +157,18 @@ class TestE2EWriteFlow(unittest.TestCase):
         """Write tool creates intermediate directories."""
         target = self.root / "deep" / "nested" / "dir" / "file.py"
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={
-                "file_path": str(target),
-                "content": "content\n",
-            }),
+            ToolCall(
+                name="Write",
+                input={
+                    "file_path": str(target),
+                    "content": "content\n",
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(result.is_error)
         self.assertTrue(target.exists())
+
 
 class TestE2EPermissionDenyBlocks(unittest.TestCase):
     """Permission deny rules block tool dispatch."""

@@ -220,6 +220,7 @@ class TestOneMillionContextSuffix:
 
     def test_has_suffix_detects_opt_in(self):
         from src.models.context import has_1m_context_suffix
+
         assert has_1m_context_suffix("claude-opus-4-7[1m]")
         assert not has_1m_context_suffix("claude-opus-4-7")
         assert not has_1m_context_suffix("")
@@ -228,6 +229,7 @@ class TestOneMillionContextSuffix:
 
     def test_strip_removes_suffix(self):
         from src.models.context import strip_1m_context_suffix
+
         assert strip_1m_context_suffix("claude-opus-4-7[1m]") == "claude-opus-4-7"
         # No-op when suffix absent.
         assert strip_1m_context_suffix("claude-opus-4-7") == "claude-opus-4-7"
@@ -236,6 +238,7 @@ class TestOneMillionContextSuffix:
 
     def test_context_window_returns_1m_for_suffixed_model(self):
         from src.models.context import get_context_window_for_model
+
         assert get_context_window_for_model("claude-opus-4-7[1m]") == 1_000_000
         # Without suffix, falls back to the per-model config or default.
         assert get_context_window_for_model("claude-opus-4-7") == 200_000
@@ -243,11 +246,13 @@ class TestOneMillionContextSuffix:
     def test_context_window_1m_works_on_unknown_models(self):
         """The suffix is a universal opt-in; doesn't require a config entry."""
         from src.models.context import get_context_window_for_model
+
         assert get_context_window_for_model("future-model[1m]") == 1_000_000
 
     def test_max_output_tokens_strips_suffix_before_config_lookup(self):
         """[1m] doesn't change max_output_tokens — only context window."""
         from src.models.context import get_model_max_output_tokens
+
         base = get_model_max_output_tokens("claude-sonnet-4-20250514")
         with_suffix = get_model_max_output_tokens("claude-sonnet-4-20250514[1m]")
         assert base == with_suffix
@@ -256,6 +261,7 @@ class TestOneMillionContextSuffix:
     def test_provider_get_model_strips_suffix(self):
         """``BaseProvider._get_model`` strips ``[1m]`` so the API never sees it."""
         from src.providers.anthropic_provider import AnthropicProvider
+
         provider = AnthropicProvider(api_key="test", model="claude-opus-4-7[1m]")
         # ``_get_model`` is the resolver every chat/stream path goes through.
         resolved = provider._get_model()

@@ -20,6 +20,7 @@ from typing import Any, Callable, Optional, Protocol, Sequence
 
 class CommandType(Enum):
     """Types of commands."""
+
     PROMPT = "prompt"
     LOCAL = "local"
     # Ports TS ``type: 'local-jsx'`` — a command that drives an interactive
@@ -32,6 +33,7 @@ class CommandType(Enum):
 
 class CommandAvailability(Enum):
     """Availability environments where a command is available."""
+
     CLAUDE_AI = "claude-ai"
     CONSOLE = "console"
 
@@ -39,6 +41,7 @@ class CommandAvailability(Enum):
 @dataclass(frozen=True)
 class CompactionResult:
     """Result data from a compaction operation."""
+
     pre_compact_count: int = 0
     post_compact_count: int = 0
     tokens_saved: int = 0
@@ -49,6 +52,7 @@ class CompactionResult:
 @dataclass(frozen=True)
 class LocalCommandResult:
     """Result of a local command execution."""
+
     type: str = "text"  # "text" | "compact" | "skip"
     value: str = ""
     compaction_result: Optional[CompactionResult] = None
@@ -58,6 +62,7 @@ class LocalCommandResult:
 @dataclass
 class CommandContext:
     """Context passed to command execution."""
+
     workspace_root: Path
     cwd: Path
     # ``conversation``, ``cost_tracker``, and ``history`` default to
@@ -105,6 +110,7 @@ class CommandContext:
 # to inject tool_registry / tool_context / runtime_context.
 # ---------------------------------------------------------------------------
 
+
 def attach_downstream_context(
     context: CommandContext,
     *,
@@ -133,6 +139,7 @@ LocalCommandCall = Callable[[str, CommandContext], LocalCommandResult]
 @dataclass(frozen=True)
 class CommandBase:
     """Base class for all commands."""
+
     name: str
     description: str
     aliases: list[str] = field(default_factory=list)
@@ -163,6 +170,7 @@ class CommandBase:
 @dataclass(frozen=True)
 class PromptCommand(CommandBase):
     """A command that expands to prompt content."""
+
     progress_message: str = ""
     content_length: int = 0
     arg_names: list[str] = field(default_factory=list)
@@ -191,6 +199,7 @@ class PromptCommand(CommandBase):
         """Get the prompt content for this command."""
         # Default implementation - will be overridden
         from .argument_substitution import substitute_arguments
+
         content = substitute_arguments(self.markdown_content, args, self.arg_names)
         return [{"type": "text", "text": content}]
 
@@ -230,9 +239,7 @@ class SkillPromptCommand(PromptCommand):
             # (clear + re-resolve), which is unsynchronized — safe only because
             # both surfaces serialize command dispatch, so no two renders run
             # concurrently. A future concurrent-dispatch change would need a lock.
-            res = await asyncio.to_thread(
-                _run_markdown_skill, self.name, args or "", tc
-            )
+            res = await asyncio.to_thread(_run_markdown_skill, self.name, args or "", tc)
             payload = res.output if isinstance(res.output, dict) else {}
             prompt = payload.get("prompt")
             if isinstance(prompt, str) and prompt.strip():
@@ -265,6 +272,7 @@ class SkillPromptCommand(PromptCommand):
 @dataclass(frozen=True)
 class LocalCommand(CommandBase):
     """A command that executes local code."""
+
     supports_non_interactive: bool = False
     run_in_thread: bool = False
     _call_impl: Optional[LocalCommandCall] = field(default=None, repr=False, compare=False)
@@ -275,7 +283,7 @@ class LocalCommand(CommandBase):
 
     def set_call(self, call: LocalCommandCall) -> None:
         """Set the call implementation."""
-        object.__setattr__(self, '_call_impl', call)
+        object.__setattr__(self, "_call_impl", call)
 
     async def call(self, args: str, context: CommandContext) -> LocalCommandResult:
         """Execute the local command."""
@@ -410,9 +418,9 @@ class InteractiveOutcome:
     ``display: 'skip'``); use :meth:`skip` for the cancelled path.
     """
 
-    message: Optional[str] = None          # TS onDone.result
-    display: str = "system"                # "skip" | "system" | "user"
-    should_query: bool = False             # TS onDone.shouldQuery
+    message: Optional[str] = None  # TS onDone.result
+    display: str = "system"  # "skip" | "system" | "user"
+    should_query: bool = False  # TS onDone.shouldQuery
     meta_messages: list[str] = field(default_factory=list)  # TS onDone.metaMessages
 
     @classmethod
@@ -441,9 +449,7 @@ class InteractiveCommand(CommandBase):
     async def run(self, args: str, context: CommandContext) -> InteractiveOutcome:
         """Drive ``context.ui`` and return the outcome. Override in
         subclasses."""
-        raise NotImplementedError(
-            "InteractiveCommand subclasses must implement run()"
-        )
+        raise NotImplementedError("InteractiveCommand subclasses must implement run()")
 
 
 # Type alias for any command

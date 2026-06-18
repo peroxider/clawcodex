@@ -59,7 +59,9 @@ def execute_http(call_impl: dict[str, Any], params: dict[str, Any]) -> str:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
-        raise HttpCallError(f"HTTP {exc.code} {exc.reason}: {exc.read().decode('utf-8', errors='replace')}") from exc
+        raise HttpCallError(
+            f"HTTP {exc.code} {exc.reason}: {exc.read().decode('utf-8', errors='replace')}"
+        ) from exc
     except urllib.error.URLError as exc:
         raise HttpCallError(f"URL error: {exc.reason}") from exc
     except Exception as exc:

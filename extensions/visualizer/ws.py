@@ -75,13 +75,21 @@ class SessionLiveTail:
         """Register a WebSocket client."""
         await ws.accept()
         self.connections.append(ws)
-        logger.debug("WS client connected for session %s (%d clients)", self.session_id, len(self.connections))
+        logger.debug(
+            "WS client connected for session %s (%d clients)",
+            self.session_id,
+            len(self.connections),
+        )
 
     def remove_connection(self, ws: WebSocket) -> None:
         """Unregister a WebSocket client."""
         if ws in self.connections:
             self.connections.remove(ws)
-        logger.debug("WS client disconnected for session %s (%d clients)", self.session_id, len(self.connections))
+        logger.debug(
+            "WS client disconnected for session %s (%d clients)",
+            self.session_id,
+            len(self.connections),
+        )
 
     async def broadcast(self, event: dict[str, Any]) -> None:
         """Send an event to all connected clients."""
@@ -127,12 +135,14 @@ class SessionLiveTail:
 
                     emit_ts = time.time()
                     # Backward-compat event for Gantt view.
-                    await self.broadcast({
-                        "type": "transcript_event",
-                        "session_id": self.session_id,
-                        "data": entry,
-                        "timestamp": emit_ts,
-                    })
+                    await self.broadcast(
+                        {
+                            "type": "transcript_event",
+                            "session_id": self.session_id,
+                            "data": entry,
+                            "timestamp": emit_ts,
+                        }
+                    )
                     # Structured update for the waterfall view.
                     update = self._entry_to_bar_update(entry, emit_ts)
                     if update is not None:
@@ -258,10 +268,13 @@ def create_ws_router() -> APIRouter:
         """WebSocket endpoint for live-tailing a session's transcript."""
         # Resolve transcript path
         from .server import _AppState
+
         app = websocket.app
         state: _AppState = app.state.viz
 
-        # Try to find the transcript file
+        # The main session transcript is at
+        # ``<sessions_dir>/<session_id>/transcript.jsonl`` (same path
+        # in the new format).
         transcript_path: Path | None = None
         session_dir = state.sessions_dir / session_id
         if session_dir.is_dir():
@@ -294,7 +307,9 @@ def create_ws_router() -> APIRouter:
                 except asyncio.TimeoutError:
                     # Send heartbeat
                     try:
-                        await websocket.send_text(json.dumps({"type": "heartbeat", "timestamp": time.time()}))
+                        await websocket.send_text(
+                            json.dumps({"type": "heartbeat", "timestamp": time.time()})
+                        )
                     except Exception:
                         break
         except WebSocketDisconnect:
@@ -312,6 +327,7 @@ def create_ws_router() -> APIRouter:
 # ---------------------------------------------------------------------------
 # F-96-E: Orchestrator State Journal live tail
 # ---------------------------------------------------------------------------
+
 
 class OrchestratorJournalTail:
     """Tails a state_journal.ndjson file and broadcasts events via WebSocket.
@@ -331,14 +347,16 @@ class OrchestratorJournalTail:
         self.connections.append(ws)
         logger.debug(
             "Orch WS client connected for journal %s (%d clients)",
-            self.journal_path, len(self.connections),
+            self.journal_path,
+            len(self.connections),
         )
 
     def remove_connection(self, ws: WebSocket) -> None:
         if ws in self.connections:
             self.connections.remove(ws)
         logger.debug(
-            "Orch WS client disconnected (%d remaining)", len(self.connections),
+            "Orch WS client disconnected (%d remaining)",
+            len(self.connections),
         )
 
     async def broadcast(self, event: dict[str, Any]) -> None:
@@ -370,14 +388,17 @@ class OrchestratorJournalTail:
                         entry = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    await self.broadcast({
-                        "type": "orchestrator_event",
-                        "data": entry,
-                        "timestamp": time.time(),
-                    })
+                    await self.broadcast(
+                        {
+                            "type": "orchestrator_event",
+                            "data": entry,
+                            "timestamp": time.time(),
+                        }
+                    )
             except Exception:
                 logger.debug(
-                    "Error tailing orchestrator journal", exc_info=True,
+                    "Error tailing orchestrator journal",
+                    exc_info=True,
                 )
             await asyncio.sleep(interval)
 
@@ -400,8 +421,8 @@ def create_orch_ws_router() -> APIRouter:
         app = websocket.app
         state: _AppState = app.state.viz
 
-        # Resolve journal path
-        reports_dir = state.sessions_dir.parent / ".reports" if state.sessions_dir else None
+        # New-format reports dir: ``~/.clawcodex/reports/<run_id>/...``
+        reports_dir = state.reports_dir
         journal_path: Path | None = None
         if reports_dir:
             journal_path = reports_dir / run_id / "state_journal.ndjson"
@@ -423,16 +444,21 @@ def create_orch_ws_router() -> APIRouter:
             while True:
                 try:
                     data = await asyncio.wait_for(
-                        websocket.receive_text(), timeout=30.0,
+                        websocket.receive_text(),
+                        timeout=30.0,
                     )
                     if data == "ping":
                         await websocket.send_text("pong")
                 except asyncio.TimeoutError:
                     try:
-                        await websocket.send_text(json.dumps({
-                            "type": "heartbeat",
-                            "timestamp": time.time(),
-                        }))
+                        await websocket.send_text(
+                            json.dumps(
+                                {
+                                    "type": "heartbeat",
+                                    "timestamp": time.time(),
+                                }
+                            )
+                        )
                     except Exception:
                         break
         except WebSocketDisconnect:

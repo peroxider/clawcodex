@@ -64,7 +64,9 @@ def should_skip_preconnect() -> bool:
     if os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY"):
         return True
     if os.environ.get("CLAUDE_CODE_DISABLE_API_PRECONNECT", "").strip().lower() in {
-        "1", "true", "yes"
+        "1",
+        "true",
+        "yes",
     }:
         return True
     return False

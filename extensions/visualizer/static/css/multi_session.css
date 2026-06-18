@@ -46,9 +46,14 @@
     --bezier-track:             #0d1117;
     --bezier-track-border:      rgba(48, 54, 61, 0.4);
     --bezier-connector:         #6e7681;
-    --bezier-connector-active:  #f778ba;
-    --bezier-connector-merge-active: #58a6ff;
-    --bezier-connector-hover:   #79c0ff;
+    /* Connector colours mirror clawcodex_sessions_analysis globals.css:
+       - spawn (fork) = blue/teal, contrasts with orchestrate pink/purple
+       - merge = amber, signals "收工" / "wrap up"
+       These were swapped in the original port; the TS reference is the
+       single source of truth. */
+    --bezier-connector-active:  #79c0ff;
+    --bezier-connector-merge-active: #f0a878;
+    --bezier-connector-hover:   #ea7ccc;
     --bezier-cat-read:          #3fb950;
     --bezier-cat-execute:       #58a6ff;
     --bezier-cat-write:         #d29922;
@@ -104,18 +109,29 @@ body.ms-reference-page .container {
 }
 
 .ms-reference-topbar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 38px;
+    color: #bec9d7;
+    text-shadow: 0 0 8px rgba(132, 163, 205, 0.45);
+    white-space: nowrap;
+    margin: 6px 0 10px;
+}
+
+/* When the topbar lives inside .ms-analysis-shell (the fullscreen
+   multi-session overlay), keep the original absolute-positioned layout
+   so the chrome floats over the chart at fixed viewport coordinates. */
+.ms-analysis-shell .ms-reference-topbar {
     position: absolute;
     z-index: 3;
     top: 11px;
     left: 17px;
     right: 58px;
     height: 38px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #bec9d7;
-    text-shadow: 0 0 8px rgba(132, 163, 205, 0.45);
-    white-space: nowrap;
+    margin: 0;
 }
 
 .ms-reference-model {
@@ -726,6 +742,106 @@ body.ms-reference-page .container {
 }
 
 /* ----------------------------------------------------------------- *
+ *  Zoom controls (mirrors clawcodex_sessions_analysis TopBar zoom widget)
+ *  Sits in a row above the chart. The - / 100% / + buttons drive the
+ *  ECharts dataZoom via dispatchAction; the label updates from the
+ *  datazoom event in multi_session_view.js.
+ * ----------------------------------------------------------------- */
+.ms-zoom-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 6px 0 10px;
+    gap: 8px;
+}
+.ms-zoom-controls {
+    display: inline-flex;
+    align-items: stretch;
+    height: 28px;
+    border: 1px solid var(--ms-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--ms-panel);
+    color: var(--ms-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+}
+.ms-zoom-btn {
+    background: transparent;
+    border: 0;
+    color: var(--ms-text);
+    width: 30px;
+    cursor: pointer;
+    transition: background 0.15s ease-out;
+    line-height: 1;
+}
+.ms-zoom-btn:hover { background: rgba(88, 166, 255, 0.12); }
+.ms-zoom-btn:active { background: rgba(88, 166, 255, 0.24); }
+.ms-zoom-btn:disabled {
+    color: var(--ms-muted);
+    cursor: not-allowed;
+}
+.ms-zoom-label {
+    min-width: 56px;
+    text-align: center;
+    line-height: 26px;
+    border-left: 1px solid var(--ms-border);
+    border-right: 1px solid var(--ms-border);
+    color: var(--ms-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Session info card (mirrors clawcodex_sessions_analysis
+ *  "本次加载 N 个文件 · 识别为 1 个会话" card).
+ *  Hidden by default; populated by multi_session_view.js once the
+ *  /api/viz/multi-session response lands.
+ * ----------------------------------------------------------------- */
+.ms-session-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    margin: 4px 0 12px;
+    border: 1px solid var(--ms-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(88, 166, 255, 0.04), rgba(88, 166, 255, 0)),
+        var(--ms-panel);
+    color: var(--ms-text);
+    font-size: 12px;
+}
+.ms-session-card-icon {
+    font-size: 16px;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+.ms-session-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ms-session-card-line strong {
+    color: #d6e4f5;
+    font-weight: 600;
+}
+.ms-session-card-id {
+    color: var(--ms-muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.ms-session-card-id code {
+    color: var(--ms-text);
+    background: var(--ms-canvas);
+    border: 1px solid var(--ms-border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* ----------------------------------------------------------------- *
  *  Bezier Waterfall View (P3)
  *  Structural CSS only — full polish (CSS variables, dark theme,
  *  legend integration) lands in P7. These rules establish the
@@ -904,77 +1020,27 @@ body.ms-reference-page .container {
 }
 
 /* ------------------------------------------------------------------ */
-/* P4 — EventDetailPanel (.bezier-backdrop center modal)              */
-/* Ported from clawcodex_sessions_analysis components/                */
-/* event-detail-panel.tsx. Mounts on document.body, NOT #bezier-chart,*/
-/* so the modal doesn't scroll with the timeline.                     */
+/* P4 — EventDetailDrawer (right-side slide-in, mirrors waterfall)    */
+/* The .turn-drawer styles above are shared with the waterfall chart;  */
+/* this section adds the bezier-specific header bits (cat dot, pills)  */
+/* and the body builders' helper classes (CodeBlock, empty state).    */
 /* ------------------------------------------------------------------ */
-.bezier-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 9000;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    box-sizing: border-box;
-    animation: bezier-backdrop-fade 120ms ease-out;
-}
-@keyframes bezier-backdrop-fade {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-}
-
-.bezier-event-panel {
-    position: relative;
-    width: 420px;
-    max-width: 85vw;
-    max-height: calc(100vh - 48px);
-    background: var(--ms-panel, #152333);
-    color: var(--ms-text, #c3cedb);
-    border: 1px solid var(--ms-border, #26384a);
-    border-radius: 0.5rem;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    animation: bezier-panel-pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-@keyframes bezier-panel-pop {
-    from { transform: translateY(8px) scale(0.98); opacity: 0; }
-    to   { transform: translateY(0)   scale(1);    opacity: 1; }
-}
-
-.bezier-event-panel-header {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px;
-    background: var(--ms-panel, #152333);
-    border-bottom: 1px solid var(--ms-border, #26384a);
-    flex-shrink: 0;
-}
-.bezier-event-panel-header-dot {
+.bezier-drawer-cat-dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
+    background: var(--bezier-cat-other, #6e7681);
 }
-.bezier-event-panel-header-title {
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--ms-text, #c3cedb);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.bezier-drawer-pills {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 8px;
 }
-.bezier-event-pill {
+.bezier-drawer-pill {
     display: inline-flex;
     align-items: center;
     height: 18px;
@@ -986,88 +1052,34 @@ body.ms-reference-page .container {
     color: var(--ms-text, #c3cedb);
     border: 1px solid var(--ms-border, #26384a);
     white-space: nowrap;
-    flex-shrink: 0;
 }
-.bezier-event-pill.is-error {
+.bezier-drawer-pill-error {
     color: #f85149;
     border-color: rgba(248, 81, 73, 0.4);
     background: rgba(248, 81, 73, 0.08);
 }
-.bezier-event-pill.is-muted {
+/* Row value modifiers — appended to <dd> in the shared .turn-drawer
+   <dl> rows. The base <dd> styles come from .turn-drawer-section dl */
+.bezier-drawer-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+}
+.bezier-drawer-muted {
     color: var(--ms-muted, #738294);
+    font-style: italic;
 }
-.bezier-event-close {
-    background: transparent;
-    border: 0;
-    color: var(--ms-muted, #738294);
-    cursor: pointer;
-    font-size: 20px;
-    line-height: 1;
-    padding: 0 4px;
-    border-radius: 4px;
-    flex-shrink: 0;
-}
-.bezier-event-close:hover {
-    color: var(--ms-text, #c3cedb);
-    background: rgba(255, 255, 255, 0.06);
-}
-.bezier-event-close:focus-visible {
-    outline: 2px solid var(--text-accent, #58a6ff);
-    outline-offset: 1px;
+.bezier-drawer-error-text {
+    color: #f85149;
 }
 
+/* Body wrapper — kept for parity with the previous modal layout.
+   The drawer .turn-drawer-body already provides scroll + padding,
+   so this just provides a min-width for narrow content. */
 .bezier-event-panel-body {
-    overflow-y: auto;
-    padding: 12px 16px 18px;
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-.bezier-event-section {
-    margin-top: 14px;
-}
-.bezier-event-section:first-child {
-    margin-top: 0;
-}
-.bezier-event-section-title {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--ms-muted, #738294);
-    margin: 0 0 6px;
-    font-weight: 600;
-}
-
-.bezier-event-row {
-    display: flex;
-    gap: 10px;
-    padding: 4px 0;
-    align-items: baseline;
-}
-.bezier-event-row-label {
-    flex: 0 0 90px;
-    color: var(--ms-muted, #738294);
-    font-size: 11px;
-}
-.bezier-event-row-value {
-    flex: 1;
     min-width: 0;
-    color: var(--ms-text, #c3cedb);
-    word-break: break-word;
-    font-variant-numeric: tabular-nums;
-}
-.bezier-event-row-value code {
-    background: rgba(255, 255, 255, 0.06);
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 11px;
-}
-.bezier-event-row.is-pill .bezier-event-row-value {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
 }
 
+/* CodeBlock — copy/expand/preview container used by appendCodeBlock */
 .bezier-event-code {
     position: relative;
     background: var(--ms-canvas, #0d1117);
@@ -1088,18 +1100,13 @@ body.ms-reference-page .container {
     max-height: 14em;
     overflow: auto;
 }
-.bezier-event-code.is-collapsed pre {
-    max-height: 8em;
-    mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
-    -webkit-mask-image: linear-gradient(180deg, #000 70%, transparent 100%);
+.bezier-event-code-wrap {
+    position: relative;
 }
-.bezier-event-code-toolbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-bottom: 4px;
-}
-.bezier-event-code-btn {
+.bezier-event-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
     background: transparent;
     border: 1px solid var(--ms-border, #26384a);
     color: var(--ms-muted, #738294);
@@ -1109,59 +1116,48 @@ body.ms-reference-page .container {
     cursor: pointer;
     line-height: 1.4;
 }
-.bezier-event-code-btn:hover {
+.bezier-event-copy:hover {
     color: var(--ms-text, #c3cedb);
     border-color: var(--ms-muted, #738294);
 }
-.bezier-event-code-btn:focus-visible {
-    outline: 2px solid var(--text-accent, #58a6ff);
-    outline-offset: 1px;
+.bezier-event-copy-label {
+    display: inline-block;
+    min-width: 32px;
+    text-align: center;
 }
-.bezier-event-code-btn.is-copied {
-    color: #3fb950;
-    border-color: rgba(63, 185, 80, 0.4);
+.bezier-event-expand {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px solid var(--ms-border, #26384a);
+    color: var(--ms-muted, #738294);
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.bezier-event-expand:hover {
+    color: var(--ms-text, #c3cedb);
+    border-color: var(--ms-muted, #738294);
+}
+.bezier-event-hint {
+    margin: 6px 0 0;
+    color: var(--ms-muted, #738294);
+    font-style: italic;
+    font-size: 11px;
+}
+.bezier-event-summary {
+    margin: 0;
+    color: var(--ms-text, #c3cedb);
+    font-size: 12px;
+    line-height: 1.5;
 }
 
 .bezier-event-empty {
     color: var(--ms-muted, #738294);
     font-style: italic;
     padding: 2px 0;
-}
-
-.bezier-event-resize {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 6px;
-    height: 100%;
-    cursor: col-resize;
-    background: transparent;
-    z-index: 3;
-    /* Visible grip dot in the middle */
-    background-image: radial-gradient(
-        circle,
-        var(--ms-muted, #738294) 0,
-        var(--ms-muted, #738294) 1px,
-        transparent 1.5px,
-        transparent 4px
-    );
-    background-size: 4px 4px;
-    background-position: center;
-    background-repeat: no-repeat;
-    opacity: 0;
-    transition: opacity 100ms ease;
-}
-.bezier-event-panel:hover .bezier-event-resize {
-    opacity: 0.6;
-}
-.bezier-event-resize:hover,
-.bezier-event-resize:focus-visible {
-    opacity: 1;
-    outline: none;
-}
-.bezier-event-resize.is-dragging {
-    opacity: 1;
-    background-color: rgba(88, 166, 255, 0.15);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1261,8 +1257,143 @@ body.ms-reference-page .container {
     font-variant-numeric: tabular-nums;
     margin-top: 1px;
 }
+
+/* ------------------------------------------------------------------
+   Bezier spawn/merge annotation pills (TS clawcodex_sessions_analysis
+   workflow-panel.tsx:518-540 — "5:45 派生 N 子agent" / "67:21 汇合收工").
+
+   These are absolutely positioned over the .bezier-waterfall panel,
+   anchored to the spawn dot (below+right) and merge dot (above+left)
+   so they sit on top of the row band like a tooltip. They use the
+   same connector colour tokens as the SVG curve so spawn reads blue
+   and merge reads amber.
+   ------------------------------------------------------------------ */
+.bezier-annotation {
+    position: absolute;
+    z-index: 6;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--ms-border, #26384a);
+    background: var(--bezier-bg, #101b26);
+    color: var(--bezier-fg, #c3cedb);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.bezier-annotation-arrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1;
+}
+.bezier-annotation-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+}
+.bezier-annotation-label {
+    color: var(--ms-muted, #738294);
+    font-size: 12px;
+}
+.bezier-spawn-annotation .bezier-annotation-arrow,
+.bezier-spawn-annotation .bezier-annotation-time {
+    color: var(--bezier-connector-active, #79c0ff);
+}
+.bezier-merge-annotation .bezier-annotation-arrow,
+.bezier-merge-annotation .bezier-annotation-time {
+    color: var(--bezier-connector-merge-active, #f0a878);
+}
+
+/* ------------------------------------------------------------------
+   Bezier sub-agent label container — badge + name + count + tokens.
+
+   The current renderer puts the role pill + name + count in the row
+   header (next to the track). To match the TS reference we keep that
+   structure but append a tokens badge so the user can see context
+   size at a glance. Mirrors workflow-panel.tsx:617-644.
+   ------------------------------------------------------------------ */
+.bezier-subagent-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+.bezier-subagent-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+.bezier-subagent-badge.is-review {
+    background: rgba(59, 130, 246, 0.18);
+    color: #79b8ff;
+}
+.bezier-subagent-badge.is-default {
+    background: rgba(245, 158, 11, 0.18);
+    color: #f0a878;
+}
+.bezier-subagent-count {
+    font-size: 11px;
+    color: var(--ms-muted, #738294);
+    font-variant-numeric: tabular-nums;
+}
+.bezier-subagent-tokens {
+    font-size: 10px;
+    color: color-mix(in srgb, var(--ms-muted, #738294) 70%, transparent);
+    font-variant-numeric: tabular-nums;
+}
 .bezier-connector-tooltip-hint {
     color: var(--ms-muted, #738294);
     opacity: 0.7;
     margin-top: 1px;
+}
+
+/* ------------------------------------------------------------------
+   Bezier narrowed sub-agent track (MIN_LANE_FRAC layout).
+
+   Each sub-agent's track occupies only its active time window
+   (startFrac → endFrac) of the canvas width, with a minimum of 12%.
+   The track is positioned via margin-left and has a reduced width
+   so events inside it use track-relative coordinates.
+
+   Matches workflow-panel.tsx buildLayout() visual output.
+   ------------------------------------------------------------------ */
+.bezier-narrowed-track {
+    border-radius: 6px;
+    background: rgba(110, 118, 129, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(110, 118, 129, 0.12);
+}
+.bezier-narrowed-track .bezier-event-bar {
+    border-radius: 2px;
+}
+/* Subtle vertical spawn/merge markers on the parent session track,
+   drawn at the spawnX / joinX positions to visually anchor the
+   connector curves. These are rendered inline by _renderSessionRow. */
+.bezier-vertical-spawn-marker,
+.bezier-vertical-merge-marker {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+.bezier-vertical-spawn-marker {
+    background: var(--bezier-connector-active, #79c0ff);
+    opacity: 0.35;
+}
+.bezier-vertical-merge-marker {
+    background: var(--bezier-connector-merge-active, #f0a878);
+    opacity: 0.35;
 }

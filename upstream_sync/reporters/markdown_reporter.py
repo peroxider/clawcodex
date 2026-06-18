@@ -30,28 +30,29 @@ class MarkdownReporter:
         ]
 
         for imp in report.module_impacts:
-            lines.extend([
-                f"### {imp.module_name}",
-                "",
-                f"- **Layer**: {imp.layer_name}",
-                f"- **Conflict Probability**: {imp.conflict_probability}",
-                f"- **Recommended Strategy**: {imp.recommended_strategy}",
-                f"- **Estimated Effort**: {imp.estimated_effort_minutes} minutes",
-                f"- **Files Changed**: {len(imp.files_changed)}",
-                f"- **Patches Affected**: {', '.join(imp.patches_affected) or 'None'}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {imp.module_name}",
+                    "",
+                    f"- **Layer**: {imp.layer_name}",
+                    f"- **Conflict Probability**: {imp.conflict_probability}",
+                    f"- **Recommended Strategy**: {imp.recommended_strategy}",
+                    f"- **Estimated Effort**: {imp.estimated_effort_minutes} minutes",
+                    f"- **Files Changed**: {len(imp.files_changed)}",
+                    f"- **Patches Affected**: {', '.join(imp.patches_affected) or 'None'}",
+                    "",
+                ]
+            )
 
         if report.action_items:
-            lines.extend([
-                "## Action Items",
-                "",
-            ])
+            lines.extend(
+                [
+                    "## Action Items",
+                    "",
+                ]
+            )
             for item in report.action_items:
-                lines.append(
-                    f"- [{item['action'].upper()}] "
-                    f"{item['module']}: {item['reason']}"
-                )
+                lines.append(f"- [{item['action'].upper()}] {item['module']}: {item['reason']}")
             lines.append("")
 
         path.write_text("\n".join(lines), encoding="utf-8")

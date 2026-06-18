@@ -9,6 +9,7 @@ The original background-runner / background-state exports from the
 prior version of this package are preserved at the bottom of the
 ``__all__`` list for backwards compatibility.
 """
+
 from __future__ import annotations
 
 # Policy primitives (imported first so bundled agents can reference them).
@@ -39,6 +40,7 @@ from clawcodex_ext.agent.registry import (  # noqa: F401
     SOURCE_EXTENSIONS,
     register,
 )
+
 
 # Markdown discovery stays lazy so importing ``clawcodex_ext.agent`` from
 # inside ``src.agent`` does not pull ``src.agent.parse_agent_markdown`` while

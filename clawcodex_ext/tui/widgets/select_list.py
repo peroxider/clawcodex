@@ -109,9 +109,7 @@ class SelectList(Static):
         self._options: list[SelectOption] = list(options)
         self._allow_cancel = allow_cancel
         self._initial_index = (
-            max(0, min(initial_index, len(self._options) - 1))
-            if self._options
-            else 0
+            max(0, min(initial_index, len(self._options) - 1)) if self._options else 0
         )
         super().__init__(self._render_text(self._initial_index), markup=False)
         self.can_focus = True

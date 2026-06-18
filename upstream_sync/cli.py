@@ -39,9 +39,12 @@ def load_config(path: Path) -> ProjectConfig:
 # init
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def init(
-    template: str = typer.Option("blank", help="Template: blank, python-port, node-fork, rust-fork"),
+    template: str = typer.Option(
+        "blank", help="Template: blank, python-port, node-fork, rust-fork"
+    ),
     output: Path = typer.Option(DEFAULT_CONFIG, help="Output config path"),
 ) -> None:
     """Initialize upstream-sync configuration for the current project."""
@@ -59,6 +62,7 @@ def init(
 # ---------------------------------------------------------------------------
 # fetch
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def fetch(
@@ -125,6 +129,7 @@ def extract(
 # analyze
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def analyze(
     from_ref: str = typer.Argument(..., help="Base ref/tag to compare from"),
@@ -155,6 +160,7 @@ def analyze(
 # ---------------------------------------------------------------------------
 # apply
 # ---------------------------------------------------------------------------
+
 
 def _resolve_commit_placeholder(path: Path, commit: str) -> Path:
     """Resolve {commit} placeholder in a path string."""
@@ -192,9 +198,7 @@ def apply(
     # Determine patch directory and series file
     if cfg.patches.patch_subdir:
         # Per-commit subdirectory structure: patches/upstream/{commit}/
-        patch_dir = _resolve_commit_placeholder(
-            Path(cfg.patches.patch_subdir), commit
-        )
+        patch_dir = _resolve_commit_placeholder(Path(cfg.patches.patch_subdir), commit)
         series_file = patch_dir / f"{commit}_series"
     else:
         # Flat structure: patches/
@@ -216,6 +220,7 @@ def apply(
 # audit
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def audit(
     config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
@@ -233,10 +238,15 @@ def audit(
 # sync (full pipeline)
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def sync(
-    from_ref: str | None = typer.Argument(None, help="Base ref/tag to compare from (auto-detected if omitted)"),
-    to_ref: str | None = typer.Argument(None, help="Target ref/tag to compare to (auto-detected if omitted)"),
+    from_ref: str | None = typer.Argument(
+        None, help="Base ref/tag to compare from (auto-detected if omitted)"
+    ),
+    to_ref: str | None = typer.Argument(
+        None, help="Target ref/tag to compare to (auto-detected if omitted)"
+    ),
     auto: bool = typer.Option(False, help="Auto-resolve low-impact changes"),
     config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
 ) -> None:
@@ -277,12 +287,17 @@ def sync(
 # generate-patch
 # ---------------------------------------------------------------------------
 
+
 @app.command("generate-patch")
 def generate_patch(
     new_commit: str = typer.Option(..., help="New upstream commit hash to generate patches for"),
-    old_commit: str = typer.Option(..., help="Old upstream commit hash to reference for patch patterns"),
+    old_commit: str = typer.Option(
+        ..., help="Old upstream commit hash to reference for patch patterns"
+    ),
     config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
-    output: Path | None = typer.Option(None, help="Output directory (default: patches/upstream/{new_commit})"),
+    output: Path | None = typer.Option(
+        None, help="Output directory (default: patches/upstream/{new_commit})"
+    ),
 ) -> None:
     """Generate new patches based on old patch patterns.
 
@@ -315,15 +330,28 @@ def generate_patch(
 # regenerate-patches (strict reconstruction)
 # ---------------------------------------------------------------------------
 
+
 @app.command("regenerate-patches")
 def regenerate_patches(
-    commit: str = typer.Option(..., help="Upstream commit hash (used to locate src/upstream/{commit})"),
+    commit: str = typer.Option(
+        ..., help="Upstream commit hash (used to locate src/upstream/{commit})"
+    ),
     src: Path = typer.Option(Path("src"), help="Downstream source tree (default: src/)"),
-    upstream_root: Path = typer.Option(Path("src/upstream"), help="Upstream snapshots root (default: src/upstream)"),
-    patch_root: Path = typer.Option(Path("patches/upstream"), help="Patches root (default: patches/upstream)"),
-    allow_deletes: bool = typer.Option(False, help="Generate delete patches for upstream files absent from src"),
-    preserve: list[str] = typer.Option([], help="Relative path to preserve from upstream base (repeatable)"),
-    preserve_file: Path | None = typer.Option(None, help="File with one relative path per line to preserve"),
+    upstream_root: Path = typer.Option(
+        Path("src/upstream"), help="Upstream snapshots root (default: src/upstream)"
+    ),
+    patch_root: Path = typer.Option(
+        Path("patches/upstream"), help="Patches root (default: patches/upstream)"
+    ),
+    allow_deletes: bool = typer.Option(
+        False, help="Generate delete patches for upstream files absent from src"
+    ),
+    preserve: list[str] = typer.Option(
+        [], help="Relative path to preserve from upstream base (repeatable)"
+    ),
+    preserve_file: Path | None = typer.Option(
+        None, help="File with one relative path per line to preserve"
+    ),
     config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
 ) -> None:
     """Regenerate all overlay patches from an upstream snapshot (strict reconstruction).
@@ -356,7 +384,9 @@ def regenerate_patches(
     typer.echo(f"Deleted files (by fork): {result.deleted_count}")
     typer.echo(f"Preserved files (new in upstream base, kept): {result.preserved_count}")
     typer.echo(f"Total patches: {len(result.patch_entries)}")
-    typer.echo(f"Total size: {result.total_size:,} bytes ({result.total_size / 1024 / 1024:.1f} MB)")
+    typer.echo(
+        f"Total size: {result.total_size:,} bytes ({result.total_size / 1024 / 1024:.1f} MB)"
+    )
     typer.echo(f"Patch directory: {result.patch_dir}")
     typer.echo(f"Series file: {result.series_file}")
     if result.preserved_files:
@@ -369,6 +399,7 @@ def regenerate_patches(
 # ---------------------------------------------------------------------------
 # backup
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def backup(
@@ -427,6 +458,7 @@ def backup_list(
 # verify
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def verify(
     old_commit: str = typer.Option(..., help="Old upstream commit hash"),
@@ -443,8 +475,16 @@ def verify(
     """
     cfg = load_config(config)
 
-    old_patches_dir = Path(str(cfg.patches.patch_subdir).format(commit=old_commit)) if cfg.patches.patch_subdir else cfg.patches.directory
-    new_patches_dir = Path(str(cfg.patches.patch_subdir).format(commit=new_commit)) if cfg.patches.patch_subdir else cfg.patches.directory
+    old_patches_dir = (
+        Path(str(cfg.patches.patch_subdir).format(commit=old_commit))
+        if cfg.patches.patch_subdir
+        else cfg.patches.directory
+    )
+    new_patches_dir = (
+        Path(str(cfg.patches.patch_subdir).format(commit=new_commit))
+        if cfg.patches.patch_subdir
+        else cfg.patches.directory
+    )
     old_upstream_dir = Path("src") / "upstream" / old_commit[:8]
     new_upstream_dir = Path("src") / "upstream" / new_commit[:8]
     backup_dir = Path("backup")
@@ -474,14 +514,16 @@ def verify(
 # upgrade (recommended workflow)
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def upgrade(
-    new_commit: str = typer.Option(...,
-        help="New upstream commit hash to upgrade to"),
-    old_commit: str = typer.Option(...,
-        help="Old upstream commit hash to reference (current version)"),
-    extract_only: bool = typer.Option(False,
-        help="Only extract new upstream source without generating patches"),
+    new_commit: str = typer.Option(..., help="New upstream commit hash to upgrade to"),
+    old_commit: str = typer.Option(
+        ..., help="Old upstream commit hash to reference (current version)"
+    ),
+    extract_only: bool = typer.Option(
+        False, help="Only extract new upstream source without generating patches"
+    ),
     config: Path = typer.Option(DEFAULT_CONFIG, help="Path to upstream-sync.yaml"),
 ) -> None:
     """Recommended workflow: sync current patches, then upgrade to new upstream.
@@ -533,6 +575,7 @@ def upgrade(
     # Verify current patches
     typer.echo("Verifying current patches apply correctly...")
     from upstream_sync.core.verifier import Verifier
+
     verifier = Verifier(Path("."))
     verify_result = verifier.verify_patches(
         old_patches_dir=old_patch_dir,
@@ -632,6 +675,7 @@ def upgrade(
 # agent-prompt
 # ---------------------------------------------------------------------------
 
+
 @app.command("agent-prompt")
 def agent_prompt(
     report: Path = typer.Argument(..., help="Path to sync-report.json"),
@@ -646,15 +690,13 @@ def agent_prompt(
     cfg = load_config(config)
     report_data = json.loads(report.read_text())
 
-    template_text = (
-        Path(__file__).parent / "templates" / "agent_prompt.md.j2"
-    ).read_text()
+    template_text = (Path(__file__).parent / "templates" / "agent_prompt.md.j2").read_text()
     template = Template(template_text)
 
     rendered = template.render(
         project_name=cfg.project_name,
         upstream_url=cfg.upstream.remote_url,
-        layers=[layer.model_dump(mode='json') for layer in cfg.layers],
+        layers=[layer.model_dump(mode="json") for layer in cfg.layers],
         **report_data,
     )
     output.write_text(rendered, encoding="utf-8")
@@ -664,6 +706,7 @@ def agent_prompt(
 # ---------------------------------------------------------------------------
 # Templates
 # ---------------------------------------------------------------------------
+
 
 def _blank_template() -> str:
     return """project_name: "my-project"

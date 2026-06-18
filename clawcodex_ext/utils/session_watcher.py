@@ -54,9 +54,7 @@ class SessionWatcher:
         """
         self._change_event.clear()
         try:
-            await asyncio.wait_for(
-                self._change_event.wait(), timeout=timeout
-            )
+            await asyncio.wait_for(self._change_event.wait(), timeout=timeout)
             return self._changed_path
         except asyncio.TimeoutError:
             return None
@@ -97,15 +95,18 @@ class _WatcherImpl:
         # Linux inotify first.
         try:
             import inotify.adapters
+
             return _INotifyImpl(self._path, self._on_change)
         except Exception:
             pass
 
         # macOS FSEvents — try only if on Darwin.
         import sys
+
         if sys.platform == "darwin":
             try:
                 import fsevents
+
                 return _FSEventsImpl(self._path, self._on_change)
             except Exception:
                 pass
@@ -124,6 +125,7 @@ class _INotifyImpl:
 
     async def start(self) -> None:
         import inotify.adapters
+
         i = inotify.adapters.InotifyTree(str(self._path))
         self._stopping = False
 
@@ -157,6 +159,7 @@ class _FSEventsImpl:
 
     async def start(self) -> None:
         import fsevents
+
         observer = fsevents.Observer()
         observer.schedule(fsevents.Watch(path=str(self._path)))
         observer.start()

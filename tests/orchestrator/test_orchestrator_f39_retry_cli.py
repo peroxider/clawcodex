@@ -204,7 +204,16 @@ class TestAppendAuditLog(unittest.TestCase):
             content = log_path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(content), 1)
             entry = json.loads(content[0])
-            for required in ("ts", "ts_iso", "operator", "issue_id", "mode", "reason", "force", "priority"):
+            for required in (
+                "ts",
+                "ts_iso",
+                "operator",
+                "issue_id",
+                "mode",
+                "reason",
+                "force",
+                "priority",
+            ):
                 self.assertIn(required, entry)
             self.assertEqual(entry["operator"], "alice")
             self.assertEqual(entry["issue_id"], "1")
@@ -217,8 +226,12 @@ class TestAppendAuditLog(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "deep" / "nested" / "audit.jsonl"
             written = _append_audit_log(
-                issue_id="1", mode="unblock", reason="",
-                operator="bob", force=False, path=log_path,
+                issue_id="1",
+                mode="unblock",
+                reason="",
+                operator="bob",
+                force=False,
+                path=log_path,
             )
             self.assertEqual(written, log_path)
             self.assertTrue(log_path.exists())
@@ -227,8 +240,12 @@ class TestAppendAuditLog(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "audit.jsonl"
             _append_audit_log(
-                issue_id="1", mode="reset", reason="bypass",
-                operator="alice", force=True, path=log_path,
+                issue_id="1",
+                mode="reset",
+                reason="bypass",
+                operator="alice",
+                force=True,
+                path=log_path,
             )
             entry = json.loads(log_path.read_text(encoding="utf-8").strip())
             self.assertTrue(entry["force"])
@@ -239,8 +256,12 @@ class TestAppendAuditLog(unittest.TestCase):
             log_path = Path(tmp) / "audit.jsonl"
             for i in range(3):
                 _append_audit_log(
-                    issue_id=str(i), mode="reset", reason=f"r{i}",
-                    operator="alice", force=False, path=log_path,
+                    issue_id=str(i),
+                    mode="reset",
+                    reason=f"r{i}",
+                    operator="alice",
+                    force=False,
+                    path=log_path,
                 )
             content = log_path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(content), 3)
@@ -249,8 +270,12 @@ class TestAppendAuditLog(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             log_path = Path(tmp) / "audit.jsonl"
             _append_audit_log(
-                issue_id="1", mode="reset", reason="x",
-                operator="alice", force=False, path=log_path,
+                issue_id="1",
+                mode="reset",
+                reason="x",
+                operator="alice",
+                force=False,
+                path=log_path,
                 extra={"issue_identifier": "ISSUE-1", "platform": "github"},
             )
             entry = json.loads(log_path.read_text(encoding="utf-8").strip())
@@ -270,11 +295,16 @@ class TestAppendAuditLog(unittest.TestCase):
             # The print to stderr is noisy — capture it.
             import io
             from contextlib import redirect_stderr
+
             buf = io.StringIO()
             with redirect_stderr(buf):
                 result = _append_audit_log(
-                    issue_id="1", mode="reset", reason="",
-                    operator="alice", force=False, path=bad_path,
+                    issue_id="1",
+                    mode="reset",
+                    reason="",
+                    operator="alice",
+                    force=False,
+                    path=bad_path,
                 )
             self.assertIsNone(result)
 
@@ -562,7 +592,10 @@ Run the issue.
 
             audit_path = Path(tmp) / "audit.jsonl"
             args = _make_args(
-                id="42", mode="followup", operator="ci-bot", reason="automated",
+                id="42",
+                mode="followup",
+                operator="ci-bot",
+                reason="automated",
             )
             with patch(
                 "extensions.orchestrator.cli.issue._DEFAULT_AUDIT_LOG_PATH",
@@ -621,8 +654,18 @@ class TestAddRetryParser(unittest.TestCase):
         add_issue_parser(sub)
 
         args = parser.parse_args(
-            ["issue", "retry", "--id", "1", "--mode", "followup",
-             "--operator", "alice", "--reason", "follow-up please"],
+            [
+                "issue",
+                "retry",
+                "--id",
+                "1",
+                "--mode",
+                "followup",
+                "--operator",
+                "alice",
+                "--reason",
+                "follow-up please",
+            ],
         )
         self.assertEqual(args.operator, "alice")
         self.assertEqual(args.reason, "follow-up please")

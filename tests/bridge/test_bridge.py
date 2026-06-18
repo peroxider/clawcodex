@@ -1,4 +1,5 @@
 """Tests for Bridge/Remote subsystem."""
+
 from __future__ import annotations
 
 import asyncio

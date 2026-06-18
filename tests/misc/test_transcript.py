@@ -5,6 +5,7 @@ semantics, atomic-line concurrent writes, reader tolerance of trailing
 partial lines, blank-line skipping, ``read_all`` round-trip, and the
 ``TranscriptReader`` interface availability for the Phase-7 DIP claim.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,9 +46,7 @@ def test_transcript_path_with_resolver(tmp_path: Path) -> None:
 
     calls: list[tuple[str, str | None]] = []
 
-    def stub_resolver(
-        agent_id: str, parent_session_id: str | None = None
-    ) -> str | None:
+    def stub_resolver(agent_id: str, parent_session_id: str | None = None) -> str | None:
         calls.append((agent_id, parent_session_id))
         if parent_session_id:
             return str(tmp_path / "subagents" / f"agent-{agent_id}.jsonl")
@@ -132,6 +131,16 @@ def test_writer_append_is_terminated_with_newline(tmp_path: Path) -> None:
     assert path.read_bytes().endswith(b"\n")
 
 
+def test_writer_tolerates_platform_without_o_cloexec(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delattr(os, "O_CLOEXEC", raising=False)
+    path = tmp_path / "windows.jsonl"
+
+    with TranscriptWriter(path) as writer:
+        writer.append({"k": 1})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"k": 1}
+
+
 def test_writer_close_is_idempotent(tmp_path: Path) -> None:
     w = TranscriptWriter(tmp_path / "x.jsonl")
     w.close()
@@ -165,6 +174,7 @@ def test_writer_dataclass_serialization(tmp_path: Path) -> None:
 def test_writer_unserializable_object_does_not_crash(tmp_path: Path) -> None:
     """A non-JSON-able object falls back to ``repr`` rather than
     bringing down the writer mid-run."""
+
     class WeirdThing:
         def __repr__(self) -> str:
             return "<WeirdThing>"

@@ -190,10 +190,7 @@ class McpAuthProvider:
             authorization_endpoint = metadata.get("authorization_endpoint")
             token_endpoint = metadata.get("token_endpoint")
             if not authorization_endpoint or not token_endpoint:
-                msg = (
-                    "OAuth metadata missing authorization_endpoint or "
-                    "token_endpoint"
-                )
+                msg = "OAuth metadata missing authorization_endpoint or token_endpoint"
                 self.mark_needs_auth(server_name, reason=msg)
                 return AuthResult(success=False, error=msg)
 
@@ -233,7 +230,8 @@ class McpAuthProvider:
 
             logger.info(
                 "MCP OAuth: opening browser for %r (url=%s)",
-                server_name, redact_sensitive_params(url),
+                server_name,
+                redact_sensitive_params(url),
             )
             if open_browser:
                 try:
@@ -241,13 +239,12 @@ class McpAuthProvider:
                 except Exception as exc:  # pragma: no cover
                     logger.warning(
                         "MCP OAuth: webbrowser.open failed for %r: %s",
-                        server_name, exc,
+                        server_name,
+                        exc,
                     )
 
             try:
-                callback = await wait_for_callback(
-                    port=port, expected_state=state
-                )
+                callback = await wait_for_callback(port=port, expected_state=state)
             except OAuthCallbackError as exc:
                 msg = f"OAuth callback failed: {exc}"
                 self.mark_needs_auth(server_name, reason=msg)

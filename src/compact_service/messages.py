@@ -24,6 +24,7 @@ class PreservedSegment:
     Used by the message loader to patch parent-UUID chains so that
     preserved messages slot correctly into the post-compact conversation.
     """
+
     head_uuid: str
     anchor_uuid: str
     tail_uuid: str
@@ -32,6 +33,7 @@ class PreservedSegment:
 @dataclass
 class CompactBoundaryMetadata:
     """Metadata stored inside a compact boundary marker."""
+
     trigger: str = "manual"  # "manual" | "auto"
     pre_compact_token_count: int = 0
     last_message_uuid: Optional[str] = None
@@ -93,9 +95,7 @@ def _serialize_metadata(m: CompactBoundaryMetadata) -> str:
         parts.append(f"summarized={m.messages_summarized}")
     if m.preserved_segment:
         ps = m.preserved_segment
-        parts.append(
-            f"preserved={ps.head_uuid[:8]}..{ps.tail_uuid[:8]}"
-        )
+        parts.append(f"preserved={ps.head_uuid[:8]}..{ps.tail_uuid[:8]}")
     return "; ".join(parts)
 
 
@@ -138,10 +138,12 @@ def _format_summary_text(
         summary,
     ]
     if suppress_follow_up:
-        lines.extend([
-            "",
-            "Please continue helping the user without asking if they want to continue.",
-        ])
+        lines.extend(
+            [
+                "",
+                "Please continue helping the user without asking if they want to continue.",
+            ]
+        )
     if is_visible_in_transcript_only:
         lines.insert(0, "[This message is visible in transcript only]")
     return "\n".join(lines)
@@ -193,11 +195,8 @@ def get_messages_after_boundary(
 
     Used to exclude already-summarized messages from the next summarization.
     """
-    boundary_indices = [
-        i for i, m in enumerate(messages)
-        if is_compact_boundary_message(m)
-    ]
+    boundary_indices = [i for i, m in enumerate(messages) if is_compact_boundary_message(m)]
     if not boundary_indices:
         return list(messages)
     last_boundary = max(boundary_indices)
-    return list(messages[last_boundary + 1:])
+    return list(messages[last_boundary + 1 :])

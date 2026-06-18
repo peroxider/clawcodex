@@ -7,7 +7,14 @@ from __future__ import annotations
 
 import logging
 
-from ..models.viz_models import Anomaly, AnomalySeverity, AnomalyType, BarStatus, BarType, SessionVizData
+from ..models.viz_models import (
+    Anomaly,
+    AnomalySeverity,
+    AnomalyType,
+    BarStatus,
+    BarType,
+    SessionVizData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +86,36 @@ class AnomalyBuilder:
         ts = session.end_time or session.start_time
 
         reason_map: dict[str, tuple[AnomalyType, AnomalySeverity, str]] = {
-            "noop_completed": (AnomalyType.NO_OP, AnomalySeverity.MEDIUM, "Agent completed without making changes. Consider if the deliverable already exists."),
-            "stagnation": (AnomalyType.STAGNATION, AnomalySeverity.HIGH, "Agent stagnated — no progress detected for multiple turns."),
-            "loop_detected": (AnomalyType.LOOP, AnomalySeverity.HIGH, "Agent entered a loop — repeated the same tool call pattern."),
-            "read_only_loop": (AnomalyType.READ_ONLY_SPIRAL, AnomalySeverity.MEDIUM, "Agent spent consecutive turns only reading without making changes."),
-            "budget_exhausted": (AnomalyType.BUDGET_EXHAUSTED, AnomalySeverity.CRITICAL, "Session terminated due to budget exhaustion."),
-            "max_turns_exceeded": (AnomalyType.MAX_TURNS, AnomalySeverity.HIGH, "Session exceeded max_turns limit."),
+            "noop_completed": (
+                AnomalyType.NO_OP,
+                AnomalySeverity.MEDIUM,
+                "Agent completed without making changes. Consider if the deliverable already exists.",
+            ),
+            "stagnation": (
+                AnomalyType.STAGNATION,
+                AnomalySeverity.HIGH,
+                "Agent stagnated — no progress detected for multiple turns.",
+            ),
+            "loop_detected": (
+                AnomalyType.LOOP,
+                AnomalySeverity.HIGH,
+                "Agent entered a loop — repeated the same tool call pattern.",
+            ),
+            "read_only_loop": (
+                AnomalyType.READ_ONLY_SPIRAL,
+                AnomalySeverity.MEDIUM,
+                "Agent spent consecutive turns only reading without making changes.",
+            ),
+            "budget_exhausted": (
+                AnomalyType.BUDGET_EXHAUSTED,
+                AnomalySeverity.CRITICAL,
+                "Session terminated due to budget exhaustion.",
+            ),
+            "max_turns_exceeded": (
+                AnomalyType.MAX_TURNS,
+                AnomalySeverity.HIGH,
+                "Session exceeded max_turns limit.",
+            ),
             "failed": (AnomalyType.CUSTOM, AnomalySeverity.HIGH, "Session failed with an error."),
         }
 

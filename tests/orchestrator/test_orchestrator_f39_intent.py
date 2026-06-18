@@ -207,7 +207,9 @@ class TestRepositoryTrackerAdapterIntent(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_intent_labels_isolated_per_instance(self) -> None:
-        a = self._make(intent_labels={"retry": "a:retry", "followup": "a:followup", "blocked": "a:blocked"})
+        a = self._make(
+            intent_labels={"retry": "a:retry", "followup": "a:followup", "blocked": "a:blocked"}
+        )
         b = self._make()
         # Mutating one must not affect the other.
         a.intent_labels["retry"] = "mutated"

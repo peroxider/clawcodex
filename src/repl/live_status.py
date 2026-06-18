@@ -36,7 +36,7 @@ import threading
 import time
 import warnings
 from contextlib import contextmanager
-from typing import Callable, Iterator
+from typing import Any, Callable, Iterator
 
 from src.utils.format import format_duration, format_number
 
@@ -69,7 +69,16 @@ except ModuleNotFoundError:  # pragma: no cover - guarded by REPL bootstrap
 # avoids pulling rich's spinner internals across a process boundary and
 # keeps the live region self-contained.
 _SPINNER_FRAMES: tuple[str, ...] = (
-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
+    "⠋",
+    "⠙",
+    "⠹",
+    "⠸",
+    "⠼",
+    "⠴",
+    "⠦",
+    "⠧",
+    "⠇",
+    "⠏",
 )
 _FRAME_INTERVAL = 0.08
 # Mirrors ``SHOW_TOKENS_AFTER_MS`` in
@@ -319,6 +328,7 @@ class LiveStatus:
             # region instead of fighting the spinner row's redraw.
             try:
                 from prompt_toolkit.application import run_in_terminal
+
                 run_in_terminal(cb)
             except Exception:
                 try:
@@ -338,7 +348,10 @@ class LiveStatus:
                 label = "shown" if repl._thinking_visible else "hidden"
                 try:
                     from prompt_toolkit.application import run_in_terminal
-                    run_in_terminal(lambda: repl.console.print(f"[dim]Thinking content: {label}[/dim]"))
+
+                    run_in_terminal(
+                        lambda: repl.console.print(f"[dim]Thinking content: {label}[/dim]")
+                    )
                 except Exception:
                     try:
                         repl.console.print(f"[dim]Thinking content: {label}[/dim]")
@@ -399,10 +412,15 @@ class LiveStatus:
                         if repl.tool_context is not None:
                             repl.tool_context.permission_context = next_ctx
                             if next_mode == "bypassPermissions":
-                                repl.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
+                                repl.tool_context.permission_handler = lambda _tn, _msg, _sug: (
+                                    True,
+                                    False,
+                                )
                                 repl.tool_context.allow_docs = True
                             else:
-                                repl.tool_context.permission_handler = repl._handle_permission_request
+                                repl.tool_context.permission_handler = (
+                                    repl._handle_permission_request
+                                )
                                 repl.tool_context.allow_docs = False
                         self.update(f"[mode: {next_mode}]")
             except Exception:

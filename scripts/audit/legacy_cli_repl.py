@@ -17,6 +17,7 @@ try:
     from rich.table import Table
     from rich.text import Text
     from rich.prompt import Prompt
+
     HAS_RICH = True
 except ImportError:
     HAS_RICH = False
@@ -49,12 +50,12 @@ class ClawcodexCLI:
 
         # Color definitions for non-rich fallback
         self.colors = {
-            'cyan': '\033[96m',
-            'green': '\033[92m',
-            'yellow': '\033[93m',
-            'red': '\033[91m',
-            'bold': '\033[1m',
-            'reset': '\033[0m',
+            "cyan": "\033[96m",
+            "green": "\033[92m",
+            "yellow": "\033[93m",
+            "red": "\033[91m",
+            "bold": "\033[1m",
+            "reset": "\033[0m",
         }
 
     def _colorize(self, text: str, color: str) -> str:
@@ -66,18 +67,20 @@ class ClawcodexCLI:
     def print_banner(self):
         """Print welcome banner."""
         if HAS_RICH:
-            self.console.print(Panel.fit(
-                "[bold cyan]ClawCodex[/bold cyan]\n"
-                "[dim]A complete reimplementation of Claude Code[/dim]",
-                subtitle="Interactive Mode • Type 'help' for commands",
-                border_style="round",
-            ))
+            self.console.print(
+                Panel.fit(
+                    "[bold cyan]ClawCodex[/bold cyan]\n"
+                    "[dim]A complete reimplementation of Claude Code[/dim]",
+                    subtitle="Interactive Mode • Type 'help' for commands",
+                    border_style="round",
+                )
+            )
         else:
             banner = f"""
-{self._colorize('╔═══════════════════════════════════════════════════════════╔', 'cyan')}
-{self._colorize('║', 'cyan')}   {self._colorize('ClawCodex', 'bold')}  - Claude Code Reimplementation   {self._colorize('║', 'cyan')}
-{self._colorize('║', 'cyan')}   Type "help" for commands • Interactive Mode                  {self._colorize('║', 'cyan')}
-{self._colorize('╚═══════════════════════════════════════════════════════════╛', 'cyan')}
+{self._colorize("╔═══════════════════════════════════════════════════════════╔", "cyan")}
+{self._colorize("║", "cyan")}   {self._colorize("ClawCodex", "bold")}  - Claude Code Reimplementation   {self._colorize("║", "cyan")}
+{self._colorize("║", "cyan")}   Type "help" for commands • Interactive Mode                  {self._colorize("║", "cyan")}
+{self._colorize("╚═══════════════════════════════════════════════════════════╛", "cyan")}
 """
             print(banner)
 
@@ -94,10 +97,14 @@ class ClawcodexCLI:
             self.console.print(table)
         else:
             print(f"\n{self._colorize('Project Status:', 'bold')}")
-            print(f"  Python Files:  {self._colorize(str(self.manifest.total_python_files), 'green')}")
+            print(
+                f"  Python Files:  {self._colorize(str(self.manifest.total_python_files), 'green')}"
+            )
             print(f"  Commands:     {self._colorize('207', 'green')}")
             print(f"  Tools:       {self._colorize('150+', 'green')}")
-            print(f"  Subsystems:   {self._colorize(str(len(self.manifest.top_level_modules)), 'green')}")
+            print(
+                f"  Subsystems:   {self._colorize(str(len(self.manifest.top_level_modules)), 'green')}"
+            )
             print()
 
     def print_help(self):
@@ -136,24 +143,25 @@ class ClawcodexCLI:
         cmd = parts[0].lower()
         args = parts[1:] if len(parts) > 1 else []
 
-        if cmd in ('exit', 'quit', 'q'):
+        if cmd in ("exit", "quit", "q"):
             print(f"\n{self._colorize('Goodbye!', 'green')} 👋\n")
             return False
 
-        elif cmd == 'help':
+        elif cmd == "help":
             self.print_help()
-        elif cmd == 'status':
+        elif cmd == "status":
             self.print_status()
-        elif cmd == 'summary':
+        elif cmd == "summary":
             print()
             print(QueryEnginePort(self.manifest).render_summary())
-        elif cmd == 'audit':
+        elif cmd == "audit":
             print()
             print(run_parity_audit().to_markdown())
-        elif cmd == 'commands':
+        elif cmd == "commands":
             query = args[0] if args else None
             if query:
                 from .commands import render_command_index
+
                 print()
                 print(render_command_index(limit=20, query=query))
             else:
@@ -163,10 +171,11 @@ class ClawcodexCLI:
                     print(f"  - {c.name}")
                 if len(cmds) > 20:
                     print(f"  ... and {len(cmds) - 20} more")
-        elif cmd == 'tools':
+        elif cmd == "tools":
             query = args[0] if args else None
             if query:
                 from .tools import render_tool_index
+
                 print()
                 print(render_tool_index(limit=20, query=query))
             else:
@@ -176,33 +185,33 @@ class ClawcodexCLI:
                     print(f"  - {t.name}")
                 if len(tools) > 20:
                     print(f"  ... and {len(tools) - 20} more")
-        elif cmd == 'route':
+        elif cmd == "route":
             if not args:
                 print(f"{self._colorize('Error:', 'red')} Please provide a prompt to route")
             else:
-                prompt = ' '.join(args)
+                prompt = " ".join(args)
                 matches = self.runtime.route_prompt(prompt, limit=5)
                 print(f"\n{self._colorize('Routed Matches:', 'bold')}")
                 for m in matches:
                     print(f"  [{m.kind}] {m.name} (score: {m.score})")
-        elif cmd == 'bootstrap':
+        elif cmd == "bootstrap":
             if not args:
                 print(f"{self._colorize('Error:', 'red')} Please provide a prompt")
             else:
-                prompt = ' '.join(args)
+                prompt = " ".join(args)
                 print(f"\n{self._colorize('Starting session...', 'yellow')}")
                 session = self.runtime.bootstrap_session(prompt, limit=5)
                 print(session.as_markdown())
-        elif cmd == 'show':
+        elif cmd == "show":
             if not args:
                 print(f"{self._colorize('Usage:', 'yellow')} show <command|tool> <name>")
             else:
                 kind = args[0]
-                name = ' '.join(args[1:]) if len(args) > 1 else None
+                name = " ".join(args[1:]) if len(args) > 1 else None
                 if not name:
                     print(f"{self._colorize('Usage:', 'yellow')} show <command|tool> <name>")
                     return True
-                if kind == 'command':
+                if kind == "command":
                     module = get_command(name)
                     if module:
                         print(f"\n{module.name}")
@@ -210,7 +219,7 @@ class ClawcodexCLI:
                         print(f"  {module.responsibility}")
                     else:
                         print(f"{self._colorize('Command not found:', 'red')} {name}")
-                elif kind == 'tool':
+                elif kind == "tool":
                     module = get_tool(name)
                     if module:
                         print(f"\n{module.name}")
@@ -228,7 +237,9 @@ class ClawcodexCLI:
                 print(f"{self._colorize('Suggested commands/tools:', 'bold')}")
                 for m in matches:
                     print(f"  [{m.kind}] {m.name} (score: {m.score})")
-                print(f"\n{self._colorize('Use:', 'cyan')} show command <name> or show tool <name> for details")
+                print(
+                    f"\n{self._colorize('Use:', 'cyan')} show command <name> or show tool <name> for details"
+                )
             else:
                 print(f"{self._colorize('No matching commands or tools found.', 'yellow')}")
 
@@ -238,7 +249,7 @@ class ClawcodexCLI:
         """Run the interactive CLI."""
         self.print_banner()
         self.print_status()
-        print("\n" + self._colorize('Type your request or "help" for commands:', 'cyan'))
+        print("\n" + self._colorize('Type your request or "help" for commands:', "cyan"))
         print(f"{self._colorize('─' * 60, 'dim')}\n")
 
         while self.running:
@@ -257,5 +268,5 @@ def main():
     cli.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

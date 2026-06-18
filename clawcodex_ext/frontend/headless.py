@@ -15,9 +15,9 @@ class HeadlessFrontend(FrontendPlugin):
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
         options = HeadlessOptions(
-            prompt=getattr(ctx.options, 'prompt', None),
-            output_format=getattr(ctx.options, 'output_format', 'text'),
-            input_format=getattr(ctx.options, 'input_format', 'text'),
+            prompt=getattr(ctx.options, "prompt", None),
+            output_format=getattr(ctx.options, "output_format", "text"),
+            input_format=getattr(ctx.options, "input_format", "text"),
             provider_name=ctx.provider_name,
             model=ctx.options.model,
             max_turns=ctx.options.max_turns,
@@ -26,7 +26,7 @@ class HeadlessFrontend(FrontendPlugin):
             skip_permissions=ctx.options.skip_permissions,
             allowed_tools=ctx.options.allowed_tools,
             disallowed_tools=ctx.options.disallowed_tools,
-            include_partial_messages=getattr(ctx.options, 'include_partial_messages', False),
+            include_partial_messages=getattr(ctx.options, "include_partial_messages", False),
             verbose=ctx.options.verbose,
             workspace_root=ctx.workspace_root,
             append_system_prompt=ctx.options.append_system_prompt,

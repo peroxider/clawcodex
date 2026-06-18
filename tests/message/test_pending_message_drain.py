@@ -4,6 +4,7 @@ The chapter contract: messages enqueued via ``queue_pending_message``
 arrive at the next tool-round boundary, NOT mid-execution. The query
 loop's between-turn hook is what surfaces them in the conversation.
 """
+
 from __future__ import annotations
 
 from src.query.query import _drain_pending_user_messages
@@ -21,8 +22,11 @@ def _make_context_with_running_agent(tmp_path) -> tuple[ToolContext, str]:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     ctx.agent_id = agent_id
     return ctx, agent_id

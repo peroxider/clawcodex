@@ -54,18 +54,22 @@ def _apply_domain_filters(
     """
     out = hits
     if blocked_domains:
+
         def _not_blocked(h: dict[str, str]) -> bool:
             host = _safe_hostname(h.get("url"))
             if not host:
                 return True  # can't confirm blocked -> keep
             return not any(_host_matches_domain(host, d) for d in blocked_domains)
+
         out = [h for h in out if _not_blocked(h)]
     if allowed_domains:
+
         def _is_allowed(h: dict[str, str]) -> bool:
             host = _safe_hostname(h.get("url"))
             if not host:
                 return False  # can't confirm allowed -> drop
             return any(_host_matches_domain(host, d) for d in allowed_domains)
+
         out = [h for h in out if _is_allowed(h)]
     return out
 
@@ -145,6 +149,7 @@ def _ddg_html_search(query: str, num: int = 10) -> list[dict[str, str]]:
 # DuckDuckGo search (via duckduckgo-search package, preferred)
 # ---------------------------------------------------------------------------
 
+
 def _ddg_package_search(query: str, num: int = 10) -> list[dict[str, str]] | None:
     """Search DuckDuckGo via the duckduckgo-search package.
 
@@ -181,6 +186,7 @@ def _search_duckduckgo(query: str, num: int = 10) -> list[dict[str, str]]:
 # Dynamic prompt with date context (ported from TS prompt.ts)
 # ---------------------------------------------------------------------------
 
+
 def _get_web_search_prompt() -> str:
     """Generate the web search prompt with dynamic date context."""
     now = datetime.now()
@@ -194,7 +200,7 @@ def _get_web_search_prompt() -> str:
         "- Searches are performed automatically within a single API call\n"
         "\n"
         "CRITICAL REQUIREMENT - You MUST follow this:\n"
-        "  - After answering the user's question, you MUST include a \"Sources:\" section at the end of your response\n"
+        '  - After answering the user\'s question, you MUST include a "Sources:" section at the end of your response\n'
         "  - In the Sources section, list all relevant URLs from the search results as markdown hyperlinks: [Title](URL)\n"
         "  - This is MANDATORY - never skip including sources in your response\n"
         "  - Example format:\n"
@@ -211,13 +217,14 @@ def _get_web_search_prompt() -> str:
         "\n"
         "IMPORTANT - Use the correct year in search queries:\n"
         f"  - The current month is {current_month_year}. You MUST use this year when searching for recent information, documentation, or current events.\n"
-        "  - Example: If the user asks for \"latest React docs\", search for \"React documentation\" with the current year, NOT last year\n"
+        '  - Example: If the user asks for "latest React docs", search for "React documentation" with the current year, NOT last year\n'
     )
 
 
 # ---------------------------------------------------------------------------
 # mapResultToApi: structured output with sources (ported from TS)
 # ---------------------------------------------------------------------------
+
 
 def _map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Format web search output for the model, including source reminder."""
@@ -261,6 +268,7 @@ def _map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
 # Input validation
 # ---------------------------------------------------------------------------
 
+
 def _validate_input(tool_input: dict[str, Any], _ctx: ToolContext) -> ValidationResult:
     """Validate web search input, including mutual exclusion of domain filters."""
     query = tool_input.get("query", "")
@@ -282,6 +290,7 @@ def _validate_input(tool_input: dict[str, Any], _ctx: ToolContext) -> Validation
 # Format provider output (structured output with snippets and links)
 # ---------------------------------------------------------------------------
 
+
 def _format_output(
     query: str,
     hits: list[dict[str, str]],
@@ -301,10 +310,12 @@ def _format_output(
 
     # Structured links
     if hits:
-        results.append({
-            "tool_use_id": "ddg-search",
-            "content": [{"title": h["title"], "url": h["url"]} for h in hits],
-        })
+        results.append(
+            {
+                "tool_use_id": "ddg-search",
+                "content": [{"title": h["title"], "url": h["url"]} for h in hits],
+            }
+        )
 
     if not results:
         results.append("No results found.")
@@ -319,6 +330,7 @@ def _format_output(
 # ---------------------------------------------------------------------------
 # Main call function
 # ---------------------------------------------------------------------------
+
 
 def _web_search_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     query = tool_input["query"]

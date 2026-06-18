@@ -21,6 +21,7 @@ silently break the isolation by, e.g., switching the async path to a
 child-linked controller (which would propagate the parent's abort and
 re-introduce the bug the REJECT_MESSAGE override would amplify).
 """
+
 from __future__ import annotations
 
 from pathlib import Path

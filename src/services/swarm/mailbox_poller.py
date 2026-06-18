@@ -45,6 +45,7 @@ brief — SRP-clean: eviction = cleanup, mailbox = inbound dispatch).
 Both are short-lived ticks over ``runtime_tasks``; co-locating their
 threads as a future optimization is fine but not in this chunk.
 """
+
 from __future__ import annotations
 
 import json
@@ -159,7 +160,8 @@ def _dispatch_plan_approval_response(
             "sender-side gate (is_team_lead) should have caught this "
             "first. If you see this in production, investigate the "
             "non-SendMessage write path.",
-            sender, expected_lead_agent_id,
+            sender,
+            expected_lead_agent_id,
             envelope.get("request_id"),
         )
         return
@@ -171,8 +173,7 @@ def _dispatch_plan_approval_response(
         if not isinstance(prev, InProcessTeammateTaskState):
             return prev
         new_permission_mode = (
-            permission_mode if isinstance(permission_mode, str)
-            else prev.permission_mode
+            permission_mode if isinstance(permission_mode, str) else prev.permission_mode
         )
         return replace(
             prev,
@@ -183,7 +184,9 @@ def _dispatch_plan_approval_response(
     runtime_tasks.update(teammate_agent_id, _apply)
     logger.info(
         "plan_approval_response: teammate=%s approved=%s permission_mode=%s",
-        teammate_agent_id, approved, permission_mode,
+        teammate_agent_id,
+        approved,
+        permission_mode,
     )
 
 
@@ -201,7 +204,8 @@ def _dispatch_permission_response(envelope: dict[str, Any]) -> None:
     approved = bool(envelope.get("approved"))
     reason = envelope.get("reason")
     deliver_permission_decision(
-        request_id, approved=approved,
+        request_id,
+        approved=approved,
         reason=reason if isinstance(reason, str) else None,
     )
 
@@ -245,7 +249,9 @@ def sweep_mailboxes(
             continue
 
         all_msgs = read_mailbox(
-            recipient_name, team_name=team_name, workspace_root=workspace_root,
+            recipient_name,
+            team_name=team_name,
+            workspace_root=workspace_root,
         )
         offset = _read_offset(inbox_path)
         new_msgs = all_msgs[offset:]
@@ -259,7 +265,9 @@ def sweep_mailboxes(
                 # ``pending_user_messages`` queue so the run loop
                 # picks it up at the next tool round.
                 _enqueue_user_message(
-                    runtime_tasks, agent_id, msg.text,
+                    runtime_tasks,
+                    agent_id,
+                    msg.text,
                 )
                 dispatched += 1
                 continue
@@ -267,13 +275,15 @@ def sweep_mailboxes(
             envelope_type = envelope.get("type")
             if envelope_type == "shutdown_request":
                 _dispatch_shutdown_request(
-                    envelope=envelope, teammate_agent_id=agent_id,
+                    envelope=envelope,
+                    teammate_agent_id=agent_id,
                     runtime_tasks=runtime_tasks,
                 )
                 dispatched += 1
             elif envelope_type == "plan_approval_response":
                 _dispatch_plan_approval_response(
-                    envelope=envelope, teammate_agent_id=agent_id,
+                    envelope=envelope,
+                    teammate_agent_id=agent_id,
                     runtime_tasks=runtime_tasks,
                     expected_lead_agent_id=expected_lead_agent_id,
                 )
@@ -295,7 +305,8 @@ def sweep_mailboxes(
             else:
                 logger.warning(
                     "unknown envelope type %r in mailbox %s — dropping.",
-                    envelope_type, inbox_path,
+                    envelope_type,
+                    inbox_path,
                 )
 
         _write_offset(inbox_path, offset + len(new_msgs))
@@ -358,7 +369,9 @@ def start_mailbox_poller(
         thread = threading.Thread(
             target=_poller_loop,
             args=(
-                runtime_tasks, workspace_root, team_name,
+                runtime_tasks,
+                workspace_root,
+                team_name,
                 expected_lead_agent_id,
                 recipient_to_agent_id_provider,
                 tick_seconds,

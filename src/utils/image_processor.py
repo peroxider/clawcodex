@@ -16,6 +16,7 @@ that only need magic-byte detection don't pay the Pillow cost.
 See also: ``my-docs/image-handling-gap-analysis.md`` and
 ``my-docs/image-handling-refactoring-plan.md``.
 """
+
 from __future__ import annotations
 
 import io
@@ -57,9 +58,11 @@ TOKEN_PER_BASE64_CHAR = 0.125
 # Types
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ImageDimensions:
     """Original + display dimensions for coordinate-mapping prompts."""
+
     original_width: int | None = None
     original_height: int | None = None
     display_width: int | None = None
@@ -69,6 +72,7 @@ class ImageDimensions:
 @dataclass(frozen=True)
 class ResizeResult:
     """Output of resize/compress operations."""
+
     data: bytes
     media_type: str  # e.g. "image/png"
     dimensions: ImageDimensions | None
@@ -82,6 +86,7 @@ class ImageProcessingError(Exception):
 # Magic-byte format detection (no Pillow needed)
 # ---------------------------------------------------------------------------
 
+
 def detect_image_format_from_buffer(buf: bytes) -> str:
     """Return the media type of an image buffer based on magic bytes.
 
@@ -94,11 +99,7 @@ def detect_image_format_from_buffer(buf: bytes) -> str:
         return "image/jpeg"
     if len(buf) >= 3 and buf[0:3] == b"GIF":
         return "image/gif"
-    if (
-        len(buf) >= 12
-        and buf[0:4] == b"RIFF"
-        and buf[8:12] == b"WEBP"
-    ):
+    if len(buf) >= 12 and buf[0:4] == b"RIFF" and buf[8:12] == b"WEBP":
         return "image/webp"
     return "image/png"
 
@@ -106,6 +107,7 @@ def detect_image_format_from_buffer(buf: bytes) -> str:
 def detect_image_format_from_base64(b64: str) -> str:
     """Decode the leading bytes of a base64 string and sniff the format."""
     import base64
+
     # Decode just enough to inspect magic bytes. 16 b64 chars → 12 raw bytes,
     # enough for WebP's RIFF...WEBP signature at offset 8.
     head = b64[:24]
@@ -119,6 +121,7 @@ def detect_image_format_from_base64(b64: str) -> str:
 # ---------------------------------------------------------------------------
 # Bounded file read (port of fsOperations.ts:578-602 readFileBytes)
 # ---------------------------------------------------------------------------
+
 
 def read_file_bytes(path: Path, max_bytes: int | None = None) -> bytes:
     """Read up to ``max_bytes`` from ``path``.
@@ -137,6 +140,7 @@ def read_file_bytes(path: Path, max_bytes: int | None = None) -> bytes:
 # ---------------------------------------------------------------------------
 # Pillow integration (lazy import)
 # ---------------------------------------------------------------------------
+
 
 def _pil():
     """Lazy import for Pillow so module import stays cheap."""
@@ -157,6 +161,7 @@ def _log_image_event(subtype: str, **fields: Any) -> None:
     """
     try:
         from src.services.analytics.events import EventType, log_event
+
         log_event(EventType.IMAGE_PROCESSING, subtype=subtype, **fields)
     except Exception:  # pragma: no cover - telemetry is best-effort
         pass
@@ -239,6 +244,7 @@ def _resize_to_envelope(img: Any, max_w: int, max_h: int) -> tuple[Any, int, int
 # Main resize pipeline (port of maybeResizeAndDownsampleImageBuffer)
 # ---------------------------------------------------------------------------
 
+
 def maybe_resize_image(
     buf: bytes,
     original_size: int,
@@ -262,7 +268,9 @@ def maybe_resize_image(
         _log_image_event("resize_failed", reason="unidentified", original_size=original_size)
         raise ImageProcessingError(f"Could not decode image: {e}") from e
     except Exception as e:
-        _log_image_event("resize_failed", reason="open_error", error=str(e), original_size=original_size)
+        _log_image_event(
+            "resize_failed", reason="open_error", error=str(e), original_size=original_size
+        )
         raise ImageProcessingError(f"Could not open image: {e}") from e
 
     orig_w, orig_h = img.size
@@ -353,6 +361,7 @@ def maybe_resize_image(
 # ---------------------------------------------------------------------------
 # Byte / token budget compression (port of compressImageBuffer family)
 # ---------------------------------------------------------------------------
+
 
 def compress_image_to_byte_budget(
     buf: bytes,
@@ -493,6 +502,7 @@ def compress_image_to_token_budget(
 # Dimensions metadata (port of createImageMetadataText)
 # ---------------------------------------------------------------------------
 
+
 def create_image_metadata_text(
     dimensions: ImageDimensions | None,
     source_path: str | None,
@@ -539,6 +549,7 @@ def create_image_metadata_text(
 # ---------------------------------------------------------------------------
 # Token estimation helper (mirrors TS inline at FileReadTool.ts:1140)
 # ---------------------------------------------------------------------------
+
 
 def estimate_image_tokens_from_base64_length(base64_len: int) -> int:
     """Return the rough token count for a base64-encoded image payload."""

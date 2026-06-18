@@ -84,7 +84,9 @@ class TestValidateHookUrl:
         assert safe is False
 
     def test_cloud_metadata_aws(self):
-        safe, reason = validate_hook_url("http://169.254.169.254/latest/meta-data/", resolve_dns=False)
+        safe, reason = validate_hook_url(
+            "http://169.254.169.254/latest/meta-data/", resolve_dns=False
+        )
         assert safe is False
 
     def test_cloud_metadata_ecs(self):
@@ -92,7 +94,9 @@ class TestValidateHookUrl:
         assert safe is False
 
     def test_google_metadata(self):
-        safe, reason = validate_hook_url("http://metadata.google.internal/computeMetadata/", resolve_dns=False)
+        safe, reason = validate_hook_url(
+            "http://metadata.google.internal/computeMetadata/", resolve_dns=False
+        )
         assert safe is False
 
     def test_no_hostname(self):

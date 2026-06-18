@@ -80,9 +80,7 @@ class WorkerStateUploader:
         if self._closed:
             return
         self._pending = (
-            _coalesce_patches(self._pending, patch)
-            if self._pending is not None
-            else dict(patch)
+            _coalesce_patches(self._pending, patch) if self._pending is not None else dict(patch)
         )
         # Fire-and-forget drain. Requires a running event loop — see
         # module docstring "Calling convention".

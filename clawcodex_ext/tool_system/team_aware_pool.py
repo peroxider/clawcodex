@@ -14,6 +14,7 @@ which conditions. Putting the policy in extensions means a single
 deployment can override the visibility rule without forking the
 upstream registry code.
 """
+
 from __future__ import annotations
 
 from extensions.tool_system_ext.team_filter import (

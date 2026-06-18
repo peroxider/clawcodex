@@ -222,8 +222,7 @@ class _QuestionPanel(Vertical):
             for i in self._selected:
                 if 0 <= i < len(self._options):
                     labels.append(
-                        str(self._options[i].get("label", "")).strip()
-                        or f"Option {i + 1}"
+                        str(self._options[i].get("label", "")).strip() or f"Option {i + 1}"
                     )
             if self._other_selected and self._other_text.strip():
                 labels.append(self._other_text.strip())
@@ -233,16 +232,10 @@ class _QuestionPanel(Vertical):
             if self._selected:
                 idx = next(iter(self._selected))
                 if 0 <= idx < len(self._options):
-                    return (
-                        str(self._options[idx].get("label", "")).strip()
-                        or f"Option {idx + 1}"
-                    )
+                    return str(self._options[idx].get("label", "")).strip() or f"Option {idx + 1}"
             # Default to first option when nothing was picked.
             if self._options:
-                return (
-                    str(self._options[0].get("label", "")).strip()
-                    or "Option 1"
-                )
+                return str(self._options[0].get("label", "")).strip() or "Option 1"
         return ", ".join(labels)
 
 

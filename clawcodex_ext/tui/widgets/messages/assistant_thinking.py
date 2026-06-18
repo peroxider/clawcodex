@@ -178,8 +178,7 @@ class AssistantThinkingMessage(BaseRow):
             return None
         indicator = "[-]" if self.expanded else "[+]"
         header = Text(
-            f"{indicator} thinking (redacted)\n" if self._redacted
-            else f"{indicator} thinking\n",
+            f"{indicator} thinking (redacted)\n" if self._redacted else f"{indicator} thinking\n",
             style="bold dim",
         )
         body = Text(text, style="italic dim")

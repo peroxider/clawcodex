@@ -28,6 +28,7 @@ class ToolEvent:
     ``tool_result`` with ``is_error=True`` (tool failed). The bridge
     layer maps these to UI rendering or stream-json events.
     """
+
     kind: str
     tool_name: str
     tool_input: dict[str, Any] | None = None
@@ -47,6 +48,7 @@ class AgentLoopResult:
     ``run_query_as_agent_loop``. The adapter re-wraps its own
     ``AgentLoopRunResult`` into this shape; callers see no diff.
     """
+
     response_text: str
     usage: dict[str, Any] | None = None  # {"input_tokens": int, "output_tokens": int}
     num_turns: int = 0
@@ -91,7 +93,7 @@ def _emit_text_chunks(
         chunk_size = len(text)
     for idx in range(0, len(text), chunk_size):
         try:
-            handler(text[idx: idx + chunk_size])
+            handler(text[idx : idx + chunk_size])
         except Exception:
             return
 
@@ -204,7 +206,9 @@ def summarize_tool_result(name: str, output: Any) -> str:
             return f"{name} · {path} · lines={start}-{(start or 1) + (num or 0) - 1}/{total}"
         if output.get("type") == "file_unchanged" and isinstance(output.get("file"), dict):
             return f"{name} · {output['file'].get('filePath')} · unchanged"
-        if output.get("type") in {"image", "pdf", "notebook"} and isinstance(output.get("file"), dict):
+        if output.get("type") in {"image", "pdf", "notebook"} and isinstance(
+            output.get("file"), dict
+        ):
             return f"{name} · {output['file'].get('filePath')} · {output.get('type')}"
         return f"{name}"
     if name.lower() == "glob":
@@ -225,7 +229,7 @@ def summarize_tool_result(name: str, output: Any) -> str:
         q = output.get("query")
         results = output.get("results")
         n = len(results) if isinstance(results, list) else None
-        return f"{name} · \"{q}\" · results={n}"
+        return f'{name} · "{q}" · results={n}'
     if name.lower() == "config":
         op = output.get("operation")
         setting = output.get("setting")

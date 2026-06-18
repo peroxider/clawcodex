@@ -27,61 +27,71 @@ class TestCreateHistoryAuthCtx:
     @pytest.mark.asyncio
     async def test_url_includes_session_id(self):
         ctx = await create_history_auth_ctx(
-            'sess_abc', access_token='tok', org_uuid='org_1',
+            "sess_abc",
+            access_token="tok",
+            org_uuid="org_1",
         )
-        assert ctx.base_url == 'https://api.anthropic.com/v1/sessions/sess_abc/events'
+        assert ctx.base_url == "https://api.anthropic.com/v1/sessions/sess_abc/events"
 
     @pytest.mark.asyncio
     async def test_default_base_url_exact(self):
         ctx = await create_history_auth_ctx(
-            'sess_abc', access_token='tok', org_uuid='org_1',
+            "sess_abc",
+            access_token="tok",
+            org_uuid="org_1",
         )
         # Pin the exact default — if anyone changes it, the regression
         # shows up here, not silently in prod.
-        assert ctx.base_url == 'https://api.anthropic.com/v1/sessions/sess_abc/events'
+        assert ctx.base_url == "https://api.anthropic.com/v1/sessions/sess_abc/events"
 
     @pytest.mark.asyncio
     async def test_custom_base_url_trims_trailing_slash(self):
         ctx = await create_history_auth_ctx(
-            'sess_x', access_token='t', org_uuid='o',
-            base_url='https://api.test/',
+            "sess_x",
+            access_token="t",
+            org_uuid="o",
+            base_url="https://api.test/",
         )
-        assert ctx.base_url == 'https://api.test/v1/sessions/sess_x/events'
+        assert ctx.base_url == "https://api.test/v1/sessions/sess_x/events"
 
     @pytest.mark.asyncio
     async def test_custom_base_url_no_trailing_slash(self):
         ctx = await create_history_auth_ctx(
-            'sess_x', access_token='t', org_uuid='o',
-            base_url='https://api.test',
+            "sess_x",
+            access_token="t",
+            org_uuid="o",
+            base_url="https://api.test",
         )
-        assert ctx.base_url == 'https://api.test/v1/sessions/sess_x/events'
+        assert ctx.base_url == "https://api.test/v1/sessions/sess_x/events"
 
     @pytest.mark.asyncio
     async def test_headers_include_all_pinned_values(self):
         ctx = await create_history_auth_ctx(
-            'sess_1', access_token='my_tok', org_uuid='my_org',
+            "sess_1",
+            access_token="my_tok",
+            org_uuid="my_org",
         )
-        assert ctx.headers['Authorization'] == 'Bearer my_tok'
-        assert ctx.headers['Content-Type'] == 'application/json'
-        assert ctx.headers['anthropic-version'] == '2023-06-01'
-        assert ctx.headers['anthropic-beta'] == 'ccr-byoc-2025-07-29'
-        assert ctx.headers['x-organization-uuid'] == 'my_org'
+        assert ctx.headers["Authorization"] == "Bearer my_tok"
+        assert ctx.headers["Content-Type"] == "application/json"
+        assert ctx.headers["anthropic-version"] == "2023-06-01"
+        assert ctx.headers["anthropic-beta"] == "ccr-byoc-2025-07-29"
+        assert ctx.headers["x-organization-uuid"] == "my_org"
 
 
 # ─── fetch_latest_events ────────────────────────────────────────────────
 
 
-def _make_ctx(base_url: str = 'https://api.test') -> HistoryAuthCtx:
+def _make_ctx(base_url: str = "https://api.test") -> HistoryAuthCtx:
     """Build a HistoryAuthCtx synchronously for tests (the builder is
     pure; we don't need the async wrapper just to construct a value)."""
     return HistoryAuthCtx(
-        base_url=f'{base_url}/v1/sessions/sess_t/events',
+        base_url=f"{base_url}/v1/sessions/sess_t/events",
         headers={
-            'Authorization': 'Bearer tok',
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
-            'anthropic-beta': 'ccr-byoc-2025-07-29',
-            'x-organization-uuid': 'org_t',
+            "Authorization": "Bearer tok",
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "ccr-byoc-2025-07-29",
+            "x-organization-uuid": "org_t",
         },
     )
 
@@ -92,15 +102,15 @@ class TestFetchLatestEvents:
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['url'] = str(req.url)
-            captured['query'] = dict(req.url.params)
+            captured["url"] = str(req.url)
+            captured["query"] = dict(req.url.params)
             return httpx.Response(
                 200,
                 json={
-                    'data': [{'type': 'user', 'uuid': 'evt_1'}],
-                    'has_more': True,
-                    'first_id': 'evt_1',
-                    'last_id': 'evt_1',
+                    "data": [{"type": "user", "uuid": "evt_1"}],
+                    "has_more": True,
+                    "first_id": "evt_1",
+                    "last_id": "evt_1",
                 },
             )
 
@@ -108,24 +118,24 @@ class TestFetchLatestEvents:
             page = await fetch_latest_events(_make_ctx(), client=client)
 
         assert page is not None
-        assert page.events == [{'type': 'user', 'uuid': 'evt_1'}]
-        assert page.first_id == 'evt_1'
+        assert page.events == [{"type": "user", "uuid": "evt_1"}]
+        assert page.first_id == "evt_1"
         assert page.has_more is True
         # Default limit is 100 and anchor_to_latest=true on the happy path.
-        assert captured['query'].get('limit') == '100'
-        assert captured['query'].get('anchor_to_latest') == 'true'
+        assert captured["query"].get("limit") == "100"
+        assert captured["query"].get("anchor_to_latest") == "true"
 
     @pytest.mark.asyncio
     async def test_default_limit_is_100(self):
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['query'] = dict(req.url.params)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["query"] = dict(req.url.params)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await fetch_latest_events(_make_ctx(), client=client)
-        assert captured['query']['limit'] == '100'
+        assert captured["query"]["limit"] == "100"
         # Sanity: confirm the module-level constant is the same number.
         assert HISTORY_PAGE_SIZE == 100
 
@@ -134,31 +144,31 @@ class TestFetchLatestEvents:
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['query'] = dict(req.url.params)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["query"] = dict(req.url.params)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await fetch_latest_events(_make_ctx(), client=client)
         # httpx serializes booleans lowercase — locks the contract from
         # gap-analysis §6 risk register.
-        assert captured['query']['anchor_to_latest'] == 'true'
+        assert captured["query"]["anchor_to_latest"] == "true"
 
     @pytest.mark.asyncio
     async def test_custom_limit_is_honored(self):
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['query'] = dict(req.url.params)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["query"] = dict(req.url.params)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await fetch_latest_events(_make_ctx(), limit=50, client=client)
-        assert captured['query']['limit'] == '50'
+        assert captured["query"]["limit"] == "50"
 
     @pytest.mark.asyncio
     async def test_non_200_4xx_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(404, content=b'not found')
+            return httpx.Response(404, content=b"not found")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -167,7 +177,7 @@ class TestFetchLatestEvents:
     @pytest.mark.asyncio
     async def test_non_200_5xx_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(503, content=b'unavailable')
+            return httpx.Response(503, content=b"unavailable")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -179,7 +189,7 @@ class TestFetchLatestEvents:
     @pytest.mark.asyncio
     async def test_network_error_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError('refused')
+            raise httpx.ConnectError("refused")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -188,7 +198,7 @@ class TestFetchLatestEvents:
     @pytest.mark.asyncio
     async def test_timeout_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            raise httpx.TimeoutException('slow')
+            raise httpx.TimeoutException("slow")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -197,7 +207,7 @@ class TestFetchLatestEvents:
     @pytest.mark.asyncio
     async def test_non_json_body_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, content=b'not json')
+            return httpx.Response(200, content=b"not json")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -217,7 +227,7 @@ class TestFetchLatestEvents:
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
-                json={'has_more': False, 'first_id': None},
+                json={"has_more": False, "first_id": None},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -228,32 +238,33 @@ class TestFetchLatestEvents:
     async def test_data_is_null_returns_empty_events(self):
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
-                200, json={'data': None, 'has_more': True, 'first_id': 'evt_2'},
+                200,
+                json={"data": None, "has_more": True, "first_id": "evt_2"},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
         # null data is treated the same as "missing or not a list".
-        assert page == HistoryPage(events=[], first_id='evt_2', has_more=True)
+        assert page == HistoryPage(events=[], first_id="evt_2", has_more=True)
 
     @pytest.mark.asyncio
     async def test_data_not_a_list_preserves_pass_through_fields(self):
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
-                json={'data': 'oops', 'has_more': True, 'first_id': 'evt_1'},
+                json={"data": "oops", "has_more": True, "first_id": "evt_1"},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
         # The point of this test: when data is malformed, first_id and
         # has_more must still survive (no None synthesis).
-        assert page == HistoryPage(events=[], first_id='evt_1', has_more=True)
+        assert page == HistoryPage(events=[], first_id="evt_1", has_more=True)
 
     @pytest.mark.asyncio
     async def test_has_more_missing_defaults_to_false(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={'data': [], 'first_id': None})
+            return httpx.Response(200, json={"data": [], "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
@@ -264,7 +275,8 @@ class TestFetchLatestEvents:
     async def test_first_id_pass_through_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
-                200, json={'data': [], 'has_more': False, 'first_id': None},
+                200,
+                json={"data": [], "has_more": False, "first_id": None},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -276,13 +288,14 @@ class TestFetchLatestEvents:
     async def test_first_id_pass_through_concrete(self):
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
-                200, json={'data': [], 'has_more': True, 'first_id': 'evt_42'},
+                200,
+                json={"data": [], "has_more": True, "first_id": "evt_42"},
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             page = await fetch_latest_events(_make_ctx(), client=client)
         assert page is not None
-        assert page.first_id == 'evt_42'
+        assert page.first_id == "evt_42"
 
 
 # ─── fetch_older_events ─────────────────────────────────────────────────
@@ -295,17 +308,17 @@ class TestFetchOlderEvents:
             return httpx.Response(
                 200,
                 json={
-                    'data': [{'type': 'assistant', 'uuid': 'evt_0'}],
-                    'has_more': False,
-                    'first_id': 'evt_0',
+                    "data": [{"type": "assistant", "uuid": "evt_0"}],
+                    "has_more": False,
+                    "first_id": "evt_0",
                 },
             )
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            page = await fetch_older_events(_make_ctx(), before_id='evt_x', client=client)
+            page = await fetch_older_events(_make_ctx(), before_id="evt_x", client=client)
         assert page is not None
-        assert page.events == [{'type': 'assistant', 'uuid': 'evt_0'}]
-        assert page.first_id == 'evt_0'
+        assert page.events == [{"type": "assistant", "uuid": "evt_0"}]
+        assert page.first_id == "evt_0"
         assert page.has_more is False
 
     @pytest.mark.asyncio
@@ -313,35 +326,35 @@ class TestFetchOlderEvents:
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['query'] = dict(req.url.params)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["query"] = dict(req.url.params)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await fetch_older_events(_make_ctx(), before_id='evt_abc', client=client)
-        assert captured['query']['before_id'] == 'evt_abc'
-        assert captured['query']['limit'] == '100'
+            await fetch_older_events(_make_ctx(), before_id="evt_abc", client=client)
+        assert captured["query"]["before_id"] == "evt_abc"
+        assert captured["query"]["limit"] == "100"
         # anchor_to_latest must NOT appear on the older-page query.
-        assert 'anchor_to_latest' not in captured['query']
+        assert "anchor_to_latest" not in captured["query"]
 
     @pytest.mark.asyncio
     async def test_custom_limit_is_honored(self):
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['query'] = dict(req.url.params)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["query"] = dict(req.url.params)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            await fetch_older_events(_make_ctx(), before_id='evt_a', limit=25, client=client)
-        assert captured['query']['limit'] == '25'
+            await fetch_older_events(_make_ctx(), before_id="evt_a", limit=25, client=client)
+        assert captured["query"]["limit"] == "25"
 
     @pytest.mark.asyncio
     async def test_non_200_returns_none(self):
         def handler(req: httpx.Request) -> httpx.Response:
-            return httpx.Response(500, content=b'oops')
+            return httpx.Response(500, content=b"oops")
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            page = await fetch_older_events(_make_ctx(), before_id='evt_a', client=client)
+            page = await fetch_older_events(_make_ctx(), before_id="evt_a", client=client)
         assert page is None
 
 
@@ -357,7 +370,8 @@ class TestDefaultClient:
     async def test_default_client_branch(self, monkeypatch):
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
-                200, json={'data': [], 'has_more': False, 'first_id': None},
+                200,
+                json={"data": [], "has_more": False, "first_id": None},
             )
 
         transport = httpx.MockTransport(handler)
@@ -368,10 +382,10 @@ class TestDefaultClient:
         original = mod.httpx.AsyncClient
 
         def patched(*args, **kwargs):
-            kwargs.setdefault('transport', transport)
+            kwargs.setdefault("transport", transport)
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(mod.httpx, 'AsyncClient', patched)
+        monkeypatch.setattr(mod.httpx, "AsyncClient", patched)
         page = await fetch_latest_events(_make_ctx())  # no client= kwarg
         assert page is not None
         assert page.events == []
@@ -386,34 +400,38 @@ class TestUrlCorrectness:
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['path'] = req.url.path
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["path"] = req.url.path
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         ctx = await create_history_auth_ctx(
-            'sess_xyz', access_token='t', org_uuid='o',
-            base_url='https://api.test',
+            "sess_xyz",
+            access_token="t",
+            org_uuid="o",
+            base_url="https://api.test",
         )
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await fetch_latest_events(ctx, client=client)
-        assert captured['path'] == '/v1/sessions/sess_xyz/events'
+        assert captured["path"] == "/v1/sessions/sess_xyz/events"
 
     @pytest.mark.asyncio
     async def test_headers_sent_on_request(self):
         captured: dict[str, object] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
-            captured['headers'] = dict(req.headers)
-            return httpx.Response(200, json={'data': [], 'has_more': False, 'first_id': None})
+            captured["headers"] = dict(req.headers)
+            return httpx.Response(200, json={"data": [], "has_more": False, "first_id": None})
 
         ctx = await create_history_auth_ctx(
-            'sess_y', access_token='real_tok', org_uuid='real_org',
-            base_url='https://api.test',
+            "sess_y",
+            access_token="real_tok",
+            org_uuid="real_org",
+            base_url="https://api.test",
         )
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             await fetch_latest_events(ctx, client=client)
-        headers = captured['headers']
-        assert headers['authorization'] == 'Bearer real_tok'
-        assert headers['content-type'] == 'application/json'
-        assert headers['anthropic-version'] == '2023-06-01'
-        assert headers['anthropic-beta'] == 'ccr-byoc-2025-07-29'
-        assert headers['x-organization-uuid'] == 'real_org'
+        headers = captured["headers"]
+        assert headers["authorization"] == "Bearer real_tok"
+        assert headers["content-type"] == "application/json"
+        assert headers["anthropic-version"] == "2023-06-01"
+        assert headers["anthropic-beta"] == "ccr-byoc-2025-07-29"
+        assert headers["x-organization-uuid"] == "real_org"

@@ -16,6 +16,7 @@ Loader semantics:
 Files are deduplicated by realpath so a symlinked ``~/.claude`` inside a
 project tree doesn't produce duplicate entries.
 """
+
 from __future__ import annotations
 
 import logging

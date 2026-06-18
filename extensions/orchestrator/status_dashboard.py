@@ -209,13 +209,7 @@ class StatusDashboard:
         tokens = status.tokens_display()
         last = status.event_truncated(40)
 
-        return (
-            f"  {id_str:<20} "
-            f"{status.status:<8} "
-            f"{age:<10} "
-            f"{tokens:>8} "
-            f"{last}"
-        )
+        return f"  {id_str:<20} {status.status:<8} {age:<10} {tokens:>8} {last}"
 
     def render(self) -> str:
         """Render the full dashboard as a multi-line string."""
@@ -260,9 +254,7 @@ class StatusDashboard:
         if self._state.failed:
             lines.append("")
             lines.append("  FAILED SESSIONS")
-            lines.append(
-                f"  {len(self._state.failed)} session(s) failed"
-            )
+            lines.append(f"  {len(self._state.failed)} session(s) failed")
 
         # Retry queue
         if self._state.retry_queue:
@@ -349,7 +341,9 @@ class StatusDashboard:
             print(f"│  Enter number or text answer, or press Enter to skip", file=sys.stderr)
         else:
             print(f"│", file=sys.stderr)
-            print(f"│  Enter your answer, or press Enter to skip (forward to author)", file=sys.stderr)
+            print(
+                f"│  Enter your answer, or press Enter to skip (forward to author)", file=sys.stderr
+            )
 
         print("└───────────────────────────────────────────────────────┘", file=sys.stderr)
         print("> ", end="", file=sys.stderr)
@@ -357,6 +351,7 @@ class StatusDashboard:
 
         try:
             import select
+
             # Wait for input with timeout
             if select.select([sys.stdin], [], [], 60)[0]:
                 answer = sys.stdin.readline()
@@ -377,7 +372,9 @@ class StatusDashboard:
 
         return None
 
-    def render_clarification_status(self, issue_id: str, status: str, timeout_seconds: int | None = None) -> str:
+    def render_clarification_status(
+        self, issue_id: str, status: str, timeout_seconds: int | None = None
+    ) -> str:
         """Render a clarification status indicator for the dashboard."""
         status_icons = {
             "pending": "⏳",

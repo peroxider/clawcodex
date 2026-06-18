@@ -26,19 +26,19 @@ DEFAULT_QUEUE_PATH = Path.home() / ".clawcodex" / "clarification_queue.json"
 class ClarificationStatus(str, Enum):
     """Lifecycle stages of a clarification item."""
 
-    NONE = "none"                         # not in clarification flow
-    PENDING = "pending"                   # awaiting answer (default on enqueue)
-    AWAITING_LOCAL = "awaiting_local"     # waiting for local operator answer
-    AWAITING_AUTHOR = "awaiting_author"   # waiting for issue author (@mention sent)
-    RESOLVED_LOCAL = "resolved_local"     # resolved by local operator
-    RESOLVED_AUTHOR = "resolved_author"   # resolved by issue author
-    TIMED_OUT_LOCAL = "timed_out_local"   # local timeout, escalated to author
-    TIMED_OUT_AUTHOR = "timed_out_author" # author timeout, escalation triggered
-    EXHAUSTED = "exhausted"             # max questions reached, gave up
+    NONE = "none"  # not in clarification flow
+    PENDING = "pending"  # awaiting answer (default on enqueue)
+    AWAITING_LOCAL = "awaiting_local"  # waiting for local operator answer
+    AWAITING_AUTHOR = "awaiting_author"  # waiting for issue author (@mention sent)
+    RESOLVED_LOCAL = "resolved_local"  # resolved by local operator
+    RESOLVED_AUTHOR = "resolved_author"  # resolved by issue author
+    TIMED_OUT_LOCAL = "timed_out_local"  # local timeout, escalated to author
+    TIMED_OUT_AUTHOR = "timed_out_author"  # author timeout, escalation triggered
+    EXHAUSTED = "exhausted"  # max questions reached, gave up
     # --- conflict handling states ---
-    DUPLICATE_REJECTED = "duplicate_rejected"   # duplicate submission, dropped
-    STALE_REJECTED = "stale_rejected"           # late answer after escalation
-    CONFLICT_RESOLVED = "conflict_resolved"     # simultaneous answers resolved
+    DUPLICATE_REJECTED = "duplicate_rejected"  # duplicate submission, dropped
+    STALE_REJECTED = "stale_rejected"  # late answer after escalation
+    CONFLICT_RESOLVED = "conflict_resolved"  # simultaneous answers resolved
 
 
 @dataclass
@@ -55,11 +55,11 @@ class ClarificationItem:
     expires_at: float | None = None
     status: ClarificationStatus = ClarificationStatus.PENDING
     answer: str | None = None
-    answer_source: str | None = None           # "dashboard" | "clarification_queue" | "author"
+    answer_source: str | None = None  # "dashboard" | "clarification_queue" | "author"
     answered_at: float | None = None
-    escalation_notified: bool = False           # operator informed of escalation
-    first_response_source: str | None = None   # "local" | "author" — first answer source
-    duplicate_of: str | None = None             # if DUPLICATE_REJECTED, reference original
+    escalation_notified: bool = False  # operator informed of escalation
+    first_response_source: str | None = None  # "local" | "author" — first answer source
+    duplicate_of: str | None = None  # if DUPLICATE_REJECTED, reference original
     stale_answers: list[str] = field(default_factory=list)  # rejected late answers
 
     def touch(self) -> None:
@@ -105,9 +105,7 @@ class ClarificationQueue:
             return
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-            self._records = {
-                k: ClarificationItem(**v) for k, v in data.items()
-            }
+            self._records = {k: ClarificationItem(**v) for k, v in data.items()}
         except Exception as exc:
             logger.warning(
                 "Failed to load clarification queue: %s — starting fresh",
@@ -141,7 +139,8 @@ class ClarificationQueue:
         return [
             item
             for item in self._records.values()
-            if item.status in (
+            if item.status
+            in (
                 ClarificationStatus.PENDING,
                 ClarificationStatus.AWAITING_LOCAL,
                 ClarificationStatus.AWAITING_AUTHOR,

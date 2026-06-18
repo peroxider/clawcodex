@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # This is Linux-specific; on other platforms the ctypes call fails
 # silently and children may still orphan — a known gap.
 
+
 def _set_pdeathsig() -> None:
     """Set PR_SET_PDEATHSIG so child receives SIGTERM if parent dies."""
     try:
@@ -72,9 +73,7 @@ class WorkspaceConfig:
             self.hooks = {}
         self.strategy = str(self.strategy or "isolated").strip().lower()
         if self.strategy not in {"isolated", "shared", "sequential"}:
-            raise ValueError(
-                "workspace.strategy must be one of: isolated, shared, sequential"
-            )
+            raise ValueError("workspace.strategy must be one of: isolated, shared, sequential")
 
 
 class WorkspaceManager:
@@ -109,58 +108,42 @@ class WorkspaceManager:
         if created:
             hook = self.config.hooks.get("after_create")
             if hook:
-                await self._run_hook(
-                    hook, workspace_path, issue, "after_create"
-                )
+                await self._run_hook(hook, workspace_path, issue, "after_create")
 
         # Ensure orchestrator control files are git-ignored locally
         self._exclude_orchestrator_files(workspace_path)
 
-        return Workspace(
-            path=workspace_path, issue_identifier=safe_id, issue_id=issue_id
-        )
+        return Workspace(path=workspace_path, issue_identifier=safe_id, issue_id=issue_id)
 
     async def cleanup(self, issue: Any) -> None:
         """Remove workspace directory. Runs before_remove hook."""
         identifier = getattr(issue, "identifier", None) or "issue"
         safe_id = _safe_identifier(identifier)
         workspace_path = (
-            self._build_path(safe_id)
-            if self.config.strategy == "isolated"
-            else self._root
+            self._build_path(safe_id) if self.config.strategy == "isolated" else self._root
         )
 
         if workspace_path.exists():
             hook = self.config.hooks.get("before_remove")
             if hook:
-                await self._run_hook(
-                    hook, workspace_path, issue, "before_remove", ignore_fail=True
-                )
+                await self._run_hook(hook, workspace_path, issue, "before_remove", ignore_fail=True)
             if self.config.strategy == "isolated":
                 try:
                     shutil.rmtree(workspace_path)
                 except Exception as exc:
-                    logger.warning(
-                        "Failed to remove workspace %s: %s", workspace_path, exc
-                    )
+                    logger.warning("Failed to remove workspace %s: %s", workspace_path, exc)
         if self.config.strategy == "sequential":
             await self._release_sequential_lock()
 
-    async def run_before_run_hook(
-        self, workspace: Workspace, issue: Any
-    ) -> None:
+    async def run_before_run_hook(self, workspace: Workspace, issue: Any) -> None:
         hook = self.config.hooks.get("before_run")
         if hook:
             await self._run_hook(hook, workspace.path, issue, "before_run")
 
-    async def run_after_run_hook(
-        self, workspace: Workspace, issue: Any
-    ) -> None:
+    async def run_after_run_hook(self, workspace: Workspace, issue: Any) -> None:
         hook = self.config.hooks.get("after_run")
         if hook:
-            await self._run_hook(
-                hook, workspace.path, issue, "after_run", ignore_fail=True
-            )
+            await self._run_hook(hook, workspace.path, issue, "after_run", ignore_fail=True)
 
     def _build_path(self, safe_id: str) -> Path:
         return self._root / safe_id
@@ -206,9 +189,7 @@ class WorkspaceManager:
                     cwd=str(path),
                 )
                 integration_branch = (
-                    self.config.integration_branch
-                    or self.config.base_branch
-                    or ""
+                    self.config.integration_branch or self.config.base_branch or ""
                 ).strip()
                 if integration_branch:
                     # 从本地来源仓库 fetch 集成 branch
@@ -256,10 +237,7 @@ class WorkspaceManager:
             )
 
         command = ["git", "clone"]
-        if (
-            isinstance(self.config.clone_depth, int)
-            and self.config.clone_depth > 0
-        ):
+        if isinstance(self.config.clone_depth, int) and self.config.clone_depth > 0:
             command.extend(["--depth", str(self.config.clone_depth)])
         command.extend([effective_url, str(path)])
         await self._run_process(command, cwd=str(path.parent))
@@ -302,9 +280,7 @@ class WorkspaceManager:
                 cwd=str(path),
             )
         else:
-            await self._try_process(
-                ["git", "checkout", "-b", base_branch], cwd=str(path)
-            )
+            await self._try_process(["git", "checkout", "-b", base_branch], cwd=str(path))
 
     async def _checkout_issue_branch(self, path: Path, issue: Any) -> None:
         if not self.config.checkout_issue_branch:
@@ -378,7 +354,14 @@ class WorkspaceManager:
             cwd=str(path),
         ):
             if await self._try_process(
-                ["git", "checkout", "-b", integration_branch, "--track", f"origin/{integration_branch}"],
+                [
+                    "git",
+                    "checkout",
+                    "-b",
+                    integration_branch,
+                    "--track",
+                    f"origin/{integration_branch}",
+                ],
                 cwd=str(path),
             ):
                 return
@@ -396,7 +379,13 @@ class WorkspaceManager:
                     cwd=str(path),
                 )
                 if await self._try_process(
-                    ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{base_branch}"],
+                    [
+                        "git",
+                        "show-ref",
+                        "--verify",
+                        "--quiet",
+                        f"refs/remotes/origin/{base_branch}",
+                    ],
                     cwd=str(path),
                 ):
                     if not await self._try_process(
@@ -408,16 +397,12 @@ class WorkspaceManager:
                     await self._run_process(["git", "checkout", base_branch], cwd=str(path))
             if integration_branch == base_branch:
                 return
-        await self._run_process(
-            ["git", "checkout", "-b", integration_branch], cwd=str(path)
-        )
+        await self._run_process(["git", "checkout", "-b", integration_branch], cwd=str(path))
 
     async def _ensure_clean_workspace(self, path: Path, reason: str) -> None:
         if not (path / ".git").exists():
             return
-        output = await self._run_process(
-            ["git", "status", "--porcelain"], cwd=str(path)
-        )
+        output = await self._run_process(["git", "status", "--porcelain"], cwd=str(path))
         if output.decode("utf-8", errors="replace").strip():
             raise WorkspaceHookError(reason)
 
@@ -425,9 +410,7 @@ class WorkspaceManager:
         workspace_path = Path(path) if path is not None else self._root
         if not (workspace_path / ".git").exists():
             return None
-        output = await self._run_process(
-            ["git", "rev-parse", "HEAD"], cwd=str(workspace_path)
-        )
+        output = await self._run_process(["git", "rev-parse", "HEAD"], cwd=str(workspace_path))
         return output.decode("utf-8", errors="replace").strip() or None
 
     async def _acquire_sequential_lock(self, issue: Any) -> None:
@@ -445,8 +428,7 @@ class WorkspaceManager:
                 lock_path.unlink()
             else:
                 raise WorkspaceHookError(
-                    f"Sequential workspace lock already held by live process: "
-                    f"{lock_path}"
+                    f"Sequential workspace lock already held by live process: {lock_path}"
                 )
         try:
             fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -506,7 +488,10 @@ class WorkspaceManager:
             return
         suffix = "" if existing.endswith("\n") or not existing else "\n"
         lines = "\n".join(patterns)
-        exclude_path.write_text(f"{existing}{suffix}# ClawCodeX managed — do not edit manually\n{lines}\n", encoding="utf-8")
+        exclude_path.write_text(
+            f"{existing}{suffix}# ClawCodeX managed — do not edit manually\n{lines}\n",
+            encoding="utf-8",
+        )
 
     async def _run_hook(
         self,
@@ -600,9 +585,7 @@ class WorkspaceManager:
             )
 
         try:
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=timeout_sec
-            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
         except asyncio.TimeoutError as exc:
             proc.kill()
             await proc.wait()
@@ -627,9 +610,7 @@ class WorkspaceManager:
                 context,
                 output,
             )
-            raise WorkspaceHookError(
-                f"Workspace command failed with exit code {proc.returncode}"
-            )
+            raise WorkspaceHookError(f"Workspace command failed with exit code {proc.returncode}")
         return stdout
 
     async def _try_process(

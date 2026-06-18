@@ -298,9 +298,7 @@ async def test_diff_dialog_escape_resolves_none():
     app = _DialogHost()
     async with app.run_test() as pilot:
         await pilot.pause()
-        screen = DiffDialogScreen(
-            files=[FileDiff(path="foo.py", patch=SAMPLE_PATCH)]
-        )
+        screen = DiffDialogScreen(files=[FileDiff(path="foo.py", patch=SAMPLE_PATCH)])
         fut = _push(app, screen)
         await pilot.pause()
         await pilot.press("escape")

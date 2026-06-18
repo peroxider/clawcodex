@@ -50,9 +50,9 @@ class TestStage2CliSmoke:
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
         output = proc.stdout + proc.stderr
         for name in ("anthropic", "openai"):
-            assert name.lower().replace("-", "") in output.lower().replace(
-                "-", ""
-            ), f"Expected {name!r} in provider list output"
+            assert name.lower().replace("-", "") in output.lower().replace("-", ""), (
+                f"Expected {name!r} in provider list output"
+            )
 
     def test_cli_model_list_exits_0(self):
         proc = _run_cli("model", "list")

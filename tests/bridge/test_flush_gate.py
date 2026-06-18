@@ -29,14 +29,14 @@ def test_enqueue_when_active_returns_true_and_queues() -> None:
 def test_end_drains_in_arrival_order_and_clears_active() -> None:
     g: FlushGate[str] = FlushGate()
     g.start()
-    g.enqueue('a')
-    g.enqueue('b', 'c')
+    g.enqueue("a")
+    g.enqueue("b", "c")
     drained = g.end()
-    assert drained == ['a', 'b', 'c']
+    assert drained == ["a", "b", "c"]
     assert g.active is False
     assert g.pending_count == 0
     # After end, enqueue is no longer active.
-    assert g.enqueue('d') is False
+    assert g.enqueue("d") is False
 
 
 def test_drop_returns_count_and_clears_pending() -> None:
@@ -74,8 +74,8 @@ def test_generic_type_preserved() -> None:
     """FlushGate is generic — items round-trip through with their type."""
     g: FlushGate[dict[str, int]] = FlushGate()
     g.start()
-    item = {'a': 1, 'b': 2}
+    item = {"a": 1, "b": 2}
     g.enqueue(item)
     drained = g.end()
     assert drained == [item]
-    assert drained[0] is item, 'items should not be copied'
+    assert drained[0] is item, "items should not be copied"

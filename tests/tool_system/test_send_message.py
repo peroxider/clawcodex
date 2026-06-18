@@ -8,6 +8,7 @@ Covers:
 * Mailbox routing (named recipient + ``*`` broadcast).
 * Structured protocols + sender-side authorization.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,6 +47,7 @@ def test_tool_registered_with_canonical_name() -> None:
 
 def test_tool_in_default_static_tools() -> None:
     from src.tool_system.tools import ALL_STATIC_TOOLS
+
     assert SendMessageTool in ALL_STATIC_TOOLS
 
 
@@ -165,9 +167,7 @@ def test_uds_error_message_names_feature_gate(tmp_path: Path) -> None:
     a future implementer know exactly what's gating the path."""
     ctx = ToolContext(workspace_root=tmp_path)
     with pytest.raises(NotImplementedError) as excinfo:
-        _call_send_message(
-            {"to": "uds:/tmp/sock", "message": "hi", "summary": "x"}, ctx
-        )
+        _call_send_message({"to": "uds:/tmp/sock", "message": "hi", "summary": "x"}, ctx)
     assert "UDS_INBOX" in str(excinfo.value)
 
 
@@ -182,8 +182,11 @@ def test_message_to_running_agent_queued(tmp_path: Path) -> None:
 
     ctx = ToolContext(workspace_root=tmp_path)
     state = register_async_agent(
-        agent_id="a-running", description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-running",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     ctx.agent_name_registry._mapping["researcher"] = state.id
 
@@ -203,8 +206,11 @@ def test_message_to_running_agent_by_raw_id(tmp_path: Path) -> None:
 
     ctx = ToolContext(workspace_root=tmp_path)
     state = register_async_agent(
-        agent_id="a-raw", description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-raw",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
 
     result = _call_send_message(
@@ -232,8 +238,11 @@ def test_message_to_terminal_agent_triggers_resume(tmp_path: Path) -> None:
 
     ctx = ToolContext(workspace_root=tmp_path)
     state = register_async_agent(
-        agent_id="a-dead", description="x", prompt="initial",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-dead",
+        description="x",
+        prompt="initial",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     complete_agent_task(state.id, result_text="done", registry=ctx.runtime_tasks)
 
@@ -260,8 +269,11 @@ async def test_concurrent_resume_race_only_one_winner(tmp_path: Path) -> None:
 
     ctx = ToolContext(workspace_root=tmp_path)
     register_async_agent(
-        agent_id="a-race", description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id="a-race",
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     complete_agent_task("a-race", result_text="done", registry=ctx.runtime_tasks)
 
@@ -269,10 +281,12 @@ async def test_concurrent_resume_race_only_one_winner(tmp_path: Path) -> None:
     # ensures exactly one wins; the other should queue.
     results = await asyncio.gather(
         SendMessageTool.call(
-            {"to": "a-race", "message": "msg-A", "summary": "x"}, ctx,
+            {"to": "a-race", "message": "msg-A", "summary": "x"},
+            ctx,
         ),
         SendMessageTool.call(
-            {"to": "a-race", "message": "msg-B", "summary": "x"}, ctx,
+            {"to": "a-race", "message": "msg-B", "summary": "x"},
+            ctx,
         ),
     )
 
@@ -308,7 +322,8 @@ def _seed_team(tmp_path: Path, members: list[TeamMember] | None = None) -> ToolC
     write_team_file(team, tmp_path)
     ctx = ToolContext(workspace_root=tmp_path)
     ctx.team = {
-        "team_name": "t", "lead_agent_id": "lead-1",
+        "team_name": "t",
+        "lead_agent_id": "lead-1",
         "sender_name": "team-lead",
     }
     return ctx
@@ -325,7 +340,9 @@ def test_named_recipient_writes_to_mailbox(tmp_path: Path) -> None:
     )
     assert result.is_error is False
     msgs = read_mailbox(
-        "researcher", team_name="t", workspace_root=tmp_path,
+        "researcher",
+        team_name="t",
+        workspace_root=tmp_path,
     )
     assert len(msgs) == 1
     assert msgs[0].text == "go investigate"
@@ -351,9 +368,14 @@ def test_broadcast_writes_to_every_member_except_sender(tmp_path: Path) -> None:
     # Each recipient's mailbox got the message; team-lead did not.
     assert len(read_mailbox("alice", team_name="t", workspace_root=tmp_path)) == 1
     assert len(read_mailbox("bob", team_name="t", workspace_root=tmp_path)) == 1
-    assert read_mailbox(
-        "team-lead", team_name="t", workspace_root=tmp_path,
-    ) == []
+    assert (
+        read_mailbox(
+            "team-lead",
+            team_name="t",
+            workspace_root=tmp_path,
+        )
+        == []
+    )
 
 
 def test_unknown_recipient_returns_error(tmp_path: Path) -> None:
@@ -374,9 +396,7 @@ def test_recipient_not_on_roster_rejected(tmp_path: Path) -> None:
         tmp_path,
         members=[TeamMember(agent_id="r1", name="alice")],
     )
-    result = _call_send_message(
-        {"to": "stranger", "message": "x", "summary": "x"}, ctx
-    )
+    result = _call_send_message({"to": "stranger", "message": "x", "summary": "x"}, ctx)
     assert result.is_error is True
     assert "not on team" in result.output["message"]
 
@@ -402,9 +422,7 @@ def test_at_in_to_raises(tmp_path: Path) -> None:
     """TS rejects '@' in the ``to:`` field (one team per session)."""
     ctx = ToolContext(workspace_root=tmp_path)
     with pytest.raises(ToolInputError, match="@"):
-        _call_send_message(
-            {"to": "alice@team", "message": "x", "summary": "x"}, ctx
-        )
+        _call_send_message({"to": "alice@team", "message": "x", "summary": "x"}, ctx)
 
 
 def test_missing_message_raises(tmp_path: Path) -> None:
@@ -444,7 +462,9 @@ def test_shutdown_request_writes_envelope_to_mailbox(tmp_path: Path) -> None:
     assert result.is_error is False
 
     msgs = read_mailbox(
-        "researcher", team_name="t", workspace_root=tmp_path,
+        "researcher",
+        team_name="t",
+        workspace_root=tmp_path,
     )
     assert len(msgs) == 1
     envelope = json.loads(msgs[0].text)
@@ -493,7 +513,8 @@ def test_shutdown_response_reject_requires_reason(tmp_path: Path) -> None:
 def test_plan_approval_only_team_lead_can_send(tmp_path: Path) -> None:
     """Sender-side authorization: ``is_team_lead`` gates plan approvals."""
     ctx = _seed_team(
-        tmp_path, members=[TeamMember(agent_id="r1", name="researcher")],
+        tmp_path,
+        members=[TeamMember(agent_id="r1", name="researcher")],
     )
     # Active agent is NOT the team lead.
     ctx.agent_id = "r1"
@@ -514,7 +535,8 @@ def test_plan_approval_only_team_lead_can_send(tmp_path: Path) -> None:
 
 def test_plan_approval_succeeds_when_sender_is_lead(tmp_path: Path) -> None:
     ctx = _seed_team(
-        tmp_path, members=[TeamMember(agent_id="r1", name="researcher")],
+        tmp_path,
+        members=[TeamMember(agent_id="r1", name="researcher")],
     )
     # Lead identifies as the team lead.
     ctx.agent_id = "lead-1"
@@ -532,7 +554,9 @@ def test_plan_approval_succeeds_when_sender_is_lead(tmp_path: Path) -> None:
     )
     assert result.is_error is False
     msgs = read_mailbox(
-        "researcher", team_name="t", workspace_root=tmp_path,
+        "researcher",
+        team_name="t",
+        workspace_root=tmp_path,
     )
     envelope = json.loads(msgs[0].text)
     assert envelope["type"] == "plan_approval_response"

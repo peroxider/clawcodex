@@ -67,11 +67,7 @@ def spawn_background_bash(
     # the final PWD for inspection. Exit code is appended to the log after the
     # process exits so ``TaskOutput`` can report it even if Popen.wait() races
     # with the reader.
-    wrapped = (
-        f"{{ {command}\n}}; __rc=$?; "
-        f"echo \"__CLAWCODEX_EXIT__=$__rc\" >&2; "
-        f"exit $__rc"
-    )
+    wrapped = f'{{ {command}\n}}; __rc=$?; echo "__CLAWCODEX_EXIT__=$__rc" >&2; exit $__rc'
 
     # ``stdin=DEVNULL`` mirrors the foreground bash path: prevents background
     # commands that read fd 0 from blocking on a TTY inherited from clawcodex's
@@ -136,6 +132,7 @@ def spawn_background_bash(
                 # ``replace`` keeps every other field (incl. proc/handle)
                 # so a still-pending TaskStop call has the Popen reference.
                 from dataclasses import replace
+
                 new_status = "completed" if rc == 0 else "failed"
                 return replace(
                     prev,

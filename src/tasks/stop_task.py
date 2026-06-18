@@ -14,6 +14,7 @@ here, where it can be unit-tested independently of the tool's argument
 plumbing and where Phase 6's in-process-teammate ``kill`` slots in
 without re-touching the tool body.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -120,10 +121,7 @@ async def stop_task(
                 task_type=runtime.type,
                 error=StopTaskError(
                     code="not_running",
-                    message=(
-                        f"Task {task_id} is not running "
-                        f"(status: {runtime.status})"
-                    ),
+                    message=(f"Task {task_id} is not running (status: {runtime.status})"),
                 ),
             )
 
@@ -154,9 +152,7 @@ async def stop_task(
                 task_type=runtime.type,
                 error=StopTaskError(
                     code="kill_timeout",
-                    message=(
-                        f"kill timed out after {_KILL_TIMEOUT_SECONDS:.0f}s"
-                    ),
+                    message=(f"kill timed out after {_KILL_TIMEOUT_SECONDS:.0f}s"),
                 ),
             )
 
@@ -178,6 +174,7 @@ async def stop_task(
                     from src.tool_system.tools.bash.background import (
                         stop_background_bash,
                     )
+
                     stopped = stop_background_bash(context, task_id)
 
         return StopTaskResult(

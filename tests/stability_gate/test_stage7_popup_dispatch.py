@@ -132,9 +132,7 @@ class TestStage7PopupDispatch:
             await pilot.pause()
             pi = pilot.app.query_one(PromptInput)
             pi._message_history_provider = lambda: ["hello world", "help me"]
-            pi._message_suggestions.add_option(
-                Option("hello world", id="hello world")
-            )
+            pi._message_suggestions.add_option(Option("hello world", id="hello world"))
             pi._message_suggestions.highlighted = 0
             pi._message_suggestions.remove_class("-hidden")
             spy = _HideSpy(pi)
@@ -248,8 +246,7 @@ class TestStage7StaticContract:
         assert not offenders, (
             "TUI handler 中禁止使用 ``event.sender is/==/!=`` —— "
             "Textual 的 Message 基类没有该属性。改用 event.option_list / "
-            "event.control / event.input 等具体事件字段。\n命中：\n  "
-            + "\n  ".join(offenders)
+            "event.control / event.input 等具体事件字段。\n命中：\n  " + "\n  ".join(offenders)
         )
 
 
@@ -300,8 +297,7 @@ def _scan_textual_api_drift(repo_root: Path) -> list[str]:
                 if _POST_SELECTED_RE.search(code):
                     rel = path.relative_to(repo_root)
                     offenders.append(
-                        f"{rel}:{ln}: _post_selected — "
-                        "removed in Textual 0.79, use action_select()"
+                        f"{rel}:{ln}: _post_selected — removed in Textual 0.79, use action_select()"
                     )
                     break
     return offenders
@@ -316,8 +312,7 @@ class TestStage7TextualApiDrift:
         assert not offenders, (
             "TUI 代码中检测到已知的 Textual 0.79 API 漂移 —— "
             "add_option 的 id= kwarg 改用 Option 包装；_post_selected "
-            "改用 action_select()。\n命中：\n  "
-            + "\n  ".join(offenders)
+            "改用 action_select()。\n命中：\n  " + "\n  ".join(offenders)
         )
 
 
@@ -366,6 +361,7 @@ class TestStage7TuiResize:
             assert "hello" in pi._input.value
             # 验证弹层也能正常添加
             from textual.widgets.option_list import Option
+
             pi._suggestions.add_option(Option("/test", id="/test"))
             pi._suggestions.remove_class("-hidden")
             assert not pi._suggestions.has_class("-hidden")
@@ -427,6 +423,4 @@ class TestStage7TuiResize:
             await pilot.pause()
 
             # resize 后 input 内容不变
-            assert pi._input.value == "persistent text", (
-                "resize 后 input 内容不应丢失"
-            )
+            assert pi._input.value == "persistent text", "resize 后 input 内容不应丢失"

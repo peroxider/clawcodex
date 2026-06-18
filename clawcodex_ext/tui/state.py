@@ -121,7 +121,9 @@ class AppState:
 
     _subscribers: list[Callable[[], None]] = field(default_factory=list, repr=False, compare=False)
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
-    _ids: "itertools.count[int]" = field(default_factory=lambda: itertools.count(1), repr=False, compare=False)
+    _ids: "itertools.count[int]" = field(
+        default_factory=lambda: itertools.count(1), repr=False, compare=False
+    )
 
     # ---- focus ----
     def recompute_focus(self) -> FocusedDialog:

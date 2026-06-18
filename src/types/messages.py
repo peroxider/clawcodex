@@ -123,12 +123,7 @@ class AttachmentMessage(UserMessage):
 MessageLike: TypeAlias = Message | Mapping[str, Any]
 
 TypedMessage: TypeAlias = (
-    UserMessage
-    | AssistantMessage
-    | SystemMessage
-    | ProgressMessage
-    | AttachmentMessage
-    | Message
+    UserMessage | AssistantMessage | SystemMessage | ProgressMessage | AttachmentMessage | Message
 )
 
 
@@ -177,6 +172,7 @@ def create_assistant_message(
 ) -> AssistantMessage:
     if isinstance(content, str):
         from .content_blocks import TextBlock
+
         block_content: MessageContent = [TextBlock(text=content or NO_CONTENT_MESSAGE)]
     else:
         block_content = content
@@ -199,6 +195,7 @@ def create_assistant_api_error_message(
     errorDetails: str | None = None,
 ) -> AssistantMessage:
     from .content_blocks import TextBlock
+
     return AssistantMessage(
         content=[TextBlock(text=content or NO_CONTENT_MESSAGE)],
         uuid=str(uuid4()),
@@ -292,6 +289,7 @@ def create_user_interruption_message(
     tool_use: bool = False,
 ) -> UserMessage:
     from . import content_blocks as cb
+
     content_str = INTERRUPT_MESSAGE_FOR_TOOL_USE if tool_use else INTERRUPT_MESSAGE
     return create_user_message(
         content=content_str,
@@ -387,7 +385,8 @@ def ensure_tool_result_pairing(
                 and (not result or result[-1].get("role") != "assistant")
             ):
                 stripped = [
-                    block for block in content
+                    block
+                    for block in content
                     if not (isinstance(block, dict) and block.get("type") == "tool_result")
                 ]
                 if len(stripped) != len(content):
@@ -486,7 +485,8 @@ def ensure_tool_result_pairing(
             nc = next_msg.get("content", "")
             if isinstance(nc, list):
                 filtered = [
-                    block for block in nc
+                    block
+                    for block in nc
                     if not (
                         isinstance(block, dict)
                         and block.get("type") == "tool_result"
@@ -514,10 +514,7 @@ def _has_tool_result_blocks(msg: dict[str, Any]) -> bool:
     content = msg.get("content", "")
     if not isinstance(content, list):
         return False
-    return any(
-        isinstance(block, dict) and block.get("type") == "tool_result"
-        for block in content
-    )
+    return any(isinstance(block, dict) and block.get("type") == "tool_result" for block in content)
 
 
 def _has_non_tool_result_blocks(msg: dict[str, Any]) -> bool:
@@ -527,8 +524,7 @@ def _has_non_tool_result_blocks(msg: dict[str, Any]) -> bool:
     if not isinstance(content, list):
         return False
     return any(
-        not (isinstance(block, dict) and block.get("type") == "tool_result")
-        for block in content
+        not (isinstance(block, dict) and block.get("type") == "tool_result") for block in content
     )
 
 
@@ -545,7 +541,9 @@ def _should_merge_user_messages(
 
 def _hoist_tool_results(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tool_results = [b for b in content if isinstance(b, dict) and b.get("type") == "tool_result"]
-    other_blocks = [b for b in content if not (isinstance(b, dict) and b.get("type") == "tool_result")]
+    other_blocks = [
+        b for b in content if not (isinstance(b, dict) and b.get("type") == "tool_result")
+    ]
     return tool_results + other_blocks
 
 
@@ -590,12 +588,27 @@ def message_to_dict(message: MessageLike) -> dict[str, Any]:
     }
 
     for attr in (
-        "stop_reason", "subtype", "level", "progress",
-        "toolUseResult", "sourceToolAssistantUUID", "permissionMode",
-        "isApiErrorMessage", "apiError", "error", "errorDetails",
-        "model", "origin", "toolUseID", "parentToolUseID", "data",
-        "imagePasteIds", "summarizeMetadata", "preventContinuation",
-        "usage", "duration_ms",
+        "stop_reason",
+        "subtype",
+        "level",
+        "progress",
+        "toolUseResult",
+        "sourceToolAssistantUUID",
+        "permissionMode",
+        "isApiErrorMessage",
+        "apiError",
+        "error",
+        "errorDetails",
+        "model",
+        "origin",
+        "toolUseID",
+        "parentToolUseID",
+        "data",
+        "imagePasteIds",
+        "summarizeMetadata",
+        "preventContinuation",
+        "usage",
+        "duration_ms",
     ):
         val = _get_field(message, attr, None)
         if val is not None and val is not False:
@@ -627,14 +640,18 @@ def message_from_dict(data: Mapping[str, Any]) -> Message:
             isMeta=is_meta,
             isVirtual=is_virtual,
             isCompactSummary=is_compact_summary,
-            stop_reason=data.get("stop_reason") if isinstance(data.get("stop_reason"), str) else None,
+            stop_reason=data.get("stop_reason")
+            if isinstance(data.get("stop_reason"), str)
+            else None,
             model=data.get("model") if isinstance(data.get("model"), str) else None,
             usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
             requestId=data.get("requestId") if isinstance(data.get("requestId"), str) else None,
             isApiErrorMessage=bool(data.get("isApiErrorMessage", False)),
             apiError=data.get("apiError") if isinstance(data.get("apiError"), dict) else None,
             error=data.get("error") if isinstance(data.get("error"), dict) else None,
-            errorDetails=data.get("errorDetails") if isinstance(data.get("errorDetails"), str) else None,
+            errorDetails=data.get("errorDetails")
+            if isinstance(data.get("errorDetails"), str)
+            else None,
             origin=origin,
         )
 
@@ -670,7 +687,9 @@ def message_from_dict(data: Mapping[str, Any]) -> Message:
 
     if msg_type == "attachment":
         raw_attachments = data.get("attachments")
-        attachments = [dict(a) for a in raw_attachments] if isinstance(raw_attachments, list) else []
+        attachments = (
+            [dict(a) for a in raw_attachments] if isinstance(raw_attachments, list) else []
+        )
         return AttachmentMessage(
             content=content,
             uuid=uuid,
@@ -684,7 +703,9 @@ def message_from_dict(data: Mapping[str, Any]) -> Message:
 
     if role == "user":
         raw_attachments = data.get("attachments")
-        attachments = [dict(a) for a in raw_attachments] if isinstance(raw_attachments, list) else []
+        attachments = (
+            [dict(a) for a in raw_attachments] if isinstance(raw_attachments, list) else []
+        )
         if attachments:
             return AttachmentMessage(
                 content=content,
@@ -729,8 +750,8 @@ def is_tool_use_request_message(message: Message) -> bool:
     content = message.content
     if isinstance(content, list):
         return any(
-            getattr(block, "type", None) == "tool_use" or
-            (isinstance(block, dict) and block.get("type") == "tool_use")
+            getattr(block, "type", None) == "tool_use"
+            or (isinstance(block, dict) and block.get("type") == "tool_use")
             for block in content
         )
     return False
@@ -742,8 +763,8 @@ def is_tool_use_result_message(message: Message) -> bool:
     content = message.content
     if isinstance(content, list):
         return any(
-            getattr(block, "type", None) == "tool_result" or
-            (isinstance(block, dict) and block.get("type") == "tool_result")
+            getattr(block, "type", None) == "tool_result"
+            or (isinstance(block, dict) and block.get("type") == "tool_result")
             for block in content
         )
     return False

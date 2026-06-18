@@ -7,6 +7,7 @@ Verifies:
 - prompt_too_long triggers reactive compact retry
 - Recovery state transitions match TS
 """
+
 from __future__ import annotations
 
 import unittest
@@ -52,7 +53,9 @@ class TestMaxOutputTokensRecovery(unittest.TestCase):
                 tool_use_context=None,
                 max_output_tokens_recovery_count=count,
             )
-            self.assertLess(state.max_output_tokens_recovery_count, MAX_OUTPUT_TOKENS_RECOVERY_LIMIT)
+            self.assertLess(
+                state.max_output_tokens_recovery_count, MAX_OUTPUT_TOKENS_RECOVERY_LIMIT
+            )
 
     def test_recovery_at_limit_should_give_up(self) -> None:
         """Recovery count >= limit means give up."""

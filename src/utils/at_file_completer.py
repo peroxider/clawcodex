@@ -39,6 +39,7 @@ from typing import Iterable
 try:
     from prompt_toolkit.completion import Completer, Completion
 except ModuleNotFoundError:  # pragma: no cover - prompt_toolkit guarded by REPL bootstrap
+
     class Completer:  # type: ignore[no-redef]
         pass
 
@@ -202,9 +203,7 @@ class AtFileCompleter(Completer):
             self.invalidate_cache()
 
     # ---- prompt_toolkit Completer interface ----
-    def get_completions(
-        self, document, complete_event
-    ) -> Iterable["Completion"]:  # type: ignore[override]
+    def get_completions(self, document, complete_event) -> Iterable["Completion"]:  # type: ignore[override]
         text = document.text_before_cursor
         match = _AT_TOKEN_RE.search(text)
         if match is None:
@@ -244,7 +243,10 @@ class AtFileCompleter(Completer):
             return
 
         matches = _filter_candidates(
-            candidates, query, self._max_suggestions, bitmaps=bitmaps,
+            candidates,
+            query,
+            self._max_suggestions,
+            bitmaps=bitmaps,
         )
         # ``start_position`` is negative: how far back from the cursor
         # the replacement begins. We replace the ``@<query>`` span so
@@ -312,7 +314,8 @@ class AtFileCompleter(Completer):
         self._index_queryable_event.clear()
         self._index_done_event.clear()
         self._index_thread = threading.Thread(
-            target=self._build_index, name="at-file-completer-index",
+            target=self._build_index,
+            name="at-file-completer-index",
             daemon=True,
         )
         self._index_thread.start()
@@ -351,7 +354,7 @@ class AtFileCompleter(Completer):
                 chunk_paths.append(path)
                 chunk_bitmaps.append(_build_path_bitmap(path))
                 # Branchless modulo-256 — same trick as TS.
-                if (i & 0xff) == 0xff:
+                if (i & 0xFF) == 0xFF:
                     now = time.perf_counter()
                     if (now - chunk_start) > _INDEX_YIELD_INTERVAL_S:
                         # Publish what we have so far so foreground reads
@@ -672,7 +675,9 @@ def _filter_candidates(
             scored.append(entry)
             if top_k_threshold is None or len(scored) >= limit:
                 top_k_threshold = _maybe_tighten_threshold(
-                    scored, limit, top_k_threshold,
+                    scored,
+                    limit,
+                    top_k_threshold,
                 )
             continue
         if q in lower:
@@ -686,24 +691,24 @@ def _filter_candidates(
             scored.append(entry)
             if top_k_threshold is None or len(scored) >= limit:
                 top_k_threshold = _maybe_tighten_threshold(
-                    scored, limit, top_k_threshold,
+                    scored,
+                    limit,
+                    top_k_threshold,
                 )
             continue
         # WI-3.3: skip the expensive subsequence scan when we already
         # have top-K full of tier-0/tier-1 hits — a tier-2 entry can
         # never beat a tier-0 or tier-1 in the final sort.
-        if (
-            top_k_threshold is not None
-            and top_k_threshold[0] < 2
-            and len(scored) >= limit
-        ):
+        if top_k_threshold is not None and top_k_threshold[0] < 2 and len(scored) >= limit:
             continue
         sub_score = _subsequence_score(lower, q)
         if sub_score is not None:
             scored.append((2, sub_score, path))
             if top_k_threshold is None or len(scored) >= limit:
                 top_k_threshold = _maybe_tighten_threshold(
-                    scored, limit, top_k_threshold,
+                    scored,
+                    limit,
+                    top_k_threshold,
                 )
 
     scored.sort(key=lambda t: (t[0], t[1], t[2].lower()))

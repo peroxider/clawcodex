@@ -17,6 +17,7 @@ def test_downstream_cli_main_delegates_to_run_cli(monkeypatch):
     from clawcodex_ext.cli.main import main
 
     dispatched = []
+
     def fake_run_cli(argv=None):
         dispatched.append(argv)
         return 42

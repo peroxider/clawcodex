@@ -20,9 +20,12 @@ import pytest
 from clawcodex_ext.cron_system.models import CronJitterConfig
 from clawcodex_ext.cron_system.runs import read_cron_runs
 from clawcodex_ext.cron_system.scheduler import CronScheduler
-from clawcodex_ext.cron_system.tasks import (add_cron_task, read_cron_tasks,
-                                             read_session_cron_tasks,
-                                             write_cron_tasks)
+from clawcodex_ext.cron_system.tasks import (
+    add_cron_task,
+    read_cron_tasks,
+    read_session_cron_tasks,
+    write_cron_tasks,
+)
 
 
 class _FakeLock:
@@ -105,9 +108,7 @@ def test_e2e_session_recurring_fires_in_process(tmp_path) -> None:
     task = read_session_cron_tasks(session_store)[0]
     session_store[task.id] = replace(task, next_fire_at=1)
 
-    scheduler, thread, stop = _spawn_scheduler(
-        tmp_path, session_store=session_store, outbox=outbox
-    )
+    scheduler, thread, stop = _spawn_scheduler(tmp_path, session_store=session_store, outbox=outbox)
     try:
         assert _wait_for(lambda: outbox and outbox[0] == "eye-care"), outbox
     finally:
@@ -140,9 +141,7 @@ def test_e2e_durable_recurring_fires_via_file(tmp_path) -> None:
     task = read_cron_tasks(tmp_path)[0]
     write_cron_tasks(tmp_path, [replace(task, next_fire_at=1)])
 
-    scheduler, thread, stop = _spawn_scheduler(
-        tmp_path, session_store=None, outbox=outbox
-    )
+    scheduler, thread, stop = _spawn_scheduler(tmp_path, session_store=None, outbox=outbox)
     try:
         assert _wait_for(lambda: outbox and outbox[0] == "durable-task"), outbox
     finally:
@@ -186,9 +185,7 @@ def test_e2e_mixed_recurring_fires_independently(tmp_path) -> None:
     sess = read_session_cron_tasks(session_store)[0]
     session_store[sess.id] = replace(sess, next_fire_at=1)
 
-    scheduler, thread, stop = _spawn_scheduler(
-        tmp_path, session_store=session_store, outbox=outbox
-    )
+    scheduler, thread, stop = _spawn_scheduler(tmp_path, session_store=session_store, outbox=outbox)
     try:
         assert _wait_for(lambda: len(outbox) >= 2), outbox
     finally:
@@ -220,9 +217,7 @@ def test_e2e_session_one_shot_fires_once(tmp_path) -> None:
     task = read_session_cron_tasks(session_store)[0]
     session_store[task.id] = replace(task, next_fire_at=1)
 
-    scheduler, thread, stop = _spawn_scheduler(
-        tmp_path, session_store=session_store, outbox=outbox
-    )
+    scheduler, thread, stop = _spawn_scheduler(tmp_path, session_store=session_store, outbox=outbox)
     try:
         assert _wait_for(lambda: outbox == ["once"]), outbox
         # Let one more tick run; one-shot must not refire.
@@ -271,9 +266,7 @@ def test_e2e_kill_switch_disables_both(tmp_path) -> None:
     def _is_killed() -> bool:
         return killed["v"]
 
-    scheduler = CronScheduler(
-        tmp_path, on_fire=outbox.append, session_store=session_store
-    )
+    scheduler = CronScheduler(tmp_path, on_fire=outbox.append, session_store=session_store)
     scheduler._lock = _FakeLock(acquired=True)  # type: ignore[attr-defined]
     scheduler.is_killed = _is_killed  # type: ignore[assignment]
 
@@ -322,9 +315,7 @@ def test_e2e_lock_owner_gate(tmp_path) -> None:
     session_store[sess.id] = replace(sess, next_fire_at=1)
 
     # Owner: starts with lock held.
-    owner_sched = CronScheduler(
-        tmp_path, on_fire=outbox_owner.append, session_store=session_store
-    )
+    owner_sched = CronScheduler(tmp_path, on_fire=outbox_owner.append, session_store=session_store)
     owner_sched._lock = _FakeLock(acquired=True)  # type: ignore[attr-defined]
     # Stranger: does not own the lock.
     stranger_sched = CronScheduler(

@@ -10,6 +10,7 @@ flow:
   appended to ``reporter_blocked/YYYY-MM-DD.jsonl`` so the operator
   can review.
 """
+
 from __future__ import annotations
 
 import logging

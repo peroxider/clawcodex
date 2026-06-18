@@ -36,9 +36,7 @@ def test_frontmatter_overrides_filename(tmp_path: Path) -> None:
 
     target = tmp_path / "outputStyles"
     target.mkdir()
-    (target / "x.md").write_text(
-        "---\nname: my-style\n---\nThe prompt body.\n"
-    )
+    (target / "x.md").write_text("---\nname: my-style\n---\nThe prompt body.\n")
     styles = load_output_styles_dir(target)
     assert "my-style" in styles
     assert "x" not in styles  # filename was overridden
@@ -83,9 +81,7 @@ def test_frontmatter_prompt_field_overrides_body(tmp_path: Path) -> None:
 def test_user_file_overrides_builtin(tmp_path: Path) -> None:
     target = tmp_path / "outputStyles"
     target.mkdir()
-    (target / "default.md").write_text(
-        "---\nname: default\n---\nUser-customized default.\n"
-    )
+    (target / "default.md").write_text("---\nname: default\n---\nUser-customized default.\n")
     styles = load_output_styles_dir(target)
     # User wins.
     assert styles["default"].prompt == "User-customized default."
@@ -124,9 +120,7 @@ def test_resolve_falls_back_to_default_for_unknown_name(
 def test_resolve_explicit_dir_wins(tmp_path: Path) -> None:
     target = tmp_path / "explicit"
     target.mkdir()
-    (target / "custom.md").write_text(
-        "---\nname: custom\n---\nFrom explicit dir.\n"
-    )
+    (target / "custom.md").write_text("---\nname: custom\n---\nFrom explicit dir.\n")
     style = resolve_output_style("custom", search_dir=target)
     assert style.prompt == "From explicit dir."
 

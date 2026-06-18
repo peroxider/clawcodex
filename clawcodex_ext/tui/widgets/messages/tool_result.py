@@ -78,12 +78,8 @@ def _wrap_paths_with_hyperlinks(body: str) -> Text:
             # idiomatic emit path; we escape the visible portion so a
             # user-supplied path containing ``[`` doesn't get parsed.
             href = link if link.startswith(("/", "~", ".")) else link
-            url = (
-                href if href.startswith("file://") else f"file://{href}"
-            )
-            out.append_text(
-                Text.from_markup(f"[link={url}]{escape_markup(piece)}[/link]")
-            )
+            url = href if href.startswith("file://") else f"file://{href}"
+            out.append_text(Text.from_markup(f"[link={url}]{escape_markup(piece)}[/link]"))
     return out
 
 
@@ -116,9 +112,7 @@ class ToolResultRow(BaseRow):
         # Wrap the summary's file paths (if any) in OSC 8 hyperlinks.
         # Header and body both go through the same heuristic so a file
         # path that appears in either position is clickable.
-        header_text = _wrap_paths_with_hyperlinks(
-            f"{glyph} {self._summary or self._tool_name}"
-        )
+        header_text = _wrap_paths_with_hyperlinks(f"{glyph} {self._summary or self._tool_name}")
         header = RowHeader(header_text, markup=False)
         header.add_class("-tool-error" if self._is_error else "-tool-success")
         yield header

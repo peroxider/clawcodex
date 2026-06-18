@@ -3,6 +3,7 @@
 This module is imported from ``clawcodex_ext/__init__.py`` so the hooks
 are registered before any ``ModelRegistry`` instance is created.
 """
+
 from __future__ import annotations
 
 import logging

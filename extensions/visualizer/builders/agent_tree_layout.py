@@ -75,10 +75,10 @@ def _role_color_for(role: str) -> str:
     评审(purple) / 核对(red) / 写入(pink) / 执行(blue)
     """
     return {
-        "评审": "#7c3aed",   # purple
-        "核对": "#dc2626",   # red
-        "写入": "#ec4899",   # pink
-        "执行": "#3b82f6",   # blue
+        "评审": "#7c3aed",  # purple
+        "核对": "#dc2626",  # red
+        "写入": "#ec4899",  # pink
+        "执行": "#3b82f6",  # blue
     }.get(role, "#a0a0b0")
 
 
@@ -137,7 +137,9 @@ class AgentTreeLayout:
             consumed_spawns.add(idx)
             node.spawn_x = _rel(ev["start_time"])
             # depth_y is 1..N based on insertion order
-            node.depth_y = 1 + sum(1 for n in nodes if n.depth_y > 0 and n.agent_id != node.agent_id)
+            node.depth_y = 1 + sum(
+                1 for n in nodes if n.depth_y > 0 and n.agent_id != node.agent_id
+            )
             node.role = ev.get("role") or _role_label_for(
                 ev.get("subagent_type"), ev.get("subagent_description")
             )
@@ -147,9 +149,7 @@ class AgentTreeLayout:
         for node in nodes:
             if node.parent_id is None or node.spawn_x is None:
                 continue
-            last_end = self._last_subagent_end_time(
-                session.timeline, node, base_time
-            )
+            last_end = self._last_subagent_end_time(session.timeline, node, base_time)
             node.join_x = last_end if last_end is not None else node.spawn_x + 1.0
 
         # ---- 5. Compute aggregate summary — only when there are sub-agents
@@ -184,19 +184,24 @@ class AgentTreeLayout:
                 or detail.get("is_agent_invocation")
                 or detail.get("subagent_type")
                 or detail.get("subagent_description")
-                or (bar.label in ("Agent", "Task") and bar.category == OperationCategory.ORCHESTRATE)
+                or (
+                    bar.label in ("Agent", "Task") and bar.category == OperationCategory.ORCHESTRATE
+                )
             )
             if not is_spawn:
                 continue
-            events.append({
-                "start_time": bar.start_time,
-                "end_time": bar.end_time,
-                "subagent_type": detail.get("subagent_type"),
-                "subagent_description": detail.get("subagent_description") or detail.get("description"),
-                "agent_id": detail.get("agent_id"),
-                "role": detail.get("role"),
-                "bar_id": bar.id,
-            })
+            events.append(
+                {
+                    "start_time": bar.start_time,
+                    "end_time": bar.end_time,
+                    "subagent_type": detail.get("subagent_type"),
+                    "subagent_description": detail.get("subagent_description")
+                    or detail.get("description"),
+                    "agent_id": detail.get("agent_id"),
+                    "role": detail.get("role"),
+                    "bar_id": bar.id,
+                }
+            )
         return events
 
     @staticmethod
@@ -232,7 +237,9 @@ class AgentTreeLayout:
         consumed: set[int],
     ) -> AgentTreeNode | None:
         """Find a non-root node to attach this spawn event to."""
-        candidates = [n for i, n in enumerate(nodes) if n.parent_id is not None and i not in consumed]
+        candidates = [
+            n for i, n in enumerate(nodes) if n.parent_id is not None and i not in consumed
+        ]
         if not candidates:
             return None
         # 1) explicit agent_id

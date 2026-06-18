@@ -1,9 +1,21 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.4（代码实现审计对齐）
-> 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
-> 
+> 版本: v3.7（F-99 + F-90 状态对齐 + remote_api 落地）
+> 更新日期: 2026-07-07 | 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.7 变更（F-99 + F-90 状态对齐 + remote_api 落地）**：
+>   - F-99 Ctrl+C/B 即时中断响应优化：§2.15 标题状态从 📋 设计完成 → ✅ 已完成（FF470158 已落地三方案组合：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
+>   - F-90 Hermes Gateway 参考实现：状态从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 个模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
+>   - remote_api 新增：`extensions/remote_api/` 作为 Hermes 兼容远程 Agent API，提供 OpenAI 兼容的 completion/responses 端点，支持流式 SSE 输出与可选 Bearer 密钥认证。
+>   - 附录 F-Number 快速索引同步更新：F-89（📋 设计完成）、F-99（✅ 已完成）、F-90（✅ 已完成）。
+>
+> **v3.6 变更（F-100 + F-73 状态对齐）**：
+>   - F-100 Dreaming 后台记忆整合系统 §2.16 标题状态从 📋 设计中改为 🟡 部分完成（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成，Phase B 30min TTL 增强待补；106 单测 + 12 门禁 + 6 E2E 场景全绿）。
+>   - F-73 从待开始更新为“本地已完成 / 远端待验证”。
+>   - GitCode workflow 目标配置、local CI fallback、pre-commit、package smoke、release preflight、publish helper 与安全扫描 helper 已落地。
+>   - 因当前仓库 GitCode Pipeline / CodeCheck / Release 附件 / PyPI token 能力尚待开通，远端执行与生产发布仍保留为后续验证项。
+>
 > **v3.4 变更（代码实现审计对齐）**：全面修正 5 项特性状态与代码不对齐。
 >   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（PullRequestFeedback/ReviewFeedbackConfig/ReviewFeedbackService/Orchestrator review follow-up 全部落地）
 >   - F-46 permission_mode 正交拆分：⏳ 规划中 → 🟡 部分完成（F-46.0：headless auto-override 已实现；F-46.1：三字段正交拆分待后续）
@@ -208,11 +220,6 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 
 ---
 
----
-
----
-
----
 
 ## 一、Orchestrator 系统
 
@@ -227,7 +234,7 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 > 仍处规划/设计阶段、保留详细设计稿的子节如下：
 > - §1.1.2 PR 检视意见自动修复闭环设计（F-37，📋 规划中）
 > - §1.3.2 运行期可观测性与 stuck-run debug（F-54，📋 设计完成）
-> 
+>
 > 已完成但仍保留设计稿的子节：
 > - §1.2.2 ProgressReporter Sink 协议重构设计（F-40，✅ 已完成 — `ProgressSink`/`CompositeProgressSink`/`ToolContextProgressSink` 已在 `progress_sink.py` 落地，`progress_reporter.py` 降级为兼容 shim）
 > - 已完成的 LocalTracker（F-36）、验证与报告闭环（F-38）、Issue 重跑入口（F-39）、Coordinator 轻量工具集（F-41）、Shared / Sequential Workspace（F-42）、Tool-call 审计旁路（F-45）、人工检视闸门（F-44）与 AgentRunner 空转检测（F-51）详见 [ARCHIVED_FEATURES.md §二十一](./ARCHIVED_FEATURES.md#二十一2026-06-02-已实现功能归档)。
@@ -298,7 +305,7 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
       │ 历史消息回放（最近 3 轮）                       │
       │ ... agent 的思考过程和工具调用结果全部可见 ...    │
       └─────────────────────────────────────────────┘
-      
+
 
    c) operator 输入:
       > 这个 Read 结果不对，你应该看 src/config/__init__.py 的默认值
@@ -910,7 +917,6 @@ Message 类型体系 (src/types/messages.py)
 | POS Converter | 不适用 | N/A | N/A | N/A |
 
 
----
 ---
 #### 1.4.5 F-49 Phase 5 — session.json + transcript.jsonl 合并（方案C：JSONL + 精简 metadata）
 
@@ -1940,7 +1946,7 @@ F-99 三层方案
 
 ### 2.16 Dreaming 后台记忆整合系统（F-100）
 
-**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+**状态**: 🟡 部分完成（主体已落地，Phase B 待补） | **优先级**: P2 | **登记日期**: 2026-06-17 | **完成日期**: 2026-06-18
 
 **目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。后续章节"背景 / 现状 / 方案 / 任务"对应 `PROGRESS.md` 十三节。
 
@@ -2017,6 +2023,19 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 | `src/memory/`（auto-memory） | 复用 |
 | `extensions/orchestrator/workspace.py` lock | 复用 |
 | `/mnt/c/Workspace/claude-code-best/...` | 参考实现 |
+
+#### 实施落地（2026-06-18）
+
+主体已实现（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成）。完整子特性状态、阶段进度、测试覆盖与剩余工作（Phase B 30min TTL 增强）见 [`docs/PROGRESS.md` 十三节](./PROGRESS.md#十三dreaming-后台记忆整合系统f-100)。
+
+| 类别 | 落地位置 |
+|------|---------|
+| DreamTask | `src/tasks/dream/dream_task.py` |
+| autoDream 服务 | `clawcodex_ext/dreaming/service.py`（runner 工厂可注入） |
+| consolidationLock | `clawcodex_ext/dreaming/lock.py`（PID + mtime 锁；30min TTL 增强待 Phase B） |
+| `/dream` slash skill | `extensions/skills_ext/bundled/dream.py`（`run`/`once`/`status`/`help` 子命令） |
+| 永久 cron 集成 | `clawcodex_ext/dreaming/cron_integration.py`（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream`） |
+| 测试 | `tests/dreaming/` 106 单测 + 6 E2E + `tests/stability_gate/` 12 门禁 |
 
 ---
 
@@ -6201,7 +6220,7 @@ def create_app(config: RCSConfig) -> FastAPI:
 > **底层**: aiohttp | **协议**: AGPL-3.0
 > **对标**: CCB `remote-control-server` / `openai-codex` API 兼容层
 
-**本 F-Number 记录一个功能完整的开源参考实现**，为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 提供具体架构参考。ClawCodex 可在实现 F-82 时选型复用以下设计模式。
+**本 F-Number 记录本项目已实现的功能完整实现**（已通过 `extensions/remote_api/` 落地 11 个模块 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；测试见 `tests/remote_api/`），同时为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 提供具体架构参考。ClawCodex 可在实现 F-82 时选型复用以下设计模式。
 
 ##### 参考 API 端点
 
@@ -6630,7 +6649,7 @@ def get_registry() -> FeatureRegistry:
 
 def feature_gated(feature_name: str, fallback=None):
     """条件启用装饰器。
-    
+
     - 用于类：如果特性禁用，用 fallback 替代
     - 用于函数：如果特性禁用，返回 fallback 值或跳过执行
     """
@@ -6748,14 +6767,14 @@ class AgentLoop:
             # ═══ Hook 点 3：Verification Agent ═══
             if self.budget.is_enabled("verification_agent"):
                 await self._run_verification(...)
-            
+
             # ═══ Hook 点 4：Tool 调用消耗控制 ═══
             tool_result = await self._call_tool(...)
             self.token_counter.add(tool_result.token_usage)
             if self.token_counter.exceeds(self.budget.get("context_window")):
                 logger.warning("Token budget exceeded, triggering auto-downgrade")
                 current_level = self.budget.downgrade()
-            
+
             # ═══ Hook 点 5：Web 搜索条件启用 ═══
             if tool_result.requires_web_search:
                 if not self.budget.is_enabled("auto_web_search"):
@@ -6824,7 +6843,7 @@ class BasePlugin(ABC):
     @abstractmethod
     async def on_load(self, context: "PluginContext") -> None:
         """插件加载时调用。
-        
+
         PluginContext 包含：
         - registry: 工具注册表的引用，用于注册/注销工具
         - command_system: CLI 命令系统，用于注册斜杠命令
@@ -6848,7 +6867,7 @@ class BasePlugin(ABC):
 
     def get_tools(self) -> list[Any]:
         """返回此插件提供的工具列表。
-        
+
         返回的 Tool 实例（通过 build_tool() 创建）会在 on_load 后
         自动通过 registry.register() 注册。
         默认返回空列表，子类按需覆盖。
@@ -6857,7 +6876,7 @@ class BasePlugin(ABC):
 
     def get_commands(self) -> list[dict]:
         """返回此插件提供的斜杠命令列表。
-        
+
         每个命令格式: {"name": str, "handler": callable, "description": str}
         默认返回空列表，子类按需覆盖。
         """
@@ -7014,20 +7033,20 @@ async def _web_browser_call(input: dict[str, Any], context: "ToolContext") -> To
     action = input.get("action")
     url = input.get("url")
     selector = input.get("selector")
-    
+
     try:
         # 延迟导入 playwright，避免非必需环境安装
         from playwright.async_api import async_playwright
-        
+
         if not hasattr(_web_browser_call, "_browser"):
             pw = await async_playwright().start()
             browser = await pw.chromium.launch(headless=True)
             page = await browser.new_page()
             _web_browser_call._browser = browser
             _web_browser_call._page = page
-        
+
         page = _web_browser_call._page
-        
+
         if action == "navigate":
             await page.goto(url, wait_until="networkidle")
             return ToolResult(name="web_browser", output={"status": "loaded", "url": url})
@@ -7134,7 +7153,7 @@ from src.providers.base import BaseProvider, ChatResponse
 
 class NativeProvider(BaseProvider):
     """原生 SDK 适配器的基类。
-    
+
     继承自现有的 BaseProvider，保持 chat() / chat_stream() 接口不变。
     新增 capabilities 注册表用于标记平台专有能力。
     """
@@ -7250,61 +7269,36 @@ def create_native_provider(provider_name: str,
 
 #### F-73: CI/CD 质量门禁与 PyPI 发布流水线
 
-**状态**: ⏳ 待开始 | **优先级**: P0
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
 
 #### 背景
 
-CCB 配备完整的 CI/CD 基础设施：4 个 GitHub Actions（ci/publish/release/contributors）+ Codecov 覆盖率 + husky pre-commit 钩子。clawcodex 目前仅有一个 `upstream-detect.yml` workflow，**完全没有**代码质量门禁（lint/format/typecheck）、自动化测试和 PyPI 发布流水线。
+CCB 配备完整的 CI/CD 基础设施：4 个 GitHub Actions（ci/publish/release/contributors）+ Codecov 覆盖率 + husky pre-commit 钩子。F-73 的目标是在 GitCode 仓库中补齐质量门禁、本地 fallback、包构建 smoke 和 TestPyPI-first 发布链路。
+
+当前提交已完成本地与目标配置层面的落地：`.gitcode/workflows/` 包含 ci / agent-smoke / security / release-preflight / publish，`scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁。远端 CodeCheck、GitCode Release 附件上传、TestPyPI/PyPI 真实发布仍依赖仓库 Pipeline、Release 权限和 token 开通，后续在仓库能力开通后继续验证。
 
 #### 子特性分解
 
-| 编号 | 子特性 | 说明 | 工具链 | 预计工作量 |
+| 编号 | 子特性 | 说明 | 工具链 | 当前状态 |
 |:----:|--------|------|:------:|:----------:|
-| P73-A | ruff lint/format CI | 在 push/PR 时自动运行 ruff lint + format 检查 | `ruff` | 1-2天 |
-| P73-B | pytest 测试流水线 | 安装依赖 → 运行 orchestrator 测试 → 报告结果 | `pytest` | 1-2天 |
-| P73-C | pre-commit 本地钩子 | ruff + 基础检查在 commit 前自动运行 | `pre-commit` | 1天 |
-| P73-D | PyPI 自动发布 | tag push → build wheel → twine upload → 发布 GitHub Release | `build` + `twine` | 2-3天 |
-| P73-E | 测试覆盖率门禁 | Codecov / coveralls 集成，覆盖率阈值保护 | `pytest-cov` | 1-2天 |
-| P73-F | pyproject.toml 规范 | 完整声明 project metadata、entry_points、optional-dependencies、classifiers | 无 | 1天 |
-| P73-G | mypy 类型检查（可选） | Python 3.10+ 类型标注验证 | `mypy` | 2-3天 |
+| P73-A | ruff lint/format CI | 在 push/PR 时自动运行 ruff lint + format 检查 | `ruff` | ✅ 本地/目标 workflow 已完成 |
+| P73-B | pytest 测试流水线 | 安装依赖 → 运行 core/orchestrator/agent smoke → 报告结果 | `pytest` | ✅ 本地/目标 workflow 已完成 |
+| P73-C | pre-commit 本地钩子 | ruff + 基础检查在 commit 前自动运行 | `pre-commit` | ✅ 已完成 |
+| P73-D | PyPI 自动发布 | tag/manual → build wheel/sdist → TestPyPI → GitCode Release → 手动 PyPI 晋升 | `build` + `twine` | 🟡 脚本与 workflow 已完成，远端发布待开通验证 |
+| P73-E | 测试覆盖率门禁 | 输出 coverage.xml 和终端覆盖率报告，先报告不阻塞 | `pytest-cov` | 🟡 已接入报告，阈值待历史基线修复后提升 |
+| P73-F | pyproject.toml 规范 | 完整声明 project metadata、entry_points、optional-dependencies、classifiers | 无 | ✅ 已完成 |
+| P73-G | mypy 类型检查（可选） | Python 3.10+ 类型标注验证 | `mypy` | 🟡 advisory 已接入，阻塞化待历史基线修复 |
 
 #### CI 流水线设计
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-on: [push, pull_request]
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install ruff && ruff check . && ruff format --check .
+落地形态：
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - run: pip install -e ".[dev]"
-      - run: pytest tests/test_orchestrator_*.py -q --cov=src
-
-  publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install build twine
-      - run: python -m build
-      - run: twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-```
+- `.gitcode/workflows/ci.yml`：docs、ruff、mypy advisory、core pytest、orchestrator pytest + coverage、package smoke。
+- `.gitcode/workflows/agent-smoke.yml`：mock LLM text/tool loop、权限拒绝、transcript、resume、workspace hooks。
+- `.gitcode/workflows/security.yml`：本地 supply-chain audit + GitCode CodeCheck（远端待验证）。
+- `.gitcode/workflows/release-preflight.yml`：发布候选 ref/tag/commit 的手动质量复核。
+- `.gitcode/workflows/publish.yml`：TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升。
+- `scripts/ci/local_ci.py`：默认检查当前 HEAD commit，交互式终端显示 Rich live dashboard；远端或破坏性步骤在本地明确 skip。
 
 #### PyPI 发布配置
 
@@ -7607,7 +7601,7 @@ clawcodex-dev sandbox status    # 查看当前模式
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
-| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ⏳ 待开始 | 1周 |
+| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
 
 ### 实施建议顺序
@@ -8014,7 +8008,7 @@ SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → �
 - Cline / Continue.dev（VS Code 编码 Agent）
 - CodeGate / Goose（安全/沙箱方向）
 - TaskWarden / Eliza（Agent 框架/运行时方向）
-- OpenClaw（ClawCodex 自己的上游基准）
+- OpenClaw（同类 Node.js code agent 产品）
 
 #### 10.1.3 整体流程
 
@@ -8582,7 +8576,7 @@ clawcodex_ext/community_radar/
 | F-70 | Plugin 系统 | §4.3 | ⏳ 待开始 |
 | F-71 | 内置工具补齐 | §7.6 | ⏳ 待开始 |
 | F-72 | Multi-API 适配器 | §7.2 | ⏳ 待开始 |
-| F-73 | CI/CD 流水线 | §7.6 | ⏳ 待开始 |
+| F-73 | CI/CD 流水线 | §7.6 | ✅ 本地已完成 / 🟡 远端待验证 |
 | F-74 | Sandbox 沙箱 | §7.2 | ⏳ 待开始 |
 | F-75 | 工具调用统计 | §2.8 | 📋 设计完成 |
 | F-78 | Issue 语义澄清 | §2.12 | 📋 规划中 |
@@ -8596,7 +8590,7 @@ clawcodex_ext/community_radar/
 | F-87 | Workflow Scripts | §7.5 | ⏳ 待开始 |
 | F-88 | Explore/Plan Agent | §7.5 | ⏳ 待开始 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
-| F-90 | Hermes Gateway OpenAI API 参考 | §7.1 | 📋 参考实现 |
+| F-90 | Hermes Gateway OpenAI API 参考（remote_api） | §7.1 | ✅ 已完成 |
 | **F-91** | **Visualizer 核心数据管道** | §8.3 | ✅ **已完成** |
 | **F-92** | **Visualizer 后端 API + WebSocket** | §8.3 | ✅ **已完成** |
 | **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ✅ **已完成** |
@@ -8605,4 +8599,4 @@ clawcodex_ext/community_radar/
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
 | F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | ✅ 已完成（2026-06-17） | 三方案组合：`AnthropicProvider._ensure_client` 默认 `timeout=5.0` + `_close_response_safely` 关 transport（Win 跳过） + `_run_tools_partitioned` 改 `asyncio.wait(FIRST_COMPLETED)` + 100ms abort poll + synth cancelled result 保配对。Cancel bound：直连 <500ms，LiteLLM bound 在 5s |
-| **F-100** | **Dreaming 后台记忆整合系统** | **§2.16** | **📋 设计中（2026-06-17）** | **移植上游 `claude-code-best` 的 `DreamTask` + `autoDream` + `/dream` skill。当前为桩：literal `"dream"` / 前缀 `d` 已声明但无 Task 类；`bundles.py:36` 引用悬空；`tests/tasks/test_task_registry.py:202` 不变量待解锁。子特性 100.1~100.7，工时合计 4.75 天** |
+| F-100 | Dreaming 后台记忆整合系统 | §2.16 | 🟡 部分完成（2026-06-18） | 主体 7 子特性全 ✅：DreamTask + autoDream + consolidationLock（PID+mtime 锁） + `/dream` slash skill + permanent cron 集成 + 测试不变量解锁；106 单测 + 12 门禁 + 6 E2E 场景全绿。Phase B（lock 30min TTL 增强，0.5天）待补 |

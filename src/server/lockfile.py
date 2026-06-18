@@ -70,9 +70,7 @@ class ServerLockfile:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             os.close(fd)
-            raise LockfileBusyError(
-                f'Another claude server instance holds {self._path}'
-            ) from exc
+            raise LockfileBusyError(f"Another claude server instance holds {self._path}") from exc
         self._fd = fd
 
     def release(self) -> None:
@@ -107,4 +105,4 @@ class ServerLockfile:
         self.release()
 
 
-__all__ = ['LockfileBusyError', 'ServerLockfile']
+__all__ = ["LockfileBusyError", "ServerLockfile"]

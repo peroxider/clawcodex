@@ -100,9 +100,7 @@ class MockTrackerAdapter(TrackerAdapter):
     async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         return {
             issue.id: issue
-            for issue in (
-                await self.fetch_candidate_issues()
-            )
+            for issue in (await self.fetch_candidate_issues())
             if issue.id in issue_ids
         }
 
@@ -117,9 +115,7 @@ class MockWorkspaceManager(WorkspaceManager):
     """Mock workspace manager that uses temp directories."""
 
     def __init__(self) -> None:
-        super().__init__(
-            WorkspaceConfig(root="/tmp/test_orchestrator_dashboard")
-        )
+        super().__init__(WorkspaceConfig(root="/tmp/test_orchestrator_dashboard"))
 
     async def create_for_issue(self, issue: Any) -> Workspace:
         import tempfile
@@ -218,6 +214,7 @@ class TestStatusDashboardThreeIssues(unittest.IsolatedAsyncioTestCase):
 
         # Simulate some TPS samples with actual time passage
         import time
+
         samples = [100, 150, 200, 180, 220, 250]
         dashboard._token_samples.extend(samples)
         dashboard._last_rendered_at = time.time() - 1.0
@@ -267,9 +264,7 @@ class TestStatusDashboardThreeIssues(unittest.IsolatedAsyncioTestCase):
         class QuickAgentRunner:
             max_turns = 2
 
-            async def run(
-                self, session: AgentSession, workflow: Any, **kwargs
-            ) -> None:
+            async def run(self, session: AgentSession, workflow: Any, **kwargs) -> None:
                 # Simulate a brief run then mark as completed
                 session.status = "completed"
                 session.turn_count = 1

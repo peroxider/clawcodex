@@ -42,21 +42,29 @@ logger = logging.getLogger(__name__)
 # State: shared across requests
 # ---------------------------------------------------------------------------
 
+
 class _AppState:
     """Mutable app state that lives on ``app.state.viz``."""
 
     def __init__(
         self,
         sessions_dir: Path | None = None,
+        transcripts_dir: Path | None = None,
         workspaces_file: Path | None = None,
         allow_import: bool = False,
     ) -> None:
         self.sessions_dir = sessions_dir or (Path.home() / ".clawcodex" / "sessions")
+        self.transcripts_dir = transcripts_dir or (Path.home() / ".clawcodex" / "transcripts")
         self.workspaces_file = workspaces_file or (Path.home() / ".clawcodex" / "workspaces.json")
         self.allow_import = allow_import
+        # Reports dir (F-96-E) now lives under the per-user root, not
+        # under the workspace. ``Path.home() / ".clawcodex" / "reports"``
+        # is the canonical location for orchestrator state journals.
+        self.reports_dir = Path.home() / ".clawcodex" / "reports"
         self.timeline_builder = TimelineBuilder(
             sessions_dir=self.sessions_dir,
-            reports_dir=self.sessions_dir.parent / ".reports" if self.sessions_dir else None,
+            transcripts_dir=self.transcripts_dir,
+            reports_dir=self.reports_dir,
         )
         self.gantt_builder = GanttDataBuilder()
         self.comparison_builder = ComparisonBuilder()
@@ -78,6 +86,7 @@ class _AppState:
         """Load share links from disk, filtering expired entries."""
         import json
         import time
+
         if not self._shares_path.exists():
             return
         try:
@@ -97,6 +106,7 @@ class _AppState:
         """Persist active share links to disk."""
         import json
         import time
+
         try:
             now = time.time()
             # Only persist non-expired
@@ -148,7 +158,9 @@ def _normalize_blocks(content: Any) -> list[dict[str, Any]]:
 
 
 def _strip_message(
-    msg: dict[str, Any], *, max_blocks: int = 16,
+    msg: dict[str, Any],
+    *,
+    max_blocks: int = 16,
 ) -> dict[str, Any]:
     """Return a compact, drawer-friendly view of a transcript message.
 
@@ -167,8 +179,7 @@ def _strip_message(
     rendered: list[dict[str, Any]] = []
     total = 0
     for b in blocks[:max_blocks]:
-        rb = {k: _truncate(v, _LLM_IO_MAX_BLOCK_CHARS)
-              for k, v in b.items() if v is not None}
+        rb = {k: _truncate(v, _LLM_IO_MAX_BLOCK_CHARS) for k, v in b.items() if v is not None}
         rendered.append(rb)
         total += sum(len(str(v)) for v in rb.values())
         if total >= _LLM_IO_MAX_MESSAGE_CHARS:
@@ -178,13 +189,24 @@ def _strip_message(
 
 
 def _scan_transcript_for_turn(
-    transcript_path: Path, turn_id: str,
+    transcript_path: Path,
+    turn_id: str,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Scan a transcript.jsonl for the LLM I/O of a single turn.
 
+    New-format expectations (per ``src.types.messages.message_to_dict``):
+
+    - ``content`` is always a list of typed content blocks.
+    - ``role`` is one of ``user`` / ``assistant`` / ``system``.
+    - tool_use blocks carry ``id``; tool_result blocks carry
+      ``tool_use_id``. No legacy ``tool_calls`` / ``tool_call_id``
+      envelope exists in the new format.
+    - ``isMeta`` / ``isVirtual`` / ``isCompactSummary`` / API-error
+      entries are skipped — they never carry turn I/O.
+
     Returns ``(input_msg, output_msg)`` where ``input_msg`` is the
     assistant message that issued the tool call (the LLM's "input") and
-    ``output_msg`` is the tool message that returned the result (the
+    ``output_msg`` is the user message that returned the result (the
     LLM's "output"). Either may be ``None`` if only one half of the
     pair exists in the transcript.
     """
@@ -201,27 +223,26 @@ def _scan_transcript_for_turn(
                 continue
             if not isinstance(entry, dict):
                 continue
+            entry_type = entry.get("type", "")
+            if entry_type in ("cost_block", "progress"):
+                continue
+            if entry.get("isMeta") or entry.get("isVirtual"):
+                continue
+            if entry.get("isCompactSummary"):
+                continue
             role = entry.get("role")
-            # Anthropic content-block envelope (assistant + tool)
+            # Anthropic content-block envelope (assistant + tool) —
+            # the only envelope the new format emits.
             for blk in _normalize_blocks(entry.get("content")):
                 btype = blk.get("type")
                 if input_msg is None and role == "assistant":
                     if btype == "tool_use" and blk.get("id") == turn_id:
                         input_msg = entry
                         break
-                if output_msg is None and (role == "user" or btype == "tool_result"):
+                if output_msg is None and role == "user":
                     if btype == "tool_result" and blk.get("tool_use_id") == turn_id:
                         output_msg = entry
                         break
-            # Legacy envelope: assistant.tool_calls[] / tool.tool_call_id
-            if input_msg is None and role == "assistant":
-                for tc in entry.get("tool_calls") or []:
-                    if isinstance(tc, dict) and tc.get("id") == turn_id:
-                        input_msg = entry
-                        break
-            if output_msg is None and role == "tool":
-                if entry.get("tool_call_id") == turn_id:
-                    output_msg = entry
             if input_msg is not None and output_msg is not None:
                 break
     return (
@@ -248,8 +269,10 @@ async def lifespan(app: FastAPI):
 # App factory
 # ---------------------------------------------------------------------------
 
+
 def create_app(
     sessions_dir: Path | None = None,
+    transcripts_dir: Path | None = None,
     workspaces_file: Path | None = None,
     allow_import: bool = False,
     host: str = "0.0.0.0",
@@ -265,6 +288,7 @@ def create_app(
     # State
     app.state.viz = _AppState(
         sessions_dir=sessions_dir,
+        transcripts_dir=transcripts_dir,
         workspaces_file=workspaces_file,
         allow_import=allow_import,
     )
@@ -320,7 +344,8 @@ def create_app(
         if q:
             q_lower = q.lower()
             sessions = [
-                s for s in sessions
+                s
+                for s in sessions
                 if q_lower in s.session_id.lower()
                 or q_lower in (s.title or "").lower()
                 or q_lower in (s.agent_name or "").lower()
@@ -367,6 +392,7 @@ def create_app(
     ):
         """Get ECharts gantt data for a session."""
         from .models.viz_models import TimeMode
+
         viz = app.state.viz.timeline_builder.build(session_id)
         if viz is None:
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
@@ -437,7 +463,8 @@ def create_app(
         session_dir = app.state.viz.sessions_dir / session_id
         if not session_dir.exists():
             raise HTTPException(
-                status_code=404, detail=f"Session {session_id} not found",
+                status_code=404,
+                detail=f"Session {session_id} not found",
             )
         transcript_path = session_dir / "transcript.jsonl"
         if not transcript_path.exists():
@@ -447,11 +474,11 @@ def create_app(
             )
         try:
             input_msg, output_msg = _scan_transcript_for_turn(
-                transcript_path, turn_id,
+                transcript_path,
+                turn_id,
             )
         except Exception as e:  # noqa: BLE001 — surface as 500
-            logger.warning("LLM I/O scan failed for %s/%s: %s",
-                           session_id, turn_id, e)
+            logger.warning("LLM I/O scan failed for %s/%s: %s", session_id, turn_id, e)
             raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
         if input_msg is None and output_msg is None:
             raise HTTPException(
@@ -482,7 +509,9 @@ def create_app(
         return links
 
     @app.get("/api/viz/sessions/{session_id}/export", tags=["export"])
-    async def export_session(session_id: str, format: str = Query("json", pattern="^(png|svg|json|pdf)$")):
+    async def export_session(
+        session_id: str, format: str = Query("json", pattern="^(png|svg|json|pdf)$")
+    ):
         """Export session data in the specified format."""
         viz = app.state.viz.timeline_builder.build(session_id)
         if viz is None:
@@ -490,10 +519,17 @@ def create_app(
         fmt = ExportFormat(format)
         content, mime, filename = app.state.viz.export_builder.export_session(viz, fmt)
         from fastapi.responses import Response
-        return Response(content=content, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+        return Response(
+            content=content,
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/api/viz/compare", tags=["comparison"])
-    async def compare_sessions(sessions: str = Query(..., description="Comma-separated session IDs")):
+    async def compare_sessions(
+        sessions: str = Query(..., description="Comma-separated session IDs"),
+    ):
         """Compare data across multiple sessions."""
         session_ids = [s.strip() for s in sessions.split(",") if s.strip()]
         if not session_ids:
@@ -526,7 +562,12 @@ def create_app(
         fmt = ExportFormat(format)
         content, mime, filename = app.state.viz.export_builder.export_comparison(result, fmt)
         from fastapi.responses import Response
-        return Response(content=content, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+        return Response(
+            content=content,
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     # --- Share links (F-92-D) ---------------------------------------------
 
@@ -563,6 +604,7 @@ def create_app(
         if share is None:
             raise HTTPException(status_code=404, detail="Share link not found")
         import time
+
         if time.time() > share.expires_at:
             del app.state.viz.share_links[link_id]
             app.state.viz._save_share_links()
@@ -588,10 +630,9 @@ def create_app(
     async def list_orchestrator_runs():
         """List all orchestrator runs with state journals (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
+
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.list_runs()
 
@@ -603,10 +644,9 @@ def create_app(
         their phases, verification results, and PR links.
         """
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
+
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.get_current_snapshot()
 
@@ -614,10 +654,9 @@ def create_app(
     async def get_orchestrator_run(run_id: str):
         """Get detailed state for a specific orchestrator run (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
+
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         state = parser.parse_run(run_id)
         if state is None:
@@ -646,14 +685,15 @@ def create_app(
             },
         }
 
-    @app.get("/api/viz/orchestrator/runs/{run_id}/issues/{issue_id}/timeline", tags=["orchestrator"])
+    @app.get(
+        "/api/viz/orchestrator/runs/{run_id}/issues/{issue_id}/timeline", tags=["orchestrator"]
+    )
     async def get_issue_timeline(run_id: str, issue_id: str):
         """Get the event timeline for a specific issue in a run (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
+
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.get_issue_timeline(run_id, issue_id)
 
@@ -679,7 +719,8 @@ def create_app(
         # Serialize workspaces to plain dicts for template context
         ws_data = [w.model_dump(mode="json") if hasattr(w, "model_dump") else w for w in workspaces]
         return app.state.templates.TemplateResponse(
-            request, "index.html",
+            request,
+            "index.html",
             {"workspaces": ws_data, "page_title": "ClawCodex Visualizer"},
         )
 
@@ -689,7 +730,8 @@ def create_app(
         if app.state.templates is None:
             return HTMLResponse(f"<h1>Session {session_id}</h1><p>Templates not found.</p>")
         return app.state.templates.TemplateResponse(
-            request, "session_row.html",
+            request,
+            "session_row.html",
             {"session_id": session_id, "page_title": f"Session {session_id}"},
         )
 
@@ -699,7 +741,8 @@ def create_app(
         if app.state.templates is None:
             return HTMLResponse("<h1>Compare Sessions</h1><p>Templates not found.</p>")
         return app.state.templates.TemplateResponse(
-            request, "comparison.html",
+            request,
+            "comparison.html",
             {"page_title": "Compare Sessions"},
         )
 
@@ -709,7 +752,8 @@ def create_app(
         if app.state.templates is None:
             return HTMLResponse("<h1>Multi-Session View</h1><p>Templates not found.</p>")
         return app.state.templates.TemplateResponse(
-            request, "multi_session.html",
+            request,
+            "multi_session.html",
             {"page_title": "Multi-Session Waterfall"},
         )
 
@@ -719,6 +763,7 @@ def create_app(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _list_workspaces(app: FastAPI) -> list[WorkspaceInfo]:
     """Enumerate workspaces from workspaces.json or sessions_dir scan."""
@@ -764,13 +809,15 @@ def _list_workspaces(app: FastAPI) -> list[WorkspaceInfo]:
                 last_updated = mtime
         except OSError:
             pass
-    return [WorkspaceInfo(
-        id="default",
-        name="All sessions",
-        path=str(state.sessions_dir),
-        session_count=total,
-        last_updated=last_updated,
-    )]
+    return [
+        WorkspaceInfo(
+            id="default",
+            name="All sessions",
+            path=str(state.sessions_dir),
+            session_count=total,
+            last_updated=last_updated,
+        )
+    ]
 
 
 def _list_sessions_in_workspace(app: FastAPI, workspace_id: str) -> list[SessionVizData]:
@@ -822,6 +869,7 @@ def _session_summary(viz: SessionVizData) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Public: mount_viz() for F-82 future merge
 # ---------------------------------------------------------------------------
+
 
 def mount_viz(app: FastAPI, prefix: str = "/viz", **kwargs: Any) -> None:
     """Mount the Visualizer sub-app onto an existing FastAPI application.

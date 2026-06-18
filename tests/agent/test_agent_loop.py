@@ -42,8 +42,8 @@ class TestAgentLoop(unittest.TestCase):
             "name": "Write",
             "input": {
                 "file_path": str(self.workspace / "hello.py"),
-                "content": "print('hello world')"
-            }
+                "content": "print('hello world')",
+            },
         }
         mock_response1 = ChatResponse(
             content="I will create the file.",
@@ -97,10 +97,7 @@ class TestAgentLoop(unittest.TestCase):
         mock_tool_write = {
             "id": "toolu_123",
             "name": "Write",
-            "input": {
-                "file_path": str(hello_path),
-                "content": "print('hello world')"
-            }
+            "input": {"file_path": str(hello_path), "content": "print('hello world')"},
         }
         mock_response1 = ChatResponse(
             content="I will create the file.",
@@ -184,14 +181,16 @@ class TestAgentLoop(unittest.TestCase):
             model="test-model",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_123",
-                "name": "Write",
-                "input": {
-                    "file_path": str(hello_path),
-                    "content": "print('hello world')",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_123",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(hello_path),
+                        "content": "print('hello world')",
+                    },
+                }
+            ],
         )
         mock_response2 = ChatResponse(
             content="File created successfully!",
@@ -231,14 +230,16 @@ class TestAgentLoop(unittest.TestCase):
                 model="test-model",
                 usage={"input_tokens": 10, "output_tokens": 20},
                 finish_reason="tool_use",
-                tool_uses=[{
-                    "id": "toolu_123",
-                    "name": "Write",
-                    "input": {
-                        "file_path": str(hello_path),
-                        "content": "print('hello world')",
-                    },
-                }],
+                tool_uses=[
+                    {
+                        "id": "toolu_123",
+                        "name": "Write",
+                        "input": {
+                            "file_path": str(hello_path),
+                            "content": "print('hello world')",
+                        },
+                    }
+                ],
             ),
             ChatResponse(
                 content="File created successfully!",
@@ -256,7 +257,9 @@ class TestAgentLoop(unittest.TestCase):
             return response
 
         provider.chat_stream_response.side_effect = stream_side_effect
-        provider.chat.side_effect = AssertionError("chat() should not be used when structured streaming is available")
+        provider.chat.side_effect = AssertionError(
+            "chat() should not be used when structured streaming is available"
+        )
 
         chunks: list[str] = []
         result = run_agent_loop(
@@ -310,6 +313,7 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_empty_messages(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
+
         assert filter_incomplete_tool_calls([]) == []
 
     def test_no_trailing_tool_use(self):
@@ -332,9 +336,11 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
         msgs = [
             UserMessage(content="hello"),
             AssistantMessage(content=[TextBlock(text="let me search")]),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
+                ]
+            ),
         ]
         result = filter_incomplete_tool_calls(msgs)
         # Trailing assistant with orphaned tool_use removed
@@ -356,12 +362,16 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
         from src.types.content_blocks import ToolUseBlock, ToolResultBlock
 
         msgs = [
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(tool_use_id="t1", content="ok"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(tool_use_id="t1", content="ok"),
+                ]
+            ),
         ]
         result = filter_incomplete_tool_calls(msgs)
         assert len(result) == 2
@@ -372,9 +382,11 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
         from src.types.content_blocks import ToolUseBlock, TextBlock
 
         msgs = [
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a"}),
+                ]
+            ),
             UserMessage(content="no tool results here"),
             AssistantMessage(content=[TextBlock(text="final summary")]),
         ]
@@ -421,9 +433,7 @@ class TestAgentDefinitions(unittest.TestCase):
         )
 
         assert is_built_in_agent(GENERAL_PURPOSE_AGENT) is True
-        custom = AgentDefinition(
-            agent_type="custom", when_to_use="custom", source="user"
-        )
+        custom = AgentDefinition(agent_type="custom", when_to_use="custom", source="user")
         assert is_built_in_agent(custom) is False
 
 

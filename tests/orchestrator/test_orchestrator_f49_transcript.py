@@ -14,6 +14,7 @@ These tests cover:
   * Error path: missing run_id, missing transcript file
   * Block-content rendering (text / tool_use / tool_result)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,22 +70,31 @@ class TestMsgReferencesTool(unittest.TestCase):
     """Unit tests for the _msg_references_tool filter helper."""
 
     def test_tool_use_match(self) -> None:
-        msg = _make_msg("assistant", [
-            {"type": "tool_use", "id": "A", "name": "Read", "input": {}},
-        ])
+        msg = _make_msg(
+            "assistant",
+            [
+                {"type": "tool_use", "id": "A", "name": "Read", "input": {}},
+            ],
+        )
         self.assertTrue(_msg_references_tool(msg, "A"))
 
     def test_tool_result_match(self) -> None:
-        msg = _make_msg("user", [
-            {"type": "tool_result", "tool_use_id": "A", "content": "ok",
-             "is_error": False},
-        ], origin="tool_result")
+        msg = _make_msg(
+            "user",
+            [
+                {"type": "tool_result", "tool_use_id": "A", "content": "ok", "is_error": False},
+            ],
+            origin="tool_result",
+        )
         self.assertTrue(_msg_references_tool(msg, "A"))
 
     def test_no_match(self) -> None:
-        msg = _make_msg("assistant", [
-            {"type": "tool_use", "id": "B", "name": "Read", "input": {}},
-        ])
+        msg = _make_msg(
+            "assistant",
+            [
+                {"type": "tool_use", "id": "B", "name": "Read", "input": {}},
+            ],
+        )
         self.assertFalse(_msg_references_tool(msg, "A"))
 
     def test_string_content_no_match(self) -> None:
@@ -96,11 +106,13 @@ class TestPrintMessage(unittest.TestCase):
     """Unit tests for _print_message block rendering."""
 
     def test_assistant_text_and_tool_use(self) -> None:
-        msg = _make_msg("assistant", [
-            {"type": "text", "text": "Looking..."},
-            {"type": "tool_use", "id": "A", "name": "Read",
-             "input": {"path": "/tmp/a.py"}},
-        ])
+        msg = _make_msg(
+            "assistant",
+            [
+                {"type": "text", "text": "Looking..."},
+                {"type": "tool_use", "id": "A", "name": "Read", "input": {"path": "/tmp/a.py"}},
+            ],
+        )
         buf = io.StringIO()
         with redirect_stdout(buf):
             _print_message(msg)
@@ -111,10 +123,13 @@ class TestPrintMessage(unittest.TestCase):
         self.assertIn("path: /tmp/a.py", out)
 
     def test_tool_result_with_error(self) -> None:
-        msg = _make_msg("user", [
-            {"type": "tool_result", "tool_use_id": "A", "content": "boom",
-             "is_error": True},
-        ], origin="tool_result")
+        msg = _make_msg(
+            "user",
+            [
+                {"type": "tool_result", "tool_use_id": "A", "content": "boom", "is_error": True},
+            ],
+            origin="tool_result",
+        )
         buf = io.StringIO()
         with redirect_stdout(buf):
             _print_message(msg)
@@ -137,8 +152,11 @@ class TestRunTranscript(unittest.TestCase):
     """Integration tests for the _run_transcript subcommand."""
 
     def _build_args(
-        self, identifier: str | None = None, run_id: str | None = None,
-        role: str | None = None, tool_use_id: str | None = None,
+        self,
+        identifier: str | None = None,
+        run_id: str | None = None,
+        role: str | None = None,
+        tool_use_id: str | None = None,
         limit: int | None = None,
     ) -> argparse.Namespace:
         return argparse.Namespace(
@@ -156,18 +174,36 @@ class TestRunTranscript(unittest.TestCase):
             tmp_path = Path(tmp)
             sessions_root = tmp_path / "sessions"
             run_id = "run-1"
-            _write_transcript(sessions_root / run_id, [
-                _make_msg("user", [{"type": "text", "text": "init prompt"}]),
-                _make_msg("assistant", [
-                    {"type": "text", "text": "Looking..."},
-                    {"type": "tool_use", "id": "A", "name": "Read",
-                     "input": {"path": "/x"}},
-                ]),
-                _make_msg("user", [
-                    {"type": "tool_result", "tool_use_id": "A",
-                     "content": "ok", "is_error": False},
-                ], origin="tool_result"),
-            ])
+            _write_transcript(
+                sessions_root / run_id,
+                [
+                    _make_msg("user", [{"type": "text", "text": "init prompt"}]),
+                    _make_msg(
+                        "assistant",
+                        [
+                            {"type": "text", "text": "Looking..."},
+                            {
+                                "type": "tool_use",
+                                "id": "A",
+                                "name": "Read",
+                                "input": {"path": "/x"},
+                            },
+                        ],
+                    ),
+                    _make_msg(
+                        "user",
+                        [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "A",
+                                "content": "ok",
+                                "is_error": False,
+                            },
+                        ],
+                        origin="tool_result",
+                    ),
+                ],
+            )
             with patch(
                 "src.services.session_storage.SESSIONS_DIR",
                 sessions_root,
@@ -190,13 +226,19 @@ class TestRunTranscript(unittest.TestCase):
             tmp_path = Path(tmp)
             sessions_root = tmp_path / "sessions"
             run_id = "run-1"
-            _write_transcript(sessions_root / run_id, [
-                _make_msg("user", [{"type": "text", "text": "p1"}]),
-                _make_msg("assistant", [
-                    {"type": "text", "text": "a1"},
-                ]),
-                _make_msg("user", [{"type": "text", "text": "p2"}]),
-            ])
+            _write_transcript(
+                sessions_root / run_id,
+                [
+                    _make_msg("user", [{"type": "text", "text": "p1"}]),
+                    _make_msg(
+                        "assistant",
+                        [
+                            {"type": "text", "text": "a1"},
+                        ],
+                    ),
+                    _make_msg("user", [{"type": "text", "text": "p2"}]),
+                ],
+            )
             with patch(
                 "src.services.session_storage.SESSIONS_DIR",
                 sessions_root,
@@ -219,23 +261,43 @@ class TestRunTranscript(unittest.TestCase):
             tmp_path = Path(tmp)
             sessions_root = tmp_path / "sessions"
             run_id = "run-1"
-            _write_transcript(sessions_root / run_id, [
-                _make_msg("user", [{"type": "text", "text": "prompt"}]),
-                _make_msg("assistant", [
-                    {"type": "tool_use", "id": "A", "name": "Read",
-                     "input": {}},
-                    {"type": "tool_use", "id": "B", "name": "Bash",
-                     "input": {}},
-                ]),
-                _make_msg("user", [
-                    {"type": "tool_result", "tool_use_id": "A",
-                     "content": "read output", "is_error": False},
-                ], origin="tool_result"),
-                _make_msg("user", [
-                    {"type": "tool_result", "tool_use_id": "B",
-                     "content": "bash output", "is_error": False},
-                ], origin="tool_result"),
-            ])
+            _write_transcript(
+                sessions_root / run_id,
+                [
+                    _make_msg("user", [{"type": "text", "text": "prompt"}]),
+                    _make_msg(
+                        "assistant",
+                        [
+                            {"type": "tool_use", "id": "A", "name": "Read", "input": {}},
+                            {"type": "tool_use", "id": "B", "name": "Bash", "input": {}},
+                        ],
+                    ),
+                    _make_msg(
+                        "user",
+                        [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "A",
+                                "content": "read output",
+                                "is_error": False,
+                            },
+                        ],
+                        origin="tool_result",
+                    ),
+                    _make_msg(
+                        "user",
+                        [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": "B",
+                                "content": "bash output",
+                                "is_error": False,
+                            },
+                        ],
+                        origin="tool_result",
+                    ),
+                ],
+            )
             with patch(
                 "src.services.session_storage.SESSIONS_DIR",
                 sessions_root,
@@ -245,7 +307,8 @@ class TestRunTranscript(unittest.TestCase):
                     rc = _run_transcript(
                         None,
                         self._build_args(
-                            run_id=run_id, tool_use_id="A",
+                            run_id=run_id,
+                            tool_use_id="A",
                         ),
                     )
         out = buf.getvalue()
@@ -262,16 +325,25 @@ class TestRunTranscript(unittest.TestCase):
             tmp_path = Path(tmp)
             sessions_root = tmp_path / "sessions"
             run_id = "run-1"
-            _write_transcript(sessions_root / run_id, [
-                _make_msg("user", [{"type": "text", "text": "p1"}]),
-                _make_msg("assistant", [
-                    {"type": "text", "text": "a1"},
-                ]),
-                _make_msg("user", [{"type": "text", "text": "p2"}]),
-                _make_msg("assistant", [
-                    {"type": "text", "text": "a2"},
-                ]),
-            ])
+            _write_transcript(
+                sessions_root / run_id,
+                [
+                    _make_msg("user", [{"type": "text", "text": "p1"}]),
+                    _make_msg(
+                        "assistant",
+                        [
+                            {"type": "text", "text": "a1"},
+                        ],
+                    ),
+                    _make_msg("user", [{"type": "text", "text": "p2"}]),
+                    _make_msg(
+                        "assistant",
+                        [
+                            {"type": "text", "text": "a2"},
+                        ],
+                    ),
+                ],
+            )
             with patch(
                 "src.services.session_storage.SESSIONS_DIR",
                 sessions_root,
@@ -320,11 +392,16 @@ class TestRunTranscript(unittest.TestCase):
             sessions_root = tmp_path / "sessions"
             run_id = "run-XYZ"
             identifier = "ISSUE-42"
-            _write_transcript(sessions_root / run_id, [
-                _make_msg("user", [{"type": "text", "text": "hi"}]),
-            ])
+            _write_transcript(
+                sessions_root / run_id,
+                [
+                    _make_msg("user", [{"type": "text", "text": "hi"}]),
+                ],
+            )
             registry_path = _seed_registry(
-                tmp_path, identifier, run_id,
+                tmp_path,
+                identifier,
+                run_id,
             )
             with patch(
                 "src.services.session_storage.SESSIONS_DIR",

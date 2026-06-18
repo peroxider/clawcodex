@@ -69,7 +69,9 @@ def test_build_provider_from_config_allows_openai_codex_without_config_api_key(m
     ]
 
 
-def test_build_provider_from_config_uses_codex_base_url_when_config_base_url_missing(monkeypatch) -> None:
+def test_build_provider_from_config_uses_codex_base_url_when_config_base_url_missing(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "src.providers.runtime.get_provider_config",
         lambda provider_name: {"api_key": "", "default_model": "configured-model"},
@@ -107,10 +109,16 @@ def test_build_provider_from_config_reports_codex_login_guidance(monkeypatch) ->
     assert "Run `clawcodex login` and select openai-codex" in str(exc_info.value)
 
 
-def test_build_provider_from_config_still_requires_api_key_for_api_key_providers(monkeypatch) -> None:
+def test_build_provider_from_config_still_requires_api_key_for_api_key_providers(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "src.providers.runtime.get_provider_config",
-        lambda provider_name: {"api_key": "", "base_url": "https://api.example.com", "default_model": "model"},
+        lambda provider_name: {
+            "api_key": "",
+            "base_url": "https://api.example.com",
+            "default_model": "model",
+        },
     )
 
     with pytest.raises(RuntimeError) as exc_info:

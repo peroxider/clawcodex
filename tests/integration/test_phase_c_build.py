@@ -103,11 +103,13 @@ class TestPhaseCImports:
 
     def test_hooks_init_reexports(self):
         import src.hooks as hooks
+
         assert hasattr(hooks, "AsyncHookRegistry")
         assert hasattr(hooks, "HookConfigManager")
 
     def test_plugins_init_reexports(self):
         import src.plugins as plugins
+
         assert hasattr(plugins, "discover_plugins")
         assert hasattr(plugins, "validate_manifest")
         assert hasattr(plugins, "resolve_dependencies")
@@ -115,6 +117,7 @@ class TestPhaseCImports:
 
     def test_skills_init_reexports(self):
         import src.skills as skills
+
         assert hasattr(skills, "validate_skill")
         assert hasattr(skills, "skill_from_mcp_tool")
         assert hasattr(skills, "get_bundled_skill_by_name")

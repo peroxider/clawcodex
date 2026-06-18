@@ -1,4 +1,5 @@
 """Tests for plugin agent discovery + namespacing (src/agent/load_plugin_agents.py)."""
+
 from __future__ import annotations
 
 from pathlib import Path

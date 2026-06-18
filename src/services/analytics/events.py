@@ -2,6 +2,7 @@
 
 Mirrors TypeScript analytics/events.ts.
 """
+
 from __future__ import annotations
 
 import time
@@ -35,6 +36,7 @@ class EventType(str, Enum):
 @dataclass
 class AnalyticsEvent:
     """A single analytics event."""
+
     type: EventType
     timestamp: float = field(default_factory=time.time)
     session_id: str = ""

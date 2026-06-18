@@ -127,7 +127,7 @@ PERMANENT_CLOSE_CODES = frozenset({1002, 4001, 4003})
 #: the server side parses NDJSON. Built once at module load (instead of
 #: a hand-typed JSON literal) so a typo can't drift the wire format
 #: vs. what the server's JSON parser expects.
-KEEP_ALIVE_FRAME = json.dumps({'type': 'keep_alive'}) + '\n'
+KEEP_ALIVE_FRAME = json.dumps({"type": "keep_alive"}) + "\n"
 
 #: Close code reported when the WS dropped without a server-sent close
 #: frame (e.g. proxy RST, TCP reset, abrupt server kill). Used as the
@@ -141,7 +141,11 @@ _PROTOCOL_PING_INTERVAL_S = 10.0
 
 
 WebSocketTransportState = Literal[
-    'idle', 'connected', 'reconnecting', 'closing', 'closed',
+    "idle",
+    "connected",
+    "reconnecting",
+    "closing",
+    "closed",
 ]
 
 
@@ -213,7 +217,7 @@ class WebSocketTransport:
         self._keepalive_interval_s = opts.keepalive_interval_s
 
         self._ws: ClientConnection | None = None
-        self._state: WebSocketTransportState = 'idle'
+        self._state: WebSocketTransportState = "idle"
 
         self._on_data_cb: Callable[[str], None] | None = None
         self._on_connect_cb: Callable[[], None] | None = None
@@ -242,11 +246,11 @@ class WebSocketTransport:
 
     def is_connected_status(self) -> bool:
         """Write-ready check. Mirrors TS ``isConnectedStatus``."""
-        return self._state == 'connected'
+        return self._state == "connected"
 
     def is_closed_status(self) -> bool:
         """Terminal-state check. Mirrors TS ``isClosedStatus``."""
-        return self._state == 'closed'
+        return self._state == "closed"
 
     def get_state_label(self) -> str:
         """Returns the state name (one of ``WebSocketTransportState``)."""
@@ -273,13 +277,13 @@ class WebSocketTransport:
         ``closed`` via ``_handle_connection_error`` (which will schedule
         a retry when applicable).
         """
-        if self._state not in ('idle', 'reconnecting'):
+        if self._state not in ("idle", "reconnecting"):
             logger.warning(
-                'WebSocketTransport: cli_websocket_connect_failed '
-                '(state=%s)', self._state,
+                "WebSocketTransport: cli_websocket_connect_failed (state=%s)",
+                self._state,
             )
             return
-        self._state = 'reconnecting'
+        self._state = "reconnecting"
         connect_start_ms = _monotonic_ms()
 
         # Per-attempt headers. The reconnect path may mutate ``self._headers``
@@ -287,14 +291,14 @@ class WebSocketTransport:
         # the current view + the X-Last-Request-Id replay anchor.
         headers = dict(self._headers)
         if self._last_sent_id:
-            headers['X-Last-Request-Id'] = self._last_sent_id
+            headers["X-Last-Request-Id"] = self._last_sent_id
             logger.debug(
-                'WebSocketTransport: adding X-Last-Request-Id=%s',
+                "WebSocketTransport: adding X-Last-Request-Id=%s",
                 self._last_sent_id,
             )
 
-        logger.debug('WebSocketTransport: opening %s', self._url)
-        logger.info('WebSocketTransport: cli_websocket_connect_opening')
+        logger.debug("WebSocketTransport: opening %s", self._url)
+        logger.info("WebSocketTransport: cli_websocket_connect_opening")
 
         try:
             ws = await ws_connect(
@@ -304,7 +308,8 @@ class WebSocketTransport:
             )
         except (websockets.exceptions.WebSocketException, OSError) as exc:
             logger.warning(
-                'WebSocketTransport: cli_websocket_connect_error: %s', exc,
+                "WebSocketTransport: cli_websocket_connect_error: %s",
+                exc,
             )
             self._handle_connection_error(close_code=None)
             return
@@ -314,10 +319,10 @@ class WebSocketTransport:
         # state through ``'closing'`` → ``'closed'``, so we only see
         # ``'closed'`` here (never the intermediate ``'closing'``).
         # Drop the orphan WS without starting the reader.
-        if self._state not in ('reconnecting', 'idle'):
+        if self._state not in ("reconnecting", "idle"):
             logger.debug(
-                'WebSocketTransport: close() ran during handshake '
-                '(state=%s); dropping orphan WS', self._state,
+                "WebSocketTransport: close() ran during handshake (state=%s); dropping orphan WS",
+                self._state,
             )
             try:
                 await ws.close()
@@ -328,8 +333,8 @@ class WebSocketTransport:
         self._ws = ws
         connect_duration_ms = _monotonic_ms() - connect_start_ms
         logger.info(
-            'WebSocketTransport: cli_websocket_connect_connected '
-            'duration_ms=%d', connect_duration_ms,
+            "WebSocketTransport: cli_websocket_connect_connected duration_ms=%d",
+            connect_duration_ms,
         )
         self._handle_open_event()
 
@@ -349,9 +354,9 @@ class WebSocketTransport:
         """
         if self._reconnect_task is not None and not self._reconnect_task.done():
             self._reconnect_task.cancel()
-        self._state = 'closing'
+        self._state = "closing"
         self._do_disconnect()
-        self._state = 'closed'
+        self._state = "closed"
 
     async def write(self, message: dict[str, Any]) -> None:
         """Send a message. Buffered (for replay) if UUID-tagged, plus
@@ -363,23 +368,23 @@ class WebSocketTransport:
         archive matters (initial flush in ``replBridge``).
         """
         # Buffer UUID-tagged messages for replay on reconnect.
-        msg_uuid = message.get('uuid')
+        msg_uuid = message.get("uuid")
         if isinstance(msg_uuid, str):
             self._message_buffer.append(message)
             self._last_sent_id = msg_uuid
 
-        if self._state != 'connected':
+        if self._state != "connected":
             # Buffered for replay (if UUID-tagged); silent drop otherwise.
             return
 
-        line = json.dumps(message) + '\n'
-        session_label = (
-            f' session={self._session_id}' if self._session_id else ''
-        )
+        line = json.dumps(message) + "\n"
+        session_label = f" session={self._session_id}" if self._session_id else ""
         detail_label = self._control_message_detail_label(message)
         logger.debug(
-            'WebSocketTransport: sending type=%s%s%s',
-            message.get('type'), session_label, detail_label,
+            "WebSocketTransport: sending type=%s%s%s",
+            message.get("type"),
+            session_label,
+            detail_label,
         )
         self._send_line(line)
 
@@ -399,9 +404,9 @@ class WebSocketTransport:
         write path lives in their ``override``.
         """
         ws = self._ws
-        if ws is None or self._state != 'connected':
+        if ws is None or self._state != "connected":
             logger.info(
-                'WebSocketTransport: cli_websocket_send_not_connected',
+                "WebSocketTransport: cli_websocket_send_not_connected",
             )
             return False
         try:
@@ -409,13 +414,14 @@ class WebSocketTransport:
             # await — matches TS ``ws.send(line)`` semantics.
             send_task = asyncio.get_running_loop().create_task(
                 ws.send(line),
-                name=f'ws-send:{self._session_id or hex(id(self))}',
+                name=f"ws-send:{self._session_id or hex(id(self))}",
             )
         except RuntimeError as exc:
             # No running loop (e.g. send from outside async context).
             # No way to schedule; treat as a connection error.
             logger.warning(
-                'WebSocketTransport: cli_websocket_send_error: %s', exc,
+                "WebSocketTransport: cli_websocket_send_error: %s",
+                exc,
             )
             self._handle_connection_error(close_code=None)
             return False
@@ -446,18 +452,20 @@ class WebSocketTransport:
         exc = task.exception()
         if exc is None:
             return
-        if self._state != 'connected':
+        if self._state != "connected":
             return
         if isinstance(
-            exc, (websockets.exceptions.ConnectionClosed, OSError),
+            exc,
+            (websockets.exceptions.ConnectionClosed, OSError),
         ):
             logger.warning(
-                'WebSocketTransport: cli_websocket_send_error: %s', exc,
+                "WebSocketTransport: cli_websocket_send_error: %s",
+                exc,
             )
             self._handle_connection_error(close_code=None)
         else:
             logger.warning(
-                'WebSocketTransport: send task unexpected error: %s',
+                "WebSocketTransport: send task unexpected error: %s",
                 exc,
             )
 
@@ -480,7 +488,8 @@ class WebSocketTransport:
             # cancellation above will tear down the read side.
             try:
                 asyncio.get_running_loop().create_task(
-                    ws.close(), name='ws-close',
+                    ws.close(),
+                    name="ws-close",
                 )
             except RuntimeError:
                 # No running loop (e.g. close from outside async context).
@@ -500,8 +509,7 @@ class WebSocketTransport:
         """
         if self._is_bridge and self._reconnect_start_time_ms is not None:
             logger.info(
-                'WebSocketTransport: tengu_ws_transport_reconnected '
-                'attempts=%d downtimeMs=%d',
+                "WebSocketTransport: tengu_ws_transport_reconnected attempts=%d downtimeMs=%d",
                 self._reconnect_attempts,
                 _monotonic_ms() - self._reconnect_start_time_ms,
             )
@@ -510,21 +518,23 @@ class WebSocketTransport:
         self._reconnect_start_time_ms = None
         self._last_reconnect_attempt_ms = None
         self._last_activity_ms = _monotonic_ms()
-        self._state = 'connected'
+        self._state = "connected"
 
         if self._on_connect_cb is not None:
             try:
                 self._on_connect_cb()
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    'WebSocketTransport: on_connect_cb raised: %s', exc,
+                    "WebSocketTransport: on_connect_cb raised: %s",
+                    exc,
                 )
 
         self._start_ping_tick()
         self._start_keepalive()
         loop = asyncio.get_running_loop()
         self._reader_task = loop.create_task(
-            self._run_reader_loop(), name='ws-transport-reader',
+            self._run_reader_loop(),
+            name="ws-transport-reader",
         )
 
         # Replay any held messages now that the WS is up again. Pass
@@ -550,18 +560,18 @@ class WebSocketTransport:
             return
         try:
             async for raw in ws:
-                text = raw if isinstance(raw, str) else raw.decode('utf-8')
+                text = raw if isinstance(raw, str) else raw.decode("utf-8")
                 self._last_activity_ms = _monotonic_ms()
                 logger.info(
-                    'WebSocketTransport: cli_websocket_message_received '
-                    'length=%d', len(text),
+                    "WebSocketTransport: cli_websocket_message_received length=%d",
+                    len(text),
                 )
                 if self._on_data_cb is not None:
                     try:
                         self._on_data_cb(text)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
-                            'WebSocketTransport: on_data_cb raised: %s',
+                            "WebSocketTransport: on_data_cb raised: %s",
                             exc,
                         )
         except asyncio.CancelledError:
@@ -577,7 +587,8 @@ class WebSocketTransport:
             self._handle_connection_error(close_code=code)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                'WebSocketTransport: reader loop error: %s', exc,
+                "WebSocketTransport: reader loop error: %s",
+                exc,
             )
             self._handle_connection_error(close_code=None)
 
@@ -590,27 +601,29 @@ class WebSocketTransport:
         a backoff-delayed reconnect.
         """
         ms_since_activity = (
-            _monotonic_ms() - self._last_activity_ms
-            if self._last_activity_ms > 0 else -1
+            _monotonic_ms() - self._last_activity_ms if self._last_activity_ms > 0 else -1
         )
         logger.debug(
-            'WebSocketTransport: cli_websocket_disconnected '
-            'close_code=%s ms_since_activity=%d', close_code, ms_since_activity,
+            "WebSocketTransport: cli_websocket_disconnected close_code=%s ms_since_activity=%d",
+            close_code,
+            ms_since_activity,
         )
         if self._is_bridge:
             logger.info(
-                'WebSocketTransport: tengu_ws_transport_closed '
-                'close_code=%s msSinceLastActivity=%d wasConnected=%s '
-                'reconnectAttempts=%d',
-                close_code, ms_since_activity,
-                self._state == 'connected', self._reconnect_attempts,
+                "WebSocketTransport: tengu_ws_transport_closed "
+                "close_code=%s msSinceLastActivity=%d wasConnected=%s "
+                "reconnectAttempts=%d",
+                close_code,
+                ms_since_activity,
+                self._state == "connected",
+                self._reconnect_attempts,
             )
 
         # Tear down the WS + listeners first so subsequent state
         # transitions don't race the old reader.
         self._do_disconnect()
 
-        if self._state in ('closing', 'closed'):
+        if self._state in ("closing", "closed"):
             return
 
         # 4003 retry-once-with-fresh-headers path. Mirrors TS lines
@@ -623,37 +636,33 @@ class WebSocketTransport:
                 fresh = self._refresh_headers()
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    'WebSocketTransport: refresh_headers raised: %s', exc,
+                    "WebSocketTransport: refresh_headers raised: %s",
+                    exc,
                 )
                 fresh = {}
-            new_auth = fresh.get('Authorization')
-            cur_auth = self._headers.get('Authorization')
+            new_auth = fresh.get("Authorization")
+            cur_auth = self._headers.get("Authorization")
             if new_auth and new_auth != cur_auth:
                 self._headers.update(fresh)
                 headers_refreshed = True
                 logger.debug(
-                    'WebSocketTransport: 4003 received but headers '
-                    'refreshed, scheduling reconnect',
+                    "WebSocketTransport: 4003 received but headers refreshed, scheduling reconnect",
                 )
                 logger.info(
-                    'WebSocketTransport: cli_websocket_4003_token_refreshed',
+                    "WebSocketTransport: cli_websocket_4003_token_refreshed",
                 )
 
-        if (
-            close_code is not None
-            and close_code in PERMANENT_CLOSE_CODES
-            and not headers_refreshed
-        ):
+        if close_code is not None and close_code in PERMANENT_CLOSE_CODES and not headers_refreshed:
             logger.warning(
-                'WebSocketTransport: cli_websocket_permanent_close '
-                'close_code=%d', close_code,
+                "WebSocketTransport: cli_websocket_permanent_close close_code=%d",
+                close_code,
             )
-            self._state = 'closed'
+            self._state = "closed"
             self._fire_on_close(close_code)
             return
 
         if not self._auto_reconnect:
-            self._state = 'closed'
+            self._state = "closed"
             self._fire_on_close(close_code)
             return
 
@@ -666,12 +675,10 @@ class WebSocketTransport:
         # budget. Mirrors TS lines 476-488.
         if (
             self._last_reconnect_attempt_ms is not None
-            and now_ms - self._last_reconnect_attempt_ms
-            > SLEEP_DETECTION_THRESHOLD_MS
+            and now_ms - self._last_reconnect_attempt_ms > SLEEP_DETECTION_THRESHOLD_MS
         ):
             logger.info(
-                'WebSocketTransport: cli_websocket_sleep_detected '
-                'gap_ms=%d',
+                "WebSocketTransport: cli_websocket_sleep_detected gap_ms=%d",
                 now_ms - self._last_reconnect_attempt_ms,
             )
             self._reconnect_start_time_ms = now_ms
@@ -681,11 +688,11 @@ class WebSocketTransport:
         elapsed = now_ms - self._reconnect_start_time_ms
         if elapsed >= DEFAULT_RECONNECT_GIVE_UP_MS:
             logger.error(
-                'WebSocketTransport: cli_websocket_reconnect_exhausted '
-                'attempts=%d elapsed_ms=%d',
-                self._reconnect_attempts, elapsed,
+                "WebSocketTransport: cli_websocket_reconnect_exhausted attempts=%d elapsed_ms=%d",
+                self._reconnect_attempts,
+                elapsed,
             )
-            self._state = 'closed'
+            self._state = "closed"
             self._fire_on_close(close_code)
             return
 
@@ -696,16 +703,17 @@ class WebSocketTransport:
                 fresh = self._refresh_headers()
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    'WebSocketTransport: refresh_headers raised: %s', exc,
+                    "WebSocketTransport: refresh_headers raised: %s",
+                    exc,
                 )
                 fresh = {}
             if fresh:
                 self._headers.update(fresh)
                 logger.debug(
-                    'WebSocketTransport: refreshed headers for reconnect',
+                    "WebSocketTransport: refreshed headers for reconnect",
                 )
 
-        self._state = 'reconnecting'
+        self._state = "reconnecting"
         self._reconnect_attempts += 1
 
         base_delay = min(
@@ -717,31 +725,31 @@ class WebSocketTransport:
         delay_ms = max(0.0, base_delay + jitter_range * (2 * random.random() - 1))
 
         logger.debug(
-            'WebSocketTransport: reconnecting in %dms (attempt=%d, '
-            'elapsed=%ds)',
-            int(delay_ms), self._reconnect_attempts, elapsed // 1000,
+            "WebSocketTransport: reconnecting in %dms (attempt=%d, elapsed=%ds)",
+            int(delay_ms),
+            self._reconnect_attempts,
+            elapsed // 1000,
         )
         logger.info(
-            'WebSocketTransport: cli_websocket_reconnect_attempt '
-            'attempts=%d', self._reconnect_attempts,
+            "WebSocketTransport: cli_websocket_reconnect_attempt attempts=%d",
+            self._reconnect_attempts,
         )
         if self._is_bridge:
             logger.info(
-                'WebSocketTransport: tengu_ws_transport_reconnecting '
-                'attempt=%d elapsedMs=%d delayMs=%d',
-                self._reconnect_attempts, elapsed, int(delay_ms),
+                "WebSocketTransport: tengu_ws_transport_reconnecting "
+                "attempt=%d elapsedMs=%d delayMs=%d",
+                self._reconnect_attempts,
+                elapsed,
+                int(delay_ms),
             )
 
         # Cancel any prior pending reconnect to avoid duplicates.
-        if (
-            self._reconnect_task is not None
-            and not self._reconnect_task.done()
-        ):
+        if self._reconnect_task is not None and not self._reconnect_task.done():
             self._reconnect_task.cancel()
         loop = asyncio.get_running_loop()
         self._reconnect_task = loop.create_task(
             self._sleep_then_reconnect(delay_ms / 1000.0),
-            name='ws-transport-reconnect',
+            name="ws-transport-reconnect",
         )
 
     async def _sleep_then_reconnect(self, delay_s: float) -> None:
@@ -750,7 +758,7 @@ class WebSocketTransport:
         except asyncio.CancelledError:
             return
         # If close() ran during the sleep, bail.
-        if self._state in ('closing', 'closed'):
+        if self._state in ("closing", "closed"):
             return
         await self.connect()
 
@@ -773,7 +781,7 @@ class WebSocketTransport:
         if last_id:
             confirmed_idx: int | None = None
             for i, msg in enumerate(self._message_buffer):
-                if msg.get('uuid') == last_id:
+                if msg.get("uuid") == last_id:
                     confirmed_idx = i
                     break
             if confirmed_idx is not None:
@@ -786,37 +794,39 @@ class WebSocketTransport:
                 if not remaining:
                     self._last_sent_id = None
                 logger.debug(
-                    'WebSocketTransport: evicted %d confirmed messages, '
-                    '%d remaining', evict_count, len(remaining),
+                    "WebSocketTransport: evicted %d confirmed messages, %d remaining",
+                    evict_count,
+                    len(remaining),
                 )
                 logger.info(
-                    'WebSocketTransport: '
-                    'cli_websocket_evicted_confirmed_messages '
-                    'evicted=%d remaining=%d',
-                    evict_count, len(remaining),
+                    "WebSocketTransport: "
+                    "cli_websocket_evicted_confirmed_messages "
+                    "evicted=%d remaining=%d",
+                    evict_count,
+                    len(remaining),
                 )
 
         if not self._message_buffer:
-            logger.debug('WebSocketTransport: no messages to replay')
+            logger.debug("WebSocketTransport: no messages to replay")
             logger.info(
-                'WebSocketTransport: cli_websocket_no_messages_to_replay',
+                "WebSocketTransport: cli_websocket_no_messages_to_replay",
             )
             return
 
         logger.debug(
-            'WebSocketTransport: replaying %d buffered messages',
+            "WebSocketTransport: replaying %d buffered messages",
             len(self._message_buffer),
         )
         logger.info(
-            'WebSocketTransport: cli_websocket_messages_to_replay '
-            'count=%d', len(self._message_buffer),
+            "WebSocketTransport: cli_websocket_messages_to_replay count=%d",
+            len(self._message_buffer),
         )
         # Snapshot the list since _send_line failure path may trigger
         # _do_disconnect which would mutate `_message_buffer` if a
         # subsequent reconnect raced (it won't in steady state but
         # snapshot guards against pathological loops).
         for msg in list(self._message_buffer):
-            line = json.dumps(msg) + '\n'
+            line = json.dumps(msg) + "\n"
             if not self._send_line(line):
                 # Send-line returned False — the WS isn't currently
                 # write-ready (state changed under us). Trigger the
@@ -837,14 +847,12 @@ class WebSocketTransport:
         self._stop_ping_tick()
         loop = asyncio.get_running_loop()
         self._ping_tick_task = loop.create_task(
-            self._ping_tick_loop(), name='ws-transport-ping-tick',
+            self._ping_tick_loop(),
+            name="ws-transport-ping-tick",
         )
 
     def _stop_ping_tick(self) -> None:
-        if (
-            self._ping_tick_task is not None
-            and not self._ping_tick_task.done()
-        ):
+        if self._ping_tick_task is not None and not self._ping_tick_task.done():
             self._ping_tick_task.cancel()
         self._ping_tick_task = None
 
@@ -853,15 +861,14 @@ class WebSocketTransport:
         try:
             while True:
                 await asyncio.sleep(self._ping_tick_interval_s)
-                if self._state != 'connected':
+                if self._state != "connected":
                     return
                 now_ms = _monotonic_ms()
                 gap = now_ms - last_tick_ms
                 last_tick_ms = now_ms
                 if gap > SLEEP_DETECTION_THRESHOLD_MS:
                     logger.info(
-                        'WebSocketTransport: '
-                        'cli_websocket_sleep_detected_on_ping gap_ms=%d',
+                        "WebSocketTransport: cli_websocket_sleep_detected_on_ping gap_ms=%d",
                         gap,
                     )
                     # _handle_connection_error mutates state — return after.
@@ -877,18 +884,16 @@ class WebSocketTransport:
         run their own activity heartbeats.
         """
         self._stop_keepalive()
-        if is_env_truthy('CLAUDE_CODE_REMOTE'):
+        if is_env_truthy("CLAUDE_CODE_REMOTE"):
             return
         loop = asyncio.get_running_loop()
         self._keepalive_task = loop.create_task(
-            self._keepalive_loop(), name='ws-transport-keepalive',
+            self._keepalive_loop(),
+            name="ws-transport-keepalive",
         )
 
     def _stop_keepalive(self) -> None:
-        if (
-            self._keepalive_task is not None
-            and not self._keepalive_task.done()
-        ):
+        if self._keepalive_task is not None and not self._keepalive_task.done():
             self._keepalive_task.cancel()
         self._keepalive_task = None
 
@@ -896,17 +901,17 @@ class WebSocketTransport:
         try:
             while True:
                 await asyncio.sleep(self._keepalive_interval_s)
-                if self._state != 'connected' or self._ws is None:
+                if self._state != "connected" or self._ws is None:
                     return
                 try:
                     self._send_line(KEEP_ALIVE_FRAME)
                     logger.debug(
-                        'WebSocketTransport: sent periodic keep_alive frame',
+                        "WebSocketTransport: sent periodic keep_alive frame",
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        'WebSocketTransport: cli_websocket_keepalive_failed: '
-                        '%s', exc,
+                        "WebSocketTransport: cli_websocket_keepalive_failed: %s",
+                        exc,
                     )
         except asyncio.CancelledError:
             return
@@ -921,41 +926,39 @@ class WebSocketTransport:
             cb(close_code)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                'WebSocketTransport: on_close_cb raised: %s', exc,
+                "WebSocketTransport: on_close_cb raised: %s",
+                exc,
             )
 
     @staticmethod
     def _control_message_detail_label(message: dict[str, Any]) -> str:
-        msg_type = message.get('type')
-        if msg_type == 'control_request':
-            req = message.get('request') or {}
-            subtype = req.get('subtype')
-            request_id = message.get('request_id')
-            tool_name = req.get('tool_name') if subtype == 'can_use_tool' else None
-            base = f' subtype={subtype} request_id={request_id}'
+        msg_type = message.get("type")
+        if msg_type == "control_request":
+            req = message.get("request") or {}
+            subtype = req.get("subtype")
+            request_id = message.get("request_id")
+            tool_name = req.get("tool_name") if subtype == "can_use_tool" else None
+            base = f" subtype={subtype} request_id={request_id}"
             if tool_name:
-                base += f' tool={tool_name}'
+                base += f" tool={tool_name}"
             return base
-        if msg_type == 'control_response':
-            resp = message.get('response') or {}
-            return (
-                f' subtype={resp.get("subtype")} '
-                f'request_id={resp.get("request_id")}'
-            )
-        return ''
+        if msg_type == "control_response":
+            resp = message.get("response") or {}
+            return f" subtype={resp.get('subtype')} request_id={resp.get('request_id')}"
+        return ""
 
 
 __all__ = [
-    'DEFAULT_BASE_RECONNECT_DELAY_MS',
-    'DEFAULT_KEEPALIVE_INTERVAL_S',
-    'DEFAULT_MAX_BUFFER_SIZE',
-    'DEFAULT_MAX_RECONNECT_DELAY_MS',
-    'DEFAULT_PING_TICK_INTERVAL_S',
-    'DEFAULT_RECONNECT_GIVE_UP_MS',
-    'KEEP_ALIVE_FRAME',
-    'PERMANENT_CLOSE_CODES',
-    'SLEEP_DETECTION_THRESHOLD_MS',
-    'WebSocketTransport',
-    'WebSocketTransportOptions',
-    'WebSocketTransportState',
+    "DEFAULT_BASE_RECONNECT_DELAY_MS",
+    "DEFAULT_KEEPALIVE_INTERVAL_S",
+    "DEFAULT_MAX_BUFFER_SIZE",
+    "DEFAULT_MAX_RECONNECT_DELAY_MS",
+    "DEFAULT_PING_TICK_INTERVAL_S",
+    "DEFAULT_RECONNECT_GIVE_UP_MS",
+    "KEEP_ALIVE_FRAME",
+    "PERMANENT_CLOSE_CODES",
+    "SLEEP_DETECTION_THRESHOLD_MS",
+    "WebSocketTransport",
+    "WebSocketTransportOptions",
+    "WebSocketTransportState",
 ]

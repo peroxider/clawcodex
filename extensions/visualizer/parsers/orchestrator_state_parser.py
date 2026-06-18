@@ -61,7 +61,11 @@ class OrchestratorStateParser:
     """
 
     def __init__(self, reports_dir: Path | None = None) -> None:
-        self.reports_dir = reports_dir or (Path.cwd() / ".reports")
+        # In the new ClawCodeX format, the orchestrator state journals
+        # live under ``~/.clawcodex/reports/run_*/`` (per-user, not
+        # per-workspace). The parser is path-agnostic but the default
+        # points at the new location.
+        self.reports_dir = reports_dir or (Path.home() / ".clawcodex" / "reports")
 
     # ------------------------------------------------------------------
     # Public API
@@ -76,12 +80,14 @@ class OrchestratorStateParser:
             if not run_dir.is_dir() or not run_dir.name.startswith("run_"):
                 continue
             journal = run_dir / "state_journal.ndjson"
-            runs.append({
-                "run_id": run_dir.name,
-                "path": str(run_dir),
-                "journal_exists": journal.exists(),
-                "event_count": self._count_ndjson_lines(journal) if journal.exists() else 0,
-            })
+            runs.append(
+                {
+                    "run_id": run_dir.name,
+                    "path": str(run_dir),
+                    "journal_exists": journal.exists(),
+                    "event_count": self._count_ndjson_lines(journal) if journal.exists() else 0,
+                }
+            )
         return runs
 
     def parse_run(self, run_id: str) -> RunState | None:
@@ -109,9 +115,7 @@ class OrchestratorStateParser:
         latest = runs[-1]
         return self.parse_run(latest["run_id"])
 
-    def get_issue_timeline(
-        self, run_id: str, issue_id: str
-    ) -> list[dict[str, Any]]:
+    def get_issue_timeline(self, run_id: str, issue_id: str) -> list[dict[str, Any]]:
         """Return the timeline of events for a specific issue in a run."""
         run_state = self.parse_run(run_id)
         if run_state is None:
@@ -132,20 +136,22 @@ class OrchestratorStateParser:
 
         issues_list = []
         for issue_id, issue in run_state.issues.items():
-            issues_list.append({
-                "issue_id": issue_id,
-                "status": issue.status,
-                "current_phase": issue.current_phase,
-                "progress": issue.progress,
-                "verification_status": issue.verification_status,
-                "pr_url": issue.pr_url,
-                "pr_number": issue.pr_number,
-                "session_path": issue.session_path,
-                "session_id": issue.session_id,
-                "error": issue.error,
-                "started_at": issue.started_at,
-                "last_updated": issue.last_updated,
-            })
+            issues_list.append(
+                {
+                    "issue_id": issue_id,
+                    "status": issue.status,
+                    "current_phase": issue.current_phase,
+                    "progress": issue.progress,
+                    "verification_status": issue.verification_status,
+                    "pr_url": issue.pr_url,
+                    "pr_number": issue.pr_number,
+                    "session_path": issue.session_path,
+                    "session_id": issue.session_id,
+                    "error": issue.error,
+                    "started_at": issue.started_at,
+                    "last_updated": issue.last_updated,
+                }
+            )
 
         return {
             "status": "active",

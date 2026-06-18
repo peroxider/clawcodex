@@ -1,4 +1,5 @@
 """Tests for IDE Integration subsystem."""
+
 from __future__ import annotations
 
 import unittest
@@ -85,8 +86,10 @@ class TestIDEConnectionManager(unittest.TestCase):
 
     def test_register_handler(self) -> None:
         mgr = IDEConnectionManager()
+
         async def handler(params):
             return {"ok": True}
+
         mgr.register_handler("test/method", handler)
         self.assertIn("test/method", mgr._handlers)
 
@@ -125,11 +128,13 @@ class TestSelectionTracker(unittest.TestCase):
     def test_history(self) -> None:
         tracker = SelectionTracker(max_history=3)
         for i in range(5):
-            tracker.update(IDESelection(
-                file_path=f"file{i}.py",
-                text=f"text{i}",
-                range=IDERange(1, 0, 1, 5),
-            ))
+            tracker.update(
+                IDESelection(
+                    file_path=f"file{i}.py",
+                    text=f"text{i}",
+                    range=IDERange(1, 0, 1, 5),
+                )
+            )
         # Max 3 in history
         self.assertEqual(len(tracker.history), 3)
         self.assertEqual(tracker.history[0].file_path, "file4.py")
@@ -165,13 +170,19 @@ class TestDiagnosticsCollector(unittest.TestCase):
 
     def test_get_errors(self) -> None:
         collector = DiagnosticsCollector()
-        collector.update_file("a.py", [
-            IDEDiagnostic("a.py", "err", IDEDiagnosticSeverity.ERROR),
-            IDEDiagnostic("a.py", "warn", IDEDiagnosticSeverity.WARNING),
-        ])
-        collector.update_file("b.py", [
-            IDEDiagnostic("b.py", "err2", IDEDiagnosticSeverity.ERROR),
-        ])
+        collector.update_file(
+            "a.py",
+            [
+                IDEDiagnostic("a.py", "err", IDEDiagnosticSeverity.ERROR),
+                IDEDiagnostic("a.py", "warn", IDEDiagnosticSeverity.WARNING),
+            ],
+        )
+        collector.update_file(
+            "b.py",
+            [
+                IDEDiagnostic("b.py", "err2", IDEDiagnosticSeverity.ERROR),
+            ],
+        )
         self.assertEqual(len(collector.get_errors()), 2)
         self.assertEqual(len(collector.get_errors("a.py")), 1)
 

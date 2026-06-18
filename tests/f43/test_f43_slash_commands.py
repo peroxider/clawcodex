@@ -148,4 +148,3 @@ def test_runtime_model_rejects_unknown_flag(monkeypatch, tmp_path: Path) -> None
     assert runtime.swaps == []
     assert "usage:" in text
     assert "Unknown argument" in text
-

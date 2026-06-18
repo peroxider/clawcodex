@@ -116,9 +116,7 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     # F-22-G4: CronCreate cannot set `permanent`. The flag is reserved for
     # the assistant-mode installer (write_if_missing).
     if tool_input.get("permanent") is True:
-        raise ToolInputError(
-            "permanent is a system-only flag and cannot be set via CronCreate"
-        )
+        raise ToolInputError("permanent is a system-only flag and cannot be set via CronCreate")
 
     recurring = bool(tool_input.get("recurring", True))
     durable = bool(tool_input.get("durable", False))
@@ -159,7 +157,8 @@ CronCreateTool: Tool = build_tool(
     },
     call=_cron_create_call,
     prompt=CRON_CREATE_PROMPT,
-    description=CRON_CREATE_PROMPT.splitlines()[0].lstrip("# ").strip() or "Schedule a recurring or one-shot prompt.",
+    description=CRON_CREATE_PROMPT.splitlines()[0].lstrip("# ").strip()
+    or "Schedule a recurring or one-shot prompt.",
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: False,
@@ -173,7 +172,9 @@ CronCreateTool: Tool = build_tool(
 def _cron_list_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     if is_cron_disabled():
         return _cron_disabled_result("CronList")
-    jobs = [_task_output(task) for task in read_all_cron_tasks(context.workspace_root, context.crons)]
+    jobs = [
+        _task_output(task) for task in read_all_cron_tasks(context.workspace_root, context.crons)
+    ]
     return ToolResult(name="CronList", output={"jobs": jobs})
 
 

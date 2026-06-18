@@ -55,9 +55,7 @@ def test_argcomplete_helper_invokes_autocomplete(monkeypatch):
         captured["kwargs"] = kwargs
 
     monkeypatch.setattr(real_argcomplete, "autocomplete", _fake_autocomplete)
-    monkeypatch.setattr(
-        "clawcodex_ext.cli.parser.build_parser", lambda: fake_parser
-    )
+    monkeypatch.setattr("clawcodex_ext.cli.parser.build_parser", lambda: fake_parser)
 
     # Reload the hook's view of argcomplete so monkeypatch takes effect.
     from clawcodex_ext.cli import dispatch
@@ -69,10 +67,19 @@ def test_argcomplete_helper_invokes_autocomplete(monkeypatch):
     assert fake_parser._actions[0].choices is not None
     nouns = set(fake_parser._actions[0].choices)
     expected = {
-        "login", "config", "mcp", "daemon", "doctor",
-        "orchestrator", "autonomy", "schedule",
+        "login",
+        "config",
+        "mcp",
+        "daemon",
+        "doctor",
+        "orchestrator",
+        "autonomy",
+        "schedule",
         # Registry-loaded subcommands (load_builtin_subcommands runs lazily).
-        "provider", "model", "pos", "viz",
+        "provider",
+        "model",
+        "pos",
+        "viz",
     }
     assert expected.issubset(nouns), f"Missing nouns: {expected - nouns}"
 
@@ -157,9 +164,7 @@ def test_argcomplete_orchestrator_noun_completion(monkeypatch):
         # outcome is irrelevant for this unit test.
         pass
 
-    assert "parser" in captured, (
-        "argcomplete.autocomplete was not called when _ARGCOMPLETE=1"
-    )
+    assert "parser" in captured, "argcomplete.autocomplete was not called when _ARGCOMPLETE=1"
 
 
 def test_argcomplete_subcommand_noun_set_is_complete():
@@ -169,9 +174,16 @@ def test_argcomplete_subcommand_noun_set_is_complete():
 
     # Inspect the source to confirm the static noun set is present.
     import inspect
+
     src = inspect.getsource(dispatch._maybe_argcomplete_top_level)
     for noun in (
-        "login", "config", "mcp", "daemon", "doctor",
-        "orchestrator", "autonomy", "schedule",
+        "login",
+        "config",
+        "mcp",
+        "daemon",
+        "doctor",
+        "orchestrator",
+        "autonomy",
+        "schedule",
     ):
         assert f'"{noun}"' in src, f"Noun {noun!r} missing from hook source"

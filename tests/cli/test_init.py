@@ -30,6 +30,7 @@ def _reset_init_and_state():
     reset_state_for_tests()
     # Also reset graceful_shutdown so signal handlers aren't sticky.
     from src.utils import graceful_shutdown as gs
+
     gs.reset_for_test_only()
     yield
     init_module.reset_init_for_test_only()
@@ -42,18 +43,22 @@ class TestInitRunsSubstepsInOrder(unittest.TestCase):
 
     def test_substep_call_order(self) -> None:
         call_log: list[str] = []
-        with mock.patch.object(
-            init_module,
-            "apply_safe_config_environment_variables",
-            side_effect=lambda *a, **kw: call_log.append("safe_env"),
-        ), mock.patch.object(
-            init_module,
-            "setup_graceful_shutdown",
-            side_effect=lambda *a, **kw: call_log.append("graceful_shutdown"),
-        ), mock.patch.object(
-            init_module,
-            "start_api_preconnect",
-            side_effect=lambda *a, **kw: call_log.append("api_preconnect"),
+        with (
+            mock.patch.object(
+                init_module,
+                "apply_safe_config_environment_variables",
+                side_effect=lambda *a, **kw: call_log.append("safe_env"),
+            ),
+            mock.patch.object(
+                init_module,
+                "setup_graceful_shutdown",
+                side_effect=lambda *a, **kw: call_log.append("graceful_shutdown"),
+            ),
+            mock.patch.object(
+                init_module,
+                "start_api_preconnect",
+                side_effect=lambda *a, **kw: call_log.append("api_preconnect"),
+            ),
         ):
             init_module.init()
 
@@ -69,13 +74,11 @@ class TestInitIsMemoized(unittest.TestCase):
     process, regardless of how many callers invoke init()."""
 
     def test_three_calls_run_substeps_once(self) -> None:
-        with mock.patch.object(
-            init_module, "apply_safe_config_environment_variables"
-        ) as mock_safe, mock.patch.object(
-            init_module, "setup_graceful_shutdown"
-        ) as mock_shutdown, mock.patch.object(
-            init_module, "start_api_preconnect"
-        ) as mock_preconnect:
+        with (
+            mock.patch.object(init_module, "apply_safe_config_environment_variables") as mock_safe,
+            mock.patch.object(init_module, "setup_graceful_shutdown") as mock_shutdown,
+            mock.patch.object(init_module, "start_api_preconnect") as mock_preconnect,
+        ):
             init_module.init()
             init_module.init()
             init_module.init()
@@ -87,9 +90,7 @@ class TestInitIsMemoized(unittest.TestCase):
 
 class TestResetClearsCache(unittest.TestCase):
     def test_reset_re_runs_substeps(self) -> None:
-        with mock.patch.object(
-            init_module, "apply_safe_config_environment_variables"
-        ) as mock_safe:
+        with mock.patch.object(init_module, "apply_safe_config_environment_variables") as mock_safe:
             init_module.init()
             init_module.reset_init_for_test_only()
             init_module.init()
@@ -118,11 +119,14 @@ class TestInitDoesNotApplyUnsafeEnv(unittest.TestCase):
         }
         original_path = os.environ.get("PATH", "")
 
-        with mock.patch(
-            "src.permissions.trust_boundary._load_config_env",
-            return_value=config_env,
-        ), mock.patch.object(init_module, "setup_graceful_shutdown"), \
-                mock.patch.object(init_module, "start_api_preconnect"):
+        with (
+            mock.patch(
+                "src.permissions.trust_boundary._load_config_env",
+                return_value=config_env,
+            ),
+            mock.patch.object(init_module, "setup_graceful_shutdown"),
+            mock.patch.object(init_module, "start_api_preconnect"),
+        ):
             os.environ.pop("ANTHROPIC_MODEL", None)
             init_module.init()
 
@@ -147,8 +151,10 @@ class TestRunPreActionSetsInteractive(unittest.TestCase):
     def test_default_args_interactive_true_when_tty(self) -> None:
         # We can't make sys.stdout a real TTY in unittest, so patch
         # isatty to return True.
-        with mock.patch.object(init_module, "init"), \
-                mock.patch.object(sys.stdout, "isatty", return_value=True):
+        with (
+            mock.patch.object(init_module, "init"),
+            mock.patch.object(sys.stdout, "isatty", return_value=True),
+        ):
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
             self.assertTrue(get_is_interactive())
@@ -160,8 +166,10 @@ class TestRunPreActionSetsInteractive(unittest.TestCase):
             self.assertFalse(get_is_interactive())
 
     def test_non_tty_stdout_sets_interactive_false(self) -> None:
-        with mock.patch.object(init_module, "init"), \
-                mock.patch.object(sys.stdout, "isatty", return_value=False):
+        with (
+            mock.patch.object(init_module, "init"),
+            mock.patch.object(sys.stdout, "isatty", return_value=False),
+        ):
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
             self.assertFalse(get_is_interactive())
@@ -169,16 +177,17 @@ class TestRunPreActionSetsInteractive(unittest.TestCase):
 
 class TestRunPreActionSetsClientType(unittest.TestCase):
     def test_default_when_env_unset(self) -> None:
-        with mock.patch.object(init_module, "init"), \
-                mock.patch.dict(os.environ, {}, clear=False):
+        with mock.patch.object(init_module, "init"), mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("CLAUDE_CODE_ENTRYPOINT", None)
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
             self.assertEqual(get_client_type(), "cli")
 
     def test_sdk_py_override(self) -> None:
-        with mock.patch.object(init_module, "init"), \
-                mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "sdk-py"}):
+        with (
+            mock.patch.object(init_module, "init"),
+            mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "sdk-py"}),
+        ):
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
             self.assertEqual(get_client_type(), "sdk-py")
@@ -186,8 +195,10 @@ class TestRunPreActionSetsClientType(unittest.TestCase):
     def test_unknown_value_falls_back_to_cli(self) -> None:
         # Defensive default: an attacker setting this env var to a
         # random string shouldn't change behavior.
-        with mock.patch.object(init_module, "init"), \
-                mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "totally-random"}):
+        with (
+            mock.patch.object(init_module, "init"),
+            mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "totally-random"}),
+        ):
             args = types.SimpleNamespace(print=False)
             init_module.run_pre_action(args)
             self.assertEqual(get_client_type(), "cli")

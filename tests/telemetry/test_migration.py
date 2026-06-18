@@ -1,4 +1,5 @@
 """Tests for F-97-L schema v1 → v2 migration helpers."""
+
 from __future__ import annotations
 
 import pytest
@@ -148,9 +149,7 @@ def test_fingerprint_dict_to_hash_handles_both_shapes():
     strings and v2 dicts alike."""
     assert _fingerprint_dict_to_hash("abc1234567890def") == "abc1234567890def"
     assert (
-        _fingerprint_dict_to_hash(
-            {"hash": "abc1234567890def", "version": 2, "method": "x"}
-        )
+        _fingerprint_dict_to_hash({"hash": "abc1234567890def", "version": 2, "method": "x"})
         == "abc1234567890def"
     )
     # Unknown shapes collapse to "" so the bucket is stable

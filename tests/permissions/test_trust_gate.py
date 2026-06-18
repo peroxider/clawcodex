@@ -67,6 +67,7 @@ class TestShouldSkipHookDueToTrust:
         # Bare object without workspace_trusted attribute → fail-safe to True.
         class Bare:
             pass
+
         assert should_skip_hook_due_to_trust(Bare()) is True
 
 
@@ -90,7 +91,10 @@ class TestExecutorRespectsGate:
         )
 
         async for _ in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             pass
 
@@ -111,7 +115,10 @@ class TestExecutorRespectsGate:
         )
 
         async for _ in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             pass
 
@@ -140,7 +147,10 @@ class TestExecutorRespectsGate:
         )
 
         async for _ in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             pass
 
@@ -152,7 +162,9 @@ class TestExecutorRespectsGate:
     async def test_untrusted_workspace_with_only_user_hooks_yields_nothing(self):
         """When the gate strips everything, the executor yields no items."""
         user_hook = HookConfig(
-            type="command", command="echo x", source=HookSource.USER_SETTINGS,
+            type="command",
+            command="echo x",
+            source=HookSource.USER_SETTINGS,
         )
         ctx = _MockContext(
             workspace_trusted=False,
@@ -161,7 +173,10 @@ class TestExecutorRespectsGate:
 
         items = []
         async for r in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             items.append(r)
 

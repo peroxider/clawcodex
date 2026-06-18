@@ -39,8 +39,7 @@ def _sanitize_for_path(name: str) -> str:
     """轻量 sanitize — 只允许字母数字、连字符、下划线。"""
     if not name or not all(c.isalnum() or c in "_-" for c in name):
         raise ValueError(
-            f"invalid component for session path: {name!r} "
-            "(allowed: alphanumeric + '_' + '-')"
+            f"invalid component for session path: {name!r} (allowed: alphanumeric + '_' + '-')"
         )
     if len(name) > 128:
         raise ValueError(f"session_id too long ({len(name)} > 128 chars)")
@@ -60,9 +59,7 @@ def init() -> None:
     register_transcript_path_resolver(nested_session_path_resolver)
     import logging
 
-    logging.getLogger(__name__).info(
-        "registered nested-session transcript path resolver"
-    )
+    logging.getLogger(__name__).info("registered nested-session transcript path resolver")
 
 
 __all__ = [

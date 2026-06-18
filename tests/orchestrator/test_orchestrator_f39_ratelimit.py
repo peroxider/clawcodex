@@ -133,9 +133,7 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
                 ),
             )
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
-            self.assertTrue(
-                orch._is_command_author_eligible(issue, "anybody")
-            )
+            self.assertTrue(orch._is_command_author_eligible(issue, "anybody"))
 
     def test_none_author_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -143,12 +141,8 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
             # Author unknown → reject (LLM self-trigger guard).
-            self.assertFalse(
-                orch._is_command_author_eligible(issue, None)
-            )
-            self.assertFalse(
-                orch._is_command_author_eligible(issue, "")
-            )
+            self.assertFalse(orch._is_command_author_eligible(issue, None))
+            self.assertFalse(orch._is_command_author_eligible(issue, ""))
 
     def test_bot_login_always_eligible(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -157,9 +151,7 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
             # The bot itself is allowed (CLI fallback may route through
             # bot comments).
-            self.assertTrue(
-                orch._is_command_author_eligible(issue, "clawcodex")
-            )
+            self.assertTrue(orch._is_command_author_eligible(issue, "clawcodex"))
 
     def test_author_matches_issue_author(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -168,9 +160,7 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
             reg.get("1").author_login = "alice"
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
-            self.assertTrue(
-                orch._is_command_author_eligible(issue, "alice")
-            )
+            self.assertTrue(orch._is_command_author_eligible(issue, "alice"))
 
     def test_other_login_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -179,9 +169,7 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
             reg.get("1").author_login = "alice"
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
-            self.assertFalse(
-                orch._is_command_author_eligible(issue, "mallory")
-            )
+            self.assertFalse(orch._is_command_author_eligible(issue, "mallory"))
 
     def test_no_record_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -189,9 +177,7 @@ class TestIsCommandAuthorEligible(unittest.TestCase):
             # No record for issue 1.
             orch = _make_orchestrator(tracker=MagicMock(), registry=reg)
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
-            self.assertFalse(
-                orch._is_command_author_eligible(issue, "alice")
-            )
+            self.assertFalse(orch._is_command_author_eligible(issue, "alice"))
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +280,9 @@ class TestCheckRetryRateLimit(unittest.TestCase):
             workflow = WorkflowConfig()
             workflow.agent.max_retries_per_issue = 2
             orch = _make_orchestrator(
-                tracker=MagicMock(), registry=reg, workflow=workflow,
+                tracker=MagicMock(),
+                registry=reg,
+                workflow=workflow,
             )
             issue = Issue(id="1", identifier="ISSUE-1", title="x")
             # retry_count == max → reject

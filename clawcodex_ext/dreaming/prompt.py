@@ -19,6 +19,7 @@ Reuses :data:`src.memdir.memdir.DIR_EXISTS_GUIDANCE`,
 :data:`src.memdir.memdir.MAX_ENTRYPOINT_LINES` constants so the prompt
 stays in lock-step with the upstream memory module's caps.
 """
+
 from __future__ import annotations
 
 from src.memdir.memdir import (

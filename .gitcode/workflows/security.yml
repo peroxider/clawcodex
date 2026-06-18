@@ -1,0 +1,46 @@
+name: security
+
+on:
+  push:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  pull_request:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  workflow_dispatch:
+
+jobs:
+  codecheck:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - name: GitCode CodeCheck
+        uses: codecheck-action@0.0.3
+        with:
+          repo_url: https://gitcode.com/Gideon_Zhao/clawcodex.git
+          branch: dev-decoupling-refactor-b24b8cb
+          rule_sets: PYTHON,SHELL
+          access_token: ${{ secrets.GITCODE_TOKEN }}
+
+  supply-chain:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and supply-chain tools
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Secret and supply-chain diff scan
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/supply_chain_audit.py --base origin/dev-decoupling-refactor-b24b8cb

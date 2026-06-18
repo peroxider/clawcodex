@@ -3,6 +3,7 @@
 Event logging, session metadata, and event sinks.
 Mirrors TypeScript analytics/ directory.
 """
+
 from __future__ import annotations
 
 from .events import AnalyticsEvent, EventType, log_event

@@ -12,6 +12,7 @@ Covers:
   branch and renders ``ASYNC_AGENT_ALLOWED_TOOLS - INTERNAL_WORKER_TOOLS``
   sorted (parity with ``coordinatorMode.ts:88-95``).
 """
+
 from __future__ import annotations
 
 import os
@@ -117,30 +118,39 @@ def test_match_session_mode_exits_coordinator(
 
 def test_internal_worker_tools_contains_chapter_listed_names() -> None:
     """Per ``coordinatorMode.ts:29-34`` and the chapter §"Tool Restrictions"."""
-    assert INTERNAL_WORKER_TOOLS == frozenset({
-        "TeamCreate",
-        "TeamDelete",
-        "SendMessage",
-        "StructuredOutput",
-    })
+    assert INTERNAL_WORKER_TOOLS == frozenset(
+        {
+            "TeamCreate",
+            "TeamDelete",
+            "SendMessage",
+            "StructuredOutput",
+        }
+    )
 
 
 class _StubTool:
     """Minimal Tool-shaped stub for filter tests."""
+
     def __init__(self, name: str) -> None:
         self.name = name
-
 
 
 def test_filter_worker_tools_excludes_internal_set() -> None:
     """Workers get standard tools (Read, Bash, etc.) but lose the four
     coordination tools that only the coordinator uses."""
     tools = [
-        _StubTool("Read"), _StubTool("Bash"), _StubTool("Edit"),
-        _StubTool("TeamCreate"), _StubTool("TeamDelete"),
-        _StubTool("SendMessage"), _StubTool("StructuredOutput"),
-        _StubTool("Agent"), _StubTool("TaskStop"),
-        _StubTool("Grep"), _StubTool("WebSearch"), _StubTool("Skill"),
+        _StubTool("Read"),
+        _StubTool("Bash"),
+        _StubTool("Edit"),
+        _StubTool("TeamCreate"),
+        _StubTool("TeamDelete"),
+        _StubTool("SendMessage"),
+        _StubTool("StructuredOutput"),
+        _StubTool("Agent"),
+        _StubTool("TaskStop"),
+        _StubTool("Grep"),
+        _StubTool("WebSearch"),
+        _StubTool("Skill"),
     ]
     worker = filter_worker_tools(tools)
     worker_names = {t.name for t in worker}
@@ -155,7 +165,8 @@ def test_filter_worker_tools_preserves_mcp_tools() -> None:
     """MCP-server tools aren't on ``INTERNAL_WORKER_TOOLS``; they
     pass through to workers (chapter §"Worker Context")."""
     tools = [
-        _StubTool("Read"), _StubTool("mcp__github__create_pr"),
+        _StubTool("Read"),
+        _StubTool("mcp__github__create_pr"),
         _StubTool("mcp__sentry__search_issues"),
     ]
     worker = filter_worker_tools(tools)
@@ -277,9 +288,7 @@ def test_user_context_default_branch_sorted(
     line = next(l for l in body.splitlines() if "Workers spawned" in l)
     tools_part = line.split(":", 1)[1].strip()
     tools = [t.strip() for t in tools_part.split(",")]
-    assert tools == sorted(tools), (
-        f"Worker tools must be alphabetically sorted; got: {tools}"
-    )
+    assert tools == sorted(tools), f"Worker tools must be alphabetically sorted; got: {tools}"
 
 
 def test_user_context_default_branch_matches_async_allowed_exactly(
@@ -332,7 +341,8 @@ def test_user_context_simple_off_returns_full_list(
 
 
 def test_user_context_simple_snapshot(
-    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Byte-exact snapshot pin for SIMPLE branch. Breaking this test
     is the deliberate review gate for any change to the SIMPLE-mode
@@ -340,15 +350,14 @@ def test_user_context_simple_snapshot(
     monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
     monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
     body = get_coordinator_user_context()["workerToolsContext"]
-    snap_path = (
-        Path(request.path).parent / "__snapshots__" / "user_context_simple.snap.txt"
-    )
+    snap_path = Path(request.path).parent / "__snapshots__" / "user_context_simple.snap.txt"
     expected = snap_path.read_text().rstrip("\n")
     assert body == expected
 
 
 def test_user_context_default_snapshot(
-    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     """Byte-exact snapshot pin for the default branch. Updates require
     a deliberate snapshot refresh (mirrors the prompt.py snapshot
@@ -356,9 +365,7 @@ def test_user_context_default_snapshot(
     monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
     monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)
     body = get_coordinator_user_context()["workerToolsContext"]
-    snap_path = (
-        Path(request.path).parent / "__snapshots__" / "user_context_default.snap.txt"
-    )
+    snap_path = Path(request.path).parent / "__snapshots__" / "user_context_default.snap.txt"
     expected = snap_path.read_text().rstrip("\n")
     assert body == expected
 
@@ -376,9 +383,7 @@ def test_user_context_simple_with_mcp_and_scratchpad(
         def __init__(self, name: str) -> None:
             self.name = name
 
-    ctx = get_coordinator_user_context(
-        [_MCPClient("github")], scratchpad_dir="/tmp/scratch"
-    )
+    ctx = get_coordinator_user_context([_MCPClient("github")], scratchpad_dir="/tmp/scratch")
     body = ctx["workerToolsContext"]
     assert "Bash, Edit, Read" in body
     assert "WebSearch" not in body  # SIMPLE doesn't leak default tools
@@ -418,6 +423,7 @@ def test_fork_subagent_enabled_when_coordinator_mode_off(
     monkeypatch.delenv("CLAUDE_CODE_COORDINATOR_MODE", raising=False)
     # Interactive flag — patch the helper.
     from unittest.mock import patch
+
     with patch(
         "src.agent.fork_subagent.get_is_non_interactive_session",
         return_value=False,

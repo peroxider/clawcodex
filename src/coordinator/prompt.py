@@ -58,6 +58,7 @@ extension. Keeping ``.ts`` matches the verbatim-port mandate; the
 "hard-won lessons" the chapter cites are about prompt shape, not
 language artifacts.
 """
+
 from __future__ import annotations
 
 from src.utils.env import is_env_truthy
@@ -76,8 +77,7 @@ TASK_STOP_TOOL_NAME = "TaskStop"
 
 
 _WORKER_CAPABILITIES_SIMPLE = (
-    "Workers have access to Bash, Read, and Edit tools, plus MCP tools "
-    "from configured MCP servers."
+    "Workers have access to Bash, Read, and Edit tools, plus MCP tools from configured MCP servers."
 )
 
 _WORKER_CAPABILITIES_DEFAULT = (

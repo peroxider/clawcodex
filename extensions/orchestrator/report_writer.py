@@ -195,4 +195,7 @@ def _copy_with_fallback(src: Path, dst: Path) -> None:
 
 
 def _safe_segment(value: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in value).strip("-._") or "unknown"
+    return (
+        "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in value).strip("-._")
+        or "unknown"
+    )

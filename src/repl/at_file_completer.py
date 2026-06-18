@@ -15,9 +15,9 @@ new location — a star-import would silently miss tests that reach into
 from __future__ import annotations
 
 from src.utils.at_file_completer import (
-    AtFileCompleter,         # primary class (Completer subclass)
+    AtFileCompleter,  # primary class (Completer subclass)
     # Private helpers reached into by tests/test_at_file_completer.py:
-    _build_path_bitmap,      # WI-3.1
+    _build_path_bitmap,  # WI-3.1
     _filter_candidates,
     _is_path_like_token,
     _path_completions,

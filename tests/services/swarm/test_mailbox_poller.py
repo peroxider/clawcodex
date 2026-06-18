@@ -11,6 +11,7 @@ Covers:
 * Read-offset cursor advances; restarts resume cleanly.
 * Daemon thread lifecycle.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,7 +59,8 @@ def _make_teammate(reg: RuntimeTaskRegistry, agent_id: str = "t1") -> str:
         start_time=0.0,
         output_file="/tmp/x",
         identity=TeammateIdentity(
-            agent_id=agent_id, agent_name="alice",
+            agent_id=agent_id,
+            agent_name="alice",
             team_name="t",
         ),
     )
@@ -66,16 +68,17 @@ def _make_teammate(reg: RuntimeTaskRegistry, agent_id: str = "t1") -> str:
     return agent_id
 
 
-def _write_envelope(
-    *, recipient: str, envelope: dict, sender: str, tmp_path: Path
-) -> None:
+def _write_envelope(*, recipient: str, envelope: dict, sender: str, tmp_path: Path) -> None:
     msg = TeammateMessage(
         from_=sender,
         text=json.dumps(envelope, ensure_ascii=False),
         timestamp="2026-05-08T12:00:00Z",
     )
     write_to_mailbox(
-        recipient, msg, team_name="t", workspace_root=tmp_path,
+        recipient,
+        msg,
+        team_name="t",
+        workspace_root=tmp_path,
     )
 
 
@@ -89,14 +92,21 @@ def test_plain_text_message_goes_to_pending_user_messages(tmp_path: Path) -> Non
     agent_id = _make_teammate(reg)
 
     msg = TeammateMessage(
-        from_="leader", text="hi alice", timestamp="2026-05-08T12:00:00Z",
+        from_="leader",
+        text="hi alice",
+        timestamp="2026-05-08T12:00:00Z",
     )
     write_to_mailbox(
-        "alice", msg, team_name="t", workspace_root=tmp_path,
+        "alice",
+        msg,
+        team_name="t",
+        workspace_root=tmp_path,
     )
 
     sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id={"alice": agent_id},
     )
 
@@ -125,7 +135,9 @@ def test_shutdown_request_sets_flag(tmp_path: Path) -> None:
     )
 
     sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id={"alice": agent_id},
     )
 
@@ -143,9 +155,14 @@ def test_plan_approval_from_lead_clears_flag(tmp_path: Path) -> None:
     cleared, ``permission_mode`` updated."""
     reg = RuntimeTaskRegistry()
     agent_id = _make_teammate(reg)
-    reg.update(agent_id, lambda s: replace(
-        s, awaiting_plan_approval=True, permission_mode="plan",
-    ))
+    reg.update(
+        agent_id,
+        lambda s: replace(
+            s,
+            awaiting_plan_approval=True,
+            permission_mode="plan",
+        ),
+    )
 
     _write_envelope(
         recipient="alice",
@@ -161,7 +178,9 @@ def test_plan_approval_from_lead_clears_flag(tmp_path: Path) -> None:
     )
 
     sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         expected_lead_agent_id="lead-1",
         recipient_to_agent_id={"alice": agent_id},
     )
@@ -171,17 +190,20 @@ def test_plan_approval_from_lead_clears_flag(tmp_path: Path) -> None:
     assert state.permission_mode == "default"
 
 
-def test_plan_approval_from_non_lead_logged_and_dropped(
-    tmp_path: Path, caplog
-) -> None:
+def test_plan_approval_from_non_lead_logged_and_dropped(tmp_path: Path, caplog) -> None:
     """Critic concern C3 + Chunk-F D1: a non-lead writing a
     ``plan_approval_response`` envelope MUST be log-and-drop. The
     teammate state stays unchanged; the poller doesn't crash."""
     reg = RuntimeTaskRegistry()
     agent_id = _make_teammate(reg)
-    reg.update(agent_id, lambda s: replace(
-        s, awaiting_plan_approval=True, permission_mode="plan",
-    ))
+    reg.update(
+        agent_id,
+        lambda s: replace(
+            s,
+            awaiting_plan_approval=True,
+            permission_mode="plan",
+        ),
+    )
 
     _write_envelope(
         recipient="alice",
@@ -198,7 +220,9 @@ def test_plan_approval_from_non_lead_logged_and_dropped(
 
     with caplog.at_level("WARNING"):
         sweep_mailboxes(
-            runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+            runtime_tasks=reg,
+            workspace_root=tmp_path,
+            team_name="t",
             expected_lead_agent_id="lead-1",
             recipient_to_agent_id={"alice": agent_id},
         )
@@ -213,9 +237,7 @@ def test_plan_approval_from_non_lead_logged_and_dropped(
     assert len(warnings) == 1
 
 
-def test_plan_approval_skips_when_no_lead_id_configured(
-    tmp_path: Path, caplog
-) -> None:
+def test_plan_approval_skips_when_no_lead_id_configured(tmp_path: Path, caplog) -> None:
     """If the poller has no ``expected_lead_agent_id`` (team file not
     loaded yet), it must NOT honor the envelope blindly — drop it."""
     reg = RuntimeTaskRegistry()
@@ -237,7 +259,9 @@ def test_plan_approval_skips_when_no_lead_id_configured(
 
     with caplog.at_level("WARNING"):
         sweep_mailboxes(
-            runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+            runtime_tasks=reg,
+            workspace_root=tmp_path,
+            team_name="t",
             expected_lead_agent_id=None,  # not yet known
             recipient_to_agent_id={"alice": agent_id},
         )
@@ -255,7 +279,8 @@ def test_permission_response_fires_callback(tmp_path: Path) -> None:
     fired: dict[str, str] = {}
 
     register_permission_callback(
-        request_id="req-perm-1", tool_use_id="toolu_x",
+        request_id="req-perm-1",
+        tool_use_id="toolu_x",
         on_allow=lambda: fired.setdefault("decision", "allow"),
         on_reject=lambda reason: fired.setdefault("decision", f"reject:{reason}"),
     )
@@ -275,7 +300,9 @@ def test_permission_response_fires_callback(tmp_path: Path) -> None:
     )
 
     sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id={"alice": agent_id},
     )
 
@@ -295,7 +322,9 @@ def test_offset_advances_so_envelopes_are_not_replayed(tmp_path: Path) -> None:
     write_to_mailbox("alice", msg, team_name="t", workspace_root=tmp_path)
 
     n1 = sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id={"alice": agent_id},
     )
     assert n1 == 1
@@ -304,7 +333,9 @@ def test_offset_advances_so_envelopes_are_not_replayed(tmp_path: Path) -> None:
 
     # Second sweep with no new messages → 0 dispatches.
     n2 = sweep_mailboxes(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id={"alice": agent_id},
     )
     assert n2 == 0
@@ -325,7 +356,9 @@ def test_daemon_starts_and_stops_cleanly(tmp_path: Path) -> None:
     write_to_mailbox("alice", msg, team_name="t", workspace_root=tmp_path)
 
     start_mailbox_poller(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id_provider=lambda: {"alice": agent_id},
         tick_seconds=0.05,
     )
@@ -346,12 +379,16 @@ def test_daemon_starts_and_stops_cleanly(tmp_path: Path) -> None:
 def test_daemon_start_is_idempotent(tmp_path: Path) -> None:
     reg = RuntimeTaskRegistry()
     start_mailbox_poller(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id_provider=lambda: {},
         tick_seconds=0.5,
     )
     start_mailbox_poller(
-        runtime_tasks=reg, workspace_root=tmp_path, team_name="t",
+        runtime_tasks=reg,
+        workspace_root=tmp_path,
+        team_name="t",
         recipient_to_agent_id_provider=lambda: {},
         tick_seconds=0.5,
     )

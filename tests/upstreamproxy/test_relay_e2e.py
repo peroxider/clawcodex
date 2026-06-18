@@ -41,10 +41,10 @@ async def _echo_handler(ws: websockets.asyncio.server.ServerConnection) -> None:
                 continue
             if not saw_connect:
                 # First inner chunk is the CONNECT line + Proxy-Auth.
-                assert payload.startswith(b'CONNECT '), payload[:32]
+                assert payload.startswith(b"CONNECT "), payload[:32]
                 saw_connect = True
                 # Send the synthesized 200 response back over the tunnel.
-                await ws.send(encode_chunk(b'HTTP/1.1 200 Connection Established\r\n\r\n'))
+                await ws.send(encode_chunk(b"HTTP/1.1 200 Connection Established\r\n\r\n"))
                 continue
             # Plain echo for everything else.
             await ws.send(encode_chunk(payload))
@@ -55,7 +55,7 @@ async def _echo_handler(ws: websockets.asyncio.server.ServerConnection) -> None:
 def _free_port() -> int:
     """Bind ephemeral port, immediately release for the WS server to take."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
@@ -65,30 +65,30 @@ async def test_relay_round_trip_echo() -> None:
     ws_port = _free_port()
 
     # Start the in-process echo WS server.
-    ws_server = await ws_serve(_echo_handler, '127.0.0.1', ws_port)
+    ws_server = await ws_serve(_echo_handler, "127.0.0.1", ws_port)
     try:
-        ws_url = f'ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws'
+        ws_url = f"ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws"
         relay = await start_upstream_proxy_relay(
-            ws_url=ws_url, session_id='cse_test', token='secret-token'
+            ws_url=ws_url, session_id="cse_test", token="secret-token"
         )
         try:
             # Open a TCP connection to the relay and send a CONNECT.
-            reader, writer = await asyncio.open_connection('127.0.0.1', relay.port)
+            reader, writer = await asyncio.open_connection("127.0.0.1", relay.port)
             try:
-                writer.write(b'CONNECT example.com:443 HTTP/1.1\r\n\r\n')
+                writer.write(b"CONNECT example.com:443 HTTP/1.1\r\n\r\n")
                 await writer.drain()
 
                 # Expect the 200-Connection-Established response back.
-                resp = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), timeout=2.0)
-                assert resp.startswith(b'HTTP/1.1 200'), resp
+                resp = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2.0)
+                assert resp.startswith(b"HTTP/1.1 200"), resp
 
                 # Send some "TLS payload" bytes; expect them echoed back.
-                payload = b'\x16\x03\x01' + b'X' * 200  # not real TLS, but an opaque blob
+                payload = b"\x16\x03\x01" + b"X" * 200  # not real TLS, but an opaque blob
                 writer.write(payload)
                 await writer.drain()
 
                 # Read the echo. Use a small read so we don't block forever.
-                received = b''
+                received = b""
                 while len(received) < len(payload):
                     chunk = await asyncio.wait_for(
                         reader.read(len(payload) - len(received)), timeout=2.0
@@ -114,20 +114,20 @@ async def test_relay_round_trip_echo() -> None:
 async def test_relay_rejects_non_connect_method() -> None:
     """An HTTP GET to the relay returns 405 Method Not Allowed."""
     ws_port = _free_port()
-    ws_server = await ws_serve(_echo_handler, '127.0.0.1', ws_port)
+    ws_server = await ws_serve(_echo_handler, "127.0.0.1", ws_port)
     try:
         relay = await start_upstream_proxy_relay(
-            ws_url=f'ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws',
-            session_id='cse_test',
-            token='tok',
+            ws_url=f"ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws",
+            session_id="cse_test",
+            token="tok",
         )
         try:
-            reader, writer = await asyncio.open_connection('127.0.0.1', relay.port)
+            reader, writer = await asyncio.open_connection("127.0.0.1", relay.port)
             try:
-                writer.write(b'GET /foo HTTP/1.1\r\nHost: x\r\n\r\n')
+                writer.write(b"GET /foo HTTP/1.1\r\nHost: x\r\n\r\n")
                 await writer.drain()
-                resp = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), timeout=2.0)
-                assert resp.startswith(b'HTTP/1.1 405'), resp
+                resp = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2.0)
+                assert resp.startswith(b"HTTP/1.1 405"), resp
             finally:
                 writer.close()
                 try:
@@ -145,22 +145,22 @@ async def test_relay_rejects_non_connect_method() -> None:
 async def test_relay_oversized_header_rejected() -> None:
     """An over-8KB CONNECT header gets 400 Bad Request."""
     ws_port = _free_port()
-    ws_server = await ws_serve(_echo_handler, '127.0.0.1', ws_port)
+    ws_server = await ws_serve(_echo_handler, "127.0.0.1", ws_port)
     try:
         relay = await start_upstream_proxy_relay(
-            ws_url=f'ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws',
-            session_id='cse_test',
-            token='tok',
+            ws_url=f"ws://127.0.0.1:{ws_port}/v1/code/upstreamproxy/ws",
+            session_id="cse_test",
+            token="tok",
         )
         try:
-            reader, writer = await asyncio.open_connection('127.0.0.1', relay.port)
+            reader, writer = await asyncio.open_connection("127.0.0.1", relay.port)
             try:
                 # Send 9KB of garbage with no CRLFCRLF — should hit the
                 # 8KB cap and return 400.
-                writer.write(b'X' * (9 * 1024))
+                writer.write(b"X" * (9 * 1024))
                 await writer.drain()
-                resp = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), timeout=2.0)
-                assert resp.startswith(b'HTTP/1.1 400'), resp
+                resp = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=2.0)
+                assert resp.startswith(b"HTTP/1.1 400"), resp
             finally:
                 writer.close()
                 try:

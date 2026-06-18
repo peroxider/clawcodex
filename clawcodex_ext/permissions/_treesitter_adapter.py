@@ -63,6 +63,7 @@ def is_bashlex_available() -> bool:
 @AdapterRegistry.register("treesitter", env_var="CLAW_USE_TREESITTER", dependency="tree_sitter")
 class BashlexParseResult:
     """Result from tree-sitter-bash based parsing."""
+
     def __init__(self, kind: str, commands: list[dict[str, Any]], reason: str = ""):
         self.kind = kind
         self.commands = commands
@@ -232,7 +233,9 @@ def _parse_env_var(node) -> tuple[str, str] | None:
 
 def _fallback_parse(command: str) -> BashlexParseResult:
     """Fallback when tree-sitter-bash is not available."""
-    return BashlexParseResult(kind="too-complex", commands=[], reason="tree_sitter_bash_unavailable")
+    return BashlexParseResult(
+        kind="too-complex", commands=[], reason="tree_sitter_bash_unavailable"
+    )
 
 
 def classify_command_with_bashlex(command: str) -> CommandSafety:

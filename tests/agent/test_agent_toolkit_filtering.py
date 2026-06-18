@@ -2,6 +2,7 @@
 
 Validates filter_tools_for_agent() and resolve_agent_tools() from src/agent/agent_tool_utils.py.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -52,25 +53,36 @@ def _make_tools(*names: str, mcp_names: list[str] | None = None) -> list[Tool]:
 
 # --- filter_tools_for_agent ---
 
+
 class TestFilterToolsForAgent:
     def test_mcp_tools_always_allowed(self):
         """MCP tools pass through regardless of agent type."""
         tools = _make_tools("Read", "Write", mcp_names=["mcp__github"])
-        
+
         result = filter_tools_for_agent(
-            tools=tools, is_built_in=True, is_async=True,
+            tools=tools,
+            is_built_in=True,
+            is_async=True,
         )
-        
+
         names = {t.name for t in result}
         assert "mcp__github" in names
 
     def test_all_agent_disallowed_blocked(self):
         """ALL_AGENT_DISALLOWED_TOOLS are always blocked."""
-        tool_names = ["Read", "Write", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "TaskOutput", "Agent"]
+        tool_names = [
+            "Read",
+            "Write",
+            "AskUserQuestion",
+            "EnterPlanMode",
+            "ExitPlanMode",
+            "TaskOutput",
+            "Agent",
+        ]
         tools = _make_tools(*tool_names)
-        
+
         result = filter_tools_for_agent(tools=tools, is_built_in=True)
-        
+
         names = {t.name for t in result}
         for blocked in ALL_AGENT_DISALLOWED_TOOLS:
             assert blocked not in names, f"{blocked} should be blocked"
@@ -78,9 +90,9 @@ class TestFilterToolsForAgent:
     def test_read_write_allowed_for_sync(self):
         """Basic tools like Read and Write are allowed for sync agents."""
         tools = _make_tools("Read", "Write", "Grep")
-        
+
         result = filter_tools_for_agent(tools=tools, is_built_in=True)
-        
+
         names = {t.name for t in result}
         assert "Read" in names
         assert "Write" in names
@@ -89,9 +101,9 @@ class TestFilterToolsForAgent:
     def test_custom_agent_disallowed_blocked(self):
         """CUSTOM_AGENT_DISALLOWED_TOOLS blocked for non-built-in agents."""
         tools = _make_tools("Read", "AskUserQuestion", "TaskStop")
-        
+
         result = filter_tools_for_agent(tools=tools, is_built_in=False)
-        
+
         names = {t.name for t in result}
         for blocked in CUSTOM_AGENT_DISALLOWED_TOOLS:
             assert blocked not in names
@@ -114,7 +126,9 @@ class TestFilterToolsForAgent:
         tools = _make_tools("Read", "Write", "Grep", "Bash", "Config", "Sleep")
 
         result = filter_tools_for_agent(
-            tools=tools, is_built_in=True, is_async=True,
+            tools=tools,
+            is_built_in=True,
+            is_async=True,
         )
 
         names = {t.name for t in result}
@@ -126,7 +140,9 @@ class TestFilterToolsForAgent:
         tools = _make_tools("Config", mcp_names=["mcp__github"])
 
         result = filter_tools_for_agent(
-            tools=tools, is_built_in=True, is_async=True,
+            tools=tools,
+            is_built_in=True,
+            is_async=True,
         )
 
         names = {t.name for t in result}
@@ -137,7 +153,9 @@ class TestFilterToolsForAgent:
         tools = _make_tools("Read", "ExitPlanMode")
 
         result = filter_tools_for_agent(
-            tools=tools, is_built_in=True, permission_mode="plan",
+            tools=tools,
+            is_built_in=True,
+            permission_mode="plan",
         )
 
         names = {t.name for t in result}
@@ -148,7 +166,9 @@ class TestFilterToolsForAgent:
         tools = _make_tools("Read", "ExitPlanMode")
 
         result = filter_tools_for_agent(
-            tools=tools, is_built_in=True, permission_mode="default",
+            tools=tools,
+            is_built_in=True,
+            permission_mode="default",
         )
 
         names = {t.name for t in result}
@@ -156,6 +176,7 @@ class TestFilterToolsForAgent:
 
 
 # --- resolve_agent_tools ---
+
 
 class TestResolveAgentTools:
     def test_wildcard_gets_all_filtered(self):
@@ -276,6 +297,7 @@ class TestResolveAgentTools:
 
 # --- Helper functions ---
 
+
 class TestHelpers:
     def test_extract_tool_name_simple(self):
         assert _extract_tool_name("Read") == "Read"
@@ -284,13 +306,16 @@ class TestHelpers:
         assert _extract_tool_name("Agent(general-purpose, explore)") == "Agent"
 
     def test_extract_rule_content(self):
-        assert _extract_rule_content("Agent(general-purpose, explore)") == "general-purpose, explore"
+        assert (
+            _extract_rule_content("Agent(general-purpose, explore)") == "general-purpose, explore"
+        )
 
     def test_extract_rule_content_none(self):
         assert _extract_rule_content("Read") is None
 
 
 # --- count_tool_uses ---
+
 
 class TestCountToolUses:
     def test_empty_messages(self):
@@ -302,19 +327,26 @@ class TestCountToolUses:
 
     def test_with_tool_uses(self):
         msgs = [
-            AssistantMessage(content=[
-                TextBlock(text="Let me search"),
-                ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a.py"}),
-                ToolUseBlock(id="t2", name="Grep", input={"query": "hello"}),
-            ]),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t3", name="Write", input={"path": "/tmp/b.py", "content": "hi"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="Let me search"),
+                    ToolUseBlock(id="t1", name="Read", input={"path": "/tmp/a.py"}),
+                    ToolUseBlock(id="t2", name="Grep", input={"query": "hello"}),
+                ]
+            ),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(
+                        id="t3", name="Write", input={"path": "/tmp/b.py", "content": "hi"}
+                    ),
+                ]
+            ),
         ]
         assert count_tool_uses(msgs) == 3
 
 
 # --- extract_partial_result ---
+
 
 class TestExtractPartialResult:
     def test_empty_messages(self):
@@ -326,9 +358,11 @@ class TestExtractPartialResult:
 
     def test_block_content(self):
         msgs = [
-            AssistantMessage(content=[
-                TextBlock(text="Result: success"),
-            ]),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="Result: success"),
+                ]
+            ),
         ]
         assert extract_partial_result(msgs) == "Result: success"
 
@@ -350,18 +384,26 @@ class TestExtractPartialResult:
 
 # --- finalize_agent_tool ---
 
+
 class TestFinalizeAgentTool:
     def test_basic_finalize(self):
         import time
+
         msgs = [
-            AssistantMessage(content=[
-                TextBlock(text="Task completed successfully"),
-            ]),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="Task completed successfully"),
+                ]
+            ),
         ]
-        result = finalize_agent_tool(msgs, "agent-1", {
-            "start_time": time.time(),
-            "agent_type": "general-purpose",
-        })
+        result = finalize_agent_tool(
+            msgs,
+            "agent-1",
+            {
+                "start_time": time.time(),
+                "agent_type": "general-purpose",
+            },
+        )
 
         assert result.agent_id == "agent-1"
         assert result.agent_type == "general-purpose"
@@ -375,22 +417,31 @@ class TestFinalizeAgentTool:
 
     def test_tool_use_count(self):
         import time
+
         msgs = [
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={}),
+                ]
+            ),
             UserMessage(content="result"),
-            AssistantMessage(content=[
-                TextBlock(text="Done"),
-                ToolUseBlock(id="t2", name="Write", input={}),
-            ]),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="Done"),
+                    ToolUseBlock(id="t2", name="Write", input={}),
+                ]
+            ),
             UserMessage(content="result2"),
             AssistantMessage(content=[TextBlock(text="Final")]),
         ]
-        result = finalize_agent_tool(msgs, "a1", {
-            "start_time": time.time(),
-            "agent_type": "test",
-        })
+        result = finalize_agent_tool(
+            msgs,
+            "a1",
+            {
+                "start_time": time.time(),
+                "agent_type": "test",
+            },
+        )
         assert result.total_tool_use_count == 2
 
     def test_no_truncation_when_content_under_limit(self):
@@ -400,11 +451,13 @@ class TestFinalizeAgentTool:
             DEFAULT_TRUNCATE_LINE_LIMIT,
         )
         import time
+
         # 100 lines × 50 chars = 5000 chars, well under both limits.
         small_text = "\n".join(f"line {i}: " + "x" * 40 for i in range(100))
         msgs = [AssistantMessage(content=[TextBlock(text=small_text)])]
         result = finalize_agent_tool(
-            msgs, "a1",
+            msgs,
+            "a1",
             {"start_time": time.time(), "agent_type": "test"},
             transcript_path="/tmp/agent-a1.jsonl",
         )
@@ -423,10 +476,12 @@ class TestFinalizeAgentTool:
     def test_truncation_applies_when_content_exceeds_limit(self):
         """Over the char cap, text is clipped and a notice block points at the transcript."""
         import time
+
         big_text = "x" * 20_000  # 20 KB > 8 KB cap
         msgs = [AssistantMessage(content=[TextBlock(text=big_text)])]
         result = finalize_agent_tool(
-            msgs, "a1",
+            msgs,
+            "a1",
             {"start_time": time.time(), "agent_type": "test"},
             transcript_path="/tmp/agent-a1.jsonl",
         )
@@ -446,10 +501,12 @@ class TestFinalizeAgentTool:
     def test_truncation_notice_handles_missing_transcript_path(self):
         """Without a transcript path, the notice says 'transcript not available'."""
         import time
+
         big_text = "x" * 20_000
         msgs = [AssistantMessage(content=[TextBlock(text=big_text)])]
         result = finalize_agent_tool(
-            msgs, "a1",
+            msgs,
+            "a1",
             {"start_time": time.time(), "agent_type": "test"},
             # transcript_path omitted → default None
         )
@@ -463,6 +520,7 @@ class TestFinalizeAgentTool:
         """Passing ``last_assistant_msg`` lets the streaming path avoid the O(n) scan."""
         from src.agent.agent_tool_utils import AgentToolResult
         import time
+
         # Two assistants: a 50-line "fake history" message and a short
         # tail. Streaming should always pick the tail — never fall back
         # to reversed scan and pick the "fake" head.
@@ -472,7 +530,8 @@ class TestFinalizeAgentTool:
         tail = AssistantMessage(content=[TextBlock(text="RIGHT: streaming final answer")])
         msgs = [head, tail]
         result = finalize_agent_tool(
-            msgs, "a1",
+            msgs,
+            "a1",
             {"start_time": time.time(), "agent_type": "test"},
             last_assistant_msg=tail,
         )

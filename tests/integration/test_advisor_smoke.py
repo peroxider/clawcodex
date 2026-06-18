@@ -44,6 +44,7 @@ class _Isolation:
     def enter(self) -> None:
         import src.config as cfg_mod
         from pathlib import Path as _P
+
         self._saved_global = cfg_mod.GLOBAL_CONFIG_FILE
         self._saved_history = cfg_mod.HISTORY_FILE
         self._saved_dir = cfg_mod.GLOBAL_CONFIG_DIR
@@ -52,15 +53,18 @@ class _Isolation:
         cfg_mod.GLOBAL_CONFIG_DIR = _P(self._tmp) / ".clawcodex"
         cfg_mod._default_manager = None
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
 
     def exit(self) -> None:
         import src.config as cfg_mod
+
         cfg_mod.GLOBAL_CONFIG_FILE = self._saved_global
         cfg_mod.HISTORY_FILE = self._saved_history
         cfg_mod.GLOBAL_CONFIG_DIR = self._saved_dir
         cfg_mod._default_manager = None
         from src.settings.settings import invalidate_settings_cache
+
         invalidate_settings_cache()
 
 
@@ -72,6 +76,7 @@ def _set_advisor(value: str) -> None:
     import src.config as cfg_mod
     from src.config import ConfigManager
     from src.settings.settings import invalidate_settings_cache
+
     cfg_mod._default_manager = None
     mgr = ConfigManager()
     cfg = mgr.load_global()
@@ -105,11 +110,13 @@ def _build_fake_anthropic_response(content_blocks: list[dict]) -> Any:
         if btype == "text":
             text_content += block.get("text", "")
         elif btype == "tool_use":
-            tool_uses.append({
-                "id": block["id"],
-                "name": block["name"],
-                "input": block.get("input", {}),
-            })
+            tool_uses.append(
+                {
+                    "id": block["id"],
+                    "name": block["name"],
+                    "input": block.get("input", {}),
+                }
+            )
         elif btype in ("server_tool_use", "advisor_tool_result"):
             raw_blocks.append(dict(block))
     return ChatResponse(
@@ -174,12 +181,14 @@ class TestAdvisorHappyPath(unittest.TestCase):
         ]
         provider = _make_provider(cap, response_blocks=response_blocks)
         # Turn 1.
-        result_msgs, _ = asyncio.run(_call_model_sync(
-            provider=provider,
-            messages=[UserMessage(content="What should I do?")],
-            system_prompt="sys",
-            tools=[],
-        ))
+        result_msgs, _ = asyncio.run(
+            _call_model_sync(
+                provider=provider,
+                messages=[UserMessage(content="What should I do?")],
+                system_prompt="sys",
+                tools=[],
+            )
+        )
         # The assembled AssistantMessage MUST carry the advisor pair as
         # raw passthrough dicts so the next turn can replay them.
         self.assertEqual(len(result_msgs), 1)
@@ -197,25 +206,28 @@ class TestAdvisorHappyPath(unittest.TestCase):
         # payload preserves the pair (beta header still going, so no
         # strip should happen).
         cap2 = _Capture()
-        provider2 = _make_provider(cap2, response_blocks=[
-            {"type": "text", "text": "ok"},
-        ])
-        asyncio.run(_call_model_sync(
-            provider=provider2,
-            messages=[
-                UserMessage(content="What should I do?"),
-                asst,
-                UserMessage(content="now what?"),
+        provider2 = _make_provider(
+            cap2,
+            response_blocks=[
+                {"type": "text", "text": "ok"},
             ],
-            system_prompt="sys",
-            tools=[],
-        ))
+        )
+        asyncio.run(
+            _call_model_sync(
+                provider=provider2,
+                messages=[
+                    UserMessage(content="What should I do?"),
+                    asst,
+                    UserMessage(content="now what?"),
+                ],
+                system_prompt="sys",
+                tools=[],
+            )
+        )
         # Beta header still attached (advisor still active).
         self.assertIn("advisor-tool-2026-03-01", cap2.call_kwargs.get("betas", []))
         # Advisor blocks survived through normalize → ensure_pairing.
-        asst_payload = next(
-            m for m in cap2.api_messages if m.get("role") == "assistant"
-        )
+        asst_payload = next(m for m in cap2.api_messages if m.get("role") == "assistant")
         api_types = [b.get("type") for b in asst_payload["content"]]
         self.assertIn("server_tool_use", api_types)
         self.assertIn("advisor_tool_result", api_types)
@@ -250,37 +262,43 @@ class TestAdvisorInterruptPath(unittest.TestCase):
             },
         ]
         provider = _make_provider(cap, response_blocks=response_blocks)
-        result_msgs, _ = asyncio.run(_call_model_sync(
-            provider=provider,
-            messages=[UserMessage(content="Help me")],
-            system_prompt="sys",
-            tools=[],
-        ))
+        result_msgs, _ = asyncio.run(
+            _call_model_sync(
+                provider=provider,
+                messages=[UserMessage(content="Help me")],
+                system_prompt="sys",
+                tools=[],
+            )
+        )
         asst = result_msgs[0]
 
         # Turn 2 — the next request must drop the orphan
         # ``server_tool_use`` (else the API rejects with "advisor tool
         # use without corresponding advisor_tool_result").
         cap2 = _Capture()
-        provider2 = _make_provider(cap2, response_blocks=[
-            {"type": "text", "text": "ok"},
-        ])
-        asyncio.run(_call_model_sync(
-            provider=provider2,
-            messages=[
-                UserMessage(content="Help me"),
-                asst,
-                UserMessage(content="continue"),
+        provider2 = _make_provider(
+            cap2,
+            response_blocks=[
+                {"type": "text", "text": "ok"},
             ],
-            system_prompt="sys",
-            tools=[],
-        ))
-        asst_payload = next(
-            m for m in cap2.api_messages if m.get("role") == "assistant"
         )
+        asyncio.run(
+            _call_model_sync(
+                provider=provider2,
+                messages=[
+                    UserMessage(content="Help me"),
+                    asst,
+                    UserMessage(content="continue"),
+                ],
+                system_prompt="sys",
+                tools=[],
+            )
+        )
+        asst_payload = next(m for m in cap2.api_messages if m.get("role") == "assistant")
         api_types = [b.get("type") for b in asst_payload["content"]]
         self.assertNotIn(
-            "server_tool_use", api_types,
+            "server_tool_use",
+            api_types,
             "Orphan server_tool_use (advisor) MUST be stripped before send",
         )
 
@@ -290,37 +308,42 @@ class TestAdvisorInterruptPath(unittest.TestCase):
         # orphans because the API rejects them in ALL cases, not just
         # when the header is absent.
         cap = _Capture()
-        provider = _make_provider(cap, response_blocks=[
-            {
-                "type": "server_tool_use",
-                "id": "srv_orphan_2",
-                "name": "advisor",
-                "input": {},
-            },
-        ])
-        asst_msg = AssistantMessage(content=[
-            {
-                "type": "server_tool_use",
-                "id": "srv_orphan_2",
-                "name": "advisor",
-                "input": {},
-            },
-        ])
-        asyncio.run(_call_model_sync(
-            provider=provider,
-            messages=[
-                UserMessage(content="hi"),
-                asst_msg,
-                UserMessage(content="x"),
+        provider = _make_provider(
+            cap,
+            response_blocks=[
+                {
+                    "type": "server_tool_use",
+                    "id": "srv_orphan_2",
+                    "name": "advisor",
+                    "input": {},
+                },
             ],
-            system_prompt="sys",
-            tools=[],
-        ))
+        )
+        asst_msg = AssistantMessage(
+            content=[
+                {
+                    "type": "server_tool_use",
+                    "id": "srv_orphan_2",
+                    "name": "advisor",
+                    "input": {},
+                },
+            ]
+        )
+        asyncio.run(
+            _call_model_sync(
+                provider=provider,
+                messages=[
+                    UserMessage(content="hi"),
+                    asst_msg,
+                    UserMessage(content="x"),
+                ],
+                system_prompt="sys",
+                tools=[],
+            )
+        )
         # Beta IS going (active advisor) — but the orphan still strips.
         self.assertIn("advisor-tool-2026-03-01", cap.call_kwargs.get("betas", []))
-        asst_payload = next(
-            m for m in cap.api_messages if m.get("role") == "assistant"
-        )
+        asst_payload = next(m for m in cap.api_messages if m.get("role") == "assistant")
         api_types = [b.get("type") for b in asst_payload["content"]]
         self.assertNotIn("server_tool_use", api_types)
 

@@ -46,14 +46,16 @@ class MatchType(Enum):
 
 class MatchTarget(Enum):
     """Which field a MappingRule pattern is matched against."""
-    OP_NAME = "op_name"          # method / operation name  (default, backward-compatible)
-    COMP_NAME = "comp_name"      # SourceComponent name (directory name)
-    FILE_PATH = "file_path"      # SourceComponent file_path
+
+    OP_NAME = "op_name"  # method / operation name  (default, backward-compatible)
+    COMP_NAME = "comp_name"  # SourceComponent name (directory name)
+    FILE_PATH = "file_path"  # SourceComponent file_path
 
 
 @dataclass
 class SkillSpec:
     """Specification for a Skill derived from grouped SDK methods."""
+
     name: str
     description: str
     allowed_tools: list[str] = field(default_factory=list)
@@ -79,6 +81,7 @@ class MappingRule:
       - COMP_NAME: match against SourceComponent name (directory name)
       - FILE_PATH: match against SourceComponent file_path
     """
+
     method_pattern: str
     tool_name: str
     skill_name: str
@@ -110,19 +113,27 @@ class MappingRule:
 
 
 DEFAULT_MAPPING_RULES: list[MappingRule] = [
-    MappingRule("docker_", "docker_ops", "build_image", "Build and push Docker images", MatchType.PREFIX),
+    MappingRule(
+        "docker_", "docker_ops", "build_image", "Build and push Docker images", MatchType.PREFIX
+    ),
     MappingRule("docker_build", "docker_build", "build_image", "Build Docker image"),
     MappingRule("docker_tag", "docker_tag", "build_image", "Tag Docker image"),
     MappingRule("docker_push", "docker_push", "build_image", "Push Docker image"),
-    MappingRule("k8s_", "k8s_ops", "deploy_service", "Kubernetes deployment operations", MatchType.PREFIX),
+    MappingRule(
+        "k8s_", "k8s_ops", "deploy_service", "Kubernetes deployment operations", MatchType.PREFIX
+    ),
     MappingRule("k8s_apply", "k8s_apply", "deploy_service", "Apply Kubernetes manifest"),
     MappingRule("k8s_delete", "k8s_delete", "deploy_service", "Delete Kubernetes resource"),
     MappingRule("k8s_get", "k8s_get", "deploy_service", "Get Kubernetes resource"),
     MappingRule("health_check", "health_check", "deploy_service", "Check service health"),
     MappingRule("rollback", "rollback", "deploy_service", "Rollback deployment"),
-    MappingRule("slack_", "slack_ops", "notify_team", "Slack notification operations", MatchType.PREFIX),
+    MappingRule(
+        "slack_", "slack_ops", "notify_team", "Slack notification operations", MatchType.PREFIX
+    ),
     MappingRule("slack_send", "slack_send", "notify_team", "Send Slack notification"),
-    MappingRule("email_", "email_ops", "notify_team", "Email notification operations", MatchType.PREFIX),
+    MappingRule(
+        "email_", "email_ops", "notify_team", "Email notification operations", MatchType.PREFIX
+    ),
     MappingRule("email_send", "email_send", "notify_team", "Send email notification"),
     MappingRule("s3_", "s3_ops", "upload_artifact", "S3 artifact operations", MatchType.PREFIX),
     MappingRule("s3_upload", "s3_upload", "upload_artifact", "Upload to S3"),
@@ -140,8 +151,8 @@ def _extract_prefixes(tool_names: list[str]) -> set[str]:
     """
     prefixes: set[str] = set()
     for name in tool_names:
-        if '.' in name:
-            prefixes.add(name.split('.')[0])
+        if "." in name:
+            prefixes.add(name.split(".")[0])
         else:
             prefixes.add(name)
     return prefixes
@@ -474,14 +485,16 @@ class SkillGrouper:
                 best_pattern = _best_distinguishing_pattern(sub_keys, other_segments)
                 skill_name = best_pattern.replace("-", "_").replace(" ", "_").lower()
                 desc = f"Auto-grouped from path: {group_key}"
-                rules.append(MappingRule(
-                    method_pattern=best_pattern,
-                    tool_name="",
-                    skill_name=skill_name,
-                    description=desc,
-                    match_type=MatchType.SUBSTRING,
-                    match_target=MatchTarget.FILE_PATH,
-                ))
+                rules.append(
+                    MappingRule(
+                        method_pattern=best_pattern,
+                        tool_name="",
+                        skill_name=skill_name,
+                        description=desc,
+                        match_type=MatchType.SUBSTRING,
+                        match_target=MatchTarget.FILE_PATH,
+                    )
+                )
             else:
                 # Merged group — generate one rule per sub_key, all pointing
                 # to the same skill_name.
@@ -504,20 +517,30 @@ class SkillGrouper:
                 used_names = {r.skill_name for r in rules}
                 if skill_name in used_names:
                     segs = [s for s in sub_keys[0].split("/") if s]
-                    skill_name = "_".join(segs[-2:]).replace("-", "_").replace(" ", "_").lower() if len(segs) >= 2 else f"{skill_name}_2"
+                    skill_name = (
+                        "_".join(segs[-2:]).replace("-", "_").replace(" ", "_").lower()
+                        if len(segs) >= 2
+                        else f"{skill_name}_2"
+                    )
+
+                # Tag merged groups so users can distinguish them from
+                # single-path groups at a glance.
+                skill_name = skill_name + "_merged"
 
                 # Build shared description listing all merged paths.
                 shared_desc = "Auto-grouped from paths: " + ", ".join(sub_keys)
                 for sk in sub_keys:
                     pat = _best_distinguishing_pattern([sk], other_segments)
-                    rules.append(MappingRule(
-                        method_pattern=pat,
-                        tool_name="",
-                        skill_name=skill_name,
-                        description=shared_desc,
-                        match_type=MatchType.SUBSTRING,
-                        match_target=MatchTarget.FILE_PATH,
-                    ))
+                    rules.append(
+                        MappingRule(
+                            method_pattern=pat,
+                            tool_name="",
+                            skill_name=skill_name,
+                            description=shared_desc,
+                            match_type=MatchType.SUBSTRING,
+                            match_target=MatchTarget.FILE_PATH,
+                        )
+                    )
 
         # ── Step 6: sort rules — specific (unique) patterns first ──
         # This ensures first-match-wins favors the most discriminating rules.
@@ -586,8 +609,8 @@ class SkillGrouper:
             single_segment: list[tuple[str, str]] = []
 
             for name, comp_name in unmatched:
-                if '_' in name:
-                    prefix = name.split('_')[0]
+                if "_" in name:
+                    prefix = name.split("_")[0]
                     # Skip empty prefix from names like _private or __dunder
                     if prefix:
                         prefix_groups.setdefault(prefix, []).append((name, comp_name))
@@ -658,9 +681,7 @@ class SkillGrouper:
                 best_neighbor = next(k for k in keys if k != smallest_key)
 
             # Merge smallest into best neighbor
-            skill_map[best_neighbor].allowed_tools.extend(
-                skill_map[smallest_key].allowed_tools
-            )
+            skill_map[best_neighbor].allowed_tools.extend(skill_map[smallest_key].allowed_tools)
             del skill_map[smallest_key]
 
         return list(skill_map.values())
@@ -798,9 +819,7 @@ class SkillGrouper:
         for _, ts, _ in all_ops:
             type_freq.update(ts)
 
-        anchor_types: list[str] = [
-            t for t, _ in type_freq.most_common(self._max_io_groups)
-        ]
+        anchor_types: list[str] = [t for t, _ in type_freq.most_common(self._max_io_groups)]
 
         anchor_set = set(anchor_types)
 
@@ -899,8 +918,10 @@ class SkillGrouper:
                     description=f"Operations sharing types: {type_desc}",
                     allowed_tools=[
                         (
-                            f"{op.class_name}.{op.name}" if op.class_name
-                            else f"{comp_name}.{op.file_stem}.{op.name}" if op.file_stem
+                            f"{op.class_name}.{op.name}"
+                            if op.class_name
+                            else f"{comp_name}.{op.file_stem}.{op.name}"
+                            if op.file_stem
                             else f"{comp_name}.{op.name}"
                         )
                         for op, comp_name in ops_with_comp
@@ -942,9 +963,7 @@ class SkillGrouper:
             return self._static_group()
 
         if not self._llm_provider:
-            logger.info(
-                "LLM_SEMANTIC: no provider configured, falling back to KEYWORD_MATCH"
-            )
+            logger.info("LLM_SEMANTIC: no provider configured, falling back to KEYWORD_MATCH")
             print(
                 "warning: LLM provider not configured for --strategy llm, "
                 "falling back to keyword match strategy. "
@@ -964,9 +983,7 @@ class SkillGrouper:
             self._maybe_auto_rules()
             return self._keyword_match_group()
 
-        system_prompt = self._LLM_SYSTEM_PROMPT.format(
-            max_groups=self._max_io_groups
-        )
+        system_prompt = self._LLM_SYSTEM_PROMPT.format(max_groups=self._max_io_groups)
         user_content = "源码目录列表：\n" + "\n".join(dir_lines)
         if requirements:
             user_content += f"\n\n业务需求：{requirements}"
@@ -981,9 +998,7 @@ class SkillGrouper:
 
             response = self._llm_provider.chat(messages)
             raw = response.content
-            logger.debug(
-                "LLM_SEMANTIC raw response (first 500 chars): %s", raw[:500]
-            )
+            logger.debug("LLM_SEMANTIC raw response (first 500 chars): %s", raw[:500])
             llm_rules = self._parse_llm_patterns(raw, dir_file_paths)
             if not llm_rules:
                 logger.warning(
@@ -1026,17 +1041,12 @@ class SkillGrouper:
                 print(f"     patterns: {pats}", file=sys.stderr)
 
             # Count dirs matched by LLM vs auto inference.
-            llm_matched = sum(
-                1 for s in skills if s.name in llm_skill_names
-            )
+            llm_matched = sum(1 for s in skills if s.name in llm_skill_names)
             auto_count = len(skills) - llm_matched
             if auto_count > 0:
-                auto_names = [
-                    s.name for s in skills if s.name not in llm_skill_names
-                ]
+                auto_names = [s.name for s in skills if s.name not in llm_skill_names]
                 print(
-                    f"   ({auto_count} groups from auto prefix inference: "
-                    f"{', '.join(auto_names)})",
+                    f"   ({auto_count} groups from auto prefix inference: {', '.join(auto_names)})",
                     file=sys.stderr,
                 )
             return skills
@@ -1069,7 +1079,7 @@ class SkillGrouper:
             desc = comp.description or "(无描述)"
             fp = comp.file_path.replace("\\", "/")
             paths.append(fp)
-            lines.append(f"- {fp}: {op_count} methods, \"{desc}\"")
+            lines.append(f'- {fp}: {op_count} methods, "{desc}"')
         return lines, paths
 
     def _parse_llm_patterns(
@@ -1118,9 +1128,7 @@ class SkillGrouper:
             if not raw_name or not isinstance(patterns, list) or not patterns:
                 continue
 
-            skill_name = (
-                raw_name.strip().lower().replace(" ", "_").replace("-", "_")
-            )
+            skill_name = raw_name.strip().lower().replace(" ", "_").replace("-", "_")
             # Deduplicate skill names.
             if skill_name in used_names:
                 n = 2
@@ -1180,7 +1188,7 @@ class SkillGrouper:
             elif raw[i] == "}":
                 depth -= 1
                 if depth == 0:
-                    candidate = raw[start:i + 1]
+                    candidate = raw[start : i + 1]
                     try:
                         parsed = json.loads(candidate)
                         if isinstance(parsed, dict) and "skills" in parsed:
@@ -1198,6 +1206,7 @@ class SkillGrouper:
 @dataclass
 class GroupResult:
     """Result of skill grouping operation."""
+
     skills: list[SkillSpec]
     unmatched_tools: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
@@ -1257,16 +1266,16 @@ def group_source_components(
     if strategy == GroupStrategy.IO_RELATION:
         component_tools = {
             (
-                f"{op.class_name}.{op.name}" if op.class_name
-                else f"{c.name}.{op.file_stem}.{op.name}" if op.file_stem
+                f"{op.class_name}.{op.name}"
+                if op.class_name
+                else f"{c.name}.{op.file_stem}.{op.name}"
+                if op.file_stem
                 else f"{c.name}.{op.name}"
             )
-            for c in components for op in c.operations
+            for c in components
+            for op in c.operations
         }
     else:
-        component_tools = {
-            f"{c.name}.{op.name}"
-            for c in components for op in c.operations
-        }
+        component_tools = {f"{c.name}.{op.name}" for c in components for op in c.operations}
     unmatched = [t for t in component_tools if t not in all_tools]
     return GroupResult(skills=skills, unmatched_tools=unmatched)

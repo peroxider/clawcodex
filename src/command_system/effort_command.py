@@ -49,6 +49,7 @@ faithfully and is forward-compatible when the pipeline lands.
     drift. The live TUI ``EffortPickerScreen`` offers ``auto/low/medium/high`` (no ``max``)
     — a pre-existing divergence, not reconciled here.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -195,9 +196,7 @@ class EffortCommand(InteractiveCommand):
             )
         # TS :120-122 (minus xhigh). Use the trimmed original-case arg in the message.
         return InteractiveOutcome(
-            message=(
-                f"Invalid argument: {raw}. Valid options are: low, medium, high, max, auto"
-            ),
+            message=(f"Invalid argument: {raw}. Valid options are: low, medium, high, max, auto"),
             display="user",
         )
 

@@ -18,7 +18,10 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from ...token_estimation import rough_token_count_estimation, rough_token_count_estimation_for_messages
+from ...token_estimation import (
+    rough_token_count_estimation,
+    rough_token_count_estimation_for_messages,
+)
 from ...types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from ...types.messages import Message, UserMessage
 
@@ -42,6 +45,7 @@ SKILL_TRUNCATION_MARKER = (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _expand_path(path: str) -> str:
     """Expand ~ and resolve to absolute path."""
@@ -91,9 +95,7 @@ def _collect_read_tool_file_paths(messages: list[Message]) -> set[str]:
             continue
         for block in content:
             if isinstance(block, ToolResultBlock):
-                if isinstance(block.content, str) and block.content.startswith(
-                    "[File unchanged"
-                ):
+                if isinstance(block.content, str) and block.content.startswith("[File unchanged"):
                     stub_ids.add(block.tool_use_id)
             elif isinstance(block, dict) and block.get("type") == "tool_result":
                 c = block.get("content", "")
@@ -159,9 +161,11 @@ def _read_file_safe(filepath: str, max_tokens: int) -> str | None:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FileAttachment:
     """A file restored after compaction."""
+
     filename: str
     content: str
 
@@ -193,18 +197,14 @@ def create_post_compact_file_attachments(
         return []
 
     preserved_read_paths = (
-        _collect_read_tool_file_paths(preserved_messages)
-        if preserved_messages
-        else set()
+        _collect_read_tool_file_paths(preserved_messages) if preserved_messages else set()
     )
 
     recent_files = sorted(
         (
             {"filename": fname, **state}
             for fname, state in read_file_state.items()
-            if not _should_exclude_from_post_compact_restore(
-                fname, plan_file_path, memory_paths
-            )
+            if not _should_exclude_from_post_compact_restore(fname, plan_file_path, memory_paths)
             and _expand_path(fname) not in preserved_read_paths
         ),
         key=lambda f: f.get("timestamp", 0),
@@ -220,9 +220,7 @@ def create_post_compact_file_attachments(
         if content is None:
             continue
 
-        attachment_text = (
-            f"[Post-compact file restore: {filename}]\n\n{content}"
-        )
+        attachment_text = f"[Post-compact file restore: {filename}]\n\n{content}"
         attachment_tokens = rough_token_count_estimation(attachment_text)
 
         if used_tokens + attachment_tokens > POST_COMPACT_TOKEN_BUDGET:
@@ -258,15 +256,14 @@ def create_plan_attachment_if_needed(
     if not plan_content.strip():
         return None
 
-    attachment_text = (
-        f"[Post-compact plan restore: {plan_file_path}]\n\n{plan_content}"
-    )
+    attachment_text = f"[Post-compact plan restore: {plan_file_path}]\n\n{plan_content}"
     return UserMessage(content=attachment_text, isMeta=True)
 
 
 @dataclass
 class SkillInfo:
     """An invoked skill to preserve across compaction."""
+
     name: str
     path: str
     content: str
@@ -295,14 +292,10 @@ def create_skill_attachment_if_needed(
         if used_tokens + tokens > POST_COMPACT_SKILLS_TOKEN_BUDGET:
             break
         used_tokens += tokens
-        skill_texts.append(
-            f"### Skill: {skill.name}\nPath: {skill.path}\n\n{truncated}"
-        )
+        skill_texts.append(f"### Skill: {skill.name}\nPath: {skill.path}\n\n{truncated}")
 
     if not skill_texts:
         return None
 
-    attachment_text = (
-        "[Post-compact skill restore]\n\n" + "\n\n---\n\n".join(skill_texts)
-    )
+    attachment_text = "[Post-compact skill restore]\n\n" + "\n\n---\n\n".join(skill_texts)
     return UserMessage(content=attachment_text, isMeta=True)

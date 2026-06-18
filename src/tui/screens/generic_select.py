@@ -71,14 +71,10 @@ class GenericSelectScreen(DialogScreen[Optional[str]]):
             self._select.focus()
 
     # ---- events ----
-    def on_select_list_option_selected(
-        self, event: SelectList.OptionSelected
-    ) -> None:
+    def on_select_list_option_selected(self, event: SelectList.OptionSelected) -> None:
         self.dismiss(str(event.option.value))
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)
 
 

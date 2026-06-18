@@ -16,9 +16,24 @@ log = logging.getLogger(__name__)
 _MODE_CONFIG: dict[PermissionMode, dict[str, str]] = {
     "default": {"title": "Default", "short_title": "Default", "symbol": "", "external": "default"},
     "plan": {"title": "Plan Mode", "short_title": "Plan", "symbol": "⏸", "external": "plan"},
-    "acceptEdits": {"title": "Accept edits", "short_title": "Accept", "symbol": "⏵⏵", "external": "acceptEdits"},
-    "bypassPermissions": {"title": "Bypass Permissions", "short_title": "Bypass", "symbol": "⏵⏵", "external": "bypassPermissions"},
-    "dontAsk": {"title": "Don't Ask", "short_title": "DontAsk", "symbol": "⏵⏵", "external": "dontAsk"},
+    "acceptEdits": {
+        "title": "Accept edits",
+        "short_title": "Accept",
+        "symbol": "⏵⏵",
+        "external": "acceptEdits",
+    },
+    "bypassPermissions": {
+        "title": "Bypass Permissions",
+        "short_title": "Bypass",
+        "symbol": "⏵⏵",
+        "external": "bypassPermissions",
+    },
+    "dontAsk": {
+        "title": "Don't Ask",
+        "short_title": "DontAsk",
+        "symbol": "⏵⏵",
+        "external": "dontAsk",
+    },
     # Internal modes — neither user-addressable nor persisted to settings.json.
     # `external` maps them to a sensible external display mode (parity with
     # typescript/src/utils/permissions/PermissionMode.ts:80-90).
@@ -115,6 +130,7 @@ def _settings_perms_structured_is_explicit(perms_obj: Any) -> bool:
     """Delegate to extensions.permissions.perms_reader when available."""
     try:
         from extensions.permissions.perms_reader import settings_perms_structured_is_explicit
+
         return settings_perms_structured_is_explicit(perms_obj)
     except ImportError:
         # Fallback: simple None / True check if extension not available.
@@ -127,6 +143,7 @@ def _settings_perms(settings: Any) -> dict[str, Any]:
     """Delegate to extensions.permissions.perms_reader when available."""
     try:
         from extensions.permissions.perms_reader import settings_perms
+
         return settings_perms(settings)
     except ImportError:
         # Fallback: legacy extra["permissions"] read path.

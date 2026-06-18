@@ -115,23 +115,27 @@ class TestConfigManager:
         project_path.write_text('{"b": 3, "c": {"y": 20}}')
         local_path.write_text('{"b": 4, "d": 5}')
 
-        with patch("src.config.get_global_config_path", return_value=global_path), \
-             patch("src.config.get_project_config_path", return_value=project_path), \
-             patch("src.config.get_local_config_path", return_value=local_path):
+        with (
+            patch("src.config.get_global_config_path", return_value=global_path),
+            patch("src.config.get_project_config_path", return_value=project_path),
+            patch("src.config.get_local_config_path", return_value=local_path),
+        ):
             mgr = ConfigManager()
             merged = mgr.get_merged()
-            assert merged["a"] == 1      # from global
-            assert merged["b"] == 4      # local overrides project overrides global
+            assert merged["a"] == 1  # from global
+            assert merged["b"] == 4  # local overrides project overrides global
             assert merged["c"]["x"] == 10  # deep merge: global
             assert merged["c"]["y"] == 20  # deep merge: project
-            assert merged["d"] == 5      # from local
+            assert merged["d"] == 5  # from local
 
     def test_convenience_get(self, tmp_path):
         path = tmp_path / "config.json"
         path.write_text('{"hello": "world"}')
-        with patch("src.config.get_global_config_path", return_value=path), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=path),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             mgr = ConfigManager()
             assert mgr.get("hello") == "world"
             assert mgr.get("missing", "default") == "default"
@@ -139,9 +143,11 @@ class TestConfigManager:
     def test_cache_invalidation(self, tmp_path):
         path = tmp_path / "config.json"
         path.write_text('{"v": 1}')
-        with patch("src.config.get_global_config_path", return_value=path), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=path),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             mgr = ConfigManager()
             assert mgr.get("v") == 1
 
@@ -185,7 +191,7 @@ class TestHistory:
         history_path.parent.mkdir(parents=True, exist_ok=True)
         with open(history_path, "w") as f:
             f.write('{"content": "good"}\n')
-            f.write('bad json line\n')
+            f.write("bad json line\n")
             f.write('{"content": "also good"}\n')
 
         with patch("src.config.HISTORY_FILE", history_path):

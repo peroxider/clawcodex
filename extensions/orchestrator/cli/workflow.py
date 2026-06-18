@@ -21,6 +21,7 @@ from pathlib import Path
 
 # ── Template resolution ──────────────────────────────────────────────
 
+
 def _template_path(variant: str = "workflow") -> Path:
     """Return the path to ``{variant}.template.md`` inside the package.
 
@@ -43,6 +44,7 @@ def _template_path(variant: str = "workflow") -> Path:
     # Python 3.9+ importlib.resources API as second resort
     try:
         from importlib.resources import files
+
         for name in candidates:
             ref = files("extensions.orchestrator.templates") / name  # type: ignore[arg-type]
             if hasattr(ref, "__fspath__"):
@@ -57,6 +59,7 @@ def _template_path(variant: str = "workflow") -> Path:
 
     # Last resort: walk sys.modules for the orchestrator package
     import extensions.orchestrator as orch_mod
+
     base = Path(orch_mod.__file__).parent  # type: ignore[arg-type]
     for name in candidates:
         candidate = base / "templates" / name
@@ -72,6 +75,7 @@ def _template_path(variant: str = "workflow") -> Path:
 def _available_templates() -> dict[str, str]:
     """Return {variant_name: template_path} for all packaged templates."""
     import extensions.orchestrator.templates as tpl_mod
+
     templates: dict[str, str] = {}
     for p in tpl_mod.__path__:  # type: ignore[attr-defined]
         for f in Path(p).glob("*.template.md"):
@@ -82,6 +86,7 @@ def _available_templates() -> dict[str, str]:
 
 # ── Placeholder substitution ─────────────────────────────────────────
 
+
 def _prompt(label: str, default: str = "", secret: bool = False) -> str:
     """Prompt interactively, or return *default* when stdin is not a TTY."""
     if not sys.stdin.isatty():
@@ -89,6 +94,7 @@ def _prompt(label: str, default: str = "", secret: bool = False) -> str:
     try:
         if secret:
             import getpass
+
             raw = getpass.getpass(f"  {label} [{default}]: ")
         else:
             raw = input(f"  {label} [{default}]: ")
@@ -115,13 +121,14 @@ def _fill_placeholders(content: str, values: dict[str, str]) -> str:
 
 # ── Parser ───────────────────────────────────────────────────────────
 
+
 def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
     """Register ``workflow`` sub-subcommands (init | list-templates)."""
     parser = subparsers.add_parser(
         "workflow",
         help="Scaffold and manage orchestrator workflow files",
         description="Generate ``workflow.md`` from the packaged template, "
-                    "or list available template variants.",
+        "or list available template variants.",
     )
     wf_sub = parser.add_subparsers(
         dest="workflow_subcommand",
@@ -133,30 +140,34 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         "init",
         help="Generate workflow.md from template",
         description="Copy the packaged workflow template to the current directory "
-                    "and replace placeholders with your values.",
+        "and replace placeholders with your values.",
     )
     init_parser.add_argument(
-        "--template", "-t",
+        "--template",
+        "-t",
         default="workflow",
         metavar="VARIANT",
         help="Template variant: workflow (default, remote tracker), "
-             "workflow-local (local file-based tracker). "
-             "Run 'list-templates' to see all available variants.",
+        "workflow-local (local file-based tracker). "
+        "Run 'list-templates' to see all available variants.",
     )
     init_parser.add_argument(
-        "--kind", "-k",
+        "--kind",
+        "-k",
         default="github",
         metavar="TRACKER",
         help="Tracker kind: github, gitcode, gitee, linear, local (default: github)",
     )
     init_parser.add_argument(
-        "--owner", "-o",
+        "--owner",
+        "-o",
         default="",
         metavar="OWNER",
         help="Repository owner (e.g. my-org)",
     )
     init_parser.add_argument(
-        "--repo", "-r",
+        "--repo",
+        "-r",
         default="",
         metavar="REPO",
         help="Repository name (e.g. my-project)",
@@ -186,7 +197,8 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Local workspace root path",
     )
     init_parser.add_argument(
-        "--output", "--out",
+        "--output",
+        "--out",
         default="workflow.md",
         metavar="FILE",
         help="Output file path (default: ./workflow.md)",
@@ -207,6 +219,7 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
 
 # ── Dispatch ─────────────────────────────────────────────────────────
 
+
 def run(args: argparse.Namespace) -> int:
     """Dispatch to the appropriate workflow subcommand."""
     cmd = args.workflow_subcommand
@@ -219,6 +232,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 # ── Implementations ──────────────────────────────────────────────────
+
 
 def _run_init(args: argparse.Namespace) -> int:
     """Copy and fill the workflow template."""

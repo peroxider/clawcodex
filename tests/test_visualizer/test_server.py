@@ -39,33 +39,35 @@ def sessions_dir(tmp_path):
         "turn_count": 3,
         "tool_count": 2,
     }
-    (session_dir / "metadata.json").write_text(
-        json.dumps(metadata, indent=2), encoding="utf-8"
-    )
+    (session_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     # transcript.jsonl
     transcript = [
         json.dumps({"role": "user", "content": "hello", "timestamp": now - 60}),
-        json.dumps({
-            "role": "assistant",
-            "content": "reading file...",
-            "timestamp": now - 58,
-            "tool_calls": [{
-                "id": "tc-001",
-                "type": "function",
-                "function": {"name": "Read", "arguments": {"file_path": "main.py"}},
-            }],
-        }),
-        json.dumps({
-            "role": "tool",
-            "tool_call_id": "tc-001",
-            "content": "file content",
-            "timestamp": now - 57,
-        }),
+        json.dumps(
+            {
+                "role": "assistant",
+                "content": "reading file...",
+                "timestamp": now - 58,
+                "tool_calls": [
+                    {
+                        "id": "tc-001",
+                        "type": "function",
+                        "function": {"name": "Read", "arguments": {"file_path": "main.py"}},
+                    }
+                ],
+            }
+        ),
+        json.dumps(
+            {
+                "role": "tool",
+                "tool_call_id": "tc-001",
+                "content": "file content",
+                "timestamp": now - 57,
+            }
+        ),
     ]
-    (session_dir / "transcript.jsonl").write_text(
-        "\n".join(transcript), encoding="utf-8"
-    )
+    (session_dir / "transcript.jsonl").write_text("\n".join(transcript), encoding="utf-8")
 
     return sd
 
@@ -74,6 +76,7 @@ def sessions_dir(tmp_path):
 def app(sessions_dir):
     """Create a test FastAPI app."""
     from extensions.visualizer.server import create_app
+
     return create_app(sessions_dir=sessions_dir, allow_import=True)
 
 
@@ -81,6 +84,7 @@ def app(sessions_dir):
 def client(app):
     """Create a test client."""
     from fastapi.testclient import TestClient
+
     return TestClient(app)
 
 
@@ -165,10 +169,13 @@ class TestComparison:
 class TestShareLinks:
     def test_create_and_get_share_link(self, client):
         # Create
-        resp = client.post("/api/viz/share", json={
-            "session_id": "test-session-001",
-            "view_type": "session",
-        })
+        resp = client.post(
+            "/api/viz/share",
+            json={
+                "session_id": "test-session-001",
+                "view_type": "session",
+            },
+        )
         assert resp.status_code == 200
         share = resp.json()
         link_id = share["id"]
@@ -182,9 +189,12 @@ class TestShareLinks:
 
     def test_delete_share_link(self, client):
         # Create
-        resp = client.post("/api/viz/share", json={
-            "session_id": "test-session-001",
-        })
+        resp = client.post(
+            "/api/viz/share",
+            json={
+                "session_id": "test-session-001",
+            },
+        )
         share = resp.json()
         link_id = share["id"]
 
@@ -205,20 +215,28 @@ class TestImportAPI:
     def test_import_disabled_by_default(self, tmp_path):
         """Without --allow-import, the import router is not mounted."""
         from extensions.visualizer.server import create_app
+
         app = create_app(sessions_dir=tmp_path, allow_import=False)
         from fastapi.testclient import TestClient
+
         client = TestClient(app)
         # Import endpoint should not exist
-        resp = client.post("/api/viz/import", json={
-            "url": "https://example.com/data.json",
-        })
+        resp = client.post(
+            "/api/viz/import",
+            json={
+                "url": "https://example.com/data.json",
+            },
+        )
         assert resp.status_code == 404 or resp.status_code == 405
 
     def test_import_enabled(self, client):
         """With --allow-import, import endpoint exists."""
-        resp = client.post("/api/viz/import", json={
-            "url": "https://example.com/data.json",
-        })
+        resp = client.post(
+            "/api/viz/import",
+            json={
+                "url": "https://example.com/data.json",
+            },
+        )
         # May fail for SSRF reasons, but endpoint should exist
         assert resp.status_code in (202, 400, 403)
 
@@ -249,19 +267,19 @@ class TestExportFormats:
         resp = client.get("/api/viz/sessions/test-session-001/export?format=svg")
         assert resp.status_code == 200
         assert "image/svg+xml" in resp.headers.get("content-type", "")
-        assert resp.headers.get("content-disposition", "").endswith(".svg\"")
+        assert resp.headers.get("content-disposition", "").endswith('.svg"')
 
     def test_export_png(self, client):
         resp = client.get("/api/viz/sessions/test-session-001/export?format=png")
         assert resp.status_code == 200
         assert "image/png" in resp.headers.get("content-type", "")
-        assert resp.headers.get("content-disposition", "").endswith(".png\"")
+        assert resp.headers.get("content-disposition", "").endswith('.png"')
 
     def test_export_pdf(self, client):
         resp = client.get("/api/viz/sessions/test-session-001/export?format=pdf")
         assert resp.status_code == 200
         assert "application/pdf" in resp.headers.get("content-type", "")
-        assert resp.headers.get("content-disposition", "").endswith(".pdf\"")
+        assert resp.headers.get("content-disposition", "").endswith('.pdf"')
 
     def test_export_invalid_format(self, client):
         resp = client.get("/api/viz/sessions/test-session-001/export?format=txt")
@@ -307,6 +325,7 @@ class TestShareLinkPersistence:
         # First app instance
         app1 = create_app(sessions_dir=sessions_dir, allow_import=False)
         from fastapi.testclient import TestClient
+
         client1 = TestClient(app1)
 
         resp = client1.post("/api/viz/share", json={"session_id": "test-session-001"})

@@ -57,6 +57,7 @@ MIN_INPUT_TOKENS_FOR_AUTOCOMPACT = 10_000
 @dataclass
 class AutoCompactTracking:
     """Tracks autocompact state across query iterations."""
+
     consecutive_failures: int = 0
     last_failure_time: float | None = None
     last_compact_time: float | None = None
@@ -175,19 +176,21 @@ def calculate_token_warning_state(
 
     threshold = auto_compact_threshold if is_auto_compact_enabled() else effective
 
-    percent_left = max(
-        0,
-        round(((threshold - token_usage) / threshold) * 100),
-    ) if threshold > 0 else 0
+    percent_left = (
+        max(
+            0,
+            round(((threshold - token_usage) / threshold) * 100),
+        )
+        if threshold > 0
+        else 0
+    )
 
     warning_threshold = threshold - WARNING_THRESHOLD_BUFFER_TOKENS
     error_threshold = threshold - ERROR_THRESHOLD_BUFFER_TOKENS
 
     is_above_warning = token_usage >= warning_threshold
     is_above_error = token_usage >= error_threshold
-    is_above_auto_compact = (
-        is_auto_compact_enabled() and token_usage >= auto_compact_threshold
-    )
+    is_above_auto_compact = is_auto_compact_enabled() and token_usage >= auto_compact_threshold
 
     # Blocking limit
     default_blocking_limit = effective - MANUAL_COMPACT_BUFFER_TOKENS
@@ -275,7 +278,8 @@ async def auto_compact_if_needed(
         return None
 
     if not should_auto_compact(
-        input_token_count, context_window,
+        input_token_count,
+        context_window,
         max_output_tokens=max_output_tokens,
         threshold_fraction=threshold_fraction,
         tracking=tracking,

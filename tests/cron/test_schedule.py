@@ -10,7 +10,9 @@ from clawcodex_ext.cron_system.tasks import add_cron_task
 
 
 def test_get_cron_task_detail_formats_trigger_fields(tmp_path) -> None:
-    task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000)
+    task = add_cron_task(
+        tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000
+    )
 
     detail = get_cron_task_detail(tmp_path, task.id)
     assert detail is not None
@@ -27,7 +29,9 @@ def test_get_cron_task_detail_formats_trigger_fields(tmp_path) -> None:
 
 
 def test_manual_fire_creates_run_and_formats_run_id(tmp_path) -> None:
-    task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000)
+    task = add_cron_task(
+        tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000
+    )
 
     run = manual_fire_cron_task(tmp_path, task.id, current_dir=tmp_path)
     output = format_manual_fire_result(task.id, run)
@@ -38,7 +42,9 @@ def test_manual_fire_creates_run_and_formats_run_id(tmp_path) -> None:
 
 
 def test_manual_fire_deduplicates_across_cli_processes(tmp_path) -> None:
-    task = add_cron_task(tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000)
+    task = add_cron_task(
+        tmp_path, cron="*/5 * * * *", prompt="ping", durable=True, created_at=1_000
+    )
 
     first = manual_fire_cron_task(tmp_path, task.id, current_dir=tmp_path)
     second = manual_fire_cron_task(tmp_path, task.id, current_dir=tmp_path)

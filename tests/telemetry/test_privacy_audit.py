@@ -1,4 +1,5 @@
 """End-to-end privacy audit tests for telemetry reporter payloads."""
+
 from __future__ import annotations
 
 from telemetry import recorder as recorder_mod
@@ -34,7 +35,9 @@ class _NoopClient:
         self.find_titles.append(title)
         return None
 
-    async def create_issue(self, *, title: str, body: str, labels: list[str] | None = None) -> dict[str, str]:
+    async def create_issue(
+        self, *, title: str, body: str, labels: list[str] | None = None
+    ) -> dict[str, str]:
         payload = {"number": "1", "title": title, "body": body}
         self.created.append(payload)
         return payload

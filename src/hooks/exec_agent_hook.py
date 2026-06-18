@@ -85,7 +85,9 @@ Evaluate this event and respond with a JSON decision."""
             )
 
         duration_ms = int((time.monotonic() - start_time) * 1000)
-        response_text = response.content.strip() if hasattr(response, "content") and response.content else ""
+        response_text = (
+            response.content.strip() if hasattr(response, "content") and response.content else ""
+        )
 
         result = HookResult(
             exit_code=0,

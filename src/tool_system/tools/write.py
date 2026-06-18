@@ -35,6 +35,7 @@ Usage:
 # Path helpers
 # ---------------------------------------------------------------------------
 
+
 def _expand_path(file_path: str) -> str:
     """Normalize ``~``, ``.``, and ``..`` to an absolute path string."""
     return str(Path(file_path).expanduser().resolve())
@@ -43,6 +44,7 @@ def _expand_path(file_path: str) -> str:
 # ---------------------------------------------------------------------------
 # backfill_observable_input  (ported from TS backfillObservableInput)
 # ---------------------------------------------------------------------------
+
 
 def _backfill_observable_input(tool_input: dict[str, Any]) -> None:
     """Expand *file_path* in-place so hook allowlists cannot be bypassed
@@ -56,6 +58,7 @@ def _backfill_observable_input(tool_input: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # validate_input  (ported from TS validateInput -- Tier 1.1)
 # ---------------------------------------------------------------------------
+
 
 def _validate_input(tool_input: dict[str, Any], context: ToolContext) -> ValidationResult:
     """Pre-flight validation with distinct error codes:
@@ -117,6 +120,7 @@ def _validate_input(tool_input: dict[str, Any], context: ToolContext) -> Validat
 # check_permissions
 # ---------------------------------------------------------------------------
 
+
 def _is_auto_memory_write(file_path: str) -> bool:
     """Whether *file_path* is a write inside the auto-memory directory.
 
@@ -175,6 +179,7 @@ def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Perm
 # map_result_to_api  (ported from TS mapToolResultToToolResultBlockParam)
 # ---------------------------------------------------------------------------
 
+
 def _map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Return concise human-readable messages instead of raw structured output."""
     if isinstance(output, dict):
@@ -195,6 +200,7 @@ def _map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
 
     # Fallback for unexpected shapes
     import json as _json
+
     if isinstance(output, str):
         content: str = output
     elif isinstance(output, dict):
@@ -211,6 +217,7 @@ def _map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # call
 # ---------------------------------------------------------------------------
+
 
 def _write_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     file_path = tool_input["file_path"]
@@ -274,6 +281,7 @@ def _write_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 # Classifier helper
 # ---------------------------------------------------------------------------
 
+
 def _write_classifier_input(input_data: dict) -> str:
     fp = (input_data or {}).get("file_path", "")
     content = (input_data or {}).get("content", "")
@@ -314,8 +322,12 @@ WriteTool: Tool = build_tool(
     validate_input=_validate_input,
     backfill_observable_input=_backfill_observable_input,
     get_path=lambda input_data: input_data.get("file_path", ""),
-    user_facing_name=lambda input_data: f"Write: {(input_data or {}).get('file_path', '')}" if input_data else "Write",
+    user_facing_name=lambda input_data: (
+        f"Write: {(input_data or {}).get('file_path', '')}" if input_data else "Write"
+    ),
     search_hint="write create file save",
     to_auto_classifier_input=_write_classifier_input,
-    get_activity_description=lambda input_data: f"Writing {(input_data or {}).get('file_path', '')}" if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Writing {(input_data or {}).get('file_path', '')}" if input_data else None
+    ),
 )

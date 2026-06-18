@@ -41,12 +41,14 @@ def resolve_dependencies(
                 continue
             available = plugins[dep_name]
             if not version_satisfies(available.version, dep_version):
-                result.conflicts.append(DependencyConflict(
-                    plugin_name=name,
-                    dependency_name=dep_name,
-                    required_version=dep_version,
-                    available_version=available.version,
-                ))
+                result.conflicts.append(
+                    DependencyConflict(
+                        plugin_name=name,
+                        dependency_name=dep_name,
+                        required_version=dep_version,
+                        available_version=available.version,
+                    )
+                )
 
     order = topological_sort(plugins)
     if order is None:

@@ -299,6 +299,7 @@ class TestMcpConfigIntegration:
         config_file.write_text(json.dumps(config_data))
 
         from src.services.mcp.config import parse_mcp_config_from_file_path
+
         result = parse_mcp_config_from_file_path(str(config_file), expand_vars=False)
         assert result.config is not None
         assert "file-server" in result.config
@@ -324,6 +325,7 @@ class TestFullMcpPipeline:
         assert len(tools) == 2
 
         from src.services.mcp.tool_wrapper import wrap_mcp_tools_for_server
+
         wrapped_tools = wrap_mcp_tools_for_server(connection, tools, client)
         assert len(wrapped_tools) == 2
 

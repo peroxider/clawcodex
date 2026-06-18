@@ -68,8 +68,12 @@ def test_create_queued_run_writes_rich_source_metadata(tmp_path) -> None:
 
 
 def test_active_source_dedup_prevents_duplicate_runs(tmp_path) -> None:
-    first = create_queued_run(tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=1000))
-    second = create_queued_run(tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=2000))
+    first = create_queued_run(
+        tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=1000)
+    )
+    second = create_queued_run(
+        tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=2000)
+    )
 
     assert first is not None
     assert second is None
@@ -77,7 +81,9 @@ def test_active_source_dedup_prevents_duplicate_runs(tmp_path) -> None:
 
 
 def test_claim_and_finalize_run_lifecycle(tmp_path) -> None:
-    run = create_queued_run(tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=1000))
+    run = create_queued_run(
+        tmp_path, CreateCronRunParams(task_id="task1", prompt="ping", queued_at=1000)
+    )
     assert run is not None
 
     claimed = claim_cron_run(tmp_path, run.id, timestamp=2000)

@@ -6,7 +6,19 @@ Usage::
     clawcodex viz --port 9000           # Custom port
     clawcodex viz --allow-import        # Enable session import endpoint
     clawcodex viz --sessions-dir /path  # Custom sessions directory
+    clawcodex viz --transcripts-dir /path  # Custom sub-agent transcripts dir
     clawcodex viz --no-open             # Don't open browser
+
+Layout in the new ClawCodeX format:
+
+- ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` — main session transcript
+- ``~/.clawcodex/transcripts/<agent_id>.jsonl`` — sub-agent transcript
+  (flat fallback, used when the nested resolver is not registered)
+- ``~/.clawcodex/sessions/<sid>/subagents/agent-<agent_id>.jsonl`` —
+  sub-agent transcript nested under the parent session
+- ``~/.clawcodex/tool-events/<run_id>/events.ndjson`` — F-45 audit log
+- ``~/.clawcodex/reports/run_*/state_journal.ndjson`` — F-96 orchestrator
+  state journals
 """
 
 from __future__ import annotations
@@ -36,7 +48,8 @@ def run_viz(args: list[str] | None = None) -> int:
         description="Start the Multi-Session Visualizer web server",
     )
     parser.add_argument(
-        "--port", "-p",
+        "--port",
+        "-p",
         type=int,
         default=8765,
         help="Port to listen on (default: 8765)",
@@ -50,7 +63,13 @@ def run_viz(args: list[str] | None = None) -> int:
         "--sessions-dir",
         type=Path,
         default=None,
-        help="Path to sessions directory (default: ~/.clawcodex/sessions)",
+        help="Main sessions directory (default: ~/.clawcodex/sessions)",
+    )
+    parser.add_argument(
+        "--transcripts-dir",
+        type=Path,
+        default=None,
+        help="Sub-agent transcripts directory (default: ~/.clawcodex/transcripts)",
     )
     parser.add_argument(
         "--workspaces-file",
@@ -106,6 +125,7 @@ def run_viz(args: list[str] | None = None) -> int:
 
     app = create_app(
         sessions_dir=parsed.sessions_dir,
+        transcripts_dir=parsed.transcripts_dir,
         workspaces_file=parsed.workspaces_file,
         allow_import=parsed.allow_import,
         host=parsed.host,
@@ -120,6 +140,7 @@ def run_viz(args: list[str] | None = None) -> int:
 
         def _open_browser() -> None:
             import time
+
             time.sleep(1.5)
             webbrowser.open(url)
 
@@ -127,6 +148,7 @@ def run_viz(args: list[str] | None = None) -> int:
 
     print(f"🖥  ClawCodex Visualizer starting at {url}")
     print(f"   Sessions dir: {parsed.sessions_dir or '~/.clawcodex/sessions'}")
+    print(f"   Transcripts dir: {parsed.transcripts_dir or '~/.clawcodex/transcripts'}")
     print(f"   Import: {'enabled' if parsed.allow_import else 'disabled'}")
     print(f"   Press Ctrl+C to stop\n")
 

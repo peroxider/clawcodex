@@ -31,6 +31,7 @@ The markdown body becomes the agent's system prompt, returned by
 ``agent.get_system_prompt()``. Missing required fields produce ``None``
 with a debug log; the loader silently drops the file rather than crash.
 """
+
 from __future__ import annotations
 
 import logging
@@ -95,7 +96,9 @@ def _parse_memory(value: Any, *, file_path: str) -> str | None:
         return s
     logger.debug(
         "agent %s: invalid memory=%r (valid: %s)",
-        file_path, value, ", ".join(sorted(VALID_MEMORY_SCOPES)),
+        file_path,
+        value,
+        ", ".join(sorted(VALID_MEMORY_SCOPES)),
     )
     return None
 
@@ -108,7 +111,9 @@ def _parse_isolation(value: Any, *, file_path: str) -> str | None:
         return s
     logger.debug(
         "agent %s: invalid isolation=%r (valid: %s)",
-        file_path, value, ", ".join(sorted(VALID_ISOLATION_MODES)),
+        file_path,
+        value,
+        ", ".join(sorted(VALID_ISOLATION_MODES)),
     )
     return None
 
@@ -152,7 +157,8 @@ def parse_agent_from_markdown(
         # can't be invoked via ``@agent-True`` mention syntax.
         logger.debug(
             "agent file %s: 'name' must be a string (got %s); using filename",
-            file_path, type(raw_name).__name__,
+            file_path,
+            type(raw_name).__name__,
         )
         raw_name = None
     agent_type = (raw_name or Path(file_path).stem).strip()
@@ -185,9 +191,7 @@ def parse_agent_from_markdown(
     omit_claude_md = _parse_bool(_first(frontmatter, "omit-claude-md", "omitClaudeMd"))
     hooks = parse_hooks(_first(frontmatter, "hooks"), owner_name=f"agent {agent_type}")
     skills = parse_string_list(_first(frontmatter, "skills"))
-    isolation = _parse_isolation(
-        _first(frontmatter, "isolation"), file_path=file_path
-    )
+    isolation = _parse_isolation(_first(frontmatter, "isolation"), file_path=file_path)
     required_mcp_servers = parse_string_list(
         _first(frontmatter, "required-mcp-servers", "requiredMcpServers")
     )

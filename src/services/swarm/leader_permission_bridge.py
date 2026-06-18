@@ -26,6 +26,7 @@ The two cooperate — the bash classifier consults
 ``SwarmPermissionSync`` first; on miss, the request is forwarded via
 this bridge.
 """
+
 from __future__ import annotations
 
 import logging
@@ -98,6 +99,7 @@ class PermissionRequest:
 class _CallbackEntry:
     """Internal record — pairs a request_id with its (on_allow, on_reject)
     callbacks plus the tool_use_id for diagnostics."""
+
     request_id: str
     tool_use_id: str
     on_allow: Callable[[], None]
@@ -209,7 +211,8 @@ def deliver_permission_decision(
     except Exception:
         logger.exception(
             "permission decision callback raised for request_id=%s tool_use_id=%s",
-            request_id, entry.tool_use_id,
+            request_id,
+            entry.tool_use_id,
         )
     return True
 
@@ -248,7 +251,10 @@ async def send_permission_request_via_mailbox(
         timestamp=envelope["timestamp"],
     )
     write_to_mailbox(
-        leader_name, msg, team_name=team_name, workspace_root=workspace_root,
+        leader_name,
+        msg,
+        team_name=team_name,
+        workspace_root=workspace_root,
     )
 
 

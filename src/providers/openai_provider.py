@@ -15,9 +15,7 @@ from .openai_compatible import OpenAICompatibleProvider
 class OpenAIProvider(OpenAICompatibleProvider):
     """OpenAI provider using OpenAI SDK."""
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize OpenAI provider.
 
         Args:
@@ -38,8 +36,10 @@ class OpenAIProvider(OpenAICompatibleProvider):
             kwargs["base_url"] = self.base_url
         # Support SSL verification bypass for corporate/internal endpoints
         import os
+
         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
             import httpx
+
             kwargs["http_client"] = httpx.Client(verify=False)
         return OpenAI(**kwargs)
 

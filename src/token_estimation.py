@@ -32,6 +32,7 @@ _encoder_loaded: bool = False
 def _load_tiktoken(encoding: str = "cl100k_base") -> Optional[object]:
     try:
         import tiktoken
+
         return tiktoken.get_encoding(encoding)
     except Exception:
         return None
@@ -176,12 +177,8 @@ def bytes_per_token_for_file_type(file_extension: str) -> int:
     return 4
 
 
-def rough_token_count_estimation_for_file_type(
-    content: str, file_extension: str
-) -> int:
-    return rough_token_count_estimation(
-        content, bytes_per_token_for_file_type(file_extension)
-    )
+def rough_token_count_estimation_for_file_type(content: str, file_extension: str) -> int:
+    return rough_token_count_estimation(content, bytes_per_token_for_file_type(file_extension))
 
 
 def rough_token_count_estimation_for_messages(
@@ -269,7 +266,9 @@ def _rough_token_count_estimation_for_block_impl(block: Any) -> int:
         return 2000
 
     if block_type == "tool_result":
-        inner = block.get("content", "") if isinstance(block, dict) else getattr(block, "content", "")
+        inner = (
+            block.get("content", "") if isinstance(block, dict) else getattr(block, "content", "")
+        )
         return rough_token_count_estimation_for_content(inner)
 
     if block_type == "tool_use":
@@ -278,7 +277,9 @@ def _rough_token_count_estimation_for_block_impl(block: Any) -> int:
         return rough_token_count_estimation(str(name) + _json_stringify(inp))
 
     if block_type == "thinking":
-        thinking = block.get("thinking", "") if isinstance(block, dict) else getattr(block, "thinking", "")
+        thinking = (
+            block.get("thinking", "") if isinstance(block, dict) else getattr(block, "thinking", "")
+        )
         return rough_token_count_estimation(str(thinking))
 
     if block_type == "redacted_thinking":
@@ -335,9 +336,7 @@ def count_messages_tokens(messages: list[dict[str, Any]]) -> int:
 async def count_tokens_with_api(content: str) -> int | None:
     if not content:
         return 0
-    return await count_messages_tokens_with_api(
-        [{"role": "user", "content": content}], []
-    )
+    return await count_messages_tokens_with_api([{"role": "user", "content": content}], [])
 
 
 async def count_messages_tokens_with_api(
@@ -440,6 +439,7 @@ def estimate_image_tokens(width: int, height: int) -> int:
     Minimum: 85 tokens
     """
     import math
+
     w_blocks = math.ceil(width / 32)
     h_blocks = math.ceil(height / 32)
     return max(85, w_blocks * h_blocks * 3)

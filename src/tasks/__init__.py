@@ -24,6 +24,7 @@ per-type modules no longer carry their own ``_register()`` side
 effect. This sidesteps the prior "must remember to import the
 submodule before lookup" trap.
 """
+
 from __future__ import annotations
 
 # Re-export the per-type ``Task`` adapters so ``from src.tasks import

@@ -6,6 +6,7 @@ Verifies:
 - Permission modes, rule sources, and decision types match
 - Deny > Ask > Allow priority ordering
 """
+
 from __future__ import annotations
 
 import json
@@ -170,9 +171,7 @@ class TestPermissionCheckFlowOrdering(unittest.TestCase):
         )
         tool = _make_mock_tool("TestTool")
         # Tool would allow, but ask rule takes priority
-        tool.check_permissions = MagicMock(
-            return_value=PermissionAllowDecision(behavior="allow")
-        )
+        tool.check_permissions = MagicMock(return_value=PermissionAllowDecision(behavior="allow"))
         decision = has_permissions_to_use_tool(tool, {}, ctx)
         self.assertEqual(decision.behavior, "ask")
         # check_permissions should NOT have been called

@@ -83,13 +83,15 @@ def validate_hook_configs(
 
     for event_name, hook_list in hooks_config.items():
         if event_name not in ALL_HOOK_EVENTS:
-            errors.append(HookValidationError(
-                event=event_name,
-                index=-1,
-                field="event",
-                message=f"Unknown hook event: {event_name}",
-                severity="warning",
-            ))
+            errors.append(
+                HookValidationError(
+                    event=event_name,
+                    index=-1,
+                    field="event",
+                    message=f"Unknown hook event: {event_name}",
+                    severity="warning",
+                )
+            )
             continue
 
         # Per-hook field validation for the WI-1.3 additions:
@@ -101,48 +103,58 @@ def validate_hook_configs(
                     continue
                 if_value = hook_raw.get("if_condition", hook_raw.get("if"))
                 if if_value is not None and not isinstance(if_value, str):
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="if",
-                        message="`if` must be a string (permission-rule grammar)",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="if",
+                            message="`if` must be a string (permission-rule grammar)",
+                        )
+                    )
                 if "once" in hook_raw and not isinstance(hook_raw["once"], bool):
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="once",
-                        message="`once` must be a boolean",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="once",
+                            message="`once` must be a boolean",
+                        )
+                    )
 
         if not isinstance(hook_list, list):
-            errors.append(HookValidationError(
-                event=event_name,
-                index=-1,
-                field="hooks",
-                message=f"Hook list for {event_name} must be an array",
-            ))
+            errors.append(
+                HookValidationError(
+                    event=event_name,
+                    index=-1,
+                    field="hooks",
+                    message=f"Hook list for {event_name} must be an array",
+                )
+            )
             continue
 
         for i, hook_raw in enumerate(hook_list):
             if not isinstance(hook_raw, dict):
-                errors.append(HookValidationError(
-                    event=event_name,
-                    index=i,
-                    field="hook",
-                    message=f"Hook at index {i} must be an object",
-                ))
+                errors.append(
+                    HookValidationError(
+                        event=event_name,
+                        index=i,
+                        field="hook",
+                        message=f"Hook at index {i} must be an object",
+                    )
+                )
                 continue
 
             hook_type = hook_raw.get("type", "command")
             if hook_type == "command":
                 if not hook_raw.get("command"):
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="command",
-                        message="Command hook must have a 'command' field",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="command",
+                            message="Command hook must have a 'command' field",
+                        )
+                    )
                 # Round-2 / Ch12 — validate ``shell`` for command hooks only.
                 # TS ``BashCommandHookSchema.shell`` enforces ``z.enum(SHELL_TYPES)``;
                 # we surface unknown values here so settings authors see them.
@@ -152,46 +164,55 @@ def validate_hook_configs(
                 # ``/hooks`` UI / logs.
                 shell_raw = hook_raw.get("shell")
                 if shell_raw is not None and shell_raw not in SHELL_TYPES:
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="shell",
-                        message=(
-                            f"Unknown shell type: {shell_raw!r}. "
-                            f"Must be one of {SHELL_TYPES}."
-                        ),
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="shell",
+                            message=(
+                                f"Unknown shell type: {shell_raw!r}. Must be one of {SHELL_TYPES}."
+                            ),
+                        )
+                    )
             elif hook_type == "http":
                 if not hook_raw.get("url"):
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="url",
-                        message="HTTP hook must have a 'url' field",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="url",
+                            message="HTTP hook must have a 'url' field",
+                        )
+                    )
             elif hook_type == "agent":
                 if not hook_raw.get("agentInstructions") and not hook_raw.get("agent_instructions"):
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="agentInstructions",
-                        message="Agent hook must have 'agentInstructions' field",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="agentInstructions",
+                            message="Agent hook must have 'agentInstructions' field",
+                        )
+                    )
             elif hook_type == "prompt":
                 if not hook_raw.get("promptText") and not hook_raw.get("prompt_text"):
-                    errors.append(HookValidationError(
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="promptText",
+                            message="Prompt hook must have 'promptText' field",
+                        )
+                    )
+            else:
+                errors.append(
+                    HookValidationError(
                         event=event_name,
                         index=i,
-                        field="promptText",
-                        message="Prompt hook must have 'promptText' field",
-                    ))
-            else:
-                errors.append(HookValidationError(
-                    event=event_name,
-                    index=i,
-                    field="type",
-                    message=f"Unknown hook type: {hook_type}",
-                ))
+                        field="type",
+                        message=f"Unknown hook type: {hook_type}",
+                    )
+                )
 
             matcher = hook_raw.get("matcher")
             if matcher is not None:
@@ -199,13 +220,15 @@ def validate_hook_configs(
                     if "*" not in matcher:
                         re.compile(matcher)
                 except re.error as e:
-                    errors.append(HookValidationError(
-                        event=event_name,
-                        index=i,
-                        field="matcher",
-                        message=f"Invalid matcher pattern: {e}",
-                        severity="warning",
-                    ))
+                    errors.append(
+                        HookValidationError(
+                            event=event_name,
+                            index=i,
+                            field="matcher",
+                            message=f"Invalid matcher pattern: {e}",
+                            severity="warning",
+                        )
+                    )
 
     return errors
 
@@ -248,6 +271,7 @@ def _translate_legacy_notification_entry(
     if target is None:
         return None
     import warnings as _warnings
+
     _warnings.warn(
         f"Hook registered under 'Notification' with matcher={matcher!r} is "
         f"deprecated; use the first-class event {target!r} directly. "
@@ -355,20 +379,24 @@ class HookConfigManager:
         try:
             data = json.loads(self._settings_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return [HookValidationError(
-                event="",
-                index=-1,
-                field="file",
-                message=f"Cannot read settings file: {self._settings_path}",
-            )]
+            return [
+                HookValidationError(
+                    event="",
+                    index=-1,
+                    field="file",
+                    message=f"Cannot read settings file: {self._settings_path}",
+                )
+            ]
 
         hooks_raw = data.get("hooks", {})
         if not isinstance(hooks_raw, dict):
-            return [HookValidationError(
-                event="",
-                index=-1,
-                field="hooks",
-                message="'hooks' field must be an object",
-            )]
+            return [
+                HookValidationError(
+                    event="",
+                    index=-1,
+                    field="hooks",
+                    message="'hooks' field must be an object",
+                )
+            ]
 
         return validate_hook_configs(hooks_raw)

@@ -9,6 +9,7 @@ Covers ``src/tool_system/tools/agent.py`` integration with the fork helpers:
 - ``filter_incomplete_tool_calls`` runs on parent context messages.
 - ``use_exact_tools`` bypasses ``resolve_agent_tools()``.
 """
+
 from __future__ import annotations
 
 import os
@@ -199,18 +200,14 @@ def test_fork_routing_includes_parent_assistant_clone(
     cloned_assistant_candidate = msgs[-2]
     assert isinstance(cloned_assistant_candidate, AssistantMessage)
     # Cloned assistant must preserve all tool_use block IDs.
-    block_ids = [
-        b.id for b in cloned_assistant_candidate.content if isinstance(b, ToolUseBlock)
-    ]
+    block_ids = [b.id for b in cloned_assistant_candidate.content if isinstance(b, ToolUseBlock)]
     assert block_ids == ["tu_1", "tu_2"]
     # The cloned assistant should not be the same Python object as the parent's.
     assert cloned_assistant_candidate is not parent_assistant
 
     user_msg = msgs[-1]
     assert isinstance(user_msg, UserMessage)
-    result_block_ids = {
-        b.tool_use_id for b in user_msg.content if isinstance(b, ToolResultBlock)
-    }
+    result_block_ids = {b.tool_use_id for b in user_msg.content if isinstance(b, ToolResultBlock)}
     assert result_block_ids == {"tu_1", "tu_2"}
 
 
@@ -418,8 +415,10 @@ def test_fork_appends_worktree_notice_when_worktree_root_set(
     assert isinstance(msgs, list) and len(msgs) >= 2
     last = msgs[-1]
     assert isinstance(last, UserMessage)
-    text = last.content if isinstance(last.content, str) else "".join(
-        b.text for b in last.content if isinstance(b, TextBlock)
+    text = (
+        last.content
+        if isinstance(last.content, str)
+        else "".join(b.text for b in last.content if isinstance(b, TextBlock))
     )
     assert str(repo_dir) in text
     assert str(worktree_dir) in text
@@ -459,10 +458,7 @@ def test_fork_skips_worktree_notice_when_worktree_root_unset(
     last = msgs[-1]
     assert isinstance(last, UserMessage)
     blocks = list(last.content) if isinstance(last.content, list) else []
-    assert any(
-        isinstance(b, TextBlock) and "<fork-boilerplate>" in b.text
-        for b in blocks
-    )
+    assert any(isinstance(b, TextBlock) and "<fork-boilerplate>" in b.text for b in blocks)
 
 
 def test_fork_skips_worktree_notice_when_root_matches_cwd(
@@ -496,8 +492,7 @@ def test_fork_skips_worktree_notice_when_root_matches_cwd(
     # The last message must still be the directive (no extra plain-text notice).
     if isinstance(last.content, list):
         assert any(
-            isinstance(b, TextBlock) and "<fork-boilerplate>" in b.text
-            for b in last.content
+            isinstance(b, TextBlock) and "<fork-boilerplate>" in b.text for b in last.content
         )
     else:
         assert "<fork-boilerplate>" in last.content

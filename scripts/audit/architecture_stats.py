@@ -141,8 +141,7 @@ def build_architecture_stats(root: Path | None = None) -> ArchitectureStats:
 
     repo_root = root if root is not None else _repo_root()
     abstractions = tuple(
-        _build_abstraction(name, package_rel, repo_root)
-        for name, package_rel in ABSTRACTION_MAP
+        _build_abstraction(name, package_rel, repo_root) for name, package_rel in ABSTRACTION_MAP
     )
     return ArchitectureStats(
         abstractions=abstractions,
@@ -192,8 +191,7 @@ def _render_markdown(stats: ArchitectureStats) -> str:
         lines.append("")
     if not any_dense:
         lines.append(
-            "_No files meet the high-density threshold; "
-            "all abstractions are evenly distributed._"
+            "_No files meet the high-density threshold; all abstractions are evenly distributed._"
         )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"

@@ -16,10 +16,13 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .registry import CommandRegistry
 from .types import Command
+
+if TYPE_CHECKING:
+    from src.types.content_blocks import ImageBlock
 
 # Regex patterns
 _COMMAND_RE = re.compile(r"^/([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+(.*))?$", re.DOTALL)
@@ -29,20 +32,14 @@ _COMMAND_RE = re.compile(r"^/([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+(.*))?$", re.DOTALL)
 # capture so ``"see @foo/bar."`` extracts ``foo/bar``. A leading ``@scope``
 # (e.g. ``@anthropic-ai/sdk``) is only treated as a path mention when it contains
 # a path separator — otherwise it's just a username-style mention and ignored.
-_FILE_MENTION_RE = re.compile(
-    r"(?:^|(?<=\s))@(?!\")([^\s,;:\"'`\[\](){}]+)"
-)
+_FILE_MENTION_RE = re.compile(r"(?:^|(?<=\s))@(?!\")([^\s,;:\"'`\[\](){}]+)")
 
 # Match ``@agent-<type>`` and ``@"<type> (agent)"`` mentions, mirroring
 # ``extractAgentMentions`` in ``typescript/src/utils/attachments.ts``. Both
 # quoted and unquoted variants are supported; the captured group is the
 # agent-type string (minus the ``agent-`` prefix for the unquoted form).
-_AGENT_MENTION_UNQUOTED_RE = re.compile(
-    r"(?:^|(?<=\s))@(agent-[\w:.@\-]+)"
-)
-_AGENT_MENTION_QUOTED_RE = re.compile(
-    r"(?:^|(?<=\s))@\"([\w:.@\-]+) \(agent\)\""
-)
+_AGENT_MENTION_UNQUOTED_RE = re.compile(r"(?:^|(?<=\s))@(agent-[\w:.@\-]+)")
+_AGENT_MENTION_QUOTED_RE = re.compile(r"(?:^|(?<=\s))@\"([\w:.@\-]+) \(agent\)\"")
 _URL_RE = re.compile(
     r"https?://[^\s<>\"'`\[\](){}]+",
     re.IGNORECASE,
@@ -59,6 +56,7 @@ _ESCAPE_RE = re.compile(r"^\\(/)")  # Escaped slash
 @dataclass
 class ParsedInput:
     """Result of parsing user input."""
+
     raw: str
     input_type: str  # "command" | "text" | "empty" | "multiline"
     command_name: str = ""
@@ -141,9 +139,7 @@ def _extract_file_mentions(text: str, cwd: str | None = None) -> list[str]:
         if not path_str:
             continue
         looks_like_path = (
-            path_str.startswith(("/", "~", "./", "../"))
-            or "/" in path_str
-            or "." in path_str
+            path_str.startswith(("/", "~", "./", "../")) or "/" in path_str or "." in path_str
         )
         if not looks_like_path:
             continue
@@ -179,19 +175,55 @@ _AT_MENTION_IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "gif", "webp"})
 # the user-visible case (Read tool supports them via ``pages``); the rest
 # are defense in depth so a stray @archive.zip doesn't pollute the prompt
 # either.
-_AT_MENTION_BINARY_EXTENSIONS = frozenset({
-    "pdf",
-    "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar",
-    "exe", "dll", "so", "dylib", "a", "o",
-    "bin", "iso", "dmg",
-    "docx", "xlsx", "pptx", "doc", "xls", "ppt",
-    "mp3", "wav", "flac", "ogg", "m4a",
-    "mp4", "mov", "avi", "mkv", "webm",
-    "ttf", "otf", "woff", "woff2",
-    "class", "jar", "war",
-    "pyc", "pyo",
-    "sqlite", "db",
-})
+_AT_MENTION_BINARY_EXTENSIONS = frozenset(
+    {
+        "pdf",
+        "zip",
+        "tar",
+        "gz",
+        "tgz",
+        "bz2",
+        "xz",
+        "7z",
+        "rar",
+        "exe",
+        "dll",
+        "so",
+        "dylib",
+        "a",
+        "o",
+        "bin",
+        "iso",
+        "dmg",
+        "docx",
+        "xlsx",
+        "pptx",
+        "doc",
+        "xls",
+        "ppt",
+        "mp3",
+        "wav",
+        "flac",
+        "ogg",
+        "m4a",
+        "mp4",
+        "mov",
+        "avi",
+        "mkv",
+        "webm",
+        "ttf",
+        "otf",
+        "woff",
+        "woff2",
+        "class",
+        "jar",
+        "war",
+        "pyc",
+        "pyo",
+        "sqlite",
+        "db",
+    }
+)
 
 # Heuristic chunk used by ``_looks_like_binary``: enough bytes to spot a
 # NUL byte in plausible binary headers without paying the full read cost
@@ -363,7 +395,7 @@ def _binary_hint_for_ext(ext: str) -> str:
     if ext == "pdf":
         return (
             "PDFs cannot be inlined as @-mention text. Use the Read tool "
-            "with the ``pages`` parameter (e.g. ``pages=\"1-5\"``) to view "
+            'with the ``pages`` parameter (e.g. ``pages="1-5"``) to view '
             "specific page ranges."
         )
     return (
@@ -509,11 +541,7 @@ def expand_at_mentions(
         if not raw:
             continue
         # Skip bare @word mentions (no path separator / dot / home marker).
-        if not (
-            raw.startswith(("/", "~", "./", "../"))
-            or "/" in raw
-            or "." in raw
-        ):
+        if not (raw.startswith(("/", "~", "./", "../")) or "/" in raw or "." in raw):
             continue
 
         expanded = os.path.expanduser(raw)
@@ -529,9 +557,7 @@ def expand_at_mentions(
                 truncated = len(entries) > _MAX_DIR_ENTRIES
                 shown = entries[:_MAX_DIR_ENTRIES]
                 if truncated:
-                    shown.append(
-                        f"\u2026 and {len(entries) - _MAX_DIR_ENTRIES} more entries"
-                    )
+                    shown.append(f"\u2026 and {len(entries) - _MAX_DIR_ENTRIES} more entries")
                 display_path = os.path.relpath(expanded, cwd)
                 attachments.append(
                     {
@@ -662,7 +688,7 @@ def format_at_mention_attachments(attachments: list[dict[str, Any]]) -> str:
             blocks.append(
                 f"<system-reminder>\n"
                 f"The user has expressed a desire to invoke the agent "
-                f"\"{att['agent_type']}\". Please invoke the agent "
+                f'"{att["agent_type"]}". Please invoke the agent '
                 f"appropriately using the Agent tool, passing in the required "
                 f"context to it.\n"
                 f"</system-reminder>"
@@ -732,7 +758,7 @@ def expand_agent_mentions(
 
     for match in _AGENT_MENTION_UNQUOTED_RE.finditer(text):
         raw = match.group(1)
-        agent_type = raw[len("agent-"):] if raw.startswith("agent-") else raw
+        agent_type = raw[len("agent-") :] if raw.startswith("agent-") else raw
         if agent_type in seen or agent_type not in known_types:
             continue
         seen.add(agent_type)

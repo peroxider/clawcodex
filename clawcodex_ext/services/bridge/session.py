@@ -2,6 +2,7 @@
 
 Mirrors TypeScript bridge/session.ts — manages remote session lifecycle.
 """
+
 from __future__ import annotations
 
 import time
@@ -21,6 +22,7 @@ class BridgeSessionState(str, Enum):
 @dataclass
 class BridgeSessionConfig:
     """Configuration for a bridge session."""
+
     server_url: str = ""
     session_id: str = field(default_factory=lambda: uuid4().hex)
     auth_token: str = ""
@@ -32,6 +34,7 @@ class BridgeSessionConfig:
 @dataclass
 class BridgeSession:
     """A remote bridge session."""
+
     config: BridgeSessionConfig = field(default_factory=BridgeSessionConfig)
     state: BridgeSessionState = BridgeSessionState.INITIALIZING
     connected_at: float | None = None

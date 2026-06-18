@@ -11,6 +11,7 @@ Ported as an :class:`InteractiveCommand` because ``local-jsx`` maps onto
 the deprecation :class:`InteractiveOutcome` directly, so it behaves identically
 on every surface (REPL, Textual, and ``NullUIHost`` headless).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

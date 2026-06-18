@@ -37,6 +37,7 @@ Out of scope (per critic concern C4 / Phase 11)
 GC / rotation / age-based eviction. Mailbox files grow unbounded
 under this WI; a separate ticket lands the cleanup policy.
 """
+
 from __future__ import annotations
 
 import json
@@ -75,8 +76,7 @@ def _sanitize_name(name: str, *, kind: str) -> str:
     """
     if not isinstance(name, str) or not _VALID_NAME_RE.match(name):
         raise ValueError(
-            f"Invalid {kind}: {name!r} "
-            "(allowed chars: A-Z, a-z, 0-9, _, -; max 64; min 1)."
+            f"Invalid {kind}: {name!r} (allowed chars: A-Z, a-z, 0-9, _, -; max 64; min 1)."
         )
     return name
 
@@ -95,9 +95,7 @@ def get_mailboxes_root(workspace_root: Path, team_name: str) -> Path:
     return root
 
 
-def get_inbox_path(
-    recipient_name: str, team_name: str, workspace_root: Path
-) -> Path:
+def get_inbox_path(recipient_name: str, team_name: str, workspace_root: Path) -> Path:
     """Return absolute path to ``<recipient>.jsonl`` for the given team.
 
     Both names are sanitized via ``_sanitize_name``; either failing
@@ -254,6 +252,7 @@ def make_iso_timestamp() -> str:
     # ``time.time`` → ISO-8601 UTC with microsecond precision and a
     # ``Z`` suffix. Avoids the timezone-aware datetime overhead.
     import datetime as _dt
+
     return _dt.datetime.fromtimestamp(time.time(), tz=_dt.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%S.%fZ"
     )
@@ -274,9 +273,7 @@ def create_shutdown_request_message(
     return out
 
 
-def create_shutdown_approved_message(
-    *, request_id: str, from_: str
-) -> dict[str, Any]:
+def create_shutdown_approved_message(*, request_id: str, from_: str) -> dict[str, Any]:
     return {
         "type": "shutdown_response",
         "request_id": request_id,
@@ -286,9 +283,7 @@ def create_shutdown_approved_message(
     }
 
 
-def create_shutdown_rejected_message(
-    *, request_id: str, from_: str, reason: str
-) -> dict[str, Any]:
+def create_shutdown_rejected_message(*, request_id: str, from_: str, reason: str) -> dict[str, Any]:
     return {
         "type": "shutdown_response",
         "request_id": request_id,

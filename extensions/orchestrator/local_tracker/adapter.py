@@ -9,11 +9,14 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..issue import Issue
 
 logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from ..tracker import CommandIntent
+
 from ..tracker import (
     Comment,
     DEFAULT_INTENT_LABELS,
@@ -263,9 +266,8 @@ class LocalTrackerAdapter(TrackerAdapter):
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
         from ..tracker import CommandIntent, parse_agent_command
-        comments = await self.fetch_new_comments_since(
-            issue_id, since_comment_id
-        )
+
+        comments = await self.fetch_new_comments_since(issue_id, since_comment_id)
         for comment in comments:
             body = comment.body or ""
             command = parse_agent_command(body)
