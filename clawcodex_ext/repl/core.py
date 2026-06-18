@@ -3296,33 +3296,39 @@ class ClawcodexREPL:
                 return
 
             if cmd_name not in special_commands:
-                # Try to execute via new command system
-                # First try sync path for LocalCommand (faster)
-                try:
-                    handled, result_text = self._try_execute_new_command(cmd_name, args)
-                    if handled:
-                        if result_text:
-                            self.console.print("\n" + result_text)
-                        self.console.print()
+                cmd_obj = self.command_registry.get(cmd_name)
+
+                if cmd_obj is not None:
+                    from clawcodex_ext.command_system.types import CommandType
+
+                    if cmd_obj.command_type == CommandType.LOCAL:
+                        try:
+                            handled, result_text = self._try_execute_new_command(cmd_name, args)
+                            if handled:
+                                if result_text:
+                                    self.console.print("\n" + result_text)
+                                self.console.print()
+                                return
+                            if result_text:
+                                self.console.print(f"[red]{result_text}[/red]")
+                        except Exception as e:
+                            self.console.print(f"[red]{e}[/red]")
                         return
-                except Exception as e:
-                    # Fall through to async path
-                    pass
 
-                # Use async path for PromptCommand
-                # Run in a new event loop since we're in a sync context
-                try:
-                    result = self._run_command_async_with_status(
-                        cmd_name,
-                        args,
-                        status_message="Recapping..." if cmd_name == "recap" else None,
-                    )
+                    try:
+                        result = self._run_command_async_with_status(
+                            cmd_name,
+                            args,
+                            status_message="Recapping..." if cmd_name == "recap" else None,
+                        )
 
-                    if result.success:
-                        if self._handle_command_result(result):
-                            return
-                except Exception:
-                    pass
+                        if result.success:
+                            self._handle_command_result(result)
+                        elif result.error:
+                            self.console.print(f"[red]{result.error}[/red]")
+                    except Exception as e:
+                        self.console.print(f"[red]{e}[/red]")
+                    return
 
         # Fall back to original command handling
         cmd = raw.lower()

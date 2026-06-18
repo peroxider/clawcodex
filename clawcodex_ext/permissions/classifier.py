@@ -276,47 +276,44 @@ def auto_mode_classify_with_llm(
     if rule_result.allow:
         return rule_result
 
-    if rule_result.reason in ("empty command", "complex command structure"):
+    _HARD_DENY_REASONS = frozenset({
+        "empty command",
+        "complex command structure",
+        "MCP tools require explicit approval",
+    })
+
+    if rule_result.reason in _HARD_DENY_REASONS:
         return rule_result
 
     if not use_llm_for_uncertain:
         return rule_result
 
-    # Only allow LLM to override 'write' and 'unknown' commands.
-    # 'destructive' and 'dangerous' commands are blocked by rule classifier
-    # and should NOT be overridden by LLM judgment.
-    llm_overridable_reasons = (
-        "command is write",
-        "command is unknown",
+    is_danger, danger_reason = detect_dangerous_tool_call(tool_name, tool_input)
+    if is_danger:
+        log.info("Hard-coded danger detected: %s", danger_reason)
+        return rule_result
+
+    log.info("Calling LLM classifier for uncertain command: tool=%s, reason=%s", tool_name, rule_result.reason)
+    llm_result = llm_classify_tool_call(
+        tool_name, tool_input, context, provider, recent_operations
+    )
+    log.info(
+        "LLM result: decision=%s, confidence=%s",
+        llm_result.decision, llm_result.confidence,
     )
 
-    if rule_result.reason in llm_overridable_reasons:
-        is_danger, danger_reason = detect_dangerous_tool_call(tool_name, tool_input)
-        if is_danger:
-            log.info("Hard-coded danger detected: %s", danger_reason)
-            return rule_result
-
-        log.info("Calling LLM classifier for uncertain command...")
-        llm_result = llm_classify_tool_call(
-            tool_name, tool_input, context, provider, recent_operations
-        )
-        log.info(
-            "LLM result: decision=%s, confidence=%s",
-            llm_result.decision, llm_result.confidence,
+    if llm_result.decision == "AUTO_ALLOW" and llm_result.confidence >= 0.8:
+        log.info("LLM override: ALLOW")
+        return AutoModeDecision(
+            allow=True,
+            reason=f"LLM override: {llm_result.reasoning}",
         )
 
-        if llm_result.decision == "AUTO_ALLOW" and llm_result.confidence >= 0.8:
-            log.info("LLM override: ALLOW")
-            return AutoModeDecision(
-                allow=True,
-                reason=f"LLM override: {llm_result.reasoning}",
-            )
-
-        if llm_result.decision == "AUTO_DENY":
-            return AutoModeDecision(
-                allow=False,
-                reason=f"LLM confirmed danger: {llm_result.reasoning}",
-            )
+    if llm_result.decision == "AUTO_DENY":
+        return AutoModeDecision(
+            allow=False,
+            reason=f"LLM confirmed danger: {llm_result.reasoning}",
+        )
 
     return rule_result
 
