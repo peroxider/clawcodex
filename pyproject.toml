@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,16 +7,15 @@ name = "clawcodex-dev-mind"
 version = "0.5.0"
 description = "A production-oriented Python rebuild of Claude Code — real architecture, reliable CLI agent"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    {name = "Claw Codex Team", email = "team@example.com"}
+    {name = "Claw Codex Team"}
 ]
 keywords = ["claude", "cli", "ai", "llm", "anthropic", "openai", "glm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -102,22 +101,30 @@ dev = [
     # requires the pytest-asyncio plugin. Without it, async tests fail at
     # run time with "async def functions are not natively supported."
     "pytest-asyncio>=1.3.0",
-    # Ch16 Phase 0: coverage reporting for the ≥90% line-coverage DoD on
-    # the new ``src/bridge/`` modules.
+    # F-73: coverage report generation for CI visibility. The current rollout
+    # intentionally does not enforce a minimum coverage percentage.
     "pytest-cov>=5.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "mypy>=1.13.0",
+    "import-linter>=2.0",
 ]
 # ``all`` is the catch-all extra consumed by ``install.sh`` (one-click
 # installer). NOTE: an earlier draft used a self-reference
 # (``all = ["clawcodex-dev-mind[dev]"]``) which deadlocks editable
-# installs — pip/setuptools wait for the package to exist on disk to
-# read its metadata, but the package is what's being built. List the
-# deps explicitly instead. Keep in sync with ``dev`` above.
+# installs because pip/setuptools wait for the package to exist on disk to
+# read its metadata, but the package is what's being built. List the deps
+# explicitly instead. Keep in sync with ``dev`` above.
 all = [
     "build>=1.0.0",
     "twine>=5.0.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=5.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "mypy>=1.13.0",
+    "import-linter>=2.0",
 ]
 
 [project.scripts]
@@ -147,6 +154,52 @@ filterwarnings = [
     "ignore::DeprecationWarning:scripts.audit.remote_runtime",
 ]
 
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    "src/upstream",
+    "patches",
+    "claude-code-wiki",
+    "demos",
+]
+
+[tool.ruff.lint]
+# Start with correctness-oriented rules that can be blocking without forcing
+# a repo-wide style cleanup. Formatting is still checked on changed files in CI.
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.coverage.run]
+branch = true
+source = ["src", "clawcodex_ext", "extensions"]
+omit = [
+    "src/upstream/*",
+    "tests/*",
+    "scripts/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 0
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_return_any = false
+no_implicit_optional = false
+exclude = [
+    "^src/upstream/",
+    "^patches/",
+    "^claude-code-wiki/",
+    "^demos/",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*", "clawcodex_ext*", "extensions*"]
@@ -168,8 +221,7 @@ exclude = [
 # ``src/tool_system``, ``src/coordinator``). The contract below enforces
 # this on every commit when ``lint-imports`` runs in CI.
 #
-# To run locally: ``pip install import-linter && lint-imports``.
-# (Not in ``dev`` extras yet — install ad-hoc until CI wires it in.)
+# To run locally: ``pip install -e ".[dev]" && lint-imports``.
 [tool.importlinter]
 root_package = "src"
 

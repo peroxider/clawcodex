@@ -230,6 +230,7 @@ cd clawcodex
 uv venv --python 3.11
 source .venv/bin/activate
 uv pip install -e ".[dev]"
+python scripts/ci/dev_setup.py
 
 # Configure providers (one-time)
 clawcodex-dev login
@@ -263,8 +264,6 @@ Tab completion covers the top-level subcommands (`login`, `config`, `mcp`,
 subcommand also completes its nouns (`server` / `issue` / `dashboard`).
 
 > The upstream CLI (`python -m src.cli`) still works — this fork adds a parallel `clawcodex-dev` entry that registers the downstream subcommands (`orchestrator`, `cron`, `pos`, ...).
-
----
 
 ## Prerequisites & Supported Platforms
 
@@ -723,6 +722,9 @@ See [`docs/FEATURE_PLAN.md`](docs/FEATURE_PLAN.md) for the full F-feature backlo
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
 pip install -e ".[dev]"
+# Create CI/CD environment
+python scripts/ci/dev_setup.py
+python -m pre_commit run --all-files  # optional first-run confidence check
 
 # Run only the fork's own tests
 pytest tests/test_orchestrator.py -v
@@ -734,13 +736,89 @@ pytest tests/test_bridge.py -v
 pytest tests/ -m "not integration" -v
 ```
 
+Git hooks do not auto-activate just because `.pre-commit-config.yaml` is
+present in a clone. `scripts/ci/dev_setup.py` installs the local pre-commit hook
+and creates the ignored `.env` template when missing; `install.sh install` and
+`install.sh update` do the same for one-click installs. The hook is an early
+local hygiene check, not a replacement for the GitCode `push` / `pull_request`
+gates.
+
+GitCode CI/CD gates live in `.gitcode/workflows/`. Because GitCode Pipeline may be unavailable for this repository, the same gate shape can be simulated locally. By default this checks the current HEAD commit and shows a live colored dashboard in interactive terminals:
+
+```bash
+python scripts/ci/local_ci.py
+```
+
+The detailed gate map is in [`docs/cicd/CICD_GATE.md`](docs/cicd/CICD_GATE.md).
+
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers PR conventions. [`upstream_sync/`](upstream_sync/) contains tooling to pull new chapters from the upstream TypeScript reference.
+
+---
+
+## Release
+
+Release publishing changes external services, so run it only from a clean
+tracked working tree. When `--tag` is provided, the local fallback creates the
+missing local tag at `HEAD`; an existing release tag must already point at
+`HEAD`.
+
+`.env` is ignored by Git. Generate it once from `.env.example` with the developer
+setup helper, then edit it locally:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ci\dev_setup.py
+```
+
+Fill tokens according to the publish target:
+
+| Publish target | `.env` value to fill | Notes |
+|---|---|---|
+| TestPyPI rehearsal | `TEST_PYPI_TOKEN=...` | Default `--release-target testpypi`. |
+| PyPI promotion | `PYPI_TOKEN=...` | Use `--release-target pypi` after checking TestPyPI. |
+| GitCode Release assets | `GITCODE_TOKEN=...` | Only needed when you do **not** pass `--skip-gitcode-release`. Keep `GITCODE_OWNER=` and `GITCODE_REPO=` empty until GitCode Release upload is enabled here. |
+
+Credential-only checks do not build or upload anything:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --check-credentials --skip-gitcode-release
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --check-credentials --skip-gitcode-release
+```
+
+A normal publish run performs, in order: load `.env`, check credentials, require a
+clean tracked tree, create or verify the release tag, clean old artifacts, run release lint,
+run advisory mypy, run release tests, build/check/install the package in
+`.release-smoke/`, upload to TestPyPI or PyPI, then upload GitCode Release assets
+unless skipped.
+
+Useful options:
+
+| Option | Effect |
+|---|---|
+| `--release-target testpypi` | Upload package artifacts to TestPyPI; this is the default. |
+| `--release-target pypi` | Upload package artifacts to PyPI. |
+| `--tag v0.0.0` | Create the missing local tag at `HEAD`; if it already exists, require it to point at `HEAD`. |
+| `--dry-run` | Run validation and package smoke, then list uploads without changing PyPI or GitCode. |
+| `--check-credentials` | Only create/load `.env` and verify required token names. |
+| `--skip-gitcode-release` | Do not create GitCode Release assets; currently recommended for this repository. |
+| `--skip-tests` | Skip the release pytest set; use only when another trusted gate already ran. |
+
+Recommended flow:
+
+```powershell
+# Validate release checks and package build without uploading artifacts.
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --dry-run --skip-gitcode-release
+# Upload package artifacts to TestPyPI only.
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --skip-gitcode-release
+# Promote package artifacts to production PyPI.
+\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --tag v0.5.0
+```
+
 
 ---
 
 ## Sync with upstream
 
-This fork tracks the upstream `clawcodex` repo. The sync pipeline is at `upstream_sync/` and the design is in [`docs/UPSTREAM_SYNC_DESIGN.md`](docs/UPSTREAM_SYNC_DESIGN.md). When upstream moves, run:
+This fork tracks the upstream `clawcodex` repo. The sync pipeline is at `upstream_sync/` and the design is in [`upstream_sync/UPSTREAM_SYNC_DESIGN.md`](upstream_sync/UPSTREAM_SYNC_DESIGN.md). When upstream moves, run:
 
 ```bash
 python -m upstream_sync.pull --since 2026-05-20

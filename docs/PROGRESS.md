@@ -2,9 +2,16 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.4
-> 更新日期: 2026-07
-> 上游同步: 58ea488 (dev-decoupling-refactor)
+> 版本: v3.6
+> 更新日期: 2026-06-18
+> 上游同步: 9f0596e (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
+>   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
+>   - F-73 CI/CD 质量门禁与发布流水线进入“本地已完成 / 远端待验证”状态。
+>   - GitCode workflow 目标配置、preflight 差异门禁、docs/ruff/pytest/package/security/release helper 已落地。
+>   - `scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁，并标记 CodeCheck / TestPyPI / GitCode Release 等远端或破坏性步骤。
+>   - TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升链路已具备脚本与 workflow；真实远端执行待仓库 Pipeline、CodeCheck、Release 权限与 token 开通后继续验证。
 >
 > **v3.4 变更**：代码实现审计 — 修正 5 个 FEATURE_PLAN.md 状态与代码不对齐问题。
 >   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（与 PROGRESS.md 对齐，PullRequestFeedback/ReviewFeedbackService 全部落地）
@@ -127,7 +134,7 @@
 | F-70 | Plugin 系统 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §4.3 |
 | F-71 | 内置工具补齐 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
-| F-73 | CI/CD 流水线 | P0 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
+| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-75 | 工具/Skill 调用统计（跨会话） | P2 | ⏳ 待开始 | 跨会话工具使用统计与策略优化；见 FEATURE_PLAN §4.8（F-75） |
 | F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ⏳ 待开始 | 三通道语义澄清（LLM/CLI/TUI），冲突裁决，离线澄清；见 FEATURE_PLAN §4.12（F-78） |
@@ -1790,21 +1797,29 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 
 ### F-73: CI/CD 质量门禁与 PyPI 发布流水线
 
-**状态**: ⏳ 待开始 | **优先级**: P0
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
+
+**落地摘要（2026-06-17）**:
+
+- 已新增 GitCode workflow 目标配置：`ci.yml`、`agent-smoke.yml`、`security.yml`、`release-preflight.yml`、`publish.yml`。
+- 已新增 `scripts/ci/` helper：preflight、docs check、supply-chain audit、GitCode Release 上传契约、local CI、本地发布 dry-run/执行入口。
+- 已新增 `.pre-commit-config.yaml` 与 `install.sh` best-effort hook 安装，提交前可做基础卫生检查。
+- 已新增 `scripts/ci/local_ci.py`，在 GitCode Pipeline 暂不可用时本地复现主要门禁；远端 CodeCheck、TestPyPI/PyPI 上传、GitCode Release 附件上传会明确标记为 remote-only 或 destructive skip。
+- 待仓库功能开通后继续验证：GitCode Pipeline 调度、GitCode CodeCheck action、GitCode Release 附件上传、TestPyPI token、生产 PyPI 手动晋升。
 
 | 编号 | 子特性 | 工具链 | 状态 | 预计工作量 |
 |:----:|--------|:------:|:----:|:----------:|
-| P73-A | ruff lint/format CI | `ruff` | ⏳ 待开始 | 1-2天 |
-| P73-B | pytest 测试流水线 | `pytest` | ⏳ 待开始 | 1-2天 |
-| P73-C | pre-commit 本地钩子 | `pre-commit` | ⏳ 待开始 | 1天 |
-| P73-D | PyPI 自动发布（tag push → build → twine → Release） | `build` + `twine` | ⏳ 待开始 | 2-3天 |
-| P73-E | 测试覆盖率门禁 | `pytest-cov` + Codecov | ⏳ 待开始 | 1-2天 |
-| P73-F | pyproject.toml 元数据规范 | 无 | ⏳ 待开始 | 1天 |
-| P73-G | mypy 类型检查（可选） | `mypy` | ⏳ 待开始 | 2-3天 |
+| P73-A | ruff lint/format CI | `ruff` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
+| P73-B | pytest 测试流水线 | `pytest` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
+| P73-C | pre-commit 本地钩子 | `pre-commit` | ✅ 已完成 | 1天 |
+| P73-D | PyPI 自动发布（tag push → build → twine → Release） | `build` + `twine` | 🟡 脚本与 workflow 已完成，TestPyPI/GitCode Release/PyPI 待远端验证 | 2-3天 |
+| P73-E | 测试覆盖率门禁 | `pytest-cov` + Codecov | 🟡 coverage 报告已接入，阈值暂不阻塞 | 1-2天 |
+| P73-F | pyproject.toml 元数据规范 | 无 | ✅ 已完成 | 1天 |
+| P73-G | mypy 类型检查（可选） | `mypy` | 🟡 advisory 已接入，阻塞化待历史基线修复 | 2-3天 |
 
 **估算总工时**: 1 周
 
-**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-73 CI/CD 质量门禁与 PyPI 发布流水线`
+**详细设计**: `docs/FEATURE_PLAN.md` → `§7.6 F-73 CI/CD 质量门禁与 PyPI 发布流水线`
 
 ### F-74: Sandbox / SSH Remote 沙箱远程执行
 
@@ -1831,7 +1846,7 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
-| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ⏳ 待开始 | 1周 |
+| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
 
 ### 实施建议顺序
