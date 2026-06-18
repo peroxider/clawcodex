@@ -237,17 +237,33 @@ class MultiSessionViewBuilder:
                 # Extract score from metadata if available (design-spec: 评审/核对评分)
                 score = node.metadata.get("score") if node.metadata else None
                 score_label = node.metadata.get("score_label") if node.metadata else None
+                role = node.role or "执行"
+                # Context tokens for the sub-agent (mirrors clawcodex_sessions_analysis
+                # workflow-panel.tsx:639-643 — used by formatTokens in the sub-agent
+                # label). Fall back to None when the node has no stats so the JS can
+                # skip the badge.
+                context_tokens = None
+                if getattr(node, "stats", None) and getattr(node.stats, "context_tokens", None):
+                    context_tokens = node.stats.context_tokens
                 agent_rows.append(
                     {
                         "id": f"{s.session_id}/{node.agent_id}",
                         "parentSessionId": s.session_id,
                         "name": node.name,
-                        "role": node.role or "执行",
+                        "role": role,
                         "roleColor": node.role_color or "#3b82f6",
                         "title": node.name,
                         "count": self._bar_count_for_agent(node),
                         "score": score,
                         "scoreLabel": score_label or node.name,
+                        # badge / isReview mirror the TS reference (lane.tsx /
+                        # workflow-panel.tsx) so the bezier sub-agent label can
+                        # render the same "评审/核对" pill. We derive `badge` from
+                        # scoreLabel when present, else from role.
+                        "badge": score_label or role,
+                        "isReview": role == "评审",
+                        "contextTokens": context_tokens,
+                        "contextSize": self._fmt_tokens(context_tokens) if context_tokens else "",
                         "spawnX": spawn_x,
                         "joinX": join_x,
                         "duration": max(0.001, join_x - spawn_x),

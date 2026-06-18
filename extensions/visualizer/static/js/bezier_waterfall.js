@@ -195,6 +195,16 @@ const BezierWaterfall = (function() {
         return m + ':' + String(s).padStart(2, '0');
     }
 
+    // Mirror of clawcodex_sessions_analysis/lib/format.ts:formatTokens.
+    // Used by the sub-agent label to render the muted token size badge
+    // (workflow-panel.tsx:639-643). Returns "—" for falsy values so the
+    // label stays readable when stats are missing.
+    function formatTokens(n) {
+        if (!n) return '—';
+        if (n >= 1000) return Math.round(n / 1000) + 'K';
+        return String(n);
+    }
+
     function buildTicks(durationMs, zoom) {
         zoom = zoom || 1;
         const visibleMs = durationMs / zoom;
@@ -545,6 +555,69 @@ const BezierWaterfall = (function() {
                 track.appendChild(this._renderEventBar(t));
             }
             row.appendChild(track);
+
+            // Spawn annotation — mirrors workflow-panel.tsx:518-526. The
+            // builder attaches a `spawnCallout` (x + label + subagentCount)
+            // when the session summary contains a spawn_time. Position is
+            // absolute so the pill drops below+right of the spawn dot and
+            // sits on top of the row band without disturbing the flow of
+            // the header / track below it.
+            const spawnCallout = session.spawnCallout;
+            if (spawnCallout && typeof spawnCallout.x === 'number') {
+                const pill = el('div', 'bezier-annotation bezier-spawn-annotation');
+                pill.style.left = Math.max(0, xToPx(spawnCallout.x, this.canvasWidth, this.durationSec) + 8) + 'px';
+                // dotY in the TS reference is HEADER_H + LANE_H/2 = 22 + 11 = 33;
+                // the +10 offsets the pill below the dot. Mirrored as-is
+                // so the visual cadence matches clawcodex_sessions_analysis.
+                pill.style.top = (HEADER_H + Math.floor(TRACK_H / 2) + 10) + 'px';
+                const arrow = el('span', 'bezier-annotation-arrow', '▼');
+                const timeText = el('span', 'bezier-annotation-time',
+                    formatClock((spawnCallout.x || 0) * 1000));
+                const sub = (typeof spawnCallout.subagentCount === 'number')
+                    ? spawnCallout.subagentCount : 0;
+                const label = el('span', 'bezier-annotation-label',
+                    'Workflow 派生 ' + sub + ' 子agent');
+                pill.appendChild(arrow);
+                pill.appendChild(timeText);
+                pill.appendChild(label);
+                track.appendChild(pill);
+            }
+
+            // Merge annotation — mirrors workflow-panel.tsx:528-540. The
+            // TS reference positions one merge pill per session panel,
+            // anchored to the panel-level mergeX (max joinX across the
+            // session's sub-agents). We compute the same value from
+            // this.data.agents since the bezier view flattens sessions
+            // and sub-agents into one vertical list. The pill anchors to
+            // the LEFT of the merge dot (translateX(-100%)) so it never
+            // overflows the canvas right edge.
+            const subAgents = ((this.data && this.data.agents) || [])
+                .filter((a) => a.parentSessionId === session.id);
+            if (subAgents.length > 0) {
+                let maxJoinX = 0;
+                let hasJoin = false;
+                for (const a of subAgents) {
+                    const jx = (typeof a.joinX === 'number') ? a.joinX : (a.spawnX || 0);
+                    if (jx > maxJoinX) maxJoinX = jx;
+                    hasJoin = true;
+                }
+                if (hasJoin) {
+                    const mergePx = xToPx(maxJoinX, this.canvasWidth, this.durationSec);
+                    const pill = el('div', 'bezier-annotation bezier-merge-annotation');
+                    pill.style.left = (mergePx - 8) + 'px';
+                    pill.style.top = (HEADER_H + Math.floor(TRACK_H / 2) + 36) + 'px';
+                    pill.style.transform = 'translateX(-100%)';
+                    const arrow = el('span', 'bezier-annotation-arrow', '▲');
+                    const timeText = el('span', 'bezier-annotation-time',
+                        formatClock(maxJoinX * 1000));
+                    const label = el('span', 'bezier-annotation-label', '汇合收工');
+                    pill.appendChild(arrow);
+                    pill.appendChild(timeText);
+                    pill.appendChild(label);
+                    track.appendChild(pill);
+                }
+            }
+
             return row;
         }
 
@@ -678,6 +751,26 @@ const BezierWaterfall = (function() {
             if (agent.roleColor) pill.style.background = agent.roleColor;
             header.appendChild(pill);
             header.appendChild(el('span', 'bezier-row-name', agent.name || agent.id));
+            // TS reference (workflow-panel.tsx:617-644) renders the
+            // sub-agent label as a single inline group of badge +
+            // name + events.length + formatTokens(contextTokens). We
+            // keep the existing role pill + name + "次调用" meta, then
+            // append the badge + count + tokens cluster to mirror
+            // clawcodex_sessions_analysis without duplicating text.
+            const meta = el('span', 'bezier-subagent-meta');
+            if (agent.badge && agent.badge !== (agent.role || '执行')) {
+                const badge = el('span', 'bezier-subagent-badge '
+                    + (agent.isReview ? 'is-review' : 'is-default'));
+                badge.textContent = agent.badge;
+                meta.appendChild(badge);
+            }
+            if (agent.contextTokens) {
+                meta.appendChild(el('span', 'bezier-subagent-tokens',
+                    formatTokens(agent.contextTokens)));
+            }
+            if (meta.childNodes.length) {
+                header.appendChild(meta);
+            }
             if (agent.count) {
                 header.appendChild(el('span', 'bezier-row-meta', agent.count + ' 次调用'));
             }

@@ -46,9 +46,14 @@
     --bezier-track:             #0d1117;
     --bezier-track-border:      rgba(48, 54, 61, 0.4);
     --bezier-connector:         #6e7681;
-    --bezier-connector-active:  #f778ba;
-    --bezier-connector-merge-active: #58a6ff;
-    --bezier-connector-hover:   #79c0ff;
+    /* Connector colours mirror clawcodex_sessions_analysis globals.css:
+       - spawn (fork) = blue/teal, contrasts with orchestrate pink/purple
+       - merge = amber, signals "收工" / "wrap up"
+       These were swapped in the original port; the TS reference is the
+       single source of truth. */
+    --bezier-connector-active:  #79c0ff;
+    --bezier-connector-merge-active: #f0a878;
+    --bezier-connector-hover:   #ea7ccc;
     --bezier-cat-read:          #3fb950;
     --bezier-cat-execute:       #58a6ff;
     --bezier-cat-write:         #d29922;
@@ -104,18 +109,29 @@ body.ms-reference-page .container {
 }
 
 .ms-reference-topbar {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 38px;
+    color: #bec9d7;
+    text-shadow: 0 0 8px rgba(132, 163, 205, 0.45);
+    white-space: nowrap;
+    margin: 6px 0 10px;
+}
+
+/* When the topbar lives inside .ms-analysis-shell (the fullscreen
+   multi-session overlay), keep the original absolute-positioned layout
+   so the chrome floats over the chart at fixed viewport coordinates. */
+.ms-analysis-shell .ms-reference-topbar {
     position: absolute;
     z-index: 3;
     top: 11px;
     left: 17px;
     right: 58px;
     height: 38px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #bec9d7;
-    text-shadow: 0 0 8px rgba(132, 163, 205, 0.45);
-    white-space: nowrap;
+    margin: 0;
 }
 
 .ms-reference-model {
@@ -1240,6 +1256,102 @@ body.ms-reference-page .container {
     color: var(--ms-muted, #738294);
     font-variant-numeric: tabular-nums;
     margin-top: 1px;
+}
+
+/* ------------------------------------------------------------------
+   Bezier spawn/merge annotation pills (TS clawcodex_sessions_analysis
+   workflow-panel.tsx:518-540 — "5:45 派生 N 子agent" / "67:21 汇合收工").
+
+   These are absolutely positioned over the .bezier-waterfall panel,
+   anchored to the spawn dot (below+right) and merge dot (above+left)
+   so they sit on top of the row band like a tooltip. They use the
+   same connector colour tokens as the SVG curve so spawn reads blue
+   and merge reads amber.
+   ------------------------------------------------------------------ */
+.bezier-annotation {
+    position: absolute;
+    z-index: 6;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--ms-border, #26384a);
+    background: var(--bezier-bg, #101b26);
+    color: var(--bezier-fg, #c3cedb);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.bezier-annotation-arrow {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1;
+}
+.bezier-annotation-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+}
+.bezier-annotation-label {
+    color: var(--ms-muted, #738294);
+    font-size: 12px;
+}
+.bezier-spawn-annotation .bezier-annotation-arrow,
+.bezier-spawn-annotation .bezier-annotation-time {
+    color: var(--bezier-connector-active, #79c0ff);
+}
+.bezier-merge-annotation .bezier-annotation-arrow,
+.bezier-merge-annotation .bezier-annotation-time {
+    color: var(--bezier-connector-merge-active, #f0a878);
+}
+
+/* ------------------------------------------------------------------
+   Bezier sub-agent label container — badge + name + count + tokens.
+
+   The current renderer puts the role pill + name + count in the row
+   header (next to the track). To match the TS reference we keep that
+   structure but append a tokens badge so the user can see context
+   size at a glance. Mirrors workflow-panel.tsx:617-644.
+   ------------------------------------------------------------------ */
+.bezier-subagent-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+.bezier-subagent-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+.bezier-subagent-badge.is-review {
+    background: rgba(59, 130, 246, 0.18);
+    color: #79b8ff;
+}
+.bezier-subagent-badge.is-default {
+    background: rgba(245, 158, 11, 0.18);
+    color: #f0a878;
+}
+.bezier-subagent-count {
+    font-size: 11px;
+    color: var(--ms-muted, #738294);
+    font-variant-numeric: tabular-nums;
+}
+.bezier-subagent-tokens {
+    font-size: 10px;
+    color: color-mix(in srgb, var(--ms-muted, #738294) 70%, transparent);
+    font-variant-numeric: tabular-nums;
 }
 .bezier-connector-tooltip-hint {
     color: var(--ms-muted, #738294);
