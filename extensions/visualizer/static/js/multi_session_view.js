@@ -163,6 +163,8 @@ const MultiSessionView = (function() {
             updateReferenceChrome(data);
             if (legendId) renderLegend(data.legend || [], legendId);
             renderChart(data, chartId);
+            wireZoomControls();
+            updateZoomLabel();
         } catch (e) {
             console.error('Multi-session load failed:', e);
             const el = document.getElementById(chartId);
@@ -270,7 +272,10 @@ const MultiSessionView = (function() {
 
     function updateReferenceChrome(data) {
         const shell = document.querySelector('.ms-analysis-shell');
-        if (!shell || !data) return;
+        // For session_row.html the .ms-reference-topbar sits outside the
+        // .ms-analysis-shell; bail only when neither target exists.
+        const topbar = document.getElementById('ms-reference-topbar');
+        if (!shell && !topbar) return;
         const sessions = data.sessions || [];
         const agents = data.agents || [];
         const first = sessions[0] || {};
@@ -308,6 +313,80 @@ const MultiSessionView = (function() {
                 <span class="ms-reference-dot"></span>
             `;
         }
+
+        // ----------------------------------------------------------------
+        // Session info card (TS-style "本次加载 N 个文件 · 识别为 1 个会话").
+        // Hidden by default; populated here from the response. Survives
+        // re-renders (we only update textContent + the hidden flag).
+        // ----------------------------------------------------------------
+        const card = document.getElementById('ms-session-card');
+        if (card) {
+            const fileCount = data.fileCount || sessions.length || 1;
+            const agentCount = (agents.length || 0) + (sessions.length || 0);
+            const filesEl = document.getElementById('ms-session-card-files');
+            const agentsEl = document.getElementById('ms-session-card-agents');
+            if (filesEl) filesEl.textContent = String(fileCount);
+            if (agentsEl) {
+                agentsEl.textContent = agentCount > 1
+                    ? `1 个会话 (含 ${agentCount - 1} 个子agent)`
+                    : `1 个会话`;
+            }
+            card.hidden = false;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Zoom controls — wire the - / 100% / + buttons to the ECharts
+    // dataZoom. The label updates from the datazoom handler below.
+    // ------------------------------------------------------------------
+    function wireZoomControls() {
+        const inBtn = document.getElementById('ms-zoom-in');
+        const outBtn = document.getElementById('ms-zoom-out');
+        if (!inBtn || !outBtn) return;
+        // Avoid double-wiring when init() runs twice (e.g. live update).
+        if (inBtn.dataset.wired === '1') return;
+        inBtn.dataset.wired = '1';
+        outBtn.dataset.wired = '1';
+
+        const zoomBy = (factor) => {
+            if (!chart) return;
+            const opt = chart.getOption();
+            const dz = opt && opt.dataZoom && opt.dataZoom[0];
+            if (!dz) return;
+            const start = (typeof dz.start === 'number') ? dz.start : 0;
+            const end = (typeof dz.end === 'number') ? dz.end : 100;
+            const center = (start + end) / 2;
+            let nextStart = start;
+            let nextEnd = end;
+            if (factor > 1) {
+                // zoom in — narrow the window
+                const halfSpan = (end - start) / 2 / factor;
+                nextStart = Math.max(0, center - halfSpan);
+                nextEnd = Math.min(100, center + halfSpan);
+            } else {
+                // zoom out — widen
+                const halfSpan = ((end - start) / 2) * (1 / factor);
+                nextStart = Math.max(0, center - halfSpan);
+                nextEnd = Math.min(100, center + halfSpan);
+            }
+            chart.dispatchAction({ type: 'dataZoom', start: nextStart, end: nextEnd });
+        };
+
+        inBtn.addEventListener('click', () => zoomBy(1.4));
+        outBtn.addEventListener('click', () => zoomBy(1 / 1.4));
+    }
+
+    function updateZoomLabel() {
+        const label = document.getElementById('ms-zoom-label');
+        if (!label || !chart) return;
+        const opt = chart.getOption();
+        const dz = opt && opt.dataZoom && opt.dataZoom[0];
+        if (!dz) return;
+        const span = ((dz.end || 100) - (dz.start || 0));
+        // span < 100 means zoomed in. 100/span gives the zoom factor
+        // (e.g. span=50 → 200%). Clamp to a reasonable display range.
+        const pct = Math.round(Math.max(50, Math.min(400, 10000 / Math.max(1, span))));
+        label.textContent = `${pct}%`;
     }
 
     // ------------------------------------------------------------------
@@ -411,6 +490,9 @@ const MultiSessionView = (function() {
                 if (typeof nextStart === 'number' && typeof nextEnd === 'number') {
                     lastDzState = { start: nextStart, end: nextEnd };
                 }
+                // Refresh the - / 100% / + label so it stays in sync with
+                // the user's zoom gestures (wheel / inside / slider).
+                updateZoomLabel();
                 // Recompute the visible x-range in absolute (data-seconds)
                 // units. The axisLabel formatter reads isCompactMs to pick
                 // between ``mm:ss.SSS`` and the compact ``S.SSS`` form, so

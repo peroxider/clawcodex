@@ -136,24 +136,46 @@ class ModelRegistry:
     ) -> list[str]:
         """Return up to *n* close-matching model names for "Did you mean ...?".
 
-        Uses :func:`difflib.get_close_matches` with a 0.6 cutoff so only
-        plausibly intended matches are surfaced.  When ``provider`` is given,
-        only that provider's models are searched; otherwise the entire
-        registry is searched.
+        Compares *name* against each model's first dash-separated segment
+        ("family name" — e.g. ``claude-sonnet-4-6`` -> ``claude``) so single-
+        word typos like ``cluade`` -> ``claude-...`` surface with high
+        SequenceMatcher ratios.  Full model names are then expanded in
+        registry order, deduplicated, and truncated to *n*.
+
+        When ``provider`` is given, only that provider's models are searched;
+        otherwise the entire registry is searched.
         """
         import difflib
 
         if not name:
             return []
         providers = [provider] if provider else self.provider_names()
-        candidates: list[str] = []
+
+        # Build short-name -> full-model list mapping.
+        short_to_fulls: dict[str, list[str]] = {}
         for prov in providers:
             try:
                 self.validate_provider(prov)
             except UnknownProviderError:
                 continue
-            candidates.extend(self.available_models(prov))
-        return difflib.get_close_matches(name, candidates, n=n, cutoff=0.6)
+            for model in self.available_models(prov):
+                short = model.split("-", 1)[0] if "-" in model else model
+                short_to_fulls.setdefault(short, []).append(model)
+
+        short_candidates = list(short_to_fulls.keys())
+        short_matches = difflib.get_close_matches(
+            name, short_candidates, n=n, cutoff=0.6
+        )
+
+        # Expand short matches back to full model names (preserve registry order).
+        full_suggestions: list[str] = []
+        for short in short_matches:
+            for full in short_to_fulls[short]:
+                if full not in full_suggestions:
+                    full_suggestions.append(full)
+                    if len(full_suggestions) >= n:
+                        return full_suggestions
+        return full_suggestions
 
     def provider_statuses(self) -> list[ProviderStatus]:
         from src.config import get_provider_config

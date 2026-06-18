@@ -726,6 +726,106 @@ body.ms-reference-page .container {
 }
 
 /* ----------------------------------------------------------------- *
+ *  Zoom controls (mirrors clawcodex_sessions_analysis TopBar zoom widget)
+ *  Sits in a row above the chart. The - / 100% / + buttons drive the
+ *  ECharts dataZoom via dispatchAction; the label updates from the
+ *  datazoom event in multi_session_view.js.
+ * ----------------------------------------------------------------- */
+.ms-zoom-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 6px 0 10px;
+    gap: 8px;
+}
+.ms-zoom-controls {
+    display: inline-flex;
+    align-items: stretch;
+    height: 28px;
+    border: 1px solid var(--ms-border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--ms-panel);
+    color: var(--ms-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+}
+.ms-zoom-btn {
+    background: transparent;
+    border: 0;
+    color: var(--ms-text);
+    width: 30px;
+    cursor: pointer;
+    transition: background 0.15s ease-out;
+    line-height: 1;
+}
+.ms-zoom-btn:hover { background: rgba(88, 166, 255, 0.12); }
+.ms-zoom-btn:active { background: rgba(88, 166, 255, 0.24); }
+.ms-zoom-btn:disabled {
+    color: var(--ms-muted);
+    cursor: not-allowed;
+}
+.ms-zoom-label {
+    min-width: 56px;
+    text-align: center;
+    line-height: 26px;
+    border-left: 1px solid var(--ms-border);
+    border-right: 1px solid var(--ms-border);
+    color: var(--ms-text);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------- *
+ *  Session info card (mirrors clawcodex_sessions_analysis
+ *  "本次加载 N 个文件 · 识别为 1 个会话" card).
+ *  Hidden by default; populated by multi_session_view.js once the
+ *  /api/viz/multi-session response lands.
+ * ----------------------------------------------------------------- */
+.ms-session-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    margin: 4px 0 12px;
+    border: 1px solid var(--ms-border);
+    border-radius: 8px;
+    background:
+        linear-gradient(180deg, rgba(88, 166, 255, 0.04), rgba(88, 166, 255, 0)),
+        var(--ms-panel);
+    color: var(--ms-text);
+    font-size: 12px;
+}
+.ms-session-card-icon {
+    font-size: 16px;
+    line-height: 1.4;
+    flex-shrink: 0;
+}
+.ms-session-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ms-session-card-line strong {
+    color: #d6e4f5;
+    font-weight: 600;
+}
+.ms-session-card-id {
+    color: var(--ms-muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.ms-session-card-id code {
+    color: var(--ms-text);
+    background: var(--ms-canvas);
+    border: 1px solid var(--ms-border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+/* ----------------------------------------------------------------- *
  *  Bezier Waterfall View (P3)
  *  Structural CSS only — full polish (CSS variables, dark theme,
  *  legend integration) lands in P7. These rules establish the

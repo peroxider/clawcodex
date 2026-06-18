@@ -114,6 +114,23 @@ def _format_configured_model_list(provider: str | None = None) -> str:
     return "\n".join(lines)
 
 
+_MODEL_USAGE = (
+    "Usage: /model [NAME [--provider NAME]]\n\n"
+    "Modes:\n"
+    "  (no args)              Show current provider/model + available models.\n"
+    "  NAME                   Switch to model NAME. Unique short prefixes auto-\n"
+    "                         match (e.g. 'gpt-4o-m' -> 'gpt-4o-mini'); ambiguous\n"
+    "                         prefixes list candidates; on typo, suggests\n"
+    "                         'Did you mean ...?'.\n"
+    "  NAME --provider P      Switch to NAME under provider P (skip inference).\n"
+    "  help, --help, -h       Print this help.\n\n"
+    "Persistence:\n"
+    "  Known model     runtime only - config unchanged.\n"
+    "  Unknown model   saved to config.json; will survive restart.\n"
+    "  If save fails   session only; not persisted.\n"
+)
+
+
 def _provider_command() -> LocalCommand:
     command = LocalCommand(
         name="provider",
@@ -170,6 +187,10 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
 def _model_call(args: str, context: Any) -> LocalCommandResult:
     tokens = args.split()
 
+    # Help subcommand - first-token check so /model --help still shows help.
+    if tokens and tokens[0] in ("help", "--help", "-h"):
+        return _text(_MODEL_USAGE)
+
     if not tokens:
         current = _format_runtime_current(context)
         model_list = format_model_list()
@@ -191,6 +212,34 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         # than silently jumping to whichever provider "owns" the model name.
         provider = _current_provider_name(context) or "anthropic"
 
+    # ---- Try prefix matching / spelling suggestions on validation failure ----
+    # Unique prefix matches are auto-corrected with a Note; multiple matches
+    # are listed for the user to choose from; zero matches fall through to
+    # ``Did you mean ...?`` suggestions from difflib.
+    try:
+        registry.validate_model(model, provider)
+    except (UnknownModelError, ProviderMismatchError):
+        prefix_matches = registry.find_prefix_matches(model, provider)
+        if len(prefix_matches) == 1:
+            resolved_model, resolved_provider = prefix_matches[0]
+            warnings.append(
+                f"Note: matched '{model}' by prefix to '{resolved_model}'"
+            )
+            model = resolved_model
+            provider = resolved_provider
+        elif len(prefix_matches) > 1:
+            options = ", ".join(m[0] for m in prefix_matches)
+            warnings.append(
+                f"Multiple models start with '{model}': {options} - "
+                f"please be more specific"
+            )
+        else:
+            suggestions = registry.suggest_models(model, provider)
+            if suggestions:
+                warnings.append(
+                    f"Did you mean: {', '.join(suggestions)}?"
+                )
+
     # ---- Check if the model is known for this provider ----
     # Also check the config's ``models`` list: a model previously persisted
     # (e.g. via /model <unknown-name>) is treated as "known" so the second
@@ -200,7 +249,10 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         registry.validate_model(model, provider)
     except (UnknownModelError, ProviderMismatchError):
         model_known = _model_is_in_config_models(model, provider)
-        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
+        if not model_known:
+            warnings.append(
+                f"Warning: unknown model '{model}' — proceeding anyway"
+            )
 
     # ---- Persist unknown model to config so it's available next session ----
     if not model_known:
@@ -212,7 +264,13 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
             _set_dp(provider)
         # ``persist_unknown`` skips registry validation and tolerates a missing
         # provider config (it falls back to the registry default base URL).
-        ModelStore(registry).set_default_model_persist_unknown(provider, model)
+        # Adjacent hint to the warning tells the user whether their switch
+        # will survive the next REPL launch.
+        try:
+            ModelStore(registry).set_default_model_persist_unknown(provider, model)
+            warnings.append("(saved to config; will survive restart)")
+        except Exception as exc:
+            warnings.append(f"(session only; not persisted: {exc})")
 
     # ---- Runtime switch (always, regardless of persistence) ----
     runtime = _runtime(context)
