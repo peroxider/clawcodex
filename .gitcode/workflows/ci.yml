@@ -1,0 +1,226 @@
+name: ci
+
+on:
+  push:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  pull_request:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Run changed documentation checks
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python scripts/ci/preflight.py \
+            --output ci_preflight.env \
+            --docs-files-output ci_doc_files.txt
+          source ci_preflight.env
+          if [ "$CI_RUN_DOCS" != "true" ]; then
+            echo "No documentation changes; skipping docs gate."
+            exit 0
+          fi
+          python scripts/ci/docs_check.py --files-from "$CI_DOC_FILE_LIST"
+
+  lint:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dev tools
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Ruff lint and format check
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/preflight.py \
+            --output ci_preflight.env \
+            --python-files-output ci_python_files.txt
+          source ci_preflight.env
+          if [ "$CI_RUN_PYTHON" != "true" ]; then
+            echo "No Python/package changes; skipping ruff gate."
+            exit 0
+          fi
+          if [ -s "$CI_PYTHON_FILE_LIST" ]; then
+            export CI_PYTHON_FILE_LIST
+            python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          files = [
+              line.strip()
+              for line in Path(os.environ["CI_PYTHON_FILE_LIST"]).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
+          subprocess.run([sys.executable, "-m", "ruff", "check", *files], check=True)
+          subprocess.run([sys.executable, "-m", "ruff", "format", "--check", *files], check=True)
+          PY
+          else
+            python -m ruff check .
+            python -m ruff format --check .
+          fi
+
+  typecheck:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dev tools
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Mypy advisory typecheck
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python -m mypy src clawcodex_ext extensions || true
+
+  pytest-core:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dependencies
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Run core pytest smoke
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/preflight.py --output ci_preflight.env
+          source ci_preflight.env
+          if [ "$CI_RUN_PYTHON" != "true" ]; then
+            echo "No Python/package changes; skipping core pytest gate."
+            exit 0
+          fi
+          python -m pytest \
+            tests/fast \
+            tests/config/test_config.py \
+            tests/config/test_config_system.py \
+            tests/config/test_effort.py \
+            tests/model \
+            tests/utils/test_combined_abort_signal.py \
+            tests/input/test_format.py \
+            tests/input/test_frontmatter_adapter.py \
+            tests/permissions/test_permission_modes.py \
+            tests/hooks/test_hook_config.py \
+            tests/skills/test_skills_frontmatter_yaml.py \
+            tests/bridge/test_jwt_utils.py \
+            tests/ci/test_gitcode_release.py \
+            -q
+
+  pytest-orchestrator:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dependencies
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Run orchestrator pytest with coverage
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+          COVERAGE_FAIL_UNDER: "0"
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/preflight.py --output ci_preflight.env
+          source ci_preflight.env
+          if [ "$CI_RUN_ORCHESTRATOR" != "true" ]; then
+            echo "No orchestrator/package changes; skipping orchestrator pytest gate."
+            exit 0
+          fi
+          python -m pytest \
+            tests/orchestrator/test_local_tracker_parser.py \
+            tests/orchestrator/test_orchestrator_f39_intent.py \
+            tests/test_visualizer/test_orchestrator_link.py \
+            -q \
+            --cov=extensions.orchestrator \
+            --cov=clawcodex_ext \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under="${COVERAGE_FAIL_UNDER}"
+
+  package-smoke:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Compute package smoke scope
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python scripts/ci/preflight.py --output ci_preflight.env
+      - name: Install uv and build tools
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source ci_preflight.env
+          if [ "$CI_RUN_PACKAGE" != "true" ]; then
+            echo "No non-docs changes; skipping package smoke."
+            exit 0
+          fi
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Build and smoke-test wheel
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source ci_preflight.env
+          if [ "$CI_RUN_PACKAGE" != "true" ]; then
+            echo "No non-docs changes; skipping package smoke."
+            exit 0
+          fi
+          source .venv/bin/activate
+          rm -rf dist build .package-smoke clawcodex_dev_mind-*
+          python -m build
+          python -m twine check dist/*
+          python -m venv .package-smoke
+          . .package-smoke/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install dist/*.whl
+          clawcodex-dev --help

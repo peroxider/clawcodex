@@ -1,0 +1,45 @@
+name: agent-smoke
+
+on:
+  push:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  pull_request:
+    branches: ["dev-decoupling-refactor-b24b8cb"]
+  workflow_dispatch:
+
+jobs:
+  agent-replay-smoke:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dependencies
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Run no-live-key Agent replay smoke
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/preflight.py --output ci_preflight.env
+          source ci_preflight.env
+          if [ "$CI_DOCS_ONLY" = "true" ]; then
+            echo "Docs-only change; skipping Agent replay smoke."
+            exit 0
+          fi
+          python -m pytest \
+            tests/agent/test_agent_smoke_no_live_key.py \
+            tests/orchestrator/test_orchestrator_f49_transcript.py \
+            tests/orchestrator/test_orchestrator_f49_resume.py \
+            tests/orchestrator/test_orchestrator_workspace_hooks.py \
+            -q

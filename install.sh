@@ -7,8 +7,10 @@
 #  - uv installation (no sudo, via official astral.sh installer)
 #  - Python 3.10+ provisioning (via uv)
 #  - Repo clone/update to ~/.clawcodex/clawcodex
+#  - Local release .env bootstrap from .env.example (never overwrites)
 #  - Venv creation (uv-managed)
 #  - Dependency install: pip install -e ".[all]"
+#  - Local pre-commit hook install (best-effort; never blocks CLI install)
 #  - Global commands: ~/.local/bin/clawcodex  +  ~/.local/bin/clawcodex-dev
 #  - Shell rc patch: .bashrc / .zshrc / .profile  (PATH += ~/.local/bin)
 #
@@ -370,6 +372,39 @@ clone_or_update_repo() {
 }
 
 # ============================================================================
+#  Initialize local release environment
+# ============================================================================
+ensure_local_env_file() {
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+        _script_p1
+        echo "[DRY-RUN] would create $CLAWCODEX_HOME/.env from .env.example if missing"
+        return 0
+    fi
+
+    cd "$CLAWCODEX_HOME"
+    if [[ -f ".env" ]]; then
+        log_ok "Local .env already exists (not modified)"
+        return 0
+    fi
+
+    if [[ -f ".env.example" ]]; then
+        cp ".env.example" ".env"
+    else
+        cat > ".env" <<'EOF'
+# Local F-73 release credentials. Never commit real token values.
+GITCODE_TOKEN=
+TEST_PYPI_TOKEN=
+# PYPI_TOKEN=
+GITCODE_OWNER=
+GITCODE_REPO=
+GITCODE_API_ROOT=https://api.gitcode.com
+EOF
+    fi
+    chmod 600 ".env" 2>/dev/null || true
+    log_ok "Created local .env template (fill tokens before release publishing)"
+}
+
+# ============================================================================
 #  Create venv
 # ============================================================================
 create_venv() {
@@ -493,6 +528,65 @@ install_deps() {
     fi
     rm -f /tmp/uv-pip.log
     log_ok "Dependencies installed (fresh-resolve, NOT lock-pinned; target: $([[ $USE_VENV -eq 1 ]] && echo .venv || echo system))"
+}
+
+# ============================================================================
+#  Install local Git hooks
+# ============================================================================
+find_project_python() {
+    if [[ "$USE_VENV" -eq 1 ]]; then
+        for candidate in \
+            "$CLAWCODEX_HOME/.venv/bin/python" \
+            "$CLAWCODEX_HOME/.venv/Scripts/python.exe" \
+            "$CLAWCODEX_HOME/.venv/Scripts/python"; do
+            if [[ -x "$candidate" ]]; then
+                echo "$candidate"
+                return 0
+            fi
+        done
+        return 1
+    fi
+
+    for candidate in \
+        "$(command -v python3 2>/dev/null || true)" \
+        "$(command -v python 2>/dev/null || true)"; do
+        if [[ -n "$candidate" && -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+install_git_hooks() {
+    log_info "Installing local Git hooks (pre-commit, best-effort)..."
+    if [[ "${DRY_RUN:-0}" -eq 1 ]]; then
+        _script_p1
+        echo "[DRY-RUN] would run: python -m pre_commit install   (in $CLAWCODEX_HOME)"
+        return 0
+    fi
+
+    if [[ ! -d "$CLAWCODEX_HOME/.git" || ! -f "$CLAWCODEX_HOME/.pre-commit-config.yaml" ]]; then
+        log_warn "Skipping pre-commit hook install (not a Git worktree with .pre-commit-config.yaml)."
+        return 0
+    fi
+
+    local python_bin
+    if ! python_bin=$(find_project_python); then
+        log_warn "Skipping pre-commit hook install (project Python not found)."
+        return 0
+    fi
+
+    if ! "$python_bin" -m pre_commit --version >/dev/null 2>&1; then
+        log_warn "Skipping pre-commit hook install (pre-commit is not available in the install environment)."
+        return 0
+    fi
+
+    if (cd "$CLAWCODEX_HOME" && "$python_bin" -m pre_commit install --hook-type pre-commit >/dev/null); then
+        log_ok "Installed .git/hooks/pre-commit"
+    else
+        log_warn "Could not install .git/hooks/pre-commit; run 'python -m pre_commit install' manually if you develop in this checkout."
+    fi
 }
 
 # ============================================================================
@@ -917,7 +1011,9 @@ cmd_update() {
                       "Or:  $0 doctor    (diagnose environment)"
     fi
     clone_or_update_repo
+    ensure_local_env_file
     install_deps
+    install_git_hooks
     register_commands
     log_ok "Update complete."
     log_info "Run '$0 verify' to confirm health."
@@ -1119,6 +1215,9 @@ VERSIONING
 NOTES
     - Re-running this script is safe: existing repos are fast-forwarded,
       existing venvs are reused, command wrappers are regenerated.
+    - install/update creates a local .env template when missing and attempts
+      to install .git/hooks/pre-commit after deps are available. Hook
+      installation is best-effort and never blocks CLI setup.
     - On Windows, run from Git Bash or WSL. To set up:
         Git Bash : install Git for Windows (https://git-scm.com/download/win),
                    open "Git Bash" from the Start menu, then run this script.
@@ -1264,6 +1363,9 @@ clawcodex 安装脚本 v${INSTALLER_VERSION}  (安装 clawcodex v${CLAWCODEX_VER
 注意事项
     - 重复运行本脚本是安全的：已存在的仓库会 fast-forward，已存在的
       venv 会复用，命令 wrapper 会重新生成。
+    - install/update 会在缺失时创建本地 .env 模板，并在依赖可用后尝试
+      安装 .git/hooks/pre-commit。hook 安装是 best-effort，不会阻断
+      CLI 安装。
     - 在 Windows 上请从 Git Bash 或 WSL 运行。设置方式：
         Git Bash : 安装 Git for Windows (https://git-scm.com/download/win)，
                    在开始菜单中打开 "Git Bash"，然后运行本脚本。
@@ -1298,27 +1400,33 @@ install_main() {
         echo -e "  ${C_BOLD}Debug:${C_RESET}       ${C_YELLOW}ON (set -x trace)${C_RESET}"
     fi
 
-    log_step "1/7  Checking prerequisites"
+    log_step "1/9  Checking prerequisites"
     check_git
 
-    log_step "2/7  Installing uv (Astral, no sudo)"
+    log_step "2/9  Installing uv (Astral, no sudo)"
     # Re-source in case it wasn't on PATH at the top of the script.
     export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     install_uv
 
-    log_step "3/7  Provisioning Python $PYTHON_MIN_VERSION+"
+    log_step "3/9  Provisioning Python $PYTHON_MIN_VERSION+"
     ensure_python
 
-    log_step "4/7  Cloning / updating repository"
+    log_step "4/9  Cloning / updating repository"
     clone_or_update_repo
 
-    log_step "5/7  $([[ $USE_VENV -eq 1 ]] && echo "Creating virtual environment" || echo "Preparing (no venv — using system Python)")"
+    log_step "5/9  Initializing local release .env"
+    ensure_local_env_file
+
+    log_step "6/9  $([[ $USE_VENV -eq 1 ]] && echo "Creating virtual environment" || echo "Preparing (no venv — using system Python)")"
     create_venv
 
-    log_step "6/7  Installing dependencies (uv sync --extra all, lock-pinned)"
+    log_step "7/9  Installing dependencies (uv sync --extra all, lock-pinned)"
     install_deps
 
-    log_step "7/7  Registering global commands & patching PATH"
+    log_step "8/9  Installing local Git hooks"
+    install_git_hooks
+
+    log_step "9/9  Registering global commands & patching PATH"
     register_commands
     update_shell_rc
 
@@ -1334,8 +1442,8 @@ install_main() {
     echo -e "  ${C_BOLD}Commands at:${C_RESET}   $LOCAL_BIN/{clawcodex,clawcodex-dev}"
     echo ""
 
-    # Step 8 (post-install setup) lives outside the 1–7 numbered pipeline
-    # because it's optional and varies the most.
+    # Post-install setup lives outside the numbered pipeline because it is
+    # optional and varies the most.
     run_post_install_setup
 
     log_warn "Open a new shell, or run:  source ~/.bashrc   (or ~/.zshrc)"

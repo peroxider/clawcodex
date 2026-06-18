@@ -131,6 +131,7 @@ cd clawcodex
 uv venv --python 3.11
 source .venv/bin/activate
 uv pip install -e ".[dev]"
+python scripts/ci/dev_setup.py
 
 # 配置 provider（一次性）
 clawcodex-dev login
@@ -144,7 +145,23 @@ clawcodex-dev pos --help           # 查看 SOP 编译器子命令
 
 > 上游的 CLI 入口（`python -m src.cli`）依然可用 —— 本 fork 新增了一个并行的 `clawcodex-dev` 入口，挂载下游子命令（`orchestrator`、`cron`、`pos` 等）。
 
----
+### Shell Tab 补全
+
+`clawcodex-dev` 内置 [argcomplete](https://github.com/kislyuk/argcomplete)
+支持。安装完成后，在 shell 中启用补全：
+
+```bash
+# bash
+eval "$(register-python-argcomplete clawcodex-dev)"
+
+# zsh
+eval "$(register-python-argcomplete clawcodex-dev)"
+
+# fish
+register-python-argcomplete --shell fish clawcodex-dev | source
+```
+
+Tab 补全覆盖顶层子命令（`login`、`config`、`mcp`、`daemon`、`doctor`、`orchestrator`、`autonomy`、`schedule`、`provider`、`model`、`pos`、`viz`）和顶层 flag。`orchestrator` 子命令也会补全其名词（`server` / `issue` / `dashboard`）。
 
 ## 环境要求与适配平台
 
@@ -598,6 +615,8 @@ clawcodex_ext/                       # 下游 CLI + 服务
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
 pip install -e ".[dev]"
+# 创建CI/CD环境
+python scripts/ci/dev_setup.py
 
 # 只跑本 fork 自己的测试
 pytest tests/test_orchestrator.py -v
@@ -609,13 +628,73 @@ pytest tests/test_bridge.py -v
 pytest tests/ -m "not integration" -v
 ```
 
+GitCode CI/CD 门禁位于 `.gitcode/workflows/`。当前仓库可能暂时没有可用的GitCode Pipeline，因此可以用同一套门禁形状在本地模拟。默认会检查当前 HEAD commit，并在交互式终端中显示彩色 live dashboard：
+
+```bash
+python scripts/ci/local_ci.py
+```
+
+详细门禁说明见 [`docs/cicd/CICD_GATE.md`](../cicd/CICD_GATE.md)。
+
 [`CONTRIBUTING.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/CONTRIBUTING.md) 涵盖 PR 规范。[`upstream_sync/`](https://gitcode.com/chadwweng/clawcodex/blob/main/upstream_sync) 提供了从上游 TypeScript 参考拉新章节的工具。
+
+---
+
+## 发布
+
+发布会改动外部服务，所以请只在 tracked 工作树干净、发布 tag 已创建且指向`HEAD` 时运行。
+
+`.env` 会被 Git 忽略。第一次使用时，用开发初始化脚本从 `.env.example` 生成，然后只在本地编辑：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ci\dev_setup.py
+```
+
+按发布目标填写 token：
+
+| 发布目标 | 需要填写的 `.env` 值 | 说明 |
+|---|---|---|
+| TestPyPI 演练 | `TEST_PYPI_TOKEN=...` | 默认 `--release-target testpypi`。 |
+| PyPI 正式发布 | `PYPI_TOKEN=...` | 先确认 TestPyPI 包体可用，再用 `--release-target pypi`。 |
+| GitCode Release 附件 | `GITCODE_TOKEN=...` | 只有不传 `--skip-gitcode-release` 时需要。当前仓库未接入 GitCode Release 上传前，`GITCODE_OWNER=` 和 `GITCODE_REPO=` 保持为空。 |
+
+只检查凭据，不构建、不上传：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --check-credentials --skip-gitcode-release
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --check-credentials --skip-gitcode-release
+```
+
+默认发布流程依次执行：加载 `.env`、检查凭据、要求 tracked 工作树干净、创建或验证发布 tag、清理旧产物、release lint、advisory mypy、release tests、构建/检查/安装包体到`.release-smoke/`、上传到 TestPyPI 或 PyPI，最后上传 GitCode Release 附件（除非跳过）。
+
+常用选项：
+
+| 选项 | 作用 |
+|---|---|
+| `--release-target testpypi` | 上传到 TestPyPI，默认值。 |
+| `--release-target pypi` | 上传到 PyPI。 |
+| `--tag v0.0.0` | tag 缺失时在 `HEAD` 创建本地 tag；如果已存在，则要求它指向 `HEAD`。 |
+| `--dry-run` | 跑验证和 package smoke，只列出将上传的内容，不改动 PyPI 或 GitCode。 |
+| `--check-credentials` | 只创建/加载 `.env` 并检查所需 token 名称。 |
+| `--skip-gitcode-release` | 不创建 GitCode Release 附件；当前仓库建议使用。 |
+| `--skip-tests` | 跳过 release pytest 集合；只在已有可信门禁时使用。 |
+
+推荐流程：
+
+```powershell
+# 只执行发布前校验和包构建 smoke，不上传任何产物。
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --dry-run --skip-gitcode-release
+# 只上传包产物到 TestPyPI。
+.\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --skip-gitcode-release
+# 将包产物晋升上传到生产 PyPI。
+\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --tag v0.5.0
+```
 
 ---
 
 ## 与上游同步
 
-本 fork 跟踪上游 `clawcodex` 仓库。同步流水线在 `upstream_sync/`，设计文档在 [`docs/UPSTREAM_SYNC_DESIGN.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/docs/UPSTREAM_SYNC_DESIGN.md)。上游有更新时跑：
+本 fork 跟踪上游 `clawcodex` 仓库。同步流水线在 `upstream_sync/`，设计文档在 [`upstream_sync/UPSTREAM_SYNC_DESIGN.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/docs/UPSTREAM_SYNC_DESIGN.md)。上游有更新时跑：
 
 ```bash
 python -m upstream_sync.pull --since 2026-05-20
