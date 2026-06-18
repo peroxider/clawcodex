@@ -16,6 +16,7 @@ Uses ``unittest.IsolatedAsyncioTestCase`` (the repo's canonical async
 test pattern) and ``tempfile.TemporaryDirectory`` for socket path
 isolation.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,10 +39,12 @@ def _sock_path(tmp: Path, name: str = "ctrl.sock") -> Path:
 
 async def _drain_one(cs: ControlSocket, timeout: float = 2.0) -> ControlCommand | None:
     """Pull one command from ``poll_commands``, or None on timeout."""
+
     async def _next() -> ControlCommand | None:
         async for cmd in cs.poll_commands():
             return cmd
         return None
+
     return await asyncio.wait_for(_next(), timeout=timeout)
 
 
@@ -51,7 +54,9 @@ async def _open_client(sock_path: Path) -> tuple[asyncio.StreamReader, asyncio.S
 
 
 async def _wait_for_clients(
-    cs: ControlSocket, expected: int = 1, timeout: float = 2.0,
+    cs: ControlSocket,
+    expected: int = 1,
+    timeout: float = 2.0,
 ) -> None:
     """Poll until the server has registered ``expected`` clients.
 
@@ -72,7 +77,9 @@ async def _wait_for_clients(
 
 
 async def _send_cmd(
-    writer: asyncio.StreamWriter, cmd: str, payload: str = "",
+    writer: asyncio.StreamWriter,
+    cmd: str,
+    payload: str = "",
 ) -> None:
     writer.write(
         (json.dumps({"cmd": cmd, "payload": payload}) + "\n").encode("utf-8"),
@@ -81,7 +88,8 @@ async def _send_cmd(
 
 
 async def _read_line(
-    reader: asyncio.StreamReader, timeout: float = 2.0,
+    reader: asyncio.StreamReader,
+    timeout: float = 2.0,
 ) -> str:
     line = await asyncio.wait_for(reader.readline(), timeout=timeout)
     return line.decode("utf-8").rstrip("\n")
@@ -275,10 +283,12 @@ class TestControlSocketEventBroadcasting(unittest.IsolatedAsyncioTestCase):
                 reader, writer = await _open_client(path)
                 await _wait_for_clients(cs, expected=1)
                 try:
-                    await cs.send_event({
-                        "type": "tool_call",
-                        "data": {"tool_name": "Read", "params": {"path": "/x"}},
-                    })
+                    await cs.send_event(
+                        {
+                            "type": "tool_call",
+                            "data": {"tool_name": "Read", "params": {"path": "/x"}},
+                        }
+                    )
                     line = await _read_line(reader)
                     payload = json.loads(line)
                     self.assertEqual(payload["type"], "tool_call")
@@ -415,7 +425,9 @@ class TestControlSocketAgentSessionIntegration(unittest.IsolatedAsyncioTestCase)
             try:
                 session = AgentSession(
                     issue=Issue(
-                        id="I-1", identifier="ISSUE-1", title="t",
+                        id="I-1",
+                        identifier="ISSUE-1",
+                        title="t",
                     ),
                     workspace=Workspace(
                         path=str(ws_path),
@@ -431,14 +443,16 @@ class TestControlSocketAgentSessionIntegration(unittest.IsolatedAsyncioTestCase)
                 await _wait_for_clients(cs, expected=1)
                 try:
                     # Simulate the runner dispatching a ToolCallEvent.
-                    await cs.send_event({
-                        "type": "ToolCallEvent",
-                        "data": {
-                            "tool_name": "Read",
-                            "tool_use_id": "A",
-                            "params": {"path": "/x"},
-                        },
-                    })
+                    await cs.send_event(
+                        {
+                            "type": "ToolCallEvent",
+                            "data": {
+                                "tool_name": "Read",
+                                "tool_use_id": "A",
+                                "params": {"path": "/x"},
+                            },
+                        }
+                    )
                     line = await _read_line(reader)
                     payload = json.loads(line)
                     self.assertEqual(payload["type"], "ToolCallEvent")
@@ -468,7 +482,9 @@ class TestControlSocketAgentSessionIntegration(unittest.IsolatedAsyncioTestCase)
             try:
                 session = AgentSession(
                     issue=Issue(
-                        id="I-1", identifier="ISSUE-1", title="t",
+                        id="I-1",
+                        identifier="ISSUE-1",
+                        title="t",
                     ),
                     workspace=Workspace(
                         path=str(ws_path),

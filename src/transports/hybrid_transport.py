@@ -102,7 +102,11 @@ class HybridTransport(WebSocketTransport):
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
         super().__init__(
-            url, headers, session_id, refresh_headers, options,
+            url,
+            headers,
+            session_id,
+            refresh_headers,
+            options,
         )
         self._post_url = _convert_ws_url_to_post_url(url)
         if http_client is not None:
@@ -113,21 +117,19 @@ class HybridTransport(WebSocketTransport):
             self._owns_http_client = True
         self._stream_event_buffer: list[dict[str, Any]] = []
         self._stream_event_timer: asyncio.TimerHandle | None = None
-        self._uploader: SerialBatchEventUploader[dict[str, Any]] = (
-            SerialBatchEventUploader(
-                SerialBatchEventUploaderConfig(
-                    max_batch_size=_MAX_BATCH_SIZE,
-                    max_queue_size=_MAX_QUEUE_SIZE,
-                    base_delay_ms=_BASE_DELAY_MS,
-                    max_delay_ms=_MAX_DELAY_MS,
-                    jitter_ms=_JITTER_MS,
-                    max_consecutive_failures=max_consecutive_failures,
-                    on_batch_dropped=on_batch_dropped,
-                    send=self._post_once,
-                )
+        self._uploader: SerialBatchEventUploader[dict[str, Any]] = SerialBatchEventUploader(
+            SerialBatchEventUploaderConfig(
+                max_batch_size=_MAX_BATCH_SIZE,
+                max_queue_size=_MAX_QUEUE_SIZE,
+                base_delay_ms=_BASE_DELAY_MS,
+                max_delay_ms=_MAX_DELAY_MS,
+                jitter_ms=_JITTER_MS,
+                max_consecutive_failures=max_consecutive_failures,
+                on_batch_dropped=on_batch_dropped,
+                send=self._post_once,
             )
         )
-        logger.debug('HybridTransport: POST URL = %s', self._post_url)
+        logger.debug("HybridTransport: POST URL = %s", self._post_url)
 
     @property
     def dropped_batch_count(self) -> int:
@@ -138,7 +140,7 @@ class HybridTransport(WebSocketTransport):
     async def write(self, message: dict[str, Any]) -> None:
         """Enqueue a message for POST. Returns after the bytes are
         accepted by the uploader (which then drains serially)."""
-        if message.get('type') == 'stream_event':
+        if message.get("type") == "stream_event":
             self._stream_event_buffer.append(message)
             if self._stream_event_timer is None:
                 loop = asyncio.get_running_loop()
@@ -172,7 +174,7 @@ class HybridTransport(WebSocketTransport):
             loop = asyncio.get_running_loop()
             loop.create_task(
                 self._grace_close_uploader(uploader),
-                name='hybrid-transport-close-grace',
+                name="hybrid-transport-close-grace",
             )
         except RuntimeError:
             uploader.close()
@@ -196,25 +198,26 @@ class HybridTransport(WebSocketTransport):
             loop = asyncio.get_running_loop()
             loop.create_task(
                 self._uploader.enqueue(buffered),
-                name='hybrid-transport-stream-flush',
+                name="hybrid-transport-stream-flush",
             )
         except RuntimeError:
             logger.warning(
-                'HybridTransport: no running loop in stream-timer fire; '
-                'dropping %d stream events', len(buffered),
+                "HybridTransport: no running loop in stream-timer fire; dropping %d stream events",
+                len(buffered),
             )
 
     async def _grace_close_uploader(
-        self, uploader: SerialBatchEventUploader[dict[str, Any]],
+        self,
+        uploader: SerialBatchEventUploader[dict[str, Any]],
     ) -> None:
         try:
             await asyncio.wait_for(uploader.flush(), timeout=CLOSE_GRACE_S)
         except asyncio.TimeoutError:
             logger.debug(
-                'HybridTransport: close grace expired with pending writes',
+                "HybridTransport: close grace expired with pending writes",
             )
         except Exception as exc:  # noqa: BLE001
-            logger.debug('HybridTransport: grace flush error: %s', exc)
+            logger.debug("HybridTransport: grace flush error: %s", exc)
         finally:
             uploader.close()
             if self._owns_http_client:
@@ -222,7 +225,7 @@ class HybridTransport(WebSocketTransport):
                     await self._http_client.aclose()
                 except Exception as exc:  # noqa: BLE001
                     logger.debug(
-                        'HybridTransport: http_client aclose error: %s',
+                        "HybridTransport: http_client aclose error: %s",
                         exc,
                     )
 
@@ -230,43 +233,46 @@ class HybridTransport(WebSocketTransport):
         session_token = get_session_ingress_auth_token()
         if not session_token:
             logger.debug(
-                'HybridTransport: no session token available for POST',
+                "HybridTransport: no session token available for POST",
             )
             return
 
         headers = {
-            'Authorization': f'Bearer {session_token}',
-            'Content-Type': 'application/json',
+            "Authorization": f"Bearer {session_token}",
+            "Content-Type": "application/json",
         }
 
         try:
             response = await self._http_client.post(
                 self._post_url,
-                json={'events': events},
+                json={"events": events},
                 headers=headers,
             )
         except httpx.RequestError as exc:
             logger.debug(
-                'HybridTransport: POST network error: %s', exc,
+                "HybridTransport: POST network error: %s",
+                exc,
             )
             raise
 
         if 200 <= response.status_code < 300:
             logger.debug(
-                'HybridTransport: POST success count=%d', len(events),
+                "HybridTransport: POST success count=%d",
+                len(events),
             )
             return
         if 400 <= response.status_code < 500 and response.status_code != 429:
             logger.warning(
-                'HybridTransport: POST returned %d (permanent); '
-                'dropping %d events', response.status_code, len(events),
+                "HybridTransport: POST returned %d (permanent); dropping %d events",
+                response.status_code,
+                len(events),
             )
             return
         logger.warning(
-            'HybridTransport: POST returned %d (retryable)',
+            "HybridTransport: POST returned %d (retryable)",
             response.status_code,
         )
-        raise RuntimeError(f'POST failed with {response.status_code}')
+        raise RuntimeError(f"POST failed with {response.status_code}")
 
 
 def _convert_ws_url_to_post_url(ws_url: str) -> str:
@@ -276,26 +282,32 @@ def _convert_ws_url_to_post_url(ws_url: str) -> str:
     To:   ``https://api.example.com/v2/session_ingress/session/<session_id>/events``
     """
     parsed = urlparse(ws_url)
-    if parsed.scheme == 'wss':
-        scheme = 'https'
-    elif parsed.scheme == 'ws':
-        scheme = 'http'
+    if parsed.scheme == "wss":
+        scheme = "https"
+    elif parsed.scheme == "ws":
+        scheme = "http"
     else:
         scheme = parsed.scheme
 
-    path = parsed.path.replace('/ws/', '/session/', 1)
-    if not path.endswith('/events'):
-        path = (path + 'events') if path.endswith('/') else (path + '/events')
+    path = parsed.path.replace("/ws/", "/session/", 1)
+    if not path.endswith("/events"):
+        path = (path + "events") if path.endswith("/") else (path + "/events")
 
-    return urlunparse((
-        scheme, parsed.netloc, path, parsed.params,
-        parsed.query, parsed.fragment,
-    ))
+    return urlunparse(
+        (
+            scheme,
+            parsed.netloc,
+            path,
+            parsed.params,
+            parsed.query,
+            parsed.fragment,
+        )
+    )
 
 
 __all__ = [
-    'BATCH_FLUSH_INTERVAL_S',
-    'CLOSE_GRACE_S',
-    'HybridTransport',
-    'POST_TIMEOUT_S',
+    "BATCH_FLUSH_INTERVAL_S",
+    "CLOSE_GRACE_S",
+    "HybridTransport",
+    "POST_TIMEOUT_S",
 ]

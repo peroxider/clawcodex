@@ -129,7 +129,8 @@ class BuildMemoryPromptTest(unittest.TestCase):
                 memory_dir=tmp,
             )
             self.assertIn(
-                f"## {ENTRYPOINT_NAME}", prompt,
+                f"## {ENTRYPOINT_NAME}",
+                prompt,
             )
             self.assertIn(
                 f"Your {ENTRYPOINT_NAME} is currently empty",

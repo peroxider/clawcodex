@@ -625,18 +625,14 @@ def get_total_cache_read_input_tokens() -> int:
     """Sum of ``cache_read_input_tokens`` across every model in
     ``model_usage``. Mirrors TS ``getTotalCacheReadInputTokens``
     (state.ts:744-746)."""
-    return sum(
-        usage.cache_read_input_tokens for usage in _STATE.model_usage.values()
-    )
+    return sum(usage.cache_read_input_tokens for usage in _STATE.model_usage.values())
 
 
 def get_total_cache_creation_input_tokens() -> int:
     """Sum of ``cache_creation_input_tokens`` across every model in
     ``model_usage``. Mirrors TS ``getTotalCacheCreationInputTokens``
     (state.ts:748-750)."""
-    return sum(
-        usage.cache_creation_input_tokens for usage in _STATE.model_usage.values()
-    )
+    return sum(usage.cache_creation_input_tokens for usage in _STATE.model_usage.values())
 
 
 def get_total_web_search_requests() -> int:
@@ -1000,9 +996,7 @@ def get_invoked_skills_for_agent(
     Python because we never pass ``undefined``.
     """
     return {
-        key: skill
-        for key, skill in _STATE.invoked_skills.items()
-        if skill.agent_id == agent_id
+        key: skill for key, skill in _STATE.invoked_skills.items() if skill.agent_id == agent_id
     }
 
 

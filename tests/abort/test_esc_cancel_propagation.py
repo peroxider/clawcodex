@@ -22,6 +22,7 @@ These tests pin the new behaviour:
   onto the tool context, so subagents and other downstream tools see
   the same signal the UI tripped.
 """
+
 from __future__ import annotations
 
 import threading
@@ -101,9 +102,7 @@ def _build_registry_with_blocking_tool(
         for _ in range(200):  # ~2 seconds at 10ms cadence
             if signal is not None and signal.aborted:
                 abort_check["saw_abort"] = True
-                return ToolResult(
-                    name="Slow", output={"interrupted": True}, is_error=False
-                )
+                return ToolResult(name="Slow", output={"interrupted": True}, is_error=False)
             if block_event.wait(timeout=0.01):
                 break
         return ToolResult(name="Slow", output={"ran_to_completion": True})
@@ -137,9 +136,7 @@ def test_agent_loop_propagates_cancel_set_via_tool_context(
     block_event = threading.Event()
     entered_event = threading.Event()
     abort_check: dict[str, bool] = {}
-    registry = _build_registry_with_blocking_tool(
-        block_event, abort_check, entered_event
-    )
+    registry = _build_registry_with_blocking_tool(block_event, abort_check, entered_event)
 
     provider = _FakeAnthropic(
         responses=[

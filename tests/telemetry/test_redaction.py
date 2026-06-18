@@ -1,4 +1,5 @@
 """Tests for the Redactor + scan_secrets + stacktrace truncation."""
+
 from __future__ import annotations
 
 import os

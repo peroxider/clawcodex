@@ -4,6 +4,7 @@ Builds a builtin 'prompt' command whose prompt depends on USER_TYPE: ant users g
 static "this command moved to a plugin" message; everyone else dispatches to a private
 prompt builder (the command's real implementation while the marketplace is private).
 """
+
 from __future__ import annotations
 
 import inspect

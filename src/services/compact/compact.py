@@ -67,9 +67,7 @@ PTL_RETRY_MARKER = "[earlier conversation truncated for compaction retry]"
 # System prompt for the summarization model call. Matches TS reference
 # (compact.ts:1305) — keeps the summarizer focused on summarizing rather
 # than continuing the parent agent task.
-COMPACT_SYSTEM_PROMPT = (
-    "You are a helpful AI assistant tasked with summarizing conversations."
-)
+COMPACT_SYSTEM_PROMPT = "You are a helpful AI assistant tasked with summarizing conversations."
 
 # Error messages
 ERROR_MESSAGE_PROMPT_TOO_LONG = (
@@ -138,6 +136,7 @@ def _collect_discovered_tool_names(messages: list[Message]) -> list[str]:
 @dataclass
 class CompactionResult:
     """Result of a compaction operation."""
+
     boundary_marker: Message
     summary_messages: list[UserMessage]
     messages_to_keep: list[Message] = field(default_factory=list)
@@ -153,6 +152,7 @@ class CompactionResult:
 @dataclass
 class CompactContext:
     """Context for a compaction operation."""
+
     provider: Any  # BaseProvider
     model: str
     messages: list[Message]
@@ -395,7 +395,8 @@ async def compact_conversation(
             except Exception as e2:
                 logger.warning(
                     "Compact LLM call failed: %s, sync fallback: %s, using text extraction",
-                    e, e2,
+                    e,
+                    e2,
                 )
                 summary_text = _fallback_summary(messages_to_compact)
                 break
@@ -493,15 +494,9 @@ async def partial_compact_conversation(
 
     if direction in ("earlier", "up_to"):
         messages_to_summarize = messages[:pivot_index]
-        messages_to_keep = [
-            m for m in messages[pivot_index:]
-            if not is_compact_boundary_message(m)
-        ]
+        messages_to_keep = [m for m in messages[pivot_index:] if not is_compact_boundary_message(m)]
     else:
-        messages_to_keep = [
-            m for m in messages[:pivot_index]
-            if m.role != "progress"
-        ]
+        messages_to_keep = [m for m in messages[:pivot_index] if m.role != "progress"]
         messages_to_summarize = messages[pivot_index:]
 
     if len(messages_to_summarize) < 1:
@@ -543,9 +538,7 @@ async def partial_compact_conversation(
             error_str = str(e)
             if _is_prompt_too_long_error(error_str) and attempt < MAX_PTL_RETRIES:
                 token_gap = parse_prompt_too_long_token_gap(error_str)
-                truncated = truncate_head_for_ptl_retry(
-                    messages_to_summarize, token_gap=token_gap
-                )
+                truncated = truncate_head_for_ptl_retry(messages_to_summarize, token_gap=token_gap)
                 if truncated is not None:
                     truncated_api = normalize_messages_for_api(truncated)
                     truncated_stripped = strip_images_from_messages(truncated_api)
@@ -591,9 +584,7 @@ async def partial_compact_conversation(
     #   'from'/'later' (prefix kept) → anchor = boundary UUID
     if direction in ("up_to", "earlier"):
         anchor_uuid = (
-            getattr(summary_msg, "uuid", None)
-            or getattr(boundary_msg, "uuid", None)
-            or ""
+            getattr(summary_msg, "uuid", None) or getattr(boundary_msg, "uuid", None) or ""
         )
     else:
         anchor_uuid = getattr(boundary_msg, "uuid", None) or ""

@@ -83,8 +83,8 @@ def _issuer_key(issuer: str) -> str:
 
 def is_xaa_enabled() -> bool:
     """Feature gate. Two env vars must align:
-      * ``ENABLE_MCP_XAA=1`` — explicit opt-in.
-      * ``MCP_XAA_ISSUER`` set — issuer must be configured.
+    * ``ENABLE_MCP_XAA=1`` — explicit opt-in.
+    * ``MCP_XAA_ISSUER`` set — issuer must be configured.
     """
     if os.environ.get("ENABLE_MCP_XAA", "").strip() != "1":
         return False
@@ -127,9 +127,7 @@ def get_cached_idp_id_token(issuer: str) -> str | None:
 def save_idp_id_token(issuer: str, id_token: str) -> None:
     """Cache an IdP id_token. Extracts ``exp`` from the JWT for TTL."""
     exp = jwt_exp(id_token)
-    _id_token_cache[_issuer_key(issuer)] = _CachedIdToken(
-        id_token=id_token, expires_at=exp
-    )
+    _id_token_cache[_issuer_key(issuer)] = _CachedIdToken(id_token=id_token, expires_at=exp)
 
 
 def clear_idp_id_token(issuer: str) -> None:
@@ -168,9 +166,7 @@ async def discover_oidc(
     try:
         url = idp_issuer.rstrip("/") + "/.well-known/openid-configuration"
         try:
-            response = await client.get(
-                url, headers={"Accept": "application/json"}
-            )
+            response = await client.get(url, headers={"Accept": "application/json"})
         except httpx.HTTPError as exc:
             raise RuntimeError(f"OIDC discovery failed for {idp_issuer}: {exc}")
         if response.status_code != 200:

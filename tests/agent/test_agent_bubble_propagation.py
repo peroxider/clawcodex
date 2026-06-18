@@ -21,6 +21,7 @@ These tests focus on the bubble-mode preservation gap closed in this
 PR. They cover the full 2-by-2-by-2 matrix over ``mode`` (bubble vs
 default), ``is_async``, and parent ``should_avoid`` (True vs False).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -70,17 +71,17 @@ def _make_agent(
 #              expected_should_avoid, expected_await)
 MATRIX = [
     # bubble + sync — prompts always enabled, no await flag.
-    ("bubble",  False, False, False, False),
-    ("bubble",  False, True,  True,  False),  # parent override wins
+    ("bubble", False, False, False, False),
+    ("bubble", False, True, True, False),  # parent override wins
     # bubble + async — prompts enabled, await classifier first.
-    ("bubble",  True,  False, False, True),
-    ("bubble",  True,  True,  True,  False),  # parent override wins
+    ("bubble", True, False, False, True),
+    ("bubble", True, True, True, False),  # parent override wins
     # default + sync — prompts enabled (sync always prompts directly).
     ("default", False, False, False, False),
-    ("default", False, True,  True,  False),
+    ("default", False, True, True, False),
     # default + async — prompts disabled (no terminal to bubble to).
-    ("default", True,  False, True,  False),
-    ("default", True,  True,  True,  False),
+    ("default", True, False, True, False),
+    ("default", True, True, True, False),
 ]
 
 
@@ -118,6 +119,7 @@ def test_permission_cascade_matrix(
 # ---------------------------------------------------------------------------
 # Integration: resolve_permission_mode + _build_permission_context
 # ---------------------------------------------------------------------------
+
 
 def test_bubble_agent_round_trip_through_resolver() -> None:
     """Defining a bubble agent + running async yields the bubble cascade.

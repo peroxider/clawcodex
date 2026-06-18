@@ -84,9 +84,7 @@ def _is_debug_mode() -> bool:
     argv flag which is REPL-runtime-only). The argv check is not
     relevant for RemoteIO; we mirror only the env-var portion.
     """
-    return is_env_truthy(os.environ.get("DEBUG")) or is_env_truthy(
-        os.environ.get("DEBUG_SDK")
-    )
+    return is_env_truthy(os.environ.get("DEBUG")) or is_env_truthy(os.environ.get("DEBUG_SDK"))
 
 
 # Sentinel object signaling end-of-stream on the input queue.
@@ -120,9 +118,7 @@ class RemoteIO:
         self._initial_prompt_task: asyncio.Task[None] | None = None
         self._connect_task: asyncio.Task[None] | None = None
 
-        self._is_bridge = (
-            os.environ.get("CLAUDE_CODE_ENVIRONMENT_KIND") == "bridge"
-        )
+        self._is_bridge = os.environ.get("CLAUDE_CODE_ENVIRONMENT_KIND") == "bridge"
         self._is_debug = _is_debug_mode()
 
         # Header building uses the canonical helpers. These handle BOTH
@@ -183,9 +179,7 @@ class RemoteIO:
         if self._is_bridge:
             interval_ms = get_poll_interval_config().session_keepalive_interval_v2_ms
             if interval_ms > 0:
-                self._keep_alive_task = loop.create_task(
-                    self._keep_alive_loop(interval_ms / 1000)
-                )
+                self._keep_alive_task = loop.create_task(self._keep_alive_loop(interval_ms / 1000))
 
         # Initial prompt drain.
         if initial_prompt is not None:
@@ -232,8 +226,7 @@ class RemoteIO:
             # strings or the sentinel — narrow explicitly.
             if not isinstance(item, str):
                 raise TypeError(
-                    f"RemoteIO input queue produced non-str non-sentinel: "
-                    f"{type(item).__name__}"
+                    f"RemoteIO input queue produced non-str non-sentinel: {type(item).__name__}"
                 )
             yield item
 

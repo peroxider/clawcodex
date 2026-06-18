@@ -5,6 +5,7 @@ re-run them. Predictions stay cached.
 Usage:
     python eval/_clear_infra_errors.py <run_id>
 """
+
 from __future__ import annotations
 
 import json
@@ -49,8 +50,13 @@ def main(run_id: str) -> None:
         infra_ids = []
         for iid in err_ids:
             log = (
-                SWEBENCH / "logs" / "run_evaluation" / f"{run_id}-{agent}"
-                / f"{agent}-local" / iid / "run_instance.log"
+                SWEBENCH
+                / "logs"
+                / "run_evaluation"
+                / f"{run_id}-{agent}"
+                / f"{agent}-local"
+                / iid
+                / "run_instance.log"
             )
             if not log.exists():
                 continue
@@ -62,10 +68,7 @@ def main(run_id: str) -> None:
 
         # Delete per-instance dirs so harness re-runs them
         for iid in infra_ids:
-            d = (
-                SWEBENCH / "logs" / "run_evaluation" / f"{run_id}-{agent}"
-                / f"{agent}-local" / iid
-            )
+            d = SWEBENCH / "logs" / "run_evaluation" / f"{run_id}-{agent}" / f"{agent}-local" / iid
             if d.exists():
                 shutil.rmtree(d)
 

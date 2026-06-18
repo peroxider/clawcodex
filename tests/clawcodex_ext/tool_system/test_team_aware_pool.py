@@ -6,6 +6,7 @@ the entry point used by ``src/query/agent_loop_compat.py`` and
 ``clawcodex_ext/repl/core.py`` to materialize the model-facing tool
 list.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -47,12 +48,22 @@ def test_get_team_aware_tool_list_drops_send_message_when_no_team() -> None:
 
 def test_get_team_aware_tool_list_keeps_all_when_team_active() -> None:
     registry = _build_registry_with(
-        "Read", "Bash", "SendMessage", "TeamCreate", "TeamDelete", "Edit",
+        "Read",
+        "Bash",
+        "SendMessage",
+        "TeamCreate",
+        "TeamDelete",
+        "Edit",
     )
     team = {"team_name": "t", "lead_agent_id": "lead-1"}
     result = get_team_aware_tool_list(registry, team=team)
     assert [t.name for t in result] == [
-        "Read", "Bash", "SendMessage", "TeamCreate", "TeamDelete", "Edit",
+        "Read",
+        "Bash",
+        "SendMessage",
+        "TeamCreate",
+        "TeamDelete",
+        "Edit",
     ]
 
 
@@ -69,7 +80,10 @@ def test_get_team_aware_tool_list_drops_team_create_delete_when_no_team() -> Non
     # exists; the filter drops them so the model can't accidentally
     # call them out of order.
     registry = _build_registry_with(
-        "Read", "TeamCreate", "TeamDelete", "Bash",
+        "Read",
+        "TeamCreate",
+        "TeamDelete",
+        "Bash",
     )
     result = get_team_aware_tool_list(registry, team=None)
     assert [t.name for t in result] == ["Read", "Bash"]

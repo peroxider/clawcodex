@@ -48,8 +48,7 @@ class CommandRegistry:
 
         # Remove aliases pointing to this command
         aliases_to_remove = [
-            alias for alias, target in self._aliases.items()
-            if target == name_lower
+            alias for alias, target in self._aliases.items() if target == name_lower
         ]
         for alias in aliases_to_remove:
             del self._aliases[alias]
@@ -147,7 +146,9 @@ class CommandRegistry:
                 score = 30
 
             if score > 0:
-                matches.append((-score, command.name, command))  # Negative for ascending sort, name for tiebreaker
+                matches.append(
+                    (-score, command.name, command)
+                )  # Negative for ascending sort, name for tiebreaker
 
         # Sort by score (highest first), then name
         matches.sort()

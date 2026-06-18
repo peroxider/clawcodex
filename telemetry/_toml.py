@@ -22,6 +22,7 @@ falls back to :mod:`tomli` (already a transitive dep via pytest) on
 older interpreters. Both modules expose the same ``load`` / ``loads``
 API.
 """
+
 from __future__ import annotations
 
 import logging

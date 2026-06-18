@@ -28,6 +28,7 @@ SKIP_DIRS = {
     "dist",
     "tmp",
 }
+SKIP_DOC_PARTS = {"raw"}
 
 LINK_RE = re.compile(r"(!?\[[^\]\n]*\]\(([^)\n]+)\))")
 EXTERNAL_SCHEMES = (
@@ -48,6 +49,14 @@ def _is_doc(path: Path) -> bool:
     return path.suffix.lower() in DOC_SUFFIXES
 
 
+def _is_skipped_doc(path: Path) -> bool:
+    try:
+        rel_parts = path.relative_to(ROOT).parts
+    except ValueError:
+        return True
+    return any(part in SKIP_DOC_PARTS or part.endswith(".raw") for part in rel_parts)
+
+
 def _iter_all_docs() -> list[Path]:
     try:
         proc = subprocess.run(
@@ -65,7 +74,7 @@ def _iter_all_docs() -> list[Path]:
         paths: list[Path] = []
         for raw in proc.stdout.splitlines():
             path = (ROOT / _normalise(raw)).resolve()
-            if path.is_file() and _is_doc(path):
+            if path.is_file() and _is_doc(path) and not _is_skipped_doc(path):
                 paths.append(path)
         return sorted(paths)
 
@@ -77,7 +86,7 @@ def _iter_all_docs() -> list[Path]:
             rel_parts = path.relative_to(ROOT).parts
         except ValueError:
             continue
-        if any(part in SKIP_DIRS for part in rel_parts):
+        if any(part in SKIP_DIRS for part in rel_parts) or _is_skipped_doc(path):
             continue
         docs.append(path)
     return sorted(docs)
@@ -97,7 +106,7 @@ def _candidate_paths(raw_paths: list[str], *, all_docs: bool) -> list[Path]:
     for raw in raw_paths:
         rel = _normalise(raw)
         path = (ROOT / rel).resolve()
-        if not path.exists() or not path.is_file() or not _is_doc(path):
+        if not path.exists() or not path.is_file() or not _is_doc(path) or _is_skipped_doc(path):
             continue
         try:
             path.relative_to(ROOT)

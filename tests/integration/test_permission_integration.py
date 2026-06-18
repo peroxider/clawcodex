@@ -2,6 +2,7 @@
 
 Full permission flow: setup → classify → check → decide.
 """
+
 from __future__ import annotations
 
 import json

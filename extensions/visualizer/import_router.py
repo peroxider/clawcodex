@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import logging
 import time
 import uuid
@@ -39,6 +40,7 @@ _PRIVATE_NETWORKS = [
 def _is_private_host(hostname: str) -> bool:
     """Check if a hostname resolves to a private IP address."""
     import socket
+
     try:
         addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         for family, _type, _proto, _canonname, sockaddr in addrinfo:
@@ -72,6 +74,7 @@ def _validate_import_url(url: str) -> str:
 # Request / Response models
 # ---------------------------------------------------------------------------
 
+
 class ImportRequest(BaseModel):
     """Request body for session import."""
 
@@ -84,6 +87,7 @@ class ImportRequest(BaseModel):
 # Router
 # ---------------------------------------------------------------------------
 
+
 def create_import_router() -> APIRouter:
     """Create the conditional import router."""
     router = APIRouter(prefix="/import", tags=["import"])
@@ -92,10 +96,13 @@ def create_import_router() -> APIRouter:
     async def start_import(request: Request, body: ImportRequest):
         """Start an async import job (conditional — only when allow_import=True)."""
         from .server import _AppState
+
         state: _AppState = request.app.state.viz
 
         if not state.allow_import:
-            raise HTTPException(status_code=403, detail="Import is not enabled. Use --allow-import flag.")
+            raise HTTPException(
+                status_code=403, detail="Import is not enabled. Use --allow-import flag."
+            )
 
         # SSRF check
         try:
@@ -106,6 +113,7 @@ def create_import_router() -> APIRouter:
         # Create async task
         task_id = uuid.uuid4().hex[:12]
         from .models.viz_models import ImportStatus
+
         status = ImportStatus(task_id=task_id, status="pending")
         state.import_tasks[task_id] = status
 
@@ -118,6 +126,7 @@ def create_import_router() -> APIRouter:
     async def get_import_status(request: Request, task_id: str):
         """Check the status of an import job."""
         from .server import _AppState
+
         state: _AppState = request.app.state.viz
         status = state.import_tasks.get(task_id)
         if status is None:
@@ -131,6 +140,7 @@ def create_import_router() -> APIRouter:
 # Background import logic
 # ---------------------------------------------------------------------------
 
+
 async def _do_import(state: Any, task_id: str, url: str, body: ImportRequest) -> None:
     """Execute the actual import in the background."""
     import_status = state.import_tasks[task_id]
@@ -138,6 +148,7 @@ async def _do_import(state: Any, task_id: str, url: str, body: ImportRequest) ->
 
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(url)
             response.raise_for_status()
@@ -257,16 +268,10 @@ def _coerce_tool_use_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
         for idx, call in enumerate(tool_calls):
             if not isinstance(call, dict):
                 continue
-            tool_use_id = (
-                call.get("id")
-                or call.get("tool_use_id")
-                or f"imported-tu-{idx}"
-            )
+            tool_use_id = call.get("id") or call.get("tool_use_id") or f"imported-tu-{idx}"
             func = call.get("function") or {}
             tool_name = (
-                func.get("name")
-                if isinstance(func, dict)
-                else call.get("name") or "unknown"
+                func.get("name") if isinstance(func, dict) else call.get("name") or "unknown"
             )
             arguments = (
                 func.get("arguments")
@@ -279,13 +284,15 @@ def _coerce_tool_use_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
                 input_payload: Any = arguments
             else:
                 input_payload = arguments or {}
-            blocks.append({
-                "type": "tool_use",
-                "id": tool_use_id,
-                "tool_use_id": tool_use_id,
-                "name": tool_name,
-                "input": input_payload,
-            })
+            blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "tool_use_id": tool_use_id,
+                    "name": tool_name,
+                    "input": input_payload,
+                }
+            )
     return blocks
 
 
@@ -357,8 +364,16 @@ def _envelope_message(
     if role == "assistant":
         content_blocks = content_blocks + _coerce_tool_use_blocks(raw)
         # Carry model / usage / stop_reason forward if present.
-        for key in ("model", "stop_reason", "usage", "requestId",
-                    "duration_ms", "apiError", "error", "errorDetails"):
+        for key in (
+            "model",
+            "stop_reason",
+            "usage",
+            "requestId",
+            "duration_ms",
+            "apiError",
+            "error",
+            "errorDetails",
+        ):
             if raw.get(key) is not None:
                 message[key] = raw[key]
         if raw.get("isApiErrorMessage"):

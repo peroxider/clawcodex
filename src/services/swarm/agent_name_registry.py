@@ -18,6 +18,7 @@ The class also exposes ``get`` / ``release`` / ``items`` /
 ``__contains__`` so existing readers (SendMessage routing, tests)
 keep working with familiar shapes.
 """
+
 from __future__ import annotations
 
 import threading

@@ -310,13 +310,11 @@ def _check_chain_consistency(messages: list[Message]) -> list[str]:
         # Check ordering: user → assistant → user → assistant
         if prev_role == "user" and role == "user":
             warnings.append(
-                f"Message {i}: two consecutive user messages; "
-                "expected assistant between them"
+                f"Message {i}: two consecutive user messages; expected assistant between them"
             )
         if prev_role == "assistant" and role == "assistant":
             warnings.append(
-                f"Message {i}: two consecutive assistant messages; "
-                "expected user between them"
+                f"Message {i}: two consecutive assistant messages; expected user between them"
             )
 
         # Check assistant messages have content
@@ -332,7 +330,11 @@ def _check_chain_consistency(messages: list[Message]) -> list[str]:
                 has_tool_use = False
                 if isinstance(content, list):
                     for block in content:
-                        btype = getattr(block, "type", None) if not isinstance(block, dict) else block.get("type")
+                        btype = (
+                            getattr(block, "type", None)
+                            if not isinstance(block, dict)
+                            else block.get("type")
+                        )
                         if btype == "text":
                             has_text = True
                         elif btype == "tool_use":
@@ -349,16 +351,12 @@ def _check_chain_consistency(messages: list[Message]) -> list[str]:
     # Check that the chain starts with a user message
     first_role = getattr(messages[0], "role", None) or ""
     if first_role != "user":
-        warnings.append(
-            f"Chain starts with '{first_role}' message (expected 'user')"
-        )
+        warnings.append(f"Chain starts with '{first_role}' message (expected 'user')")
 
     # Check that the chain ends with an assistant message
     last_role = getattr(messages[-1], "role", None) or ""
     if last_role not in ("assistant", "user"):
-        warnings.append(
-            f"Chain ends with '{last_role}' message (expected 'assistant' or 'user')"
-        )
+        warnings.append(f"Chain ends with '{last_role}' message (expected 'assistant' or 'user')")
 
     return warnings
 

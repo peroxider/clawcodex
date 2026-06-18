@@ -19,6 +19,7 @@ def _is_blank_string(value: str) -> bool:
 
 def _is_likely_structured_object_literal(value: str) -> bool:
     import re
+
     return bool(re.match(r"^\s*\{\s*['\"]?\w+['\"]?\s*:", value))
 
 

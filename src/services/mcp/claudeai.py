@@ -87,9 +87,7 @@ async def fetch_claudeai_mcp_configs_if_eligible(
         return {}
     token = _resolve_auth_token(auth_provider)
     if not token:
-        logger.debug(
-            "Claude.ai MCP loader: no first-party auth token; skipping fetch"
-        )
+        logger.debug("Claude.ai MCP loader: no first-party auth token; skipping fetch")
         _cache = {}
         return {}
     own_client = http_client is None

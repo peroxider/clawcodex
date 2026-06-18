@@ -181,9 +181,7 @@ async def init_env_less_bridge_core(
     *,
     http_client: httpx.AsyncClient | None = None,
     config: EnvLessBridgeConfig | None = None,
-    transport_factory: Callable[
-        [V2TransportOptions], Awaitable[ReplBridgeTransport]
-    ] | None = None,
+    transport_factory: Callable[[V2TransportOptions], Awaitable[ReplBridgeTransport]] | None = None,
 ) -> RemoteBridgeHandle | None:
     """Create a session, fetch a worker JWT, connect the v2 transport.
 
@@ -207,7 +205,7 @@ async def init_env_less_bridge_core(
     # ── 1. OAuth pre-check ─────────────────────────────────────────────
     access_token = params.get_access_token()
     if not access_token:
-        logger.debug('[remote-bridge] No OAuth token')
+        logger.debug("[remote-bridge] No OAuth token")
         return None
 
     # ── 2. Create session (POST /v1/code/sessions) ─────────────────────
@@ -221,14 +219,13 @@ async def init_env_less_bridge_core(
             tags=params.tags,
             client=http_client,
         ),
-        'createCodeSession',
+        "createCodeSession",
         cfg,
     )
     if session_id is None:
-        _fire_state(params.on_state_change, 'failed',
-                    'Session creation failed — see debug log')
+        _fire_state(params.on_state_change, "failed", "Session creation failed — see debug log")
         return None
-    logger.debug('[remote-bridge] Created session %s', session_id)
+    logger.debug("[remote-bridge] Created session %s", session_id)
 
     # ── 3. Fetch bridge credentials ────────────────────────────────────
     credentials = await _with_retry(
@@ -239,12 +236,13 @@ async def init_env_less_bridge_core(
             timeout_seconds=timeout_seconds,
             client=http_client,
         ),
-        'fetchRemoteCredentials',
+        "fetchRemoteCredentials",
         cfg,
     )
     if credentials is None:
-        _fire_state(params.on_state_change, 'failed',
-                    'Remote credentials fetch failed — see debug log')
+        _fire_state(
+            params.on_state_change, "failed", "Remote credentials fetch failed — see debug log"
+        )
         await _safe_archive_session(
             session_id,
             params.base_url,
@@ -255,7 +253,7 @@ async def init_env_less_bridge_core(
         )
         return None
     logger.debug(
-        '[remote-bridge] Fetched bridge credentials (expires_in=%ss)',
+        "[remote-bridge] Fetched bridge credentials (expires_in=%ss)",
         credentials.expires_in,
     )
 
@@ -280,9 +278,8 @@ async def init_env_less_bridge_core(
             )
         )
     except Exception as err:  # noqa: BLE001  surface as pre-flight failure
-        logger.error('[remote-bridge] v2 transport setup failed: %s', err)
-        _fire_state(params.on_state_change, 'failed',
-                    f'Transport setup failed: {err}')
+        logger.error("[remote-bridge] v2 transport setup failed: %s", err)
+        _fire_state(params.on_state_change, "failed", f"Transport setup failed: {err}")
         await _safe_archive_session(
             session_id,
             params.base_url,
@@ -293,10 +290,10 @@ async def init_env_less_bridge_core(
         )
         return None
     logger.debug(
-        '[remote-bridge] v2 transport created (epoch=%s)',
+        "[remote-bridge] v2 transport created (epoch=%s)",
         credentials.worker_epoch,
     )
-    _fire_state(params.on_state_change, 'ready')
+    _fire_state(params.on_state_change, "ready")
 
     # ── 5. State (closures shared by all callbacks) ────────────────────
     state = _BridgeState(
@@ -313,7 +310,7 @@ async def init_env_less_bridge_core(
     refresh = TokenRefreshScheduler(
         get_access_token=_async_refresh_token(params),
         on_refresh=state.on_jwt_refresh,
-        label='remote',
+        label="remote",
         refresh_buffer_ms=cfg.token_refresh_buffer_ms,
     )
     state.refresh = refresh
@@ -335,7 +332,7 @@ async def init_env_less_bridge_core(
     # ── 8. Return handle ───────────────────────────────────────────────
     return RemoteBridgeHandle(
         bridge_session_id=session_id,
-        environment_id='',
+        environment_id="",
         session_ingress_url=credentials.api_base_url,
         write_messages=state.write_messages,
         write_sdk_messages=state.write_sdk_messages,
@@ -365,9 +362,7 @@ class _BridgeState:
     credentials: RemoteCredentials
     transport: ReplBridgeTransport
     http_client: httpx.AsyncClient | None
-    transport_factory: Callable[
-        [V2TransportOptions], Awaitable[ReplBridgeTransport]
-    ]
+    transport_factory: Callable[[V2TransportOptions], Awaitable[ReplBridgeTransport]]
     refresh: TokenRefreshScheduler | None = None
 
     recent_posted_uuids: BoundedUUIDSet = field(init=False)
@@ -379,16 +374,12 @@ class _BridgeState:
     torn_down: bool = False
     auth_recovery_in_flight: bool = False
     user_message_callback_done: bool = False
-    connect_cause: str = 'initial'
+    connect_cause: str = "initial"
 
     def __post_init__(self) -> None:
         # UUID dedup ring buffers, sized per env-less config.
-        self.recent_posted_uuids = BoundedUUIDSet(
-            self.cfg.uuid_dedup_buffer_size
-        )
-        self.recent_inbound_uuids = BoundedUUIDSet(
-            self.cfg.uuid_dedup_buffer_size
-        )
+        self.recent_posted_uuids = BoundedUUIDSet(self.cfg.uuid_dedup_buffer_size)
+        self.recent_inbound_uuids = BoundedUUIDSet(self.cfg.uuid_dedup_buffer_size)
 
         # Seed dedup with initial-history UUIDs so server echoes of the
         # flushed history are recognized as our own.
@@ -409,9 +400,7 @@ class _BridgeState:
         lazily via the closures so the new transport receives the wiring.
         """
         active_transport = self.transport
-        self.transport.set_on_connect(
-            lambda: self._on_connect(active_transport)
-        )
+        self.transport.set_on_connect(lambda: self._on_connect(active_transport))
         self.transport.set_on_data(self._on_data)
         self.transport.set_on_close(self._on_close)
 
@@ -427,27 +416,23 @@ class _BridgeState:
         swaps ``self.transport`` mid-flush, the stale callback is a no-op
         (matches TS guard pattern).
         """
-        logger.debug('[remote-bridge] v2 transport connected')
+        logger.debug("[remote-bridge] v2 transport connected")
         if (
             not self.initial_flush_done
             and self.params.initial_messages
             and len(self.params.initial_messages) > 0
         ):
             self.initial_flush_done = True
-            asyncio.create_task(
-                self._flush_history_then_drain(flush_transport)
-            )
+            asyncio.create_task(self._flush_history_then_drain(flush_transport))
             return
         # No initial flush — drain any pre-connect queued writes
         # (``write_messages`` calls that landed during the handshake) and
         # close the gate so subsequent writes go straight to the uploader.
         if self.flush_gate.active:
             self._drain_flush_gate()
-        _fire_state(self.params.on_state_change, 'connected')
+        _fire_state(self.params.on_state_change, "connected")
 
-    async def _flush_history_then_drain(
-        self, flush_transport: ReplBridgeTransport
-    ) -> None:
+    async def _flush_history_then_drain(self, flush_transport: ReplBridgeTransport) -> None:
         """Async wrapper for flush + drain. Mirrors TS .finally() chain.
 
         Stale-transport guards: if the transport was swapped mid-flush
@@ -458,7 +443,7 @@ class _BridgeState:
             assert self.params.initial_messages is not None
             await self._flush_history(self.params.initial_messages)
         except Exception as err:  # noqa: BLE001  log + carry on
-            logger.warning('[remote-bridge] flushHistory failed: %s', err)
+            logger.warning("[remote-bridge] flushHistory failed: %s", err)
         finally:
             if (
                 self.transport is flush_transport
@@ -466,7 +451,7 @@ class _BridgeState:
                 and not self.auth_recovery_in_flight
             ):
                 self._drain_flush_gate()
-                _fire_state(self.params.on_state_change, 'connected')
+                _fire_state(self.params.on_state_change, "connected")
 
     def _on_data(self, data: str) -> None:
         """Route an SSE event line to the ingress handler."""
@@ -482,7 +467,7 @@ class _BridgeState:
                 # Without reportState('running'), the server stays on
                 # ``requires_action`` until the next user message or
                 # turn-end result.
-                transport.report_state({'state': 'running'})
+                transport.report_state({"state": "running"})
                 inner(response)
 
             on_permission_response_wrapped = wrapped
@@ -521,13 +506,14 @@ class _BridgeState:
         """
         if self.torn_down:
             return
-        logger.debug('[remote-bridge] v2 transport closed (code=%s)', code)
+        logger.debug("[remote-bridge] v2 transport closed (code=%s)", code)
         if code == 401 and not self.auth_recovery_in_flight:
             asyncio.create_task(self._recover_from_auth_failure())
             return
         _fire_state(
-            self.params.on_state_change, 'failed',
-            f'Transport closed (code {code})',
+            self.params.on_state_change,
+            "failed",
+            f"Transport closed (code {code})",
         )
 
     # ── Transport rebuild (shared by proactive refresh + 401 recovery) ──
@@ -556,18 +542,12 @@ class _BridgeState:
             self.transport.close()
             self.transport = await self.transport_factory(
                 V2TransportOptions(
-                    session_url=build_ccr_v2_sdk_url(
-                        fresh.api_base_url, self.session_id
-                    ),
+                    session_url=build_ccr_v2_sdk_url(fresh.api_base_url, self.session_id),
                     ingress_token=fresh.worker_jwt,
                     session_id=self.session_id,
                     epoch=fresh.worker_epoch,
-                    heartbeat_interval_seconds=(
-                        self.cfg.heartbeat_interval_ms / 1000.0
-                    ),
-                    heartbeat_jitter_fraction=(
-                        self.cfg.heartbeat_jitter_fraction
-                    ),
+                    heartbeat_interval_seconds=(self.cfg.heartbeat_interval_ms / 1000.0),
+                    heartbeat_jitter_fraction=(self.cfg.heartbeat_jitter_fraction),
                     initial_sequence_num=old_seq,
                     outbound_only=self.params.outbound_only,
                     get_auth_token=_freeze_token(fresh.worker_jwt),
@@ -582,9 +562,7 @@ class _BridgeState:
             self.wire_transport_callbacks()
             self.transport.connect()
             if self.refresh is not None:
-                self.refresh.schedule_from_expires_in(
-                    self.session_id, fresh.expires_in
-                )
+                self.refresh.schedule_from_expires_in(self.session_id, fresh.expires_in)
             self.credentials = fresh
             # Leave the gate active — the new transport's ``_on_connect``
             # will drain it once CCR.initialize() resolves. Python
@@ -614,22 +592,24 @@ class _BridgeState:
             return
         self.auth_recovery_in_flight = True
         _fire_state(
-            self.params.on_state_change, 'reconnecting',
-            'JWT expired — refreshing',
+            self.params.on_state_change,
+            "reconnecting",
+            "JWT expired — refreshing",
         )
-        logger.debug('[remote-bridge] 401 on SSE — attempting JWT refresh')
+        logger.debug("[remote-bridge] 401 on SSE — attempting JWT refresh")
         try:
             # getAccessToken() returns expired tokens as non-None strings
             # — unconditional OAuth refresh below catches that.
             stale = self.params.get_access_token()
             if self.params.on_auth_401 is not None:
-                await self.params.on_auth_401(stale or '')
+                await self.params.on_auth_401(stale or "")
             oauth_token = self.params.get_access_token() or stale
             if not oauth_token or self.torn_down:
                 if not self.torn_down:
                     _fire_state(
-                        self.params.on_state_change, 'failed',
-                        'JWT refresh failed: no OAuth token',
+                        self.params.on_state_change,
+                        "failed",
+                        "JWT refresh failed: no OAuth token",
                     )
                 return
             fresh = await _with_retry(
@@ -640,30 +620,30 @@ class _BridgeState:
                     timeout_seconds=self.cfg.http_timeout_ms / 1000.0,
                     client=self.http_client,
                 ),
-                'fetchRemoteCredentials (recovery)',
+                "fetchRemoteCredentials (recovery)",
                 self.cfg,
             )
             if fresh is None or self.torn_down:
                 if not self.torn_down:
                     _fire_state(
-                        self.params.on_state_change, 'failed',
-                        'JWT refresh failed after 401',
+                        self.params.on_state_change,
+                        "failed",
+                        "JWT refresh failed after 401",
                     )
                 return
             # If 401 interrupted the initial flush, writeBatch may have
             # silently no-op'd on the closed uploader. Reset so the new
             # onConnect re-flushes.
             self.initial_flush_done = False
-            await self._rebuild_transport(fresh, 'auth_401_recovery')
-            logger.debug('[remote-bridge] Transport rebuilt after 401')
+            await self._rebuild_transport(fresh, "auth_401_recovery")
+            logger.debug("[remote-bridge] Transport rebuilt after 401")
         except Exception as err:  # noqa: BLE001  log + surface
-            logger.error(
-                '[remote-bridge] 401 recovery failed: %s', err
-            )
+            logger.error("[remote-bridge] 401 recovery failed: %s", err)
             if not self.torn_down:
                 _fire_state(
-                    self.params.on_state_change, 'failed',
-                    f'JWT refresh failed: {err}',
+                    self.params.on_state_change,
+                    "failed",
+                    f"JWT refresh failed: {err}",
                 )
         finally:
             self.auth_recovery_in_flight = False
@@ -675,11 +655,11 @@ class _BridgeState:
         against ``recover_from_auth_failure`` via ``auth_recovery_in_flight``
         so a laptop-wake double-fire doesn't bump epoch twice.
         """
+
         async def _do() -> None:
             if self.auth_recovery_in_flight or self.torn_down:
                 logger.debug(
-                    '[remote-bridge] Recovery already in flight, '
-                    'skipping proactive refresh'
+                    "[remote-bridge] Recovery already in flight, skipping proactive refresh"
                 )
                 return
             self.auth_recovery_in_flight = True
@@ -692,24 +672,23 @@ class _BridgeState:
                         timeout_seconds=self.cfg.http_timeout_ms / 1000.0,
                         client=self.http_client,
                     ),
-                    'fetchRemoteCredentials (proactive)',
+                    "fetchRemoteCredentials (proactive)",
                     self.cfg,
                 )
                 if fresh is None or self.torn_down:
                     return
-                await self._rebuild_transport(fresh, 'proactive_refresh')
-                logger.debug(
-                    '[remote-bridge] Transport rebuilt (proactive refresh)'
-                )
+                await self._rebuild_transport(fresh, "proactive_refresh")
+                logger.debug("[remote-bridge] Transport rebuilt (proactive refresh)")
             except Exception as err:  # noqa: BLE001
                 logger.error(
-                    '[remote-bridge] Proactive refresh rebuild failed: %s',
+                    "[remote-bridge] Proactive refresh rebuild failed: %s",
                     err,
                 )
                 if not self.torn_down:
                     _fire_state(
-                        self.params.on_state_change, 'failed',
-                        f'Refresh failed: {err}',
+                        self.params.on_state_change,
+                        "failed",
+                        f"Refresh failed: {err}",
                     )
             finally:
                 self.auth_recovery_in_flight = False
@@ -729,28 +708,23 @@ class _BridgeState:
         """
         eligible = [m for m in msgs if is_eligible_bridge_message(_msg_dict(m))]
         cap = self.params.initial_history_cap
-        capped = (
-            eligible[-cap:] if cap > 0 and len(eligible) > cap else eligible
-        )
+        capped = eligible[-cap:] if cap > 0 and len(eligible) > cap else eligible
         if len(capped) < len(eligible):
             logger.debug(
-                '[remote-bridge] Capped initial flush: %s -> %s (cap=%s)',
-                len(eligible), len(capped), cap,
+                "[remote-bridge] Capped initial flush: %s -> %s (cap=%s)",
+                len(eligible),
+                len(capped),
+                cap,
             )
-        events = [
-            {**m, 'session_id': self.session_id}
-            for m in to_sdk_messages(capped)
-        ]
+        events = [{**m, "session_id": self.session_id} for m in to_sdk_messages(capped)]
         if not events:
             return
         # Pre-cap eligible tail decides reportState: the cap may truncate
         # to a user message even when the actual trailing message is
         # assistant. Match TS behavior exactly.
-        if eligible and _msg_dict(eligible[-1]).get('type') == 'user':
-            self.transport.report_state({'state': 'running'})
-        logger.debug(
-            '[remote-bridge] Flushing %s history events', len(events)
-        )
+        if eligible and _msg_dict(eligible[-1]).get("type") == "user":
+            self.transport.report_state({"state": "running"})
+        logger.debug("[remote-bridge] Flushing %s history events", len(events))
         await self.transport.write_batch(events)
 
     def _drain_flush_gate(self) -> None:
@@ -760,14 +734,11 @@ class _BridgeState:
             return
         for msg in msgs:
             self.recent_posted_uuids.add(msg.uuid)
-        events = [
-            {**m, 'session_id': self.session_id}
-            for m in to_sdk_messages(msgs)
-        ]
-        if any(_msg_dict(m).get('type') == 'user' for m in msgs):
-            self.transport.report_state({'state': 'running'})
+        events = [{**m, "session_id": self.session_id} for m in to_sdk_messages(msgs)]
+        if any(_msg_dict(m).get("type") == "user" for m in msgs):
+            self.transport.report_state({"state": "running"})
         logger.debug(
-            '[remote-bridge] Drained %s queued message(s) after flush',
+            "[remote-bridge] Drained %s queued message(s) after flush",
             len(msgs),
         )
         asyncio.create_task(self.transport.write_batch(events))
@@ -777,7 +748,8 @@ class _BridgeState:
     def write_messages(self, messages: list[Message]) -> None:
         """Write a batch of local Message[] to the transport."""
         filtered = [
-            m for m in messages
+            m
+            for m in messages
             if is_eligible_bridge_message(_msg_dict(m))
             and m.uuid not in self.initial_message_uuids
             and not self.recent_posted_uuids.has(m.uuid)
@@ -797,101 +769,89 @@ class _BridgeState:
 
         if self.flush_gate.enqueue(*filtered):
             logger.debug(
-                '[remote-bridge] Queued %s message(s) during flush',
+                "[remote-bridge] Queued %s message(s) during flush",
                 len(filtered),
             )
             return
 
         for msg in filtered:
             self.recent_posted_uuids.add(msg.uuid)
-        events = [
-            {**m, 'session_id': self.session_id}
-            for m in to_sdk_messages(filtered)
-        ]
-        if any(_msg_dict(m).get('type') == 'user' for m in filtered):
-            self.transport.report_state({'state': 'running'})
-        logger.debug(
-            '[remote-bridge] Sending %s message(s)', len(filtered)
-        )
+        events = [{**m, "session_id": self.session_id} for m in to_sdk_messages(filtered)]
+        if any(_msg_dict(m).get("type") == "user" for m in filtered):
+            self.transport.report_state({"state": "running"})
+        logger.debug("[remote-bridge] Sending %s message(s)", len(filtered))
         asyncio.create_task(self.transport.write_batch(events))
 
     def write_sdk_messages(self, messages: list[dict[str, Any]]) -> None:
         """Write pre-shaped SDK messages (used by the daemon path)."""
         filtered = [
-            m for m in messages
-            if not m.get('uuid') or not self.recent_posted_uuids.has(m['uuid'])
+            m for m in messages if not m.get("uuid") or not self.recent_posted_uuids.has(m["uuid"])
         ]
         if not filtered:
             return
         for msg in filtered:
-            uid = msg.get('uuid')
+            uid = msg.get("uuid")
             if uid:
                 self.recent_posted_uuids.add(uid)
-        events = [{**m, 'session_id': self.session_id} for m in filtered]
+        events = [{**m, "session_id": self.session_id} for m in filtered]
         asyncio.create_task(self.transport.write_batch(events))
 
     def send_control_request(self, request: dict[str, Any]) -> None:
         if self.auth_recovery_in_flight:
             logger.debug(
-                '[remote-bridge] Dropping control_request during '
-                '401 recovery: %s', request.get('request_id'),
+                "[remote-bridge] Dropping control_request during 401 recovery: %s",
+                request.get("request_id"),
             )
             return
-        event = {**request, 'session_id': self.session_id}
-        inner = request.get('request') or {}
-        if inner.get('subtype') == 'can_use_tool':
-            self.transport.report_state({'state': 'requires_action'})
+        event = {**request, "session_id": self.session_id}
+        inner = request.get("request") or {}
+        if inner.get("subtype") == "can_use_tool":
+            self.transport.report_state({"state": "requires_action"})
         asyncio.create_task(self.transport.write(event))
         logger.debug(
-            '[remote-bridge] Sent control_request request_id=%s',
-            request.get('request_id'),
+            "[remote-bridge] Sent control_request request_id=%s",
+            request.get("request_id"),
         )
 
     def send_control_response(self, response: dict[str, Any]) -> None:
         if self.auth_recovery_in_flight:
-            logger.debug(
-                '[remote-bridge] Dropping control_response during 401 recovery'
-            )
+            logger.debug("[remote-bridge] Dropping control_response during 401 recovery")
             return
-        event = {**response, 'session_id': self.session_id}
-        self.transport.report_state({'state': 'running'})
+        event = {**response, "session_id": self.session_id}
+        self.transport.report_state({"state": "running"})
         asyncio.create_task(self.transport.write(event))
-        logger.debug('[remote-bridge] Sent control_response')
+        logger.debug("[remote-bridge] Sent control_response")
 
     def send_cancel_request(self, request_id: str) -> None:
         if self.auth_recovery_in_flight:
             logger.debug(
-                '[remote-bridge] Dropping control_cancel_request '
-                'during 401 recovery: %s', request_id,
+                "[remote-bridge] Dropping control_cancel_request during 401 recovery: %s",
+                request_id,
             )
             return
         event = {
-            'type': 'control_cancel_request',
-            'request_id': request_id,
-            'session_id': self.session_id,
+            "type": "control_cancel_request",
+            "request_id": request_id,
+            "session_id": self.session_id,
         }
         # Hook/classifier/channel/recheck resolved the permission locally
         # — interactiveHandler calls only cancelRequest (no sendResponse)
         # on those paths, so without this the server stays on
         # requires_action.
-        self.transport.report_state({'state': 'running'})
+        self.transport.report_state({"state": "running"})
         asyncio.create_task(self.transport.write(event))
         logger.debug(
-            '[remote-bridge] Sent control_cancel_request request_id=%s',
+            "[remote-bridge] Sent control_cancel_request request_id=%s",
             request_id,
         )
 
     def send_result(self) -> None:
         if self.auth_recovery_in_flight:
-            logger.debug(
-                '[remote-bridge] Dropping result during 401 recovery'
-            )
+            logger.debug("[remote-bridge] Dropping result during 401 recovery")
             return
-        self.transport.report_state({'state': 'idle'})
-        asyncio.create_task(
-            self.transport.write(make_result_message(self.session_id))
-        )
-        logger.debug('[remote-bridge] Sent result')
+        self.transport.report_state({"state": "idle"})
+        asyncio.create_task(self.transport.write(make_result_message(self.session_id)))
+        logger.debug("[remote-bridge] Sent result")
 
     # ── Teardown ───────────────────────────────────────────────────────
 
@@ -921,7 +881,7 @@ class _BridgeState:
         # this against a 2s cap, so bound the wait tightly — losing the
         # result message under back-pressure is preferable to blocking
         # teardown past the cap.
-        self.transport.report_state({'state': 'idle'})
+        self.transport.report_state({"state": "idle"})
         try:
             await asyncio.wait_for(
                 self.transport.write(make_result_message(self.session_id)),
@@ -929,12 +889,11 @@ class _BridgeState:
             )
         except asyncio.TimeoutError:
             logger.warning(
-                '[remote-bridge] Result write timed out after %ss '
-                '(producer queue back-pressure)',
+                "[remote-bridge] Result write timed out after %ss (producer queue back-pressure)",
                 _TEARDOWN_RESULT_WRITE_TIMEOUT_SECONDS,
             )
         except Exception as err:  # noqa: BLE001  log + carry on
-            logger.warning('[remote-bridge] Result write failed: %s', err)
+            logger.warning("[remote-bridge] Result write failed: %s", err)
 
         token = self.params.get_access_token()
         archive_timeout = self.cfg.teardown_archive_timeout_ms / 1000.0
@@ -950,7 +909,7 @@ class _BridgeState:
         # Single 401 retry — token might be stale post-laptop-wake.
         if status == 401 and self.params.on_auth_401 is not None:
             try:
-                await self.params.on_auth_401(token or '')
+                await self.params.on_auth_401(token or "")
                 token = self.params.get_access_token()
                 status = await _archive_v2_session(
                     self.session_id,
@@ -961,14 +920,10 @@ class _BridgeState:
                     self.http_client,
                 )
             except Exception as err:  # noqa: BLE001
-                logger.error(
-                    '[remote-bridge] Teardown 401 retry threw: %s', err
-                )
+                logger.error("[remote-bridge] Teardown 401 retry threw: %s", err)
 
         self.transport.close()
-        logger.debug(
-            '[remote-bridge] Torn down (archive=%s)', status
-        )
+        logger.debug("[remote-bridge] Torn down (archive=%s)", status)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -999,9 +954,7 @@ def _fire_state(
         else:
             cb(state, detail)
     except Exception as err:  # noqa: BLE001
-        logger.warning(
-            '[remote-bridge] on_state_change callback raised: %s', err
-        )
+        logger.warning("[remote-bridge] on_state_change callback raised: %s", err)
 
 
 def _msg_dict(msg: Message | dict[str, Any]) -> dict[str, Any]:
@@ -1020,13 +973,13 @@ def _msg_dict(msg: Message | dict[str, Any]) -> dict[str, Any]:
     if isinstance(msg, dict):
         return msg
     flat = vars(msg).copy()
-    msg_type = flat.get('type')
+    msg_type = flat.get("type")
     # Only user/assistant carry inner ``message.content`` in the wire
     # format; system and others stay flat.
-    if msg_type in ('user', 'assistant') and 'message' not in flat:
-        flat['message'] = {
-            'role': flat.get('role', msg_type),
-            'content': flat.get('content'),
+    if msg_type in ("user", "assistant") and "message" not in flat:
+        flat["message"] = {
+            "role": flat.get("role", msg_type),
+            "content": flat.get("content"),
         }
     return flat
 
@@ -1049,16 +1002,14 @@ async def _with_retry(
             return result
         if attempt < max_attempts:
             base_ms = cfg.init_retry_base_delay_ms * (2 ** (attempt - 1))
-            jitter_ms = (
-                base_ms
-                * cfg.init_retry_jitter_fraction
-                * (2 * random.random() - 1)
-            )
+            jitter_ms = base_ms * cfg.init_retry_jitter_fraction * (2 * random.random() - 1)
             delay_ms = min(base_ms + jitter_ms, cfg.init_retry_max_delay_ms)
             logger.debug(
-                '[remote-bridge] %s failed (attempt %s/%s), '
-                'retrying in %sms',
-                label, attempt, max_attempts, round(delay_ms),
+                "[remote-bridge] %s failed (attempt %s/%s), retrying in %sms",
+                label,
+                attempt,
+                max_attempts,
+                round(delay_ms),
             )
             await asyncio.sleep(delay_ms / 1000.0)
     return None
@@ -1074,10 +1025,11 @@ def _async_refresh_token(
     rely on truthiness alone. Passes the stale token to ``on_auth_401``
     so keychain-comparison can detect parallel refresh (Phase 10 wiring).
     """
+
     async def _refresh() -> str | None:
         stale = params.get_access_token()
         if params.on_auth_401 is not None:
-            await params.on_auth_401(stale or '')
+            await params.on_auth_401(stale or "")
         return params.get_access_token() or stale
 
     return _refresh
@@ -1099,17 +1051,19 @@ async def _safe_archive_session(
     """
     try:
         await _archive_v2_session(
-            session_id, base_url, access_token, org_uuid,
-            timeout_seconds, http_client,
+            session_id,
+            base_url,
+            access_token,
+            org_uuid,
+            timeout_seconds,
+            http_client,
         )
     except Exception as err:  # noqa: BLE001
-        logger.debug(
-            '[remote-bridge] Pre-flight archive failed: %s', err
-        )
+        logger.debug("[remote-bridge] Pre-flight archive failed: %s", err)
 
 
-_ARCHIVE_BETA_HEADER = 'ccr-byoc-2025-07-29'
-_ANTHROPIC_VERSION = '2023-06-01'
+_ARCHIVE_BETA_HEADER = "ccr-byoc-2025-07-29"
+_ANTHROPIC_VERSION = "2023-06-01"
 
 
 async def _archive_v2_session(
@@ -1135,42 +1089,46 @@ async def _archive_v2_session(
     archived) is success.
     """
     if not access_token:
-        return 'no_token'
+        return "no_token"
     compat_id = to_compat_session_id(session_id)
     headers = {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json',
-        'anthropic-version': _ANTHROPIC_VERSION,
-        'anthropic-beta': _ARCHIVE_BETA_HEADER,
-        'x-organization-uuid': org_uuid,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "anthropic-version": _ANTHROPIC_VERSION,
+        "anthropic-beta": _ARCHIVE_BETA_HEADER,
+        "x-organization-uuid": org_uuid,
     }
-    url = f'{base_url.rstrip("/")}/v1/sessions/{compat_id}/archive'
+    url = f"{base_url.rstrip('/')}/v1/sessions/{compat_id}/archive"
     try:
         if http_client is not None:
             response = await http_client.post(
-                url, headers=headers, json={}, timeout=timeout_seconds,
+                url,
+                headers=headers,
+                json={},
+                timeout=timeout_seconds,
             )
         else:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    url, headers=headers, json={}, timeout=timeout_seconds,
+                    url,
+                    headers=headers,
+                    json={},
+                    timeout=timeout_seconds,
                 )
     except httpx.TimeoutException:
-        logger.debug('[remote-bridge] Archive %s timed out', compat_id)
-        return 'timeout'
+        logger.debug("[remote-bridge] Archive %s timed out", compat_id)
+        return "timeout"
     except httpx.HTTPError as err:
-        logger.debug('[remote-bridge] Archive %s failed: %s', compat_id, err)
-        return 'error'
-    logger.debug(
-        '[remote-bridge] Archive %s status=%s', compat_id, response.status_code
-    )
+        logger.debug("[remote-bridge] Archive %s failed: %s", compat_id, err)
+        return "error"
+    logger.debug("[remote-bridge] Archive %s status=%s", compat_id, response.status_code)
     return response.status_code
 
 
 __all__ = [
-    'BridgeState',
-    'DEFAULT_ENV_LESS_BRIDGE_CONFIG',
-    'EnvLessBridgeParams',
-    'RemoteBridgeHandle',
-    'init_env_less_bridge_core',
+    "BridgeState",
+    "DEFAULT_ENV_LESS_BRIDGE_CONFIG",
+    "EnvLessBridgeParams",
+    "RemoteBridgeHandle",
+    "init_env_less_bridge_core",
 ]

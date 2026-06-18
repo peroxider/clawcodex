@@ -8,6 +8,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ModelConfig:
     """Configuration for a specific model."""
+
     model_id: str
     display_name: str
     context_window: int
@@ -50,7 +51,6 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         cost_cache_create_per_mtok=18.75,
         cost_cache_read_per_mtok=1.50,
     ),
-
     # Claude 3.7 series
     "claude-3-7-sonnet-20250219": ModelConfig(
         model_id="claude-3-7-sonnet-20250219",
@@ -61,7 +61,6 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         cost_input_per_mtok=3.0,
         cost_output_per_mtok=15.0,
     ),
-
     # Claude 3.5 series
     "claude-3-5-sonnet-20241022": ModelConfig(
         model_id="claude-3-5-sonnet-20241022",
@@ -94,7 +93,6 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
         cost_cache_create_per_mtok=1.25,
         cost_cache_read_per_mtok=0.10,
     ),
-
     # Claude 3 series
     "claude-3-opus-20240229": ModelConfig(
         model_id="claude-3-opus-20240229",

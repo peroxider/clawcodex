@@ -76,14 +76,7 @@ class TestFrontmatterParser:
         assert post[0]["hooks"][0]["command"] == "./scripts/format.sh"
 
     def test_multiline_pipe_description_joins(self) -> None:
-        md = (
-            "---\n"
-            "description: |\n"
-            "  Line one\n"
-            "  Line two\n"
-            "---\n"
-            "body\n"
-        )
+        md = "---\ndescription: |\n  Line one\n  Line two\n---\nbody\n"
         result = parse_frontmatter(md)
         # YAML `|` preserves newlines as a single string.
         desc = result.frontmatter["description"]
@@ -95,17 +88,13 @@ class TestFrontmatterParser:
         # The TS `allowed-tools` syntax allows `Tool(arg-pattern)`. The
         # YAML parser must keep these as single list entries, not split
         # them on the `:` inside the parens.
-        md = (
-            "---\n"
-            'allowed-tools: ["Bash(git diff:*)", "Read"]\n'
-            "---\n"
-            "body\n"
-        )
+        md = '---\nallowed-tools: ["Bash(git diff:*)", "Read"]\n---\nbody\n'
         result = parse_frontmatter(md)
         tools = result.frontmatter["allowed-tools"]
-        assert tools == ["Bash(git diff:*)", "Read"], (
-            f"paren-arg pattern was split or mangled: {tools!r}"
-        )
+        assert tools == [
+            "Bash(git diff:*)",
+            "Read",
+        ], f"paren-arg pattern was split or mangled: {tools!r}"
 
     def test_malformed_yaml_does_not_raise(self, caplog: pytest.LogCaptureFixture) -> None:
         # A bad YAML body must not crash the loader — it should return
@@ -138,9 +127,7 @@ class TestFrontmatterParser:
 
 class TestFieldValidators:
     def test_model_inherit_returns_none(self) -> None:
-        result = parse_skill_frontmatter_fields(
-            {"model": "inherit"}, "", "s"
-        )
+        result = parse_skill_frontmatter_fields({"model": "inherit"}, "", "s")
         assert result["model"] is None, (
             "`model: inherit` must yield None so callers fall back to "
             "the active session model (TS parity)."
@@ -151,9 +138,7 @@ class TestFieldValidators:
 
     def test_model_known_value_kept(self) -> None:
         # A canonical-looking model name is preserved as-is.
-        result = parse_skill_frontmatter_fields(
-            {"model": "claude-sonnet-4-5"}, "", "s"
-        )
+        result = parse_skill_frontmatter_fields({"model": "claude-sonnet-4-5"}, "", "s")
         assert result["model"] == "claude-sonnet-4-5"
 
     def test_effort_low_kept(self) -> None:
@@ -165,21 +150,17 @@ class TestFieldValidators:
             result = parse_skill_frontmatter_fields({"effort": level}, "", "s")
             assert result["effort"] == level
 
-    def test_effort_invalid_drops_with_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_effort_invalid_drops_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="src.skills.loader"):
-            result = parse_skill_frontmatter_fields(
-                {"effort": "garbage"}, "", "s"
-            )
+            result = parse_skill_frontmatter_fields({"effort": "garbage"}, "", "s")
         assert result["effort"] is None, (
             "invalid effort levels must be dropped (None), not preserved"
         )
         # Confirm we logged the rejection — the spec asks us to capture
         # the warning explicitly with caplog.
-        assert any(
-            "effort" in rec.getMessage().lower() for rec in caplog.records
-        ), "expected a warning log for invalid effort"
+        assert any("effort" in rec.getMessage().lower() for rec in caplog.records), (
+            "expected a warning log for invalid effort"
+        )
 
     def test_effort_integer_kept_as_string(self) -> None:
         # TS' parseEffortValue accepts numeric strings too.
@@ -187,33 +168,25 @@ class TestFieldValidators:
         assert result["effort"] == "3"
 
     def test_allowed_tools_preserves_paren_arg_pattern(self) -> None:
-        result = parse_skill_frontmatter_fields(
-            {"allowed-tools": ["Bash(git diff:*)"]}, "", "s"
-        )
+        result = parse_skill_frontmatter_fields({"allowed-tools": ["Bash(git diff:*)"]}, "", "s")
         assert result["allowed_tools"] == ["Bash(git diff:*)"], (
             "paren-arg pattern must be preserved as one entry; "
             "splitting on `:` would break Bash command rules"
         )
 
     def test_allowed_tools_string_form_split_on_comma(self) -> None:
-        result = parse_skill_frontmatter_fields(
-            {"allowed-tools": "Bash, Read"}, "", "s"
-        )
+        result = parse_skill_frontmatter_fields({"allowed-tools": "Bash, Read"}, "", "s")
         # String form is split on commas.
         assert result["allowed_tools"] == ["Bash", "Read"]
 
     def test_hooks_valid_event_round_trips_to_dict(self) -> None:
         hooks_in = {
-            "PostToolUse": [
-                {"matcher": "Write", "hooks": [{"type": "command", "command": "x"}]}
-            ]
+            "PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "x"}]}]
         }
         result = parse_skill_frontmatter_fields({"hooks": hooks_in}, "", "s")
         assert result["hooks"] == hooks_in
 
-    def test_hooks_unknown_event_drops_silently(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_hooks_unknown_event_drops_silently(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG, logger="src.skills.loader"):
             result = parse_skill_frontmatter_fields(
                 {"hooks": {"BogusEvent": [{"hooks": [{"type": "command"}]}]}},
@@ -225,11 +198,7 @@ class TestFieldValidators:
     def test_hooks_malformed_inner_drops(self) -> None:
         # Inner hooks list missing `type` must drop the whole hooks dict.
         result = parse_skill_frontmatter_fields(
-            {
-                "hooks": {
-                    "PostToolUse": [{"hooks": [{"command": "no-type-field"}]}]
-                }
-            },
+            {"hooks": {"PostToolUse": [{"hooks": [{"command": "no-type-field"}]}]}},
             "",
             "s",
         )
@@ -243,13 +212,9 @@ class TestFieldValidators:
         result = parse_skill_frontmatter_fields({"shell": "powershell"}, "", "s")
         assert result["shell"] == "powershell"
 
-    def test_shell_invalid_drops_with_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_shell_invalid_drops_with_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="src.skills.loader"):
-            result = parse_skill_frontmatter_fields(
-                {"shell": "fish"}, "", "s"
-            )
+            result = parse_skill_frontmatter_fields({"shell": "fish"}, "", "s")
         assert result["shell"] is None
 
 
@@ -293,9 +258,7 @@ class TestSkillRoundTrip:
         skills = load_skills_from_skills_dir(str(skills_dir), "projectSettings")
         assert skills[0].shell == "bash"
 
-    def test_invalid_yaml_skill_is_skipped_quietly_others_still_load(
-        self, tmp_path: Path
-    ) -> None:
+    def test_invalid_yaml_skill_is_skipped_quietly_others_still_load(self, tmp_path: Path) -> None:
         skills_dir = tmp_path / "skills"
         # Bad skill.
         _write_skill(

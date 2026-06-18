@@ -69,9 +69,7 @@ def _write_skill(path: Path, body: str) -> None:
 # ======================================================================
 
 
-def test_symlinked_skill_collapses_to_single_entry(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_symlinked_skill_collapses_to_single_entry(tmp_path: Path, isolated_home: Path) -> None:
     """Two paths pointing at the same SKILL.md (via symlink) must
     collapse to one entry after realpath dedup."""
     project = tmp_path / "proj"
@@ -88,13 +86,10 @@ def test_symlinked_skill_collapses_to_single_entry(
     # Both names land in the walker, but the realpath dedup keeps the
     # first-wins entry only. Total count of unique skills must be 1.
     seen_files = {
-        os.path.realpath(str(Path(s.base_dir) / "SKILL.md"))
-        for s in skills
-        if s.base_dir
+        os.path.realpath(str(Path(s.base_dir) / "SKILL.md")) for s in skills if s.base_dir
     }
     assert len(seen_files) == 1, (
-        f"realpath dedup should collapse symlinked skills, got: "
-        f"{[s.name for s in skills]}"
+        f"realpath dedup should collapse symlinked skills, got: {[s.name for s in skills]}"
     )
 
 
@@ -114,8 +109,7 @@ def test_disable_policy_skills_excludes_managed_dir(
     # Without the disable, the policy skill should appear.
     skills = get_skill_dir_commands(str(project))
     assert any(s.name == "policyskill" for s in skills), (
-        f"managed/policy skill should load by default; got: "
-        f"{[s.name for s in skills]}"
+        f"managed/policy skill should load by default; got: {[s.name for s in skills]}"
     )
 
     # With CLAUDE_CODE_DISABLE_POLICY_SKILLS=1, it must NOT.
@@ -168,17 +162,11 @@ def test_bare_mode_with_add_dir_only_loads_those(
 
     skills = get_skill_dir_commands(str(project))
     names = {s.name for s in skills}
-    assert "extraskill" in names, (
-        f"bare mode should still load --add-dir skills; got: {names}"
-    )
-    assert "projskill" not in names, (
-        f"bare mode must skip auto-discovery; got: {names}"
-    )
+    assert "extraskill" in names, f"bare mode should still load --add-dir skills; got: {names}"
+    assert "projskill" not in names, f"bare mode must skip auto-discovery; got: {names}"
 
 
-def test_managed_user_project_precedence(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_managed_user_project_precedence(tmp_path: Path, isolated_home: Path) -> None:
     """When the same skill name appears in managed + user + project
     dirs, the unified ``get_all_skills`` merge keeps the highest-
     priority occurrence (TS order: managed → user → project → bundled).
@@ -205,8 +193,7 @@ def test_managed_user_project_precedence(
     # Managed wins per `get_skill_dir_commands` ordering (managed loads
     # first, dedup is first-wins).
     assert by_name["shared"].description == "from-managed", (
-        f"precedence regression — expected managed to win, got: "
-        f"{by_name['shared'].description!r}"
+        f"precedence regression — expected managed to win, got: {by_name['shared'].description!r}"
     )
 
 
@@ -215,18 +202,11 @@ def test_managed_user_project_precedence(
 # ======================================================================
 
 
-def test_conditional_skill_held_until_path_matches(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_conditional_skill_held_until_path_matches(tmp_path: Path, isolated_home: Path) -> None:
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "lintpy" / "SKILL.md",
-        "---\n"
-        "description: lint python\n"
-        "paths:\n"
-        '  - "src/**/*.py"\n'
-        "---\n"
-        "Run ruff",
+        '---\ndescription: lint python\npaths:\n  - "src/**/*.py"\n---\nRun ruff',
     )
 
     # Initial load: the conditional skill is held back.
@@ -251,13 +231,11 @@ def test_conditional_skill_held_until_path_matches(
     assert "lintpy" in {s.name for s in get_dynamic_skills()}
 
 
-def test_paths_double_glob_treated_as_unconditional(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_paths_double_glob_treated_as_unconditional(tmp_path: Path, isolated_home: Path) -> None:
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "always" / "SKILL.md",
-        "---\ndescription: always\npaths:\n  - \"**\"\n---\nbody",
+        '---\ndescription: always\npaths:\n  - "**"\n---\nbody',
     )
     skills = get_skill_dir_commands(str(project))
     names = {s.name for s in skills}
@@ -273,12 +251,7 @@ def test_path_validity_guards_reject_dotdot_and_absolute(
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "guarded" / "SKILL.md",
-        "---\n"
-        "description: guarded\n"
-        "paths:\n"
-        '  - "src/**/*.py"\n'
-        "---\n"
-        "body",
+        '---\ndescription: guarded\npaths:\n  - "src/**/*.py"\n---\nbody',
     )
 
     # Prime the conditional bucket.
@@ -287,18 +260,13 @@ def test_path_validity_guards_reject_dotdot_and_absolute(
 
     # `..`-escaping path: should be filtered out by the validity guard.
     above = tmp_path.parent / "outside.py"
-    activated = activate_conditional_skills_for_paths(
-        [str(above)], str(project)
-    )
+    activated = activate_conditional_skills_for_paths([str(above)], str(project))
     assert activated == [], (
-        "files outside the cwd (relpath starts with '..') must be "
-        "ignored by the activation guard"
+        "files outside the cwd (relpath starts with '..') must be ignored by the activation guard"
     )
 
     # Absolute path that ISN'T under cwd similarly drops.
-    activated2 = activate_conditional_skills_for_paths(
-        ["/etc/passwd"], str(project)
-    )
+    activated2 = activate_conditional_skills_for_paths(["/etc/passwd"], str(project))
     assert activated2 == []
 
     # The skill stays in the conditional bucket.
@@ -318,9 +286,7 @@ def test_dynamic_discovery_skips_gitignored_dirs(
     ignored_skills_dir = project / "node_modules" / "pkg" / ".claude" / "skills"
     ignored_skills_dir.mkdir(parents=True)
     (ignored_skills_dir / "noisy" / "SKILL.md").parent.mkdir(parents=True)
-    (ignored_skills_dir / "noisy" / "SKILL.md").write_text(
-        "---\ndescription: noisy\n---\nbody"
-    )
+    (ignored_skills_dir / "noisy" / "SKILL.md").write_text("---\ndescription: noisy\n---\nbody")
 
     # Mock `git check-ignore` to say "yes, this is ignored". We mock
     # at the `subprocess.run` boundary used by `_is_path_gitignored`.
@@ -336,19 +302,15 @@ def test_dynamic_discovery_skips_gitignored_dirs(
 
     # Walk from a touched file inside the ignored dir.
     with mock.patch("subprocess.run", side_effect=fake_run):
-        new_dirs = discover_skill_dirs_for_paths(
-            [str(file_under_ignored)], str(project)
-        )
+        new_dirs = discover_skill_dirs_for_paths([str(file_under_ignored)], str(project))
 
     # The gitignored skills dir must NOT be returned.
-    assert all(
-        "node_modules" not in d for d in new_dirs
-    ), f"gitignored skills dir leaked into discovery: {new_dirs}"
+    assert all("node_modules" not in d for d in new_dirs), (
+        f"gitignored skills dir leaked into discovery: {new_dirs}"
+    )
 
 
-def test_dynamic_discovery_includes_non_ignored_dirs(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_dynamic_discovery_includes_non_ignored_dirs(tmp_path: Path, isolated_home: Path) -> None:
     """Sanity counterpart: a non-ignored `.claude/skills` dir is
     returned by the discovery walk."""
     project = tmp_path / "proj"
@@ -363,6 +325,5 @@ def test_dynamic_discovery_includes_non_ignored_dirs(
     new_dirs = discover_skill_dirs_for_paths([str(file_path)], str(project))
     # The nested skills dir is included.
     assert any(str(nested_skills_dir) == d for d in new_dirs), (
-        f"non-ignored nested .claude/skills dir should appear in "
-        f"discovery; got: {new_dirs}"
+        f"non-ignored nested .claude/skills dir should appear in discovery; got: {new_dirs}"
     )

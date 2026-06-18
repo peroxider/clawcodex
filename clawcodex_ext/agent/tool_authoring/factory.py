@@ -8,6 +8,7 @@ from typing import Any
 from src.tool_system.build_tool import Tool, build_tool
 from src.tool_system.context import ToolContext
 from src.tool_system.protocol import ToolResult
+from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
 from clawcodex_ext.agent.tool_authoring.validators import validate_spec, ValidationError
 from clawcodex_ext.agent.tool_authoring.call_handlers import (
     BashCallError,
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 # Tool builder
 # ---------------------------------------------------------------------------
 
+
 def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     """Construct a ``Tool`` instance from an ``AgentToolSpec``.
 
@@ -37,6 +39,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     Returns:
         A ``Tool`` object that can be registered with a ``ToolRegistry``.
     """
+
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
         try:
             if spec.call_type == "bash":

@@ -21,6 +21,7 @@ from src.providers.base import ChatResponse
 # Fake provider
 # ---------------------------------------------------------------------------
 
+
 class _FakeProvider:
     """Deterministic provider stub for integration testing."""
 
@@ -127,6 +128,7 @@ class _WriteToolProvider:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_config(home_path: Path, provider: str = "glm") -> Path:
     config_dir = home_path / ".clawcodex"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -153,6 +155,7 @@ def _redirect_global_config(config_file: Path):
     directly and reset the singleton.
     """
     import src.config as config_module
+
     patcher = patch.object(config_module, "GLOBAL_CONFIG_FILE", config_file)
     patcher.start()
     config_module._default_manager = None
@@ -163,11 +166,13 @@ def _redirect_global_config(config_file: Path):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestIntegrationSmoke:
     """Integration smoke tests — no real network calls."""
 
     def _make_repl(self, provider_class):
         from src.repl.core import ClawcodexREPL
+
         return ClawcodexREPL(
             provider_name="glm",
             stream=False,
@@ -203,6 +208,7 @@ class TestIntegrationSmoke:
         finally:
             config_patcher.stop()
             import src.config as config_module
+
             config_module._default_manager = None
             os.chdir(old_cwd)
 
@@ -228,6 +234,7 @@ class TestIntegrationSmoke:
         finally:
             config_patcher.stop()
             import src.config as config_module
+
             config_module._default_manager = None
             os.chdir(old_cwd)
 
@@ -255,17 +262,17 @@ class TestIntegrationSmoke:
 
     def test_message_types_in_api_payload(self):
         """normalize_messages_for_api produces valid Anthropic-style dicts."""
-        from src.types.messages import (
-            UserMessage, AssistantMessage, normalize_messages_for_api
-        )
+        from src.types.messages import UserMessage, AssistantMessage, normalize_messages_for_api
         from src.types.content_blocks import TextBlock, ToolUseBlock
 
         msgs = [
             UserMessage(content="ping"),
-            AssistantMessage(content=[
-                TextBlock(text="pong"),
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    TextBlock(text="pong"),
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/foo"}),
+                ]
+            ),
         ]
         payload = normalize_messages_for_api(msgs)
         assert payload[0] == {"role": "user", "content": "ping"}

@@ -60,8 +60,7 @@ def resolve(
     except UnknownProviderError:
         provider_unknown = True
         print(
-            f"Warning: provider '{provider}' is not in the built-in list — "
-            f"proceeding anyway",
+            f"Warning: provider '{provider}' is not in the built-in list — proceeding anyway",
             file=sys.stderr,
         )
 

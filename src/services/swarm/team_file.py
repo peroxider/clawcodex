@@ -23,6 +23,7 @@ The team file lives at ``<workspace_root>/.clawcodex/team.json`` (the
 existing path; pre-Chunk-F TeamCreate already wrote there). Reader is
 tolerant of missing ``members`` field (legacy teams pre-Chunk-F).
 """
+
 from __future__ import annotations
 
 import json

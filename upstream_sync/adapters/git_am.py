@@ -105,6 +105,7 @@ class GitAmEngine:
     def status(self) -> dict:
         """Return git-am state by checking for .git/rebase-apply."""
         import os
+
         rebase_apply = Path(".git") / "rebase-apply"
         am_style = Path(".git") / "rebase-merge"
         if rebase_apply.exists() or am_style.exists():

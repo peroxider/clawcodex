@@ -5,6 +5,7 @@ branch independently. Behavioral string-contains tests prove the
 chapter pillars are present (3 tools / 4 phases / "never delegate
 understanding" / continue-vs-spawn / example session).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,6 +25,7 @@ def _clear_simple_env():
     rationale) so any direct ``os.environ`` mutations inside the
     test don't leak."""
     import os as _os
+
     saved = _os.environ.pop("CLAUDE_CODE_SIMPLE", None)
     try:
         yield
@@ -107,7 +109,6 @@ def test_simple_branch_mentions_only_three_tools(
 # ---------------------------------------------------------------------------
 
 
-
 # ---------------------------------------------------------------------------
 # WI-8.5 — WORKER agent definition
 # ---------------------------------------------------------------------------
@@ -115,6 +116,7 @@ def test_simple_branch_mentions_only_three_tools(
 
 def test_worker_agent_type_is_worker() -> None:
     from src.coordinator.worker_agent import WORKER_AGENT
+
     assert WORKER_AGENT.agent_type == "worker"
 
 
@@ -124,12 +126,14 @@ def test_worker_inherits_general_purpose_tools() -> None:
     tool-set construction level, not the agent definition)."""
     from src.agent.agent_definitions import GENERAL_PURPOSE_AGENT
     from src.coordinator.worker_agent import WORKER_AGENT
+
     assert WORKER_AGENT.tools == GENERAL_PURPOSE_AGENT.tools
 
 
 def test_worker_has_distinct_when_to_use() -> None:
     """When-to-use rephrased for coordinator-mode role."""
     from src.coordinator.worker_agent import WORKER_AGENT
+
     assert "Worker agent for coordinator mode" in WORKER_AGENT.when_to_use
 
 
@@ -137,6 +141,7 @@ def test_get_coordinator_agents_lists_worker_first() -> None:
     """``workerAgent.ts:16-18`` order: WORKER first so
     ``subagent_type: "worker"`` resolves to the right definition."""
     from src.coordinator.worker_agent import get_coordinator_agents
+
     agents = get_coordinator_agents()
     assert agents[0].agent_type == "worker"
     types = [a.agent_type for a in agents]

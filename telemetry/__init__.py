@@ -19,6 +19,7 @@ Public surface (the only symbols business code should reach for):
 Anything else is an implementation detail and may change between
 minor releases.
 """
+
 from __future__ import annotations
 
 from .aggregator import DailyAggregator

@@ -1,4 +1,5 @@
 """Unit tests for ``clawcodex_ext.agent.markdown_discovery``."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,12 +15,7 @@ def _write_agent_md(directory: Path, name: str, *, description: str, body: str) 
     directory.mkdir(parents=True, exist_ok=True)
     file_path = directory / f"{name}.md"
     file_path.write_text(
-        f"---\n"
-        f"description: {description}\n"
-        f"tools:\n"
-        f"  - Read\n"
-        f"---\n\n"
-        f"{body}\n",
+        f"---\ndescription: {description}\ntools:\n  - Read\n---\n\n{body}\n",
         encoding="utf-8",
     )
     return file_path

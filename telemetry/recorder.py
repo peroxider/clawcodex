@@ -14,6 +14,7 @@ The recorder is the only public surface business code talks to:
   critical section; the underlying :class:`LocalJsonlStorage` writes
   are atomic per file.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -404,9 +405,7 @@ class _TelemetryRecorderImpl:
 
     # -- internals ------------------------------------------------------
 
-    def record_event(
-        self, event: TelemetryEvent, kind: str = "events"
-    ) -> None:
+    def record_event(self, event: TelemetryEvent, kind: str = "events") -> None:
         """Submit a pre-built :class:`TelemetryEvent` for redaction + storage.
 
         This is the public chokepoint for callers that need to attach
@@ -422,9 +421,7 @@ class _TelemetryRecorderImpl:
             return
         self._enqueue_event(event, kind=kind)
 
-    def _enqueue_event(
-        self, event: TelemetryEvent, kind: str = "events"
-    ) -> None:
+    def _enqueue_event(self, event: TelemetryEvent, kind: str = "events") -> None:
         try:
             redacted = self._redactor.redact_event(event)
         except Exception as exc:  # noqa: BLE001

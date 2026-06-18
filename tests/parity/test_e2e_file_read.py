@@ -3,6 +3,7 @@
 Simulates: User prompt → Read tool dispatched → file content returned.
 Tests the full tool dispatch pipeline for the Read tool.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -30,13 +31,15 @@ class TestE2EFileRead(unittest.TestCase):
         self.test_file.write_text("Hello, world!\nLine 2\nLine 3\n")
 
         self.py_file = self.root / "example.py"
-        self.py_file.write_text(textwrap.dedent("""\
+        self.py_file.write_text(
+            textwrap.dedent("""\
             def greet(name):
                 return f"Hello, {name}!"
 
             if __name__ == "__main__":
                 print(greet("world"))
-        """))
+        """)
+        )
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -82,11 +85,14 @@ class TestE2EFileRead(unittest.TestCase):
     def test_read_with_offset_and_limit(self) -> None:
         """Read tool supports offset and limit parameters."""
         result = self.registry.dispatch(
-            ToolCall(name="Read", input={
-                "file_path": str(self.test_file),
-                "offset": 1,
-                "limit": 2,
-            }),
+            ToolCall(
+                name="Read",
+                input={
+                    "file_path": str(self.test_file),
+                    "offset": 1,
+                    "limit": 2,
+                },
+            ),
             self.ctx,
         )
         self.assertFalse(result.is_error)
@@ -112,9 +118,7 @@ class TestE2EFileRead(unittest.TestCase):
         returns 'image/svg+xml', which the old MIME fallback wrongly treated as
         binary. TS FileReadTool has no MIME check and reads SVG as text."""
         svg = self.root / "favicon.svg"
-        svg.write_text(
-            '<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>'
-        )
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>')
         result = self.registry.dispatch(
             ToolCall(name="Read", input={"file_path": str(svg)}),
             self.ctx,
@@ -140,6 +144,7 @@ class TestE2EFileRead(unittest.TestCase):
     def test_read_png_returns_image_block(self) -> None:
         """PNG reads as image content. Mirrors TS callInner's image branch."""
         import base64
+
         png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 100
         png = self.root / "test.png"
         png.write_bytes(png_bytes)
@@ -186,13 +191,17 @@ class TestE2EFileRead(unittest.TestCase):
         import io
         from PIL import Image
         from src.utils.image_processor import IMAGE_TARGET_RAW_SIZE
+
         # 3500x2500 noise PNG -> ~14 MB raw, well over 3.75 MB cap
         img = Image.effect_noise((3500, 2500), 64).convert("RGB")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         big_bytes = buf.getvalue()
-        self.assertGreater(len(big_bytes), IMAGE_TARGET_RAW_SIZE,
-                           "test image must be over the cap to exercise resize")
+        self.assertGreater(
+            len(big_bytes),
+            IMAGE_TARGET_RAW_SIZE,
+            "test image must be over the cap to exercise resize",
+        )
         big = self.root / "huge.png"
         big.write_bytes(big_bytes)
         result = self.registry.dispatch(
@@ -219,6 +228,7 @@ class TestE2EFileRead(unittest.TestCase):
         TS detectImageFormatFromBuffer at imageResizer.ts:769-812."""
         import io
         from PIL import Image
+
         # Real JPEG bytes saved under .png extension
         img = Image.new("RGB", (50, 50), color="green")
         buf = io.BytesIO()
@@ -240,6 +250,7 @@ class TestE2EFileRead(unittest.TestCase):
         import io
         from PIL import Image
         from src.types.messages import UserMessage
+
         img = Image.new("RGB", (4000, 3000), color="white")
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=80)
@@ -268,6 +279,7 @@ class TestE2EFileRead(unittest.TestCase):
         import io
         from PIL import Image
         from src.types.messages import UserMessage
+
         img = Image.new("RGB", (50, 50), color="red")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -368,29 +380,37 @@ class TestE2EFileRead(unittest.TestCase):
 
         # Read is concurrency-safe so this exercises the parallel path.
         from src.tool_system.registry import get_all_base_tools
+
         tools = get_all_base_tools(self.registry)
-        results = asyncio.run(_run_tools_partitioned(
-            [block_a, block_b], self.registry, self.ctx, tools,
-        ))
+        results = asyncio.run(
+            _run_tools_partitioned(
+                [block_a, block_b],
+                self.registry,
+                self.ctx,
+                tools,
+            )
+        )
 
         # Primaries first, then extras: [a_result, b_result, a_meta, b_meta].
         # Both tool_results land before any meta message.
         tool_result_msgs = [
-            m for m in results
-            if m.content and hasattr(m.content[0], "tool_use_id")
+            m for m in results if m.content and hasattr(m.content[0], "tool_use_id")
         ]
         self.assertEqual(len(tool_result_msgs), 2)
         ids = {m.content[0].tool_use_id for m in tool_result_msgs}
         self.assertEqual(ids, {"tu_a", "tu_b"})
         for m in tool_result_msgs:
-            self.assertFalse(m.content[0].is_error,
-                             f"tu_{m.content[0].tool_use_id} regression: "
-                             f"got error placeholder instead of real result")
+            self.assertFalse(
+                m.content[0].is_error,
+                f"tu_{m.content[0].tool_use_id} regression: "
+                f"got error placeholder instead of real result",
+            )
 
         # End-to-end: feed through normalize_messages_for_api with an
         # assistant message carrying both tool_uses, and verify both
         # tool_results are present, non-error, and contain real content.
         from src.types.content_blocks import ToolUseBlock as TUB
+
         asst = AssistantMessage(
             content=[
                 TUB(id="tu_a", name="Read", input={"file_path": str(path_a)}),
@@ -412,25 +432,30 @@ class TestE2EFileRead(unittest.TestCase):
                     body = block.get("content")
                     # Reject the synthetic-error placeholder.
                     self.assertNotIn(
-                        "Tool result missing", str(body),
+                        "Tool result missing",
+                        str(body),
                         f"{tu_id}: API would receive synthetic placeholder "
                         f"instead of the real tool_result",
                     )
                     found_ids.add(tu_id)
-        self.assertEqual(found_ids, {"tu_a", "tu_b"},
-                         "API payload missing one or both tool_results")
+        self.assertEqual(
+            found_ids, {"tu_a", "tu_b"}, "API payload missing one or both tool_results"
+        )
 
     def test_pdf_pages_parser_accepts_single_page(self) -> None:
         from src.tool_system.tools.read import _parse_pdf_pages
+
         self.assertEqual(_parse_pdf_pages("3"), (3, 3))
 
     def test_pdf_pages_parser_accepts_range(self) -> None:
         from src.tool_system.tools.read import _parse_pdf_pages
+
         self.assertEqual(_parse_pdf_pages("1-5"), (1, 5))
         self.assertEqual(_parse_pdf_pages("10-20"), (10, 20))
 
     def test_pdf_pages_parser_rejects_malformed(self) -> None:
         from src.tool_system.tools.read import _parse_pdf_pages
+
         with self.assertRaises(ToolInputError):
             _parse_pdf_pages("abc")
         with self.assertRaises(ToolInputError):
@@ -445,6 +470,7 @@ class TestE2EFileRead(unittest.TestCase):
             PDF_MAX_PAGES_PER_READ,
             _parse_pdf_pages,
         )
+
         with self.assertRaises(ToolInputError):
             _parse_pdf_pages(f"1-{PDF_MAX_PAGES_PER_READ + 1}")
 
@@ -496,6 +522,7 @@ class TestE2EFileRead(unittest.TestCase):
         """_read_map_result_to_api emits an image content block for type=image,
         matching TS FileReadTool.ts mapToolResultToToolResultBlockParam."""
         from src.tool_system.tools.read import _read_map_result_to_api
+
         mapped = _read_map_result_to_api(
             {
                 "type": "image",
@@ -552,9 +579,12 @@ class TestE2EFileRead(unittest.TestCase):
         primary, _extras = _dispatch_single_tool(tu, self.registry, self.ctx, tools)
 
         body = primary.content[0].content
-        self.assertIsInstance(body, list,
+        self.assertIsInstance(
+            body,
+            list,
             "Aggregate-pressure path collapsed image to text instead of "
-            "short-circuiting via _has_image_block")
+            "short-circuiting via _has_image_block",
+        )
         self.assertEqual(body[0]["type"], "image")
         # The aggregate counter must NOT have grown by the image bytes:
         # ``_content_size`` returns 0 for image blocks
@@ -607,7 +637,8 @@ class TestE2EFileRead(unittest.TestCase):
         self.assertIsInstance(primary.content[0], ToolResultBlock)
         body = primary.content[0].content
         self.assertIsInstance(
-            body, list,
+            body,
+            list,
             "Bug B regression: tool_result.content is a string instead of "
             "a list of content blocks — image was JSON-stringified.",
         )
@@ -632,7 +663,8 @@ class TestE2EFileRead(unittest.TestCase):
         self.assertEqual(len(api_tool_results), 1)
         api_body = api_tool_results[0]["content"]
         self.assertIsInstance(
-            api_body, list,
+            api_body,
+            list,
             "API payload regressed: tool_result.content arrived as a string",
         )
         self.assertEqual(api_body[0]["type"], "image")
@@ -689,7 +721,9 @@ class TestE2EGlobGrep(unittest.TestCase):
     def test_grep_no_match_returns_empty(self) -> None:
         """Grep tool returns empty for no matches."""
         result = self.registry.dispatch(
-            ToolCall(name="Grep", input={"pattern": "nonexistent_string_xyz", "path": str(self.root)}),
+            ToolCall(
+                name="Grep", input={"pattern": "nonexistent_string_xyz", "path": str(self.root)}
+            ),
             self.ctx,
         )
         self.assertFalse(result.is_error)

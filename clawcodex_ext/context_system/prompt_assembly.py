@@ -85,6 +85,7 @@ def clear_context_caches() -> None:
 # getUserContext — mirrors TS context.ts getUserContext
 # ---------------------------------------------------------------------------
 
+
 async def get_user_context(
     cwd: str | None = None,
 ) -> dict[str, str]:
@@ -126,6 +127,7 @@ async def get_user_context(
 # getSystemContext — mirrors TS context.ts getSystemContext
 # ---------------------------------------------------------------------------
 
+
 async def get_system_context(
     cwd: str | None = None,
 ) -> dict[str, str]:
@@ -159,6 +161,7 @@ async def get_system_context(
 # fetchSystemPromptParts — mirrors TS queryContext.ts fetchSystemPromptParts
 # ---------------------------------------------------------------------------
 
+
 async def fetch_system_prompt_parts(
     cwd: str | None = None,
     custom_system_prompt: str | None = None,
@@ -185,7 +188,8 @@ async def fetch_system_prompt_parts(
     system_ctx_task = asyncio.ensure_future(get_system_context(cwd))
 
     user_context, system_context = await asyncio.gather(
-        user_ctx_task, system_ctx_task,
+        user_ctx_task,
+        system_ctx_task,
     )
 
     # Build default system prompt sections
@@ -202,6 +206,7 @@ async def fetch_system_prompt_parts(
 # appendSystemContext — mirrors TS api.ts appendSystemContext
 # ---------------------------------------------------------------------------
 
+
 def append_system_context(
     system_prompt: str | list[str],
     context: dict[str, str],
@@ -216,9 +221,7 @@ def append_system_context(
     else:
         parts = [system_prompt] if system_prompt else []
 
-    context_str = "\n".join(
-        f"{key}: {value}" for key, value in context.items() if value
-    )
+    context_str = "\n".join(f"{key}: {value}" for key, value in context.items() if value)
     if context_str:
         parts.append(context_str)
 
@@ -240,9 +243,7 @@ def append_system_context_blocks(
     marker so it doesn't extend the cached prefix.
     """
     result = list(blocks)
-    context_str = "\n".join(
-        f"{key}: {value}" for key, value in context.items() if value
-    )
+    context_str = "\n".join(f"{key}: {value}" for key, value in context.items() if value)
     if context_str:
         result.append({"type": "text", "text": context_str})
     return result
@@ -251,6 +252,7 @@ def append_system_context_blocks(
 # ---------------------------------------------------------------------------
 # prependUserContext — mirrors TS api.ts prependUserContext
 # ---------------------------------------------------------------------------
+
 
 def prepend_user_context(
     messages: list[Message],
@@ -264,9 +266,7 @@ def prepend_user_context(
     if not context:
         return messages
 
-    context_entries = "\n".join(
-        f"# {key}\n{value}" for key, value in context.items() if value
-    )
+    context_entries = "\n".join(f"# {key}\n{value}" for key, value in context.items() if value)
     if not context_entries:
         return messages
 
@@ -286,6 +286,7 @@ def prepend_user_context(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_local_iso_date() -> str:
     """Get current wall-clock datetime in local ISO format with hh:mm:ss.
@@ -440,6 +441,7 @@ def build_full_system_prompt(
                     has_auto_mem_path_override,
                     load_memory_prompt,
                 )
+
                 if has_auto_mem_path_override():
                     memory_prompt = load_memory_prompt()
                     if memory_prompt:
@@ -640,6 +642,7 @@ def build_full_system_prompt_blocks(
                     has_auto_mem_path_override,
                     load_memory_prompt,
                 )
+
                 if has_auto_mem_path_override():
                     memory_prompt = load_memory_prompt()
                     if memory_prompt:
@@ -734,6 +737,7 @@ def build_full_system_prompt_blocks(
     # (no GrowthBook port yet), so this defaults to "5m" universally until
     # a future WI populates it.
     from src.state.cache_state import should_1h_cache_ttl, should_use_global_cache_scope
+
     ttl = "1h" if should_1h_cache_ttl(query_source) else "5m"
 
     # WI-2.3: global-scope gate. Per chapter line 91, GLOBAL-tier blocks
@@ -741,11 +745,9 @@ def build_full_system_prompt_blocks(
     # (no MCP tools) AND (env-gated opt-in flag set). Defaults to OFF for
     # safety — see ``should_use_global_cache_scope`` docstring.
     has_mcp_tools = bool(mcp_servers)
-    use_global_scope = (
-        provider is not None
-        and should_use_global_cache_scope(
-            provider=provider, has_mcp_tools=has_mcp_tools,
-        )
+    use_global_scope = provider is not None and should_use_global_cache_scope(
+        provider=provider,
+        has_mcp_tools=has_mcp_tools,
     )
 
     # Helper that appends a section's content as a block. The LAST block
@@ -759,7 +761,8 @@ def build_full_system_prompt_blocks(
             if idx == len(group) - 1:
                 # Last block in this scope group → mark for caching.
                 cache_control: dict[str, Any] = {
-                    "type": "ephemeral", "ttl": ttl,
+                    "type": "ephemeral",
+                    "ttl": ttl,
                 }
                 # Only GLOBAL-tier blocks ever get scope='global'. SESSION
                 # and REQUEST tiers stay at the default org/session scope.
@@ -866,7 +869,7 @@ _DOING_TASKS_SECTION = (
     "- Be cautious not to introduce security vulnerabilities such as "
     "command injection, XSS, SQL injection, and other OWASP top 10 "
     "vulnerabilities.\n"
-    "- Don't add features, refactor code, or make \"improvements\" beyond "
+    '- Don\'t add features, refactor code, or make "improvements" beyond '
     "what was asked. A bug fix doesn't need surrounding code cleaned up. "
     "A simple feature doesn't need extra configurability. Don't add "
     "docstrings, comments, or type annotations to code you didn't change. "
@@ -950,8 +953,8 @@ _TONE_STYLE_SECTION = (
     "owner/repo#123 format (e.g. anthropics/claude-code#100) so they "
     "render as clickable links.\n"
     "- Do not use a colon before tool calls. Your tool calls may not be "
-    "shown directly in the output, so text like \"Let me read the file:\" "
-    "followed by a read tool call should just be \"Let me read the file.\" "
+    'shown directly in the output, so text like "Let me read the file:" '
+    'followed by a read tool call should just be "Let me read the file." '
     "with a period."
 )
 
@@ -1010,7 +1013,9 @@ def _build_intro_section(use_cache: bool) -> SystemPromptSection | None:
     if use_cache:
         cached = _prompt_cache.get("intro")
         if cached:
-            return SystemPromptSection(id="intro", content=cached, cache_scope=CacheScope.GLOBAL, order=0)
+            return SystemPromptSection(
+                id="intro", content=cached, cache_scope=CacheScope.GLOBAL, order=0
+            )
 
     content = _INTRO_SECTION
     if use_cache:
@@ -1024,32 +1029,47 @@ _build_identity_section = _build_intro_section
 
 def _build_system_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 2: System behavior norms. Mirrors TS getSimpleSystemSection()."""
-    return SystemPromptSection(id="system", content=_SYSTEM_SECTION, cache_scope=CacheScope.GLOBAL, order=1)
+    return SystemPromptSection(
+        id="system", content=_SYSTEM_SECTION, cache_scope=CacheScope.GLOBAL, order=1
+    )
 
 
 def _build_doing_tasks_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 3: Task execution guidelines. Mirrors TS getSimpleDoingTasksSection()."""
-    return SystemPromptSection(id="doing_tasks", content=_DOING_TASKS_SECTION, cache_scope=CacheScope.GLOBAL, order=2)
+    return SystemPromptSection(
+        id="doing_tasks", content=_DOING_TASKS_SECTION, cache_scope=CacheScope.GLOBAL, order=2
+    )
 
 
 def _build_actions_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 4: Cautious operations. Mirrors TS getActionsSection()."""
-    return SystemPromptSection(id="actions", content=_ACTIONS_SECTION, cache_scope=CacheScope.GLOBAL, order=3)
+    return SystemPromptSection(
+        id="actions", content=_ACTIONS_SECTION, cache_scope=CacheScope.GLOBAL, order=3
+    )
 
 
 def _build_using_tools_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 5: Tool usage guidelines. Mirrors TS getUsingYourToolsSection()."""
-    return SystemPromptSection(id="using_tools", content=_USING_TOOLS_SECTION, cache_scope=CacheScope.GLOBAL, order=4)
+    return SystemPromptSection(
+        id="using_tools", content=_USING_TOOLS_SECTION, cache_scope=CacheScope.GLOBAL, order=4
+    )
 
 
 def _build_tone_style_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 6: Tone and style. Mirrors TS getSimpleToneAndStyleSection()."""
-    return SystemPromptSection(id="tone_style", content=_TONE_STYLE_SECTION, cache_scope=CacheScope.GLOBAL, order=5)
+    return SystemPromptSection(
+        id="tone_style", content=_TONE_STYLE_SECTION, cache_scope=CacheScope.GLOBAL, order=5
+    )
 
 
 def _build_output_efficiency_section(use_cache: bool) -> SystemPromptSection | None:
     """Module 7: Output efficiency. Mirrors TS getOutputEfficiencySection()."""
-    return SystemPromptSection(id="output_efficiency", content=_OUTPUT_EFFICIENCY_SECTION, cache_scope=CacheScope.GLOBAL, order=6)
+    return SystemPromptSection(
+        id="output_efficiency",
+        content=_OUTPUT_EFFICIENCY_SECTION,
+        cache_scope=CacheScope.GLOBAL,
+        order=6,
+    )
 
 
 def _build_tool_docs_section(
@@ -1063,7 +1083,9 @@ def _build_tool_docs_section(
     if use_cache:
         cached = _prompt_cache.get("tool_docs")
         if cached:
-            return SystemPromptSection(id="tool_docs", content=cached, cache_scope=CacheScope.SESSION, order=10)
+            return SystemPromptSection(
+                id="tool_docs", content=cached, cache_scope=CacheScope.SESSION, order=10
+            )
 
     parts: list[str] = []
     parts.append("# Available Tools\n")
@@ -1089,7 +1111,9 @@ def _build_tool_docs_section(
     content = "\n\n".join(parts)
     if use_cache:
         _prompt_cache.set("tool_docs", content, scope=CacheScope.SESSION)
-    return SystemPromptSection(id="tool_docs", content=content, cache_scope=CacheScope.SESSION, order=10)
+    return SystemPromptSection(
+        id="tool_docs", content=content, cache_scope=CacheScope.SESSION, order=10
+    )
 
 
 def _build_env_section(cwd: str | None, use_cache: bool) -> SystemPromptSection | None:
@@ -1112,7 +1136,9 @@ def _build_env_section(cwd: str | None, use_cache: bool) -> SystemPromptSection 
 
     content = "\n".join(parts)
     # Environment changes per request (CWD, date)
-    return SystemPromptSection(id="environment", content=content, cache_scope=CacheScope.REQUEST, order=20)
+    return SystemPromptSection(
+        id="environment", content=content, cache_scope=CacheScope.REQUEST, order=20
+    )
 
 
 def _build_memory_section() -> SystemPromptSection | None:
@@ -1161,7 +1187,9 @@ def _build_mcp_section(
     if use_cache:
         cached = _prompt_cache.get("mcp")
         if cached:
-            return SystemPromptSection(id="mcp", content=cached, cache_scope=CacheScope.SESSION, order=30)
+            return SystemPromptSection(
+                id="mcp", content=cached, cache_scope=CacheScope.SESSION, order=30
+            )
 
     parts: list[str] = ["# MCP Servers\n"]
     for server in mcp_servers:
@@ -1184,7 +1212,9 @@ def _build_agent_section(
     if use_cache:
         cached = _prompt_cache.get("agents")
         if cached:
-            return SystemPromptSection(id="agents", content=cached, cache_scope=CacheScope.SESSION, order=40)
+            return SystemPromptSection(
+                id="agents", content=cached, cache_scope=CacheScope.SESSION, order=40
+            )
 
     parts: list[str] = ["# Available Agents\n"]
     for agent in agents:
@@ -1195,7 +1225,9 @@ def _build_agent_section(
     content = "\n".join(parts)
     if use_cache:
         _prompt_cache.set("agents", content, scope=CacheScope.SESSION)
-    return SystemPromptSection(id="agents", content=content, cache_scope=CacheScope.SESSION, order=40)
+    return SystemPromptSection(
+        id="agents", content=content, cache_scope=CacheScope.SESSION, order=40
+    )
 
 
 def _build_skill_section(
@@ -1208,7 +1240,9 @@ def _build_skill_section(
     if use_cache:
         cached = _prompt_cache.get("skills")
         if cached:
-            return SystemPromptSection(id="skills", content=cached, cache_scope=CacheScope.SESSION, order=50)
+            return SystemPromptSection(
+                id="skills", content=cached, cache_scope=CacheScope.SESSION, order=50
+            )
 
     parts: list[str] = ["# Available Skills\n"]
     for skill in skills:
@@ -1219,7 +1253,9 @@ def _build_skill_section(
     content = "\n".join(parts)
     if use_cache:
         _prompt_cache.set("skills", content, scope=CacheScope.SESSION)
-    return SystemPromptSection(id="skills", content=content, cache_scope=CacheScope.SESSION, order=50)
+    return SystemPromptSection(
+        id="skills", content=content, cache_scope=CacheScope.SESSION, order=50
+    )
 
 
 _OUTPUT_STYLE_PROMPTS: dict[str, str] = {
@@ -1237,7 +1273,12 @@ def _build_output_style_section(
     prompt = _OUTPUT_STYLE_PROMPTS.get(style, "")
     if not prompt:
         return None
-    return SystemPromptSection(id="output_style", content=f"# Output Style\n{prompt}", cache_scope=CacheScope.SESSION, order=60)
+    return SystemPromptSection(
+        id="output_style",
+        content=f"# Output Style\n{prompt}",
+        cache_scope=CacheScope.SESSION,
+        order=60,
+    )
 
 
 _PLAN_MODE_PROMPT = (
@@ -1253,7 +1294,9 @@ _PLAN_MODE_PROMPT = (
 
 
 def _build_plan_mode_section(use_cache: bool) -> SystemPromptSection | None:
-    return SystemPromptSection(id="plan_mode", content=_PLAN_MODE_PROMPT, cache_scope=CacheScope.REQUEST, order=70)
+    return SystemPromptSection(
+        id="plan_mode", content=_PLAN_MODE_PROMPT, cache_scope=CacheScope.REQUEST, order=70
+    )
 
 
 _NON_INTERACTIVE_PROMPT = (
@@ -1267,7 +1310,12 @@ _NON_INTERACTIVE_PROMPT = (
 
 
 def _build_non_interactive_section(use_cache: bool) -> SystemPromptSection | None:
-    return SystemPromptSection(id="non_interactive", content=_NON_INTERACTIVE_PROMPT, cache_scope=CacheScope.REQUEST, order=80)
+    return SystemPromptSection(
+        id="non_interactive",
+        content=_NON_INTERACTIVE_PROMPT,
+        cache_scope=CacheScope.REQUEST,
+        order=80,
+    )
 
 
 def _build_tool_restrictions_section(
@@ -1279,4 +1327,6 @@ def _build_tool_restrictions_section(
     for r in restrictions:
         parts.append(f"- {r}")
     content = "\n".join(parts)
-    return SystemPromptSection(id="tool_restrictions", content=content, cache_scope=CacheScope.REQUEST, order=90)
+    return SystemPromptSection(
+        id="tool_restrictions", content=content, cache_scope=CacheScope.REQUEST, order=90
+    )

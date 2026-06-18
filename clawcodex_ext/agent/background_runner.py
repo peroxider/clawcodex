@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 # Path helpers
 # ---------------------------------------------------------------------------
 
+
 def _sessions_dir() -> Path:
     return Path.home() / ".clawcodex" / "sessions"
 
@@ -56,6 +57,7 @@ def _runner_log_path(session_id: str) -> Path:
 # ---------------------------------------------------------------------------
 # Marker file I/O
 # ---------------------------------------------------------------------------
+
 
 def _write_runner_marker(session_id: str, pid: int) -> None:
     """Write the .background-runner.json marker (status=running)."""
@@ -100,6 +102,7 @@ def _update_runner_status(
 # ---------------------------------------------------------------------------
 # Public API — status / wait / cleanup
 # ---------------------------------------------------------------------------
+
 
 def get_background_runner_status(session_id: str) -> dict[str, Any] | None:
     """Read ``.background-runner.json`` and check whether the child is alive.
@@ -168,6 +171,7 @@ def cleanup_background_runner(session_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Headless agent loop (runs in the forked child)
 # ---------------------------------------------------------------------------
+
 
 def _run_agent_headless(
     session,
@@ -248,6 +252,7 @@ def _run_agent_headless(
 # Launch — the public fork/subprocess entry point
 # ---------------------------------------------------------------------------
 
+
 def launch_background_runner(
     session,
     provider,
@@ -270,8 +275,7 @@ def launch_background_runner(
     existing = get_background_runner_status(session.session_id)
     if existing is not None and existing.get("status") == "running":
         logger.warning(
-            "Session %s already has a running background agent (pid %s); "
-            "skipping duplicate fork",
+            "Session %s already has a running background agent (pid %s); skipping duplicate fork",
             session.session_id,
             existing.get("pid"),
         )
@@ -334,7 +338,11 @@ def _launch_via_fork(session, provider, tool_registry, tool_context, max_turns: 
 
 
 def _launch_via_subprocess(
-    session, provider, tool_registry, tool_context, max_turns: int,
+    session,
+    provider,
+    tool_registry,
+    tool_context,
+    max_turns: int,
 ) -> int | None:
     """Launch headless runner via subprocess (Windows fallback)."""
     import subprocess
@@ -357,9 +365,13 @@ def _launch_via_subprocess(
 
         proc = subprocess.Popen(
             [
-                sys.executable, "-m", "src.agent.background_runner",
-                "--session-id", session.session_id,
-                "--max-turns", str(max_turns),
+                sys.executable,
+                "-m",
+                "src.agent.background_runner",
+                "--session-id",
+                session.session_id,
+                "--max-turns",
+                str(max_turns),
             ],
             stdout=open(log_path, "a", encoding="utf-8"),  # noqa: SIM115
             stderr=subprocess.STDOUT,

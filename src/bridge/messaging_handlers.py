@@ -30,8 +30,7 @@ from typing import Any, Protocol, Union
 logger = logging.getLogger(__name__)
 
 OUTBOUND_ONLY_ERROR = (
-    'This session is outbound-only. Enable Remote Control locally to allow '
-    'inbound control.'
+    "This session is outbound-only. Enable Remote Control locally to allow inbound control."
 )
 
 
@@ -75,8 +74,7 @@ class _TransportLike(Protocol):
 
     def write(  # pragma: no cover -- structural
         self, message: dict[str, Any]
-    ) -> Any:
-        ...
+    ) -> Any: ...
 
 
 # ─── Handlers struct ───────────────────────────────────────────────────────
@@ -133,90 +131,90 @@ def handle_server_control_request(
     silent — unknown subtypes get an error response so the server doesn't
     hang waiting (~10-14 s timeout before WS kill).
     """
-    inner = request.get('request') or {}
+    inner = request.get("request") or {}
     if not isinstance(inner, dict):
-        logger.debug('[bridge:messaging] control_request.request is not a dict; ignoring')
+        logger.debug("[bridge:messaging] control_request.request is not a dict; ignoring")
         return
-    request_id = request.get('request_id', '')
-    subtype = inner.get('subtype')
+    request_id = request.get("request_id", "")
+    subtype = inner.get("subtype")
 
     response_inner: dict[str, Any]
 
     # Outbound-only: reply error for mutable requests so claude.ai doesn't
     # show false success. ``initialize`` must still succeed (server kills
     # the connection if it doesn't).
-    if handlers.outbound_only and subtype != 'initialize':
+    if handlers.outbound_only and subtype != "initialize":
         response_inner = {
-            'subtype': 'error',
-            'request_id': request_id,
-            'error': OUTBOUND_ONLY_ERROR,
+            "subtype": "error",
+            "request_id": request_id,
+            "error": OUTBOUND_ONLY_ERROR,
         }
-        _send(handlers, response_inner, subtype, kind='outbound-only')
+        _send(handlers, response_inner, subtype, kind="outbound-only")
         return
 
-    if subtype == 'initialize':
+    if subtype == "initialize":
         # Minimal capabilities — the REPL handles commands/models/account
         # info itself.
         response_inner = {
-            'subtype': 'success',
-            'request_id': request_id,
-            'response': {
-                'commands': [],
-                'output_style': 'normal',
-                'available_output_styles': ['normal'],
-                'models': [],
-                'account': {},
-                'pid': os.getpid(),
+            "subtype": "success",
+            "request_id": request_id,
+            "response": {
+                "commands": [],
+                "output_style": "normal",
+                "available_output_styles": ["normal"],
+                "models": [],
+                "account": {},
+                "pid": os.getpid(),
             },
         }
-    elif subtype == 'set_model':
+    elif subtype == "set_model":
         if handlers.on_set_model is not None:
-            handlers.on_set_model(inner.get('model'))
-        response_inner = {'subtype': 'success', 'request_id': request_id}
-    elif subtype == 'set_max_thinking_tokens':
+            handlers.on_set_model(inner.get("model"))
+        response_inner = {"subtype": "success", "request_id": request_id}
+    elif subtype == "set_max_thinking_tokens":
         if handlers.on_set_max_thinking_tokens is not None:
-            handlers.on_set_max_thinking_tokens(inner.get('max_thinking_tokens'))
-        response_inner = {'subtype': 'success', 'request_id': request_id}
-    elif subtype == 'set_permission_mode':
+            handlers.on_set_max_thinking_tokens(inner.get("max_thinking_tokens"))
+        response_inner = {"subtype": "success", "request_id": request_id}
+    elif subtype == "set_permission_mode":
         # The callback returns a Verdict so we can send an error
         # control_response without importing policy gates here.
         # If no callback is registered (daemon context, which doesn't
         # wire this), return an error verdict rather than silent
         # false-success — the chapter-prescribed pattern at
         # bridgeMessaging.ts:336-340 (WI-3.7b).
-        mode = inner.get('mode', '')
+        mode = inner.get("mode", "")
         if handlers.on_set_permission_mode is None:
             verdict: Verdict = Err(
                 error=(
-                    'set_permission_mode is not supported in this context '
-                    '(on_set_permission_mode callback not registered)'
+                    "set_permission_mode is not supported in this context "
+                    "(on_set_permission_mode callback not registered)"
                 )
             )
         else:
             verdict = handlers.on_set_permission_mode(mode)
         if isinstance(verdict, Ok):
-            response_inner = {'subtype': 'success', 'request_id': request_id}
+            response_inner = {"subtype": "success", "request_id": request_id}
         else:
             response_inner = {
-                'subtype': 'error',
-                'request_id': request_id,
-                'error': verdict.error,
+                "subtype": "error",
+                "request_id": request_id,
+                "error": verdict.error,
             }
-    elif subtype == 'interrupt':
+    elif subtype == "interrupt":
         if handlers.on_interrupt is not None:
             handlers.on_interrupt()
-        response_inner = {'subtype': 'success', 'request_id': request_id}
+        response_inner = {"subtype": "success", "request_id": request_id}
     else:
         # Unknown subtype — respond with error so the server doesn't
         # hang waiting for a reply that never comes. Chapter explicit
         # pattern at bridgeMessaging.ts:373-384.
         response_inner = {
-            'subtype': 'error',
-            'request_id': request_id,
-            'error': f'REPL bridge does not handle control_request subtype: {subtype}',
+            "subtype": "error",
+            "request_id": request_id,
+            "error": f"REPL bridge does not handle control_request subtype: {subtype}",
         }
 
-    _send(handlers, response_inner, subtype, kind='dispatch')
+    _send(handlers, response_inner, subtype, kind="dispatch")
 
 
 def _send(
@@ -235,27 +233,27 @@ def _send(
     ``bridgeMessaging.ts:278, 387``.
     """
     envelope: dict[str, Any] = {
-        'type': 'control_response',
-        'response': response_inner,
-        'session_id': handlers.session_id,
+        "type": "control_response",
+        "response": response_inner,
+        "session_id": handlers.session_id,
     }
     result = handlers.transport.write(envelope)
     if inspect.isawaitable(result):
         asyncio.get_running_loop().create_task(result)
     logger.debug(
-        '[bridge:messaging] Sent control_response (%s) for %s request_id=%s result=%s',
+        "[bridge:messaging] Sent control_response (%s) for %s request_id=%s result=%s",
         kind,
         subtype,
-        response_inner.get('request_id'),
-        response_inner.get('subtype'),
+        response_inner.get("request_id"),
+        response_inner.get("subtype"),
     )
 
 
 __all__ = [
-    'Err',
-    'OUTBOUND_ONLY_ERROR',
-    'Ok',
-    'ServerControlRequestHandlers',
-    'Verdict',
-    'handle_server_control_request',
+    "Err",
+    "OUTBOUND_ONLY_ERROR",
+    "Ok",
+    "ServerControlRequestHandlers",
+    "Verdict",
+    "handle_server_control_request",
 ]

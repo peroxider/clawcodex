@@ -15,18 +15,21 @@ class TestContextWindowForModel(unittest.TestCase):
     def test_claude_sonnet_4_6(self):
         """Claude Sonnet 4-6 returns 200k."""
         from src.context_system.context_analyzer import get_context_window_for_model
+
         result = get_context_window_for_model("claude-sonnet-4-6")
         self.assertEqual(result, 200_000)
 
     def test_gpt_4o(self):
         """GPT-4o returns 128k."""
         from src.context_system.context_analyzer import get_context_window_for_model
+
         result = get_context_window_for_model("gpt-4o")
         self.assertEqual(result, 128_000)
 
     def test_unknown_model_defaults(self):
         """Unknown model returns default 200k."""
         from src.context_system.context_analyzer import get_context_window_for_model
+
         result = get_context_window_for_model("unknown-model-xyz")
         self.assertEqual(result, 200_000)
 
@@ -36,7 +39,11 @@ class TestAnalyzeContext(unittest.TestCase):
 
     def test_empty_inputs(self):
         """Empty inputs returns reasonable defaults."""
-        from src.context_system.context_analyzer import analyze_context, get_context_window_for_model
+        from src.context_system.context_analyzer import (
+            analyze_context,
+            get_context_window_for_model,
+        )
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -52,6 +59,7 @@ class TestAnalyzeContext(unittest.TestCase):
     def test_system_prompt_tokens(self):
         """System prompt contributes to total."""
         from src.context_system.context_analyzer import analyze_context
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -66,13 +74,18 @@ class TestAnalyzeContext(unittest.TestCase):
     def test_tool_schemas_tokens(self):
         """Tool schemas contribute to total."""
         from src.context_system.context_analyzer import analyze_context
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
             system_prompt="",
             tool_schemas=[
                 {"name": "Read", "description": "Read a file", "input_schema": {"type": "object"}},
-                {"name": "Write", "description": "Write a file", "input_schema": {"type": "object"}},
+                {
+                    "name": "Write",
+                    "description": "Write a file",
+                    "input_schema": {"type": "object"},
+                },
             ],
             claude_md_content="",
         )
@@ -83,6 +96,7 @@ class TestAnalyzeContext(unittest.TestCase):
     def test_message_tokens(self):
         """Messages contribute to total."""
         from src.context_system.context_analyzer import analyze_context
+
         result = analyze_context(
             conversation_api_messages=[
                 {"role": "user", "content": "Hello world"},
@@ -100,6 +114,7 @@ class TestAnalyzeContext(unittest.TestCase):
     def test_free_space_calculation(self):
         """Free space = max_tokens - total_usage."""
         from src.context_system.context_analyzer import analyze_context
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -116,6 +131,7 @@ class TestAnalyzeContext(unittest.TestCase):
     def test_api_usage_overrides_total(self):
         """API usage, when provided, overrides estimated total."""
         from src.context_system.context_analyzer import analyze_context
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -127,7 +143,7 @@ class TestAnalyzeContext(unittest.TestCase):
                 "output_tokens": 10000,
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
-            }
+            },
         )
         # Total should reflect the API usage sum
         self.assertEqual(result.total_tokens, 50000)
@@ -139,6 +155,7 @@ class TestFormatContextAsMarkdown(unittest.TestCase):
     def test_produces_valid_markdown(self):
         """Output contains expected Markdown structure."""
         from src.context_system.context_analyzer import analyze_context, format_context_as_markdown
+
         result = analyze_context(
             conversation_api_messages=[
                 {"role": "user", "content": "Hello"},
@@ -157,6 +174,7 @@ class TestFormatContextAsMarkdown(unittest.TestCase):
     def test_shows_system_prompt_category(self):
         """System prompt appears in table."""
         from src.context_system.context_analyzer import analyze_context, format_context_as_markdown
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -170,6 +188,7 @@ class TestFormatContextAsMarkdown(unittest.TestCase):
     def test_shows_memory_files(self):
         """Memory files section appears when CLAUDE.md is present."""
         from src.context_system.context_analyzer import analyze_context, format_context_as_markdown
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -184,6 +203,7 @@ class TestFormatContextAsMarkdown(unittest.TestCase):
     def test_shows_api_usage(self):
         """API usage section appears when usage data is provided."""
         from src.context_system.context_analyzer import analyze_context, format_context_as_markdown
+
         result = analyze_context(
             conversation_api_messages=[],
             model="claude-sonnet-4-6",
@@ -195,7 +215,7 @@ class TestFormatContextAsMarkdown(unittest.TestCase):
                 "output_tokens": 5000,
                 "cache_creation_input_tokens": 2000,
                 "cache_read_input_tokens": 500,
-            }
+            },
         )
         markdown = format_context_as_markdown(result)
         self.assertIn("### API Usage", markdown)

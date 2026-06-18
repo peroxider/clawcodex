@@ -48,10 +48,11 @@ def strip_empty_lines(content: str) -> str:
     if start > end:
         return ""
 
-    return "\n".join(lines[start:end + 1])
+    return "\n".join(lines[start : end + 1])
 
 
 def strip_leading_blank_lines(s: str) -> str:
     """Remove leading lines that are blank or whitespace-only."""
     import re
+
     return re.sub(r"^(\s*\n)+", "", s)

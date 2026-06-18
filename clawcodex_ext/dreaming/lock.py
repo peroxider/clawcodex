@@ -17,6 +17,7 @@ Operations:
 * :func:`list_sessions_touched_since` — session ids with mtime
   after *since_ms* (used by the session gate).
 """
+
 from __future__ import annotations
 
 import logging

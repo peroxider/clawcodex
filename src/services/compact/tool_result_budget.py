@@ -35,6 +35,7 @@ MANIFEST_FILENAME = "budget_manifest.json"
 @dataclass
 class StoredResult:
     """Record of a single offloaded tool result."""
+
     tool_use_id: str
     path: str
     original_tokens: int
@@ -43,6 +44,7 @@ class StoredResult:
 @dataclass
 class BudgetManifest:
     """Tracks all offloaded tool results for the session."""
+
     stored: list[StoredResult] = field(default_factory=list)
 
     def save(self, budget_dir: Path) -> None:
@@ -155,9 +157,7 @@ def apply_tool_result_budget(
                 if est > max_result_tokens:
                     # Offload to disk
                     content_str = _content_to_string(block.content)
-                    file_hash = hashlib.sha256(
-                        block.tool_use_id.encode()
-                    ).hexdigest()[:12]
+                    file_hash = hashlib.sha256(block.tool_use_id.encode()).hexdigest()[:12]
                     fname = f"result_{file_hash}.txt"
                     fpath = budget_dir / fname
                     fpath.write_text(content_str, encoding="utf-8")
@@ -172,11 +172,13 @@ def apply_tool_result_budget(
                     changed = True
                     tokens_saved += est - count_tokens(ref)
 
-                    manifest.stored.append(StoredResult(
-                        tool_use_id=block.tool_use_id,
-                        path=str(fpath),
-                        original_tokens=est,
-                    ))
+                    manifest.stored.append(
+                        StoredResult(
+                            tool_use_id=block.tool_use_id,
+                            path=str(fpath),
+                            original_tokens=est,
+                        )
+                    )
                     already_stored.add(block.tool_use_id)
                 else:
                     new_content.append(block)
@@ -201,11 +203,13 @@ def apply_tool_result_budget(
                     changed = True
                     tokens_saved += est - count_tokens(ref)
 
-                    manifest.stored.append(StoredResult(
-                        tool_use_id=tuid,
-                        path=str(fpath),
-                        original_tokens=est,
-                    ))
+                    manifest.stored.append(
+                        StoredResult(
+                            tool_use_id=tuid,
+                            path=str(fpath),
+                            original_tokens=est,
+                        )
+                    )
                     already_stored.add(tuid)
                 else:
                     new_content.append(block)

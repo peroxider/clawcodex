@@ -30,12 +30,14 @@ def make_repl():
     mock_provider = Mock()
     mock_provider.model = "glm-4.5"
 
-    with patch(
-        "src.repl.core.get_provider_config",
-        return_value={"api_key": "x", "default_model": "glm-4.5"},
-    ), patch("src.repl.core.Session.create"), patch(
-        "src.repl.core.get_provider_class"
-    ) as gpc:
+    with (
+        patch(
+            "src.repl.core.get_provider_config",
+            return_value={"api_key": "x", "default_model": "glm-4.5"},
+        ),
+        patch("src.repl.core.Session.create"),
+        patch("src.repl.core.get_provider_class") as gpc,
+    ):
         gpc.return_value = mock_provider
         return ClawcodexREPL(provider_name="glm")
 
@@ -86,7 +88,6 @@ def show(label: str, keystrokes: str, expected: str) -> None:
 SCENARIOS: list[tuple[str, str, str]] = [
     # Plain Enter: the terminal sends \r. This should submit.
     ("plain Enter submits", "hello\r", "hello"),
-
     # Alt+Enter on Windows Terminal / VSCode / xterm:
     # the terminal sends ESC + \r, which prompt_toolkit parses as
     # (Escape, ControlM). We bind that to "insert newline".
@@ -95,14 +96,12 @@ SCENARIOS: list[tuple[str, str, str]] = [
         "line 1\x1b\rline 2\r",
         "line 1\nline 2",
     ),
-
     # Portable fallback: backslash then Enter. Works on ANY terminal.
     (
         "backslash + Enter inserts newline (portable fallback)",
         "line 1\\\rline 2\r",
         "line 1\nline 2",
     ),
-
     # Kitty keyboard protocol Shift+Enter (CSI 13;2u).
     # Terminals: Kitty, WezTerm, Ghostty, iTerm2 (with CSI u mode).
     # We registered this in ANSI_SEQUENCES → (Escape, ControlM).
@@ -111,7 +110,6 @@ SCENARIOS: list[tuple[str, str, str]] = [
         "line 1\x1b[13;2uline 2\r",
         "line 1\nline 2",
     ),
-
     # xterm modifyOtherKeys Shift+Enter (CSI 27;2;13~).
     # Terminals: VSCode with modifyOtherKeys enabled, xterm with it on.
     # Whether this inserts a newline or submits depends on the mapping.
@@ -120,21 +118,18 @@ SCENARIOS: list[tuple[str, str, str]] = [
         "line 1\x1b[27;2;13~line 2\r",
         "line 1\nline 2",  # what we WANT; flags a gap if it doesn't.
     ),
-
     # Multiple backslash-Enter continuations.
     (
         "multi-line via backslash-Enter x2",
         "a\\\rb\\\rc\r",
         "a\nb\nc",
     ),
-
     # Mixed: Alt+Enter then backslash+Enter then plain Enter.
     (
         "mixed Alt+Enter and backslash+Enter",
         "one\x1b\rtwo\\\rthree\r",
         "one\ntwo\nthree",
     ),
-
     # Regression: a lone backslash in the middle of a line must NOT make
     # Enter act as a newline. Cursor is AFTER 'bar', so ``text[pos-1]``
     # is 'r', not '\\'. Expected: submits the whole literal string.

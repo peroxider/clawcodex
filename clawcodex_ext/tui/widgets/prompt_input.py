@@ -256,7 +256,7 @@ def _current_agent_token(text_before_cursor: str) -> str | None:
     if at_pos > 0 and not text_before_cursor[at_pos - 1].isspace():
         return None
     token = match.group(1)  # e.g. "agent-explor" or "agent-"
-    return token[len("agent-"):]  # e.g. "explor" or ""
+    return token[len("agent-") :]  # e.g. "explor" or ""
 
 
 class PromptInput(Vertical):
@@ -518,9 +518,7 @@ class PromptInput(Vertical):
         ## _log(f'[prompt_input] posting PromptSubmitted: {text}')
         self.post_message(PromptSubmitted(text=text))
 
-    def on_option_list_option_selected(
-        self, event: OptionList.OptionSelected
-    ) -> None:
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Handle Enter/Space on a suggestion row — insert the command."""
         if event.option.id:
             self._input.value = event.option.id
@@ -696,16 +694,13 @@ class PromptInput(Vertical):
         """Show a dim ghost-text suggestion from history below the input."""
         match = self._find_history_suggestion(text)
         if match is not None:
-            suffix = match[len(text):]
+            suffix = match[len(text) :]
             # Mirror the REPL's ``_ghost_hint_for`` shape so the TUI and
             # REPL hint read identically. ``TAB`` is always advertised
             # as a context-aware secondary accept key unless the user
             # has already remapped the primary key to ``tab`` itself.
             base = display_key(self._accept_key_raw)
-            if (
-                self._accept_tab_alias
-                and to_prompt_toolkit_key(self._accept_key_raw) != "tab"
-            ):
+            if self._accept_tab_alias and to_prompt_toolkit_key(self._accept_key_raw) != "tab":
                 base = f"{base} or {display_key('tab')}"
             hint = Text()
             hint.append(suffix, style="dim")
@@ -823,7 +818,7 @@ class PromptInput(Vertical):
         i = cursor - 1
         while i >= 0 and not prefix[i].isspace():
             i -= 1
-        current_token = prefix[i + 1: cursor]
+        current_token = prefix[i + 1 : cursor]
 
         if not current_token:
             self._hide_message_suggestions()
@@ -840,9 +835,7 @@ class PromptInput(Vertical):
         # Rank via shared helper. The TUI surfaces up to
         # ``_MAX_VISIBLE_SUGGESTIONS`` (10) entries, more than the REPL's
         # 5 to compensate for Textual popup height.
-        ranked = rank_message_history(
-            history, token_lower, limit=_MAX_VISIBLE_SUGGESTIONS
-        )
+        ranked = rank_message_history(history, token_lower, limit=_MAX_VISIBLE_SUGGESTIONS)
 
         if not ranked:
             self._hide_message_suggestions()
@@ -854,9 +847,7 @@ class PromptInput(Vertical):
             # Textual 0.79 的 OptionList.add_option 不再接受 id=
             # kwarg；通过 Option 包装传入。id 是选中后回填到 input
             # 的全文（display 仅作展示截断）。
-            self._message_suggestions.add_option(
-                Option(display, id=full_msg)
-            )
+            self._message_suggestions.add_option(Option(display, id=full_msg))
         self._message_suggestions.highlighted = 0
         self._message_suggestions.remove_class("-hidden")
 
@@ -874,10 +865,7 @@ class PromptInput(Vertical):
         lowercase a-z presence for fast pre-filtering in ``_filter_candidates``.
         """
         now = time.monotonic()
-        if (
-            self._file_cache
-            and (now - self._file_cache_built_at) < _FILE_CACHE_TTL
-        ):
+        if self._file_cache and (now - self._file_cache_built_at) < _FILE_CACHE_TTL:
             return self._file_cache, self._file_cache_bitmaps
 
         paths = _list_git_files(self._cwd)
@@ -920,7 +908,10 @@ class PromptInput(Vertical):
             return
 
         matches = _filter_candidates(
-            candidates, query, _AT_FILE_MAX_SUGGESTIONS, bitmaps=bitmaps,
+            candidates,
+            query,
+            _AT_FILE_MAX_SUGGESTIONS,
+            bitmaps=bitmaps,
         )
         if not matches:
             self._hide_at_file_suggestions()
@@ -930,9 +921,7 @@ class PromptInput(Vertical):
         for path in matches:
             # Textual 0.79: id= kwarg 不再被 add_option 接受，
             # 改用 Option 包装。
-            self._at_file_suggestions.add_option(
-                Option(path, id="@" + path)
-            )
+            self._at_file_suggestions.add_option(Option(path, id="@" + path))
         self._at_file_suggestions.highlighted = 0
         self._at_file_suggestions.remove_class("-hidden")
 

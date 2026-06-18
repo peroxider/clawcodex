@@ -160,9 +160,11 @@ ToolPermissionRulesBySource = dict[PermissionRuleSource, list[str]]
 @dataclass(frozen=True)
 class RuleDecisionReason:
     type: Literal["rule"] = "rule"
-    rule: PermissionRule = field(default_factory=lambda: PermissionRule(
-        source="session", rule_behavior="deny", rule_value=PermissionRuleValue(tool_name="")
-    ))
+    rule: PermissionRule = field(
+        default_factory=lambda: PermissionRule(
+            source="session", rule_behavior="deny", rule_value=PermissionRuleValue(tool_name="")
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -217,6 +219,7 @@ class ClassifierDecisionReason:
     field names which classifier produced the decision (e.g. ``"auto-mode"``,
     ``"dangerous-agent-action"``); ``reason`` is the prose rationale.
     """
+
     type: Literal["classifier"] = "classifier"
     classifier: str = ""
     reason: str = ""
@@ -230,6 +233,7 @@ class PermissionPromptToolDecisionReason:
     external tool (typically MCP-provided) is configured as the permission
     prompt and resolves the decision before reaching the user.
     """
+
     type: Literal["permissionPromptTool"] = "permissionPromptTool"
     permission_prompt_tool_name: str = ""
     tool_result: Any | None = None
@@ -243,6 +247,7 @@ class SandboxOverrideDecisionReason:
     command is on the excluded-from-sandbox list, or the user explicitly
     passed ``dangerouslyDisableSandbox``.
     """
+
     type: Literal["sandboxOverride"] = "sandboxOverride"
     reason: Literal["excludedCommand", "dangerouslyDisableSandbox"] = "excludedCommand"
 
@@ -320,15 +325,9 @@ class ToolPermissionContext:
     additional_working_directories: dict[str, AdditionalWorkingDirectory] = field(
         default_factory=dict
     )
-    always_allow_rules: ToolPermissionRulesBySource = field(
-        default_factory=_empty_rules_by_source
-    )
-    always_deny_rules: ToolPermissionRulesBySource = field(
-        default_factory=_empty_rules_by_source
-    )
-    always_ask_rules: ToolPermissionRulesBySource = field(
-        default_factory=_empty_rules_by_source
-    )
+    always_allow_rules: ToolPermissionRulesBySource = field(default_factory=_empty_rules_by_source)
+    always_deny_rules: ToolPermissionRulesBySource = field(default_factory=_empty_rules_by_source)
+    always_ask_rules: ToolPermissionRulesBySource = field(default_factory=_empty_rules_by_source)
     is_bypass_permissions_mode_available: bool = False
     should_avoid_permission_prompts: bool = False
     # When True, async sub-agents that can still surface prompts (today:

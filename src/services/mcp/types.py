@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional, get_args
 
-ConfigScope = Literal[
-    "local", "user", "project", "dynamic", "enterprise", "claudeai", "managed"
-]
+ConfigScope = Literal["local", "user", "project", "dynamic", "enterprise", "claudeai", "managed"]
 
 TransportType = Literal["stdio", "sse", "http", "ws", "sdk"]
 
@@ -147,11 +145,7 @@ class DisabledMCPServer:
 
 
 MCPServerConnection = (
-    ConnectedMCPServer
-    | FailedMCPServer
-    | NeedsAuthMCPServer
-    | PendingMCPServer
-    | DisabledMCPServer
+    ConnectedMCPServer | FailedMCPServer | NeedsAuthMCPServer | PendingMCPServer | DisabledMCPServer
 )
 
 
@@ -203,9 +197,7 @@ class MCPCliState:
 KNOWN_TRANSPORT_TYPES: tuple[str, ...] = get_args(TransportType)
 
 
-def _validate_str_str_dict(
-    value: Any, field_name: str, errors: list[str]
-) -> dict[str, str] | None:
+def _validate_str_str_dict(value: Any, field_name: str, errors: list[str]) -> dict[str, str] | None:
     """Validate that ``value`` is a ``dict[str, str]``; append errors and return None on failure."""
     if value is None:
         return None
@@ -277,9 +269,7 @@ def validate_server_config(data: Any) -> tuple[McpServerConfig | None, list[str]
     server_type: str | None = server_type_raw
     if server_type is not None and server_type not in KNOWN_TRANSPORT_TYPES:
         expected = ", ".join(KNOWN_TRANSPORT_TYPES)
-        return None, [
-            f"unknown transport type: {server_type!r}. Expected one of: {expected}"
-        ]
+        return None, [f"unknown transport type: {server_type!r}. Expected one of: {expected}"]
 
     # ``authServerMetadataUrl`` is the camelCase JSON key (Phase 4 WI-4.1
     # escape hatch). Accept both spellings so existing configs work either way.
@@ -298,9 +288,7 @@ def validate_server_config(data: Any) -> tuple[McpServerConfig | None, list[str]
             data.get("url"), "url", errors, required=True, allow_empty=False
         )
         headers = _validate_str_str_dict(data.get("headers"), "headers", errors)
-        headers_helper = _validate_string_field(
-            data.get("headersHelper"), "headersHelper", errors
-        )
+        headers_helper = _validate_string_field(data.get("headersHelper"), "headersHelper", errors)
         if errors or url is None:
             return None, errors
         remote_ctor = {
@@ -334,13 +322,9 @@ def validate_server_config(data: Any) -> tuple[McpServerConfig | None, list[str]
         if not isinstance(args_raw, list):
             errors.append("args must be a list of strings")
         else:
-            invalid_indices = [
-                i for i, v in enumerate(args_raw) if not isinstance(v, str)
-            ]
+            invalid_indices = [i for i, v in enumerate(args_raw) if not isinstance(v, str)]
             if invalid_indices:
-                errors.append(
-                    f"args[{invalid_indices[0]}] must be a string"
-                )
+                errors.append(f"args[{invalid_indices[0]}] must be a string")
             else:
                 args = list(args_raw)
 

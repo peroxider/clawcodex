@@ -28,7 +28,9 @@ def build_autonomy_status(workspace_root: Path, *, deep: bool = False) -> str:
         selected_runs = runs if deep else runs[:10]
         lines.extend(_run_table(selected_runs, deep=deep))
         if not deep and len(runs) > len(selected_runs):
-            lines.append(f"  ... {len(runs) - len(selected_runs)} older runs hidden; use --deep to show all.")
+            lines.append(
+                f"  ... {len(runs) - len(selected_runs)} older runs hidden; use --deep to show all."
+            )
     return "\n".join(lines)
 
 
@@ -39,7 +41,9 @@ def build_autonomy_runs(workspace_root: Path, *, deep: bool = False) -> str:
     selected_runs = runs if deep else runs[:20]
     lines = ["Scheduled-task runs", *_run_table(selected_runs, deep=deep)]
     if not deep and len(runs) > len(selected_runs):
-        lines.append(f"... {len(runs) - len(selected_runs)} older runs hidden; use --deep to show all.")
+        lines.append(
+            f"... {len(runs) - len(selected_runs)} older runs hidden; use --deep to show all."
+        )
     return "\n".join(lines)
 
 
@@ -77,14 +81,18 @@ def _run_table(runs: list[CronRun], *, deep: bool = False) -> list[str]:
         lines.append(f"    task_id: {run.task_id}")
         lines.append(f"    trigger: {run.trigger}")
         lines.append(f"    runtime: {run.runtime}")
-        lines.append(f"    source: {run.source_id or run.task_id} ({_truncate(run.source_label or run.prompt, 80)})")
+        lines.append(
+            f"    source: {run.source_id or run.task_id} ({_truncate(run.source_label or run.prompt, 80)})"
+        )
         lines.append(f"    prompt: {_truncate(run.prompt_preview or run.prompt, 120)}")
         lines.append(f"    queued: {run.queued_at}")
         lines.append(f"    started: {run.started_at or '—'}")
         lines.append(f"    ended: {run.ended_at or run.completed_at or '—'}")
         lines.append(f"    root_dir: {run.root_dir or '—'}")
         lines.append(f"    current_dir: {run.current_dir or '—'}")
-        lines.append(f"    owner: {run.owner_key} pid={run.owner_process_id or '—'} session={run.owner_session_id or '—'}")
+        lines.append(
+            f"    owner: {run.owner_key} pid={run.owner_process_id or '—'} session={run.owner_session_id or '—'}"
+        )
         if run.error:
             lines.append(f"    error: {_truncate(run.error, 160)}")
     return lines

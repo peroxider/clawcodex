@@ -71,6 +71,7 @@ def clear_session_cache() -> None:
 @dataclass
 class SessionMetadata:
     """Metadata for a session."""
+
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     start_time: float = field(default_factory=time.time)
     model: str = ""

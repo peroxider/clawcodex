@@ -31,6 +31,7 @@ C5 rule (mutator must be sync, never ``await`` under the lock) holds
 end-to-end. Async work happens outside the lock, exactly like
 ``kill_async_agent`` does in ``local_agent.py``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -271,9 +272,7 @@ class DreamTask:
     name: str = "DreamTask"
     type: Literal["dream"] = "dream"
 
-    async def kill(
-        self, task_id: str, registry: "RuntimeTaskRegistry"
-    ) -> None:
+    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
         rollback_dream_lock_after_kill(task_id, registry)
 
 

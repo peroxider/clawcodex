@@ -7,6 +7,7 @@ Covers:
 - Step 11b (empty result handling)
 - Step 14 (classify_tool_error invoked on errors)
 """
+
 from __future__ import annotations
 
 import math
@@ -103,7 +104,9 @@ class TestProcessToolResultBlockEnforcesPerToolLimit(unittest.TestCase):
             max_result_size_chars=30_000,
         )
         out = process_tool_result_block(
-            tool, big, "bash-id",
+            tool,
+            big,
+            "bash-id",
             tool_results_dir=self.results_dir,
         )
         self.assertIn(PERSISTED_OUTPUT_TAG, out["content"])
@@ -123,7 +126,9 @@ class TestProcessToolResultBlockEnforcesPerToolLimit(unittest.TestCase):
             max_result_size_chars=math.inf,  # type: ignore[arg-type]
         )
         out = process_tool_result_block(
-            tool, big, "read-id",
+            tool,
+            big,
+            "read-id",
             tool_results_dir=self.results_dir,
         )
         # 100_000 chars unchanged — no wrapper.
@@ -142,7 +147,9 @@ class TestProcessToolResultBlockEnforcesPerToolLimit(unittest.TestCase):
             max_result_size_chars=10_000,
         )
         out = process_tool_result_block(
-            tool, small, "my-id",
+            tool,
+            small,
+            "my-id",
             tool_results_dir=self.results_dir,
         )
         self.assertEqual(out["content"], "ok")
@@ -165,7 +172,9 @@ class TestEmptyResultHandling(unittest.TestCase):
             call=_call,
         )
         out = process_tool_result_block(
-            tool, "", "tu-1",
+            tool,
+            "",
+            "tu-1",
             tool_results_dir=self.results_dir,
         )
         self.assertEqual(out["content"], "(QuietTool completed with no output)")
@@ -180,7 +189,9 @@ class TestEmptyResultHandling(unittest.TestCase):
             call=_call,
         )
         out = process_tool_result_block(
-            tool, "   \n\n  ", "tu-2",
+            tool,
+            "   \n\n  ",
+            "tu-2",
             tool_results_dir=self.results_dir,
         )
         self.assertEqual(

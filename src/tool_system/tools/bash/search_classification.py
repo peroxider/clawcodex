@@ -9,32 +9,77 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_SPLIT_RE = re.compile(
-    r"(>>|>&|>|&&|\|\||[|;])"
+_SPLIT_RE = re.compile(r"(>>|>&|>|&&|\|\||[|;])")
+
+SEARCH_COMMANDS: frozenset[str] = frozenset(
+    [
+        "find",
+        "grep",
+        "rg",
+        "ag",
+        "ack",
+        "locate",
+        "which",
+        "whereis",
+    ]
 )
 
-SEARCH_COMMANDS: frozenset[str] = frozenset([
-    "find", "grep", "rg", "ag", "ack", "locate", "which", "whereis",
-])
+READ_COMMANDS: frozenset[str] = frozenset(
+    [
+        "cat",
+        "head",
+        "tail",
+        "less",
+        "more",
+        "wc",
+        "stat",
+        "file",
+        "strings",
+        "jq",
+        "awk",
+        "cut",
+        "sort",
+        "uniq",
+        "tr",
+    ]
+)
 
-READ_COMMANDS: frozenset[str] = frozenset([
-    "cat", "head", "tail", "less", "more",
-    "wc", "stat", "file", "strings",
-    "jq", "awk", "cut", "sort", "uniq", "tr",
-])
+LIST_COMMANDS: frozenset[str] = frozenset(
+    [
+        "ls",
+        "tree",
+        "du",
+    ]
+)
 
-LIST_COMMANDS: frozenset[str] = frozenset([
-    "ls", "tree", "du",
-])
+SEMANTIC_NEUTRAL_COMMANDS: frozenset[str] = frozenset(
+    [
+        "echo",
+        "printf",
+        "true",
+        "false",
+        ":",
+    ]
+)
 
-SEMANTIC_NEUTRAL_COMMANDS: frozenset[str] = frozenset([
-    "echo", "printf", "true", "false", ":",
-])
-
-SILENT_COMMANDS: frozenset[str] = frozenset([
-    "mv", "cp", "rm", "mkdir", "rmdir", "chmod", "chown", "chgrp",
-    "touch", "ln", "cd", "export", "unset", "wait",
-])
+SILENT_COMMANDS: frozenset[str] = frozenset(
+    [
+        "mv",
+        "cp",
+        "rm",
+        "mkdir",
+        "rmdir",
+        "chmod",
+        "chown",
+        "chgrp",
+        "touch",
+        "ln",
+        "cd",
+        "export",
+        "unset",
+        "wait",
+    ]
+)
 
 
 @dataclass(frozen=True)

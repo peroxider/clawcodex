@@ -29,6 +29,7 @@ DEFAULT_CLIENT_ID = "clawcodex-cli"
 @dataclass
 class OAuthTokens:
     """OAuth token set."""
+
     access_token: str
     refresh_token: str = ""
     token_type: str = "Bearer"
@@ -118,13 +119,15 @@ class OAuthFlow:
         try:
             import urllib.request
 
-            data = urllib.parse.urlencode({
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.client_id,
-                "redirect_uri": f"http://localhost:{self.redirect_port}/callback",
-                "code_verifier": self._code_verifier,
-            }).encode("utf-8")
+            data = urllib.parse.urlencode(
+                {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "client_id": self.client_id,
+                    "redirect_uri": f"http://localhost:{self.redirect_port}/callback",
+                    "code_verifier": self._code_verifier,
+                }
+            ).encode("utf-8")
 
             req = urllib.request.Request(
                 self.token_url,
@@ -151,11 +154,13 @@ class OAuthFlow:
         try:
             import urllib.request
 
-            data = urllib.parse.urlencode({
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "client_id": self.client_id,
-            }).encode("utf-8")
+            data = urllib.parse.urlencode(
+                {
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                    "client_id": self.client_id,
+                }
+            ).encode("utf-8")
 
             req = urllib.request.Request(
                 self.token_url,

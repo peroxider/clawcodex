@@ -22,10 +22,12 @@ from textual.app import App
 
 _log_lock = threading.Lock()
 
+
 def _log(msg: str) -> None:
     with _log_lock:
-        with open('/tmp/tui_flow.log', 'a') as f:
-            f.write(msg + '\n')
+        with open("/tmp/tui_flow.log", "a") as f:
+            f.write(msg + "\n")
+
 
 from src import __version__ as CLAW_VERSION
 from src.agent import Session
@@ -172,7 +174,7 @@ class ClawCodexTUI(App):
         # the /history slash-command dialog. The store is append-only
         # per turn and auto-rotates past ``max_entries``.
         self.history_store = HistoryStore()
-        self._theme_name = (theme_name or self._resolve_theme_name())
+        self._theme_name = theme_name or self._resolve_theme_name()
         # Index into ``self.stylesheet._sources`` for the theme CSS
         # overrides.  Tracked so ``apply_theme`` can *replace* the
         # source instead of stacking duplicates.
@@ -221,9 +223,7 @@ class ClawCodexTUI(App):
         # Also stamp it on the ToolContext so future hand-rolled cycles
         # (none today, but a future hook) can find the same callable.
         if self.tool_context is not None:
-            self.tool_context.default_permission_handler = (
-                self._agent_bridge._permission_handler
-            )
+            self.tool_context.default_permission_handler = self._agent_bridge._permission_handler
         self._install_away_summary_controller()
         self._resume_browse = resume_browse
 
@@ -378,9 +378,7 @@ class ClawCodexTUI(App):
                     ring_bell()
                 except Exception:
                     pass
-                self.announcer.announce(
-                    describe_status("idle"), level="polite", notify=False
-                )
+                self.announcer.announce(describe_status("idle"), level="polite", notify=False)
             else:
                 self.announcer.announce(
                     describe_status("busy", verb=self.app_state.verb),
@@ -426,6 +424,7 @@ class ClawCodexTUI(App):
         # Signal agent to continue running in background.
         try:
             from src.agent.background_state import signal_background
+
             signal_background()
         except Exception:
             pass
@@ -441,10 +440,12 @@ class ClawCodexTUI(App):
             # then fork into the background runner.
             self._agent_bridge.cancel()
             import time
+
             time.sleep(0.15)
             has_bg_agent = False
             try:
                 from src.agent.background_runner import launch_background_runner
+
                 launch_background_runner(
                     session=self.session,
                     provider=self.provider,
@@ -538,16 +539,14 @@ class ClawCodexTUI(App):
 
         # Schedule the async work on the Textual loop; if it comes back
         # handled we emit the appropriate UI response.
-        self.run_worker(self._dispatch_registry_async(text, transcript), exclusive=False, name="slash-cmd")
+        self.run_worker(
+            self._dispatch_registry_async(text, transcript), exclusive=False, name="slash-cmd"
+        )
         return True
 
     async def _dispatch_registry_async(self, text: str, transcript: Transcript) -> None:
         stripped = text.strip()
-        command_name = (
-            stripped[1:].split(maxsplit=1)[0].lower()
-            if stripped.startswith("/")
-            else ""
-        )
+        command_name = stripped[1:].split(maxsplit=1)[0].lower() if stripped.startswith("/") else ""
         show_busy = command_name == "recap" and not self.app_state.is_thinking
         if show_busy:
             self.app_state.set_thinking(True, verb="Recapping")
@@ -590,6 +589,7 @@ class ClawCodexTUI(App):
             # calling code prints the resume hint after teardown.
             try:
                 from src.agent.background_state import signal_background
+
                 signal_background()
             except Exception:
                 pass
@@ -609,7 +609,12 @@ class ClawCodexTUI(App):
             transcript.clear_transcript()
             self._agent_bridge.reset_advisor_dedup()
             return
-        if result.system_text in ("__stream_on__", "__stream_off__", "__stream_toggle__", "__stream_status__"):
+        if result.system_text in (
+            "__stream_on__",
+            "__stream_off__",
+            "__stream_toggle__",
+            "__stream_status__",
+        ):
             if result.system_text == "__stream_on__":
                 self.stream = True
             elif result.system_text == "__stream_off__":
@@ -704,25 +709,17 @@ class ClawCodexTUI(App):
             if not persisted:
                 return
             setattr(self.app_state, "effort", effort)
-            transcript.append_system(
-                f"Reasoning effort set to {effort or 'auto'}.", style="muted"
-            )
-            self.announcer.announce(
-                f"Reasoning effort set to {effort or 'auto'}."
-            )
+            transcript.append_system(f"Reasoning effort set to {effort or 'auto'}.", style="muted")
+            self.announcer.announce(f"Reasoning effort set to {effort or 'auto'}.")
 
         self.announcer.announce("Opened effort picker.", notify=False)
         self.push_screen(EffortPickerScreen(current=current), callback=_on_selected)
 
     def _open_history_search(self, transcript: Transcript) -> None:
         records = self.history_store.recent(limit=500)
-        entries = [
-            HistoryEntry(prompt=r.prompt, timestamp=r.timestamp) for r in records
-        ]
+        entries = [HistoryEntry(prompt=r.prompt, timestamp=r.timestamp) for r in records]
         if not entries:
-            transcript.append_system(
-                "History is empty — run some prompts first.", style="muted"
-            )
+            transcript.append_system("History is empty — run some prompts first.", style="muted")
             return
 
         def _on_selected(result: str | None) -> None:
@@ -744,9 +741,7 @@ class ClawCodexTUI(App):
         # Rough estimate: $5 per 1M tokens. Phase 2 keeps this simple;
         # real per-model rates land with /cost refactor in Phase 3.
         estimate = (tokens / 1_000_000) * 5.0
-        self.announcer.announce(
-            f"Session cost estimate ${estimate:.2f}.", notify=False
-        )
+        self.announcer.announce(f"Session cost estimate ${estimate:.2f}.", notify=False)
         self.push_screen(
             CostThresholdScreen(provider=self.provider_name, amount_usd=estimate),
             callback=lambda _=None: self._restore_prompt_focus(),
@@ -809,17 +804,17 @@ class ClawCodexTUI(App):
         current_mode = "default"
         try:
             from src.permissions.modes import to_external_permission_mode
+
             ctx = self.tool_context
             if ctx is not None and ctx.permission_context is not None:
-                current_mode = to_external_permission_mode(
-                    ctx.permission_context.mode or "default"
-                )
+                current_mode = to_external_permission_mode(ctx.permission_context.mode or "default")
         except Exception:
             pass
 
         is_bypass_available = False
         try:
             from src.permissions.modes import has_allow_bypass_permissions_mode
+
             is_bypass_available = has_allow_bypass_permissions_mode()
         except Exception:
             pass
@@ -837,14 +832,10 @@ class ClawCodexTUI(App):
                 # posts ``PermissionModeChanged`` which the screen
                 # handles to update the status bar.
                 self._runtime_permission_controller.set_mode(mode)
-                transcript.append_system(
-                    f"Permission mode set to {mode}.", style="muted"
-                )
+                transcript.append_system(f"Permission mode set to {mode}.", style="muted")
                 self.announcer.announce(f"Permission mode: {mode}.")
             except Exception as exc:
-                transcript.append_system(
-                    f"Failed to set permission mode: {exc}", style="error"
-                )
+                transcript.append_system(f"Failed to set permission mode: {exc}", style="error")
 
         self.announcer.announce("Opened permission mode picker.", notify=False)
         self.push_screen(
@@ -874,14 +865,10 @@ class ClawCodexTUI(App):
                 files.append(FileDiff(path=str(entry["path"]), patch=str(entry["patch"])))
 
         if not files:
-            transcript.append_system(
-                "No pending diffs to display.", style="muted"
-            )
+            transcript.append_system("No pending diffs to display.", style="muted")
             return
 
-        self.announcer.announce(
-            f"Diff dialog open. {len(files)} file(s) changed.", notify=False
-        )
+        self.announcer.announce(f"Diff dialog open. {len(files)} file(s) changed.", notify=False)
         self.push_screen(
             DiffDialogScreen(files=files),
             callback=lambda _=None: self._restore_prompt_focus(),
@@ -890,9 +877,7 @@ class ClawCodexTUI(App):
     def _open_message_selector(self, transcript: Transcript) -> None:
         messages = self._collect_transcript_messages()
         if not messages:
-            transcript.append_system(
-                "Nothing to rewind — the transcript is empty.", style="muted"
-            )
+            transcript.append_system("Nothing to rewind — the transcript is empty.", style="muted")
             return
 
         def _on_choice(result: tuple[int, str]) -> None:
@@ -906,24 +891,16 @@ class ClawCodexTUI(App):
             if action == "restore" and self._repl_screen is not None:
                 self._repl_screen.prompt_input.set_value(selected.text)
                 self._repl_screen.prompt_input.focus_input()
-                transcript.append_system(
-                    f"Restored prompt from message #{index}.", style="muted"
-                )
-                self.announcer.announce(
-                    f"Restored prompt from message {index}.", notify=False
-                )
+                transcript.append_system(f"Restored prompt from message #{index}.", style="muted")
+                self.announcer.announce(f"Restored prompt from message {index}.", notify=False)
             elif action == "summarize":
                 transcript.append_system(
                     f"Summarise-from-here requested for message #{index}.",
                     style="muted",
                 )
-                self.announcer.announce(
-                    f"Summarise requested for message {index}."
-                )
+                self.announcer.announce(f"Summarise requested for message {index}.")
 
-        self.announcer.announce(
-            f"Message selector open. {len(messages)} message(s).", notify=False
-        )
+        self.announcer.announce(f"Message selector open. {len(messages)} message(s).", notify=False)
         self.push_screen(
             MessageSelectorScreen(messages=messages, on_choice=None),
             callback=_on_choice,
@@ -957,13 +934,9 @@ class ClawCodexTUI(App):
     def _open_mcp_list(self, transcript: Transcript) -> None:
         servers = self._collect_mcp_servers()
         if not servers:
-            transcript.append_system(
-                "No MCP servers configured.", style="muted"
-            )
+            transcript.append_system("No MCP servers configured.", style="muted")
             return
-        self.announcer.announce(
-            f"MCP servers list open. {len(servers)} server(s).", notify=False
-        )
+        self.announcer.announce(f"MCP servers list open. {len(servers)} server(s).", notify=False)
         self.push_screen(
             McpListScreen(servers=servers),
             callback=lambda _=None: self._restore_prompt_focus(),
@@ -981,7 +954,11 @@ class ClawCodexTUI(App):
         if isinstance(raw, dict):
             for server_id, entry in raw.items():
                 name = entry.get("name", server_id) if isinstance(entry, dict) else server_id
-                status = entry.get("status", "disconnected") if isinstance(entry, dict) else "disconnected"
+                status = (
+                    entry.get("status", "disconnected")
+                    if isinstance(entry, dict)
+                    else "disconnected"
+                )
                 tools = entry.get("tools", []) if isinstance(entry, dict) else []
                 servers.append(
                     McpServer(
@@ -996,17 +973,13 @@ class ClawCodexTUI(App):
     def _open_tasks_dialog(self, transcript: Transcript) -> None:
         # The background task panel lives on the REPL screen; the slash
         # command just routes focus to it rather than stacking a modal.
-        if self._repl_screen is not None and hasattr(
-            self._repl_screen, "focus_task_panel"
-        ):
+        if self._repl_screen is not None and hasattr(self._repl_screen, "focus_task_panel"):
             try:
                 self._repl_screen.focus_task_panel()
                 return
             except Exception:
                 pass
-        transcript.append_system(
-            "Task panel focus is not available in this build.", style="muted"
-        )
+        transcript.append_system("Task panel focus is not available in this build.", style="muted")
 
     def _confirm_exit(self, transcript: Transcript) -> None:
         """Push :class:`ExitFlowScreen` instead of quitting immediately."""
@@ -1020,9 +993,7 @@ class ClawCodexTUI(App):
             else:  # "cancel"
                 self._restore_prompt_focus()
 
-        self.announcer.announce(
-            "Exit confirmation open.", level="assertive", notify=False
-        )
+        self.announcer.announce("Exit confirmation open.", level="assertive", notify=False)
         self.push_screen(
             ExitFlowScreen(
                 has_inflight_work=self.app_state.is_thinking,
@@ -1063,9 +1034,8 @@ class ClawCodexTUI(App):
             pass
         try:
             new_css = textual_css_overrides(self.palette)
-            if (
-                self._theme_source_idx is not None
-                and self._theme_source_idx < len(self.stylesheet._sources)
+            if self._theme_source_idx is not None and self._theme_source_idx < len(
+                self.stylesheet._sources
             ):
                 self.stylesheet._sources[self._theme_source_idx] = (new_css, None)
             else:
@@ -1165,6 +1135,7 @@ class ClawCodexTUI(App):
             return
         try:
             from src.services.session_storage import SessionStorage
+
             storage = SessionStorage(session_id=self.session.session_id)
             storage.update_metadata(last_user_input=text[:200])  # cap at 200 chars
         except Exception:
@@ -1283,6 +1254,7 @@ class ClawCodexTUI(App):
                 # Suppress NO_CONTENT_MESSAGE placeholder injected for empty
                 # assistant responses — matches live-chat behaviour.
                 from src.types.messages import NO_CONTENT_MESSAGE
+
                 if text and text != NO_CONTENT_MESSAGE:
                     self._post_to_screen(AssistantMessage(text=text, agent_name=agent_type))
                 # Replay tool_use / tool_result / thinking blocks from the content list.
@@ -1319,7 +1291,9 @@ class ClawCodexTUI(App):
                             # Replay redacted thinking with redacted=True.
                             data = item.get("data", "") or ""
                             if data and self._repl_screen is not None:
-                                self._repl_screen.transcript.append_thinking_chunk(data, redacted=True)
+                                self._repl_screen.transcript.append_thinking_chunk(
+                                    data, redacted=True
+                                )
 
     def _slash_command_words(self) -> list[str]:
         return build_command_words(self.workspace_root, self.tool_context)
@@ -1335,6 +1309,7 @@ class ClawCodexTUI(App):
                 return []
             msgs = getattr(messages, "messages", [])
             from src.types.messages import UserMessage
+
             result: list[str] = []
             for msg in msgs:
                 if isinstance(msg, UserMessage):

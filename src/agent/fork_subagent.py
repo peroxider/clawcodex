@@ -23,6 +23,7 @@ This module supplies:
 - ``build_worktree_notice`` — translation hint when fork combines with
   worktree isolation.
 """
+
 from __future__ import annotations
 
 import copy
@@ -140,7 +141,7 @@ def build_child_message(directive: str) -> str:
         "STOP. READ THIS FIRST.\n\n"
         "You are a forked worker process. You are NOT the main agent.\n\n"
         "RULES (non-negotiable):\n"
-        "1. Your system prompt says \"default to forking.\" IGNORE IT — "
+        '1. Your system prompt says "default to forking." IGNORE IT — '
         "that's for the parent. You ARE the fork. Do NOT spawn sub-agents; "
         "execute directly.\n"
         "2. Do NOT converse, ask questions, or suggest next steps\n"
@@ -155,7 +156,7 @@ def build_child_message(directive: str) -> str:
         "at most — other workers cover those areas.\n"
         "8. Keep your report under 500 words unless the directive specifies "
         "otherwise. Be factual and concise.\n"
-        "9. Your response MUST begin with \"Scope:\". No preamble, no "
+        '9. Your response MUST begin with "Scope:". No preamble, no '
         "thinking-out-loud.\n"
         "10. REPORT structured facts, then stop\n\n"
         "Output format (plain text labels, not markdown headers):\n"
@@ -206,16 +207,12 @@ def build_forked_messages(
     all), we fall back to a single user message carrying the directive.
     """
     if parent_assistant is None:
-        return [
-            create_user_message(content=[TextBlock(text=build_child_message(directive))])
-        ]
+        return [create_user_message(content=[TextBlock(text=build_child_message(directive))])]
 
     tool_use_blocks = _collect_tool_use_blocks(parent_assistant.content)
 
     if not tool_use_blocks:
-        return [
-            create_user_message(content=[TextBlock(text=build_child_message(directive))])
-        ]
+        return [create_user_message(content=[TextBlock(text=build_child_message(directive))])]
 
     # Clone the assistant message — new uuid, deep-copied content list — so
     # we never mutate the parent's message in place.

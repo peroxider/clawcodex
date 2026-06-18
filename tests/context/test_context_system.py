@@ -39,7 +39,9 @@ class TestContextSystem(unittest.TestCase):
             (root / "src").mkdir()
             (root / "src" / "app.py").write_text("print('hi')\n", encoding="utf-8")
             (root / "tests").mkdir()
-            (root / "tests" / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+            (root / "tests" / "test_app.py").write_text(
+                "def test_ok():\n    assert True\n", encoding="utf-8"
+            )
 
             with patch.dict(os.environ, {"CLAUDE_CODE_ORIGINAL_CWD": tmp}):
                 prompt = build_context_prompt(root)

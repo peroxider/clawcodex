@@ -1,4 +1,5 @@
 """Unit tests for ``clawcodex_ext.agent.registry.AgentRegistry``."""
+
 from __future__ import annotations
 
 from src.agent.agent_definitions import AgentDefinition
@@ -88,6 +89,7 @@ def test_register_is_last_wins_by_agent_type(caplog):
     assert first is not None
 
     with caplog.at_level("INFO", logger="clawcodex_ext.agent.registry"):
+
         @AgentRegistry.register(
             "dup",
             when_to_use="second",

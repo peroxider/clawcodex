@@ -133,22 +133,17 @@ def _notebook_edit_call(tool_input: dict[str, Any], context: ToolContext) -> Too
 
     if edit_mode == "insert" and not cell_type:
         raise ToolInputError(
-            "cell_type is required when edit_mode is 'insert'. "
-            "Specify 'code' or 'markdown'."
+            "cell_type is required when edit_mode is 'insert'. Specify 'code' or 'markdown'."
         )
 
     if cell_type and cell_type not in ("code", "markdown"):
-        raise ToolInputError(
-            f"Invalid cell_type: {cell_type}. Must be 'code' or 'markdown'."
-        )
+        raise ToolInputError(f"Invalid cell_type: {cell_type}. Must be 'code' or 'markdown'.")
 
     if not path.exists():
         raise ToolInputError(f"Notebook file does not exist: {path}")
 
     if not context.was_file_read_and_unchanged(path):
-        raise ToolInputError(
-            "Notebook must be read first and be unchanged since last read"
-        )
+        raise ToolInputError("Notebook must be read first and be unchanged since last read")
 
     original_content = path.read_text(encoding="utf-8", errors="replace")
 
@@ -180,9 +175,7 @@ def _notebook_edit_call(tool_input: dict[str, Any], context: ToolContext) -> Too
                 f"Available cells: {len(cells)} (use cell-0 through cell-{len(cells) - 1})"
             )
         if target_index is None and edit_mode == "insert":
-            raise ToolInputError(
-                f"Cannot insert after non-existent cell: {cell_id}"
-            )
+            raise ToolInputError(f"Cannot insert after non-existent cell: {cell_id}")
     else:
         target_index = 0
 
@@ -237,7 +230,12 @@ def _notebook_edit_call(tool_input: dict[str, Any], context: ToolContext) -> Too
         output={
             "new_source": new_source,
             "cell_id": resolved_cell_id,
-            "cell_type": cell_type or (cells[target_index]["cell_type"] if edit_mode == "replace" and target_index is not None and target_index < len(cells) else "code"),
+            "cell_type": cell_type
+            or (
+                cells[target_index]["cell_type"]
+                if edit_mode == "replace" and target_index is not None and target_index < len(cells)
+                else "code"
+            ),
             "language": language,
             "edit_mode": edit_mode,
             "notebook_path": str(path),
@@ -301,8 +299,16 @@ NotebookEditTool: Tool = build_tool(
     is_concurrency_safe=lambda _input: False,
     check_permissions=_check_permissions,
     get_path=lambda input_data: (input_data or {}).get("notebook_path", ""),
-    user_facing_name=lambda input_data: f"Edit Notebook: {(input_data or {}).get('notebook_path', '')}" if input_data else "Edit Notebook",
+    user_facing_name=lambda input_data: (
+        f"Edit Notebook: {(input_data or {}).get('notebook_path', '')}"
+        if input_data
+        else "Edit Notebook"
+    ),
     search_hint="edit Jupyter notebook cells ipynb",
-    to_auto_classifier_input=lambda input_data: f"{(input_data or {}).get('notebook_path', '')} {(input_data or {}).get('edit_mode', 'replace')}: {(input_data or {}).get('new_source', '')}",
-    get_activity_description=lambda input_data: f"Editing notebook {(input_data or {}).get('notebook_path', '')}" if input_data else None,
+    to_auto_classifier_input=lambda input_data: (
+        f"{(input_data or {}).get('notebook_path', '')} {(input_data or {}).get('edit_mode', 'replace')}: {(input_data or {}).get('new_source', '')}"
+    ),
+    get_activity_description=lambda input_data: (
+        f"Editing notebook {(input_data or {}).get('notebook_path', '')}" if input_data else None
+    ),
 )

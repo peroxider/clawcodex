@@ -27,9 +27,11 @@ def _make_messages(count: int = 6) -> list[Message]:
     messages: list[Message] = []
     for i in range(count):
         messages.append(UserMessage(content=f"User message {i} " * 20))
-        messages.append(AssistantMessage(
-            content=[TextBlock(text=f"Assistant response {i} " * 20)],
-        ))
+        messages.append(
+            AssistantMessage(
+                content=[TextBlock(text=f"Assistant response {i} " * 20)],
+            )
+        )
     return messages
 
 
@@ -39,12 +41,14 @@ class TestCompactConversation(unittest.TestCase):
     def test_produces_boundary_and_summary(self):
         """Compaction produces boundary marker and summary message."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary: User asked about Python code.",
-            model="test",
-            usage={"input_tokens": 500, "output_tokens": 100},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary: User asked about Python code.",
+                model="test",
+                usage={"input_tokens": 500, "output_tokens": 100},
+                finish_reason="stop",
+            )
+        )
 
         ctx = CompactContext(
             provider=provider,
@@ -119,12 +123,14 @@ class TestCompactConversation(unittest.TestCase):
     def test_tokens_saved_reported(self):
         """tokens_saved is calculated and reported."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Brief summary.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Brief summary.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         ctx = CompactContext(
             provider=provider,
@@ -138,12 +144,14 @@ class TestCompactConversation(unittest.TestCase):
     def test_user_display_message(self):
         """user_display_message is populated."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary of the conversation.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary of the conversation.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         ctx = CompactContext(
             provider=provider,
@@ -161,12 +169,14 @@ class TestPartialCompactConversation(unittest.TestCase):
     def test_earlier_direction(self):
         """Partial compact with 'earlier' summarizes prefix."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary of earlier messages.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary of earlier messages.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         messages = _make_messages(4)
         ctx = CompactContext(
@@ -181,12 +191,14 @@ class TestPartialCompactConversation(unittest.TestCase):
     def test_later_direction(self):
         """Partial compact with 'later' summarizes suffix."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary of later messages.",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary of later messages.",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         messages = _make_messages(4)
         ctx = CompactContext(
@@ -213,12 +225,14 @@ class TestPartialCompactConversation(unittest.TestCase):
     def test_preserved_segment_annotated_for_kept_messages(self):
         """Partial compact annotates the boundary with preserved-segment metadata."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
 
         messages = _make_messages(4)
         ctx = CompactContext(
@@ -228,9 +242,7 @@ class TestPartialCompactConversation(unittest.TestCase):
         )
         # 'earlier' summarizes prefix and keeps the suffix → suffix-preserving.
         # Anchor should be the summary message UUID.
-        result = asyncio.run(
-            partial_compact_conversation(ctx, pivot_index=4, direction="earlier")
-        )
+        result = asyncio.run(partial_compact_conversation(ctx, pivot_index=4, direction="earlier"))
 
         meta = getattr(result.boundary_marker, "_compact_boundary_meta", None)
         self.assertIsNotNone(meta)
@@ -253,21 +265,21 @@ class TestPartialCompactConversation(unittest.TestCase):
     def test_partial_compact_captures_usage(self):
         """Partial compact records compaction_usage from response."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary",
-            model="test",
-            usage={"input_tokens": 1234, "output_tokens": 56},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary",
+                model="test",
+                usage={"input_tokens": 1234, "output_tokens": 56},
+                finish_reason="stop",
+            )
+        )
 
         ctx = CompactContext(
             provider=provider,
             model="test-model",
             messages=_make_messages(4),
         )
-        result = asyncio.run(
-            partial_compact_conversation(ctx, pivot_index=4, direction="earlier")
-        )
+        result = asyncio.run(partial_compact_conversation(ctx, pivot_index=4, direction="earlier"))
         self.assertIsNotNone(result.compaction_usage)
         self.assertEqual(result.compaction_usage["input_tokens"], 1234)
 
@@ -281,9 +293,7 @@ class TestCompactionParityFixes(unittest.TestCase):
 
         async def capture_call(**kwargs):
             captured.update(kwargs)
-            return ChatResponse(
-                content="Summary", model="test", usage={}, finish_reason="stop"
-            )
+            return ChatResponse(content="Summary", model="test", usage={}, finish_reason="stop")
 
         provider = MagicMock()
         provider.chat_async = AsyncMock(side_effect=capture_call)
@@ -300,19 +310,25 @@ class TestCompactionParityFixes(unittest.TestCase):
     def test_discovered_tools_recorded_on_boundary(self):
         """tool_use names from summarized messages are stored on the boundary."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary", model="test", usage={}, finish_reason="stop"
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary", model="test", usage={}, finish_reason="stop"
+            )
+        )
 
         messages: list[Message] = [
             UserMessage(content="please read a file"),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/a"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/a"}),
+                ]
+            ),
             UserMessage(content="thanks"),
-            AssistantMessage(content=[
-                ToolUseBlock(id="t2", name="Glob", input={"pattern": "*"}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t2", name="Glob", input={"pattern": "*"}),
+                ]
+            ),
         ]
 
         ctx = CompactContext(

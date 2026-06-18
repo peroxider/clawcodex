@@ -30,6 +30,7 @@ _MAX_COLUMN_LENGTH = 500
 
 # -- Semantic coercion helpers ------------------------------------------------
 
+
 def _semantic_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -53,6 +54,7 @@ def _semantic_int(value: Any, default: int | None = None) -> int | None:
 
 # -- Glob pattern splitting ---------------------------------------------------
 
+
 def _split_glob_patterns(glob: str) -> list[str]:
     """Split glob parameter into individual patterns, preserving brace expressions."""
     patterns: list[str] = []
@@ -65,6 +67,7 @@ def _split_glob_patterns(glob: str) -> list[str]:
 
 
 # -- Python fallback search ---------------------------------------------------
+
 
 def _iter_files(root: Path) -> Iterator[Path]:
     for dirpath, dirnames, filenames in os.walk(root):
@@ -122,8 +125,7 @@ def _grep_fallback_python(
     if glob_pattern:
         patterns = _split_glob_patterns(glob_pattern)
         files_to_search = [
-            p for p in files_to_search
-            if any(_matches_glob(p, pat) for pat in patterns)
+            p for p in files_to_search if any(_matches_glob(p, pat) for pat in patterns)
         ]
     if type_name:
         files_to_search = [p for p in files_to_search if _matches_type(p, type_name)]
@@ -196,6 +198,7 @@ def _grep_fallback_python(
 
 # -- Ripgrep-based search -----------------------------------------------------
 
+
 def _grep_via_ripgrep(
     pattern: str,
     base_path: str,
@@ -258,6 +261,7 @@ def _grep_via_ripgrep(
 
 # -- Pagination ----------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class _Pagination:
     items: list[Any]
@@ -279,6 +283,7 @@ def _paginate(items: list[Any], *, head_limit: int | None, offset: int) -> _Pagi
 
 
 # -- Result formatting for API ------------------------------------------------
+
 
 def _format_limit_info(applied_limit: int | None, applied_offset: int) -> str:
     parts = []
@@ -330,6 +335,7 @@ def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
 
 # -- Main tool call ------------------------------------------------------------
 
+
 def _grep_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     pattern = tool_input["pattern"]
     if not isinstance(pattern, str) or pattern == "":
@@ -351,7 +357,9 @@ def _grep_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     case_insensitive = _semantic_bool(tool_input.get("-i", False))
     multiline = _semantic_bool(tool_input.get("multiline", False))
-    show_line_numbers = _semantic_bool(tool_input.get("-n", True)) if output_mode == "content" else False
+    show_line_numbers = (
+        _semantic_bool(tool_input.get("-n", True)) if output_mode == "content" else False
+    )
 
     # Resolve context lines: context/-C take precedence over -B/-A
     ctx_val = _semantic_int(tool_input.get("context"))
@@ -421,7 +429,11 @@ def _grep_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         return _build_result_from_fallback(fb, head_limit=head_limit, offset=offset, cwd=cwd)
 
     return _build_result_from_ripgrep(
-        results, output_mode=output_mode, head_limit=head_limit, offset=offset, cwd=cwd,
+        results,
+        output_mode=output_mode,
+        head_limit=head_limit,
+        offset=offset,
+        cwd=cwd,
     )
 
 
@@ -466,7 +478,7 @@ def _build_result_from_ripgrep(
             colon = line.rfind(":")
             if colon > 0:
                 file_path = line[:colon]
-                count_str = line[colon + 1:]
+                count_str = line[colon + 1 :]
                 count_lines.append(to_relative_path(file_path, cwd) + ":" + count_str)
                 try:
                     total_matches += int(count_str)
@@ -674,5 +686,7 @@ GrepTool: Tool = build_tool(
     search_hint="grep search regex find content",
     to_auto_classifier_input=lambda input_data: (input_data or {}).get("pattern", ""),
     is_search_or_read_command=lambda _input: SearchOrReadResult(is_search=True),
-    get_activity_description=lambda input_data: f"Searching for {(input_data or {}).get('pattern', '')!r}" if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Searching for {(input_data or {}).get('pattern', '')!r}" if input_data else None
+    ),
 )

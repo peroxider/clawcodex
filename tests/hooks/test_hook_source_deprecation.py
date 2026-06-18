@@ -62,9 +62,7 @@ class TestDeprecationAlias:
             # so no warning fires.
             _ = HookSource.__name__
             _ = HookSource.__members__
-        assert all(
-            not issubclass(w.category, DeprecationWarning) for w in captured
-        )
+        assert all(not issubclass(w.category, DeprecationWarning) for w in captured)
 
     def test_canonical_names_no_warning(self):
         with warnings.catch_warnings(record=True) as captured:

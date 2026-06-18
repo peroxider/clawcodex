@@ -61,6 +61,7 @@ Parameters:
 # (ported from TS ListMcpResourcesTool.ts mapToolResultToToolResultBlockParam)
 # ---------------------------------------------------------------------------
 
+
 def _list_resources_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Format ListMcpResources result for the API.
 
@@ -84,6 +85,7 @@ def _list_resources_map_result_to_api(output: Any, tool_use_id: str) -> dict[str
 # (ported from TS ReadMcpResourceTool.ts mapToolResultToToolResultBlockParam)
 # ---------------------------------------------------------------------------
 
+
 def _read_resource_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     """Format ReadMcpResource result for the API.
 
@@ -100,6 +102,7 @@ def _read_resource_map_result_to_api(output: Any, tool_use_id: str) -> dict[str,
 # Call implementations
 # ---------------------------------------------------------------------------
 
+
 def _list_mcp_resources_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     server = tool_input.get("server")
     if server is not None and (not isinstance(server, str) or not server.strip()):
@@ -109,7 +112,11 @@ def _list_mcp_resources_call(tool_input: dict[str, Any], context: ToolContext) -
     if server:
         client = context.mcp_clients.get(server)
         if client is None:
-            return ToolResult(name="ListMcpResourcesTool", output={"error": f"mcp server not connected: {server}"}, is_error=True)
+            return ToolResult(
+                name="ListMcpResourcesTool",
+                output={"error": f"mcp server not connected: {server}"},
+                is_error=True,
+            )
         clients = [(server, client)]
     else:
         clients = list(context.mcp_clients.items())
@@ -173,13 +180,26 @@ def _read_mcp_resource_call(tool_input: dict[str, Any], context: ToolContext) ->
 
     client = context.mcp_clients.get(server)
     if client is None:
-        return ToolResult(name="ReadMcpResourceTool", output={"error": f"mcp server not connected: {server}"}, is_error=True)
+        return ToolResult(
+            name="ReadMcpResourceTool",
+            output={"error": f"mcp server not connected: {server}"},
+            is_error=True,
+        )
     if not hasattr(client, "read_resource"):
-        return ToolResult(name="ReadMcpResourceTool", output={"error": f"mcp server does not support resources: {server}"}, is_error=True)
+        return ToolResult(
+            name="ReadMcpResourceTool",
+            output={"error": f"mcp server does not support resources: {server}"},
+            is_error=True,
+        )
     out = client.read_resource(uri)
     if isinstance(out, dict) and "contents" in out:
         return ToolResult(name="ReadMcpResourceTool", output=out)
-    return ToolResult(name="ReadMcpResourceTool", output={"contents": [{"uri": uri, **(out if isinstance(out, dict) else {"text": str(out)})}]})
+    return ToolResult(
+        name="ReadMcpResourceTool",
+        output={
+            "contents": [{"uri": uri, **(out if isinstance(out, dict) else {"text": str(out)})}]
+        },
+    )
 
 
 ReadMcpResourceTool: Tool = build_tool(

@@ -50,7 +50,9 @@ def _session(
         detected_mode=detected_mode,
     )
     viz.timeline = list(bars)
-    viz.agent_tree = [AgentTreeNode(agent_id="primary", name="primary-agent", session_ref=session_id)]
+    viz.agent_tree = [
+        AgentTreeNode(agent_id="primary", name="primary-agent", session_ref=session_id)
+    ]
     return viz
 
 
@@ -65,12 +67,21 @@ class TestMultiSessionViewBuilderEmpty:
 
 class TestSingleSessionLegend:
     def test_legend_counts_match_categories(self):
-        viz = _session("s1", 0, 100,
+        viz = _session(
+            "s1",
+            0,
+            100,
             _bar("Read", 0, 5),
             _bar("Bash", 10, 20),
             _bar("Write", 30, 40),
-            _bar("Agent", 50, 60, subagent_type="review",
-                 subagent_description="X", isAgentInvocation=True),
+            _bar(
+                "Agent",
+                50,
+                60,
+                subagent_type="review",
+                subagent_description="X",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         out = MultiSessionViewBuilder().build([viz])
@@ -86,8 +97,14 @@ class TestSingleSessionLegend:
         out = MultiSessionViewBuilder().build([viz])
         labels = [l["label"] for l in out["legend"]]
         assert labels == [
-            "读取", "执行", "写入", "编排",
-            "推理", "轮次", "后台", "其他",
+            "读取",
+            "执行",
+            "写入",
+            "编排",
+            "推理",
+            "轮次",
+            "后台",
+            "其他",
         ]
 
     def test_pre_set_other_llm_bar_is_refined(self):
@@ -115,7 +132,10 @@ class TestSingleSessionLegend:
 
 class TestSingleSessionLayout:
     def test_session_row_metadata_includes_tool_count(self):
-        viz = _session("s1", 0, 100,
+        viz = _session(
+            "s1",
+            0,
+            100,
             _bar("Read", 0, 5),
             _bar("Bash", 10, 20),
             _bar("Write", 30, 40),
@@ -134,11 +154,26 @@ class TestSingleSessionLayout:
         assert "收工" in marker["label"]
 
     def test_spawn_callout_present_with_subs(self):
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review",
-                 subagent_description="防作弊", isAgentInvocation=True),
-            _bar("Agent", 200, 210, subagent_type="verify",
-                 subagent_description="解析崩溃", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="防作弊",
+                isAgentInvocation=True,
+            ),
+            _bar(
+                "Agent",
+                200,
+                210,
+                subagent_type="verify",
+                subagent_description="解析崩溃",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         out = MultiSessionViewBuilder().build([viz])
@@ -150,9 +185,18 @@ class TestSingleSessionLayout:
 
 class TestAgentRows:
     def test_subagent_rows_present(self):
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review",
-                 subagent_description="防作弊", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="防作弊",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         out = MultiSessionViewBuilder().build([viz])
@@ -163,9 +207,26 @@ class TestAgentRows:
         assert a["spawnX"] == 100.0
 
     def test_subagent_depth_y_stacked_below_session(self):
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review", subagent_description="A", isAgentInvocation=True),
-            _bar("Agent", 200, 210, subagent_type="verify", subagent_description="B", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="A",
+                isAgentInvocation=True,
+            ),
+            _bar(
+                "Agent",
+                200,
+                210,
+                subagent_type="verify",
+                subagent_description="B",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         out = MultiSessionViewBuilder().build([viz])
@@ -173,8 +234,18 @@ class TestAgentRows:
         assert ys == [1, 2]
 
     def test_subagent_rows_include_window_activity_ticks(self):
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review", subagent_description="A", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="A",
+                isAgentInvocation=True,
+            ),
             _bar("Read", 120, 122),
             _bar("Bash", 130, 135),
         )
@@ -188,8 +259,18 @@ class TestAgentRows:
     def test_explicit_agent_id_activity_wins_over_window_fallback(self):
         explicit = _bar("Read", 20, 22)
         explicit.agent_id = "auto/A"
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review", subagent_description="A", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="A",
+                isAgentInvocation=True,
+            ),
             explicit,
             _bar("Bash", 120, 125),
         )
@@ -201,8 +282,18 @@ class TestAgentRows:
 
 class TestEdges:
     def test_fork_and_join_edges_emitted(self):
-        viz = _session("s1", 0, 600,
-            _bar("Agent", 100, 110, subagent_type="review", subagent_description="X", isAgentInvocation=True),
+        viz = _session(
+            "s1",
+            0,
+            600,
+            _bar(
+                "Agent",
+                100,
+                110,
+                subagent_type="review",
+                subagent_description="X",
+                isAgentInvocation=True,
+            ),
         )
         AgentTreeLayout().layout(viz)
         out = MultiSessionViewBuilder().build([viz])
@@ -216,7 +307,10 @@ class TestEdges:
 
 class TestTimeRange:
     def test_tick_labels_cover_activity_range(self):
-        viz = _session("s1", 0, 1800,
+        viz = _session(
+            "s1",
+            0,
+            1800,
             _bar("Read", 0, 5),
             _bar("Bash", 60, 120),
         )
@@ -283,7 +377,10 @@ class TestTimeRange:
             assert len(ms_part) == 3 and ms_part.isdigit()
 
     def test_time_range_ignores_late_session_end(self):
-        viz = _session("s1", 0, 3600,
+        viz = _session(
+            "s1",
+            0,
+            3600,
             _bar("Read", 10, 10.05),
             _bar("Bash", 20, 20.1),
         )

@@ -24,6 +24,7 @@ MemoryType = Literal["Managed", "User", "Project", "Local"]
 # MemoryFileInfo — mirrors TS MemoryFileInfo from claudemd.ts
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MemoryFileInfo:
     """A loaded memory/instruction file (CLAUDE.md, rules, etc.)."""
@@ -31,8 +32,8 @@ class MemoryFileInfo:
     path: str
     type: MemoryType
     content: str
-    parent: str | None = None           # Path of the file that @included this one
-    globs: list[str] | None = None      # Glob patterns from frontmatter `paths:`
+    parent: str | None = None  # Path of the file that @included this one
+    globs: list[str] | None = None  # Glob patterns from frontmatter `paths:`
     content_differs_from_disk: bool = False
     raw_content: str | None = None
 
@@ -42,13 +43,14 @@ class MemoryFileInfo:
 # Mirrors TS fetchSystemPromptParts from queryContext.ts
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SystemPromptParts:
     """Assembled pieces for the API cache-key prefix."""
 
     default_system_prompt: list[str]
-    user_context: dict[str, str]     # e.g. {"claudeMd": "...", "currentDate": "..."}
-    system_context: dict[str, str]   # e.g. {"gitStatus": "..."}
+    user_context: dict[str, str]  # e.g. {"claudeMd": "...", "currentDate": "..."}
+    system_context: dict[str, str]  # e.g. {"gitStatus": "..."}
 
 
 # ---------------------------------------------------------------------------
@@ -66,36 +68,123 @@ MEMORY_INSTRUCTION_PROMPT = (
 )
 
 # Text file extensions allowed for @include directives (mirrors TS TEXT_FILE_EXTENSIONS)
-TEXT_FILE_EXTENSIONS: frozenset[str] = frozenset([
-    ".md", ".txt", ".text",
-    ".json", ".yaml", ".yml", ".toml", ".xml", ".csv",
-    ".html", ".htm", ".css", ".scss", ".sass", ".less",
-    ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-    ".py", ".pyi", ".pyw",
-    ".rb", ".erb", ".rake",
-    ".go", ".rs",
-    ".java", ".kt", ".kts", ".scala",
-    ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".hxx",
-    ".cs", ".swift",
-    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".bat", ".cmd",
-    ".env", ".ini", ".cfg", ".conf", ".config", ".properties",
-    ".sql", ".graphql", ".gql", ".proto",
-    ".vue", ".svelte", ".astro",
-    ".ejs", ".hbs", ".pug", ".jade",
-    ".php", ".pl", ".pm", ".lua", ".r", ".R", ".dart",
-    ".ex", ".exs", ".erl", ".hrl",
-    ".clj", ".cljs", ".cljc", ".edn",
-    ".hs", ".lhs", ".elm", ".ml", ".mli",
-    ".f", ".f90", ".f95", ".for",
-    ".cmake", ".make", ".makefile", ".gradle", ".sbt",
-    ".rst", ".adoc", ".asciidoc", ".org", ".tex", ".latex",
-    ".lock", ".log", ".diff", ".patch",
-])
+TEXT_FILE_EXTENSIONS: frozenset[str] = frozenset(
+    [
+        ".md",
+        ".txt",
+        ".text",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".xml",
+        ".csv",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".mts",
+        ".cts",
+        ".py",
+        ".pyi",
+        ".pyw",
+        ".rb",
+        ".erb",
+        ".rake",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".kts",
+        ".scala",
+        ".c",
+        ".cpp",
+        ".cc",
+        ".cxx",
+        ".h",
+        ".hpp",
+        ".hxx",
+        ".cs",
+        ".swift",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".fish",
+        ".ps1",
+        ".bat",
+        ".cmd",
+        ".env",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".config",
+        ".properties",
+        ".sql",
+        ".graphql",
+        ".gql",
+        ".proto",
+        ".vue",
+        ".svelte",
+        ".astro",
+        ".ejs",
+        ".hbs",
+        ".pug",
+        ".jade",
+        ".php",
+        ".pl",
+        ".pm",
+        ".lua",
+        ".r",
+        ".R",
+        ".dart",
+        ".ex",
+        ".exs",
+        ".erl",
+        ".hrl",
+        ".clj",
+        ".cljs",
+        ".cljc",
+        ".edn",
+        ".hs",
+        ".lhs",
+        ".elm",
+        ".ml",
+        ".mli",
+        ".f",
+        ".f90",
+        ".f95",
+        ".for",
+        ".cmake",
+        ".make",
+        ".makefile",
+        ".gradle",
+        ".sbt",
+        ".rst",
+        ".adoc",
+        ".asciidoc",
+        ".org",
+        ".tex",
+        ".latex",
+        ".lock",
+        ".log",
+        ".diff",
+        ".patch",
+    ]
+)
 
 
 # ---------------------------------------------------------------------------
 # Legacy types — kept for backward compat with workspace_snapshot.py
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class WorkspaceSnapshot:

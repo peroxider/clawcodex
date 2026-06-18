@@ -1,4 +1,5 @@
 """Tests for LocalJsonlStorage."""
+
 from __future__ import annotations
 
 import json
@@ -54,8 +55,8 @@ def test_retention_sweep_removes_old_files(tmp_path):
     new_date = utc_date(utc_now())
     storage.append("events", {"x": 1})  # creates today
     storage._dir_for("events").mkdir(parents=True, exist_ok=True)
-    (storage._dir_for("events") / f"{old_date}.jsonl").write_text("{\"x\":1}\n")
-    (storage._dir_for("events") / f"{new_date}.jsonl").write_text("{\"x\":2}\n")
+    (storage._dir_for("events") / f"{old_date}.jsonl").write_text('{"x":1}\n')
+    (storage._dir_for("events") / f"{new_date}.jsonl").write_text('{"x":2}\n')
     removed = storage.retention_sweep()
     assert removed >= 1
     assert not (storage._dir_for("events") / f"{old_date}.jsonl").exists()

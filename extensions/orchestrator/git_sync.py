@@ -142,6 +142,7 @@ class GitSyncService:
 
         # Check if tracker is LocalTrackerAdapter — skip push/PR for local-only repos
         from .local_tracker.adapter import LocalTrackerAdapter
+
         is_local_tracker = isinstance(self.tracker, LocalTrackerAdapter)
         workspace_strategy = getattr(session, "workspace_strategy", "isolated")
         is_sequential = workspace_strategy == "sequential"
@@ -210,7 +211,8 @@ class GitSyncService:
                 pass
             else:
                 pushed, has_conflict, conflict_files = self._push_with_recovery(
-                    repo_root, branch_name,
+                    repo_root,
+                    branch_name,
                 )
         else:
             commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
@@ -236,7 +238,8 @@ class GitSyncService:
             # No staged changes but branch may have diverged from origin — still push
             if branch_name and not no_push:
                 pushed, has_conflict, conflict_files = self._push_with_recovery(
-                    repo_root, branch_name,
+                    repo_root,
+                    branch_name,
                 )
 
         pr_ref: PullRequestRef | None = followup_pr
@@ -260,7 +263,9 @@ class GitSyncService:
             # fall back to listing open PRs and matching by head branch.
             if pr_ref is not None and (not pr_ref.number or not pr_ref.url):
                 pr_ref = await self._find_pr_fallback(
-                    pr_ref, head_branch=branch_name, base_branch=base_branch,
+                    pr_ref,
+                    head_branch=branch_name,
+                    base_branch=base_branch,
                 )
 
         report_result = self._write_report(
@@ -288,7 +293,9 @@ class GitSyncService:
                 pr_ref = self._merge_pr_ref(updated_pr, pr_ref)
                 if not pr_ref.number or not pr_ref.url:
                     pr_ref = await self._find_pr_fallback(
-                        pr_ref, head_branch=branch_name, base_branch=base_branch,
+                        pr_ref,
+                        head_branch=branch_name,
+                        base_branch=base_branch,
                     )
                 self._write_report(
                     session=session,
@@ -327,9 +334,7 @@ class GitSyncService:
                 committed=has_reviewable_commit,
                 pushed=pushed if not no_push else False,
                 report_path=(
-                    report_result.persistent_markdown_path
-                    if report_result is not None
-                    else None
+                    report_result.persistent_markdown_path if report_result is not None else None
                 ),
             )
 
@@ -342,7 +347,9 @@ class GitSyncService:
             pushed=pushed,
             has_conflict=has_conflict,
             conflict_files=conflict_files,
-            pending_review=bool((is_local_tracker or self._agent_config.review_required) and has_reviewable_commit),
+            pending_review=bool(
+                (is_local_tracker or self._agent_config.review_required) and has_reviewable_commit
+            ),
         )
 
     def _post_commit_error(
@@ -368,7 +375,9 @@ class GitSyncService:
             pushed=pushed,
             has_conflict=has_conflict,
             conflict_files=conflict_files,
-            pending_review=bool((is_local_tracker or self._agent_config.review_required) and committed),
+            pending_review=bool(
+                (is_local_tracker or self._agent_config.review_required) and committed
+            ),
         )
         return GitSyncPostCommitError(cause, result)
 
@@ -377,7 +386,10 @@ class GitSyncService:
         if not command:
             return
         output = await self._run_shell(command, repo_root, self._hooks_config.timeout_ms)
-        if get_file_status(repo_root) and getattr(session, "workspace_strategy", "isolated") != "sequential":
+        if (
+            get_file_status(repo_root)
+            and getattr(session, "workspace_strategy", "isolated") != "sequential"
+        ):
             self._run_git_checked(["add", "-A"], repo_root)
             self._run_git_checked(["commit", "--amend", "--no-edit"], repo_root)
         setattr(session, "pre_commit_output", output)
@@ -456,9 +468,7 @@ class GitSyncService:
                 "",
             ) from exc
         output = "\n".join(
-            part.decode("utf-8", errors="replace").strip()
-            for part in (stdout, stderr)
-            if part
+            part.decode("utf-8", errors="replace").strip() for part in (stdout, stderr) if part
         ).strip()
         if proc.returncode != 0:
             raise VerificationFailed(
@@ -485,9 +495,7 @@ class GitSyncService:
                 for line in path.read_text(encoding="utf-8").splitlines()
                 if line.strip() and not line.startswith("#")
             }
-        new_patterns = [
-            pattern for pattern in self._gitignore_patterns if pattern not in existing
-        ]
+        new_patterns = [pattern for pattern in self._gitignore_patterns if pattern not in existing]
         if not new_patterns:
             return
         with path.open("a", encoding="utf-8") as handle:
@@ -498,11 +506,14 @@ class GitSyncService:
                 handle.write(f"{pattern}\n")
 
     def _push_with_recovery(
-        self, repo_root: str, branch_name: str,
+        self,
+        repo_root: str,
+        branch_name: str,
     ) -> tuple[bool, bool, tuple[str, ...]]:
         """Push branch, recovering from non-fast-forward with rebase."""
         stdout, stderr, rc = _run_git(
-            ["push", "-u", "origin", branch_name], repo_root,
+            ["push", "-u", "origin", branch_name],
+            repo_root,
         )
         if rc == 0:
             return True, False, ()
@@ -513,15 +524,14 @@ class GitSyncService:
         # Attempt fetch + rebase
         self._run_git_checked(["fetch", "origin"], repo_root)
         stdout, stderr, rc = _run_git(
-            ["rebase", f"origin/{branch_name}"], repo_root,
+            ["rebase", f"origin/{branch_name}"],
+            repo_root,
         )
         if rc != 0:
             # Check if remote branch doesn't exist (shallow clone scenario)
             if "fatal: invalid upstream" in stderr or "couldn't find remote ref" in stderr:
                 # Remote branch doesn't exist - force push to create it
-                self._run_git_checked(
-                    ["push", "-u", "origin", branch_name, "--force"], repo_root
-                )
+                self._run_git_checked(["push", "-u", "origin", branch_name, "--force"], repo_root)
                 return True, False, ()
             conflict_files = self._detect_conflicts(repo_root)
             if conflict_files:
@@ -546,7 +556,8 @@ class GitSyncService:
     def _detect_conflicts(self, repo_root: str) -> tuple[str, ...]:
         """Return list of files with conflict markers."""
         stdout, _, _ = _run_git(
-            ["diff", "--name-only", "--diff-filter=U"], repo_root,
+            ["diff", "--name-only", "--diff-filter=U"],
+            repo_root,
         )
         if not stdout.strip():
             return ()
@@ -590,9 +601,7 @@ class GitSyncService:
                 repo_root,
             )
         if rc != 0:
-            raise GitSyncError(
-                f"Failed to checkout work branch {branch_name}: {stderr or stdout}"
-            )
+            raise GitSyncError(f"Failed to checkout work branch {branch_name}: {stderr or stdout}")
         return branch_name
 
     def _ensure_commit_identity(self, repo_root: str) -> None:
@@ -654,18 +663,18 @@ class GitSyncService:
         if not whitelist:
             return
         import fnmatch
+
         stdout, _, rc = _run_git(["diff", "--cached", "--name-only"], repo_root)
         if rc != 0 or not stdout.strip():
             return
         staged = [f.strip() for f in stdout.strip().splitlines() if f.strip()]
-        to_unstage = [
-            f for f in staged
-            if not any(fnmatch.fnmatch(f, pat) for pat in whitelist)
-        ]
+        to_unstage = [f for f in staged if not any(fnmatch.fnmatch(f, pat) for pat in whitelist)]
         if to_unstage:
             self._run_git_checked(["reset", "--", *to_unstage], repo_root)
 
-    def _build_commit_message(self, issue: Issue, *, followup: bool = False, feedback_body: str | None = None) -> str:
+    def _build_commit_message(
+        self, issue: Issue, *, followup: bool = False, feedback_body: str | None = None
+    ) -> str:
         identifier = (issue.identifier or "issue").strip().lstrip("#")
         prefix = "fix" if followup else "feat"
         if followup and feedback_body:
@@ -736,7 +745,9 @@ class GitSyncService:
             branch_name=branch_name,
             base_branch=base_branch,
             commit_sha=commit_sha,
-            pr_number=str(pull_request.number) if pull_request and pull_request.number is not None else None,
+            pr_number=str(pull_request.number)
+            if pull_request and pull_request.number is not None
+            else None,
             pr_url=pull_request.url if pull_request else None,
             turn_count=getattr(session, "turn_count", 0),
             tool_count=getattr(session, "tool_count", 0),
@@ -845,9 +856,7 @@ class GitSyncService:
     def _run_git_checked(self, args: list[str], repo_root: str) -> str:
         stdout, stderr, rc = _run_git(args, repo_root)
         if rc != 0:
-            raise GitSyncError(
-                f"git {' '.join(args)} failed: {stderr or stdout}"
-            )
+            raise GitSyncError(f"git {' '.join(args)} failed: {stderr or stdout}")
         return stdout.strip()
 
     async def _find_pr_fallback(
@@ -864,6 +873,7 @@ class GitSyncService:
         polls the tracker's open-PR list and matches by ``head_branch``.
         """
         import asyncio
+
         for _ in range(15):
             try:
                 found = await self.tracker.find_pull_request(

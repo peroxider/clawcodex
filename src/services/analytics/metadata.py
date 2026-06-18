@@ -3,6 +3,7 @@
 Mirrors TypeScript analytics/metadata.ts — collects session-level metadata
 for analytics reporting.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,6 +16,7 @@ from typing import Any
 @dataclass
 class SessionAnalyticsMetadata:
     """Metadata collected at session start for analytics."""
+
     session_id: str = ""
     model: str = ""
     os_name: str = ""

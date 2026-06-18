@@ -314,17 +314,13 @@ class TestOrchestratorFollowupDispatch(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(session.run_kind, "agent_followup")
 
             # Simulate the dispatch in _run_issue:
-            sync_mode = (
-                "followup" if session.run_kind == "agent_followup" else "default"
-            )
+            sync_mode = "followup" if session.run_kind == "agent_followup" else "default"
             sync_mock = MagicMock()
             sync_mock.sync = AsyncMock(
                 return_value=MagicMock(
                     branch_name="clawcodex/issue-1",
                     commit_sha="newsha",
-                    pull_request=PullRequestRef(
-                        number="42", url="https://example.test/pr/42"
-                    ),
+                    pull_request=PullRequestRef(number="42", url="https://example.test/pr/42"),
                 )
             )
             sync_result = await sync_mock.sync(session, mode=sync_mode)
@@ -342,9 +338,7 @@ class TestOrchestratorFollowupDispatch(unittest.IsolatedAsyncioTestCase):
             session = _make_session(issue_id="1")
             # No _prepare_intent_session call → run_kind stays "issue".
 
-            sync_mode = (
-                "followup" if session.run_kind == "agent_followup" else "default"
-            )
+            sync_mode = "followup" if session.run_kind == "agent_followup" else "default"
             self.assertEqual(sync_mode, "default")
 
 

@@ -1,4 +1,5 @@
 """Tests for DailyAggregator."""
+
 from __future__ import annotations
 
 import time
@@ -140,7 +141,9 @@ def test_aggregate_tool_summary(tmp_path):
 
 def test_aggregate_handles_payload_without_fields(tmp_path):
     storage = _storage(tmp_path)
-    storage.append("events", {"type": "session_start", "timestamp": time.time(), "session_id": "s1"})
+    storage.append(
+        "events", {"type": "session_start", "timestamp": time.time(), "session_id": "s1"}
+    )
     agg = DailyAggregator(storage)
     summary = agg.aggregate(utc_date(utc_now()))
     assert summary["sessions"] == 1

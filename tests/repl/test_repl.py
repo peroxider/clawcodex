@@ -34,21 +34,19 @@ class TestREPL(unittest.TestCase):
                 "glm": {
                     "api_key": "test_api_key_12345678",
                     "base_url": "https://open.bigmodel.cn/api/paas/v4",
-                    "default_model": "glm-4.5"
+                    "default_model": "glm-4.5",
                 }
-            }
+            },
         }
 
         config_file = self.config_dir / "config.json"
-        with open(config_file, 'w') as f:
+        with open(config_file, "w") as f:
             json.dump(test_config, f)
 
         # Redirect ConfigManager to the test config and drop any cached
         # singleton state. Patching ``get_config_path`` alone is a no-op
         # because the manager reads ``GLOBAL_CONFIG_FILE`` directly.
-        self._global_config_patcher = patch.object(
-            config_module, "GLOBAL_CONFIG_FILE", config_file
-        )
+        self._global_config_patcher = patch.object(config_module, "GLOBAL_CONFIG_FILE", config_file)
         self._global_config_patcher.start()
         config_module._default_manager = None
 
@@ -58,11 +56,11 @@ class TestREPL(unittest.TestCase):
 
     def test_repl_initialization(self):
         """Test REPL initialization."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -74,11 +72,11 @@ class TestREPL(unittest.TestCase):
 
     def test_repl_initialization_with_stream_enabled(self):
         """Test REPL can start with stream mode enabled."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session.return_value = Mock()
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -87,16 +85,18 @@ class TestREPL(unittest.TestCase):
                     self.assertTrue(repl.stream)
 
     def test_startup_header_contains_logo_and_metadata(self):
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = Mock(return_value=mock_provider)
 
                     repl = ClawcodexREPL(provider_name="glm")
 
-                    with patch('clawcodex_ext.repl.core.Path.cwd', return_value=Path(self.temp_dir)):
+                    with patch(
+                        "clawcodex_ext.repl.core.Path.cwd", return_value=Path(self.temp_dir)
+                    ):
                         # Capture stdout to verify fallback path output
                         import io
                         from contextlib import redirect_stdout
@@ -116,9 +116,9 @@ class TestREPL(unittest.TestCase):
 
     def test_handle_command_exit(self):
         """Test /exit command."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -130,13 +130,13 @@ class TestREPL(unittest.TestCase):
 
     def test_handle_command_clear(self):
         """Test /clear command."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session_instance = Mock()
                 mock_session_instance.conversation = Mock()
                 mock_session.return_value = mock_session_instance
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -148,9 +148,9 @@ class TestREPL(unittest.TestCase):
 
     def test_handle_command_stream_toggle(self):
         """Test /stream command toggles stream mode safely."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -166,14 +166,14 @@ class TestREPL(unittest.TestCase):
 
     def test_handle_command_render_last_renders_markdown(self):
         """Test /render-last re-renders the last assistant response."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session_factory:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session.conversation.add_assistant_message("## Hello\n\n- item")
                 mock_session_factory.return_value = mock_session
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -182,20 +182,22 @@ class TestREPL(unittest.TestCase):
                     repl.console.print = Mock()
                     repl.handle_command("/render-last")
 
-                    self.assertTrue(any(
-                        args and isinstance(args[0], Markdown)
-                        for args, _kwargs in repl.console.print.call_args_list
-                    ))
+                    self.assertTrue(
+                        any(
+                            args and isinstance(args[0], Markdown)
+                            for args, _kwargs in repl.console.print.call_args_list
+                        )
+                    )
 
     def test_handle_command_render_last_without_message(self):
         """Test /render-last handles empty history gracefully."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session_factory:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -204,10 +206,12 @@ class TestREPL(unittest.TestCase):
                     repl.console.print = Mock()
                     repl.handle_command("/render-last")
 
-                    self.assertTrue(any(
-                        args and "No assistant response available to render." in str(args[0])
-                        for args, _kwargs in repl.console.print.call_args_list
-                    ))
+                    self.assertTrue(
+                        any(
+                            args and "No assistant response available to render." in str(args[0])
+                            for args, _kwargs in repl.console.print.call_args_list
+                        )
+                    )
 
     def test_local_command_text_defaults_to_plain_output(self):
         """Ordinary local command output must not be markdown-rendered."""
@@ -218,10 +222,12 @@ class TestREPL(unittest.TestCase):
 
         first_arg = repl.console.print.call_args_list[0].args[0]
         self.assertEqual(first_arg, "\n**plain**")
-        self.assertFalse(any(
-            args and isinstance(args[0], Markdown)
-            for args, _kwargs in repl.console.print.call_args_list
-        ))
+        self.assertFalse(
+            any(
+                args and isinstance(args[0], Markdown)
+                for args, _kwargs in repl.console.print.call_args_list
+            )
+        )
 
     def test_recap_local_command_text_renders_markdown(self):
         repl = ClawcodexREPL.__new__(ClawcodexREPL)
@@ -229,10 +235,12 @@ class TestREPL(unittest.TestCase):
 
         repl._print_local_command_text("Recapitulate\n- **done**", command="recap")
 
-        self.assertTrue(any(
-            args and isinstance(args[0], Markdown)
-            for args, _kwargs in repl.console.print.call_args_list
-        ))
+        self.assertTrue(
+            any(
+                args and isinstance(args[0], Markdown)
+                for args, _kwargs in repl.console.print.call_args_list
+            )
+        )
 
     def test_handle_command_tools_lists_registered_tools(self):
         """/tools must call ToolRegistry.list_tools() and print each name.
@@ -241,9 +249,10 @@ class TestREPL(unittest.TestCase):
         ``list_specs()`` and crashed with AttributeError on every invocation.
         """
         from types import SimpleNamespace
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -287,9 +296,9 @@ class TestREPL(unittest.TestCase):
             description=lambda _i: "Run a shell command",
         )
 
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -310,13 +319,13 @@ class TestREPL(unittest.TestCase):
 
     def test_chat_uses_true_api_stream_for_simple_prompt(self):
         """Simple prompts should use provider.chat_stream when stream mode is enabled."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session_factory:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider.chat_stream.return_value = iter(["你", "好"])
@@ -328,10 +337,12 @@ class TestREPL(unittest.TestCase):
                     repl.chat("你是谁")
 
                     mock_provider.chat_stream.assert_called_once()
-                    self.assertFalse(any(
-                        args and isinstance(args[0], Markdown)
-                        for args, _kwargs in repl.console.print.call_args_list
-                    ))
+                    self.assertFalse(
+                        any(
+                            args and isinstance(args[0], Markdown)
+                            for args, _kwargs in repl.console.print.call_args_list
+                        )
+                    )
                     self.assertEqual(len(mock_session.conversation.messages), 2)
                     self.assertEqual(mock_session.conversation.messages[1].role, "assistant")
                     last_content = mock_session.conversation.messages[1].content
@@ -342,13 +353,13 @@ class TestREPL(unittest.TestCase):
 
     def test_chat_uses_query_engine_for_code_task(self):
         """Code-like prompts use the new QueryEngine path."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session_factory:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider.chat_stream_response.side_effect = NotImplementedError()
@@ -369,13 +380,13 @@ class TestREPL(unittest.TestCase):
 
     def test_chat_uses_query_engine_on_stream_init_failure(self):
         """If real streaming fails, fall back to QueryEngine."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session_factory:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session_factory:
                 mock_session = Mock()
                 mock_session.conversation = Conversation()
                 mock_session_factory.return_value = mock_session
 
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider.chat_stream.side_effect = RuntimeError("stream unavailable")
@@ -400,16 +411,13 @@ class TestREPL(unittest.TestCase):
         skills_dir = Path(self.temp_dir) / "skills"
         (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
         (skills_dir / "hello" / "SKILL.md").write_text(
-            "---\n"
-            "description: say hello\n"
-            "---\n"
-            "Hello\n",
+            "---\ndescription: say hello\n---\nHello\n",
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"CLAWCODEX_SKILLS_DIR": str(skills_dir)}):
-            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-                with patch('clawcodex_ext.repl.core.Session.create'):
-                    with patch('src.providers.get_provider_class') as mock_provider_class:
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("clawcodex_ext.repl.core.Session.create"):
+                    with patch("src.providers.get_provider_class") as mock_provider_class:
                         mock_provider = Mock()
                         mock_provider.model = "glm-4.5"
                         mock_provider_class.return_value = mock_provider
@@ -418,7 +426,9 @@ class TestREPL(unittest.TestCase):
                         repl.console.print = Mock()
                         repl.handle_command("/")
                         rendered = "\n".join(
-                            str(args[0]) for args, _kwargs in repl.console.print.call_args_list if args
+                            str(args[0])
+                            for args, _kwargs in repl.console.print.call_args_list
+                            if args
                         )
                         self.assertIn("Available commands and skills", rendered)
                         self.assertIn("/hello", rendered)
@@ -427,16 +437,13 @@ class TestREPL(unittest.TestCase):
         skills_dir = Path(self.temp_dir) / "skills"
         (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
         (skills_dir / "hello" / "SKILL.md").write_text(
-            "---\n"
-            "description: say hello\n"
-            "---\n"
-            "Hello\n",
+            "---\ndescription: say hello\n---\nHello\n",
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"CLAWCODEX_SKILLS_DIR": str(skills_dir)}):
-            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-                with patch('clawcodex_ext.repl.core.Session.create'):
-                    with patch('src.providers.get_provider_class') as mock_provider_class:
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("clawcodex_ext.repl.core.Session.create"):
+                    with patch("src.providers.get_provider_class") as mock_provider_class:
                         mock_provider = Mock()
                         mock_provider.model = "glm-4.5"
                         mock_provider_class.return_value = mock_provider
@@ -445,7 +452,9 @@ class TestREPL(unittest.TestCase):
                         repl.console.print = Mock()
                         repl.handle_command("/he")
                         rendered = "\n".join(
-                            str(args[0]) for args, _kwargs in repl.console.print.call_args_list if args
+                            str(args[0])
+                            for args, _kwargs in repl.console.print.call_args_list
+                            if args
                         )
                         self.assertIn("/help", rendered)
                         self.assertIn("/hello", rendered)
@@ -454,17 +463,13 @@ class TestREPL(unittest.TestCase):
         skills_dir = Path(self.temp_dir) / "skills"
         (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
         (skills_dir / "hello" / "SKILL.md").write_text(
-            "---\n"
-            "description: say hello\n"
-            "arguments: [name]\n"
-            "---\n"
-            "Hello $name\n",
+            "---\ndescription: say hello\narguments: [name]\n---\nHello $name\n",
             encoding="utf-8",
         )
         with patch.dict("os.environ", {"CLAWCODEX_SKILLS_DIR": str(skills_dir)}):
-            with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-                with patch('clawcodex_ext.repl.core.Session.create'):
-                    with patch('src.providers.get_provider_class') as mock_provider_class:
+            with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+                with patch("clawcodex_ext.repl.core.Session.create"):
+                    with patch("src.providers.get_provider_class") as mock_provider_class:
                         mock_provider = Mock()
                         mock_provider.model = "glm-4.5"
                         mock_provider_class.return_value = mock_provider
@@ -481,13 +486,13 @@ class TestREPL(unittest.TestCase):
 
     def test_save_session(self):
         """Test session saving."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session_instance = Mock()
                 mock_session_instance.session_id = "test_session_123"
                 mock_session.return_value = mock_session_instance
 
-                with patch('src.providers.get_provider_class') as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -499,18 +504,18 @@ class TestREPL(unittest.TestCase):
 
     def test_load_session(self):
         """Test session loading."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session_instance = Mock()
                 mock_session_instance.session_id = "current_session"
                 mock_session.return_value = mock_session_instance
 
-                with patch('src.providers.get_provider_class') as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
 
-                    with patch('clawcodex_ext.repl.core.Session.load') as mock_load:
+                    with patch("clawcodex_ext.repl.core.Session.load") as mock_load:
                         loaded_session = Mock()
                         loaded_session.session_id = "loaded_session_123"
                         loaded_session.provider = "glm"
@@ -526,18 +531,18 @@ class TestREPL(unittest.TestCase):
 
     def test_load_nonexistent_session(self):
         """Test loading a session that doesn't exist."""
-        with patch('src.config.get_config_path', return_value=self.config_dir / "config.json"):
-            with patch('clawcodex_ext.repl.core.Session.create') as mock_session:
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
                 mock_session_instance = Mock()
                 mock_session_instance.session_id = "current_session"
                 mock_session.return_value = mock_session_instance
 
-                with patch('src.providers.get_provider_class') as mock_provider_class:
+                with patch("src.providers.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
 
-                    with patch('clawcodex_ext.repl.core.Session.load', return_value=None):
+                    with patch("clawcodex_ext.repl.core.Session.load", return_value=None):
                         repl = ClawcodexREPL(provider_name="glm")
                         original_session = repl.session
 
@@ -548,14 +553,20 @@ class TestREPL(unittest.TestCase):
 
     def test_permission_prompt_is_serialized(self):
         """Concurrent permission checks should not open overlapping prompts."""
-        with patch('clawcodex_ext.repl.core.get_provider_config', return_value={
-            "api_key": "test_api_key_12345678",
-            "base_url": "https://open.bigmodel.cn/api/paas/v4",
-            "default_model": "glm-4.5",
-        }), patch('clawcodex_ext.repl.core.PromptSession') as mock_prompt_session:
+        with (
+            patch(
+                "clawcodex_ext.repl.core.get_provider_config",
+                return_value={
+                    "api_key": "test_api_key_12345678",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "default_model": "glm-4.5",
+                },
+            ),
+            patch("clawcodex_ext.repl.core.PromptSession") as mock_prompt_session,
+        ):
             mock_prompt_session.return_value = Mock(prompt=Mock(return_value=""))
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -596,14 +607,20 @@ class TestREPL(unittest.TestCase):
 
     def test_permission_prompt_cached_per_tool(self):
         """After first decision, same tool should not prompt again."""
-        with patch('clawcodex_ext.repl.core.get_provider_config', return_value={
-            "api_key": "test_api_key_12345678",
-            "base_url": "https://open.bigmodel.cn/api/paas/v4",
-            "default_model": "glm-4.5",
-        }), patch('clawcodex_ext.repl.core.PromptSession') as mock_prompt_session:
+        with (
+            patch(
+                "clawcodex_ext.repl.core.get_provider_config",
+                return_value={
+                    "api_key": "test_api_key_12345678",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "default_model": "glm-4.5",
+                },
+            ),
+            patch("clawcodex_ext.repl.core.PromptSession") as mock_prompt_session,
+        ):
             mock_prompt_session.return_value = Mock(prompt=Mock(return_value=""))
-            with patch('clawcodex_ext.repl.core.Session.create'):
-                with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+            with patch("clawcodex_ext.repl.core.Session.create"):
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
@@ -649,13 +666,19 @@ class TestREPL(unittest.TestCase):
         path used by the surrounding ``Select >`` and the permission
         prompt), which pauses ``LiveStatus`` around the read.
         """
-        with patch('clawcodex_ext.repl.core.get_provider_config', return_value={
-            "api_key": "test_api_key_12345678",
-            "base_url": "https://open.bigmodel.cn/api/paas/v4",
-            "default_model": "glm-4.5",
-        }), patch('clawcodex_ext.repl.core.PromptSession') as mock_prompt_session, \
-                patch('clawcodex_ext.repl.core.Session.create'), \
-                patch('src.providers.runtime.build_provider_from_config') as mock_build_provider:
+        with (
+            patch(
+                "clawcodex_ext.repl.core.get_provider_config",
+                return_value={
+                    "api_key": "test_api_key_12345678",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "default_model": "glm-4.5",
+                },
+            ),
+            patch("clawcodex_ext.repl.core.PromptSession") as mock_prompt_session,
+            patch("clawcodex_ext.repl.core.Session.create"),
+            patch("src.providers.runtime.build_provider_from_config") as mock_build_provider,
+        ):
             mock_prompt_session.return_value = Mock(prompt=Mock(return_value=""))
             mock_provider = Mock()
             mock_provider.model = "glm-4.5"
@@ -675,28 +698,41 @@ class TestREPL(unittest.TestCase):
 
             # If the bug regresses, bare input() is reached for the 'Other'
             # follow-up and the AssertionError makes the test fail loudly.
-            with patch("builtins.input", side_effect=AssertionError(
-                "bare input() reached the 'Other' branch — regression of "
-                "src/repl/core.py:1037; 'Other' must read through "
-                "_safe_input so LiveStatus can pause the spinner."
-            )):
-                answers = repl._ask_user_questions([{
-                    "question": "每分钟发送的消息内容应该是什么？",
-                    "header": "msg",
-                    "options": [
-                        {"label": "简单心跳提醒",
-                         "description": "每分钟发送一条简短的状态消息"},
-                        {"label": "健康检查报告",
-                         "description": "汇报工作树与运行中的任务"},
-                        {"label": "自定义内容",
-                         "description": "我会告诉你具体想发的内容"},
-                    ],
-                    "multiSelect": False,
-                }])
+            with patch(
+                "builtins.input",
+                side_effect=AssertionError(
+                    "bare input() reached the 'Other' branch — regression of "
+                    "src/repl/core.py:1037; 'Other' must read through "
+                    "_safe_input so LiveStatus can pause the spinner."
+                ),
+            ):
+                answers = repl._ask_user_questions(
+                    [
+                        {
+                            "question": "每分钟发送的消息内容应该是什么？",
+                            "header": "msg",
+                            "options": [
+                                {
+                                    "label": "简单心跳提醒",
+                                    "description": "每分钟发送一条简短的状态消息",
+                                },
+                                {
+                                    "label": "健康检查报告",
+                                    "description": "汇报工作树与运行中的任务",
+                                },
+                                {"label": "自定义内容", "description": "我会告诉你具体想发的内容"},
+                            ],
+                            "multiSelect": False,
+                        }
+                    ]
+                )
 
-            self.assertEqual(answers, {
-                "每分钟发送的消息内容应该是什么？": "心跳一下 ⏰",
-            })
+            self.assertEqual(
+                answers,
+                {
+                    "每分钟发送的消息内容应该是什么？": "心跳一下 ⏰",
+                },
+            )
             # Both prompts went through _safe_input, in order.
             self.assertEqual(prompts_seen, ["Select > ", "Other > "])
 
@@ -787,7 +823,7 @@ class TestSession(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             session_dir = Path(temp_dir) / ".clawcodex" / "sessions"
 
-            with patch('src.agent.session.Path.home', return_value=Path(temp_dir)):
+            with patch("src.agent.session.Path.home", return_value=Path(temp_dir)):
                 # Create and save
                 session = Session.create("glm", "glm-4.5")
                 session.conversation.add_message("user", "Test message")
@@ -830,9 +866,9 @@ class TestREPLConversationSanitization(unittest.TestCase):
                     "base_url": "https://openrouter.ai/api/v1",
                     "default_model": "deepseek/deepseek-v4-pro",
                 }
-            }
+            },
         }
-        with open(self.config_file, 'w') as f:
+        with open(self.config_file, "w") as f:
             json.dump(test_config, f)
         self._global_config_patcher = patch.object(
             config_module, "GLOBAL_CONFIG_FILE", self.config_file
@@ -848,7 +884,7 @@ class TestREPLConversationSanitization(unittest.TestCase):
         # Build the smallest valid REPL fixture for unit-level testing
         # of the sanitization helper. We need a real `session.conversation`
         # (so the helper has something to mutate); everything else is mocked.
-        with patch('clawcodex_ext.repl.core.Session.create') as mock_session_create:
+        with patch("clawcodex_ext.repl.core.Session.create") as mock_session_create:
             session = Mock()
             session.conversation = Conversation()
             session.session_id = "test-session"
@@ -856,7 +892,7 @@ class TestREPLConversationSanitization(unittest.TestCase):
             session.model = "deepseek/deepseek-v4-pro"
             mock_session_create.return_value = session
 
-            with patch('clawcodex_ext.repl.core.get_provider_class') as mock_provider_class:
+            with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
                 mock_provider = Mock()
                 mock_provider.model = "deepseek/deepseek-v4-pro"
                 mock_provider_class.return_value = mock_provider
@@ -875,14 +911,18 @@ class TestREPLConversationSanitization(unittest.TestCase):
 
         repl = self._make_repl()
 
-        repl.session.conversation.add_user_message([
-            TextBlock(text="describe this image"),
-            ImageBlock(source={
-                "type": "base64",
-                "media_type": "image/png",
-                "data": "AAAA",
-            }),
-        ])
+        repl.session.conversation.add_user_message(
+            [
+                TextBlock(text="describe this image"),
+                ImageBlock(
+                    source={
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "AAAA",
+                    }
+                ),
+            ]
+        )
 
         err_msg = AssistantMessage(
             content="image not supported text",
@@ -895,8 +935,7 @@ class TestREPLConversationSanitization(unittest.TestCase):
         # User's text intent must survive; the image bytes get the
         # "[image]" placeholder (matches strip_images_from_typed_messages
         # contract).
-        user_msgs = [m for m in repl.session.conversation.messages
-                     if m.role == "user"]
+        user_msgs = [m for m in repl.session.conversation.messages if m.role == "user"]
         self.assertEqual(len(user_msgs), 1)
         content = user_msgs[0].content
         self.assertIsInstance(content, list)
@@ -915,14 +954,18 @@ class TestREPLConversationSanitization(unittest.TestCase):
         from src.types.messages import AssistantMessage
 
         repl = self._make_repl()
-        repl.session.conversation.add_user_message([
-            TextBlock(text="describe"),
-            ImageBlock(source={
-                "type": "base64",
-                "media_type": "image/png",
-                "data": "AAAA",
-            }),
-        ])
+        repl.session.conversation.add_user_message(
+            [
+                TextBlock(text="describe"),
+                ImageBlock(
+                    source={
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "AAAA",
+                    }
+                ),
+            ]
+        )
 
         # Non-error success message: no-op.
         ok_msg = AssistantMessage(content="here is the description")
@@ -961,14 +1004,18 @@ class TestREPLConversationSanitization(unittest.TestCase):
 
         # Seed the conversation with an image-bearing user message so
         # if the strip is invoked, we have something to strip.
-        repl.session.conversation.add_user_message([
-            TextBlock(text="describe"),
-            ImageBlock(source={
-                "type": "base64",
-                "media_type": "image/png",
-                "data": "AAAA",
-            }),
-        ])
+        repl.session.conversation.add_user_message(
+            [
+                TextBlock(text="describe"),
+                ImageBlock(
+                    source={
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "AAAA",
+                    }
+                ),
+            ]
+        )
 
         # Mock the engine's submit_message to yield exactly one
         # AssistantMessage tagged image_unsupported. This is the
@@ -988,7 +1035,7 @@ class TestREPLConversationSanitization(unittest.TestCase):
         # Patch QueryEngine.__init__ -> .submit_message to use our fake.
         # ``chat()`` constructs a QueryEngine inline, so we patch the
         # class to return a mock with our fake_submit_message.
-        with patch('clawcodex_ext.repl.core.QueryEngine') as mock_engine_class:
+        with patch("clawcodex_ext.repl.core.QueryEngine") as mock_engine_class:
             mock_engine = Mock()
             mock_engine.submit_message = fake_submit_message
             mock_engine.reset_abort_controller = Mock()
@@ -1020,5 +1067,5 @@ class TestREPLConversationSanitization(unittest.TestCase):
         )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

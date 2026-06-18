@@ -37,6 +37,7 @@ from upstream_sync.config import ProjectConfig, PatchConfig
 @dataclass
 class PatchDiff:
     """Represents the diff between two versions of a file."""
+
     path: str
     old_version: str
     new_version: str
@@ -47,6 +48,7 @@ class PatchDiff:
 @dataclass
 class GeneratedPatch:
     """A generated patch with metadata."""
+
     filename: str
     content: str
     source_file: str
@@ -57,9 +59,11 @@ class GeneratedPatch:
 # Regeneration (strict reconstruction) types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RegeneratePatch:
     """An individual patch entry during regeneration."""
+
     filename: str
     relative_path: str
     patch_type: str  # 'modified' | 'new' | 'deleted'
@@ -73,6 +77,7 @@ class RegenerateResult:
 
         src/upstream/{commit} + patches/upstream/{commit}/series == src/
     """
+
     patch_entries: list[RegeneratePatch] = field(default_factory=list)
     modified_count: int = 0
     new_count: int = 0
@@ -134,9 +139,7 @@ class PatchGenerator:
             # Check if this file was modified in old patches
             if diff.path in old_patch_patterns:
                 pattern = old_patch_patterns[diff.path]
-                new_patch_content = self._transform_patch(
-                    diff, pattern, old_commit, new_commit
-                )
+                new_patch_content = self._transform_patch(diff, pattern, old_commit, new_commit)
             else:
                 # For new files, create a simple patch
                 new_patch_content = self._create_simple_patch(diff, new_commit)
@@ -145,12 +148,14 @@ class PatchGenerator:
                 filename = self._generate_patch_filename(diff, new_commit)
                 patch_path = patch_subdir / filename
                 patch_path.write_text(new_patch_content, encoding="utf-8")
-                generated.append(GeneratedPatch(
-                    filename=filename,
-                    content=new_patch_content,
-                    source_file=diff.path,
-                    patch_type='add' if diff.is_new else 'modify',
-                ))
+                generated.append(
+                    GeneratedPatch(
+                        filename=filename,
+                        content=new_patch_content,
+                        source_file=diff.path,
+                        patch_type="add" if diff.is_new else "modify",
+                    )
+                )
 
         return generated
 
@@ -182,13 +187,15 @@ class PatchGenerator:
             if line.startswith("diff --git"):
                 # Save previous file diff
                 if current_file:
-                    diffs.append(PatchDiff(
-                        path=current_file,
-                        old_version="\n".join(old_lines),
-                        new_version="\n".join(new_lines),
-                        is_new=is_new,
-                        is_deleted=is_deleted,
-                    ))
+                    diffs.append(
+                        PatchDiff(
+                            path=current_file,
+                            old_version="\n".join(old_lines),
+                            new_version="\n".join(new_lines),
+                            is_new=is_new,
+                            is_deleted=is_deleted,
+                        )
+                    )
                 # Parse new file path from "b/<path>" part
                 # e.g., "diff --git a/src/bridge/__init__.py b/src/bridge/__init__.py"
                 parts = line.split(" b/")
@@ -198,7 +205,7 @@ class PatchGenerator:
                     # e.g., "src/bridge/__init__.py" -> "bridge/__init__.py"
                     subpath = self.cfg.upstream.source_subpath
                     if raw_path.startswith(f"{subpath}/"):
-                        current_file = raw_path[len(subpath)+1:]
+                        current_file = raw_path[len(subpath) + 1 :]
                     else:
                         current_file = raw_path
                 old_lines = []
@@ -216,13 +223,15 @@ class PatchGenerator:
 
         # Save last file
         if current_file:
-            diffs.append(PatchDiff(
-                path=current_file,
-                old_version="\n".join(old_lines),
-                new_version="\n".join(new_lines),
-                is_new=is_new,
-                is_deleted=is_deleted,
-            ))
+            diffs.append(
+                PatchDiff(
+                    path=current_file,
+                    old_version="\n".join(old_lines),
+                    new_version="\n".join(new_lines),
+                    is_new=is_new,
+                    is_deleted=is_deleted,
+                )
+            )
 
         return diffs
 
@@ -254,16 +263,16 @@ class PatchGenerator:
                         continue
                     # Strip source_subpath prefix if present
                     if src.startswith(f"{subpath}/"):
-                        src = src[len(subpath)+1:]
+                        src = src[len(subpath) + 1 :]
                     patterns[src] = content
                     break
                 elif line.startswith("--- a/") or line.startswith("+++ b/"):
                     # Extract path after a/ or b/
                     prefix = "--- a/" if line.startswith("--- a/") else "+++ b/"
-                    src = line[len(prefix):].split(" ")[0]
+                    src = line[len(prefix) :].split(" ")[0]
                     # Strip source_subpath prefix if present
                     if src.startswith(f"{subpath}/"):
-                        src = src[len(subpath)+1:]
+                        src = src[len(subpath) + 1 :]
                     patterns[src] = content
                     break
 
@@ -307,8 +316,14 @@ class PatchGenerator:
         if not diff.is_new and not diff.is_deleted:
             # For modifications, use git diff
             result = subprocess.run(
-                ["git", "diff", f"upstream/{self.cfg.upstream.main_branch}~1",
-                 f"upstream/{self.cfg.upstream.main_branch}", "--", diff.path],
+                [
+                    "git",
+                    "diff",
+                    f"upstream/{self.cfg.upstream.main_branch}~1",
+                    f"upstream/{self.cfg.upstream.main_branch}",
+                    "--",
+                    diff.path,
+                ],
                 cwd=self.repo_root,
                 capture_output=True,
                 text=True,
@@ -344,9 +359,7 @@ class PatchGenerator:
     def _resolve_patch_dir(self, commit: str) -> Path:
         """Resolve the patch directory for a given commit."""
         if self.cfg.patches.patch_subdir:
-            return Path(
-                str(self.cfg.patches.patch_subdir).format(commit=commit)
-            )
+            return Path(str(self.cfg.patches.patch_subdir).format(commit=commit))
         return self.cfg.patches.directory
 
     def create_series_file(self, patches: list[GeneratedPatch], output_path: Path) -> None:
@@ -372,7 +385,9 @@ class PatchGenerator:
     @staticmethod
     def files_differ_norm(upstream_path: Path, src_path: Path) -> bool:
         """Compare two files with normalised line endings."""
-        return PatchGenerator.read_normalised(upstream_path) != PatchGenerator.read_normalised(src_path)
+        return PatchGenerator.read_normalised(upstream_path) != PatchGenerator.read_normalised(
+            src_path
+        )
 
     @staticmethod
     def normalize_patch_path(path: str) -> str:
@@ -380,7 +395,7 @@ class PatchGenerator:
         name = path.replace("/", "_")
         dot_idx = name.rfind(".")
         if dot_idx >= 0:
-            name = name[:dot_idx] + "_" + name[dot_idx + 1:]
+            name = name[:dot_idx] + "_" + name[dot_idx + 1 :]
         return name
 
     @staticmethod
@@ -412,7 +427,9 @@ class PatchGenerator:
             if not path.is_file():
                 continue
             relative_path = str(path.relative_to(root))
-            if not PatchGenerator.is_skipped(relative_path, skip_prefixes, skip_dirs, skip_suffixes):
+            if not PatchGenerator.is_skipped(
+                relative_path, skip_prefixes, skip_dirs, skip_suffixes
+            ):
                 files.add(relative_path)
         return files
 
@@ -487,7 +504,9 @@ class PatchGenerator:
         return body
 
     @staticmethod
-    def generate_modified_patch(relative_path: str, upstream_path: Path, src_path: Path) -> str | None:
+    def generate_modified_patch(
+        relative_path: str, upstream_path: Path, src_path: Path
+    ) -> str | None:
         """Generate a full patch for a modified file."""
         diff_output = PatchGenerator.run_diff_raw(upstream_path, src_path)
         if not diff_output:
@@ -614,9 +633,7 @@ class PatchGenerator:
             if patch_type != phase:
                 phase = patch_type
                 if phase == "new":
-                    lines.extend(
-                        ["", "# === Phase 2: New files (fork-only, not in upstream) ==="]
-                    )
+                    lines.extend(["", "# === Phase 2: New files (fork-only, not in upstream) ==="])
                 elif phase == "deleted":
                     lines.extend(
                         ["", "# === Phase 3: Deleted files (removed from upstream base) ==="]
@@ -701,9 +718,7 @@ class PatchGenerator:
         # Cross-check preserve entries
         for relative_path in sorted(preserve):
             if relative_path not in upstream_files:
-                raise ValueError(
-                    f"--preserve entry not in upstream base: {relative_path}"
-                )
+                raise ValueError(f"--preserve entry not in upstream base: {relative_path}")
 
         # Classify files
         upstream_only = sorted(upstream_files - src_files)
@@ -761,7 +776,9 @@ class PatchGenerator:
                 content = self.generate_delete_patch(relative_path, upstream / relative_path)
                 if content is None:
                     continue
-                patch_filename = f"{index:04d}.{self.normalize_patch_path(relative_path)}.delete.patch"
+                patch_filename = (
+                    f"{index:04d}.{self.normalize_patch_path(relative_path)}.delete.patch"
+                )
                 self._write_patch(patch_dir / patch_filename, content)
                 patch_entries.append((patch_filename, "deleted"))
                 index += 1
@@ -778,8 +795,7 @@ class PatchGenerator:
         )
 
         total_size = sum(
-            (patch_dir / patch_filename).stat().st_size
-            for patch_filename, _ in patch_entries
+            (patch_dir / patch_filename).stat().st_size for patch_filename, _ in patch_entries
         )
 
         # Build result

@@ -88,7 +88,7 @@ ConfigTool: Tool = build_tool(
     },
     call=_config_call,
     prompt='Get or set Clawcodex configuration values (e.g. "default_provider", "providers.openai.base_url").',
-    description='Get or set Clawcodex configuration values.',
+    description="Get or set Clawcodex configuration values.",
     max_result_size_chars=100_000,
     is_destructive=lambda _input: "value" in _input,
     to_auto_classifier_input=_config_classifier_input,

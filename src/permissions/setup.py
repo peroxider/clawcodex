@@ -131,19 +131,23 @@ def setup_permissions(
 
     if cli_allow:
         for rule_str in cli_allow:
-            all_rules.append(PermissionRule(
-                source="cliArg",
-                rule_behavior="allow",
-                rule_value=permission_rule_value_from_string(rule_str),
-            ))
+            all_rules.append(
+                PermissionRule(
+                    source="cliArg",
+                    rule_behavior="allow",
+                    rule_value=permission_rule_value_from_string(rule_str),
+                )
+            )
 
     if cli_deny:
         for rule_str in cli_deny:
-            all_rules.append(PermissionRule(
-                source="cliArg",
-                rule_behavior="deny",
-                rule_value=permission_rule_value_from_string(rule_str),
-            ))
+            all_rules.append(
+                PermissionRule(
+                    source="cliArg",
+                    rule_behavior="deny",
+                    rule_value=permission_rule_value_from_string(rule_str),
+                )
+            )
 
     for rule in all_rules:
         if rule.rule_behavior == "allow":
@@ -151,12 +155,14 @@ def setup_permissions(
                 rule.rule_value.tool_name,
                 rule.rule_value.rule_content,
             ):
-                warnings.append(DangerousRuleWarning(
-                    rule=rule,
-                    tool_name=rule.rule_value.tool_name,
-                    rule_content=rule.rule_value.rule_content,
-                    source=rule.source,
-                ))
+                warnings.append(
+                    DangerousRuleWarning(
+                        rule=rule,
+                        tool_name=rule.rule_value.tool_name,
+                        rule_content=rule.rule_value.rule_content,
+                        source=rule.source,
+                    )
+                )
 
     context = apply_rules_to_context(context, all_rules)
 

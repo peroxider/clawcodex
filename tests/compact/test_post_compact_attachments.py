@@ -31,18 +31,12 @@ class TestShouldExcludeFromPostCompactRestore(unittest.TestCase):
 
     def test_plan_file_excluded(self):
         self.assertTrue(
-            _should_exclude_from_post_compact_restore(
-                "/tmp/plan.md", plan_file_path="/tmp/plan.md"
-            )
+            _should_exclude_from_post_compact_restore("/tmp/plan.md", plan_file_path="/tmp/plan.md")
         )
 
     def test_claude_md_excluded(self):
-        self.assertTrue(
-            _should_exclude_from_post_compact_restore("CLAUDE.md")
-        )
-        self.assertTrue(
-            _should_exclude_from_post_compact_restore(".claude.md")
-        )
+        self.assertTrue(_should_exclude_from_post_compact_restore("CLAUDE.md"))
+        self.assertTrue(_should_exclude_from_post_compact_restore(".claude.md"))
 
     def test_memory_path_excluded(self):
         paths = {os.path.abspath("/home/user/.claude/memory.md")}
@@ -56,27 +50,35 @@ class TestShouldExcludeFromPostCompactRestore(unittest.TestCase):
 class TestCollectReadToolFilePaths(unittest.TestCase):
     def test_collects_read_paths(self):
         msgs = [
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/tmp/foo.py"}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(tool_use_id="t1", content="file contents"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/tmp/foo.py"}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(tool_use_id="t1", content="file contents"),
+                ]
+            ),
         ]
         paths = _collect_read_tool_file_paths(msgs)
         self.assertIn(os.path.abspath("/tmp/foo.py"), paths)
 
     def test_skips_stub_results(self):
         msgs = [
-            AssistantMessage(content=[
-                ToolUseBlock(id="t1", name="Read", input={"file_path": "/tmp/bar.py"}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(
-                    tool_use_id="t1",
-                    content="[File unchanged since last read]",
-                ),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(id="t1", name="Read", input={"file_path": "/tmp/bar.py"}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="t1",
+                        content="[File unchanged since last read]",
+                    ),
+                ]
+            ),
         ]
         paths = _collect_read_tool_file_paths(msgs)
         self.assertEqual(len(paths), 0)
@@ -124,9 +126,7 @@ class TestCreatePostCompactFileAttachments(unittest.TestCase):
         files = []
         try:
             for i in range(10):
-                f = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".py", delete=False
-                )
+                f = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
                 f.write(f"file {i}")
                 f.close()
                 files.append(f.name)
@@ -150,16 +150,18 @@ class TestCreatePostCompactFileAttachments(unittest.TestCase):
         try:
             state = {name: {"content": "content", "timestamp": time.time()}}
             preserved = [
-                AssistantMessage(content=[
-                    ToolUseBlock(id="t1", name="Read", input={"file_path": name}),
-                ]),
-                UserMessage(content=[
-                    ToolResultBlock(tool_use_id="t1", content="content"),
-                ]),
+                AssistantMessage(
+                    content=[
+                        ToolUseBlock(id="t1", name="Read", input={"file_path": name}),
+                    ]
+                ),
+                UserMessage(
+                    content=[
+                        ToolResultBlock(tool_use_id="t1", content="content"),
+                    ]
+                ),
             ]
-            result = create_post_compact_file_attachments(
-                state, preserved_messages=preserved
-            )
+            result = create_post_compact_file_attachments(state, preserved_messages=preserved)
             self.assertEqual(len(result), 0)
         finally:
             os.unlink(name)
@@ -168,9 +170,7 @@ class TestCreatePostCompactFileAttachments(unittest.TestCase):
         files = []
         try:
             for i in range(3):
-                f = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".py", delete=False
-                )
+                f = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
                 f.write(f"file_{i}_content")
                 f.close()
                 files.append(f.name)
@@ -194,14 +194,10 @@ class TestCreatePlanAttachmentIfNeeded(unittest.TestCase):
         self.assertIsNone(create_plan_attachment_if_needed(None))
 
     def test_nonexistent_file_returns_none(self):
-        self.assertIsNone(
-            create_plan_attachment_if_needed("/nonexistent/plan.md")
-        )
+        self.assertIsNone(create_plan_attachment_if_needed("/nonexistent/plan.md"))
 
     def test_creates_attachment_for_existing_plan(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("# My Plan\n\n1. Step one\n2. Step two")
             f.flush()
             name = f.name
@@ -214,9 +210,7 @@ class TestCreatePlanAttachmentIfNeeded(unittest.TestCase):
             os.unlink(name)
 
     def test_empty_plan_returns_none(self):
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write("   ")
             f.flush()
             name = f.name

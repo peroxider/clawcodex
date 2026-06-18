@@ -66,7 +66,11 @@ class TestClaudeCodeToolParity(unittest.TestCase):
             "Write",
         ]
         not_yet_implemented = {"NotebookEdit", "PowerShell", "REPL", "RemoteTrigger", "SendMessage"}
-        missing = [name for name in expected if self.registry.get(name) is None and name not in not_yet_implemented]
+        missing = [
+            name
+            for name in expected
+            if self.registry.get(name) is None and name not in not_yet_implemented
+        ]
         self.assertEqual(missing, [])
 
     def test_send_user_message_is_user_visible_fallback(self) -> None:
@@ -151,7 +155,9 @@ class TestClaudeCodeToolParity(unittest.TestCase):
             usage={"input_tokens": 1, "output_tokens": 1},
             finish_reason="tool_calls",
             reasoning_content="hidden chain of thought token stream",
-            tool_uses=[{"id": "toolu_1", "name": "SendUserMessage", "input": {"message": "working"}}],
+            tool_uses=[
+                {"id": "toolu_1", "name": "SendUserMessage", "input": {"message": "working"}}
+            ],
         )
         second = ChatResponse(
             content="done",

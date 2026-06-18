@@ -7,6 +7,7 @@ session scan helper.
 Tests use a tmp-path override of the auto-memory dir to keep
 filesystem state hermetic.
 """
+
 from __future__ import annotations
 
 import json
@@ -145,6 +146,7 @@ def test_rollback_rewinds_mtime(memory_dir: Path) -> None:
 
 def test_rollback_swallows_oserror(monkeypatch, memory_dir: Path) -> None:
     """rollback must not raise even on filesystem failures."""
+
     def _raise(*_a, **_kw):
         raise OSError("boom")
 
@@ -207,9 +209,7 @@ def test_list_sessions_touched_since_filters_by_mtime(
     assert result == ["new"]
 
 
-def test_list_sessions_skips_dotfiles(
-    monkeypatch: pytest.MonkeyPatch, memory_dir: Path
-) -> None:
+def test_list_sessions_skips_dotfiles(monkeypatch: pytest.MonkeyPatch, memory_dir: Path) -> None:
     proj_dir = memory_dir / "project_sessions"
     proj_dir.mkdir()
     (proj_dir / ".hidden").mkdir()

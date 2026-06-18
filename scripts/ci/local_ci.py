@@ -274,6 +274,31 @@ def _preflight_counts() -> tuple[int, int, int]:
     return changed_count, len(_read_list(PYTHON_FILES)), len(_read_list(DOC_FILES))
 
 
+def _chunked_commands(
+    prefix: list[str],
+    paths: list[str],
+    *,
+    max_command_chars: int = 24_000,
+) -> list[list[str]]:
+    """Split long file lists so Windows CreateProcess stays under its limit."""
+    commands: list[list[str]] = []
+    current: list[str] = []
+    current_len = sum(len(part) + 1 for part in prefix)
+
+    for path in paths:
+        path_len = len(path) + 1
+        if current and current_len + path_len > max_command_chars:
+            commands.append([*prefix, *current])
+            current = []
+            current_len = sum(len(part) + 1 for part in prefix)
+        current.append(path)
+        current_len += path_len
+
+    if current:
+        commands.append([*prefix, *current])
+    return commands
+
+
 def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Step]:
     python_files = _read_list(PYTHON_FILES)
     docs_command = [sys.executable, "scripts/ci/docs_check.py", "--files-from", str(DOC_FILES)]
@@ -282,10 +307,16 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
 
     lint_commands = []
     if python_files:
-        lint_commands = [
-            [sys.executable, "-m", "ruff", "check", *python_files],
-            [sys.executable, "-m", "ruff", "format", "--check", *python_files],
-        ]
+        lint_commands = _chunked_commands(
+            [sys.executable, "-m", "ruff", "check"],
+            python_files,
+        )
+        lint_commands.extend(
+            _chunked_commands(
+                [sys.executable, "-m", "ruff", "format", "--check"],
+                python_files,
+            )
+        )
 
     if not _env_bool(env, "CI_RUN_PYTHON"):
         lint_skip_reason = "no Python/package/CI changes"

@@ -243,9 +243,7 @@ async def test_theme_picker_selects_light():
     app = _DialogHost()
     async with app.run_test() as pilot:
         await pilot.pause()
-        dlg = ThemePickerScreen(
-            themes=["auto", "dark", "light", "claude"], current="dark"
-        )
+        dlg = ThemePickerScreen(themes=["auto", "dark", "light", "claude"], current="dark")
         result_future = _push(app, dlg)
         await pilot.pause()
         await pilot.press("down")  # cursor starts at "dark" (current)

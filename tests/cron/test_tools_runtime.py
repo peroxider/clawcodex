@@ -3,8 +3,7 @@ from __future__ import annotations
 import pytest
 
 from clawcodex_ext.cron_system.runs import read_cron_runs
-from clawcodex_ext.cron_system.runtime import (attach_cron_runtime,
-                                               replace_cron_tools)
+from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
 from clawcodex_ext.cron_system.tools import CronCreateTool
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
@@ -67,9 +66,7 @@ def test_mutating_cron_tools_are_not_read_only() -> None:
 
 def test_durable_false_and_true_both_visible_in_list(tmp_path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
-    session = CronCreateTool.call(
-        {"cron": "*/5 * * * *", "prompt": "session"}, ctx
-    ).output
+    session = CronCreateTool.call({"cron": "*/5 * * * *", "prompt": "session"}, ctx).output
     durable = CronCreateTool.call(
         {"cron": "*/5 * * * *", "prompt": "durable", "durable": True}, ctx
     ).output
@@ -82,9 +79,7 @@ def test_durable_false_and_true_both_visible_in_list(tmp_path) -> None:
 
 def test_durable_false_delete_works(tmp_path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
-    created = CronCreateTool.call(
-        {"cron": "*/5 * * * *", "prompt": "session"}, ctx
-    ).output
+    created = CronCreateTool.call({"cron": "*/5 * * * *", "prompt": "session"}, ctx).output
     # Session tasks live in ctx.crons (in-memory). CronDelete must find
     # them there since the file is never written.
     deleted = registry_tool("CronDelete").call({"id": created["id"]}, ctx).output

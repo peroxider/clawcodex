@@ -166,9 +166,7 @@ class TestAppendToolEventLog(unittest.TestCase):
                     "turn": 0,
                 },
             )
-            log_path = (
-                base / ".clawcodex" / "tool-events" / "run-test-1" / "events.ndjson"
-            )
+            log_path = base / ".clawcodex" / "tool-events" / "run-test-1" / "events.ndjson"
             self.assertTrue(log_path.exists(), f"missing: {log_path}")
             lines = log_path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(lines), 1)
@@ -198,15 +196,10 @@ class TestAppendToolEventLog(unittest.TestCase):
                 ctx,
             )
         log_path = (
-            Path(os.environ["HOME"])
-            / ".clawcodex"
-            / "tool-events"
-            / "run-multi"
-            / "events.ndjson"
+            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-multi" / "events.ndjson"
         )
         rows = [
-            json.loads(line)
-            for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+            json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
         ]
         self.assertEqual([r["tool"] for r in rows], ["Bash", "Read", "Edit"])
         self.assertEqual(rows[0]["params"], {"command": "ls"})
@@ -222,15 +215,9 @@ class TestAppendToolEventLog(unittest.TestCase):
             },
         )
         log_path = (
-            Path(os.environ["HOME"])
-            / ".clawcodex"
-            / "tool-events"
-            / "run-deny"
-            / "events.ndjson"
+            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-deny" / "events.ndjson"
         )
-        row = json.loads(
-            log_path.read_text(encoding="utf-8").strip().splitlines()[0]
-        )
+        row = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[0])
         self.assertFalse(row["approved"])
         self.assertEqual(row["deny_reason"], "not in safe-list")
 
@@ -245,11 +232,7 @@ class TestAppendToolEventLog(unittest.TestCase):
             },
         )
         log_path = (
-            Path(os.environ["HOME"])
-            / ".clawcodex"
-            / "tool-events"
-            / "unknown"
-            / "events.ndjson"
+            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "unknown" / "events.ndjson"
         )
         self.assertTrue(log_path.exists())
 
@@ -259,11 +242,7 @@ class TestAppendToolEventLog(unittest.TestCase):
         for _ in range(5):
             runner._append_tool_event_log(_tc_event(approved=True), ctx)
         log_path = (
-            Path(os.environ["HOME"])
-            / ".clawcodex"
-            / "tool-events"
-            / "run-x"
-            / "events.ndjson"
+            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-x" / "events.ndjson"
         )
         lines = log_path.read_text(encoding="utf-8").strip().splitlines()
         self.assertEqual(len(lines), 5)
@@ -343,9 +322,8 @@ class TestAgentRunnerWiresAuditBypass(unittest.TestCase):
                 _QueryRunnerWithToolCallStub,
             ):
                 import asyncio
-                asyncio.run(
-                    runner.run(session, WorkflowConfig.from_dict({}))
-                )
+
+                asyncio.run(runner.run(session, WorkflowConfig.from_dict({})))
 
             self.assertIsNotNone(session.tool_events_path)
             self.assertTrue(session.tool_events_path.endswith("events.ndjson"))
@@ -359,9 +337,7 @@ class TestAgentRunnerWiresAuditBypass(unittest.TestCase):
             )
             rows = [
                 json.loads(line)
-                for line in tool_events_path.read_text(
-                    encoding="utf-8"
-                ).strip().splitlines()
+                for line in tool_events_path.read_text(encoding="utf-8").strip().splitlines()
             ]
             self.assertEqual(len(rows), 1)
             row = rows[0]
@@ -424,11 +400,7 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
             # Pre-create a fake tool-events NDJSON to simulate the
             # agent_runner having written it.
             tool_events = (
-                Path(os.environ["HOME"])
-                / ".clawcodex"
-                / "tool-events"
-                / "run-x"
-                / "events.ndjson"
+                Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-x" / "events.ndjson"
             )
             tool_events.parent.mkdir(parents=True, exist_ok=True)
             tool_events.write_text(
@@ -465,10 +437,7 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
             )
 
             self.assertIsInstance(result, ReportResult)
-            persistent_events = (
-                Path(result.persistent_markdown_path).parent
-                / "run-x.events.ndjson"
-            )
+            persistent_events = Path(result.persistent_markdown_path).parent / "run-x.events.ndjson"
             self.assertTrue(persistent_events.exists(), persistent_events)
             self.assertEqual(
                 persistent_events.read_text(encoding="utf-8"),
@@ -480,11 +449,7 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
             workspace = Path(tmp) / "ws"
             workspace.mkdir()
             tool_events = (
-                Path(os.environ["HOME"])
-                / ".clawcodex"
-                / "tool-events"
-                / "run-m"
-                / "events.ndjson"
+                Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-m" / "events.ndjson"
             )
             tool_events.parent.mkdir(parents=True, exist_ok=True)
             tool_events.write_text("{}\n", encoding="utf-8")
@@ -500,9 +465,7 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
                 output_text="",
                 tool_events_path=str(tool_events),
             )
-            md = Path(result.workspace_markdown_path).read_text(
-                encoding="utf-8"
-            )
+            md = Path(result.workspace_markdown_path).read_text(encoding="utf-8")
             self.assertIn("Tool events:", md)
             self.assertIn(str(tool_events), md)
 
@@ -520,9 +483,7 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
                 status="completed",
                 output_text="",
             )
-            md = Path(result.workspace_markdown_path).read_text(
-                encoding="utf-8"
-            )
+            md = Path(result.workspace_markdown_path).read_text(encoding="utf-8")
             self.assertNotIn("Tool events:", md)
 
 
@@ -548,6 +509,7 @@ class TestToolEventLogRotation(unittest.TestCase):
         from extensions.orchestrator.agent_runner import (
             _TOOL_EVENT_LOG_ROTATE_BYTES,
         )
+
         runner = AgentRunner(AgentConfig(), SandboxConfig())
         ctx = {
             "run_id": "run-rotate",
@@ -555,12 +517,7 @@ class TestToolEventLogRotation(unittest.TestCase):
             "turn": 0,
         }
         # Pre-create a saturated events.ndjson at the rotation threshold.
-        log_dir = (
-            Path(os.environ["HOME"])
-            / ".clawcodex"
-            / "tool-events"
-            / "run-rotate"
-        )
+        log_dir = Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-rotate"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / "events.ndjson"
         log_path.write_bytes(b"x" * _TOOL_EVENT_LOG_ROTATE_BYTES)
@@ -571,12 +528,9 @@ class TestToolEventLogRotation(unittest.TestCase):
         # the new file should now contain one valid row.
         rotated = log_dir / "events.ndjson.1"
         self.assertTrue(rotated.exists())
-        self.assertEqual(
-            rotated.stat().st_size, _TOOL_EVENT_LOG_ROTATE_BYTES
-        )
+        self.assertEqual(rotated.stat().st_size, _TOOL_EVENT_LOG_ROTATE_BYTES)
         rows = [
-            json.loads(line)
-            for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+            json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
         ]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["tool"], "Bash")
@@ -628,9 +582,7 @@ class TestFourPermissionModes(unittest.TestCase):
                 log_path.exists(),
                 f"missing log for mode={mode}",
             )
-            row = json.loads(
-                log_path.read_text(encoding="utf-8").strip().splitlines()[0]
-            )
+            row = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[0])
             self.assertEqual(row["permission_mode"], mode)
             # 8-field invariant across modes.
             self.assertEqual(

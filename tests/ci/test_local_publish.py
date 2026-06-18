@@ -223,7 +223,9 @@ def test_flow_runner_marks_dynamic_package_upload_skip(monkeypatch):
         on_update=lambda: seen.append(step.status),
     )
 
-    assert runner.run(step, lambda: (_ for _ in ()).throw(local_publish.StepSkipped("token missing")))
+    assert runner.run(
+        step, lambda: (_ for _ in ()).throw(local_publish.StepSkipped("token missing"))
+    )
 
     assert step.status == "SKIP"
     assert step.result == "token missing"

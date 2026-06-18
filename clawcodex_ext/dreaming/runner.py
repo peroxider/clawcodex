@@ -21,6 +21,7 @@ This lets Phase A land the state machine + service main loop with
 real tests; the runner swap is a one-line change in
 :func:`run_dream_consolidation` once the agent runner is exposed.
 """
+
 from __future__ import annotations
 
 import logging

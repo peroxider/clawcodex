@@ -149,9 +149,7 @@ def _resolve_motion_range(
     return None
 
 
-def _word_motion(
-    buffer: VimBuffer, at: Cursor, *, count: int, big: bool
-) -> Range | None:
+def _word_motion(buffer: VimBuffer, at: Cursor, *, count: int, big: bool) -> Range | None:
     """``w`` / ``W`` — start of next word."""
 
     line = buffer.line(at.row) if at.row < buffer.line_count else ""
@@ -172,9 +170,7 @@ def _word_motion(
     return Range(start=at, end=Cursor(at.row, col))
 
 
-def _word_back(
-    buffer: VimBuffer, at: Cursor, *, count: int, big: bool
-) -> Range | None:
+def _word_back(buffer: VimBuffer, at: Cursor, *, count: int, big: bool) -> Range | None:
     """``b`` / ``B`` — start of previous word."""
 
     line = buffer.line(at.row) if at.row < buffer.line_count else ""
@@ -194,9 +190,7 @@ def _word_back(
     return Range(start=Cursor(at.row, col), end=at)
 
 
-def _word_end(
-    buffer: VimBuffer, at: Cursor, *, count: int, big: bool
-) -> Range | None:
+def _word_end(buffer: VimBuffer, at: Cursor, *, count: int, big: bool) -> Range | None:
     """``e`` / ``E`` — end of word (end-inclusive)."""
 
     line = buffer.line(at.row) if at.row < buffer.line_count else ""
@@ -263,9 +257,7 @@ def _set_yank(yank_buffer: list[str], text: str) -> None:
         yank_buffer[0] = text
 
 
-def _indent_range(
-    buffer: VimBuffer, range_: Range, *, indent_amount: int
-) -> None:
+def _indent_range(buffer: VimBuffer, range_: Range, *, indent_amount: int) -> None:
     """Add or remove leading indent (2 spaces per level) on each line."""
 
     r = range_.normalised()

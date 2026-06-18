@@ -24,6 +24,7 @@ Also exports ``build_effective_system_prompt`` (CLAUDE.md + style +
 git status assembly) so the cutover code can pre-build the system
 prompt before calling the adapter — ``query()`` expects it pre-built.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ from ..agent.transcript import TranscriptWriter, get_main_transcript_path
 # (per the F.4 extraction in PR #N). ``src/tui/__init__.py`` doesn't
 # load the renderers module on import, so no circular hazard.
 from ..tool_system.renderers import (
+    AgentLoopResult,
     ToolEvent,
     ToolEventHandler,
     TextChunkHandler,
@@ -91,14 +93,14 @@ def run_query_as_agent_loop_sync(
     """
     import asyncio as _asyncio
     from ..outputStyles import resolve_output_style
-    from ..tool_system.renderers import AgentLoopResult
 
     style_prompt = resolve_output_style(
         getattr(tool_context, "output_style_name", None),
         getattr(tool_context, "output_style_dir", None),
     ).prompt
     effective_system_prompt = build_effective_system_prompt(
-        style_prompt, tool_context,
+        style_prompt,
+        tool_context,
     )
 
     def _persist(msg: Any) -> None:
@@ -117,31 +119,30 @@ def run_query_as_agent_loop_sync(
             conversation.add_existing_message(msg)
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception(
                 "Failed to persist message into conversation: role=%s",
                 getattr(msg, "role", "?"),
             )
             raise
 
-    compat_result = _asyncio.run(run_query_as_agent_loop(
-        initial_messages=list(conversation.messages),
-        provider=provider,
-        tool_registry=tool_registry,
-        tool_context=tool_context,
-        system_prompt=effective_system_prompt,
-        max_turns=max_turns,
-        on_event=on_event,
-        on_text_chunk=on_text_chunk,
-        on_message=_persist,
-        cancel_signal=cancel_signal,
-    ))
+    compat_result = _asyncio.run(
+        run_query_as_agent_loop(
+            initial_messages=list(conversation.messages),
+            provider=provider,
+            tool_registry=tool_registry,
+            tool_context=tool_context,
+            system_prompt=effective_system_prompt,
+            max_turns=max_turns,
+            on_event=on_event,
+            on_text_chunk=on_text_chunk,
+            on_message=_persist,
+            cancel_signal=cancel_signal,
+        )
+    )
     return AgentLoopResult(
         response_text=compat_result.response_text,
-        usage=(
-            compat_result.usage
-            if compat_result.num_turns > 0
-            else None
-        ),
+        usage=(compat_result.usage if compat_result.num_turns > 0 else None),
         num_turns=compat_result.num_turns,
     )
 
@@ -162,6 +163,7 @@ def build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) 
     # callers need it, no need to drag it into agent_loop_compat's
     # import time.
     from ..context_system import build_context_prompt
+
     try:
         context_prompt = build_context_prompt(
             tool_context.workspace_root,
@@ -181,6 +183,7 @@ class AgentLoopRunResult:
     callers that previously consumed ``run_agent_loop``, AND adds a
     typed ``terminal`` so wrappers can discriminate exit reason.
     """
+
     response_text: str
     usage: dict[str, int]
     num_turns: int
@@ -245,9 +248,7 @@ async def run_query_as_agent_loop(
             # both pre- and per-iteration (legacy fallback path).
             abort_controller = AbortController()
             if cancel_signal.aborted:
-                abort_controller.abort(
-                    cancel_signal.reason or "user_interrupt"
-                )
+                abort_controller.abort(cancel_signal.reason or "user_interrupt")
         else:
             abort_controller = AbortController()
 
@@ -294,8 +295,7 @@ async def run_query_as_agent_loop(
             )
         except Exception:
             logging.getLogger(__name__).exception(
-                "main transcript open failed for session %s; "
-                "continuing without disk persistence",
+                "main transcript open failed for session %s; continuing without disk persistence",
                 main_session_id,
             )
             main_transcript = None
@@ -329,9 +329,7 @@ async def run_query_as_agent_loop(
         # at iteration boundaries so the next check will exit.
         if cancel_signal is not None and cancel_signal.aborted:
             if not abort_controller.signal.aborted:
-                abort_controller.abort(
-                    cancel_signal.reason or "user_interrupt"
-                )
+                abort_controller.abort(cancel_signal.reason or "user_interrupt")
 
         if isinstance(msg, AssistantMessage):
             # Critic S1 fix: skip persisting API-error messages and
@@ -364,12 +362,14 @@ async def run_query_as_agent_loop(
                     if isinstance(block, TextBlock):
                         text_parts.append(block.text)
                     elif isinstance(block, ToolUseBlock) and on_event is not None:
-                        on_event(ToolEvent(
-                            kind="tool_use",
-                            tool_name=block.name,
-                            tool_input=block.input,
-                            tool_use_id=block.id,
-                        ))
+                        on_event(
+                            ToolEvent(
+                                kind="tool_use",
+                                tool_name=block.name,
+                                tool_input=block.input,
+                                tool_use_id=block.id,
+                            )
+                        )
             if text_parts:
                 last_assistant_text = " ".join(text_parts).strip()
                 # NB: do NOT fire on_text_chunk here. It was already
@@ -390,22 +390,22 @@ async def run_query_as_agent_loop(
                 continue
             content = msg.content
             if isinstance(content, list):
-                has_tool_result = any(
-                    isinstance(block, ToolResultBlock) for block in content
-                )
+                has_tool_result = any(isinstance(block, ToolResultBlock) for block in content)
                 if has_tool_result and on_message is not None:
                     on_message(msg)
                 if on_event is not None:
                     for block in content:
                         if isinstance(block, ToolResultBlock):
-                            on_event(ToolEvent(
-                                kind="tool_result",
-                                tool_name="",
-                                tool_use_id=block.tool_use_id,
-                                tool_output=block.content,
-                                is_error=bool(block.is_error),
-                                error=str(block.content) if block.is_error else None,
-                            ))
+                            on_event(
+                                ToolEvent(
+                                    kind="tool_result",
+                                    tool_name="",
+                                    tool_use_id=block.tool_use_id,
+                                    tool_output=block.content,
+                                    is_error=bool(block.is_error),
+                                    error=str(block.content) if block.is_error else None,
+                                )
+                            )
 
     # Critic C1 fix: surface terminal abort/error reasons as exceptions
     # so callers' existing ``except AbortError`` / ``except Exception``
@@ -419,9 +419,7 @@ async def run_query_as_agent_loop(
         reason = getattr(terminal, "reason", None) or ""
         if reason in ("aborted_streaming", "aborted_tools", "interrupted"):
             raise AbortError(
-                getattr(abort_controller.signal, "reason", None)
-                or reason
-                or "user_interrupt"
+                getattr(abort_controller.signal, "reason", None) or reason or "user_interrupt"
             )
 
     # When the loop exited because of max_turns, surface the legacy

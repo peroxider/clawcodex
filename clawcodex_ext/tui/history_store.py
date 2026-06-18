@@ -101,7 +101,9 @@ class HistoryStore:
         try:
             with self._path.open("w", encoding="utf-8") as fp:
                 for record in keep:
-                    json.dump({"prompt": record.prompt, "ts": record.timestamp}, fp, ensure_ascii=False)
+                    json.dump(
+                        {"prompt": record.prompt, "ts": record.timestamp}, fp, ensure_ascii=False
+                    )
                     fp.write("\n")
         except Exception:
             return

@@ -87,9 +87,7 @@ class TestIsBuiltinPluginId:
 
 class TestClearBuiltinPlugins:
     def test_clear(self) -> None:
-        register_builtin_plugin(
-            BuiltinPluginDefinition(name="temp", description="temp")
-        )
+        register_builtin_plugin(BuiltinPluginDefinition(name="temp", description="temp"))
         assert len(get_builtin_plugins()["enabled"]) == 1
         clear_builtin_plugins()
         assert len(get_builtin_plugins()["enabled"]) == 0

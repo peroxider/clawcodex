@@ -93,7 +93,7 @@ def _is_sessions_message(value: object) -> bool:
     new server-side message types don't get silently dropped before the
     Python client is updated.
     """
-    return isinstance(value, dict) and isinstance(value.get('type'), str)
+    return isinstance(value, dict) and isinstance(value.get("type"), str)
 
 
 class SessionsWebSocket:
@@ -116,14 +116,14 @@ class SessionsWebSocket:
         get_access_token: GetAccessToken,
         callbacks: SessionsWebSocketCallbacks,
         *,
-        base_url: str = 'wss://api.anthropic.com',
-        anthropic_version: str = '2023-06-01',
+        base_url: str = "wss://api.anthropic.com",
+        anthropic_version: str = "2023-06-01",
     ) -> None:
         self._session_id = session_id
         self._org_uuid = org_uuid
         self._get_access_token = get_access_token
         self._callbacks = callbacks
-        self._base_url = base_url.rstrip('/')
+        self._base_url = base_url.rstrip("/")
         self._anthropic_version = anthropic_version
 
         self._ws: websockets.asyncio.client.ClientConnection | None = None
@@ -168,25 +168,23 @@ class SessionsWebSocket:
         """
         if self._state in ("connecting", "connected"):
             logger.debug(
-                '[SessionsWebSocket] connect() called in state=%s; ignoring',
+                "[SessionsWebSocket] connect() called in state=%s; ignoring",
                 self._state,
             )
             return
         if self._user_disconnected:
-            logger.debug(
-                '[SessionsWebSocket] connect() called after disconnect(); ignoring'
-            )
+            logger.debug("[SessionsWebSocket] connect() called after disconnect(); ignoring")
             return
         # Transition: closed → connecting BEFORE the await so subsequent
         # callers see the in-flight state.
         self._state = "connecting"
         url = (
-            f'{self._base_url}/v1/sessions/ws/{self._session_id}/subscribe'
-            f'?organization_uuid={self._org_uuid}'
+            f"{self._base_url}/v1/sessions/ws/{self._session_id}/subscribe"
+            f"?organization_uuid={self._org_uuid}"
         )
         headers = {
-            'Authorization': f'Bearer {self._get_access_token()}',
-            'anthropic-version': self._anthropic_version,
+            "Authorization": f"Bearer {self._get_access_token()}",
+            "anthropic-version": self._anthropic_version,
         }
         try:
             ws = await ws_connect(
@@ -208,8 +206,8 @@ class SessionsWebSocket:
         # the orphan WS and bail without starting the reader.
         if self._state != "connecting":
             logger.debug(
-                '[SessionsWebSocket] disconnect() ran during handshake (state=%s); '
-                'closing orphan WS',
+                "[SessionsWebSocket] disconnect() ran during handshake (state=%s); "
+                "closing orphan WS",
                 self._state,
             )
             try:
@@ -224,7 +222,8 @@ class SessionsWebSocket:
         self._not_found_retries = 0
         await self._invoke(self._callbacks.on_connected)
         self._reader_task = asyncio.get_running_loop().create_task(
-            self._read_loop(), name='sessions-ws-reader',
+            self._read_loop(),
+            name="sessions-ws-reader",
         )
 
     async def disconnect(self) -> None:
@@ -313,14 +312,12 @@ class SessionsWebSocket:
         ``"connecting"``) is dropped, not transmitted.
         """
         if self._state != "connected" or self._ws is None:
-            logger.warning(
-                '[SessionsWebSocket] cannot send: state=%s', self._state
-            )
+            logger.warning("[SessionsWebSocket] cannot send: state=%s", self._state)
             return
         try:
             await self._ws.send(json.dumps(response))
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
-            logger.warning('[SessionsWebSocket] send failed: %s', exc)
+            logger.warning("[SessionsWebSocket] send failed: %s", exc)
 
     async def send_control_request(self, inner: dict) -> None:
         """Wrap ``inner`` in a ``control_request`` envelope and send.
@@ -328,19 +325,17 @@ class SessionsWebSocket:
         State-gated identically to ``send_control_response``.
         """
         if self._state != "connected" or self._ws is None:
-            logger.warning(
-                '[SessionsWebSocket] cannot send: state=%s', self._state
-            )
+            logger.warning("[SessionsWebSocket] cannot send: state=%s", self._state)
             return
         envelope = {
-            'type': 'control_request',
-            'request_id': str(_uuid.uuid4()),
-            'request': inner,
+            "type": "control_request",
+            "request_id": str(_uuid.uuid4()),
+            "request": inner,
         }
         try:
             await self._ws.send(json.dumps(envelope))
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
-            logger.warning('[SessionsWebSocket] send failed: %s', exc)
+            logger.warning("[SessionsWebSocket] send failed: %s", exc)
 
     # ─── Read loop ────────────────────────────────────────────────────
 
@@ -349,14 +344,14 @@ class SessionsWebSocket:
         assert ws is not None
         try:
             async for raw in ws:
-                text = raw if isinstance(raw, str) else raw.decode('utf-8', errors='replace')
+                text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
                 try:
                     parsed = json.loads(text)
                 except json.JSONDecodeError as exc:
-                    logger.debug('[SessionsWebSocket] parse error: %s', exc)
+                    logger.debug("[SessionsWebSocket] parse error: %s", exc)
                     continue
                 if not _is_sessions_message(parsed):
-                    logger.debug('[SessionsWebSocket] ignoring non-message: %s', parsed)
+                    logger.debug("[SessionsWebSocket] ignoring non-message: %s", parsed)
                     continue
                 await self._invoke(self._callbacks.on_message, parsed)
         except websockets.exceptions.ConnectionClosed as exc:
@@ -385,29 +380,19 @@ class SessionsWebSocket:
         # itself was cancelled by disconnect(), so we're cleaning up
         # after a race the user already chose to lose.
         if self._user_disconnected:
-            logger.debug(
-                '[SessionsWebSocket] _on_ws_close after disconnect(); no reconnect'
-            )
+            logger.debug("[SessionsWebSocket] _on_ws_close after disconnect(); no reconnect")
             return
 
         if close_code == WS_CLOSE_PERMANENT_UNAUTHORIZED:
-            logger.debug(
-                '[SessionsWebSocket] permanent close 4003; not reconnecting'
-            )
-            asyncio.get_running_loop().create_task(
-                self._invoke(self._callbacks.on_close)
-            )
+            logger.debug("[SessionsWebSocket] permanent close 4003; not reconnecting")
+            asyncio.get_running_loop().create_task(self._invoke(self._callbacks.on_close))
             return
 
         if close_code == WS_CLOSE_SESSION_NOT_FOUND:
             self._not_found_retries += 1
             if self._not_found_retries > MAX_SESSION_NOT_FOUND_RETRIES:
-                logger.debug(
-                    '[SessionsWebSocket] 4001 retry budget exhausted; not reconnecting'
-                )
-                asyncio.get_running_loop().create_task(
-                    self._invoke(self._callbacks.on_close)
-                )
+                logger.debug("[SessionsWebSocket] 4001 retry budget exhausted; not reconnecting")
+                asyncio.get_running_loop().create_task(self._invoke(self._callbacks.on_close))
                 return
             delay = RECONNECT_DELAY_SECONDS * self._not_found_retries
             self._schedule_reconnect_with_delay(delay)
@@ -416,10 +401,8 @@ class SessionsWebSocket:
         # Generic transient.
         self._reconnect_attempts += 1
         if self._reconnect_attempts > MAX_RECONNECT_ATTEMPTS:
-            logger.debug('[SessionsWebSocket] not reconnecting (budget exhausted)')
-            asyncio.get_running_loop().create_task(
-                self._invoke(self._callbacks.on_close)
-            )
+            logger.debug("[SessionsWebSocket] not reconnecting (budget exhausted)")
+            asyncio.get_running_loop().create_task(self._invoke(self._callbacks.on_close))
             return
         self._schedule_reconnect_with_delay(RECONNECT_DELAY_SECONDS)
 
@@ -435,9 +418,7 @@ class SessionsWebSocket:
             return
         self._reconnect_attempts += 1
         if self._reconnect_attempts > MAX_RECONNECT_ATTEMPTS:
-            asyncio.get_running_loop().create_task(
-                self._invoke(self._callbacks.on_close)
-            )
+            asyncio.get_running_loop().create_task(self._invoke(self._callbacks.on_close))
             return
         self._schedule_reconnect_with_delay(RECONNECT_DELAY_SECONDS)
 
@@ -456,7 +437,7 @@ class SessionsWebSocket:
             await self.connect()
 
         loop = asyncio.get_running_loop()
-        self._reconnect_task = loop.create_task(_do_reconnect(), name='sessions-ws-reconnect')
+        self._reconnect_task = loop.create_task(_do_reconnect(), name="sessions-ws-reconnect")
 
     # ─── Internal: callback helper ───────────────────────────────────
 
@@ -470,12 +451,12 @@ class SessionsWebSocket:
 
 
 __all__ = [
-    'ConnectionState',
-    'GetAccessToken',
-    'MAX_RECONNECT_ATTEMPTS',
-    'MAX_SESSION_NOT_FOUND_RETRIES',
-    'PING_INTERVAL_SECONDS',
-    'RECONNECT_DELAY_SECONDS',
-    'SessionsWebSocket',
-    'SessionsWebSocketCallbacks',
+    "ConnectionState",
+    "GetAccessToken",
+    "MAX_RECONNECT_ATTEMPTS",
+    "MAX_SESSION_NOT_FOUND_RETRIES",
+    "PING_INTERVAL_SECONDS",
+    "RECONNECT_DELAY_SECONDS",
+    "SessionsWebSocket",
+    "SessionsWebSocketCallbacks",
 ]

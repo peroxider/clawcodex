@@ -85,7 +85,5 @@ class EffortPickerScreen(DialogScreen[tuple[EffortValue | None, bool]]):
                 pass
         self.dismiss((effort, True))
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss((None, False))

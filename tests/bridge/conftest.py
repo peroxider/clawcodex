@@ -14,9 +14,11 @@ def make_jwt(payload: dict[str, Any]) -> str:
     signature verification is performed by the production code, so a
     fake signature segment is fine.
     """
-    header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b'=').decode('ascii')
-    body = base64.urlsafe_b64encode(json.dumps(payload).encode('utf-8')).rstrip(b'=').decode('ascii')
-    return f'{header}.{body}.signature'
+    header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').rstrip(b"=").decode("ascii")
+    body = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).rstrip(b"=").decode("ascii")
+    )
+    return f"{header}.{body}.signature"
 
 
-__all__ = ['make_jwt']
+__all__ = ["make_jwt"]

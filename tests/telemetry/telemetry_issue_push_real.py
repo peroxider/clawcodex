@@ -13,6 +13,7 @@ Telemetry IssueReporter 真实推送测试。
   python3 tests/telemetry/telemetry_issue_push_real.py --preview   # 仅预览，不推送
   python3 tests/telemetry/telemetry_issue_push_real.py --close     # 推送后关闭 Issue
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,9 @@ from typing import Any
 _HERE = Path(__file__).resolve().parent.parent.parent
 os.chdir(str(_HERE))
 _tests_dir = str((_HERE / "tests").resolve())
-sys.path = [str(_HERE)] + [p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir]
+sys.path = [str(_HERE)] + [
+    p for p in sys.path if p and p != _tests_dir and os.path.realpath(p) != _tests_dir
+]
 
 # ---------------------------------------------------------------------------
 # 远端仓库信息
@@ -41,6 +44,7 @@ REPO = "clawcodex"
 ISSUE_TITLE = "Telemetry E2E Test — do not modify"
 DATE = time.strftime("%Y-%m-%d", time.gmtime())
 
+
 # ---------------------------------------------------------------------------
 # 事件构造
 # ---------------------------------------------------------------------------
@@ -50,52 +54,82 @@ def build_events(storage: Any) -> None:
 
     now = time.time()
     # SESSION_START × 2
-    for i, (pf, prov, mdl) in enumerate([
-        ("Linux", "anthropic", "claude-sonnet-4-20250514"),
-        ("macOS", "openai", "gpt-4o"),
-    ]):
-        storage.append("events", TelemetryEvent(
-            type=EventType.SESSION_START, session_id=f"push-test-sess-{i}",
-            timestamp=now - i * 120,
-            fields={
-                "entrypoint": "cli", "platform": pf,
-                "provider": prov, "model": mdl,
-                "client_type": "cli", "is_non_interactive": False,
-                "app_version": "0.5.0-e2e-test",
-            },
-        ).to_dict(), date=DATE)
+    for i, (pf, prov, mdl) in enumerate(
+        [
+            ("Linux", "anthropic", "claude-sonnet-4-20250514"),
+            ("macOS", "openai", "gpt-4o"),
+        ]
+    ):
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.SESSION_START,
+                session_id=f"push-test-sess-{i}",
+                timestamp=now - i * 120,
+                fields={
+                    "entrypoint": "cli",
+                    "platform": pf,
+                    "provider": prov,
+                    "model": mdl,
+                    "client_type": "cli",
+                    "is_non_interactive": False,
+                    "app_version": "0.5.0-e2e-test",
+                },
+            ).to_dict(),
+            date=DATE,
+        )
 
     # COMMAND_RUN × 4
     for cmd, ok, dur in [
-        ("print",  True,  1.2),
-        ("agent",  True,  32.0),
-        ("print",  False, 0.6),
-        ("Bash",   True,  5.0),
+        ("print", True, 1.2),
+        ("agent", True, 32.0),
+        ("print", False, 0.6),
+        ("Bash", True, 5.0),
     ]:
-        storage.append("events", TelemetryEvent(
-            type=EventType.COMMAND_RUN, session_id="push-test-sess-0",
-            timestamp=now, fields={
-                "command_name": cmd, "success": ok,
-                "duration_s": dur, "exit_status": 0 if ok else 1,
-            },
-        ).to_dict(), date=DATE)
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.COMMAND_RUN,
+                session_id="push-test-sess-0",
+                timestamp=now,
+                fields={
+                    "command_name": cmd,
+                    "success": ok,
+                    "duration_s": dur,
+                    "exit_status": 0 if ok else 1,
+                },
+            ).to_dict(),
+            date=DATE,
+        )
 
     # TOOL_SUMMARY
     for tool, ok, dur in [("Bash", True, 3.0), ("ReadFile", True, 0.5), ("Edit", True, 1.2)]:
-        storage.append("events", TelemetryEvent(
-            type=EventType.TOOL_SUMMARY, session_id="push-test-sess-0",
-            timestamp=now, fields={"tool_name": tool, "success": ok, "duration_s": dur},
-        ).to_dict(), date=DATE)
+        storage.append(
+            "events",
+            TelemetryEvent(
+                type=EventType.TOOL_SUMMARY,
+                session_id="push-test-sess-0",
+                timestamp=now,
+                fields={"tool_name": tool, "success": ok, "duration_s": dur},
+            ).to_dict(),
+            date=DATE,
+        )
 
     # ERROR (crashes)
-    storage.append("crashes", TelemetryEvent(
-        type=EventType.ERROR, session_id="push-test-sess-0",
-        timestamp=now, fields={
-            "error_class": "ValueError",
-            "fingerprint": "e2e-test-fingerprint-001",
-            "stacktrace": ["ValueError: e2e test error", "  File test_cli.py:99"],
-        },
-    ).to_dict(), date=DATE)
+    storage.append(
+        "crashes",
+        TelemetryEvent(
+            type=EventType.ERROR,
+            session_id="push-test-sess-0",
+            timestamp=now,
+            fields={
+                "error_class": "ValueError",
+                "fingerprint": "e2e-test-fingerprint-001",
+                "stacktrace": ["ValueError: e2e test error", "  File test_cli.py:99"],
+            },
+        ).to_dict(),
+        date=DATE,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +142,9 @@ def main() -> int:
     args = parser.parse_args()
 
     # 读取 token
-    token = os.environ.get("CLAW_TELEMETRY_REPORTING_TOKEN") or os.environ.get("GITCODE_TOKEN") or ""
+    token = (
+        os.environ.get("CLAW_TELEMETRY_REPORTING_TOKEN") or os.environ.get("GITCODE_TOKEN") or ""
+    )
     if not token and not args.preview:
         print("❌ 需要设置 CLAW_TELEMETRY_REPORTING_TOKEN 或 GITCODE_TOKEN")
         print("   获取方式: https://gitcode.com/settings/tokens (需要 issue 权限)")
@@ -153,6 +189,7 @@ def main() -> int:
         # Step 3: 渲染
         print("\n--- 步骤 3: 渲染 Markdown (DryRunReporter) ---")
         from telemetry.reporters.dry_run import DryRunReporter
+
         rendered = DryRunReporter().render(summary, DATE)
         print(f"  渲染长度: {len(rendered)} 字符")
         print("  --- 渲染内容 ---")
@@ -173,7 +210,9 @@ def main() -> int:
         if args.preview:
             print("\n🔍 预览模式 — 未执行推送")
             print(f"   运行以下命令执行推送:")
-            print(f"   CLAW_TELEMETRY_REPORTING_TOKEN=xxx python3 tests/telemetry/telemetry_issue_push_real.py")
+            print(
+                f"   CLAW_TELEMETRY_REPORTING_TOKEN=xxx python3 tests/telemetry/telemetry_issue_push_real.py"
+            )
             return 0
 
         # Step 5: 构造 IssueReporter (无 mock client)
@@ -222,9 +261,13 @@ def main() -> int:
         # Step 8: 可选 — 关闭 Issue
         if args.close:
             import asyncio
+
             print(f"\n--- 步骤 8: 关闭 Issue #{issue_id} ---")
             client = RepositoryIssueClient(
-                platform=PLATFORM, owner=OWNER, repo=REPO, api_key=token,
+                platform=PLATFORM,
+                owner=OWNER,
+                repo=REPO,
+                api_key=token,
             )
             asyncio.run(client.update_issue(issue_id, state="closed"))
             print(f"  ✅ Issue #{issue_id} 已关闭")

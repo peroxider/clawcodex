@@ -8,6 +8,7 @@ Plus the ``recent_activities`` cap-5 ring buffer behavior, the
 preview-blacklist for SyntheticOutput tools, and the
 ``ActivityDescriptionResolver`` plumbing.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -116,10 +117,12 @@ def test_tool_use_count_increments_per_block() -> None:
     tracker = ProgressTracker()
     update_progress_from_message(
         tracker,
-        _msg(blocks=[
-            ToolUseBlock(id="t1", name="Read", input={"path": "/a"}),
-            ToolUseBlock(id="t2", name="Read", input={"path": "/b"}),
-        ]),
+        _msg(
+            blocks=[
+                ToolUseBlock(id="t1", name="Read", input={"path": "/a"}),
+                ToolUseBlock(id="t2", name="Read", input={"path": "/b"}),
+            ]
+        ),
     )
     assert tracker.tool_use_count == 2
 
@@ -130,9 +133,7 @@ def test_recent_activities_capped_at_five() -> None:
     for i in range(6):
         update_progress_from_message(
             tracker,
-            _msg(blocks=[
-                ToolUseBlock(id=f"t{i}", name="Bash", input={"command": f"cmd-{i}"})
-            ]),
+            _msg(blocks=[ToolUseBlock(id=f"t{i}", name="Bash", input={"command": f"cmd-{i}"})]),
         )
     assert len(tracker.recent_activities) == MAX_RECENT_ACTIVITIES
     # Oldest dropped; newest preserved.
@@ -147,10 +148,12 @@ def test_synthetic_output_blocks_omitted_from_preview_but_counted() -> None:
     tracker = ProgressTracker()
     update_progress_from_message(
         tracker,
-        _msg(blocks=[
-            ToolUseBlock(id="t1", name="Read", input={"path": "/x"}),
-            ToolUseBlock(id="t2", name="StructuredOutput", input={}),
-        ]),
+        _msg(
+            blocks=[
+                ToolUseBlock(id="t1", name="Read", input={"path": "/x"}),
+                ToolUseBlock(id="t2", name="StructuredOutput", input={}),
+            ]
+        ),
     )
     assert tracker.tool_use_count == 2
     assert len(tracker.recent_activities) == 1
@@ -177,6 +180,7 @@ def test_activity_description_resolver_invoked() -> None:
 def test_resolver_exception_does_not_poison_tracker() -> None:
     """A misbehaving resolver must not crash the tracker; the activity
     is still recorded (without a description)."""
+
     def resolver(_name: str, _input: dict[str, Any]) -> str | None:
         raise RuntimeError("boom")
 

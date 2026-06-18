@@ -33,16 +33,16 @@ from .protojson import coerce_int64
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_VERSION = '2023-06-01'
+ANTHROPIC_VERSION = "2023-06-01"
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 def _oauth_headers(access_token: str) -> dict[str, str]:
     return {
-        'Authorization': f'Bearer {access_token}',
-        'Content-Type': 'application/json',
-        'anthropic-version': ANTHROPIC_VERSION,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "anthropic-version": ANTHROPIC_VERSION,
     }
 
 
@@ -84,10 +84,10 @@ async def create_code_session(
 
     Mirrors ``codeSessionApi.ts:26-80``.
     """
-    url = f'{base_url.rstrip("/")}/v1/code/sessions'
-    body: dict[str, Any] = {'title': title, 'bridge': {}}
+    url = f"{base_url.rstrip('/')}/v1/code/sessions"
+    body: dict[str, Any] = {"title": title, "bridge": {}}
     if tags:
-        body['tags'] = tags
+        body["tags"] = tags
 
     try:
         if client is None:
@@ -95,16 +95,17 @@ async def create_code_session(
                 resp = await fresh.post(url, json=body, headers=_oauth_headers(access_token))
         else:
             resp = await client.post(
-                url, json=body, headers=_oauth_headers(access_token), timeout=timeout_seconds,
+                url,
+                json=body,
+                headers=_oauth_headers(access_token),
+                timeout=timeout_seconds,
             )
     except (httpx.HTTPError, httpx.TimeoutException) as exc:
-        logger.debug('[code-session] Session create request failed: %s', exc)
+        logger.debug("[code-session] Session create request failed: %s", exc)
         return None
 
     if resp.status_code not in (200, 201):
-        logger.debug(
-            '[code-session] Session create failed %d', resp.status_code
-        )
+        logger.debug("[code-session] Session create failed %d", resp.status_code)
         return None
 
     try:
@@ -112,12 +113,12 @@ async def create_code_session(
     except ValueError:
         return None
 
-    session_obj = data.get('session') if isinstance(data, dict) else None
+    session_obj = data.get("session") if isinstance(data, dict) else None
     if not isinstance(session_obj, dict):
         return None
-    sid = session_obj.get('id')
-    if not isinstance(sid, str) or not sid.startswith('cse_'):
-        logger.debug('[code-session] No session.id (cse_*) in response')
+    sid = session_obj.get("id")
+    if not isinstance(sid, str) or not sid.startswith("cse_"):
+        logger.debug("[code-session] No session.id (cse_*) in response")
         return None
     return sid
 
@@ -142,10 +143,10 @@ async def fetch_remote_credentials(
     Returns ``None`` on failure. ``worker_epoch`` is coerced via
     ``coerce_int64`` (handles protojson string-OR-number).
     """
-    url = f'{base_url.rstrip("/")}/v1/code/sessions/{session_id}/bridge'
+    url = f"{base_url.rstrip('/')}/v1/code/sessions/{session_id}/bridge"
     headers = _oauth_headers(access_token)
     if trusted_device_token:
-        headers['X-Trusted-Device-Token'] = trusted_device_token
+        headers["X-Trusted-Device-Token"] = trusted_device_token
 
     try:
         if client is None:
@@ -153,14 +154,17 @@ async def fetch_remote_credentials(
                 resp = await fresh.post(url, json={}, headers=headers)
         else:
             resp = await client.post(
-                url, json={}, headers=headers, timeout=timeout_seconds,
+                url,
+                json={},
+                headers=headers,
+                timeout=timeout_seconds,
             )
     except (httpx.HTTPError, httpx.TimeoutException) as exc:
-        logger.debug('[code-session] /bridge request failed: %s', exc)
+        logger.debug("[code-session] /bridge request failed: %s", exc)
         return None
 
     if resp.status_code != 200:
-        logger.debug('[code-session] /bridge failed %d', resp.status_code)
+        logger.debug("[code-session] /bridge failed %d", resp.status_code)
         return None
 
     try:
@@ -170,27 +174,27 @@ async def fetch_remote_credentials(
 
     if not isinstance(data, dict):
         return None
-    worker_jwt = data.get('worker_jwt')
-    api_base = data.get('api_base_url')
-    expires_in = data.get('expires_in')
-    raw_epoch = data.get('worker_epoch')
+    worker_jwt = data.get("worker_jwt")
+    api_base = data.get("api_base_url")
+    expires_in = data.get("expires_in")
+    raw_epoch = data.get("worker_epoch")
 
     if not isinstance(worker_jwt, str) or not worker_jwt:
-        logger.debug('[code-session] /bridge missing worker_jwt')
+        logger.debug("[code-session] /bridge missing worker_jwt")
         return None
     if not isinstance(api_base, str) or not api_base:
-        logger.debug('[code-session] /bridge missing api_base_url')
+        logger.debug("[code-session] /bridge missing api_base_url")
         return None
     if not isinstance(expires_in, int):
-        logger.debug('[code-session] /bridge missing or invalid expires_in')
+        logger.debug("[code-session] /bridge missing or invalid expires_in")
         return None
     if raw_epoch is None:
-        logger.debug('[code-session] /bridge missing worker_epoch')
+        logger.debug("[code-session] /bridge missing worker_epoch")
         return None
     try:
         epoch = coerce_int64(raw_epoch)
     except ValueError as exc:
-        logger.debug('[code-session] /bridge worker_epoch invalid: %s', exc)
+        logger.debug("[code-session] /bridge worker_epoch invalid: %s", exc)
         return None
     return RemoteCredentials(
         worker_jwt=worker_jwt,
@@ -219,7 +223,7 @@ async def register_worker(
 
     Mirrors ``workSecret.ts:97-127``.
     """
-    url = f'{session_url.rstrip("/")}/worker/register'
+    url = f"{session_url.rstrip('/')}/worker/register"
     headers = _oauth_headers(access_token)
     try:
         if client is None:
@@ -227,39 +231,38 @@ async def register_worker(
                 resp = await fresh.post(url, json={}, headers=headers)
         else:
             resp = await client.post(
-                url, json={}, headers=headers, timeout=timeout_seconds,
+                url,
+                json={},
+                headers=headers,
+                timeout=timeout_seconds,
             )
     except (httpx.HTTPError, httpx.TimeoutException) as exc:
-        raise RuntimeError(f'register_worker failed: {exc}') from exc
+        raise RuntimeError(f"register_worker failed: {exc}") from exc
 
     if resp.status_code not in (200, 201):
-        raise RuntimeError(
-            f'register_worker: unexpected status {resp.status_code}'
-        )
+        raise RuntimeError(f"register_worker: unexpected status {resp.status_code}")
 
     try:
         data = resp.json()
     except ValueError as exc:
-        raise RuntimeError(f'register_worker: invalid JSON response: {exc}') from exc
+        raise RuntimeError(f"register_worker: invalid JSON response: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise RuntimeError('register_worker: response is not an object')
-    raw = data.get('worker_epoch')
+        raise RuntimeError("register_worker: response is not an object")
+    raw = data.get("worker_epoch")
     if raw is None:
-        raise RuntimeError('register_worker: response missing worker_epoch')
+        raise RuntimeError("register_worker: response missing worker_epoch")
     try:
         return coerce_int64(raw)
     except ValueError as exc:
-        raise RuntimeError(
-            f'register_worker: invalid worker_epoch: {exc}'
-        ) from exc
+        raise RuntimeError(f"register_worker: invalid worker_epoch: {exc}") from exc
 
 
 __all__ = [
-    'ANTHROPIC_VERSION',
-    'DEFAULT_TIMEOUT_SECONDS',
-    'RemoteCredentials',
-    'create_code_session',
-    'fetch_remote_credentials',
-    'register_worker',
+    "ANTHROPIC_VERSION",
+    "DEFAULT_TIMEOUT_SECONDS",
+    "RemoteCredentials",
+    "create_code_session",
+    "fetch_remote_credentials",
+    "register_worker",
 ]

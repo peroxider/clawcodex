@@ -56,14 +56,9 @@ def normalize_oauth_error_body(
     # error masquerading as success. ``body.get("error")`` (vs ``"error"
     # in body``) correctly treats ``{"error": null}`` and ``{"error":
     # ""}`` as not-an-error.
-    if (
-        200 <= status_code < 300
-        and body.get("error")
-        and "access_token" not in body
-    ):
+    if 200 <= status_code < 300 and body.get("error") and "access_token" not in body:
         logger.debug(
-            "OAuth error normalization: rewriting 2xx response with error "
-            "body to 400 (error=%r)",
+            "OAuth error normalization: rewriting 2xx response with error body to 400 (error=%r)",
             body.get("error"),
         )
         status_code = 400
@@ -74,7 +69,8 @@ def normalize_oauth_error_body(
         canonical = _VENDOR_TO_RFC_CODE[err]
         logger.debug(
             "OAuth error normalization: mapping vendor code %r → RFC code %r",
-            err, canonical,
+            err,
+            canonical,
         )
         body["error"] = canonical
 

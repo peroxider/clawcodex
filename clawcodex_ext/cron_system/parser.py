@@ -52,7 +52,9 @@ def parse_cron_expression(expr: str) -> CronFields | None:
 
     parsed: list[frozenset[int]] = []
     for idx, part in enumerate(parts):
-        values = _parse_field(part, *_FIELD_RANGES[idx], names=_NAMES[idx], normalize_sunday=idx == 4)
+        values = _parse_field(
+            part, *_FIELD_RANGES[idx], names=_NAMES[idx], normalize_sunday=idx == 4
+        )
         if values is None:
             return None
         parsed.append(frozenset(values))

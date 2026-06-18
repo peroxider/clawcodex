@@ -1,4 +1,5 @@
 """Tests for the recorder singleton + NullRecorder zero-cost path."""
+
 from __future__ import annotations
 
 import os
@@ -111,8 +112,7 @@ def test_record_event_writes_to_storage_via_public_api(tmp_path):
     today = utc_date(utc_now())
     rows = storage.read_day("events", today)
     assert any(
-        row["type"] == "tool_summary"
-        and row["fields"]["tool_name"] == "image_processing"
+        row["type"] == "tool_summary" and row["fields"]["tool_name"] == "image_processing"
         for row in rows
     )
 

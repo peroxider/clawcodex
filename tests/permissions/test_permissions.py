@@ -137,7 +137,9 @@ class TestToolRegistryDispatchPermissions(unittest.TestCase):
     def test_dispatch_allows_regular_file_with_handler(self) -> None:
         self.ctx.permission_handler = lambda name, msg, sug: (True, False)
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={"file_path": str(self.root / "test.txt"), "content": "hello"}),
+            ToolCall(
+                name="Write", input={"file_path": str(self.root / "test.txt"), "content": "hello"}
+            ),
             self.ctx,
         )
         self.assertFalse(result.is_error)
@@ -145,13 +147,18 @@ class TestToolRegistryDispatchPermissions(unittest.TestCase):
 
     def test_dispatch_denies_md_file_without_handler(self) -> None:
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}),
+            ToolCall(
+                name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}
+            ),
             self.ctx,
         )
         self.assertTrue(result.is_error)
         error_msg = result.output.get("error", "").lower()
         self.assertTrue(
-            "permission" in error_msg or "allow_docs" in error_msg or "blocked" in error_msg or "denied" in error_msg,
+            "permission" in error_msg
+            or "allow_docs" in error_msg
+            or "blocked" in error_msg
+            or "denied" in error_msg,
             f"Expected permission-related error, got: {error_msg}",
         )
 
@@ -168,7 +175,9 @@ class TestToolRegistryDispatchPermissions(unittest.TestCase):
         self.ctx.permission_handler = mock_handler
 
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}),
+            ToolCall(
+                name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}
+            ),
             self.ctx,
         )
 
@@ -183,7 +192,9 @@ class TestToolRegistryDispatchPermissions(unittest.TestCase):
         self.ctx.permission_handler = mock_handler
 
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}),
+            ToolCall(
+                name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}
+            ),
             self.ctx,
         )
 
@@ -198,7 +209,9 @@ class TestToolRegistryDispatchPermissions(unittest.TestCase):
         self.ctx.permission_handler = mock_handler
 
         result = self.registry.dispatch(
-            ToolCall(name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}),
+            ToolCall(
+                name="Write", input={"file_path": str(self.root / "test.md"), "content": "hello"}
+            ),
             self.ctx,
         )
 

@@ -10,6 +10,7 @@ from typing import Any
 @dataclass(frozen=True)
 class SdkMethod:
     """A single SDK method that maps to one atomic tool."""
+
     name: str
     description: str
     parameters: list[str] = field(default_factory=list)
@@ -52,6 +53,7 @@ class SdkParser:
             self._parsed = self._parse_openapi(self._raw)
         elif self._raw.startswith(("http://", "https://", "{")):
             import json
+
             try:
                 spec = json.loads(self._raw)
                 self._parsed = self._parse_openapi(spec)
@@ -80,53 +82,60 @@ class SdkParser:
                 required = [p["name"] for p in params if p.get("required")]
                 param_names = [p["name"] for p in params]
 
-                methods.append(SdkMethod(
-                    name=safe_name,
-                    description=operation.get("summary") or operation.get("description", "")[:200],
-                    parameters=param_names,
-                    required_params=required,
-                    return_type="json",
-                ))
+                methods.append(
+                    SdkMethod(
+                        name=safe_name,
+                        description=operation.get("summary")
+                        or operation.get("description", "")[:200],
+                        parameters=param_names,
+                        required_params=required,
+                        return_type="json",
+                    )
+                )
 
         for schema_name, schema in schemas.items():
             props = schema.get("properties", {})
             param_names = list(props.keys())
             required = schema.get("required", [])
-            methods.append(SdkMethod(
-                name=self._sanitize_name(schema_name),
-                description=f"Schema: {schema_name}",
-                parameters=param_names,
-                required_params=required,
-                return_type="json",
-                original_class=schema_name,
-            ))
+            methods.append(
+                SdkMethod(
+                    name=self._sanitize_name(schema_name),
+                    description=f"Schema: {schema_name}",
+                    parameters=param_names,
+                    required_params=required,
+                    return_type="json",
+                    original_class=schema_name,
+                )
+            )
 
         return methods
 
     def _parse_simple_list(self, spec: str) -> list[SdkMethod]:
         """Parse simple comma/newline separated method list."""
         methods: list[SdkMethod] = []
-        method_names = re.split(r'[,\n]+', spec)
+        method_names = re.split(r"[,\n]+", spec)
         for raw in method_names:
             name = raw.strip()
             if not name or name.startswith("#"):
                 continue
             safe_name = self._sanitize_name(name)
-            methods.append(SdkMethod(
-                name=safe_name,
-                description=f"SDK method: {name}",
-                parameters=[],
-                required_params=[],
-            ))
+            methods.append(
+                SdkMethod(
+                    name=safe_name,
+                    description=f"SDK method: {name}",
+                    parameters=[],
+                    required_params=[],
+                )
+            )
         return methods
 
     @staticmethod
     def _sanitize_name(name: str) -> str:
         """Convert a method name to a valid tool name (kebab-case)."""
-        name = re.sub(r'[/{}<>\[\]]', '_', name)
-        name = re.sub(r'([A-Z])', lambda m: f'_{m.group(1).lower()}', name)
-        name = re.sub(r'_+', '_', name)
-        name = name.strip('_').lower()
+        name = re.sub(r"[/{}<>\[\]]", "_", name)
+        name = re.sub(r"([A-Z])", lambda m: f"_{m.group(1).lower()}", name)
+        name = re.sub(r"_+", "_", name)
+        name = name.strip("_").lower()
         if not name:
             return "sdk_method"
         return name
@@ -135,6 +144,7 @@ class SdkParser:
 @dataclass
 class SdkParseResult:
     """Result of parsing an SDK spec."""
+
     methods: list[SdkMethod]
     source: str
     errors: list[str] = field(default_factory=list)

@@ -119,6 +119,7 @@ def _create_assistant_api_error_message(
 
 def _create_user_interruption_message(*, tool_use: bool = False) -> UserMessage:
     from ..types.messages import INTERRUPT_MESSAGE, INTERRUPT_MESSAGE_FOR_TOOL_USE
+
     content = INTERRUPT_MESSAGE_FOR_TOOL_USE if tool_use else INTERRUPT_MESSAGE
     return UserMessage(content=content, isMeta=True)
 
@@ -280,6 +281,7 @@ def _is_hook_stopped_continuation(msg: Message | None) -> bool:
     if msg is None:
         return False
     from ..types.messages import AttachmentMessage
+
     if not isinstance(msg, AttachmentMessage):
         return False
     attachments = getattr(msg, "attachments", None) or []
@@ -337,12 +339,14 @@ async def _call_model_sync(
     advisor_model_normalized: str | None = None
     try:
         from ..settings.settings import get_settings
+
         settings = get_settings()
         configured = (getattr(settings, "advisor_model", "") or "").strip()
         configured_provider = (getattr(settings, "advisor_provider", "") or "").strip()
         force_client = bool(getattr(settings, "advisor_client_mode", False))
         if configured:
             from ..models.model import canonical_model_name
+
             candidate = canonical_model_name(configured)
             advisor_mode = decide_advisor_mode(
                 provider,
@@ -354,9 +358,7 @@ async def _call_model_sync(
             if advisor_mode != ADVISOR_MODE_INACTIVE:
                 advisor_model_normalized = candidate
     except Exception:
-        logger.exception(
-            "Advisor activation check failed; treating advisor as inactive"
-        )
+        logger.exception("Advisor activation check failed; treating advisor as inactive")
         advisor_mode = ADVISOR_MODE_INACTIVE
         advisor_model_normalized = None
 
@@ -379,7 +381,8 @@ async def _call_model_sync(
     _diag = os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes")
     if _diag:
         _total_chars = sum(
-            len(m.get("content", "")) if isinstance(m.get("content"), str)
+            len(m.get("content", ""))
+            if isinstance(m.get("content"), str)
             else sum(len(str(b)) for b in m.get("content", []))
             for m in api_messages
         )
@@ -387,30 +390,37 @@ async def _call_model_sync(
             sys_desc = f"{len(system_prompt)} chars"
         else:
             sys_total_chars = sum(
-                len(blk.get("text", ""))
-                for blk in system_prompt
-                if isinstance(blk, dict)
+                len(blk.get("text", "")) for blk in system_prompt if isinstance(blk, dict)
             )
             sys_desc = f"{len(system_prompt)} blocks, {sys_total_chars} chars"
         logger.warning(
             "[DIAG] _call_model_sync: %d api_messages, ~%d chars, system_prompt=%s, %d tools",
-            len(api_messages), _total_chars, sys_desc, len(list(tools)),
+            len(api_messages),
+            _total_chars,
+            sys_desc,
+            len(list(tools)),
         )
         for i, m in enumerate(api_messages):
             role = m.get("role", "?")
             c = m.get("content", "")
             if isinstance(c, str):
                 clen = len(c)
-                logger.warning("[DIAG]   msg[%d] role=%s  content_len=%d  text=%s", i, role, clen, c[:80])
+                logger.warning(
+                    "[DIAG]   msg[%d] role=%s  content_len=%d  text=%s", i, role, clen, c[:80]
+                )
             else:
                 block_types = []
                 for b in c:
                     if isinstance(b, dict):
                         bt = b.get("type", "?")
                         if bt == "tool_use":
-                            block_types.append(f"tool_use(id={b.get('id','')},name={b.get('name','')})")
+                            block_types.append(
+                                f"tool_use(id={b.get('id', '')},name={b.get('name', '')})"
+                            )
                         elif bt == "tool_result":
-                            block_types.append(f"tool_result(tool_use_id={b.get('tool_use_id','')})")
+                            block_types.append(
+                                f"tool_result(tool_use_id={b.get('tool_use_id', '')})"
+                            )
                         else:
                             block_types.append(bt)
                     else:
@@ -428,11 +438,13 @@ async def _call_model_sync(
         is_enabled_fn = getattr(tool, "is_enabled", None)
         if callable(is_enabled_fn) and not is_enabled_fn():
             continue
-        tool_schemas.append({
-            "name": tool.name,
-            "description": tool.prompt(),
-            "input_schema": dict(tool.input_schema),
-        })
+        tool_schemas.append(
+            {
+                "name": tool.name,
+                "description": tool.prompt(),
+                "input_schema": dict(tool.input_schema),
+            }
+        )
 
     # Append the advisor schema AFTER the regular tools so the
     # ``cache_control`` marker (which conventionally lives on the last
@@ -518,6 +530,7 @@ async def _call_model_sync(
         # the prose that may confuse those models.
         if isinstance(system_prompt, list):
             from ..context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+
             flattened = "\n\n".join(
                 str(blk.get("text", ""))
                 for blk in system_prompt
@@ -555,6 +568,7 @@ async def _call_model_sync(
     # upstream query loop stays free of orchestrator-specific throttling.
     try:
         from extensions.api.query_middleware import enforce_request_delay
+
         enforce_request_delay()
     except ImportError:
         pass
@@ -583,15 +597,21 @@ async def _call_model_sync(
                 except TypeError:
                     # Provider doesn't accept on_thinking_chunk (or on_text_chunk)
                     response = provider.chat_stream_response(
-                        api_messages, abort_signal=abort_signal, **call_kwargs,
+                        api_messages,
+                        abort_signal=abort_signal,
+                        **call_kwargs,
                     )
             else:
                 response = provider.chat_stream_response(
-                    api_messages, abort_signal=abort_signal, **call_kwargs,
+                    api_messages,
+                    abort_signal=abort_signal,
+                    **call_kwargs,
                 )
         except (NotImplementedError, AttributeError):
             if _diag:
-                logger.warning("[DIAG] _call_model_sync: streaming not supported, falling back to chat()")
+                logger.warning(
+                    "[DIAG] _call_model_sync: streaming not supported, falling back to chat()"
+                )
             response = provider.chat(api_messages, **call_kwargs)
             # Emulate streaming chunks from the final text when the
             # caller asked for live streaming (on_text_chunk set) but
@@ -604,6 +624,7 @@ async def _call_model_sync(
             # once after the model finishes.
             if on_text_chunk is not None and response.content:
                 from ..tool_system.renderers import _emit_text_chunks
+
                 _emit_text_chunks(on_text_chunk, response.content)
     except AbortError:
         # User-initiated cancel — propagate so the query loop's
@@ -626,7 +647,9 @@ async def _call_model_sync(
         return [err_msg], []
     except Exception as e:
         if _diag:
-            logger.warning("[DIAG] _call_model_sync: EXCEPTION after %.1fs: %s", time.monotonic() - _t0, e)
+            logger.warning(
+                "[DIAG] _call_model_sync: EXCEPTION after %.1fs: %s", time.monotonic() - _t0, e
+            )
         error_str = str(e)
         if "prompt is too long" in error_str.lower() or "prompt_too_long" in error_str.lower():
             err_msg = _create_assistant_api_error_message(
@@ -640,6 +663,7 @@ async def _call_model_sync(
         # query loop stays free of orchestrator-specific error policies.
         try:
             from extensions.api.query_middleware import handle_rate_limit_error
+
             rate_limit_msg = handle_rate_limit_error(error_str)
             if rate_limit_msg is not None:
                 return [rate_limit_msg], []
@@ -666,6 +690,7 @@ async def _call_model_sync(
         # TS `isWithheldMediaSizeError` at query.ts:892. `is_media_size_error`
         # expects a str (substring match), so pass error_str explicitly.
         from ..services.api.errors import is_media_size_error
+
         if is_media_size_error(error_str):
             err_msg = _create_assistant_api_error_message(
                 f"Media too large: {error_str}",
@@ -690,6 +715,7 @@ async def _call_model_sync(
             IMAGE_UNSUPPORTED_ERROR_MESSAGE,
             is_image_unsupported_error,
         )
+
         if is_image_unsupported_error(error_str):
             err_msg = _create_assistant_api_error_message(
                 IMAGE_UNSUPPORTED_ERROR_MESSAGE,
@@ -748,7 +774,11 @@ async def _call_model_sync(
         _tool_count = len(response.tool_uses) if response.tool_uses else 0
         logger.warning(
             "[DIAG] _call_model_sync: response in %.1fs  text=%d chars  tools=%d  finish=%s  usage=%s",
-            _inference_ms / 1000.0, _text_len, _tool_count, stop_reason, response.usage,
+            _inference_ms / 1000.0,
+            _text_len,
+            _tool_count,
+            stop_reason,
+            response.usage,
         )
 
     assistant_msg = AssistantMessage(
@@ -780,6 +810,7 @@ def _resolve_max_tool_use_concurrency() -> int:
     legacy = os.environ.get("CLAWCODEX_MAX_TOOL_USE_CONCURRENCY")
     if legacy is not None:
         import warnings
+
         warnings.warn(
             "CLAWCODEX_MAX_TOOL_USE_CONCURRENCY is deprecated; use "
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY instead.",
@@ -796,6 +827,7 @@ MAX_TOOL_USE_CONCURRENCY = _resolve_max_tool_use_concurrency()
 @dataclass
 class _ToolBatch:
     """A batch of tool_use blocks with the same concurrency classification."""
+
     is_concurrent_safe: bool
     blocks: list[ToolUseBlock]
 
@@ -864,6 +896,7 @@ def _build_user_cancelled_result(tool_use_id: str) -> UserMessage:
     (``createSyntheticErrorMessage`` for ``user_interrupted``).
     """
     from ..types.messages import REJECT_MESSAGE
+
     return UserMessage(
         content=[
             ToolResultBlock(
@@ -948,6 +981,7 @@ def _dispatch_single_tool(
                 process_tool_result_block,
                 resolve_tool_results_dir,
             )
+
             tool_results_dir = resolve_tool_results_dir(tool_use_context)
             with tool_use_context._aggregate_lock:
                 aggregate_so_far = tool_use_context.tool_result_chars_so_far
@@ -1007,10 +1041,12 @@ def _dispatch_single_tool(
                     extras.append(msg)
                 elif isinstance(msg, dict):
                     # Defensive: accept the raw-dict form too.
-                    extras.append(UserMessage(
-                        content=msg.get("content", ""),
-                        isMeta=bool(msg.get("isMeta", False)),
-                    ))
+                    extras.append(
+                        UserMessage(
+                            content=msg.get("content", ""),
+                            isMeta=bool(msg.get("isMeta", False)),
+                        )
+                    )
         return result_msg, extras
     except AbortError as abort_err:
         # Two contracts to satisfy at once:
@@ -1247,14 +1283,18 @@ async def _run_tools_partitioned(
         else:
             for block in batch.blocks:
                 pair = await asyncio.to_thread(
-                    _dispatch_single_tool, block, tool_registry, tool_use_context, tools,
+                    _dispatch_single_tool,
+                    block,
+                    tool_registry,
+                    tool_use_context,
+                    tools,
                 )
                 _accumulate(pair)
                 if _is_user_cancelled_abort(tool_use_context):
                     # Mark the remaining exclusive-batch tools as
                     # cancelled too so we don't issue them and so the
                     # pairing invariant holds.
-                    remaining = batch.blocks[batch.blocks.index(block) + 1:]
+                    remaining = batch.blocks[batch.blocks.index(block) + 1 :]
                     for tail_block in remaining:
                         primaries.append(_build_user_cancelled_result(tail_block.id))
                     break
@@ -1323,7 +1363,8 @@ async def query(
         if _diag:
             logger.warning(
                 "[DIAG] query loop: turn=%d  messages=%d  transition=%s",
-                state.turn_count, len(messages),
+                state.turn_count,
+                len(messages),
                 state.transition.reason if state.transition else "initial",
             )
         tool_use_context = state.tool_use_context
@@ -1366,7 +1407,9 @@ async def query(
                             ", ".join(pipeline_result.layers_applied),
                         )
             except Exception:
-                logger.warning("Compression pipeline failed, continuing with original messages", exc_info=True)
+                logger.warning(
+                    "Compression pipeline failed, continuing with original messages", exc_info=True
+                )
 
         # Ch5/B.4 + B.5 — pre-emption guards before the API call.
         # Two distinct guards:
@@ -1387,13 +1430,9 @@ async def query(
             is_auto_compact_enabled,
         )
 
-        skip_blocking_guards = (
-            params.query_source in ("compact", "session_memory")
-            or (
-                state.transition is not None
-                and state.transition.reason
-                in ("collapse_drain_retry", "reactive_compact_retry")
-            )
+        skip_blocking_guards = params.query_source in ("compact", "session_memory") or (
+            state.transition is not None
+            and state.transition.reason in ("collapse_drain_retry", "reactive_compact_retry")
         )
 
         if not skip_blocking_guards:
@@ -1416,11 +1455,7 @@ async def query(
                 if params.pipeline_config is not None
                 else None
             )
-            consec = (
-                getattr(tracking, "consecutive_failures", 0)
-                if tracking is not None
-                else 0
-            )
+            consec = getattr(tracking, "consecutive_failures", 0) if tracking is not None else 0
             if (
                 consec >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
                 and is_auto_compact_enabled()
@@ -1436,7 +1471,9 @@ async def query(
                     error="invalid_request",
                 )
                 set_terminal(
-                    holder, natural_termination, Terminal(reason="blocking_limit"),
+                    holder,
+                    natural_termination,
+                    Terminal(reason="blocking_limit"),
                 )
                 return
 
@@ -1445,19 +1482,17 @@ async def query(
             # — otherwise we let the API 413 and the B.2 recovery path
             # handle it. This matches TS: the guard exists to short-
             # circuit only when no recovery would catch the 500 anyway.
-            elif (
-                warning["is_at_blocking_limit"]
-                and not (
-                    config.reactive_compact_enabled
-                    and is_auto_compact_enabled()
-                )
+            elif warning["is_at_blocking_limit"] and not (
+                config.reactive_compact_enabled and is_auto_compact_enabled()
             ):
                 yield _create_assistant_api_error_message(
                     content=PROMPT_TOO_LONG_ERROR_MESSAGE,
                     error="invalid_request",
                 )
                 set_terminal(
-                    holder, natural_termination, Terminal(reason="blocking_limit"),
+                    holder,
+                    natural_termination,
+                    Terminal(reason="blocking_limit"),
                 )
                 return
 
@@ -1531,10 +1566,7 @@ async def query(
             last_message = assistant_messages[-1] if assistant_messages else None
 
             if _is_withheld_max_output_tokens(last_message):
-                if (
-                    max_output_tokens_override is None
-                    and max_output_tokens_recovery_count == 0
-                ):
+                if max_output_tokens_override is None and max_output_tokens_recovery_count == 0:
                     state = QueryState(
                         messages=messages,
                         tool_use_context=tool_use_context,
@@ -1590,20 +1622,13 @@ async def query(
             # appropriate Terminal — do NOT fall through to the
             # "API error → Terminal(completed)" path. Mirrors TS at
             # query.ts:1244-1252.
-            if (
-                (is_withheld_ptl or is_withheld_media)
-                and has_attempted_reactive_compact
-            ):
+            if (is_withheld_ptl or is_withheld_media) and has_attempted_reactive_compact:
                 if last_message is not None:
                     yield last_message
                 set_terminal(
                     holder,
                     natural_termination,
-                    Terminal(
-                        reason="image_error"
-                        if is_withheld_media
-                        else "prompt_too_long"
-                    ),
+                    Terminal(reason="image_error" if is_withheld_media else "prompt_too_long"),
                 )
                 return
 
@@ -1624,9 +1649,7 @@ async def query(
                 # need to round-trip it precisely because
                 # reactive_compact only uses the exception for
                 # classification.
-                synthetic_err = PromptTooLongError(
-                    "withheld during streaming, recovering"
-                )
+                synthetic_err = PromptTooLongError("withheld during streaming, recovering")
                 result: ReactiveCompactResult = await reactive_compact(
                     messages=messages,
                     error=synthetic_err,
@@ -1691,11 +1714,7 @@ async def query(
                 set_terminal(
                     holder,
                     natural_termination,
-                    Terminal(
-                        reason="image_error"
-                        if is_withheld_media
-                        else "prompt_too_long"
-                    ),
+                    Terminal(reason="image_error" if is_withheld_media else "prompt_too_long"),
                 )
                 return
 
@@ -1721,7 +1740,9 @@ async def query(
             )
             logger.warning(
                 "[DIAG] query loop: running %d tools in %d batches: %s",
-                len(tool_use_blocks), len(_batches), _batch_desc,
+                len(tool_use_blocks),
+                len(_batches),
+                _batch_desc,
             )
 
         # Snapshot the current conversation onto the ToolContext so
@@ -1751,14 +1772,24 @@ async def query(
         if _diag:
             logger.warning(
                 "[DIAG] query loop: tools finished in %.1fs, %d results",
-                time.monotonic() - _tools_t0, len(tool_results),
+                time.monotonic() - _tools_t0,
+                len(tool_results),
             )
             for tr in tool_results:
                 if isinstance(tr.content, list):
                     for b in tr.content:
-                        if hasattr(b, 'content'):
-                            clen = len(b.content) if isinstance(b.content, str) else len(str(b.content))
-                            logger.warning("[DIAG]   result: tool_use_id=%s  is_error=%s  content_len=%d", getattr(b, 'tool_use_id', '?'), getattr(b, 'is_error', False), clen)
+                        if hasattr(b, "content"):
+                            clen = (
+                                len(b.content)
+                                if isinstance(b.content, str)
+                                else len(str(b.content))
+                            )
+                            logger.warning(
+                                "[DIAG]   result: tool_use_id=%s  is_error=%s  content_len=%d",
+                                getattr(b, "tool_use_id", "?"),
+                                getattr(b, "is_error", False),
+                                clen,
+                            )
 
         for result_msg in tool_results:
             yield result_msg
@@ -1786,7 +1817,9 @@ async def query(
         #   * BEFORE state reconstruction — no next iteration follows.
         if any(_is_hook_stopped_continuation(msg) for msg in tool_results):
             set_terminal(
-                holder, natural_termination, Terminal(reason="hook_stopped"),
+                holder,
+                natural_termination,
+                Terminal(reason="hook_stopped"),
             )
             return
 

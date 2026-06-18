@@ -6,6 +6,7 @@ registry. Hermetic via autouse fixture: pins
 ``project_transcript_dir`` to a tmp path so manual_dream's session
 scan never reaches the real ``~/.clawcodex/sessions/`` directory.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -30,9 +31,7 @@ from src.task_registry import RuntimeTaskRegistry
 
 
 @pytest.fixture(autouse=True)
-def _isolate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def _isolate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Reset state between tests.
 
     * Clear the dream service closure (so ``manual_dream`` creates
@@ -114,9 +113,7 @@ def test_register_dream_skill_registers_local_command() -> None:
 
     cmd = get_command_registry().get("dream")
     assert cmd is not None, "dream command should be registered"
-    assert cmd.command_type == CommandType.LOCAL, (
-        f"expected LOCAL, got {cmd.command_type}"
-    )
+    assert cmd.command_type == CommandType.LOCAL, f"expected LOCAL, got {cmd.command_type}"
     assert cmd.loaded_from == "bundled"
     assert "/dream" in cmd.description or "dream" in cmd.description.lower()
 

@@ -17,9 +17,7 @@ from src.memdir.memory_types import (
 
 class TaxonomyTest(unittest.TestCase):
     def test_four_types(self):
-        self.assertEqual(
-            MEMORY_TYPES, ("user", "feedback", "project", "reference")
-        )
+        self.assertEqual(MEMORY_TYPES, ("user", "feedback", "project", "reference"))
 
     def test_parse_known(self):
         for t in MEMORY_TYPES:

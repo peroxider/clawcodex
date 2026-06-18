@@ -1,4 +1,5 @@
 """Tests for TelemetryConfig + load_config()."""
+
 from __future__ import annotations
 
 import os
@@ -194,10 +195,10 @@ def _write_pyproject(cwd: Path, table: str) -> Path:
     p.write_text(
         "[project]\n"
         'name = "demo"\n'
-        "version = \"0.0.1\"\n\n"
+        'version = "0.0.1"\n\n'
         f"[tool.clawcodex.{table}]\n"
         "enabled = true\n"
-        "storage_dir = \"/tmp/tel-toml-test\"\n",
+        'storage_dir = "/tmp/tel-toml-test"\n',
         encoding="utf-8",
     )
     return p
@@ -206,9 +207,7 @@ def _write_pyproject(cwd: Path, table: str) -> Path:
 def _write_telemetry_toml(cwd: Path) -> Path:
     p = cwd / "telemetry.toml"
     p.write_text(
-        "[telemetry]\n"
-        "enabled = true\n"
-        "retention_days = 7\n",
+        "[telemetry]\nenabled = true\nretention_days = 7\n",
         encoding="utf-8",
     )
     return p

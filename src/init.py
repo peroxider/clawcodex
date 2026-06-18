@@ -125,6 +125,7 @@ def init() -> None:
     # caller (memoize or test) is a no-op.
     _logger.info("init: registering nested-session transcript resolver")
     from clawcodex_ext import ensure_nested_transcript_initialized
+
     ensure_nested_transcript_initialized()
     profile_checkpoint("init_after_nested_transcript")
 
@@ -222,13 +223,15 @@ def _determine_is_interactive(args: object) -> bool:
 # main.tsx:822-838. Unknown values fall back to ``cli`` (defensive
 # default — an attacker setting this env var to a random string
 # shouldn't change client-type-gated behavior).
-_KNOWN_CLIENT_TYPES = frozenset({
-    "sdk-py",
-    "sdk-ts",
-    "sdk-cli",
-    "cli",
-    "claude-vscode",
-})
+_KNOWN_CLIENT_TYPES = frozenset(
+    {
+        "sdk-py",
+        "sdk-ts",
+        "sdk-cli",
+        "cli",
+        "claude-vscode",
+    }
+)
 
 
 def _determine_client_type() -> str:
@@ -247,7 +250,5 @@ def reset_init_for_test_only() -> None:
     by ``bootstrap.state.reset_state_for_tests``.
     """
     if os.environ.get("PYTEST_CURRENT_TEST") is None:
-        raise RuntimeError(
-            "reset_init_for_test_only can only be called in tests"
-        )
+        raise RuntimeError("reset_init_for_test_only can only be called in tests")
     init.cache_clear()

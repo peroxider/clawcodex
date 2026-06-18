@@ -90,10 +90,7 @@ def _read_log_tail(log_path: str) -> str:
     except FileNotFoundError:
         return "No debug log exists yet — logging was just enabled."
     except OSError as exc:
-        return (
-            f"Failed to read last {_DEFAULT_DEBUG_LINES_READ} lines of "
-            f"debug log: {exc}"
-        )
+        return f"Failed to read last {_DEFAULT_DEBUG_LINES_READ} lines of debug log: {exc}"
 
 
 def _settings_path_hint(scope: str) -> str:
@@ -172,9 +169,7 @@ def register_debug_skill() -> None:
     register_bundled_skill(
         BundledSkillDefinition(
             name="debug",
-            description=(
-                "Enable debug logging for this session and help diagnose issues"
-            ),
+            description=("Enable debug logging for this session and help diagnose issues"),
             allowed_tools=["Read", "Grep", "Glob"],
             argument_hint="[issue description]",
             # disable_model_invocation: matches TS — user must opt in

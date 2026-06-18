@@ -57,10 +57,7 @@ def _redact_params(query_string: str) -> str:
     params = parse_qsl(query_string, keep_blank_values=True)
     if not params:
         return query_string
-    redacted = [
-        (k, REDACTION_MARKER if k.lower() in _SENSITIVE_LOWER else v)
-        for k, v in params
-    ]
+    redacted = [(k, REDACTION_MARKER if k.lower() in _SENSITIVE_LOWER else v) for k, v in params]
     return urlencode(redacted)
 
 
@@ -78,9 +75,7 @@ def redact_sensitive_params(url: str) -> str:
     try:
         parsed = urlparse(url)
         new_query = _redact_params(parsed.query)
-        new_fragment = (
-            _redact_params(parsed.fragment) if parsed.fragment else parsed.fragment
-        )
+        new_fragment = _redact_params(parsed.fragment) if parsed.fragment else parsed.fragment
         return urlunparse(parsed._replace(query=new_query, fragment=new_fragment))
     except (ValueError, TypeError):
         return url

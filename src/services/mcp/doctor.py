@@ -75,7 +75,9 @@ class DiagnosticReport:
             lines.append("No MCP servers configured.")
             return "\n".join(lines)
 
-        lines.append(f"Servers: {self.total_count} total, {self.healthy_count} healthy, {self.unhealthy_count} unhealthy")
+        lines.append(
+            f"Servers: {self.total_count} total, {self.healthy_count} healthy, {self.unhealthy_count} unhealthy"
+        )
         lines.append("")
 
         for diag in self.servers:
@@ -175,6 +177,7 @@ async def check_server_health(
 
     try:
         from .client import McpClient
+
         client = McpClient()
         connection = await asyncio.wait_for(
             client.connect(name, config),
@@ -183,6 +186,7 @@ async def check_server_health(
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
         from .types import ConnectedMCPServer, FailedMCPServer
+
         if isinstance(connection, ConnectedMCPServer):
             caps = {}
             if connection.capabilities:
@@ -271,30 +275,31 @@ async def run_diagnostics(
             elif isinstance(inner, (McpSSEServerConfig, McpHTTPServerConfig)):
                 warnings.extend(_validate_url_config(name, inner.url))
 
-            report.servers.append(ServerDiagnostic(
-                name=name,
-                scope=config.scope,
-                transport_type=transport_type,
-                status="unchecked",
-                warnings=warnings,
-            ))
+            report.servers.append(
+                ServerDiagnostic(
+                    name=name,
+                    scope=config.scope,
+                    transport_type=transport_type,
+                    status="unchecked",
+                    warnings=warnings,
+                )
+            )
         return report
 
-    tasks = [
-        check_server_health(name, config)
-        for name, config in configs.items()
-    ]
+    tasks = [check_server_health(name, config) for name, config in configs.items()]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
     for result in results:
         if isinstance(result, Exception):
-            report.servers.append(ServerDiagnostic(
-                name="unknown",
-                scope="unknown",
-                transport_type="unknown",
-                status="error",
-                error=str(result),
-            ))
+            report.servers.append(
+                ServerDiagnostic(
+                    name="unknown",
+                    scope="unknown",
+                    transport_type="unknown",
+                    status="error",
+                    error=str(result),
+                )
+            )
         else:
             report.servers.append(result)
 

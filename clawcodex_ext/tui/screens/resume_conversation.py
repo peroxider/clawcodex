@@ -49,9 +49,7 @@ class SessionEntry:
         # Timestamp
         if self.last_updated:
             try:
-                dt_str = datetime.fromtimestamp(self.last_updated).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
+                dt_str = datetime.fromtimestamp(self.last_updated).strftime("%Y-%m-%d %H:%M")
                 parts.append(dt_str)
             except Exception:
                 pass
@@ -239,16 +237,18 @@ class ResumeConversation(DialogScreen[str | None]):
                         transcript_text = transcript_text[:2000]
                 except Exception:
                     pass
-                out.append(SessionEntry(
-                    session_id=session_id,
-                    title=getattr(meta, "title", None) or "",
-                    model=getattr(meta, "model", None) or "",
-                    msg_count=getattr(meta, "message_count", None) or 0,
-                    last_updated=getattr(meta, "last_updated", None) or 0.0,
-                    cwd=getattr(meta, "cwd", None) or "",
-                    last_user_input=getattr(meta, "last_user_input", None) or "",
-                    _transcript_text=transcript_text,
-                ))
+                out.append(
+                    SessionEntry(
+                        session_id=session_id,
+                        title=getattr(meta, "title", None) or "",
+                        model=getattr(meta, "model", None) or "",
+                        msg_count=getattr(meta, "message_count", None) or 0,
+                        last_updated=getattr(meta, "last_updated", None) or 0.0,
+                        cwd=getattr(meta, "cwd", None) or "",
+                        last_user_input=getattr(meta, "last_user_input", None) or "",
+                        _transcript_text=transcript_text,
+                    )
+                )
             return out
         except Exception:
             return []

@@ -123,11 +123,15 @@ class TestMarketplaceIntegration:
         target.mkdir()
         plugin_source = source / "formatter"
         plugin_source.mkdir()
-        (plugin_source / "plugin.json").write_text(json.dumps({
-            "name": "formatter",
-            "description": "Code formatter",
-            "version": "1.0.0",
-        }))
+        (plugin_source / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": "formatter",
+                    "description": "Code formatter",
+                    "version": "1.0.0",
+                }
+            )
+        )
 
         plugin = install_plugin(source, target, "formatter")
         assert plugin.name == "formatter"

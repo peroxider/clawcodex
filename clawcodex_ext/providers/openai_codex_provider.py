@@ -59,8 +59,12 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
             self._client = None
         return super().client
 
-    def _prepare_responses_input(self, messages: list[MessageInput]) -> tuple[str | None, list[dict[str, Any]]]:
-        provider_messages = _convert_anthropic_messages_to_openai(super()._prepare_messages(messages))
+    def _prepare_responses_input(
+        self, messages: list[MessageInput]
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        provider_messages = _convert_anthropic_messages_to_openai(
+            super()._prepare_messages(messages)
+        )
         instructions: list[str] = []
         responses_input: list[dict[str, Any]] = []
 
@@ -78,7 +82,9 @@ class OpenAICodexProvider(OpenAICompatibleProvider):
                 responses_input.extend(_assistant_tool_calls_to_response_input(message, content))
                 continue
             if role in {"user", "assistant"}:
-                responses_input.append({"role": role, "content": _content_to_responses_parts(content, role=role)})
+                responses_input.append(
+                    {"role": role, "content": _content_to_responses_parts(content, role=role)}
+                )
 
         return ("\n\n".join(instructions) or None), responses_input
 
@@ -144,7 +150,9 @@ def _tool_message_to_response_input(message: dict[str, Any], content: Any) -> di
     }
 
 
-def _assistant_tool_calls_to_response_input(message: dict[str, Any], content: Any) -> list[dict[str, Any]]:
+def _assistant_tool_calls_to_response_input(
+    message: dict[str, Any], content: Any
+) -> list[dict[str, Any]]:
     responses_input: list[dict[str, Any]] = []
     text = _content_to_text(content)
     if text:
@@ -154,12 +162,14 @@ def _assistant_tool_calls_to_response_input(message: dict[str, Any], content: An
         if not isinstance(tool_call, dict):
             continue
         function = tool_call.get("function", {})
-        responses_input.append({
-            "type": "function_call",
-            "call_id": tool_call.get("id", ""),
-            "name": function.get("name", ""),
-            "arguments": function.get("arguments", "{}"),
-        })
+        responses_input.append(
+            {
+                "type": "function_call",
+                "call_id": tool_call.get("id", ""),
+                "name": function.get("name", ""),
+                "arguments": function.get("arguments", "{}"),
+            }
+        )
     return responses_input
 
 
@@ -234,13 +244,15 @@ def _responses_tools(tools: Optional[list[dict[str, Any]]] = None) -> list[dict[
         name = function.get("name")
         if not isinstance(name, str) or not name:
             continue
-        converted.append({
-            "type": "function",
-            "name": name,
-            "description": function.get("description", ""),
-            "parameters": function.get("parameters", {"type": "object", "properties": {}}),
-            "strict": False,
-        })
+        converted.append(
+            {
+                "type": "function",
+                "name": name,
+                "description": function.get("description", ""),
+                "parameters": function.get("parameters", {"type": "object", "properties": {}}),
+                "strict": False,
+            }
+        )
     return converted or None
 
 
@@ -350,8 +362,12 @@ def _parse_function_call_arguments(arguments: Any) -> dict[str, Any]:
 def _build_responses_usage_dict(usage: Any) -> dict[str, Any]:
     if usage is None:
         return {}
-    input_tokens = _get_attr_or_key(usage, "input_tokens", _get_attr_or_key(usage, "prompt_tokens", 0))
-    output_tokens = _get_attr_or_key(usage, "output_tokens", _get_attr_or_key(usage, "completion_tokens", 0))
+    input_tokens = _get_attr_or_key(
+        usage, "input_tokens", _get_attr_or_key(usage, "prompt_tokens", 0)
+    )
+    output_tokens = _get_attr_or_key(
+        usage, "output_tokens", _get_attr_or_key(usage, "completion_tokens", 0)
+    )
     return {
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,

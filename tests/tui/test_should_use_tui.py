@@ -35,18 +35,22 @@ def test_explicit_true_forces_tui(clean_env):
 
     from src.entrypoints.tui import should_use_tui
 
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(True) is True
 
 
 def test_explicit_false_disables_tui(clean_env):
     from src.entrypoints.tui import should_use_tui
 
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(False) is False
 
 
@@ -55,9 +59,11 @@ def test_default_on_real_tty_is_repl(clean_env):
 
     from src.entrypoints.tui import should_use_tui
 
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False
 
 
@@ -66,9 +72,11 @@ def test_legacy_env_forces_rich_repl(clean_env):
     from src.entrypoints.tui import should_use_tui
 
     clean_env.setenv("CLAWCODEX_LEGACY_REPL", "1")
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False
 
 
@@ -77,9 +85,11 @@ def test_tui_env_zero_disables(clean_env):
     from src.entrypoints.tui import should_use_tui
 
     clean_env.setenv("CLAWCODEX_TUI", "0")
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False
 
 
@@ -87,9 +97,11 @@ def test_env_opt_in_enables_tui_on_tty(clean_env):
     from src.entrypoints.tui import should_use_tui
 
     clean_env.setenv("CLAWCODEX_TUI", "1")
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is True
 
 
@@ -97,9 +109,11 @@ def test_default_disabled_without_tty(clean_env):
     """Piped / non-interactive sessions fall back to the legacy REPL."""
     from src.entrypoints.tui import should_use_tui
 
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=False), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=False),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False
 
 
@@ -107,16 +121,20 @@ def test_default_disabled_on_dumb_term(clean_env):
     from src.entrypoints.tui import should_use_tui
 
     clean_env.setenv("TERM", "dumb")
-    with patch("src.entrypoints.tui._textual_available", return_value=True), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=True),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False
 
 
 def test_default_disabled_when_textual_missing(clean_env):
     from src.entrypoints.tui import should_use_tui
 
-    with patch("src.entrypoints.tui._textual_available", return_value=False), \
-         patch("sys.stdout.isatty", return_value=True), \
-         patch("sys.stdin.isatty", return_value=True):
+    with (
+        patch("src.entrypoints.tui._textual_available", return_value=False),
+        patch("sys.stdout.isatty", return_value=True),
+        patch("sys.stdin.isatty", return_value=True),
+    ):
         assert should_use_tui(None) is False

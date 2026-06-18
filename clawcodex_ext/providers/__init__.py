@@ -1,4 +1,5 @@
 """Downstream provider extensions — model discovery hooks and provider overrides."""
+
 from __future__ import annotations
 
 # Note: ``register_provider`` and ``register_provider_info`` are safe to call
@@ -25,6 +26,7 @@ def _OpenAICodexProvider_lazy():
     Instead, register a callable that returns the class on demand.
     """
     from clawcodex_ext.providers.openai_codex_provider import OpenAICodexProvider
+
     return OpenAICodexProvider
 
 
@@ -58,10 +60,12 @@ register_provider(
 # the hardcoded if-branches in the upstream resolver.
 # ---------------------------------------------------------------------------
 
+
 def _ClawcodexAnthropicProvider_lazy():
     from clawcodex_ext.providers.anthropic_provider import (
         ClawcodexAnthropicProvider,
     )
+
     return ClawcodexAnthropicProvider
 
 
@@ -69,6 +73,7 @@ def _ClawcodexMinimaxProvider_lazy():
     from clawcodex_ext.providers.minimax_provider import (
         ClawcodexMinimaxProvider,
     )
+
     return ClawcodexMinimaxProvider
 
 

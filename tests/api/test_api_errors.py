@@ -161,46 +161,32 @@ class TestIsImageUnsupportedError(unittest.TestCase):
         )
 
     def test_paraphrase_does_not_support(self) -> None:
-        self.assertTrue(
-            is_image_unsupported_error("This model does not support image input")
-        )
+        self.assertTrue(is_image_unsupported_error("This model does not support image input"))
 
     def test_paraphrase_doesnt_support(self) -> None:
-        self.assertTrue(
-            is_image_unsupported_error("Selected model doesn't support image content")
-        )
+        self.assertTrue(is_image_unsupported_error("Selected model doesn't support image content"))
 
     def test_paraphrase_image_input_is_not_supported(self) -> None:
-        self.assertTrue(
-            is_image_unsupported_error("Image input is not supported by deepseek-v4")
-        )
+        self.assertTrue(is_image_unsupported_error("Image input is not supported by deepseek-v4"))
 
     def test_paraphrase_snake_case_code(self) -> None:
         self.assertTrue(is_image_unsupported_error("error: image_input_not_supported"))
 
     def test_paraphrase_model_does_not_accept(self) -> None:
-        self.assertTrue(
-            is_image_unsupported_error("Model does not accept image content blocks")
-        )
+        self.assertTrue(is_image_unsupported_error("Model does not accept image content blocks"))
 
     def test_case_insensitive(self) -> None:
-        self.assertTrue(
-            is_image_unsupported_error("NO ENDPOINTS FOUND THAT SUPPORT IMAGE INPUT")
-        )
+        self.assertTrue(is_image_unsupported_error("NO ENDPOINTS FOUND THAT SUPPORT IMAGE INPUT"))
 
     # Negative cases — make sure we don't accidentally classify adjacent
     # but distinct errors (PTL, media-size, generic 404) as
     # image_unsupported, which would route them away from their own
     # recovery paths.
     def test_negative_prompt_too_long(self) -> None:
-        self.assertFalse(
-            is_image_unsupported_error("prompt is too long: 250000 tokens > 200000")
-        )
+        self.assertFalse(is_image_unsupported_error("prompt is too long: 250000 tokens > 200000"))
 
     def test_negative_media_size(self) -> None:
-        self.assertFalse(
-            is_image_unsupported_error("image exceeds the maximum allowed size")
-        )
+        self.assertFalse(is_image_unsupported_error("image exceeds the maximum allowed size"))
 
     def test_negative_generic_404(self) -> None:
         self.assertFalse(is_image_unsupported_error("404 Not Found"))

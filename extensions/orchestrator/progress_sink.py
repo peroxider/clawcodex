@@ -229,9 +229,7 @@ class ToolContextProgressSink:
             # (a re-run that goes past the configured phase list still
             # reports 100% for the last configured phase).
             try:
-                real_idx = self._workflow_phases.index(
-                    self._named_phase(idx)
-                )
+                real_idx = self._workflow_phases.index(self._named_phase(idx))
             except ValueError:
                 return 100
             return int((real_idx + 1) / len(self._workflow_phases) * 100)

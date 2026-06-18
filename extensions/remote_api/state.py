@@ -89,9 +89,7 @@ class ResponseStore:
         while len(self._items) > self.limit:
             response_id, _ = self._items.popitem(last=False)
             stale = [
-                name
-                for name, stored_id in self._conversations.items()
-                if stored_id == response_id
+                name for name, stored_id in self._conversations.items() if stored_id == response_id
             ]
             for name in stale:
                 self._conversations.pop(name, None)

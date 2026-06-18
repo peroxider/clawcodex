@@ -16,6 +16,7 @@ here gives the operator the same reconstructed Conversation that
 
 Reads only; no orchestrator coupling beyond :class:`IssueRegistry`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,8 +70,7 @@ def _render_summary(label: str, result) -> str:
     if result.metadata is not None:
         md = result.metadata
         lines.append(
-            f"  model={md.model} cwd={md.cwd} "
-            f"title={md.title!r} messages={md.message_count}"
+            f"  model={md.model} cwd={md.cwd} title={md.title!r} messages={md.message_count}"
         )
     else:
         lines.append("  (no metadata.json — using empty conversation)")
@@ -93,13 +93,9 @@ def _render_summary(label: str, result) -> str:
                 for block in content:
                     btype = getattr(block, "type", None)
                     if btype == "text":
-                        snippet_parts.append(
-                            (getattr(block, "text", "") or "").strip()
-                        )
+                        snippet_parts.append((getattr(block, "text", "") or "").strip())
                     elif btype == "tool_use":
-                        snippet_parts.append(
-                            f"[tool:{getattr(block, 'name', '?')}]"
-                        )
+                        snippet_parts.append(f"[tool:{getattr(block, 'name', '?')}]")
                     elif btype == "tool_result":
                         snippet_parts.append("[tool_result]")
                 snippet = " ".join(p for p in snippet_parts if p)
@@ -137,8 +133,7 @@ def _run_resume_session(
     if resolved is None:
         if issue_id:
             print(
-                f"error: no completed run found for issue {issue_id!r}. "
-                f"Nothing to resume.",
+                f"error: no completed run found for issue {issue_id!r}. Nothing to resume.",
                 file=sys.stderr,
             )
         else:

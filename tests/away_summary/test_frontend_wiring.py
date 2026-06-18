@@ -406,8 +406,8 @@ def test_tui_away_summary_display_posts_to_ui_thread(monkeypatch, tmp_path) -> N
                 "Transcript",
                 (),
                 {
-                    "append_system": lambda self, text, *, style="muted", render="plain": rendered.append(
-                        (text, style, render)
+                    "append_system": lambda self, text, *, style="muted", render="plain": (
+                        rendered.append((text, style, render))
                     )
                 },
             )()

@@ -112,7 +112,7 @@ class FileHistory:
                     logger.error("Failed to restore %s to checkpoint %s: %s", abs_path, name, e)
 
                 idx = snapshots.index(target_snapshot)
-                self._snapshots[abs_path] = snapshots[:idx + 1]
+                self._snapshots[abs_path] = snapshots[: idx + 1]
 
         return restored
 
@@ -182,9 +182,7 @@ def _compute_lines_changed(original: str, current: str) -> LinesChanged:
     added = 0
     removed = 0
 
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(
-        None, orig_lines, curr_lines
-    ).get_opcodes():
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, orig_lines, curr_lines).get_opcodes():
         if tag == "replace":
             removed += i2 - i1
             added += j2 - j1

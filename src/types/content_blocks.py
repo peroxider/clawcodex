@@ -75,8 +75,13 @@ ContentBlock: TypeAlias = (
 )
 
 _BLOCK_CLASSES = (
-    TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock,
-    RedactedThinkingBlock, ImageBlock, DocumentBlock,
+    TextBlock,
+    ToolUseBlock,
+    ToolResultBlock,
+    ThinkingBlock,
+    RedactedThinkingBlock,
+    ImageBlock,
+    DocumentBlock,
 )
 
 

@@ -40,9 +40,7 @@ def test_enabled_when_env_var_is_one(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize("value", ["", "0", "true", "yes"])
-def test_only_value_one_enables(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
+def test_only_value_one_enables(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     monkeypatch.setenv(FRAME_DEBUG_ENV, value)
     assert is_enabled() is False
 
@@ -69,9 +67,7 @@ def test_enabled_emit_notifies_all_observers(
     received: list[FrameEvent] = []
     register_frame_observer(received.append)
 
-    event = FrameEvent(
-        duration_ms=12.5, phases={"render": 5.2, "diff": 1.1}
-    )
+    event = FrameEvent(duration_ms=12.5, phases={"render": 5.2, "diff": 1.1})
     emit_frame_event(event)
     assert received == [event]
 

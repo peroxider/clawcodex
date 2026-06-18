@@ -36,6 +36,7 @@ _mdm_handle = get_or_start_mdm_raw_read()
 def main():
     """Delegate to the downstream CLI dispatch."""
     from clawcodex_ext.cli.dispatch import run_cli
+
     return run_cli()
 
 
@@ -45,43 +46,52 @@ def main():
 # and imports (e.g. ``from src.cli import _build_parser``) keep working.
 # ----------------------------------------------------------------------
 
+
 def _build_parser():
     from clawcodex_ext.cli.parser import build_parser
+
     return build_parser()
 
 
 def _resolve_permission_state(args):
     from clawcodex_ext.cli.permissions import resolve_permission_state
+
     return resolve_permission_state(args)
 
 
 def _run_print_mode(args):
     from clawcodex_ext.cli.runners import run_print_mode
+
     return run_print_mode(args)
 
 
 def _run_tui_mode(args):
     from clawcodex_ext.cli.runners import run_tui_mode
+
     return run_tui_mode(args)
 
 
 def _split_csv(value):
     from clawcodex_ext.cli.runners import _split_csv
+
     return _split_csv(value)
 
 
 def _show_provider_defaults_table():
     from clawcodex_ext.cli.runners import _show_provider_defaults_table
+
     return _show_provider_defaults_table()
 
 
 def handle_login():
     from clawcodex_ext.cli.runners import handle_login
+
     return handle_login()
 
 
 def show_config():
     from clawcodex_ext.cli.runners import show_config
+
     return show_config()
 
 
@@ -93,6 +103,7 @@ def start_repl(
     resume_session_id: str | None = None,
 ):
     from clawcodex_ext.cli.runners import start_repl
+
     return start_repl(
         stream=stream,
         permission_mode=permission_mode,
@@ -101,5 +112,5 @@ def start_repl(
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

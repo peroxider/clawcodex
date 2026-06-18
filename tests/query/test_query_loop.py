@@ -79,14 +79,16 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_001",
-                "name": "Write",
-                "input": {
-                    "file_path": str(self.workspace / "test.txt"),
-                    "content": "hello",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_001",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(self.workspace / "test.txt"),
+                        "content": "hello",
+                    },
+                }
+            ],
         )
 
         final_response = ChatResponse(
@@ -123,8 +125,10 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
         self.assertGreaterEqual(len(assistants), 1)
 
         tool_results = [
-            m for m in collected
-            if isinstance(m, UserMessage) and isinstance(m.content, list)
+            m
+            for m in collected
+            if isinstance(m, UserMessage)
+            and isinstance(m.content, list)
             and any(isinstance(b, ToolResultBlock) for b in m.content)
         ]
         self.assertGreaterEqual(len(tool_results), 1)
@@ -139,14 +143,16 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
             reasoning_content="thinking trace from provider",
-            tool_uses=[{
-                "id": "toolu_001",
-                "name": "Write",
-                "input": {
-                    "file_path": str(self.workspace / "reasoning.txt"),
-                    "content": "hello",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_001",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(self.workspace / "reasoning.txt"),
+                        "content": "hello",
+                    },
+                }
+            ],
         )
         second = ChatResponse(
             content="Done",
@@ -177,7 +183,8 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
         self.assertEqual(provider.chat.call_count, 2)
         second_call_messages = provider.chat.call_args_list[1].args[0]
         assistant_with_tool_use = next(
-            msg for msg in second_call_messages
+            msg
+            for msg in second_call_messages
             if msg.get("role") == "assistant" and isinstance(msg.get("content"), list)
         )
         self.assertEqual(
@@ -194,14 +201,16 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
             model="test",
             usage={"input_tokens": 10, "output_tokens": 20},
             finish_reason="tool_use",
-            tool_uses=[{
-                "id": "toolu_001",
-                "name": "Write",
-                "input": {
-                    "file_path": str(self.workspace / "test.txt"),
-                    "content": "hello",
-                },
-            }],
+            tool_uses=[
+                {
+                    "id": "toolu_001",
+                    "name": "Write",
+                    "input": {
+                        "file_path": str(self.workspace / "test.txt"),
+                        "content": "hello",
+                    },
+                }
+            ],
         )
 
         provider.chat.return_value = tool_use_response
@@ -227,7 +236,8 @@ class TestQueryLoopSingleTurn(unittest.TestCase):
         _run(run())
 
         max_turns_msgs = [
-            m for m in collected
+            m
+            for m in collected
             if isinstance(m, SystemMessage) and getattr(m, "subtype", None) == "max_turns_reached"
         ]
         self.assertEqual(len(max_turns_msgs), 1)
@@ -277,10 +287,7 @@ class TestQueryLoopAbort(unittest.TestCase):
 
         _run(run())
 
-        interruptions = [
-            m for m in collected
-            if isinstance(m, UserMessage) and m.isMeta
-        ]
+        interruptions = [m for m in collected if isinstance(m, UserMessage) and m.isMeta]
         self.assertGreaterEqual(len(interruptions), 1)
 
 
@@ -339,8 +346,10 @@ class TestQueryLoopImageSizeError(unittest.TestCase):
         self.assertTrue(getattr(err, "isApiErrorMessage", False))
         self.assertEqual(getattr(err, "_api_error", None), "media_size")
         content = err.content
-        text = content if isinstance(content, str) else "".join(
-            b.text for b in content if isinstance(b, TextBlock)
+        text = (
+            content
+            if isinstance(content, str)
+            else "".join(b.text for b in content if isinstance(b, TextBlock))
         )
         self.assertIn("Media too large", text)
 

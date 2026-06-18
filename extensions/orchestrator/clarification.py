@@ -27,6 +27,7 @@ from .clarification_queue import ClarificationQueue, ClarificationStatus
 from .tracker import Comment
 
 if TYPE_CHECKING:
+    from .clarification_queue import ClarificationItem
     from .tracker import TrackerAdapter
 
 logger = logging.getLogger(__name__)
@@ -37,13 +38,13 @@ class ClarificationConfig:
     """Configuration for clarification flow."""
 
     enabled: bool = True
-    timeout_local_seconds: float = 30 * 60        # 30 minutes for local channels
-    timeout_author_seconds: float = 72 * 3600     # 72 hours for author channel
+    timeout_local_seconds: float = 30 * 60  # 30 minutes for local channels
+    timeout_author_seconds: float = 72 * 3600  # 72 hours for author channel
     max_questions_per_issue: int = 3
     confidence_threshold: float = 0.7
-    operator_priority: bool = True                # operator answers beat author
-    simultaneous_grace_ms: float = 5000           # 5ms window for simultaneous
-    stale_notification: str = "all"              # "all" | "operator_only" | "none"
+    operator_priority: bool = True  # operator answers beat author
+    simultaneous_grace_ms: float = 5000  # 5ms window for simultaneous
+    stale_notification: str = "all"  # "all" | "operator_only" | "none"
 
     # Escalation policy when all channels timeout
     escalation: str = "skip"  # "skip" | "mark_failed" | "notify"
@@ -202,11 +203,13 @@ class ClarificationResolver:
         ):
             queue_answer = self._queue.get_resolved(issue_id)
             if queue_answer and queue_answer.answer:
-                candidates.append((
-                    queue_answer.answer_source or "clarification_queue",
-                    queue_answer.answer,
-                    queue_answer.answered_at or time.time(),
-                ))
+                candidates.append(
+                    (
+                        queue_answer.answer_source or "clarification_queue",
+                        queue_answer.answer,
+                        queue_answer.answered_at or time.time(),
+                    )
+                )
 
         # Channel 3: Issue comments
         if item.status in (
@@ -221,11 +224,13 @@ class ClarificationResolver:
                 latest = new_comments[-1]  # Chronologically last
                 if latest.body and latest.body.strip():
                     ts = self._parse_comment_timestamp(latest.created_at)
-                    candidates.append((
-                        "author",
-                        latest.body.strip(),
-                        ts,
-                    ))
+                    candidates.append(
+                        (
+                            "author",
+                            latest.body.strip(),
+                            ts,
+                        )
+                    )
 
         return candidates
 
@@ -355,9 +360,7 @@ class ClarificationResolver:
         """Build the @mention comment body."""
         question = item.question
         if item.options:
-            options_text = "\n".join(
-                f"{i+1}. {opt}" for i, opt in enumerate(item.options)
-            )
+            options_text = "\n".join(f"{i + 1}. {opt}" for i, opt in enumerate(item.options))
             body = (
                 f"## Clarification Needed\n\n"
                 f"I need some clarification on this issue:\n\n"
@@ -411,11 +414,13 @@ class ClarificationResolver:
             existing = []
             if notif_path.exists():
                 existing = json.loads(notif_path.read_text())
-            existing.append({
-                "issue_id": issue_id,
-                "timestamp": __import__("time").time(),
-                "policy": self._config.escalation,
-            })
+            existing.append(
+                {
+                    "issue_id": issue_id,
+                    "timestamp": __import__("time").time(),
+                    "policy": self._config.escalation,
+                }
+            )
             notif_path.write_text(json.dumps(existing, indent=2))
         except Exception:
             pass
@@ -428,6 +433,7 @@ class ClarificationResolver:
             # ISO format with Z suffix
             ts = created_at.replace("Z", "+00:00")
             from datetime import datetime
+
             dt = datetime.fromisoformat(ts)
             return dt.timestamp()
         except Exception:

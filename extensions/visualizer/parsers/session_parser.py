@@ -122,7 +122,9 @@ class SessionMetadataParser:
             last_updated = meta.get("last_updated", start_time)
             viz.start_time = start_time
             viz.end_time = last_updated or start_time
-            viz.duration_ms = int((viz.end_time - viz.start_time) * 1000) if viz.end_time > viz.start_time else 0
+            viz.duration_ms = (
+                int((viz.end_time - viz.start_time) * 1000) if viz.end_time > viz.start_time else 0
+            )
 
         # Metadata-only fields (not recoverable from transcript)
         viz.workspace = meta.get("cwd", "")
@@ -160,7 +162,9 @@ class SessionMetadataParser:
     # ------------------------------------------------------------------
 
     def _enrich_from_transcript(
-        self, viz: SessionVizData, transcript_path: Path,
+        self,
+        viz: SessionVizData,
+        transcript_path: Path,
     ) -> None:
         """Walk the JSONL transcript and fill the transcript-driven fields.
 
@@ -324,7 +328,9 @@ class SessionMetadataParser:
     # ------------------------------------------------------------------
 
     def _infer_status(
-        self, meta: dict[str, Any], transcript_path: Path,
+        self,
+        meta: dict[str, Any],
+        transcript_path: Path,
     ) -> str:
         """Infer session status from transcript freshness and metadata.
 
@@ -390,10 +396,7 @@ class SessionMetadataParser:
                                 pass
                 issue_id = ""
                 for ev in events:
-                    if (
-                        ev.get("type") == "session_ref"
-                        and ev.get("session_id") == viz.session_id
-                    ):
+                    if ev.get("type") == "session_ref" and ev.get("session_id") == viz.session_id:
                         issue_id = str(ev.get("issue_id", ""))
                         break
                 if issue_id:
@@ -403,9 +406,7 @@ class SessionMetadataParser:
                             ev.get("type") == "verification"
                             and str(ev.get("issue_id", "")) == issue_id
                         ):
-                            viz.verification_status = str(
-                                ev.get("verification_status", "")
-                            )
+                            viz.verification_status = str(ev.get("verification_status", ""))
                             break
             except Exception as e:
                 logger.debug("State journal enrich failed for %s: %s", viz.session_id, e)

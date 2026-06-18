@@ -18,6 +18,7 @@ controller must hold for both REPL and TUI:
    blocks other mutators so the listener can't race with another
    cycle.
 """
+
 from __future__ import annotations
 
 import threading

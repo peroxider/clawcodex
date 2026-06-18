@@ -96,7 +96,11 @@ def convert_pos_to_agent(
 
     # Step 3: Build Agent from Skills
     resolved_name = agent_name or _generate_agent_name(requirements)
-    resolved_desc = agent_description or f"Agent for: {requirements}" if requirements else f"Agent converted from SDK"
+    resolved_desc = (
+        agent_description or f"Agent for: {requirements}"
+        if requirements
+        else f"Agent converted from SDK"
+    )
     resolved_model = model
 
     builder = AgentBuilder(
@@ -111,6 +115,7 @@ def convert_pos_to_agent(
     # Step 4: Persist agent for long-term use
     try:
         from extensions.pos_converter.agent_builder import persist_converted_agent
+
         persist_converted_agent(result.agent, skills)
         persist_status = "saved"
     except Exception as exc:
@@ -140,9 +145,10 @@ def convert_pos_to_agent(
 def _generate_agent_name(requirements: str) -> str:
     """Generate a valid agent name from requirements."""
     import re
+
     name = requirements.lower().strip()
-    name = re.sub(r'[^a-z0-9]+', '-', name)
-    name = re.sub(r'^-+|-+$', '', name)
+    name = re.sub(r"[^a-z0-9]+", "-", name)
+    name = re.sub(r"^-+|-+$", "", name)
     if not name:
         name = "converted-agent"
     if len(name) > 40:
@@ -196,12 +202,12 @@ def _format_result(result: dict[str, Any]) -> str:
         lines.append(f"Tools: {', '.join(skill['tools'])}")
 
     lines.append(f"\n## Tools ({len(result.get('tools', []))})")
-    lines.append(", ".join(result.get('tools', [])))
+    lines.append(", ".join(result.get("tools", [])))
 
     lines.append(f"\nPersistence: {result['persist_status']}")
     lines.append(f"Skill files: {', '.join(result.get('skill_files', []))}")
 
-    if result.get('warnings'):
+    if result.get("warnings"):
         lines.append(f"\nWarnings: {'; '.join(result['warnings'])}")
 
     return "\n".join(lines)

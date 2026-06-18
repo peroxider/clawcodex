@@ -4,6 +4,7 @@ Covers the dispatch layer's sync-vs-async branch, the three
 ``retrieval_status`` values (``success`` / ``timeout`` / ``not_ready``),
 schema bounds rejection, default timeout, and abort-fast-path.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,14 +38,18 @@ def test_dispatch_loop_branches_on_iscoroutinefunction(tmp_path: Path) -> None:
 
     class _AsyncStub:
         name = "AsyncStub"
+
         async def call(self, _input, _ctx):
             from src.tool_system.protocol import ToolResult
+
             return ToolResult(name="AsyncStub", output={"ok": True})
 
     class _SyncStub:
         name = "SyncStub"
+
         def call(self, _input, _ctx):
             from src.tool_system.protocol import ToolResult
+
             return ToolResult(name="SyncStub", output={"ok": True})
 
     # Both stubs round-trip through the same dispatcher.
@@ -63,17 +68,18 @@ def _ctx_with_agent(tmp_path: Path) -> tuple[ToolContext, str]:
     ctx = ToolContext(workspace_root=tmp_path)
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=ctx.runtime_tasks,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=ctx.runtime_tasks,
     )
     return ctx, agent_id
 
 
 def test_block_false_returns_not_ready_for_running_task(tmp_path: Path) -> None:
     ctx, agent_id = _ctx_with_agent(tmp_path)
-    result = asyncio.run(
-        TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx)
-    )
+    result = asyncio.run(TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx))
     assert result.output["retrieval_status"] == "not_ready"
     assert result.output["task"]["status"] == "running"
 
@@ -81,9 +87,7 @@ def test_block_false_returns_not_ready_for_running_task(tmp_path: Path) -> None:
 def test_block_false_returns_success_for_terminal_task(tmp_path: Path) -> None:
     ctx, agent_id = _ctx_with_agent(tmp_path)
     complete_agent_task(agent_id, result_text="ok", registry=ctx.runtime_tasks)
-    result = asyncio.run(
-        TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx)
-    )
+    result = asyncio.run(TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx))
     assert result.output["retrieval_status"] == "success"
     assert result.output["task"]["status"] == "completed"
 
@@ -136,9 +140,7 @@ def test_unknown_task_id_returns_success_with_null_task(tmp_path: Path) -> None:
     """Mirrors TS: an absent task is reported as success-with-null-body
     (NOT an error). Callers distinguish via the ``task`` key."""
     ctx = ToolContext(workspace_root=tmp_path)
-    result = asyncio.run(
-        TaskOutputTool.call({"task_id": "a-unknown"}, ctx)
-    )
+    result = asyncio.run(TaskOutputTool.call({"task_id": "a-unknown"}, ctx))
     assert result.output["retrieval_status"] == "success"
     assert result.output["task"] is None
 
@@ -154,9 +156,7 @@ def test_timeout_default_is_30000_ms(tmp_path: Path) -> None:
     (which doesn't actually wait) so the test runs in ms."""
     ctx, agent_id = _ctx_with_agent(tmp_path)
     # No ``timeout`` in input; ``block: false`` so we don't wait.
-    result = asyncio.run(
-        TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx)
-    )
+    result = asyncio.run(TaskOutputTool.call({"task_id": agent_id, "block": False}, ctx))
     assert result.output["retrieval_status"] == "not_ready"
 
 
@@ -168,11 +168,7 @@ def test_timeout_invalid_string_raises() -> None:
 
     ctx = ToolContext(workspace_root=Path("/tmp"))
     with pytest.raises(ToolInputError):
-        asyncio.run(
-            TaskOutputTool.call(
-                {"task_id": "a1", "timeout": "huge"}, ctx
-            )
-        )
+        asyncio.run(TaskOutputTool.call({"task_id": "a1", "timeout": "huge"}, ctx))
 
 
 def test_schema_declares_minimum_and_maximum_bounds() -> None:
@@ -206,8 +202,10 @@ def test_block_true_exits_early_on_abort_signal(tmp_path: Path) -> None:
     # Fake abort controller — simplest possible shape.
     class _Sig:
         aborted = True
+
     class _Ctl:
         signal = _Sig()
+
     ctx.abort_controller = _Ctl()
 
     start = time.time()

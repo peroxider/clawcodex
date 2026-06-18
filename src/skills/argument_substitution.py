@@ -61,4 +61,3 @@ def substitute_arguments(
         content = content + f"\n\nARGUMENTS: {args}"
 
     return content
-

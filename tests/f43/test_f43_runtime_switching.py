@@ -33,7 +33,6 @@ class FakeRegistry:
         raise NotImplementedError
 
 
-
 def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) -> None:
     built: list[tuple[str, str | None]] = []
 
@@ -43,7 +42,9 @@ def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) 
     )
     monkeypatch.setattr(
         "src.providers.runtime.build_provider_from_config",
-        lambda provider_name, model=None: built.append((provider_name, model)) or FakeProvider(model),
+        lambda provider_name, model=None: (
+            built.append((provider_name, model)) or FakeProvider(model)
+        ),
     )
     monkeypatch.setattr(
         "src.tool_system.defaults.build_default_registry",
@@ -77,7 +78,9 @@ def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) 
     assert options.model == "zai/glm-4"
 
 
-def test_runtime_context_swap_provider_replaces_provider_and_registry(monkeypatch, tmp_path: Path) -> None:
+def test_runtime_context_swap_provider_replaces_provider_and_registry(
+    monkeypatch, tmp_path: Path
+) -> None:
     registries: list[FakeRegistry] = []
 
     monkeypatch.setattr(

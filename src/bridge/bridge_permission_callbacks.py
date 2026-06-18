@@ -52,8 +52,8 @@ def is_bridge_permission_response(
     """
     if not isinstance(value, dict):
         return False
-    behavior = value.get('behavior')
-    return behavior == 'allow' or behavior == 'deny'
+    behavior = value.get("behavior")
+    return behavior == "allow" or behavior == "deny"
 
 
 class BridgePermissionCallbacks(Protocol):
@@ -77,9 +77,7 @@ class BridgePermissionCallbacks(Protocol):
         blocked_path: str | None = None,
     ) -> None: ...
 
-    def send_response(
-        self, request_id: str, response: BridgePermissionResponse
-    ) -> None: ...
+    def send_response(self, request_id: str, response: BridgePermissionResponse) -> None: ...
 
     def cancel_request(self, request_id: str) -> None:
         """Cancel a pending control_request so the web app can dismiss its prompt."""
@@ -95,7 +93,7 @@ class BridgePermissionCallbacks(Protocol):
 
 
 __all__ = [
-    'BridgePermissionCallbacks',
-    'BridgePermissionResponse',
-    'is_bridge_permission_response',
+    "BridgePermissionCallbacks",
+    "BridgePermissionResponse",
+    "is_bridge_permission_response",
 ]

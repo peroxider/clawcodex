@@ -2,6 +2,7 @@
 
 Mirrors TypeScript voice/stt.ts — abstract STT interface and configuration.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -12,6 +13,7 @@ from typing import Any
 @dataclass
 class STTConfig:
     """Speech-to-text configuration."""
+
     language: str = "en"
     model: str = "whisper-1"
     sample_rate: int = 16000
@@ -22,6 +24,7 @@ class STTConfig:
 @dataclass
 class STTResult:
     """Result of a speech-to-text transcription."""
+
     text: str
     confidence: float = 1.0
     is_final: bool = True

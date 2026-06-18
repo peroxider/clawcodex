@@ -3,6 +3,7 @@
 Mirrors TypeScript swarm/permissions.ts — synchronizes permission decisions
 across teammates so one approval applies to all.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PermissionDecision:
     """A cached permission decision."""
+
     tool_name: str
     rule_content: str | None
     allowed: bool
@@ -39,6 +41,7 @@ class SwarmPermissionSync:
     ) -> None:
         """Record a permission decision."""
         import time
+
         key = self._make_key(tool_name, rule_content)
         self._decisions[key] = PermissionDecision(
             tool_name=tool_name,

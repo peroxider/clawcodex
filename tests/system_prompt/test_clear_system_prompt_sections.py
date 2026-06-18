@@ -1,4 +1,5 @@
 """Test the cache+latch reset that fires on /clear and /compact (Phase A)."""
+
 from __future__ import annotations
 
 import unittest
@@ -41,6 +42,7 @@ class TestClearSystemPromptSections(unittest.TestCase):
         # Populate the cache with three sections at distinct scopes so we
         # can distinguish a partial clear from a full clear.
         from src.context_system.system_prompt_cache import CacheScope
+
         cache.set("intro", "intro content", scope=CacheScope.GLOBAL)
         cache.set("env", "env content", scope=CacheScope.SESSION)
         cache.set("mcp", "mcp content", scope=CacheScope.REQUEST)

@@ -28,7 +28,6 @@ def require_bearer_auth(api_key: str | None, authorization: str | None) -> None:
     prefix = "Bearer "
     if not authorization or not authorization.startswith(prefix):
         raise RemoteAPIError(401, "missing bearer token", code="unauthorized")
-    token = authorization[len(prefix):]
+    token = authorization[len(prefix) :]
     if not hmac.compare_digest(token, api_key):
         raise RemoteAPIError(401, "invalid bearer token", code="unauthorized")
-

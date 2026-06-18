@@ -62,9 +62,7 @@ class SkillHooks:
             except Exception:
                 pass  # Don't let callback errors break registration
 
-    def on_skill_activated(
-        self, callback: SkillActivationCallback
-    ) -> None:
+    def on_skill_activated(self, callback: SkillActivationCallback) -> None:
         """
         Register a callback to be notified when a conditional skill is activated.
 

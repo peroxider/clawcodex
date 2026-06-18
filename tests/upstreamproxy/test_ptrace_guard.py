@@ -21,16 +21,16 @@ def test_pr_set_dumpable_constant() -> None:
 
 def test_non_linux_returns_false() -> None:
     """On macOS/Windows, set_non_dumpable is a no-op returning False."""
-    if platform.system() == 'Linux':
-        pytest.skip('platform-specific test for non-Linux')
+    if platform.system() == "Linux":
+        pytest.skip("platform-specific test for non-Linux")
     assert set_non_dumpable() is False
 
 
 @pytest.mark.linux_only
 def test_linux_returns_true() -> None:
     """On Linux, prctl(PR_SET_DUMPABLE, 0) succeeds."""
-    if platform.system() != 'Linux':
-        pytest.skip('Linux-only test')
+    if platform.system() != "Linux":
+        pytest.skip("Linux-only test")
     assert set_non_dumpable() is True
 
 

@@ -70,11 +70,11 @@ def get_context_window_for_model(model: str) -> int:
         if name in model_lower:
             return window
     # Try to extract a numeric window from model name (e.g., "gpt-4-32k")
-    match = re.search(r'(\d+)k', model_lower)
+    match = re.search(r"(\d+)k", model_lower)
     if match:
         return int(match.group(1)) * 1_000
     # Check for 1m suffix
-    if '1m' in model_lower or 'million' in model_lower:
+    if "1m" in model_lower or "million" in model_lower:
         return 1_000_000
     return DEFAULT_CONTEXT_WINDOW
 
@@ -289,10 +289,7 @@ def format_context_as_markdown(data: ContextData) -> str:
     lines.append("")
 
     # Main categories table
-    visible_categories = [
-        c for c in data.categories
-        if c.tokens > 0 and c.name != "Free space"
-    ]
+    visible_categories = [c for c in data.categories if c.tokens > 0 and c.name != "Free space"]
 
     if visible_categories:
         lines.append("### Estimated usage by category")
@@ -339,7 +336,9 @@ def format_context_as_markdown(data: ContextData) -> str:
         lines.append("| Agent Type | Source | Tokens |")
         lines.append("|------------|--------|--------|")
         for a in data.agents:
-            lines.append(f"| {a.get('agent_type', 'unknown')} | {a.get('source', 'unknown')} | {a.get('tokens', 0):,} |")
+            lines.append(
+                f"| {a.get('agent_type', 'unknown')} | {a.get('source', 'unknown')} | {a.get('tokens', 0):,} |"
+            )
         lines.append("")
 
     # Skills

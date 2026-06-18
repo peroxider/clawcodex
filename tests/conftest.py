@@ -47,6 +47,7 @@ def _ensure_src_submodules_loaded():
     import src as _src_pkg
     import src.config as _config_mod
     import src.permissions as _perms_mod
+
     # Force-bind on the current ``src`` module object (whichever one
     # is in ``sys.modules`` right now) so pytest's monkeypatch can
     # resolve dotted paths regardless of any prior ``sys.modules.pop``

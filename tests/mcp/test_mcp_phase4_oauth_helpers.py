@@ -106,7 +106,9 @@ class TestRedactSensitiveParams:
         """Implicit OAuth flow returns tokens in the URL fragment per
         RFC 6749 §4.2.2. Fragment must be redacted to avoid credential
         leakage in logs."""
-        url = "https://app.example.com/callback#access_token=SECRET&token_type=Bearer&expires_in=3600"
+        url = (
+            "https://app.example.com/callback#access_token=SECRET&token_type=Bearer&expires_in=3600"
+        )
         out = redact_sensitive_params(url)
         assert "SECRET" not in out
         assert "REDACTED" in out

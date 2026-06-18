@@ -3,6 +3,7 @@
 Most tests are skipped when ``pdftoppm`` is not installed; the unavailable
 path is always testable since it's a pure ``shutil.which`` check.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -27,6 +28,7 @@ class TestPdfExtractionUnavailableHandling(unittest.TestCase):
         (PDFs that don't exist / are empty / oversize give those errors
         regardless of pdftoppm availability), so we need a real PDF on disk."""
         import tempfile
+
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             # Minimal valid PDF stub (header + EOF marker is enough to pass
             # the existence/size guards; pdftoppm would fail later but we
@@ -45,6 +47,7 @@ class TestPdfExtractionUnavailableHandling(unittest.TestCase):
         """Empty/missing/oversize PDFs report actionable errors even on
         hosts without pdftoppm. Regression for the critic-flagged ordering bug."""
         from src.utils.pdf_extraction import PdfExtractionFailed
+
         with self.assertRaises(PdfExtractionFailed) as cm:
             extract_pdf_pages(Path("/tmp/__definitely_does_not_exist__.pdf"))
         self.assertIn("does not exist", str(cm.exception))

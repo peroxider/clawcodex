@@ -6,6 +6,7 @@ Verifies:
 - Recovery constants match
 - QueryConfig fields match
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,8 @@ class TestQueryStateFieldsParity(unittest.TestCase):
         state = QueryState.__dataclass_fields__
         for field_name in expected_fields:
             self.assertIn(
-                field_name, state,
+                field_name,
+                state,
                 f"QueryState missing field '{field_name}'",
             )
 
@@ -81,6 +83,7 @@ class TestTransitionReasonsParity(unittest.TestCase):
         ts_reasons = set(self.snapshot["transition_reasons"])
         # ContinueReason is a Literal type — get its args
         import typing
+
         py_reasons = set(typing.get_args(ContinueReason))
         self.assertEqual(ts_reasons, py_reasons)
 
@@ -102,6 +105,7 @@ class TestTransitionReasonsParity(unittest.TestCase):
         """The 10 chapter §'Terminal States' reasons must round-trip."""
         ts_reasons = set(self.snapshot["terminal_reasons"])
         import typing as _typing
+
         py_reasons = set(_typing.get_args(TerminalReason))
         self.assertEqual(ts_reasons, py_reasons)
 
@@ -139,7 +143,8 @@ class TestQueryConfigFieldsParity(unittest.TestCase):
         config = QueryConfig.__dataclass_fields__
         for field_name in expected_fields:
             self.assertIn(
-                field_name, config,
+                field_name,
+                config,
                 f"QueryConfig missing field '{field_name}'",
             )
 

@@ -3,6 +3,7 @@
 Provides teammate spawning, permission synchronization, and team coordination.
 Mirrors TypeScript swarm/ directory.
 """
+
 from __future__ import annotations
 
 from .teammate import Teammate, TeammateConfig, TeammateManager, TeammateStatus

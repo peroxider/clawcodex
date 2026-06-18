@@ -67,9 +67,12 @@ class TestMcpPluginWrapper:
         assert len(get_all_mcp_plugins()) == 2
 
     def test_get_tools(self):
-        wrap_mcp_server_as_plugin("srv", [
-            {"name": "tool1", "description": "d1"},
-        ])
+        wrap_mcp_server_as_plugin(
+            "srv",
+            [
+                {"name": "tool1", "description": "d1"},
+            ],
+        )
         tools = get_mcp_plugin_tools("srv")
         assert len(tools) == 1
         assert tools[0].name == "tool1"
@@ -129,15 +132,18 @@ class TestLspDiagnostics:
     def test_add_diagnostics(self):
         config = LspServerConfig(name="diag-test", command="test")
         wrap_lsp_server_as_plugin(config)
-        add_diagnostics("diag-test", [
-            LspDiagnostic(
-                file_path="src/main.py",
-                line=10,
-                column=5,
-                message="Unused import",
-                severity=DiagnosticSeverity.WARNING,
-            ),
-        ])
+        add_diagnostics(
+            "diag-test",
+            [
+                LspDiagnostic(
+                    file_path="src/main.py",
+                    line=10,
+                    column=5,
+                    message="Unused import",
+                    severity=DiagnosticSeverity.WARNING,
+                ),
+            ],
+        )
         diags = get_diagnostics("diag-test")
         assert len(diags) == 1
         assert diags[0].message == "Unused import"
@@ -145,10 +151,13 @@ class TestLspDiagnostics:
     def test_filter_by_file(self):
         config = LspServerConfig(name="filter-test", command="test")
         wrap_lsp_server_as_plugin(config)
-        add_diagnostics("filter-test", [
-            LspDiagnostic(file_path="a.py", line=1, column=1, message="err1"),
-            LspDiagnostic(file_path="b.py", line=1, column=1, message="err2"),
-        ])
+        add_diagnostics(
+            "filter-test",
+            [
+                LspDiagnostic(file_path="a.py", line=1, column=1, message="err1"),
+                LspDiagnostic(file_path="b.py", line=1, column=1, message="err2"),
+            ],
+        )
         diags = get_diagnostics("filter-test", file_path="a.py")
         assert len(diags) == 1
         assert diags[0].message == "err1"
@@ -156,16 +165,25 @@ class TestLspDiagnostics:
     def test_filter_by_severity(self):
         config = LspServerConfig(name="sev-test", command="test")
         wrap_lsp_server_as_plugin(config)
-        add_diagnostics("sev-test", [
-            LspDiagnostic(
-                file_path="a.py", line=1, column=1, message="error",
-                severity=DiagnosticSeverity.ERROR,
-            ),
-            LspDiagnostic(
-                file_path="a.py", line=2, column=1, message="warning",
-                severity=DiagnosticSeverity.WARNING,
-            ),
-        ])
+        add_diagnostics(
+            "sev-test",
+            [
+                LspDiagnostic(
+                    file_path="a.py",
+                    line=1,
+                    column=1,
+                    message="error",
+                    severity=DiagnosticSeverity.ERROR,
+                ),
+                LspDiagnostic(
+                    file_path="a.py",
+                    line=2,
+                    column=1,
+                    message="warning",
+                    severity=DiagnosticSeverity.WARNING,
+                ),
+            ],
+        )
         errors = get_diagnostics("sev-test", severity=DiagnosticSeverity.ERROR)
         assert len(errors) == 1
         assert errors[0].message == "error"
@@ -173,16 +191,22 @@ class TestLspDiagnostics:
     def test_clear_diagnostics(self):
         config = LspServerConfig(name="clear-test", command="test")
         wrap_lsp_server_as_plugin(config)
-        add_diagnostics("clear-test", [
-            LspDiagnostic(file_path="a.py", line=1, column=1, message="err"),
-        ])
+        add_diagnostics(
+            "clear-test",
+            [
+                LspDiagnostic(file_path="a.py", line=1, column=1, message="err"),
+            ],
+        )
         clear_diagnostics("clear-test")
         assert get_diagnostics("clear-test") == []
 
     def test_diagnostics_nonexistent_server(self):
-        add_diagnostics("nope", [
-            LspDiagnostic(file_path="a.py", line=1, column=1, message="err"),
-        ])
+        add_diagnostics(
+            "nope",
+            [
+                LspDiagnostic(file_path="a.py", line=1, column=1, message="err"),
+            ],
+        )
         assert get_diagnostics("nope") == []
 
     def test_diagnostic_severity_values(self):

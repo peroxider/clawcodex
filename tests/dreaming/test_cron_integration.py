@@ -7,6 +7,7 @@ Hermetic via autouse fixture: pins ``project_transcript_dir`` to a
 tmp path so any gate-chain call in the fire handler never reads the
 real ``~/.clawcodex/sessions/`` directory.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -127,18 +128,14 @@ def test_install_is_idempotent(tmp_path: Path) -> None:
 
 def test_install_respects_custom_cron(tmp_path: Path) -> None:
     """The caller can override the cron expression."""
-    task, created = install_dream_permanent_cron_task(
-        tmp_path, cron_expr="0 4 * * 0"
-    )
+    task, created = install_dream_permanent_cron_task(tmp_path, cron_expr="0 4 * * 0")
     assert created is True
     assert task.cron == "0 4 * * 0"
 
 
 def test_install_respects_custom_task_id(tmp_path: Path) -> None:
     """The caller can override the task id (e.g. for tests)."""
-    task, created = install_dream_permanent_cron_task(
-        tmp_path, task_id="dream-custom"
-    )
+    task, created = install_dream_permanent_cron_task(tmp_path, task_id="dream-custom")
     assert created is True
     assert task.id == "dream-custom"
 
@@ -147,9 +144,7 @@ def test_install_rejects_overwrite_of_other_permanent(tmp_path: Path) -> None:
     """A different prompt under the same cron is rejected (PermissionError)."""
     install_dream_permanent_cron_task(tmp_path)
     with pytest.raises(PermissionError):
-        install_dream_permanent_cron_task(
-            tmp_path, prompt="something completely different"
-        )
+        install_dream_permanent_cron_task(tmp_path, prompt="something completely different")
 
 
 # ---------------------------------------------------------------------------
@@ -168,9 +163,7 @@ def test_wire_intercepts_dream_task_and_calls_execute(monkeypatch, tmp_path: Pat
     )
 
     fired_original: list[Any] = []
-    scheduler = _FakeScheduler(
-        on_fire_task=lambda t, r: fired_original.append(t)
-    )
+    scheduler = _FakeScheduler(on_fire_task=lambda t, r: fired_original.append(t))
     wire_dream_fire_handler(scheduler, registry=reg)
 
     dream_task, _ = install_dream_permanent_cron_task(tmp_path)
@@ -189,9 +182,7 @@ def test_wire_passes_through_non_dream_tasks(tmp_path: Path) -> None:
     """Non-dream tasks are forwarded to the original on_fire_task
     unchanged."""
     fired_original: list[Any] = []
-    scheduler = _FakeScheduler(
-        on_fire_task=lambda t, r: fired_original.append((t, r))
-    )
+    scheduler = _FakeScheduler(on_fire_task=lambda t, r: fired_original.append((t, r)))
     wire_dream_fire_handler(scheduler)
 
     other_task = type("T", (), {"id": "morning-checkin", "prompt": "x"})()
@@ -221,9 +212,7 @@ def test_wire_uses_custom_task_id() -> None:
     """``task_id`` override lets the wire handler match a different
     installed id (e.g. for tests)."""
     fired_original: list[Any] = []
-    scheduler = _FakeScheduler(
-        on_fire_task=lambda t, r: fired_original.append(t)
-    )
+    scheduler = _FakeScheduler(on_fire_task=lambda t, r: fired_original.append(t))
     wire_dream_fire_handler(scheduler, task_id="dream-custom")
 
     # A task with id="dream-custom" should be intercepted (treated as dream).
@@ -254,12 +243,8 @@ def test_install_and_wire_end_to_end(tmp_path: Path) -> None:
     )
 
     fired_original: list[Any] = []
-    scheduler = _FakeScheduler(
-        on_fire_task=lambda t, r: fired_original.append(t)
-    )
-    task, created = install_and_wire_dream(
-        tmp_path, scheduler, registry=reg
-    )
+    scheduler = _FakeScheduler(on_fire_task=lambda t, r: fired_original.append(t))
+    task, created = install_and_wire_dream(tmp_path, scheduler, registry=reg)
     assert created is True
     assert task.id == DREAM_PERMANENT_TASK_ID
 

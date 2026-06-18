@@ -32,23 +32,25 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentComponentInfo:
     """子 Agent 的信息，供总览 Agent 决策。"""
-    name: str                         # "video-ops-agent"
-    description: str                  # "视频算子处理：转码、切片、水印"
+
+    name: str  # "video-ops-agent"
+    description: str  # "视频算子处理：转码、切片、水印"
     capabilities: list[str] = field(default_factory=list)
     input_types: list[str] = field(default_factory=list)
     output_types: list[str] = field(default_factory=list)
-    invoke_pattern: str = ""          # '@video-ops-agent 将 input.mp4 转码为 HLS'
+    invoke_pattern: str = ""  # '@video-ops-agent 将 input.mp4 转码为 HLS'
 
 
 @dataclass
 class WorkflowStage:
     """工作流的一个阶段，描述阶段之间的衔接关系。"""
-    name: str                         # "视频预处理"
-    order: int                        # 阶段序号
-    description: str = ""             # "对原始视频进行格式检测和标准化"
-    responsible_agent: str = ""       # "video-ops-agent"
+
+    name: str  # "视频预处理"
+    order: int  # 阶段序号
+    description: str = ""  # "对原始视频进行格式检测和标准化"
+    responsible_agent: str = ""  # "video-ops-agent"
     depends_on: list[str] | None = None  # 前置阶段
-    output_type: str = ""             # "标准化视频"
+    output_type: str = ""  # "标准化视频"
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +243,7 @@ class AgentMarkdownWriter:
             if self._templates_dir:
                 tmpl_path = self._templates_dir / f"{name}.j2"
                 if tmpl_path.is_file():
-                    self._templates[name] = Template(
-                        tmpl_path.read_text(encoding="utf-8")
-                    )
+                    self._templates[name] = Template(tmpl_path.read_text(encoding="utf-8"))
                     return self._templates[name]
             self._templates[name] = Template(default_src)
         return self._templates[name]
@@ -425,9 +425,7 @@ class AgentMarkdownWriter:
         # Collect all skill names from component agents
         all_skills = [f"skill-{a.name}" for a in component_agents]
 
-        tmpl = self._get_template(
-            "overview_agent", _OVERVIEW_AGENT_TEMPLATE_SRC
-        )
+        tmpl = self._get_template("overview_agent", _OVERVIEW_AGENT_TEMPLATE_SRC)
         content = tmpl.render(
             name=name,
             description=description,

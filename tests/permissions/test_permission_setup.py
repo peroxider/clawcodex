@@ -34,11 +34,14 @@ class TestSetupPermissionsBasic(unittest.TestCase):
 class TestSetupPermissionsFromFile(unittest.TestCase):
     def test_loads_user_settings(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({
-                "permissions": {
-                    "allow": ["Bash(ls*)"],
+            json.dump(
+                {
+                    "permissions": {
+                        "allow": ["Bash(ls*)"],
+                    },
                 },
-            }, f)
+                f,
+            )
             f.flush()
             try:
                 result = setup_permissions(user_settings_path=f.name)
@@ -48,11 +51,14 @@ class TestSetupPermissionsFromFile(unittest.TestCase):
 
     def test_dangerous_rule_warning(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({
-                "permissions": {
-                    "allow": ["Bash(python*)"],
+            json.dump(
+                {
+                    "permissions": {
+                        "allow": ["Bash(python*)"],
+                    },
                 },
-            }, f)
+                f,
+            )
             f.flush()
             try:
                 result = setup_permissions(user_settings_path=f.name)
@@ -79,12 +85,15 @@ class TestSetupPermissionsCLI(unittest.TestCase):
 class TestShadowedRules(unittest.TestCase):
     def test_detects_shadowed(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({
-                "permissions": {
-                    "allow": ["Bash(ls*)"],
-                    "deny": ["Bash"],
+            json.dump(
+                {
+                    "permissions": {
+                        "allow": ["Bash(ls*)"],
+                        "deny": ["Bash"],
+                    },
                 },
-            }, f)
+                f,
+            )
             f.flush()
             try:
                 result = setup_permissions(user_settings_path=f.name)

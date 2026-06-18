@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from typing import Any, Generator, Optional
+from typing import Any, Callable, Generator, Optional
 
 from .base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
 
@@ -162,14 +162,16 @@ def _convert_anthropic_messages_to_openai(
                     text_parts.append(block.get("text", ""))
                 elif btype == "tool_use":
                     inp = block.get("input", {})
-                    tool_calls.append({
-                        "id": block.get("id", ""),
-                        "type": "function",
-                        "function": {
-                            "name": block.get("name", ""),
-                            "arguments": json.dumps(inp) if isinstance(inp, dict) else str(inp),
-                        },
-                    })
+                    tool_calls.append(
+                        {
+                            "id": block.get("id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": block.get("name", ""),
+                                "arguments": json.dumps(inp) if isinstance(inp, dict) else str(inp),
+                            },
+                        }
+                    )
                 else:
                     other_blocks.append(block)
 
@@ -304,11 +306,13 @@ def _convert_anthropic_messages_to_openai(
                     # requirement is honoured.
                     flat_content = "[empty tool result]"
 
-                result.append({
-                    "role": "tool",
-                    "tool_call_id": tool_use_id,
-                    "content": flat_content,
-                })
+                result.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_use_id,
+                        "content": flat_content,
+                    }
+                )
                 if multimodal_blocks_from_tool:
                     # Lead with a tiny text block naming the parent
                     # tool_use_id so the model can correlate this
@@ -317,14 +321,14 @@ def _convert_anthropic_messages_to_openai(
                     # format gives no tool_call_id on user messages.
                     correlation_text = {
                         "type": "text",
-                        "text": (
-                            f"[content for tool_use_id={tool_use_id}]"
-                        ),
+                        "text": (f"[content for tool_use_id={tool_use_id}]"),
                     }
-                    result.append({
-                        "role": "user",
-                        "content": [correlation_text, *multimodal_blocks_from_tool],
-                    })
+                    result.append(
+                        {
+                            "role": "user",
+                            "content": [correlation_text, *multimodal_blocks_from_tool],
+                        }
+                    )
             continue
 
         # Fallback
@@ -344,7 +348,12 @@ def _convert_to_openai_tool_schema(anthropic_tool: dict[str, Any]) -> dict[str, 
     if schema_type is None or schema_type == "None":
         return None
     # Some providers (Azure) require type=object to have properties
-    if schema_type == "object" and "properties" not in input_schema and "anyOf" not in input_schema and "oneOf" not in input_schema:
+    if (
+        schema_type == "object"
+        and "properties" not in input_schema
+        and "anyOf" not in input_schema
+        and "oneOf" not in input_schema
+    ):
         # Try to add an empty properties dict if none provided
         input_schema = {**input_schema, "properties": {}}
     return {
@@ -414,10 +423,7 @@ class OpenAICompatibleProvider(BaseProvider):
         }
 
     def chat(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
@@ -461,10 +467,7 @@ class OpenAICompatibleProvider(BaseProvider):
 
         # Handle reasoning content (GLM specific, but harmless for others)
         reasoning_content: Optional[str] = None
-        if (
-            hasattr(choice.message, "reasoning_content")
-            and choice.message.reasoning_content
-        ):
+        if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
             reasoning_content = choice.message.reasoning_content
 
         # Extract tool calls (OpenAI format -> Anthropic format)
@@ -476,11 +479,13 @@ class OpenAICompatibleProvider(BaseProvider):
                     args = json.loads(tc.function.arguments) if tc.function.arguments else {}
                 except Exception:
                     args = {}
-                tool_uses.append({
-                    "id": tc.id,
-                    "name": tc.function.name,
-                    "input": args,
-                })
+                tool_uses.append(
+                    {
+                        "id": tc.id,
+                        "name": tc.function.name,
+                        "input": args,
+                    }
+                )
 
         return ChatResponse(
             content=choice.message.content or "",
@@ -492,10 +497,7 @@ class OpenAICompatibleProvider(BaseProvider):
         )
 
     def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -543,7 +545,7 @@ class OpenAICompatibleProvider(BaseProvider):
         on_text_chunk: TextChunkCallback | None = None,
         on_thinking_chunk: "Callable[[str], None] | None" = None,
         abort_signal: Any = None,
-        **kwargs
+        **kwargs,
     ) -> ChatResponse:
         """Stream OpenAI-compatible chunks while rebuilding the final response.
 
@@ -718,7 +720,9 @@ class OpenAICompatibleProvider(BaseProvider):
                         tool_call_deltas = getattr(delta, "tool_calls", None) or []
                         for tc in tool_call_deltas:
                             idx = getattr(tc, "index", 0)
-                            entry = tool_calls_by_index.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                            entry = tool_calls_by_index.setdefault(
+                                idx, {"id": "", "name": "", "arguments": ""}
+                            )
 
                             tc_id = getattr(tc, "id", None)
                             if tc_id:
@@ -756,11 +760,13 @@ class OpenAICompatibleProvider(BaseProvider):
                 parsed_args = json.loads(item["arguments"]) if item["arguments"] else {}
             except Exception:
                 parsed_args = {}
-            tool_uses.append({
-                "id": item["id"] or f"tool_call_{idx}",
-                "name": item["name"],
-                "input": parsed_args,
-            })
+            tool_uses.append(
+                {
+                    "id": item["id"] or f"tool_call_{idx}",
+                    "name": item["name"],
+                    "input": parsed_args,
+                }
+            )
 
         reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
         return ChatResponse(

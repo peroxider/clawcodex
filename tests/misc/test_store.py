@@ -17,6 +17,7 @@ from src.utils.store import Store, create_store
 @dataclass
 class _S:
     """Test fixture state — a small dataclass for identity testing."""
+
     x: int
     label: str = ""
 
@@ -228,6 +229,7 @@ class TestUpdaterErrors(unittest.TestCase):
         that point (lock the documented contract from store.py:73-74).
         Subscribers also fire only if the listener-loop reaches them — onChange
         raising blocks the loop, so subscribers should NOT fire."""
+
         def bad_on_change(old: _S, new: _S) -> None:
             raise RuntimeError("on_change_boom")
 

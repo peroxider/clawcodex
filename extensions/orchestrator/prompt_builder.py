@@ -379,7 +379,7 @@ def _to_jinja_value(value: Any) -> Any:
 
 def _resolve_workspace_path(session: Any) -> Path | None:
     """Extract the workspace root path from a session object.
-    
+
     Returns None when there is no session or no workspace, which means
     the workspace-diff context is silently skipped.
     """
@@ -397,7 +397,7 @@ def _resolve_workspace_path(session: Any) -> Path | None:
 def _get_workspace_diff(ws_path: Path) -> str | None:
     """Run ``git diff --stat`` and ``git status --short`` in the
     workspace to produce a compact summary of uncommitted changes.
-    
+
     Returns ``None`` when the workspace is clean (no changes), so the
     caller can skip injecting the diff context block entirely.
     """
@@ -563,9 +563,7 @@ def _detect_python_in_workspace(
             if rel == ".python-version":
                 version = f.read_text(encoding="utf-8", errors="replace").strip()
                 if version:
-                    pyenv_root = Path(
-                        os.environ.get("PYENV_ROOT", str(Path.home() / ".pyenv"))
-                    )
+                    pyenv_root = Path(os.environ.get("PYENV_ROOT", str(Path.home() / ".pyenv")))
                     py = pyenv_root / "versions" / version / "bin" / "python3"
                     if py.exists():
                         return str(py)

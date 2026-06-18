@@ -53,7 +53,16 @@ class TestResumeSession:
         with open(transcript_path, "w") as f:
             f.write(json.dumps({"role": "user", "content": "valid", "type": "user"}) + "\n")
             f.write("this is not json\n")
-            f.write(json.dumps({"role": "assistant", "content": [{"type": "text", "text": "ok"}], "type": "assistant"}) + "\n")
+            f.write(
+                json.dumps(
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "ok"}],
+                        "type": "assistant",
+                    }
+                )
+                + "\n"
+            )
 
         result = resume_session("bad-session", sessions_dir=tmp_path)
         assert result.success is True
@@ -64,12 +73,16 @@ class TestResumeSession:
 class TestFixOrphanedToolUses:
     def test_no_orphans(self):
         messages = [
-            AssistantMessage(content=[
-                ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(type="tool_result", tool_use_id="t1", content="ok"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(type="tool_result", tool_use_id="t1", content="ok"),
+                ]
+            ),
         ]
         fixed, warnings = _fix_orphaned_tool_uses(messages)
         assert len(warnings) == 0
@@ -77,9 +90,11 @@ class TestFixOrphanedToolUses:
 
     def test_orphaned_tool_use_gets_synthetic_result(self):
         messages = [
-            AssistantMessage(content=[
-                ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
+                ]
+            ),
             # No tool_result for t1
         ]
         fixed, warnings = _fix_orphaned_tool_uses(messages)
@@ -92,13 +107,17 @@ class TestFixOrphanedToolUses:
 
     def test_multiple_orphans(self):
         messages = [
-            AssistantMessage(content=[
-                ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
-                ToolUseBlock(type="tool_use", id="t2", name="Write", input={}),
-            ]),
-            UserMessage(content=[
-                ToolResultBlock(type="tool_result", tool_use_id="t1", content="ok"),
-            ]),
+            AssistantMessage(
+                content=[
+                    ToolUseBlock(type="tool_use", id="t1", name="Read", input={}),
+                    ToolUseBlock(type="tool_use", id="t2", name="Write", input={}),
+                ]
+            ),
+            UserMessage(
+                content=[
+                    ToolResultBlock(type="tool_result", tool_use_id="t1", content="ok"),
+                ]
+            ),
         ]
         fixed, warnings = _fix_orphaned_tool_uses(messages)
         assert len(warnings) > 0

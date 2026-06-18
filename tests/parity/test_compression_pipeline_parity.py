@@ -6,6 +6,7 @@ Verifies:
 - Pipeline has early-exit behavior
 - Pipeline continues on individual layer failure
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -52,13 +53,16 @@ class TestCompressionLayerOrderParity(unittest.TestCase):
 
     def test_layer_names_match(self) -> None:
         expected = [layer["name"] for layer in self.snapshot["layers_in_order"]]
-        self.assertEqual(expected, [
-            "tool_result_budget",
-            "snip_compact",
-            "microcompact",
-            "context_collapse",
-            "autocompact",
-        ])
+        self.assertEqual(
+            expected,
+            [
+                "tool_result_budget",
+                "snip_compact",
+                "microcompact",
+                "context_collapse",
+                "autocompact",
+            ],
+        )
 
     def test_layer_indices_sequential(self) -> None:
         for i, layer in enumerate(self.snapshot["layers_in_order"]):
@@ -83,16 +87,23 @@ class TestCompressionLayerOrderParity(unittest.TestCase):
         messages = _make_messages()
         config = PipelineConfig(collapse_store=None, provider=None, mc_enabled=True)
 
-        with patch("src.services.compact.pipeline.apply_tool_result_budget", mock_tool_result_budget), \
-             patch("src.services.compact.pipeline.snip_compact", mock_snip_compact), \
-             patch("src.services.compact.pipeline.microcompact_typed_messages", mock_microcompact):
+        with (
+            patch(
+                "src.services.compact.pipeline.apply_tool_result_budget", mock_tool_result_budget
+            ),
+            patch("src.services.compact.pipeline.snip_compact", mock_snip_compact),
+            patch("src.services.compact.pipeline.microcompact_typed_messages", mock_microcompact),
+        ):
             result = asyncio.run(run_compression_pipeline(messages, config=config))
 
-        self.assertEqual(execution_log, [
-            "tool_result_budget",
-            "snip_compact",
-            "microcompact",
-        ])
+        self.assertEqual(
+            execution_log,
+            [
+                "tool_result_budget",
+                "snip_compact",
+                "microcompact",
+            ],
+        )
 
 
 class TestCompressionPipelineBehavior(unittest.TestCase):
@@ -141,8 +152,12 @@ class TestCompressionPipelineBehavior(unittest.TestCase):
             provider=None,
         )
 
-        with patch("src.services.compact.pipeline.apply_tool_result_budget", mock_tool_result_budget), \
-             patch("src.services.compact.pipeline.snip_compact", mock_snip_compact):
+        with (
+            patch(
+                "src.services.compact.pipeline.apply_tool_result_budget", mock_tool_result_budget
+            ),
+            patch("src.services.compact.pipeline.snip_compact", mock_snip_compact),
+        ):
             result = asyncio.run(run_compression_pipeline(messages, config=config))
 
         self.assertFalse(layer2_called, "Layer 2 should not run when layer 1 frees enough tokens")
@@ -150,6 +165,7 @@ class TestCompressionPipelineBehavior(unittest.TestCase):
 
     def test_pipeline_continues_on_layer_failure(self) -> None:
         """If one layer fails, pipeline should continue with remaining layers."""
+
         def mock_tool_result_budget_fail(msgs, **kwargs):
             raise RuntimeError("Layer 1 failure")
 
@@ -162,9 +178,14 @@ class TestCompressionPipelineBehavior(unittest.TestCase):
         messages = _make_messages()
         config = PipelineConfig(collapse_store=None, provider=None)
 
-        with patch("src.services.compact.pipeline.apply_tool_result_budget", mock_tool_result_budget_fail), \
-             patch("src.services.compact.pipeline.snip_compact", mock_snip_compact), \
-             patch("src.services.compact.pipeline.microcompact_typed_messages", mock_microcompact):
+        with (
+            patch(
+                "src.services.compact.pipeline.apply_tool_result_budget",
+                mock_tool_result_budget_fail,
+            ),
+            patch("src.services.compact.pipeline.snip_compact", mock_snip_compact),
+            patch("src.services.compact.pipeline.microcompact_typed_messages", mock_microcompact),
+        ):
             result = asyncio.run(run_compression_pipeline(messages, config=config))
 
         self.assertIn("snip_compact", result.layers_applied)

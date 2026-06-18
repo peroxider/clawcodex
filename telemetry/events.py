@@ -5,6 +5,7 @@ F-97 deliberately keeps the event model small and stable; see
 Prompts, model outputs, transcripts, file contents, API keys, env vars,
 absolute paths and full shell args are **never** recorded here.
 """
+
 from __future__ import annotations
 
 import time

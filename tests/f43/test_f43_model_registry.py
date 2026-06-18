@@ -43,14 +43,34 @@ def test_dynamic_discovery_hook_adds_models() -> None:
     """Global register_discovery_hook affects ModelRegistry() default."""
     # Ensure global hooks dict is clean for this test
     _DISCOVERY_HOOKS.clear()
-    registry = ModelRegistry(provider_info={"openai-codex": {"available_models": ["gpt-5.3-codex"], "default_model": "gpt-5.3-codex", "label": "test", "default_base_url": ""}}, discovery_hooks=None)
+    registry = ModelRegistry(
+        provider_info={
+            "openai-codex": {
+                "available_models": ["gpt-5.3-codex"],
+                "default_model": "gpt-5.3-codex",
+                "label": "test",
+                "default_base_url": "",
+            }
+        },
+        discovery_hooks=None,
+    )
 
     assert "gpt-9999" not in registry.available_models("openai-codex")
 
     register_discovery_hook("openai-codex", lambda: ["gpt-9999"])
 
     # A new ModelRegistry with default hooks reads the global registry
-    registry2 = ModelRegistry(provider_info={"openai-codex": {"available_models": ["gpt-5.3-codex"], "default_model": "gpt-5.3-codex", "label": "test", "default_base_url": ""}}, discovery_hooks=None)
+    registry2 = ModelRegistry(
+        provider_info={
+            "openai-codex": {
+                "available_models": ["gpt-5.3-codex"],
+                "default_model": "gpt-5.3-codex",
+                "label": "test",
+                "default_base_url": "",
+            }
+        },
+        discovery_hooks=None,
+    )
     assert "gpt-9999" in registry2.available_models("openai-codex")
 
     # Existing instances that share the global _DISCOVERY_HOOKS see the update too

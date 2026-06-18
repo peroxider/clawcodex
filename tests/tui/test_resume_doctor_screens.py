@@ -31,9 +31,7 @@ async def test_resume_screen_mounts_and_dismisses() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resume_screen_shows_empty_state_when_no_sessions(
-    tmp_path, monkeypatch
-) -> None:
+async def test_resume_screen_shows_empty_state_when_no_sessions(tmp_path, monkeypatch) -> None:
     """Phase-8 placeholder: no sessions → empty-state surface.
 
     Isolate the global ``SESSIONS_DIR`` so this test doesn't pick up
@@ -41,9 +39,7 @@ async def test_resume_screen_shows_empty_state_when_no_sessions(
     wiring made the screen actually read from disk).
     """
 
-    monkeypatch.setattr(
-        "src.services.session_storage.SESSIONS_DIR", tmp_path
-    )
+    monkeypatch.setattr("src.services.session_storage.SESSIONS_DIR", tmp_path)
 
     class _Harness(App):
         async def on_mount(self) -> None:

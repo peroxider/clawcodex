@@ -51,12 +51,8 @@ class RemoteSessionCallbacks:
     """Public callbacks. Mirrors TS at lines 64-85."""
 
     on_message: Callable[[dict], None | Awaitable[None]]
-    on_permission_request: Callable[
-        [SDKControlPermissionRequest, str], None | Awaitable[None]
-    ]
-    on_permission_cancelled: (
-        Callable[[str, str | None], None | Awaitable[None]] | None
-    ) = None
+    on_permission_request: Callable[[SDKControlPermissionRequest, str], None | Awaitable[None]]
+    on_permission_cancelled: Callable[[str, str | None], None | Awaitable[None]] | None = None
     on_connected: Callable[[], None | Awaitable[None]] | None = None
     on_disconnected: Callable[[], None | Awaitable[None]] | None = None
     on_reconnecting: Callable[[], None | Awaitable[None]] | None = None
@@ -71,7 +67,7 @@ class RemoteSessionManager:
         config: RemoteSessionConfig,
         callbacks: RemoteSessionCallbacks,
         *,
-        base_url: str = 'wss://api.anthropic.com',
+        base_url: str = "wss://api.anthropic.com",
     ) -> None:
         self._config = config
         self._callbacks = callbacks
@@ -103,7 +99,7 @@ class RemoteSessionManager:
         )
         # Schedule the connect; SessionsWebSocket.connect is async.
         loop = asyncio.get_running_loop()
-        loop.create_task(self._websocket.connect(), name='remote-session-connect')
+        loop.create_task(self._websocket.connect(), name="remote-session-connect")
 
     def is_connected(self) -> bool:
         return self._websocket is not None and self._websocket.is_connected()
@@ -120,13 +116,13 @@ class RemoteSessionManager:
         if self._websocket is None or not self._websocket.is_connected():
             return False
         envelope = {
-            'type': 'user',
-            'message': {'role': 'user', 'content': content},
-            'parent_tool_use_id': None,
-            'session_id': self._config.session_id,
+            "type": "user",
+            "message": {"role": "user", "content": content},
+            "parent_tool_use_id": None,
+            "session_id": self._config.session_id,
         }
         if uuid is not None:
-            envelope['uuid'] = uuid
+            envelope["uuid"] = uuid
         # Re-use the WS' send-control-response method to push raw JSON;
         # the WS doesn't distinguish between control envelopes and SDK
         # messages on send.
@@ -145,28 +141,28 @@ class RemoteSessionManager:
         """
         if request_id not in self._pending_permission_requests:
             logger.warning(
-                '[RemoteSessionManager] no pending permission request: %s',
+                "[RemoteSessionManager] no pending permission request: %s",
                 request_id,
             )
             return
         del self._pending_permission_requests[request_id]
 
-        if result.behavior == 'allow':
+        if result.behavior == "allow":
             response_payload: dict[str, object] = {
-                'behavior': 'allow',
-                'updatedInput': getattr(result, 'updated_input', {}),
+                "behavior": "allow",
+                "updatedInput": getattr(result, "updated_input", {}),
             }
         else:
             response_payload = {
-                'behavior': 'deny',
-                'message': getattr(result, 'message', ''),
+                "behavior": "deny",
+                "message": getattr(result, "message", ""),
             }
         envelope = {
-            'type': 'control_response',
-            'response': {
-                'subtype': 'success',
-                'request_id': request_id,
-                'response': response_payload,
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request_id,
+                "response": response_payload,
             },
         }
         if self._websocket is not None:
@@ -179,13 +175,11 @@ class RemoteSessionManager:
         gating per A16: viewer_only callers must NOT send interrupts.
         """
         if self._config.viewer_only:
-            logger.debug(
-                '[RemoteSessionManager] viewer_only: cancel_session is a no-op'
-            )
+            logger.debug("[RemoteSessionManager] viewer_only: cancel_session is a no-op")
             return
         if self._websocket is None:
             return
-        await self._websocket.send_control_request({'subtype': 'interrupt'})
+        await self._websocket.send_control_request({"subtype": "interrupt"})
 
     async def disconnect(self) -> None:
         """Close the WS and clear pending permission requests."""
@@ -206,27 +200,27 @@ class RemoteSessionManager:
 
     async def _handle_message(self, message: dict) -> None:
         """Route messages from the WS to the right consumer callback."""
-        msg_type = message.get('type')
+        msg_type = message.get("type")
 
-        if msg_type == 'control_request':
+        if msg_type == "control_request":
             await self._handle_control_request(message)
             return
-        if msg_type == 'control_cancel_request':
+        if msg_type == "control_cancel_request":
             await self._handle_control_cancel(message)
             return
-        if msg_type == 'control_response':
-            logger.debug('[RemoteSessionManager] received control_response')
+        if msg_type == "control_response":
+            logger.debug("[RemoteSessionManager] received control_response")
             return
         # All other SDK message types → on_message.
         await self._invoke(self._callbacks.on_message, message)
 
     async def _handle_control_request(self, message: dict) -> None:
-        request_id = message.get('request_id')
-        inner = message.get('request')
+        request_id = message.get("request_id")
+        inner = message.get("request")
         if not isinstance(request_id, str) or not isinstance(inner, dict):
             return
-        subtype = inner.get('subtype')
-        if subtype == 'can_use_tool':
+        subtype = inner.get("subtype")
+        if subtype == "can_use_tool":
             self._pending_permission_requests[request_id] = inner  # type: ignore[assignment]
             await self._invoke(
                 self._callbacks.on_permission_request,
@@ -235,28 +229,26 @@ class RemoteSessionManager:
             )
             return
         # Unknown subtype — send error so the server doesn't hang.
-        logger.debug(
-            '[RemoteSessionManager] unsupported control request subtype: %s', subtype
-        )
+        logger.debug("[RemoteSessionManager] unsupported control request subtype: %s", subtype)
         if self._websocket is not None:
-            await self._websocket.send_control_response({
-                'type': 'control_response',
-                'response': {
-                    'subtype': 'error',
-                    'request_id': request_id,
-                    'error': f'Unsupported control request subtype: {subtype}',
-                },
-            })
+            await self._websocket.send_control_response(
+                {
+                    "type": "control_response",
+                    "response": {
+                        "subtype": "error",
+                        "request_id": request_id,
+                        "error": f"Unsupported control request subtype: {subtype}",
+                    },
+                }
+            )
 
     async def _handle_control_cancel(self, message: dict) -> None:
-        request_id = message.get('request_id')
+        request_id = message.get("request_id")
         if not isinstance(request_id, str):
             return
         pending = self._pending_permission_requests.pop(request_id, None)
-        tool_use_id = pending.get('tool_use_id') if pending else None
-        await self._invoke(
-            self._callbacks.on_permission_cancelled, request_id, tool_use_id
-        )
+        tool_use_id = pending.get("tool_use_id") if pending else None
+        await self._invoke(self._callbacks.on_permission_cancelled, request_id, tool_use_id)
 
     @staticmethod
     async def _invoke(callback: Callable[..., object] | None, /, *args: object) -> None:
@@ -286,8 +278,8 @@ def create_remote_session_config(
 
 
 __all__ = [
-    'RemoteSessionCallbacks',
-    'RemoteSessionConfig',
-    'RemoteSessionManager',
-    'create_remote_session_config',
+    "RemoteSessionCallbacks",
+    "RemoteSessionConfig",
+    "RemoteSessionManager",
+    "create_remote_session_config",
 ]

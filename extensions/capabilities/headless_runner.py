@@ -108,11 +108,21 @@ def _make_stub_tool_event(
     tool_use_id: str,
 ) -> Any:
     """Build a minimal object duck-typing as a ToolEvent."""
+
     # The on_event callback passed to run_headless receives a ToolEvent
     # (a frozen dataclass). We construct a lightweight object that has
     # the same attribute layout so the event bridge in query.py works.
     class _StubEvent:
-        __slots__ = ("kind", "tool_name", "tool_input", "tool_output", "tool_use_id", "is_error", "error")
+        __slots__ = (
+            "kind",
+            "tool_name",
+            "tool_input",
+            "tool_output",
+            "tool_use_id",
+            "is_error",
+            "error",
+        )
+
         def __init__(self):
             self.kind = kind
             self.tool_name = tool_name

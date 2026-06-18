@@ -15,19 +15,19 @@ from src.bridge.trusted_device import (
 
 
 def test_get_token_returns_none_when_env_unset() -> None:
-    env = {k: v for k, v in os.environ.items() if k != 'CLAUDE_TRUSTED_DEVICE_TOKEN'}
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_TRUSTED_DEVICE_TOKEN"}
     with patch.dict(os.environ, env, clear=True):
         assert get_trusted_device_token() is None
 
 
 def test_get_token_returns_env_var_when_set() -> None:
-    env = {'CLAUDE_TRUSTED_DEVICE_TOKEN': 'tdt-abc'}
+    env = {"CLAUDE_TRUSTED_DEVICE_TOKEN": "tdt-abc"}
     with patch.dict(os.environ, env, clear=True):
-        assert get_trusted_device_token() == 'tdt-abc'
+        assert get_trusted_device_token() == "tdt-abc"
 
 
 def test_get_token_treats_empty_string_as_unset() -> None:
-    env = {'CLAUDE_TRUSTED_DEVICE_TOKEN': ''}
+    env = {"CLAUDE_TRUSTED_DEVICE_TOKEN": ""}
     with patch.dict(os.environ, env, clear=True):
         assert get_trusted_device_token() is None
 
@@ -45,6 +45,6 @@ def test_clear_token_is_noop() -> None:
 @pytest.mark.asyncio
 async def test_enroll_is_noop_stub(caplog: pytest.LogCaptureFixture) -> None:
     """Enrollment emits a debug log + returns; does not raise."""
-    with caplog.at_level('DEBUG', logger='src.bridge.trusted_device'):
+    with caplog.at_level("DEBUG", logger="src.bridge.trusted_device"):
         await enroll_trusted_device()
-    assert any('no-op stub' in r.message for r in caplog.records)
+    assert any("no-op stub" in r.message for r in caplog.records)

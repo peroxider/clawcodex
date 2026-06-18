@@ -28,14 +28,14 @@ logger = logging.getLogger(__name__)
 class IssueStatus(str, Enum):
     """Lifecycle stages of a tracked issue."""
 
-    QUEUED = "queued"             # in candidate queue, awaiting dispatch
-    PENDING = "pending"           # claimed, workspace created, not yet synced
-    RUNNING = "running"          # agent session actively processing
-    SYNCED = "synced"             # git sync completed (commit + push + PR)
+    QUEUED = "queued"  # in candidate queue, awaiting dispatch
+    PENDING = "pending"  # claimed, workspace created, not yet synced
+    RUNNING = "running"  # agent session actively processing
+    SYNCED = "synced"  # git sync completed (commit + push + PR)
     PENDING_REVIEW = "pending_review"  # awaiting human review (LocalTracker only)
-    COMPLETED = "completed"       # session finished successfully
-    FAILED = "failed"            # session ended with a non-success status
-    ABANDONED = "abandoned"      # retry limit reached, gave up
+    COMPLETED = "completed"  # session finished successfully
+    FAILED = "failed"  # session ended with a non-success status
+    ABANDONED = "abandoned"  # retry limit reached, gave up
     VERIFICATION_FAILED = "verification_failed"
 
 
@@ -86,11 +86,11 @@ class IssueRecord:
     updated_at: float = field(default_factory=time.time)
     attempt_count: int = 0
     # Clarification-related fields (for three-channel clarification flow)
-    clarification_status: str | None = None   # ClarificationStatus value
+    clarification_status: str | None = None  # ClarificationStatus value
     question_history: list[str] = field(default_factory=list)
     author_login: str | None = None
     local_answer: str | None = None
-    local_answer_source: str | None = None    # "dashboard" | "clarification_queue"
+    local_answer_source: str | None = None  # "dashboard" | "clarification_queue"
     first_response_source: str | None = None  # "local" | "author"
     stale_answers: list[str] = field(default_factory=list)
     processed_feedback_ids: list[str] = field(default_factory=list)
@@ -165,7 +165,11 @@ class IssueRegistry:
                         v["intent"] = Intent.NONE
                 known_fields = {field.name for field in fields(IssueRecord)}
                 self._records[k] = IssueRecord(
-                    **{field_name: value for field_name, value in v.items() if field_name in known_fields}
+                    **{
+                        field_name: value
+                        for field_name, value in v.items()
+                        if field_name in known_fields
+                    }
                 )
         except Exception as exc:
             logger.warning("Failed to load issue registry: %s — starting fresh", exc)
@@ -232,17 +236,14 @@ class IssueRegistry:
 
     def iter_records_with_pr(self) -> list[IssueRecord]:
         return [
-            record
-            for record in self._records.values()
-            if record.pr_number and record.branch_name
+            record for record in self._records.values() if record.pr_number and record.branch_name
         ]
 
     def latest_sequential_record(self) -> IssueRecord | None:
         sequential_records = (
             record
             for record in self._records.values()
-            if record.workspace_strategy == "sequential"
-            and record.sequence_index is not None
+            if record.workspace_strategy == "sequential" and record.sequence_index is not None
         )
         return max(
             sequential_records,
@@ -251,11 +252,7 @@ class IssueRegistry:
         )
 
     def running_records(self) -> list[IssueRecord]:
-        return [
-            record
-            for record in self._records.values()
-            if record.status == IssueStatus.RUNNING
-        ]
+        return [record for record in self._records.values() if record.status == IssueStatus.RUNNING]
 
     def has_processed_feedback(self, issue_id: str, feedback_id: str) -> bool:
         record = self._records.get(issue_id)

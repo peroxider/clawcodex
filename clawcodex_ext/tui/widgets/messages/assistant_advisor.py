@@ -36,6 +36,7 @@ from .base import BaseRow, RowHeader
 def _advisor_verbose_mode() -> bool:
     try:
         from src.settings.settings import get_settings
+
         # ``output_style.show_thinking`` doubles as the verbose toggle —
         # the existing knob the user already uses to opt into long
         # in-transcript text. Keeps us from introducing yet another

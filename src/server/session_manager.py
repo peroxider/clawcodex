@@ -68,10 +68,8 @@ class SessionManager:
         subprocess and then calling ``attach_process`` + ``mark_running``.
         """
         if self.max_sessions is not None and self._active_count() >= self.max_sessions:
-            raise RuntimeError(
-                f'Direct Connect server: max_sessions ({self.max_sessions}) reached'
-            )
-        sid = f'ds_{_uuid.uuid4().hex}'
+            raise RuntimeError(f"Direct Connect server: max_sessions ({self.max_sessions}) reached")
+        sid = f"ds_{_uuid.uuid4().hex}"
         now = time.time()
         info = SessionInfo(
             id=sid,
@@ -106,7 +104,7 @@ class SessionManager:
     ) -> None:
         info = self._sessions.get(session_id)
         if info is None:
-            raise KeyError(f'unknown session: {session_id}')
+            raise KeyError(f"unknown session: {session_id}")
         info.process = process
 
     def mark_running(self, session_id: str) -> None:
@@ -200,4 +198,4 @@ class SessionManager:
         return stopped
 
 
-__all__ = ['SessionManager']
+__all__ = ["SessionManager"]

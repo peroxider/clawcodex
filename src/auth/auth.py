@@ -45,6 +45,7 @@ _KEY_PATTERNS: dict[str, re.Pattern[str]] = {
 @dataclass(frozen=True)
 class ApiKeyInfo:
     """Information about a loaded API key."""
+
     key: str
     provider: str
     source: ApiKeySource
@@ -71,6 +72,7 @@ def load_api_key(provider: str = "anthropic") -> ApiKeyInfo | None:
     # 2. Config file
     try:
         from ..config import load_config
+
         config = load_config()
         providers = config.get("providers", {})
         provider_cfg = providers.get(provider, {})
@@ -117,6 +119,7 @@ def get_api_key_source(provider: str = "anthropic") -> ApiKeySource:
             return "env"
     try:
         from ..config import load_config
+
         config = load_config()
         key = config.get("providers", {}).get(provider, {}).get("api_key", "")
         if key:
@@ -129,14 +132,18 @@ def get_api_key_source(provider: str = "anthropic") -> ApiKeySource:
 def _load_from_keychain(provider: str) -> str | None:
     """Try to load API key from macOS keychain."""
     import platform
+
     if platform.system() != "Darwin":
         return None
     try:
         import subprocess
+
         service = f"clawcodex-{provider}"
         result = subprocess.run(
             ["security", "find-generic-password", "-s", service, "-w"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()

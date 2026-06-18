@@ -45,6 +45,7 @@ DEFAULT_UNSUPPORTED_MODEL_PATTERNS = ["haiku"]
 # ToolSearchMode enum — mirrors TS ToolSearchMode
 # ---------------------------------------------------------------------------
 
+
 class ToolSearchMode(str, Enum):
     """
     Determines how deferrable tools are surfaced.
@@ -62,6 +63,7 @@ class ToolSearchMode(str, Enum):
 # ---------------------------------------------------------------------------
 # Mode determination from env vars
 # ---------------------------------------------------------------------------
+
 
 def _parse_auto_percentage(value: str) -> int | None:
     """Parse auto:N syntax. Returns percentage 0-100 or None."""
@@ -131,6 +133,7 @@ def get_tool_search_mode() -> ToolSearchMode:
 # Model support checks
 # ---------------------------------------------------------------------------
 
+
 def _get_context_window_for_model(model: str) -> int:
     """Get context window size for a model."""
     model_lower = model.lower()
@@ -158,6 +161,7 @@ def model_supports_tool_reference(model: str) -> bool:
 # Deferred tool detection
 # ---------------------------------------------------------------------------
 
+
 def is_deferred_tool(tool: Tool) -> bool:
     """
     Check if a tool should be deferred (not loaded inline).
@@ -176,12 +180,10 @@ def is_deferred_tool(tool: Tool) -> bool:
 # Tool search availability checks
 # ---------------------------------------------------------------------------
 
+
 def is_tool_search_tool_available(tools: list[Any]) -> bool:
     """Check if ToolSearchTool is in the tools list."""
-    return any(
-        getattr(t, "name", None) == TOOL_SEARCH_TOOL_NAME
-        for t in tools
-    )
+    return any(getattr(t, "name", None) == TOOL_SEARCH_TOOL_NAME for t in tools)
 
 
 def is_tool_search_enabled_optimistic() -> bool:
@@ -247,7 +249,9 @@ def _check_auto_threshold(tools: Tools, model: str) -> bool:
     enabled = total_chars >= char_threshold
     logger.debug(
         "Auto tool search: %d chars (threshold: %d, %d%% of context) -> %s",
-        total_chars, char_threshold, get_auto_tool_search_percentage(),
+        total_chars,
+        char_threshold,
+        get_auto_tool_search_percentage(),
         "enabled" if enabled else "disabled",
     )
     return enabled
@@ -256,6 +260,7 @@ def _check_auto_threshold(tools: Tools, model: str) -> bool:
 # ---------------------------------------------------------------------------
 # Message history scanning for tool_reference blocks
 # ---------------------------------------------------------------------------
+
 
 def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
     """
@@ -270,15 +275,25 @@ def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
     discovered: set[str] = set()
 
     for msg in messages:
-        msg_type = getattr(msg, "type", None) or (msg.get("type") if isinstance(msg, dict) else None)
+        msg_type = getattr(msg, "type", None) or (
+            msg.get("type") if isinstance(msg, dict) else None
+        )
 
         # Compact boundary carries pre-compact discovered set
         if msg_type == "system":
-            subtype = getattr(msg, "subtype", None) or (msg.get("subtype") if isinstance(msg, dict) else None)
+            subtype = getattr(msg, "subtype", None) or (
+                msg.get("subtype") if isinstance(msg, dict) else None
+            )
             if subtype == "compact_boundary":
-                metadata = getattr(msg, "compact_metadata", None) or (msg.get("compact_metadata") if isinstance(msg, dict) else None)
+                metadata = getattr(msg, "compact_metadata", None) or (
+                    msg.get("compact_metadata") if isinstance(msg, dict) else None
+                )
                 if metadata:
-                    carried = metadata.get("pre_compact_discovered_tools") if isinstance(metadata, dict) else getattr(metadata, "pre_compact_discovered_tools", None)
+                    carried = (
+                        metadata.get("pre_compact_discovered_tools")
+                        if isinstance(metadata, dict)
+                        else getattr(metadata, "pre_compact_discovered_tools", None)
+                    )
                     if carried:
                         discovered.update(carried)
                 continue
@@ -287,7 +302,9 @@ def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
         if msg_type != "user":
             continue
 
-        content = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else None)
+        content = getattr(msg, "content", None) or (
+            msg.get("content") if isinstance(msg, dict) else None
+        )
         if not isinstance(content, list):
             continue
 
@@ -323,6 +340,7 @@ def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
 # ---------------------------------------------------------------------------
 # Tool filtering for API calls
 # ---------------------------------------------------------------------------
+
 
 def filter_tools_for_request(
     tools: Tools,

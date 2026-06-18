@@ -49,7 +49,10 @@ class TestPluggyHookManager:
         manager.register(plugin, "PreToolUse")
         result = manager.deregister(plugin, "PreToolUse")
         assert result is True
-        assert "PreToolUse" not in manager._registered_hooks or plugin not in manager._registered_hooks.get("PreToolUse", [])
+        assert (
+            "PreToolUse" not in manager._registered_hooks
+            or plugin not in manager._registered_hooks.get("PreToolUse", [])
+        )
 
     def test_get_plugins(self):
         manager = PluggyHookManager("clawcodex")

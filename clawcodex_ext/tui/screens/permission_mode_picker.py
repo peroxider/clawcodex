@@ -58,9 +58,7 @@ class PermissionModePickerScreen(DialogScreen[str | None]):
         current_index = 0
         for idx, (key, title, desc) in enumerate(self._modes):
             label = f"{title} ({key})"
-            options.append(
-                SelectOption(label=label, value=key, description=desc)
-            )
+            options.append(SelectOption(label=label, value=key, description=desc))
             if key == self._current:
                 current_index = idx
         self._select = SelectList(
@@ -83,9 +81,7 @@ class PermissionModePickerScreen(DialogScreen[str | None]):
                 pass
         self.dismiss(mode)
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         if self._on_select is not None:
             try:
                 self._on_select(None)

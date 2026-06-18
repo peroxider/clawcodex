@@ -4,6 +4,7 @@ Synced with ``src.__version__`` at module load time. The value here is a
 fallback for environments where ``src`` is not importable (e.g. isolated
 packaging builds).
 """
+
 from __future__ import annotations
 
 from typing import Final

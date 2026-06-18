@@ -278,6 +278,7 @@ def _is_preapproved(hostname: str, pathname: str) -> bool:
 
 # -- Permission Check ----------------------------------------------------------
 
+
 def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> PermissionResult:
     url = tool_input.get("url", "")
     if not isinstance(url, str) or not url:
@@ -295,6 +296,7 @@ def _check_permissions(tool_input: dict[str, Any], context: ToolContext) -> Perm
 
 # -- Result Mapping ------------------------------------------------------------
 
+
 def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
     if not isinstance(result, dict):
         return {"type": "tool_result", "tool_use_id": tool_use_id, "content": str(result)}
@@ -303,6 +305,7 @@ def _map_result_to_api(result: Any, tool_use_id: str) -> dict[str, Any]:
 
 
 # -- Main Call -----------------------------------------------------------------
+
 
 def _web_fetch_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     url = tool_input.get("url", "")
@@ -410,6 +413,8 @@ WebFetchTool: Tool = build_tool(
     is_concurrency_safe=lambda _input: True,
     check_permissions=_check_permissions,
     search_hint="web fetch url http download",
-    get_activity_description=lambda input_data: f"Fetching {(input_data or {}).get('url', '')}..." if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Fetching {(input_data or {}).get('url', '')}..." if input_data else None
+    ),
     to_auto_classifier_input=_web_fetch_classifier_input,
 )

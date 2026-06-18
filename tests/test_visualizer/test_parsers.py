@@ -41,6 +41,7 @@ def _iso(ts: float) -> str:
     timestamps.
     """
     from datetime import datetime, timezone
+
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
@@ -64,12 +65,14 @@ def _assistant_tool_use(
     content: list[dict] = []
     if text is not None:
         content.append({"type": "text", "text": text})
-    content.append({
-        "type": "tool_use",
-        "name": name,
-        "id": tool_use_id,
-        "input": input or {},
-    })
+    content.append(
+        {
+            "type": "tool_use",
+            "name": name,
+            "id": tool_use_id,
+            "input": input or {},
+        }
+    )
     return {
         "role": "assistant",
         "type": "message",
@@ -161,18 +164,24 @@ class TestTranscriptParser:
         assert bars == []
 
     def test_parse_assistant_text_message(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_text(1717500000.0, "Hello, I will help you."),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_text(1717500000.0, "Hello, I will help you."),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].type == BarType.LLM_CALL
         assert bars[0].label == "LLM text"
 
     def test_parse_tool_use_block(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Read", "tu-1", {"path": "a.py"}),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Read", "tu-1", {"path": "a.py"}),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # No text block was passed → just 1 bar (the tool_use).
         assert len(bars) == 1
@@ -183,9 +192,14 @@ class TestTranscriptParser:
     def test_parse_tool_use_block_with_leading_text(self, tmp_path):
         """A text-then-tool_use entry produces one LLM_CALL bar followed
         by one TOOL_CALL bar."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Read", "tu-1", {"path": "a.py"}, text="Let me look"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(
+                    1717500000.0, "Read", "tu-1", {"path": "a.py"}, text="Let me look"
+                ),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 2
         assert bars[0].type == BarType.LLM_CALL
@@ -193,10 +207,13 @@ class TestTranscriptParser:
         assert bars[1].label == "Read"
 
     def test_parse_tool_result_block(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Bash", "tu-1", {}),
-            _tool_result_entry(1717500001.0, "tu-1", "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Bash", "tu-1", {}),
+                _tool_result_entry(1717500001.0, "tu-1", "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # 1 tool_use + 1 tool_result = 2 bars (no leading text in the
         # tool_use helper call).
@@ -208,20 +225,26 @@ class TestTranscriptParser:
         assert bars[0].duration_ms == 1000
 
     def test_parse_tool_result_error(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Bash", "tu-1", {}),
-            _tool_result_entry(1717500002.0, "tu-1", "error", is_error=True),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Bash", "tu-1", {}),
+                _tool_result_entry(1717500002.0, "tu-1", "error", is_error=True),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert bars[1].status == BarStatus.ERROR
 
     def test_tool_call_duration_backfilled_from_result(self, tmp_path):
         """The TOOL_CALL bar's duration_ms is backfilled from the matching
         TOOL_RESULT (parsed from the user-message tool_result block)."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Read", "tu-a", {}),
-            _tool_result_entry(1717500001.5, "tu-a", "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Read", "tu-a", {}),
+                _tool_result_entry(1717500001.5, "tu-a", "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 2
         # 0=tool_call, 1=tool_result
@@ -232,9 +255,12 @@ class TestTranscriptParser:
     def test_tool_call_duration_stays_zero_without_result(self, tmp_path):
         """A TOOL_CALL with no matching TOOL_RESULT and no following bar
         keeps duration_ms=0 — no signal to estimate from."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Bash", "tu-x", {}),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Bash", "tu-x", {}),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # No leading text + 1 tool_use = 1 bar
         assert len(bars) == 1
@@ -245,12 +271,15 @@ class TestTranscriptParser:
         """A TOOL_CALL with no matching TOOL_RESULT but with a following
         bar in the timeline gets its duration estimated from the next
         bar's start_time."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            # Agent tool_use at t=100
-            _assistant_tool_use(100.0, "Agent", "call_a", {}),
-            # Next bar at t=130
-            _assistant_tool_use(130.0, "Agent", "call_b", {}),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                # Agent tool_use at t=100
+                _assistant_tool_use(100.0, "Agent", "call_a", {}),
+                # Next bar at t=130
+                _assistant_tool_use(130.0, "Agent", "call_b", {}),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # Two entries, each with no leading text → 2 tool_use bars total.
         assert len(bars) == 2
@@ -263,10 +292,13 @@ class TestTranscriptParser:
     def test_tool_call_fallback_with_only_text_after(self, tmp_path):
         """A TOOL_CALL followed by a text block (typical end-of-turn
         pattern) gets the estimate from the text block's start_time."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(200.0, "Read", "call_x", {}),
-            _assistant_text(200.5, "Done."),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(200.0, "Read", "call_x", {}),
+                _assistant_text(200.5, "Done."),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # 0=tool_call(x), 1=text("Done.")
         assert len(bars) == 2
@@ -278,22 +310,25 @@ class TestTranscriptParser:
     def test_entry_with_multiple_blocks_emits_one_bar_per_block(self, tmp_path):
         """A single transcript entry can carry multiple content blocks
         (Anthropic API format: ``[text, tool_use, tool_use, ...]``)."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(100.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [
-                    {"type": "text", "text": "Let me look at a few files."},
-                    {"type": "tool_use", "name": "Read", "id": "c1", "input": {}},
-                    {"type": "tool_use", "name": "Read", "id": "c2", "input": {}},
-                    {"type": "tool_use", "name": "Read", "id": "c3", "input": {}},
-                ],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(100.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [
+                        {"type": "text", "text": "Let me look at a few files."},
+                        {"type": "tool_use", "name": "Read", "id": "c1", "input": {}},
+                        {"type": "tool_use", "name": "Read", "id": "c2", "input": {}},
+                        {"type": "tool_use", "name": "Read", "id": "c3", "input": {}},
+                    ],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # 1 text + 3 tool_use = 4 bars
         assert len(bars) == 4
@@ -305,17 +340,20 @@ class TestTranscriptParser:
         assert len(set(ids)) == 3, f"expected 3 distinct bar ids, got {ids}"
 
     def test_single_text_only_entry_unchanged(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(50.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "text", "text": "Just a single text block."}],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(50.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "text", "text": "Just a single text block."}],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].type == BarType.LLM_CALL
@@ -323,20 +361,23 @@ class TestTranscriptParser:
     def test_entry_with_empty_text_block_skipped(self, tmp_path):
         """An entry whose content list contains a text block with an
         empty string yields no bar; only the surviving tool_use remains."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(60.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [
-                    {"type": "text", "text": ""},  # dropped
-                    {"type": "tool_use", "name": "Read", "id": "keep", "input": {}},
-                ],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(60.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [
+                        {"type": "text", "text": ""},  # dropped
+                        {"type": "tool_use", "name": "Read", "id": "keep", "input": {}},
+                    ],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # Only the Read survives the empty-text drop.
         assert len(bars) == 1
@@ -348,10 +389,13 @@ class TestTranscriptParser:
         must not re-parent the unrelated tool_call. (The tool_call may
         still pick up a pass-2 next-bar duration estimate — that's
         separate from the pair-matching logic.)"""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            _assistant_tool_use(1717500000.0, "Read", "tu-a", {}),
-            _tool_result_entry(1717500001.0, "tu-orphan", "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                _assistant_tool_use(1717500000.0, "Read", "tu-a", {}),
+                _tool_result_entry(1717500001.0, "tu-orphan", "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         # 1 tool_call + 1 tool_result (no leading text in the helper)
         assert len(bars) == 2
@@ -369,18 +413,21 @@ class TestTranscriptParser:
 
     def test_skip_meta_entry(self, tmp_path):
         """``isMeta=True`` entries are bookkeeping and produce no bars."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": True,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "text", "text": "this should be dropped"}],
-            },
-            _assistant_text(1717500001.0, "real text"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": True,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "text", "text": "this should be dropped"}],
+                },
+                _assistant_text(1717500001.0, "real text"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].label == "LLM text"
@@ -388,75 +435,90 @@ class TestTranscriptParser:
     def test_skip_cost_block_entry(self, tmp_path):
         """``type=="cost_block"`` is a non-Message entry; the transcript
         parser emits no bars for it (cost is folded by SessionMetadataParser)."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {"type": "cost_block", "cost": {"total_cost_usd": 0.42}},
-            _assistant_text(1717500000.0, "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {"type": "cost_block", "cost": {"total_cost_usd": 0.42}},
+                _assistant_text(1717500000.0, "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].label == "LLM text"
 
     def test_skip_progress_entry(self, tmp_path):
         """``type=="progress"`` is a sentinel; it does not produce a bar."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {"type": "progress", "data": {"kind": "thinking"}, "toolUseID": "x"},
-            _assistant_text(1717500000.0, "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {"type": "progress", "data": {"kind": "thinking"}, "toolUseID": "x"},
+                _assistant_text(1717500000.0, "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
 
     def test_skip_compact_summary(self, tmp_path):
         """``isCompactSummary=True`` entries are snip boundary markers —
         no bars, but they do affect downstream anchoring."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": True,
-                "content": [{"type": "text", "text": "compaction summary"}],
-            },
-            _assistant_text(1717500001.0, "post-compact"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": True,
+                    "content": [{"type": "text", "text": "compaction summary"}],
+                },
+                _assistant_text(1717500001.0, "post-compact"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].label == "LLM text"
 
     def test_skip_api_error_message(self, tmp_path):
         """``isApiErrorMessage=True`` on an assistant entry produces no bar."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "isApiErrorMessage": True,
-                "apiError": "rate limit",
-                "content": [{"type": "text", "text": "rate limit error"}],
-            },
-            _assistant_text(1717500001.0, "ok"),
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "isApiErrorMessage": True,
+                    "apiError": "rate limit",
+                    "content": [{"type": "text", "text": "rate limit error"}],
+                },
+                _assistant_text(1717500001.0, "ok"),
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
 
     def test_system_role_emits_custom_bar(self, tmp_path):
         """System-injected events emit a CUSTOM bar with user_role='system'."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "system",
-                "type": "message",
-                "subtype": "background_complete",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "text", "text": "__background_complete__"}],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "system",
+                    "type": "message",
+                    "subtype": "background_complete",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "text", "text": "__background_complete__"}],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].type == BarType.CUSTOM
@@ -465,17 +527,20 @@ class TestTranscriptParser:
 
     def test_thinking_block_emits_llm_text_bar(self, tmp_path):
         """A ``thinking`` block produces the same bar shape as ``text``."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "thinking", "thinking": "hmm, let me think"}],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "thinking", "thinking": "hmm, let me think"}],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].type == BarType.LLM_CALL
@@ -483,20 +548,23 @@ class TestTranscriptParser:
     def test_parent_session_id_propagates_to_bars(self, tmp_path):
         """A ``parent_session_id`` field on a sub-agent entry propagates
         into bar.agent_id so the multi-session view can group sub-agents."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "parent_session_id": "main-session-1",
-                "content": [
-                    {"type": "tool_use", "name": "Read", "id": "c1", "input": {}},
-                ],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "parent_session_id": "main-session-1",
+                    "content": [
+                        {"type": "tool_use", "name": "Read", "id": "c1", "input": {}},
+                    ],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].agent_id == "main-session-1"
@@ -531,17 +599,20 @@ class TestTranscriptParser:
         assert bars2[0].id == "txt-1"
 
     def test_iso8601_timestamp_in_entry(self, tmp_path):
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": "2024-06-04T12:00:00+00:00",
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "text", "text": "hi"}],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": "2024-06-04T12:00:00+00:00",
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "text", "text": "hi"}],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].start_time > 0
@@ -549,17 +620,20 @@ class TestTranscriptParser:
     def test_unparseable_timestamp_marks_ts_unrecorded(self, tmp_path):
         """A non-ISO, non-string timestamp triggers the ``ts_unrecorded``
         flag on the resulting bar."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": 12345,  # int — not accepted in the new format
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": [{"type": "text", "text": "hi"}],
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": 12345,  # int — not accepted in the new format
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": [{"type": "text", "text": "hi"}],
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].ts_unrecorded is True
@@ -567,17 +641,20 @@ class TestTranscriptParser:
     def test_string_content_skipped_as_malformed(self, tmp_path):
         """The new envelope always writes content as a list. A bare string
         content is treated as a malformed line and skipped."""
-        p = _write_jsonl(tmp_path / "t.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "content": "legacy bare string",
-            },
-        ])
+        p = _write_jsonl(
+            tmp_path / "t.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "content": "legacy bare string",
+                },
+            ],
+        )
         bars = TranscriptParser().parse_file(p)
         assert bars == []
 
@@ -609,10 +686,13 @@ class TestSessionMetadataParser:
         }
         (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
         # Transcript carries the model label on the assistant entry.
-        _write_jsonl(session_dir / "transcript.jsonl", [
-            _user_text(1717500000.0, "hi"),
-            _assistant_text(1717500030.0, "done", model="claude-opus-4-7"),
-        ])
+        _write_jsonl(
+            session_dir / "transcript.jsonl",
+            [
+                _user_text(1717500000.0, "hi"),
+                _assistant_text(1717500030.0, "done", model="claude-opus-4-7"),
+            ],
+        )
 
         parser = SessionMetadataParser(sessions_dir=tmp_path)
         viz = parser.parse("test-session-001")
@@ -632,12 +712,15 @@ class TestSessionMetadataParser:
         session_dir.mkdir()
         meta = {"title": "ts"}
         (session_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
-        _write_jsonl(session_dir / "transcript.jsonl", [
-            _user_text(1717500000.0, "hi"),
-            _assistant_tool_use(1717500001.0, "Read", "tu-1", {}),
-            _tool_result_entry(1717500002.0, "tu-1", "ok"),
-            _assistant_text(1717500003.0, "done"),
-        ])
+        _write_jsonl(
+            session_dir / "transcript.jsonl",
+            [
+                _user_text(1717500000.0, "hi"),
+                _assistant_tool_use(1717500001.0, "Read", "tu-1", {}),
+                _tool_result_entry(1717500002.0, "tu-1", "ok"),
+                _assistant_text(1717500003.0, "done"),
+            ],
+        )
         parser = SessionMetadataParser(sessions_dir=tmp_path)
         viz = parser.parse("ts-session")
         assert viz is not None
@@ -679,40 +762,43 @@ class TestSessionMetadataParser:
         session_dir = tmp_path / "cb-session"
         session_dir.mkdir()
         (session_dir / "metadata.json").write_text(json.dumps({}), encoding="utf-8")
-        _write_jsonl(session_dir / "transcript.jsonl", [
-            _user_text(1717500000.0, "hi"),
-            {
-                **{
-                    "role": "assistant",
-                    "type": "message",
-                    "timestamp": _iso(1717500001.0),
-                    "isMeta": False,
-                    "isVirtual": False,
-                    "isCompactSummary": False,
-                    "usage": {
-                        "input_tokens": 100,
-                        "output_tokens": 50,
-                        "cache_creation_input_tokens": 0,
-                        "cache_read_input_tokens": 0,
-                    },
-                    "content": [{"type": "text", "text": "ok"}],
-                },
-            },
-            {
-                "type": "cost_block",
-                "cost": {
-                    "total_cost_usd": 0.07,
-                    "model_usage": {
-                        "claude-opus-4-7": {
-                            "input_tokens": 5000,
-                            "output_tokens": 200,
+        _write_jsonl(
+            session_dir / "transcript.jsonl",
+            [
+                _user_text(1717500000.0, "hi"),
+                {
+                    **{
+                        "role": "assistant",
+                        "type": "message",
+                        "timestamp": _iso(1717500001.0),
+                        "isMeta": False,
+                        "isVirtual": False,
+                        "isCompactSummary": False,
+                        "usage": {
+                            "input_tokens": 100,
+                            "output_tokens": 50,
                             "cache_creation_input_tokens": 0,
                             "cache_read_input_tokens": 0,
                         },
+                        "content": [{"type": "text", "text": "ok"}],
                     },
                 },
-            },
-        ])
+                {
+                    "type": "cost_block",
+                    "cost": {
+                        "total_cost_usd": 0.07,
+                        "model_usage": {
+                            "claude-opus-4-7": {
+                                "input_tokens": 5000,
+                                "output_tokens": 200,
+                                "cache_creation_input_tokens": 0,
+                                "cache_read_input_tokens": 0,
+                            },
+                        },
+                    },
+                },
+            ],
+        )
         parser = SessionMetadataParser(sessions_dir=tmp_path)
         viz = parser.parse("cb-session")
         assert viz is not None
@@ -725,6 +811,7 @@ class TestSessionMetadataParser:
 
     def test_status_recent_transcript_is_running(self, tmp_path):
         import time as _time
+
         session_dir = tmp_path / "live-session"
         session_dir.mkdir()
         meta = {"start_time": _time.time() - 60, "last_updated": _time.time() - 60}
@@ -743,6 +830,7 @@ class TestSessionMetadataParser:
 
     def test_status_recent_last_updated_is_running(self, tmp_path):
         import time as _time
+
         session_dir = tmp_path / "live-session"
         session_dir.mkdir()
         meta = {"start_time": _time.time() - 600, "last_updated": _time.time() - 30}
@@ -754,6 +842,7 @@ class TestSessionMetadataParser:
             encoding="utf-8",
         )
         import os
+
         os.utime(tp, (old, old))
 
         parser = SessionMetadataParser(sessions_dir=tmp_path)
@@ -764,6 +853,7 @@ class TestSessionMetadataParser:
     def test_status_old_transcript_is_completed(self, tmp_path):
         import os
         import time as _time
+
         session_dir = tmp_path / "old-session"
         session_dir.mkdir()
         old = _time.time() - 3600
@@ -783,6 +873,7 @@ class TestSessionMetadataParser:
 
     def test_status_explicit_wins_over_recency(self, tmp_path):
         import time as _time
+
         session_dir = tmp_path / "weird-session"
         session_dir.mkdir()
         meta = {
@@ -816,6 +907,7 @@ class TestSessionMetadataParser:
         ``"running"``."""
         import os
         import time as _time
+
         session_dir = tmp_path / "stale-short"
         session_dir.mkdir()
         ancient = _time.time() - 47 * 3600
@@ -832,8 +924,7 @@ class TestSessionMetadataParser:
         viz = parser.parse("stale-short")
         assert viz is not None
         assert viz.status == "completed", (
-            f"stale short session mis-classified as {viz.status!r} "
-            f"(expected 'completed')"
+            f"stale short session mis-classified as {viz.status!r} (expected 'completed')"
         )
 
 
@@ -855,9 +946,17 @@ class TestToolEventsParser:
 
     def test_parse_approved_tool(self, tmp_path):
         p = tmp_path / "events.ndjson"
-        p.write_text(json.dumps({
-            "ts": 1717500000.0, "tool": "Bash", "approved": True, "turn": 1,
-        }) + "\n")
+        p.write_text(
+            json.dumps(
+                {
+                    "ts": 1717500000.0,
+                    "tool": "Bash",
+                    "approved": True,
+                    "turn": 1,
+                }
+            )
+            + "\n"
+        )
         bars = ToolEventsParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].type == BarType.TOOL_CALL
@@ -866,18 +965,33 @@ class TestToolEventsParser:
 
     def test_parse_denied_tool(self, tmp_path):
         p = tmp_path / "events.ndjson"
-        p.write_text(json.dumps({
-            "ts": 1717500000.0, "tool": "Write", "approved": False, "deny_reason": "permission denied",
-        }) + "\n")
+        p.write_text(
+            json.dumps(
+                {
+                    "ts": 1717500000.0,
+                    "tool": "Write",
+                    "approved": False,
+                    "deny_reason": "permission denied",
+                }
+            )
+            + "\n"
+        )
         bars = ToolEventsParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].status == BarStatus.ERROR
 
     def test_parse_pending_tool(self, tmp_path):
         p = tmp_path / "events.ndjson"
-        p.write_text(json.dumps({
-            "ts": 1717500000.0, "tool": "Read", "approved": None,
-        }) + "\n")
+        p.write_text(
+            json.dumps(
+                {
+                    "ts": 1717500000.0,
+                    "tool": "Read",
+                    "approved": None,
+                }
+            )
+            + "\n"
+        )
         bars = ToolEventsParser().parse_file(p)
         assert len(bars) == 1
         assert bars[0].status == BarStatus.WARNING
@@ -925,19 +1039,22 @@ class TestMultiAgentParser:
         session_dir = tmp_path / "main"
         sub_dir = session_dir / "subagents"
         sub_dir.mkdir(parents=True)
-        _write_jsonl(sub_dir / "agent-abc123.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "parent_session_id": "main",
-                "content": [{"type": "text", "text": "I will search the repo"}],
-            },
-            _assistant_tool_use(1717500001.0, "Read", "tu-1", {}),
-        ])
+        _write_jsonl(
+            sub_dir / "agent-abc123.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "parent_session_id": "main",
+                    "content": [{"type": "text", "text": "I will search the repo"}],
+                },
+                _assistant_tool_use(1717500001.0, "Read", "tu-1", {}),
+            ],
+        )
         nodes = MultiAgentParser().parse_for_session(
             "main",
             sessions_dir=tmp_path,
@@ -955,18 +1072,21 @@ class TestMultiAgentParser:
         first non-meta entry carries ``parent_session_id == session_id``."""
         tx_dir = tmp_path / "transcripts"
         tx_dir.mkdir()
-        _write_jsonl(tx_dir / "agent-xyz.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "parent_session_id": "main",
-                "content": [{"type": "text", "text": "hello from subagent"}],
-            },
-        ])
+        _write_jsonl(
+            tx_dir / "agent-xyz.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "parent_session_id": "main",
+                    "content": [{"type": "text", "text": "hello from subagent"}],
+                },
+            ],
+        )
         nodes = MultiAgentParser().parse_for_session(
             "main",
             sessions_dir=tmp_path,
@@ -981,18 +1101,21 @@ class TestMultiAgentParser:
         excluded."""
         tx_dir = tmp_path / "transcripts"
         tx_dir.mkdir()
-        _write_jsonl(tx_dir / "agent-other.jsonl", [
-            {
-                "role": "assistant",
-                "type": "message",
-                "timestamp": _iso(1717500000.0),
-                "isMeta": False,
-                "isVirtual": False,
-                "isCompactSummary": False,
-                "parent_session_id": "different-session",
-                "content": [{"type": "text", "text": "x"}],
-            },
-        ])
+        _write_jsonl(
+            tx_dir / "agent-other.jsonl",
+            [
+                {
+                    "role": "assistant",
+                    "type": "message",
+                    "timestamp": _iso(1717500000.0),
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                    "parent_session_id": "different-session",
+                    "content": [{"type": "text", "text": "x"}],
+                },
+            ],
+        )
         nodes = MultiAgentParser().parse_for_session(
             "main",
             sessions_dir=tmp_path,

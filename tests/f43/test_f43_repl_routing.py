@@ -74,6 +74,4 @@ def test_handle_command_routes_model_to_new_command_system() -> None:
         if stripped.startswith("'") and stripped.endswith(","):
             stripped = stripped.rstrip(",").strip("'\"")
         if stripped == "model":
-            raise AssertionError(
-                f"/model must not appear in special_commands; found: {line!r}"
-            )
+            raise AssertionError(f"/model must not appear in special_commands; found: {line!r}")

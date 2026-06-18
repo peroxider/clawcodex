@@ -56,9 +56,7 @@ class _Tracker(TrackerAdapter):
     async def fetch_candidate_issues(self) -> list[Issue]:
         return []
 
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         return {}
 
     async def create_comment(self, issue_id: str, body: str) -> _Comment:
@@ -374,7 +372,10 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
                 cm.exception.result.commit_sha,
             )
             self.assertEqual(
-                _git_output(["ls-remote", "--heads", "origin", "clawcodex/issue-77-verify-before-push"], workspace.path),
+                _git_output(
+                    ["ls-remote", "--heads", "origin", "clawcodex/issue-77-verify-before-push"],
+                    workspace.path,
+                ),
                 "",
             )
 
@@ -404,7 +405,8 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             # branch — represents a prior run that already produced the
             # F-40 work. This session makes no further file changes.
             (workspace.path / "progress_sink.py").write_text(
-                "# implementation\n", encoding="utf-8",
+                "# implementation\n",
+                encoding="utf-8",
             )
             _git(["add", "progress_sink.py"], workspace.path)
             _git(
@@ -446,7 +448,8 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
             # mark_synced() with the commit_sha from the result.
             self.assertFalse(cm.exception.result.committed)
             self.assertEqual(
-                cm.exception.result.branch_name, "integration/f40",
+                cm.exception.result.branch_name,
+                "integration/f40",
             )
 
     async def test_pre_commit_hook_modifies_files_and_amends_commit(self) -> None:
@@ -466,11 +469,15 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
 
             service = GitSyncService(
                 _Tracker(),
-                hooks_config=HooksConfig(pre_commit=f"{sys.executable} -c \"from pathlib import Path; Path('formatted.txt').write_text('ok\\n')\""),
+                hooks_config=HooksConfig(
+                    pre_commit=f"{sys.executable} -c \"from pathlib import Path; Path('formatted.txt').write_text('ok\\n')\""
+                ),
             )
             await service.sync(_Session(issue, workspace))
 
-            self.assertIn("formatted.txt", _git_output(["show", "--name-only", "--pretty="], workspace.path))
+            self.assertIn(
+                "formatted.txt", _git_output(["show", "--name-only", "--pretty="], workspace.path)
+            )
 
     async def test_pre_push_hook_cannot_modify_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -492,7 +499,7 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
                 hooks_config=HooksConfig(
                     pre_push=(
                         f"{sys.executable} -c "
-                        "\"from pathlib import Path; "
+                        '"from pathlib import Path; '
                         "Path('dirty.txt').write_text('dirty\\n')\""
                     ),
                 ),

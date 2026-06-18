@@ -22,6 +22,7 @@ from .templates import AGENT_TEMPLATE, SKILL_TEMPLATE
 @dataclass
 class AgentBuildResult:
     """Result of building an Agent from SOP conversion."""
+
     agent: AgentDefinition
     skill_files: list[Path] = field(default_factory=list)
     markdown_files: list[Path] = field(default_factory=list)
@@ -147,13 +148,15 @@ class AgentBuilder:
         # Write skills
         skill_dicts = []
         for spec in self._skills:
-            skill_dicts.append({
-                "name": spec.name,
-                "description": spec.description,
-                "allowed_tools": spec.allowed_tools,
-                "parameters": [],
-                "source_code": "",
-            })
+            skill_dicts.append(
+                {
+                    "name": spec.name,
+                    "description": spec.description,
+                    "allowed_tools": spec.allowed_tools,
+                    "parameters": [],
+                    "source_code": "",
+                }
+            )
         skill_paths = writer.write_skills(skill_dicts, self._output_dir)
         md_files.extend(skill_paths)
 
@@ -213,11 +216,15 @@ def _write_skill_file(spec: SkillSpec, *, mapping_rules: list[MappingRule] | Non
         frontmatter_lines.append(f"when_to_use: {rule.description}")
     frontmatter_lines.append("---")
 
-    content = "\n".join(frontmatter_lines) + "\n\n" + SKILL_TEMPLATE.format(
-        skill_name=spec.name,
-        description=spec.description,
-        description_lower=spec.description.lower(),
-        tools=", ".join(spec.allowed_tools),
+    content = (
+        "\n".join(frontmatter_lines)
+        + "\n\n"
+        + SKILL_TEMPLATE.format(
+            skill_name=spec.name,
+            description=spec.description,
+            description_lower=spec.description.lower(),
+            tools=", ".join(spec.allowed_tools),
+        )
     )
     skill_file.write_text(content, encoding="utf-8")
     return skill_file
@@ -251,6 +258,7 @@ def write_agent_markdown(agent: AgentDefinition, path: Path) -> None:
 @dataclass
 class AgentPersistenceSpec:
     """JSON-serializable agent spec for persistence (3.9.12 design)."""
+
     name: str
     description: str
     model: str | None = None

@@ -20,7 +20,13 @@ def _cron_create_call(tool_input: dict[str, Any], context: ToolContext) -> ToolR
     durable = bool(tool_input.get("durable", False))
 
     cid = uuid.uuid4().hex[:12]
-    context.crons[cid] = {"id": cid, "cron": cron, "prompt": prompt, "recurring": recurring, "durable": durable}
+    context.crons[cid] = {
+        "id": cid,
+        "cron": cron,
+        "prompt": prompt,
+        "recurring": recurring,
+        "durable": durable,
+    }
     return ToolResult(
         name="CronCreate",
         output={"id": cid, "humanSchedule": cron, "recurring": recurring, "durable": durable},

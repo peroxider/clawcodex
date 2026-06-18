@@ -9,6 +9,7 @@ The private builder calls the lower-level ``execute_shell_commands_in_prompt`` d
 and IGNORES ``args`` — faithful to TS, which does not run any skill-style transforms
 (no base-dir header, no ``ARGUMENTS:`` append, no ``${…}`` substitution).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -216,9 +217,7 @@ Begin your analysis now. Do this in 3 steps:
 Your final reply must contain the markdown report and nothing else."""
 
 
-def _security_review_private_prompt(
-    args: str, context: CommandContext
-) -> list[dict[str, Any]]:
+def _security_review_private_prompt(args: str, context: CommandContext) -> list[dict[str, Any]]:
     """Build the real security-review prompt (marketplace-private path).
 
     TS ignores ``_args`` (security-review.ts:205); we accept-and-ignore for signature

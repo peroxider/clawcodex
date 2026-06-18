@@ -60,9 +60,14 @@ class OAuthDiscoveryError(RuntimeError):
 # resulting access token. Only honor the override from operator-write
 # scopes (``user`` settings live under $HOME; ``enterprise`` /
 # ``managed`` are policy-controlled).
-_ESCAPE_HATCH_TRUSTED_SCOPES: frozenset[str] = frozenset({
-    "user", "enterprise", "managed", "dynamic",
-})
+_ESCAPE_HATCH_TRUSTED_SCOPES: frozenset[str] = frozenset(
+    {
+        "user",
+        "enterprise",
+        "managed",
+        "dynamic",
+    }
+)
 
 
 class EscapeHatchScopeRejectedError(OAuthDiscoveryError):
@@ -140,7 +145,8 @@ async def discover_oauth_metadata(
                     "OAuth discovery: rejecting authServerMetadataUrl override "
                     "from untrusted scope %r (server %s); falling back to "
                     "RFC 9728 / RFC 8414 discovery.",
-                    escape_hatch_source_scope, server_url,
+                    escape_hatch_source_scope,
+                    server_url,
                 )
                 raise EscapeHatchScopeRejectedError(server_url, [escape_hatch_url])
             # RFC 8414 §2 mandates TLS for AS metadata URLs. The escape
@@ -174,14 +180,13 @@ async def discover_oauth_metadata(
                 continue
             logger.info(
                 "OAuth discovery: PRM hit at %s; %d authorization_server(s) advertised",
-                url, len(authorization_servers),
+                url,
+                len(authorization_servers),
             )
             # 3) Follow authorization_servers[0] to RFC 8414 metadata.
             # AnyUrl → str adds trailing slash; downstream is robust to that.
             as_url = str(authorization_servers[0])
-            as_urls = build_oauth_authorization_server_metadata_discovery_urls(
-                as_url, server_url
-            )
+            as_urls = build_oauth_authorization_server_metadata_discovery_urls(as_url, server_url)
             for as_candidate in as_urls:
                 attempted.append(as_candidate)
                 metadata = await _try_as_metadata(client, as_candidate)
@@ -189,9 +194,7 @@ async def discover_oauth_metadata(
                     return metadata
 
         # 4) Fallback: probe AS metadata directly against the server URL.
-        as_urls = build_oauth_authorization_server_metadata_discovery_urls(
-            None, server_url
-        )
+        as_urls = build_oauth_authorization_server_metadata_discovery_urls(None, server_url)
         for as_candidate in as_urls:
             if as_candidate in attempted:
                 continue
@@ -210,9 +213,7 @@ async def discover_oauth_metadata(
             await client.aclose()
 
 
-async def _try_prm(
-    client: httpx.AsyncClient, url: str
-) -> list[Any] | None:
+async def _try_prm(client: httpx.AsyncClient, url: str) -> list[Any] | None:
     """Probe an RFC 9728 PRM URL. Return its ``authorization_servers``
     list on success, None otherwise. The SDK helper returns
     ``ProtectedResourceMetadata | None`` (not a tuple)."""
@@ -232,9 +233,7 @@ async def _try_prm(
     return list(servers) if servers else None
 
 
-async def _try_as_metadata(
-    client: httpx.AsyncClient, url: str
-) -> dict[str, Any] | None:
+async def _try_as_metadata(client: httpx.AsyncClient, url: str) -> dict[str, Any] | None:
     """Probe an RFC 8414 AS-metadata URL. Return the metadata dict on
     success, None otherwise. The SDK helper returns
     ``tuple[bool, OAuthMetadata | None]`` — we treat any non-(_, metadata)

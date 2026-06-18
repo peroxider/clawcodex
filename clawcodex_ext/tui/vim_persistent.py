@@ -277,9 +277,7 @@ def replay(change: RecordedChange, ctx: "TransitionContext") -> None:
             end_col = min(cur.col + count, len(line))
             if end_col == cur.col:
                 return
-            removed = buf.delete(
-                Range(start=cur, end=Cursor(row=cur.row, col=end_col))
-            )
+            removed = buf.delete(Range(start=cur, end=Cursor(row=cur.row, col=end_col)))
             ctx.set_text(buf.text)
             ctx.set_cursor(buf.cursor)
             ctx.set_register(removed, False)
@@ -293,8 +291,7 @@ def replay(change: RecordedChange, ctx: "TransitionContext") -> None:
             if end_col == cur.col:
                 return
             toggled = "".join(
-                c.upper() if c.islower() else c.lower()
-                for c in line[cur.col:end_col]
+                c.upper() if c.islower() else c.lower() for c in line[cur.col : end_col]
             )
             new_line = line[: cur.col] + toggled + line[end_col:]
             lines = list(buf.lines)

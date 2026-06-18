@@ -28,6 +28,7 @@ State is closure-scoped inside :func:`init_auto_dream` (not
 module-level) so tests can re-initialize for a fresh closure in
 ``setUp`` / ``beforeEach`` — matching the upstream pattern.
 """
+
 from __future__ import annotations
 
 import logging

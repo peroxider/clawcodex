@@ -193,7 +193,7 @@ def _response_id_from_path(path: str) -> str | None:
     prefix = "/v1/responses/"
     if not path.startswith(prefix):
         return None
-    response_id = path[len(prefix):]
+    response_id = path[len(prefix) :]
     if "/" in response_id:
         return None
     return response_id or None
@@ -204,5 +204,5 @@ def _response_input_items_id_from_path(path: str) -> str | None:
     suffix = "/input_items"
     if not path.startswith(prefix) or not path.endswith(suffix):
         return None
-    response_id = path[len(prefix):-len(suffix)]
+    response_id = path[len(prefix) : -len(suffix)]
     return response_id or None

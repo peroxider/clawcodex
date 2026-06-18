@@ -50,9 +50,7 @@ ThinkingChunkCallback: TypeAlias = Callable[[str], None]
 class BaseProvider(ABC):
     """Base class for LLM providers."""
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize provider.
 
         Args:
@@ -66,10 +64,7 @@ class BaseProvider(ABC):
 
     @abstractmethod
     def chat(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
@@ -85,10 +80,7 @@ class BaseProvider(ABC):
 
     @abstractmethod
     def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -103,10 +95,7 @@ class BaseProvider(ABC):
         pass
 
     async def chat_async(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> ChatResponse:
         """Async chat completion. Default: runs ``chat()`` in a thread pool.
 
@@ -114,9 +103,8 @@ class BaseProvider(ABC):
         should override this with a true async implementation.
         """
         import asyncio
-        return await asyncio.to_thread(
-            self.chat, messages, tools=tools, **kwargs
-        )
+
+        return await asyncio.to_thread(self.chat, messages, tools=tools, **kwargs)
 
     def chat_stream_response(
         self,
@@ -125,7 +113,7 @@ class BaseProvider(ABC):
         on_text_chunk: TextChunkCallback | None = None,
         on_thinking_chunk: ThinkingChunkCallback | None = None,
         abort_signal: "AbortSignal | None" = None,
-        **kwargs
+        **kwargs,
     ) -> ChatResponse:
         """Stream a response while also returning the final structured ChatResponse.
 
@@ -166,6 +154,7 @@ class BaseProvider(ABC):
         # Late import to avoid a top-level dependency from base.py
         # into the models package.
         from src.models.context import strip_1m_context_suffix
+
         raw = kwargs.get("model", self.model)
         return strip_1m_context_suffix(raw) if raw else raw
 
@@ -189,5 +178,6 @@ class BaseProvider(ABC):
         # Local import to avoid a top-level dependency from base.py into
         # the utils package, matching the style of ``_get_model``.
         from src.utils.image_validation import validate_images_for_api
+
         validate_images_for_api(prepared)
         return prepared

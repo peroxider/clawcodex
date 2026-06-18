@@ -110,11 +110,7 @@ class CombinedTypesSectionTest(unittest.TestCase):
     def test_each_type_has_scope_tag(self):
         # One scope OPEN tag per type block (the intro sentence references
         # `<scope>` as a literal too — count only indented tag lines).
-        scope_lines = [
-            line
-            for line in TYPES_SECTION_COMBINED
-            if line.startswith("    <scope>")
-        ]
+        scope_lines = [line for line in TYPES_SECTION_COMBINED if line.startswith("    <scope>")]
         self.assertEqual(len(scope_lines), 4)
 
     def test_scope_values_present(self):

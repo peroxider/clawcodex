@@ -294,9 +294,7 @@ def test_mcp_skill_renderer_does_not_call_shell_executor() -> None:
     assert "!`whoami`" in out
 
 
-def test_mcp_skill_through_skilltool_never_calls_bash(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_mcp_skill_through_skilltool_never_calls_bash(tmp_path: Path, isolated_home: Path) -> None:
     """End-to-end version of the MCP-skip security boundary.
 
     Registers an MCP-loaded skill containing a shell block, invokes
@@ -312,6 +310,7 @@ def test_mcp_skill_through_skilltool_never_calls_bash(
     # `loaded_from="bundled"`. This mirrors how a real MCP skill would
     # arrive in the registry via `get_all_skills` step 6.
     from src.skills.model import Skill
+
     mcp_skill = Skill(
         name="evil-mcp",
         description="MCP skill with a shell block",
@@ -329,9 +328,10 @@ def test_mcp_skill_through_skilltool_never_calls_bash(
     # `get_all_skills`, which would clobber our manual registration.
     # We patch the source (`src.skills.loader.get_all_skills`) since
     # it's imported inside the function rather than at module scope.
-    with mock.patch(
-        "src.skills.loader.get_all_skills", lambda **_: None
-    ), mock.patch("src.tool_system.tools.bash.BashTool.call") as bash_call:
+    with (
+        mock.patch("src.skills.loader.get_all_skills", lambda **_: None),
+        mock.patch("src.tool_system.tools.bash.BashTool.call") as bash_call,
+    ):
         result = SkillTool.call({"skill": "evil-mcp"}, ctx)
 
     assert bash_call.call_count == 0, (
@@ -369,11 +369,7 @@ def test_combined_transform_order_arg_sub_runs_before_shell_exec() -> None:
     # `$0` is the 0-indexed shorthand for the first parsed arg (this
     # impl is 0-indexed: see argument_substitution._repl_shorthand).
     # Note: `!` needs whitespace before it for the inline regex.
-    body = (
-        "Base: ${CLAUDE_SKILL_DIR} | "
-        "Session: ${CLAUDE_SESSION_ID} | "
-        "Out: !`echo $0`"
-    )
+    body = "Base: ${CLAUDE_SKILL_DIR} | Session: ${CLAUDE_SESSION_ID} | Out: !`echo $0`"
     out = render_skill_prompt(
         body=body,
         args="world",

@@ -18,23 +18,35 @@ from __future__ import annotations
 # Keys that don't take a "c-" prefix and need no transformation when
 # going prompt_toolkit -> Textual. Anything not in this map that starts
 # with "c-" is treated as Ctrl+<suffix> in both dialects.
-_PLAIN_KEYS: frozenset[str] = frozenset({
-    "tab",
-    "enter",
-    "return",
-    "escape",
-    "up",
-    "down",
-    "left",
-    "right",
-    "home",
-    "end",
-    "delete",
-    "backspace",
-    "space",
-    "f1", "f2", "f3", "f4", "f5", "f6",
-    "f7", "f8", "f9", "f10", "f11", "f12",
-})
+_PLAIN_KEYS: frozenset[str] = frozenset(
+    {
+        "tab",
+        "enter",
+        "return",
+        "escape",
+        "up",
+        "down",
+        "left",
+        "right",
+        "home",
+        "end",
+        "delete",
+        "backspace",
+        "space",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+        "f8",
+        "f9",
+        "f10",
+        "f11",
+        "f12",
+    }
+)
 
 
 def to_prompt_toolkit_key(key: str) -> str:

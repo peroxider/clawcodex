@@ -5,6 +5,7 @@ Covers the state machine + lifecycle helpers in
 ``tests/tasks/test_task_registry.py`` (registry round-trip) and the
 ``local_agent`` lifecycle tests (mutator returns + status flip).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -57,10 +58,7 @@ def test_register_dream_task_upserts_with_id_and_running_status() -> None:
 def test_register_dream_task_id_is_unique_under_load() -> None:
     reg = RuntimeTaskRegistry()
     ids = {
-        register_dream_task(
-            sessions_reviewing=0, prior_mtime=0, registry=reg
-        )
-        for _ in range(50)
+        register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg) for _ in range(50)
     }
     # 50 random 36^8 ids — collision probability is ~ 50^2 / (2 * 36^8)
     # ≈ 4e-13. Assert no duplicates.
@@ -88,9 +86,7 @@ def test_is_dream_task_type_guard() -> None:
 
 def test_add_dream_turn_flips_phase_on_first_touch() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     # No path touched — phase stays "starting".
     add_dream_turn(
         task_id,
@@ -118,16 +114,20 @@ def test_add_dream_turn_flips_phase_on_first_touch() -> None:
 
 def test_add_dream_turn_dedupes_touched_paths() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
+    add_dream_turn(
+        task_id,
+        text="",
+        tool_use_count=1,
+        touched_paths=["a.md"],
+        registry=reg,
     )
     add_dream_turn(
-        task_id, text="", tool_use_count=1,
-        touched_paths=["a.md"], registry=reg,
-    )
-    add_dream_turn(
-        task_id, text="", tool_use_count=1,
-        touched_paths=["a.md", "b.md"], registry=reg,
+        task_id,
+        text="",
+        tool_use_count=1,
+        touched_paths=["a.md", "b.md"],
+        registry=reg,
     )
     state = reg.get(task_id)
     assert state.files_touched == ["a.md", "b.md"]
@@ -135,12 +135,8 @@ def test_add_dream_turn_dedupes_touched_paths() -> None:
 
 def test_add_dream_turn_skips_pure_noop() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
-    add_dream_turn(
-        task_id, text="", tool_use_count=0, touched_paths=[], registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
+    add_dream_turn(task_id, text="", tool_use_count=0, touched_paths=[], registry=reg)
     state = reg.get(task_id)
     assert state.turns == []  # noop dropped
     assert state.phase == "starting"
@@ -148,13 +144,14 @@ def test_add_dream_turn_skips_pure_noop() -> None:
 
 def test_add_dream_turn_caps_at_max_dream_turns() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     for i in range(MAX_DREAM_TURNS + 10):
         add_dream_turn(
-            task_id, text=f"t{i}", tool_use_count=0,
-            touched_paths=[f"file_{i}.md"], registry=reg,
+            task_id,
+            text=f"t{i}",
+            tool_use_count=0,
+            touched_paths=[f"file_{i}.md"],
+            registry=reg,
         )
     state = reg.get(task_id)
     assert len(state.turns) == MAX_DREAM_TURNS
@@ -165,13 +162,14 @@ def test_add_dream_turn_caps_at_max_dream_turns() -> None:
 
 def test_add_dream_turn_noop_on_terminal() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     complete_dream_task(task_id, reg)
     add_dream_turn(
-        task_id, text="late", tool_use_count=1,
-        touched_paths=["x.md"], registry=reg,
+        task_id,
+        text="late",
+        tool_use_count=1,
+        touched_paths=["x.md"],
+        registry=reg,
     )
     state = reg.get(task_id)
     assert state.turns == []
@@ -185,9 +183,7 @@ def test_add_dream_turn_noop_on_terminal() -> None:
 
 def test_complete_dream_task_flips_status_and_stamps_end_time() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     complete_dream_task(task_id, reg)
     state = reg.get(task_id)
     assert state.status == "completed"
@@ -199,9 +195,7 @@ def test_complete_dream_task_flips_status_and_stamps_end_time() -> None:
 
 def test_complete_dream_task_is_idempotent() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     complete_dream_task(task_id, reg)
     first_end = reg.get(task_id).end_time
     time.sleep(0.001)
@@ -212,9 +206,7 @@ def test_complete_dream_task_is_idempotent() -> None:
 
 def test_fail_dream_task_flips_status() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     fail_dream_task(task_id, reg)
     state = reg.get(task_id)
     assert state.status == "failed"
@@ -228,9 +220,7 @@ def test_fail_dream_task_flips_status() -> None:
 
 def test_rollback_dream_lock_after_kill_returns_prior_mtime() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=99999, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=99999, registry=reg)
     captured = rollback_dream_lock_after_kill(task_id, reg)
     assert captured == 99999
     state = reg.get(task_id)
@@ -240,9 +230,7 @@ def test_rollback_dream_lock_after_kill_returns_prior_mtime() -> None:
 
 def test_rollback_dream_lock_after_kill_returns_none_on_already_terminal() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     complete_dream_task(task_id, reg)
     captured = rollback_dream_lock_after_kill(task_id, reg)
     assert captured is None  # already terminal — no state change
@@ -250,9 +238,7 @@ def test_rollback_dream_lock_after_kill_returns_none_on_already_terminal() -> No
 
 def test_dream_task_adapter_kill_dispatches_to_rollback() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=42, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=42, registry=reg)
     adapter = DreamTask()
     assert adapter.name == "DreamTask"
     assert adapter.type == "dream"
@@ -264,9 +250,7 @@ def test_dream_task_adapter_kill_dispatches_to_rollback() -> None:
 
 def test_dream_task_adapter_kill_no_op_on_terminal() -> None:
     reg = RuntimeTaskRegistry()
-    task_id = register_dream_task(
-        sessions_reviewing=0, prior_mtime=0, registry=reg
-    )
+    task_id = register_dream_task(sessions_reviewing=0, prior_mtime=0, registry=reg)
     fail_dream_task(task_id, reg)
     adapter = DreamTask()
     asyncio.run(adapter.kill(task_id, reg))

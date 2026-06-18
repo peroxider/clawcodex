@@ -193,12 +193,8 @@ class TestTrackerAdapterCommandDefault(unittest.IsolatedAsyncioTestCase):
                 return None
 
         adapter = _Adapter()
-        self.assertIsNone(
-            await adapter.fetch_issue_command_intent("1", None)
-        )
-        self.assertIsNone(
-            await adapter.fetch_issue_command_intent("1", "cursor-1")
-        )
+        self.assertIsNone(await adapter.fetch_issue_command_intent("1", None))
+        self.assertIsNone(await adapter.fetch_issue_command_intent("1", "cursor-1"))
 
 
 class TestRepositoryTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
@@ -224,9 +220,7 @@ class TestRepositoryTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(intent.comment_id, "2")
 
     async def test_returns_none_when_no_command(self) -> None:
-        adapter = RepositoryTrackerAdapter(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
+        adapter = RepositoryTrackerAdapter(platform="github", owner="o", repo="r", api_key="dummy")
         with patch_fetch_new_comments(
             adapter,
             [
@@ -238,9 +232,7 @@ class TestRepositoryTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(command)
 
     async def test_returns_first_command_in_order(self) -> None:
-        adapter = RepositoryTrackerAdapter(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
+        adapter = RepositoryTrackerAdapter(platform="github", owner="o", repo="r", api_key="dummy")
         with patch_fetch_new_comments(
             adapter,
             [
@@ -255,15 +247,9 @@ class TestRepositoryTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(intent.comment_id, "2")
 
     async def test_swallow_adapter_exception(self) -> None:
-        adapter = RepositoryTrackerAdapter(
-            platform="github", owner="o", repo="r", api_key="dummy"
-        )
-        adapter.fetch_new_comments_since = AsyncMock(
-            side_effect=RuntimeError("network down")
-        )
-        self.assertIsNone(
-            await adapter.fetch_issue_command_intent("1", None)
-        )
+        adapter = RepositoryTrackerAdapter(platform="github", owner="o", repo="r", api_key="dummy")
+        adapter.fetch_new_comments_since = AsyncMock(side_effect=RuntimeError("network down"))
+        self.assertIsNone(await adapter.fetch_issue_command_intent("1", None))
 
 
 class TestLocalTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
@@ -275,8 +261,10 @@ class TestLocalTrackerAdapterCommand(unittest.IsolatedAsyncioTestCase):
             digest = hashlib.sha256("1".encode("utf-8")).hexdigest()[:12]
             comments_path = Path(tmp) / f"1-{digest}.comments.ndjson"
             comments_path.write_text(
-                json.dumps({"id": "1", "body": "human chat"}) + "\n"
-                + json.dumps({"id": "2", "body": "/agent follow-up please"}) + "\n",
+                json.dumps({"id": "1", "body": "human chat"})
+                + "\n"
+                + json.dumps({"id": "2", "body": "/agent follow-up please"})
+                + "\n",
                 encoding="utf-8",
             )
             adapter = LocalTrackerAdapter(issues_path=tmp)
@@ -418,7 +406,9 @@ class TestPostCommandAcknowledgement(unittest.IsolatedAsyncioTestCase):
 
 class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
     async def test_label_only_intent(self) -> None:
-        orch = _make_orchestrator(tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json"))
+        orch = _make_orchestrator(
+            tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json")
+        )
         orch.tracker.extract_intent_from_labels = AsyncMock(return_value=Intent.RETRY)
         orch.tracker.fetch_issue_command_intent = AsyncMock(return_value=None)
 
@@ -428,7 +418,9 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(command_intent)
 
     async def test_command_only_intent(self) -> None:
-        orch = _make_orchestrator(tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json"))
+        orch = _make_orchestrator(
+            tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json")
+        )
         orch.tracker.extract_intent_from_labels = AsyncMock(return_value=Intent.NONE)
         orch.tracker.fetch_issue_command_intent = AsyncMock(
             return_value=CommandIntent(
@@ -446,12 +438,12 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(command_intent.author_login, "alice")
 
     async def test_command_beats_label(self) -> None:
-        orch = _make_orchestrator(tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json"))
+        orch = _make_orchestrator(
+            tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json")
+        )
         orch.tracker.extract_intent_from_labels = AsyncMock(return_value=Intent.RETRY)
         orch.tracker.fetch_issue_command_intent = AsyncMock(
-            return_value=CommandIntent(
-                command=Command.FOLLOWUP, author_login="alice"
-            )
+            return_value=CommandIntent(command=Command.FOLLOWUP, author_login="alice")
         )
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x", labels=["agent:retry"])
@@ -462,12 +454,12 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         self.assertIs(command_intent.command, Command.FOLLOWUP)
 
     async def test_blocked_label_sticky_against_unblock(self) -> None:
-        orch = _make_orchestrator(tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json"))
+        orch = _make_orchestrator(
+            tracker=MagicMock(), registry=IssueRegistry(Path(tempfile.mkdtemp()) / "r.json")
+        )
         orch.tracker.extract_intent_from_labels = AsyncMock(return_value=Intent.BLOCKED)
         orch.tracker.fetch_issue_command_intent = AsyncMock(
-            return_value=CommandIntent(
-                command=Command.UNBLOCK, author_login="alice"
-            )
+            return_value=CommandIntent(command=Command.UNBLOCK, author_login="alice")
         )
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x", labels=["agent:blocked"])
@@ -487,6 +479,7 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
 def patch_fetch_new_comments(adapter: Any, comments: list[Comment]) -> Any:
     """Monkey-patch `adapter.fetch_new_comments_since` to return `comments`."""
     from unittest.mock import patch as _patch
+
     return _patch.object(
         adapter,
         "fetch_new_comments_since",

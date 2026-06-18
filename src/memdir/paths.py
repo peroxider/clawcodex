@@ -82,9 +82,8 @@ def is_auto_memory_enabled() -> bool:
         return True
     if _is_env_truthy(os.environ.get("CLAUDE_CODE_SIMPLE")):
         return False
-    if (
-        _is_env_truthy(os.environ.get("CLAUDE_CODE_REMOTE"))
-        and not os.environ.get("CLAUDE_CODE_REMOTE_MEMORY_DIR")
+    if _is_env_truthy(os.environ.get("CLAUDE_CODE_REMOTE")) and not os.environ.get(
+        "CLAUDE_CODE_REMOTE_MEMORY_DIR"
     ):
         return False
     # Merged settings — any source. Project-level opt-out is intentional.
@@ -226,11 +225,7 @@ def find_canonical_git_root(start: str | os.PathLike[str] | None = None) -> str 
     common_path = common_path.resolve()
 
     parts = common_path.parts
-    if (
-        len(parts) >= 3
-        and parts[-3] == ".git"
-        and parts[-2] == "worktrees"
-    ):
+    if len(parts) >= 3 and parts[-3] == ".git" and parts[-2] == "worktrees":
         # .git/worktrees/<name> → walk up to the main work tree
         return str(common_path.parents[2])
     if common_path.name == ".git":
@@ -278,9 +273,7 @@ def get_auto_mem_daily_log_path(date: _date | None = None) -> str:
     yyyy = f"{d.year:04d}"
     mm = f"{d.month:02d}"
     dd = f"{d.day:02d}"
-    return os.path.join(
-        get_auto_mem_path(), "logs", yyyy, mm, f"{yyyy}-{mm}-{dd}.md"
-    )
+    return os.path.join(get_auto_mem_path(), "logs", yyyy, mm, f"{yyyy}-{mm}-{dd}.md")
 
 
 def is_auto_mem_path(absolute_path: str) -> bool:

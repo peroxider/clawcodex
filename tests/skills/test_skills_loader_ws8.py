@@ -112,9 +112,7 @@ class TestLoadSkillsFromSkillsDir:
     def test_nested_skills(self, tmp_path: Path) -> None:
         category = tmp_path / "category" / "nested-skill"
         category.mkdir(parents=True)
-        (category / "SKILL.md").write_text(
-            "---\ndescription: Nested\n---\nNested content"
-        )
+        (category / "SKILL.md").write_text("---\ndescription: Nested\n---\nNested content")
         skills = load_skills_from_skills_dir(str(tmp_path), "projectSettings")
         assert len(skills) == 1
         assert "nested-skill" in skills[0].name

@@ -69,9 +69,7 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
                 "GITHUB_ASSIGNEE": "codex-bot",
             }
         ):
-            config = WorkflowConfig.from_dict(
-                {"tracker": {"kind": "github"}}
-            )
+            config = WorkflowConfig.from_dict({"tracker": {"kind": "github"}})
 
         self.assertEqual(config.tracker.kind, "github")
         self.assertEqual(config.tracker.endpoint, "https://api.github.com")
@@ -199,9 +197,7 @@ class TestWorkflowTrackerConfig(unittest.TestCase):
         self.assertEqual(clone_url, "https://gitee.com/acme/widget.git")
 
     def test_local_tracker_config_uses_local_defaults(self) -> None:
-        config = WorkflowConfig.from_dict(
-            {"tracker": {"kind": "local", "issues_path": "~/issues"}}
-        )
+        config = WorkflowConfig.from_dict({"tracker": {"kind": "local", "issues_path": "~/issues"}})
 
         self.assertEqual(config.tracker.kind, "local")
         self.assertEqual(config.tracker.issues_path, os.path.expanduser("~/issues"))
@@ -777,9 +773,7 @@ class _ReviewFeedbackTracker(TrackerAdapter):
     async def fetch_candidate_issues(self) -> list[Issue]:
         return []
 
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         return {}
 
     async def create_comment(self, issue_id: str, body: str) -> None:
@@ -918,9 +912,7 @@ class TestOrchestratorDependencies(unittest.IsolatedAsyncioTestCase):
 
     async def test_poll_skips_terminal_registry_issue_still_active_in_tracker(self) -> None:
         with TemporaryDirectory() as tmp:
-            tracker = _DependencyTracker(
-                [Issue(id="done", identifier="LOCAL-001", state="open")]
-            )
+            tracker = _DependencyTracker([Issue(id="done", identifier="LOCAL-001", state="open")])
             orchestrator = _ReviewOrchestrator(
                 workflow=WorkflowConfig.from_dict(
                     {
@@ -1207,7 +1199,9 @@ class TestOrchestratorReviewFeedback(unittest.IsolatedAsyncioTestCase):
         assert session is not None
         assert record is not None
         self.assertEqual(session.run_kind, "review_followup")
-        self.assertEqual(session.pull_request, PullRequestRef(number="9", url="https://example.test/pr/9"))
+        self.assertEqual(
+            session.pull_request, PullRequestRef(number="9", url="https://example.test/pr/9")
+        )
         self.assertEqual(session.feedback_ids, ["inline_review:202"])
         self.assertIn("Fix only the PR review feedback", session.prompt_override or "")
         self.assertIn("Use the existing helper here.", session.prompt_override or "")
@@ -1238,7 +1232,9 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
                         "number": 13,
                         "title": "PR masquerading as issue",
                         "state": "open",
-                        "pull_request": {"url": "https://api.github.com/repos/acme/widget/pulls/13"},
+                        "pull_request": {
+                            "url": "https://api.github.com/repos/acme/widget/pulls/13"
+                        },
                     },
                     {
                         "number": 14,
@@ -1788,7 +1784,10 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
         def handler(request: httpx.Request) -> httpx.Response:
             requests.append(request)
             self.assertEqual(request.url.params.get("access_token"), "gitcode-token")
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/issues/42/comments":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/issues/42/comments"
+            ):
                 return httpx.Response(
                     200,
                     json=[
@@ -1801,7 +1800,10 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
                         }
                     ],
                 )
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/comments":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/pulls/9/comments"
+            ):
                 return httpx.Response(
                     200,
                     json=[
@@ -1817,7 +1819,10 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
                         }
                     ],
                 )
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/reviews":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/pulls/9/reviews"
+            ):
                 return httpx.Response(
                     200,
                     json=[
@@ -1832,7 +1837,10 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
                 )
             if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9":
                 return httpx.Response(200, json={"head": {"sha": "headsha"}})
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/commits/headsha/statuses":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/commits/headsha/statuses"
+            ):
                 return httpx.Response(
                     200,
                     json=[
@@ -1892,14 +1900,23 @@ class TestRepositoryTrackerAdapter(unittest.IsolatedAsyncioTestCase):
 
     async def test_fetch_pull_request_feedback_skips_missing_optional_review_endpoint(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/issues/9/comments":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/issues/9/comments"
+            ):
                 return httpx.Response(
                     200,
                     json=[{"id": 101, "body": "Please update docs"}],
                 )
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/comments":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/pulls/9/comments"
+            ):
                 return httpx.Response(200, json=[])
-            if request.method == "GET" and request.url.path == "/api/v5/repos/acme/widget/pulls/9/reviews":
+            if (
+                request.method == "GET"
+                and request.url.path == "/api/v5/repos/acme/widget/pulls/9/reviews"
+            ):
                 return httpx.Response(404, json={"message": "Not Found"})
             raise AssertionError(f"Unexpected request: {request.method} {request.url}")
 

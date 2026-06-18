@@ -37,7 +37,13 @@ class _HangingRunner:
 
     async def run(self, session: AgentSession, workflow: WorkflowConfig, **kwargs: Any) -> None:
         session.run_id = "run-timeout"
-        session.debug_log_path = str(session.workspace.path / ".orchestrator_control" / "runs" / session.run_id / "debug.ndjson")
+        session.debug_log_path = str(
+            session.workspace.path
+            / ".orchestrator_control"
+            / "runs"
+            / session.run_id
+            / "debug.ndjson"
+        )
         session.turn_count = 2
         session.tool_count = 3
         session.last_agent_event = "ToolCallEvent"

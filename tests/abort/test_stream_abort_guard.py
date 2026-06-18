@@ -8,6 +8,7 @@ the helper's contract directly so a future refactor that changes one
 provider but forgets to update the helper (or vice versa) fails fast
 at the unit level.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -290,6 +291,7 @@ def test_reraise_if_aborted_no_signal_is_noop() -> None:
 # translates that exception to ``AbortError`` via
 # ``reraise_if_aborted``. These tests pin the close behaviour.
 
+
 def test_close_response_safely_closes_transport_on_non_windows(monkeypatch) -> None:
     """F-99: ``_close_response_safely`` calls ``response._transport.close()``.
 
@@ -398,4 +400,3 @@ def test_attach_transport_close_failure_does_not_propagate(monkeypatch) -> None:
 
     with guard.attach(stream):
         controller.abort("user_interrupt")  # must not raise
-

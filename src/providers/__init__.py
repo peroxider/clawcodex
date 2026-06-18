@@ -249,14 +249,17 @@ AVAILABLE_PROVIDERS: dict[str, str] = {k: v["label"] for k, v in PROVIDER_INFO.i
 # when the extension package is not installed.
 # ---------------------------------------------------------------------------
 
+
 def __getattr__(name: str):
     """Lazy re-export for 二开 provider API symbols."""
-    _FACADE_NAMES = frozenset({
-        "create_provider",
-        "should_use_litellm",
-        "register_provider",
-        "register_provider_info",
-    })
+    _FACADE_NAMES = frozenset(
+        {
+            "create_provider",
+            "should_use_litellm",
+            "register_provider",
+            "register_provider_info",
+        }
+    )
     if name in _FACADE_NAMES:
         from clawcodex_ext.providers.factory import (  # noqa: F401
             create_provider as _create_provider,
@@ -264,8 +267,10 @@ def __getattr__(name: str):
             register_provider as _register_provider,
             register_provider_info as _register_provider_info,
         )
+
         # Cache on the module so subsequent lookups skip __getattr__
         import sys
+
         mod = sys.modules[__name__]
         mod.create_provider = _create_provider
         mod.should_use_litellm = _should_use_litellm

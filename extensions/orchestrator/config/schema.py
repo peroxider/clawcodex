@@ -98,9 +98,7 @@ def _normalize_string_list(value: Any, default: list[str]) -> list[str]:
 def _normalize_workspace_strategy(value: Any) -> str:
     strategy = str(value or "isolated").strip().lower()
     if strategy not in {"isolated", "shared", "sequential"}:
-        raise ValueError(
-            "workspace.strategy must be one of: isolated, shared, sequential"
-        )
+        raise ValueError("workspace.strategy must be one of: isolated, shared, sequential")
     return strategy
 
 
@@ -155,9 +153,7 @@ class TrackerConfig:
     assignee: str | None = None
     branch_prefix: str | None = None
     issues_path: str | None = None
-    active_states: list[str] = field(
-        default_factory=lambda: ["Todo", "In Progress"]
-    )
+    active_states: list[str] = field(default_factory=lambda: ["Todo", "In Progress"])
     terminal_states: list[str] = field(
         default_factory=lambda: [
             "Closed",
@@ -412,9 +408,7 @@ class WorkflowConfig:
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
-    observability: ObservabilityConfig = field(
-        default_factory=ObservabilityConfig
-    )
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
 
     @classmethod
@@ -448,9 +442,7 @@ class WorkflowConfig:
             kind=tracker_kind,
             endpoint=_resolve_env_value(tracker_raw.get("endpoint"))
             or tracker_info.default_endpoint,
-            api_key=_normalize_secret_value(
-                _resolve_env_value(tracker_raw.get("api_key"))
-            )
+            api_key=_normalize_secret_value(_resolve_env_value(tracker_raw.get("api_key")))
             or _resolve_first_env(tracker_info.api_key_env_vars),
             project_slug=tracker_raw.get("project_slug"),
             owner=_resolve_env_value(tracker_raw.get("owner"))
@@ -461,33 +453,21 @@ class WorkflowConfig:
             assignee=_resolve_env_value(tracker_raw.get("assignee"))
             or _resolve_first_env(tracker_info.assignee_env_vars),
             branch_prefix=_resolve_env_value(tracker_raw.get("branch_prefix")),
-            issues_path=_normalize_secret_value(
-                _expand_path(tracker_raw.get("issues_path"), "")
-            ),
+            issues_path=_normalize_secret_value(_expand_path(tracker_raw.get("issues_path"), "")),
             active_states=tracker_active_states,
             terminal_states=tracker_terminal_states,
         )
 
-        workspace_root = _expand_path(
-            workspace_raw.get("root"), _default_tmp_workspace()
-        )
-        workspace_strategy = _normalize_workspace_strategy(
-            workspace_raw.get("strategy")
-        )
+        workspace_root = _expand_path(workspace_raw.get("root"), _default_tmp_workspace())
+        workspace_strategy = _normalize_workspace_strategy(workspace_raw.get("strategy"))
         workspace = WorkspaceConfig(
             root=workspace_root,
             hooks=workspace_raw.get("hooks", {}),
-            repo_clone_url=_resolve_env_value(
-                workspace_raw.get("repo_clone_url")
-            ),
+            repo_clone_url=_resolve_env_value(workspace_raw.get("repo_clone_url")),
             clone_depth=workspace_raw.get("clone_depth", 1),
-            checkout_issue_branch=workspace_raw.get(
-                "checkout_issue_branch", True
-            ),
+            checkout_issue_branch=workspace_raw.get("checkout_issue_branch", True),
             git_username=_resolve_env_value(workspace_raw.get("git_username")),
-            git_token=_normalize_secret_value(
-                _resolve_env_value(workspace_raw.get("git_token"))
-            ),
+            git_token=_normalize_secret_value(_resolve_env_value(workspace_raw.get("git_token"))),
             gitignore_patterns=workspace_raw.get(
                 "gitignore_patterns",
                 [
@@ -505,18 +485,12 @@ class WorkflowConfig:
             ),
             strategy=workspace_strategy,
             base_branch=_resolve_env_value(workspace_raw.get("base_branch")),
-            integration_branch=_resolve_env_value(
-                workspace_raw.get("integration_branch")
-            ),
-            require_clean_start=bool(
-                workspace_raw.get("require_clean_start", True)
-            ),
+            integration_branch=_resolve_env_value(workspace_raw.get("integration_branch")),
+            require_clean_start=bool(workspace_raw.get("require_clean_start", True)),
             require_clean_between_issues=bool(
                 workspace_raw.get("require_clean_between_issues", True)
             ),
-            preserve_on_terminal=bool(
-                workspace_raw.get("preserve_on_terminal", True)
-            ),
+            preserve_on_terminal=bool(workspace_raw.get("preserve_on_terminal", True)),
             sequential_lock=bool(workspace_raw.get("sequential_lock", True)),
         )
 
@@ -524,13 +498,9 @@ class WorkflowConfig:
         agent = AgentConfig(
             max_concurrent_agents=agent_raw.get("max_concurrent_agents", 10),
             max_turns=agent_raw.get("max_turns", 600),
-            max_retry_backoff_ms=agent_raw.get(
-                "max_retry_backoff_ms", 300_000
-            ),
+            max_retry_backoff_ms=agent_raw.get("max_retry_backoff_ms", 300_000),
             max_retry_attempts=agent_raw.get("max_retry_attempts", 5),
-            max_turns_retry_delay_ms=agent_raw.get(
-                "max_turns_retry_delay_ms", 30_000
-            ),
+            max_turns_retry_delay_ms=agent_raw.get("max_turns_retry_delay_ms", 30_000),
             max_concurrent_agents_by_state=_normalize_state_limits(
                 agent_raw.get("max_concurrent_agents_by_state")
             ),
@@ -542,30 +512,18 @@ class WorkflowConfig:
             test_command=_resolve_env_value(agent_raw.get("test_command")) or "",
             build_command=_resolve_env_value(agent_raw.get("build_command")) or "",
             lint_command=_resolve_env_value(agent_raw.get("lint_command")) or "",
-            verification=VerificationConfig(
-                timeout_ms=verification_raw.get("timeout_ms", 600_000)
-            ),
+            verification=VerificationConfig(timeout_ms=verification_raw.get("timeout_ms", 600_000)),
             # F-39 Sub-F
             max_retries_per_issue=agent_raw.get("max_retries_per_issue", 3),
-            allow_anyone_to_retry=bool(
-                agent_raw.get("allow_anyone_to_retry", False)
-            ),
+            allow_anyone_to_retry=bool(agent_raw.get("allow_anyone_to_retry", False)),
             # 429-aware in-turn backoff (see AgentConfig docstring above)
-            rate_limit_base_delay_ms=agent_raw.get(
-                "rate_limit_base_delay_ms", 30_000
-            ),
-            rate_limit_max_backoff_ms=agent_raw.get(
-                "rate_limit_max_backoff_ms", 600_000
-            ),
+            rate_limit_base_delay_ms=agent_raw.get("rate_limit_base_delay_ms", 30_000),
+            rate_limit_max_backoff_ms=agent_raw.get("rate_limit_max_backoff_ms", 600_000),
             rate_limit_exponential_factor=float(
                 agent_raw.get("rate_limit_exponential_factor", 2.0)
             ),
-            rate_limit_max_retries=agent_raw.get(
-                "rate_limit_max_retries", 40
-            ),
-            delay_between_requests_ms=agent_raw.get(
-                "delay_between_requests_ms", 2000
-            ),
+            rate_limit_max_retries=agent_raw.get("rate_limit_max_retries", 40),
+            delay_between_requests_ms=agent_raw.get("delay_between_requests_ms", 2000),
             run_timeout_ms=agent_raw.get("run_timeout_ms", 1_800_000),
             # File-path whitelist gate (see AgentConfig docstring).
             allowed_changed_files=_normalize_string_list(
@@ -583,24 +541,16 @@ class WorkflowConfig:
             # without crashing the loader. ``fallback_to_phase_step``
             # defaults to ``False`` so new workflows see ``None``
             # instead of misleading 25/50/75/100.
-            phases=_normalize_string_list(
-                agent_raw.get("phases"), default=[]
-            ),
-            fallback_to_phase_step=bool(
-                agent_raw.get("fallback_to_phase_step", False)
-            ),
+            phases=_normalize_string_list(agent_raw.get("phases"), default=[]),
+            fallback_to_phase_step=bool(agent_raw.get("fallback_to_phase_step", False)),
             # F-40 root-cause fix: stagnation / loop guard knobs.
             # These were defined in AgentConfig (schema.py) and set in
             # workflow.md, but ``from_dict`` never forwarded them to the
             # dataclass constructor, so the schema defaults (3/5/3) were
             # always used regardless of the YAML config.
             max_no_op_turns=int(agent_raw.get("max_no_op_turns", 3)),
-            loop_detection_window=int(
-                agent_raw.get("loop_detection_window", 5)
-            ),
-            loop_detection_threshold=int(
-                agent_raw.get("loop_detection_threshold", 3)
-            ),
+            loop_detection_window=int(agent_raw.get("loop_detection_window", 5)),
+            loop_detection_threshold=int(agent_raw.get("loop_detection_threshold", 3)),
             # F-40 root-cause fix: model name override.
             model=_resolve_env_value(agent_raw.get("model")) or None,
         )
@@ -610,9 +560,7 @@ class WorkflowConfig:
                     "workspace.strategy=sequential requires agent.max_concurrent_agents=1"
                 )
             over_limit_states = [
-                state
-                for state, limit in agent.max_concurrent_agents_by_state.items()
-                if limit > 1
+                state for state, limit in agent.max_concurrent_agents_by_state.items() if limit > 1
             ]
             if over_limit_states:
                 raise ValueError(
@@ -634,9 +582,7 @@ class WorkflowConfig:
             after_create=_resolve_env_value(hooks_raw.get("after_create")),
             before_run=_resolve_env_value(hooks_raw.get("before_run")),
             after_run=_resolve_env_value(hooks_raw.get("after_run")),
-            before_remove=_resolve_env_value(
-                hooks_raw.get("before_remove")
-            ),
+            before_remove=_resolve_env_value(hooks_raw.get("before_remove")),
             pre_commit=_resolve_env_value(hooks_raw.get("pre_commit")),
             pre_push=_resolve_env_value(hooks_raw.get("pre_push")),
             post_sync=_resolve_env_value(hooks_raw.get("post_sync")),
@@ -645,15 +591,11 @@ class WorkflowConfig:
 
         return cls(
             tracker=tracker,
-            polling=PollingConfig(
-                interval_ms=polling_raw.get("interval_ms", 30_000)
-            ),
+            polling=PollingConfig(interval_ms=polling_raw.get("interval_ms", 30_000)),
             workspace=workspace,
             worker=WorkerConfig(
                 ssh_hosts=worker_raw.get("ssh_hosts", []),
-                max_concurrent_agents_per_host=worker_raw.get(
-                    "max_concurrent_agents_per_host"
-                ),
+                max_concurrent_agents_per_host=worker_raw.get("max_concurrent_agents_per_host"),
             ),
             agent=agent,
             sandbox=sandbox,
@@ -665,17 +607,13 @@ class WorkflowConfig:
                 max_feedback_items_per_run=review_feedback_raw.get(
                     "max_feedback_items_per_run", 20
                 ),
-                include_ci_failures=bool(
-                    review_feedback_raw.get("include_ci_failures", True)
-                ),
+                include_ci_failures=bool(review_feedback_raw.get("include_ci_failures", True)),
                 reply_to_comments=bool(review_feedback_raw.get("reply_to_comments", True)),
                 ignore_authors=_normalize_string_list(
                     review_feedback_raw.get("ignore_authors"), []
                 ),
                 bot_login=_resolve_env_value(review_feedback_raw.get("bot_login")),
-                max_log_chars_per_check=review_feedback_raw.get(
-                    "max_log_chars_per_check", 12_000
-                ),
+                max_log_chars_per_check=review_feedback_raw.get("max_log_chars_per_check", 12_000),
                 max_followup_attempts_per_pr=review_feedback_raw.get(
                     "max_followup_attempts_per_pr", 5
                 ),
@@ -684,13 +622,9 @@ class WorkflowConfig:
                 ),
             ),
             observability=ObservabilityConfig(
-                dashboard_enabled=observability_raw.get(
-                    "dashboard_enabled", True
-                ),
+                dashboard_enabled=observability_raw.get("dashboard_enabled", True),
                 refresh_ms=observability_raw.get("refresh_ms", 1_000),
-                render_interval_ms=observability_raw.get(
-                    "render_interval_ms", 16
-                ),
+                render_interval_ms=observability_raw.get("render_interval_ms", 16),
             ),
             server=ServerConfig(
                 port=server_raw.get("port"),
@@ -698,9 +632,7 @@ class WorkflowConfig:
             ),
         )
 
-    def resolve_turn_sandbox_policy(
-        self, workspace_path: str | None = None
-    ) -> dict[str, Any]:
+    def resolve_turn_sandbox_policy(self, workspace_path: str | None = None) -> dict[str, Any]:
         if self.sandbox.turn_sandbox_policy:
             return self.sandbox.turn_sandbox_policy
         root = workspace_path or self.workspace.root

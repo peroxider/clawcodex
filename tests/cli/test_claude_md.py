@@ -122,7 +122,9 @@ class TestParseFrontmatterPaths(unittest.TestCase):
 class TestParseMemoryFileContent(unittest.TestCase):
     def test_basic_md_file(self):
         info, includes = _parse_memory_file_content(
-            "# Rules\nAlways test.", "/project/CLAUDE.md", "Project",
+            "# Rules\nAlways test.",
+            "/project/CLAUDE.md",
+            "Project",
         )
         self.assertIsNotNone(info)
         self.assertEqual(info.type, "Project")
@@ -130,19 +132,25 @@ class TestParseMemoryFileContent(unittest.TestCase):
 
     def test_non_text_extension_rejected(self):
         info, includes = _parse_memory_file_content(
-            "binary stuff", "/file.jpg", "Project",
+            "binary stuff",
+            "/file.jpg",
+            "Project",
         )
         self.assertIsNone(info)
 
     def test_html_comments_stripped(self):
         info, _ = _parse_memory_file_content(
-            "before <!-- comment --> after", "/test.md", "Project",
+            "before <!-- comment --> after",
+            "/test.md",
+            "Project",
         )
         self.assertNotIn("comment", info.content)
 
     def test_include_paths_extracted(self):
         info, includes = _parse_memory_file_content(
-            "See @./extra.md for more", "/project/CLAUDE.md", "Project",
+            "See @./extra.md for more",
+            "/project/CLAUDE.md",
+            "Project",
             include_base_path="/project/CLAUDE.md",
         )
         self.assertTrue(len(includes) > 0)
@@ -193,7 +201,7 @@ class TestProcessMemoryFile(unittest.TestCase):
             # Link them: level_0 -> level_1 -> level_2 -> ...
             for i, f in enumerate(files):
                 if i + 1 < len(files):
-                    f.write_text(f"Level {i}\n@./level_{i+1}.md", encoding="utf-8")
+                    f.write_text(f"Level {i}\n@./level_{i + 1}.md", encoding="utf-8")
                 else:
                     f.write_text(f"Level {i}", encoding="utf-8")
 
@@ -221,7 +229,8 @@ class TestProcessMdRules(unittest.TestCase):
             rules_dir.mkdir()
             # Rule with glob path -> conditional
             (rules_dir / "conditional.md").write_text(
-                "---\npaths: src/**\n---\nSrc-only rule.", encoding="utf-8",
+                "---\npaths: src/**\n---\nSrc-only rule.",
+                encoding="utf-8",
             )
             # Rule without glob -> unconditional
             (rules_dir / "always.md").write_text("Always applies.", encoding="utf-8")
@@ -232,7 +241,9 @@ class TestProcessMdRules(unittest.TestCase):
             self.assertIn("Src-only", result[0].content)
 
             # Get only unconditional rules
-            result = _run(process_md_rules(str(rules_dir), "Project", set(), conditional_rule=False))
+            result = _run(
+                process_md_rules(str(rules_dir), "Project", set(), conditional_rule=False)
+            )
             self.assertEqual(len(result), 1)
             self.assertIn("Always", result[0].content)
 
@@ -291,12 +302,15 @@ class TestGetMemoryFiles(unittest.TestCase):
         clear_memory_file_caches()
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "CLAUDE.md").write_text("test", encoding="utf-8")
-            with patch.dict(os.environ, {
-                "CLAUDE_CODE_BARE_MODE": "true",
-                "CLAUDE_CODE_ADDITIONAL_DIRECTORIES": "",
-                "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
-                "CLAUDE_CODE_ORIGINAL_CWD": tmp,
-            }):
+            with patch.dict(
+                os.environ,
+                {
+                    "CLAUDE_CODE_BARE_MODE": "true",
+                    "CLAUDE_CODE_ADDITIONAL_DIRECTORIES": "",
+                    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "true",
+                    "CLAUDE_CODE_ORIGINAL_CWD": tmp,
+                },
+            ):
                 clear_memory_file_caches()
                 # In bare mode with no add-dirs, should still technically
                 # load from the walk but the shouldDisableClaudeMd is checked

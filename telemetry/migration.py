@@ -17,6 +17,7 @@ guarantee that two fingerprints were generated the same way. The
 explicit ``version``/``method`` fields make that auditable, and the
 ``hash`` field stays a stable 16-char join key for the daily aggregator.
 """
+
 from __future__ import annotations
 
 import logging

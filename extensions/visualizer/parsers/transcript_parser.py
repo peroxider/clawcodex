@@ -159,7 +159,9 @@ class TranscriptParser:
     # ------------------------------------------------------------------
 
     def _entry_to_bars(
-        self, entry: dict[str, Any], line_num: int,
+        self,
+        entry: dict[str, Any],
+        line_num: int,
     ) -> list[TimelineBar]:
         """Convert a single transcript entry to one or more ``TimelineBar``s.
 
@@ -224,7 +226,8 @@ class TranscriptParser:
             btype = block.get("type", "")
             if btype == "tool_use":
                 bar = self._tool_use_bar(
-                    block, timestamp,
+                    block,
+                    timestamp,
                     ts_unrecorded=ts_unrecorded,
                     subagent_id=subagent_id,
                 )
@@ -232,7 +235,8 @@ class TranscriptParser:
                     bars.append(bar)
             elif btype == "tool_result":
                 bar = self._tool_result_bar(
-                    block, timestamp,
+                    block,
+                    timestamp,
                     ts_unrecorded=ts_unrecorded,
                     subagent_id=subagent_id,
                 )
@@ -241,7 +245,8 @@ class TranscriptParser:
             elif btype in ("text", "thinking"):
                 # LLM text / reasoning span — same bar shape.
                 bar = self._text_bar(
-                    block, timestamp,
+                    block,
+                    timestamp,
                     model=entry_model,
                     ts_unrecorded=ts_unrecorded,
                     subagent_id=subagent_id,
@@ -332,10 +337,12 @@ class TranscriptParser:
         self._bar_counter += 1
         content = block.get("content", "")
         if isinstance(content, list):
-            excerpt = "\n".join(
-                str(b.get("text", "")) for b in content
-                if isinstance(b, dict) and b.get("text")
-            )[:200] or "..."
+            excerpt = (
+                "\n".join(
+                    str(b.get("text", "")) for b in content if isinstance(b, dict) and b.get("text")
+                )[:200]
+                or "..."
+            )
         elif isinstance(content, str):
             excerpt = content[:200]
         else:
@@ -409,8 +416,7 @@ class TranscriptParser:
         content = entry.get("content", "")
         if isinstance(content, list):
             content = "\n".join(
-                b.get("text", "") for b in content
-                if isinstance(b, dict) and b.get("text")
+                b.get("text", "") for b in content if isinstance(b, dict) and b.get("text")
             )
         system_text = content[:200] if isinstance(content, str) else None
 
@@ -496,9 +502,7 @@ class TranscriptParser:
         for text_bar in text_bars:
             for next_bar in all_sorted:
                 if next_bar.start_time > text_bar.start_time + 0.001:
-                    duration_ms = int(
-                        (next_bar.start_time - text_bar.start_time) * 1000
-                    )
+                    duration_ms = int((next_bar.start_time - text_bar.start_time) * 1000)
                     if duration_ms >= 100:
                         text_bar.end_time = next_bar.start_time
                         text_bar.duration_ms = duration_ms

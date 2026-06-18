@@ -41,6 +41,7 @@ Usage at startup::
     task, created = install_and_wire_dream(workspace_root, scheduler)
     scheduler.start()  # safe to fire tasks now
 """
+
 from __future__ import annotations
 
 import logging
@@ -60,8 +61,7 @@ DREAM_DEFAULT_CRON: str = "0 3 * * *"
 # intercepts before the outbox), but visible in ``cron list`` and the
 # outbox payload for debugging.
 DREAM_PERMANENT_PROMPT: str = (
-    "[auto-dream] memory consolidation (F-100) — "
-    "local fire handler; not a model prompt"
+    "[auto-dream] memory consolidation (F-100) — local fire handler; not a model prompt"
 )
 
 
@@ -119,9 +119,7 @@ def install_dream_permanent_cron_task(
             task.cron,
         )
     else:
-        _log.debug(
-            "dream permanent cron task already present: id=%s", task.id
-        )
+        _log.debug("dream permanent cron task already present: id=%s", task.id)
     return task, created
 
 

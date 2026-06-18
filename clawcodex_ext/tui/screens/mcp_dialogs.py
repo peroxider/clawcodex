@@ -85,9 +85,7 @@ class McpListScreen(DialogScreen[str | None]):
                 pass
         self.dismiss(server_id)
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)
 
 
@@ -120,9 +118,7 @@ class McpToolListScreen(DialogScreen[str | None]):
 
     def build_body(self) -> Iterator[Widget]:
         if not self._tools:
-            yield Static(
-                Text("No tools available.", style="dim"), markup=False
-            )
+            yield Static(Text("No tools available.", style="dim"), markup=False)
             return
         options = [SelectOption(label=t, value=t) for t in self._tools]
         self._select = SelectList(options, allow_cancel=True)
@@ -135,9 +131,7 @@ class McpToolListScreen(DialogScreen[str | None]):
     def on_select_list_option_selected(self, event: SelectList.OptionSelected) -> None:
         self.dismiss(str(event.option.value))
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)
 
 
@@ -193,9 +187,7 @@ class McpElicitationScreen(DialogScreen[str | None]):
     def on_select_list_option_selected(self, event: SelectList.OptionSelected) -> None:
         self.dismiss(str(event.option.value))
 
-    def on_select_list_selection_cancelled(
-        self, _: SelectList.SelectionCancelled
-    ) -> None:
+    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
         self.dismiss(None)
 
 

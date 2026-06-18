@@ -11,6 +11,7 @@ Covers the four chapter abort scenarios:
 Plus the lifecycle helpers (``register_agent_foreground`` /
 ``register_agent_background`` / ``unregister_agent_foreground``).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -37,8 +38,11 @@ def _spawn_running(reg: RuntimeTaskRegistry, *, is_backgrounded: bool = True) ->
     """Spawn a teammate-like running agent and return its id."""
     agent_id = generate_task_id("local_agent")
     register_async_agent(
-        agent_id=agent_id, description="x", prompt="x",
-        agent_type="general-purpose", registry=reg,
+        agent_id=agent_id,
+        description="x",
+        prompt="x",
+        agent_type="general-purpose",
+        registry=reg,
     )
     if not is_backgrounded:
         register_agent_foreground(agent_id=agent_id, registry=reg)
@@ -115,7 +119,8 @@ async def test_foreground_completes_naturally_no_bg_signal() -> None:
     iterator = _async_iter(["a", "b", "c"])
 
     messages, was_backgrounded = await run_with_background_escape(
-        iterator, background_signal=bg,
+        iterator,
+        background_signal=bg,
     )
 
     assert messages == ["a", "b", "c"]
@@ -174,7 +179,9 @@ async def test_bg_signal_fires_on_background_callback() -> None:
 
     msgs_and_flag, _ = await asyncio.gather(
         run_with_background_escape(
-            iterator, background_signal=bg, on_background=on_bg,
+            iterator,
+            background_signal=bg,
+            on_background=on_bg,
         ),
         trigger(),
     )
@@ -221,7 +228,9 @@ async def test_bg_callback_exception_does_not_break_promotion() -> None:
 
     msgs_and_flag, _ = await asyncio.gather(
         run_with_background_escape(
-            iterator, background_signal=bg, on_background=bad_callback,
+            iterator,
+            background_signal=bg,
+            on_background=bad_callback,
         ),
         trigger(),
     )
@@ -244,7 +253,8 @@ async def test_bg_signal_already_set_returns_immediately() -> None:
     iterator = slow_iter()
 
     messages, was_backgrounded = await run_with_background_escape(
-        iterator, background_signal=bg,
+        iterator,
+        background_signal=bg,
     )
     # Either no messages (bg won the first race) or some — both
     # are correct under asyncio scheduling. Key invariant:
@@ -283,7 +293,9 @@ async def test_full_promotion_flow_via_on_background_callback() -> None:
 
     msgs_and_flag, _ = await asyncio.gather(
         run_with_background_escape(
-            iterator, background_signal=bg, on_background=on_bg,
+            iterator,
+            background_signal=bg,
+            on_background=on_bg,
         ),
         trigger(),
     )

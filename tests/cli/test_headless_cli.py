@@ -55,9 +55,13 @@ def fake_wiring(monkeypatch):
     def _fake_build_provider_from_config(provider_name, model=None):
         return _FakeProvider("test-key", model=model, responses=list(scripted_responses))
 
-    monkeypatch.setattr(headless_mod, "build_provider_from_config", _fake_build_provider_from_config)
+    monkeypatch.setattr(
+        headless_mod, "build_provider_from_config", _fake_build_provider_from_config
+    )
     monkeypatch.setattr(headless_mod, "get_default_provider", lambda: "anthropic")
-    monkeypatch.setattr(headless_mod, "build_default_registry", lambda provider=None: _FakeRegistry())
+    monkeypatch.setattr(
+        headless_mod, "build_default_registry", lambda provider=None: _FakeRegistry()
+    )
 
     return scripted_responses
 
@@ -239,6 +243,7 @@ def test_headless_without_skip_permissions_installs_auto_deny_handler(fake_wirin
         return await original(*args, **kwargs)
 
     import src.entrypoints.headless as mod
+
     mod.run_query_as_agent_loop = _capture  # type: ignore[assignment]
     try:
         code = run_headless(
@@ -272,6 +277,7 @@ def test_headless_with_skip_permissions_clears_handler(fake_wiring, tmp_path):
         return await original(*args, **kwargs)
 
     import src.entrypoints.headless as mod
+
     mod.run_query_as_agent_loop = _capture  # type: ignore[assignment]
     try:
         run_headless(

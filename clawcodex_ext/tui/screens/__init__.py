@@ -42,6 +42,7 @@ def __getattr__(name: str):
     if module_name is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     import importlib
+
     mod = importlib.import_module(_PREFIX + module_name)
     val = getattr(mod, name)
     globals()[name] = val

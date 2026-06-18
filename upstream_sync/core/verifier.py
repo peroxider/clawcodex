@@ -17,6 +17,7 @@ from typing import Callable
 @dataclass
 class VerificationResult:
     """Result of a verification check."""
+
     passed: bool
     message: str
     details: dict | None = None

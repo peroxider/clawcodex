@@ -58,7 +58,9 @@ class TestChangeReport:
             overall_impact="medium",
             statistics={"files_changed_upstream": 12, "modules_affected": 2},
             module_impacts=[],
-            action_items=[{"module": "foo", "action": "review-patches", "reason": "patches affected"}],
+            action_items=[
+                {"module": "foo", "action": "review-patches", "reason": "patches affected"}
+            ],
         )
         json_str = report.to_json()
         assert "upstream/v2025_05" in json_str
@@ -78,10 +80,13 @@ class TestChangeAnalyzer:
     def test_assess_conflict_probability(self, analyzer):
         assert analyzer._assess_conflict_probability(["a.py"], []) == "low"
         assert analyzer._assess_conflict_probability(["a.py", "b.py"], ["patch1"]) == "medium"
-        assert analyzer._assess_conflict_probability(["a.py", "b.py", "c.py", "d.py"], ["p1"]) == "high"
+        assert (
+            analyzer._assess_conflict_probability(["a.py", "b.py", "c.py", "d.py"], ["p1"])
+            == "high"
+        )
 
     def test_estimate_effort(self, analyzer):
-        assert analyzer._estimate_effort("low", 5) == 15   # 5 + 5*2
+        assert analyzer._estimate_effort("low", 5) == 15  # 5 + 5*2
         assert analyzer._estimate_effort("medium", 3) == 26  # 20 + 3*2
 
     def test_recommend_strategy(self, analyzer):

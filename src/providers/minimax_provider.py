@@ -7,6 +7,7 @@ from typing import Generator, Optional, Any
 try:
     import anthropic  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
+
     class _MissingAnthropic:
         class Anthropic:  # type: ignore[no-redef]
             def __init__(self, *args, **kwargs):
@@ -28,9 +29,7 @@ class MinimaxProvider(BaseProvider):
 
     DEFAULT_BASE_URL = "https://api.minimaxi.com/anthropic"
 
-    def __init__(
-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
-    ):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize Minimax provider.
 
         Args:
@@ -63,11 +62,13 @@ class MinimaxProvider(BaseProvider):
                 if text_val is not None:
                     content_text += str(text_val)
             elif block_type == "tool_use":
-                tool_uses.append({
-                    "id": str(getattr(block, "id", "")),
-                    "name": str(getattr(block, "name", "")),
-                    "input": dict(getattr(block, "input", {})),
-                })
+                tool_uses.append(
+                    {
+                        "id": str(getattr(block, "id", "")),
+                        "name": str(getattr(block, "name", "")),
+                        "input": dict(getattr(block, "input", {})),
+                    }
+                )
 
         usage = getattr(response, "usage", None)
         return ChatResponse(
@@ -82,10 +83,7 @@ class MinimaxProvider(BaseProvider):
         )
 
     def chat(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> ChatResponse:
         """Synchronous chat completion.
 
@@ -123,10 +121,7 @@ class MinimaxProvider(BaseProvider):
         return self._build_chat_response(response)
 
     def chat_stream(
-        self,
-        messages: list[MessageInput],
-        tools: Optional[list[dict[str, Any]]] = None,
-        **kwargs
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
     ) -> Generator[str, None, None]:
         """Streaming chat completion.
 
@@ -166,7 +161,7 @@ class MinimaxProvider(BaseProvider):
         tools: Optional[list[dict[str, Any]]] = None,
         on_text_chunk: TextChunkCallback | None = None,
         abort_signal: Any = None,
-        **kwargs
+        **kwargs,
     ) -> ChatResponse:
         """Stream Minimax response with abort-signal-aware cancellation.
 
@@ -195,14 +190,19 @@ class MinimaxProvider(BaseProvider):
         streamed_text = ""
         final_message: Any = None
         try:
-            with client.messages.stream(
-                model=model,
-                max_tokens=max_tokens,
-                messages=minimax_messages,
-                **({"system": system} if system else {}),
-                **extra_kwargs,
-                **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
-            ) as stream, guard.attach(stream):
+            with (
+                client.messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=minimax_messages,
+                    **({"system": system} if system else {}),
+                    **extra_kwargs,
+                    **{
+                        k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
+                    },
+                ) as stream,
+                guard.attach(stream),
+            ):
                 for text in stream.text_stream:
                     if not text:
                         continue

@@ -2,6 +2,7 @@
 
 Mirrors typescript/src/tools/AgentTool/prompt.ts.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -80,7 +81,7 @@ def get_agent_prompt(
         f"- If you want to read a specific file path, use the {_FILE_READ_TOOL_NAME} tool "
         f"or the {_GLOB_TOOL_NAME} tool instead of the {_AGENT_TOOL_NAME} tool, "
         f"to find the match more quickly\n"
-        f"- If you are searching for a specific class definition like \"class Foo\", "
+        f'- If you are searching for a specific class definition like "class Foo", '
         f"use the {_GLOB_TOOL_NAME} tool instead, to find the match more quickly\n"
         f"- If you are searching for code within a specific file or set of 2-3 files, "
         f"use the {_FILE_READ_TOOL_NAME} tool instead of the {_AGENT_TOOL_NAME} tool, "
@@ -98,12 +99,12 @@ def get_agent_prompt(
         f"- Describe what you've already learned or ruled out.\n"
         f"- Give enough context about the surrounding problem that the agent can make "
         f"judgment calls rather than just following a narrow instruction.\n"
-        f"- If you need a short response, say so (\"report in under 200 words\").\n"
+        f'- If you need a short response, say so ("report in under 200 words").\n'
         f"- Lookups: hand over the exact command. Investigations: hand over the question "
         f"\u2014 prescribed steps become dead weight when the premise is wrong.\n\n"
         f"Terse command-style prompts produce shallow, generic work.\n\n"
         f"**Never delegate understanding.** Don't write \"based on your findings, fix the "
-        f"bug\" or \"based on the research, implement it.\" Those phrases push synthesis "
+        f'bug" or "based on the research, implement it." Those phrases push synthesis '
         f"onto the agent instead of doing it yourself. Write prompts that prove you "
         f"understood: include file paths, line numbers, what specifically to change.\n"
     )
@@ -129,39 +130,41 @@ def get_agent_prompt(
             f"independent work to do in parallel."
         )
 
-    usage_parts.extend([
-        f"- When the agent is done, it will return a single message back to you. "
-        f"The result returned by the agent is not visible to the user. To show the "
-        f"user the result, you should send a text message back to the user with a "
-        f"concise summary of the result.",
-        f"- To continue a previously spawned agent, use {_SEND_MESSAGE_TOOL_NAME} "
-        f"with the agent's ID or name as the `to` field. The agent resumes with its "
-        f"full context preserved. Each Agent invocation starts fresh \u2014 provide a "
-        f"complete task description.",
-        f"- The agent's outputs should generally be trusted",
-        f"- Clearly tell the agent whether you expect it to write code or just to do "
-        f"research (search, file reads, web fetches, etc.), since it is not aware of "
-        f"the user's intent",
-        f"- If the agent description mentions that it should be used proactively, then "
-        f"you should try your best to use it without the user having to ask for it "
-        f"first. Use your judgement.",
-        f"- If the user specifies that they want you to run agents \"in parallel\", "
-        f"you MUST send a single message with multiple {_AGENT_TOOL_NAME} tool use "
-        f"content blocks. For example, if you need to launch both a build-validator "
-        f"agent and a test-runner agent in parallel, send a single message with both "
-        f"tool calls.",
-    ])
+    usage_parts.extend(
+        [
+            f"- When the agent is done, it will return a single message back to you. "
+            f"The result returned by the agent is not visible to the user. To show the "
+            f"user the result, you should send a text message back to the user with a "
+            f"concise summary of the result.",
+            f"- To continue a previously spawned agent, use {_SEND_MESSAGE_TOOL_NAME} "
+            f"with the agent's ID or name as the `to` field. The agent resumes with its "
+            f"full context preserved. Each Agent invocation starts fresh \u2014 provide a "
+            f"complete task description.",
+            f"- The agent's outputs should generally be trusted",
+            f"- Clearly tell the agent whether you expect it to write code or just to do "
+            f"research (search, file reads, web fetches, etc.), since it is not aware of "
+            f"the user's intent",
+            f"- If the agent description mentions that it should be used proactively, then "
+            f"you should try your best to use it without the user having to ask for it "
+            f"first. Use your judgement.",
+            f'- If the user specifies that they want you to run agents "in parallel", '
+            f"you MUST send a single message with multiple {_AGENT_TOOL_NAME} tool use "
+            f"content blocks. For example, if you need to launch both a build-validator "
+            f"agent and a test-runner agent in parallel, send a single message with both "
+            f"tool calls.",
+        ]
+    )
     usage_notes = "\n".join(usage_parts)
 
     # --- Examples ---
     examples = (
         f"\nExample usage:\n\n"
         f"<example_agent_descriptions>\n"
-        f"\"test-runner\": use this agent after you are done writing code to run tests\n"
-        f"\"greeting-responder\": use this agent to respond to user greetings with a friendly joke\n"
+        f'"test-runner": use this agent after you are done writing code to run tests\n'
+        f'"greeting-responder": use this agent to respond to user greetings with a friendly joke\n'
         f"</example_agent_descriptions>\n\n"
         f"<example>\n"
-        f"user: \"Please write a function that checks if a number is prime\"\n"
+        f'user: "Please write a function that checks if a number is prime"\n'
         f"assistant: I'm going to use the {_FILE_WRITE_TOOL_NAME} tool to write the following code:\n"
         f"<code>\n"
         f"def is_prime(n):\n"
@@ -179,11 +182,11 @@ def get_agent_prompt(
         f"assistant: Uses the {_AGENT_TOOL_NAME} tool to launch the test-runner agent\n"
         f"</example>\n\n"
         f"<example>\n"
-        f"user: \"Hello\"\n"
+        f'user: "Hello"\n'
         f"<commentary>\n"
         f"Since the user is greeting, use the greeting-responder agent to respond with a friendly joke\n"
         f"</commentary>\n"
-        f"assistant: \"I'm going to use the {_AGENT_TOOL_NAME} tool to launch the greeting-responder agent\"\n"
+        f'assistant: "I\'m going to use the {_AGENT_TOOL_NAME} tool to launch the greeting-responder agent"\n'
         f"</example>"
     )
 

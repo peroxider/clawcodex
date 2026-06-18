@@ -93,14 +93,8 @@ async def _select_with_provider(
     """
     valid = {h.filename for h in memories}
     manifest = format_memory_manifest(memories)
-    tools_section = (
-        f"\n\nRecently used tools: {', '.join(recent_tools)}"
-        if recent_tools
-        else ""
-    )
-    user_msg = (
-        f"Query: {query}\n\nAvailable memories:\n{manifest}{tools_section}"
-    )
+    tools_section = f"\n\nRecently used tools: {', '.join(recent_tools)}" if recent_tools else ""
+    user_msg = f"Query: {query}\n\nAvailable memories:\n{manifest}{tools_section}"
     messages = [{"role": "user", "content": user_msg}]
 
     if cancel_event.is_set():
@@ -110,9 +104,7 @@ async def _select_with_provider(
         # Sync provider in an async function would block the loop. The
         # selector is a side query — degrade to no-result rather than
         # hang the main turn.
-        logger.debug(
-            "memdir selector: provider lacks chat_async; skipping selection"
-        )
+        logger.debug("memdir selector: provider lacks chat_async; skipping selection")
         return []
     try:
         response = await provider.chat_async(
@@ -136,8 +128,7 @@ async def _select_with_provider(
     if isinstance(content, list):
         # Anthropic-shape: list of content blocks; concatenate text blocks.
         text = "".join(
-            block.get("text", "") if isinstance(block, dict) else str(block)
-            for block in content
+            block.get("text", "") if isinstance(block, dict) else str(block) for block in content
         )
     else:
         text = str(content)
@@ -153,9 +144,7 @@ async def _select_with_provider(
     # Defense in depth: even though the prompt says "up to 5" and the
     # JSON schema sets maxItems: 5, enforce the cap here too in case the
     # provider abstraction silently drops the schema.
-    validated = [
-        name for name in selected if isinstance(name, str) and name in valid
-    ]
+    validated = [name for name in selected if isinstance(name, str) and name in valid]
     return validated[:MAX_RELEVANT_MEMORIES]
 
 
@@ -195,11 +184,7 @@ async def find_relevant_memories(
         header = by_filename.get(name)
         if header is None:
             continue
-        result.append(
-            RelevantMemory(path=header.file_path, mtime_ms=header.mtime_ms)
-        )
+        result.append(RelevantMemory(path=header.file_path, mtime_ms=header.mtime_ms))
 
-    logger.debug(
-        "memdir recall: scanned=%d selected=%d", len(headers), len(result)
-    )
+    logger.debug("memdir recall: scanned=%d selected=%d", len(headers), len(result))
     return result

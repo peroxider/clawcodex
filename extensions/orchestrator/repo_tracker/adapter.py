@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
 
 from ..issue import Issue
 
 logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from ..tracker import CommandIntent
+
 from ..tracker import (
     Comment,
     DEFAULT_INTENT_LABELS,
@@ -44,12 +48,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self.owner = owner
         self.repo = repo
         self.assignee = assignee
-        self.active_states = (
-            active_states or default_active_states_for_kind(platform)
-        )
-        self.terminal_states = (
-            terminal_states or default_terminal_states_for_kind(platform)
-        )
+        self.active_states = active_states or default_active_states_for_kind(platform)
+        self.terminal_states = terminal_states or default_terminal_states_for_kind(platform)
         # F-39: intent label conventions (operator-driven retry/followup/blocked).
         # If caller passes None, fall back to the standard "agent:*" set.
         self.intent_labels: dict[str, str] = (
@@ -85,14 +85,14 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         since_comment_id: str | None,
     ) -> "CommandIntent | None":
         from ..tracker import CommandIntent, parse_agent_command
+
         try:
-            comments = await self.fetch_new_comments_since(
-                issue_id, since_comment_id
-            )
+            comments = await self.fetch_new_comments_since(issue_id, since_comment_id)
         except Exception as exc:
             logger.warning(
                 "fetch_issue_command_intent(%s) failed: %s",
-                issue_id, exc,
+                issue_id,
+                exc,
             )
             return None
         for comment in comments:
@@ -113,9 +113,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             assignee=self.assignee,
         )
 
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         issues = await self.client.fetch_issue_states_by_ids(
             issue_ids,
             active_states=self.active_states,
@@ -169,11 +167,7 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             for item in [*self.active_states, *self.terminal_states]
             if item.strip()
         }
-        labels = [
-            label
-            for label in labels
-            if label.strip().lower() not in known_state_labels
-        ]
+        labels = [label for label in labels if label.strip().lower() not in known_state_labels]
         if normalized_state and normalized_state not in {
             "open",
             "opened",

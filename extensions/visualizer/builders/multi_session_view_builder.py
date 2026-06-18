@@ -86,6 +86,7 @@ def _wall_clock(ts: float) -> str:
     if ts <= 0:
         return ""
     import time
+
     return time.strftime("%H:%M", time.localtime(ts))
 
 
@@ -103,6 +104,7 @@ class MultiSessionViewBuilder:
             }
 
         base_time = min(s.start_time or 0 for s in sessions)
+
         # x in seconds, relative to base_time. Do NOT clamp negatives:
         # the start_time backfill in SessionMetadataParser can still be
         # later than a few transcript entries when the agent loop wrote
@@ -201,7 +203,9 @@ class MultiSessionViewBuilder:
                 "model": s.model,
                 "totalOps": s.tool_count or s.stats.total_ops,
                 "contextTokens": s.stats.context_tokens,
-                "contextSize": self._fmt_tokens(s.stats.context_tokens) if s.stats.context_tokens else "",
+                "contextSize": self._fmt_tokens(s.stats.context_tokens)
+                if s.stats.context_tokens
+                else "",
                 "endMarker": self._end_marker(s, rel),
             }
             summary = s.agent_layout_summary or {}
@@ -210,7 +214,9 @@ class MultiSessionViewBuilder:
                 sub = summary.get("subagent_count", 0)
                 row["spawnCallout"] = {
                     "x": summary["spawn_time"],
-                    "label": f"▼ {spawn_clock} Workflow 派生 {sub} 子agent" if spawn_clock else f"▼ Workflow 派生 {sub} 子agent",
+                    "label": f"▼ {spawn_clock} Workflow 派生 {sub} 子agent"
+                    if spawn_clock
+                    else f"▼ Workflow 派生 {sub} 子agent",
                     "subagentCount": sub,
                     "byRole": summary.get("by_role", {}),
                 }
@@ -231,22 +237,24 @@ class MultiSessionViewBuilder:
                 # Extract score from metadata if available (design-spec: 评审/核对评分)
                 score = node.metadata.get("score") if node.metadata else None
                 score_label = node.metadata.get("score_label") if node.metadata else None
-                agent_rows.append({
-                    "id": f"{s.session_id}/{node.agent_id}",
-                    "parentSessionId": s.session_id,
-                    "name": node.name,
-                    "role": node.role or "执行",
-                    "roleColor": node.role_color or "#3b82f6",
-                    "title": node.name,
-                    "count": self._bar_count_for_agent(node),
-                    "score": score,
-                    "scoreLabel": score_label or node.name,
-                    "spawnX": spawn_x,
-                    "joinX": join_x,
-                    "duration": max(0.001, join_x - spawn_x),
-                    "depthY": 0,  # filled in by _renumber_agents
-                    "ticks": self._build_agent_ticks(s.timeline, node, rel, categorizer),
-                })
+                agent_rows.append(
+                    {
+                        "id": f"{s.session_id}/{node.agent_id}",
+                        "parentSessionId": s.session_id,
+                        "name": node.name,
+                        "role": node.role or "执行",
+                        "roleColor": node.role_color or "#3b82f6",
+                        "title": node.name,
+                        "count": self._bar_count_for_agent(node),
+                        "score": score,
+                        "scoreLabel": score_label or node.name,
+                        "spawnX": spawn_x,
+                        "joinX": join_x,
+                        "duration": max(0.001, join_x - spawn_x),
+                        "depthY": 0,  # filled in by _renumber_agents
+                        "ticks": self._build_agent_ticks(s.timeline, node, rel, categorizer),
+                    }
+                )
         agent_rows.sort(key=lambda r: (r["parentSessionId"], r["spawnX"]))
         agent_rows = self._renumber_agents(agent_rows, session_rows)
 
@@ -302,7 +310,7 @@ class MultiSessionViewBuilder:
         model = (s.model or "").strip()
         for prefix in ("claude-", "openai-", "azure-"):
             if model.lower().startswith(prefix):
-                model = model[len(prefix):]
+                model = model[len(prefix) :]
                 break
         mode = (s.detected_mode or s.config_summary.get("config") or "").strip()
         if model and mode:
@@ -326,41 +334,45 @@ class MultiSessionViewBuilder:
             if bar.end_time <= 0:
                 continue
             cat = categorizer.categorize(bar)
-            ticks.append({
-                "x": rel_fn(bar.start_time),
-                "w": max(0.001, rel_fn(bar.end_time) - rel_fn(bar.start_time)),
-                "category": cat.value,
-                "color": bar.color or cat.color,
-                "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
-                "label": bar.label,
-                "id": bar.id,
-                "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
-                "detail": bar.detail,
-                "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
-                # Bezier-view extension: ISO-8601 absolute timestamp for
-                # the EventDetailPanel. Computed here (not stored on the
-                # bar) so the parser stays free of presentation concerns.
-                # ``bar.absolute_time`` takes precedence when the parser
-                # has already filled it (e.g. tests injecting pre-stamped
-                # bars), otherwise we derive from start_time. None when
-                # the bar has no parseable timestamp.
-                "absoluteTime": (
-                    bar.absolute_time
-                    if bar.absolute_time
-                    else (
-                        datetime.fromtimestamp(bar.start_time).isoformat()
-                        if bar.start_time > 0
-                        else None
-                    )
-                ),
-                "durationUnrecorded": bar.duration_unrecorded,
-                "durationHeuristic": bar.duration_heuristic,
-                "tsUnrecorded": bar.ts_unrecorded,
-                "model": bar.model,
-                "userRole": bar.user_role,
-                "userText": bar.user_text,
-                "systemText": bar.system_text,
-            })
+            ticks.append(
+                {
+                    "x": rel_fn(bar.start_time),
+                    "w": max(0.001, rel_fn(bar.end_time) - rel_fn(bar.start_time)),
+                    "category": cat.value,
+                    "color": bar.color or cat.color,
+                    "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
+                    "label": bar.label,
+                    "id": bar.id,
+                    "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
+                    "detail": bar.detail,
+                    "toolUseId": bar.detail.get("tool_use_id")
+                    if isinstance(bar.detail, dict)
+                    else "",
+                    # Bezier-view extension: ISO-8601 absolute timestamp for
+                    # the EventDetailPanel. Computed here (not stored on the
+                    # bar) so the parser stays free of presentation concerns.
+                    # ``bar.absolute_time`` takes precedence when the parser
+                    # has already filled it (e.g. tests injecting pre-stamped
+                    # bars), otherwise we derive from start_time. None when
+                    # the bar has no parseable timestamp.
+                    "absoluteTime": (
+                        bar.absolute_time
+                        if bar.absolute_time
+                        else (
+                            datetime.fromtimestamp(bar.start_time).isoformat()
+                            if bar.start_time > 0
+                            else None
+                        )
+                    ),
+                    "durationUnrecorded": bar.duration_unrecorded,
+                    "durationHeuristic": bar.duration_heuristic,
+                    "tsUnrecorded": bar.ts_unrecorded,
+                    "model": bar.model,
+                    "userRole": bar.user_role,
+                    "userText": bar.user_text,
+                    "systemText": bar.system_text,
+                }
+            )
         return ticks
 
     def _build_agent_ticks(
@@ -390,11 +402,16 @@ class MultiSessionViewBuilder:
             owner = bar.agent_id or detail.get("agent_id") or detail.get("subagent_id")
             if owner and str(owner) == str(node.agent_id):
                 explicit.append(bar)
-        source = explicit if explicit else [
-            bar for bar in timeline
-            if spawn_x <= rel_fn(bar.start_time) <= join_x
-            and categorizer.categorize(bar) != OperationCategory.ORCHESTRATE
-        ]
+        source = (
+            explicit
+            if explicit
+            else [
+                bar
+                for bar in timeline
+                if spawn_x <= rel_fn(bar.start_time) <= join_x
+                and categorizer.categorize(bar) != OperationCategory.ORCHESTRATE
+            ]
+        )
 
         ticks: list[dict[str, Any]] = []
         for bar in source:
@@ -403,34 +420,38 @@ class MultiSessionViewBuilder:
             cat = categorizer.categorize(bar)
             x = rel_fn(bar.start_time)
             end = rel_fn(bar.end_time)
-            ticks.append({
-                "x": x,
-                "w": max(0.001, end - x),
-                "category": cat.value,
-                "color": bar.color or cat.color,
-                "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
-                "label": bar.label,
-                "id": f"{node.agent_id}:{bar.id}",
-                "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
-                "detail": bar.detail,
-                "toolUseId": bar.detail.get("tool_use_id") if isinstance(bar.detail, dict) else "",
-                "absoluteTime": (
-                    bar.absolute_time
-                    if bar.absolute_time
-                    else (
-                        datetime.fromtimestamp(bar.start_time).isoformat()
-                        if bar.start_time > 0
-                        else None
-                    )
-                ),
-                "durationUnrecorded": bar.duration_unrecorded,
-                "durationHeuristic": bar.duration_heuristic,
-                "tsUnrecorded": bar.ts_unrecorded,
-                "model": bar.model,
-                "userRole": bar.user_role,
-                "userText": bar.user_text,
-                "systemText": bar.system_text,
-            })
+            ticks.append(
+                {
+                    "x": x,
+                    "w": max(0.001, end - x),
+                    "category": cat.value,
+                    "color": bar.color or cat.color,
+                    "status": bar.status.value if hasattr(bar.status, "value") else str(bar.status),
+                    "label": bar.label,
+                    "id": f"{node.agent_id}:{bar.id}",
+                    "type": bar.type.value if hasattr(bar.type, "value") else str(bar.type),
+                    "detail": bar.detail,
+                    "toolUseId": bar.detail.get("tool_use_id")
+                    if isinstance(bar.detail, dict)
+                    else "",
+                    "absoluteTime": (
+                        bar.absolute_time
+                        if bar.absolute_time
+                        else (
+                            datetime.fromtimestamp(bar.start_time).isoformat()
+                            if bar.start_time > 0
+                            else None
+                        )
+                    ),
+                    "durationUnrecorded": bar.duration_unrecorded,
+                    "durationHeuristic": bar.duration_heuristic,
+                    "tsUnrecorded": bar.ts_unrecorded,
+                    "model": bar.model,
+                    "userRole": bar.user_role,
+                    "userText": bar.user_text,
+                    "systemText": bar.system_text,
+                }
+            )
         return ticks
 
     def _session_metadata(self, s: SessionVizData) -> str:
@@ -443,16 +464,16 @@ class MultiSessionViewBuilder:
         if not tool_count:
             # Count every TOOL_CALL bar in the parent swimlane.
             tool_count = sum(
-                1 for b in s.timeline
+                1
+                for b in s.timeline
                 if b.type == BarType.TOOL_CALL and b.category != OperationCategory.ORCHESTRATE
             )
         sub = s.agent_layout_summary.get("subagent_count", 0) if s.agent_layout_summary else 0
         if tool_count and sub:
             # Subagent call counts (sum of agent_trees stats.total_ops)
-            sub_calls = sum(
-                n.stats.total_ops for n in s.agent_tree
-                if n.parent_id and n.stats
-            ) or (tool_count * sub)  # rough estimate
+            sub_calls = sum(n.stats.total_ops for n in s.agent_tree if n.parent_id and n.stats) or (
+                tool_count * sub
+            )  # rough estimate
             parts.append(f"{tool_count} 主线 + {sub} 子agent ({sub_calls} 调用)")
         elif tool_count:
             parts.append(f"{tool_count} 工具调用")
@@ -471,7 +492,8 @@ class MultiSessionViewBuilder:
         # Sub-agent context range (for multi-agent sessions)
         if sub:
             sub_ctxs = [
-                n.stats.context_tokens for n in s.agent_tree
+                n.stats.context_tokens
+                for n in s.agent_tree
                 if n.parent_id and n.stats and n.stats.context_tokens
             ]
             if sub_ctxs:
@@ -564,8 +586,13 @@ class MultiSessionViewBuilder:
             out.append(row)
             y += 1
             y = self._flatten_agents(
-                children, parent=node.agent_id, session_id=session_id,
-                base_y=base_y, row_offset=y, out=out, rel_fn=rel_fn,
+                children,
+                parent=node.agent_id,
+                session_id=session_id,
+                base_y=base_y,
+                row_offset=y,
+                out=out,
+                rel_fn=rel_fn,
             )
         return y
 
@@ -610,19 +637,23 @@ class MultiSessionViewBuilder:
                 0,
             )
             if a.get("spawnX") is not None:
-                edges.append({
-                    "type": "fork",
-                    "from": {"x": a["spawnX"], "y": parent_y},
-                    "to": {"x": a["spawnX"], "y": a["depthY"]},
-                    "color": "#ea7ccc",
-                })
+                edges.append(
+                    {
+                        "type": "fork",
+                        "from": {"x": a["spawnX"], "y": parent_y},
+                        "to": {"x": a["spawnX"], "y": a["depthY"]},
+                        "color": "#ea7ccc",
+                    }
+                )
             if a.get("joinX") is not None and a["joinX"] != a.get("spawnX"):
-                edges.append({
-                    "type": "join",
-                    "from": {"x": a["joinX"], "y": a["depthY"]},
-                    "to": {"x": a["joinX"], "y": parent_y},
-                    "color": "#ea7ccc",
-                })
+                edges.append(
+                    {
+                        "type": "join",
+                        "from": {"x": a["joinX"], "y": a["depthY"]},
+                        "to": {"x": a["joinX"], "y": parent_y},
+                        "color": "#ea7ccc",
+                    }
+                )
         return edges
 
     @staticmethod

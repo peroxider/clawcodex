@@ -29,10 +29,13 @@ class TestCostTracker:
 
     def test_record_usage(self):
         tracker = CostTracker()
-        cost = tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 1000,
-            "output_tokens": 500,
-        })
+        cost = tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 1000,
+                "output_tokens": 500,
+            },
+        )
         assert cost > 0
         assert tracker.get_total_cost() == cost
         assert tracker.get_total_input_tokens() == 1000
@@ -40,24 +43,33 @@ class TestCostTracker:
 
     def test_cumulative_cost(self):
         tracker = CostTracker()
-        cost1 = tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 100,
-            "output_tokens": 50,
-        })
-        cost2 = tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 200,
-            "output_tokens": 100,
-        })
+        cost1 = tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+        )
+        cost2 = tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 200,
+                "output_tokens": 100,
+            },
+        )
         assert tracker.get_total_cost() == cost1 + cost2
         assert tracker.get_total_input_tokens() == 300
         assert tracker.get_total_output_tokens() == 150
 
     def test_turn_cost_and_reset(self):
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 100,
-            "output_tokens": 50,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+        )
         turn1_cost = tracker.get_turn_cost()
         assert turn1_cost > 0
 
@@ -65,20 +77,26 @@ class TestCostTracker:
         assert tracker.get_turn_cost() == 0.0
         assert tracker.get_total_cost() == turn1_cost
 
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 200,
-            "output_tokens": 100,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 200,
+                "output_tokens": 100,
+            },
+        )
         assert tracker.get_turn_cost() > 0
         assert tracker.get_total_cost() > turn1_cost
 
     def test_cache_savings(self):
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_read_input_tokens": 10000,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_read_input_tokens": 10000,
+            },
+        )
         savings = tracker.get_cache_savings()
         assert savings > 0
 
@@ -86,20 +104,26 @@ class TestCostTracker:
         tracker = CostTracker()
         assert not tracker.is_over_budget(None)
         assert not tracker.is_over_budget(1.0)
-        tracker.record_usage("claude-opus-4-20250514", {
-            "input_tokens": 1_000_000,
-            "output_tokens": 1_000_000,
-        })
+        tracker.record_usage(
+            "claude-opus-4-20250514",
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+            },
+        )
         assert tracker.is_over_budget(0.01)
 
     def test_get_summary(self):
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_creation_input_tokens": 200,
-            "cache_read_input_tokens": 300,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 200,
+                "cache_read_input_tokens": 300,
+            },
+        )
         summary = tracker.get_summary()
         assert summary["total_cost_usd"] > 0
         assert summary["total_input_tokens"] == 100

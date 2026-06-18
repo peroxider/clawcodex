@@ -52,6 +52,7 @@ class TestBundledSkills:
         # catalogue (simplify, debug, loop, stuck, verify-content).
         # Instead we assert the temporary skill is gone.
         from src.skills.bundled_skills import _bundled_skills
+
         register_bundled_skill(
             BundledSkillDefinition(
                 name="temp",

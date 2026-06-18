@@ -2,6 +2,7 @@
 
 Full compression pipeline: grouping → layers → compact → cleanup.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -58,23 +59,28 @@ class TestCompressionLayers(unittest.TestCase):
 
     def test_tool_result_budget_exists(self) -> None:
         from src.services.compact.tool_result_budget import apply_tool_result_budget
+
         self.assertTrue(callable(apply_tool_result_budget))
 
     def test_snip_compact_exists(self) -> None:
         from src.services.compact.snip_compact import snip_compact
+
         self.assertTrue(callable(snip_compact))
 
     def test_microcompact_exists(self) -> None:
         from src.context_system.microcompact import microcompact_messages
+
         self.assertTrue(callable(microcompact_messages))
 
     def test_context_collapse_exists(self) -> None:
         from src.services.compact.context_collapse import ContextCollapseStore
+
         store = ContextCollapseStore()
         self.assertIsNotNone(store)
 
     def test_autocompact_exists(self) -> None:
         from src.services.compact.autocompact import should_auto_compact
+
         self.assertTrue(callable(should_auto_compact))
 
 
@@ -83,16 +89,19 @@ class TestCompressionPipeline(unittest.TestCase):
 
     def test_pipeline_config_defaults(self) -> None:
         from src.services.compact.pipeline import PipelineConfig
+
         config = PipelineConfig()
         self.assertIsNotNone(config)
 
     def test_compact_context_fields(self) -> None:
         from src.services.compact.compact import CompactContext
+
         fields = CompactContext.__dataclass_fields__
         self.assertIn("messages", fields)
 
     def test_compact_prompt_exists(self) -> None:
         from src.services.compact.prompt import BASE_COMPACT_PROMPT
+
         self.assertIsInstance(BASE_COMPACT_PROMPT, str)
         self.assertGreater(len(BASE_COMPACT_PROMPT), 0)
 
@@ -102,6 +111,7 @@ class TestReactiveCompact(unittest.TestCase):
 
     def test_result_dataclass(self) -> None:
         from src.services.compact.reactive_compact import ReactiveCompactResult
+
         result = ReactiveCompactResult(
             compacted=True,
             messages=[],
@@ -113,6 +123,7 @@ class TestReactiveCompact(unittest.TestCase):
 
     def test_error_detection(self) -> None:
         from src.services.compact.reactive_compact import is_prompt_too_long_error
+
         self.assertTrue(is_prompt_too_long_error(Exception("prompt_too_long")))
         self.assertTrue(is_prompt_too_long_error(Exception("Prompt is too long")))
         self.assertFalse(is_prompt_too_long_error(Exception("random error")))
@@ -131,6 +142,7 @@ class TestPostCompactCleanup(unittest.TestCase):
 
     def test_cleanup_function_exists(self) -> None:
         from src.services.compact.post_compact_cleanup import run_post_compact_cleanup
+
         self.assertTrue(callable(run_post_compact_cleanup))
 
     def test_compact_warning_state(self) -> None:
@@ -138,6 +150,7 @@ class TestPostCompactCleanup(unittest.TestCase):
             is_compact_warning_suppressed,
             suppress_compact_warning,
         )
+
         self.assertTrue(callable(is_compact_warning_suppressed))
         self.assertTrue(callable(suppress_compact_warning))
 

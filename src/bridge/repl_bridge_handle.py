@@ -55,8 +55,8 @@ def set_repl_bridge_handle(h: ReplBridgeHandle | None) -> None:
     # Until then, cross-peer dedup is silently broken — a debug log keeps
     # the gap visible during development.
     logger.debug(
-        '[bridge:handle] %s (multi-peer dedup not yet wired — Phase 2)',
-        'set' if h is not None else 'cleared',
+        "[bridge:handle] %s (multi-peer dedup not yet wired — Phase 2)",
+        "set" if h is not None else "cleared",
     )
 
 
@@ -94,7 +94,7 @@ def _reset_for_testing() -> None:
 
 
 __all__ = [
-    'get_repl_bridge_handle',
-    'get_self_bridge_compat_id',
-    'set_repl_bridge_handle',
+    "get_repl_bridge_handle",
+    "get_self_bridge_compat_id",
+    "set_repl_bridge_handle",
 ]

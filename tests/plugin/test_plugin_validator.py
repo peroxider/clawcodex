@@ -13,15 +13,17 @@ class TestValidateManifest:
         assert errors == []
 
     def test_valid_full(self):
-        errors = validate_manifest({
-            "name": "my-plugin",
-            "description": "A test plugin",
-            "version": "1.2.3",
-            "hooks": {"PreToolUse": []},
-            "mcp_servers": {"server1": {}},
-            "permissions": ["read", "write"],
-            "dependencies": {"other-plugin": "^1.0.0"},
-        })
+        errors = validate_manifest(
+            {
+                "name": "my-plugin",
+                "description": "A test plugin",
+                "version": "1.2.3",
+                "hooks": {"PreToolUse": []},
+                "mcp_servers": {"server1": {}},
+                "permissions": ["read", "write"],
+                "dependencies": {"other-plugin": "^1.0.0"},
+            }
+        )
         assert errors == []
 
     def test_missing_name(self):
@@ -73,10 +75,12 @@ class TestValidateManifest:
         assert any(e.field == "permissions" for e in errors)
 
     def test_valid_permissions(self):
-        errors = validate_manifest({
-            "name": "test",
-            "permissions": ["read", "write", "execute", "network", "mcp"],
-        })
+        errors = validate_manifest(
+            {
+                "name": "test",
+                "permissions": ["read", "write", "execute", "network", "mcp"],
+            }
+        )
         assert not any(e.field == "permissions" for e in errors)
 
     def test_dependencies_not_dict(self):

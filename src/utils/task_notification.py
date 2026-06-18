@@ -13,6 +13,7 @@ This is the primary guard against duplicate XML deliveries — a task that
 flips terminal between two notification sweeps still produces exactly
 one envelope.
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -75,16 +76,8 @@ def build_task_notification_xml(
     closing tags inside summary/result text.
     """
     summary = _build_summary(description, status, error)
-    tool_use_line = (
-        f"\n<{TOOL_USE_ID_TAG}>{tool_use_id}</{TOOL_USE_ID_TAG}>"
-        if tool_use_id
-        else ""
-    )
-    result_section = (
-        f"\n<{RESULT_TAG}>{final_message}</{RESULT_TAG}>"
-        if final_message
-        else ""
-    )
+    tool_use_line = f"\n<{TOOL_USE_ID_TAG}>{tool_use_id}</{TOOL_USE_ID_TAG}>" if tool_use_id else ""
+    result_section = f"\n<{RESULT_TAG}>{final_message}</{RESULT_TAG}>" if final_message else ""
     if usage is not None:
         usage_section = (
             f"\n<{USAGE_TAG}>"

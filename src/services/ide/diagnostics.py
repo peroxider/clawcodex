@@ -3,6 +3,7 @@
 Mirrors TypeScript ide/diagnostics.ts — collects LSP diagnostics from the IDE
 and makes them available to the agent context.
 """
+
 from __future__ import annotations
 
 import logging

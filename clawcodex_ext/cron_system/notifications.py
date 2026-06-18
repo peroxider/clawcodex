@@ -11,12 +11,14 @@ def build_missed_task_notification(missed: list[CronTask]) -> str:
     lines = ["The following one-shot scheduled tasks were missed while the scheduler was inactive:"]
     for task in missed:
         fence = _safe_fence(task.prompt)
-        lines.extend([
-            f"- {task.id}: {task.cron}",
-            fence,
-            task.prompt,
-            fence,
-        ])
+        lines.extend(
+            [
+                f"- {task.id}: {task.cron}",
+                fence,
+                task.prompt,
+                fence,
+            ]
+        )
     return "\n".join(lines)
 
 

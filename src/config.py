@@ -28,6 +28,7 @@ from typing import Any, Optional
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import]
     from pydantic import Field  # type: ignore[import]
+
     _PYDANTIC_SETTINGS_AVAILABLE = True
 except ImportError:
     _PYDANTIC_SETTINGS_AVAILABLE = False
@@ -53,7 +54,12 @@ def _find_git_root(cwd: str | Path | None = None) -> Path | None:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(start), timeout=5,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(start),
+            timeout=5,
         )
         if result.returncode == 0:
             return Path(result.stdout.strip())
@@ -84,6 +90,7 @@ def get_local_config_path(cwd: str | Path | None = None) -> Path | None:
 # Deep merge
 # ---------------------------------------------------------------------------
 
+
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursively merge *override* into *base*, returning a new dict."""
     merged = dict(base)
@@ -98,6 +105,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 # ---------------------------------------------------------------------------
 # Atomic JSON I/O
 # ---------------------------------------------------------------------------
+
 
 def _read_json(path: Path) -> dict[str, Any]:
     """Read a JSON file, returning empty dict on any error."""
@@ -134,10 +142,12 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 # Default config
 # ---------------------------------------------------------------------------
 
+
 def get_default_config() -> dict[str, Any]:
     """Generate default global configuration."""
     try:
         from src.providers import PROVIDER_INFO
+
         providers = {
             name: {
                 "api_key": "",
@@ -159,6 +169,7 @@ def get_default_config() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # ConfigManager — three-level loading + merge
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ConfigManager:
@@ -241,6 +252,7 @@ class ConfigManager:
 # ---------------------------------------------------------------------------
 # History (JSONL paste history)
 # ---------------------------------------------------------------------------
+
 
 def append_history_entry(content: str, *, source: str = "paste") -> None:
     """Append a history entry to the JSONL history file."""

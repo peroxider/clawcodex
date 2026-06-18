@@ -226,8 +226,7 @@ class TestToolContextProgressSink(unittest.TestCase):
         sink.on_phase_complete(PhaseComplete(phase=5, turn_count=5), session)
 
         stages = ctx.tasks["f-40"]["metadata"]["progress_stages"]
-        self.assertEqual([s["stage"] for s in stages],
-                         ["analysis", "design", "review"])
+        self.assertEqual([s["stage"] for s in stages], ["analysis", "design", "review"])
         # Honest progress: 1/5, 2/5, 5/5 → 20, 40, 100
         self.assertEqual([s["progress"] for s in stages], [20, 40, 100])
 
@@ -277,8 +276,13 @@ class TestToolContextProgressSink(unittest.TestCase):
         ctx = self._make_context()
         sink = ToolContextProgressSink(task_id="f-40", context=ctx)
         session = _make_session_obj()
-        for reason in ("stagnation", "loop_detected", "noop_completed",
-                       "budget_exhausted", "rate_limit_circuit_open"):
+        for reason in (
+            "stagnation",
+            "loop_detected",
+            "noop_completed",
+            "budget_exhausted",
+            "rate_limit_circuit_open",
+        ):
             sink.on_session_complete(SessionComplete(reason=reason), session)
 
         stages = ctx.tasks["f-40"]["metadata"]["progress_stages"]
@@ -343,8 +347,7 @@ class TestProgressReporterShim(unittest.TestCase):
         reporter.on_event(SessionComplete(reason="success"), session)
 
         stages = ctx.tasks["f-40"]["metadata"]["progress_stages"]
-        self.assertEqual([s["stage"] for s in stages],
-                         ["phase_1", "session_success"])
+        self.assertEqual([s["stage"] for s in stages], ["phase_1", "session_success"])
 
     def test_legacy_on_event_without_set_task_id_is_noop(self) -> None:
         ctx = self._make_context()

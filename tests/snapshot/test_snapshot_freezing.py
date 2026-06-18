@@ -56,9 +56,10 @@ class _MockOptions:
 @dataclass
 class _MockContext:
     """Minimal stand-in for ToolContext for executor calls."""
+
     options: _MockOptions = field(default_factory=_MockOptions)
     hook_config_manager: Any | None = None
-    workspace_trusted: bool = True       # default True so trust gate doesn't fire
+    workspace_trusted: bool = True  # default True so trust gate doesn't fire
     abort_controller: Any | None = None
 
 
@@ -84,7 +85,9 @@ class TestExecutorReadsFromSnapshot:
         manager = _build_manager_with_snapshot({"PreToolUse": [real_hook]})
 
         ctx = _MockContext(
-            options=_MockOptions(hooks={"PreToolUse": [{"type": "command", "command": "echo BOGUS"}]}),
+            options=_MockOptions(
+                hooks={"PreToolUse": [{"type": "command", "command": "echo BOGUS"}]}
+            ),
             hook_config_manager=manager,
         )
 
@@ -142,18 +145,25 @@ class TestRunHooksForEventReadsSnapshot:
         # bypass were still live.
         bogus_marker = tmp_path / "bogus_fired.txt"
         ctx = _MockContext(
-            options=_MockOptions(hooks={
-                "PreToolUse": [{
-                    "type": "command",
-                    "command": f"echo 'bogus' > {bogus_marker}",
-                }]
-            }),
+            options=_MockOptions(
+                hooks={
+                    "PreToolUse": [
+                        {
+                            "type": "command",
+                            "command": f"echo 'bogus' > {bogus_marker}",
+                        }
+                    ]
+                }
+            ),
             hook_config_manager=manager,
         )
 
         results = []
         async for r in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             results.append(r)
 
@@ -172,12 +182,20 @@ class TestRunHooksForEventReadsSnapshot:
         marker_a = tmp_path / "a_fired.txt"
         marker_b = tmp_path / "b_fired.txt"
 
-        settings_path.write_text(json.dumps({
-            "hooks": {"PreToolUse": [{
-                "type": "command",
-                "command": f"echo 'A' > {marker_a}",
-            }]}
-        }))
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "type": "command",
+                                "command": f"echo 'A' > {marker_a}",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
 
         # Capture snapshot (this is what bootstrap would do).
         snapshot = load_hooks_from_settings(settings_path)
@@ -185,17 +203,28 @@ class TestRunHooksForEventReadsSnapshot:
         manager._snapshot = snapshot
 
         # Now mutate the settings file on disk to a different hook.
-        settings_path.write_text(json.dumps({
-            "hooks": {"PreToolUse": [{
-                "type": "command",
-                "command": f"echo 'B' > {marker_b}",
-            }]}
-        }))
+        settings_path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "PreToolUse": [
+                            {
+                                "type": "command",
+                                "command": f"echo 'B' > {marker_b}",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
 
         # Execute — snapshot was captured before the mutation.
         ctx = _MockContext(hook_config_manager=manager)
         async for _ in _run_hooks_for_event(
-            "PreToolUse", "Bash", {"tool_name": "Bash"}, ctx,
+            "PreToolUse",
+            "Bash",
+            {"tool_name": "Bash"},
+            ctx,
         ):
             pass
 
@@ -215,9 +244,9 @@ class TestLegacyOptionsHooksFallback:
     def test_legacy_path_emits_deprecation_warning(self):
         # No hook_config_manager set; only options.hooks.
         ctx = _MockContext(
-            options=_MockOptions(hooks={
-                "PreToolUse": [{"type": "command", "command": "echo legacy"}]
-            }),
+            options=_MockOptions(
+                hooks={"PreToolUse": [{"type": "command", "command": "echo legacy"}]}
+            ),
         )
 
         with warnings.catch_warnings(record=True) as captured:
@@ -229,9 +258,7 @@ class TestLegacyOptionsHooksFallback:
         assert result["PreToolUse"][0].command == "echo legacy"
 
         # ...and emits a DeprecationWarning.
-        deprecation_warnings = [
-            w for w in captured if issubclass(w.category, DeprecationWarning)
-        ]
+        deprecation_warnings = [w for w in captured if issubclass(w.category, DeprecationWarning)]
         assert len(deprecation_warnings) >= 1
         msg = str(deprecation_warnings[0].message)
         assert "options.hooks" in msg

@@ -150,32 +150,40 @@ class TestPluginRegistry:
 
     def test_get_all(self):
         for i in range(3):
-            register_plugin(LoadedPlugin(
-                name=f"plugin-{i}",
-                manifest=PluginManifest(name=f"plugin-{i}"),
-            ))
+            register_plugin(
+                LoadedPlugin(
+                    name=f"plugin-{i}",
+                    manifest=PluginManifest(name=f"plugin-{i}"),
+                )
+            )
         assert len(get_loaded_plugins()) == 3
 
     def test_get_enabled(self):
-        register_plugin(LoadedPlugin(
-            name="enabled",
-            manifest=PluginManifest(name="enabled"),
-            enabled=True,
-        ))
-        register_plugin(LoadedPlugin(
-            name="disabled",
-            manifest=PluginManifest(name="disabled"),
-            enabled=False,
-        ))
+        register_plugin(
+            LoadedPlugin(
+                name="enabled",
+                manifest=PluginManifest(name="enabled"),
+                enabled=True,
+            )
+        )
+        register_plugin(
+            LoadedPlugin(
+                name="disabled",
+                manifest=PluginManifest(name="disabled"),
+                enabled=False,
+            )
+        )
         enabled = get_enabled_plugins()
         assert len(enabled) == 1
         assert enabled[0].name == "enabled"
 
     def test_clear(self):
-        register_plugin(LoadedPlugin(
-            name="temp",
-            manifest=PluginManifest(name="temp"),
-        ))
+        register_plugin(
+            LoadedPlugin(
+                name="temp",
+                manifest=PluginManifest(name="temp"),
+            )
+        )
         clear_loaded_plugins()
         assert get_loaded_plugins() == []
 

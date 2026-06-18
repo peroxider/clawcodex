@@ -13,6 +13,7 @@ Three cases:
   * Negative — only normal tool_results → ``completed`` after second turn.
   * Abort wins — abort signal AND hook_stopped attachment → ``aborted_tools``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -66,21 +67,25 @@ def _make_params(
 
 
 def _make_tool_use_response(
-    *, tool_use_id: str, workspace: Path,
+    *,
+    tool_use_id: str,
+    workspace: Path,
 ) -> ChatResponse:
     return ChatResponse(
         content="Working on it...",
         model="test",
         usage={"input_tokens": 10, "output_tokens": 20},
         finish_reason="tool_use",
-        tool_uses=[{
-            "id": tool_use_id,
-            "name": "Write",
-            "input": {
-                "file_path": str(workspace / "x.txt"),
-                "content": "hi",
-            },
-        }],
+        tool_uses=[
+            {
+                "id": tool_use_id,
+                "name": "Write",
+                "input": {
+                    "file_path": str(workspace / "x.txt"),
+                    "content": "hi",
+                },
+            }
+        ],
     )
 
 
@@ -115,13 +120,15 @@ def _make_hook_stopped_attachment(
     """Build an AttachmentMessage shaped exactly as
     ``tool_execution.py:362-372`` and ``tool_hooks.py:185-195`` produce.
     """
-    return create_attachment_message({
-        "type": "hook_stopped_continuation",
-        "message": message,
-        "hook_name": hook_name,
-        "tool_use_id": tool_use_id,
-        "hook_event": "PreToolUse",
-    })
+    return create_attachment_message(
+        {
+            "type": "hook_stopped_continuation",
+            "message": message,
+            "hook_name": hook_name,
+            "tool_use_id": tool_use_id,
+            "hook_event": "PreToolUse",
+        }
+    )
 
 
 class TestIsHookStoppedContinuationPredicate(unittest.TestCase):
@@ -132,13 +139,15 @@ class TestIsHookStoppedContinuationPredicate(unittest.TestCase):
         self.assertTrue(_is_hook_stopped_continuation(msg))
 
     def test_attachment_with_other_type_returns_false(self):
-        msg = create_attachment_message({
-            "type": "hook_blocking_error",
-            "hook_name": "PostToolUse:Bash",
-            "tool_use_id": "toolu_001",
-            "hook_event": "PostToolUse",
-            "blocking_error": "lint failed",
-        })
+        msg = create_attachment_message(
+            {
+                "type": "hook_blocking_error",
+                "hook_name": "PostToolUse:Bash",
+                "tool_use_id": "toolu_001",
+                "hook_event": "PostToolUse",
+                "blocking_error": "lint failed",
+            }
+        )
         self.assertFalse(_is_hook_stopped_continuation(msg))
 
     def test_attachment_with_no_attachments_returns_false(self):
@@ -176,7 +185,8 @@ class TestHookStoppedTerminal(unittest.TestCase):
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.return_value = _make_tool_use_response(
-            tool_use_id="toolu_001", workspace=self.workspace,
+            tool_use_id="toolu_001",
+            workspace=self.workspace,
         )
 
         params = _make_params(workspace=self.workspace, provider=provider)
@@ -204,7 +214,8 @@ class TestHookStoppedTerminal(unittest.TestCase):
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.return_value = _make_tool_use_response(
-            tool_use_id="toolu_002", workspace=self.workspace,
+            tool_use_id="toolu_002",
+            workspace=self.workspace,
         )
 
         params = _make_params(workspace=self.workspace, provider=provider)
@@ -222,9 +233,7 @@ class TestHookStoppedTerminal(unittest.TestCase):
         self.assertEqual(terminal.reason, "hook_stopped")
         # The attachment is yielded as part of tool_results — confirm it
         # made it to the consumer stream.
-        attachments_yielded = [
-            m for m in messages if isinstance(m, AttachmentMessage)
-        ]
+        attachments_yielded = [m for m in messages if isinstance(m, AttachmentMessage)]
         self.assertGreaterEqual(len(attachments_yielded), 1)
 
     def test_normal_tool_result_does_not_fire_hook_stopped(self):
@@ -236,7 +245,8 @@ class TestHookStoppedTerminal(unittest.TestCase):
         # Turn 1: tool_use. Turn 2: end_turn (completion).
         provider.chat.side_effect = [
             _make_tool_use_response(
-                tool_use_id="toolu_003", workspace=self.workspace,
+                tool_use_id="toolu_003",
+                workspace=self.workspace,
             ),
             _make_completion_response(),
         ]
@@ -264,11 +274,14 @@ class TestHookStoppedTerminal(unittest.TestCase):
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.return_value = _make_tool_use_response(
-            tool_use_id="toolu_004", workspace=self.workspace,
+            tool_use_id="toolu_004",
+            workspace=self.workspace,
         )
 
         params = _make_params(
-            workspace=self.workspace, provider=provider, abort=abort,
+            workspace=self.workspace,
+            provider=provider,
+            abort=abort,
         )
 
         async def patched_run_tools(*args, **kwargs):
@@ -306,10 +319,12 @@ class TestHookStoppedDoesNotEmitMaxTurnsAttachment(unittest.TestCase):
 
     def test_hook_stopped_at_final_turn_skips_max_turns_attachment(self):
         from src.types.messages import SystemMessage
+
         provider = MagicMock()
         provider.chat_stream_response.side_effect = NotImplementedError()
         provider.chat.return_value = _make_tool_use_response(
-            tool_use_id="toolu_005", workspace=self.workspace,
+            tool_use_id="toolu_005",
+            workspace=self.workspace,
         )
 
         # max_turns=1: the upcoming next_turn_count would be 2, which
@@ -317,7 +332,9 @@ class TestHookStoppedDoesNotEmitMaxTurnsAttachment(unittest.TestCase):
         # scan runs BEFORE that check, so we should get hook_stopped
         # and no max_turns_reached attachment.
         params = _make_params(
-            workspace=self.workspace, provider=provider, max_turns=1,
+            workspace=self.workspace,
+            provider=provider,
+            max_turns=1,
         )
 
         async def patched_run_tools(*args, **kwargs):
@@ -334,12 +351,13 @@ class TestHookStoppedDoesNotEmitMaxTurnsAttachment(unittest.TestCase):
 
         self.assertEqual(terminal.reason, "hook_stopped")
         max_turns_attachments = [
-            m for m in messages
-            if isinstance(m, SystemMessage)
-            and getattr(m, "subtype", None) == "max_turns_reached"
+            m
+            for m in messages
+            if isinstance(m, SystemMessage) and getattr(m, "subtype", None) == "max_turns_reached"
         ]
         self.assertEqual(
-            max_turns_attachments, [],
+            max_turns_attachments,
+            [],
             "hook_stopped must not also yield max_turns_reached",
         )
 

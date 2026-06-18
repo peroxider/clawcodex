@@ -92,9 +92,7 @@ class VisualSelection:
             line = buffer.line(row) if row < buffer.line_count else ""
             start_col = min(col_a, len(line))
             end_col = min(col_b + 1, len(line))
-            ranges.append(
-                Range(start=Cursor(row, start_col), end=Cursor(row, end_col))
-            )
+            ranges.append(Range(start=Cursor(row, start_col), end=Cursor(row, end_col)))
         return ranges
 
     # ---- internals ----

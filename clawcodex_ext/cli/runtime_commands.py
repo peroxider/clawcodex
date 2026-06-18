@@ -70,8 +70,12 @@ def _format_configured_model_list(provider: str | None = None) -> str:
         gp = get_global_config_path()
         if gp and gp.exists():
             raw = json.loads(gp.read_text())
-            for p in (raw.get("providers") or {}):
-                if (provider is None or p == provider) and p not in configured and p not in registry.provider_names():
+            for p in raw.get("providers") or {}:
+                if (
+                    (provider is None or p == provider)
+                    and p not in configured
+                    and p not in registry.provider_names()
+                ):
                     configured.append(p)
     except Exception:
         configured = []
@@ -170,6 +174,7 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
     except UnknownProviderError:
         warnings.append(f"Warning: unknown provider '{provider}' — proceeding anyway")
         from src.config import set_default_provider as _set_dp
+
         _set_dp(provider)
 
     runtime.swap_provider(provider)
@@ -222,23 +227,18 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
         prefix_matches = registry.find_prefix_matches(model, provider)
         if len(prefix_matches) == 1:
             resolved_model, resolved_provider = prefix_matches[0]
-            warnings.append(
-                f"Note: matched '{model}' by prefix to '{resolved_model}'"
-            )
+            warnings.append(f"Note: matched '{model}' by prefix to '{resolved_model}'")
             model = resolved_model
             provider = resolved_provider
         elif len(prefix_matches) > 1:
             options = ", ".join(m[0] for m in prefix_matches)
             warnings.append(
-                f"Multiple models start with '{model}': {options} - "
-                f"please be more specific"
+                f"Multiple models start with '{model}': {options} - please be more specific"
             )
         else:
             suggestions = registry.suggest_models(model, provider)
             if suggestions:
-                warnings.append(
-                    f"Did you mean: {', '.join(suggestions)}?"
-                )
+                warnings.append(f"Did you mean: {', '.join(suggestions)}?")
 
     # ---- Check if the model is known for this provider ----
     # Also check the config's ``models`` list: a model previously persisted
@@ -250,9 +250,7 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
     except (UnknownModelError, ProviderMismatchError):
         model_known = _model_is_in_config_models(model, provider)
         if not model_known:
-            warnings.append(
-                f"Warning: unknown model '{model}' — proceeding anyway"
-            )
+            warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
 
     # ---- Persist unknown model to config so it's available next session ----
     if not model_known:

@@ -23,21 +23,11 @@ def get_legacy_tool_names(canonical_name: str) -> list[str]:
 
 
 def escape_rule_content(content: str) -> str:
-    return (
-        content
-        .replace("\\", "\\\\")
-        .replace("(", "\\(")
-        .replace(")", "\\)")
-    )
+    return content.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
 def unescape_rule_content(content: str) -> str:
-    return (
-        content
-        .replace("\\(", "(")
-        .replace("\\)", ")")
-        .replace("\\\\", "\\")
-    )
+    return content.replace("\\(", "(").replace("\\)", ")").replace("\\\\", "\\")
 
 
 def _find_first_unescaped_char(s: str, char: str) -> int:

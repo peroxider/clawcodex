@@ -184,7 +184,10 @@ class RemoteAgentRunner:
             try:
                 from src.bootstrap.state import SdkContext, SessionId, run_with_sdk_context
                 from src.outputStyles import resolve_output_style
-                from src.query.agent_loop_compat import build_effective_system_prompt, run_query_as_agent_loop
+                from src.query.agent_loop_compat import (
+                    build_effective_system_prompt,
+                    run_query_as_agent_loop,
+                )
 
                 session_id = _session_id_for_run(self.config.session_id or self.run_id)
                 runtime["tool_context"].session_id = session_id
@@ -194,7 +197,11 @@ class RemoteAgentRunner:
                 ).prompt
                 system_prompt = build_effective_system_prompt(style_prompt, runtime["tool_context"])
                 if self.instructions:
-                    system_prompt = f"{system_prompt}\n\n{self.instructions}" if system_prompt else self.instructions
+                    system_prompt = (
+                        f"{system_prompt}\n\n{self.instructions}"
+                        if system_prompt
+                        else self.instructions
+                    )
 
                 sdk_context = SdkContext(
                     session_id=SessionId(session_id),

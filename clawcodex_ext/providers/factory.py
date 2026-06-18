@@ -17,13 +17,19 @@ Architecture::
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.providers import PROVIDER_INFO, _EXTRA_PROVIDER_CLASSES, get_provider_class
 from src.providers.base import BaseProvider
+
+if TYPE_CHECKING:
+    from src.providers import ProviderInfo
 
 
 # ---------------------------------------------------------------------------
 # LiteLLM switch
 # ---------------------------------------------------------------------------
+
 
 def should_use_litellm() -> bool:
     """Return whether runtime provider creation should use LiteLLM."""
@@ -35,6 +41,7 @@ def should_use_litellm() -> bool:
 # ---------------------------------------------------------------------------
 # Provider factory
 # ---------------------------------------------------------------------------
+
 
 def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
     """Create a provider instance for runtime use."""
@@ -57,6 +64,7 @@ def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
 # ---------------------------------------------------------------------------
 # Extension registration API
 # ---------------------------------------------------------------------------
+
 
 def register_provider(name: str, info: "ProviderInfo", cls: type | callable) -> None:
     """Register a new provider at runtime.
@@ -94,6 +102,7 @@ def register_provider_info(name: str, info: "ProviderInfo") -> None:
         # AVAILABLE_PROVIDERS`` references (which bound at import time)
         # see the change.
         import src.providers as _pkg
+
         _pkg.AVAILABLE_PROVIDERS[name] = info["label"]
 
 

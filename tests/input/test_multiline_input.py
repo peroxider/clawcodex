@@ -51,12 +51,14 @@ def _make_repl():
     mock_provider = Mock()
     mock_provider.model = "glm-4.5"
 
-    with patch(
-        "src.repl.core.get_provider_config",
-        return_value={"api_key": "x", "default_model": "glm-4.5"},
-    ), patch("src.repl.core.Session.create"), patch(
-        "src.repl.core.get_provider_class"
-    ) as mock_provider_class:
+    with (
+        patch(
+            "src.repl.core.get_provider_config",
+            return_value={"api_key": "x", "default_model": "glm-4.5"},
+        ),
+        patch("src.repl.core.Session.create"),
+        patch("src.repl.core.get_provider_class") as mock_provider_class,
+    ):
         mock_provider_class.return_value = mock_provider
         return ClawcodexREPL(provider_name="glm")
 

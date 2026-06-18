@@ -25,7 +25,8 @@ def handle_permission_ask(
     if handler is None:
         return PermissionDenyDecision(
             behavior="deny",
-            message=decision.message or f"Permission required but no handler available for {tool_name}",
+            message=decision.message
+            or f"Permission required but no handler available for {tool_name}",
             decision_reason=decision.decision_reason,
         )
 

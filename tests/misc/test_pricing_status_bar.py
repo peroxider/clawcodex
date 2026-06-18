@@ -4,6 +4,7 @@ Covers ``get_pricing`` prefix matching, ``compute_cost`` for the modern
 model lineup, ``compute_session_cost`` worker+advisor accumulation, and
 ``format_cost_usd`` decimal-place selection by magnitude.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -78,26 +79,33 @@ class TestGetPricing(unittest.TestCase):
         self.assertIsNone(get_pricing("claude-opus-4-9-future"))
         # But the known 4.5/4.6/4.7 variants still resolve to 5/25.
         self.assertEqual(
-            get_pricing("claude-opus-4-7")["input"], 5.0 / 1_000_000,
+            get_pricing("claude-opus-4-7")["input"],
+            5.0 / 1_000_000,
         )
 
 
 class TestComputeCost(unittest.TestCase):
     def test_input_plus_output_no_cache(self) -> None:
-        cost = compute_cost("claude-haiku-4-5", {
-            "input_tokens": 1_000_000,
-            "output_tokens": 1_000_000,
-        })
+        cost = compute_cost(
+            "claude-haiku-4-5",
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+            },
+        )
         # 1M input @ $1 + 1M output @ $5 = $6 exactly
         self.assertAlmostEqual(cost, 6.0, places=6)
 
     def test_cache_creation_and_read_charged(self) -> None:
-        cost = compute_cost("claude-opus-4-7", {
-            "input_tokens": 1_000_000,
-            "output_tokens": 0,
-            "cache_creation_input_tokens": 1_000_000,
-            "cache_read_input_tokens": 1_000_000,
-        })
+        cost = compute_cost(
+            "claude-opus-4-7",
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 1_000_000,
+                "cache_read_input_tokens": 1_000_000,
+            },
+        )
         # opus-4-7 (5/25 tier): $5 input + $6.25 cache_creation + $0.50 cache_read
         self.assertAlmostEqual(cost, 5.0 + 6.25 + 0.50, places=6)
 
@@ -108,10 +116,13 @@ class TestComputeCost(unittest.TestCase):
     def test_none_values_treated_as_zero(self) -> None:
         # Defensive: usage dict might have explicit None from a
         # stale-cache response.
-        cost = compute_cost("claude-opus-4-7", {
-            "input_tokens": None,
-            "output_tokens": 100,
-        })
+        cost = compute_cost(
+            "claude-opus-4-7",
+            {
+                "input_tokens": None,
+                "output_tokens": 100,
+            },
+        )
         # 100 output @ opus-4-7's $25/M = $0.0025
         self.assertAlmostEqual(cost, 100 * (25.0 / 1_000_000), places=8)
 
@@ -207,10 +218,13 @@ class TestFormatCostUsd(unittest.TestCase):
         # Critic C1: instead of mispricing, compute_cost returns 0
         # for unknowns — the status bar's "hidden when zero" check
         # naturally suppresses the segment.
-        cost = compute_cost("totally-unknown-model-xyz", {
-            "input_tokens": 1_000_000,
-            "output_tokens": 1_000_000,
-        })
+        cost = compute_cost(
+            "totally-unknown-model-xyz",
+            {
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+            },
+        )
         self.assertEqual(cost, 0.0)
 
 

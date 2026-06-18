@@ -18,6 +18,7 @@ read back. That identity guarantee matters because
 ``result_text``, ``completed_at``) — readers that captured the original
 reference must see those updates.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -80,6 +81,7 @@ def test_sync_agent_registers_on_runtime_tasks(tmp_path: Path) -> None:
         "src.agent.transcript.get_agent_transcript_path",
         return_value=None,
     ):
+
         async def fake_run_agent(_params):
             # One empty assistant message so ``finalize_agent_tool`` has
             # something to format; the streaming loop then exits cleanly.
@@ -113,8 +115,7 @@ def test_sync_agent_registers_on_runtime_tasks(tmp_path: Path) -> None:
     # (TypeError at registration) and what the in-place mutation
     # contract depends on.
     assert len(captured) == 1, (
-        "sync subagent path must register exactly one task state on "
-        "runtime_tasks"
+        "sync subagent path must register exactly one task state on runtime_tasks"
     )
     sync_state = captured[0]
     assert isinstance(sync_state, LocalAgentTaskState)
@@ -149,25 +150,27 @@ def test_sync_agent_does_not_use_bracket_assignment(tmp_path: Path) -> None:
         # Mirror Mapping's behaviour so the test would fail loudly if
         # the call site were ever reintroduced — the bug surfaces here
         # as a TypeError on the production code path.
-        raise TypeError(
-            "'RuntimeTaskRegistry' object does not support item assignment"
-        )
+        raise TypeError("'RuntimeTaskRegistry' object does not support item assignment")
 
     with patch(
         "src.agent.transcript.get_agent_transcript_path",
         return_value=None,
     ):
+
         async def fake_run_agent(_params):
             yield AssistantMessage(content=[TextBlock(text="")])
 
-        with patch(
-            "src.tool_system.tools.agent.run_agent",
-            fake_run_agent,
-        ), patch.object(
-            type(context.runtime_tasks),
-            "__setitem__",
-            trap_setitem,
-            create=True,
+        with (
+            patch(
+                "src.tool_system.tools.agent.run_agent",
+                fake_run_agent,
+            ),
+            patch.object(
+                type(context.runtime_tasks),
+                "__setitem__",
+                trap_setitem,
+                create=True,
+            ),
         ):
             result = registry.dispatch(
                 ToolCall(

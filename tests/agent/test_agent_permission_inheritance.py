@@ -2,6 +2,7 @@
 
 Validates the resolve_permission_mode() logic from src/agent/run_agent.py.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,6 +33,7 @@ def _make_agent(permission_mode: PermissionMode | None = None) -> AgentDefinitio
 
 
 # --- resolve_permission_mode ---
+
 
 class TestResolvePermissionMode:
     def test_bypass_perms_takes_precedence(self):
@@ -108,6 +110,7 @@ class TestResolvePermissionMode:
 
 
 # --- _build_permission_context ---
+
 
 class TestBuildPermissionContext:
     def test_sync_preserves_parent_prompts_setting(self):
@@ -234,6 +237,7 @@ class TestBuildPermissionContext:
 
 
 # --- End-to-end permission scenarios ---
+
 
 class TestPermissionScenarios:
     def test_general_purpose_agent_inherits_default(self):

@@ -9,6 +9,7 @@ renderer needs a Textual host.
 The TS dead ``"external" === 'ant'`` branch is dropped here: Python has
 no equivalent build-substitution facility. See gap-analysis §2.4.
 """
+
 from __future__ import annotations
 
 import re
@@ -37,7 +38,7 @@ def is_buddy_live() -> bool:
     return d.year > 2026 or (d.year == 2026 and d.month >= 4)
 
 
-_BUDDY_TRIGGER_RE = re.compile(r'/buddy\b')
+_BUDDY_TRIGGER_RE = re.compile(r"/buddy\b")
 
 
 def find_buddy_trigger_positions(text: str) -> list[dict[str, int]]:
@@ -49,14 +50,11 @@ def find_buddy_trigger_positions(text: str) -> list[dict[str, int]]:
     """
     if not is_buddy_enabled():
         return []
-    return [
-        {'start': m.start(), 'end': m.end()}
-        for m in _BUDDY_TRIGGER_RE.finditer(text)
-    ]
+    return [{"start": m.start(), "end": m.end()} for m in _BUDDY_TRIGGER_RE.finditer(text)]
 
 
 __all__ = [
-    'find_buddy_trigger_positions',
-    'is_buddy_live',
-    'is_buddy_teaser_window',
+    "find_buddy_trigger_positions",
+    "is_buddy_live",
+    "is_buddy_teaser_window",
 ]

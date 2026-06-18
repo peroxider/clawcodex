@@ -34,6 +34,7 @@ Per A6/C5: the promotion mutator (which flips ``is_backgrounded`` on
 without ``await``. The actual asyncio races happen *outside* the
 registry lock.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -66,6 +67,7 @@ def register_agent_foreground(
     already exist in ``runtime_tasks`` (via ``register_async_agent``);
     this helper just flips the flag.
     """
+
     def _flip(prev: Any) -> Any:
         if not isinstance(prev, LocalAgentTaskState):
             return prev

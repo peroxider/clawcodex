@@ -22,9 +22,7 @@ from src.tool_system.tools.write import _check_permissions, _write_call
 
 class WriteCarveOutTest(unittest.TestCase):
     def setUp(self):
-        self._saved_override = os.environ.get(
-            "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"
-        )
+        self._saved_override = os.environ.get("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
         # Use a controlled tempdir as the auto-memory path
         self._mem_tmp = tempfile.TemporaryDirectory()
         os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._mem_tmp.name
@@ -36,9 +34,7 @@ class WriteCarveOutTest(unittest.TestCase):
         if self._saved_override is None:
             os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
         else:
-            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = (
-                self._saved_override
-            )
+            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._saved_override
         self._mem_tmp.cleanup()
         self._workspace_tmp.cleanup()
 
@@ -59,9 +55,7 @@ class WriteCarveOutNoOverrideTest(unittest.TestCase):
     carve-out where ``has_auto_mem_path_override()`` is false."""
 
     def setUp(self):
-        self._saved_override = os.environ.get(
-            "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"
-        )
+        self._saved_override = os.environ.get("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE")
         os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
 
         from src.memdir import get_auto_mem_path
@@ -76,9 +70,7 @@ class WriteCarveOutNoOverrideTest(unittest.TestCase):
         if self._saved_override is None:
             os.environ.pop("CLAUDE_COWORK_MEMORY_PATH_OVERRIDE", None)
         else:
-            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = (
-                self._saved_override
-            )
+            os.environ["CLAUDE_COWORK_MEMORY_PATH_OVERRIDE"] = self._saved_override
         # Clean up any test files we wrote
         for name in ("test_carve_out_a.md", "test_carve_out_b.md"):
             try:
@@ -89,9 +81,7 @@ class WriteCarveOutNoOverrideTest(unittest.TestCase):
 
     def test_check_permissions_passes_through_for_memory_md(self):
         target = self._mem_dir / "test_carve_out_a.md"
-        result = _check_permissions(
-            {"file_path": str(target)}, self.context
-        )
+        result = _check_permissions({"file_path": str(target)}, self.context)
         self.assertIsInstance(result, PermissionPassthroughResult)
 
     def test_check_permissions_unchanged_for_outside_path(self):
@@ -99,14 +89,10 @@ class WriteCarveOutNoOverrideTest(unittest.TestCase):
         # should NOT bypass — falls through to allowlist/docs gate.
         with tempfile.TemporaryDirectory() as outside:
             target = Path(outside) / "evil.md"
-            result = _check_permissions(
-                {"file_path": str(target)}, self.context
-            )
+            result = _check_permissions({"file_path": str(target)}, self.context)
             # ensure_allowed_path raises -> passthrough
             # OR the .md gate fires. Either way, NOT a bypass-of-everything.
-            self.assertIsInstance(
-                result, (PermissionPassthroughResult, PermissionAskDecision)
-            )
+            self.assertIsInstance(result, (PermissionPassthroughResult, PermissionAskDecision))
 
     def test_call_writes_into_memory_dir(self):
         target = self._mem_dir / "test_carve_out_b.md"

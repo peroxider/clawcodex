@@ -50,7 +50,9 @@ class TestGetEffectiveContextWindowSize(unittest.TestCase):
     def test_floor(self):
         """Effective context has a floor to prevent negative thresholds."""
         effective = get_effective_context_window_size(25_000)
-        self.assertGreaterEqual(effective, MAX_OUTPUT_TOKENS_FOR_SUMMARY + AUTOCOMPACT_BUFFER_TOKENS)
+        self.assertGreaterEqual(
+            effective, MAX_OUTPUT_TOKENS_FOR_SUMMARY + AUTOCOMPACT_BUFFER_TOKENS
+        )
 
     @patch.dict(os.environ, {"CLAUDE_CODE_AUTO_COMPACT_WINDOW": "100000"})
     def test_env_override(self):
@@ -152,41 +154,49 @@ class TestAutoCompactIfNeeded(unittest.TestCase):
         messages = []
         for i in range(count):
             messages.append(UserMessage(content=f"User message {i}"))
-            messages.append(AssistantMessage(
-                content=[TextBlock(text=f"Assistant response {i}")],
-            ))
+            messages.append(
+                AssistantMessage(
+                    content=[TextBlock(text=f"Assistant response {i}")],
+                )
+            )
         return messages
 
     def test_no_compact_below_threshold(self):
         """Returns None when below threshold."""
         provider = MagicMock()
-        result = asyncio.run(auto_compact_if_needed(
-            self._make_messages(),
-            input_token_count=5_000,
-            context_window=200_000,
-            provider=provider,
-            model="test-model",
-        ))
+        result = asyncio.run(
+            auto_compact_if_needed(
+                self._make_messages(),
+                input_token_count=5_000,
+                context_window=200_000,
+                provider=provider,
+                model="test-model",
+            )
+        )
         self.assertIsNone(result)
         provider.chat_async.assert_not_called()
 
     def test_compact_above_threshold(self):
         """Returns CompactionResult when above threshold."""
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary of conversation",
-            model="test",
-            usage={"input_tokens": 100, "output_tokens": 50},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary of conversation",
+                model="test",
+                usage={"input_tokens": 100, "output_tokens": 50},
+                finish_reason="stop",
+            )
+        )
         threshold = get_auto_compact_threshold(200_000)
-        result = asyncio.run(auto_compact_if_needed(
-            self._make_messages(),
-            input_token_count=threshold + 1,
-            context_window=200_000,
-            provider=provider,
-            model="test-model",
-        ))
+        result = asyncio.run(
+            auto_compact_if_needed(
+                self._make_messages(),
+                input_token_count=threshold + 1,
+                context_window=200_000,
+                provider=provider,
+                model="test-model",
+            )
+        )
         self.assertIsNotNone(result)
         self.assertEqual(result.trigger, "auto")
 
@@ -194,21 +204,25 @@ class TestAutoCompactIfNeeded(unittest.TestCase):
         """Successful compaction resets failures and increments count."""
         tracking = AutoCompactTracking(consecutive_failures=2)
         provider = MagicMock()
-        provider.chat_async = AsyncMock(return_value=ChatResponse(
-            content="Summary",
-            model="test",
-            usage={},
-            finish_reason="stop",
-        ))
+        provider.chat_async = AsyncMock(
+            return_value=ChatResponse(
+                content="Summary",
+                model="test",
+                usage={},
+                finish_reason="stop",
+            )
+        )
         threshold = get_auto_compact_threshold(200_000)
-        result = asyncio.run(auto_compact_if_needed(
-            self._make_messages(),
-            input_token_count=threshold + 1,
-            context_window=200_000,
-            provider=provider,
-            model="test-model",
-            tracking=tracking,
-        ))
+        result = asyncio.run(
+            auto_compact_if_needed(
+                self._make_messages(),
+                input_token_count=threshold + 1,
+                context_window=200_000,
+                provider=provider,
+                model="test-model",
+                tracking=tracking,
+            )
+        )
         self.assertIsNotNone(result)
         self.assertEqual(tracking.consecutive_failures, 0)
         self.assertEqual(tracking.total_compactions, 1)
@@ -218,53 +232,54 @@ class TestAutoCompactIfNeeded(unittest.TestCase):
         """Returns None when compact is disabled."""
         provider = MagicMock()
         threshold = get_auto_compact_threshold(200_000)
-        result = asyncio.run(auto_compact_if_needed(
-            self._make_messages(),
-            input_token_count=threshold + 1,
-            context_window=200_000,
-            provider=provider,
-            model="test-model",
-        ))
+        result = asyncio.run(
+            auto_compact_if_needed(
+                self._make_messages(),
+                input_token_count=threshold + 1,
+                context_window=200_000,
+                provider=provider,
+                model="test-model",
+            )
+        )
         self.assertIsNone(result)
 
     def test_forwards_attachment_context(self):
         """auto_compact_if_needed forwards read_file_state to the pipeline."""
         import tempfile
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".py", delete=False
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write("print('x')")
             f.flush()
             tmp_path = f.name
 
         try:
             provider = MagicMock()
-            provider.chat_async = AsyncMock(return_value=ChatResponse(
-                content="Summary",
-                model="test",
-                usage={"input_tokens": 100, "output_tokens": 50},
-                finish_reason="stop",
-            ))
+            provider.chat_async = AsyncMock(
+                return_value=ChatResponse(
+                    content="Summary",
+                    model="test",
+                    usage={"input_tokens": 100, "output_tokens": 50},
+                    finish_reason="stop",
+                )
+            )
 
             threshold = get_auto_compact_threshold(200_000)
-            result = asyncio.run(auto_compact_if_needed(
-                self._make_messages(),
-                input_token_count=threshold + 100,
-                context_window=200_000,
-                provider=provider,
-                model="test-model",
-                read_file_state={
-                    tmp_path: {"content": "print('x')", "timestamp": time.time()}
-                },
-            ))
+            result = asyncio.run(
+                auto_compact_if_needed(
+                    self._make_messages(),
+                    input_token_count=threshold + 100,
+                    context_window=200_000,
+                    provider=provider,
+                    model="test-model",
+                    read_file_state={tmp_path: {"content": "print('x')", "timestamp": time.time()}},
+                )
+            )
             self.assertIsNotNone(result)
             self.assertGreaterEqual(len(result.attachments), 1)
             # Attachment should reference the file we passed in.
-            self.assertTrue(any(
-                tmp_path in m.content for m in result.attachments
-                if isinstance(m.content, str)
-            ))
+            self.assertTrue(
+                any(tmp_path in m.content for m in result.attachments if isinstance(m.content, str))
+            )
         finally:
             os.unlink(tmp_path)
 

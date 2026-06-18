@@ -1,6 +1,7 @@
 """Buddy feature gate. Always returns ``True``; existence of the symbol
 allows future env-var or config gating without touching every consumer.
 """
+
 from __future__ import annotations
 
 
@@ -9,4 +10,4 @@ def is_buddy_enabled() -> bool:
     return True
 
 
-__all__ = ['is_buddy_enabled']
+__all__ = ["is_buddy_enabled"]

@@ -164,10 +164,7 @@ class TestBlockCache:
 
 
 def _make_messages(n: int) -> list[dict[str, Any]]:
-    return [
-        {"role": "user", "content": f"message number {i}"}
-        for i in range(n)
-    ]
+    return [{"role": "user", "content": f"message number {i}"} for i in range(n)]
 
 
 class TestMessagesAggregation:

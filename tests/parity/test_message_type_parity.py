@@ -7,6 +7,7 @@ Verifies:
 - Message constants match
 - Field names on each message type match
 """
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,8 @@ class TestMessageTypeParity(unittest.TestCase):
         for msg_type_info in self.snapshot["message_types"]:
             cls_name = msg_type_info["class"]
             self.assertIn(
-                cls_name, self.py_classes,
+                cls_name,
+                self.py_classes,
                 f"Missing Python class for TS message type '{cls_name}'",
             )
 
@@ -84,7 +86,8 @@ class TestMessageTypeParity(unittest.TestCase):
                 continue
             instance = py_cls()
             self.assertEqual(
-                instance.role, expected_role,
+                instance.role,
+                expected_role,
                 f"{cls_name}.role = '{instance.role}', expected '{expected_role}'",
             )
 
@@ -143,7 +146,8 @@ class TestContentBlockParity(unittest.TestCase):
         for block_info in self.snapshot["content_block_types"]:
             cls_name = block_info["class"]
             self.assertIn(
-                cls_name, self.py_block_classes,
+                cls_name,
+                self.py_block_classes,
                 f"Missing Python class for TS content block type '{cls_name}'",
             )
 
@@ -156,7 +160,8 @@ class TestContentBlockParity(unittest.TestCase):
                 continue
             instance = py_cls()
             self.assertEqual(
-                instance.type, expected_type,
+                instance.type,
+                expected_type,
                 f"{cls_name}.type = '{instance.type}', expected '{expected_type}'",
             )
 
@@ -193,7 +198,8 @@ class TestStreamEventParity(unittest.TestCase):
     def test_all_stream_event_types_exist(self) -> None:
         for event_name in self.snapshot["stream_event_types"]:
             self.assertIn(
-                event_name, self.py_stream_classes,
+                event_name,
+                self.py_stream_classes,
                 f"Missing Python class for TS stream event type '{event_name}'",
             )
 
@@ -225,7 +231,8 @@ class TestMessageConstantsParity(unittest.TestCase):
         }
         for const_name in self.snapshot["message_constants"]:
             self.assertIn(
-                const_name, constant_map,
+                const_name,
+                constant_map,
                 f"Missing Python constant '{const_name}'",
             )
             val = constant_map[const_name]

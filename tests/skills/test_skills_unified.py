@@ -85,9 +85,7 @@ def _write_skill(path: Path, body: str) -> None:
 # ======================================================================
 
 
-def test_flat_project_skill_invokable_via_skilltool(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_flat_project_skill_invokable_via_skilltool(tmp_path: Path, isolated_home: Path) -> None:
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "foo" / "SKILL.md",
@@ -130,9 +128,7 @@ def test_nested_namespace_skill_invokable_as_colon_form(
     assert "Write a commit message" in out["prompt"]
 
 
-def test_nested_namespace_appears_in_get_all_skills(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_nested_namespace_appears_in_get_all_skills(tmp_path: Path, isolated_home: Path) -> None:
     project = tmp_path / "proj"
     _write_skill(
         project / ".claude" / "skills" / "deep" / "nested" / "thing" / "SKILL.md",
@@ -155,9 +151,7 @@ def test_nested_namespace_appears_in_get_all_skills(
 # ======================================================================
 
 
-def test_bundled_skill_discoverable_through_skilltool(
-    tmp_path: Path, isolated_home: Path
-) -> None:
+def test_bundled_skill_discoverable_through_skilltool(tmp_path: Path, isolated_home: Path) -> None:
     register_bundled_skill(
         BundledSkillDefinition(
             name="bundled-thing",

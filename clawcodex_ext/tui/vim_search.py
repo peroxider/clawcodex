@@ -126,9 +126,7 @@ def _find_backward(
             else:
                 break
         if last_match is not None:
-            return SearchHit(
-                at=Cursor(row, last_match.start()), text=last_match.group(0)
-            )
+            return SearchHit(at=Cursor(row, last_match.start()), text=last_match.group(0))
     if not wrap:
         return None
     # Wrap to the end and walk back to after.row, INCLUDING after.row's
@@ -147,9 +145,7 @@ def _find_backward(
             if m.start() >= min_start:
                 last_match = m
         if last_match is not None:
-            return SearchHit(
-                at=Cursor(row, last_match.start()), text=last_match.group(0)
-            )
+            return SearchHit(at=Cursor(row, last_match.start()), text=last_match.group(0))
     return None
 
 

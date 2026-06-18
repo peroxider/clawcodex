@@ -32,7 +32,9 @@ def run_orchestrator_subcommand(rest: list[str]) -> int:
     # Find subcommand token position (everything else is passed through)
     subcommand_tokens = {
         "dashboard",
-        "server", "issue", "workflow",  # noun-verb
+        "server",
+        "issue",
+        "workflow",  # noun-verb
     }
     subcommand_idx = -1
     subcommand = None
@@ -67,10 +69,10 @@ Usage (noun-verb):
     from extensions.orchestrator.cli.workflow import add_workflow_parser
 
     # Register noun-verb subparsers
-    add_server_parser(subparsers)        # server status|stop|start
-    add_issue_parser(subparsers)         # issue list|show|tail|stop|pause|resume|...
-    add_workflow_parser(subparsers)      # workflow init|list-templates
-    add_dashboard_parser(subparsers)     # dashboard [--port PORT]
+    add_server_parser(subparsers)  # server status|stop|start
+    add_issue_parser(subparsers)  # issue list|show|tail|stop|pause|resume|...
+    add_workflow_parser(subparsers)  # workflow init|list-templates
+    add_dashboard_parser(subparsers)  # dashboard [--port PORT]
 
     # Parse all arguments
     if os.environ.get("_ARGCOMPLETE") == "1":
@@ -82,15 +84,19 @@ Usage (noun-verb):
     # Dispatch — noun-verb dispatch
     if args.subcommand == "server":
         from extensions.orchestrator.cli.server import run as run_server
+
         return run_server(args)
     elif args.subcommand == "issue":
         from extensions.orchestrator.cli.issue import run as run_issue
+
         return run_issue(args)
     elif args.subcommand == "workflow":
         from extensions.orchestrator.cli.workflow import run as run_workflow
+
         return run_workflow(args)
     elif args.subcommand == "dashboard":
         from extensions.orchestrator.cli.dashboard import run as run_dashboard
+
         return run_dashboard(args)
     else:
         parser.print_help()

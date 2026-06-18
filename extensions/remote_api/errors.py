@@ -45,4 +45,3 @@ def _default_code(status_code: int) -> str:
     if status_code >= 500:
         return "internal_error"
     return "invalid_request"
-

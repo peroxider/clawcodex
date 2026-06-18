@@ -21,6 +21,7 @@ class GeminiAuth:
         # Config
         try:
             from ..config import load_config
+
             config = load_config()
             key = config.get("providers", {}).get("gemini", {}).get("api_key", "")
             if key:

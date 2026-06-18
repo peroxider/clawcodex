@@ -24,12 +24,21 @@ from src.hooks.config_manager import load_hooks_from_settings
 class TestLegacyMatcherTranslation:
     def test_on_session_start_matcher_translates_to_first_class(self, tmp_path):
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [{
-                "type": "command", "command": "echo start",
-                "matcher": "onSessionStart",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {
+                                "type": "command",
+                                "command": "echo start",
+                                "matcher": "onSessionStart",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         with pytest.warns(DeprecationWarning, match="onSessionStart"):
             snapshot = load_hooks_from_settings(path)
         # The hook is now under SessionStart, NOT under Notification.
@@ -40,12 +49,21 @@ class TestLegacyMatcherTranslation:
 
     def test_on_session_end_matcher_translates(self, tmp_path):
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [{
-                "type": "command", "command": "echo end",
-                "matcher": "onSessionEnd",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {
+                                "type": "command",
+                                "command": "echo end",
+                                "matcher": "onSessionEnd",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         with pytest.warns(DeprecationWarning, match="onSessionEnd"):
             snapshot = load_hooks_from_settings(path)
         assert "SessionEnd" in snapshot.hooks
@@ -53,12 +71,21 @@ class TestLegacyMatcherTranslation:
 
     def test_on_compact_matcher_translates_to_pre_compact(self, tmp_path):
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [{
-                "type": "command", "command": "echo c",
-                "matcher": "onCompact",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {
+                                "type": "command",
+                                "command": "echo c",
+                                "matcher": "onCompact",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         with pytest.warns(DeprecationWarning, match="onCompact"):
             snapshot = load_hooks_from_settings(path)
         # Convention: legacy ``onCompact`` → ``PreCompact`` (about-to-happen).
@@ -69,12 +96,21 @@ class TestLegacyMatcherTranslation:
         # the ``on`` prefix). Both forms translate to the same first-class
         # event.
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [{
-                "type": "command", "command": "echo s",
-                "matcher": "SessionStart",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {
+                                "type": "command",
+                                "command": "echo s",
+                                "matcher": "SessionStart",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         with pytest.warns(DeprecationWarning, match="SessionStart"):
             snapshot = load_hooks_from_settings(path)
         assert "SessionStart" in snapshot.hooks
@@ -85,12 +121,21 @@ class TestLegacyMatcherTranslation:
         # ``onPermissionRequest`` — not in the legacy lifecycle map) is NOT
         # translated; it stays under Notification.
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [{
-                "type": "command", "command": "echo n",
-                "matcher": "onPermissionRequest",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {
+                                "type": "command",
+                                "command": "echo n",
+                                "matcher": "onPermissionRequest",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         # No deprecation warning expected.
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
@@ -104,11 +149,20 @@ class TestLegacyMatcherTranslation:
         # Settings.json using first-class names directly: no deprecation
         # warning fires (the warning is only for the legacy form).
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"SessionStart": [{
-                "type": "command", "command": "echo modern",
-            }]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "SessionStart": [
+                            {
+                                "type": "command",
+                                "command": "echo modern",
+                            }
+                        ]
+                    }
+                }
+            )
+        )
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             snapshot = load_hooks_from_settings(path)
@@ -119,12 +173,18 @@ class TestLegacyMatcherTranslation:
     def test_multiple_legacy_entries_each_warn(self, tmp_path):
         # Two legacy entries → two warnings.
         path = tmp_path / "settings.json"
-        path.write_text(json.dumps({
-            "hooks": {"Notification": [
-                {"type": "command", "command": "echo a", "matcher": "onSessionStart"},
-                {"type": "command", "command": "echo b", "matcher": "onSessionEnd"},
-            ]}
-        }))
+        path.write_text(
+            json.dumps(
+                {
+                    "hooks": {
+                        "Notification": [
+                            {"type": "command", "command": "echo a", "matcher": "onSessionStart"},
+                            {"type": "command", "command": "echo b", "matcher": "onSessionEnd"},
+                        ]
+                    }
+                }
+            )
+        )
         with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             snapshot = load_hooks_from_settings(path)
@@ -142,15 +202,18 @@ class TestLifecycleRoutersReadFirstClass:
     @pytest.mark.asyncio
     async def test_session_start_router_reads_first_class_event(self):
         from src.hooks.session_hooks import SESSION_START_EVENT
+
         # The constant is now ``SessionStart`` (first-class), not ``Notification``.
         assert SESSION_START_EVENT == "SessionStart"
 
     @pytest.mark.asyncio
     async def test_session_end_router_reads_first_class_event(self):
         from src.hooks.session_hooks import SESSION_END_EVENT
+
         assert SESSION_END_EVENT == "SessionEnd"
 
     @pytest.mark.asyncio
     async def test_compact_router_reads_pre_compact(self):
         from src.hooks.session_hooks import COMPACT_EVENT
+
         assert COMPACT_EVENT == "PreCompact"

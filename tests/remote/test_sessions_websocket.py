@@ -27,7 +27,7 @@ pytestmark = pytest.mark.integration
 
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
@@ -50,7 +50,7 @@ class _ScriptedServer:
         if self.close_codes:
             code = self.close_codes.pop(0)
             try:
-                await ws.close(code=code, reason='scripted close')
+                await ws.close(code=code, reason="scripted close")
             except (websockets.exceptions.ConnectionClosed, OSError):
                 pass
 
@@ -59,7 +59,7 @@ class _ScriptedServer:
 async def test_4003_is_permanent_no_reconnect():
     server = _ScriptedServer(close_codes=[4003])
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         on_close_fired = asyncio.Event()
         callbacks = SessionsWebSocketCallbacks(
@@ -67,8 +67,11 @@ async def test_4003_is_permanent_no_reconnect():
             on_close=lambda: on_close_fired.set(),
         )
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         # Server immediately closes with 4003.
@@ -93,7 +96,7 @@ async def test_4001_triggers_reconnect_with_on_reconnecting():
     """
     server = _ScriptedServer(close_codes=[4001, 4001])
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         reconnecting_fired = asyncio.Event()
         callbacks = SessionsWebSocketCallbacks(
@@ -101,12 +104,16 @@ async def test_4001_triggers_reconnect_with_on_reconnecting():
             on_reconnecting=lambda: reconnecting_fired.set(),
         )
         from src.remote import sessions_websocket as ws_mod
+
         original_delay = ws_mod.RECONNECT_DELAY_SECONDS
         ws_mod.RECONNECT_DELAY_SECONDS = 0.02
         try:
             ws = SessionsWebSocket(
-                'sid', 'org', lambda: 'tok', callbacks,
-                base_url=f'ws://127.0.0.1:{port}',
+                "sid",
+                "org",
+                lambda: "tok",
+                callbacks,
+                base_url=f"ws://127.0.0.1:{port}",
             )
             await ws.connect()
             await asyncio.wait_for(reconnecting_fired.wait(), timeout=5.0)
@@ -147,12 +154,16 @@ async def test_initial_connect_failure_exhausts_budget():
         on_error=on_error,
     )
     from src.remote import sessions_websocket as ws_mod
+
     original_delay = ws_mod.RECONNECT_DELAY_SECONDS
     ws_mod.RECONNECT_DELAY_SECONDS = 0.02
     try:
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         await asyncio.wait_for(on_close_fired.wait(), timeout=10.0)
@@ -175,26 +186,29 @@ async def test_message_dispatch_to_on_message():
 
         async def handler(self, ws):
             self.connection_count += 1
-            await ws.send(json.dumps({'type': 'assistant', 'message': {'content': 'hi'}}))
+            await ws.send(json.dumps({"type": "assistant", "message": {"content": "hi"}}))
             await asyncio.sleep(0.1)  # keep connection open briefly
 
     server = _MsgServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(
             on_message=lambda m: received.append(m),
         )
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         for _ in range(50):
             if received:
                 break
             await asyncio.sleep(0.02)
-        assert any(m.get('type') == 'assistant' for m in received)
+        assert any(m.get("type") == "assistant" for m in received)
         await ws.disconnect()
     finally:
         ws_server.close()
@@ -208,20 +222,23 @@ async def test_invalid_json_is_silently_dropped():
 
     class _GarbageServer:
         async def handler(self, ws):
-            await ws.send('not json {{{')
-            await ws.send(json.dumps({'type': 'good'}))
+            await ws.send("not json {{{")
+            await ws.send(json.dumps({"type": "good"}))
             await asyncio.sleep(0.1)
 
     server = _GarbageServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(
             on_message=lambda m: received.append(m),
         )
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         for _ in range(50):
@@ -229,7 +246,7 @@ async def test_invalid_json_is_silently_dropped():
                 break
             await asyncio.sleep(0.02)
         # Only the good message should make it through.
-        assert received == [{'type': 'good'}]
+        assert received == [{"type": "good"}]
         await ws.disconnect()
     finally:
         ws_server.close()
@@ -250,20 +267,25 @@ async def test_send_control_response_round_trip():
 
     server = _EchoServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
-        await ws.send_control_response({
-            'type': 'control_response',
-            'response': {'subtype': 'success', 'request_id': 'r1'},
-        })
+        await ws.send_control_response(
+            {
+                "type": "control_response",
+                "response": {"subtype": "success", "request_id": "r1"},
+            }
+        )
         await asyncio.sleep(0.1)
-        assert any('control_response' in line for line in server_received)
+        assert any("control_response" in line for line in server_received)
         await ws.disconnect()
     finally:
         ws_server.close()
@@ -284,21 +306,24 @@ async def test_send_control_request_wraps_in_envelope():
 
     server = _EchoServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
-        await ws.send_control_request({'subtype': 'interrupt'})
+        await ws.send_control_request({"subtype": "interrupt"})
         await asyncio.sleep(0.1)
         assert len(server_received) == 1
         envelope = json.loads(server_received[0])
-        assert envelope['type'] == 'control_request'
-        assert envelope['request']['subtype'] == 'interrupt'
-        assert 'request_id' in envelope
+        assert envelope["type"] == "control_request"
+        assert envelope["request"]["subtype"] == "interrupt"
+        assert "request_id" in envelope
         await ws.disconnect()
     finally:
         ws_server.close()
@@ -315,6 +340,7 @@ async def test_concurrent_connect_is_singleflight():
     Round-2 fix: the second call enters ``connect()``, sees state is
     ``"connecting"``, and bails immediately.
     """
+
     class _SlowAcceptServer:
         def __init__(self) -> None:
             self.connection_count = 0
@@ -330,23 +356,25 @@ async def test_concurrent_connect_is_singleflight():
 
     server = _SlowAcceptServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         task_a = asyncio.create_task(ws.connect())
         task_b = asyncio.create_task(ws.connect())
         await asyncio.gather(task_a, task_b)
         await asyncio.sleep(0.1)
         assert server.connection_count == 1, (
-            f'expected single-flight connect, got {server.connection_count} '
-            'WS handshakes'
+            f"expected single-flight connect, got {server.connection_count} WS handshakes"
         )
         assert ws.is_connected()
-        assert ws.state == 'connected'
+        assert ws.state == "connected"
         await ws.disconnect()
     finally:
         ws_server.close()
@@ -360,6 +388,7 @@ async def test_send_before_connected_is_dropped():
     Round-2 fix: ``send_control_response`` and ``send_control_request``
     gate strictly on ``state == 'connected'``.
     """
+
     class _EchoServer:
         async def handler(self, ws):
             try:
@@ -370,22 +399,25 @@ async def test_send_before_connected_is_dropped():
 
     server = _EchoServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         # Simulate the in-handshake window directly: state is "connecting"
         # but no WS is assigned. Both send paths must early-return rather
         # than raising on ``self._ws.send`` (which would AttributeError).
-        ws._state = 'connecting'  # type: ignore[assignment]
+        ws._state = "connecting"  # type: ignore[assignment]
         ws._ws = None
-        await ws.send_control_response({'type': 'control_response', 'response': {}})
-        await ws.send_control_request({'subtype': 'interrupt'})
+        await ws.send_control_response({"type": "control_response", "response": {}})
+        await ws.send_control_request({"subtype": "interrupt"})
         assert ws.is_connected() is False
-        ws._state = 'closed'  # type: ignore[assignment]
+        ws._state = "closed"  # type: ignore[assignment]
     finally:
         ws_server.close()
         await ws_server.wait_closed()
@@ -411,18 +443,21 @@ async def test_disconnect_during_handshake_unwinds_cleanly():
 
     server = _SlowAcceptServer()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         connect_task = asyncio.create_task(ws.connect())
         await asyncio.sleep(0.0)
         await ws.disconnect()
         await connect_task
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
         assert ws.is_connected() is False
         if connections_seen:
             await asyncio.wait_for(closed_event.wait(), timeout=2.0)
@@ -445,31 +480,34 @@ async def test_state_progresses_through_connecting_to_connected():
 
     server = _Server()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
         states.append(ws.state)
 
         connect_task = asyncio.create_task(ws.connect())
         for _ in range(50):
-            if ws.state == 'connecting':
-                states.append('connecting')
+            if ws.state == "connecting":
+                states.append("connecting")
                 break
             await asyncio.sleep(0)
         await connect_task
         states.append(ws.state)
-        assert ws.state == 'connected'
+        assert ws.state == "connected"
         assert ws.is_connected() is True
-        assert states[0] == 'closed'
-        assert 'connecting' in states
-        assert states[-1] == 'connected'
+        assert states[0] == "closed"
+        assert "connecting" in states
+        assert states[-1] == "connected"
         await ws.disconnect()
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
     finally:
         ws_server.close()
         await ws_server.wait_closed()
@@ -478,6 +516,7 @@ async def test_state_progresses_through_connecting_to_connected():
 @pytest.mark.asyncio
 async def test_double_disconnect_is_idempotent():
     """``disconnect()`` after ``disconnect()`` must be a no-op."""
+
     class _Server:
         async def handler(self, ws):
             try:
@@ -488,19 +527,22 @@ async def test_double_disconnect_is_idempotent():
 
     server = _Server()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         assert ws.is_connected()
         await ws.disconnect()
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
         await ws.disconnect()
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
         assert ws.is_connected() is False
     finally:
         ws_server.close()
@@ -510,6 +552,7 @@ async def test_double_disconnect_is_idempotent():
 @pytest.mark.asyncio
 async def test_reconnect_clears_user_disconnected_latch():
     """``reconnect()`` after ``disconnect()`` re-arms the WS."""
+
     class _Server:
         def __init__(self) -> None:
             self.connection_count = 0
@@ -524,18 +567,21 @@ async def test_reconnect_clears_user_disconnected_latch():
 
     server = _Server()
     port = _free_port()
-    ws_server = await ws_serve(server.handler, '127.0.0.1', port)
+    ws_server = await ws_serve(server.handler, "127.0.0.1", port)
     try:
         callbacks = SessionsWebSocketCallbacks(on_message=lambda m: None)
         ws = SessionsWebSocket(
-            'sid', 'org', lambda: 'tok', callbacks,
-            base_url=f'ws://127.0.0.1:{port}',
+            "sid",
+            "org",
+            lambda: "tok",
+            callbacks,
+            base_url=f"ws://127.0.0.1:{port}",
         )
         await ws.connect()
         await ws.disconnect()
         # connect() after disconnect must be rejected.
         await ws.connect()
-        assert ws.state == 'closed'
+        assert ws.state == "closed"
         assert server.connection_count == 1
         # reconnect() clears the latch and re-arms.
         await ws.reconnect()

@@ -232,18 +232,24 @@ def compute_session_cost(
     """
     worker_cost = 0.0
     if worker_model and (worker_input_tokens or worker_output_tokens):
-        worker_cost = compute_cost(worker_model, {
-            "input_tokens": worker_input_tokens,
-            "output_tokens": worker_output_tokens,
-            "cache_creation_input_tokens": worker_cache_creation_tokens,
-            "cache_read_input_tokens": worker_cache_read_tokens,
-        })
+        worker_cost = compute_cost(
+            worker_model,
+            {
+                "input_tokens": worker_input_tokens,
+                "output_tokens": worker_output_tokens,
+                "cache_creation_input_tokens": worker_cache_creation_tokens,
+                "cache_read_input_tokens": worker_cache_read_tokens,
+            },
+        )
     advisor_cost = 0.0
     if advisor_model and (advisor_input_tokens or advisor_output_tokens):
-        advisor_cost = compute_cost(advisor_model, {
-            "input_tokens": advisor_input_tokens,
-            "output_tokens": advisor_output_tokens,
-        })
+        advisor_cost = compute_cost(
+            advisor_model,
+            {
+                "input_tokens": advisor_input_tokens,
+                "output_tokens": advisor_output_tokens,
+            },
+        )
     return worker_cost, advisor_cost, worker_cost + advisor_cost
 
 

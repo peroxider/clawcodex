@@ -114,9 +114,7 @@ class LinearGraphQLClient:
                             resp.status,
                             _summarize_error_body(body),
                         )
-                        raise LinearAPIError(
-                            f"Linear API returned status {resp.status}"
-                        )
+                        raise LinearAPIError(f"Linear API returned status {resp.status}")
                     return body
             except aiohttp.ClientError as exc:
                 logger.error("Linear GraphQL request failed: %s", exc)
@@ -255,10 +253,7 @@ def _extract_blockers(issue: dict[str, Any]) -> list[dict[str, Any]]:
     relations = issue.get("inverseRelations", {}).get("nodes", [])
     blockers = []
     for rel in relations:
-        if (
-            isinstance(rel, dict)
-            and str(rel.get("type", "")).strip().lower() == "blocks"
-        ):
+        if isinstance(rel, dict) and str(rel.get("type", "")).strip().lower() == "blocks":
             blocker_issue = rel.get("issue")
             if isinstance(blocker_issue, dict):
                 blockers.append(

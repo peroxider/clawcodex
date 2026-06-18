@@ -1,4 +1,5 @@
 """Tests for compute_fingerprint."""
+
 from __future__ import annotations
 
 import re
@@ -12,6 +13,7 @@ _HEX16 = re.compile(r"^[0-9a-f]{16}$")
 def _raise_with_message(msg: str):
     def _f():
         raise RuntimeError(msg)
+
     return _f
 
 

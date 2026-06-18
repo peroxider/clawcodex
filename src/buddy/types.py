@@ -16,6 +16,7 @@ the species literals here are plain strings. If a future Python build
 adds a similar canary scan, reconstruct via ``chr()`` at module load.
 See gap-analysis §2.3.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,58 +25,109 @@ from typing import Literal, TypedDict
 
 # --- Rarity ----------------------------------------------------------
 
-Rarity = Literal['common', 'uncommon', 'rare', 'epic', 'legendary']
+Rarity = Literal["common", "uncommon", "rare", "epic", "legendary"]
 
 RARITIES: tuple[Rarity, ...] = (
-    'common', 'uncommon', 'rare', 'epic', 'legendary',
+    "common",
+    "uncommon",
+    "rare",
+    "epic",
+    "legendary",
 )
 
 
 # --- Species ---------------------------------------------------------
 
 Species = Literal[
-    'duck', 'goose', 'blob', 'cat', 'dragon', 'octopus', 'owl',
-    'penguin', 'turtle', 'snail', 'ghost', 'axolotl', 'capybara',
-    'cactus', 'robot', 'rabbit', 'mushroom', 'chonk',
+    "duck",
+    "goose",
+    "blob",
+    "cat",
+    "dragon",
+    "octopus",
+    "owl",
+    "penguin",
+    "turtle",
+    "snail",
+    "ghost",
+    "axolotl",
+    "capybara",
+    "cactus",
+    "robot",
+    "rabbit",
+    "mushroom",
+    "chonk",
 ]
 
 SPECIES: tuple[Species, ...] = (
-    'duck', 'goose', 'blob', 'cat', 'dragon', 'octopus', 'owl',
-    'penguin', 'turtle', 'snail', 'ghost', 'axolotl', 'capybara',
-    'cactus', 'robot', 'rabbit', 'mushroom', 'chonk',
+    "duck",
+    "goose",
+    "blob",
+    "cat",
+    "dragon",
+    "octopus",
+    "owl",
+    "penguin",
+    "turtle",
+    "snail",
+    "ghost",
+    "axolotl",
+    "capybara",
+    "cactus",
+    "robot",
+    "rabbit",
+    "mushroom",
+    "chonk",
 )
 
 
 # --- Eye glyphs ------------------------------------------------------
 
-Eye = Literal['·', '✦', '×', '◉', '@', '°']
+Eye = Literal["·", "✦", "×", "◉", "@", "°"]
 
-EYES: tuple[Eye, ...] = ('·', '✦', '×', '◉', '@', '°')
+EYES: tuple[Eye, ...] = ("·", "✦", "×", "◉", "@", "°")
 
 
 # --- Hats ------------------------------------------------------------
 
 Hat = Literal[
-    'none', 'crown', 'tophat', 'propeller', 'halo',
-    'wizard', 'beanie', 'tinyduck',
+    "none",
+    "crown",
+    "tophat",
+    "propeller",
+    "halo",
+    "wizard",
+    "beanie",
+    "tinyduck",
 ]
 
 HATS: tuple[Hat, ...] = (
-    'none', 'crown', 'tophat', 'propeller', 'halo',
-    'wizard', 'beanie', 'tinyduck',
+    "none",
+    "crown",
+    "tophat",
+    "propeller",
+    "halo",
+    "wizard",
+    "beanie",
+    "tinyduck",
 )
 
 
 # --- Stat names ------------------------------------------------------
 
-StatName = Literal['DEBUGGING', 'PATIENCE', 'CHAOS', 'WISDOM', 'SNARK']
+StatName = Literal["DEBUGGING", "PATIENCE", "CHAOS", "WISDOM", "SNARK"]
 
 STAT_NAMES: tuple[StatName, ...] = (
-    'DEBUGGING', 'PATIENCE', 'CHAOS', 'WISDOM', 'SNARK',
+    "DEBUGGING",
+    "PATIENCE",
+    "CHAOS",
+    "WISDOM",
+    "SNARK",
 )
 
 
 # --- Shape types -----------------------------------------------------
+
 
 @dataclass(frozen=True)
 class CompanionBones:
@@ -85,6 +137,7 @@ class CompanionBones:
     ``SPECIES`` don't break stored companions, and editing
     ``config['companion']`` can't fake a rarity.
     """
+
     rarity: Rarity
     species: Species
     eye: Eye
@@ -95,6 +148,7 @@ class CompanionBones:
 
 class CompanionSoul(TypedDict):
     """Persisted-in-config portion. Plain dict for JSON-roundtrip."""
+
     name: str
     personality: str
 
@@ -107,6 +161,7 @@ class StoredCompanion(TypedDict):
     files (``~/.clawcodex/config.json`` vs ``~/.openclaude.json``) so
     there's no cross-port migration concern. See gap-analysis §4.8.
     """
+
     name: str
     personality: str
     hatched_at: int  # unix milliseconds
@@ -115,6 +170,7 @@ class StoredCompanion(TypedDict):
 @dataclass(frozen=True)
 class Companion:
     """Live companion: bones (regenerated) + soul (persisted) + hatched_at."""
+
     name: str
     personality: str
     hatched_at: int
@@ -129,19 +185,19 @@ class Companion:
 # --- Rarity-keyed constants ------------------------------------------
 
 RARITY_WEIGHTS: dict[Rarity, int] = {
-    'common': 60,
-    'uncommon': 25,
-    'rare': 10,
-    'epic': 4,
-    'legendary': 1,
+    "common": 60,
+    "uncommon": 25,
+    "rare": 10,
+    "epic": 4,
+    "legendary": 1,
 }
 
 RARITY_STARS: dict[Rarity, str] = {
-    'common': '★',
-    'uncommon': '★★',
-    'rare': '★★★',
-    'epic': '★★★★',
-    'legendary': '★★★★★',
+    "common": "★",
+    "uncommon": "★★",
+    "rare": "★★★",
+    "epic": "★★★★",
+    "legendary": "★★★★★",
 }
 
 # RARITY_COLORS values are src/tui/theme.py Palette field names,
@@ -153,23 +209,33 @@ RARITY_STARS: dict[Rarity, str] = {
 # (``inactive``, ``permission``, ``autoAccept``) don't exist on the
 # Python palette today; the mapping picks the closest semantic match.
 RARITY_COLORS: dict[Rarity, str] = {
-    'common':    'text_muted',  # was TS 'inactive'
-    'uncommon':  'success',
-    'rare':      'primary',     # was TS 'permission'  (blue)
-    'epic':      'secondary',   # was TS 'autoAccept'  (violet)
-    'legendary': 'warning',
+    "common": "text_muted",  # was TS 'inactive'
+    "uncommon": "success",
+    "rare": "primary",  # was TS 'permission'  (blue)
+    "epic": "secondary",  # was TS 'autoAccept'  (violet)
+    "legendary": "warning",
 }
 
 
 __all__ = [
     # Literals + tuples
-    'Rarity', 'RARITIES',
-    'Species', 'SPECIES',
-    'Eye', 'EYES',
-    'Hat', 'HATS',
-    'StatName', 'STAT_NAMES',
+    "Rarity",
+    "RARITIES",
+    "Species",
+    "SPECIES",
+    "Eye",
+    "EYES",
+    "Hat",
+    "HATS",
+    "StatName",
+    "STAT_NAMES",
     # Shape types
-    'CompanionBones', 'CompanionSoul', 'StoredCompanion', 'Companion',
+    "CompanionBones",
+    "CompanionSoul",
+    "StoredCompanion",
+    "Companion",
     # Rarity-keyed constants
-    'RARITY_WEIGHTS', 'RARITY_STARS', 'RARITY_COLORS',
+    "RARITY_WEIGHTS",
+    "RARITY_STARS",
+    "RARITY_COLORS",
 ]

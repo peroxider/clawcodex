@@ -59,10 +59,12 @@ class TestAgentHookExecutor:
         config = HookConfig(type="agent", agent_instructions="Check if safe")
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "decision": "allow",
-            "reason": "Looks safe",
-        })
+        mock_response.content = json.dumps(
+            {
+                "decision": "allow",
+                "reason": "Looks safe",
+            }
+        )
 
         mock_provider = MagicMock()
         mock_provider.chat_async = AsyncMock(return_value=mock_response)
@@ -77,10 +79,12 @@ class TestAgentHookExecutor:
         config = HookConfig(type="agent", agent_instructions="Deny dangerous commands")
 
         mock_response = MagicMock()
-        mock_response.content = json.dumps({
-            "decision": "deny",
-            "reason": "Too dangerous",
-        })
+        mock_response.content = json.dumps(
+            {
+                "decision": "deny",
+                "reason": "Too dangerous",
+            }
+        )
 
         mock_provider = MagicMock()
         mock_provider.chat_async = AsyncMock(return_value=mock_response)
@@ -93,7 +97,9 @@ class TestAgentHookExecutor:
         config = HookConfig(type="agent", agent_instructions="Check")
 
         mock_response = MagicMock()
-        mock_response.content = 'Here is my evaluation:\n{"decision": "allow", "reason": "OK"}\nDone.'
+        mock_response.content = (
+            'Here is my evaluation:\n{"decision": "allow", "reason": "OK"}\nDone.'
+        )
 
         mock_provider = MagicMock()
         mock_provider.chat_async = AsyncMock(return_value=mock_response)
@@ -159,10 +165,12 @@ class TestHttpHookExecutor:
         config = HookConfig(type="http", url="https://hooks.example.com/pre-tool")
 
         mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps({
-            "decision": "allow",
-            "reason": "Approved",
-        }).encode()
+        mock_response.read.return_value = json.dumps(
+            {
+                "decision": "allow",
+                "reason": "Approved",
+            }
+        ).encode()
         mock_response.status = 200
         mock_urlopen.return_value = mock_response
 

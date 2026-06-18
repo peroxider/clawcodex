@@ -42,10 +42,13 @@ def _make_plugin_source(base: Path, name: str) -> Path:
 class TestLoadMarketplaceIndex:
     def test_load(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "plugin-a", "description": "A", "version": "1.0.0", "downloads": 100},
-            {"name": "plugin-b", "description": "B", "version": "2.0.0", "tags": ["test"]},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "plugin-a", "description": "A", "version": "1.0.0", "downloads": 100},
+                {"name": "plugin-b", "description": "B", "version": "2.0.0", "tags": ["test"]},
+            ],
+        )
         idx = load_marketplace_index(index_file)
         assert len(idx.entries) == 2
         assert idx.entries[0].name == "plugin-a"
@@ -66,10 +69,13 @@ class TestLoadMarketplaceIndex:
 class TestSearchMarketplace:
     def test_search_by_name(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "formatter", "description": "Code formatter"},
-            {"name": "linter", "description": "Code linter"},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "formatter", "description": "Code formatter"},
+                {"name": "linter", "description": "Code linter"},
+            ],
+        )
         load_marketplace_index(index_file)
         results = search_marketplace("format")
         assert len(results) == 1
@@ -77,20 +83,26 @@ class TestSearchMarketplace:
 
     def test_search_by_description(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "plugin-a", "description": "A Python tool"},
-            {"name": "plugin-b", "description": "A Rust tool"},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "plugin-a", "description": "A Python tool"},
+                {"name": "plugin-b", "description": "A Rust tool"},
+            ],
+        )
         load_marketplace_index(index_file)
         results = search_marketplace("python")
         assert len(results) == 1
 
     def test_search_with_tags(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "a", "description": "tool", "tags": ["python"]},
-            {"name": "b", "description": "tool", "tags": ["rust"]},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "a", "description": "tool", "tags": ["python"]},
+                {"name": "b", "description": "tool", "tags": ["rust"]},
+            ],
+        )
         load_marketplace_index(index_file)
         results = search_marketplace("tool", tags=["python"])
         assert len(results) == 1
@@ -102,9 +114,12 @@ class TestSearchMarketplace:
 
     def test_search_case_insensitive(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "MyPlugin", "description": "Something"},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "MyPlugin", "description": "Something"},
+            ],
+        )
         load_marketplace_index(index_file)
         results = search_marketplace("myplugin")
         assert len(results) == 1
@@ -113,29 +128,33 @@ class TestSearchMarketplace:
 class TestListMarketplace:
     def test_list_sorted_by_name(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "zzz", "description": "last"},
-            {"name": "aaa", "description": "first"},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "zzz", "description": "last"},
+                {"name": "aaa", "description": "first"},
+            ],
+        )
         load_marketplace_index(index_file)
         entries = list_marketplace()
         assert entries[0].name == "aaa"
 
     def test_list_sorted_by_downloads(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": "low", "description": "low", "downloads": 10},
-            {"name": "high", "description": "high", "downloads": 1000},
-        ])
+        _make_index(
+            index_file,
+            [
+                {"name": "low", "description": "low", "downloads": 10},
+                {"name": "high", "description": "high", "downloads": 1000},
+            ],
+        )
         load_marketplace_index(index_file)
         entries = list_marketplace(sort_by="downloads")
         assert entries[0].name == "high"
 
     def test_list_limit(self, tmp_path):
         index_file = tmp_path / "index.json"
-        _make_index(index_file, [
-            {"name": f"p{i}", "description": f"d{i}"} for i in range(10)
-        ])
+        _make_index(index_file, [{"name": f"p{i}", "description": f"d{i}"} for i in range(10)])
         load_marketplace_index(index_file)
         entries = list_marketplace(limit=3)
         assert len(entries) == 3

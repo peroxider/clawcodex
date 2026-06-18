@@ -23,6 +23,7 @@ Tests cover:
   ``REJECT_MESSAGE`` (the cascade indicates a real parallel-tool error).
 * Normal completion — no abort, no override.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -97,9 +98,7 @@ def test_dispatch_pre_tool_abort_returns_reject_message(tmp_path: Path) -> None:
 
     registry = MagicMock()
     registry.dispatch = MagicMock(
-        side_effect=AssertionError(
-            "registry must not be hit when abort is already tripped"
-        )
+        side_effect=AssertionError("registry must not be hit when abort is already tripped")
     )
 
     block = ToolUseBlock(id="call_1", name="Bash", input={"command": "ls"})
@@ -136,7 +135,9 @@ def test_dispatch_post_tool_abort_overrides_bash_interrupted_output(
         # interrupted payload by this point.
         context.abort_controller.abort("user_interrupt")
         return ToolResult(
-            name="Bash", output=bash_output, is_error=True,
+            name="Bash",
+            output=bash_output,
+            is_error=True,
         )
 
     bash_tool = build_tool(
@@ -158,9 +159,7 @@ def test_dispatch_post_tool_abort_overrides_bash_interrupted_output(
         "REJECT_MESSAGE so the next-turn resume sees a clear 'user "
         "rejected' signal"
     )
-    assert "<error>Command was aborted before completion</error>" not in (
-        tool_result.content
-    )
+    assert "<error>Command was aborted before completion</error>" not in (tool_result.content)
     assert tool_result.is_error is True
 
 

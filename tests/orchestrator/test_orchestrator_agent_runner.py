@@ -97,7 +97,9 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
                 capture_output=True,
             )
             (workspace_path / "README.md").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True
+            )
             subprocess.run(
                 ["git", "commit", "-m", "initial"],
                 cwd=workspace_path,
@@ -112,7 +114,9 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
                 text=True,
             ).stdout.strip()
             (workspace_path / "README.md").write_text("updated\n", encoding="utf-8")
-            subprocess.run(["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True
+            )
             subprocess.run(
                 ["git", "commit", "-m", "agent committed"],
                 cwd=workspace_path,
@@ -321,9 +325,7 @@ class _BehaviorsStub:
 
     def _next(self):
         if self._index >= len(self._behaviors):
-            raise AssertionError(
-                f"_BehaviorsStub exhausted after {self._index} calls"
-            )
+            raise AssertionError(f"_BehaviorsStub exhausted after {self._index} calls")
         b = self._behaviors[self._index]
         self._index += 1
         self.call_count += 1
@@ -342,10 +344,12 @@ def _behaviors_429_then_success(num_429: int) -> list:
     """Return a behavior list: ``num_429`` 429s followed by one success."""
     out = []
     for _ in range(num_429):
-        out.append([
-            TextDelta(content=_RATE_LIMIT_TEXT),
-            SessionComplete(reason="exit_code=1"),
-        ])
+        out.append(
+            [
+                TextDelta(content=_RATE_LIMIT_TEXT),
+                SessionComplete(reason="exit_code=1"),
+            ]
+        )
     out.append([SessionComplete(reason="success")])
     return out
 
@@ -390,10 +394,12 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
             session = _build_429_session(tmp)
             runner = AgentRunner(AgentConfig(max_turns=5), SandboxConfig())
             rec = _install_recording_sleep(runner)
-            stub = _BehaviorsStub([
-                [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
-                [SessionComplete(reason="success")],
-            ])
+            stub = _BehaviorsStub(
+                [
+                    [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
+                    [SessionComplete(reason="success")],
+                ]
+            )
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -439,14 +445,17 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
             expected = [30.0, 60.0, 120.0, 240.0]
             for actual, exp in zip(rec.calls, expected):
                 self.assertAlmostEqual(
-                    actual, exp, delta=exp * 0.15,
+                    actual,
+                    exp,
+                    delta=exp * 0.15,
                     msg=f"backoff call {actual} not within jitter of {exp}",
                 )
             self.assertEqual(session.status, "completed")
             self.assertEqual(session.consecutive_429_count, 0)
             # Total backoff ≥ sum of base delays
             self.assertGreaterEqual(
-                session.total_429_backoff_seconds, sum(expected),
+                session.total_429_backoff_seconds,
+                sum(expected),
             )
 
     async def test_circuit_breaker_opens(self) -> None:
@@ -502,13 +511,15 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
             rec = _install_recording_sleep(runner)
             # 429, 429, success, 429, success. The 4th 429 should use
             # the base delay (30s), NOT 120s.
-            stub = _BehaviorsStub([
-                [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
-                [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
-                [SessionComplete(reason="success")],
-                [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
-                [SessionComplete(reason="success")],
-            ])
+            stub = _BehaviorsStub(
+                [
+                    [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
+                    [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
+                    [SessionComplete(reason="success")],
+                    [TextDelta(content=_RATE_LIMIT_TEXT), SessionComplete(reason="exit_code=1")],
+                    [SessionComplete(reason="success")],
+                ]
+            )
 
             # Tracker stub: always report the issue as still active so
             # the runner keeps going past a success instead of
@@ -575,10 +586,12 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                 SandboxConfig(),
             )
             rec = _install_recording_sleep(runner)
-            stub = _BehaviorsStub([
-                "raise_rate_limit",
-                [SessionComplete(reason="success")],
-            ])
+            stub = _BehaviorsStub(
+                [
+                    "raise_rate_limit",
+                    [SessionComplete(reason="success")],
+                ]
+            )
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -631,13 +644,15 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
             # Each turn: no tool calls, no output, then
             # SessionComplete(success).  After the 3rd such turn the
             # runner must break out of the outer while.
-            stub = _BehaviorsStub([
-                [SessionComplete(reason="success")],
-                [SessionComplete(reason="success")],
-                [SessionComplete(reason="success")],
-                [SessionComplete(reason="success")],
-                [SessionComplete(reason="success")],
-            ])
+            stub = _BehaviorsStub(
+                [
+                    [SessionComplete(reason="success")],
+                    [SessionComplete(reason="success")],
+                    [SessionComplete(reason="success")],
+                    [SessionComplete(reason="success")],
+                    [SessionComplete(reason="success")],
+                ]
+            )
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -671,6 +686,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
                 ),
                 SandboxConfig(),
             )
+
             # Each turn calls Read then Write (same signature). The
             # 3rd turn should trip loop_detected.
             def _build_turn():
@@ -695,6 +711,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
                     ),
                     SessionComplete(reason="success"),
                 ]
+
             stub = _BehaviorsStub([_build_turn() for _ in range(5)])
 
             with patch(
@@ -720,6 +737,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
             session = _build_429_session(tmp)
             tracker = _ActiveTrackerStub(["open", "ready"])
             runner = AgentRunner(AgentConfig(max_turns=2), SandboxConfig())
+
             # Always productive: one tool call per turn. The
             # stagnation/loop guards must NOT trip, and the runner
             # should reach max_turns naturally.
@@ -736,6 +754,7 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
                     ),
                     SessionComplete(reason="success"),
                 ]
+
             stub = _BehaviorsStub([_build_turn() for _ in range(3)])
 
             with patch(
@@ -764,25 +783,27 @@ class TestAgentRunnerStagnationAndLoop(unittest.IsolatedAsyncioTestCase):
                 AgentConfig(max_turns=3, max_no_op_turns=2),
                 SandboxConfig(),
             )
-            stub = _BehaviorsStub([
-                # Turn 1: no-op (streak=1)
-                [SessionComplete(reason="success")],
-                # Turn 2: productive — should reset streak
+            stub = _BehaviorsStub(
                 [
-                    ToolCallEvent(
-                        tool_name="Read",
-                        params={},
-                        tool_use_id="rid",
-                    ),
-                    ToolResultEvent(
-                        tool_name="Read",
-                        result={"output": "ok", "is_error": False},
-                    ),
-                    SessionComplete(reason="success"),
-                ],
-                # Turn 3: no-op (streak=1, well under threshold=2)
-                [SessionComplete(reason="success")],
-            ])
+                    # Turn 1: no-op (streak=1)
+                    [SessionComplete(reason="success")],
+                    # Turn 2: productive — should reset streak
+                    [
+                        ToolCallEvent(
+                            tool_name="Read",
+                            params={},
+                            tool_use_id="rid",
+                        ),
+                        ToolResultEvent(
+                            tool_name="Read",
+                            result={"output": "ok", "is_error": False},
+                        ),
+                        SessionComplete(reason="success"),
+                    ],
+                    # Turn 3: no-op (streak=1, well under threshold=2)
+                    [SessionComplete(reason="success")],
+                ]
+            )
 
             with patch(
                 "extensions.orchestrator.agent_runner.QueryRunner",
@@ -816,9 +837,8 @@ class _ActiveTrackerStub:
 
     async def fetch_issue_states_by_ids(self, issue_ids):
         from extensions.orchestrator.issue import Issue
-        return {
-            iid: Issue(id=iid, state="open") for iid in issue_ids
-        }
+
+        return {iid: Issue(id=iid, state="open") for iid in issue_ids}
 
 
 class _MultiToolTurnStub:
@@ -939,7 +959,8 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), SandboxConfig(),
+                    AgentConfig(max_turns=1),
+                    SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",
@@ -956,18 +977,13 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                 transcript_path = session_dir / "transcript.jsonl"
                 lines = [
                     json.loads(line)
-                    for line in transcript_path.read_text(
-                        encoding="utf-8"
-                    ).splitlines()
+                    for line in transcript_path.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 ]
 
-        assistant_msgs = [
-            m for m in lines if m.get("role") == "assistant"
-        ]
+        assistant_msgs = [m for m in lines if m.get("role") == "assistant"]
         tool_result_user_msgs = [
-            m for m in lines
-            if m.get("role") == "user" and m.get("origin") == "tool_result"
+            m for m in lines if m.get("role") == "user" and m.get("origin") == "tool_result"
         ]
         self.assertEqual(len(assistant_msgs), 1)
         self.assertEqual(len(tool_result_user_msgs), 1)
@@ -1017,7 +1033,8 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), SandboxConfig(),
+                    AgentConfig(max_turns=1),
+                    SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",
@@ -1034,15 +1051,12 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                 transcript_path = session_dir / "transcript.jsonl"
                 lines = [
                     json.loads(line)
-                    for line in transcript_path.read_text(
-                        encoding="utf-8"
-                    ).splitlines()
+                    for line in transcript_path.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 ]
 
         tool_result_user_msgs = [
-            m for m in lines
-            if m.get("role") == "user" and m.get("origin") == "tool_result"
+            m for m in lines if m.get("role") == "user" and m.get("origin") == "tool_result"
         ]
         self.assertEqual(len(tool_result_user_msgs), 1)
 
@@ -1075,7 +1089,8 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                     workspace=workspace,
                 )
                 runner = AgentRunner(
-                    AgentConfig(max_turns=1), SandboxConfig(),
+                    AgentConfig(max_turns=1),
+                    SandboxConfig(),
                 )
                 with patch(
                     "extensions.orchestrator.agent_runner.QueryRunner",
@@ -1092,15 +1107,12 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
                 transcript_path = session_dir / "transcript.jsonl"
                 lines = [
                     json.loads(line)
-                    for line in transcript_path.read_text(
-                        encoding="utf-8"
-                    ).splitlines()
+                    for line in transcript_path.read_text(encoding="utf-8").splitlines()
                     if line.strip()
                 ]
 
         tool_result_user_msgs = [
-            m for m in lines
-            if m.get("role") == "user" and m.get("origin") == "tool_result"
+            m for m in lines if m.get("role") == "user" and m.get("origin") == "tool_result"
         ]
         self.assertEqual(len(tool_result_user_msgs), 1)
 
@@ -1109,5 +1121,6 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result_blocks[0]["tool_use_id"], "R")
         self.assertTrue(result_blocks[0]["is_error"])
         self.assertEqual(
-            result_blocks[0]["content"], "rejected: destructive command",
+            result_blocks[0]["content"],
+            "rejected: destructive command",
         )

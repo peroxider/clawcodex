@@ -3,6 +3,7 @@
 Mirrors TypeScript ide/selection.ts — tracks the current editor selection
 shared by the IDE extension.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SelectionEntry:
     """A timestamped selection entry."""
+
     selection: IDESelection
     timestamp: float
 
@@ -50,7 +52,7 @@ class SelectionTracker:
         entry = SelectionEntry(selection=selection, timestamp=time.time())
         self._history.append(entry)
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
         for listener in self._listeners:
             try:
                 listener(selection)
@@ -73,7 +75,4 @@ class SelectionTracker:
 
     def _prune_expired(self) -> None:
         now = time.time()
-        self._history = [
-            e for e in self._history
-            if (now - e.timestamp) < self._expiry_seconds
-        ]
+        self._history = [e for e in self._history if (now - e.timestamp) < self._expiry_seconds]

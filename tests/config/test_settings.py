@@ -88,9 +88,7 @@ class TestValidation:
     def test_invalid_permission_mode_via_structured(self):
         # F-47: bad default mode is reported against ``permissions.defaultMode``
         # when written through the structured field.
-        s = SettingsSchema(
-            permissions=PermissionsConfig(default_mode="not-a-mode")
-        )
+        s = SettingsSchema(permissions=PermissionsConfig(default_mode="not-a-mode"))
         errors = validate_settings(s)
         assert any(e.field == "permissions.defaultMode" for e in errors)
 
@@ -128,9 +126,7 @@ class TestValidation:
             permissions=PermissionsConfig(rules={"allow": ["Bash", ""], "deny": [], "ask": []})
         )
         errors = validate_settings(s)
-        assert any(
-            e.field == "permissions.rules.allow[1]" for e in errors
-        )
+        assert any(e.field == "permissions.rules.allow[1]" for e in errors)
 
 
 class TestChangeDetector:
@@ -167,7 +163,12 @@ class TestChangeDetector:
 class TestManagedPath:
     def test_returns_none_when_no_managed_file(self):
         with patch.dict(os.environ, {}, clear=False):
-            with patch("os.environ.get", side_effect=lambda k, *a: None if k == "CLAUDE_MANAGED_SETTINGS_PATH" else os.environ.get(k, *a)):
+            with patch(
+                "os.environ.get",
+                side_effect=lambda k, *a: (
+                    None if k == "CLAUDE_MANAGED_SETTINGS_PATH" else os.environ.get(k, *a)
+                ),
+            ):
                 # Most environments won't have the managed file
                 result = resolve_managed_settings_path()
                 # Just verify it doesn't crash -- result may be None
@@ -183,10 +184,13 @@ class TestManagedPath:
 class TestLoadSettings:
     def test_returns_defaults_without_config(self, tmp_path):
         from src.config import ConfigManager
+
         mgr = ConfigManager(cwd=tmp_path)
-        with patch("src.config.get_global_config_path", return_value=tmp_path / "missing.json"), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=tmp_path / "missing.json"),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             invalidate_settings_cache()
             s = load_settings(config_manager=mgr)
             assert s.model == DEFAULT_SETTINGS.model
@@ -194,11 +198,14 @@ class TestLoadSettings:
 
     def test_overrides_from_config(self, tmp_path):
         from src.config import ConfigManager
+
         global_path = tmp_path / "config.json"
         global_path.write_text('{"settings": {"model": "custom-model", "effort": "high"}}')
-        with patch("src.config.get_global_config_path", return_value=global_path), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+        with (
+            patch("src.config.get_global_config_path", return_value=global_path),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             invalidate_settings_cache()
             mgr = ConfigManager(cwd=tmp_path)
             s = load_settings(config_manager=mgr)
@@ -207,9 +214,12 @@ class TestLoadSettings:
 
     def test_extra_overrides(self, tmp_path):
         from src.config import ConfigManager
-        with patch("src.config.get_global_config_path", return_value=tmp_path / "missing.json"), \
-             patch("src.config.get_project_config_path", return_value=None), \
-             patch("src.config.get_local_config_path", return_value=None):
+
+        with (
+            patch("src.config.get_global_config_path", return_value=tmp_path / "missing.json"),
+            patch("src.config.get_project_config_path", return_value=None),
+            patch("src.config.get_local_config_path", return_value=None),
+        ):
             invalidate_settings_cache()
             mgr = ConfigManager(cwd=tmp_path)
             s = load_settings(config_manager=mgr, extra_overrides={"fast_mode": True})

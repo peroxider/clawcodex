@@ -4,6 +4,7 @@ Covers WI-0.1 (`stop_requested` footgun fix), WI-0.2 (`shell_id`
 back-compat), and WI-0.3 (`KillShell` alias). The plan is at
 ``my-docs/ch10-coordination-refactoring-plan.md``.
 """
+
 from __future__ import annotations
 
 import sys

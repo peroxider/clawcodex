@@ -1,4 +1,5 @@
 """Tests for opt-in telemetry IssueReporter."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -27,13 +28,17 @@ class _FakeClient:
         self.updated: list[dict[str, Any]] = []
         self.find_titles: list[str] = []
 
-    async def find_issue_by_title(self, title: str, *, state: str = "open") -> dict[str, Any] | None:
+    async def find_issue_by_title(
+        self, title: str, *, state: str = "open"
+    ) -> dict[str, Any] | None:
         if self.fail:
             raise RuntimeError("network down")
         self.find_titles.append(title)
         return self.existing
 
-    async def create_issue(self, *, title: str, body: str, labels: list[str] | None = None) -> dict[str, Any]:
+    async def create_issue(
+        self, *, title: str, body: str, labels: list[str] | None = None
+    ) -> dict[str, Any]:
         if self.fail:
             raise RuntimeError("network down")
         payload = {"number": 101, "title": title, "body": body}
@@ -55,7 +60,9 @@ class _FakeClient:
         return payload
 
 
-def _reporter(tmp_path, client: _FakeClient, **overrides: Any) -> tuple[IssueReporter, LocalJsonlStorage]:
+def _reporter(
+    tmp_path, client: _FakeClient, **overrides: Any
+) -> tuple[IssueReporter, LocalJsonlStorage]:
     storage = LocalJsonlStorage(tmp_path / "telemetry", 7)
     config = {
         "reporting_enabled": True,
@@ -105,7 +112,9 @@ def test_update_or_create_creates_inbox_issue_when_missing(tmp_path) -> None:
 
 def test_update_or_create_updates_existing_date_block(tmp_path) -> None:
     existing_body = "intro\n\n" + _wrap_date_block("old\n", "2026-06-15")
-    client = _FakeClient(existing={"number": 7, "title": "ClawCodex Telemetry Inbox", "body": existing_body})
+    client = _FakeClient(
+        existing={"number": 7, "title": "ClawCodex Telemetry Inbox", "body": existing_body}
+    )
     reporter, _storage = _reporter(tmp_path, client)
 
     assert reporter.emit("new\n", date="2026-06-15") is True

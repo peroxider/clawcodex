@@ -107,16 +107,18 @@ class ApproveSafeOnlyPolicy(ApprovalPolicy):
     All other tools require explicit approval.
     """
 
-    _SAFE_TOOLS: frozenset[str] = frozenset({
-        "glob",
-        "grep",
-        "read",
-        "read_multiple_files",
-        "web_search",
-        "web_fetch",
-        "toolsearch",
-        "ask_user_question",
-    })
+    _SAFE_TOOLS: frozenset[str] = frozenset(
+        {
+            "glob",
+            "grep",
+            "read",
+            "read_multiple_files",
+            "web_search",
+            "web_fetch",
+            "toolsearch",
+            "ask_user_question",
+        }
+    )
 
     def evaluate(
         self,

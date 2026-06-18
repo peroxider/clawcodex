@@ -82,11 +82,11 @@ def validate_jitter_config(config: CronJitterConfig | None) -> CronJitterConfig:
         recurring_frac=_clamp_fraction(config.recurring_frac),
         recurring_cap_ms=max(0, min(MAX_RECURRING_CAP_MS, int(config.recurring_cap_ms))),
         one_shot_max_ms=max(0, min(MAX_ONE_SHOT_MAX_MS, int(config.one_shot_max_ms))),
-        one_shot_floor_ms=max(
-            0, min(MAX_ONE_SHOT_FLOOR_MS, int(config.one_shot_floor_ms))
-        ),
+        one_shot_floor_ms=max(0, min(MAX_ONE_SHOT_FLOOR_MS, int(config.one_shot_floor_ms))),
         one_shot_minute_mod=max(1, min(MAX_ONE_SHOT_MINUTE_MOD, int(config.one_shot_minute_mod))),
-        recurring_max_age_ms=max(0, min(MAX_RECURRING_MAX_AGE_MS, int(config.recurring_max_age_ms))),
+        recurring_max_age_ms=max(
+            0, min(MAX_RECURRING_MAX_AGE_MS, int(config.recurring_max_age_ms))
+        ),
     )
 
 
@@ -122,10 +122,18 @@ def jitter_config_from_dict(data: dict[str, Any]) -> CronJitterConfig:
         enabled=bool(_get("enabled", default=True)),
         max_jitter_ms=int(_get("max_jitter_ms", "maxJitterMs", default=DEFAULT_RECURRING_CAP_MS)),
         recurring_frac=_get("recurring_frac", "recurringFrac", default=DEFAULT_RECURRING_FRAC),
-        recurring_cap_ms=int(_get("recurring_cap_ms", "recurringCapMs", default=DEFAULT_RECURRING_CAP_MS)),
-        one_shot_max_ms=int(_get("one_shot_max_ms", "oneShotMaxMs", default=DEFAULT_ONE_SHOT_MAX_MS)),
-        one_shot_floor_ms=int(_get("one_shot_floor_ms", "oneShotFloorMs", default=DEFAULT_ONE_SHOT_FLOOR_MS)),
-        one_shot_minute_mod=int(_get("one_shot_minute_mod", "oneShotMinuteMod", default=DEFAULT_ONE_SHOT_MINUTE_MOD)),
+        recurring_cap_ms=int(
+            _get("recurring_cap_ms", "recurringCapMs", default=DEFAULT_RECURRING_CAP_MS)
+        ),
+        one_shot_max_ms=int(
+            _get("one_shot_max_ms", "oneShotMaxMs", default=DEFAULT_ONE_SHOT_MAX_MS)
+        ),
+        one_shot_floor_ms=int(
+            _get("one_shot_floor_ms", "oneShotFloorMs", default=DEFAULT_ONE_SHOT_FLOOR_MS)
+        ),
+        one_shot_minute_mod=int(
+            _get("one_shot_minute_mod", "oneShotMinuteMod", default=DEFAULT_ONE_SHOT_MINUTE_MOD)
+        ),
         recurring_max_age_ms=int(
             _get(
                 "recurring_max_age_ms",
@@ -159,6 +167,7 @@ def load_jitter_config(
         if config_path.exists():
             try:
                 import json as _json
+
                 raw = _json.loads(config_path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 _log.warning("failed to read %s: %s; using defaults", config_path, exc)

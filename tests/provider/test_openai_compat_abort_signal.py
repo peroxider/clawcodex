@@ -11,6 +11,7 @@ This module pins the new behavior. We don't exercise the real OpenAI
 SDK — a synthetic stream fake mimics the surface the provider reads
 (``response.close()`` plus a slow-yielding iterator).
 """
+
 from __future__ import annotations
 
 import threading
@@ -366,7 +367,9 @@ class _ContentThenUsageStream:
         final.model = "test-model"
         final.choices = []
         final.usage = MagicMock(
-            prompt_tokens=10, completion_tokens=5, total_tokens=15,
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
         )
         yield final
 

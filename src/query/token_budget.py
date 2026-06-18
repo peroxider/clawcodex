@@ -141,7 +141,9 @@ def find_token_budget_positions(text: str) -> list[BudgetPosition]:
 
     start_match = SHORTHAND_START_RE.search(text)
     if start_match:
-        offset = start_match.start() + len(start_match.group(0)) - len(start_match.group(0).lstrip())
+        offset = (
+            start_match.start() + len(start_match.group(0)) - len(start_match.group(0).lstrip())
+        )
         positions.append(BudgetPosition(start=offset, end=start_match.end()))
 
     end_match = SHORTHAND_END_RE.search(text)

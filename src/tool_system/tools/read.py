@@ -38,24 +38,26 @@ FILE_NOT_FOUND_CWD_NOTE = "Note: your current working directory is"
 # Blocked device paths (ported from TS FileReadTool.ts lines 97-128)
 # ---------------------------------------------------------------------------
 
-BLOCKED_DEVICE_PATHS = frozenset([
-    # Infinite output -- never reach EOF
-    "/dev/zero",
-    "/dev/random",
-    "/dev/urandom",
-    "/dev/full",
-    # Blocks waiting for input
-    "/dev/stdin",
-    "/dev/tty",
-    "/dev/console",
-    # Nonsensical to read
-    "/dev/stdout",
-    "/dev/stderr",
-    # fd aliases for stdin/stdout/stderr
-    "/dev/fd/0",
-    "/dev/fd/1",
-    "/dev/fd/2",
-])
+BLOCKED_DEVICE_PATHS = frozenset(
+    [
+        # Infinite output -- never reach EOF
+        "/dev/zero",
+        "/dev/random",
+        "/dev/urandom",
+        "/dev/full",
+        # Blocks waiting for input
+        "/dev/stdin",
+        "/dev/tty",
+        "/dev/console",
+        # Nonsensical to read
+        "/dev/stdout",
+        "/dev/stderr",
+        # fd aliases for stdin/stdout/stderr
+        "/dev/fd/0",
+        "/dev/fd/1",
+        "/dev/fd/2",
+    ]
+)
 
 
 def _is_blocked_device_path(file_path: str) -> bool:
@@ -64,9 +66,7 @@ def _is_blocked_device_path(file_path: str) -> bool:
         return True
     # /proc/self/fd/0-2 and /proc/<pid>/fd/0-2 are Linux aliases for stdio
     if file_path.startswith("/proc/") and (
-        file_path.endswith("/fd/0")
-        or file_path.endswith("/fd/1")
-        or file_path.endswith("/fd/2")
+        file_path.endswith("/fd/0") or file_path.endswith("/fd/1") or file_path.endswith("/fd/2")
     ):
         return True
     return False
@@ -76,34 +76,115 @@ def _is_blocked_device_path(file_path: str) -> bool:
 # Binary extension blocking (ported from TS constants/files.ts)
 # ---------------------------------------------------------------------------
 
-BINARY_EXTENSIONS = frozenset([
-    # Images
-    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".tiff", ".tif",
-    # Videos
-    ".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".flv", ".m4v", ".mpeg", ".mpg",
-    # Audio
-    ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".aiff", ".opus",
-    # Archives
-    ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar", ".xz", ".z", ".tgz", ".iso",
-    # Executables/binaries
-    ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a", ".obj", ".lib",
-    ".app", ".msi", ".deb", ".rpm",
-    # Documents (PDF is excluded at the call site -- the tool renders PDFs natively)
-    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-    ".odt", ".ods", ".odp",
-    # Fonts
-    ".ttf", ".otf", ".woff", ".woff2", ".eot",
-    # Bytecode / VM artifacts
-    ".pyc", ".pyo", ".class", ".jar", ".war", ".ear", ".node", ".wasm", ".rlib",
-    # Database files
-    ".sqlite", ".sqlite3", ".db", ".mdb", ".idx",
-    # Design / 3D
-    ".psd", ".ai", ".eps", ".sketch", ".fig", ".xd", ".blend", ".3ds", ".max",
-    # Flash
-    ".swf", ".fla",
-    # Lock/profiling data
-    ".lockb", ".dat", ".data",
-])
+BINARY_EXTENSIONS = frozenset(
+    [
+        # Images
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".ico",
+        ".webp",
+        ".tiff",
+        ".tif",
+        # Videos
+        ".mp4",
+        ".mov",
+        ".avi",
+        ".mkv",
+        ".webm",
+        ".wmv",
+        ".flv",
+        ".m4v",
+        ".mpeg",
+        ".mpg",
+        # Audio
+        ".mp3",
+        ".wav",
+        ".ogg",
+        ".flac",
+        ".aac",
+        ".m4a",
+        ".wma",
+        ".aiff",
+        ".opus",
+        # Archives
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".7z",
+        ".rar",
+        ".xz",
+        ".z",
+        ".tgz",
+        ".iso",
+        # Executables/binaries
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".bin",
+        ".o",
+        ".a",
+        ".obj",
+        ".lib",
+        ".app",
+        ".msi",
+        ".deb",
+        ".rpm",
+        # Documents (PDF is excluded at the call site -- the tool renders PDFs natively)
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".odt",
+        ".ods",
+        ".odp",
+        # Fonts
+        ".ttf",
+        ".otf",
+        ".woff",
+        ".woff2",
+        ".eot",
+        # Bytecode / VM artifacts
+        ".pyc",
+        ".pyo",
+        ".class",
+        ".jar",
+        ".war",
+        ".ear",
+        ".node",
+        ".wasm",
+        ".rlib",
+        # Database files
+        ".sqlite",
+        ".sqlite3",
+        ".db",
+        ".mdb",
+        ".idx",
+        # Design / 3D
+        ".psd",
+        ".ai",
+        ".eps",
+        ".sketch",
+        ".fig",
+        ".xd",
+        ".blend",
+        ".3ds",
+        ".max",
+        # Flash
+        ".swf",
+        ".fla",
+        # Lock/profiling data
+        ".lockb",
+        ".dat",
+        ".data",
+    ]
+)
 
 # Extensions that are in BINARY_EXTENSIONS but are handled natively by this tool.
 _BINARY_EXTENSION_EXEMPTIONS = frozenset([".pdf", ".svg"])
@@ -119,6 +200,7 @@ IMAGE_MIME_TYPES = {
     "gif": "image/gif",
     "webp": "image/webp",
 }
+
 
 def _has_blocked_binary_extension(file_path: str) -> bool:
     """Return True if file_path has a known binary extension that this tool cannot read.
@@ -136,6 +218,7 @@ def _has_blocked_binary_extension(file_path: str) -> bool:
 # ---------------------------------------------------------------------------
 # File size / token limits
 # ---------------------------------------------------------------------------
+
 
 def _get_max_size_bytes() -> int:
     """Return the max file size in bytes (pre-read check).
@@ -175,6 +258,7 @@ def _rough_token_estimate(text: str) -> int:
 # File-not-found suggestion helpers
 # ---------------------------------------------------------------------------
 
+
 def _find_similar_file(file_path: str) -> str | None:
     """Find a file with the same base name but different extension in the same directory."""
     try:
@@ -196,6 +280,7 @@ def _find_similar_file(file_path: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Prompt (ported from TS prompt.ts)
 # ---------------------------------------------------------------------------
+
 
 def _render_prompt() -> str:
     return f"""Reads a file from the local filesystem. You can access any file directly by using this tool.
@@ -260,6 +345,7 @@ def _parse_pdf_pages(pages: str) -> tuple[int | None, int | None]:
 # Range-aware dedup helpers
 # ---------------------------------------------------------------------------
 
+
 def _get_dedup_fingerprint(fp_entry: tuple[int, ...] | tuple[int, int, bool]) -> tuple[int, int]:
     """Extract (mtime, size) from a fingerprint entry regardless of tuple length."""
     return (fp_entry[0], fp_entry[1])
@@ -275,6 +361,7 @@ def _is_partial_read(fp_entry: tuple[int, ...] | tuple[int, int, bool]) -> bool:
 # ---------------------------------------------------------------------------
 # Core call implementation
 # ---------------------------------------------------------------------------
+
 
 def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     file_path = tool_input["file_path"]
@@ -350,9 +437,9 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             raise ToolInputError(
                 f"Notebook file ({stat.st_size:,} bytes) exceeds maximum allowed size "
                 f"({max_size:,} bytes). Use Bash with jq to read specific portions:\n"
-                f'  cat "{file_path}" | jq \'.cells[:20]\'  # First 20 cells\n'
-                f'  cat "{file_path}" | jq \'.cells[100:120]\'  # Cells 100-120\n'
-                f'  cat "{file_path}" | jq \'.cells | length\'  # Count total cells\n'
+                f"  cat \"{file_path}\" | jq '.cells[:20]'  # First 20 cells\n"
+                f"  cat \"{file_path}\" | jq '.cells[100:120]'  # Cells 100-120\n"
+                f"  cat \"{file_path}\" | jq '.cells | length'  # Count total cells\n"
                 f'  cat "{file_path}" | jq \'.cells[] | select(.cell_type=="code") | .source\'  # All code sources'
             )
         raw = path.read_text(encoding="utf-8", errors="replace")
@@ -383,6 +470,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
                 PdfExtractionUnavailable as _PdfMissing,
                 extract_pdf_pages as _extract_pages,
             )
+
             try:
                 ext_result = _extract_pages(resolved, first_page, last_page)
             except _PdfMissing as e:
@@ -400,6 +488,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
                 maybe_resize_image as _maybe_resize,
             )
             import shutil as _shutil
+
             image_blocks: list[dict[str, Any]] = []
             try:
                 for page_path in ext_result.image_paths:
@@ -413,17 +502,23 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
                         continue
                     detected = _sniff_format(page_bytes)
                     try:
-                        page_result = _maybe_resize(page_bytes, len(page_bytes), format_hint=detected)
+                        page_result = _maybe_resize(
+                            page_bytes, len(page_bytes), format_hint=detected
+                        )
                     except _ImgErr:
-                        page_result = _ResizeResult(data=page_bytes, media_type=detected, dimensions=None)
-                    image_blocks.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": page_result.media_type,
-                            "data": _base64.b64encode(page_result.data).decode("ascii"),
-                        },
-                    })
+                        page_result = _ResizeResult(
+                            data=page_bytes, media_type=detected, dimensions=None
+                        )
+                    image_blocks.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": page_result.media_type,
+                                "data": _base64.b64encode(page_result.data).decode("ascii"),
+                            },
+                        }
+                    )
             finally:
                 # Always clean up the tempdir, even on exception. The image
                 # bytes are already in image_blocks, so the on-disk JPEGs
@@ -434,6 +529,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             new_messages = None
             if image_blocks:
                 from src.types.messages import create_user_message
+
                 new_messages = [create_user_message(image_blocks, isMeta=True)]
             return ToolResult(
                 name="Read",
@@ -488,6 +584,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             maybe_resize_image as _maybe_resize,
             read_file_bytes as _bounded_read,
         )
+
         # Bounded read at the safety cap (50 MB): protects against symlinked
         # /dev/zero / TOCTOU-grown files without truncating real images, which
         # Pillow then resizes down to IMAGE_TARGET_RAW_SIZE in memory.
@@ -534,6 +631,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         new_messages = None
         if metadata_text:
             from src.types.messages import create_user_message
+
             new_messages = [create_user_message(metadata_text, isMeta=True)]
         return ToolResult(
             name="Read",
@@ -606,6 +704,7 @@ def _read_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 # ---------------------------------------------------------------------------
 # mapResultToApi (improved formatting from TS)
 # ---------------------------------------------------------------------------
+
 
 def _read_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     if isinstance(output, dict):
@@ -756,10 +855,14 @@ ReadTool: Tool = build_tool(
     is_read_only=lambda _input: True,
     is_concurrency_safe=lambda _input: True,
     get_path=lambda input_data: input_data.get("file_path", ""),
-    user_facing_name=lambda input_data: f"Read: {(input_data or {}).get('file_path', '')}" if input_data else "Read",
+    user_facing_name=lambda input_data: (
+        f"Read: {(input_data or {}).get('file_path', '')}" if input_data else "Read"
+    ),
     search_hint="read file cat view open",
     is_search_or_read_command=lambda _input: SearchOrReadResult(is_read=True),
-    get_activity_description=lambda input_data: f"Reading {(input_data or {}).get('file_path', '')}" if input_data else None,
+    get_activity_description=lambda input_data: (
+        f"Reading {(input_data or {}).get('file_path', '')}" if input_data else None
+    ),
     # Mirrors TS FileReadTool.toAutoClassifierInput -- returns the
     # file_path verbatim. The auto-mode classifier sees the path
     # being read, which is sufficient context for the read-vs-leak

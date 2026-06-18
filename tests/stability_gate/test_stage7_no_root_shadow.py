@@ -95,13 +95,11 @@ class TestNoRootLevelShadow:
                 continue
             if (ROOT / "src" / d.name).exists():
                 violations.append(
-                    f"[package] /{d.name} "
-                    f"(contains __init__.py, also exists as src/{d.name})"
+                    f"[package] /{d.name} (contains __init__.py, also exists as src/{d.name})"
                 )
         assert not violations, (
             "Root-level package shadowing detected "
-            f"({len(violations)} violation(s)):\n  - "
-            + "\n  - ".join(violations)
+            f"({len(violations)} violation(s)):\n  - " + "\n  - ".join(violations)
         )
 
     def test_no_root_facade_module(self) -> None:
@@ -118,8 +116,7 @@ class TestNoRootLevelShadow:
                 violations.append(f"[facade]   /{p.name} (starts with {first_line!r})")
         assert not violations, (
             "Root-level facade module(s) detected "
-            f"({len(violations)} violation(s)):\n  - "
-            + "\n  - ".join(violations)
+            f"({len(violations)} violation(s)):\n  - " + "\n  - ".join(violations)
         )
 
     def test_no_root_eager_import(self) -> None:
@@ -138,18 +135,14 @@ class TestNoRootLevelShadow:
                 continue
             for stmt in tree.body:  # 顶层 stmt
                 if isinstance(stmt, ast.ImportFrom) and stmt.module:
-                    if _EAGER_IMPORT_RE.match(
-                        f"from {stmt.module} import {ast.unparse(stmt)}"
-                    ):
+                    if _EAGER_IMPORT_RE.match(f"from {stmt.module} import {ast.unparse(stmt)}"):
                         violations.append(
-                            f"[eager]    /{p.name} "
-                            f"(top-level `from {stmt.module} import ...`)"
+                            f"[eager]    /{p.name} (top-level `from {stmt.module} import ...`)"
                         )
                         break
         assert not violations, (
             "Root-level eager re-import detected "
-            f"({len(violations)} violation(s)):\n  - "
-            + "\n  - ".join(violations)
+            f"({len(violations)} violation(s)):\n  - " + "\n  - ".join(violations)
         )
 
     def test_no_untracked_stale_dirs(self) -> None:
@@ -167,8 +160,7 @@ class TestNoRootLevelShadow:
                         f"[stale]    /{name} (26M stale build output, in .gitignore)"
                     )
         assert not soft_violations, (
-            "Stale root-level directory/ies detected:\n  - "
-            + "\n  - ".join(soft_violations)
+            "Stale root-level directory/ies detected:\n  - " + "\n  - ".join(soft_violations)
         )
 
     def test_known_special_case_litellm_adapter_documented(self) -> None:

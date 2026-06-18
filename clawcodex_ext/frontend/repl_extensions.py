@@ -168,11 +168,11 @@ def _register_signal_session_save(repl: "ClawcodexREPL") -> None:
             return
         try:
             import sys
+
             if sys.stdout.isatty():
                 from rich.console import Console
-                Console().print(
-                    f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]"
-                )
+
+                Console().print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
         except Exception:
             pass
 

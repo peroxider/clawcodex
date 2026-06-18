@@ -1,4 +1,5 @@
 """Summarize the SWE-bench Verified text dataset we're evaluating on."""
+
 import statistics
 from collections import Counter
 from datasets import load_from_disk
@@ -40,13 +41,20 @@ print()
 
 # Tests per instance
 import json
-fail_to_pass = [len(json.loads(r["FAIL_TO_PASS"]) if isinstance(r["FAIL_TO_PASS"], str) else r["FAIL_TO_PASS"]) for r in ds]
-pass_to_pass = [len(json.loads(r["PASS_TO_PASS"]) if isinstance(r["PASS_TO_PASS"], str) else r["PASS_TO_PASS"]) for r in ds]
+
+fail_to_pass = [
+    len(json.loads(r["FAIL_TO_PASS"]) if isinstance(r["FAIL_TO_PASS"], str) else r["FAIL_TO_PASS"])
+    for r in ds
+]
+pass_to_pass = [
+    len(json.loads(r["PASS_TO_PASS"]) if isinstance(r["PASS_TO_PASS"], str) else r["PASS_TO_PASS"])
+    for r in ds
+]
 print(f"FAIL_TO_PASS tests per instance:")
 print(f"  median: {int(statistics.median(fail_to_pass))}  max: {max(fail_to_pass)}")
 print(f"PASS_TO_PASS tests per instance:")
 print(f"  median: {int(statistics.median(pass_to_pass))}  max: {max(pass_to_pass)}")
-print(f"  total tests evaluated across all 499: {sum(fail_to_pass)+sum(pass_to_pass):,}")
+print(f"  total tests evaluated across all 499: {sum(fail_to_pass) + sum(pass_to_pass):,}")
 print()
 
 # Show one concrete example
@@ -60,8 +68,12 @@ print(f"version:       {row.get('version', '(none)')}")
 print(f"prompt len:    {len(row['text']):,} chars")
 print(f"gold patch len: {len(row['patch']):,} chars")
 print()
-ftp = json.loads(row["FAIL_TO_PASS"]) if isinstance(row["FAIL_TO_PASS"], str) else row["FAIL_TO_PASS"]
-ptp = json.loads(row["PASS_TO_PASS"]) if isinstance(row["PASS_TO_PASS"], str) else row["PASS_TO_PASS"]
+ftp = (
+    json.loads(row["FAIL_TO_PASS"]) if isinstance(row["FAIL_TO_PASS"], str) else row["FAIL_TO_PASS"]
+)
+ptp = (
+    json.loads(row["PASS_TO_PASS"]) if isinstance(row["PASS_TO_PASS"], str) else row["PASS_TO_PASS"]
+)
 print(f"FAIL_TO_PASS ({len(ftp)} tests):")
 for t in ftp[:3]:
     print(f"  {t}")

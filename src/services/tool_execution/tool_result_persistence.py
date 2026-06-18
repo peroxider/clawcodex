@@ -257,7 +257,9 @@ def persist_tool_result(
         # We cannot persist content that contains non-text blocks — the
         # caller should have already short-circuited on image blocks.
         for block in content:  # type: ignore[union-attr]
-            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            block_type = (
+                block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            )
             if block_type not in ("text",):
                 return PersistToolResultError(
                     error="Cannot persist tool results containing non-text content"
@@ -363,13 +365,21 @@ def maybe_persist_large_tool_result(
     if is_tool_result_content_empty(content):
         new_block = dict(tool_result_block)
         new_block["content"] = f"({tool_name} completed with no output)"
-        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        if (
+            duration_ms is not None
+            and isinstance(duration_ms, (int, float))
+            and float(duration_ms) >= 0
+        ):
             new_block["duration_ms"] = int(duration_ms)
         return new_block
 
     # Image content must not be persisted — the model needs the bytes.
     if _has_image_block(content):
-        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        if (
+            duration_ms is not None
+            and isinstance(duration_ms, (int, float))
+            and float(duration_ms) >= 0
+        ):
             stamped = dict(tool_result_block)
             stamped["duration_ms"] = int(duration_ms)
             return stamped
@@ -385,7 +395,11 @@ def maybe_persist_large_tool_result(
     # Read still gets persisted whenever the running aggregate is
     # close to the cap.
     if threshold == float("inf"):
-        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        if (
+            duration_ms is not None
+            and isinstance(duration_ms, (int, float))
+            and float(duration_ms) >= 0
+        ):
             stamped = dict(tool_result_block)
             stamped["duration_ms"] = int(duration_ms)
             return stamped
@@ -398,7 +412,11 @@ def maybe_persist_large_tool_result(
     # point per ``toolLimits.ts:49`` semantics.
     aggregate_would_exceed = (aggregate_chars_so_far + size) > aggregate_cap
     if size <= threshold and not aggregate_would_exceed:
-        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        if (
+            duration_ms is not None
+            and isinstance(duration_ms, (int, float))
+            and float(duration_ms) >= 0
+        ):
             stamped = dict(tool_result_block)
             stamped["duration_ms"] = int(duration_ms)
             return stamped
@@ -417,7 +435,11 @@ def maybe_persist_large_tool_result(
             tool_name,
             persist_result.error,  # type: ignore[union-attr]
         )
-        if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+        if (
+            duration_ms is not None
+            and isinstance(duration_ms, (int, float))
+            and float(duration_ms) >= 0
+        ):
             stamped = dict(tool_result_block)
             stamped["duration_ms"] = int(duration_ms)
             return stamped
@@ -427,7 +449,11 @@ def maybe_persist_large_tool_result(
     message = build_large_tool_result_message(persist_result)
     new_block = dict(tool_result_block)
     new_block["content"] = message
-    if duration_ms is not None and isinstance(duration_ms, (int, float)) and float(duration_ms) >= 0:
+    if (
+        duration_ms is not None
+        and isinstance(duration_ms, (int, float))
+        and float(duration_ms) >= 0
+    ):
         new_block["duration_ms"] = int(duration_ms)
     return new_block
 
@@ -516,11 +542,5 @@ def resolve_tool_results_dir(context: "ToolContext") -> Path:
     workspace_root = getattr(context, "workspace_root", None)
     if session_id and workspace_root is not None:
         workspace_basename = Path(workspace_root).name or "workspace"
-        return (
-            Path.home()
-            / ".claude"
-            / workspace_basename
-            / str(session_id)
-            / TOOL_RESULTS_SUBDIR
-        )
+        return Path.home() / ".claude" / workspace_basename / str(session_id) / TOOL_RESULTS_SUBDIR
     return Path("/tmp") / "claude_tool_results" / str(os.getpid()) / TOOL_RESULTS_SUBDIR

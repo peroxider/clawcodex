@@ -46,6 +46,7 @@ class UsageEvent:
 @dataclass
 class ModelUsageEntry:
     """Per-model aggregated usage."""
+
     model: str
     input_tokens: int = 0
     output_tokens: int = 0

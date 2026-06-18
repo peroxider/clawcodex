@@ -94,14 +94,13 @@ def browse_sessions_interactive(
                     return sid
             except ValueError:
                 pass
-            console.print("[red]Invalid selection. Use # followed by a number from the table.[/red]")
+            console.print(
+                "[red]Invalid selection. Use # followed by a number from the table.[/red]"
+            )
             continue
 
         # Prefix match against session ID
-        matches = [
-            m for m in metas
-            if m.session_id.startswith(raw) or raw in m.session_id
-        ]
+        matches = [m for m in metas if m.session_id.startswith(raw) or raw in m.session_id]
         if len(matches) == 1:
             sid = matches[0].session_id
             console.print(f"[green]Selected session: {sid[:8]}…[/green]")
@@ -116,7 +115,9 @@ def browse_sessions_interactive(
             # No ID match — try content search as fallback
             content_results = _search_session_content(metas, raw)
             if content_results:
-                console.print(f"[green]No session ID match. Showing sessions whose content matches '{raw}':[/green]")
+                console.print(
+                    f"[green]No session ID match. Showing sessions whose content matches '{raw}':[/green]"
+                )
                 _render_session_table(console, content_results)
                 metas = list(content_results)
                 _print_help(console)
@@ -192,26 +193,27 @@ def load_session_metadata_for_display(limit: int = 50) -> list[dict]:
         ts = ""
         if meta.last_updated:
             try:
-                ts = datetime.fromtimestamp(meta.last_updated).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
+                ts = datetime.fromtimestamp(meta.last_updated).strftime("%Y-%m-%d %H:%M")
             except Exception:
                 ts = str(meta.last_updated)
         last_input = (meta.last_user_input or "")[:60]
         if len(last_input) == 60:
             last_input += "…"
-        out.append({
-            "session_id": meta.session_id,
-            "time": ts,
-            "model": meta.model or "",
-            "message_count": meta.message_count,
-            "last_user_input": last_input,
-            "title": meta.title or "",
-        })
+        out.append(
+            {
+                "session_id": meta.session_id,
+                "time": ts,
+                "model": meta.model or "",
+                "message_count": meta.message_count,
+                "last_user_input": last_input,
+                "title": meta.title or "",
+            }
+        )
     return out
 
 
 # ---- internal helpers ----
+
 
 def _render_session_table(console: Console, metas: Sequence[SessionMetadata]) -> None:
     """Render a table of sessions to the console."""
@@ -227,9 +229,7 @@ def _render_session_table(console: Console, metas: Sequence[SessionMetadata]) ->
         ts = ""
         if meta.last_updated:
             try:
-                ts = datetime.fromtimestamp(meta.last_updated).strftime(
-                    "%Y-%m-%d %H:%M"
-                )
+                ts = datetime.fromtimestamp(meta.last_updated).strftime("%Y-%m-%d %H:%M")
             except Exception:
                 ts = str(meta.last_updated)
 

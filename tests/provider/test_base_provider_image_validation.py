@@ -88,11 +88,13 @@ class TestBaseProviderImageValidation(unittest.TestCase):
     def test_oversize_aggregated_with_other_messages(self) -> None:
         provider = _StubProvider(api_key="test")
         with self.assertRaises(ImageSizeError) as cm:
-            provider._prepare_messages([
-                _msg([{"type": "text", "text": "intro"}]),
-                _msg([_img_block(API_IMAGE_MAX_BASE64_SIZE + 100)]),
-                _msg([_img_block(API_IMAGE_MAX_BASE64_SIZE + 200)]),
-            ])
+            provider._prepare_messages(
+                [
+                    _msg([{"type": "text", "text": "intro"}]),
+                    _msg([_img_block(API_IMAGE_MAX_BASE64_SIZE + 100)]),
+                    _msg([_img_block(API_IMAGE_MAX_BASE64_SIZE + 200)]),
+                ]
+            )
         self.assertEqual(len(cm.exception.oversized), 2)
 
 

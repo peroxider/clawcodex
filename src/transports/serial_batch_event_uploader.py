@@ -64,7 +64,7 @@ from typing import Generic, TypeVar
 logger = logging.getLogger(__name__)
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RetryableError(Exception):
@@ -79,7 +79,9 @@ class RetryableError(Exception):
     """
 
     def __init__(
-        self, message: str, retry_after_ms: float | None = None,
+        self,
+        message: str,
+        retry_after_ms: float | None = None,
     ) -> None:
         super().__init__(message)
         self.retry_after_ms = retry_after_ms
@@ -123,40 +125,33 @@ class SerialBatchEventUploaderConfig(Generic[T]):
         # zero max_queue_size blocks every enqueue forever.
         if self.max_batch_size < 1:
             raise ValueError(
-                f'max_batch_size must be >= 1 (got {self.max_batch_size})',
+                f"max_batch_size must be >= 1 (got {self.max_batch_size})",
             )
         if self.max_queue_size < 1:
             raise ValueError(
-                f'max_queue_size must be >= 1 (got {self.max_queue_size})',
+                f"max_queue_size must be >= 1 (got {self.max_queue_size})",
             )
         if self.base_delay_ms < 0:
             raise ValueError(
-                f'base_delay_ms must be >= 0 (got {self.base_delay_ms})',
+                f"base_delay_ms must be >= 0 (got {self.base_delay_ms})",
             )
         if self.max_delay_ms < self.base_delay_ms:
             raise ValueError(
-                f'max_delay_ms ({self.max_delay_ms}) must be >= '
-                f'base_delay_ms ({self.base_delay_ms})',
+                f"max_delay_ms ({self.max_delay_ms}) must be >= "
+                f"base_delay_ms ({self.base_delay_ms})",
             )
         if self.jitter_ms < 0:
             raise ValueError(
-                f'jitter_ms must be >= 0 (got {self.jitter_ms})',
+                f"jitter_ms must be >= 0 (got {self.jitter_ms})",
             )
-        if (
-            self.max_batch_bytes is not None
-            and self.max_batch_bytes < 1
-        ):
+        if self.max_batch_bytes is not None and self.max_batch_bytes < 1:
             raise ValueError(
-                f'max_batch_bytes (when set) must be >= 1 '
-                f'(got {self.max_batch_bytes})',
+                f"max_batch_bytes (when set) must be >= 1 (got {self.max_batch_bytes})",
             )
-        if (
-            self.max_consecutive_failures is not None
-            and self.max_consecutive_failures < 1
-        ):
+        if self.max_consecutive_failures is not None and self.max_consecutive_failures < 1:
             raise ValueError(
-                f'max_consecutive_failures (when set) must be >= 1 '
-                f'(got {self.max_consecutive_failures})',
+                f"max_consecutive_failures (when set) must be >= 1 "
+                f"(got {self.max_consecutive_failures})",
             )
 
 
@@ -238,13 +233,8 @@ class SerialBatchEventUploader(Generic[T]):
 
         # Backpressure: wait until there's space. Loop because multiple
         # waiters released at once may collectively still exceed capacity.
-        while (
-            len(self._pending) + len(items) > self._config.max_queue_size
-            and not self._closed
-        ):
-            fut: asyncio.Future[None] = (
-                asyncio.get_running_loop().create_future()
-            )
+        while len(self._pending) + len(items) > self._config.max_queue_size and not self._closed:
+            fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
             self._backpressure_waiters.append(fut)
             try:
                 await fut
@@ -277,9 +267,7 @@ class SerialBatchEventUploader(Generic[T]):
         if not self._pending and not self._draining:
             return
         self._kick_drain()
-        fut: asyncio.Future[None] = (
-            asyncio.get_running_loop().create_future()
-        )
+        fut: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self._flush_waiters.append(fut)
         await fut
 
@@ -325,7 +313,8 @@ class SerialBatchEventUploader(Generic[T]):
             return
         loop = asyncio.get_running_loop()
         self._drain_task = loop.create_task(
-            self._drain(), name='serial-batch-uploader-drain',
+            self._drain(),
+            name="serial-batch-uploader-drain",
         )
 
     async def _drain(self) -> None:
@@ -355,8 +344,7 @@ class SerialBatchEventUploader(Generic[T]):
                     failures += 1
                     if (
                         self._config.max_consecutive_failures is not None
-                        and failures
-                        >= self._config.max_consecutive_failures
+                        and failures >= self._config.max_consecutive_failures
                     ):
                         self._dropped_batches += 1
                         cb = self._config.on_batch_dropped
@@ -365,8 +353,8 @@ class SerialBatchEventUploader(Generic[T]):
                                 cb(len(batch), failures)
                             except Exception as cb_err:  # noqa: BLE001
                                 logger.warning(
-                                    '[batch-uploader] on_batch_dropped '
-                                    'raised: %s', cb_err,
+                                    "[batch-uploader] on_batch_dropped raised: %s",
+                                    cb_err,
                                 )
                         failures = 0
                         # Free any backpressure waiters even though
@@ -377,10 +365,7 @@ class SerialBatchEventUploader(Generic[T]):
                     # pending`` allocates once; ``unshift`` equivalents
                     # would re-index every pending item batch-size times.
                     self._pending = batch + self._pending
-                    retry_after_ms = (
-                        err.retry_after_ms
-                        if isinstance(err, RetryableError) else None
-                    )
+                    retry_after_ms = err.retry_after_ms if isinstance(err, RetryableError) else None
                     await self._sleep(
                         self._retry_delay(failures, retry_after_ms),
                     )
@@ -431,12 +416,13 @@ class SerialBatchEventUploader(Generic[T]):
         while i < len(self._pending) and count < max_batch_size:
             try:
                 item_bytes = len(
-                    json.dumps(self._pending[i]).encode('utf-8'),
+                    json.dumps(self._pending[i]).encode("utf-8"),
                 )
             except (TypeError, ValueError) as exc:
                 logger.warning(
-                    '[batch-uploader] dropping un-serializable item '
-                    'at index %d: %s', i, exc,
+                    "[batch-uploader] dropping un-serializable item at index %d: %s",
+                    i,
+                    exc,
                 )
                 del self._pending[i]
                 continue
@@ -451,7 +437,9 @@ class SerialBatchEventUploader(Generic[T]):
         return batch
 
     def _retry_delay(
-        self, failures: int, retry_after_ms: float | None,
+        self,
+        failures: int,
+        retry_after_ms: float | None,
     ) -> float:
         """Compute the next retry delay in ms.
 
@@ -490,14 +478,15 @@ class SerialBatchEventUploader(Generic[T]):
         """
         try:
             await asyncio.wait_for(
-                self._close_event.wait(), timeout=ms / 1000.0,
+                self._close_event.wait(),
+                timeout=ms / 1000.0,
             )
         except asyncio.TimeoutError:
             return
 
 
 __all__ = [
-    'RetryableError',
-    'SerialBatchEventUploader',
-    'SerialBatchEventUploaderConfig',
+    "RetryableError",
+    "SerialBatchEventUploader",
+    "SerialBatchEventUploaderConfig",
 ]

@@ -226,9 +226,7 @@ class TrackerAdapter(ABC):
         """Poll for issues in active states."""
 
     @abstractmethod
-    async def fetch_issue_states_by_ids(
-        self, issue_ids: list[str]
-    ) -> dict[str, Issue]:
+    async def fetch_issue_states_by_ids(self, issue_ids: list[str]) -> dict[str, Issue]:
         """Refresh current state for running issues.
 
         Returns a mapping from issue_id to Issue.
@@ -564,8 +562,7 @@ def create_tracker_adapter(
         owner=getattr(config, "owner", None) or "",
         repo=getattr(config, "repo", None) or "",
         api_key=getattr(config, "api_key", None),
-        endpoint=getattr(config, "endpoint", None)
-        or tracker_kind_info(kind).default_endpoint,
+        endpoint=getattr(config, "endpoint", None) or tracker_kind_info(kind).default_endpoint,
         active_states=list(getattr(config, "active_states", []) or []),
         terminal_states=list(getattr(config, "terminal_states", []) or []),
         assignee=getattr(config, "assignee", None),
@@ -583,20 +580,17 @@ def validate_tracker_config(config: Any) -> None:
     if info.kind == "local":
         if not getattr(config, "issues_path", None):
             raise TrackerConfigError(
-                "Local issues path not configured. "
-                "Set tracker.issues_path in WORKFLOW.md"
+                "Local issues path not configured. Set tracker.issues_path in WORKFLOW.md"
             )
         return
     if not getattr(config, "api_key", None):
         env_hint = " or ".join(info.api_key_env_vars)
         raise TrackerConfigError(
-            f"{info.label} API key not configured. "
-            f"Set {env_hint} or tracker.api_key in WORKFLOW.md"
+            f"{info.label} API key not configured. Set {env_hint} or tracker.api_key in WORKFLOW.md"
         )
     if info.requires_project_slug and not getattr(config, "project_slug", None):
         raise TrackerConfigError(
-            f"{info.label} project slug not configured. "
-            "Set tracker.project_slug in WORKFLOW.md"
+            f"{info.label} project slug not configured. Set tracker.project_slug in WORKFLOW.md"
         )
     if info.requires_repository:
         owner = getattr(config, "owner", None)

@@ -1,4 +1,5 @@
 """Tests for DryRunReporter and LocalFileReporter."""
+
 from __future__ import annotations
 
 import time
@@ -94,6 +95,4 @@ def test_local_file_reporter_blocks_on_secret(tmp_path):
     out = storage.base_dir / "reports" / f"{today}.md"
     assert not out.exists()
     blocked = storage.read_day("reporter_blocked", today)
-    assert blocked and any(
-        row.get("reason") == "secret_scan" for row in blocked
-    )
+    assert blocked and any(row.get("reason") == "secret_scan" for row in blocked)

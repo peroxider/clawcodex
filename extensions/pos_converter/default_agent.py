@@ -169,7 +169,7 @@ def _parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
         return {}, content
 
     frontmatter_lines = lines[1:end_idx]
-    body = "\n".join(lines[end_idx + 1:]).strip()
+    body = "\n".join(lines[end_idx + 1 :]).strip()
 
     frontmatter: dict[str, Any] = {}
     current_key: str | None = None

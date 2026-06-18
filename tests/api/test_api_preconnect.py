@@ -110,7 +110,8 @@ class TestStartApiPreconnect(unittest.TestCase):
         elapsed_ms = (time.perf_counter() - t0) * 1000
         self.assertIsInstance(handle, PreconnectHandle)
         self.assertLess(
-            elapsed_ms, 100,
+            elapsed_ms,
+            100,
             f"start_api_preconnect took {elapsed_ms:.1f}ms — must return immediately",
         )
         # Best effort: drain the daemon thread so the test process exits cleanly.

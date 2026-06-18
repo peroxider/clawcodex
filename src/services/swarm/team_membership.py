@@ -5,6 +5,7 @@ by SendMessage's plan-approval gate (sender side, Chunk F / WI-7.3),
 the mailbox poller's envelope verification (receiver side, per critic
 concern C3), and Phase 9's permission-forwarding bridge.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

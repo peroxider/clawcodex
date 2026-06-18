@@ -138,9 +138,7 @@ class QueryEngine:
                     {"type": "text", "text": self._config.custom_system_prompt}
                 ]
                 if self._config.append_system_prompt:
-                    blocks.append(
-                        {"type": "text", "text": self._config.append_system_prompt}
-                    )
+                    blocks.append({"type": "text", "text": self._config.append_system_prompt})
                 # Append git-status etc. as a final uncached block.
                 system_prompt = append_system_context_blocks(blocks, parts.system_context)
                 return system_prompt, parts.user_context, parts.system_context
@@ -164,6 +162,7 @@ class QueryEngine:
             # Local import keeps the command_system package off the
             # module-load path of every query.
             from ..command_system import get_skill_tool_commands
+
             blocks = build_full_system_prompt_blocks(
                 cwd=cwd,
                 append_system_prompt=self._config.append_system_prompt,
@@ -183,7 +182,8 @@ class QueryEngine:
                 skills=get_skill_tool_commands(cwd),
             )
             system_prompt = append_system_context_blocks(
-                blocks, parts.system_context,
+                blocks,
+                parts.system_context,
             )
             return system_prompt, parts.user_context, parts.system_context
 
@@ -214,13 +214,12 @@ class QueryEngine:
         user_msg = UserMessage(content=prompt)
         self._mutable_messages.append(user_msg)
 
-        system_prompt, user_context, system_context = (
-            await self._build_system_prompt_parts()
-        )
+        system_prompt, user_context, system_context = await self._build_system_prompt_parts()
 
         # Prepend user context (CLAUDE.md + date) as <system-reminder>
         messages_for_query = prepend_user_context(
-            list(self._mutable_messages), user_context,
+            list(self._mutable_messages),
+            user_context,
         )
 
         # TS query loop runs 5-layer compression pipeline every iteration
@@ -241,7 +240,7 @@ class QueryEngine:
 
         pipeline_config = PipelineConfig(
             provider=self._config.provider,
-            model=getattr(self._config.provider, 'model', '') or '',
+            model=getattr(self._config.provider, "model", "") or "",
             read_file_state=read_file_state or None,
             # Ch5/B.5 — thread the session-scoped tracking instance so
             # the autocompact circuit-breaker can count consecutive
@@ -309,9 +308,8 @@ class QueryEngine:
                 from ..context_system.microcompact import (
                     strip_images_from_typed_messages,
                 )
-                self._mutable_messages = strip_images_from_typed_messages(
-                    self._mutable_messages
-                )
+
+                self._mutable_messages = strip_images_from_typed_messages(self._mutable_messages)
 
             yield message
 

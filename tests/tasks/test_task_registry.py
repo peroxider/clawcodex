@@ -5,6 +5,7 @@ dispatch (``register_task`` / ``get_all_tasks`` / ``get_task_by_type``).
 The contract that the ``update`` mutator must be a sync function
 (assumption A6 / concern C5) is exercised explicitly.
 """
+
 from __future__ import annotations
 
 import threading
@@ -73,8 +74,12 @@ def test_by_type_filters_correctly() -> None:
     reg.upsert(_make_state("b1"))
     reg.upsert(_make_state("b2"))
     other = TaskStateBase(
-        id="a1", type="local_agent", status="running",
-        description="t", start_time=0.0, output_file="",
+        id="a1",
+        type="local_agent",
+        status="running",
+        description="t",
+        start_time=0.0,
+        output_file="",
     )
     reg.upsert(other)
     assert {t.id for t in reg.by_type("local_bash")} == {"b1", "b2"}

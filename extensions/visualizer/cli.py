@@ -48,7 +48,8 @@ def run_viz(args: list[str] | None = None) -> int:
         description="Start the Multi-Session Visualizer web server",
     )
     parser.add_argument(
-        "--port", "-p",
+        "--port",
+        "-p",
         type=int,
         default=8765,
         help="Port to listen on (default: 8765)",
@@ -139,6 +140,7 @@ def run_viz(args: list[str] | None = None) -> int:
 
         def _open_browser() -> None:
             import time
+
             time.sleep(1.5)
             webbrowser.open(url)
 

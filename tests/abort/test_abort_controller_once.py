@@ -8,6 +8,7 @@ TS implementation uses ``addEventListener('abort', cb, {once: true})``
 plus a WeakRef-based cleanup; the Python port now mirrors the
 self-detaching ``once`` behavior.
 """
+
 from __future__ import annotations
 
 import unittest

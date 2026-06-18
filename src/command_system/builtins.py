@@ -1,5 +1,5 @@
-"""Facade — command_system/builtins.py has been moved to clawcodex_ext (lazy proxy).
-"""
+"""Facade — command_system/builtins.py has been moved to clawcodex_ext (lazy proxy)."""
+
 from __future__ import annotations
 
 __all__ = [
@@ -69,6 +69,7 @@ def get_builtin_commands():
 
 def __getattr__(name: str):
     import clawcodex_ext.command_system.builtins as _mod
+
     if name in _mod.__dict__:
         val = _mod.__dict__[name]
         globals()[name] = val

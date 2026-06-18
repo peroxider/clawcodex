@@ -3,6 +3,7 @@
 Covers magic-byte detection, bounded file read, resize-to-envelope,
 token-budget compression, and dimensions metadata.
 """
+
 from __future__ import annotations
 
 import base64
@@ -232,19 +233,22 @@ class TestCreateImageMetadataText(unittest.TestCase):
         )
 
     def test_returns_none_when_unresized_and_no_source(self) -> None:
-        dims = ImageDimensions(original_width=100, original_height=100,
-                                display_width=100, display_height=100)
+        dims = ImageDimensions(
+            original_width=100, original_height=100, display_width=100, display_height=100
+        )
         self.assertIsNone(create_image_metadata_text(dims, None))
 
     def test_unresized_with_source_emits_source_only(self) -> None:
-        dims = ImageDimensions(original_width=100, original_height=100,
-                                display_width=100, display_height=100)
+        dims = ImageDimensions(
+            original_width=100, original_height=100, display_width=100, display_height=100
+        )
         text = create_image_metadata_text(dims, "/photos/a.png")
         self.assertEqual(text, "[Image: source: /photos/a.png]")
 
     def test_resized_with_source_includes_display_and_scale(self) -> None:
-        dims = ImageDimensions(original_width=4000, original_height=3000,
-                                display_width=1568, display_height=1176)
+        dims = ImageDimensions(
+            original_width=4000, original_height=3000, display_width=1568, display_height=1176
+        )
         text = create_image_metadata_text(dims, "/photos/big.png")
         self.assertIn("/photos/big.png", text)
         self.assertIn("original 4000x3000", text)
@@ -255,8 +259,9 @@ class TestCreateImageMetadataText(unittest.TestCase):
 
     def test_resized_no_source_still_emits(self) -> None:
         """Resize alone is reason enough to emit metadata."""
-        dims = ImageDimensions(original_width=4000, original_height=3000,
-                                display_width=1568, display_height=1176)
+        dims = ImageDimensions(
+            original_width=4000, original_height=3000, display_width=1568, display_height=1176
+        )
         text = create_image_metadata_text(dims, None)
         self.assertIsNotNone(text)
         self.assertIn("original 4000x3000", text)

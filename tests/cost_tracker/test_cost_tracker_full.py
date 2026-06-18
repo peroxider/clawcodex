@@ -50,14 +50,20 @@ class TestWebSearch:
 class TestPerModelAggregation:
     def test_single_model(self):
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 100,
-            "output_tokens": 50,
-        })
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 200,
-            "output_tokens": 100,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+        )
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 200,
+                "output_tokens": 100,
+            },
+        )
         usage = tracker.get_model_usage()
         assert "claude-sonnet-4-20250514" in usage
         entry = usage["claude-sonnet-4-20250514"]
@@ -68,7 +74,9 @@ class TestPerModelAggregation:
     def test_multiple_models(self):
         tracker = CostTracker()
         tracker.record_usage("claude-sonnet-4-20250514", {"input_tokens": 100, "output_tokens": 50})
-        tracker.record_usage("claude-3-5-haiku-20241022", {"input_tokens": 200, "output_tokens": 100})
+        tracker.record_usage(
+            "claude-3-5-haiku-20241022", {"input_tokens": 200, "output_tokens": 100}
+        )
         usage = tracker.get_model_usage()
         assert len(usage) == 2
         assert "claude-sonnet-4-20250514" in usage
@@ -112,11 +120,14 @@ class TestEnhancedSummary:
 
     def test_cache_savings_in_summary(self):
         tracker = CostTracker()
-        tracker.record_usage("claude-sonnet-4-20250514", {
-            "input_tokens": 100,
-            "output_tokens": 50,
-            "cache_read_input_tokens": 500,
-        })
+        tracker.record_usage(
+            "claude-sonnet-4-20250514",
+            {
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 500,
+            },
+        )
         summary = tracker.get_summary()
         assert summary["cache_savings_usd"] > 0
 

@@ -3,6 +3,7 @@
 Mirrors transitions in
 ``typescript/src/utils/permissions/getNextPermissionMode.ts:34-79``.
 """
+
 from __future__ import annotations
 
 import unittest
@@ -22,13 +23,15 @@ class TestGetNextPermissionMode(unittest.TestCase):
 
     def test_plan_with_bypass_to_bypassPermissions(self) -> None:
         ctx = ToolPermissionContext(
-            mode="plan", is_bypass_permissions_mode_available=True,
+            mode="plan",
+            is_bypass_permissions_mode_available=True,
         )
         self.assertEqual(get_next_permission_mode(ctx), "bypassPermissions")
 
     def test_plan_without_bypass_to_default(self) -> None:
         ctx = ToolPermissionContext(
-            mode="plan", is_bypass_permissions_mode_available=False,
+            mode="plan",
+            is_bypass_permissions_mode_available=False,
         )
         self.assertEqual(get_next_permission_mode(ctx), "default")
 
@@ -58,7 +61,8 @@ class TestCyclePermissionMode(unittest.TestCase):
 
     def test_full_cycle_no_bypass(self) -> None:
         ctx = ToolPermissionContext(
-            mode="default", is_bypass_permissions_mode_available=False,
+            mode="default",
+            is_bypass_permissions_mode_available=False,
         )
         modes: list[str] = []
         for _ in range(5):
@@ -69,7 +73,8 @@ class TestCyclePermissionMode(unittest.TestCase):
 
     def test_full_cycle_with_bypass(self) -> None:
         ctx = ToolPermissionContext(
-            mode="default", is_bypass_permissions_mode_available=True,
+            mode="default",
+            is_bypass_permissions_mode_available=True,
         )
         modes: list[str] = []
         for _ in range(5):
@@ -77,7 +82,8 @@ class TestCyclePermissionMode(unittest.TestCase):
             modes.append(mode)
         # default → acceptEdits → plan → bypassPermissions → dontAsk → default
         self.assertEqual(
-            modes, ["acceptEdits", "plan", "bypassPermissions", "dontAsk", "default"],
+            modes,
+            ["acceptEdits", "plan", "bypassPermissions", "dontAsk", "default"],
         )
 
     def test_cycle_preserves_other_context_fields(self) -> None:

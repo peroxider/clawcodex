@@ -16,9 +16,16 @@ from .lock import CronTaskLock
 from .models import CronJitterConfig, CronTask, load_jitter_config
 from .notifications import build_missed_task_notification
 from .runs import CronRun, create_queued_run_for_task, finalize_cron_run
-from .tasks import (find_due_tasks, find_missed_tasks, mark_cron_tasks_fired,
-                    now_ms, prune_expired_recurring_tasks, read_all_cron_tasks,
-                    read_cron_tasks, remove_missed_tasks)
+from .tasks import (
+    find_due_tasks,
+    find_missed_tasks,
+    mark_cron_tasks_fired,
+    now_ms,
+    prune_expired_recurring_tasks,
+    read_all_cron_tasks,
+    read_cron_tasks,
+    remove_missed_tasks,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -148,9 +155,7 @@ class CronScheduler:
                 session_store=self.session_store,
             )
         self._prune_tick_counter += 1
-        due = find_due_tasks(
-            self.workspace_root, timestamp, session_store=self.session_store
-        )
+        due = find_due_tasks(self.workspace_root, timestamp, session_store=self.session_store)
         if not due:
             return []
         # Dedupe by task.id: if the same id lives in both file and session
@@ -178,9 +183,7 @@ class CronScheduler:
                 continue
             self._in_flight_add(task.id)
             try:
-                run = create_queued_run_for_task(
-                    self.workspace_root, task, queued_at=timestamp
-                )
+                run = create_queued_run_for_task(self.workspace_root, task, queued_at=timestamp)
                 if run is None:
                     continue
                 fired.append(task)
@@ -230,13 +233,9 @@ class CronScheduler:
     def notify_missed_once(self, at_ms: int | None = None) -> list[CronTask]:
         if self.is_disabled():
             return []
-        missed = find_missed_tasks(
-            self.workspace_root, at_ms, session_store=self.session_store
-        )
+        missed = find_missed_tasks(self.workspace_root, at_ms, session_store=self.session_store)
         if missed:
-            remove_missed_tasks(
-                self.workspace_root, missed, session_store=self.session_store
-            )
+            remove_missed_tasks(self.workspace_root, missed, session_store=self.session_store)
             # F-22-G7: missed event.
             self.on_missed_event(
                 {
@@ -277,17 +276,10 @@ class CronScheduler:
         if not self._atexit_registered:
             atexit.register(self.stop)
             self._atexit_registered = True
-        if (
-            not self._signal_registered
-            and threading.current_thread() is threading.main_thread()
-        ):
+        if not self._signal_registered and threading.current_thread() is threading.main_thread():
             try:
-                self._previous_sigterm = signal.signal(
-                    signal.SIGTERM, self._signal_cleanup
-                )
-                self._previous_sigint = signal.signal(
-                    signal.SIGINT, self._signal_cleanup
-                )
+                self._previous_sigterm = signal.signal(signal.SIGTERM, self._signal_cleanup)
+                self._previous_sigint = signal.signal(signal.SIGINT, self._signal_cleanup)
                 self._signal_registered = True
             except (ValueError, OSError):  # not main thread / unsupported
                 pass
@@ -309,11 +301,7 @@ class CronScheduler:
 
     def _signal_cleanup(self, signum, frame):  # pragma: no cover - signal path
         self.stop()
-        prev = (
-            self._previous_sigterm
-            if signum == signal.SIGTERM
-            else self._previous_sigint
-        )
+        prev = self._previous_sigterm if signum == signal.SIGTERM else self._previous_sigint
         if prev and prev not in (signal.SIG_DFL, signal.SIG_IGN, None):
             try:
                 prev(signum, frame)

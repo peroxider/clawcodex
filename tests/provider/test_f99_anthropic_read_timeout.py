@@ -9,6 +9,7 @@ These tests pin the contract by patching ``anthropic`` on the
 provider module and asserting the ``timeout`` kwarg is forwarded.
 We don't exercise the real SDK — that would require a live API key.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -49,6 +50,7 @@ def patched_anthropic(fake_anthropic_module):
     lazy loader takes over again).
     """
     import src.providers.anthropic_provider as mod
+
     original = getattr(mod, "anthropic", None)
     mod.anthropic = fake_anthropic_module
     yield mod, fake_anthropic_module

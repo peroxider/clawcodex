@@ -201,9 +201,7 @@ class TestValidatorShell:
 
     def test_missing_shell_no_error(self) -> None:
         # Absent ``shell`` is fine — falls through to the default.
-        errors = validate_hook_configs(
-            {"PreToolUse": [{"type": "command", "command": "x"}]}
-        )
+        errors = validate_hook_configs({"PreToolUse": [{"type": "command", "command": "x"}]})
         assert errors == []
 
     def test_shell_on_non_command_hook_is_ignored(self) -> None:
@@ -269,7 +267,9 @@ class TestExecutorBashPath:
         assert result.exit_code == 0
 
     @pytest.mark.asyncio
-    async def test_explicit_bash_uses_subprocess_shell(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_explicit_bash_uses_subprocess_shell(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         captured: dict[str, object] = {}
 
         async def fake_shell(cmd, *, stdin, stdout, stderr, env):

@@ -42,9 +42,7 @@ def test_force_hyperlink_env_var_overrides(monkeypatch: pytest.MonkeyPatch) -> N
     "term_program",
     ["iTerm.app", "WezTerm", "vscode", "kitty", "ghostty"],
 )
-def test_known_term_programs_supported(
-    monkeypatch: pytest.MonkeyPatch, term_program: str
-) -> None:
+def test_known_term_programs_supported(monkeypatch: pytest.MonkeyPatch, term_program: str) -> None:
     monkeypatch.setenv("TERM_PROGRAM", term_program)
     monkeypatch.delenv("FORCE_HYPERLINK", raising=False)
     assert is_hyperlink_supported()
@@ -92,9 +90,7 @@ def test_modern_truecolor_terminal_supported(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _patch_term_only(monkeypatch, "xterm-256color")
-    console = Console(
-        force_terminal=True, legacy_windows=False, color_system="truecolor"
-    )
+    console = Console(force_terminal=True, legacy_windows=False, color_system="truecolor")
     assert is_hyperlink_supported(console)
 
 

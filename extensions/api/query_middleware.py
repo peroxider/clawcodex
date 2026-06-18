@@ -71,6 +71,7 @@ def enforce_request_delay() -> None:
 # Rate-limit error policy
 # ---------------------------------------------------------------------------
 
+
 def handle_rate_limit_error(error_str: str):
     """Return a tagged error message if *error_str* indicates rate-limiting.
 
@@ -87,6 +88,7 @@ def handle_rate_limit_error(error_str: str):
     # Lazy import to avoid circular dependency — this function is only
     # called on error, so the import cost is negligible.
     from src.types.messages import AssistantMessage
+
     err_msg = AssistantMessage(
         content="Rate limit exceeded. Please wait and retry.",
         isApiErrorMessage=True,

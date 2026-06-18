@@ -86,20 +86,20 @@ def create_combined_abort_signal(
     # Mutable state captured by the closures below. ``cleaned`` makes the
     # cleanup idempotent; ``timer`` is the asyncio TimerHandle so we can
     # cancel it on early cleanup.
-    state: dict[str, object] = {'cleaned': False, 'timer': None}
+    state: dict[str, object] = {"cleaned": False, "timer": None}
 
     primary_listener: Callable[[], None] | None = None
     secondary_listener: Callable[[], None] | None = None
 
     def cleanup() -> None:
-        if state['cleaned']:
+        if state["cleaned"]:
             return
-        state['cleaned'] = True
-        timer = state['timer']
+        state["cleaned"] = True
+        timer = state["timer"]
         if timer is not None:
             assert isinstance(timer, asyncio.TimerHandle)
             timer.cancel()
-            state['timer'] = None
+            state["timer"] = None
         if primary is not None and primary_listener is not None:
             primary.remove_listener(primary_listener)
         if secondary is not None and secondary_listener is not None:
@@ -116,14 +116,14 @@ def create_combined_abort_signal(
         abort_combined(secondary.reason if secondary is not None else None)
 
     def abort_from_timeout() -> None:
-        abort_combined('timeout')
+        abort_combined("timeout")
 
     if timeout_seconds is not None:
         # Defer scheduling to the running loop; raises RuntimeError if no
         # loop is running. Matches TS setTimeout semantics (the equivalent
         # call would only work in a JS event loop too).
         loop = asyncio.get_running_loop()
-        state['timer'] = loop.call_later(timeout_seconds, abort_from_timeout)
+        state["timer"] = loop.call_later(timeout_seconds, abort_from_timeout)
 
     if primary is not None:
         primary_listener = primary.add_listener(abort_from_primary)
@@ -134,6 +134,6 @@ def create_combined_abort_signal(
 
 
 __all__ = [
-    'CombinedAbortSignal',
-    'create_combined_abort_signal',
+    "CombinedAbortSignal",
+    "create_combined_abort_signal",
 ]

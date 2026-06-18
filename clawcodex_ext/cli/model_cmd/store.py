@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
 from clawcodex_ext.cli.model_cmd.errors import UnsupportedScopeError as ModelUnsupportedScopeError
-from clawcodex_ext.cli.provider_cmd.errors import UnsupportedScopeError as ProviderUnsupportedScopeError
+from clawcodex_ext.cli.provider_cmd.errors import (
+    UnsupportedScopeError as ProviderUnsupportedScopeError,
+)
 
 
 class ModelStore:

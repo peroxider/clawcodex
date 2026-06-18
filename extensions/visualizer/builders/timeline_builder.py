@@ -75,16 +75,19 @@ class TimelineBuilder:
         # survive the recomputation. Without this, the enrichment is
         # silently wiped every time.
         from .stats_builder import StatsBuilder
+
         viz.stats = StatsBuilder().build(viz.timeline, base=viz.stats)
 
         # Detect anomalies
         from .anomaly_builder import AnomalyBuilder
+
         viz.anomalies = AnomalyBuilder().build(viz)
 
         # Compute multi-agent waterfall layout (spawn_x / join_x / depth_y).
         # Best-effort: never raises — if the timeline has no Agent calls,
         # the layout is a no-op and agent_layout_summary stays empty.
         from .agent_tree_layout import AgentTreeLayout
+
         try:
             AgentTreeLayout().layout(viz)
         except Exception as e:

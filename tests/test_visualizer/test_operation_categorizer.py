@@ -13,7 +13,9 @@ from extensions.visualizer.models.viz_models import (
 )
 
 
-def _bar(label: str, detail: dict | None = None, bar_type: BarType = BarType.TOOL_CALL) -> TimelineBar:
+def _bar(
+    label: str, detail: dict | None = None, bar_type: BarType = BarType.TOOL_CALL
+) -> TimelineBar:
     return TimelineBar(
         id=f"x-{label}",
         type=bar_type,
@@ -54,19 +56,25 @@ class TestOperationCategorizerToolRules:
 class TestOperationCategorizerExplicitFlags:
     def test_isAgentInvocation_flag(self):
         cat = OperationCategorizer()
-        bar = _bar("Bash", detail={
-            "tool_name": "Bash",
-            "isAgentInvocation": True,
-        })
+        bar = _bar(
+            "Bash",
+            detail={
+                "tool_name": "Bash",
+                "isAgentInvocation": True,
+            },
+        )
         # Explicit flag wins over tool_name match
         assert cat.categorize(bar) == OperationCategory.ORCHESTRATE
 
     def test_is_agent_invocation_snake_case(self):
         cat = OperationCategorizer()
-        bar = _bar("Read", detail={
-            "tool_name": "Read",
-            "is_agent_invocation": True,
-        })
+        bar = _bar(
+            "Read",
+            detail={
+                "tool_name": "Read",
+                "is_agent_invocation": True,
+            },
+        )
         assert cat.categorize(bar) == OperationCategory.ORCHESTRATE
 
     def test_pre_set_category_returned(self):
@@ -137,5 +145,4 @@ class TestOperationCategoryColor:
     def test_legend_labels_present(self):
         labels = {c.label for c in OperationCategory}
         # All eight Chinese labels (F-95 follow-up split OTHER into 3 sub-cats)
-        assert {"读取", "执行", "写入", "编排",
-                "推理", "轮次", "后台", "其他"} <= labels
+        assert {"读取", "执行", "写入", "编排", "推理", "轮次", "后台", "其他"} <= labels

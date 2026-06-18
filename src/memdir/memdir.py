@@ -109,11 +109,7 @@ def truncate_entrypoint_content(raw: str) -> EntrypointTruncation:
             was_byte_truncated=False,
         )
 
-    truncated = (
-        "\n".join(content_lines[:MAX_ENTRYPOINT_LINES])
-        if was_line_truncated
-        else trimmed
-    )
+    truncated = "\n".join(content_lines[:MAX_ENTRYPOINT_LINES]) if was_line_truncated else trimmed
 
     encoded = truncated.encode("utf-8")
     if len(encoded) > MAX_ENTRYPOINT_BYTES:
@@ -133,9 +129,7 @@ def truncate_entrypoint_content(raw: str) -> EntrypointTruncation:
     elif was_line_truncated and not was_byte_truncated:
         reason = f"{line_count} lines (limit: {MAX_ENTRYPOINT_LINES})"
     else:
-        reason = (
-            f"{line_count} lines and {_format_file_size(byte_count)}"
-        )
+        reason = f"{line_count} lines and {_format_file_size(byte_count)}"
 
     warning = (
         f"\n\n> WARNING: {ENTRYPOINT_NAME} is {reason}. Only part of it "
@@ -163,9 +157,7 @@ def ensure_memory_dir_exists(memory_dir: str) -> None:
     try:
         Path(memory_dir).mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        logger.debug(
-            "ensure_memory_dir_exists failed for %s: %s", memory_dir, exc
-        )
+        logger.debug("ensure_memory_dir_exists failed for %s: %s", memory_dir, exc)
 
 
 def _how_to_save_section(skip_index: bool) -> list[str]:

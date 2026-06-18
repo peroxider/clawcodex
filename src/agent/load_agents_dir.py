@@ -14,6 +14,7 @@ every prompt build. Call ``clear_agent_definitions_cache()`` after a
 known on-disk change (e.g., the user edits ``~/.claude/agents/foo.md``)
 to force a refresh.
 """
+
 from __future__ import annotations
 
 import logging
@@ -137,6 +138,7 @@ def get_agent_definitions_with_overrides(cwd: str) -> list[AgentDefinition]:
         try:
             from src.agent.load_plugin_agents import load_plugin_agents
             from src.plugins import get_loaded_plugins
+
             plugin_agents = load_plugin_agents(get_loaded_plugins())
         except Exception:
             logger.exception("plugin agent loading failed; continuing without plugin agents")
@@ -159,20 +161,17 @@ def get_agent_definitions_with_overrides(cwd: str) -> list[AgentDefinition]:
                 SOURCE_CLAWCODEX_EXT,
                 SOURCE_EXTENSIONS,
             )
+
             ensure_bundled_agents_registered()
             # Programmatic registrations + markdown files together.
             clawcodex_ext_agents = (
-                AgentRegistry.by_source(SOURCE_CLAWCODEX_EXT)
-                + discover_clawcodex_ext_agents()
+                AgentRegistry.by_source(SOURCE_CLAWCODEX_EXT) + discover_clawcodex_ext_agents()
             )
             extension_agents = (
-                AgentRegistry.by_source(SOURCE_EXTENSIONS)
-                + discover_extension_agents()
+                AgentRegistry.by_source(SOURCE_EXTENSIONS) + discover_extension_agents()
             )
         except Exception:
-            logger.exception(
-                "extension agent loading failed; continuing without extension agents"
-            )
+            logger.exception("extension agent loading failed; continuing without extension agents")
             clawcodex_ext_agents = []
             extension_agents = []
 

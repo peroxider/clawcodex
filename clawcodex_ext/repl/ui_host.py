@@ -49,11 +49,7 @@ class ReplUIHost:
             return None
         self._print(f"\n{title}")
         for idx, opt in enumerate(opts, start=1):
-            marker = (
-                " (current)"
-                if current is not None and opt.value == current
-                else ""
-            )
+            marker = " (current)" if current is not None and opt.value == current else ""
             desc = f" — {opt.description}" if opt.description else ""
             self._print(f"  {idx}. {opt.label}{desc}{marker}")
         prompt = f"Select [1-{len(opts)}] (Enter to cancel): "
@@ -84,11 +80,7 @@ class ReplUIHost:
         # Surface the default (else the placeholder) as an inline hint. Unlike
         # select, an empty line is a VALID empty submit ('') — we do NOT
         # substitute the default — and only EOF / Ctrl-C cancels (-> None).
-        hint = (
-            f" [{default}]"
-            if default
-            else (f" ({placeholder})" if placeholder else "")
-        )
+        hint = f" [{default}]" if default else (f" ({placeholder})" if placeholder else "")
         prompt = f"{title}{hint}: "
         loop = asyncio.get_running_loop()
         try:

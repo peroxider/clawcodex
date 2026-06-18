@@ -4,6 +4,7 @@ Covers the pure filter function, the has_team_context predicate, and
 the TEAM_ONLY_TOOL_NAMES constant. The filter is the linchpin of the
 "hide SendMessage when no team" fix — its semantics must stay tight.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ class _FakeTool:
     the filter under test. The filter reads via ``getattr(t, name_attr)``
     so any object with a ``name`` attribute works.
     """
+
     name: str
 
 
@@ -76,7 +78,10 @@ def test_filter_passes_through_when_team_active() -> None:
     ]
     result = filter_team_only_tools(tools, has_team=True)
     assert [t.name for t in result] == [
-        "Read", "SendMessage", "TeamCreate", "TeamDelete",
+        "Read",
+        "SendMessage",
+        "TeamCreate",
+        "TeamDelete",
     ]
 
 
@@ -126,7 +131,9 @@ def test_filter_with_custom_name_attr() -> None:
         _RenamedTool("SendMessage"),
     ]
     result = filter_team_only_tools(
-        tools, has_team=False, name_attr="display_name",
+        tools,
+        has_team=False,
+        name_attr="display_name",
     )
     assert [t.display_name for t in result] == ["Read"]
 

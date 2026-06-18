@@ -30,6 +30,7 @@ def _make_tool(name: str, concurrency_safe: bool = False) -> Tool:
 
 def _make_context(tools: list[Tool] | None = None) -> ToolContext:
     from src.tool_system.context import ToolUseOptions
+
     return ToolContext(
         workspace_root=Path("/tmp"),
         options=ToolUseOptions(tools=tools or []),
@@ -82,10 +83,16 @@ class TestConcurrencyModel:
         ctx = _make_context(tools)
         executor = StreamingToolExecutor(tools, None, ctx)
         from src.services.tool_execution.streaming_executor import TrackedTool
-        executor._tools.append(TrackedTool(
-            id="x", block=_make_block("t1"), assistant_message=_make_assistant_msg(),
-            status="executing", is_concurrency_safe=True,
-        ))
+
+        executor._tools.append(
+            TrackedTool(
+                id="x",
+                block=_make_block("t1"),
+                assistant_message=_make_assistant_msg(),
+                status="executing",
+                is_concurrency_safe=True,
+            )
+        )
         assert not executor._can_execute_tool(False)
         assert executor._can_execute_tool(True)
 
@@ -98,9 +105,7 @@ class TestSiblingAbort:
         assert not executor._has_errored
         executor._has_errored = True
         executor._errored_tool_description = "Bash(ls)"
-        result = executor._get_abort_reason(
-            MagicMock(block=MagicMock(name_="t"))
-        )
+        result = executor._get_abort_reason(MagicMock(block=MagicMock(name_="t")))
         assert result == "sibling_error"
 
 

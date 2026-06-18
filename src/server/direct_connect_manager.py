@@ -54,23 +54,21 @@ class DirectConnectCallbacks:
 
 def _is_stdout_message(value: object) -> bool:
     """True for ``{type: str}`` payloads — pre-narrowing guard."""
-    return (
-        isinstance(value, dict)
-        and 'type' in value
-        and isinstance(value.get('type'), str)
-    )
+    return isinstance(value, dict) and "type" in value and isinstance(value.get("type"), str)
 
 
 # Message types that the manager filters out (server-internal noise that
 # the local CLI does not need to surface). Mirrors the inverted check at
 # ``directConnectManager.ts:104-110``.
-_FILTERED_TYPES = frozenset({
-    'control_response',
-    'keep_alive',
-    'control_cancel_request',
-    'streamlined_text',
-    'streamlined_tool_use_summary',
-})
+_FILTERED_TYPES = frozenset(
+    {
+        "control_response",
+        "keep_alive",
+        "control_cancel_request",
+        "streamlined_text",
+        "streamlined_tool_use_summary",
+    }
+)
 
 
 class DirectConnectSessionManager:
@@ -109,7 +107,7 @@ class DirectConnectSessionManager:
         """
         headers: dict[str, str] = {}
         if self._config.auth_token:
-            headers['authorization'] = f'Bearer {self._config.auth_token}'
+            headers["authorization"] = f"Bearer {self._config.auth_token}"
 
         ws = await ws_connect(
             self._config.ws_url,
@@ -118,7 +116,7 @@ class DirectConnectSessionManager:
         self._ws = ws
         self._reader_task = asyncio.get_running_loop().create_task(
             self._read_loop(),
-            name='direct-connect-reader',
+            name="direct-connect-reader",
         )
         await self._invoke(self._callbacks.on_connected)
 
@@ -135,10 +133,10 @@ class DirectConnectSessionManager:
         if self._ws is None or self._closed:
             return False
         envelope = {
-            'type': 'user',
-            'message': {'role': 'user', 'content': content},
-            'parent_tool_use_id': None,
-            'session_id': '',
+            "type": "user",
+            "message": {"role": "user", "content": content},
+            "parent_tool_use_id": None,
+            "session_id": "",
         }
         try:
             await self._ws.send(json.dumps(envelope))
@@ -159,22 +157,22 @@ class DirectConnectSessionManager:
         """
         if self._ws is None or self._closed:
             return
-        if result.behavior == 'allow':
+        if result.behavior == "allow":
             response: dict[str, object] = {
-                'behavior': 'allow',
-                'updatedInput': getattr(result, 'updated_input', {}),
+                "behavior": "allow",
+                "updatedInput": getattr(result, "updated_input", {}),
             }
         else:
             response = {
-                'behavior': 'deny',
-                'message': getattr(result, 'message', ''),
+                "behavior": "deny",
+                "message": getattr(result, "message", ""),
             }
         envelope = {
-            'type': 'control_response',
-            'response': {
-                'subtype': 'success',
-                'request_id': request_id,
-                'response': response,
+            "type": "control_response",
+            "response": {
+                "subtype": "success",
+                "request_id": request_id,
+                "response": response,
             },
         }
         try:
@@ -192,9 +190,9 @@ class DirectConnectSessionManager:
         if self._ws is None or self._closed:
             return
         envelope = {
-            'type': 'control_request',
-            'request_id': str(_uuid.uuid4()),
-            'request': {'subtype': 'interrupt'},
+            "type": "control_request",
+            "request_id": str(_uuid.uuid4()),
+            "request": {"subtype": "interrupt"},
         }
         try:
             await self._ws.send(json.dumps(envelope))
@@ -246,13 +244,13 @@ class DirectConnectSessionManager:
         try:
             async for raw in ws:
                 if isinstance(raw, bytes):
-                    text = raw.decode('utf-8', errors='replace')
+                    text = raw.decode("utf-8", errors="replace")
                 else:
                     text = raw
                 # Split on newlines so a single WS frame containing
                 # multiple NDJSON lines is handled correctly. Empty
                 # lines are skipped.
-                for line in text.split('\n'):
+                for line in text.split("\n"):
                     line = line.strip()
                     if not line:
                         continue
@@ -272,13 +270,13 @@ class DirectConnectSessionManager:
 
     async def _dispatch(self, msg: dict[str, object]) -> None:
         """Branch one parsed message to the right callback."""
-        msg_type = msg.get('type')
+        msg_type = msg.get("type")
 
-        if msg_type == 'control_request':
+        if msg_type == "control_request":
             await self._handle_control_request(msg)
             return
 
-        if msg_type == 'system' and msg.get('subtype') == 'post_turn_summary':
+        if msg_type == "system" and msg.get("subtype") == "post_turn_summary":
             return  # filtered
 
         if msg_type in _FILTERED_TYPES:
@@ -293,12 +291,12 @@ class DirectConnectSessionManager:
         response so the server doesn't hang waiting for a reply that
         never comes (chapter explicit pattern).
         """
-        request_id = msg.get('request_id')
-        inner = msg.get('request')
+        request_id = msg.get("request_id")
+        inner = msg.get("request")
         if not isinstance(request_id, str) or not isinstance(inner, dict):
             return
-        subtype = inner.get('subtype')
-        if subtype == 'can_use_tool':
+        subtype = inner.get("subtype")
+        if subtype == "can_use_tool":
             await self._invoke(
                 self._callbacks.on_permission_request,
                 inner,  # type: ignore[arg-type]
@@ -306,11 +304,9 @@ class DirectConnectSessionManager:
             )
             return
         # Unknown — send error response so the server doesn't hang.
-        logger.debug(
-            '[DirectConnect] Unsupported control request subtype: %s', subtype
-        )
+        logger.debug("[DirectConnect] Unsupported control request subtype: %s", subtype)
         await self._send_error_response(
-            request_id, f'Unsupported control request subtype: {subtype}'
+            request_id, f"Unsupported control request subtype: {subtype}"
         )
 
     async def _send_error_response(self, request_id: str, error: str) -> None:
@@ -318,11 +314,11 @@ class DirectConnectSessionManager:
         if self._ws is None or self._closed:
             return
         envelope = {
-            'type': 'control_response',
-            'response': {
-                'subtype': 'error',
-                'request_id': request_id,
-                'error': error,
+            "type": "control_response",
+            "response": {
+                "subtype": "error",
+                "request_id": request_id,
+                "error": error,
             },
         }
         try:
@@ -343,6 +339,6 @@ class DirectConnectSessionManager:
 
 
 __all__ = [
-    'DirectConnectCallbacks',
-    'DirectConnectSessionManager',
+    "DirectConnectCallbacks",
+    "DirectConnectSessionManager",
 ]

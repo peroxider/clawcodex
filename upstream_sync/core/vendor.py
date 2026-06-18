@@ -106,6 +106,7 @@ class VendorManager:
         if use_archive:
             import tarfile
             import io
+
             # Extract the full archive and filter to only the subpath members
             proc = subprocess.run(
                 ["git", "archive", "--prefix=", upstream_ref],
@@ -119,13 +120,14 @@ class VendorManager:
                 for member in members:
                     # Strip the subpath/ prefix so contents go directly into target_path
                     # e.g., "src/bridge/__init__.py" -> "bridge/__init__.py"
-                    member.name = member.name[len(subpath)+1:]
+                    member.name = member.name[len(subpath) + 1 :]
                     if member.name:
                         tar.extract(member, target_path)
         else:
             # Fallback: checkout to a temp branch and copy
             import tempfile
             import shutil
+
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp_branch = f"tmp-extract-{ref[:8]}"
                 subprocess.run(
@@ -158,9 +160,7 @@ class VendorManager:
     def create_version_tag(self, version: str, commit: str) -> None:
         """Create a version lock tag (e.g. upstream/v2025_06)."""
         dt = datetime.strptime(version, "%Y.%m.%d")
-        tag = self.cfg.version_tag_format.format(
-            YYYY=dt.year, MM=f"{dt.month:02d}"
-        )
+        tag = self.cfg.version_tag_format.format(YYYY=dt.year, MM=f"{dt.month:02d}")
         subprocess.run(
             ["git", "tag", tag, commit],
             cwd=self.repo_root,
@@ -243,8 +243,7 @@ class VendorManager:
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"Upstream remote '{upstream_ref}' not found. "
-                "Run 'upstream-sync fetch' first."
+                f"Upstream remote '{upstream_ref}' not found. Run 'upstream-sync fetch' first."
             )
         latest_ref = upstream_ref
 
