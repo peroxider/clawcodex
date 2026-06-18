@@ -163,6 +163,7 @@ def build_command_suggestions(
         from src.command_system.registry import CommandRegistry, get_command_registry
 
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 
         # Use a fresh private registry so we don't clobber the global
         # registry's LocalCommand for /model and /provider (F-43).
@@ -173,6 +174,7 @@ def build_command_suggestions(
         for cmd in get_builtin_commands():
             private_reg.register(cmd)
         register_away_summary_commands(private_reg)
+        register_runtime_commands(private_reg)
         for cmd in private_reg.list_commands(include_disabled=True):
             if getattr(cmd, "is_hidden", False):
                 continue
