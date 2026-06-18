@@ -1,9 +1,11 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.4（代码实现审计对齐）
-> 更新日期: 2026-07 | 上游同步: 58ea488 (dev-decoupling-refactor)
+> 版本: v3.5（v3.4 基础 + F-100 状态对齐）
+> 更新日期: 2026-06-18 | 上游同步: 58ea488 (dev-decoupling-refactor)
 > 
+> **v3.5 变更（F-100 状态对齐，2026-06-18）**：F-100 Dreaming 后台记忆整合系统 §2.16 标题状态从 📋 设计中改为 🟡 部分完成（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成，Phase B 30min TTL 增强待补；106 单测 + 12 门禁 + 6 E2E 场景全绿）。
+>
 > **v3.4 变更（代码实现审计对齐）**：全面修正 5 项特性状态与代码不对齐。
 >   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（PullRequestFeedback/ReviewFeedbackConfig/ReviewFeedbackService/Orchestrator review follow-up 全部落地）
 >   - F-46 permission_mode 正交拆分：⏳ 规划中 → 🟡 部分完成（F-46.0：headless auto-override 已实现；F-46.1：三字段正交拆分待后续）
@@ -1940,7 +1942,7 @@ F-99 三层方案
 
 ### 2.16 Dreaming 后台记忆整合系统（F-100）
 
-**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+**状态**: 🟡 部分完成（主体已落地，Phase B 待补） | **优先级**: P2 | **登记日期**: 2026-06-17 | **完成日期**: 2026-06-18
 
 **目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。后续章节"背景 / 现状 / 方案 / 任务"对应 `PROGRESS.md` 十三节。
 
@@ -2017,6 +2019,19 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 | `src/memory/`（auto-memory） | 复用 |
 | `extensions/orchestrator/workspace.py` lock | 复用 |
 | `/mnt/c/Workspace/claude-code-best/...` | 参考实现 |
+
+#### 实施落地（2026-06-18）
+
+主体已实现（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成）。完整子特性状态、阶段进度、测试覆盖与剩余工作（Phase B 30min TTL 增强）见 [`docs/PROGRESS.md` 十三节](./PROGRESS.md#十三dreaming-后台记忆整合系统f-100)。
+
+| 类别 | 落地位置 |
+|------|---------|
+| DreamTask | `src/tasks/dream/dream_task.py` |
+| autoDream 服务 | `clawcodex_ext/dreaming/service.py`（runner 工厂可注入） |
+| consolidationLock | `clawcodex_ext/dreaming/lock.py`（PID + mtime 锁；30min TTL 增强待 Phase B） |
+| `/dream` slash skill | `extensions/skills_ext/bundled/dream.py`（`run`/`once`/`status`/`help` 子命令） |
+| 永久 cron 集成 | `clawcodex_ext/dreaming/cron_integration.py`（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream`） |
+| 测试 | `tests/dreaming/` 106 单测 + 6 E2E + `tests/stability_gate/` 12 门禁 |
 
 ---
 
@@ -8605,4 +8620,4 @@ clawcodex_ext/community_radar/
 | **F-96** | **Orchestrator 实时看板接入（State Journal）** | §8.10 | ✅ **已完成** |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
 | F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | ✅ 已完成（2026-06-17） | 三方案组合：`AnthropicProvider._ensure_client` 默认 `timeout=5.0` + `_close_response_safely` 关 transport（Win 跳过） + `_run_tools_partitioned` 改 `asyncio.wait(FIRST_COMPLETED)` + 100ms abort poll + synth cancelled result 保配对。Cancel bound：直连 <500ms，LiteLLM bound 在 5s |
-| **F-100** | **Dreaming 后台记忆整合系统** | **§2.16** | **📋 设计中（2026-06-17）** | **移植上游 `claude-code-best` 的 `DreamTask` + `autoDream` + `/dream` skill。当前为桩：literal `"dream"` / 前缀 `d` 已声明但无 Task 类；`bundles.py:36` 引用悬空；`tests/tasks/test_task_registry.py:202` 不变量待解锁。子特性 100.1~100.7，工时合计 4.75 天** |
+| F-100 | Dreaming 后台记忆整合系统 | §2.16 | 🟡 部分完成（2026-06-18） | 主体 7 子特性全 ✅：DreamTask + autoDream + consolidationLock（PID+mtime 锁） + `/dream` slash skill + permanent cron 集成 + 测试不变量解锁；106 单测 + 12 门禁 + 6 E2E 场景全绿。Phase B（lock 30min TTL 增强，0.5天）待补 |

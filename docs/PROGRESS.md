@@ -1966,7 +1966,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 十三、Dreaming 后台记忆整合系统（F-100）
 
-**状态**: 📋 设计中 | **优先级**: P2 | **登记日期**: 2026-06-17
+**状态**: 🟡 部分完成（主体已落地，Phase B 待补） | **优先级**: P2 | **登记日期**: 2026-06-17 | **完成日期**: 2026-06-18
 
 **目标**: 从上游 fork 移植 dreaming 子系统（`DreamTask` 后台探索 + `autoDream` 自动 consolidate auto-memory + `/dream` slash skill），让 clawcodex 拥有"空闲时自我整合记忆"的能力。
 
@@ -2002,10 +2002,12 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | 阶段 | 内容 | 预计工时 | 状态 |
 |------|------|:--------:|:----:|
 | Phase A | 子特性 100.1+100.2+100.3+100.6：DreamTask + autoDream 主循环 + consolidationLock + 解锁 test 不变量（runner 是 stub：可由 `set_dream_runner_factory` 在生产 wiring 时替换） | 2天 | ✅ 完成 |
-| Phase B | 子特性 100.3：consolidationLock（基于已有 `dist_lock.py`，加 30min TTL） | 0.5天 | 📋 待实现 |
+| Phase B | 100.3 增强：consolidationLock TTL 过期清理（基于 Phase A 的 PID + mtime 锁，再叠加 30min TTL 过期）[^phase-b-scope] | 0.5天 | 📋 待实现 |
 | Phase C | 子特性 100.4：`/dream` slash skill + TUI 状态展示 | 0.5天 | ✅ 完成（`LocalCommand` 注册 + `run`/`once`/`status`/`help` 子命令 + 13 单测 + stage3d 6 测；TUI 状态展示按决定 #4 留待后续增量） |
 | Phase D | 子特性 100.5：cron 永久任务注册（`install_permanent_cron_tasks`） | 0.5天 | ✅ 完成（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream` + 本地 fire handler 拦截 + 11 单测 + cron_system 集成无回归） |
 | Phase E | 子特性 100.6+100.7：测试 + 门禁 | 1天 | ✅ 完成（E2E `tests/dreaming/test_e2e_dreaming.py` 6 个场景: slash run / slash status / manual_dream force / cron fire + wire / install 幂等 / 真 scheduler tick；runner 真集成通过 recording_factory 端到端验证） |
+
+[^phase-b-scope]: 子特性 100.3 在 Phase A 与 Phase B 出现两次但**范围不同**：**Phase A** 完成的是 consolidationLock **基础实现**（PID + mtime 锁，✅）；**Phase B** 计划的是 100.3 的 **TTL 增强**（30min 过期清理，📋）。当前锁功能已可工作，Phase B 仅为健壮性增量，缺它不会影响 F-100 主体功能。
 
 ### 验收标准
 
