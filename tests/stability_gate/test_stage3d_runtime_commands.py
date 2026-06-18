@@ -320,3 +320,223 @@ class TestDreamCommandExecution:
             f"should not return Unknown command; got error={error!r}, "
             f"result_text={result_text!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 竞态条件回归测试 — register_builtin_commands(None) 不得覆盖 LocalCommand
+# ---------------------------------------------------------------------------
+# 根因：后台线程 _warm_slash_suggestions_cache → build_command_suggestions
+# 调用 register_builtin_commands(None) 覆盖了全局注册表的 LocalCommand
+# 为 InteractiveCommand，导致 execute_command_sync 报
+# "Command not implemented for sync execution"。
+# 修复方案 (clawcodex_ext/tui/commands.py) 改用私有 CommandRegistry。
+# 以下测试守卫：即使 register_builtin_commands(None) 再次被调用，
+# model/provider 仍为 LOCAL 且可执行。
+# ---------------------------------------------------------------------------
+
+
+class TestRuntimeCommandsRaceCondition:
+    """build_command_suggestions 不得污染全局注册表（竞态条件回归）。"""
+
+    def test_build_command_suggestions_does_not_overwrite_model(self):
+        """build_command_suggestions 调用后全局 registry 的 model 仍为 LOCAL。"""
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.builtins import register_builtin_commands
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.command_system.types import CommandType
+        from clawcodex_ext.tui.commands import build_command_suggestions
+        from types import SimpleNamespace
+
+        reg = get_command_registry()
+        reg.clear()
+
+        # 模拟 REPL 正常启动顺序
+        register_builtin_commands(None)
+        register_runtime_commands(None)
+
+        # 验证初始状态
+        assert reg.get("model").command_type == CommandType.LOCAL
+
+        # 模拟后台线程调用 build_command_suggestions
+        build_command_suggestions(Path("/tmp"))
+
+        # 关键断言：全局注册表未被污染
+        cmd = reg.get("model")
+        assert cmd is not None, "model command must survive build_command_suggestions"
+        assert cmd.command_type == CommandType.LOCAL, (
+            f"expected LOCAL after build_command_suggestions, "
+            f"got {cmd.command_type}"
+        )
+
+    def test_build_command_suggestions_does_not_overwrite_provider(self):
+        """build_command_suggestions 调用后全局 registry 的 provider 仍为 LOCAL。"""
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.builtins import register_builtin_commands
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.command_system.types import CommandType
+        from clawcodex_ext.tui.commands import build_command_suggestions
+        from types import SimpleNamespace
+
+        reg = get_command_registry()
+        reg.clear()
+
+        register_builtin_commands(None)
+        register_runtime_commands(None)
+
+        assert reg.get("provider").command_type == CommandType.LOCAL
+
+        build_command_suggestions(Path("/tmp"))
+
+        cmd = reg.get("provider")
+        assert cmd is not None, "provider command must survive build_command_suggestions"
+        assert cmd.command_type == CommandType.LOCAL, (
+            f"expected LOCAL after build_command_suggestions, "
+            f"got {cmd.command_type}"
+        )
+
+    def test_model_executable_after_build_command_suggestions(self):
+        """build_command_suggestions 后 model 仍可通过 execute_command_sync 执行。"""
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.builtins import (
+            register_builtin_commands,
+            execute_command_sync,
+        )
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.tui.commands import build_command_suggestions
+        from types import SimpleNamespace
+
+        reg = get_command_registry()
+        reg.clear()
+        register_builtin_commands(None)
+        register_runtime_commands(None)
+
+        build_command_suggestions(Path("/tmp"))
+
+        success, result_text, error = execute_command_sync(
+            "model", "", _build_context(runtime_context=False)
+        )
+        assert success is True, (
+            f"should be executable after build_command_suggestions; "
+            f"got error={error!r}"
+        )
+        assert "Models:" in (result_text or "")
+
+    def test_provider_executable_after_build_command_suggestions(self):
+        """build_command_suggestions 后 provider 仍可通过 execute_command_sync 执行。"""
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.builtins import (
+            register_builtin_commands,
+            execute_command_sync,
+        )
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.tui.commands import build_command_suggestions
+        from types import SimpleNamespace
+
+        reg = get_command_registry()
+        reg.clear()
+        register_builtin_commands(None)
+        register_runtime_commands(None)
+
+        build_command_suggestions(Path("/tmp"))
+
+        success, result_text, error = execute_command_sync(
+            "provider", "", _build_context(runtime_context=False)
+        )
+        assert success is True, (
+            f"should be executable after build_command_suggestions; "
+            f"got error={error!r}"
+        )
+        assert "Providers:" in (result_text or "")
+
+
+# ---------------------------------------------------------------------------
+# 未知模型回退 provider 测试 — 使用当前运行时 provider 而非硬编码 anthropic
+# ---------------------------------------------------------------------------
+# 旧行为：infer_provider_for_model 失败时硬编码 provider = "anthropic"
+# 新行为：使用运行时上下文的 provider_name，保留用户当前的 provider
+
+
+class TestModelProviderFallback:
+    """未知模型回退到当前运行时 provider，而非硬编码 anthropic。"""
+
+    def _ensure_registered(self):
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+
+        get_command_registry().clear()
+        register_runtime_commands(None)
+
+    def test_unknown_model_falls_back_to_runtime_provider(self):
+        """未知模型使用运行时上下文的 provider，不是 anthropic。"""
+        self._ensure_registered()
+
+        # 构造一个 provider="openai" 的运行时上下文
+        from types import SimpleNamespace
+        from clawcodex_ext.command_system.engine import create_command_context
+
+        provider = SimpleNamespace(
+            model="gpt-4",
+            get_available_models=lambda: ["gpt-4"],
+        )
+        context = create_command_context(
+            workspace_root=Path("/tmp"),
+            provider=provider,
+            runtime_context=SimpleNamespace(
+                provider_name="openai",
+                options=SimpleNamespace(model="gpt-4"),
+                provider=provider,
+                tool_registry=None,
+                tool_context=None,
+                swap_provider=lambda p, m=None: None,
+            ),
+        )
+
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "model", "unknown-model", context
+        )
+        assert success is True, f"expected success, got error={error!r}"
+        # 应回退到 openai，而非 anthropic
+        assert "provider: openai" in (result_text or ""), (
+            f"expected 'provider: openai' in output, got {result_text!r}"
+        )
+        # 不应包含 "anthropic"
+        assert "anthropic" not in (result_text or "").lower(), (
+            f"should not fall back to anthropic, got {result_text!r}"
+        )
+
+    def test_known_model_stays_on_current_provider(self):
+        """已知模型（在当前 provider 列表中）不切换 provider。"""
+        self._ensure_registered()
+
+        from types import SimpleNamespace
+        from clawcodex_ext.command_system.engine import create_command_context
+
+        provider = SimpleNamespace(
+            model="gpt-4",
+            get_available_models=lambda: ["gpt-4", "another-model"],
+        )
+        context = create_command_context(
+            workspace_root=Path("/tmp"),
+            provider=provider,
+            runtime_context=SimpleNamespace(
+                provider_name="openai",
+                options=SimpleNamespace(model="gpt-4"),
+                provider=provider,
+                tool_registry=None,
+                tool_context=None,
+                swap_provider=lambda p, m=None: None,
+            ),
+        )
+
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "model", "another-model", context
+        )
+        assert success is True, f"expected success, got error={error!r}"
+        # provider 应保持 openai（another-model 在当前 provider 列表中）
+        assert "provider: openai" in (result_text or ""), (
+            f"expected 'provider: openai', got {result_text!r}"
+        )

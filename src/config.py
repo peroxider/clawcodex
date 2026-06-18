@@ -336,6 +336,13 @@ def set_api_key(
         config["providers"][provider]["base_url"] = base_url
     if default_model is not None:
         config["providers"][provider]["default_model"] = default_model
+        # Maintain a deduplicated models list so config-aware UIs
+        # (e.g. REPL /model) can offer the user's known models
+        # even when they are not in the built-in ModelRegistry.
+        models: list[str] = config["providers"][provider].get("models", [])
+        if default_model not in models:
+            models.append(default_model)
+        config["providers"][provider]["models"] = models
     mgr.save_global(config)
 
 

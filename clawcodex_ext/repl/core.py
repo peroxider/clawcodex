@@ -3860,6 +3860,8 @@ class ClawcodexREPL:
 - `/init` - Create CLAUDE.md file for the project
 - `/cost` - Show session cost and usage
 - `/compact` - Compact conversation to save context space
+- `/model` - Show current model and available list, or switch model
+- `/provider` - Show current provider and available list, or switch provider
 - `/tui` - Switch into the Textual-based full-screen TUI (opt-in)
 
 **Usage:**
