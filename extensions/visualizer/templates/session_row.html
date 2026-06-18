@@ -105,6 +105,27 @@
     </div>
 </aside>
 
+{# Side drawer for bezier event detail. Mirrors the waterfall turn-drawer
+   (same .turn-drawer styling, same slide-in transition, same close
+   affordance). The body is populated by bezier_waterfall.js when an
+   event bar is clicked; the header is replaced with a category dot +
+   title + category/error pills, but uses the same .turn-drawer-header
+   structure so the close button stays in the top-right corner. #}
+<aside id="bezier-drawer" class="turn-drawer" aria-hidden="true" role="dialog"
+       aria-labelledby="bezier-drawer-title">
+    <div class="turn-drawer-header">
+        <span class="bezier-drawer-cat-dot" id="bezier-drawer-cat-dot"
+              aria-hidden="true"></span>
+        <h3 id="bezier-drawer-title">Event Detail</h3>
+        <span class="bezier-drawer-pills" id="bezier-drawer-pills"></span>
+        <button type="button" class="turn-drawer-close"
+                aria-label="Close drawer">×</button>
+    </div>
+    <div class="turn-drawer-body" id="bezier-drawer-body">
+        <div class="turn-drawer-empty">Not loaded yet</div>
+    </div>
+</aside>
+
 {# Include status bar #}
 {% include "status_bar.html" %}
 {% endblock %}

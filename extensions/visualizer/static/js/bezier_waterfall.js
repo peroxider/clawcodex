@@ -1,10 +1,11 @@
 /**
  * ClawCodex Visualizer — Bezier Waterfall View
  *
- * P4 — EventDetailPanel (5-body modal) on top of P3 zoom/pan.
+ * P4 — EventDetailDrawer (right-side slide-in, mirrors the waterfall
+ *   chart's .turn-drawer pattern) on top of P3 zoom/pan.
  *   Renders the 8-category timeline with a sticky time axis, ported
  *   from clawcodex_sessions_analysis (Next.js). Clicking an event
- *   bar opens a centered modal with one of 5 body types.
+ *   bar opens a side drawer with one of 5 body types.
  *
  * Scope of this file (P4):
  *   - Fetch /api/viz/multi-session?sessions=... and render 8 category bars
@@ -18,18 +19,16 @@
  *   - ResizeObserver on the scroll container; re-render on width change
  *   - ref-mirror pattern (zoomRef / containerWRef)
  *   - destroy() tears down all listeners + observers + cancels rAF
- *   - NEW: EventDetailPanel as .bezier-backdrop center modal
+ *   - EventDetailDrawer: pre-built #bezier-drawer markup, .open toggle
  *       · 5 body types: tool / tool-result / llm / user / system
  *       · click vs pan differentiated by panState.moved (no separate
  *         click handler / suppress flag needed)
- *       · Esc key closes; click on backdrop closes; X button closes
+ *       · Esc key closes; X button closes
  *       · Sticky header (category color dot + label + category pill +
- *         error pill + close)
+ *         error pill)
  *       · Time section: relative / duration / absolute
  *         (duration: 未记录 / 估算 / real ms — fixes Next.js
  *          event-detail-panel.tsx:84-108 missing "估算" label)
- *       · Resize handle on right edge: 280 ≤ width ≤ innerWidth*0.85,
- *         setPointerCapture + body.cursor = 'col-resize'
  *       · CodeBlock: 12-16 line preview + expand/collapse + copy
  *         (navigator.clipboard.writeText + execCommand fallback)
  *
@@ -135,10 +134,6 @@ const BezierWaterfall = (function() {
     // Pan threshold in CSS pixels — drags below this are treated as
     // clicks and don't engage the pan. Matches session-analyzer.tsx:105.
     const PAN_THRESHOLD_PX = 4;
-    // ---- P4 detail panel constants (ported from event-detail-panel.tsx:18-20) ----
-    const PANEL_DEFAULT_W   = 420;
-    const PANEL_MIN_W       = 280;
-    const PANEL_MAX_VW_FRAC = 0.85;
     // CodeBlock default preview limits. LLM 12, others 16 — match
     // the Next.js <CodeBlock maxLines={...}> choices.
     const CODEBLOCK_MAX_LINES_LLM  = 12;
@@ -267,25 +262,31 @@ const BezierWaterfall = (function() {
     }
 
     function buildSection(title) {
-        const section = el('div', 'bezier-event-section');
-        section.appendChild(el('h4', null, title));
-        const content = el('div', 'bezier-event-section-content');
+        // Use the waterfall's .turn-drawer-section so the bezier drawer
+        // inherits the same spacing, borders, and section titles. The
+        // section content is a generic div (CodeBlock appends into it
+        // directly; appendRow nests a <dl>).
+        const section = el('section', 'turn-drawer-section');
+        if (title) section.appendChild(el('h4', null, title));
+        const content = el('div', 'turn-drawer-section-content');
         section.appendChild(content);
         return { section, content };
     }
 
     function appendRow(content, label, value, opts) {
+        // Match the waterfall's <dl><dt><dd> shape so rows pick up the
+        // shared .turn-drawer-section dl/dt/dd styles. Optional flag
+        // classes are scoped to the bezier drawer (no waterfall collision).
         opts = opts || {};
-        const row = el('div', 'bezier-event-row');
-        const l = el('span', 'bezier-event-row-label', label);
-        const v = el('span', 'bezier-event-row-value',
-            (value == null || value === '') ? '—' : String(value));
-        if (opts.mono)  v.classList.add('bezier-event-mono');
-        if (opts.muted) v.classList.add('bezier-event-muted');
-        if (opts.error) v.classList.add('bezier-event-error-text');
-        row.appendChild(l);
-        row.appendChild(v);
-        content.appendChild(row);
+        const dl = el('dl');
+        const dt = el('dt', null, label);
+        const dd = el('dd', null, (value == null || value === '') ? '—' : String(value));
+        if (opts.mono)  dd.classList.add('bezier-drawer-mono');
+        if (opts.muted) dd.classList.add('bezier-drawer-muted');
+        if (opts.error) dd.classList.add('bezier-drawer-error-text');
+        dl.appendChild(dt);
+        dl.appendChild(dd);
+        content.appendChild(dl);
     }
 
     function appendCodeBlock(content, text, maxLines) {
@@ -392,11 +393,10 @@ const BezierWaterfall = (function() {
             this.rafId = null;
             this.zoomRef = { current: 1 };
             this.containerWRef = { current: 0 };
-            // ---- P4 detail panel state ----
+            // ---- P4 detail drawer state ----
             this.selectedEvent = null;       // currently-open tick (or null)
-            this.panelEl = null;             // detail panel root
-            this.backdropEl = null;          // full-screen backdrop
-            this.panelWidth = PANEL_DEFAULT_W;
+            this._drawerRefs = null;         // {drawer, body, title, catDot, pills, closeBtn}
+            this._drawerCloseWired = false;  // bound exactly once per instance
             this._tickByBarId = new Map();   // barId → tick, for click resolution
             // ---- P5 connector state ----
             // activeMap is rebuilt on every _render() and tracks the
@@ -1165,7 +1165,9 @@ const BezierWaterfall = (function() {
         }
 
         // ----------------------------------------------------------------
-        // P4 — EventDetailPanel (center modal, 5 body types)
+        // P4 — EventDetailDrawer (right-side slide-in, mirrors the
+        // waterfall chart's .turn-drawer pattern). 5 body types share
+        // the same drawer; selection toggles the .open class.
         // ----------------------------------------------------------------
 
         // The 5 body types are keyed by `_eventKindOf(tick)`. Mapping
@@ -1208,82 +1210,95 @@ const BezierWaterfall = (function() {
             this._renderDetailPanel();
         }
 
-        // Build / show / hide the backdrop + panel. The panel and
-        // backdrop are children of document.body (NOT the chart
-        // container) so a modal stays put when the chart scrolls.
-        _renderDetailPanel() {
-            if (!this.selectedEvent) {
-                if (this.backdropEl && this.backdropEl.parentNode) {
-                    this.backdropEl.parentNode.removeChild(this.backdropEl);
+        // Lazily cache the static #bezier-drawer markup declared in
+        // session_row.html. Wire the close button + Escape key once
+        // per instance; subsequent calls just return the cached refs.
+        // Mirrors the waterfall's drawer pattern (close button + Esc
+        // + click-outside are all handled outside the chart code).
+        _ensureDrawer() {
+            if (this._drawerRefs) return this._drawerRefs;
+            const drawer = document.getElementById('bezier-drawer');
+            if (!drawer) {
+                console.warn('[bezier] #bezier-drawer not found in DOM');
+                return null;
+            }
+            const refs = {
+                drawer,
+                body: drawer.querySelector('#bezier-drawer-body'),
+                title: drawer.querySelector('#bezier-drawer-title'),
+                catDot: drawer.querySelector('#bezier-drawer-cat-dot'),
+                pills: drawer.querySelector('#bezier-drawer-pills'),
+                closeBtn: drawer.querySelector('.turn-drawer-close'),
+            };
+            if (refs.closeBtn) {
+                refs.closeBtn.addEventListener('click', () => this._closeDetailPanel());
+            }
+            // Esc key — bound at the instance level (not the document
+            // level) so multiple bezier instances don't double-fire.
+            // Use capture phase so we close before the waterfall's own
+            // Esc handler on a different drawer.
+            this._onDrawerKeydown = (e) => {
+                if (e.key === 'Escape' && this.selectedEvent) {
+                    e.stopPropagation();
+                    this._closeDetailPanel();
                 }
-                this.backdropEl = null;
-                this.panelEl = null;
-                document.body.style.overflow = '';
-                return;
-            }
-            if (!this.backdropEl) {
-                this.backdropEl = el('div', 'bezier-backdrop');
-                this.backdropEl.addEventListener('click', (e) => {
-                    if (e.target === this.backdropEl) this._closeDetailPanel();
-                });
-                document.body.appendChild(this.backdropEl);
-                // Lock body scroll while the panel is open so the
-                // chart behind the modal can't be scrolled.
-                document.body.style.overflow = 'hidden';
-            }
-            if (!this.panelEl) {
-                this.panelEl = el('aside', 'bezier-event-panel');
-                this.panelEl.setAttribute('role', 'dialog');
-                this.panelEl.setAttribute('aria-modal', 'true');
-                this.panelEl.setAttribute('aria-labelledby', 'bezier-event-title');
-                this.panelEl.style.width = this.panelWidth + 'px';
-                this.backdropEl.appendChild(this.panelEl);
-            }
-            // Rebuild content (cheap; panels are short).
-            this.panelEl.innerHTML = '';
-            this.panelEl.style.width = this.panelWidth + 'px';
-            this.panelEl.appendChild(this._buildPanelHeader(this.selectedEvent));
-            this.panelEl.appendChild(this._buildPanelBody(this.selectedEvent));
-            this.panelEl.appendChild(this._buildResizeHandle());
+            };
+            document.addEventListener('keydown', this._onDrawerKeydown, true);
+            this._drawerRefs = refs;
+            this._drawerCloseWired = true;
+            return refs;
         }
 
-        _buildPanelHeader(tick) {
+        // Build a single header pill (category or error). Pills are
+        // scoped to the bezier drawer (no collision with the waterfall
+        // legend bar) and inherit `--bezier-cat-*` theme colours.
+        _buildPill(text, color, opts) {
+            opts = opts || {};
+            const pill = el('span', 'bezier-drawer-pill', text);
+            if (color) {
+                pill.style.borderColor = color;
+                pill.style.color = color;
+            }
+            if (opts.error) pill.classList.add('bezier-drawer-pill-error');
+            return pill;
+        }
+
+        // Populate the pre-built drawer markup and toggle the .open
+        // class. When `selectedEvent` is null the drawer is hidden and
+        // its body is cleared; no DOM nodes are created or destroyed.
+        _renderDetailPanel() {
+            if (!this.selectedEvent) {
+                if (this._drawerRefs && this._drawerRefs.drawer) {
+                    this._drawerRefs.drawer.classList.remove('open');
+                    if (this._drawerRefs.body) this._drawerRefs.body.innerHTML = '';
+                }
+                return;
+            }
+            const refs = this._ensureDrawer();
+            if (!refs) return;
+            const tick = this.selectedEvent;
+            // Update the static header (cat dot + title + pills).
             const kind = this._eventKindOf(tick);
             const cat  = (kind === 'llm') ? 'llm' : bezierCategoryOf(tick);
-            // Use the live theme colours (read from --bezier-cat-*
-            // at construction time) so the header dot updates if the
-            // user toggles a theme. Falls back to CATEGORY_COLORS
-            // and the standard 'other' grey for safety.
             const colorMap = this._categoryColors || CATEGORY_COLORS;
-            const meta = { color: colorMap[cat] || CATEGORY_COLORS[cat] || '#6e7681',
-                           label: CATEGORY_LABELS[cat] || '其他' };
-
-            const header = el('div', 'bezier-event-panel-header');
-            const dot = el('span', 'bezier-event-cat-dot');
-            dot.style.background = meta.color;
-            header.appendChild(dot);
-
-            const title = el('span', 'bezier-event-panel-title', this._headerLabelOf(tick));
-            title.id = 'bezier-event-title';
-            header.appendChild(title);
-
-            const catPill = el('span', 'bezier-event-cat-pill', meta.label);
-            catPill.style.borderColor = meta.color;
-            catPill.style.color = meta.color;
-            header.appendChild(catPill);
-
-            if (this._isErrorOf(tick)) {
-                header.appendChild(el('span', 'bezier-event-error-pill', '错误'));
+            const catColor = colorMap[cat] || CATEGORY_COLORS[cat] || '#6e7681';
+            const catLabel = CATEGORY_LABELS[cat] || '其他';
+            if (refs.catDot) refs.catDot.style.background = catColor;
+            if (refs.title)  refs.title.textContent = this._headerLabelOf(tick);
+            if (refs.pills) {
+                refs.pills.innerHTML = '';
+                refs.pills.appendChild(this._buildPill(catLabel, catColor));
+                if (this._isErrorOf(tick)) {
+                    refs.pills.appendChild(this._buildPill('错误', null, { error: true }));
+                }
             }
-
-            const closeBtn = el('button', 'bezier-event-close');
-            closeBtn.type = 'button';
-            closeBtn.setAttribute('aria-label', '关闭详情面板');
-            closeBtn.textContent = '×';
-            closeBtn.addEventListener('click', () => this._closeDetailPanel());
-            header.appendChild(closeBtn);
-
-            return header;
+            // Rebuild the body. Cheap; the body is short.
+            if (refs.body) {
+                refs.body.innerHTML = '';
+                refs.body.appendChild(this._buildPanelBody(tick));
+            }
+            refs.drawer.classList.add('open');
+            refs.drawer.setAttribute('aria-hidden', 'false');
         }
 
         _buildPanelBody(tick) {
@@ -1441,45 +1456,20 @@ const BezierWaterfall = (function() {
             }
         }
 
-        // Resize handle on the right edge of the panel. setPointerCapture
-        // + body.cursor = 'col-resize' + prevValue restore mirrors
-        // event-detail-panel.tsx:439-527.
-        _buildResizeHandle() {
-            const handle = el('div', 'bezier-event-resize');
-            handle.setAttribute('role', 'separator');
-            handle.setAttribute('aria-orientation', 'vertical');
-            handle.setAttribute('aria-label', '拖拽调整宽度');
-            handle.setAttribute('aria-valuenow', String(this.panelWidth));
-            // Grip dot
-            handle.appendChild(el('span', 'bezier-event-resize-grip'));
-            let drag = null;
-            handle.addEventListener('pointerdown', (e) => {
-                e.preventDefault();
-                try { handle.setPointerCapture(e.pointerId); } catch (_) {}
-                drag = { startX: e.clientX, startW: this.panelWidth };
-            });
-            handle.addEventListener('pointermove', (e) => {
-                if (!drag) return;
-                const maxW = Math.max(PANEL_MIN_W, window.innerWidth * PANEL_MAX_VW_FRAC);
-                const delta = e.clientX - drag.startX;
-                const nextW = Math.max(PANEL_MIN_W, Math.min(maxW, drag.startW + delta));
-                this.panelWidth = nextW;
-                this.panelEl.style.width = nextW + 'px';
-                handle.setAttribute('aria-valuenow', String(nextW));
-            });
-            const endDrag = (e) => {
-                if (!drag) return;
-                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
-                drag = null;
-            };
-            handle.addEventListener('pointerup', endDrag);
-            handle.addEventListener('pointercancel', endDrag);
-            return handle;
-        }
+        // Resize handle removed: the side drawer uses the fixed width
+        // defined on .turn-drawer (420px / 92vw) from the waterfall
+        // chart. Resizing would shift the chart behind it; the existing
+        // width is tuned for both surfaces.
 
         destroy() {
             this._detachInteractions();
             this._destroyDetailPanel();
+            if (this._onDrawerKeydown) {
+                document.removeEventListener('keydown', this._onDrawerKeydown, true);
+                this._onDrawerKeydown = null;
+            }
+            this._drawerRefs = null;
+            this._drawerCloseWired = false;
             if (this.container) {
                 this.container.innerHTML = '';
                 this.container.classList.remove('bezier-waterfall');
@@ -1489,14 +1479,13 @@ const BezierWaterfall = (function() {
         }
 
         _destroyDetailPanel() {
-            if (this.backdropEl && this.backdropEl.parentNode) {
-                this.backdropEl.parentNode.removeChild(this.backdropEl);
+            if (this._drawerRefs && this._drawerRefs.drawer) {
+                this._drawerRefs.drawer.classList.remove('open');
+                this._drawerRefs.drawer.setAttribute('aria-hidden', 'true');
+                if (this._drawerRefs.body) this._drawerRefs.body.innerHTML = '';
             }
-            this.backdropEl = null;
-            this.panelEl = null;
             this.selectedEvent = null;
             this._tickByBarId = new Map();
-            document.body.style.overflow = '';
         }
     }
 
@@ -1568,9 +1557,6 @@ const BezierWaterfall = (function() {
         ZOOM_MIN: ZOOM_MIN,
         ZOOM_MAX: ZOOM_MAX,
         ZOOM_STEP: ZOOM_STEP,
-        PANEL_DEFAULT_W: PANEL_DEFAULT_W,
-        PANEL_MIN_W: PANEL_MIN_W,
-        PANEL_MAX_VW_FRAC: PANEL_MAX_VW_FRAC,
         // P5 — row layout constants
         ROW_H: ROW_H,
         HEADER_H: HEADER_H,
