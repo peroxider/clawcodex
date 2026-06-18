@@ -18,3 +18,4 @@ def test_api_serve_help(capsys):
     assert "clawcodex api serve" in output
     assert "--host" in output
     assert "--port" in output
+    assert "--state-limit" in output

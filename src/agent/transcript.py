@@ -350,7 +350,7 @@ class TranscriptWriter:
         # sensitive prompt content — readable by the user only.
         self._fd: int | None = os.open(
             self._path,
-            os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC,
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
             0o600,
         )
         self._closed = False
