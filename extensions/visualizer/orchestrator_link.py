@@ -1,7 +1,15 @@
 """Orchestrator link generator (F-95-A).
 
 Generates links to F-38 reports, F-45 tool events, and F-54 debug logs
-from session data.
+from session data, using the new ClawCodeX on-disk layout:
+
+- Tool events (F-45) live at ``~/.clawcodex/tool-events/<run_id>/events.ndjson``.
+- Debug logs (F-54) live at ``~/.clawcodex/tool-events/<run_id>/debug.ndjson``.
+- Reports (F-38) live alongside the session at ``<session_dir>/report.{md,json}``.
+
+The old fallback path ``<session_dir>/.orchestrator_control/runs/<run_id>/``
+is no longer consulted — that layout was retired when the orchestrator
+moved to the F-45 canonical tool-events root.
 """
 
 from __future__ import annotations
@@ -12,6 +20,9 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Canonical tool-events root in the new format (F-45).
+TOOL_EVENTS_ROOT = Path.home() / ".clawcodex" / "tool-events"
 
 
 class OrchestratorLink:
@@ -29,7 +40,6 @@ class OrchestratorLink:
         }
 
         if session_dir is None:
-            # Try default location
             session_dir = Path.home() / ".clawcodex" / "sessions" / session_id
 
         if not session_dir.is_dir():
@@ -50,16 +60,17 @@ class OrchestratorLink:
             }
 
         # F-45: Tool events audit log
-        events_file = session_dir / "events.ndjson"
+        # Canonical path: ``~/.clawcodex/tool-events/<run_id>/events.ndjson``.
+        # The session_id is the run_id (the new orchestrator key is the
+        # session id from bootstrap, not a separate ``run_*``).
+        events_file = TOOL_EVENTS_ROOT / session_id / "events.ndjson"
         if not events_file.exists():
-            # Check orchestrator control dir
-            orch_dir = session_dir / ".orchestrator_control" / "runs"
-            if orch_dir.is_dir():
-                for run_dir in orch_dir.iterdir():
-                    candidate = run_dir / "events.ndjson"
-                    if candidate.exists():
-                        events_file = candidate
-                        break
+            # Legacy fallback (transitional periods only) — same file
+            # under the session directory. The old
+            # ``.orchestrator_control/runs/<run_id>/`` layout is gone.
+            fallback = session_dir / "events.ndjson"
+            if fallback.exists():
+                events_file = fallback
 
         if events_file.exists():
             links["f45_events"] = {
@@ -71,15 +82,11 @@ class OrchestratorLink:
             }
 
         # F-54: Debug timeline log
-        debug_file = session_dir / "debug.ndjson"
+        debug_file = TOOL_EVENTS_ROOT / session_id / "debug.ndjson"
         if not debug_file.exists():
-            orch_dir = session_dir / ".orchestrator_control" / "runs"
-            if orch_dir.is_dir():
-                for run_dir in orch_dir.iterdir():
-                    candidate = run_dir / "debug.ndjson"
-                    if candidate.exists():
-                        debug_file = candidate
-                        break
+            fallback = session_dir / "debug.ndjson"
+            if fallback.exists():
+                debug_file = fallback
 
         if debug_file.exists():
             links["f54_debug"] = {

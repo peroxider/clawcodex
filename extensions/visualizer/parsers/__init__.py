@@ -7,6 +7,7 @@ Use direct submodule imports for the others, e.g.::
 
     from .orchestrator_state_parser import OrchestratorStateParser
     from .transcript_parser import TranscriptParser
+    from .tool_events_parser import ToolEventsParser
 """
 
 from .session_parser import SessionMetadataParser

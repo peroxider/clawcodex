@@ -48,15 +48,22 @@ class _AppState:
     def __init__(
         self,
         sessions_dir: Path | None = None,
+        transcripts_dir: Path | None = None,
         workspaces_file: Path | None = None,
         allow_import: bool = False,
     ) -> None:
         self.sessions_dir = sessions_dir or (Path.home() / ".clawcodex" / "sessions")
+        self.transcripts_dir = transcripts_dir or (Path.home() / ".clawcodex" / "transcripts")
         self.workspaces_file = workspaces_file or (Path.home() / ".clawcodex" / "workspaces.json")
         self.allow_import = allow_import
+        # Reports dir (F-96-E) now lives under the per-user root, not
+        # under the workspace. ``Path.home() / ".clawcodex" / "reports"``
+        # is the canonical location for orchestrator state journals.
+        self.reports_dir = Path.home() / ".clawcodex" / "reports"
         self.timeline_builder = TimelineBuilder(
             sessions_dir=self.sessions_dir,
-            reports_dir=self.sessions_dir.parent / ".reports" if self.sessions_dir else None,
+            transcripts_dir=self.transcripts_dir,
+            reports_dir=self.reports_dir,
         )
         self.gantt_builder = GanttDataBuilder()
         self.comparison_builder = ComparisonBuilder()
@@ -182,9 +189,19 @@ def _scan_transcript_for_turn(
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Scan a transcript.jsonl for the LLM I/O of a single turn.
 
+    New-format expectations (per ``src.types.messages.message_to_dict``):
+
+    - ``content`` is always a list of typed content blocks.
+    - ``role`` is one of ``user`` / ``assistant`` / ``system``.
+    - tool_use blocks carry ``id``; tool_result blocks carry
+      ``tool_use_id``. No legacy ``tool_calls`` / ``tool_call_id``
+      envelope exists in the new format.
+    - ``isMeta`` / ``isVirtual`` / ``isCompactSummary`` / API-error
+      entries are skipped — they never carry turn I/O.
+
     Returns ``(input_msg, output_msg)`` where ``input_msg`` is the
     assistant message that issued the tool call (the LLM's "input") and
-    ``output_msg`` is the tool message that returned the result (the
+    ``output_msg`` is the user message that returned the result (the
     LLM's "output"). Either may be ``None`` if only one half of the
     pair exists in the transcript.
     """
@@ -201,27 +218,26 @@ def _scan_transcript_for_turn(
                 continue
             if not isinstance(entry, dict):
                 continue
+            entry_type = entry.get("type", "")
+            if entry_type in ("cost_block", "progress"):
+                continue
+            if entry.get("isMeta") or entry.get("isVirtual"):
+                continue
+            if entry.get("isCompactSummary"):
+                continue
             role = entry.get("role")
-            # Anthropic content-block envelope (assistant + tool)
+            # Anthropic content-block envelope (assistant + tool) —
+            # the only envelope the new format emits.
             for blk in _normalize_blocks(entry.get("content")):
                 btype = blk.get("type")
                 if input_msg is None and role == "assistant":
                     if btype == "tool_use" and blk.get("id") == turn_id:
                         input_msg = entry
                         break
-                if output_msg is None and (role == "user" or btype == "tool_result"):
+                if output_msg is None and role == "user":
                     if btype == "tool_result" and blk.get("tool_use_id") == turn_id:
                         output_msg = entry
                         break
-            # Legacy envelope: assistant.tool_calls[] / tool.tool_call_id
-            if input_msg is None and role == "assistant":
-                for tc in entry.get("tool_calls") or []:
-                    if isinstance(tc, dict) and tc.get("id") == turn_id:
-                        input_msg = entry
-                        break
-            if output_msg is None and role == "tool":
-                if entry.get("tool_call_id") == turn_id:
-                    output_msg = entry
             if input_msg is not None and output_msg is not None:
                 break
     return (
@@ -250,6 +266,7 @@ async def lifespan(app: FastAPI):
 
 def create_app(
     sessions_dir: Path | None = None,
+    transcripts_dir: Path | None = None,
     workspaces_file: Path | None = None,
     allow_import: bool = False,
     host: str = "0.0.0.0",
@@ -265,6 +282,7 @@ def create_app(
     # State
     app.state.viz = _AppState(
         sessions_dir=sessions_dir,
+        transcripts_dir=transcripts_dir,
         workspaces_file=workspaces_file,
         allow_import=allow_import,
     )
@@ -589,9 +607,7 @@ def create_app(
         """List all orchestrator runs with state journals (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.list_runs()
 
@@ -604,9 +620,7 @@ def create_app(
         """
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.get_current_snapshot()
 
@@ -615,9 +629,7 @@ def create_app(
         """Get detailed state for a specific orchestrator run (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         state = parser.parse_run(run_id)
         if state is None:
@@ -651,9 +663,7 @@ def create_app(
         """Get the event timeline for a specific issue in a run (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
         parser = OrchestratorStateParser(
-            reports_dir=app.state.viz.sessions_dir.parent / ".reports"
-            if app.state.viz.sessions_dir
-            else None,
+            reports_dir=app.state.viz.reports_dir,
         )
         return parser.get_issue_timeline(run_id, issue_id)
 

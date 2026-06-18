@@ -1,10 +1,38 @@
-"""Example fixture data for the Visualizer."""
+"""Example fixture data for the Visualizer.
+
+The demo session is written in the new ClawCodeX envelope:
+
+* ``metadata.json`` only carries the user-anchored fields the new format
+  actually persists — ``session_id``, ``start_time``, ``model``,
+  ``cwd``, ``title``, ``agent_name``, ``tags``. Operational counters
+  (``turn_count`` / ``tool_count`` / ``duration_ms`` / ``status`` /
+  ``provider``) are no longer cached on metadata; the parsers derive
+  them by walking ``transcript.jsonl``.
+* ``transcript.jsonl`` uses the full new envelope: each line carries
+  ``role``, ``content`` (a list of typed content blocks), ``type``,
+  ``uuid``, ``timestamp`` (ISO 8601), ``isMeta``, ``isVirtual``,
+  ``isCompactSummary``, ``origin``, and (for assistant) ``model`` /
+  ``usage`` / ``stop_reason``. No legacy ``tool_calls`` / ``tool_call_id``
+  envelope remains.
+* ``events.ndjson`` keeps the F-45 tool-events shape (unchanged).
+"""
 
 import json
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 FIXTURES_DIR = Path(__file__).resolve().parent
+
+
+def _iso(ts: float) -> str:
+    """Format a Unix timestamp as ISO 8601 UTC (no microseconds)."""
+    return datetime.fromtimestamp(ts, tz=timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _new_uuid() -> str:
+    return uuid.uuid4().hex
 
 
 def create_demo_session(output_dir: Path | None = None) -> str:
@@ -21,92 +49,227 @@ def create_demo_session(output_dir: Path | None = None) -> str:
 
     now = time.time()
 
-    # metadata.json
+    # metadata.json — minimal user-anchored fields only. Operational
+    # counters (turn_count / tool_count / status / duration_ms) are no
+    # longer cached here; the parser derives them from transcript.jsonl.
     metadata = {
         "session_id": session_id,
         "title": "Demo Session — Full Pipeline",
-        "workspace": str(output_dir),
-        "model": "claude-3-sonnet",
-        "provider": "anthropic",
-        "status": "completed",
+        "cwd": str(output_dir),
+        "model": "claude-opus-4-7",
         "agent_name": "clawcodex-overview",
         "start_time": now - 120,
-        "end_time": now,
-        "duration_ms": 120000,
-        "turn_count": 8,
-        "tool_count": 12,
         "tags": ["demo", "test"],
     }
     (session_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2), encoding="utf-8"
     )
 
-    # transcript.jsonl — simulated conversation
+    # transcript.jsonl — new ClawCodeX envelope. ``content`` is a list of
+    # typed blocks, timestamps are ISO 8601, assistant entries carry
+    # model / usage / stop_reason, and ``isMeta`` / ``isVirtual`` /
+    # ``isCompactSummary`` / ``origin`` are filled in.
+    user_uuid = _new_uuid()
+    assistant_read_uuid = _new_uuid()
+    tool_read_uuid = _new_uuid()
+    assistant_bash_uuid = _new_uuid()
+    tool_bash_uuid = _new_uuid()
+    assistant_grep_uuid = _new_uuid()
+    tool_grep_uuid = _new_uuid()
+    assistant_final_uuid = _new_uuid()
+
     transcript_lines = [
+        # ---- user prompt
         json.dumps({
             "role": "user",
-            "content": "Please analyze the codebase and suggest improvements",
-            "timestamp": now - 120,
+            "type": "message",
+            "uuid": user_uuid,
+            "timestamp": _iso(now - 120),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "user",
+            "content": [
+                {"type": "text", "text": "Please analyze the codebase and suggest improvements"},
+            ],
         }),
+        # ---- assistant: Read src/main.py
         json.dumps({
             "role": "assistant",
-            "content": "I'll start by reading the main files...",
-            "timestamp": now - 118,
-            "tool_calls": [{
-                "id": "tc-001",
-                "type": "function",
-                "function": {"name": "Read", "arguments": {"file_path": "src/main.py"}},
-            }],
+            "type": "message",
+            "uuid": assistant_read_uuid,
+            "timestamp": _iso(now - 118),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "agent",
+            "model": "claude-opus-4-7",
+            "stop_reason": "tool_use",
+            "duration_ms": 1100,
+            "usage": {
+                "input_tokens": 320,
+                "output_tokens": 80,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            "content": [
+                {"type": "text", "text": "I'll start by reading the main files..."},
+                {
+                    "type": "tool_use",
+                    "id": "tc-001",
+                    "tool_use_id": "tc-001",
+                    "name": "Read",
+                    "input": {"file_path": "src/main.py"},
+                },
+            ],
         }),
+        # ---- tool_result for tc-001 (carried as a user message with
+        # ``tool_result`` block in the new envelope)
         json.dumps({
-            "role": "tool",
-            "tool_call_id": "tc-001",
-            "content": "# main.py\nimport sys\n...",
-            "timestamp": now - 117,
+            "role": "user",
+            "type": "message",
+            "uuid": tool_read_uuid,
+            "timestamp": _iso(now - 117),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "tool_result",
+            "toolUseID": "tc-001",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tc-001",
+                    "content": [{"type": "text", "text": "# main.py\nimport sys\n..."}],
+                },
+            ],
         }),
+        # ---- assistant: Bash
         json.dumps({
             "role": "assistant",
-            "content": "Now let me check the test coverage...",
-            "timestamp": now - 115,
-            "tool_calls": [{
-                "id": "tc-002",
-                "type": "function",
-                "function": {"name": "Bash", "arguments": {"command": "pytest --cov"}},
-            }],
+            "type": "message",
+            "uuid": assistant_bash_uuid,
+            "timestamp": _iso(now - 115),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "agent",
+            "model": "claude-opus-4-7",
+            "stop_reason": "tool_use",
+            "duration_ms": 950,
+            "usage": {
+                "input_tokens": 410,
+                "output_tokens": 60,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            "content": [
+                {"type": "text", "text": "Now let me check the test coverage..."},
+                {
+                    "type": "tool_use",
+                    "id": "tc-002",
+                    "tool_use_id": "tc-002",
+                    "name": "Bash",
+                    "input": {"command": "pytest --cov"},
+                },
+            ],
         }),
+        # ---- tool_result for tc-002
         json.dumps({
-            "role": "tool",
-            "tool_call_id": "tc-002",
-            "content": "Coverage: 67% - needs improvement",
-            "timestamp": now - 110,
+            "role": "user",
+            "type": "message",
+            "uuid": tool_bash_uuid,
+            "timestamp": _iso(now - 110),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "tool_result",
+            "toolUseID": "tc-002",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tc-002",
+                    "content": [{"type": "text", "text": "Coverage: 67% - needs improvement"}],
+                },
+            ],
         }),
+        # ---- assistant: Grep
         json.dumps({
             "role": "assistant",
-            "content": "Let me also search for potential issues...",
-            "timestamp": now - 108,
-            "tool_calls": [{
-                "id": "tc-003",
-                "type": "function",
-                "function": {"name": "Grep", "arguments": {"pattern": "TODO|FIXME|HACK", "path": "src"}},
-            }],
+            "type": "message",
+            "uuid": assistant_grep_uuid,
+            "timestamp": _iso(now - 108),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "agent",
+            "model": "claude-opus-4-7",
+            "stop_reason": "tool_use",
+            "duration_ms": 850,
+            "usage": {
+                "input_tokens": 380,
+                "output_tokens": 50,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            "content": [
+                {"type": "text", "text": "Let me also search for potential issues..."},
+                {
+                    "type": "tool_use",
+                    "id": "tc-003",
+                    "tool_use_id": "tc-003",
+                    "name": "Grep",
+                    "input": {"pattern": "TODO|FIXME|HACK", "path": "src"},
+                },
+            ],
         }),
+        # ---- tool_result for tc-003
         json.dumps({
-            "role": "tool",
-            "tool_call_id": "tc-003",
-            "content": "Found 5 TODOs and 2 FIXMEs",
-            "timestamp": now - 105,
+            "role": "user",
+            "type": "message",
+            "uuid": tool_grep_uuid,
+            "timestamp": _iso(now - 105),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "tool_result",
+            "toolUseID": "tc-003",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "tc-003",
+                    "content": [{"type": "text", "text": "Found 5 TODOs and 2 FIXMEs"}],
+                },
+            ],
         }),
+        # ---- assistant final summary
         json.dumps({
             "role": "assistant",
-            "content": "Based on my analysis, here are the key improvements...",
-            "timestamp": now - 100,
+            "type": "message",
+            "uuid": assistant_final_uuid,
+            "timestamp": _iso(now - 100),
+            "isMeta": False,
+            "isVirtual": False,
+            "isCompactSummary": False,
+            "origin": "agent",
+            "model": "claude-opus-4-7",
+            "stop_reason": "end_turn",
+            "duration_ms": 1700,
+            "usage": {
+                "input_tokens": 720,
+                "output_tokens": 240,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            },
+            "content": [
+                {"type": "text", "text": "Based on my analysis, here are the key improvements..."},
+            ],
         }),
     ]
     (session_dir / "transcript.jsonl").write_text(
-        "\n".join(transcript_lines), encoding="utf-8"
+        "\n".join(transcript_lines) + "\n", encoding="utf-8"
     )
 
-    # events.ndjson — simulated tool events
+    # events.ndjson — F-45 tool-events log (unchanged shape)
     events = [
         {"event": "tool_call", "tool_name": "Read", "tool_call_id": "tc-001",
          "timestamp": now - 118, "approved": True, "turn": 1,
@@ -124,7 +287,7 @@ def create_demo_session(output_dir: Path | None = None) -> str:
         {"event": "tool_result", "tool_call_id": "tc-003",
          "timestamp": now - 105, "duration_ms": 2500},
     ]
-    events_text = "\n".join(json.dumps(e) for e in events)
+    events_text = "\n".join(json.dumps(e) for e in events) + "\n"
     (session_dir / "events.ndjson").write_text(events_text, encoding="utf-8")
 
     return session_id

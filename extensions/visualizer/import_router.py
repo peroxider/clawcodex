@@ -151,8 +151,16 @@ async def _do_import(state: Any, task_id: str, url: str, body: ImportRequest) ->
         session_dir.mkdir(parents=True, exist_ok=True)
 
         if body.format == "jsonl":
-            # Save as transcript.jsonl
-            (session_dir / "transcript.jsonl").write_text(data, encoding="utf-8")
+            # Re-wrap each imported line into the new ClawCodeX transcript
+            # envelope: ``{role, content (list of typed blocks), type, uuid,
+            # timestamp (ISO 8601), isMeta, isVirtual, isCompactSummary,
+            # origin}``. Upstream payload lines are not assumed to already
+            # be in this shape; we coerce on write so the visualizer's
+            # parsers (transcript_parser / session_parser) can read them
+            # uniformly with locally-produced sessions.
+            (session_dir / "transcript.jsonl").write_text(
+                _rewrite_imported_jsonl(data), encoding="utf-8"
+            )
         else:
             # Save as metadata.json
             (session_dir / "metadata.json").write_text(data, encoding="utf-8")
@@ -165,3 +173,233 @@ async def _do_import(state: Any, task_id: str, url: str, body: ImportRequest) ->
         logger.error("Import failed for task %s: %s", task_id, e)
         import_status.status = "failed"
         import_status.error = str(e)
+
+
+# ---------------------------------------------------------------------------
+# Envelope rewriter
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone
+
+
+def _iso_now() -> str:
+    """Return the current wall-clock time as ISO 8601 (UTC, no microseconds)."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _to_iso_timestamp(value: Any) -> str:
+    """Coerce an imported timestamp into an ISO 8601 string.
+
+    Accepts float / int (Unix epoch), ISO 8601 string, or ``None`` —
+    mirrors the parser-side coercion but always writes ISO output.
+    """
+    if value is None or value == "":
+        return _iso_now()
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat()
+    if isinstance(value, str):
+        try:
+            # Accept both naive and 'Z'-suffixed ISO strings; emit UTC.
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.isoformat()
+        except ValueError:
+            return _iso_now()
+    return _iso_now()
+
+
+def _envelope_block_text(text: str) -> dict[str, Any]:
+    """Wrap a raw string into a typed ``text`` content block."""
+    return {"type": "text", "text": text}
+
+
+def _coerce_content_blocks(content: Any) -> list[dict[str, Any]]:
+    """Coerce ``content`` into a list of typed content blocks.
+
+    The new envelope requires ``content`` to be a list of typed blocks
+    (``text`` / ``tool_use`` / ``tool_result`` / ``thinking`` / ...).
+    Imported legacy payloads sometimes carry a bare string or a
+    ``tool_calls`` list on the envelope — normalize those into blocks so
+    the visualizer can render them without special-casing.
+    """
+    if isinstance(content, list):
+        out: list[dict[str, Any]] = []
+        for block in content:
+            if isinstance(block, dict):
+                # Already a typed block; pass through but enforce type key.
+                if "type" not in block:
+                    out.append({**block, "type": "text"})
+                else:
+                    out.append(block)
+            elif isinstance(block, str):
+                out.append(_envelope_block_text(block))
+            else:
+                out.append(_envelope_block_text(str(block)))
+        return out
+    if isinstance(content, str):
+        return [_envelope_block_text(content)]
+    if content is None:
+        return []
+    return [_envelope_block_text(str(content))]
+
+
+def _coerce_tool_use_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract tool_use blocks from either the modern ``content`` list or
+    the legacy ``tool_calls`` field on an assistant envelope.
+
+    Returns a list of ``tool_use`` blocks (possibly empty) — caller is
+    expected to merge these into the envelope's ``content`` list.
+    """
+    blocks: list[dict[str, Any]] = []
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list):
+        for idx, call in enumerate(tool_calls):
+            if not isinstance(call, dict):
+                continue
+            tool_use_id = (
+                call.get("id")
+                or call.get("tool_use_id")
+                or f"imported-tu-{idx}"
+            )
+            func = call.get("function") or {}
+            tool_name = (
+                func.get("name")
+                if isinstance(func, dict)
+                else call.get("name") or "unknown"
+            )
+            arguments = (
+                func.get("arguments")
+                if isinstance(func, dict)
+                else call.get("arguments") or call.get("input")
+            )
+            if isinstance(arguments, str):
+                # Best-effort: keep the raw string; parsers will JSON-decode
+                # when reading. Avoid silent loss.
+                input_payload: Any = arguments
+            else:
+                input_payload = arguments or {}
+            blocks.append({
+                "type": "tool_use",
+                "id": tool_use_id,
+                "tool_use_id": tool_use_id,
+                "name": tool_name,
+                "input": input_payload,
+            })
+    return blocks
+
+
+def _coerce_tool_result_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """Lift a top-level ``tool`` envelope (with ``tool_call_id`` / ``content``)
+    into a single ``tool_result`` content block.
+    """
+    if message.get("role") != "tool":
+        return []
+    tool_use_id = message.get("tool_call_id") or message.get("tool_use_id") or ""
+    is_error = bool(message.get("is_error"))
+    raw = message.get("content")
+    if isinstance(raw, list):
+        result_content = raw
+    elif isinstance(raw, str):
+        result_content = [_envelope_block_text(raw)]
+    elif raw is None:
+        result_content = []
+    else:
+        result_content = [_envelope_block_text(str(raw))]
+    block: dict[str, Any] = {
+        "type": "tool_result",
+        "tool_use_id": tool_use_id,
+        "content": result_content,
+    }
+    if is_error:
+        block["is_error"] = True
+    return [block]
+
+
+def _envelope_message(
+    raw: dict[str, Any],
+    *,
+    is_first_user: bool,
+    fallback_ts: str,
+) -> dict[str, Any] | None:
+    """Coerce one raw imported record into a new-envelope message dict.
+
+    Returns ``None`` for records that don't carry a useful role (e.g.
+    bare metadata lines) — caller is expected to skip them.
+    """
+    role = raw.get("role")
+    if not role:
+        return None
+    if role not in ("user", "assistant", "system", "tool"):
+        return None
+
+    message: dict[str, Any] = {
+        "role": role if role != "tool" else "user",
+        "type": "message",
+        "uuid": raw.get("uuid") or raw.get("id") or uuid.uuid4().hex,
+        "timestamp": _to_iso_timestamp(raw.get("timestamp") or raw.get("_timestamp")),
+        "isMeta": bool(raw.get("isMeta", False)),
+        "isVirtual": bool(raw.get("isVirtual", False)),
+        "isCompactSummary": bool(raw.get("isCompactSummary", False)),
+        "origin": raw.get("origin") or ("import" if is_first_user else "agent"),
+    }
+
+    # tool_result: synthesize content blocks and stash tool_use_id on detail.
+    if role == "tool":
+        blocks = _coerce_tool_result_blocks(raw)
+        message["content"] = blocks or _coerce_content_blocks(raw.get("content"))
+        tool_use_id = raw.get("tool_call_id") or raw.get("tool_use_id") or ""
+        if tool_use_id:
+            message["toolUseID"] = tool_use_id
+        return message
+
+    content_blocks = _coerce_content_blocks(raw.get("content"))
+    if role == "assistant":
+        content_blocks = content_blocks + _coerce_tool_use_blocks(raw)
+        # Carry model / usage / stop_reason forward if present.
+        for key in ("model", "stop_reason", "usage", "requestId",
+                    "duration_ms", "apiError", "error", "errorDetails"):
+            if raw.get(key) is not None:
+                message[key] = raw[key]
+        if raw.get("isApiErrorMessage"):
+            message["isApiErrorMessage"] = True
+    elif role == "system":
+        # System subtype may carry level / subtype / data — forward verbatim.
+        for key in ("subtype", "level", "preventContinuation", "data"):
+            if raw.get(key) is not None:
+                message[key] = raw[key]
+        if raw.get("toolUseID"):
+            message["toolUseID"] = raw["toolUseID"]
+
+    message["content"] = content_blocks
+    return message
+
+
+def _rewrite_imported_jsonl(data: str) -> str:
+    """Rewrite an imported JSONL payload to the new ClawCodeX envelope.
+
+    Tolerant of legacy formats (string content + ``tool_calls`` /
+    ``tool_call_id``) and bare partial records: anything we can't map
+    cleanly is dropped, not crashed on, so an import never bricks the
+    visualizer.
+    """
+    out_lines: list[str] = []
+    first_user_seen = False
+    for line in data.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            logger.debug("Skipping non-JSON line in imported transcript")
+            continue
+        if not isinstance(raw, dict):
+            continue
+        msg = _envelope_message(raw, is_first_user=not first_user_seen, fallback_ts=_iso_now())
+        if msg is None:
+            continue
+        if msg.get("role") == "user" and not first_user_seen:
+            first_user_seen = True
+        out_lines.append(json.dumps(msg, default=str))
+    return "\n".join(out_lines) + ("\n" if out_lines else "")

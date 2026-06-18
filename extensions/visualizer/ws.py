@@ -261,7 +261,9 @@ def create_ws_router() -> APIRouter:
         app = websocket.app
         state: _AppState = app.state.viz
 
-        # Try to find the transcript file
+        # The main session transcript is at
+        # ``<sessions_dir>/<session_id>/transcript.jsonl`` (same path
+        # in the new format).
         transcript_path: Path | None = None
         session_dir = state.sessions_dir / session_id
         if session_dir.is_dir():
@@ -400,8 +402,8 @@ def create_orch_ws_router() -> APIRouter:
         app = websocket.app
         state: _AppState = app.state.viz
 
-        # Resolve journal path
-        reports_dir = state.sessions_dir.parent / ".reports" if state.sessions_dir else None
+        # New-format reports dir: ``~/.clawcodex/reports/<run_id>/...``
+        reports_dir = state.reports_dir
         journal_path: Path | None = None
         if reports_dir:
             journal_path = reports_dir / run_id / "state_journal.ndjson"

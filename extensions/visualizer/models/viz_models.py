@@ -372,6 +372,12 @@ class SessionVizData(BaseModel):
     # Raw data pointers (not serialized in full; frontend fetches on demand)
     transcript_path: str | None = None
     snapshot_path: str | None = None
+    # New-format: parent session's sub-agent transcripts may live under
+    # ``<sessions_dir>/<sid>/subagents/agent-*.jsonl`` (nested) or in the
+    # flat ``~/.clawcodex/transcripts/`` fallback. This field records the
+    # resolved directory so downstream consumers (e.g. agent tree
+    # builder) can load child transcripts without re-deriving paths.
+    transcripts_dir: str | None = None
 
     # Computed fields
     turn_count: int = 0

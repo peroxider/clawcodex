@@ -61,7 +61,11 @@ class OrchestratorStateParser:
     """
 
     def __init__(self, reports_dir: Path | None = None) -> None:
-        self.reports_dir = reports_dir or (Path.cwd() / ".reports")
+        # In the new ClawCodeX format, the orchestrator state journals
+        # live under ``~/.clawcodex/reports/run_*/`` (per-user, not
+        # per-workspace). The parser is path-agnostic but the default
+        # points at the new location.
+        self.reports_dir = reports_dir or (Path.home() / ".clawcodex" / "reports")
 
     # ------------------------------------------------------------------
     # Public API

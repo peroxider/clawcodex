@@ -151,8 +151,8 @@ class TestEntryToBarUpdate:
         assert ev is not None
         assert ev["bar"]["category"] == "orchestrate"
         # Agent isn't in the _TOOL_COLORS palette, so we fall back to the
-        # category color (#ea7ccc — pink, matches the fork curves).
-        assert ev["bar"]["color"] == "#ea7ccc"
+        # OperationCategory.ORCHESTRATE color (pink, matches the fork curves).
+        assert ev["bar"]["color"] == "#f778ba"
 
     def test_is_agent_invocation_flag_overrides_tool_name(self):
         """Even if a tool isn't in the ORCHESTRATE rule set, an explicit
@@ -185,8 +185,8 @@ class TestEntryToBarUpdate:
             }],
         }, emit_ts=_ts(0))
         assert ev["bar"]["category"] == "other"
-        # No matching palette entry → category default color (#a0a0b0).
-        assert ev["bar"]["color"] == "#a0a0b0"
+        # No matching palette entry → OperationCategory.OTHER color.
+        assert ev["bar"]["color"] == "#6e7681"
 
     def test_iso8601_timestamp_is_coerced_to_float(self):
         """Timestamps in the entry are coerced with the same rules as
