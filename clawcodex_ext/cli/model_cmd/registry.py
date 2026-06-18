@@ -107,6 +107,54 @@ class ModelRegistry:
             raise AmbiguousModelError(model, matches)
         return matches[0]
 
+    def find_prefix_matches(
+        self, prefix: str, provider: str | None = None
+    ) -> list[tuple[str, str]]:
+        """Return ``(model, provider)`` tuples whose model name starts with ``prefix``.
+
+        When ``provider`` is given, only that provider is searched; otherwise
+        every known provider is searched.  The empty prefix yields no matches.
+        Used by ``/model`` to auto-correct short names like ``sonnet`` →
+        ``claude-sonnet-4-6`` when no exact match exists.
+        """
+        if not prefix:
+            return []
+        providers = [provider] if provider else self.provider_names()
+        matches: list[tuple[str, str]] = []
+        for prov in providers:
+            try:
+                self.validate_provider(prov)
+            except UnknownProviderError:
+                continue
+            for model in self.available_models(prov):
+                if model.startswith(prefix) and model != prefix:
+                    matches.append((model, prov))
+        return matches
+
+    def suggest_models(
+        self, name: str, provider: str | None = None, n: int = 3
+    ) -> list[str]:
+        """Return up to *n* close-matching model names for "Did you mean ...?".
+
+        Uses :func:`difflib.get_close_matches` with a 0.6 cutoff so only
+        plausibly intended matches are surfaced.  When ``provider`` is given,
+        only that provider's models are searched; otherwise the entire
+        registry is searched.
+        """
+        import difflib
+
+        if not name:
+            return []
+        providers = [provider] if provider else self.provider_names()
+        candidates: list[str] = []
+        for prov in providers:
+            try:
+                self.validate_provider(prov)
+            except UnknownProviderError:
+                continue
+            candidates.extend(self.available_models(prov))
+        return difflib.get_close_matches(name, candidates, n=n, cutoff=0.6)
+
     def provider_statuses(self) -> list[ProviderStatus]:
         from src.config import get_provider_config
 
