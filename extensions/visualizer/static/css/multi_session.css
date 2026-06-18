@@ -1358,3 +1358,42 @@ body.ms-reference-page .container {
     opacity: 0.7;
     margin-top: 1px;
 }
+
+/* ------------------------------------------------------------------
+   Bezier narrowed sub-agent track (MIN_LANE_FRAC layout).
+
+   Each sub-agent's track occupies only its active time window
+   (startFrac → endFrac) of the canvas width, with a minimum of 12%.
+   The track is positioned via margin-left and has a reduced width
+   so events inside it use track-relative coordinates.
+
+   Matches workflow-panel.tsx buildLayout() visual output.
+   ------------------------------------------------------------------ */
+.bezier-narrowed-track {
+    border-radius: 6px;
+    background: rgba(110, 118, 129, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(110, 118, 129, 0.12);
+}
+.bezier-narrowed-track .bezier-event-bar {
+    border-radius: 2px;
+}
+/* Subtle vertical spawn/merge markers on the parent session track,
+   drawn at the spawnX / joinX positions to visually anchor the
+   connector curves. These are rendered inline by _renderSessionRow. */
+.bezier-vertical-spawn-marker,
+.bezier-vertical-merge-marker {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+.bezier-vertical-spawn-marker {
+    background: var(--bezier-connector-active, #79c0ff);
+    opacity: 0.35;
+}
+.bezier-vertical-merge-marker {
+    background: var(--bezier-connector-merge-active, #f0a878);
+    opacity: 0.35;
+}

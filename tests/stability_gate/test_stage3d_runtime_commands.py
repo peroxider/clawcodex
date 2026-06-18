@@ -439,6 +439,73 @@ class TestRuntimeCommandsRaceCondition:
 # 新行为：使用运行时上下文的 provider_name，保留用户当前的 provider
 
 
+class TestRuntimeCommandCompletion:
+    """/model 和 /provider 在 build_command_suggestions / 补全弹窗中的可见性。"""
+
+    def test_build_command_suggestions_includes_model(self):
+        """build_command_suggestions 返回值应包含 model 条目。"""
+        from clawcodex_ext.tui.commands import build_command_suggestions
+
+        suggestions = build_command_suggestions(Path("/tmp"))
+        names = [s.name for s in suggestions]
+        assert "model" in names, (
+            f"build_command_suggestions must include 'model'; got {names}"
+        )
+
+    def test_build_command_suggestions_includes_provider(self):
+        """build_command_suggestions 返回值应包含 provider 条目。"""
+        from clawcodex_ext.tui.commands import build_command_suggestions
+
+        suggestions = build_command_suggestions(Path("/tmp"))
+        names = [s.name for s in suggestions]
+        assert "provider" in names, (
+            f"build_command_suggestions must include 'provider'; got {names}"
+        )
+
+    def test_build_command_suggestions_model_entry_is_slash_completable(self):
+        """model 条目应有非空的 slash 属性（能被 _SlashOnlyCompleter 补全）。"""
+        from clawcodex_ext.tui.commands import build_command_suggestions
+
+        suggestions = build_command_suggestions(Path("/tmp"))
+        model_entry = next((s for s in suggestions if s.name == "model"), None)
+        assert model_entry is not None, "model entry must exist"
+        assert model_entry.slash == "/model", (
+            f"expected slash='/model', got {model_entry.slash!r}"
+        )
+
+    def test_build_command_suggestions_provider_entry_is_slash_completable(self):
+        """provider 条目应有非空的 slash 属性（能被 _SlashOnlyCompleter 补全）。"""
+        from clawcodex_ext.tui.commands import build_command_suggestions
+
+        suggestions = build_command_suggestions(Path("/tmp"))
+        provider_entry = next((s for s in suggestions if s.name == "provider"), None)
+        assert provider_entry is not None, "provider entry must exist"
+        assert provider_entry.slash == "/provider", (
+            f"expected slash='/provider', got {provider_entry.slash!r}"
+        )
+
+    def test_provider_appears_in_slash_only_completer_flat_words(self):
+        """/provider 应出现在 _get_slash_command_words 扁平列表中（REPL 补全备用源）。"""
+        # 模拟 REPL 的 _get_slash_command_words 逻辑
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.command_system.builtins import register_builtin_commands
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext.tui.commands import build_command_words
+
+        reg = get_command_registry()
+        reg.clear()
+        register_builtin_commands(None)
+        register_runtime_commands(None)
+
+        words = build_command_words(Path("/tmp"))
+        assert "/provider" in words, (
+            f"flat words must include '/provider'; got {words}"
+        )
+        assert "/model" in words, (
+            f"flat words must include '/model'; got {words}"
+        )
+
+
 class TestModelProviderFallback:
     """未知模型回退到当前运行时 provider，而非硬编码 anthropic。"""
 

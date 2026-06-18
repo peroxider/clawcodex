@@ -134,6 +134,12 @@ const BezierWaterfall = (function() {
     // Pan threshold in CSS pixels — drags below this are treated as
     // clicks and don't engage the pan. Matches session-analyzer.tsx:105.
     const PAN_THRESHOLD_PX = 4;
+    // ---- P5b narrowed sub-agent track layout ----
+    // Minimum fraction of the canvas width that a sub-agent track
+    // occupies. Ported from workflow-panel.tsx:46 (MIN_LANE_FRAC = 0.12).
+    // Narrow agent windows (e.g. a 3-second review in a 5-minute session)
+    // are widened to this fraction so the track stays visible.
+    const MIN_LANE_FRAC = 0.12;
     // CodeBlock default preview limits. LLM 12, others 16 — match
     // the Next.js <CodeBlock maxLines={...}> choices.
     const CODEBLOCK_MAX_LINES_LLM  = 12;
@@ -420,6 +426,7 @@ const BezierWaterfall = (function() {
             this._connectorTipEl   = null;        // HTML tooltip sibling
             this._rowIndexById     = new Map();   // id (session or agent) -> flat row index
             this._agentById        = new Map();   // agentId -> agent row from data.agents
+            this._agentLayoutCache = null;            // Map<sessionId, layout[]> | null
             // Cleanup bookkeeping.
             this._listeners = [];
             this._observers = [];
@@ -473,6 +480,8 @@ const BezierWaterfall = (function() {
             this.container.innerHTML = '';
             // Reset tick lookup; the click path uses this Map.
             this._tickByBarId = new Map();
+            // Reset sub-agent layout cache; rebuilt by _getAgentLayout.
+            this._agentLayoutCache = null;
             // Build the flat row index for the P5 connector layer.
             // Done up front so the sub-agent row renderer and the SVG
             // path endpoints see the same row numbers.
@@ -739,6 +748,92 @@ const BezierWaterfall = (function() {
             this._totalRows = rowIdx;
         }
 
+        // ----------------------------------------------------------------
+        // P5b — narrowed sub-agent track layout
+        // ----------------------------------------------------------------
+        //
+        // Port of workflow-panel.tsx:48-160 buildLayout(). Each sub-agent
+        // occupies a fraction of the canvas width corresponding to its
+        // active time window (spawnX → joinX). Windows narrower than
+        // MIN_LANE_FRAC are widened symmetrically so the track remains
+        // visible, clamped to the session's merge point (rightBound).
+        //
+        // Returns an array of {agent, startFrac, endFrac} objects.
+
+        _computeSubAgentLayout(agents) {
+            if (!agents || agents.length === 0) return [];
+            const dur = this.durationSec || 1;
+
+            // mergeFrac = rightmost boundary (max joinX across all agents,
+            // capped at 1.0). Lanes must not extend past this point.
+            let maxJoin = 0;
+            for (const a of agents) {
+                const jx = a.joinX != null ? a.joinX : (a.spawnX || 0);
+                if (jx > maxJoin) maxJoin = jx;
+            }
+            const mergeFrac = Math.min(1, maxJoin / dur) || 1;
+            const rightBound = Math.max(MIN_LANE_FRAC, mergeFrac);
+
+            const out = [];
+            for (const a of agents) {
+                const spawnX = a.spawnX || 0;
+                const joinX  = a.joinX != null ? a.joinX : spawnX;
+                let startFrac, endFrac;
+
+                if (!(a.ticks && a.ticks.length > 0)) {
+                    // No events: centre the min-width window on spawnX.
+                    const centre = dur > 0 ? Math.max(0, Math.min(1, spawnX / dur)) : rightBound / 2;
+                    startFrac = Math.max(0, centre - MIN_LANE_FRAC / 2);
+                    endFrac   = Math.min(rightBound, startFrac + MIN_LANE_FRAC);
+                } else {
+                    // Derive window from the actual tick data.
+                    let minT = Infinity, maxEnd = 0;
+                    for (const t of a.ticks) {
+                        if (t.x < minT) minT = t.x;
+                        const end = t.x + Math.max(t.w || 0, 0.001);
+                        if (end > maxEnd) maxEnd = end;
+                    }
+                    startFrac = dur > 0 ? Math.max(0, Math.min(1, (minT - 0.3) / dur)) : 0;
+                    endFrac   = dur > 0 ? Math.min(Math.max(0, Math.min(1, maxEnd / dur)), rightBound) : rightBound;
+
+                    if (endFrac - startFrac < MIN_LANE_FRAC) {
+                        const centre = (startFrac + endFrac) / 2;
+                        startFrac = Math.max(0, centre - MIN_LANE_FRAC / 2);
+                        endFrac   = startFrac + MIN_LANE_FRAC;
+                        if (endFrac > rightBound) {
+                            endFrac   = rightBound;
+                            startFrac = Math.max(0, endFrac - MIN_LANE_FRAC);
+                        }
+                    }
+                }
+
+                // Defensive swap if inverted.
+                if (startFrac > endFrac) {
+                    const tmp = startFrac; startFrac = endFrac; endFrac = tmp;
+                }
+
+                out.push({ agent: a, startFrac, endFrac });
+            }
+            return out;
+        }
+
+        // Cached lookup — returns the layout entry for a specific
+        // agent, computing (and caching) the full sibling layout if
+        // needed. Used by _renderConnectorPath and _renderConnectorTooltip
+        // so they can snap curve endpoints to the narrowed track edge
+        // without recomputing the entire layout on every edge.
+        _getAgentLayout(agent) {
+            if (!this._agentLayoutCache) this._agentLayoutCache = new Map();
+            const sid = agent.parentSessionId;
+            if (!this._agentLayoutCache.has(sid)) {
+                const siblings = ((this.data && this.data.agents) || [])
+                    .filter((a) => a.parentSessionId === sid);
+                this._agentLayoutCache.set(sid, this._computeSubAgentLayout(siblings));
+            }
+            const layout = this._agentLayoutCache.get(sid);
+            return layout.find((l) => l.agent.id === agent.id) || null;
+        }
+
         _renderSubAgentRow(agent) {
             const row = el('div', 'bezier-row bezier-subagent-row');
             row.dataset.agentId = agent.id;
@@ -776,12 +871,55 @@ const BezierWaterfall = (function() {
             }
             row.appendChild(header);
 
-            const track = el('div', 'bezier-row-track bezier-subagent-track');
-            track.style.width = this.canvasWidth + 'px';
+            // Compute this agent's narrowed track layout. The track
+            // occupies [startFrac, endFrac] of the canvas width rather
+            // than the full width, matching workflow-panel.tsx's
+            // buildLayout() with MIN_LANE_FRAC = 0.12.
+            const layout = this._getAgentLayout(agent);
+            const startFrac = layout ? layout.startFrac : 0;
+            const endFrac   = layout ? layout.endFrac   : 1;
+            const trackOffsetPx = startFrac * this.canvasWidth;
+            const trackWidth    = Math.max(1, (endFrac - startFrac) * this.canvasWidth);
+            const trackDurSec   = Math.max(0.001, (endFrac - startFrac) * this.durationSec);
+
+            const track = el('div', 'bezier-row-track bezier-narrowed-track');
+            track.style.width      = trackWidth + 'px';
+            track.style.marginLeft = trackOffsetPx + 'px';
+
             const ticks = agent.ticks || [];
             for (const t of ticks) {
-                const bar = this._renderEventBar(t);
+                const bar = el('div', 'bezier-event-bar bezier-cat-' + bezierCategoryOf(t));
+                if (t.status === 'error') bar.classList.add('bezier-status-error');
+                if (t.status === 'warning') bar.classList.add('bezier-status-warning');
+                if (t.durationUnrecorded) bar.classList.add('bezier-duration-unrecorded');
+                if (t.tsUnrecorded) bar.classList.add('bezier-ts-unrecorded');
+                if (t.durationHeuristic) bar.classList.add('bezier-duration-heuristic');
                 bar.classList.add('bezier-subagent-bar');
+                bar.dataset.barId = t.id || '';
+                if (t.id) this._tickByBarId.set(String(t.id), t);
+
+                // Position RELATIVE to the track's own time window
+                // (not global canvas), so events distribute correctly
+                // within the narrowed track.
+                const relX = t.x - (startFrac * this.durationSec);
+                const leftPx = Math.max(0, (relX / trackDurSec) * trackWidth);
+                let wPx = ((t.w || 0) / trackDurSec) * trackWidth;
+                if (t.durationUnrecorded) wPx = Math.max(MIN_BAR_PX, wPx);
+
+                bar.style.left  = leftPx + 'px';
+                bar.style.width = wPx + 'px';
+
+                const cat = bezierCategoryOf(t);
+                bar.style.background = (this._categoryColors && this._categoryColors[cat])
+                    || CATEGORY_COLORS[cat] || t.color || '#6e7681';
+
+                const timeStr = t.absoluteTime || (t.tsUnrecorded ? '未记录' : '');
+                const durStr = t.durationUnrecorded
+                    ? (t.durationHeuristic ? '估算' : '未记录')
+                    : ((t.w * 1000).toFixed(0) + 'ms');
+                bar.title = (t.label || bezierCategoryOf(t))
+                    + (timeStr ? ' · ' + timeStr : '') + ' · ' + durStr;
+
                 track.appendChild(bar);
             }
             row.appendChild(track);
@@ -834,8 +972,21 @@ const BezierWaterfall = (function() {
 
             const fromY = (fromMyY * ROW_H) + HEADER_H + (TRACK_H / 2);
             const toY   = (toMyY   * ROW_H) + HEADER_H + (TRACK_H / 2);
-            const fromX = xToPx(edge.from.x, this.canvasWidth, this.durationSec);
-            const toX   = xToPx(edge.to.x,   this.canvasWidth, this.durationSec);
+            let fromX = xToPx(edge.from.x, this.canvasWidth, this.durationSec);
+            let toX   = xToPx(edge.to.x,   this.canvasWidth, this.durationSec);
+
+            // Snap the sub-agent side X to the narrowed track edge.
+            // Spawn (fork): curve goes parent → sub-agent, so toX = LEFT edge.
+            // Merge (join): curve goes sub-agent → parent, so fromX = RIGHT edge.
+            const myLayout = this._getAgentLayout(agent);
+            if (myLayout) {
+                if (edge.type === 'fork') {
+                    toX = myLayout.startFrac * this.canvasWidth;
+                } else {
+                    fromX = myLayout.endFrac * this.canvasWidth;
+                }
+            }
+
             if (!isFinite(fromX) || !isFinite(toX)) return null;
 
             const role = edge.type === 'fork' ? 'spawn' : 'merge';
@@ -951,8 +1102,18 @@ const BezierWaterfall = (function() {
             const isSpawn = ref.role === 'spawn';
             const x0Raw = isSpawn ? agent.spawnX : agent.joinX;
             const x1Raw = isSpawn ? agent.joinX  : agent.spawnX;
-            const x0 = xToPx(x0Raw || 0, this.canvasWidth, this.durationSec);
-            const x1 = xToPx(x1Raw || 0, this.canvasWidth, this.durationSec);
+            let x0 = xToPx(x0Raw || 0, this.canvasWidth, this.durationSec);
+            let x1 = xToPx(x1Raw || 0, this.canvasWidth, this.durationSec);
+            // Snap sub-agent side to the narrowed track edge (matches
+            // _renderConnectorPath so the tooltip sits on the curve).
+            const tipLayout = this._getAgentLayout(agent);
+            if (tipLayout) {
+                if (isSpawn) {
+                    x1 = tipLayout.startFrac * this.canvasWidth;
+                } else {
+                    x0 = tipLayout.endFrac * this.canvasWidth;
+                }
+            }
             const y0 = (this._rowIndexById.get('s:' + agent.parentSessionId) * ROW_H)
                 + HEADER_H + (TRACK_H / 2);
             const y1 = (this._rowIndexById.get('a:' + agent.id) * ROW_H)
@@ -1655,6 +1816,7 @@ const BezierWaterfall = (function() {
         HEADER_H: HEADER_H,
         TRACK_H: TRACK_H,
         SUBAGENT_INDENT_PX: SUBAGENT_INDENT_PX,
+        MIN_LANE_FRAC: MIN_LANE_FRAC,
         // P5 — connector constants
         CONNECTOR_STROKE_DEFAULT:  CONNECTOR_STROKE_DEFAULT,
         CONNECTOR_STROKE_HOVER:    CONNECTOR_STROKE_HOVER,
