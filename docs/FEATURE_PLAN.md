@@ -1,8 +1,14 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.6（F-100 + F-73 状态对齐）
-> 更新日期: 2026-06-18 | 上游同步: 9f0596e (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.7（F-99 + F-90 状态对齐 + remote_api 落地）
+> 更新日期: 2026-07-07 | 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.7 变更（F-99 + F-90 状态对齐 + remote_api 落地）**：
+>   - F-99 Ctrl+C/B 即时中断响应优化：§2.15 标题状态从 📋 设计完成 → ✅ 已完成（FF470158 已落地三方案组合：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
+>   - F-90 Hermes Gateway 参考实现：状态从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 个模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
+>   - remote_api 新增：`extensions/remote_api/` 作为 Hermes 兼容远程 Agent API，提供 OpenAI 兼容的 completion/responses 端点，支持流式 SSE 输出与可选 Bearer 密钥认证。
+>   - 附录 F-Number 快速索引同步更新：F-89（📋 设计完成）、F-99（✅ 已完成）、F-90（✅ 已完成）。
 >
 > **v3.6 变更（F-100 + F-73 状态对齐）**：
 >   - F-100 Dreaming 后台记忆整合系统 §2.16 标题状态从 📋 设计中改为 🟡 部分完成（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成，Phase B 30min TTL 增强待补；106 单测 + 12 门禁 + 6 E2E 场景全绿）。
@@ -214,11 +220,6 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 
 ---
 
----
-
----
-
----
 
 ## 一、Orchestrator 系统
 
@@ -916,7 +917,6 @@ Message 类型体系 (src/types/messages.py)
 | POS Converter | 不适用 | N/A | N/A | N/A |
 
 
----
 ---
 #### 1.4.5 F-49 Phase 5 — session.json + transcript.jsonl 合并（方案C：JSONL + 精简 metadata）
 
@@ -6220,7 +6220,7 @@ def create_app(config: RCSConfig) -> FastAPI:
 > **底层**: aiohttp | **协议**: AGPL-3.0
 > **对标**: CCB `remote-control-server` / `openai-codex` API 兼容层
 
-**本 F-Number 记录一个功能完整的开源参考实现**，为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 提供具体架构参考。ClawCodex 可在实现 F-82 时选型复用以下设计模式。
+**本 F-Number 记录本项目已实现的功能完整实现**（已通过 `extensions/remote_api/` 落地 11 个模块 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；测试见 `tests/remote_api/`），同时为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 提供具体架构参考。ClawCodex 可在实现 F-82 时选型复用以下设计模式。
 
 ##### 参考 API 端点
 
@@ -8008,7 +8008,7 @@ SR-5.1 的目标是把这个过程自动化：抓取 → 抽取 → 去重 → �
 - Cline / Continue.dev（VS Code 编码 Agent）
 - CodeGate / Goose（安全/沙箱方向）
 - TaskWarden / Eliza（Agent 框架/运行时方向）
-- OpenClaw（ClawCodex 自己的上游基准）
+- OpenClaw（同类 Node.js code agent 产品）
 
 #### 10.1.3 整体流程
 
@@ -8590,7 +8590,7 @@ clawcodex_ext/community_radar/
 | F-87 | Workflow Scripts | §7.5 | ⏳ 待开始 |
 | F-88 | Explore/Plan Agent | §7.5 | ⏳ 待开始 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
-| F-90 | Hermes Gateway OpenAI API 参考 | §7.1 | 📋 参考实现 |
+| F-90 | Hermes Gateway OpenAI API 参考（remote_api） | §7.1 | ✅ 已完成 |
 | **F-91** | **Visualizer 核心数据管道** | §8.3 | ✅ **已完成** |
 | **F-92** | **Visualizer 后端 API + WebSocket** | §8.3 | ✅ **已完成** |
 | **F-93** | **Visualizer 前端（Jinja2 + ECharts）** | §8.3 | ✅ **已完成** |

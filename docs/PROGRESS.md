@@ -2,9 +2,14 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.6
-> 更新日期: 2026-06-18
-> 上游同步: 9f0596e (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.7
+> 更新日期: 2026-07-07
+> 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.7 变更**：F-99 状态对齐 + F-90 remote_api 落地。
+>   - F-99 Ctrl+C/B 即时中断响应优化：从 📋 设计完成 → ✅ 已完成（FF470158 三方案组合全部落地：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
+>   - F-90 Hermes Gateway：从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
+>   - F-90 §7.1 PROGRESS.md 新增 F-90 实施跟踪：remote_api 作为 Hermes 兼容远程 Agent API 已完成。
 >
 > **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
 >   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
@@ -1547,32 +1552,26 @@ CronTask due
 
 ### F-90: Hermes Gateway OpenAI 兼容 API 参考实现
 
-**状态**: 📋 参考实现 | **优先级**: P2 | **对标**: CCB remote-control-server / OpenAI API 兼容层
-**来源**: `hermes-agent` 项目 `gateway/platforms/api_server.py`（4305 行，AGPL-3.0，aiohttp）
+**状态**: ✅ 已完成（2026-07-07，`extensions/remote_api/`） | **优先级**: P2 | **对标**: CCB remote-control-server / OpenAI API 兼容层
 
-本 F-Number 记录一个功能完整的开源参考实现，为 F-82 (Remote Control Server) 提供设计参考。hermes-agent 的 `hermes gateway run` 命令已完整实现以下功能：
+`extensions/remote_api/` 目前已实现 11 个模块共 2597 行，提供 Hermes 兼容的远程 Agent API，含：
 
-| 模块 | 状态（hermes-agent） | ClawCodex 参考价值 |
-|------|:-------------------:|-------------------|
-| Chat Completions `/v1/chat/completions` | ✅ 完整实现 | 消息规范化、SSE 流式、多模态兼容可直接迁移 |
-| Responses API `/v1/responses` | ✅ 完整实现 | `previous_response_id` 链式会话设计 |
-| Session 管理 `/api/sessions` | ✅ 完整实现 | CRUD + fork + chat + stream |
-| Runs 管理 `/v1/runs` + SSE events | ✅ 完整实现 | 异步执行 + SSE 生命周期事件 → F-82.5 直接参考 |
-| Cron Jobs `/api/jobs` | ✅ 完整实现 | CRUD + pause/resume/run |
-| 认证与安全 | ✅ 完整实现 | API_KEY 强制 + CORS + 密钥强度检测 + 端口冲突 |
-| Agent LRU 缓存 | ✅ 完整实现 | 128 个上限，1h TTL，线程安全 → 可复用 |
-| 客户端断连处理 | ✅ 完整实现 | ConnectionResetError → agent.interrupt() |
+| 模块 | 状态（clawcodex） | 文件 |
+|------|:----------------:|------|
+| Chat Completions `/v1/chat/completions` | ✅ 已完成 | `extensions/remote_api/core.py` |
+| Responses API `/v1/responses` | ✅ 已完成 | `extensions/remote_api/core.py` |
+| SSE 流式输出 | ✅ 已完成 | `extensions/remote_api/sse.py` |
+| Bearer 密钥认证 | ✅ 已完成 | `extensions/remote_api/auth.py` |
+| CLI `clawcodex api serve` 子命令 | ✅ 已完成 | `extensions/remote_api/cli.py` |
+| Agent runner 生命周期 | ✅ 已完成 | `extensions/remote_api/runner.py` |
+| 消息规范化 | ✅ 已完成 | `extensions/remote_api/normalization.py` |
+| stdlib 兼容服务器 | ✅ 已完成 | `extensions/remote_api/stdlib_server.py` |
+| 状态管理 | ✅ 已完成 | `extensions/remote_api/state.py` |
+| E2E 测试 | ✅ 已完成 | `tests/remote_api/` |
 
-**关键设计模式**（可直接迁移到 F-82）：
+> **参考来源**: `hermes-agent` 项目 `gateway/platforms/api_server.py`（4305 行，AGPL-3.0，aiohttp）
 
-| 模式 | 实现参考 | ClawCodex 适配建议 |
-|------|---------|-------------------|
-| SSE Tool Progress 事件 | `_write_sse_chat_completion()` 中推送 `hermes.tool.progress` 事件 | 复用事件 schema，替换 Agent 类型 |
-| 消息规范化 | `_normalize_chat_content()` 处理数组格式 content | 设为通用中间件 |
-| 会话连续性 | `X-Hermes-Session-Id` 头 + 指纹派生 `_derive_chat_session_id()` | 替换 SessionDB 实现 |
-| 孤儿 Run 清理 | 后台 `_sweep_orphaned_runs()` 定时器 | 可复用整套逻辑 |
-
-**启动流程**: `hermes gateway run` → `gateway/run.py:start_gateway()` → `APIServerAdapter.connect()` → aiohttp `TCPSite`
+> 以上 clawcodex 实现完成。F-90 的设计模式（SSE Tool Progress、消息规范化、会话连续性、孤儿 Run 清理）仍可为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 的未来实现提供参考。
 
 ### F-83: Ultraplan 高级规划模式
 
@@ -1918,7 +1917,7 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 十二、REPL/Agent 中断响应优化（F-99）
 
-**状态**: 📋 设计完成 | **优先级**: P0
+**状态**: ✅ 已完成（2026-06-17） | **优先级**: P0
 
 **目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
 
@@ -1954,11 +1953,11 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 | 阶段 | 内容 | 预计工时 | 状态 |
 |------|------|:--------:|:----:|
-| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | 📋 待实现 |
-| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | 📋 待实现 |
-| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | 📋 待实现 |
-| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | 📋 待实现 |
-| Phase E | 稳定性门禁验证 | 0.5天 | 📋 待实现 |
+| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | ✅ 已完成 |
+| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | ✅ 已完成 |
+| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | ✅ 已完成 |
+| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | ✅ 已完成 |
+| Phase E | 稳定性门禁验证 | 0.5天 | ✅ 已完成 |
 
 ### 验收标准
 
