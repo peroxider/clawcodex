@@ -12,8 +12,9 @@ flowchart TD
     A["push / pull_request"] --> B["preflight.py"]
     B --> C["ci / docs"]
     B --> D["ci / lint"]
-    B --> E["ci / typecheck advisory"]
+    B --> E["ci / typecheck required"]
     B --> F["ci / pytest-core"]
+    B --> S["ci / pytest-stability-gate"]
     B --> G["ci / pytest-orchestrator + coverage.xml"]
     B --> H["ci / package-smoke"]
     A --> I["agent-smoke / agent-replay-smoke"]
@@ -30,6 +31,12 @@ HEAD commit 的已提交内容，不纳入当前工作树中未提交或未跟�
 PR/push 时使用 `--base <ref>`；需要排查历史债时再显式使用 `--all`。它会把
 GitCode CodeCheck、TestPyPI/PyPI 上传、GitCode Release 上传标记为 remote-only
 或 destructive skip。
+
+pytest 目标由 `scripts/ci/pytest_targets.py` 统一生成。push / PR 路径保留固定
+smoke 清单，同时读取 preflight 生成的 `CI_PYTHON_FILE_LIST`，把本次变更中的
+`tests/**/test_*.py` 与 `tests/**/*_test.py` 自动追加到对应 pytest 门禁。这样
+新增测试文件会随本次变更一起运行；全仓库 pytest 仍需显式执行
+`python -m pytest tests/`。
 
 在交互式终端中，`local_ci.py` 使用 Rich live dashboard：总流程表常驻显示，
 当前步骤以运行中状态高亮，完成后显示通过、跳过、advisory 或失败；下面的详情面板
@@ -93,7 +100,7 @@ GitCode CodeCheck、TestPyPI/PyPI 上传、GitCode Release 上传标记为 remot
 
 ## `ci / typecheck`
 
-触发方式：当前 workflow 每次运行都会执行。
+触发方式：Python 文件、包配置、CI helper 或运行时包范围变更时运行。
 
 检查内容：
 
@@ -101,12 +108,14 @@ GitCode CodeCheck、TestPyPI/PyPI 上传、GitCode Release 上传标记为 remot
 
 当前策略：
 
-- 该门禁是 advisory，不阻塞合入。
-- 已知基线会在模块发现阶段失败，例如 `clawcodex_ext.command_system.__init__`
-  被当成 package 与子模块重复发现。
+- 该门禁是阻塞项；GitCode workflow、release-preflight、`local_ci.py` 与
+  `local_publish.py` 中的 mypy 失败都会让对应流程失败。
+- 已修复 duplicate module discovery 入口；legacy runtime/TUI/orchestrator 模块的历史
+  类型债务集中记录在 `pyproject.toml` 的 mypy override baseline 中。
+- baseline 外的模块若出现新的 mypy 错误，会直接阻塞 CI；后续维护时应持续收缩该
+  baseline，而不是重新把 mypy 改回 advisory。
 
-后续目标：先修复 duplicate module discovery 和 lazy proxy 迁移遗留问题，再移除
-workflow 中的 `|| true`，把它提升为阻塞门禁。
+后续目标：随着 legacy 层继续类型化，逐项移除 `pyproject.toml` 中的 baseline 条目。
 
 ## `ci / pytest-core`
 
@@ -117,9 +126,24 @@ workflow 中的 `|| true`，把它提升为阻塞门禁。
 - `tests/fast`。
 - config、model、input、permissions、hooks、skills、bridge 等稳定核心 smoke。
 - `tests/ci/test_gitcode_release.py`，固定 GitCode Release 预签名上传契约。
+- 本次变更中除 agent、orchestrator、stability_gate、visualizer 专属目录外的新增/修改
+  pytest 文件。
 - 运行前清空 live provider key，避免误打真实模型。
 
-定位：这是当前可阻塞的核心测试子集，不等于全量 pytest。
+定位：这是当前可阻塞的核心 smoke + changed-test 门禁，不等于全量 pytest。
+
+## `ci / pytest-stability-gate`
+
+触发方式：与 `ci / pytest-core` 相同，Python、包或 CI 变更时运行。
+
+检查内容：
+
+- `tests/stability_gate`。
+- 本次变更中的 `tests/stability_gate/` pytest 文件。
+- 运行前清空 live provider key，避免误打真实模型。
+
+定位：把启动、导入、REPL/CLI resilience 等稳定性测试从 core smoke 中单独拆出，便于
+后续独立观察失败面。
 
 ## `ci / pytest-orchestrator`
 
@@ -129,6 +153,7 @@ workflow 中的 `|| true`，把它提升为阻塞门禁。
 
 - orchestrator local tracker 和 F-39 intent smoke。
 - visualizer/orchestrator link smoke。
+- 本次变更中的 `tests/orchestrator/` 与 `tests/test_visualizer/` pytest 文件。
 - `pytest-cov` 对 `extensions.orchestrator`、`clawcodex_ext`、`src` 输出终端报告
   和 `coverage.xml`。
 - `--cov-fail-under=0`，覆盖率只报告不阻塞。
@@ -162,6 +187,7 @@ workflow 中的 `|| true`，把它提升为阻塞门禁。
 - transcript 回放。
 - resume/session 恢复。
 - workspace hook 行为。
+- 本次变更中的 `tests/agent/` pytest 文件。
 
 暂不支持检查的内容：
 
@@ -209,8 +235,9 @@ workflow 中的 `|| true`，把它提升为阻塞门禁。
 检查内容：
 
 - CI helper 范围的 ruff check 和 ruff format check。
-- mypy advisory。
-- 稳定 pytest smoke，包含 core、agent-smoke、orchestrator 和 GitCode Release 上传契约。
+- required mypy。
+- 固定 release pytest smoke，包含 core、agent-smoke、orchestrator 和 GitCode
+  Release 上传契约；release/publish 路径验证指定 ref/tag，不做 changed-test 追加。
 - 覆盖率报告。
 - build、twine check、wheel 安装、`clawcodex-dev --help`。
 

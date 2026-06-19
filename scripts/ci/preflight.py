@@ -144,6 +144,18 @@ def _default_base() -> str:
     return "HEAD~1"
 
 
+def _warn(message: str) -> None:
+    """Print a warning to stderr, yellow when the stream supports color.
+
+    Honors ``NO_COLOR`` (https://no-color.org/) and only emits ANSI color when
+    stderr is a TTY, so redirected logs / CI captures stay plain text.
+    """
+    use_color = sys.stderr.isatty() and "NO_COLOR" not in os.environ
+    if use_color:
+        message = f"\033[33m{message}\033[0m"
+    print(message, file=sys.stderr)
+
+
 def _changed_files(base: str, all_files: bool) -> list[str]:
     if all_files:
         return _tracked_files()
@@ -154,12 +166,25 @@ def _changed_files(base: str, all_files: bool) -> list[str]:
         else:
             out = ""
         if not out:
+            # ``base`` could not be resolved to a merge base (typical causes:
+            # the ref was never fetched locally, is misspelled, or fetch
+            # failed). Falling back to ``HEAD~1..HEAD`` silently would only
+            # check the *last* commit — which for a multi-commit PR hides the
+            # earlier commits' changes and diverges from the PR gate. Warn
+            # loudly so the operator notices the scope shrank, unless the
+            # caller asked for ``HEAD~1`` explicitly (that is the expected
+            # single-commit scope, not a degraded one).
+            if base != "HEAD~1":
+                _warn(
+                    f"Warning: could not resolve base {base!r} to a merge base "
+                    f"(fetch the ref or fix the spelling); falling back to "
+                    f"HEAD~1..HEAD, so ONLY the last commit is checked. "
+                    f"Run `git fetch` and verify the ref with "
+                    f"`git rev-parse --verify {base}` before relying on this result."
+                )
             out = _run_git(["diff", "--name-only", "HEAD~1..HEAD"], check=False)
         if not out:
-            print(
-                "Warning: could not determine changed files; falling back to all tracked files.",
-                file=sys.stderr,
-            )
+            _warn("Warning: could not determine changed files; falling back to all tracked files.")
             return _tracked_files()
     return sorted({line.strip().replace("\\", "/") for line in out.splitlines() if line.strip()})
 

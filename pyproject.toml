@@ -200,6 +200,8 @@ fail_under = 0
 
 [tool.mypy]
 python_version = "3.10"
+platform = "linux"
+explicit_package_bases = true
 ignore_missing_imports = true
 warn_unused_ignores = false
 warn_return_any = false
@@ -210,6 +212,56 @@ exclude = [
     "^claude-code-wiki/",
     "^demos/",
 ]
+
+# F-73: mypy is a blocking CI gate again. These modules are the explicit
+# historical debt baseline discovered while reopening the gate; keep this list
+# shrinking as the older runtime, TUI, orchestration, and facade layers are
+# typed. Modules outside this baseline fail CI on new type errors.
+[[tool.mypy.overrides]]
+module = [
+    "clawcodex_ext.agent.*",
+    "clawcodex_ext.away_summary.*",
+    "clawcodex_ext.cli.*",
+    "clawcodex_ext.command_system.*",
+    "clawcodex_ext.context_system.*",
+    "clawcodex_ext.cron_system.*",
+    "clawcodex_ext.dreaming.*",
+    "clawcodex_ext.entrypoints.*",
+    "clawcodex_ext.frontend.*",
+    "clawcodex_ext.hooks.*",
+    "clawcodex_ext.memory.*",
+    "clawcodex_ext.permissions.*",
+    "clawcodex_ext.providers.*",
+    "clawcodex_ext.repl.*",
+    "clawcodex_ext.runtime.*",
+    "clawcodex_ext.skills.*",
+    "clawcodex_ext.tool_system.*",
+    "clawcodex_ext.tui.*",
+    "clawcodex_ext.utils.*",
+    "extensions.capabilities.*",
+    "extensions.orchestrator.*",
+    "extensions.pos_converter.*",
+    "extensions.remote_api.*",
+    "extensions.visualizer.*",
+    "src",
+    "src.agent.*",
+    "src.bridge.*",
+    "src.hooks.*",
+    "src.memdir.*",
+    "src.permissions.*",
+    "src.providers.*",
+    "src.query.*",
+    "src.remote.*",
+    "src.server.*",
+    "src.services.*",
+    "src.tasks.*",
+    "src.token_estimation",
+    "src.tool_system.*",
+    "src.types.*",
+    "src.upstreamproxy.*",
+    "telemetry.*",
+]
+ignore_errors = true
 
 [tool.setuptools.packages.find]
 where = ["."]

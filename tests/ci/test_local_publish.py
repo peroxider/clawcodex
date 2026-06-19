@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from types import SimpleNamespace
 
@@ -70,6 +71,17 @@ def test_check_credentials_mode_skips_build_and_publish(monkeypatch):
     assert by_name["publish / package"].skip_reason == "credential check mode"
 
 
+def test_typecheck_step_is_blocking(monkeypatch):
+    local_publish = _load_module(monkeypatch)
+
+    steps = local_publish._build_step_plan(_args())
+    by_name = {step.name: step for step in steps}
+
+    assert "ci / typecheck-advisory" not in by_name
+    assert by_name["ci / typecheck"].advisory is False
+    assert by_name["ci / typecheck"].skip_reason is None
+
+
 def test_local_publish_reports_release_artifact_locations(monkeypatch):
     local_publish = _load_module(monkeypatch)
 
@@ -78,6 +90,24 @@ def test_local_publish_reports_release_artifact_locations(monkeypatch):
     assert ".release-smoke/" in paths
     assert "dist/" in paths
     assert local_publish.SDIST_STAGING_DIR_GLOB in paths
+
+
+def test_rmtree_recovers_from_unscannable_reparse_point(tmp_path, monkeypatch):
+    local_publish = _load_module(monkeypatch)
+    target = tmp_path / "tree"
+    failed = target / "lib64"
+    removed: list[str] = []
+
+    def fake_rmtree(path, *, onerror):
+        onerror(os.scandir, str(failed), (OSError, OSError("cannot scan"), None))
+
+    monkeypatch.setattr(local_publish.shutil, "rmtree", fake_rmtree)
+    monkeypatch.setattr(local_publish.os.path, "lexists", lambda path: True)
+    monkeypatch.setattr(local_publish.os, "rmdir", lambda path: removed.append(path))
+
+    local_publish._rmtree(target)
+
+    assert removed == [str(failed)]
 
 
 def test_flow_table_marks_initial_skip_status(monkeypatch, capsys):

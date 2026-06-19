@@ -13,7 +13,8 @@
 > **v3.6 变更（F-100 + F-73 状态对齐）**：
 >   - F-100 Dreaming 后台记忆整合系统 §2.16 标题状态从 📋 设计中改为 🟡 部分完成（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成，Phase B 30min TTL 增强待补；106 单测 + 12 门禁 + 6 E2E 场景全绿）。
 >   - F-73 从待开始更新为“本地已完成 / 远端待验证”。
->   - GitCode workflow 目标配置、local CI fallback、pre-commit、package smoke、release preflight、publish helper 与安全扫描 helper 已落地。
+>   - GitCode workflow 目标配置、local CI fallback、pre-commit、mypy required gate、package smoke、release preflight、publish helper 与安全扫描 helper 已落地。
+>   - mypy 已从 advisory 提升为阻塞门禁；duplicate-module 发现问题已修复，legacy 类型债务以 `pyproject.toml` 显式 baseline 管理，后续逐项收缩。
 >   - 因当前仓库 GitCode Pipeline / CodeCheck / Release 附件 / PyPI token 能力尚待开通，远端执行与生产发布仍保留为后续验证项。
 >
 > **v3.4 变更（代码实现审计对齐）**：全面修正 5 项特性状态与代码不对齐。
@@ -7275,26 +7276,26 @@ def create_native_provider(provider_name: str,
 
 CCB 配备完整的 CI/CD 基础设施：4 个 GitHub Actions（ci/publish/release/contributors）+ Codecov 覆盖率 + husky pre-commit 钩子。F-73 的目标是在 GitCode 仓库中补齐质量门禁、本地 fallback、包构建 smoke 和 TestPyPI-first 发布链路。
 
-当前提交已完成本地与目标配置层面的落地：`.gitcode/workflows/` 包含 ci / agent-smoke / security / release-preflight / publish，`scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁。远端 CodeCheck、GitCode Release 附件上传、TestPyPI/PyPI 真实发布仍依赖仓库 Pipeline、Release 权限和 token 开通，后续在仓库能力开通后继续验证。
+当前提交已完成本地与目标配置层面的落地：`.gitcode/workflows/` 包含 ci / agent-smoke / security / release-preflight / publish，`scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁。pytest 门禁采用固定 smoke + changed-test 自动追加，新增/修改的 pytest 文件会随 PR/push 范围运行；`tests/stability_gate` 已拆成独立 pytest job，触发范围与 core pytest 相同。远端 CodeCheck、GitCode Release 附件上传、TestPyPI/PyPI 真实发布仍依赖仓库 Pipeline、Release 权限和 token 开通，后续在仓库能力开通后继续验证。
 
 #### 子特性分解
 
 | 编号 | 子特性 | 说明 | 工具链 | 当前状态 |
 |:----:|--------|------|:------:|:----------:|
 | P73-A | ruff lint/format CI | 在 push/PR 时自动运行 ruff lint + format 检查 | `ruff` | ✅ 本地/目标 workflow 已完成 |
-| P73-B | pytest 测试流水线 | 安装依赖 → 运行 core/orchestrator/agent smoke → 报告结果 | `pytest` | ✅ 本地/目标 workflow 已完成 |
+| P73-B | pytest 测试流水线 | 安装依赖 → 运行 core/stability/orchestrator/agent smoke → 自动追加 changed pytest → 报告结果 | `pytest` | ✅ 本地/目标 workflow 已完成 |
 | P73-C | pre-commit 本地钩子 | ruff + 基础检查在 commit 前自动运行 | `pre-commit` | ✅ 已完成 |
 | P73-D | PyPI 自动发布 | tag/manual → build wheel/sdist → TestPyPI → GitCode Release → 手动 PyPI 晋升 | `build` + `twine` | 🟡 脚本与 workflow 已完成，远端发布待开通验证 |
 | P73-E | 测试覆盖率门禁 | 输出 coverage.xml 和终端覆盖率报告，先报告不阻塞 | `pytest-cov` | 🟡 已接入报告，阈值待历史基线修复后提升 |
 | P73-F | pyproject.toml 规范 | 完整声明 project metadata、entry_points、optional-dependencies、classifiers | 无 | ✅ 已完成 |
-| P73-G | mypy 类型检查（可选） | Python 3.10+ 类型标注验证 | `mypy` | 🟡 advisory 已接入，阻塞化待历史基线修复 |
+| P73-G | mypy 类型检查（阻塞） | Python 3.10+ 类型标注验证 | `mypy` | ✅ 本地/目标 workflow 已完成，legacy baseline 待持续收缩 |
 
 #### CI 流水线设计
 
 落地形态：
 
-- `.gitcode/workflows/ci.yml`：docs、ruff、mypy advisory、core pytest、orchestrator pytest + coverage、package smoke。
-- `.gitcode/workflows/agent-smoke.yml`：mock LLM text/tool loop、权限拒绝、transcript、resume、workspace hooks。
+- `.gitcode/workflows/ci.yml`：docs、ruff、required mypy、core pytest + changed pytest、stability-gate pytest、orchestrator pytest + coverage、package smoke。
+- `.gitcode/workflows/agent-smoke.yml`：mock LLM text/tool loop、权限拒绝、transcript、resume、workspace hooks，并追加 changed agent pytest。
 - `.gitcode/workflows/security.yml`：本地 supply-chain audit + GitCode CodeCheck（远端待验证）。
 - `.gitcode/workflows/release-preflight.yml`：发布候选 ref/tag/commit 的手动质量复核。
 - `.gitcode/workflows/publish.yml`：TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升。
@@ -7601,7 +7602,7 @@ clawcodex-dev sandbox status    # 查看当前模式
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
-| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
+| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | changed pytest 自动追加与 stability-gate pytest 已落地；远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
 
 ### 实施建议顺序

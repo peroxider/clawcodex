@@ -37,9 +37,9 @@ jobs:
             echo "Docs-only change; skipping Agent replay smoke."
             exit 0
           fi
-          python -m pytest \
-            tests/agent/test_agent_smoke_no_live_key.py \
-            tests/orchestrator/test_orchestrator_f49_transcript.py \
-            tests/orchestrator/test_orchestrator_f49_resume.py \
-            tests/orchestrator/test_orchestrator_workspace_hooks.py \
-            -q
+          mapfile -t PYTEST_TARGETS < <(
+            python scripts/ci/pytest_targets.py agent-smoke \
+              --changed-files-from "$CI_PYTHON_FILE_LIST" \
+              --include-prefix tests/agent/
+          )
+          python -m pytest "${PYTEST_TARGETS[@]}" -q

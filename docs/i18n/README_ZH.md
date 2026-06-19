@@ -628,21 +628,30 @@ pytest tests/test_bridge.py -v
 pytest tests/ -m "not integration" -v
 ```
 
-GitCode CI/CD 门禁位于 `.gitcode/workflows/`。当前仓库可能暂时没有可用的GitCode Pipeline，因此可以用同一套门禁形状在本地模拟。默认会检查当前 HEAD commit，并在交互式终端中显示彩色 live dashboard：
+- GitCode CI/CD 门禁位于 `.gitcode/workflows/`。当前仓库可能暂时没有可用的GitCode Pipeline，因此可以用同一套门禁形状在本地模拟。交互式终端会显示彩色 live dashboard；在 CI/日志中用 `--ui plain` 强制纯文本输出，Agent介入验证自修复时，建议提交前让AI Agent执行下面命令进行代码提交自检。
 
-```bash
-python scripts/ci/local_ci.py
-```
+    ```bash
+    # AI介入的纯文本形式
+    python scripts/ci/local_ci.py --base "fork仓的远程开发分支" --ui plain --failure-lines 120
+    # 开发者介入的图像形式
+    python scripts/ci/local_ci.py --base upstream/dev-decoupling-refactor-b24b8cb
+    ```
 
-详细门禁说明见 [`docs/cicd/CICD_GATE.md`](../cicd/CICD_GATE.md)。
+    - **变更文件检查的范围。** 不带 `--all` 时，门禁只 diff `HEAD~1..HEAD`——即分支上**最后一笔**提交。单提交改动没问题，但**开 PR 前若分支上有多笔提交，这样会漏检**：分支上更早的提交不被覆盖，本地结果可能与 GitCode PR 门禁（对整段 PR 相对 merge-base 做 diff）不一致。所有需要用 `--base <ref>` 覆盖整段 PR diff
+        - `--base` 接受任意 ref；`local_ci` 会计算 `merge-base(<ref>, HEAD)` 并检查`merge-base...HEAD`，所以分支增长后依然正确。若要检查整个 tracked 树（最慢；也会暴露历史债务），用 `--all`。
+    - **跑门禁前需要用 `git fetch upstream` 保持 `upstream` 最新。**
+    - pytest 门禁采用固定 smoke 集合 + 当前 PR/push 范围内变更的`tests/**/test_*.py` 或 `tests/**/*_test.py` 文件，新增测试无需逐个手动写入workflow 即可被覆盖。
 
-[`CONTRIBUTING.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/CONTRIBUTING.md) 涵盖 PR 规范。[`upstream_sync/`](https://gitcode.com/chadwweng/clawcodex/blob/main/upstream_sync) 提供了从上游 TypeScript 参考拉新章节的工具。
+- 详细门禁说明见 [`docs/cicd/CICD_GATE.md`](../cicd/CICD_GATE.md)，[`CONTRIBUTING.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/CONTRIBUTING.md) 涵盖 PR 规范。
+
+
+
 
 ---
 
 ## 发布
 
-发布会改动外部服务，所以请只在 tracked 工作树干净、发布 tag 已创建且指向`HEAD` 时运行。
+> 发布会改动外部服务，所以请只在 tracked 工作树干净、发布 tag 已创建且指向`HEAD` 时运行。
 
 `.env` 会被 Git 忽略。第一次使用时，用开发初始化脚本从 `.env.example` 生成，然后只在本地编辑：
 
@@ -665,7 +674,7 @@ python scripts/ci/local_ci.py
 .\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --check-credentials --skip-gitcode-release
 ```
 
-默认发布流程依次执行：加载 `.env`、检查凭据、要求 tracked 工作树干净、创建或验证发布 tag、清理旧产物、release lint、advisory mypy、release tests、构建/检查/安装包体到`.release-smoke/`、上传到 TestPyPI 或 PyPI，最后上传 GitCode Release 附件（除非跳过）。
+默认发布流程依次执行：加载 `.env`、检查凭据、要求 tracked 工作树干净、创建或验证发布 tag、清理旧产物、release lint、required mypy、release tests、构建/检查/安装包体到`.release-smoke/`、上传到 TestPyPI 或 PyPI，最后上传 GitCode Release 附件（除非跳过）。
 
 常用选项：
 

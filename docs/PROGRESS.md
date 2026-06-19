@@ -14,7 +14,8 @@
 > **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
 >   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
 >   - F-73 CI/CD 质量门禁与发布流水线进入“本地已完成 / 远端待验证”状态。
->   - GitCode workflow 目标配置、preflight 差异门禁、docs/ruff/pytest/package/security/release helper 已落地。
+>   - GitCode workflow 目标配置、preflight 差异门禁、docs/ruff/mypy/pytest/package/security/release helper 已落地；pytest 门禁已补充 changed-test 自动追加和独立 stability-gate job，新增测试会随 PR/push 范围运行。
+>   - mypy 已从 advisory 提升为阻塞门禁；duplicate-module 发现问题已修复，legacy 类型债务以 `pyproject.toml` 显式 baseline 管理，后续逐项收缩。
 >   - `scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁，并标记 CodeCheck / TestPyPI / GitCode Release 等远端或破坏性步骤。
 >   - TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升链路已具备脚本与 workflow；真实远端执行待仓库 Pipeline、CodeCheck、Release 权限与 token 开通后继续验证。
 >
@@ -139,7 +140,7 @@
 | F-70 | Plugin 系统 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §4.3 |
 | F-71 | 内置工具补齐 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
-| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
+| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、changed pytest 自动追加、stability-gate pytest、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-75 | 工具/Skill 调用统计（跨会话） | P2 | ⏳ 待开始 | 跨会话工具使用统计与策略优化；见 FEATURE_PLAN §4.8（F-75） |
 | F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ⏳ 待开始 | 三通道语义澄清（LLM/CLI/TUI），冲突裁决，离线澄清；见 FEATURE_PLAN §4.12（F-78） |
@@ -1809,12 +1810,12 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 | 编号 | 子特性 | 工具链 | 状态 | 预计工作量 |
 |:----:|--------|:------:|:----:|:----------:|
 | P73-A | ruff lint/format CI | `ruff` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
-| P73-B | pytest 测试流水线 | `pytest` | ✅ 本地/目标 workflow 已完成 | 1-2天 |
+| P73-B | pytest 测试流水线 | `pytest` | ✅ 本地/目标 workflow 已完成；固定 smoke + changed pytest 自动追加 + stability-gate job | 1-2天 |
 | P73-C | pre-commit 本地钩子 | `pre-commit` | ✅ 已完成 | 1天 |
 | P73-D | PyPI 自动发布（tag push → build → twine → Release） | `build` + `twine` | 🟡 脚本与 workflow 已完成，TestPyPI/GitCode Release/PyPI 待远端验证 | 2-3天 |
 | P73-E | 测试覆盖率门禁 | `pytest-cov` + Codecov | 🟡 coverage 报告已接入，阈值暂不阻塞 | 1-2天 |
 | P73-F | pyproject.toml 元数据规范 | 无 | ✅ 已完成 | 1天 |
-| P73-G | mypy 类型检查（可选） | `mypy` | 🟡 advisory 已接入，阻塞化待历史基线修复 | 2-3天 |
+| P73-G | mypy 类型检查（阻塞） | `mypy` | ✅ 本地/目标 workflow 已完成，legacy baseline 待持续收缩 | 2-3天 |
 
 **估算总工时**: 1 周
 
@@ -1845,7 +1846,7 @@ F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
-| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
+| F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | changed pytest 自动追加与 stability-gate pytest 已落地；远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
 
 ### 实施建议顺序

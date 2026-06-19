@@ -89,12 +89,12 @@ jobs:
           cd repo_workspace
           python -m pip install --upgrade pip uv
           uv sync --locked --python 3.11 --extra dev
-      - name: Mypy advisory typecheck
+      - name: Mypy required typecheck
         run: |
           set -euo pipefail
           cd repo_workspace
           source .venv/bin/activate
-          python -m mypy src clawcodex_ext extensions || true
+          python -m mypy src clawcodex_ext extensions
 
   pytest-core:
     runs-on: euleros-2.10.1
@@ -125,21 +125,51 @@ jobs:
             echo "No Python/package changes; skipping core pytest gate."
             exit 0
           fi
-          python -m pytest \
-            tests/fast \
-            tests/config/test_config.py \
-            tests/config/test_config_system.py \
-            tests/config/test_effort.py \
-            tests/model \
-            tests/utils/test_combined_abort_signal.py \
-            tests/input/test_format.py \
-            tests/input/test_frontmatter_adapter.py \
-            tests/permissions/test_permission_modes.py \
-            tests/hooks/test_hook_config.py \
-            tests/skills/test_skills_frontmatter_yaml.py \
-            tests/bridge/test_jwt_utils.py \
-            tests/ci/test_gitcode_release.py \
-            -q
+          mapfile -t PYTEST_TARGETS < <(
+            python scripts/ci/pytest_targets.py core \
+              --changed-files-from "$CI_PYTHON_FILE_LIST" \
+              --exclude-prefix tests/agent/ \
+              --exclude-prefix tests/orchestrator/ \
+              --exclude-prefix tests/stability_gate/ \
+              --exclude-prefix tests/test_visualizer/
+          )
+          python -m pytest "${PYTEST_TARGETS[@]}" -q
+
+  pytest-stability-gate:
+    runs-on: euleros-2.10.1
+    steps:
+      - uses: checkout-action@0.0.1
+      - uses: setup-python@0.0.1
+        with:
+          python-version: "3.11"
+      - name: Install uv and dependencies
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          python -m pip install --upgrade pip uv
+          uv sync --locked --python 3.11 --extra dev
+      - name: Run stability gate pytest smoke
+        env:
+          OPENAI_API_KEY: ""
+          ANTHROPIC_API_KEY: ""
+          GLM_API_KEY: ""
+          ZHIPUAI_API_KEY: ""
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/preflight.py --output ci_preflight.env
+          source ci_preflight.env
+          if [ "$CI_RUN_PYTHON" != "true" ]; then
+            echo "No Python/package changes; skipping stability pytest gate."
+            exit 0
+          fi
+          mapfile -t PYTEST_TARGETS < <(
+            python scripts/ci/pytest_targets.py stability-gate \
+              --changed-files-from "$CI_PYTHON_FILE_LIST" \
+              --include-prefix tests/stability_gate/
+          )
+          python -m pytest "${PYTEST_TARGETS[@]}" -q
 
   pytest-orchestrator:
     runs-on: euleros-2.10.1
@@ -171,10 +201,13 @@ jobs:
             echo "No orchestrator/package changes; skipping orchestrator pytest gate."
             exit 0
           fi
-          python -m pytest \
-            tests/orchestrator/test_local_tracker_parser.py \
-            tests/orchestrator/test_orchestrator_f39_intent.py \
-            tests/test_visualizer/test_orchestrator_link.py \
+          mapfile -t PYTEST_TARGETS < <(
+            python scripts/ci/pytest_targets.py orchestrator \
+              --changed-files-from "$CI_PYTHON_FILE_LIST" \
+              --include-prefix tests/orchestrator/ \
+              --include-prefix tests/test_visualizer/
+          )
+          python -m pytest "${PYTEST_TARGETS[@]}" \
             -q \
             --cov=extensions.orchestrator \
             --cov=clawcodex_ext \

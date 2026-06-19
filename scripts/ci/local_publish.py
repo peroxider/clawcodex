@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from env_loader import ROOT, ensure_dotenv, load_dotenv
+import pytest_targets
 
 try:
     from rich import box
@@ -33,28 +34,7 @@ except ImportError:  # pragma: no cover - rich is optional for this helper.
     RICH_AVAILABLE = False
 
 
-PYTEST_SMOKE = [
-    "tests/fast",
-    "tests/config/test_config.py",
-    "tests/config/test_config_system.py",
-    "tests/config/test_effort.py",
-    "tests/model",
-    "tests/utils/test_combined_abort_signal.py",
-    "tests/input/test_format.py",
-    "tests/input/test_frontmatter_adapter.py",
-    "tests/permissions/test_permission_modes.py",
-    "tests/hooks/test_hook_config.py",
-    "tests/skills/test_skills_frontmatter_yaml.py",
-    "tests/bridge/test_jwt_utils.py",
-    "tests/ci/test_gitcode_release.py",
-    "tests/agent/test_agent_smoke_no_live_key.py",
-    "tests/orchestrator/test_local_tracker_parser.py",
-    "tests/orchestrator/test_orchestrator_f39_intent.py",
-    "tests/orchestrator/test_orchestrator_f49_transcript.py",
-    "tests/orchestrator/test_orchestrator_f49_resume.py",
-    "tests/orchestrator/test_orchestrator_workspace_hooks.py",
-    "tests/test_visualizer/test_orchestrator_link.py",
-]
+PYTEST_SMOKE = list(pytest_targets.RELEASE_SMOKE_PYTEST)
 RELEASE_RUFF_FILES = [
     "scripts/ci/dev_setup.py",
     "scripts/ci/docs_check.py",
@@ -62,6 +42,7 @@ RELEASE_RUFF_FILES = [
     "scripts/ci/gitcode_release.py",
     "scripts/ci/local_publish.py",
     "scripts/ci/preflight.py",
+    "scripts/ci/pytest_targets.py",
     "scripts/ci/supply_chain_audit.py",
 ]
 PROVIDER_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GLM_API_KEY", "ZHIPUAI_API_KEY")
@@ -373,15 +354,38 @@ def _clean_provider_env() -> dict[str, str]:
     return env
 
 
+def _rmtree(path: Path) -> None:
+    def _on_error(function, failed_path, exc_info) -> None:
+        try:
+            os.chmod(failed_path, 0o700)
+        except OSError:
+            pass
+        try:
+            function(failed_path)
+            return
+        except OSError:
+            pass
+        for remover in (os.rmdir, os.unlink):
+            try:
+                remover(failed_path)
+                return
+            except OSError:
+                pass
+        if os.path.lexists(failed_path):
+            raise exc_info[1]
+
+    shutil.rmtree(path, onerror=_on_error)
+
+
 def _clean_artifacts() -> None:
     removed: list[str] = []
     for path in (ROOT / "dist", ROOT / "build", RELEASE_SMOKE_DIR):
-        if path.exists():
-            shutil.rmtree(path)
+        if os.path.lexists(path):
+            _rmtree(path)
             removed.append(_relative(path))
     for path in ROOT.glob(SDIST_STAGING_DIR_GLOB):
         if path.is_dir():
-            shutil.rmtree(path)
+            _rmtree(path)
             removed.append(_relative(path))
 
     if removed:
@@ -571,10 +575,9 @@ def _build_step_plan(args: argparse.Namespace) -> list[FlowStep]:
             skip_reason=mode_skip,
         ),
         FlowStep(
-            "ci / typecheck-advisory",
-            "mypy baseline exposure; recorded but not release-blocking",
+            "ci / typecheck",
+            "required mypy gate with explicit legacy baseline",
             skip_reason=mode_skip,
-            advisory=True,
         ),
         FlowStep(
             "ci / release-tests",
@@ -817,7 +820,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         "release / clean-artifacts": _clean_artifacts,
         "ci / release-lint": lambda: _run_release_lint(show_output=args.show_output),
-        "ci / typecheck-advisory": lambda: _run_typecheck(show_output=args.show_output),
+        "ci / typecheck": lambda: _run_typecheck(show_output=args.show_output),
         "ci / release-tests": lambda: _run_tests(show_output=args.show_output),
         "ci / package-smoke": lambda: _run_package_smoke(show_output=args.show_output),
         "publish / package": lambda: _publish_package(

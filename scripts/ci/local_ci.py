@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import preflight
+import pytest_targets
 
 try:
     from rich import box
@@ -42,34 +43,10 @@ DOC_FILES = STATE_DIR / "ci_doc_files.txt"
 
 PROVIDER_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GLM_API_KEY", "ZHIPUAI_API_KEY")
 
-CORE_PYTEST = [
-    "tests/fast",
-    "tests/config/test_config.py",
-    "tests/config/test_config_system.py",
-    "tests/config/test_effort.py",
-    "tests/model",
-    "tests/utils/test_combined_abort_signal.py",
-    "tests/input/test_format.py",
-    "tests/input/test_frontmatter_adapter.py",
-    "tests/permissions/test_permission_modes.py",
-    "tests/hooks/test_hook_config.py",
-    "tests/skills/test_skills_frontmatter_yaml.py",
-    "tests/bridge/test_jwt_utils.py",
-    "tests/ci/test_gitcode_release.py",
-]
-
-ORCHESTRATOR_PYTEST = [
-    "tests/orchestrator/test_local_tracker_parser.py",
-    "tests/orchestrator/test_orchestrator_f39_intent.py",
-    "tests/test_visualizer/test_orchestrator_link.py",
-]
-
-AGENT_SMOKE_PYTEST = [
-    "tests/agent/test_agent_smoke_no_live_key.py",
-    "tests/orchestrator/test_orchestrator_f49_transcript.py",
-    "tests/orchestrator/test_orchestrator_f49_resume.py",
-    "tests/orchestrator/test_orchestrator_workspace_hooks.py",
-]
+CORE_PYTEST = list(pytest_targets.CORE_PYTEST)
+ORCHESTRATOR_PYTEST = list(pytest_targets.ORCHESTRATOR_PYTEST)
+AGENT_SMOKE_PYTEST = list(pytest_targets.AGENT_SMOKE_PYTEST)
+STABILITY_GATE_PYTEST = list(pytest_targets.STABILITY_GATE_PYTEST)
 
 CI_HELPER_FILES = [
     "scripts/ci/dev_setup.py",
@@ -79,6 +56,7 @@ CI_HELPER_FILES = [
     "scripts/ci/local_ci.py",
     "scripts/ci/local_publish.py",
     "scripts/ci/preflight.py",
+    "scripts/ci/pytest_targets.py",
     "scripts/ci/supply_chain_audit.py",
 ]
 SDIST_STAGING_DIR_GLOB = "clawcodex_dev_mind-*"
@@ -299,8 +277,43 @@ def _chunked_commands(
     return commands
 
 
+def _pytest_targets_for_steps(python_files: list[str], *, all_files: bool) -> dict[str, list[str]]:
+    changed_files = [] if all_files else python_files
+    return {
+        "core": pytest_targets.targets_for_preset(
+            "core",
+            changed_files,
+            exclude_prefixes=(
+                "tests/agent/",
+                "tests/orchestrator/",
+                "tests/stability_gate/",
+                "tests/test_visualizer/",
+            ),
+        ),
+        "stability-gate": pytest_targets.targets_for_preset(
+            "stability-gate",
+            changed_files,
+            include_prefixes=("tests/stability_gate/",),
+        ),
+        "orchestrator": pytest_targets.targets_for_preset(
+            "orchestrator",
+            changed_files,
+            include_prefixes=(
+                "tests/orchestrator/",
+                "tests/test_visualizer/",
+            ),
+        ),
+        "agent-smoke": pytest_targets.targets_for_preset(
+            "agent-smoke",
+            changed_files,
+            include_prefixes=("tests/agent/",),
+        ),
+    }
+
+
 def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Step]:
     python_files = _read_list(PYTHON_FILES)
+    pytest_target_sets = _pytest_targets_for_steps(python_files, all_files=all_files)
     docs_command = [sys.executable, "scripts/ci/docs_check.py", "--files-from", str(DOC_FILES)]
     supply_command = [sys.executable, "scripts/ci/supply_chain_audit.py"]
     supply_command.extend(["--all"] if all_files else ["--base", base])
@@ -346,15 +359,23 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
         ),
         Step(
             name="ci / typecheck",
-            description="mypy advisory baseline exposure",
+            description="required mypy gate with explicit legacy baseline",
             commands=[[sys.executable, "-m", "mypy", "src", "clawcodex_ext", "extensions"]],
-            blocking=False,
-            advisory=True,
+            skip_reason=None if _env_bool(env, "CI_RUN_PYTHON") else "no Python/package/CI changes",
         ),
         Step(
             name="ci / pytest-core",
-            description="stable core pytest smoke without live provider keys",
-            commands=[[sys.executable, "-m", "pytest", *CORE_PYTEST, "-q"]],
+            description="stable core pytest smoke plus changed pytest files",
+            commands=[[sys.executable, "-m", "pytest", *pytest_target_sets["core"], "-q"]],
+            skip_reason=None if _env_bool(env, "CI_RUN_PYTHON") else "no Python/package/CI changes",
+            env=_clean_provider_env(),
+        ),
+        Step(
+            name="ci / pytest-stability-gate",
+            description="stability gate pytest smoke plus changed stability tests",
+            commands=[
+                [sys.executable, "-m", "pytest", *pytest_target_sets["stability-gate"], "-q"]
+            ],
             skip_reason=None if _env_bool(env, "CI_RUN_PYTHON") else "no Python/package/CI changes",
             env=_clean_provider_env(),
         ),
@@ -366,7 +387,7 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
                     sys.executable,
                     "-m",
                     "pytest",
-                    *ORCHESTRATOR_PYTEST,
+                    *pytest_target_sets["orchestrator"],
                     "-q",
                     "--cov=extensions.orchestrator",
                     "--cov=clawcodex_ext",
@@ -398,8 +419,8 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
         ),
         Step(
             name="agent-smoke / agent-replay-smoke",
-            description="mock LLM text/tool loop, transcript, resume, workspace hooks",
-            commands=[[sys.executable, "-m", "pytest", *AGENT_SMOKE_PYTEST, "-q"]],
+            description="mock LLM loop smoke plus changed agent pytest files",
+            commands=[[sys.executable, "-m", "pytest", *pytest_target_sets["agent-smoke"], "-q"]],
             skip_reason=None if not _env_bool(env, "CI_DOCS_ONLY") else "docs-only change",
             env=_clean_provider_env(),
         ),
@@ -422,13 +443,36 @@ def _build_steps(env: dict[str, str], *, all_files: bool, base: str) -> list[Ste
     ]
 
 
+def _rmtree(path: Path) -> None:
+    def _on_error(function, failed_path, exc_info) -> None:
+        try:
+            os.chmod(failed_path, 0o700)
+        except OSError:
+            pass
+        try:
+            function(failed_path)
+            return
+        except OSError:
+            pass
+        for remover in (os.rmdir, os.unlink):
+            try:
+                remover(failed_path)
+                return
+            except OSError:
+                pass
+        if os.path.lexists(failed_path):
+            raise exc_info[1]
+
+    shutil.rmtree(path, onerror=_on_error)
+
+
 def _prepare_step(step: Step) -> None:
     if step.name == "ci / package-smoke":
         paths = [ROOT / "dist", ROOT / "build", ROOT / ".package-smoke"]
         paths.extend(path for path in ROOT.glob(SDIST_STAGING_DIR_GLOB) if path.is_dir())
         for path in paths:
-            if path.exists():
-                shutil.rmtree(path)
+            if os.path.lexists(path):
+                _rmtree(path)
 
 
 def _expand_globs(command: list[str]) -> list[str]:
