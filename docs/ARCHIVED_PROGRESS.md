@@ -1915,3 +1915,143 @@ F-97-A 包结构 → F-97-L Schema v2 迁移。详见 `FEATURE_PLAN.md §九`。
 2026-06-15~16 期间 8 个 commit 完成 A~L 全部子特性（`a2cbfb1`, `37aea3d`, `9a9bab2`, `1465218`, `042ef4f`, `38bab8c`, `76d9688`, `41e2b30`）。
 
 **教训**：verification 必须以本地 pytest 输出为准。
+---
+
+## 九、2026-06-19 归档——已完成进度详情（PROGRESS v3.9）
+
+### F-37: Orchestrator PR 检视意见自动修复闭环
+
+**状态**: ✅ 已完成（核心链路已验证）| **优先级**: P0
+
+#### 目标
+
+将基于 PR 检视意见的自动修改能力产品化到 extensions/orchestrator，形成 issue → implementation PR → review feedback → follow-up fix → push update 的自动闭环。
+
+#### 当前基线
+
+| 能力 | 状态 | 说明 |
+|------|:----:|------|
+| Issue 自动实现 | ✅ | Orchestrator 可轮询 issue 并启动 agent run |
+| 自动 commit/push/PR | ✅ | GitSyncService 在 agent 完成后提交、推送并创建/复用 PR |
+| Issue 评论读取 | ✅ | TrackerAdapter 已有 issue comments 接口 |
+| PR conversation 评论读取 | ✅ | 使用 issue_id 读取 PR 对应 issue conversation |
+| PR inline review comments 读取 | ✅ | 归一化文件路径、行号、diff hunk |
+| Review summary 读取 | ✅ | GitHub /pulls/{number}/reviews 已验证 |
+| CI/pipeline 失败日志读取 | ✅ | 按 max_log_chars_per_check 截断摘要 |
+| Feedback 幂等处理 | ✅ | processed_feedback_ids 防止重复触发 |
+| 同 PR 分支 follow-up run | ✅ | git_sync.sync(mode="followup") 复用原 PR 分支 |
+
+#### 实施进度
+
+9 个阶段全部完成：Tracker 协议扩展 → GitHub/Gitee/GitCode client 扩展 → CI 失败日志接入 → feedback store → Orchestrator poll loop review follow-up → review-fix prompt builder → git sync follow-up 模式 → 评论回复/汇总 → 单元测试和端到端测试。
+
+#### 验收标准
+
+- 已有 issue 首次处理链路不回退
+- PR 上新增检视评论后 Orchestrator 能触发同分支修改
+- PR inline comment 以文件路径、行号、diff hunk 形式进入 prompt
+- CI 失败日志以摘要形式进入 prompt，单条受字符上限控制
+- 已处理的评论不会在后续轮询中重复触发
+- bot 自己的状态评论不会造成自触发循环
+- follow-up run 不创建新分支、不创建新 PR
+- 无法自动判断的反馈进入 clarification 流程
+
+#### 风险与约束
+
+- 不同平台 PR review API 差异较大
+- CI 日志必须摘要和截断
+- 网页评论可能包含冲突的要求
+- 避免刷屏，推荐按 run 汇总回复
+
+#### 真实环境验证摘要
+
+- GitCode test-f37 已验证 Issue → PR、conversation follow-up、inline review follow-up、幂等、批处理
+- GitCode /pulls/{number}/reviews 返回 404
+- GitHub yeyunu/test37 PR #2 已验证 Review Summary 可采集
+
+
+### F-89: @agent-name 多入口统一支持
+
+**状态**: ✅ 已完成 | **优先级**: P1
+
+#### 目标
+
+将 expand_agent_mentions() 能力从 REPL 扩展到 Headless（--print）、API 层、TUI 三入口，实现四入口一致的 @agent-<type> 委托体验。
+
+#### 当前基线
+
+| 入口 | @agent-name 支持 | 代码位置 |
+|------|:--------------:|----------|
+| REPL | ✅ | clawcodex_ext/repl/core.py:3035 |
+| Headless | ✅ | clawcodex_ext/entrypoints/headless.py:282-307 |
+| API 层 | ✅ | extensions/api/query.py → run_headless() |
+| TUI | ✅ | clawcodex_ext/tui/screens/repl.py:249-270 |
+
+#### 实施阶段
+
+Phase 1 (Headless) + Phase 2 (API) + Phase 3 (TUI) 全部完成，每入口约 5-10 行改动。
+
+#### 验收标准
+
+1. clawcodex-dev --print "@agent-explore ..." → LLM 收到 agent_mention
+2. API SDK session.chat("@agent-video-ops ...") → agent_mention 生效
+3. TUI 中输入 @agent-critic → 同 REPL 行为
+4. 未知 agent type 被静默忽略
+
+
+### F-99: REPL/Agent 中断响应优化
+
+**状态**: ✅ 已完成（2026-06-17）| **优先级**: P0
+
+#### 目标
+
+解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
+
+#### 问题根因
+
+三瓶颈：Provider response.close() 无效（httpx 下为 advisory）→ asyncio.gather 等待所有工具 → 无传输层终止。
+
+#### 三层方案
+
+| 方案 | 改动 | 延迟 bound |
+|------|------|:----------:|
+| 方案1：httpx read_timeout=5s | AnthropicProvider._ensure_client() | ≤5s |
+| 方案2：传输连接关闭 | _close_response_safely() + transport.close() | <100ms |
+| 方案3：工具阶段可取消 | _run_tools_partitioned() → asyncio.wait(FIRST_COMPLETED) | <500ms |
+
+#### 改造点清单
+
+| 文件 | 改动 | 方案 |
+|------|------|:----:|
+| src/providers/anthropic_provider.py | _ensure_client() 注入 timeout=5.0 | 方案1 |
+| src/providers/_stream_abort.py | _close_transport_safely() via getattr | 方案2 + Win32 skip |
+| src/query/query.py | _run_tools_partitioned → asyncio.wait(FIRST_COMPLETED, 0.1) + cancel | 方案3 |
+
+#### 实施进度
+
+Phase A~E 全部完成。新增 10+6 个单测覆盖方案1/2/3。Cancel latency bound：直连 <500ms，LiteLLM 代理 ≤5s（bound 在 read_timeout）。
+
+
+### F-73: CI/CD 质量门禁与 PyPI 发布流水线
+
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
+
+#### 实现摘要
+
+- 已新增 GitCode workflow 目标配置：ci.yml、agent-smoke.yml、security.yml、release-preflight.yml、publish.yml
+- 已新增 scripts/ci/ helper：preflight、docs check、supply-chain audit、GitCode Release 上传契约
+- 已新增 .pre-commit-config.yaml 与 install.sh hook 安装
+- 已新增 scripts/ci/local_ci.py 本地复现主要门禁
+- 待仓库功能开通后继续验证：GitCode Pipeline 调度、CodeCheck、Release、PyPI
+
+#### 子特性
+
+| 编号 | 子特性 | 工具链 | 状态 |
+|:----:|--------|:------:|:----:|
+| P73-A | ruff lint/format CI | ruff | ✅ 本地/目标 workflow |
+| P73-B | pytest 测试流水线 | pytest | ✅ 本地/目标 workflow；含 changed pytest 自动追加 + stability-gate |
+| P73-C | pre-commit 本地钩子 | pre-commit | ✅ 已完成 |
+| P73-D | PyPI 自动发布 | build + twine | 🟡 待远端验证 |
+| P73-E | 测试覆盖率门禁 | pytest-cov + Codecov | 🟡 阈值暂不阻塞 |
+| P73-F | pyproject.toml 元数据规范 | — | ✅ 已完成 |
+| P73-G | mypy 类型检查（阻塞） | mypy | ✅ 本地/目标 workflow；legacy baseline 待收缩 |

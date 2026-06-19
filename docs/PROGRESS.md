@@ -191,67 +191,8 @@
 
 **状态**: ✅ 已完成（核心链路已验证）
 **优先级**: P0
-**规划文档**: `docs/FEATURE_PLAN.md` → `3.1.4 PR 检视意见自动修复闭环设计`
 
-### 目标
-
-将基于 PR 检视意见的自动修改能力产品化到 `extensions/orchestrator`：当 Orchestrator 已经根据 issue 自动实现、提交并创建 PR 后，后续网页上的 PR conversation 评论、inline review comments、review summary 和 CI/pipeline 失败日志应能被自动读取、去重、转化为 follow-up agent run，并在同一 PR 分支上完成修改、验证、提交和推送。
-
-### 当前基线
-
-| 能力 | 当前状态 | 说明 |
-|------|----------|------|
-| Issue 自动实现 | ✅ 已具备 | Orchestrator 可轮询 issue 并启动 agent run |
-| 自动 commit/push/PR | ✅ 已具备 | `GitSyncService` 在 agent 完成后提交、推送并创建/复用 PR |
-| Issue 评论读取 | ✅ 已具备 | TrackerAdapter 已有 issue comments 接口，主要服务 clarification 流程 |
-| PR conversation 评论读取 | ✅ 已完成 | 使用 issue_id 读取 PR 对应 issue conversation，避免混用 PR number |
-| PR inline review comments 读取 | ✅ 已完成 | 归一化文件路径、行号、diff hunk，进入 review-fix prompt |
-| Review summary 读取 | ✅ 已完成 | GitHub `/pulls/{number}/reviews` 已验证；GitCode 该端点返回 404，按平台能力跳过 |
-| CI/pipeline 失败日志读取 | ✅ 已完成 | 读取 check/status 失败项，按 `max_log_chars_per_check` 截断摘要 |
-| Feedback 幂等处理 | ✅ 已完成 | `processed_feedback_ids` / `pending_feedback_ids` 防止重复触发 |
-| 同 PR 分支 follow-up run | ✅ 已完成 | `git_sync.sync(mode="followup")` 复用原 PR 分支并追加 `fix:` commit |
-
-### 实施进度
-
-| 阶段 | 任务 | 状态 |
-|------|------|------|
-| 1 | 扩展 tracker 协议，新增 `PullRequestFeedback` 数据模型和 PR feedback fetch/reply 接口 | ✅ 已完成 |
-| 2 | 扩展 GitHub/Gitee/GitCode repository client，读取 PR conversation、inline review comments、review summary | ✅ 已完成 |
-| 3 | 接入 CI/pipeline 失败日志读取与日志截断策略 | ✅ 已完成 |
-| 4 | 扩展 registry 或新增 feedback store，记录 feedback cursor、已处理 id、follow-up attempt 次数 | ✅ 已完成 |
-| 5 | 在 Orchestrator poll loop 增加 review follow-up 阶段，扫描已有 open PR 的新反馈 | ✅ 已完成 |
-| 6 | 新增 review-fix prompt builder，约束 agent 只处理 PR 检视意见与 CI 失败 | ✅ 已完成 |
-| 7 | 调整 git sync follow-up 模式，确保只 commit/push 原 PR 分支，不创建新 PR | ✅ 已完成 |
-| 8 | 增加评论回复/汇总能力，标记已处理、无法处理或需 clarification 的反馈 | ✅ 已完成 |
-| 9 | 增加单元测试和端到端测试：去重、bot 评论过滤、inline 映射、CI 日志截断、重试上限 | ✅ 已完成 |
-
-### 验收标准
-
-- 已有 issue 首次处理链路不回退：仍能自动实现、提交、推送并创建/复用 PR。
-- PR 上新增普通检视评论后，Orchestrator 能在下一轮 follow-up 中读取并触发同分支修改。
-- PR inline comment 能以文件路径、行号、diff hunk 形式进入 prompt，agent 能定位并做最小修改。
-- CI 失败日志能以摘要形式进入 prompt，单条日志受字符上限控制。
-- 已处理的评论或 check 不会在后续轮询中重复触发。
-- bot 自己发布的状态评论不会造成自触发循环。
-- follow-up run 不创建新分支、不创建新 PR，只更新当前 PR 分支。
-- 无法自动判断的反馈进入 clarification/operator hint 流程，而不是猜测修改。
-
-### 风险与约束
-
-- 不同平台的 PR review API 差异较大，GitHub/Gitee/GitCode 需要分别映射到统一反馈模型。
-- CI 日志可能非常大，必须摘要和截断，避免 prompt 过载。
-- 网页评论可能包含互相冲突的要求，首期应优先处理明确、可定位、可验证的反馈。
-- 自动回复评论应避免刷屏，推荐按 run 汇总回复，或仅回复明确处理完成的 inline comments。
-- 默认不做自动合并、force push、关闭 PR 等高风险动作。
-
-### 真实环境验证摘要
-
-- GitCode `test-f37` 已验证 Issue → PR、conversation follow-up、inline review follow-up、幂等、批处理、`max_followup_attempts_per_pr`、`ignore_authors`。
-- GitCode `/pulls/{number}/reviews` 返回 404，因此 Review Summary 在 GitCode 上按“不支持的可选端点”跳过。
-- GitHub `yeyunu/test37` PR #2 已验证 Review Summary 可采集为 `review_summary:4473425602`，并在 manual 模式进入 `pending_feedback_ids`。
-- GitHub Review Summary 测试中 review 作者与 token 用户相同；为验证采集能力，测试 workflow 显式设置了非当前用户的 `bot_login`，真实部署建议使用独立 bot token 或显式配置 `bot_login`。
-
----
+> 完整进度（目标、当前基线、9 阶段实施进度、验收标准、风险与约束、真实环境验证摘要）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 
 ## F-38: Orchestrator 验证与报告闭环
@@ -443,45 +384,9 @@
 ## F-89: @agent-name 多入口统一支持
 
 **状态**: ✅ 已完成 | **优先级**: P1
-**规划文档**: `docs/FEATURE_PLAN.md` → `§3.4 @agent-name 多入口统一支持（F-89）`
 
-### 目标
+> 完整进度（目标、当前基线、3 阶段实施、验收标准、依赖与协同）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
-将 `expand_agent_mentions()` 能力从 REPL 扩展到 Headless（`--print`）、API 层、TUI 三入口，实现四入口一致的 `@agent-<type>` 委托体验。
-
-### 当前基线
-
-| 入口 | `@agent-name` 支持 | 代码位置 |
-|------|-------------------|----------|
-| REPL | ✅ 支持 | `clawcodex_ext/repl/core.py:3035` |
-| Headless | ✅ 支持 | `clawcodex_ext/entrypoints/headless.py:282-307` |
-| API 层 | ✅ 支持（通过 headless 委托） | `extensions/api/query.py` → `run_headless()` |
-| TUI | ✅ 支持 | `clawcodex_ext/tui/screens/repl.py:249-270` |
-
-### 实施阶段
-
-| 阶段 | 入口 | 改动点 | 工作量 | 状态 |
-|------|------|--------|--------|------|
-| Phase 1 | Headless | `headless.py` 在 `_run_headless()` 前插入 `expand_agent_mentions()` | ~5 行 | ✅ 已完成 |
-| Phase 2 | API 层 | 自动覆盖——API 通过 `run_headless_session` 委托给 headless | ~10 行 | ✅ 已完成（继承 headless） |
-| Phase 3 | TUI | `clawcodex_ext/tui/screens/repl.py` 在 `on_prompt_submitted` 中增加 | ~5 行 | ✅ 已完成 |
-
-### 验收标准
-
-1. `clawcodex-dev --print "@agent-explore 列出当前目录文件"` → LLM 收到 agent_mention system-reminder
-2. 通过 API SDK 调用 `session.chat("@agent-video-ops ...")` → agent_mention 生效
-3. TUI 中输入 `@agent-critic review this` → 同 REPL 行为
-4. 未知 agent type 被静默忽略
-
-### 依赖与协同
-
-- 无外部依赖，`expand_agent_mentions()` 已在 `clawcodex_ext/command_system/input_processing.py` 中存在
-- 配合 F-50（SOP 转换器固化）：`pos convert` 生成的 Agent 可在 Headless/API/TUI 中通过 `@agent-<name>` 调用
-
-
-## 五、Architecture & SDK 下沉进度
-
-> 注：F-49（会话统一存储）、F-51（空转检测）、F-54（可观测性）设计上属于 Orchestrator 系统（FEATURE_PLAN §1.3~1.4），会话恢复增强（FEATURE_PLAN §6）已移至第七章。
 
 ## F-48: src/ 核心路径二开修改解耦
 
@@ -1420,23 +1325,9 @@ CronTask due
 
 ### F-60: Pipe IPC + LAN 群控系统
 
-**状态**: ✅ 已完成（2026-06-19，`src/services/pipe_ipc/`） | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
+**状态**: ✅ 已完成（2026-06-19，`src/services/pipe_ipc/`）| **优先级**: P0
 
-**实现**: `src/services/pipe_ipc/` 共 7 个模块 967 行 + 11 个测试文件。
-
-| 模块 | 文件 | 状态 |
-|------|------|:----:|
-| 数据模型 | `models.py` (131行) — PipeMessage、PipePeer、PipeMessageType 枚举 | ✅ |
-| UDS 服务器/客户端 | `uds.py` (198行) — `UnixSocketServer` 监听、`PipeClient` 连接、心跳、readline 协议 | ✅ |
-| 编解码 | `codec.py` (39行) — JSON 行协议序列化/反序列化 | ✅ |
-| 权限转发 | `permissions.py` (64行) — `PipePermissionForwarder` 请求/授权/拒绝 | ✅ |
-| 注册表 | `registry.py` (99行) — `PipeRegistry` 内存 + 磁盘持久化 | ✅ |
-| 测试 | `test_models.py`, `test_uds.py`, `test_codec.py`, `test_permissions.py`, `test_registry.py` (414行) | ✅ |
-
-**子特性实现**:
-- P60-A (UDS 命名管道): ✅ `uds.py` `UnixSocketServer` + `PipeClient` 完整实现
-- P60-D (权限转发): ✅ `permissions.py` `PipePermissionForwarder` 请求/授权异步等待
-- P60-B/C/E/F (多实例编排/UDP 发现/跨机器路由/面板): 待后续增量
+> 完整实现（7 模块 967 行 + 11 测试）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-61: Computer Use 屏幕操控
 
@@ -1451,14 +1342,11 @@ CronTask due
 | 平台工厂 | `factory.py` (50行) — `create_computer_use()` 自动检测操作系统分发实现 | ✅ |
 | Linux 实现 | `platform/linux.py` (420行) — scrot 截图、xdotool 键鼠模拟、wmctrl 窗口管理、xclip 剪贴板 | ✅ |
 | Null/DryRun 实现 | `platform/null.py` (170行) — `NullScreenshotter`/`DryRunExecutor` 模拟操作 | ✅ |
-| 异常 | `exceptions.py` (21行) — `ScreenshotError`/`ComputerUseError` | ✅ |
-| 测试 | 7 个文件共 786 行 — `test_base.py`, `test_models.py`, `test_factory.py`, `test_linux.py`, `test_null.py`, `test_dry_run.py` | ✅ |
+| 异常 | `exceptions.### F-61: Computer Use 屏幕操控
 
-**子特性实现**:
-- P61-A (跨平台截图): ✅ Linux `scrot` + Null 回退；macOS/Windows 预留工厂扩展点
-- P61-B (键鼠模拟): ✅ Linux `xdotool` + `xte`；Null/DryRun 模式
-- P61-C (窗口管理): ✅ Linux `wmctrl` 打开/关闭/焦点/移动/列表
-- P61-D (剪贴板): ✅ Linux `xclip` 读/写文本
+**状态**: ✅ 已完成（2026-06-19，`src/services/computer_use/`）| **优先级**: P0
+
+> 完整实现（9 模块 1797 行 + 15 测试）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-62: Chrome 浏览器自动化控制
 
@@ -1475,27 +1363,9 @@ CronTask due
 
 ### F-63: Channels 频道通知系统
 
-**状态**: ✅ 已完成（2026-06-19，`src/services/channels/`） | **优先级**: P1 | **对标**: CCB Channels
+**状态**: ✅ 已完成（2026-06-19，`src/services/channels/`）| **优先级**: P1
 
-**实现**: `src/services/channels/` 共 9 个模块 2097 行 + 18 个测试文件。
-
-| 模块 | 文件 | 状态 |
-|------|------|:----:|
-| 抽象接口 | `base.py` (147行) — `Channel` Protocol + `NotificationMessage` 数据类 | ✅ |
-| 数据模型 | `models.py` (121行) — 通知消息、平台枚举、配置模型 | ✅ |
-| 传输层 | `transport.py` (244行) — 重试策略、速率限制、回退通道 | ✅ |
-| 飞书/Lark | `feishu.py` (104行) — Webhook 推送 + 富文本消息构建 | ✅ |
-| Slack | `slack.py` (56行) — Webhook 推送 | ✅ |
-| Discord | `discord.py` (49行) — Webhook 推送 | ✅ |
-| Null 降级 | `null_channel.py` (86行) — 无操作空通道 | ✅ |
-| 测试 | 8 个文件共 1199 行 — `conftest.py`, `test_models.py`, `test_feishu.py`, `test_slack.py`, `test_discord.py`, `test_null.py`, `test_transport.py`, `test_manager.py` | ✅ |
-
-**子特性实现**:
-- P63-A (飞书通知): ✅ `feishu.py` 完整实现
-- P63-B (Slack 通知): ✅ `slack.py` 完整实现
-- P63-C (Discord 通知): ✅ `discord.py` 完整实现
-- P63-E (传输层重试): ✅ `transport.py` 重试策略 + 速率限制 + 回退
-- P63-D (微信通知): ⏳ 待后续增量
+> 完整实现（9 模块 2097 行 + 18 测试）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-64: Voice Mode 语音输入
 
@@ -1539,7 +1409,7 @@ CronTask due
 
 ### F-67: Buddy 伴侣 / Proactive 自主模式
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB Buddy + Proactive
+**状态**: ✅ 已完成（`src/buddy/` 共 8 文件完整实现）| **优先级**: P2| **优先级**: P2 | **对标**: CCB Buddy + Proactive
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
@@ -1585,26 +1455,9 @@ CronTask due
 
 ### F-90: Hermes Gateway OpenAI 兼容 API 参考实现
 
-**状态**: ✅ 已完成（2026-07-07，`extensions/remote_api/`） | **优先级**: P2 | **对标**: CCB remote-control-server / OpenAI API 兼容层
+**状态**: ✅ 已完成（2026-07-07，`extensions/remote_api/`）| **优先级**: P2
 
-`extensions/remote_api/` 目前已实现 11 个模块共 2597 行，提供 Hermes 兼容的远程 Agent API，含：
-
-| 模块 | 状态（clawcodex） | 文件 |
-|------|:----------------:|------|
-| Chat Completions `/v1/chat/completions` | ✅ 已完成 | `extensions/remote_api/core.py` |
-| Responses API `/v1/responses` | ✅ 已完成 | `extensions/remote_api/core.py` |
-| SSE 流式输出 | ✅ 已完成 | `extensions/remote_api/sse.py` |
-| Bearer 密钥认证 | ✅ 已完成 | `extensions/remote_api/auth.py` |
-| CLI `clawcodex api serve` 子命令 | ✅ 已完成 | `extensions/remote_api/cli.py` |
-| Agent runner 生命周期 | ✅ 已完成 | `extensions/remote_api/runner.py` |
-| 消息规范化 | ✅ 已完成 | `extensions/remote_api/normalization.py` |
-| stdlib 兼容服务器 | ✅ 已完成 | `extensions/remote_api/stdlib_server.py` |
-| 状态管理 | ✅ 已完成 | `extensions/remote_api/state.py` |
-| E2E 测试 | ✅ 已完成 | `tests/remote_api/` |
-
-> **参考来源**: `hermes-agent` 项目 `gateway/platforms/api_server.py`（4305 行，AGPL-3.0，aiohttp）
-
-> 以上 clawcodex 实现完成。F-90 的设计模式（SSE Tool Progress、消息规范化、会话连续性、孤儿 Run 清理）仍可为 F-82 (Remote Control Server) 和 F-66 (ACP 协议) 的未来实现提供参考。
+> 完整实现（11 模块 2597 行）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-83: Ultraplan 高级规划模式
 
@@ -1626,34 +1479,13 @@ CronTask due
 - P83-A (核心 prompt 与模板): ✅ `models.py` 定义规划数据模型
 - P83-C (多步分层执行与追踪): ✅ `executor.py` 完整实现
 - P83-D (动态调整): ✅ `adjuster.py` 完整实现
-- P83-E (自动验证): ✅ `verifier.py` 完整实现
-- P83-F (持久化与 resume): ✅ `store.py` 完整实现
-- P83-B (CLI 斜杠命令): ⏳ 待后续增量
+- P83-E (自动验证): ✅ `### F-83: Ultraplan 高级规划模式
 
-### F-84: Context Collapse 上下文折叠
+**状态**: ✅ 已完成（2026-06-19，`src/services/ultraplan/`）| **优先级**### F-84: Context Collapse 上下文折叠
 
-**状态**: ✅ 已完成（2026-06-19，`src/services/context_collapse/`） | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
+**状态**: ✅ 已完成（2026-06-19，`src/services/context_collapse/`）| **优先级**: P1
 
-**实现**: `src/services/context_collapse/` 共 8 个模块 3366 行 + 14 个测试文件（2844 行）。
-
-| 模块 | 文件 | 状态 |
-|------|------|:----:|
-| Token 阈值检测 | `tokens.py` (292行) — `TokenCounter` tiktoken 计数、`ThresholdDetector` 溢出预警 | ✅ |
-| 摘要生成 | `summary.py` (206行) — `ContextSummarizer` LLM 驱动旧消息摘要 | ✅ |
-| 折叠引擎 | `engine.py` (300行) — `CollapseEngine` 全流程编排：检测→摘要→注入→恢复 | ✅ |
-| 边界管理 | `boundary.py` (148行) — `CollapseBoundary` 保护最近 N 轮不被折叠、系统消息保护 | ✅ |
-| 持久化 | `persistence.py` (168行) — `CollapseStore` 折叠元数据持久化与会话恢复 | ✅ |
-| 触发器 | `trigger.py` (252行) — `CollapseTrigger` 413 紧急折叠 + Token 阈值预警 + 定时触发 | ✅ |
-| 异常 | `exceptions.py` (36行) | ✅ |
-| 测试 | 6 个文件共 1844 行 — `test_tokens.py`, `test_summary.py`, `test_engine.py`, `test_boundary.py`, `test_persistence.py`, `test_trigger.py` | ✅ |
-
-**子特性实现**:
-- P84-A (Token 阈值检测): ✅ `tokens.py` 完整实现
-- P84-B (摘要生成): ✅ `summary.py` 完整实现
-- P84-C (折叠注入): ✅ `engine.py` 历史占位符注入
-- P84-D (持久化与恢复): ✅ `persistence.py` 完整实现
-- P84-E (413 紧急折叠): ✅ `trigger.py` 紧急折叠恢复
-- P84-F (QueryEngine 5 层协作): ⏳ 待后续集成
+> 完整实现（8 模块 3366 行 + 14 测试）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-85: Templates 模板系统
 
@@ -1679,26 +1511,9 @@ CronTask due
 
 ### F-86: Kairos / Brief 调度模式
 
-**状态**: ✅ 已完成（2026-06-19，`src/services/kairos/` + `src/services/periodic/`） | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS — Tick 驱动调度引擎 + 简报模式
+**状态**: ✅ 已完成（2026-06-19，`src/services/kairos/` + `src/services/periodic/`）| **优先级**: P2
 
-**实现**: `src/services/kairos/` + `src/services/periodic/` 共 8 个模块 2022 行 + 13 个测试文件（2150 行）。
-
-| 模块 | 文件 | 状态 |
-|------|------|:----:|
-| Kairos 数据模型 | `kairos/models.py` (224行) — `TickEvent`/`ScheduleSpec`/`BriefConfig`/`DailyLogEntry` | ✅ |
-| Tick 调度核心 | `kairos/scheduler.py` (244行) — `KairosScheduler` 时基触发 + 周期性唤醒 | ✅ |
-| Brief 简报模式 | `kairos/brief.py` (95行) — `BriefGenerator` 简报内容组装与推送 | ✅ |
-| 每日日志 | `kairos/daily_log.py` (94行) — `DailyLog` 自动生成与持久化 | ✅ |
-| 周期性任务引擎 | `periodic/__init__.py` (166行) — `PeriodicTaskEngine` 注册/调度/执行周期性任务 | ✅ |
-| 测试 | 6 个文件共 1132 行 — `test_models.py`, `test_scheduler.py`, `test_brief.py`, `test_daily_log.py`, `test_periodic.py` | ✅ |
-
-**子特性实现**:
-- P86-A (Tick 调度核心): ✅ `kairos/scheduler.py` 完整实现
-- P86-C (Brief 简报模式): ✅ `kairos/brief.py` 完整实现
-- P86-E (每日日志): ✅ `kairos/daily_log.py` 完整实现
-- P86-D (Tick 消息注入): ⏳ 待对话流集成
-- P86-B (SleepTool): ⏳ 待后续增量
-- P86-F (CLI 控制命令): ⏳ 待后续增量
+> 完整实现（8 模块 2022 行 + 13 测试）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-87: Workflow Scripts 工作流脚本
 
@@ -1766,6 +1581,102 @@ F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ 
 
 > 本节跟踪 Python 生态适配角度发现的 clawcodex 特性缺口实施进度。
 > F-68~F-74 均为 Python 标准库或成熟第三方库可实现的特性。
+
+### F-68: Feature Gate 运行时特性开关系统
+
+**状态**: ⏳ 待开始 | **优先级**: P1
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P68-A | FeatureRegistry 核心注册表 | ⏳ 待开始 | 3-5天 |
+| P68-B | @feature_gated 装饰器 | ⏳ 待开始 | 2-3天 |
+| P68-C | JSON/YAML 配置文件持久化 | ⏳ 待开始 | 1-2天 |
+| P68-D | CLI 运行时切换 | ⏳ 待开始 | 1-2天 |
+| P68-E | 环境变量覆盖 | ⏳ 待开始 | 1天 |
+| P68-F | 依赖性解析与冲突检测 | ⏳ 待开始 | 2-3天 |
+
+**估算总工时**: 1-2 周
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-68 Feature Gate 运行时特性开关系统`
+
+### F-69: Budget / Poor Mode 资源节俭模式
+
+**状态**: ⏳ 待开始 | **优先级**: P1
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P69-A | BudgetMode 配置模型（4级行为矩阵） | ⏳ 待开始 | 2-3天 |
+| P69-B | Agent 循环节俭钩子（skip memory/verification） | ⏳ 待开始 | 3-5天 |
+| P69-C | Tool 级别节俭策略（降级搜索深度/禁用高消耗工具） | ⏳ 待开始 | 2-3天 |
+| P69-D | `/budget` CLI 斜杠命令 | ⏳ 待开始 | 2-3天 |
+| P69-E | Token 用量实时统计与自动降级告警 | ⏳ 待开始 | 3-5天 |
+
+**估算总工时**: 1-2 周
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-69 Budget / Poor Mode 资源节俭模式`
+
+### F-70: Plugin 插件系统基础框架
+
+**状态**: ⏳ 待开始 | **优先级**: P1
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P70-A | BasePlugin 协议接口定义 | ⏳ 待开始 | 3-5天 |
+| P70-B | Plugin 发现（entry_points + 目录扫描） | ⏳ 待开始 | 2-3天 |
+| P70-C | Plugin 生命周期管理（install/uninstall/enable/disable） | ⏳ 待开始 | 5-7天 |
+| P70-D | 子进程沙箱隔离 | ⏳ 待开始 | 5-7天 |
+| P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | ⏳ 待开始 | 2-3天 |
+
+**估算总工时**: 2-3 周
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-70 Plugin 插件系统基础框架`
+
+### F-71: 内置工具补齐（缺失工具批量实现）
+
+**状态**: ⏳ 待开始 | **优先级**: P1
+
+| 编号 | 子特性 | Python 依赖 | 状态 | 预计工作量 |
+|:----:|--------|:-----------:|:----:|:----------:|
+| P71-A | AgentTool 子 Agent 生成 | 无 | ⏳ 待开始 | 5-7天 |
+| P71-B | WebBrowserTool 浏览器控制 | `playwright` | ⏳ 待开始 | 5-7天 |
+| P71-C | CtxInspectTool 上下文检查 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-D | DiscoverSkillsTool 技能发现 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-E | VerifyPlanExecutionTool 计划验证 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-F | WorkflowTool 工作流执行 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-G | PushNotificationTool 桌面通知 | `plyer`/`notify-py` | ⏳ 待开始 | 2-3天 |
+| P71-H | MonitorTool 健康监控 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-I | SendUserFileTool 文件传输 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-J | SubscribePRTool PR 订阅 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-K | TerminalCaptureTool 终端捕获 | `ptyprocess` | ⏳ 待开始 | 3-5天 |
+| P71-L | ReviewArtifactTool Review 产物 | 无 | ⏳ 待开始 | 2-3天 |
+| P71-M | ListPeersTool 对等节点列表 | 无 | ⏳ 待开始 | 1-2天 |
+| P71-N | ExecuteTool 代理工具执行 | 无 | ⏳ 待开始 | 3-5天 |
+
+**估算总工时**: 3-4 周（可分批并行推进，优先 P71-A/C/D/F/N）
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-71 内置工具补齐`
+
+### F-72: Multi-API 原生适配器扩展
+
+**状态**: ⏳ 待开始 | **优先级**: P1
+
+| 编号 | 子特性 | Python 依赖 | 状态 | 预计工作量 |
+|:----:|--------|:-----------:|:----:|:----------:|
+| P72-A | OpenAI 原生适配器（stream/structured output/function call） | `openai` | ⏳ 待开始 | 3-5天 |
+| P72-B | Gemini 原生适配器（Safety/grounding 全能力） | `google-genai` | ⏳ 待开始 | 3-5天 |
+| P72-C | Grok/xAI 原生适配器 | `requests` | ⏳ 待开始 | 2-3天 |
+| P72-D | 原生适配器自动选择（provider → adapter → LiteLLM 回退） | 无 | ⏳ 待开始 | 2-3天 |
+| P72-E | 平台专有特性映射表与能力标记 | 无 | ⏳ 待开始 | 3-5天 |
+
+**估算总工时**: 2 周
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-72 Multi-API 原生适配器扩展`
+
+### F-73: CI/CD 质量门禁与 PyPI 发布流水线
+
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
+
+> 完整进度（实现摘要、子特性表格、7 项门禁状态）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-68: Feature Gate 运行时特性开关系统
 
@@ -1980,66 +1891,10 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 
 ## 十二、REPL/Agent 中断响应优化（F-99）
 
-**状态**: ✅ 已完成（2026-06-17） | **优先级**: P0
+**状态**: ✅ 已完成（2026-06-17）| **优先级**: P0
 
-**目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
+> 完整进度（问题根因、三层方案、改造点清单、实施进度、验收标准）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
-**详细设计**: `docs/FEATURE_PLAN.md` → `§2.15 Ctrl+C/B 即时中断响应优化（F-99）`
-
-### 问题根因
-
-三瓶颈串联：
-
-| 瓶颈 | 位置 | 延迟贡献 | 原因 |
-|------|------|---------|------|
-| 1. Provider `response.close()` 无效 | `src/providers/_stream_abort.py` `_close_response_safely()` | 10~30s（主要） | LiteLLM/httpx 下 `response.close()` 是 advisory，不打断底层 socket read |
-| 2. `asyncio.gather` 等待所有工具 | `src/query/query.py` L1602 | 0.1~5s（次要） | 工具通过 `asyncio.to_thread` 派发，`gather` 等最慢的那个完成，abort 检查在 gather 之后 |
-| 3. 无传输层终止 | `src/providers/_stream_abort.py` | 无实际中止能力 | `close()` 仅关闭应用层流，底层 TCP 连接可能保持打开 |
-
-### 三层方案
-
-| 方案 | 改动 | 延迟 bound | 风险 |
-|------|------|:----------:|:----:|
-| **方案1**（P0）：httpx read_timeout=5s | `AnthropicProvider._ensure_client()` +5行 | ≤5s | 正常慢 chunk 误触发（极少见） |
-| **方案2**（P1）：传输连接关闭 | `_close_response_safely()` + `transport.close()` +8行 | <100ms | 依赖 httpx `_transport` 内部属性 |
-| **方案3**（P2）：工具阶段可取消 | `_run_tools_partitioned()` → `asyncio.wait(FIRST_COMPLETED)` | <500ms | 调度逻辑复杂度增加 |
-
-### 改造点清单
-
-| 文件 | 改动 | 方案 | 状态 |
-|------|------|------|:----:|
-| `src/providers/anthropic_provider.py` | `_ensure_client()` 注入 `timeout=_F99_READ_TIMEOUT (5.0)`（caller 已传 `timeout`/`http_client` 时不覆盖） | 方案1 | ✅ 已实现 |
-| `src/providers/_stream_abort.py` | `_close_transport_safely()` 通过 `getattr(response, '_transport', None)` 关闭；Windows `sys.platform == 'win32'` 跳过 | 方案2 | ✅ 已实现 |
-| `src/query/query.py` | `_run_tools_partitioned` → 嵌套 `_run_concurrent_batch` 改用 `asyncio.wait(FIRST_COMPLETED, timeout=0.1)` + `task.cancel()` + 合成 cancelled tool_result 保 pairing | 方案3 | ✅ 已实现 |
-
-### 实施进度
-
-| 阶段 | 内容 | 预计工时 | 状态 |
-|------|------|:--------:|:----:|
-| Phase A | 方案1：AnthropicProvider httpx read_timeout 配置 | 0.5天 | ✅ 已完成 |
-| Phase B | 方案2：_close_response_safely 传输连接关闭 | 0.5天 | ✅ 已完成 |
-| Phase C | 方案3：_run_tools_partitioned 可取消 | 1天 | ✅ 已完成 |
-| Phase D | 单元测试 + E2E 测试（含 LiteLLM 代理模拟） | 1天 | ✅ 已完成 |
-| Phase E | 稳定性门禁验证 | 0.5天 | ✅ 已完成 |
-
-### 验收标准
-
-| # | 验收项 | 验收方式 |
-|---|--------|---------|
-| 1 | 直连 Anthropic 时 Ctrl+C 在 <500ms 内返回提示符 | 手动测试：发送长 prompt → Ctrl+C |
-| 2 | LiteLLM 代理下 Ctrl+C 在 <5s 内返回提示符 | 通过 LiteLLM 代理测试 |
-| 3 | 工具执行阶段 Ctrl+C 在 <500ms 内取消 | agent 执行 `sleep 30` → Ctrl+C |
-| 4 | 正常流式响应不受影响 | 运行常规对话确认无中断 |
-
-### 依赖与协同
-
-| 依赖 | 说明 |
-|------|------|
-| `httpx` 内部 API | 方案2 依赖 `Response._transport`（非公开属性） |
-| F-27 | 本特性为 F-27（TUI 响应性修复）的 Phase 2 增强 |
-| F-28 | Ctrl+B 后台化共享同一 `_cancel_engine` 回调 |*
-
----
 
 ## 十三、Dreaming 后台记忆整合系统（F-100）
 

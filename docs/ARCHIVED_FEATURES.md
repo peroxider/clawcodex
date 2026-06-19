@@ -3960,3 +3960,379 @@ SOP convert → AgentMarkdownWriter → .claude/agents/*.md (tools: [detect_moda
 - **依赖**: F-18（CreateAgentTool 持久化机制）、F-34（Frontend 解耦，提供统一初始化入口）
 - **协同**: F-16（Auto 模式，`auto_mode_classify` 需要 agent 注册表判断子 agent 权限）；F-50（SOP 转换器生成的 agent markdown 通过统一路径注册）
 - **前置条件**: `AgentRegistry` 在 `RuntimeContext.build()` 中初始化完 todo 后调用 `register_all_sources()`
+
+---
+
+## 二十四、F-9 /goal 命令（目标管理）
+
+**状态**: ✅ 已完成（2026-06-19 代码审计确认）
+**实现位置**: `clawcodex_ext/goal/` 9 文件 2538 行
+**目标**: 为长时间运行任务提供持久化目标、自动续跑、token 用量监控与恢复能力，避免用户需要反复输入"继续"。
+
+> 参考上游 claude-code-best 的 `/goal` 实现（PR #1261，commit `3e3e1de81bf89857`）设计，在 clawcodex 中以 Python 方式落地。
+
+### 功能说明
+
+`/goal` 是一个 slash 命令，用于设置、查看或控制驱动多轮自动续跑的目标。支持以下用法：
+
+| 命令 | 功能 |
+|------|------|
+| `/goal` 或 `/goal status` | 显示当前目标状态（目标、状态、已用时间、token、续跑轮数） |
+| `/goal <objective>` | 设置新的目标；若当前已有未完结目标，弹出确认对话框 |
+| `/goal clear` | 清除当前目标并持久化 tombstone，停止自动续跑 |
+| `/goal pause` | 暂停自动续跑，保留目标状态 |
+| `/goal resume` | 从 `paused` 恢复为 `active`，并重置 `blockedAttempts` |
+| `/goal continue` | 在达到最大续跑轮数（`max_turns`）后重置计数器并继续 |
+| `/goal complete` | 手动将目标标记为完成 |
+
+约束：
+- 目标文本最长 **4000 字符**；超长时应提示用户把详细说明写入文件，用简短 objective 引用。
+- 设置新目标时，若已存在非 `complete` 的目标，必须弹出 `GoalReplaceConfirmDialog` 让用户确认替换，避免误覆盖进度。
+
+### 状态机
+
+目标在内存中以 `Map<sessionId, GoalState>` 维护，状态流转如下：
+
+```
+              setGoal()
+                 │
+                 ▼
+        ┌─────────────────┐
+        │     active      │◄─────────────────────────────┐
+        └────────┬────────┘                              │
+                 │ pauseGoal()                           │ resumeGoal()
+                 ▼                                       │
+        ┌─────────────────┐      continueGoalFromMaxTurns()│
+        │     paused      │───────────────────────────────┘
+        └─────────────────┘      (仅在 max_turns 时)
+
+active ──► complete         completeGoal()
+active ──► budget_limited   tokensUsed >= tokenBudget
+active ──► usage_limited    markUsageLimited()（如限流/断网后）
+active ──► blocked          同一 blocker 连续 3 次
+active ──► max_turns        turnsExecuted >= MAX_GOAL_TURNS
+```
+
+状态定义：
+
+| 状态 | 含义 | 是否终态 |
+|------|------|----------|
+| `active` | 正在自动续跑 | 否 |
+| `paused` | 用户手动暂停 | 否 |
+| `blocked` | 连续 3 次同一原因受阻 | 是 |
+| `budget_limited` | token 预算耗尽 | 是 |
+| `usage_limited` | 用量/限流导致无法继续 | 是 |
+| `max_turns` | 达到最大续跑轮数上限 | 是（用户可 `continue` 解除） |
+| `complete` | 目标已完成 | 是 |
+
+### 核心机制
+
+#### 自动续跑（`useGoalContinuation`）
+在 REPL/主循环挂载一个 hook，当当前轮次完成（`isLoading` 从 true 变为 false）且满足以下条件时，自动向消息队列注入一条 continuation prompt：
+
+1. `GOAL` feature flag 开启。
+2. 存在 `active` 状态的目标。
+3. 本轮正常结束，非用户中断（`wasAborted === false`）。
+4. 没有交互式 local-jsx UI 占用中。
+5. 不在 plan mode。
+6. 消息队列中没有用户消息（用户输入优先）。
+7. `turnsExecuted < MAX_GOAL_TURNS`（默认 **150**）。
+
+注入参数：
+- `mode: 'prompt'`, `priority: 'now'`, `isMeta: true`
+- `origin: 'goal-continuation'` 或 `'goal-budget-limit'`
+- `skipSlashCommands: true`
+
+达到 `MAX_GOAL_TURNS` 后，目标进入 `max_turns` 状态，停止自动注入；用户可通过 `/goal continue` 重置计数器。
+
+#### Token 用量追踪
+每次模型调用产生 usage 后，在 `cost-tracker` 中汇总以下 token 类型并调用 `updateGoalTokens(delta)`：
+
+- `input_tokens`
+- `output_tokens`
+- `cache_read_input_tokens`
+- `cache_creation_input_tokens`
+
+仅当目标状态为 `active` 时累计；跨越 `tokenBudget` 后状态自动变为 `budget_limited`，并注入一次 `budget_limit` 提示词要求模型停止实质性工作、给出进度摘要。
+
+#### Blocked 审计
+模型调用 `GoalTool` 报告 `blocked` 时，不立即改变状态。只有在 **连续 3 次同一原因**（大小写不敏感）受阻后，才将目标置为 `blocked`；不同原因会重置计数器。`pause` / `resume` 也会重置 `blockedAttempts` 和 `lastBlockReason`。
+
+#### Completion 审计
+提示词要求模型在标记完成前执行严格的 Completion Audit：
+
+1. 从 objective 和引用文件中推导具体需求。
+2. 保持原始 scope，不得围绕"已完成内容"重新定义成功。
+3. 对每个显式需求提供权威证据（测试输出、文件内容、命令结果）。
+4. 仅当测试/清单真正覆盖需求时才将其视为证据。
+5. 不确定或间接证据视为"未完成"。
+6. 审计必须**证明完成**，而非"未找到剩余工作"。
+
+#### 计时
+使用 `startTime`、`pausedAt`、`accumulatedActiveMs` 计算实际活跃时间，暂停期间不计入。UI 显示格式为 `Xm Ys` 或 `Ys`。
+
+### 数据模型
+
+```typescript
+type GoalStatus =
+  | 'active'
+  | 'paused'
+  | 'blocked'
+  | 'budget_limited'
+  | 'usage_limited'
+  | 'max_turns'
+  | 'complete'
+
+type GoalState = {
+  objective: string
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  startTime: number
+  pausedAt: number | null
+  accumulatedActiveMs: number
+  blockedAttempts: number
+  lastBlockReason: string | null
+  createdAt: number
+  updatedAt: number
+  turnsExecuted: number
+}
+```
+
+常量：
+- `MAX_GOAL_TURNS = 150`
+- `BLOCKED_CONSECUTIVE_THRESHOLD = 3`
+- `MAX_OBJECTIVE_CHARS = 4000`
+
+### 提示词注入
+
+所有 goal 相关 steering prompt 包裹在 XML tag 中，便于模型识别系统注入的指导：
+
+| 类型 | Tag | 触发时机 |
+|------|-----|----------|
+| continuation | `<goal-steering type="continuation">` | 每轮 idle 后自动续跑 |
+| budget_limit | `<goal-steering type="budget_limit">` | token 预算耗尽时一次性注入 |
+| objective_updated | `<goal-steering type="objective_updated">` | 用户通过 `/goal <new>` 替换目标时 |
+| active-goal context | `<active-goal ...>` | 紧凑的系统提示词上下文块 |
+
+### 持久化与 `--resume` 恢复
+
+目标状态通过 `goalStorage.ts` 桥接到 JSONL transcript，实现跨进程恢复。
+
+**为什么需要 transcript 持久化**：`/goal` 的自动续跑由 REPL 主循环内存中的 `GoalState` 驱动。进程退出后 `--resume` 需要恢复目标状态，包括已消耗的 token、续跑轮数、活跃时间，避免用户需要重新设置目标。
+
+**持久化写入规则**：
+- 每次状态变更调用 `persistCurrentGoal()`
+- 写入 `GoalMetadataEntry`：`{ type: 'goal', sessionId, state, timestamp }`
+- `/goal clear` 写入 `GoalClearedEntry`，防止 `--resume` 复活旧目标
+
+**读取与恢复规则**：
+- `ResumeConversation` / session restore 路径调用 `hydrateGoalFromTranscript()`
+- 按时间顺序扫描，最新 `goal` entry 为权威状态
+- 最新 entry 为 `goal-cleared` 则认为当前无目标
+
+### 实现文件
+
+| 文件 | 上游位置 | 职责 |
+|------|----------|------|
+| Goal 命令 | `src/commands/goal/goal.tsx` | `/goal` 子命令解析、UI 回调、状态转换 |
+| 命令注册 | `src/commands/goal/index.ts` | 注册为 `local-jsx` slash command |
+| 替换确认对话框 | `src/commands/goal/GoalReplaceConfirmDialog.tsx` | 目标覆盖二次确认 |
+| 状态机 | `src/services/goal/goalState.ts` | 纯内存状态、流转、计时 |
+| 持久化桥接 | `src/services/goal/goalStorage.ts` | 连接状态机与 JSONL transcript |
+| 审计常量 | `src/services/goal/goalAudit.ts` | Completion/Blocked 审计规则、终态判断 |
+| 提示词模板 | `src/services/goal/prompts.ts` | continuation / budget_limit / objective_updated / context block |
+| Goal 工具 | `packages/builtin-tools/src/tools/GoalTool/GoalTool.ts` | 模型查询/更新目标状态 |
+| 自动续跑 Hook | `src/hooks/useGoalContinuation.ts` | REPL 中驱动自动续跑 |
+| Token 追踪 | `src/cost-tracker.ts` | 将 usage 同步到 goal tokens |
+| Transcript 存储 | `src/utils/sessionStorage.ts` | 读写 `goal` / `goal-cleared` JSONL entries |
+| 状态栏 | `src/components/StatusLine.tsx` | `GoalPill` 展示当前目标摘要 |
+| 类型定义 | `src/types/logs.ts` | GoalState / GoalStatus / GoalMetadataEntry |
+| Feature flag | `scripts/defines.ts` | `GOAL` 特性开关 |
+
+### UI 展示
+
+状态栏 `GoalPill` 在 `feature('GOAL')` 开启且存在目标时显示：
+
+```
+[Active · 实现 dashboard · 12.3k/200k]
+```
+
+颜色规则：`active`（绿色）、`paused` / `budget_limited` / `usage_limited`（黄色）、`blocked`（红色）、`complete`（青色）、`max_turns`（默认色）。目标文本超过 30 字符时截断显示。
+
+### 测试覆盖
+
+| 测试 | 位置 | 覆盖点 |
+|------|------|--------|
+| 状态机单元测试 | `src/services/goal/__tests__/goalState.test.ts` | set/pause/resume/complete/clear、token 累计、budget_limited、blocked 3 次、max_turns、计时 |
+| 集成测试 | `tests/integration/goal-lifecycle.test.ts` | 完整生命周期、提示词内容、审计规则一致性、终态判断 |
+
+---
+
+## 二十五、F-11 sessionStorage 容量限制
+
+**状态**: ✅ 已完成
+**目标**: 防止长时间运行的 daemon/swarm 会话导致内存泄漏
+
+### 功能说明
+
+为 `existingSessionFiles` Map 设置容量上限，防止无限增长：
+
+```python
+MAX_CACHED_SESSION_FILES = 200
+
+def add_session_file(sessionId: UUID, filePath: str):
+    if len(existingSessionFiles) >= MAX_CACHED_SESSION_FILES:
+        oldest_key = next(iter(existingSessionFiles))
+        del existingSessionFiles[oldest_key]
+    existingSessionFiles[sessionId] = filePath
+```
+
+### 问题场景
+
+- daemon/swarm 模式下长时间运行
+- sessionId 频繁创建销毁
+- Map 无限增长导致 OOM
+
+### 实现文件
+
+| 文件 | 位置 | 状态 |
+|------|------|------|
+| sessionStorage | `utils/sessionStorage.ts` → `utils/session_storage.py` | 已完成 |
+
+---
+
+## 二十六、F-99 Ctrl+C/B 即时中断响应优化
+
+**状态**: ✅ 已完成（2026-06-17） | **优先级**: P0
+**目标**: 解决 LLM 流式响应 + 工具执行阶段按 Ctrl+C/Ctrl+B 需要 10~30s 才生效的 UX 问题，目标 < 500ms。
+
+### 问题根因
+
+```
+你按 Ctrl+C
+  ↓  <1ms
+LiveStatus keybinding → engine.interrupt() → abort_controller.abort()
+  ↓  <1ms
+StreamAbortGuard listener → stream.response.close()
+  ↓  ⚠️ httpx 下 close() 是 advisory（不打断阻塞读）
+SDK 继续从 socket 读取 → 模型继续生成 → 10~30s 后自然结束
+```
+
+三瓶颈串联：
+
+| 瓶颈 | 位置 | 延迟贡献 | 原因 |
+|------|------|---------|------|
+| 1. Provider `response.close()` 无效 | `src/providers/_stream_abort.py` | 10~30s（主要） | LiteLLM/httpx 下 advisory close |
+| 2. `asyncio.gather` 等待所有工具 | `src/query/query.py` L1602 | 0.1~5s（次要） | 等最慢工具完成 |
+| 3. 无传输层终止 | `src/providers/_stream_abort.py` | 无实际中止能力 | TCP 连接保持打开 |
+
+### 方案架构
+
+```
+F-99 三层方案
+├── 方案1: httpx read_timeout（P0）         ← 延迟 bound 在 5s
+│   └── AnthropicProvider._ensure_client() 设置 httpx.Client(read_timeout=5.0)
+├── 方案2: 传输连接关闭（P1）                ← 延迟 bound 在 <100ms
+│   └── _close_response_safely() 增加 transport.close()
+└── 方案3: 工具阶段可取消（P2）              ← 工具阶段即时响应
+    └── _run_tools_partitioned() 用 asyncio.wait(FIRST_COMPLETED) 替代 gather
+```
+
+### 改造点清单
+
+| 文件 | 改动 | 方案 |
+|------|------|------|
+| `src/providers/anthropic_provider.py` | `_ensure_client()` 传入自定义 `httpx.Client(timeout=...)` | 方案1 |
+| `src/providers/_stream_abort.py` | `_close_response_safely()` 增加 `response._transport.close()` | 方案2 |
+| `src/query/query.py` | `_run_tools_partitioned()` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` | 方案3 |
+| `src/query/query.py` | `_dispatch_single_tool()` 传递 abort_signal 给工具执行 | 方案3 |
+
+### 风险与约束
+
+| 风险 | 缓解措施 |
+|------|---------|
+| httpx `_transport` 内部属性依赖 | 增加 `getattr` fallback + 注释标注非公开 API |
+| `asyncio.wait(FIRST_COMPLETED)` 增加复杂度 | 封装 helper 函数 |
+| read_timeout=5s 在正常慢 chunk 时误触发 | 保留 `StreamWatchdog` 90s 兜底 |
+| `transport.close()` 在 Windows 上不可用 | `sys.platform == "win32"` 时跳过 |
+
+### 设计决定
+
+1. **方案1+2+3 组合实施**，一次性覆盖所有瓶颈
+2. 方案2 用 `getattr` 而非 `hasattr`：使用 try/except 防御
+3. 不做 provider 无关的泛化：方案1 只改 `AnthropicProvider`
+4. `asyncio.wait(FIRST_COMPLETED)` 只影响 abort 路径
+
+---
+
+## 二十七、F-55 SOP 转换器分组策略增强
+
+**状态**: ✅ 已实现 | **优先级**: P1
+**实现位置**: `extensions/pos_converter/skill_grouper.py`
+**核心文件**: `skill_grouper.py`, `source_parser.py`, `agent_md_writer.py`, `clawcodex_ext/cli/pos_cmd/commands.py`
+
+F-55 是 F-50 (SOP 转换器源码固化) 的增强子特性，解决 **"模块多时 Agent 过多"** 的核心问题。
+
+### 背景与问题
+
+SOP 转换器的默认行为是将 `SourceCodeParser` 解析出的每个组件 (`SourceComponent`) 各自生成一个独立 Agent，然后额外生成一个总览 Agent。N=50 模块时生成 **51 个 Agent 文件**。
+
+过多 Agent 带来：
+1. **用户心智负担**：/agent-list 出现几十个名字
+2. **启动加载成本**：运行时注册表需发现所有 Agent
+3. **路由低效**：总览 Agent 的指令集随 N 线性增长
+
+### 四种分组策略
+
+| 策略 | 分组依据 | Agent 数量（50 模块） | 适用场景 |
+|------|---------|:-------------------:|---------|
+| `COMPONENT_GROUP` | 每个 SourceComponent 一个 Skill/Agent | 50 | 模块高度正交 |
+| `KEYWORD_MATCH` | 按预定义 MappingRule 模式匹配 | 3-8 | 命名约定良好 |
+| `IO_RELATION` | 按参数类型签名聚类 | 5-15 | 内聚度低但参数体系清晰 |
+| `LLM_SEMANTIC` | LLM 语义聚类 | 3-8 | 无固定命名约定 |
+
+**关键约束**：无论选择哪种策略，总览 Agent 始终生成，始终是用户的唯一入口。
+
+### CLI 接口
+
+```bash
+clawcodex pos convert ./sdk/ --out ./output                              # 默认 COMPONENT_GROUP
+clawcodex pos convert ./sdk/ --out ./output --strategy keyword           # 关键字规则合并
+clawcodex pos convert ./sdk/ --out ./output --strategy io                # IO 参数类型合并
+clawcodex pos convert ./sdk/ --out ./output --strategy llm               # LLM 语义分组
+clawcodex pos convert ./sdk/ --strategy io --preview                     # 预览分组
+```
+
+### 实现架构
+
+```
+CLI (commands.py)
+    │
+    ▼
+group_source_components(components, strategy=GroupStrategy.IO_RELATION)
+    │
+    ├── SkillGrouper._component_group()     每个组件 → 一个 SkillSpec
+    ├── SkillGrouper._static_group()        MappingRule 关键字匹配
+    ├── SkillGrouper._io_relation_group()   参数类型聚类
+    └── SkillGrouper._group_with_llm()      LLM 语义分组 (placeholder)
+    │
+    ▼
+AgentMarkdownWriter.write_agent() × N + write_overview_agent() × 1
+```
+
+### 设计决定
+
+| # | 决定 | 理由 |
+|---|------|------|
+| 1 | COMPONENT_GROUP 为默认策略 | 向后兼容 |
+| 2 | 总览 Agent 始终生成 | 用户只需面对一个入口 |
+| 3 | IO_RELATION 分组名加上类型签名 | 让人看出分组依据 |
+| 4 | LLM_SEMANTIC 标注 TODO 暂不实现 | 依赖 F-52 Tool 注册能力 |
+| 5 | `--preview` 预览模式不属于核心能力 | 可用 `--dry-run` (未来特性) 替代 |
+
+### 依赖与协同
+
+- **依赖**：F-50（SourceCodeParser + AgentMarkdownWriter 是前置基础）
+- **协同**：F-52（Tool 注册 → 策略重要度柔性可调）、总览 Agent 默认加载机制
+- **不依赖**：F-37/F-38/F-39（独立功能）
