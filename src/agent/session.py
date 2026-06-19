@@ -114,22 +114,78 @@ class Session:
 
     @classmethod
     def load(cls, session_id: str) -> Optional['Session']:
-        """Load session from disk."""
-        session_file = Path.home() / ".clawcodex" / "sessions" / session_id / "session.json"
+        """Load session from disk.
 
-        if not session_file.exists():
+        F-49 P5-B/P5-D: primary source is ``session.json`` (fast path).
+        When ``session.json`` does not exist (orchestrator/cron sessions
+        that only write JSONL), falls back to scanning ``transcript.jsonl``:
+        - metadata.json -> ``model`` / ``created_at``.
+        - Message lines -> ``conversation.messages``.
+        """
+        session_dir = Path.home() / ".clawcodex" / "sessions" / session_id
+        session_file = session_dir / "session.json"
+
+        # Fast path: .json snapshot exists.
+        if session_file.exists():
+            with open(session_file, 'r') as f:
+                data = json.load(f)
+            return cls(
+                session_id=data["session_id"],
+                provider=data["provider"],
+                model=data["model"],
+                conversation=Conversation.from_dict(data["conversation"]),
+                created_at=data["created_at"],
+                updated_at=data["updated_at"]
+            )
+
+        # F-49 P5-D: fallback --- read metadata and messages from JSONL
+        # transcript.  This lets orchestrator/cron sessions load via the
+        # standard ``Session.load()`` path without the explicit
+        # ``load_from_session_storage`` call in ``resume()``.
+        transcript_path = session_dir / "transcript.jsonl"
+        metadata_path = session_dir / "metadata.json"
+        if not transcript_path.exists():
             return None
 
-        with open(session_file, 'r') as f:
-            data = json.load(f)
+        # Read metadata for model/created_at
+        provider = ""
+        model = ""
+        created_at = ""
+        updated_at = ""
+        if metadata_path.exists():
+            try:
+                md = json.loads(metadata_path.read_text())
+                model = md.get("model", "")
+                created_at = str(md.get("start_time", ""))
+                updated_at = str(md.get("last_updated", ""))
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        # Read messages from transcript
+        from src.types.messages import message_from_dict
+        from src.services.session_storage import SessionStorage
+
+        storage = SessionStorage(session_id=session_id)
+        entries = storage.read_transcript()
+        messages = []
+        for entry in entries:
+            if (
+                entry.get("role") == "system"
+                and entry.get("content") == "__background_complete__"
+            ):
+                continue
+            try:
+                messages.append(message_from_dict(entry))
+            except Exception:
+                pass
 
         return cls(
-            session_id=data["session_id"],
-            provider=data["provider"],
-            model=data["model"],
-            conversation=Conversation.from_dict(data["conversation"]),
-            created_at=data["created_at"],
-            updated_at=data["updated_at"]
+            session_id=session_id,
+            provider=provider,
+            model=model,
+            conversation=Conversation(messages=messages),
+            created_at=created_at,
+            updated_at=updated_at,
         )
 
     @classmethod
@@ -181,36 +237,16 @@ class Session:
 
         loaded = cls.load(session_id)
         if loaded is None:
-            # F-49 Phase 0.2: fall back to the SessionStorage
-            # directory format written by AgentRunner + headless
-            # agent runs. The flat-file path above is the original
-            # single-session REPL flow; this branch is the
-            # multi-session / orchestrator flow.
-            # Implementation lives in extensions/agent/session_persist.py
-            # so the upstream Session stays free of orchestrator-specific
-            # persistence concerns.
-            try:
-                from extensions.agent.session_persist import load_from_session_storage
-                data = load_from_session_storage(session_id)
-                if data is not None:
-                    loaded = cls(
-                        session_id=data["session_id"],
-                        provider="",
-                        model=data["model"],
-                        conversation=Conversation(),
-                        created_at=data["start_time"],
-                        updated_at=data["last_updated"],
-                    )
-            except ImportError:
-                pass
-            if loaded is None:
-                return None
-        # F-49 Phase 0.4.1: if conversation.messages is still empty
-        # (happens when the session was created by Cron/Orchestrator
-        # which only write JSONL, not the .json snapshot), back-fill
-        # from the SessionStorage transcript.  This single fix makes
-        # --resume work uniformly across all consumers (CLI/REPL/TUI)
-        # without each needing its own transcript sync logic.
+            # F-49 P5-D: Session.load() now falls back to reading
+            # from transcript.jsonl when session.json does not
+            # exist (load() returns a fully populated Session with
+            # messages).  The old load_from_session_storage fallback
+            # has been removed.
+            return None
+        # F-49 Phase 0.4.1 / P5-D: safety net --- if messages are still empty
+        # (should no longer happen now that Session.load() reads JSONL
+        # directly), back-fill from the SessionStorage transcript.  Kept
+        # as a defensive double-check for backward compatibility.
         if not loaded.conversation.messages:
             try:
                 from src.services.session_storage import SessionStorage

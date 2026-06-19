@@ -6,6 +6,11 @@ the persisted cost snapshot for a given session ID and dispatches
 ``/resume`` path picks up where the last session left off, rather than
 silently starting from zero.
 
+F-49 P5-C: primary source is the ``session.json`` snapshot (fast path).
+When ``session.json`` does not exist (orchestrator/cron sessions that
+only write JSONL), falls back to scanning the last ``cost_block`` entry
+in ``transcript.jsonl`` via ``tail -1``-style read.
+
 The TS file ``cost-tracker.ts`` does two things: defines the
 ``CostTracker`` class (which Python's port has consolidated onto the
 bootstrap singleton) and the restore orchestrator. The orchestrator is
@@ -32,46 +37,13 @@ def _sessions_dir() -> Path:
     return Path.home() / ".clawcodex" / "sessions"
 
 
-def restore_cost_state_for_session(session_id: SessionId | str) -> bool:
-    """Restore cost accumulators from the persisted snapshot for
-    ``session_id``.
+def _restore_from_cost_block(cost_block: dict[str, Any]) -> None:
+    """Dispatch a ``cost_block`` dict into the bootstrap singleton.
 
-    Returns True if the snapshot was found and applied, False otherwise.
-
-    Mirrors TS ``restoreCostStateForSession`` semantics: the gate is the
-    **persisted file's session_id**, not the bootstrap singleton's
-    runtime session_id. This means the function works regardless of
-    whether ``switch_session(sid)`` was called first — the resume path
-    can call restore-then-switch or switch-then-restore.
-
-    The on-disk location is ``~/.clawcodex/sessions/<sid>/session.json`` —
-    the same place ``Session.save`` writes.
+    Shared by both the ``session.json`` path and the ``transcript.jsonl``
+    fallback (P5-C).  Extracted so the two code paths call the same
+    restore logic.
     """
-    target = str(session_id)
-    session_file = _sessions_dir() / target / "session.json"
-    if not session_file.exists():
-        return False
-
-    try:
-        data = json.loads(session_file.read_text())
-    except (OSError, json.JSONDecodeError):
-        return False
-
-    if not isinstance(data, dict):
-        return False
-
-    # Gate on the *persisted* session_id matching the target — mirrors
-    # the TS pattern. Refuses to restore from a file whose session_id
-    # header doesn't agree with the filename (defends against a renamed
-    # or hand-edited file).
-    persisted_sid = data.get("session_id")
-    if persisted_sid != target:
-        return False
-
-    # Extract cost fields with defaults — tolerate snapshots that
-    # don't yet persist them.
-    cost_block: dict[str, Any] = data.get("cost", {}) if isinstance(data, dict) else {}
-
     model_usage_raw: dict[str, Any] = cost_block.get("model_usage", {}) or {}
     model_usage: dict[str, ModelUsage] = {}
     for model, entry in model_usage_raw.items():
@@ -97,7 +69,90 @@ def restore_cost_state_for_session(session_id: SessionId | str) -> bool:
         last_duration=cost_block.get("last_duration"),
         model_usage=model_usage if model_usage else None,
     )
+
+
+def _restore_from_jsonl_tail(session_id: str) -> bool:
+    """F-49 P5-C: read the last ``cost_block`` entry from ``transcript.jsonl``.
+
+    Scans ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` for the last
+    line whose ``"type"`` equals ``"cost_block"``.  This is the fallback
+    when ``session.json`` does not exist (orchestrator / cron sessions).
+
+    Returns True if a cost block was found and applied, False otherwise.
+    """
+    transcript_path = _sessions_dir() / session_id / "transcript.jsonl"
+    if not transcript_path.exists():
+        return False
+
+    last_cost_block: dict[str, Any] | None = None
+    try:
+        with open(transcript_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(entry, dict) and entry.get("type") == "cost_block":
+                    cost = entry.get("cost")
+                    if isinstance(cost, dict):
+                        last_cost_block = cost
+    except OSError:
+        return False
+
+    if last_cost_block is None:
+        return False
+
+    _restore_from_cost_block(last_cost_block)
     return True
+
+
+def restore_cost_state_for_session(session_id: SessionId | str) -> bool:
+    """Restore cost accumulators from the persisted snapshot for
+    ``session_id``.
+
+    Returns True if the snapshot was found and applied, False otherwise.
+
+    Mirrors TS ``restoreCostStateForSession`` semantics: the gate is the
+    **persisted file's session_id**, not the bootstrap singleton's
+    runtime session_id. This means the function works regardless of
+    whether ``switch_session(sid)`` was called first — the resume path
+    can call restore-then-switch or switch-then-restore.
+
+    F-49 P5-C: primary source is ``session.json`` (same place
+    ``Session.save`` writes).  When ``session.json`` does not exist,
+    falls back to scanning ``transcript.jsonl`` for the last
+    ``cost_block`` entry.
+    """
+    target = str(session_id)
+    session_file = _sessions_dir() / target / "session.json"
+    if session_file.exists():
+        try:
+            data = json.loads(session_file.read_text())
+        except (OSError, json.JSONDecodeError):
+            return False
+
+        if not isinstance(data, dict):
+            return False
+
+        # Gate on the *persisted* session_id matching the target — mirrors
+        # the TS pattern. Refuses to restore from a file whose session_id
+        # header doesn't agree with the filename (defends against a renamed
+        # or hand-edited file).
+        persisted_sid = data.get("session_id")
+        if persisted_sid != target:
+            return False
+
+        # Extract cost fields with defaults — tolerate snapshots that
+        # don't yet persist them.
+        cost_block: dict[str, Any] = data.get("cost", {}) if isinstance(data, dict) else {}
+        _restore_from_cost_block(cost_block)
+        return True
+
+    # F-49 P5-C: fallback to transcript.jsonl when no .json snapshot exists.
+    return _restore_from_jsonl_tail(target)
 
 
 __all__ = ["restore_cost_state_for_session"]

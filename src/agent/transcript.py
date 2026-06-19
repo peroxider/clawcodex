@@ -400,6 +400,43 @@ class TranscriptWriter:
         ):
             self._flush_sort_buffer()
 
+    def write_session_init(
+        self,
+        session_id: str,
+        provider: str = "",
+        model: str = "",
+        created_at: str | None = None,
+    ) -> None:
+        """F-49 P5-G: write a ``session_init`` line as the first transcript entry.
+
+        The line carries session-level metadata (provider, model, created_at)
+        so ``Session.load()`` can reconstruct these fields from the JSONL
+        transcript alone, without a separate ``session.json`` snapshot.
+
+        Written directly (not through the sort buffer) so it lands on disk
+        immediately as the first line.
+
+        Example line written to disk::
+
+            {"type":"session_init","session_id":"abc...","provider":"anthropic",
+             "model":"claude-sonnet-4-20250514","created_at":"2026-06-19T09:03:02"}
+        """
+        if self._closed or self._fd is None:
+            raise RuntimeError("TranscriptWriter is closed")
+        from datetime import datetime
+
+        payload: dict[str, Any] = {
+            "type": "session_init",
+            "session_id": session_id,
+        }
+        if provider:
+            payload["provider"] = provider
+        if model:
+            payload["model"] = model
+        payload["created_at"] = created_at or datetime.now().isoformat()
+        line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+        self._write_raw(line.encode("utf-8"))
+
     def _flush_sort_buffer(self) -> None:
         """Sort the buffered (ts, line) pairs ascending and write them out.
 
