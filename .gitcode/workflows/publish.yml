@@ -61,29 +61,10 @@ jobs:
             scripts/ci/preflight.py \
             scripts/ci/supply_chain_audit.py \
             scripts/ci/env_loader.py \
-            scripts/ci/local_publish.py
-          python -m pytest \
-            tests/fast \
-            tests/config/test_config.py \
-            tests/config/test_config_system.py \
-            tests/config/test_effort.py \
-            tests/model \
-            tests/utils/test_combined_abort_signal.py \
-            tests/input/test_format.py \
-            tests/input/test_frontmatter_adapter.py \
-            tests/permissions/test_permission_modes.py \
-            tests/hooks/test_hook_config.py \
-            tests/skills/test_skills_frontmatter_yaml.py \
-            tests/bridge/test_jwt_utils.py \
-            tests/ci/test_gitcode_release.py \
-            tests/agent/test_agent_smoke_no_live_key.py \
-            tests/orchestrator/test_local_tracker_parser.py \
-            tests/orchestrator/test_orchestrator_f39_intent.py \
-            tests/orchestrator/test_orchestrator_f49_transcript.py \
-            tests/orchestrator/test_orchestrator_f49_resume.py \
-            tests/orchestrator/test_orchestrator_workspace_hooks.py \
-            tests/test_visualizer/test_orchestrator_link.py \
-            -q
+            scripts/ci/local_publish.py \
+            scripts/ci/pytest_targets.py
+          mapfile -t PYTEST_TARGETS < <(python scripts/ci/pytest_targets.py release-smoke)
+          python -m pytest "${PYTEST_TARGETS[@]}" -q
           rm -rf dist build
           python -m build
           python -m twine check dist/*

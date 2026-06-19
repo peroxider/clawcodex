@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -112,6 +113,83 @@ def test_build_steps_skips_lint_when_package_scope_has_no_python_files(tmp_path,
     assert lint_step.skip_reason == "no changed Python files"
 
 
+def test_typecheck_step_is_blocking(tmp_path, monkeypatch):
+    local_ci = _load_module(monkeypatch)
+    monkeypatch.setattr(local_ci, "PYTHON_FILES", tmp_path / "ci_python_files.txt")
+    monkeypatch.setattr(local_ci, "DOC_FILES", tmp_path / "ci_doc_files.txt")
+    local_ci.PYTHON_FILES.write_text("src/example.py\n", encoding="utf-8")
+
+    local_ci.DOC_FILES.write_text("", encoding="utf-8")
+
+    steps = local_ci._build_steps(
+        {
+            "CI_RUN_DOCS": "false",
+            "CI_RUN_PYTHON": "true",
+            "CI_RUN_ORCHESTRATOR": "false",
+            "CI_RUN_PACKAGE": "false",
+            "CI_DOCS_ONLY": "false",
+        },
+        all_files=False,
+        base="HEAD~1",
+    )
+
+    typecheck_step = next(step for step in steps if step.name == "ci / typecheck")
+    assert typecheck_step.blocking is True
+    assert typecheck_step.advisory is False
+    assert typecheck_step.skip_reason is None
+
+
+def test_build_steps_appends_changed_pytest_files_to_matching_smoke_gate(
+    tmp_path,
+    monkeypatch,
+):
+    local_ci = _load_module(monkeypatch)
+    monkeypatch.setattr(local_ci, "PYTHON_FILES", tmp_path / "ci_python_files.txt")
+    monkeypatch.setattr(local_ci, "DOC_FILES", tmp_path / "ci_doc_files.txt")
+    local_ci.PYTHON_FILES.write_text(
+        "\n".join(
+            [
+                "src/query/engine.py",
+                "tests/api/test_api_retry.py",
+                "tests/agent/test_agent_loop.py",
+                "tests/orchestrator/test_orchestrator_dashboard.py",
+                "tests/stability_gate/test_stage1_imports.py",
+                "tests/test_visualizer/test_multi_session_api.py",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    local_ci.DOC_FILES.write_text("", encoding="utf-8")
+
+    steps = local_ci._build_steps(
+        {
+            "CI_RUN_DOCS": "false",
+            "CI_RUN_PYTHON": "true",
+            "CI_RUN_ORCHESTRATOR": "true",
+            "CI_RUN_PACKAGE": "true",
+            "CI_DOCS_ONLY": "false",
+        },
+        all_files=False,
+        base="HEAD~1",
+    )
+
+    by_name = {step.name: step for step in steps}
+    core_targets = by_name["ci / pytest-core"].commands[0]
+    stability_targets = by_name["ci / pytest-stability-gate"].commands[0]
+    orchestrator_targets = by_name["ci / pytest-orchestrator"].commands[0]
+    agent_targets = by_name["agent-smoke / agent-replay-smoke"].commands[0]
+
+    assert "tests/api/test_api_retry.py" in core_targets
+    assert "tests/agent/test_agent_loop.py" not in core_targets
+    assert "tests/stability_gate/test_stage1_imports.py" not in core_targets
+    assert "tests/stability_gate" in stability_targets
+    assert "tests/stability_gate/test_stage1_imports.py" not in stability_targets
+    assert "tests/orchestrator/test_orchestrator_dashboard.py" in orchestrator_targets
+    assert "tests/test_visualizer/test_multi_session_api.py" in orchestrator_targets
+    assert "tests/agent/test_agent_loop.py" in agent_targets
+
+
 def test_chunked_commands_split_long_file_lists(monkeypatch):
     local_ci = _load_module(monkeypatch)
 
@@ -141,6 +219,15 @@ def test_gitcode_ci_package_smoke_is_skipped_for_docs_only_changes():
 
     assert "No non-docs changes; skipping package smoke." in workflow
     assert '[ "$CI_RUN_PACKAGE" != "true" ]' in workflow
+
+
+def test_gitcode_typecheck_is_blocking():
+    workflow = Path(".gitcode/workflows/ci.yml").read_text(encoding="utf-8")
+    release_preflight = Path(".gitcode/workflows/release-preflight.yml").read_text(encoding="utf-8")
+
+    assert "Mypy required typecheck" in workflow
+    assert "python -m mypy src clawcodex_ext extensions || true" not in workflow
+    assert "python -m mypy src clawcodex_ext extensions || true" not in release_preflight
 
 
 def test_write_preflight_uses_committed_scope_only(tmp_path, monkeypatch, capsys):
@@ -183,6 +270,24 @@ def test_package_smoke_cleanup_removes_sdist_staging_dir(tmp_path, monkeypatch):
     assert not (tmp_path / "build").exists()
     assert not (tmp_path / ".package-smoke").exists()
     assert not (tmp_path / "clawcodex_dev_mind-0.5.0").exists()
+
+
+def test_rmtree_recovers_from_unscannable_reparse_point(tmp_path, monkeypatch):
+    local_ci = _load_module(monkeypatch)
+    target = tmp_path / "tree"
+    failed = target / "lib64"
+    removed: list[str] = []
+
+    def fake_rmtree(path, *, onerror):
+        onerror(os.scandir, str(failed), (OSError, OSError("cannot scan"), None))
+
+    monkeypatch.setattr(local_ci.shutil, "rmtree", fake_rmtree)
+    monkeypatch.setattr(local_ci.os.path, "lexists", lambda path: True)
+    monkeypatch.setattr(local_ci.os, "rmdir", lambda path: removed.append(path))
+
+    local_ci._rmtree(target)
+
+    assert removed == [str(failed)]
 
 
 def test_local_ci_reports_package_artifact_locations(monkeypatch):

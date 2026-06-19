@@ -743,15 +743,21 @@ and creates the ignored `.env` template when missing; `install.sh install` and
 local hygiene check, not a replacement for the GitCode `push` / `pull_request`
 gates.
 
-GitCode CI/CD gates live in `.gitcode/workflows/`. Because GitCode Pipeline may be unavailable for this repository, the same gate shape can be simulated locally. By default this checks the current HEAD commit and shows a live colored dashboard in interactive terminals:
+- GitCode CI/CD gates live in `.gitcode/workflows/`. Because GitCode Pipeline may be unavailable for this repository, the same gate shape can be simulated locally. In interactive terminals it shows a live colored dashboard; in CI/logs force plain output with `--ui plain`. When an AI agent is involved in development, it is recommended to have it run the command below as a pre-commit self-check before committing.
 
-```bash
-python scripts/ci/local_ci.py
-```
+    ```bash
+    # Plain-text form for AI involvement
+    python scripts/ci/local_ci.py --base "the fork's remote dev branch" --ui plain --failure-lines 120
+    # Graphical form for developer involvement
+    python scripts/ci/local_ci.py --base upstream/dev-decoupling-refactor-b24b8cb
+    ```
 
-The detailed gate map is in [`docs/cicd/CICD_GATE.md`](docs/cicd/CICD_GATE.md).
+    - **Scope of the changed-file check.** Without `--all`, the gate diffs only `HEAD~1..HEAD` — i.e. the *last* commit on the branch. That is fine for a single-commit change, but **before opening a PR with multiple commits it under-checks**: earlier commits on the branch are not covered, so the local result can diverge from the GitCode PR gate (which diffs the whole PR against its merge base). Use `--base <ref>` to cover the full PR diff.
+        - `--base` accepts any ref; `local_ci` computes `merge-base(<ref>, HEAD)` and checks `merge-base...HEAD`, so it stays correct as your branch grows. To check the entire tracked tree instead (slowest; also surfaces historical debt), use `--all`.
+    - **Keep `upstream` current with `git fetch upstream` before running the gate.**
+    - Pytest gates use a fixed smoke suite plus any changed `tests/**/test_*.py` or `tests/**/*_test.py` files from the current PR/push scope, so newly added tests are picked up without manually editing every workflow.
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) covers PR conventions. [`upstream_sync/`](upstream_sync/) contains tooling to pull new chapters from the upstream TypeScript reference.
+- The detailed gate map is in [`docs/cicd/CICD_GATE.md`](docs/cicd/CICD_GATE.md); [`CONTRIBUTING.md`](CONTRIBUTING.md) covers PR conventions.
 
 ---
 
@@ -786,7 +792,7 @@ Credential-only checks do not build or upload anything:
 
 A normal publish run performs, in order: load `.env`, check credentials, require a
 clean tracked tree, create or verify the release tag, clean old artifacts, run release lint,
-run advisory mypy, run release tests, build/check/install the package in
+run required mypy, run release tests, build/check/install the package in
 `.release-smoke/`, upload to TestPyPI or PyPI, then upload GitCode Release assets
 unless skipped.
 
