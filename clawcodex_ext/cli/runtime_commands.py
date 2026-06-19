@@ -241,19 +241,17 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
                 warnings.append(f"Did you mean: {', '.join(suggestions)}?")
 
     # ---- Check if the model is known for this provider ----
-    # Also check the config's ``models`` list: a model previously persisted
-    # (e.g. via /model <unknown-name>) is treated as "known" so the second
-    # invocation doesn't re-warn the user.
-    model_known = True
+    # Registry validation controls the user-facing warning. The config's
+    # ``models`` list only controls whether we need to persist the model again.
+    should_persist_model = False
     try:
         registry.validate_model(model, provider)
     except (UnknownModelError, ProviderMismatchError):
-        model_known = _model_is_in_config_models(model, provider)
-        if not model_known:
-            warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
+        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
+        should_persist_model = not _model_is_in_config_models(model, provider)
 
     # ---- Persist unknown model to config so it's available next session ----
-    if not model_known:
+    if should_persist_model:
         try:
             ModelStore(registry).set_default_provider(provider)
         except Exception:

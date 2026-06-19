@@ -560,6 +560,38 @@ class TestBuiltinCommands(unittest.TestCase):
         self.assertIn("Cron runtime is required", result or "")
         self.assertEqual([], read_cron_runs(self.workspace_root))
 
+    def test_cron_run_honors_tool_permission_context(self):
+        """Test /cron-run dispatches through CronRun permission checks."""
+        from clawcodex_ext.cron_system.runs import read_cron_runs
+        from clawcodex_ext.cron_system.tasks import add_cron_task
+        from src.permissions.types import ToolPermissionContext
+
+        runtime = self._build_runtime()
+        runtime.tool_context.permission_context = ToolPermissionContext.from_iterables(
+            deny_names=["CronRun"],
+        )
+        task = add_cron_task(
+            self.workspace_root,
+            cron="*/5 * * * *",
+            prompt="manual ping",
+            durable=True,
+        )
+        context = create_command_context(
+            workspace_root=self.workspace_root,
+            conversation=self.conversation,
+            cost_tracker=self.cost_tracker,
+            history=self.history,
+            tool_registry=runtime.tool_registry,
+            tool_context=runtime.tool_context,
+        )
+
+        success, result, error = execute_command_sync("cron-run", task.id, context)
+
+        self.assertFalse(success)
+        self.assertIsNone(result)
+        self.assertIn("CronRun", error or "")
+        self.assertEqual([], read_cron_runs(self.workspace_root))
+
     def test_cron_run_respects_cron_kill_switch(self):
         """Test manual fire follows CLAWCODEX_DISABLE_CRON."""
         import os

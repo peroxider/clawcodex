@@ -8,11 +8,11 @@ from typing import Any
 from .models import CronTask, is_cron_disabled, load_jitter_config
 from .runs import CronRun
 from .scheduler import CronScheduler
-from .tools import CronCreateTool, CronDeleteTool, CronListTool
+from .tools import CronCreateTool, CronDeleteTool, CronListTool, CronRunTool
 
 _log = logging.getLogger(__name__)
 
-_CRON_TOOL_NAMES = {"croncreate", "crondelete", "cronlist"}
+_CRON_TOOL_NAMES = {"croncreate", "crondelete", "cronlist", "cronrun"}
 
 
 def replace_cron_tools(registry: Any) -> None:
@@ -26,6 +26,7 @@ def replace_cron_tools(registry: Any) -> None:
     registry.register(CronCreateTool)
     registry.register(CronListTool)
     registry.register(CronDeleteTool)
+    registry.register(CronRunTool)
 
 
 def attach_cron_runtime(

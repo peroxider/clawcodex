@@ -293,7 +293,7 @@ def _cron_deep_arg(args: str) -> bool:
     return "--deep" in (args or "").split()
 
 
-def _append_cron_outbox(context: CommandContext, run: Any) -> bool:
+def _append_cron_outbox(context: CommandContext, run: dict[str, Any]) -> bool:
     tool_context = getattr(context, "tool_context", None)
     outbox = getattr(tool_context, "outbox", None)
     if not hasattr(outbox, "append"):
@@ -302,9 +302,9 @@ def _append_cron_outbox(context: CommandContext, run: Any) -> bool:
         outbox.append(
             {
                 "type": "cron_prompt",
-                "prompt": run.prompt,
-                "task_id": run.task_id,
-                "run_id": run.id,
+                "prompt": run["prompt"],
+                "task_id": run["task_id"],
+                "run_id": run["id"],
             }
         )
     except Exception:
@@ -390,37 +390,27 @@ def cron_run_command_call(args: str, context: CommandContext) -> LocalCommandRes
     if not _has_cron_tool_runtime(context):
         return _cron_runtime_required_result("manually fire scheduled cron jobs")
 
-    from clawcodex_ext.cron_system.models import is_cron_disabled
-    from clawcodex_ext.cron_system.tools import CRON_DISABLED_MESSAGE
-    from clawcodex_ext.cron_system.schedule import (
-        format_manual_fire_result,
-        get_cron_task_detail,
-        manual_fire_cron_task,
-    )
-
-    if is_cron_disabled():
-        return LocalCommandResult(type="text", value=CRON_DISABLED_MESSAGE)
-
-    session_store = _cron_session_store(context)
-    detail = get_cron_task_detail(context.workspace_root, cron_id, session_store)
-    if detail is None:
+    output = _call_cron_tool(context, "CronRun", {"id": cron_id})
+    if isinstance(output, dict) and output.get("disabled"):
+        return LocalCommandResult(type="text", value=str(output.get("message") or "Cron is disabled."))
+    if isinstance(output, dict) and output.get("not_found"):
         return LocalCommandResult(
             type="text",
             value=f"No scheduled cron job found with id '{cron_id}'.",
         )
 
-    run = manual_fire_cron_task(
-        context.workspace_root,
-        cron_id,
-        session_store,
-        current_dir=context.cwd,
-    )
-    value = format_manual_fire_result(cron_id, run)
-    if run is not None:
-        if _append_cron_outbox(context, run):
-            value = f"{value}\nQueued for execution in this session."
-        else:
-            value = f"{value}\nQueued, but no active cron outbox is available in this context."
+    run = output.get("run") if isinstance(output, dict) else None
+    if not isinstance(run, dict):
+        return LocalCommandResult(
+            type="text",
+            value=f"Trigger {cron_id} was not fired because a previous run is still queued or running.",
+        )
+
+    value = f"Trigger {cron_id} fired.\nRun ID: {run['id']}"
+    if _append_cron_outbox(context, run):
+        value = f"{value}\nQueued for execution in this session."
+    else:
+        value = f"{value}\nQueued, but no active cron outbox is available in this context."
     return LocalCommandResult(type="text", value=value)
 
 

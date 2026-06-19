@@ -4,7 +4,7 @@ import pytest
 
 from clawcodex_ext.cron_system.runs import read_cron_runs
 from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
-from clawcodex_ext.cron_system.tools import CronCreateTool
+from clawcodex_ext.cron_system.tools import CronCreateTool, CronRunTool
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.errors import ToolInputError
@@ -22,6 +22,7 @@ def test_replace_cron_tools_swaps_fallback_implementation() -> None:
     assert registry.get("CronCreate") is FallbackCronCreateTool
     replace_cron_tools(registry)
     assert registry.get("CronCreate") is CronCreateTool
+    assert registry.get("CronRun") is CronRunTool
 
 
 def test_extension_tools_store_session_tasks_by_default(tmp_path) -> None:
@@ -56,7 +57,66 @@ def test_extension_delete_missing_task_errors(tmp_path) -> None:
 def test_mutating_cron_tools_are_not_read_only() -> None:
     assert CronCreateTool.is_read_only({}) is False
     assert registry_tool("CronDelete").is_read_only({}) is False
+    assert registry_tool("CronRun").is_read_only({}) is False
     assert registry_tool("CronList").is_read_only({}) is True
+
+
+def test_cron_run_tool_creates_queued_run(tmp_path) -> None:
+    ctx = ToolContext(workspace_root=tmp_path)
+    created = CronCreateTool.call(
+        {"cron": "*/5 * * * *", "prompt": "manual ping", "durable": True},
+        ctx,
+    ).output
+
+    result = registry_tool("CronRun").call({"id": created["id"]}, ctx).output
+
+    assert result["success"] is True
+    assert result["id"] == created["id"]
+    assert result["run"]["task_id"] == created["id"]
+    assert result["run"]["prompt"] == "manual ping"
+    assert result["run"]["status"] == "queued"
+    runs = read_cron_runs(tmp_path)
+    assert len(runs) == 1
+    assert runs[0].id == result["run"]["id"]
+
+
+def test_cron_run_tool_blocks_duplicate_active_run(tmp_path) -> None:
+    ctx = ToolContext(workspace_root=tmp_path)
+    created = CronCreateTool.call(
+        {"cron": "*/5 * * * *", "prompt": "manual ping", "durable": True},
+        ctx,
+    ).output
+    run_tool = registry_tool("CronRun")
+
+    first = run_tool.call({"id": created["id"]}, ctx).output
+    second = run_tool.call({"id": created["id"]}, ctx).output
+
+    assert first["success"] is True
+    assert second == {"success": False, "id": created["id"], "run": None}
+    assert len(read_cron_runs(tmp_path)) == 1
+
+
+def test_cron_run_tool_reports_missing_task(tmp_path) -> None:
+    ctx = ToolContext(workspace_root=tmp_path)
+
+    result = registry_tool("CronRun").call({"id": "missing"}, ctx).output
+
+    assert result == {"success": False, "id": "missing", "not_found": True}
+    assert read_cron_runs(tmp_path) == []
+
+
+def test_cron_run_tool_respects_kill_switch(tmp_path, monkeypatch) -> None:
+    ctx = ToolContext(workspace_root=tmp_path)
+    created = CronCreateTool.call(
+        {"cron": "*/5 * * * *", "prompt": "manual ping", "durable": True},
+        ctx,
+    ).output
+
+    monkeypatch.setenv("CLAWCODEX_DISABLE_CRON", "1")
+    result = registry_tool("CronRun").call({"id": created["id"]}, ctx).output
+
+    assert result["disabled"] is True
+    assert read_cron_runs(tmp_path) == []
 
 
 # ---------------------------------------------------------------------------

@@ -19,6 +19,7 @@ from .models import (
     validate_jitter_config,
 )
 from .parser import cron_to_human, parse_cron_expression
+from .schedule import get_cron_task_detail, manual_fire_cron_task
 from .tasks import add_cron_task, read_all_cron_tasks, remove_cron_tasks
 
 # F-22-G1: keep in sync with `is_cron_disabled` for the in-process fast path.
@@ -90,6 +91,12 @@ field is the 8-char hex returned by CronCreate / CronList.
 Deletion is irreversible — the job, its run history, and any pending fire are
 all removed. For recurring jobs the on-disk record is removed entirely (no
 "paused" state). For session-only jobs the in-memory record is cleared.
+"""
+
+CRON_RUN_PROMPT = """\
+Manually fire a scheduled cron job by id. Use CronList first to look up the id.
+The call creates a queued scheduled-task run and returns its run id. The caller
+is responsible for delivering the queued prompt to the active execution loop.
 """
 
 
@@ -215,6 +222,60 @@ CronDeleteTool: Tool = build_tool(
     call=_cron_delete_call,
     prompt=CRON_DELETE_PROMPT,
     description="Delete a scheduled cron job by id.",
+    strict=True,
+    max_result_size_chars=100_000,
+    is_read_only=lambda _input: False,
+    is_concurrency_safe=lambda _input: True,
+    to_auto_classifier_input=lambda input_data: (input_data or {}).get("id", "") or "",
+)
+
+
+def _cron_run_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
+    if is_cron_disabled():
+        return _cron_disabled_result("CronRun")
+    cron_id = tool_input.get("id")
+    if not isinstance(cron_id, str) or not cron_id.strip():
+        raise ToolInputError("id must be a non-empty string")
+    normalized_id = cron_id.strip()
+    if get_cron_task_detail(context.workspace_root, normalized_id, context.crons) is None:
+        return ToolResult(
+            name="CronRun",
+            output={"success": False, "id": normalized_id, "not_found": True},
+        )
+    run = manual_fire_cron_task(
+        context.workspace_root,
+        normalized_id,
+        context.crons,
+        current_dir=getattr(context, "current_dir", None),
+    )
+    if run is None:
+        return ToolResult(name="CronRun", output={"success": False, "id": normalized_id, "run": None})
+    return ToolResult(
+        name="CronRun",
+        output={
+            "success": True,
+            "id": normalized_id,
+            "run": {
+                "id": run.id,
+                "task_id": run.task_id,
+                "prompt": run.prompt,
+                "status": run.status,
+            },
+        },
+    )
+
+
+CronRunTool: Tool = build_tool(
+    name="CronRun",
+    input_schema={
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+    },
+    call=_cron_run_call,
+    prompt=CRON_RUN_PROMPT,
+    description="Manually fire a scheduled cron job by id.",
     strict=True,
     max_result_size_chars=100_000,
     is_read_only=lambda _input: False,

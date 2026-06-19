@@ -584,15 +584,18 @@ class TestG6ToolPrompts:
             CronCreateTool,
             CronDeleteTool,
             CronListTool,
+            CronRunTool,
         )
 
+        inputs = {
+            "CronCreate": {"cron": "0 9 * * *", "prompt": "x"},
+            "CronList": {},
+            "CronDelete": {"id": "missing"},
+            "CronRun": {"id": "missing"},
+        }
         ctx = ToolContext(workspace_root=tmp_path, crons={})
         with patch.dict(os.environ, {ENV_CLAWCODEX_DISABLE_CRON: "1"}):
-            for tool in (CronCreateTool, CronListTool, CronDeleteTool):
-                result = (
-                    tool.call({"cron": "0 9 * * *", "prompt": "x"}, ctx)
-                    if tool.name == "CronCreate"
-                    else tool.call({}, ctx)
-                )
+            for tool in (CronCreateTool, CronListTool, CronDeleteTool, CronRunTool):
+                result = tool.call(inputs[tool.name], ctx)
                 assert result.output.get("disabled") is True
                 assert result.output.get("message") == CRON_DISABLED_MESSAGE
