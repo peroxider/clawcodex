@@ -312,6 +312,7 @@ class PromptInput(Vertical):
         self._at_file_suggestions = _AtFileSuggestions(classes="-hidden")
         self._agent_suggestions = _AgentSuggestions(classes="-hidden")
         self._ghost_suggestion = Static("", id="ghost-suggestion", classes="-hidden")
+        self._ghost_suggestion.renderable = ""
         self._vim = VimState(enabled=vim_mode)
         # Configured ghost-suggestion accept key. Stored in two forms:
         # ``_accept_key_raw`` is the canonical prompt_toolkit spelling
@@ -705,6 +706,7 @@ class PromptInput(Vertical):
             hint = Text()
             hint.append(suffix, style="dim")
             hint.append(f" ({base} to accept)", style="dim cyan")
+            self._ghost_suggestion.renderable = hint
             self._ghost_suggestion.update(hint)
             self._ghost_suggestion.remove_class("-hidden")
         else:
@@ -713,6 +715,7 @@ class PromptInput(Vertical):
     def _hide_ghost_suggestion(self) -> None:
         if not self._ghost_suggestion.has_class("-hidden"):
             self._ghost_suggestion.add_class("-hidden")
+            self._ghost_suggestion.renderable = ""
             self._ghost_suggestion.update("")
 
     def _accept_ghost_suggestion(self) -> None:
