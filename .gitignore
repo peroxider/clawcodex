@@ -186,3 +186,7 @@ coverage/
 /tmp/
 /.trae/
 /.store/
+/sessions_analysis/
+/sessions-v0-dev/
+/extensions/session_analyzer/
+/tests/session_analyzer/
