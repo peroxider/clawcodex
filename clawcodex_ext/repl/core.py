@@ -4006,12 +4006,37 @@ class ClawcodexREPL:
 
         try:
             api_messages, call_kwargs = self._build_direct_stream_payload()
-            response = self.provider.chat_stream_response(
-                api_messages, tools=None,
-                abort_signal=abort_signal,
-                on_text_chunk=on_text_chunk,
-                **call_kwargs,
-            )
+            try:
+                response = self.provider.chat_stream_response(
+                    api_messages, tools=None,
+                    abort_signal=abort_signal,
+                    on_text_chunk=on_text_chunk,
+                    **call_kwargs,
+                )
+                content = response.content if response else None
+                full_response = content if isinstance(content, str) and content else None
+                if full_response is not None:
+                    self.session.conversation.add_assistant_message(full_response)
+                    return full_response
+            except NotImplementedError:
+                pass
+
+            chunks: list[str] = []
+            try:
+                stream = self.provider.chat_stream(api_messages, tools=None, **call_kwargs)
+                for chunk in stream:
+                    if abort_signal.aborted:
+                        return None
+                    if not chunk:
+                        continue
+                    chunks.append(chunk)
+                    if on_text_chunk is not None:
+                        on_text_chunk(chunk)
+            except Exception:
+                if abort_signal.aborted:
+                    return None
+                return None
+            full_response = "".join(chunks) or None
         except Exception:
             # Provider raised (e.g. AbortError from user cancel, or a
             # real error). If the abort controller was tripped, the user
@@ -4020,7 +4045,6 @@ class ClawcodexREPL:
                 return None
             raise
 
-        full_response = response.content if response and response.content else None
         if full_response:
             self.session.conversation.add_assistant_message(full_response)
         return full_response
