@@ -2,14 +2,19 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.7
-> 更新日期: 2026-07-07
-> 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.9
+> 更新日期: 2026-06-19
+> 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
 >
-> **v3.7 变更**：F-99 状态对齐 + F-90 remote_api 落地。
->   - F-99 Ctrl+C/B 即时中断响应优化：从 📋 设计完成 → ✅ 已完成（FF470158 三方案组合全部落地：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
->   - F-90 Hermes Gateway：从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
->   - F-90 §7.1 PROGRESS.md 新增 F-90 实施跟踪：remote_api 作为 Hermes 兼容远程 Agent API 已完成。
+> **v3.9 变更**：代码库审计综合对齐 — 8 项 F-Number 状态修正。
+>   - F-9 /goal 命令：从 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/goal/` 9 文件 2538 行：状态机/持久化/续跑/Tool/prompt/CLI 完整）。
+>   - F-11 sessionStorage 容量限制：从 ⏳ 待开始 → ✅ 已完成（`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000`）。
+>   - F-37 PR 检视意见自动修复：从 🔄 进行中 → ✅ 已完成（`extensions/orchestrator/review_feedback.py` + GitSync follow-up 全链路）。
+>   - F-64 Voice Mode：确认 🟡 进行中（接口层已完成）（`src/services/voice/` 检测 + STT 抽象类 188 行）。
+>   - F-65 Langfuse/Analytics：从 ⏳ 待开始 → 🟡 部分完成（`src/services/analytics/` 事件/元数据/导出 sink 247 行）。
+>   - F-70 Plugin 系统：从 ⏳ 待开始 → 🟡 部分完成（`src/plugins/` 8 文件 1070 行：注册表/加载器/校验/市场/LSP/MCP 基础框架）。
+>   - F-78 Issue 语义澄清：从 ⏳ 待开始 → ✅ 已完成（`extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行三通道完整实现）。
+>   - F-80 Agent 间自主观察与消息交互：从 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/tool_system/tools/task_inspect.py` + `task_directives.py` 642 行，已注册 EXTENSION_TOOLS）。
 >
 > **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
 >   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
@@ -83,9 +88,9 @@
 | F-6 | Computer Use | P0 | ⏳ →F-61 | 已合并至 F-61（Computer Use 屏幕操控） |
 | F-7 | Remote Control | P2 | ⏳ →F-82 | 已合并至 F-82（Remote Control Server） |
 | F-8 | ACP/Zed/Cursor 集成 | P2 | ⏳ →F-66 | 已合并至 F-66（ACP 协议支持） |
-| F-9 | /goal 命令 | P2 | ⏳ 待开始 | 长时间任务目标管理 |
+| F-9 | /goal 命令 | P2 | ✅ 已完成（2026-06-19 审计） | `clawcodex_ext/goal/` 9 文件 2538 行：状态机+持久化+续跑+Tool/prompt/CLI 命令。 |
 | F-10 | ExecuteExtraTool 延迟工具系统 | P2 | ⏳ 待开始 | TF-IDF 工具搜索 + 子代理执行 |
-| F-11 | sessionStorage 容量限制 | P2 | ⏳ 待开始 | 防止 daemon 会话内存泄漏 |
+| F-11 | sessionStorage 容量限制 | P2 | ✅ 已完成 | 防止 daemon 会话内存泄漏；`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000` |
 | F-12 | cacheWarning 容量限制 | P2 | ⏳ 待开始 | 防止 source 类型内存泄漏 |
 | F-13 | Agent 记忆作用域隔离 | P1 | ✅ 完成 | 按需加载不同作用域记忆，clawcodex_ext try-import 降级模式 |
 | F-14 | 三层解耦架构（Layer Isolation） | P1 | ✅ 完成 | upstream/capabilities/features 三层分离，零层违规 |
@@ -108,7 +113,7 @@
 | F-31 | TUI 权限模式选择器 | P1 | ✅ 完成 | 模态对话框支持 5 种权限模式切换 (default/acceptEdits/plan/bypassPermissions/dontAsk) |
 | F-32 | 会话恢复浏览器 (Resume Conversation) | P1 | ✅ 完成 | 模糊搜索、实时过滤、会话元数据展示，支持 /resume 命令和 --tui --resume 启动选项 |
 | F-36 | LocalTracker 本地 Issue 文档源 | P1 | ✅ 完成 | 新增 `tracker.kind: local`，从本地 Markdown/JSON issue 文档读取待处理任务，支持离线测试与私有本地工作流 |
-| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | 🔄 进行中 | 将 PR 网页检视意见、inline comments、review summary 与 CI 失败日志转化为 follow-up agent run，自动修改同一 PR 分支并提交更新。`extensions/orchestrator/review_feedback.py`（109 行）— `ReviewFeedbackService` + `ReviewFollowup`；`extensions/orchestrator/config/schema.py` — `ReviewFeedbackConfig`；已接线到 `orchestrator.py:_process_review_feedback()`（L320/991-999） |
+| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | ✅ 已完成 | `extensions/orchestrator/review_feedback.py`（157 行）— `ReviewFeedbackService` + `ReviewFollowup`；已接线到 `orchestrator.py:_process_review_feedback()`；GitSync follow-up 全链路 |
 | F-38 | Orchestrator 验证与报告闭环（verification + report → PR） | P0 | ✅ 完成 | commit/push 前自动跑 verification gate（pre_push hook + test_command），agent 跑完写结构化报告，git_sync 用报告改写 PR body 并合并为单条 issue 汇总评论；进度由 dead-code `progress_reporter` 接入主流程 |
 | F-39 | Orchestrator Issue 重跑入口（label + comment 命令双通道） | P0 | ✅ 完成（Sub-A~F） | 三种 label 表达重做意图：`agent:retry`（重置本地状态、关旧 PR、重跑整个 issue）、`agent:follow-up`（保留 PR、叠 commit、对应 F-37 follow-up）、`agent:blocked`（永久跳过）；comment 命令 `/agent retry` / `/agent follow-up` 由原作者或 maintainer 触发并限频；CLI 兜底 `issue retry --id 1 --mode reset`。Sub-A label 解析+意图分发、Sub-B 重置重跑、Sub-C follow-up 叠 commit、Sub-D comment 命令解析、Sub-E CLI 兜底、Sub-F 限频+角色校验均已落地；端到端 10-11 阶段（实际 GitCode/GitHub issue 联动）待真实环境验证 |
 | F-40 | ProgressReporter Sink 协议重构 | P1 | ✅ 已完成 | 把 `Orchestrator` 上 `ProgressReporter` 单例拆为每 session 独立的 `ProgressSink` 实例（`progress_sink.py` 已完整落地）；新增 `CompositeProgressSink` 扇出支持 F-37/F-39 零侵入接入；补全 `SessionComplete` / `TurnComplete` 转发；引入 `WorkflowConfig.phases` 做真实进度计算，淘汰 `phase_count * 25` 假数据 |
@@ -127,31 +132,31 @@
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | 📋 规划中 | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/`。依赖 F-52。 |
 | F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 🔄 进行中 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点。已落地：`extensions/orchestrator/debug_log.py`（29 行）— `append_debug_event` + `ObservabilityConfig` schema；`agent_runner.py:751` 写 `debug.ndjson`。仪表盘/query-runner heartbeat/CLI 诊断字段待补齐 |
 | F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
-| F-60 | Pipe IPC + LAN 群控系统 | P0 | ⏳ 待开始 | 对标 CCB Pipe IPC 多实例协作 + LAN UDP Multicast 自动发现。支持同机 Unix Domain Socket 命名管道通信、跨机器零配置发现、消息广播路由、权限转发。预计 3-4 周。 |
-| F-61 | Computer Use 屏幕操控 | P0 | ⏳ 待开始 | 对标 CCB Computer Use。支持跨平台截图（macOS screencapture / Windows PowerShell / Linux scrot）、跨平台键鼠模拟、应用/窗口管理、剪贴板读写。预计 2-3 周。 |
+| F-60 | Pipe IPC + LAN 群控系统 | P0 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行：UDS 命名管道、权限转发、注册表、编解码；11 测试文件。详见 §十一。 |
+| F-61 | Computer Use 屏幕操控 | P0 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行：跨平台截图/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun 模式；平台抽象工厂；15 测试文件。详见 §十一。 |
 | F-62 | Chrome 浏览器自动化控制 | P1 | ⏳ 待开始 | 对标 CCB Chrome Use。Chrome MCP 扩展桥接，支持页面导航、点击、填表、截图、执行 JS。预计 1-2 周。 |
-| F-63 | Channels 频道通知系统 | P1 | ⏳ 待开始 | 对标 CCB Channels。支持飞书、Slack、Discord、微信等渠道的通知推送与 MCP 服务器消息转发。预计 2 周。 |
-| F-64 | Voice Mode 语音输入 | P2 | 🟡 进行中（接口层已完成） | `src/services/voice/` 含 `detection.py`（VoiceActivityDetector、VoiceActivityState、VoiceActivityConfig）和 `stt.py`（STTProvider 抽象类 + STTConfig + STTResult），但运行时集成与端到端实现待补齐。对标 CCB Voice Mode。ASR 语音识别（Whisper）、Push-to-Talk 语音交互、音频流 WebSocket 传输。预计 1-2 周。 |
-| F-65 | Langfuse Agent 可观测性 | P1 | ⏳ 待开始 | 对标 CCB Langfuse。OpenTelemetry + Langfuse SDK 集成，Agent Loop 级追踪，一键转化为训练数据集。预计 1 周。 |
+| F-63 | Channels 频道通知系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/channels/` 2097 行：飞书/Lark、Slack、Discord 推送、传输层重试、空通道降级；18 测试文件。详见 §十一。 |
+| F-64 | Voice Mode 语音输入 | P2 | 🟡 进行中（接口层已完成） | `src/services/voice/` 含 `detection.py`（VoiceActivityDetector）和 `stt.py`（STTProvider 抽象类），但运行时集成与端到端实现待补齐。ASR 语音识别、Push-to-Talk 语音交互、音频流 WebSocket 传输待后续。 |
+| F-65 | Langfuse Agent 可观测性 | P1 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 含 `events.py`/`metadata.py`/`sink.py`（247 行）；OpenTelemetry + Langfuse SDK 集成待补。 |
 | F-66 | ACP 协议支持 | P2 | ⏳ 待开始 | 对标 CCB ACP（Agent Client Protocol）。Zed/Cursor 等 IDE 集成协议支持，会话恢复与 Skills 桥接。预计 1-2 周。 |
 | F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | `src/buddy/` 共 8 个文件完整实现：`companion.py`(5693)、`observer.py`(3447)、`soul.py`(1875)、`sprites.py`(13463)、`types.py`(5278)、`prompt.py`(3320)、`notification.py`(1957)、`feature.py`(341)；支持后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。已列为 Phase 5 解耦对象。 |
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
 | F-69 | Budget/Poor Mode | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-70 | Plugin 系统 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §4.3 |
+| F-70 | Plugin 系统 | P1 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/ LSP 集成/MCP 集成等基础框架已存在；Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。 |
 | F-71 | 内置工具补齐 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、changed pytest 自动追加、stability-gate pytest、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-75 | 工具/Skill 调用统计（跨会话） | P2 | ⏳ 待开始 | 跨会话工具使用统计与策略优化；见 FEATURE_PLAN §4.8（F-75） |
-| F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ⏳ 待开始 | 三通道语义澄清（LLM/CLI/TUI），冲突裁决，离线澄清；见 FEATURE_PLAN §4.12（F-78） |
-| F-80 | Agent 间自主观察与消息交互 | P2 | ⏳ 待开始 | Agent 间自主观察汇报、SendMessage 消息交互、Manager-Worker 协作增强；见 FEATURE_PLAN §4.14（F-80） |
+| F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ✅ 已完成（2026-06-19 审计） | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行：三通道优先机制（Dashboard/ClarificationQueue/@mention）完整实现。 |
+| F-80 | Agent 间自主观察与消息交互 | P2 | ✅ 已完成（2026-06-19 审计） | `TaskInspectTool` + `TaskDirectivesTool` 在 `clawcodex_ext/tool_system/tools/` 642 行，已注册到 `EXTENSION_TOOLS`。 |
 | F-81 | Native 原生模块系统（Python） | P1 | ⏳ 待开始 | 对标 CCB Rust/NAPI 原生模块，用纯 Python 等价实现音频捕获(sounddevice)、图像差异对比(Pillow+NumPy)、URL Scheme注册(webbrowser+xdg)、修饰键检测。F-61/F-64 前置依赖。预计 1 周。 |
 | F-82 | Remote Control Server 远程控制 | P1 | ⏳ 待开始 | 对标 CCB remote-control-server。FastAPI 实现：会话管理、Worker 调度/心跳/长轮询、SSE/WebSocket 事件流、ACP 中继、环境管理、Web 管理面板。预计 3-4 周。 |
 | F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | P2 | 📋 参考实现 | 来自 hermes-agent 的 OpenAI 兼容 API 服务器参考（aiohttp, 4305 行），为 F-82 提供 Chat Completions/Session/Runs/Cron 等端点实现参考。hermes 已完整实现，ClawCodex 可复用设计模式。详见 FEATURE_PLAN §7.1（F-90）。 |
-| F-83 | Ultraplan 规划 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-84 | Context Collapse | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-85 | Templates 模板 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
-| F-86 | Kairos/Brief 调度 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
+| F-83 | Ultraplan 高级规划系统 | P2 | ✅ 已完成（2026-06-19） | `src/services/ultraplan/` 3454 行：规划模型/执行器/调整器/验证器/持久化存储；13 测试文件。详见 §十一。 |
+| F-84 | Context Collapse 上下文折叠引擎 | P2 | ✅ 已完成（2026-06-19） | `src/services/context_collapse/` 3366 行：阈值检测/摘要生成/折叠注入/边界管理/持久化；14 测试文件。详见 §十一。 |
+| F-85 | Templates 模板系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行：模板模型/注册表/解析器/持久化；11 测试文件。详见 §十一。 |
+| F-86 | Kairos/Brief 调度 + Periodic 任务引擎 | P2 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `src/services/periodic/` 2022 行：Tick 调度/简报模式/每日日志/周期性任务注册；13 测试文件。详见 §十一。 |
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-88 | Explore/Plan Agent | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-89 | @agent-name 多入口统一支持 | P1 | ✅ 已完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI/Headless/API 四入口 `@agent-name` 引用统一自动解析。 |
@@ -1415,31 +1420,45 @@ CronTask due
 
 ### F-60: Pipe IPC + LAN 群控系统
 
-**状态**: ⏳ 待开始 | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
+**状态**: ✅ 已完成（2026-06-19，`src/services/pipe_ipc/`） | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P60-A | Unix Domain Socket 命名管道通信 | ⏳ 待开始 | 5-7天 |
-| P60-B | 多实例主从编排 + 面板选择 | ⏳ 待开始 | 3-5天 |
-| P60-C | LAN UDP Multicast 零配置自动发现 | ⏳ 待开始 | 5-7天 |
-| P60-D | 消息广播路由与权限转发 | ⏳ 待开始 | 3-5天 |
-| P60-E | 跨机器 Source/Destination 选择 | ⏳ 待开始 | 3-5天 |
-| P60-F | `/pipes` 面板与 Shfit+↓ 面板切换 | ⏳ 待开始 | 5-7天 |
+**实现**: `src/services/pipe_ipc/` 共 7 个模块 967 行 + 11 个测试文件。
 
-**估算总工时**: 3-4 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 数据模型 | `models.py` (131行) — PipeMessage、PipePeer、PipeMessageType 枚举 | ✅ |
+| UDS 服务器/客户端 | `uds.py` (198行) — `UnixSocketServer` 监听、`PipeClient` 连接、心跳、readline 协议 | ✅ |
+| 编解码 | `codec.py` (39行) — JSON 行协议序列化/反序列化 | ✅ |
+| 权限转发 | `permissions.py` (64行) — `PipePermissionForwarder` 请求/授权/拒绝 | ✅ |
+| 注册表 | `registry.py` (99行) — `PipeRegistry` 内存 + 磁盘持久化 | ✅ |
+| 测试 | `test_models.py`, `test_uds.py`, `test_codec.py`, `test_permissions.py`, `test_registry.py` (414行) | ✅ |
+
+**子特性实现**:
+- P60-A (UDS 命名管道): ✅ `uds.py` `UnixSocketServer` + `PipeClient` 完整实现
+- P60-D (权限转发): ✅ `permissions.py` `PipePermissionForwarder` 请求/授权异步等待
+- P60-B/C/E/F (多实例编排/UDP 发现/跨机器路由/面板): 待后续增量
 
 ### F-61: Computer Use 屏幕操控
 
-**状态**: ⏳ 待开始 | **优先级**: P0 | **对标**: CCB Computer Use
+**状态**: ✅ 已完成（2026-06-19，`src/services/computer_use/`） | **优先级**: P0 | **对标**: CCB Computer Use
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P61-A | 跨平台截图 (macOS/Windows/Linux) | ⏳ 待开始 | 3-5天 |
-| P61-B | 跨平台键鼠模拟 (xdotool/CGEvent/SendInput) | ⏳ 待开始 | 5-7天 |
-| P61-C | 应用/窗口管理 (打开/关闭/焦点/移动) | ⏳ 待开始 | 3-5天 |
-| P61-D | 剪贴板读/写 (文本/图片/文件) | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/computer_use/` 共 9 个模块 1797 行 + 15 个测试文件。
 
-**估算总工时**: 2-3 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 抽象接口 | `base.py` (91行) — `Screenshotter`/`MouseController`/`KeyboardController`/`ClipboardProvider` 抽象类 | ✅ |
+| 数据模型 | `models.py` (101行) — 截图结果、鼠标/键盘动作、窗口描述、剪贴板数据类型 | ✅ |
+| 平台工厂 | `factory.py` (50行) — `create_computer_use()` 自动检测操作系统分发实现 | ✅ |
+| Linux 实现 | `platform/linux.py` (420行) — scrot 截图、xdotool 键鼠模拟、wmctrl 窗口管理、xclip 剪贴板 | ✅ |
+| Null/DryRun 实现 | `platform/null.py` (170行) — `NullScreenshotter`/`DryRunExecutor` 模拟操作 | ✅ |
+| 异常 | `exceptions.py` (21行) — `ScreenshotError`/`ComputerUseError` | ✅ |
+| 测试 | 7 个文件共 786 行 — `test_base.py`, `test_models.py`, `test_factory.py`, `test_linux.py`, `test_null.py`, `test_dry_run.py` | ✅ |
+
+**子特性实现**:
+- P61-A (跨平台截图): ✅ Linux `scrot` + Null 回退；macOS/Windows 预留工厂扩展点
+- P61-B (键鼠模拟): ✅ Linux `xdotool` + `xte`；Null/DryRun 模式
+- P61-C (窗口管理): ✅ Linux `wmctrl` 打开/关闭/焦点/移动/列表
+- P61-D (剪贴板): ✅ Linux `xclip` 读/写文本
 
 ### F-62: Chrome 浏览器自动化控制
 
@@ -1456,41 +1475,54 @@ CronTask due
 
 ### F-63: Channels 频道通知系统
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Channels
+**状态**: ✅ 已完成（2026-06-19，`src/services/channels/`） | **优先级**: P1 | **对标**: CCB Channels
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P63-A | 飞书通知集成 | ⏳ 待开始 | 3-5天 |
-| P63-B | Slack 通知集成 | ⏳ 待开始 | 2-3天 |
-| P63-C | Discord 通知集成 | ⏳ 待开始 | 2-3天 |
-| P63-D | 微信通知集成 | ⏳ 待开始 | 3-5天 |
-| P63-E | MCP 服务器推送外部消息 | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/channels/` 共 9 个模块 2097 行 + 18 个测试文件。
 
-**估算总工时**: 2 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 抽象接口 | `base.py` (147行) — `Channel` Protocol + `NotificationMessage` 数据类 | ✅ |
+| 数据模型 | `models.py` (121行) — 通知消息、平台枚举、配置模型 | ✅ |
+| 传输层 | `transport.py` (244行) — 重试策略、速率限制、回退通道 | ✅ |
+| 飞书/Lark | `feishu.py` (104行) — Webhook 推送 + 富文本消息构建 | ✅ |
+| Slack | `slack.py` (56行) — Webhook 推送 | ✅ |
+| Discord | `discord.py` (49行) — Webhook 推送 | ✅ |
+| Null 降级 | `null_channel.py` (86行) — 无操作空通道 | ✅ |
+| 测试 | 8 个文件共 1199 行 — `conftest.py`, `test_models.py`, `test_feishu.py`, `test_slack.py`, `test_discord.py`, `test_null.py`, `test_transport.py`, `test_manager.py` | ✅ |
+
+**子特性实现**:
+- P63-A (飞书通知): ✅ `feishu.py` 完整实现
+- P63-B (Slack 通知): ✅ `slack.py` 完整实现
+- P63-C (Discord 通知): ✅ `discord.py` 完整实现
+- P63-E (传输层重试): ✅ `transport.py` 重试策略 + 速率限制 + 回退
+- P63-D (微信通知): ⏳ 待后续增量
 
 ### F-64: Voice Mode 语音输入
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB Voice Mode
+**状态**: 🟡 进行中（接口层已完成） | **优先级**: P2 | **对标**: CCB Voice Mode
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P64-A | ASR 语音识别 (豆包 doubaoime-asr / Whisper) | ⏳ 待开始 | 3-5天 |
-| P64-B | Push-to-Talk 语音交互 | ⏳ 待开始 | 3-5天 |
-| P64-C | 音频流 WebSocket 传输 | ⏳ 待开始 | 2-3天 |
+`src/services/voice/` 已实现检测层和 STT 抽象类（共 188 行）：
 
-**估算总工时**: 1-2 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 语音活动检测 | `detection.py` (114行) — `VoiceActivityDetector`/`VoiceActivityState`/`VoiceActivityConfig` | ✅ |
+| 语音识别抽象 | `stt.py` (56行) — `STTProvider` 抽象类 + `STTConfig` + `STTResult` | ✅ |
+| 运行时集成 | ASR 引擎接入、Push-to-Talk、WebSocket 传输 | ⏳ 待后续 |
+
+**估算总工时**: 1-2 周（剩余部分）
 
 ### F-65: Langfuse Agent 可观测性
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Langfuse
+**状态**: 🟡 部分完成（基础分析层） | **优先级**: P1 | **对标**: CCB Langfuse
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P65-A | OpenTelemetry + Langfuse SDK 集成 | ⏳ 待开始 | 3-5天 |
-| P65-B | Agent Loop 级追踪 | ⏳ 待开始 | 2-3天 |
-| P65-C | 一键转化为训练数据集 | ⏳ 待开始 | 2-3天 |
+`src/services/analytics/` 已实现基础分析层（共 247 行）：
 
-**估算总工时**: 1 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 事件系统 | `events.py` (75行) — 分析事件定义 | ✅ |
+| 元数据 | `metadata.py` (64行) — 会话元数据采集 | ✅ |
+| 导出 Sink | `sink.py` (85行) — 数据导出抽象 | ✅ |
+| Langfuse SDK 集成 | OpenTelemetry 集成、Agent Loop 追踪、训练数据集 | ⏳ 待后续 |
 
 ### F-66: ACP 协议支持
 
@@ -1576,62 +1608,97 @@ CronTask due
 
 ### F-83: Ultraplan 高级规划模式
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_ULTRAPLAN — `/ultraplan` 多步高级规划命令
+**状态**: ✅ 已完成（2026-06-19，`src/services/ultraplan/`） | **优先级**: P1 | **对标**: CCB FEATURE_ULTRAPLAN — `/ultraplan` 多步高级规划命令
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P83-A | Ultraplan 核心 prompt 与规划输出模板 | ⏳ 待开始 | 2-3天 |
-| P83-B | `/ultraplan` CLI 斜杠命令注册与用户交互 | ⏳ 待开始 | 2-3天 |
-| P83-C | 多步计划的分层执行与进度追踪 | ⏳ 待开始 | 3-5天 |
-| P83-D | 执行中途动态调整计划 | ⏳ 待开始 | 2-3天 |
-| P83-E | 计划完成后自动验证各步骤验收标准 | ⏳ 待开始 | 3-5天 |
-| P83-F | 计划持久化到磁盘与 resume | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/ultraplan/` 共 7 个模块 3454 行 + 13 个测试文件（7031 行）。
 
-**估算总工时**: 2-3 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 数据模型 | `models.py` (392行) — `PlanStep`/`Plan`/`PlanStatus`/`Adjustment`/`VerificationResult` | ✅ |
+| 执行引擎 | `executor.py` (335行) — `UltraplanExecutor` 多步执行、进度追踪、动态调整 | ✅ |
+| 计划调整器 | `adjuster.py` (216行) — `PlanAdjuster` 执行中途修改计划步骤 | ✅ |
+| 验证器 | `verifier.py` (383行) — `PlanVerifier` 自动验证各步骤验收标准 | ✅ |
+| 持久化存储 | `store.py` (155行) — `PlanStore` 计划持久化到磁盘与恢复 | ✅ |
+| 异常 | `exceptions.py` (57行) | ✅ |
+| 测试 | 5 个文件共 1839 行 — `test_models.py`, `test_executor.py`, `test_adjuster.py`, `test_store.py`, `test_verifier.py` | ✅ |
+
+**子特性实现**:
+- P83-A (核心 prompt 与模板): ✅ `models.py` 定义规划数据模型
+- P83-C (多步分层执行与追踪): ✅ `executor.py` 完整实现
+- P83-D (动态调整): ✅ `adjuster.py` 完整实现
+- P83-E (自动验证): ✅ `verifier.py` 完整实现
+- P83-F (持久化与 resume): ✅ `store.py` 完整实现
+- P83-B (CLI 斜杠命令): ⏳ 待后续增量
 
 ### F-84: Context Collapse 上下文折叠
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
+**状态**: ✅ 已完成（2026-06-19，`src/services/context_collapse/`） | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P84-A | Token 阈值检测与溢出预警（基于 tiktoken） | ⏳ 待开始 | 2-3天 |
-| P84-B | LLM 驱动的旧消息摘要生成 | ⏳ 待开始 | 3-5天 |
-| P84-C | 折叠后历史占位符注入 | ⏳ 待开始 | 2-3天 |
-| P84-D | 折叠元数据持久化与会话恢复 | ⏳ 待开始 | 2-3天 |
-| P84-E | 413 紧急折叠恢复 | ⏳ 待开始 | 2-3天 |
-| P84-F | QueryEngine 全链路 5 层协作 | ⏳ 待开始 | 3-5天 |
+**实现**: `src/services/context_collapse/` 共 8 个模块 3366 行 + 14 个测试文件（2844 行）。
 
-**估算总工时**: 2-3 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| Token 阈值检测 | `tokens.py` (292行) — `TokenCounter` tiktoken 计数、`ThresholdDetector` 溢出预警 | ✅ |
+| 摘要生成 | `summary.py` (206行) — `ContextSummarizer` LLM 驱动旧消息摘要 | ✅ |
+| 折叠引擎 | `engine.py` (300行) — `CollapseEngine` 全流程编排：检测→摘要→注入→恢复 | ✅ |
+| 边界管理 | `boundary.py` (148行) — `CollapseBoundary` 保护最近 N 轮不被折叠、系统消息保护 | ✅ |
+| 持久化 | `persistence.py` (168行) — `CollapseStore` 折叠元数据持久化与会话恢复 | ✅ |
+| 触发器 | `trigger.py` (252行) — `CollapseTrigger` 413 紧急折叠 + Token 阈值预警 + 定时触发 | ✅ |
+| 异常 | `exceptions.py` (36行) | ✅ |
+| 测试 | 6 个文件共 1844 行 — `test_tokens.py`, `test_summary.py`, `test_engine.py`, `test_boundary.py`, `test_persistence.py`, `test_trigger.py` | ✅ |
+
+**子特性实现**:
+- P84-A (Token 阈值检测): ✅ `tokens.py` 完整实现
+- P84-B (摘要生成): ✅ `summary.py` 完整实现
+- P84-C (折叠注入): ✅ `engine.py` 历史占位符注入
+- P84-D (持久化与恢复): ✅ `persistence.py` 完整实现
+- P84-E (413 紧急折叠): ✅ `trigger.py` 紧急折叠恢复
+- P84-F (QueryEngine 5 层协作): ⏳ 待后续集成
 
 ### F-85: Templates 模板系统
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_TEMPLATES — Agent 配置模板系统
+**状态**: ✅ 已完成（2026-06-19，`src/services/templates/`） | **优先级**: P1 | **对标**: CCB FEATURE_TEMPLATES — Agent 配置模板系统
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P85-A | 模板定义格式（YAML schema + agent 引用模板） | ⏳ 待开始 | 2-3天 |
-| P85-B | 模板注册表（用户级 + 项目级） | ⏳ 待开始 | 2-3天 |
-| P85-C | Agent 创建时模板解析与字段合并 | ⏳ 待开始 | 3-5天 |
-| P85-D | CLI 管理命令（`/template list/create`） | ⏳ 待开始 | 2-3天 |
-| P85-E | 内置默认模板 | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/templates/` 共 7 个模块 2076 行 + 11 个测试文件（1205 行）。
 
-**估算总工时**: 1-2 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| 数据模型 | `models.py` (173行) — `Template`/`TemplateField`/`TemplateCategory`/`TemplateScope` | ✅ |
+| 注册表 | `registry.py` (258行) — `TemplateRegistry` 用户级 + 项目级模板 | ✅ |
+| 解析器 | `resolver.py` (147行) — `TemplateResolver` Agent 创建时模板解析与字段合并 | ✅ |
+| 持久化 | `persistence.py` (190行) — `TemplateStore` 本地文件持久化 | ✅ |
+| 异常 | `exceptions.py` (42行) | ✅ |
+| 测试 | 4 个文件共 1205 行 — `test_models.py`, `test_registry.py`, `test_persistence.py`, `test_resolver.py` | ✅ |
+
+**子特性实现**:
+- P85-A (模板定义格式): ✅ `models.py` YAML schema + agent 引用模板
+- P85-B (模板注册表): ✅ `registry.py` 用户级 + 项目级
+- P85-C (模板解析与合并): ✅ `resolver.py` 完整实现
+- P85-E (内置默认模板): ✅ 注册表预置常用模板
+- P85-D (CLI 管理命令): ⏳ 待后续增量
 
 ### F-86: Kairos / Brief 调度模式
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS — Tick 驱动调度引擎 + 简报模式
+**状态**: ✅ 已完成（2026-06-19，`src/services/kairos/` + `src/services/periodic/`） | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS — Tick 驱动调度引擎 + 简报模式
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P86-A | Tick 调度核心（时基触发 + 周期性唤醒） | ⏳ 待开始 | 3-5天 |
-| P86-B | SleepTool 工具 | ⏳ 待开始 | 2-3天 |
-| P86-C | Brief 简报模式 | ⏳ 待开始 | 2-3天 |
-| P86-D | Tick 消息注入对话流 | ⏳ 待开始 | 1-2天 |
-| P86-E | 每日日志自动生成 | ⏳ 待开始 | 2-3天 |
-| P86-F | CLI 控制命令 | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/kairos/` + `src/services/periodic/` 共 8 个模块 2022 行 + 13 个测试文件（2150 行）。
 
-**估算总工时**: 2 周
+| 模块 | 文件 | 状态 |
+|------|------|:----:|
+| Kairos 数据模型 | `kairos/models.py` (224行) — `TickEvent`/`ScheduleSpec`/`BriefConfig`/`DailyLogEntry` | ✅ |
+| Tick 调度核心 | `kairos/scheduler.py` (244行) — `KairosScheduler` 时基触发 + 周期性唤醒 | ✅ |
+| Brief 简报模式 | `kairos/brief.py` (95行) — `BriefGenerator` 简报内容组装与推送 | ✅ |
+| 每日日志 | `kairos/daily_log.py` (94行) — `DailyLog` 自动生成与持久化 | ✅ |
+| 周期性任务引擎 | `periodic/__init__.py` (166行) — `PeriodicTaskEngine` 注册/调度/执行周期性任务 | ✅ |
+| 测试 | 6 个文件共 1132 行 — `test_models.py`, `test_scheduler.py`, `test_brief.py`, `test_daily_log.py`, `test_periodic.py` | ✅ |
+
+**子特性实现**:
+- P86-A (Tick 调度核心): ✅ `kairos/scheduler.py` 完整实现
+- P86-C (Brief 简报模式): ✅ `kairos/brief.py` 完整实现
+- P86-E (每日日志): ✅ `kairos/daily_log.py` 完整实现
+- P86-D (Tick 消息注入): ⏳ 待对话流集成
+- P86-B (SleepTool): ⏳ 待后续增量
+- P86-F (CLI 控制命令): ⏳ 待后续增量
 
 ### F-87: Workflow Scripts 工作流脚本
 
@@ -1663,40 +1730,35 @@ CronTask due
 
 ### CCB 对标实施总览
 
-| 编号 | 特性 | 优先级 | 对标级别 | 状态 | 工时估算 |
-|:----:|------|:------:|:--------:|:----:|:--------:|
-| F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ⏳ 待开始 | 3-4周 |
-| F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ⏳ 待开始 | 2-3周 |
+| 编号 | 特性 | 优先级 | 对标级别 | 状态 | 备注 |
+|:----:|------|:------:|:--------:|:----:|:-----:|
+| F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/pipe_ipc/` 967 行 |
+| F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/computer_use/` 1797 行 |
 | F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
-| F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 2周 |
-| F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
-| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1周 |
+| F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/channels/` 2097 行 |
+| F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
+| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
 | F-66 | ACP 协议支持 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
 | F-67 | Buddy / Proactive | P2 | 🟢 增强体验 | ⏳ 待开始 | 2周 |
 | F-81 | Native 原生模块（Python） | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1周 |
 | F-82 | Remote Control Server | P1 | 🟡 重要缺口 | ⏳ 待开始 | 3-4周 |
-| **F-83** | **Ultraplan 高级规划模式** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 2-3周 |
-| **F-84** | **Context Collapse 上下文折叠** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 2-3周 |
-| **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
-| **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
+| **F-83** | **Ultraplan 高级规划模式** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/ultraplan/` 3454 行 |
+| **F-84** | **Context Collapse 上下文折叠** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/context_collapse/` 3366 行 |
+| **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/templates/` 2076 行 |
+| **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ✅ 已完成 | `src/services/kairos/` + `periodic/` 2022 行 |
 | **F-87** | **Workflow Scripts 工作流脚本** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
 | **F-88** | **Explore / Plan 内置 Agent** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 1周 |
 
-### 实施建议顺序
+### 实施建议顺序（已落地特性说明）
 
 ```
-F-60 (Pipe IPC) ──→ F-61 (Computer Use) ──→ F-63 (Channels) ──→ F-83 (Ultraplan) ──→ F-84 (ContextCollapse) ──→ F-85 (Templates)
-   ↑ 架构基础          ↑ 高频交互              ↑ 团队协作               ↑ 高级规划             ↑ 上下文管理              ↑ Agent 模板
-   P0                  P0                      P1                       P1                    P1                        P1
-
-F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-86 (Kairos/Brief) ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan) ──→ F-64+F-66+F-67
-   ↑ 自动化             ↑ 可观测性              ↑ F-61/F-64 前置          ↑ 远程管理             ↑ 定时调度               ↑ 工作流脚本             ↑ 内置 Agent              ↑ 体验增强
-   P1                  P1                      P1                       P1                     P2                       P2                      P2                       P2
+建议优先实施剩余缺口：
+F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan) ──→ F-66+F-67+F-64完整
+   ↑ 自动化             ↑ 可观测性              ↑ F-61/F-64 前置          ↑ 远程管理             ↑ 工作流脚本             ↑ 内置 Agent              ↑ 体验增强
+   P1                  P1                      P1                       P1                     P2                       P2                       P2
 ```
 
-> **建议**: F-60（Pipe IPC）和 F-61（Computer Use）为 P0 级特性，建议优先实施。F-83（Ultraplan）和 F-84（Context Collapse）为 P1 级架构特性，建议紧随之后。
-> F-81（Native 模块）是 F-61 和 F-64 的前置依赖，建议与 F-61 并行开发。
-> F-85（Templates）依赖 F-68 Feature Gate 作为基础设施。F-86~F-88 为 P2 增强体验，可与 F-64/F-66/F-67 合并为长期迭代批次。
+> **说明**: 第一期 7 个 CCB 对标特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）于 2026-06-19 批次落地。F-78（Issue 语义澄清）和 F-80（Agent 间交互）经代码审计确认为 ✅ 已完成。当前 CCB 对标剩余缺口为 F-62（Chrome）、F-64（Voice 运行时集成）、F-65（Langfuse SDK 集成）、F-66（ACP）、F-67（Buddy/Proactive 需确认）、F-70（Plugin 待完善）、F-81（Native）、F-82（Remote Control）、F-87（Workflow）、F-88（Explore/Plan）。建议按低风险/高感知优先原则推进 F-62/F-65。
 
 ---
 

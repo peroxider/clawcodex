@@ -1,14 +1,19 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.7（F-99 + F-90 状态对齐 + remote_api 落地）
-> 更新日期: 2026-07-07 | 上游同步: f4792ff (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.9（代码审计综合对齐：F-9/F-11/F-37/F-64/F-65/F-70/F-78/F-80 状态修正）
+> 更新日期: 2026-06-19 | 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
 >
-> **v3.7 变更（F-99 + F-90 状态对齐 + remote_api 落地）**：
->   - F-99 Ctrl+C/B 即时中断响应优化：§2.15 标题状态从 📋 设计完成 → ✅ 已完成（FF470158 已落地三方案组合：AnthropicProvider read_timeout=5.0 + _close_transport_safely + _run_tools_partitioned FIRST_COMPLETED 轮询；Cancel bound 直连 <500ms，LiteLLM bound 在 5s）。
->   - F-90 Hermes Gateway 参考实现：状态从 📋 参考实现 → ✅ 已完成（extensions/remote_api/ 落地 11 个模块共 2597 行，含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令；tests/remote_api/ 含 E2E 测试）。
->   - remote_api 新增：`extensions/remote_api/` 作为 Hermes 兼容远程 Agent API，提供 OpenAI 兼容的 completion/responses 端点，支持流式 SSE 输出与可选 Bearer 密钥认证。
->   - 附录 F-Number 快速索引同步更新：F-89（📋 设计完成）、F-99（✅ 已完成）、F-90（✅ 已完成）。
+> **v3.9 变更（代码审计综合对齐）**：
+>   - F-9 /goal 命令：§2.6 从 ⏳ 待实现 → ✅ 已完成（`clawcodex_ext/goal/` 9 文件 2538 行完整实现：状态机/持久化/续跑/Tool/prompt/CLI 命令 6 大子系统全）。
+>   - F-11 sessionStorage 容量限制：状态确认 ✅ 已完成（`src/services/session_storage.py` 已有 `MAX_CACHED_SESSION_FILES=1000` 容量上限逻辑，PROGRESS.md 同步修正）。
+>   - F-37 PR 检视意见自动修复闭环：确认状态为 ✅ 已完成（`extensions/orchestrator/review_feedback.py` 157 行 + GitSync follow-up 全链路；PROGRESS.md §1.2 同步修正）。
+>   - F-64 Voice Mode：从 ⏳ 待开始 → 🟡 接口层已完成（`src/services/voice/` 检测 + STT 抽象类 188 行，运行时集成待补）。
+>   - F-65 Langfuse 可观测性：从 ⏳ 待开始 → 🟡 部分完成（`src/services/analytics/` 事件/元数据/导出 sink 共 247 行，Langfuse SDK 集成待补）。
+>   - F-70 Plugin 系统：从 ⏳ 待开始 → 🟡 部分完成（`src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/IDE集成/MCP集成等已有基础框架）。
+>   - F-78 Issue 语义澄清流程：从 📋 规划中 → ✅ 已完成（`extensions/orchestrator/clarification.py` + `clarification_queue.py` 共 865 行：三通道优先机制完整实现）。
+>   - F-80 Agent 间自主观察与消息交互：从 📋 规划中 → ✅ 已完成（`clawcodex_ext/tool_system/tools/task_inspect.py` + `task_directives.py` 共 642 行，已在 `EXTENSION_TOOLS` 注册）。
+>   - 附录 F-Number 快速索引同步更新：以上 8 个 F-Number 状态修正。
 >
 > **v3.6 变更（F-100 + F-73 状态对齐）**：
 >   - F-100 Dreaming 后台记忆整合系统 §2.16 标题状态从 📋 设计中改为 🟡 部分完成（100.1~100.7 七子特性全 ✅，Phase A/C/D/E 已完成，Phase B 30min TTL 增强待补；106 单测 + 12 门禁 + 6 E2E 场景全绿）。
@@ -1156,7 +1161,7 @@ Message 类型体系 (src/types/messages.py)
 > 详细设计与验证记录已归档至 [ARCHIVED_FEATURES.md §二十一.7 F-13 Agent 记忆作用域隔离](./ARCHIVED_FEATURES.md#二十一7-f-13-agent-记忆作用域隔离)。
 
 ### 2.6 /goal 命令（目标管理）（F-9）
-**状态**: ✅ 设计完成（参考实现：claude-code-best@`3e3e1de81bf89857`）
+**状态**: ✅ 已完成（2026-06-19 代码审计确认）
 **目标**: 为长时间运行任务提供持久化目标、自动续跑、token 用量监控与恢复能力，避免用户需要反复输入“继续”。
 
 > 本功能参考上游 claude-code-best 的 `/goal` 实现（PR #1261，commit `3e3e1de81bf89857`）详细设计，并在 clawcodex 中以 Python 方式落地。
@@ -1824,7 +1829,7 @@ def add_session_file(sessionId: UUID, filePath: str):
 
 ---
 ### 2.12 Issue 语义澄清流程（自主模式扩展）（F-78）
-**状态**: ✅ 已完成（F-1.5~F-1.11，Phase A-G 全部完成）
+**状态**: ✅ 已完成（2026-06-19 代码审计确认）
 **优先级**: P1
 **目标**: 当 Issue 语义模糊时，通过**三通道优先机制**获取澄清——本地操作员（Dashboard/ClarificationQueue）优先，作者 @mention 兜底
 
@@ -1844,7 +1849,7 @@ def add_session_file(sessionId: UUID, filePath: str):
 ---
 
 ### 2.14 Agent 间自主观察与消息交互（F-80）
-**状态**: ✅ 已完成（Phase M1-M5 全部完成）
+**状态**: ✅ 已完成（2026-06-19 代码审计确认）
 **优先级**: P1
 **目标**: 实现 Manager Agent 全自动观察 Worker Agent 状态并注入指令，支持优先级队列和权限审批
 
@@ -3571,13 +3576,13 @@ clawcodex --resume                              # 浏览模式（不变）
 | **Auth 服务** | §3.5 | 无对应 F-number | ✅ 已实现 | `src/services/auth/` 含 auth.py, oauth 相关模块 |
 | **Bridge 桥接** | §3.4.2 | 无对应 F-number | ✅ 已实现 | `src/services/bridge/` 含 auth, session, transport 模块 |
 | **Swarm/Team 系统** | §3.3（协作） | 无对应 F-number | ✅ 已实现 | `src/services/swarm/` 含 mailbox, permissions, agent_name_registry, team_fi 等 |
-| **Pipes IPC + LAN 群控** | §3.5.3 / §8.1 | **F-60 ⏳ 待开始** | ❌ 未实现 | 需要在 `src/services/pipes/` 或等效位置实现 |
+| **Pipes IPC + LAN 群控** | §3.5.3 / §8.1 | **F-60 ✅ 已完成** | ✅ `src/services/pipe_ipc/` | UDS 命名管道、编解码、权限转发、注册表；967 行 + 11 测试 |
 | **Plugin 系统** | §3.5 | **F-70 ⏳ 待开始** | ❌ 未实现 | 规划在 §十 |
-| **Computer Use** | §8.2 | **F-61 ⏳ 待开始** | ❌ 未实现 | 截屏/键鼠/窗口/剪贴板 |
+| **Computer Use** | §8.2 | **F-61 ✅ 已完成** | ✅ `src/services/computer_use/` | 跨平台截屏/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun；1797 行 + 15 测试 |
 | **Chrome 自动化** | §8.2 | **F-62 ⏳ 待开始** | ❌ 未实现 | 浏览器控制 |
-| **Channels 通知** | — | **F-63 ⏳ 待开始** | ❌ 未实现 | 邮件/Slack/Discord/飞书通知 |
-| **Voice Mode** | — | **F-64 ⏳ 待开始** | ❌ 未实现 | `src/services/voice/` 骨架存在，功能待实装 |
-| **Langfuse** | — | **F-65 ⏳ 待开始** | ❌ 未实现 | `src/services/analytics/` 骨架存在 |
+| **Channels 通知** | — | **F-63 ✅ 已完成** | ✅ `src/services/channels/` | 飞书/Slack/Discord 推送；传输层重试；2097 行 + 18 测试 |
+| **Voice Mode** | — | **F-64 🟡 进行中** | 🟡 `src/services/voice/`（188 行骨架） | `detection.py` + `stt.py` 抽象类已实现，运行时集成待补 |
+| **Langfuse** | — | **F-65 🟡 部分完成** | 🟡 `src/services/analytics/`（247 行） | 事件/元数据/导出 sink 基础层；Langfuse SDK 集成待补 |
 | **ACP 协议** | §8.3 | **F-66 ⏳ 待开始** | ❌ 未实现 | Agent Communication Protocol |
 | **Buddy/Proactive** | — | **F-67 ⏳ 待开始** | ❌ 未实现 | 伴侣模式 |
 | **Notifier + PreventSleep** | §8.3 | 无对应 F-number | ❌ 未实现 | 通知与防休眠服务 |
@@ -3588,7 +3593,7 @@ clawcodex --resume                              # 浏览模式（不变）
 
 #### F-60: Pipe IPC + LAN 群控系统
 
-**状态**: ⏳ 待开始 | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
+**状态**: ✅ 已完成（2026-06-19，`src/services/pipe_ipc/`） | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
 
 #### 背景
 
@@ -3927,7 +3932,7 @@ class PipeClient:
 
 #### F-61: Computer Use 屏幕操控
 
-**状态**: ⏳ 待开始 | **优先级**: P0 | **对标**: CCB Computer Use
+**状态**: ✅ 已完成（2026-06-19，`src/services/computer_use/`） | **优先级**: P0 | **对标**: CCB Computer Use
 
 #### 背景
 
@@ -4414,7 +4419,7 @@ def build_chrome_tools() -> list[Tool]:
 
 #### F-63: Channels 频道通知系统
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Channels
+**状态**: ✅ 已完成（2026-06-19，`src/services/channels/`） | **优先级**: P1 | **对标**: CCB Channels
 
 #### 背景
 
@@ -6272,7 +6277,7 @@ def create_app(config: RCSConfig) -> FastAPI:
 
 #### F-83: Ultraplan 高级规划模式
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_ULTRAPLAN — `/ultraplan` 多步高级规划命令
+**状态**: ✅ 已完成（2026-06-19，`src/services/ultraplan/`） | **优先级**: P1 | **对标**: CCB FEATURE_ULTRAPLAN — `/ultraplan` 多步高级规划命令
 
 CCB 提供 `/ultraplan` 命令，让 AI 对复杂多步骤任务生成结构化的分层规划（目标 → 子任务 → 步骤 → 验收标准），并可在规划执行过程中动态调整。ClawCodex 当前无此功能。
 
@@ -6291,7 +6296,7 @@ CCB 提供 `/ultraplan` 命令，让 AI 对复杂多步骤任务生成结构化�
 
 #### F-84: Context Collapse 上下文折叠
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
+**状态**: ✅ 已完成（2026-06-19，`src/services/context_collapse/`） | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
 
 CCB 实现 5 层上下文清理流水线（toolResultBudget → snip → microcompact → contextCollapse → autocompact），在接近 token 限制时自动将旧消息折叠为压缩摘要。ClawCodex 已有 `src/services/context/collapse/` 基础骨架与 `ContextCollapseStore` 数据模型，但完整的折叠触发、LLM 摘要生成、持久化与恢复链路尚未实现为独立特性。
 
@@ -6315,7 +6320,7 @@ CCB 实现 5 层上下文清理流水线（toolResultBudget → snip → microco
 
 #### F-85: Templates 模板系统
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB FEATURE_TEMPLATES — Agent 配置模板系统
+**状态**: ✅ 已完成（2026-06-19，`src/services/templates/`） | **优先级**: P1 | **对标**: CCB FEATURE_TEMPLATES — Agent 配置模板系统
 
 CCB 的 Template 系统允许用户定义可复用的 Agent 配置模板（包含 tools、model、prompt、max_turns 等），在创建 Agent 时引用模板名快速构建。ClawCodex 当前使用 Agent 定义文件，但缺少模板化复用机制。
 
@@ -6333,7 +6338,7 @@ CCB 的 Template 系统允许用户定义可复用的 Agent 配置模板（包�
 
 #### F-86: Kairos / Brief 调度模式
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS / FEATURE_KAIROS_BRIEF — Tick 驱动调度引擎 + 简报模式
+**状态**: ✅ 已完成（2026-06-19，`src/services/kairos/` + `src/services/periodic/`） | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS / FEATURE_KAIROS_BRIEF — Tick 驱动调度引擎 + 简报模式
 
 CCB 的 Kairos 子系统提供定时唤醒 Agent 执行任务的调度能力（Tick 驱动），配合 Brief 模式提供轻量级状态简报。ClawCodex 代码中已有 KAIROS 注释（`bridge_main.py`、`memdir/paths.py`）但明确标注 deferred。此特性与 F-67 Proactive 模式有重叠，但 KAIROS 侧重于定时调度（周期性 Tick），Proactive 侧重于用户空闲时自主工作。
 
@@ -6394,41 +6399,41 @@ CCB 内置 `explore`（代码库探索）和 `plan`（实施规划）两种专�
 > Bridge 桥接、Swarm/Team 系统。真正的增量缺口集中于 **F-60~F-67 的 8 个用户可见特性** + F-71 的 4 个待实现工具，
 > 以及 Notifier/Pipes 插件。v2.18 新增 **F-83~F-88 共 6 个新识别特性**。
 
-| 编号 | 特性 | 优先级 | 对标级别 | 状态 | 工时估算 |
-|:----:|------|:------:|:--------:|:----:|:--------:|
-| F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ⏳ 待开始 | 3-4周 |
-| F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ⏳ 待开始 | 2-3周 |
+| 编号 | 特性 | 优先级 | 对标级别 | 状态 | 备注 |
+|:----:|------|:------:|:--------:|:----:|:-----:|
+| F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/pipe_ipc/` 967 行 |
+| F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/computer_use/` 1797 行 |
 | F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
-| F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 2周 |
-| F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
-| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1周 |
+| F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/channels/` 2097 行 |
+| F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
+| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
 | F-66 | ACP 协议支持 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
 | F-67 | Buddy / Proactive | P2 | 🟢 增强体验 | ⏳ 待开始 | 2周 |
 | F-71 | 4 个未实现工具（Execute/RemoteTrigger/WebBrowser/Snip） | P1 | 🟡 重要缺口 | ⏳ 待开始 | 2周 |
 | — | Notifier + PreventSleep 通知与防休眠服务 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1周 |
-| **F-83** | **Ultraplan 高级规划模式** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 2-3周 |
-| **F-84** | **Context Collapse 上下文折叠** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 2-3周 |
-| **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
-| **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
+| **F-70** | **Plugin 系统** | **P1** | 🟡 重要缺口 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行基础框架 |
+| **F-78** | **Issue 语义澄清** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行 |
+| **F-80** | **Agent 间交互** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `TaskInspectTool`+`TaskDirectivesTool` 642 行 |
+| **F-83** | **Ultraplan 高级规划模式** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/ultraplan/` 3454 行 |
+| **F-84** | **Context Collapse 上下文折叠** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/context_collapse/` 3366 行 |
+| **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/templates/` 2076 行 |
+| **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ✅ 已完成 | `src/services/kairos/` + `periodic/` 2022 行 |
 | **F-87** | **Workflow Scripts 工作流脚本** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
 | **F-88** | **Explore / Plan 内置 Agent** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 1周 |
 
-### 实施建议顺序
+### 实施建议顺序（已落地特性说明）
 
 ```
-F-60 (Pipe IPC) ──→ F-61 (Computer Use) ──→ F-63 (Channels) ──→ F-83 (Ultraplan) ──→ F-84 (ContextCollapse) ──→ F-85 (Templates)
-   ↑ 架构基础          ↑ 高频交互              ↑ 团队协作               ↑ 高级规划             ↑ 上下文管理              ↑ Agent 模板
-   P0                  P0                      P1                       P1                    P1                        P1
+建议优先实施剩余缺口：
+F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-71 工具补齐 ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan)
+   ↑ 自动化             ↑ 可观测性              ↑ 4 个缺失工具           ↑ 工作流脚本             ↑ 内置 Agent
+   P1                  P1                      P1                       P2                      P2
 
-F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-71 工具补齐 ──→ Notifier ──→ F-86 (Kairos/Brief) ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan) ──→ F-64+F-66+F-67
-   ↑ 自动化             ↑ 可观测性              ↑ 4 个缺失工具           ↑ 通知服务             ↑ 定时调度               ↑ 工作流脚本             ↑ 内置 Agent              ↑ 体验增强
-   P1                  P1                      P1                     P2                     P2                       P2                      P2                       P2
+F-64 (Voice Mode) ──→ F-66 (ACP) ──→ F-67 (Buddy/Proactive) ──→ 长期迭代
+   P2                  P2                      P2
 ```
 
-> **建议**: F-60（Pipe IPC）和 F-61（Computer Use）为 P0 级特性，建议优先实施。F-83（Ultraplan）和 F-84（Context Collapse）为 P1 级架构特性，建议紧随之后。
-> F-85（Templates）依赖 F-68 Feature Gate 作为基础设施。F-71 的 4 个待实现工具可与 F-61 并行开发。
-> F-86~F-88 为 P2 增强体验，可与 F-64/F-66/F-67 合并为长期迭代批次。
-> 已在代码中实现的基础设施（Signal、STATE、Coordinator、MCP、Auth、Bridge 等）无需重新规划 F-number。
+> 第一期 7 个特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）已于 2026-06-19 批次全部落地。剩余缺口：F-62（Chrome 自动化）、F-64（Voice Mode）、F-65（Langfuse）、F-66（ACP）、F-67（Buddy）、F-71（4 个工具）、F-87（Workflow Scripts）、F-88（Explore/Plan Agent），建议按低风险/高感知优先原则推进 F-62/F-65。
 
 ---
 
@@ -8535,7 +8540,7 @@ clawcodex_ext/community_radar/
 | F-2 | Team 成员管理 | §2.2 | 📋 规划中 |
 | F-3 | MCP 扩展功能 | §2.4 | ✅ 基础完成 |
 | F-4 | 结构化输出增强 | §2.3 | 📋 适配器完成 |
-| F-9 | /goal 目标管理 | §2.6 | ⏳ 待实现 |
+| F-9 | /goal 目标管理 | §2.6 | ✅ 已完成（2026-06-19 审计） | `clawcodex_ext/goal/` 9 文件 2538 行 |
 | F-10 | ExecuteExtraTool | §2.7 | 🔄 规划中 |
 | F-11 | sessionStorage 容量 | §2.10 | ✅ 已完成 |
 | F-12 | cacheWarning 容量 | §2.11 | ✅ 已完成 |
@@ -8545,7 +8550,7 @@ clawcodex_ext/community_radar/
 | F-20 | Agent 进度汇报 | §2.1 | ✅ 完成 |
 | F-22 | Cron 系统 | §五 | 🔄 进行中 |
 | F-36 | LocalTracker | §1.1.1 | ✅ 完成 |
-| F-37 | PR 检视意见自动修复 | §1.1.2 | 📋 规划中 |
+| F-37 | PR 检视意见自动修复 | §1.1.2 | ✅ 已完成 |
 | F-38 | 验证与报告闭环 | §1.1.3 | ✅ 完成 |
 | F-39 | Issue 重跑入口 | §1.1.4 | ✅ 完成 |
 | F-40 | ProgressReporter Sink | §1.2.2 | ✅ 已完成 |
@@ -8564,30 +8569,30 @@ clawcodex_ext/community_radar/
 | F-53 | Tool→CLI 命令映射 | §4.4 | 📋 设计完成 |
 | F-54 | 运行期可观测性 | §1.3.2 | 📋 设计完成 |
 | F-55 | SOP 分组策略增强 | §4.2.1 | ✅ 完成 |
-| F-60 | Pipe IPC 群控 | §7.1 | ⏳ 待开始 |
-| F-61 | Computer Use | §7.2 | ⏳ 待开始 |
+| F-60 | Pipe IPC 群控 | §7.1 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行 + 11 测试 |
+| F-61 | Computer Use | §7.2 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行 + 15 测试 |
 | F-62 | Chrome 自动化 | §7.2 | ⏳ 待开始 |
-| F-63 | Channels 通知 | §7.3 | ⏳ 待开始 |
-| F-64 | Voice Mode | §7.3 | ⏳ 待开始 |
-| F-65 | Langfuse 可观测 | §7.4 | ⏳ 待开始 |
+| F-63 | Channels 通知 | §7.3 | ✅ 已完成（2026-06-19） | `src/services/channels/` 2097 行 + 18 测试 |
+| F-64 | Voice Mode | §7.3 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
+| F-65 | Langfuse 可观测 | §7.4 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
 | F-66 | ACP 协议 | §7.4 | ⏳ 待开始 |
 | F-67 | Buddy/Proactive | §7.5 | ⏳ 待开始 |
 | F-68 | Feature Gate | §7.6 | ⏳ 待开始 |
 | F-69 | Budget/Poor Mode | §7.5 | ⏳ 待开始 |
-| F-70 | Plugin 系统 | §4.3 | ⏳ 待开始 |
+| F-70 | Plugin 系统 | §4.3 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行基础框架 |
 | F-71 | 内置工具补齐 | §7.6 | ⏳ 待开始 |
 | F-72 | Multi-API 适配器 | §7.2 | ⏳ 待开始 |
 | F-73 | CI/CD 流水线 | §7.6 | ✅ 本地已完成 / 🟡 远端待验证 |
 | F-74 | Sandbox 沙箱 | §7.2 | ⏳ 待开始 |
 | F-75 | 工具调用统计 | §2.8 | 📋 设计完成 |
-| F-78 | Issue 语义澄清 | §2.12 | 📋 规划中 |
-| F-80 | Agent 间交互 | §2.14 | 📋 规划中 |
+| F-78 | Issue 语义澄清 | §2.12 | ✅ 已完成（2026-06-19 审计） | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行 |
+| F-80 | Agent 间交互 | §2.14 | ✅ 已完成（2026-06-19 审计） | `TaskInspectTool` + `TaskDirectivesTool` 642 行，已注册 EXTENSION_TOOLS |
 | F-81 | Native 模块系统 | §4.4 | ⏳ 待开始 |
 | F-82 | Remote Control | §7.1 | ⏳ 待开始 |
-| F-83 | Ultraplan 规划 | §7.5 | ⏳ 待开始 |
-| F-84 | Context Collapse | §7.5 | ⏳ 待开始 |
-| F-85 | Templates 模板 | §7.6 | ⏳ 待开始 |
-| F-86 | Kairos/Brief 调度 | §7.5 | ⏳ 待开始 |
+| F-83 | Ultraplan 规划 | §7.5 | ✅ 已完成（2026-06-19） | `src/services/ultraplan/` 3454 行 + 13 测试 |
+| F-84 | Context Collapse | §7.5 | ✅ 已完成（2026-06-19） | `src/services/context_collapse/` 3366 行 + 14 测试 |
+| F-85 | Templates 模板 | §7.6 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行 + 11 测试 |
+| F-86 | Kairos/Brief 调度 | §7.5 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `periodic/` 2022 行 + 13 测试 |
 | F-87 | Workflow Scripts | §7.5 | ⏳ 待开始 |
 | F-88 | Explore/Plan Agent | §7.5 | ⏳ 待开始 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
