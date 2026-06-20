@@ -6,10 +6,17 @@ the persisted cost snapshot for a given session ID and dispatches
 ``/resume`` path picks up where the last session left off, rather than
 silently starting from zero.
 
-F-49 P5-C: primary source is the ``session.json`` snapshot (fast path).
-When ``session.json`` does not exist (orchestrator/cron sessions that
-only write JSONL), falls back to scanning the last ``cost_block`` entry
-in ``transcript.jsonl`` via ``tail -1``-style read.
+F-49 P5-C: primary source is the **trailing** ``session_snapshot`` line
+in ``transcript.jsonl`` (written by :meth:`Session.save`). The reader
+walks the transcript once and remembers the latest line whose ``type``
+is ``session_snapshot`` (new format) or ``cost_block`` (legacy format
+written by pre-P5-E ``session_persist``). Both shapes carry the same
+``cost`` dict shape, so the restore code is identical.
+
+When ``transcript.jsonl`` has no snapshot/cost_block line (e.g. very
+new sessions that haven't been ``save()``d yet, or pure orchestrator
+sessions), falls back to the legacy ``session.json`` snapshot written
+by pre-Phase-5 ``Session.save()``.
 
 The TS file ``cost-tracker.ts`` does two things: defines the
 ``CostTracker`` class (which Python's port has consolidated onto the
@@ -40,9 +47,9 @@ def _sessions_dir() -> Path:
 def _restore_from_cost_block(cost_block: dict[str, Any]) -> None:
     """Dispatch a ``cost_block`` dict into the bootstrap singleton.
 
-    Shared by both the ``session.json`` path and the ``transcript.jsonl``
-    fallback (P5-C).  Extracted so the two code paths call the same
-    restore logic.
+    Shared by the ``session.json`` legacy path and the
+    ``transcript.jsonl`` primary path (P5-C). Extracted so the two code
+    paths call the same restore logic.
     """
     model_usage_raw: dict[str, Any] = cost_block.get("model_usage", {}) or {}
     model_usage: dict[str, ModelUsage] = {}
@@ -72,13 +79,17 @@ def _restore_from_cost_block(cost_block: dict[str, Any]) -> None:
 
 
 def _restore_from_jsonl_tail(session_id: str) -> bool:
-    """F-49 P5-C: read the last ``cost_block`` entry from ``transcript.jsonl``.
+    """F-49 P5-C: read the trailing cost line from ``transcript.jsonl``.
 
-    Scans ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` for the last
-    line whose ``"type"`` equals ``"cost_block"``.  This is the fallback
-    when ``session.json`` does not exist (orchestrator / cron sessions).
+    Walks ``~/.clawcodex/sessions/<sid>/transcript.jsonl`` once and
+    remembers the LAST line whose ``type`` is either ``session_snapshot``
+    (new P5-A format, written by :meth:`Session.save`) or ``cost_block``
+    (legacy format, written by pre-P5-E ``session_persist``). The
+    trailing cost line is the snapshot of record — successive saves
+    append additional lines, but ``cost_restore`` keys on the latest
+    one because that is what reflects the current cost counters.
 
-    Returns True if a cost block was found and applied, False otherwise.
+    Returns True if a cost line was found and applied, False otherwise.
     """
     transcript_path = _sessions_dir() / session_id / "transcript.jsonl"
     if not transcript_path.exists():
@@ -95,10 +106,14 @@ def _restore_from_jsonl_tail(session_id: str) -> bool:
                     entry = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if isinstance(entry, dict) and entry.get("type") == "cost_block":
-                    cost = entry.get("cost")
-                    if isinstance(cost, dict):
-                        last_cost_block = cost
+                if not isinstance(entry, dict):
+                    continue
+                entry_type = entry.get("type")
+                if entry_type not in ("session_snapshot", "cost_block"):
+                    continue
+                cost = entry.get("cost")
+                if isinstance(cost, dict):
+                    last_cost_block = cost
     except OSError:
         return False
 
@@ -121,12 +136,21 @@ def restore_cost_state_for_session(session_id: SessionId | str) -> bool:
     whether ``switch_session(sid)`` was called first — the resume path
     can call restore-then-switch or switch-then-restore.
 
-    F-49 P5-C: primary source is ``session.json`` (same place
-    ``Session.save`` writes).  When ``session.json`` does not exist,
-    falls back to scanning ``transcript.jsonl`` for the last
-    ``cost_block`` entry.
+    F-49 P5-C: primary source is the trailing ``session_snapshot`` /
+    ``cost_block`` line in ``transcript.jsonl``. Falls back to
+    ``session.json`` when no snapshot line is present (e.g. very new
+    sessions or pre-Phase-5 saves that have not yet been migrated).
     """
     target = str(session_id)
+    transcript_path = _sessions_dir() / target / "transcript.jsonl"
+
+    # F-49 P5-C: prefer the transcript tail. This is the path taken
+    # by ``Session.save()`` after Phase 5 — every save appends a
+    # ``session_snapshot`` line, and cost_restore picks the latest.
+    if transcript_path.exists() and _restore_from_jsonl_tail(target):
+        return True
+
+    # Legacy fallback: pre-Phase-5 ``session.json`` snapshot.
     session_file = _sessions_dir() / target / "session.json"
     if session_file.exists():
         try:
@@ -151,8 +175,7 @@ def restore_cost_state_for_session(session_id: SessionId | str) -> bool:
         _restore_from_cost_block(cost_block)
         return True
 
-    # F-49 P5-C: fallback to transcript.jsonl when no .json snapshot exists.
-    return _restore_from_jsonl_tail(target)
+    return False
 
 
 __all__ = ["restore_cost_state_for_session"]

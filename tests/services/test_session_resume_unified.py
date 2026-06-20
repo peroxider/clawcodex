@@ -251,11 +251,18 @@ class TestResumeUnified:
         self,
         mock_sessions_dir: Path,
     ) -> None:
-        """After resume→save, the ``.json`` snapshot file must exist on disk."""
+        """After resume→save, the transcript carries a trailing
+        ``session_snapshot`` line (P5-A unified format).
+
+        F-49 P5-A: ``session.json`` is no longer written. The cost
+        snapshot lives in the **last line** of ``transcript.jsonl`` as
+        a ``{"type": "session_snapshot", "cost": ...}`` entry, so
+        ``cost_restore`` can pick it up via ``tail -1``.
+        """
         session_id = f"snapshot-{uuid4().hex[:12]}"
         _write_orchestrator_session(mock_sessions_dir, session_id, num_turns=1)
 
-        # Before save: no .json
+        # Before save: no session.json
         json_path = mock_sessions_dir / session_id / "session.json"
         assert not json_path.exists()
 
@@ -263,13 +270,23 @@ class TestResumeUnified:
         assert loaded is not None
         loaded.save()
 
-        # After save: .json exists
-        assert json_path.exists()
-        # Verify it contains the messages
-        with open(json_path) as f:
-            data = json.load(f)
-        assert "conversation" in data
-        assert len(data["conversation"]["messages"]) > 0
+        # After save: no session.json (P5-A — full snapshot dropped).
+        assert not json_path.exists()
+        # The transcript ends with a session_snapshot line.
+        transcript_path = mock_sessions_dir / session_id / "transcript.jsonl"
+        lines = [
+            line
+            for line in transcript_path.read_text().splitlines()
+            if line.strip()
+        ]
+        assert lines, "transcript.jsonl is empty after save"
+        snapshot = json.loads(lines[-1])
+        assert snapshot.get("type") == "session_snapshot"
+        assert "cost" in snapshot
+        # The first line is session_init (P5-E).
+        first = json.loads(lines[0])
+        assert first.get("type") == "session_init"
+        assert first.get("session_id") == session_id
 
     def test_missing_json_fallback_to_jsonl(
         self,

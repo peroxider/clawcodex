@@ -17,28 +17,50 @@ Two public hooks:
   TailFollower to watch for lines written by a backgrounded agent.
 * ``load_from_session_storage(session_id)`` — construct a Session-like
   object from a SessionStorage directory if one exists.
+
+F-49 P5-E changes:
+
+* The very first call per session writes a ``session_init`` line as
+  line 1 of ``transcript.jsonl`` carrying ``session_id``, ``provider``,
+  ``model``, ``cwd``, and ``created_at``. ``Session.load()`` reads this
+  line to reconstruct provider/model without needing ``session.json``.
+* The duplicate ``cost_block`` write (to both ``metadata.json`` and
+  ``transcript.jsonl``) has been removed. ``Session.save()`` now writes
+  a ``session_snapshot`` line containing the cost block; cost_restore
+  reads ``tail -1`` from the transcript instead of looking at
+  ``session.json``.
 """
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+
+
+_SESSION_INIT_MARKER = "session_init"
 
 
 def save_to_session_storage(session: Any) -> None:
     """Persist conversation messages via SessionStorage (JSONL transcript).
 
-    Best-effort: errors are logged but never propagated. The JSONL
-    transcript is the file that :class:`TailFollower` watches during
-    ``--resume``, so it must exist and contain all current messages
-    for the resume path to work correctly.
+    Best-effort: errors are swallowed so the upstream agent loop never
+    fails on a persistence hiccup. The JSONL transcript is the file
+    that :class:`TailFollower` watches during ``--resume``, so it must
+    exist and contain all current messages for the resume path to work.
 
-    Also writes the full cost block (API usage, durations, token counts)
-    to both ``metadata.json`` and ``transcript.jsonl``, matching the
-    shape written by ``Session.save()`` into ``<sid>.json``.
+    F-49 P5-E: on the **first** call for a given session, write a
+    ``session_init`` line as the very first entry in ``transcript.jsonl``.
+    Subsequent calls are idempotent — they detect the existing init line
+    and skip writing a duplicate.
+
+    The cost block is NOT written here anymore; ``Session.save()`` writes
+    a ``session_snapshot`` line at exit time, and ``cost_restore`` reads
+    that line via ``tail -1``. Writing a ``cost_block`` here would
+    duplicate the cost on every save and confuse cost_restore (which
+    keys on the LAST line of the transcript).
     """
     try:
-        from src.agent.session import _snapshot_cost_block
         from src.services.session_storage import SessionStorage
 
         storage = SessionStorage(session_id=session.session_id)
@@ -47,39 +69,116 @@ def save_to_session_storage(session: Any) -> None:
             cwd=str(Path.cwd()),
             title=_derive_title(session),
         )
+
+        # F-49 P5-E: write the session_init line once, at the very start
+        # of the transcript, before any messages. Subsequent calls skip
+        # this branch because ``_has_session_init`` returns True.
+        if not _has_session_init(storage):
+            _write_session_init_line(storage, session)
+
         # Write each message from the conversation.  Use ``write_raw``
         # with the serialised dict so we don't re-encode via
         # ``message_to_dict`` (which may not match the shape stored
         # in ``Conversation.to_dict``).
         conv_dict = session.conversation.to_dict()
-        messages_list = conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
-        # Track the last user input from the conversation
-        last_input = _extract_last_user_input(messages_list)
-        if last_input:
-            try:
-                storage.update_metadata(last_user_input=last_input[:200])
-            except Exception:
-                pass
+        messages_list = (
+            conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
+        )
         for msg_data in messages_list:
             if isinstance(msg_data, dict):
                 storage.write_raw(msg_data)
         storage.flush()
-
-        # --- Cost block: write to both metadata.json and transcript.jsonl ---
-        cost_block = _snapshot_cost_block()
-        # metadata.json gets the full cost dict
-        storage.update_metadata(cost=cost_block)
-        # transcript.jsonl gets a dedicated cost-block entry (type="cost_block"
-        # so read_messages() skips it, but read_transcript() returns it)
-        storage.write_raw(
-            {
-                "type": "cost_block",
-                "cost": cost_block,
-            }
-        )
-        storage.flush()
     except Exception:
         pass  # Best-effort; not critical if this fails.
+
+
+def _has_session_init(storage: Any) -> bool:
+    """Return True if the transcript already has a ``session_init`` line.
+
+    We scan the on-disk transcript rather than maintaining a sentinel in
+    memory so this stays correct across process restarts and across the
+    ``save_to_session_storage`` <-> ``save_transcript`` <-> ``Session.save``
+    dance. The scan is cheap: we stop at the first non-blank line and
+    inspect its ``type`` field.
+    """
+    transcript_path = storage.session_dir / "transcript.jsonl"
+    if not transcript_path.exists():
+        return False
+    try:
+        import json
+
+        with open(transcript_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except Exception:
+                    return False
+                if isinstance(entry, dict):
+                    return entry.get("type") == _SESSION_INIT_MARKER
+                return False
+    except OSError:
+        return False
+    return False
+
+
+def _write_session_init_line(storage: Any, session: Any) -> None:
+    """Write a ``session_init`` line as the FIRST entry of the transcript.
+
+    F-49 P5-E: this line carries ``session_id``, ``provider``, ``model``,
+    ``cwd``, and ``created_at`` — the information :meth:`Session.load`
+    needs to reconstruct provider/model without a separate ``session.json``.
+    Subsequent ``Session.save()`` calls do NOT touch this line; new
+    provider/model values land in the trailing ``session_snapshot`` line.
+
+    When the transcript already exists with legacy message lines (the
+    common upgrade path — orchestrator / cron sessions that wrote
+    messages before ``save_to_session_storage`` was wired up), we
+    rewrite the file: ``session_init`` first, then the existing
+    message lines in their original order. JSONL is append-only and
+    cannot cheaply prepend, so this rewrite is necessary on the
+    first call that runs after the upgrade.
+    """
+    import json
+
+    payload: dict[str, Any] = {
+        "type": _SESSION_INIT_MARKER,
+        "session_id": session.session_id,
+        "provider": getattr(session, "provider", "") or "",
+        "model": getattr(session, "model", "") or "",
+        "cwd": str(Path.cwd()),
+        "created_at": datetime.now().isoformat(),
+    }
+    init_line = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+    transcript_path = storage.session_dir / "transcript.jsonl"
+    storage.session_dir.mkdir(parents=True, exist_ok=True)
+
+    # Read the existing transcript (if any). We rewrite the file with
+    # ``session_init`` first, then the previous lines in order.
+    existing_lines: list[str] = []
+    if transcript_path.exists():
+        try:
+            with open(transcript_path, "r", encoding="utf-8") as f:
+                for raw in f:
+                    raw = raw.rstrip("\r\n")
+                    if not raw.strip():
+                        continue
+                    existing_lines.append(raw + "\n")
+        except OSError:
+            existing_lines = []
+
+    with open(transcript_path, "w", encoding="utf-8") as f:
+        f.write(init_line)
+        for line in existing_lines:
+            f.write(line)
+
+    # Reset the SessionStorage's de-dup baseline so the follow-up
+    # ``flush()`` re-scans the now-prepended transcript and skips any
+    # message uuids already on disk.
+    storage._flushed_uuids = storage._scan_flushed_uuids()
 
 
 def _derive_title(session: Any) -> str:

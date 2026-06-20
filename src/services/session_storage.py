@@ -70,51 +70,90 @@ def clear_session_cache() -> None:
 
 @dataclass
 class SessionMetadata:
-    """Metadata for a session."""
+    """Metadata for a session.
+
+    F-49 P5-F: ``cwd``, ``total_cost``, ``last_user_input``, ``agent_name``,
+    and ``cost`` are kept as in-memory attributes (for backward compatibility
+    with callers that read them) but are no longer **written** to
+    ``metadata.json``. The on-disk shape is now limited to list-summary
+    fields — full conversation lives in ``transcript.jsonl`` and the cost
+    snapshot lives in the last ``session_snapshot`` line of that file.
+
+    ``from_dict`` still tolerates the old extra fields so legacy
+    ``metadata.json`` files keep loading without data loss; those fields
+    simply round-trip through memory and are dropped on the next save.
+    """
 
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     start_time: float = field(default_factory=time.time)
     model: str = ""
-    cwd: str = ""
     title: str = ""
-    total_cost: float = 0.0
     message_count: int = 0
     last_updated: float = field(default_factory=time.time)
+    tags: list[str] = field(default_factory=list)
+
+    # ---- Legacy fields kept in memory only (not serialized by ``to_dict``) ----
+    # These were previously written to ``metadata.json`` and are still
+    # tolerated on read via ``from_dict`` for backward compatibility.
+    cwd: str = ""
+    total_cost: float = 0.0
     last_user_input: str = ""
     agent_name: str = ""  # S-R4-A: agent type used for the session
-    tags: list[str] = field(default_factory=list)
     cost: dict[str, Any] | None = None  # Full cost block (matches _snapshot_cost_block shape)
 
+    # Fields that ``to_dict`` will serialize. Anything not in this set is
+    # kept in memory only — see P5-F in docs/FEATURE_PLAN.md.
+    _SERIALIZED_FIELDS: tuple[str, ...] = field(
+        default=(
+            "session_id",
+            "start_time",
+            "model",
+            "title",
+            "message_count",
+            "last_updated",
+            "tags",
+        ),
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
     def to_dict(self) -> dict[str, Any]:
+        """Serialize only the list-summary fields.
+
+        F-49 P5-F: excludes ``cwd`` / ``total_cost`` / ``last_user_input`` /
+        ``agent_name`` / ``cost``. Those values are still kept on the
+        in-memory instance (so callers that read ``meta.cwd`` continue
+        to work) but are no longer written to disk — the transcript
+        JSONL is the single source of truth.
+        """
         return {
             "session_id": self.session_id,
             "start_time": self.start_time,
             "model": self.model,
-            "cwd": self.cwd,
             "title": self.title,
-            "total_cost": self.total_cost,
             "message_count": self.message_count,
             "last_updated": self.last_updated,
-            "last_user_input": self.last_user_input,
-            "agent_name": self.agent_name,
-            "tags": self.tags,
-            "cost": self.cost,
+            "tags": list(self.tags),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SessionMetadata:
+        # Legacy fields are tolerated on read so old metadata.json
+        # files keep loading. New writes (via to_dict) drop them.
         return cls(
             session_id=data.get("session_id", str(uuid.uuid4())),
             start_time=data.get("start_time", time.time()),
             model=data.get("model", ""),
-            cwd=data.get("cwd", ""),
             title=data.get("title", ""),
-            total_cost=data.get("total_cost", 0.0),
             message_count=data.get("message_count", 0),
             last_updated=data.get("last_updated", time.time()),
+            tags=data.get("tags", []),
+            # Legacy fields — kept in memory only.
+            cwd=data.get("cwd", ""),
+            total_cost=data.get("total_cost", 0.0),
             last_user_input=data.get("last_user_input", ""),
             agent_name=data.get("agent_name", ""),
-            tags=data.get("tags", []),
             cost=data.get("cost"),
         )
 
@@ -152,6 +191,20 @@ class SessionStorage:
 
     # --- Metadata ---
 
+    # F-49 P5-F: fields that are kept in memory but no longer written
+    # to ``metadata.json``. ``cwd`` is preserved here for caller
+    # compatibility (extensions may still pass it); it is simply not
+    # persisted. The same applies to total_cost / last_user_input /
+    # agent_name / cost — those move to the transcript's
+    # ``session_init`` / ``session_snapshot`` lines.
+    _LEGACY_METADATA_FIELDS: tuple[str, ...] = (
+        "cwd",
+        "total_cost",
+        "last_user_input",
+        "agent_name",
+        "cost",
+    )
+
     def init_metadata(
         self,
         *,
@@ -159,6 +212,7 @@ class SessionStorage:
         cwd: str = "",
         title: str = "",
         tags: list[str] | None = None,
+        **legacy: Any,
     ) -> SessionMetadata:
         """Initialize session metadata.
 
@@ -172,6 +226,16 @@ class SessionStorage:
         session moves its start_time later than the messages it
         contains (see visualizer screenshot repro for
         ``02cba64e-…``).
+
+        F-49 P5-F: ``cwd`` and other legacy metadata fields
+        (``total_cost`` / ``last_user_input`` / ``agent_name`` /
+        ``cost``) are accepted for caller compatibility but are NOT
+        written to ``metadata.json``. They live in the transcript
+        JSONL instead (``session_init`` carries ``cwd``, ``session_snapshot``
+        carries the cost block). Use ``**legacy`` to silently absorb
+        any other deprecated kwarg without TypeError-ing existing
+        callers; the values are kept on the in-memory instance but
+        not persisted.
         """
         existing = self._load_metadata()
         if existing is not None:
@@ -179,8 +243,14 @@ class SessionStorage:
             # caller-supplied identity fields only.
             if model:
                 existing.model = model
+            # Legacy fields are still updated in memory so callers
+            # that read ``meta.cwd`` / ``meta.cost`` see the latest
+            # value — they're just not written back to disk.
             if cwd:
                 existing.cwd = cwd
+            for key, value in legacy.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
             if title:
                 existing.title = title
             if tags:
@@ -195,6 +265,11 @@ class SessionStorage:
             title=title,
             tags=tags or [],
         )
+        # Absorb any legacy kwargs onto the in-memory instance
+        # without persisting them.
+        for key, value in legacy.items():
+            if hasattr(self._metadata, key):
+                setattr(self._metadata, key, value)
         self._save_metadata()
         return self._metadata
 
@@ -205,13 +280,27 @@ class SessionStorage:
         return self._load_metadata()
 
     def update_metadata(self, **kwargs: Any) -> None:
-        """Update metadata fields."""
+        """Update metadata fields.
+
+        F-49 P5-F: legacy fields (``cwd``, ``total_cost``,
+        ``last_user_input``, ``agent_name``, ``cost``) are still
+        updated on the in-memory ``SessionMetadata`` so callers that
+        read them keep working, but they are NOT written to
+        ``metadata.json``. The next ``_save_metadata`` will use
+        ``to_dict()`` which excludes them, so they evaporate on the
+        next save. This keeps callers backward compatible while
+        preventing the legacy fields from re-entering the on-disk
+        format.
+        """
         meta = self.get_metadata()
         if meta is None:
             return
         for key, value in kwargs.items():
             if hasattr(meta, key):
                 setattr(meta, key, value)
+        # ``last_updated`` is still written — it's one of the
+        # serialized list-summary fields. Always bump it so
+        # list_sessions() ordering reflects the actual save.
         meta.last_updated = time.time()
         self._save_metadata()
 

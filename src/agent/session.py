@@ -47,51 +47,83 @@ class Session:
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
     def save(self):
-        """Save session to disk including a cost block.
+        """Save session to disk, appending a ``session_snapshot`` line.
 
-        Ch03 round-2 (R2.1): the ``cost`` key matches the schema read by
-        ``src/services/cost_restore.py:restore_cost_state_for_session``
-        so a save → load round-trip restores bootstrap counters
-        (`total_cost_usd`, durations, lines added/removed, per-model
-        usage). Previously this method emitted no cost block; the
-        restore reader hit defaults of 0 unconditionally.
+        F-49 P5-A: ``session.json`` is no longer written. Instead, a
+        ``session_snapshot`` line carrying the cost block is appended
+        to ``transcript.jsonl`` (via the ``save_to_session_storage``
+        hook). ``Session.load()`` and ``cost_restore`` read this line
+        via ``tail -1`` rather than parsing a separate snapshot file.
 
-        Also persists conversation messages via :class:`SessionStorage`
-        (JSONL transcript) so ``--resume`` can attach a
-        :class:`TailFollower` to watch for lines written by a
-        backgrounded agent.
+        The JSONL transcript remains the single source of truth:
+        ``save_to_session_storage`` flushes the current conversation
+        and writes a ``session_init`` line on the first call; this
+        method then appends the trailing ``session_snapshot`` so the
+        file ends with the latest cost state.
+
+        Backward compat: if an old ``session.json`` exists from a
+        pre-P5 save, it is left untouched on disk. The migration
+        script (``clawcodex-dev session migrate --from-3-file``)
+        converts it to the new format on demand. ``Session.load()``
+        auto-detects legacy ``session.json`` and falls back to reading
+        it when ``transcript.jsonl`` lacks a ``session_init`` line.
         """
         session_dir = Path.home() / ".clawcodex" / "sessions" / self.session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
-        session_file = session_dir / "session.json"
-
         cost_block = _snapshot_cost_block()
-
-        session_data = {
-            "session_id": self.session_id,
-            "provider": self.provider,
-            "model": self.model,
-            "conversation": self.conversation.to_dict(),
-            "created_at": self.created_at,
-            "updated_at": datetime.now().isoformat(),
-            "cost": cost_block,
-        }
-
-        with open(session_file, 'w') as f:
-            json.dump(session_data, f, indent=2)
-
         self.updated_at = datetime.now().isoformat()
 
-        # Also persist via SessionStorage (JSONL transcript) so
-        # TailFollower can observe new lines during --resume.
-        # Implementation lives in extensions/agent/session_persist.py
-        # so the upstream Session stays free of orchestrator-specific
-        # persistence concerns.
+        # Persist the conversation via SessionStorage (JSONL transcript)
+        # so ``--resume`` can attach a :class:`TailFollower` to watch
+        # for new lines during a backgrounded agent. Implementation
+        # lives in extensions/agent/session_persist.py so the upstream
+        # Session stays free of orchestrator-specific persistence
+        # concerns.
         try:
             from extensions.agent.session_persist import save_to_session_storage
             save_to_session_storage(self)
         except ImportError:
+            pass
+
+        # F-49 P5-A: append a ``session_snapshot`` line carrying the
+        # cost block. ``cost_restore`` reads ``tail -1`` from the
+        # transcript to recover counters, so the snapshot MUST be the
+        # final line of the file at the time of save. We append after
+        # ``save_to_session_storage`` (which writes messages) so the
+        # snapshot is trailing. Multiple snapshots may coexist across
+        # successive saves; ``tail -1`` picks the latest one.
+        self._append_session_snapshot(cost_block)
+
+    def _append_session_snapshot(self, cost_block: dict) -> None:
+        """Append a ``session_snapshot`` line to ``transcript.jsonl``.
+
+        The line carries the full cost block (matching the shape
+        produced by :func:`_snapshot_cost_block`) so cost_restore can
+        rebuild bootstrap counters via ``tail -1``.
+
+        Errors are swallowed: a transcript that fails to write the
+        snapshot is not fatal — ``cost_restore`` will simply fall back
+        to the prior snapshot or return False (no cost recovered).
+        """
+        try:
+            transcript_path = (
+                Path.home() / ".clawcodex" / "sessions" / self.session_id / "transcript.jsonl"
+            )
+            payload: dict = {
+                "type": "session_snapshot",
+                "cost": cost_block,
+                "updated_at": datetime.now().isoformat(),
+                "provider": self.provider,
+                "model": self.model,
+            }
+            with open(transcript_path, "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+                )
+        except OSError:
+            # Best-effort: the in-memory session state is still valid
+            # even if the snapshot cannot be written to disk.
             pass
 
     def save_transcript(self):
@@ -116,38 +148,64 @@ class Session:
     def load(cls, session_id: str) -> Optional['Session']:
         """Load session from disk.
 
-        F-49 P5-B/P5-D: primary source is ``session.json`` (fast path).
-        When ``session.json`` does not exist (orchestrator/cron sessions
-        that only write JSONL), falls back to scanning ``transcript.jsonl``:
-        - metadata.json -> ``model`` / ``created_at``.
-        - Message lines -> ``conversation.messages``.
+        F-49 P5-B: primary source is the **enhanced transcript JSONL**
+        introduced by Phase 5. The transcript's structure is::
+
+            line 1      {"type": "session_init", "session_id": ..., "provider": ..., "model": ..., "cwd": ..., "created_at": ...}
+            lines 2..N  message entries (one per agent turn)
+            last line   {"type": "session_snapshot", "cost": {...}, "updated_at": ...}
+
+        ``Session.load()`` walks the transcript once, pulling provider /
+        model / created_at from the init line and building the
+        conversation from the message lines. The cost block is left to
+        ``cost_restore`` (which reads ``tail -1`` at resume time).
+
+        Backward compat: when ``transcript.jsonl`` does not start with
+        a ``session_init`` line, fall back to the legacy ``session.json``
+        snapshot. ``session.json`` is left on disk untouched so the
+        migration script can convert it on demand. The same fallback
+        covers orchestrator/cron sessions that only write metadata +
+        plain message JSONL (no session_init marker).
         """
         session_dir = Path.home() / ".clawcodex" / "sessions" / session_id
+        transcript_path = session_dir / "transcript.jsonl"
         session_file = session_dir / "session.json"
 
-        # Fast path: .json snapshot exists.
+        # F-49 P5-B: prefer the new enhanced-transcript format.
+        # ``_load_from_enhanced_transcript`` returns None when the
+        # transcript lacks a session_init marker — in that case the
+        # file is either legacy (no marker by design) or empty, and
+        # we fall back to session.json.
+        if transcript_path.exists():
+            new_format = _load_from_enhanced_transcript(
+                session_id, transcript_path
+            )
+            if new_format is not None:
+                return new_format
+
+        # Legacy fallback: pre-P5 ``session.json`` snapshot.
         if session_file.exists():
-            with open(session_file, 'r') as f:
-                data = json.load(f)
+            try:
+                with open(session_file, 'r') as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                return None
             return cls(
                 session_id=data["session_id"],
                 provider=data["provider"],
                 model=data["model"],
                 conversation=Conversation.from_dict(data["conversation"]),
                 created_at=data["created_at"],
-                updated_at=data["updated_at"]
+                updated_at=data["updated_at"],
             )
 
-        # F-49 P5-D: fallback --- read metadata and messages from JSONL
-        # transcript.  This lets orchestrator/cron sessions load via the
-        # standard ``Session.load()`` path without the explicit
-        # ``load_from_session_storage`` call in ``resume()``.
-        transcript_path = session_dir / "transcript.jsonl"
-        metadata_path = session_dir / "metadata.json"
+        # Final fallback: orchestrator/cron sessions that only wrote
+        # metadata + plain message JSONL. Read metadata for model and
+        # created_at; scan transcript for messages. Provider is left
+        # empty because the file does not record it.
         if not transcript_path.exists():
             return None
-
-        # Read metadata for model/created_at
+        metadata_path = session_dir / "metadata.json"
         provider = ""
         model = ""
         created_at = ""
@@ -161,11 +219,18 @@ class Session:
             except (OSError, json.JSONDecodeError):
                 pass
 
-        # Read messages from transcript
-        from src.types.messages import message_from_dict
         from src.services.session_storage import SessionStorage
 
-        storage = SessionStorage(session_id=session_id)
+        # Pass the parent of ``session_dir`` (the sessions root) so the
+        # storage reads from the directory Session.save() actually wrote
+        # to. The dynamic default inside SessionStorage would also pick
+        # this up via the patched ``Path.home()``, but threading the
+        # explicit path keeps the read site obvious and removes any
+        # dependency on import-time ``SESSIONS_DIR`` resolution.
+        storage = SessionStorage(
+            session_id=session_id,
+            sessions_dir=session_dir.parent,
+        )
         entries = storage.read_transcript()
         messages = []
         for entry in entries:
@@ -175,6 +240,8 @@ class Session:
             ):
                 continue
             try:
+                from src.types.messages import message_from_dict
+
                 messages.append(message_from_dict(entry))
             except Exception:
                 pass
@@ -237,40 +304,14 @@ class Session:
 
         loaded = cls.load(session_id)
         if loaded is None:
-            # F-49 P5-D: Session.load() now falls back to reading
-            # from transcript.jsonl when session.json does not
-            # exist (load() returns a fully populated Session with
-            # messages).  The old load_from_session_storage fallback
-            # has been removed.
+            # F-49 P5-D: Session.load() now reads transcript.jsonl
+            # directly (P5-B), so it returns a fully-populated Session
+            # with messages for both new-format transcripts AND legacy
+            # session.json / metadata.json + JSONL combinations. The
+            # old ``load_from_session_storage`` fallback has been
+            # removed — the only way to reach None here is "no session
+            # exists on disk at all", which is a real failure.
             return None
-        # F-49 Phase 0.4.1 / P5-D: safety net --- if messages are still empty
-        # (should no longer happen now that Session.load() reads JSONL
-        # directly), back-fill from the SessionStorage transcript.  Kept
-        # as a defensive double-check for backward compatibility.
-        if not loaded.conversation.messages:
-            try:
-                from src.services.session_storage import SessionStorage
-                from src.types.messages import message_from_dict
-
-                storage = SessionStorage(session_id=session_id)
-                entries = storage.read_transcript()
-                if entries:
-                    messages = []
-                    for entry in entries:
-                        # Skip background-completion markers
-                        if (
-                            entry.get("role") == "system"
-                            and entry.get("content") == "__background_complete__"
-                        ):
-                            continue
-                        try:
-                            messages.append(message_from_dict(entry))
-                        except Exception:
-                            pass
-                    if messages:
-                        loaded.conversation.messages = messages
-            except Exception:
-                pass  # Best-effort; don't fail resume
         # F-9: hydrate the long-running ``/goal`` state machine from
         # the JSONL transcript. The goal state is persisted as
         # ``{"type": "goal", ...}`` / ``{"type": "goal-cleared", ...}``
@@ -322,3 +363,117 @@ def _snapshot_cost_block() -> dict:
             for model, u in get_model_usage().items()
         },
     }
+
+
+def _load_from_enhanced_transcript(
+    session_id: str,
+    transcript_path: Path,
+) -> Optional[Session]:
+    """F-49 P5-B: load a session from the enhanced transcript JSONL format.
+
+    Reads ``transcript_path`` and reconstructs a :class:`Session` from:
+
+    * Line 1: ``session_init`` — provider / model / created_at /
+      cwd. The init marker signals "this transcript is in the new
+      format"; absence of it triggers the legacy ``session.json``
+      fallback in :meth:`Session.load`.
+    * Middle / tail lines: ``message`` entries — the conversation.
+
+    ``cost_block`` (legacy) and ``session_snapshot`` (new) tail lines
+    are skipped here; their cost block is consumed by ``cost_restore``
+    at resume time so this method stays a pure conversation reader.
+
+    Returns ``None`` when the transcript is empty OR when its first
+    non-blank line is not a ``session_init`` marker — signalling the
+    file is legacy format (or not yet initialized) and the caller
+    should fall back to ``session.json`` / metadata.
+
+    An empty transcript is treated the same as a non-init first line
+    because both cases mean "this transcript doesn't carry the
+    new-format anchor" — falling back to ``session.json`` is the only
+    way to recover the conversation in that scenario (legacy pre-P5
+    sessions often wrote a ``session.json`` alongside an empty
+    ``transcript.jsonl``).
+    """
+    provider = ""
+    model = ""
+    created_at = ""
+
+    from src.types.messages import message_from_dict
+
+    messages: list = []
+    found_init = False
+    try:
+        with open(transcript_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    # Skip malformed lines, mirroring
+                    # ``SessionStorage.read_transcript``.
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+
+                # ---- First non-blank line: must be session_init ----
+                if not found_init:
+                    if entry.get("type") != "session_init":
+                        # Not the new format — caller falls back to
+                        # ``session.json`` or metadata-based reconstruction.
+                        return None
+                    found_init = True
+                    provider = entry.get("provider", "") or ""
+                    model = entry.get("model", "") or ""
+                    created_at = entry.get("created_at", "") or ""
+                    continue
+
+                # ---- Middle / tail lines ----
+                entry_type = entry.get("type")
+                if entry_type in (
+                    "cost_block",
+                    "session_snapshot",
+                    "session_init",
+                ):
+                    # cost_block: legacy cost entry written by
+                    # pre-P5-E session_persist (kept for backward
+                    # compat with already-existing transcripts).
+                    # session_snapshot: tail line from Session.save();
+                    # cost_restore owns reading the cost block from
+                    # this line so this method stays pure.
+                    # session_init: defensive — a second init line
+                    # should not happen but we tolerate it.
+                    continue
+                if (
+                    entry.get("role") == "system"
+                    and entry.get("content") == "__background_complete__"
+                ):
+                    continue
+
+                try:
+                    messages.append(message_from_dict(entry))
+                except Exception:
+                    # Skip unparseable message entries; the transcript
+                    # remains valid overall.
+                    continue
+    except OSError:
+        return None
+
+    # No session_init seen — the transcript is empty or contains only
+    # legacy markers. Treat it as "not in the new format" so the caller
+    # falls back to ``session.json`` / metadata. Without this guard an
+    # empty transcript would yield an empty Session with no provider/
+    # model, which masks the legacy session.json entirely.
+    if not found_init:
+        return None
+
+    return Session(
+        session_id=session_id,
+        provider=provider,
+        model=model,
+        conversation=Conversation(messages=messages),
+        created_at=created_at,
+        updated_at=created_at,
+    )

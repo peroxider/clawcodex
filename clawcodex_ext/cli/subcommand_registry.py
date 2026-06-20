@@ -36,6 +36,10 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli.pos_cmd import commands as _pos_commands  # noqa: F401
     from clawcodex_ext.cli import telemetry_cmd as _telemetry_cmd  # noqa: F401
 
+    # F-49 P5-H: ``clawcodex-dev session migrate`` subcommand for
+    # converting legacy 3-file sessions to the unified 2-file format.
+    from clawcodex_ext.cli import session_migrate_cmd as _session_migrate_cmd  # noqa: F401
+
     # F-94-A: ``clawcodex viz`` subcommand for the Multi-Session Visualizer
     from extensions.visualizer.cli import register_viz_subcommand  # noqa: F401
 

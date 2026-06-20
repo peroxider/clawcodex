@@ -56,8 +56,34 @@ class SaveCostBlockTests(unittest.TestCase):
         return tempfile.mkdtemp(prefix="ch03-r2-")
 
     def _read_saved(self, sid: str) -> dict:
-        path = self.tmpdir / ".clawcodex" / "sessions" / f"{sid}.json"
-        return json.loads(path.read_text())
+        """Read the cost block written by ``Session.save``.
+
+        F-49 P5-A: ``session.json`` no longer exists. The cost block
+        lives in the trailing ``session_snapshot`` line of
+        ``transcript.jsonl``. This helper returns a dict shaped like
+        the legacy session.json (with a top-level ``cost`` key) so
+        the existing test assertions keep working without modification.
+        """
+        transcript_path = (
+            self.tmpdir / ".clawcodex" / "sessions" / sid / "transcript.jsonl"
+        )
+        lines = [
+            line
+            for line in transcript_path.read_text().splitlines()
+            if line.strip()
+        ]
+        # Walk from the end to find the trailing cost-bearing line
+        # (session_snapshot in the new format, cost_block in legacy).
+        for raw in reversed(lines):
+            entry = json.loads(raw)
+            if entry.get("type") == "session_snapshot":
+                return {"cost": entry.get("cost"), "provider": entry.get("provider"), "model": entry.get("model")}
+        # Fallback: legacy cost_block line — return its cost dict at top level.
+        for raw in lines:
+            entry = json.loads(raw)
+            if entry.get("type") == "cost_block":
+                return {"cost": entry.get("cost")}
+        raise AssertionError(f"no session_snapshot / cost_block line in {transcript_path}")
 
     def test_save_emits_cost_block_with_current_state(self) -> None:
         # Prime bootstrap state.
