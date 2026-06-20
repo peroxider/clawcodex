@@ -1,0 +1,403 @@
+"""Data models for SR-5.1 Community Feature Radar.
+
+Mirrors the dataclasses declared in FEATURE_PLAN.md §10.1.5-10.1.7 so the
+rest of the pipeline (registry → fetcher → extractor → classifier →
+deduplicator → scorer → reporter) can speak a single shared vocabulary.
+
+Naming + field shapes are deliberately kept Pythonic (snake_case) rather
+than mirroring the camelCase JSON shape used in GitHub APIs; the layer
+boundary between API responses and internal records is the Fetcher.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class FeatureCategory(str, Enum):
+    AGENT_LOOP = "agent_loop"
+    TOOL_SYSTEM = "tool_system"
+    PROVIDER = "provider"
+    PERMISSION = "permission"
+    MEMORY = "memory"
+    MCP = "mcp"
+    MULTI_AGENT = "multi_agent"
+    ORCHESTRATOR = "orchestrator"
+    TUI_REPL = "tui_repl"
+    CLI = "cli"
+    OBSERVABILITY = "observability"
+    INFRA = "infra"
+    UNKNOWN = "unknown"
+
+
+class FeatureType(str, Enum):
+    NEW = "new"
+    ENHANCEMENT = "enhancement"
+    BREAKING = "breaking"
+    DEPRECATION = "deprecation"
+    BUGFIX = "bugfix"
+
+
+# ---------------------------------------------------------------------------
+# Source registration
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class WatchSource:
+    """A single upstream project being tracked by the radar.
+
+    Matches the dataclass sketched in FEATURE_PLAN.md §10.1.5. Only fields
+    with defaults can be omitted from YAML; ``name`` and ``repo`` are
+    required.
+    """
+
+    name: str
+    repo: str
+    track_releases: bool = True
+    track_commits: bool = False
+    track_prs: bool = False
+    track_issues: bool = False
+    release_tag_filter: str | None = None
+    changelog_path: str | None = None
+    notes: str | None = None
+    # Tags used by the strategic-value scorer (FEATURE_PLAN.md §10.1.7).
+    # Optional project-side metadata that helps the keyword match decide
+    # whether a feature aligns with a ClawCodex roadmap item.
+    roadmap_keywords: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "WatchSource":
+        if not isinstance(data, dict):
+            raise ValueError("WatchSource.from_dict expects a dict")
+        name = data.get("name")
+        repo = data.get("repo")
+        if not isinstance(name, str) or not name:
+            raise ValueError("WatchSource requires a non-empty 'name'")
+        if not isinstance(repo, str) or "/" not in repo:
+            raise ValueError(
+                f"WatchSource[{name}] requires 'repo' in 'owner/name' form"
+            )
+        keywords = data.get("roadmap_keywords") or data.get("roadmapKeywords") or []
+        if not isinstance(keywords, list):
+            keywords = []
+        return cls(
+            name=name,
+            repo=repo,
+            track_releases=bool(data.get("track_releases", True)),
+            track_commits=bool(data.get("track_commits", False)),
+            track_prs=bool(data.get("track_prs", False)),
+            track_issues=bool(data.get("track_issues", False)),
+            release_tag_filter=data.get("release_tag_filter")
+            or data.get("releaseTagFilter"),
+            changelog_path=data.get("changelog_path") or data.get("changelogPath"),
+            notes=data.get("notes"),
+            roadmap_keywords=[str(k) for k in keywords],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "repo": self.repo,
+            "track_releases": self.track_releases,
+            "track_commits": self.track_commits,
+            "track_prs": self.track_prs,
+            "track_issues": self.track_issues,
+            "release_tag_filter": self.release_tag_filter,
+            "changelog_path": self.changelog_path,
+            "notes": self.notes,
+            "roadmap_keywords": list(self.roadmap_keywords),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Raw upstream objects (post-Fetcher)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Release:
+    tag: str
+    name: str
+    body: str
+    published_at: str | None  # ISO 8601
+    url: str
+    is_prerelease: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tag": self.tag,
+            "name": self.name,
+            "body": self.body,
+            "published_at": self.published_at,
+            "url": self.url,
+            "is_prerelease": self.is_prerelease,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Release":
+        return cls(
+            tag=str(data.get("tag", "")),
+            name=str(data.get("name", "")),
+            body=str(data.get("body", "") or ""),
+            published_at=data.get("published_at"),
+            url=str(data.get("url", "")),
+            is_prerelease=bool(data.get("is_prerelease", False)),
+        )
+
+
+@dataclass
+class Commit:
+    sha: str
+    message: str
+    author: str | None
+    committed_at: str | None
+    url: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sha": self.sha,
+            "message": self.message,
+            "author": self.author,
+            "committed_at": self.committed_at,
+            "url": self.url,
+        }
+
+
+@dataclass
+class PullRequest:
+    number: int
+    title: str
+    state: str
+    merged_at: str | None
+    url: str
+    body: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "number": self.number,
+            "title": self.title,
+            "state": self.state,
+            "merged_at": self.merged_at,
+            "url": self.url,
+            "body": self.body,
+        }
+
+
+@dataclass
+class FetchResult:
+    """Bundles everything a Fetcher produced for one WatchSource.
+
+    ``errors`` is a free-form list of ``str`` descriptions (network
+    failures, parse errors, rate-limit warnings). The pipeline never
+    raises out of a fetch — callers render errors into the digest so
+    users see why a source contributed 0 records.
+    """
+
+    source: str
+    releases: list[Release] = field(default_factory=list)
+    commits: list[Commit] = field(default_factory=list)
+    prs: list[PullRequest] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.releases or self.commits or self.prs)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline records
+# ---------------------------------------------------------------------------
+
+
+def make_feature_id(source: str, title: str, kind: str) -> str:
+    """Stable id for a FeatureRecord before dedup.
+
+    Uses the first 12 hex chars of SHA-1(source|title|kind). Long enough
+    to be unique across the ~10 default sources, short enough to remain
+    readable in log lines.
+    """
+    h = hashlib.sha1()
+    h.update(source.encode("utf-8"))
+    h.update(b"|")
+    h.update((title or "").lower().encode("utf-8"))
+    h.update(b"|")
+    h.update((kind or "").encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
+@dataclass
+class FeatureRecord:
+    """A single community-feature candidate produced by the pipeline.
+
+    Mirrors the dataclass in FEATURE_PLAN.md §10.1.6. Fields are kept
+    loose (``category`` defaults to UNKNOWN) so the rule-based
+    extractor can construct records before the classifier has had a
+    chance to label them.
+    """
+
+    id: str
+    source: str
+    title: str
+    description: str
+    category: FeatureCategory = FeatureCategory.UNKNOWN
+    feature_type: FeatureType = FeatureType.NEW
+    released_at: str | None = None
+    url: str = ""
+    related_projects: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    raw_body: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "source": self.source,
+            "title": self.title,
+            "description": self.description,
+            "category": self.category.value,
+            "feature_type": self.feature_type.value,
+            "released_at": self.released_at,
+            "url": self.url,
+            "related_projects": list(self.related_projects),
+            "tags": list(self.tags),
+            "raw_body": self.raw_body,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FeatureRecord":
+        try:
+            category = FeatureCategory(data.get("category") or "unknown")
+        except ValueError:
+            category = FeatureCategory.UNKNOWN
+        try:
+            ftype = FeatureType(data.get("feature_type") or "new")
+        except ValueError:
+            ftype = FeatureType.NEW
+        related = data.get("related_projects") or []
+        tags = data.get("tags") or []
+        return cls(
+            id=str(data.get("id") or make_feature_id(
+                data.get("source", ""), data.get("title", ""), str(data.get("feature_type", "new"))
+            )),
+            source=str(data.get("source", "")),
+            title=str(data.get("title", "")),
+            description=str(data.get("description", "") or ""),
+            category=category,
+            feature_type=ftype,
+            released_at=data.get("released_at"),
+            url=str(data.get("url", "") or ""),
+            related_projects=[str(p) for p in related],
+            tags=[str(t) for t in tags],
+            raw_body=data.get("raw_body"),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FeatureScore:
+    record_id: str
+    overall: float
+    popularity: float
+    maturity: float
+    adaptation_cost: float
+    strategic_value: float
+    architecture_fit: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "record_id": self.record_id,
+            "overall": self.overall,
+            "popularity": self.popularity,
+            "maturity": self.maturity,
+            "adaptation_cost": self.adaptation_cost,
+            "strategic_value": self.strategic_value,
+            "architecture_fit": self.architecture_fit,
+            "dimensions": {
+                "popularity": self.popularity,
+                "maturity": self.maturity,
+                "adaptation_cost": self.adaptation_cost,
+                "strategic_value": self.strategic_value,
+                "architecture_fit": self.architecture_fit,
+            },
+        }
+
+
+# ---------------------------------------------------------------------------
+# Reports
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DigestStats:
+    total_releases: int = 0
+    total_features: int = 0
+    by_category: dict[str, int] = field(default_factory=dict)
+    top_projects: list[tuple[str, int]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "total_releases": self.total_releases,
+            "total_features": self.total_features,
+            "by_category": dict(self.by_category),
+            "top_projects": [list(item) for item in self.top_projects],
+        }
+
+
+@dataclass
+class ScoredFeature:
+    """A feature bundled with its FeatureScore for easy rendering."""
+
+    record: FeatureRecord
+    score: FeatureScore
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "record": self.record.to_dict(),
+            "score": self.score.to_dict(),
+        }
+
+
+@dataclass
+class CommunityDigest:
+    period: str  # "weekly" | "monthly"
+    generated_at: str
+    summary: str
+    new_features: list[FeatureRecord] = field(default_factory=list)
+    trending: list[ScoredFeature] = field(default_factory=list)
+    breaking_changes: list[FeatureRecord] = field(default_factory=list)
+    stats: DigestStats = field(default_factory=DigestStats)
+    # When the run was manual (CLI), include raw sources so users can
+    # audit why a feature appeared.
+    sources_used: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "period": self.period,
+            "generated_at": self.generated_at,
+            "summary": self.summary,
+            "new_features": [r.to_dict() for r in self.new_features],
+            "trending": [s.to_dict() for s in self.trending],
+            "breaking_changes": [r.to_dict() for r in self.breaking_changes],
+            "stats": self.stats.to_dict(),
+            "sources_used": list(self.sources_used),
+            "errors": list(self.errors),
+        }
+
+
+def utc_now_iso() -> str:
+    """ISO 8601 UTC timestamp used for digest.generated_at."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
