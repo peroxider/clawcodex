@@ -237,6 +237,35 @@ def get_cron_task_status(
 # ---------------------------------------------------------------------------
 
 
+def ensure_cron_installed(
+    *, task_id: str = DEFAULT_CRON_TASK_ID, force: bool = False
+) -> CronTaskSummary:
+    """Install the Cron task if it is not already registered.
+
+    Phase 3 default: ``RadarConfig.enabled`` is ``True`` so the first
+    call to :func:`run_community_scan` registers the durable task. This
+    helper is idempotent: when the task already exists it returns a
+    ``CronTaskSummary(installed=True)`` without rewriting the file unless
+    ``force=True`` is passed.
+
+    When ``RadarConfig.enabled`` is False the helper is a no-op (returns
+    ``installed=False``) so users who explicitly disabled the radar do
+    not get a surprise schedule.
+    """
+    config = _load_config_safely()
+    if not config.enabled:
+        return CronTaskSummary(
+            task_id=task_id,
+            installed=False,
+            schedule=config.cron_schedule,
+            message="RadarConfig.enabled=False; not installing Cron task",
+        )
+    existing = get_cron_task_status(task_id=task_id)
+    if existing.installed and not force:
+        return existing
+    return install_cron_task(schedule=config.cron_schedule, task_id=task_id)
+
+
 def _load_config_safely() -> RadarConfig:
     """Load RadarConfig from disk without crashing on bad input."""
     path = default_config_path()
@@ -287,4 +316,5 @@ __all__ = [
     "uninstall_cron_task",
     "get_cron_task_status",
     "load_registry_safely",
+    "ensure_cron_installed",
 ]

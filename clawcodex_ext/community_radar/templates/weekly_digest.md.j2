@@ -1,0 +1,70 @@
+{# Weekly Community Digest — SR-5.1 — rendered via Jinja2 #}
+# {{ title }} ({{ period_label }})
+
+> 生成时间: {{ generated_at }}
+> 覆盖范围: {{ sources_count }} 个项目 · {{ total_releases }} 个 release · {{ total_features }} 条特性记录
+{%- if llm_assisted %}
+> LLM 辅助: 本期分类/摘要经模型精炼
+{%- endif %}
+
+## 摘要
+
+{{ summary }}
+
+{% if trending %}
+## 高评分候选特性
+
+| 特性 | 来源 | 评分 | 分类 | 简述 |
+|------|------|:----:|------|------|
+{% for item in trending %}
+| {{ item.title }} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} | {{ item.desc }} |
+{% endfor %}
+{% else %}
+## 高评分候选特性
+
+（无）
+{% endif %}
+
+{% if new_features %}
+## 新增候选特性
+
+{% for record in new_features %}
+- **{{ record.title }}** — {{ record.desc }}（{{ record.feature_type }}；{{ record.related }}）
+{% endfor %}
+{% else %}
+## 新增候选特性
+
+（无）
+{% endif %}
+
+{% if breaking_changes %}
+## 破坏性变更预警
+
+| 项目 | 特性 | 影响评估 |
+|------|------|---------|
+{% for record in breaking_changes %}
+| {{ record.source }} | {{ record.title }} | {{ record.impact }} |
+{% endfor %}
+{% else %}
+## 破坏性变更预警
+
+（无）
+{% endif %}
+
+## 分类分布
+
+{% if by_category %}
+{% for cat, count in by_category %}
+- {{ cat }}: {{ count }}
+{% endfor %}
+{% else %}
+（无）
+{% endif %}
+
+{% if errors %}
+## 抓取错误
+
+{% for err in errors %}
+- {{ err }}
+{% endfor %}
+{% endif %}

@@ -28,7 +28,7 @@ _log = logging.getLogger(__name__)
 
 
 # Default sources — keep in sync with FEATURE_PLAN.md §10.1.2.
-DEFAULT_SOURCES: list[dict[str, Any]] = [
+PHASE1_SOURCES: list[dict[str, Any]] = [
     {
         "name": "claude-code",
         "repo": "anthropics/claude-code",
@@ -81,6 +81,59 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "roadmap_keywords": ["graph", "state", "node", "edge", "workflow"],
     },
 ]
+
+
+PHASE2_SOURCES: list[dict[str, Any]] = [
+    {
+        "name": "cline",
+        "repo": "cline/cline",
+        "track_releases": True,
+        "notes": "VS Code 编码 Agent（Claude Dev 继任）",
+        "roadmap_keywords": ["vscode", "extension", "browser", "mcp"],
+    },
+    {
+        "name": "continue",
+        "repo": "continuedev/continue",
+        "track_releases": True,
+        "notes": "VS Code / JetBrains 编码助手",
+        "roadmap_keywords": ["vscode", "jetbrains", "autocomplete", "chat"],
+    },
+    {
+        "name": "codegate",
+        "repo": "stacklok/codegate",
+        "track_releases": True,
+        "notes": "AI 编码助手的安全/沙箱网关",
+        "roadmap_keywords": ["security", "sandbox", "policy", "guardrail"],
+    },
+    {
+        "name": "goose",
+        "repo": "block/goose",
+        "track_releases": True,
+        "notes": "Block 出品的本地 AI Agent",
+        "roadmap_keywords": ["desktop", "extension", "tool", "recipe"],
+    },
+    {
+        "name": "eliza",
+        "repo": "elizaOS/eliza",
+        "track_releases": True,
+        "notes": "多模态 Agent 运行时框架",
+        "roadmap_keywords": ["agent", "runtime", "character", "plugin"],
+    },
+    {
+        "name": "openclaw",
+        "repo": "openclaw/openclaw",
+        "track_releases": True,
+        "notes": "Node.js 编码 Agent 同类产品",
+        "roadmap_keywords": ["nodejs", "agent", "cli", "tool"],
+    },
+]
+
+
+# Phase 1 remains the default seed; Phase 2 sources can be layered on
+# top via the ``--include-phase2`` CLI flag or ``Registry.with_defaults(
+# include_phase2=True)``. ``DEFAULT_SOURCES`` keeps pointing at Phase 1
+# so existing installs and tests see no churn.
+DEFAULT_SOURCES: list[dict[str, Any]] = list(PHASE1_SOURCES)
 
 
 def _load_yaml_or_json(path: Path) -> Any:
@@ -222,15 +275,21 @@ class SourceRegistry:
         path: Path | str | None = None,
         *,
         extras: Iterable[WatchSource] | None = None,
+        include_phase2: bool = False,
     ) -> "SourceRegistry":
         """Build a registry pre-populated with the Phase-1 default sources.
 
         ``extras`` lets callers layer local sources on top without
         overriding the defaults. ``path`` is optional; passing it lets
-        the same registry be saved later without rewiring.
+        the same registry be saved later without rewiring. Pass
+        ``include_phase2=True`` to also seed the Phase-2 expansion
+        projects (Cline / Continue.dev / Goose / OpenClaw / etc.).
         """
         reg = cls(path if path is not None else Path("sources.yaml"))
-        for item in DEFAULT_SOURCES:
+        seed = list(PHASE1_SOURCES)
+        if include_phase2:
+            seed.extend(PHASE2_SOURCES)
+        for item in seed:
             try:
                 reg.add(WatchSource.from_dict(item))
             except ValueError as exc:

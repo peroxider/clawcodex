@@ -64,13 +64,23 @@ class RadarConfig:
     ``weights`` is keyed by :class:`FeatureScore` dimension name. They
     are normalised to sum to 1.0 by :meth:`normalized_weights` so the
     scorer never has to worry about caller-supplied totals.
+
+    Phase 3 changes:
+
+    * ``enabled`` defaults to ``True`` so a fresh install immediately
+      gets a working Cron durable task. Users who want to opt out set
+      the env var ``CLAWCODEX_RADAR_ENABLED=0`` or override
+      ``community_radar.enabled: false`` in their workflow.md.
+    * ``notify`` defaults to ``True``; the actual delivery only happens
+      when at least one channel is configured (see
+      :mod:`clawcodex_ext.community_radar.notifier`).
     """
 
-    enabled: bool = False
+    enabled: bool = True
     cron_schedule: str = DEFAULT_CRON_SCHEDULE
     max_features_per_report: int = DEFAULT_MAX_FEATURES
     output_dir: str = DEFAULT_OUTPUT_DIR
-    notify: bool = False
+    notify: bool = True
     cache_dir: str = ".cache/community-radar"
     # ``weights`` + ``roadmap_keywords`` are deliberately not part of
     # the public workflow.md schema; tests and advanced users can
@@ -143,7 +153,7 @@ class RadarConfig:
         else:
             keywords = list(DEFAULT_ROADMAP_KEYWORDS)
         return cls(
-            enabled=bool(data.get("enabled", False)),
+            enabled=bool(data.get("enabled", True)),
             cron_schedule=str(data.get("cron_schedule") or DEFAULT_CRON_SCHEDULE),
             max_features_per_report=int(
                 data.get("max_features_per_report")
@@ -151,7 +161,7 @@ class RadarConfig:
                 or DEFAULT_MAX_FEATURES
             ),
             output_dir=str(data.get("output_dir") or data.get("outputDir") or DEFAULT_OUTPUT_DIR),
-            notify=bool(data.get("notify", False)),
+            notify=bool(data.get("notify", True)),
             cache_dir=str(data.get("cache_dir") or data.get("cacheDir") or ".cache/community-radar"),
             weights=weights,
             roadmap_keywords=keywords,

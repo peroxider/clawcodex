@@ -22,6 +22,23 @@ from .config import (
     apply_env_overrides,
     default_config_path,
 )
+from .cron_integration import (
+    DEFAULT_CRON_PROMPT,
+    DEFAULT_CRON_TASK_ID,
+    CronTaskSummary,
+    ensure_cron_installed,
+    get_cron_task_status,
+    install_cron_task,
+    load_registry_safely,
+    uninstall_cron_task,
+)
+from .llm_classifier import (
+    LLMConfig,
+    build_classifier_hook,
+    build_extractor_hook,
+    build_summarizer_hook,
+    llm_generated_marker,
+)
 from .models import (
     CommunityDigest,
     DigestStats,
@@ -35,16 +52,25 @@ from .models import (
     ScoredFeature,
     WatchSource,
 )
+from .notifier import (
+    NOTIFY_CONFIG_RELATIVE_PATH,
+    DigestNotifier,
+    NotifyConfig,
+    build_digest_message,
+)
 from .pipeline import CommunityRadarPipeline, ScanResult, run_community_scan
-from .registry import DEFAULT_SOURCES, SourceRegistry, default_registry_path
-from .cron_integration import (
-    DEFAULT_CRON_PROMPT,
-    DEFAULT_CRON_TASK_ID,
-    CronTaskSummary,
-    install_cron_task,
-    uninstall_cron_task,
-    get_cron_task_status,
-    load_registry_safely,
+from .registry import (
+    DEFAULT_SOURCES,
+    PHASE1_SOURCES,
+    PHASE2_SOURCES,
+    SourceRegistry,
+    default_registry_path,
+)
+from .reporter import (
+    CommunityReporter,
+    DigestWriteResult,
+    copy_to_persistent,
+    render_proposals,
 )
 
 __all__ = [
@@ -73,14 +99,33 @@ __all__ = [
     "run_community_scan",
     # registry
     "DEFAULT_SOURCES",
+    "PHASE1_SOURCES",
+    "PHASE2_SOURCES",
     "SourceRegistry",
     "default_registry_path",
     # cron integration
     "DEFAULT_CRON_PROMPT",
     "DEFAULT_CRON_TASK_ID",
     "CronTaskSummary",
+    "ensure_cron_installed",
     "install_cron_task",
     "uninstall_cron_task",
     "get_cron_task_status",
     "load_registry_safely",
+    # LLM hooks (Phase 2)
+    "LLMConfig",
+    "build_classifier_hook",
+    "build_extractor_hook",
+    "build_summarizer_hook",
+    "llm_generated_marker",
+    # Notifier (Phase 4)
+    "NOTIFY_CONFIG_RELATIVE_PATH",
+    "DigestNotifier",
+    "NotifyConfig",
+    "build_digest_message",
+    # Reporter extras (Phase 4)
+    "CommunityReporter",
+    "DigestWriteResult",
+    "copy_to_persistent",
+    "render_proposals",
 ]

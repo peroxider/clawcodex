@@ -14,10 +14,11 @@ from clawcodex_ext.community_radar.config import (
 )
 
 
-def test_defaults_are_opt_in() -> None:
+def test_defaults_phase3_opt_out() -> None:
     cfg = RadarConfig()
-    assert cfg.enabled is False
-    assert cfg.notify is False
+    # Phase 3 change: defaults flipped so a fresh install is functional.
+    assert cfg.enabled is True
+    assert cfg.notify is True
     assert cfg.use_llm is False
     assert cfg.max_features_per_report == 20
 
@@ -51,6 +52,15 @@ def test_apply_env_overrides(tmp_path: Path, monkeypatch) -> None:
     assert cfg.notify is True
     assert cfg.output_dir == str(tmp_path / "out")
     assert cfg.weights["popularity"] == 0.30
+
+
+def test_apply_env_overrides_can_opt_out(monkeypatch) -> None:
+    """Phase 3: default is enabled; env var must be able to disable it."""
+    monkeypatch.setenv("CLAWCODEX_RADAR_ENABLED", "0")
+    monkeypatch.setenv("CLAWCODEX_RADAR_NOTIFY", "false")
+    cfg = apply_env_overrides(RadarConfig())
+    assert cfg.enabled is False
+    assert cfg.notify is False
 
 
 def test_from_dict_unknown_keys_ignored() -> None:

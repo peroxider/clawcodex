@@ -18,7 +18,7 @@ from clawcodex_ext.community_radar.models import (
 )
 from clawcodex_ext.community_radar.reporter import (
     CommunityReporter,
-    _render_markdown,
+    _render_inline_markdown,
 )
 
 
@@ -60,7 +60,7 @@ def test_render_markdown_includes_table() -> None:
         stats=DigestStats(total_releases=1, total_features=1, by_category={"tool_system": 1}),
         sources_used=["aider"],
     )
-    md = _render_markdown(digest)
+    md = _render_inline_markdown(digest)
     assert "# ClawCodex 社区动态报告" in md
     assert "| Sample" in md
     assert "tool_system" in md
@@ -103,7 +103,7 @@ def test_reporter_handles_empty_input(tmp_path: Path) -> None:
         releases_total=0,
     )
     assert digest.stats.total_features == 0
-    md = _render_markdown(digest)
+    md = _render_inline_markdown(digest)
     assert "（无）" in md
 
 
@@ -131,6 +131,6 @@ def test_breaking_changes_surface_in_digest(tmp_path: Path) -> None:
         stats=DigestStats(total_releases=1, total_features=1),
         sources_used=["langgraph"],
     )
-    md = _render_markdown(digest)
+    md = _render_inline_markdown(digest)
     assert "## 破坏性变更预警" in md
     assert "StateGraph refactor" in md

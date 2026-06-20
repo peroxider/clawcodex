@@ -7,6 +7,8 @@ from pathlib import Path
 
 from clawcodex_ext.community_radar.registry import (
     DEFAULT_SOURCES,
+    PHASE1_SOURCES,
+    PHASE2_SOURCES,
     SourceRegistry,
     default_registry_path,
 )
@@ -64,3 +66,42 @@ def test_default_sources_shape() -> None:
     # Defensive: every default entry must parse cleanly.
     for item in DEFAULT_SOURCES:
         WatchSource.from_dict(item)
+
+
+def test_phase1_sources_shape() -> None:
+    for item in PHASE1_SOURCES:
+        WatchSource.from_dict(item)
+    # Exactly 7 Phase-1 sources per FEATURE_PLAN §10.1.2.
+    assert len(PHASE1_SOURCES) == 7
+
+
+def test_phase2_sources_shape() -> None:
+    names = set()
+    for item in PHASE2_SOURCES:
+        WatchSource.from_dict(item)
+        names.add(item["name"])
+    # Phase 2 should cover the named projects in FEATURE_PLAN §10.1.2.
+    for required in ("cline", "continue", "goose", "openclaw"):
+        assert required in names, f"missing Phase 2 source: {required}"
+
+
+def test_with_defaults_include_phase2() -> None:
+    reg = SourceRegistry.with_defaults(include_phase2=True)
+    names = {s.name for s in reg.list()}
+    # Phase 1 names still present.
+    assert "claude-code" in names
+    assert "langgraph" in names
+    # Phase 2 names added.
+    assert "cline" in names
+    assert "continue" in names
+    assert "goose" in names
+
+
+def test_with_defaults_phase2_off_by_default() -> None:
+    reg = SourceRegistry.with_defaults()
+    names = {s.name for s in reg.list()}
+    # Backward-compat: the default constructor still yields Phase 1 only.
+    assert "cline" not in names
+    assert "goose" not in names
+    # And matches DEFAULT_SOURCES exactly.
+    assert len(reg) == len(DEFAULT_SOURCES)

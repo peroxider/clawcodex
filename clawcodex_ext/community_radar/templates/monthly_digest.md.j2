@@ -1,0 +1,54 @@
+{# Monthly Community Digest — SR-5.1 — rendered via Jinja2 #}
+# {{ title }} ({{ period_label }})
+
+> 报告周期: {{ generated_at }}
+> 项目覆盖: {{ sources_count }} · Release 数: {{ total_releases }} · 候选特性: {{ total_features }}
+{%- if llm_assisted %}
+> LLM 辅助: 分类与摘要经模型精炼
+{%- endif %}
+
+## 月度摘要
+
+{{ summary }}
+
+{% if trending %}
+## 月度 Top-10 高分候选
+
+| # | 特性 | 来源 | 评分 | 分类 |
+|---|------|------|:---:|------|
+{% for item in trending[:10] %}
+| {{ loop.index }} | {{ item.title }} | {{ item.sources }} | {{ "%.1f"|format(item.score) }} | {{ item.category }} |
+{% endfor %}
+{% endif %}
+
+## 趋势分类
+
+{% for cat, count in by_category %}
+- **{{ cat }}**: {{ count }} 条
+{% endfor %}
+
+## 重点关注项目
+
+{% for project, count in top_projects %}
+- {{ project }}: {{ count }} 条候选
+{% endfor %}
+
+{% if breaking_changes %}
+## 月度破坏性变更汇总
+
+{% for record in breaking_changes %}
+- **{{ record.source }}** · {{ record.title }} — {{ record.impact }}
+{% endfor %}
+{% else %}
+## 月度破坏性变更汇总
+
+（本月暂无）
+{% endif %}
+
+{% if errors %}
+## 抓取告警
+
+{% for err in errors %}
+- {{ err }}
+{% endfor %}
+{% endif %}

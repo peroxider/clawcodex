@@ -25,6 +25,7 @@ from typing import Iterable
 
 from .classifier import FeatureClassifier
 from .config import RadarConfig
+from .cron_integration import ensure_cron_installed
 from .deduplicator import FeatureDeduplicator
 from .extractor import FeatureExtractor
 from .fetcher import Fetcher
@@ -34,6 +35,7 @@ from .models import (
     ScoredFeature,
     WatchSource,
 )
+from .notifier import DigestNotifier
 from .registry import SourceRegistry
 from .reporter import CommunityReporter, DigestWriteResult, copy_to_persistent
 from .scorer import FeatureScorer
@@ -46,6 +48,8 @@ class ScanResult:
     digest: CommunityDigest
     write_result: DigestWriteResult | None
     records: list[FeatureRecord]
+    notifications: dict[str, bool] | None = None
+    cron_status: dict[str, Any] | None = None
 
 
 class CommunityRadarPipeline:
@@ -62,6 +66,8 @@ class CommunityRadarPipeline:
         deduplicator: FeatureDeduplicator | None = None,
         scorer: FeatureScorer | None = None,
         reporter: CommunityReporter | None = None,
+        notifier: DigestNotifier | None = None,
+        ensure_cron: bool = True,
     ) -> None:
         self.config = config or RadarConfig()
         self.registry = registry
@@ -72,6 +78,8 @@ class CommunityRadarPipeline:
         self.deduplicator = deduplicator or FeatureDeduplicator()
         self.scorer = scorer or FeatureScorer(self.config)
         self.reporter = reporter or CommunityReporter(self.config)
+        self.notifier = notifier or DigestNotifier(self.config)
+        self._ensure_cron = ensure_cron
         self._owns_fetcher = fetcher is None
         self.fetcher = fetcher
 
@@ -87,16 +95,41 @@ class CommunityRadarPipeline:
         write: bool = True,
         output_dir: Path | str | None = None,
         persistent_copy: bool = True,
+        notify: bool | None = None,
+        auto_install_cron: bool | None = None,
     ) -> ScanResult:
         """Run the full pipeline and (optionally) persist a digest.
 
         ``sources`` overrides the registry when supplied; callers that
         already pre-loaded their own list of :class:`WatchSource`
         records can skip the registry entirely.
+
+        ``notify`` and ``auto_install_cron`` override the corresponding
+        ``RadarConfig`` flags for this call only. ``None`` means
+        "inherit from config".
         """
         sources = list(sources) if sources is not None else self._load_sources()
         if not sources:
             _log.warning("community radar scan: no sources configured")
+
+        cron_status: dict[str, Any] | None = None
+        if auto_install_cron is None:
+            auto_install_cron = self._ensure_cron
+        if auto_install_cron:
+            try:
+                summary = ensure_cron_installed()
+                cron_status = {
+                    "task_id": summary.task_id,
+                    "installed": summary.installed,
+                    "schedule": summary.schedule,
+                    "message": summary.message,
+                }
+            except Exception as exc:  # noqa: BLE001
+                _log.warning("ensure_cron_installed failed: %s", exc)
+                cron_status = {"error": str(exc)}
+
+        notify_flag = self.config.notify if notify is None else bool(notify)
+        notifications: dict[str, bool] | None = None
 
         try:
             fetch_results = self._fetch_all(sources)
@@ -128,13 +161,30 @@ class CommunityRadarPipeline:
                 if persistent_copy:
                     copy_to_persistent(write_result.markdown_path)
                     copy_to_persistent(write_result.json_path)
+                    if write_result.proposals_path is not None:
+                        copy_to_persistent(write_result.proposals_path)
+
+            if notify_flag and write_result is not None:
+                try:
+                    notifications = self.notifier.broadcast(
+                        digest, write_result
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _log.warning("notification broadcast failed: %s", exc)
+                    notifications = {"error": str(exc)}  # type: ignore[assignment]
         finally:
             # Always close an owned fetcher so HTTP clients don't leak
             # even when the pipeline short-circuits on empty input.
             if self._owns_fetcher and self.fetcher is not None:
                 self.fetcher.close()
 
-        return ScanResult(digest=digest, write_result=write_result, records=records)
+        return ScanResult(
+            digest=digest,
+            write_result=write_result,
+            records=records,
+            notifications=notifications,
+            cron_status=cron_status,
+        )
 
     # ------------------------------------------------------------------
     # Internals
