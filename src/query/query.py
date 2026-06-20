@@ -71,6 +71,12 @@ class QueryParams:
     user_context: dict[str, str] | None = None
     system_context: dict[str, str] | None = None
     pipeline_config: PipelineConfig | None = None
+    # P84-F: when set, the compression pipeline uses this engine for
+    # layer 4 (context collapse) instead of the legacy read-only
+    # ``ContextCollapseStore.project_view`` path. The engine owns its
+    # own store and records new commits when the trigger fires. Typed
+    # as ``Any`` to avoid an import cycle with the engine module.
+    collapse_engine: Any | None = None
     # Ch5/F-followup: live streaming text callback. When set, the
     # provider's chat_stream_response receives this callback so each
     # SSE text-delta drives the UI in real time. Critical for the
@@ -945,7 +951,26 @@ def _dispatch_single_tool(
             input=block.input,
             tool_use_id=block.id,
         )
+        _t0 = time.monotonic()
         result = tool_registry.dispatch(call, tool_use_context)
+        _dur_ms = (time.monotonic() - _t0) * 1000
+
+        # F-75: 工具/Skill 调用统计（静默记录，不阻断热路径）
+        try:
+            from clawcodex_ext.tool_stats import record_tool, record_skill
+
+            _ok = not getattr(result, "is_error", False)
+            _err = None
+            if not _ok:
+                _err = str(getattr(result, "output", {}).get("error", "")) or None
+
+            if block.name == "Skill":
+                _skill_name = block.input.get("skill", "") or "unknown"
+                record_skill(_skill_name, dur_ms=_dur_ms, ok=_ok, error=_err)
+            else:
+                record_tool(block.name, dur_ms=_dur_ms, ok=_ok, error=_err)
+        except Exception:
+            pass
 
         # Post-tool override: bash's interrupted payload reads as a
         # generic failure; replace it so the resume turn sees an
@@ -1631,6 +1656,81 @@ async def query(
                     Terminal(reason="image_error" if is_withheld_media else "prompt_too_long"),
                 )
                 return
+
+            # P84-F: when a ``CollapseEngine`` is configured, prefer
+            # ``engine.recover_from_413`` over the LLM-driven
+            # ``reactive_compact`` path. The engine records a context
+            # collapse commit and projects the messages; the retry
+            # therefore has fewer tokens to send. This is cheaper than
+            # the LLM summary that ``reactive_compact`` produces and
+            # preserves the audit log via the engine's store. If the
+            # engine path doesn't apply (no engine, not a PTL error,
+            # or recovery returned ``applied=False``), we fall through
+            # to the existing reactive_compact block below.
+            if (
+                is_withheld_ptl
+                and not has_attempted_reactive_compact
+                and params.collapse_engine is not None
+            ):
+                from ..services.api.errors import PromptTooLongError
+
+                # The message must contain "too long" so the engine's
+                # default_error_predicate (Emergency413Trigger) classifies
+                # the synthetic error as a 413-class emergency and
+                # triggers the FULL collapse decision. Without this the
+                # predicate returns NOOP and ``recover_from_413`` raises
+                # ``ContextLengthExceededError("still over budget")``,
+                # defeating the recovery.
+                synthetic_err = PromptTooLongError(
+                    "synthetic 413: prompt is too long, recovering via CollapseEngine"
+                )
+                try:
+                    recovery = params.collapse_engine.recover_from_413(
+                        messages=messages, error=synthetic_err
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "CollapseEngine.recover_from_413 raised %r; "
+                        "falling back to reactive_compact",
+                        exc,
+                    )
+                    recovery = None
+                if recovery is not None and getattr(recovery, "applied", False):
+                    # Re-project the original message list through the
+                    # engine's store. The store now has the new commit
+                    # so the archived messages are replaced by the
+                    # synthetic [Collapsed context] user-message and
+                    # the kept messages pass through.
+                    projected = params.collapse_engine.store.project_view(list(messages))
+                    for msg in projected:
+                        yield msg
+                    # Mirror the reactive_compact success path: reset
+                    # the autocompact circuit-breaker so the next
+                    # iteration's B.5 guard does not trip on a stale
+                    # ``consecutive_failures`` count.
+                    if (
+                        params.pipeline_config is not None
+                        and params.pipeline_config.autocompact_tracking is not None
+                    ):
+                        params.pipeline_config.autocompact_tracking.consecutive_failures = 0
+                    state = QueryState(
+                        messages=projected,
+                        tool_use_context=tool_use_context,
+                        auto_compact_tracking=(
+                            params.pipeline_config.autocompact_tracking
+                            if params.pipeline_config is not None
+                            else None
+                        ),
+                        max_output_tokens_recovery_count=max_output_tokens_recovery_count,
+                        has_attempted_reactive_compact=True,  # one-shot
+                        max_output_tokens_override=None,
+                        stop_hook_active=state.stop_hook_active,
+                        turn_count=turn_count,
+                        pending_tool_use_summary=state.pending_tool_use_summary,
+                        continuation_nudge_count=state.continuation_nudge_count,
+                        transition=Transition(reason="collapse_engine_retry"),
+                    )
+                    continue
 
             if (
                 (is_withheld_ptl or is_withheld_media)

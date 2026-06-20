@@ -624,12 +624,25 @@ def create_app(
         app.state.viz._save_share_links()
         return {"status": "deleted"}
 
+    # --- F-75: Tool/Skill Stats API ---
+
+    @app.get("/api/viz/stats", tags=["stats"])
+    async def get_tool_stats(kind: str | None = None, agent_id: str | None = None, limit: int = 0):
+        """Tool/Skill call statistics (F-75). Aggregates from tool_stats.jsonl."""
+        parser = StatsFileParser()
+        if limit > 0:
+            data = {"rows": parser.get_recent(limit=limit, kind=kind, agent_id=agent_id)}
+        else:
+            data = parser.get_summary(kind=kind, agent_id=agent_id)
+        return data
+
     # --- F-96: Orchestrator Real-time Dashboard API -----------------------
 
     @app.get("/api/viz/orchestrator/runs", tags=["orchestrator"])
     async def list_orchestrator_runs():
         """List all orchestrator runs with state journals (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
+from .parsers.stats_parser import StatsFileParser
 
         parser = OrchestratorStateParser(
             reports_dir=app.state.viz.reports_dir,
@@ -696,6 +709,13 @@ def create_app(
             reports_dir=app.state.viz.reports_dir,
         )
         return parser.get_issue_timeline(run_id, issue_id)
+
+    @app.get("/viz/stats", response_class=HTMLResponse, tags=["frontend"])
+    async def stats_dashboard(request: Request):
+        """F-75: Tool/Skill stats dashboard page."""
+        parser = StatsFileParser()
+        summary = parser.get_summary()
+        return templates.TemplateResponse("stats_panel.html", {"request": request, "summary": summary})
 
     @app.get("/viz/orchestrator", response_class=HTMLResponse, tags=["frontend"])
     async def orchestrator_dashboard(request: Request):

@@ -6,6 +6,9 @@ package-load time, only safe (non-circular) imports are listed here.
 Use direct submodule imports for the others, e.g.::
 
     from .orchestrator_state_parser import OrchestratorStateParser
+
+# F-75: stats file parser (no circular deps)
+from .stats_parser import StatsFileParser
     from .transcript_parser import TranscriptParser
     from .tool_events_parser import ToolEventsParser
 """
@@ -21,4 +24,5 @@ __all__ = [
     "SessionMetadataParser",
     "MultiAgentParser",
     "OrchestratorStateParser",
+    "StatsFileParser",
 ]
