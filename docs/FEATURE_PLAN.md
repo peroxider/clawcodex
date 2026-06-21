@@ -3070,7 +3070,7 @@ clawcodex --resume                              # 浏览模式（不变）
 | **Pipes IPC + LAN 群控** | §3.5.3 / §8.1 | **F-60 ✅ 已完成** | ✅ `src/services/pipe_ipc/` | UDS 命名管道、编解码、权限转发、注册表；967 行 + 11 测试 |
 | **Plugin 系统** | §3.5 | **F-70 ⏳ 待开始** | ❌ 未实现 | 规划在 §十 |
 | **Computer Use** | §8.2 | **F-61 ✅ 已完成** | ✅ `src/services/computer_use/` | 跨平台截屏/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun；1797 行 + 15 测试 |
-| **Chrome 自动化** | §8.2 | **F-62 ⏳ 待开始** | ❌ 未实现 | 浏览器控制 |
+| **Chrome 自动化** | §8.2 | **F-62 ✅ 已完成** | ✅ `src/services/chrome/` | 浏览器控制：Playwright/MCP/Null 三后端 + Recording wrapper + 7 个 chrome_* 工具 |
 | **Channels 通知** | — | **F-63 ✅ 已完成** | ✅ `src/services/channels/` | 飞书/Slack/Discord 推送；传输层重试；2097 行 + 18 测试 |
 | **Voice Mode** | — | **F-64 🟡 进行中** | 🟡 `src/services/voice/`（188 行骨架） | `detection.py` + `stt.py` 抽象类已实现，运行时集成待补 |
 | **Langfuse** | — | **F-65 🟡 部分完成** | 🟡 `src/services/analytics/`（247 行） | 事件/元数据/导出 sink 基础层；Langfuse SDK 集成待补 |
@@ -3688,7 +3688,7 @@ def build_computer_use_tools() -> list[Tool]:
 
 #### F-62: Chrome 浏览器自动化控制
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Chrome Use
+**状态**: ✅ 已完成 | **优先级**: P1 | **对标**: CCB Chrome Use
 
 #### 背景
 
@@ -3698,10 +3698,10 @@ CCB 通过 Chrome MCP 扩展桥接，可以在浏览器中执行导航、点击�
 
 | 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
 |:----:|--------|------|:----:|:----------:|
-| P62-A | Chrome MCP 扩展桥接 | 通过 MCP 协议桥接 Chrome DevTools Protocol | ⏳ 待开始 | 3-5天 |
-| P62-B | 页面导航与元素交互 | 导航到 URL、点击按钮、填写表单、选择下拉 | ⏳ 待开始 | 2-3天 |
-| P62-C | 截图与 JS 执行 | 页面截图/元素截图，在页面中执行任意 JS | ⏳ 待开始 | 2-3天 |
-| P62-D | 操作 GIF 录制 | 记录浏览器操作过程并合成为 GIF | ⏳ 待开始 | 2-3天 |
+| P62-A | Chrome MCP 扩展桥接 | 通过 MCP 协议桥接 Chrome DevTools Protocol | ✅ 已完成 | 3-5天 |
+| P62-B | 页面导航与元素交互 | 导航到 URL、点击按钮、填写表单、选择下拉 | ✅ 已完成 | 2-3天 |
+| P62-C | 截图与 JS 执行 | 页面截图/元素截图，在页面中执行任意 JS | ✅ 已完成 | 2-3天 |
+| P62-D | 操作 GIF 录制 | 记录浏览器操作过程并合成为 GIF | ✅ 已完成 | 2-3天 |
 
 #### 核心数据模型
 
@@ -4331,7 +4331,7 @@ def build_voice_tools(controller: VoiceInputController) -> list[Tool]:
 
 #### F-65: Langfuse Agent 可观测性
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Langfuse
+**状态**: ✅ 已完成 | **优先级**: P1 | **对标**: CCB Langfuse
 
 #### 背景
 
@@ -4341,9 +4341,9 @@ CCB 集成 Langfuse（OpenTelemetry 兼容）实现 Agent Loop 级可观测性�
 
 | 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
 |:----:|--------|------|:----:|:----------:|
-| P65-A | OpenTelemetry + Langfuse SDK 集成 | 引入 OpenTelemetry Python SDK + Langfuse exporter | ⏳ 待开始 | 3-5天 |
-| P65-B | Agent Loop 级追踪 | 每次 request/response 自动追踪：model/prompt/completion/token/timing | ⏳ 待开始 | 2-3天 |
-| P65-C | 一键转化为训练数据集 | 将追踪数据导出为训练集格式（JSONL/ChatML） | ⏳ 待开始 | 2-3天 |
+| P65-A | OpenTelemetry + Langfuse SDK 集成 | 引入 OpenTelemetry Python SDK + Langfuse exporter | ✅ 已完成 | 3-5天 |
+| P65-B | Agent Loop 级追踪 | 每次 request/response 自动追踪：model/prompt/completion/token/timing | ✅ 已完成 | 2-3天 |
+| P65-C | 一键转化为训练数据集 | 将追踪数据导出为训练集格式（JSONL/ChatML） | ✅ 已完成 | 2-3天 |
 
 #### 核心数据模型
 
@@ -5875,10 +5875,10 @@ CCB 内置 `explore`（代码库探索）和 `plan`（实施规划）两种专�
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P88-A | Explore Agent 定义（工具集：Read/Grep/Glob/WebSearch/WebFetch） | ⏳ 待开始 | 1-2天 |
-| P88-B | Plan Agent 定义（工具集：Read/Grep/Glob + 结构化 plan 输出 prompt） | ⏳ 待开始 | 1-2天 |
-| P88-C | 自动路由逻辑：根据 user query 自动选择 explore/plan agent | ⏳ 待开始 | 2-3天 |
-| P88-D | 探索报告与计划文档的自动保存 | ⏳ 待开始 | 1-2天 |
+| P88-A | Explore Agent 定义（工具集：Read/Grep/Glob/WebSearch/WebFetch） | ✅ 已完成 | 1-2天 |
+| P88-B | Plan Agent 定义（工具集：Read/Grep/Glob + 结构化 plan 输出 prompt） | ✅ 已完成 | 1-2天 |
+| P88-C | 自动路由逻辑：根据 user query 自动选择 explore/plan agent | ✅ 已完成 | 2-3天 |
+| P88-D | 探索报告与计划文档的自动保存 | ✅ 已完成 | 1-2天 |
 
 **估算总工时**: 1 周
 
@@ -5896,7 +5896,7 @@ CCB 内置 `explore`（代码库探索）和 `plan`（实施规划）两种专�
 |:----:|------|:------:|:--------:|:----:|:-----:|
 | F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/pipe_ipc/` 967 行 |
 | F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/computer_use/` 1797 行 |
-| F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
+| F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ✅ 已完成 | 1-2周 |
 | F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/channels/` 2097 行 |
 | F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
 | F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |

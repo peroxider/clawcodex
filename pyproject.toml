@@ -109,6 +109,17 @@ dev = [
     "mypy>=1.13.0",
     "import-linter>=2.0",
 ]
+# F-62 Chrome browser automation. ``playwright`` drives a real
+# headless Chromium; ``pillow`` composites screenshot frames into
+# the operation GIF. ``mcp`` is the upstream SDK for the
+# Chrome DevTools MCP server backend. Without this extra, the
+# chrome tools still register — they degrade to a
+# NullChromeController that returns an install-hint error on
+# every call.
+chrome = [
+    "playwright>=1.40",
+    "Pillow>=10.0",
+]
 # ``all`` is the catch-all extra consumed by ``install.sh`` (one-click
 # installer). NOTE: an earlier draft used a self-reference
 # (``all = ["clawcodex-dev-mind[dev]"]``) which deadlocks editable

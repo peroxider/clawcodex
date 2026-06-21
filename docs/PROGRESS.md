@@ -11,7 +11,7 @@
 >   - F-11 sessionStorage 容量限制：从 ⏳ 待开始 → ✅ 已完成（`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000`）。
 >   - F-37 PR 检视意见自动修复：从 🔄 进行中 → ✅ 已完成（`extensions/orchestrator/review_feedback.py` + GitSync follow-up 全链路）。
 >   - F-64 Voice Mode：确认 🟡 进行中（接口层已完成）（`src/services/voice/` 检测 + STT 抽象类 188 行）。
->   - F-65 Langfuse/Analytics：从 ⏳ 待开始 → 🟡 部分完成（`src/services/analytics/` 事件/元数据/导出 sink 247 行）。
+>   - F-65 Langfuse/Analytics：从 ⏳ 待开始 → ✅ 已完成（`src/services/analytics/` 事件/元数据/导出 sink + `src/services/langfuse/` 客户端/Sink/Exporter 全链路；49 测试通过）。
 >   - F-70 Plugin 系统：从 ⏳ 待开始 → 🟡 部分完成（`src/plugins/` 8 文件 1070 行：注册表/加载器/校验/市场/LSP/MCP 基础框架）。
 >   - F-78 Issue 语义澄清：从 ⏳ 待开始 → ✅ 已完成（`extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行三通道完整实现）。
 >   - F-80 Agent 间自主观察与消息交互：从 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/tool_system/tools/task_inspect.py` + `task_directives.py` 642 行，已注册 EXTENSION_TOOLS）。
@@ -134,10 +134,10 @@
 | F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
 | F-60 | Pipe IPC + LAN 群控系统 | P0 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行：UDS 命名管道、权限转发、注册表、编解码；11 测试文件。详见 §十一。 |
 | F-61 | Computer Use 屏幕操控 | P0 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行：跨平台截图/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun 模式；平台抽象工厂；15 测试文件。详见 §十一。 |
-| F-62 | Chrome 浏览器自动化控制 | P1 | ⏳ 待开始 | 对标 CCB Chrome Use。Chrome MCP 扩展桥接，支持页面导航、点击、填表、截图、执行 JS。预计 1-2 周。 |
+| F-62 | Chrome 浏览器自动化控制 | P1 | ✅ 已完成 | 对标 CCB Chrome Use。`src/services/chrome/` 8 模块 ~1700 行：ChromeController ABC + PlaywrightChromeController（主） + MCPChromeController（CHROME_MCP_URL） + NullChromeController（降级） + RecordingChromeController（Pillow GIF） + build_chrome_tools() 7 个 chrome_* 工具已注册到 EXTENSION_TOOLS。P62-A/B/C/D 全部完成。详见 §十一。 |
 | F-63 | Channels 频道通知系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/channels/` 2097 行：飞书/Lark、Slack、Discord 推送、传输层重试、空通道降级；18 测试文件。详见 §十一。 |
 | F-64 | Voice Mode 语音输入 | P2 | 🟡 进行中（接口层已完成） | `src/services/voice/` 含 `detection.py`（VoiceActivityDetector）和 `stt.py`（STTProvider 抽象类），但运行时集成与端到端实现待补齐。ASR 语音识别、Push-to-Talk 语音交互、音频流 WebSocket 传输待后续。 |
-| F-65 | Langfuse Agent 可观测性 | P1 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 含 `events.py`/`metadata.py`/`sink.py`（247 行）；OpenTelemetry + Langfuse SDK 集成待补。 |
+| F-65 | Langfuse Agent 可观测性 | P1 | ✅ 已完成（2026-06-21） | `src/services/analytics/`（247 行）+ `src/services/langfuse/`：客户端/Sink/Exporter 全链路；可选 SDK 依赖 + 优雅降级；49 测试通过。 |
 | F-66 | ACP 协议支持 | P2 | ⏳ 待开始 | 对标 CCB ACP（Agent Client Protocol）。Zed/Cursor 等 IDE 集成协议支持，会话恢复与 Skills 桥接。预计 1-2 周。 |
 | F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | `src/buddy/` 共 8 个文件完整实现：`companion.py`(5693)、`observer.py`(3447)、`soul.py`(1875)、`sprites.py`(13463)、`types.py`(5278)、`prompt.py`(3320)、`notification.py`(1957)、`feature.py`(341)；支持后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。已列为 Phase 5 解耦对象。 |
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
@@ -158,7 +158,7 @@
 | F-85 | Templates 模板系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行：模板模型/注册表/解析器/持久化；11 测试文件。详见 §十一。 |
 | F-86 | Kairos/Brief 调度 + Periodic 任务引擎 | P2 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `src/services/periodic/` 2022 行：Tick 调度/简报模式/每日日志/周期性任务注册；13 测试文件。详见 §十一。 |
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-88 | Explore/Plan Agent | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
+| F-88 | Explore/Plan Agent | P2 | ✅ 已完成（2026-06-21） | P88-A/B 定义 Explore / Plan 内置 agent；P88-C `src/agent/routing.py` 短语表自动路由（20 关键词 × 2 类别，Plan 优先 tie-break）；P88-D `src/agent/report_store.py` 双格式（MD+JSON）原子写盘，~330 LOC。Agent 工具集成 3 钩子：显式 type 之前的分类填充 + sync/async 完成时 best-effort 持久化。17 个新单测覆盖纯函数 + 端到端 dispatch。详见 §七。 |
 | F-89 | @agent-name 多入口统一支持 | P1 | ✅ 已完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI/Headless/API 四入口 `@agent-name` 引用统一自动解析。 |
 | F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 5 模型 / 4 解析器 / 7 构建器 |
 | F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 15 REST 端点 + WebSocket live tail |
@@ -1383,7 +1383,7 @@ CronTask due
 
 ### F-65: Langfuse Agent 可观测性
 
-**状态**: 🟡 部分完成（基础分析层） | **优先级**: P1 | **对标**: CCB Langfuse
+**状态**: ✅ 已完成（2026-06-21） | **优先级**: P1 | **对标**: CCB Langfuse
 
 `src/services/analytics/` 已实现基础分析层（共 247 行）：
 
@@ -1532,14 +1532,24 @@ CronTask due
 
 ### F-88: Explore / Plan 内置 Agent
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB BUILTIN_EXPLORE_PLAN_AGENTS — 内置探索与规划 Agent
+**状态**: ✅ 已完成（2026-06-21） | **优先级**: P2 | **对标**: CCB BUILTIN_EXPLORE_PLAN_AGENTS — 内置探索与规划 Agent
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P88-A | Explore Agent 定义 | ⏳ 待开始 | 1-2天 |
-| P88-B | Plan Agent 定义 | ⏳ 待开始 | 1-2天 |
-| P88-C | 自动路由逻辑 | ⏳ 待开始 | 2-3天 |
-| P88-D | 探索报告与计划自动保存 | ⏳ 待开始 | 1-2天 |
+| P88-A | Explore Agent 定义 | ✅ 已完成 | 1-2天 |
+| P88-B | Plan Agent 定义 | ✅ 已完成 | 1-2天 |
+| P88-C | 自动路由逻辑 | ✅ 已完成 | 2-3天 |
+| P88-D | 探索报告与计划自动保存 | ✅ 已完成 | 1-2天 |
+
+**实现说明**：
+- P88-A/B：`src/agent/agent_definitions.py:159,228` 定义 `EXPLORE_AGENT` / `PLAN_AGENT`，通过 `get_built_in_agents()` 注册。
+- P88-C：新建 `src/agent/routing.py`（~110 LOC），纯函数分类器 `classify_prompt_to_subagent_type()` 基于 20 关键词 × 2 类别短语表，case-insensitive 匹配，Plan 在平局时获胜，受 `available` 集合约束。`src/tool_system/tools/agent.py` 在显式 type 检查之前插入路由钩子；显式 `subagent_type` 仍优先。
+- P88-D：新建 `src/agent/report_store.py`（~220 LOC），`ReportStore` 类用 `tempfile.mkstemp + os.replace` 原子写双格式文件（`<id>.md` + `<id>.json`），路径约定 `~/.clawcodex/reports/{explore,plan}/<session_id>/<agent_id>.{md,json}`（CLAWCODEX_HOME 可覆盖）。`parse_critical_files()` 从 markdown 末尾 `### Critical Files` 段解析。Agent 工具 sync (`_run_sync_agent`) 与 async (`_launch_async_agent._background_lifecycle`) 路径各加 best-effort 钩子；只在 `agent_type in ONE_SHOT_BUILTIN_AGENT_TYPES` 时触发，失败不抛。
+
+**测试覆盖**：
+- `tests/agent/test_routing.py`（~21 测试）：纯函数分类器短语匹配、tie-break、可达性约束、参数化扫描。
+- `tests/agent/test_report_store.py`（~17 测试）：原子写、session-scoped 路径、critical-files 解析、线程安全、frozen dataclass。
+- `tests/agent/test_f88_integration.py`（7 测试）：端到端通过 Agent 工具 dispatch：auto-routing 选择 Explore/Plan/general-purpose、显式 type 优先、Explore/Plan 报告落盘、general-purpose 不写报告。
 
 **估算总工时**: 1 周
 
@@ -1549,10 +1559,10 @@ CronTask due
 |:----:|------|:------:|:--------:|:----:|:-----:|
 | F-60 | Pipe IPC + LAN 群控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/pipe_ipc/` 967 行 |
 | F-61 | Computer Use 屏幕操控 | P0 | 🔴 严重缺口 | ✅ 已完成 | `src/services/computer_use/` 1797 行 |
-| F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1-2周 |
+| F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/chrome/` 8 模块 ~1700 行；153 测试通过 |
 | F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/channels/` 2097 行 |
 | F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
-| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
+| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | ✅ 已完成（2026-06-21） | `src/services/analytics/` + `src/services/langfuse/`（客户端/Sink/Exporter）；49 测试通过 |
 | F-66 | ACP 协议支持 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
 | F-67 | Buddy / Proactive | P2 | 🟢 增强体验 | ⏳ 待开始 | 2周 |
 | F-81 | Native 原生模块（Python） | P1 | 🟡 重要缺口 | ⏳ 待开始 | 1周 |
@@ -1562,7 +1572,7 @@ CronTask due
 | **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/templates/` 2076 行 |
 | **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ✅ 已完成 | `src/services/kairos/` + `periodic/` 2022 行 |
 | **F-87** | **Workflow Scripts 工作流脚本** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
-| **F-88** | **Explore / Plan 内置 Agent** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 1周 |
+| **F-88** | **Explore / Plan 内置 Agent** | **P2** | 🟢 增强体验 | ✅ 已完成（2026-06-21） | 1周 |
 
 ### 实施建议顺序（已落地特性说明）
 
