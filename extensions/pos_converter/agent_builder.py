@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.agent.agent_definitions import AgentDefinition, AgentSource
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, AgentSource
 from src.skills.model import Skill
 from .source_parser import SourceComponent
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage

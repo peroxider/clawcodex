@@ -33,7 +33,7 @@ from .runner import (
 )
 from .sse import chat_chunk, chat_usage_chunk, encode_done, encode_sse
 from .state import ResponseStore, StoredResponse
-from src.types.content_blocks import ImageBlock, TextBlock
+from clawcodex_ext.types.content_blocks import ImageBlock, TextBlock
 
 
 API_MODEL_NAME = "clawcodex-agent"

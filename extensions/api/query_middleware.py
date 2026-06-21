@@ -87,7 +87,7 @@ def handle_rate_limit_error(error_str: str):
         return None
     # Lazy import to avoid circular dependency — this function is only
     # called on error, so the import cost is negligible.
-    from src.types.messages import AssistantMessage
+    from clawcodex_ext.types.messages import AssistantMessage
 
     err_msg = AssistantMessage(
         content="Rate limit exceeded. Please wait and retry.",

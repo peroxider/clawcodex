@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from src.types.messages import Message
+from clawcodex_ext.types.messages import Message
 
 from .errors import RemoteAPIError
 

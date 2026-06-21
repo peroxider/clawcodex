@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from src.permissions.types import ToolPermissionContext
     from src.tool_system.build_tool import Tool
     from src.tool_system.context import ToolContext
-    from src.tool_system.protocol import ToolCall, ToolResult
+    from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
     from src.tool_system.registry import ToolRegistry
 
 __all__ = ["ToolSystemProtocol"]

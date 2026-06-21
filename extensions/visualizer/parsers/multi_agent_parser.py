@@ -7,7 +7,8 @@ Sub-agent transcripts in the new format live in two places:
   emits a one-shot warning.
 - **Nested**: ``~/.clawcodex/sessions/<parent_session_id>/subagents/
   agent-<agent_id>.jsonl`` — when the resolver in
-  ``clawcodex_ext.transcript.nested_path`` is registered at startup.
+  ``clawcodex_ext.agent.transcript.init()`` is called at startup
+  (registers ``nested_session_path_resolver``).
 
 Each sub-agent transcript entry carries a ``parent_session_id`` field
 (``src.agent.transcript._serialize_message`` injects it for every entry

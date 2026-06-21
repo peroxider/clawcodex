@@ -6,7 +6,7 @@ import importlib.util
 import json
 from typing import Any, Generator, Optional
 
-from src.providers.base import (
+from clawcodex_ext.providers.base import (
     BaseProvider,
     ChatResponse,
     MessageInput,

@@ -7,8 +7,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.types.content_blocks import ImageBlock, TextBlock, ToolResultBlock, ToolUseBlock
-from src.types.messages import AssistantMessage, Message, UserMessage
+from clawcodex_ext.types.content_blocks import ImageBlock, TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.messages import AssistantMessage, Message, UserMessage
 
 from .errors import RemoteAPIError
 

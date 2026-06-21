@@ -239,7 +239,7 @@ class AgentSession:
             import json as _json
             from src.agent.conversation import Conversation
             from src.services.session_storage import SessionStorage
-            from src.types.messages import message_from_dict
+            from clawcodex_ext.types.messages import message_from_dict
 
             storage: SessionStorage | None = getattr(self, "_transcript_storage", None)
             messages = []
@@ -503,11 +503,11 @@ class AgentRunner:
             return
 
         storage = session._transcript_storage
-        from src.types.messages import (
+        from clawcodex_ext.types.messages import (
             create_assistant_message,
             create_user_message,
         )
-        from src.types.content_blocks import (
+        from clawcodex_ext.types.content_blocks import (
             TextBlock,
             ToolResultBlock,
         )
@@ -995,8 +995,8 @@ class AgentRunner:
                             session.control_socket = None
                     if session._transcript_storage is not None:
                         try:
-                            from src.types.messages import create_user_message
-                            from src.types.content_blocks import TextBlock
+                            from clawcodex_ext.types.messages import create_user_message
+                            from clawcodex_ext.types.content_blocks import TextBlock
 
                             session._transcript_storage.write_message(
                                 create_user_message(
@@ -1176,7 +1176,7 @@ class AgentRunner:
                             # (c) max_turns fallthrough, (d) 429 backoff reset.
                             if session._transcript_storage is not None:
                                 try:
-                                    from src.types.content_blocks import ToolUseBlock
+                                    from clawcodex_ext.types.content_blocks import ToolUseBlock
 
                                     if event.tool_use_id:
                                         session._transcript_tool_uses.append(
@@ -1238,7 +1238,7 @@ class AgentRunner:
                             # synthetic error block.
                             if session._transcript_storage is not None and event.tool_use_id:
                                 try:
-                                    from src.types.content_blocks import ToolResultBlock
+                                    from clawcodex_ext.types.content_blocks import ToolResultBlock
 
                                     result_output = event.result.get("output", "")
                                     is_error = event.result.get("is_error", False)
