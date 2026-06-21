@@ -5819,11 +5819,11 @@ CCB 的 Template 系统允许用户定义可复用的 Agent 配置模板（包�
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P85-A | 模板定义格式（YAML/JSON schema + agent: template_name 引用） | ⏳ 待开始 | 2-3天 |
-| P85-B | 模板注册表（`~/.clawcodex/templates/` + 项目级 `.clawcodex/templates/`） | ⏳ 待开始 | 2-3天 |
-| P85-C | Agent 创建时模板解析与字段合并（template base + inline override） | ⏳ 待开始 | 3-5天 |
-| P85-D | CLI 管理命令（`/template list`、`/template show`、`/template create`） | ⏳ 待开始 | 2-3天 |
-| P85-E | 内置默认模板（general-purpose、explore、plan、fix、review 等） | ⏳ 待开始 | 2-3天 |
+| P85-A | 模板定义格式（YAML/JSON schema + agent: template_name 引用） | ✅ 已完成 | 2-3天 |
+| P85-B | 模板注册表（`~/.clawcodex/templates/` + 项目级 `.clawcodex/templates/`） | ✅ 已完成 | 2-3天 |
+| P85-C | Agent 创建时模板解析与字段合并（template base + inline override） | ✅ 已完成 | 3-5天 |
+| P85-D | CLI 管理命令（`/template list`、`/template show`、`/template create`） | ✅ 已完成 | 2-3天 |
+| P85-E | 内置默认模板（general-purpose、explore、plan、fix、review 等） | ✅ 已完成 | 2-3天 |
 
 **估算总工时**: 1-2 周
 
