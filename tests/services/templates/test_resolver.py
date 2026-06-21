@@ -97,16 +97,12 @@ def test_override_with_none_sets_value_to_none() -> None:
 
 
 def test_list_override_replaces_wholesale() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(), {"tools": ["Read"]}
-    )
+    r = TemplateResolver().resolve(_tpl(), {"tools": ["Read"]})
     assert r.fields["tools"] == ["Read"]
 
 
 def test_list_override_empty_list_replaces() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(), {"tools": []}
-    )
+    r = TemplateResolver().resolve(_tpl(), {"tools": []})
     assert r.fields["tools"] == []
 
 
@@ -116,16 +112,12 @@ def test_list_override_empty_list_replaces() -> None:
 
 
 def test_dict_override_deep_merges() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(), {"nested": {"b": 99, "c": 3}}
-    )
+    r = TemplateResolver().resolve(_tpl(), {"nested": {"b": 99, "c": 3}})
     assert r.fields["nested"] == {"a": 1, "b": 99, "c": 3}
 
 
 def test_dict_override_replaces_with_scalars() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(), {"nested": "stringified"}
-    )
+    r = TemplateResolver().resolve(_tpl(), {"nested": "stringified"})
     assert r.fields["nested"] == "stringified"
 
 
@@ -144,16 +136,12 @@ def test_shadow_keys_lists_undeclared_overrides() -> None:
 
 
 def test_shadow_keys_sorted() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(fields={}), {"z": 1, "a": 2, "m": 3}
-    )
+    r = TemplateResolver().resolve(_tpl(fields={}), {"z": 1, "a": 2, "m": 3})
     assert r.shadow_keys == ["a", "m", "z"]
 
 
 def test_no_shadow_when_all_keys_declared() -> None:
-    r = TemplateResolver().resolve(
-        _tpl(), {"max_turns": 10}
-    )
+    r = TemplateResolver().resolve(_tpl(), {"max_turns": 10})
     assert r.shadow_keys == []
 
 

@@ -288,18 +288,14 @@ def test_from_dict_defaults_source_to_user() -> None:
 
 
 def test_from_dict_coerces_none_fields_and_metadata_to_empty() -> None:
-    t = Template.from_dict(
-        {"id": "x", "title": "x", "fields": None, "metadata": None}
-    )
+    t = Template.from_dict({"id": "x", "title": "x", "fields": None, "metadata": None})
     assert dict(t.fields) == {}
     assert dict(t.metadata) == {}
 
 
 def test_from_dict_propagates_invalid_field_name() -> None:
     with pytest.raises(ValueError):
-        Template.from_dict(
-            {"id": "x", "title": "x", "fields": {"1bad": 1}}
-        )
+        Template.from_dict({"id": "x", "title": "x", "fields": {"1bad": 1}})
 
 
 def test_from_dict_propagates_invalid_id() -> None:

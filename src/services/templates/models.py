@@ -40,8 +40,7 @@ def _validate_id(value: str, *, what: str = "id") -> None:
         raise ValueError(f"{what} must be a non-empty string")
     if not _ID_RE.match(value):
         raise ValueError(
-            f"{what} has invalid characters or length: {value!r} "
-            "(expected [A-Za-z0-9._-]{1,64})"
+            f"{what} has invalid characters or length: {value!r} (expected [A-Za-z0-9._-]{{1,64}})"
         )
 
 
@@ -49,9 +48,7 @@ def _validate_title(value: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError("title must be a non-empty string")
     if len(value) > _TITLE_MAX:
-        raise ValueError(
-            f"title exceeds {_TITLE_MAX} characters (got {len(value)})"
-        )
+        raise ValueError(f"title exceeds {_TITLE_MAX} characters (got {len(value)})")
 
 
 def _validate_description(value: str | None) -> None:
@@ -60,10 +57,7 @@ def _validate_description(value: str | None) -> None:
     if not isinstance(value, str):
         raise ValueError("description must be a string when provided")
     if len(value) > _DESCRIPTION_MAX:
-        raise ValueError(
-            f"description exceeds {_DESCRIPTION_MAX} characters "
-            f"(got {len(value)})"
-        )
+        raise ValueError(f"description exceeds {_DESCRIPTION_MAX} characters (got {len(value)})")
 
 
 def _validate_fields(value: Mapping[str, Any] | None) -> None:
@@ -72,15 +66,10 @@ def _validate_fields(value: Mapping[str, Any] | None) -> None:
     if not isinstance(value, Mapping):
         raise ValueError("fields must be a mapping when provided")
     if len(value) > _FIELDS_MAX:
-        raise ValueError(
-            f"fields exceeds {_FIELDS_MAX} entries (got {len(value)})"
-        )
+        raise ValueError(f"fields exceeds {_FIELDS_MAX} entries (got {len(value)})")
     for name in value:
         if not isinstance(name, str) or not _FIELD_NAME_RE.match(name):
-            raise ValueError(
-                f"field name must match {_FIELD_NAME_RE.pattern!r}: "
-                f"got {name!r}"
-            )
+            raise ValueError(f"field name must match {_FIELD_NAME_RE.pattern!r}: got {name!r}")
 
 
 def _validate_metadata(value: Mapping[str, Any] | None) -> None:

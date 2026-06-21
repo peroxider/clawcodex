@@ -136,9 +136,7 @@ def test_register_many_with_overwrite_succeeds_on_existing() -> None:
     """overwrite=True is a flat "last write wins" — no collision raised."""
     r = TemplateRegistry()
     r.register(_tpl("a", title="first"))
-    added = r.register_many(
-        [_tpl("a", title="second"), _tpl("b")], overwrite=True
-    )
+    added = r.register_many([_tpl("a", title="second"), _tpl("b")], overwrite=True)
     assert added == 2
     assert r.get("a").title == "second"
     assert "b" in r
@@ -225,9 +223,7 @@ def test_discover_loads_yaml_files(tmp_path: Path) -> None:
 def test_discover_loads_json_files(tmp_path: Path) -> None:
     sub = tmp_path / "templates"
     sub.mkdir()
-    (sub / "fix.json").write_text(
-        '{"id": "fix", "title": "Fix bug"}', encoding="utf-8"
-    )
+    (sub / "fix.json").write_text('{"id": "fix", "title": "Fix bug"}', encoding="utf-8")
     r = TemplateRegistry(search_dir=sub)
     added = r.discover()
     assert added == 1
@@ -238,9 +234,7 @@ def test_discover_skips_corrupt_files(tmp_path: Path) -> None:
     sub = tmp_path / "templates"
     sub.mkdir()
     (sub / "bad.yml").write_text("not: valid: yaml: [", encoding="utf-8")
-    (sub / "good.yml").write_text(
-        "id: good\ntitle: Good\n", encoding="utf-8"
-    )
+    (sub / "good.yml").write_text("id: good\ntitle: Good\n", encoding="utf-8")
     r = TemplateRegistry(search_dir=sub)
     added = r.discover()
     assert added == 1

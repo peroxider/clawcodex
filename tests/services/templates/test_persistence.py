@@ -80,9 +80,7 @@ def test_load_invalid_payload_raises_corrupt(tmp_path: Path) -> None:
 
 def test_load_missing_required_field_raises_corrupt(tmp_path: Path) -> None:
     path = tmp_path / "bad.json"
-    path.write_text(
-        json.dumps({"templates": {"x": {"id": "x"}}}), encoding="utf-8"
-    )
+    path.write_text(json.dumps({"templates": {"x": {"id": "x"}}}), encoding="utf-8")
     with pytest.raises(TemplateCorruptError):
         TemplateStateFile(path).load()
 
@@ -271,12 +269,8 @@ def test_merge_registries_empty_source() -> None:
 def test_discover_then_save_then_load_round_trip(tmp_path: Path) -> None:
     search = tmp_path / "templates"
     search.mkdir()
-    (search / "a.yml").write_text(
-        "id: a\ntitle: A\nfields:\n  tools: [Read]\n", encoding="utf-8"
-    )
-    (search / "b.yml").write_text(
-        "id: b\ntitle: B\n", encoding="utf-8"
-    )
+    (search / "a.yml").write_text("id: a\ntitle: A\nfields:\n  tools: [Read]\n", encoding="utf-8")
+    (search / "b.yml").write_text("id: b\ntitle: B\n", encoding="utf-8")
     store_path = tmp_path / "store.json"
 
     reg = TemplateRegistry(search_dir=search)

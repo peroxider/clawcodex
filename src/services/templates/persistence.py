@@ -56,16 +56,11 @@ class TemplateStateFile:
 
     def save(self, registry: TemplateRegistry) -> Path:
         if not isinstance(registry, TemplateRegistry):
-            raise TypeError(
-                "TemplateStateFile.save expects a TemplateRegistry"
-            )
+            raise TypeError("TemplateStateFile.save expects a TemplateRegistry")
         with self._lock:
             payload: dict[str, Any] = {
                 "version": self.SCHEMA_VERSION,
-                "templates": {
-                    t.id: t.to_dict()
-                    for t in registry.list_templates()
-                },
+                "templates": {t.id: t.to_dict() for t in registry.list_templates()},
             }
             self._atomic_write(self._path, payload)
             return self._path
@@ -73,29 +68,19 @@ class TemplateStateFile:
     def load(self) -> TemplateRegistry:
         with self._lock:
             if not self._path.exists():
-                raise TemplateNotFoundError(
-                    f"template state file does not exist: {self._path}"
-                )
+                raise TemplateNotFoundError(f"template state file does not exist: {self._path}")
             try:
                 raw = self._path.read_text(encoding="utf-8")
                 data: Any = json.loads(raw)
             except json.JSONDecodeError as exc:
-                raise TemplateCorruptError(
-                    f"template state file is not valid JSON: {exc}"
-                ) from exc
+                raise TemplateCorruptError(f"template state file is not valid JSON: {exc}") from exc
             except OSError as exc:
-                raise TemplateCorruptError(
-                    f"template state file could not be read: {exc}"
-                ) from exc
+                raise TemplateCorruptError(f"template state file could not be read: {exc}") from exc
             if not isinstance(data, dict):
-                raise TemplateCorruptError(
-                    f"template state root must be an object: {self._path}"
-                )
+                raise TemplateCorruptError(f"template state root must be an object: {self._path}")
             templates_payload = data.get("templates", {})
             if not isinstance(templates_payload, dict):
-                raise TemplateCorruptError(
-                    "template state 'templates' must be an object"
-                )
+                raise TemplateCorruptError("template state 'templates' must be an object")
             registry = TemplateRegistry()
             for tid, tdata in templates_payload.items():
                 try:
@@ -136,9 +121,7 @@ class TemplateStateFile:
             raise
 
 
-def save_registry(
-    path: Path | str, registry: TemplateRegistry
-) -> Path:
+def save_registry(path: Path | str, registry: TemplateRegistry) -> Path:
     """Convenience: write ``registry`` to ``path`` atomically."""
     return TemplateStateFile(path).save(registry)
 
@@ -159,12 +142,8 @@ def merge_registries(
     Two templates are considered the same when their ``id`` matches.
     The function returns the number of templates appended to ``target``.
     """
-    if not isinstance(target, TemplateRegistry) or not isinstance(
-        source, TemplateRegistry
-    ):
-        raise TypeError(
-            "merge_registries expects two TemplateRegistry instances"
-        )
+    if not isinstance(target, TemplateRegistry) or not isinstance(source, TemplateRegistry):
+        raise TypeError("merge_registries expects two TemplateRegistry instances")
     added = 0
     for template in source.list_templates():
         if template.id in target:
