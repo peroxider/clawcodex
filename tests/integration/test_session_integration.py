@@ -12,7 +12,7 @@ from pathlib import Path
 
 from src.services.session_resume import resume_session
 from src.services.session_storage import SessionStorage
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import (
     AssistantMessage,
     create_assistant_message,

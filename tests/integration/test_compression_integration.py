@@ -14,37 +14,37 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import (
     Message,
     UserMessage,
     AssistantMessage,
     normalize_messages_for_api,
 )
-from src.providers.base import BaseProvider, ChatResponse
-from src.compact_service.messages import (
+from clawcodex_ext.providers.base import BaseProvider, ChatResponse
+from clawcodex_ext.compact_service.messages import (
     create_compact_boundary_message,
     is_compact_boundary_message,
     get_messages_after_boundary,
 )
-from src.services.compact.pipeline import (
+from clawcodex_ext.services.compact.pipeline import (
     CompressionPipeline,
     PipelineConfig,
     run_compression_pipeline,
 )
-from src.services.compact.compact import (
+from clawcodex_ext.services.compact.compact import (
     CompactContext,
     compact_conversation,
 )
-from src.services.compact.autocompact import (
+from clawcodex_ext.services.compact.autocompact import (
     AutoCompactTracking,
     auto_compact_if_needed,
     should_auto_compact,
 )
-from src.services.compact.context_collapse import ContextCollapseStore
-from src.services.compact.tool_result_budget import apply_tool_result_budget
-from src.services.compact.snip_compact import snip_compact
-from src.context_system.microcompact import (
+from clawcodex_ext.services.compact.context_collapse import ContextCollapseStore
+from clawcodex_ext.services.compact.tool_result_budget import apply_tool_result_budget
+from clawcodex_ext.services.compact.snip_compact import snip_compact
+from clawcodex_ext.context_system.microcompact import (
     microcompact_typed_messages,
     microcompact_messages,
     strip_images_from_messages,

@@ -15,12 +15,12 @@ from src.tool_system.build_tool import (
     TOOL_DEFAULTS,
 )
 from src.tool_system.context import ToolContext
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     PermissionDenyDecision,
     PermissionPassthroughResult,
     PermissionResult,
 )
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 
 def _noop_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:

@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     PermissionAskDecision,
     PermissionPassthroughResult,
 )

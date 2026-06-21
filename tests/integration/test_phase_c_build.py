@@ -53,11 +53,11 @@ class TestPhaseCImports:
         assert hasattr(mod, "run_diagnostics")
 
     def test_compact_reactive(self):
-        mod = importlib.import_module("src.services.compact.reactive_compact")
+        mod = importlib.import_module("clawcodex_ext.services.compact.reactive_compact")
         assert hasattr(mod, "is_prompt_too_long_error")
 
     def test_compact_session_memory(self):
-        mod = importlib.import_module("src.services.compact.session_memory_compact")
+        mod = importlib.import_module("clawcodex_ext.services.compact.session_memory_compact")
         assert hasattr(mod, "SessionMemory")
 
     def test_file_state_cache(self):

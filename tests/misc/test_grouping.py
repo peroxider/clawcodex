@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.services.compact.grouping import group_messages_by_api_round, ApiRound
+from clawcodex_ext.services.compact.grouping import group_messages_by_api_round, ApiRound
 
 
 class TestGroupMessagesByApiRound(unittest.TestCase):

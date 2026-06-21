@@ -9,7 +9,7 @@ from src.permissions.bash_parser.parser import parse_command
 from src.permissions.bash_security import analyze_bash_command, check_bash_command_safety
 from src.permissions.check import auto_mode_classify, prepare_permission_matcher
 from src.permissions.setup import setup_permissions
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.query.config import FrozenQueryConfig, QueryConfig, build_query_config
 from src.query.streaming import QueryEvent, StreamingQueryState, streaming_query
 from src.services.api.errors import (

@@ -1,6 +1,6 @@
 import pytest
 
-from src.services.compact.reactive_compact import (
+from clawcodex_ext.services.compact.reactive_compact import (
     _drop_oldest_messages,
     build_post_compact_messages,
     clear_withheld_errors,
@@ -8,11 +8,11 @@ from src.services.compact.reactive_compact import (
     is_prompt_too_long_error,
     withhold_error,
 )
-from src.services.compact.session_memory_compact import (
+from clawcodex_ext.services.compact.session_memory_compact import (
     SessionMemory,
     try_session_memory_compaction,
 )
-from src.services.compact.prompt import (
+from clawcodex_ext.services.compact.prompt import (
     format_compact_summary,
     get_compact_prompt,
 )

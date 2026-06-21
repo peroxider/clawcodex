@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +263,7 @@ class TestIntegrationSmoke:
     def test_message_types_in_api_payload(self):
         """normalize_messages_for_api produces valid Anthropic-style dicts."""
         from src.types.messages import UserMessage, AssistantMessage, normalize_messages_for_api
-        from src.types.content_blocks import TextBlock, ToolUseBlock
+        from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
 
         msgs = [
             UserMessage(content="ping"),

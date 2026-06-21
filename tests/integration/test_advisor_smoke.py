@@ -22,7 +22,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from src.providers.anthropic_provider import AnthropicProvider
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.query import _call_model_sync
 from src.types.messages import AssistantMessage, UserMessage
 

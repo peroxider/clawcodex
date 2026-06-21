@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from src.tasks.progress import (
+from clawcodex_ext.tasks.progress import (
     MAX_RECENT_ACTIVITIES,
     AgentProgress,
     ProgressTracker,
@@ -24,7 +24,7 @@ from src.tasks.progress import (
     total_tokens_from_tracker,
     update_progress_from_message,
 )
-from src.types.content_blocks import TextBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
 from src.types.messages import AssistantMessage
 
 

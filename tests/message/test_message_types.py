@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.content_blocks import (
+from clawcodex_ext.types.content_blocks import (
     DocumentBlock,
     ImageBlock,
     RedactedThinkingBlock,

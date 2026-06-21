@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.types.content_blocks import (
+from clawcodex_ext.types.content_blocks import (
     TextBlock,
     ToolUseBlock,
     ToolResultBlock,

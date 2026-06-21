@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import (
     AssistantMessage,
     Message,

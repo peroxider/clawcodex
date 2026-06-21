@@ -127,7 +127,7 @@ class TestBasicIntegration:
         from src.services.tool_execution.streaming_executor import ToolUseBlock
         from src.tool_system.build_tool import build_tool
         from src.tool_system.context import ToolContext, ToolUseOptions
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         safe_tool = build_tool(
             name="Read",

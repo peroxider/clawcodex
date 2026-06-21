@@ -42,7 +42,7 @@ from src.context_system.git_context import (
 from src.context_system.memory_prefetch import find_relevant_memories
 from src.context_system.models import MemoryFileInfo, SystemPromptParts
 from src.context_system.prompt_assembly import clear_context_caches as clear_prompt_caches
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import QueryParams, StreamEvent
 from src.tool_system.build_tool import build_tool
@@ -56,7 +56,7 @@ from src.tool_system.tool_search import (
     is_deferred_tool,
     is_tool_search_enabled,
 )
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import AssistantMessage, UserMessage
 
 

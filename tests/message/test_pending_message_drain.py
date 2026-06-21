@@ -8,12 +8,12 @@ loop's between-turn hook is what surfaces them in the conversation.
 from __future__ import annotations
 
 from src.query.query import _drain_pending_user_messages
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     queue_pending_message,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 from src.tool_system.context import ToolContext
 from src.types.messages import UserMessage
 

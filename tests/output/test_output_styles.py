@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from src.agent.conversation import Conversation
 from src.outputStyles import BUILTIN_OUTPUT_STYLES, load_output_styles_dir, resolve_output_style
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry

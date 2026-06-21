@@ -15,7 +15,7 @@ from unittest.mock import patch
 import pytest
 
 from src.agent.conversation import Conversation
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
 from src.tool_system.renderers import AgentLoopResult
 from src.tool_system.context import ToolContext

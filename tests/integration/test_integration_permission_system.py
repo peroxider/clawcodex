@@ -33,7 +33,7 @@ from src.permissions.loader import apply_rules_to_context, settings_to_rules
 from src.tool_system.build_tool import Tool, build_tool
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall, ToolResult
+from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
 from src.tool_system.registry import ToolRegistry
 
 

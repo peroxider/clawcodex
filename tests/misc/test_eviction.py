@@ -14,7 +14,7 @@ import threading
 import time
 from dataclasses import replace
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.eviction import (
     PANEL_GRACE_SECONDS,
     is_eligible_for_eviction,
@@ -28,7 +28,7 @@ from src.tasks.local_agent import (
     complete_agent_task,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 
 
 def _make_terminal_notified(reg: RuntimeTaskRegistry) -> LocalAgentTaskState:
