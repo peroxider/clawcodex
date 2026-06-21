@@ -15,7 +15,7 @@ import pytest
 
 from src.entrypoints import HeadlessOptions, run_headless
 from src.entrypoints import headless as headless_mod
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 
 from clawcodex_ext.utils.resume_hint import reset_resume_hint_for_test_only
 

@@ -14,7 +14,7 @@ from rich.markdown import Markdown
 import src.config as config_module
 from src.repl import ClawcodexREPL
 from src.agent import Session, Conversation
-from src.providers.base import ChatMessage, ChatResponse
+from clawcodex_ext.providers.base import ChatMessage, ChatResponse
 
 from clawcodex_ext.utils.resume_hint import reset_resume_hint_for_test_only
 

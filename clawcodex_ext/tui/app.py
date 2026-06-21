@@ -1253,7 +1253,7 @@ class ClawCodexTUI(App):
                 text = _flatten_message_text(content)
                 # Suppress NO_CONTENT_MESSAGE placeholder injected for empty
                 # assistant responses — matches live-chat behaviour.
-                from src.types.messages import NO_CONTENT_MESSAGE
+                from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE
 
                 if text and text != NO_CONTENT_MESSAGE:
                     self._post_to_screen(AssistantMessage(text=text, agent_name=agent_type))
@@ -1308,7 +1308,7 @@ class ClawCodexTUI(App):
             if messages is None:
                 return []
             msgs = getattr(messages, "messages", [])
-            from src.types.messages import UserMessage
+            from clawcodex_ext.types.messages import UserMessage
 
             result: list[str] = []
             for msg in msgs:
