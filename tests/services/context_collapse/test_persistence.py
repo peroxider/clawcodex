@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from src.services.compact.context_collapse import CollapseCommit, ContextCollapseStore
+from clawcodex_ext.services.compact.context_collapse import CollapseCommit, ContextCollapseStore
 from src.services.context_collapse.exceptions import (
     CollapseStateCorruptError,
     CollapseStateNotFoundError,

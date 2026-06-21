@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.providers.base import ChatMessage
+from clawcodex_ext.providers.base import ChatMessage
 from src.providers.native.capabilities import (
     CAP_REASONING,
     CAP_STREAMING_TOOLS,

@@ -14,10 +14,10 @@ from __future__ import annotations
 import unittest
 from typing import Any
 
-from src.providers.base import BaseProvider, ChatMessage
+from clawcodex_ext.providers.base import BaseProvider, ChatMessage
 from src.providers.openai_compatible import OpenAICompatibleProvider
 from src.utils.image_processor import API_IMAGE_MAX_BASE64_SIZE
-from src.utils.image_validation import ImageSizeError
+from clawcodex_ext.utils.image_validation import ImageSizeError
 
 
 class _StubProvider(BaseProvider):

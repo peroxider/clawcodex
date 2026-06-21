@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.query import (
     QueryParams,
     _is_hook_stopped_continuation,

@@ -31,7 +31,7 @@ from clawcodex_ext.permissions.runtime import (
     RuntimePermissionController,
     apply_permission_mode_runtime,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.state.app_state import (
     AppState,
     create_app_state_store,

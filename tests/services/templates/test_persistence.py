@@ -193,7 +193,7 @@ def test_safe_filename_suffix_is_short_hex() -> None:
 
 
 def test_safe_filename_suffix_function() -> None:
-    from src.services.templates.persistence import safe_filename_suffix
+    from clawcodex_ext.services.templates.persistence import safe_filename_suffix
 
     s = safe_filename_suffix()
     assert isinstance(s, str)

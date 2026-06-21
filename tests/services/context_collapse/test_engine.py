@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from src.services.compact.context_collapse import (
+from clawcodex_ext.services.compact.context_collapse import (
     CollapseCommit,
     ContextCollapseStore,
 )

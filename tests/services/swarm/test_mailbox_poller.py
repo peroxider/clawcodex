@@ -33,7 +33,7 @@ from src.services.swarm.mailbox_poller import (
     stop_mailbox_poller,
     sweep_mailboxes,
 )
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.in_process_teammate import (
     InProcessTeammateTaskState,
     TeammateIdentity,

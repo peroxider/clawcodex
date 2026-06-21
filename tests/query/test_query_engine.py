@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.types.content_blocks import TextBlock

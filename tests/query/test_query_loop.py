@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
@@ -308,7 +308,7 @@ class TestQueryLoopImageSizeError(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_image_size_error_from_provider_yields_media_size_assistant_message(self):
-        from src.utils.image_validation import ImageSizeError
+        from clawcodex_ext.utils.image_validation import ImageSizeError
 
         provider = MagicMock()
         # Both streaming and non-streaming code paths share _prepare_messages,

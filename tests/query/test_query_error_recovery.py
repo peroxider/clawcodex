@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.types.content_blocks import TextBlock
@@ -220,7 +220,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
 
         # Mock reactive_compact to return success (so the recovery path
         # fires and the loop continues to the second model call).
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         async def fake_reactive_compact(messages, error, provider, model, **kw):
             return ReactiveCompactResult(
@@ -278,7 +278,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
             ),
         ]
 
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         async def fake_reactive_compact(messages, error, provider, model, **kw):
             return ReactiveCompactResult(
@@ -318,7 +318,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
             Exception("Prompt is too long")
         )
 
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         compact_calls = []
 
@@ -375,7 +375,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
             Exception("Prompt is too long")
         )
 
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         compact_calls = []
 
@@ -437,7 +437,7 @@ class TestPhaseBPromptTooLongRecovery(unittest.TestCase):
             ),
         ]
 
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         async def fake_reactive_compact(messages, error, provider, model, **kw):
             return ReactiveCompactResult(
@@ -628,8 +628,8 @@ class TestPhaseBBlockingLimitPreemption(unittest.TestCase):
         import os
         from unittest.mock import MagicMock, patch
         from src.query.transitions import TerminalHolder
-        from src.services.compact.autocompact import AutoCompactTracking
-        from src.services.compact.pipeline import PipelineConfig
+        from clawcodex_ext.services.compact.autocompact import AutoCompactTracking
+        from clawcodex_ext.services.compact.pipeline import PipelineConfig
 
         provider = MagicMock()
         provider.context_window = 100_000

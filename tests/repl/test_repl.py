@@ -475,7 +475,7 @@ class TestREPL(unittest.TestCase):
         """
         from types import SimpleNamespace
         from src.tool_system.build_tool import build_tool
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         def _noop(_input, _ctx):
             return ToolResult(name="X", output={}, is_error=False)

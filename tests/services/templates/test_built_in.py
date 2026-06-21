@@ -21,7 +21,7 @@ from src.services.templates import (
     register_built_in_templates,
     reset_default_template_registry,
 )
-from src.services.templates.built_in import (
+from clawcodex_ext.services.templates.built_in import (
     _BUILT_IN_TEMPLATES,
     _READ_ONLY_DISALLOWED,
 )

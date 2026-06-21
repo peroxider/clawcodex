@@ -10,7 +10,7 @@ from src.providers.anthropic_provider import AnthropicProvider
 from src.providers.glm_provider import GLMProvider
 from src.providers.openai_compatible import _convert_anthropic_messages_to_openai
 from src.providers.openai_provider import OpenAIProvider
-from src.providers.base import ChatMessage, ChatResponse
+from clawcodex_ext.providers.base import ChatMessage, ChatResponse
 
 
 class TestChatMessage(unittest.TestCase):
