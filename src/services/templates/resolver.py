@@ -33,6 +33,7 @@ from typing import Any
 
 from .exceptions import TemplateResolutionError
 from .models import Template
+from .registry import TemplateRegistry
 
 
 def _merge(base: Any, override: Any) -> Any:
@@ -92,9 +93,7 @@ class TemplateResolver:
         if override is None:
             override = {}
         if not isinstance(override, Mapping):
-            raise TemplateResolutionError(
-                "override must be a mapping when provided"
-            )
+            raise TemplateResolutionError("override must be a mapping when provided")
 
         merged: dict[str, Any] = {}
         for key, value in template.fields.items():
@@ -125,18 +124,12 @@ class TemplateResolver:
 
     def resolve_from_registry(
         self,
-        registry: "TemplateRegistry | Any",  # type: ignore[name-defined]
+        registry: TemplateRegistry,
         template_id: str,
         override: Mapping[str, Any] | None = None,
     ) -> ResolvedTemplate:
-        # Local import to avoid a circular dependency with registry.py
-        # (registry.py imports from models only).
-        from .registry import TemplateRegistry
-
         if not isinstance(registry, TemplateRegistry):
-            raise TypeError(
-                "resolve_from_registry expects a TemplateRegistry"
-            )
+            raise TypeError("resolve_from_registry expects a TemplateRegistry")
         template = registry.get(template_id)
         return self.resolve(template, override)
 
