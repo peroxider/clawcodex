@@ -8,7 +8,7 @@ from rich.markdown import Markdown
 
 from src.agent.conversation import Conversation
 from src.command_system.registry import CommandRegistry, get_command_registry
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.types.messages import Message
 
 from clawcodex_ext.away_summary.config import AwaySummaryConfig

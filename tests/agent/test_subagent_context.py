@@ -11,7 +11,7 @@ from src.agent.subagent_context import (
     SubagentContextOverrides,
     create_subagent_context,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.tool_system.context import QueryChainTracking, ToolContext
 from src.utils.abort_controller import AbortController, create_child_abort_controller
 

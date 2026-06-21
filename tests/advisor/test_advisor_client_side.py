@@ -165,7 +165,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
     advisor doesn't see its own previous consultations as input."""
 
     def test_strips_server_side_advisor_blocks(self) -> None:
-        from src.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 
         msgs = [
             UserMessage(content="hi"),
@@ -204,7 +204,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         in the flattened text invites the advisor to LARP as the
         worker. Strip it so the advisor sees the conversation as if
         it's being asked to opine, not to ack a tool invocation."""
-        from src.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 
         msgs = [
             UserMessage(content="task"),
@@ -303,7 +303,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         cruft must be filtered from the advisor's view — otherwise
         the advisor thinks the worker just hit a tool failure and
         responds to that instead of the actual task."""
-        from src.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 
         msgs = [
             UserMessage(content="real task"),
@@ -320,7 +320,7 @@ class TestBuildAdvisorForwardedMessages(unittest.TestCase):
         self.assertNotIn("[Tool use interrupted]", joined)
 
     def test_returns_plain_dicts_safe_to_send(self) -> None:
-        from src.types.messages import UserMessage
+        from clawcodex_ext.types.messages import UserMessage
 
         out = build_advisor_forwarded_messages([UserMessage(content="hello")])
         self.assertTrue(all(isinstance(m, dict) for m in out))

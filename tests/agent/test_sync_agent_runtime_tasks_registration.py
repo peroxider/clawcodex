@@ -26,12 +26,12 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agent.agent_definitions import AgentDefinition
+from clawcodex_ext.agent.agent_definitions import AgentDefinition
 from src.tasks.local_agent import LocalAgentTaskState
 from src.tool_system.context import ToolContext, ToolUseOptions
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
-from src.types.content_blocks import TextBlock
+from clawcodex_ext.tool_system.protocol import ToolCall
+from clawcodex_ext.types.content_blocks import TextBlock
 from src.types.messages import AssistantMessage
 
 

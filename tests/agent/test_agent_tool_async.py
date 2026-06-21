@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
-from src.types.content_blocks import TextBlock
+from clawcodex_ext.tool_system.protocol import ToolCall
+from clawcodex_ext.types.content_blocks import TextBlock
 from src.types.messages import AssistantMessage
 
 

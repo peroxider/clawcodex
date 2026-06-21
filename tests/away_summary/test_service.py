@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.agent.conversation import Conversation
-from src.providers.base import ChatResponse
-from src.types.content_blocks import TextBlock
+from clawcodex_ext.providers.base import ChatResponse
+from clawcodex_ext.types.content_blocks import TextBlock
 from src.types.messages import Message, normalize_messages_for_api
 
 from clawcodex_ext.away_summary.config import AwaySummaryConfig

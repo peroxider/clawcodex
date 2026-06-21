@@ -16,8 +16,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.providers.base import ChatResponse
-from src.utils.image_validation import ImageSizeError
+from clawcodex_ext.providers.base import ChatResponse
+from clawcodex_ext.utils.image_validation import ImageSizeError
 
 
 pytestmark = pytest.mark.skip(

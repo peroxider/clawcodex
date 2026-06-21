@@ -115,7 +115,7 @@ def test_collect_agent_messages_writes_formatted_line(monkeypatch, capsys) -> No
     from types import SimpleNamespace
 
     from src.tool_system.tools import agent as agent_mod
-    from src.types.content_blocks import TextBlock, ToolUseBlock
+    from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
     from src.types.messages import AssistantMessage
 
     async def fake_run_agent(_params):  # type: ignore[no-untyped-def]

@@ -36,11 +36,11 @@ from src.query.query import (
     _is_user_cancelled_abort,
 )
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.build_tool import build_tool
-from src.types.content_blocks import ToolResultBlock, ToolUseBlock
-from src.types.messages import REJECT_MESSAGE
+from clawcodex_ext.types.content_blocks import ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.messages import REJECT_MESSAGE
 from src.utils.abort_controller import AbortController, AbortError
 
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent.agent_definitions import (
+from clawcodex_ext.agent.agent_definitions import (
     AgentDefinition,
     EXPLORE_AGENT,
     GENERAL_PURPOSE_AGENT,
@@ -22,14 +22,14 @@ from src.agent.agent_tool_utils import (
     _extract_tool_name,
     _extract_rule_content,
 )
-from src.agent.constants import (
+from clawcodex_ext.agent.constants import (
     ALL_AGENT_DISALLOWED_TOOLS,
     ASYNC_AGENT_ALLOWED_TOOLS,
     CUSTOM_AGENT_DISALLOWED_TOOLS,
 )
 from src.tool_system.build_tool import Tool, build_tool
-from src.tool_system.protocol import ToolResult
-from src.types.content_blocks import TextBlock, ToolUseBlock
+from clawcodex_ext.tool_system.protocol import ToolResult
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
 from src.types.messages import AssistantMessage, UserMessage
 
 

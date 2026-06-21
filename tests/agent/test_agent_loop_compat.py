@@ -13,10 +13,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.types.messages import UserMessage
+from clawcodex_ext.types.messages import UserMessage
 from src.utils.abort_controller import AbortController
 
 from src.query.agent_loop_compat import (
@@ -307,8 +307,8 @@ class TestLiveStreamingAndPersistence(unittest.TestCase):
         self.assertEqual(result.terminal.reason, "completed")
         # We expect at least: assistant turn 1 (with tool_use),
         # user (with tool_result), assistant turn 2 (text).
-        from src.types.messages import AssistantMessage as _AM, UserMessage as _UM
-        from src.types.content_blocks import ToolUseBlock, ToolResultBlock
+        from clawcodex_ext.types.messages import AssistantMessage as _AM, UserMessage as _UM
+        from clawcodex_ext.types.content_blocks import ToolUseBlock, ToolResultBlock
 
         assistants = [m for m in persisted if isinstance(m, _AM)]
         self.assertGreaterEqual(len(assistants), 2)

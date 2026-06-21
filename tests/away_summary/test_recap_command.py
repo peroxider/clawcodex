@@ -7,7 +7,7 @@ from src.command_system.builtins import execute_command_sync
 from src.command_system.engine import create_command_context
 from src.command_system.registry import CommandRegistry, get_command_registry
 from src.history import HistoryLog
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.types.messages import Message
 
 from clawcodex_ext.away_summary.config import AwaySummaryConfig

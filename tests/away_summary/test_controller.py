@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.agent.conversation import Conversation
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.types.messages import Message
 
 from clawcodex_ext.away_summary.config import AwaySummaryConfig

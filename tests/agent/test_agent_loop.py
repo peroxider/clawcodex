@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 
 from src.agent.conversation import Conversation
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.context import ToolContext
 from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
@@ -318,8 +318,8 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_no_trailing_tool_use(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
-        from src.types.messages import AssistantMessage, UserMessage
-        from src.types.content_blocks import TextBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.content_blocks import TextBlock
 
         msgs = [
             UserMessage(content="hello"),
@@ -330,8 +330,8 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_trailing_tool_use_removed(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
-        from src.types.messages import AssistantMessage, UserMessage
-        from src.types.content_blocks import TextBlock, ToolUseBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
 
         msgs = [
             UserMessage(content="hello"),
@@ -348,7 +348,7 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_string_content_not_removed(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
-        from src.types.messages import AssistantMessage
+        from clawcodex_ext.types.messages import AssistantMessage
 
         msgs = [
             AssistantMessage(content="just text, no tool_use"),
@@ -358,8 +358,8 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_matched_tool_use_is_kept(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
-        from src.types.messages import AssistantMessage, UserMessage
-        from src.types.content_blocks import ToolUseBlock, ToolResultBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.content_blocks import ToolUseBlock, ToolResultBlock
 
         msgs = [
             AssistantMessage(
@@ -378,8 +378,8 @@ class TestFilterIncompleteToolCalls(unittest.TestCase):
 
     def test_unmatched_tool_use_removed_even_if_not_trailing(self):
         from src.agent.run_agent import filter_incomplete_tool_calls
-        from src.types.messages import AssistantMessage, UserMessage
-        from src.types.content_blocks import ToolUseBlock, TextBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+        from clawcodex_ext.types.content_blocks import ToolUseBlock, TextBlock
 
         msgs = [
             AssistantMessage(

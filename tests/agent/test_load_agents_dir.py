@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.agent.agent_definitions import AgentDefinition, get_built_in_agents
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, get_built_in_agents
 from src.agent.filter_agents_by_mcp import filter_agents_by_mcp_requirements
 from src.agent.load_agents_dir import (
     clear_agent_definitions_cache,

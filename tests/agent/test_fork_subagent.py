@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.agent.constants import (
+from clawcodex_ext.agent.constants import (
     FORK_BOILERPLATE_TAG,
     FORK_DIRECTIVE_PREFIX,
     FORK_SUBAGENT_TYPE,
@@ -25,7 +25,7 @@ from src.agent.fork_subagent import (
     is_in_fork_child,
 )
 from src.tool_system.context import ToolContext, ToolUseOptions
-from src.types.content_blocks import (
+from clawcodex_ext.types.content_blocks import (
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,

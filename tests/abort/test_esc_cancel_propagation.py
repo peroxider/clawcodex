@@ -32,10 +32,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.build_tool import build_tool
 from src.utils.abort_controller import AbortController, AbortError

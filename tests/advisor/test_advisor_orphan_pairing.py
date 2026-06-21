@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.messages import ensure_tool_result_pairing
+from clawcodex_ext.types.messages import ensure_tool_result_pairing
 
 
 class TestOrphanServerToolUseStripping(unittest.TestCase):

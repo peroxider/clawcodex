@@ -24,7 +24,7 @@ from src.tasks.local_agent import (
     fail_agent_task,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 from src.tool_system.context import ToolContext
 
 

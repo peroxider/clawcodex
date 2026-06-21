@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from src.agent.agent_definitions import AgentDefinition
+from clawcodex_ext.agent.agent_definitions import AgentDefinition
 from src.agent.load_agents_dir import clear_agent_definitions_cache
 from src.repl.core import ClawcodexREPL
 
