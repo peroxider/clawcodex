@@ -1,17 +1,2 @@
-from __future__ import annotations
-
-
-class ToolError(Exception):
-    pass
-
-
-class ToolInputError(ToolError):
-    pass
-
-
-class ToolPermissionError(ToolError):
-    pass
-
-
-class ToolExecutionError(ToolError):
-    pass
+"""Facade — tool_system/errors.py moved to clawcodex_ext/tool_system/."""
+from clawcodex_ext.tool_system.errors import *  # noqa: F401,F403
