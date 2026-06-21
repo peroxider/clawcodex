@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from .base import BaseProvider, ChatMessage, ChatResponse
-
 
 # Provider metadata for login/UI
 class ProviderInfo(TypedDict):

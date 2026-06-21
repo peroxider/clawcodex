@@ -33,7 +33,7 @@ from typing import Any, Callable
 from ..tool_system.context import ToolContext
 from ..tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system import get_team_aware_tool_list
-from ..providers.base import BaseProvider
+from clawcodex_ext.providers.base import BaseProvider
 from ..types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from ..types.messages import (
     AssistantMessage,

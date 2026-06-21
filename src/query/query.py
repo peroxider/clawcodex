@@ -23,7 +23,7 @@ from ..tool_system.protocol import ToolCall, ToolResult
 from ..tool_system.registry import ToolRegistry
 from ..utils.abort_controller import AbortController, AbortError
 from ..utils.image_validation import ImageSizeError
-from ..providers.base import BaseProvider, ChatResponse
+from clawcodex_ext.providers.base import BaseProvider, ChatResponse
 
 from .config import QueryConfig, build_query_config
 from .transitions import (
@@ -33,7 +33,7 @@ from .transitions import (
     Transition,
     set_terminal,
 )
-from ..services.compact.pipeline import (
+from clawcodex_ext.services.compact.pipeline import (
     CompressionPipeline,
     PipelineConfig,
     run_compression_pipeline,
@@ -1449,7 +1449,7 @@ async def query(
         # were already validated under the limit), or when this is a
         # compact/session_memory forked query (those need to run to
         # REDUCE the token count, blocking would deadlock).
-        from ..services.compact.autocompact import (
+        from clawcodex_ext.services.compact.autocompact import (
             MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES,
             calculate_token_warning_state,
             is_auto_compact_enabled,
@@ -1737,7 +1737,7 @@ async def query(
                 and not has_attempted_reactive_compact
                 and config.reactive_compact_enabled
             ):
-                from ..services.compact.reactive_compact import (
+                from clawcodex_ext.services.compact.reactive_compact import (
                     ReactiveCompactResult,
                     reactive_compact,
                 )
