@@ -32,7 +32,7 @@ from clawcodex_ext.permissions.cycle import (
     get_auto_mode_availability_reason,
     PROTECTED_DIRECTORIES,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 
 
 class TestClassificationCache(unittest.TestCase):

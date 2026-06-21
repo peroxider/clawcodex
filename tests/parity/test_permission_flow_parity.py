@@ -15,7 +15,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.permissions.check import has_permissions_to_use_tool
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     EXTERNAL_PERMISSION_MODES,
     PERMISSION_MODES,
     PERMISSION_RULE_SOURCES,

@@ -10,7 +10,7 @@ from src.permissions.check import (
     auto_mode_classify,
     prepare_permission_matcher,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 
 
 class TestDenialTracker(unittest.TestCase):

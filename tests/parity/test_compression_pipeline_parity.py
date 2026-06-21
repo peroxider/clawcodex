@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.services.compact.pipeline import (
+from clawcodex_ext.services.compact.pipeline import (
     CompressionPipeline,
     CompressionResult,
     PipelineConfig,

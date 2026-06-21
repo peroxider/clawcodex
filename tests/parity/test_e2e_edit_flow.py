@@ -10,11 +10,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.errors import ToolPermissionError
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 
 
 class TestE2EEditFlow(unittest.TestCase):

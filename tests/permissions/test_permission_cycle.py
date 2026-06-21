@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 
 from src.permissions.cycle import cycle_permission_mode, get_next_permission_mode
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 
 
 class TestGetNextPermissionMode(unittest.TestCase):

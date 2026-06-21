@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     PermissionAllowDecision,
     PermissionAskDecision,
     PermissionDenyDecision,
@@ -12,7 +12,7 @@ from src.permissions.types import (
     ToolPermissionContext,
 )
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.tools.write import WriteTool
 from src.tool_system.tools.edit import EditTool

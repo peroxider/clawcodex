@@ -8,7 +8,7 @@ from src.permissions.check import (
     has_permissions_to_use_tool,
     has_permissions_to_use_tool_inner,
 )
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     ModeDecisionReason,
     PermissionAllowDecision,
     PermissionAskDecision,

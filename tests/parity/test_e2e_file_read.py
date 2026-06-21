@@ -14,7 +14,7 @@ from pathlib import Path
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.errors import ToolInputError, ToolPermissionError
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 
 
 class TestE2EFileRead(unittest.TestCase):

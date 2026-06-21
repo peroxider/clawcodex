@@ -17,7 +17,7 @@ from src.services.tool_execution.orchestrator import (
 from src.services.tool_execution.streaming_executor import ToolUseBlock
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 
 
 class TestE2EMultiToolBatch(unittest.TestCase):

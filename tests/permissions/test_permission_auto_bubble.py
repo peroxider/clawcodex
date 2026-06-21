@@ -14,7 +14,7 @@ import unittest
 from typing import Any
 
 from src.permissions.check import has_permissions_to_use_tool
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     AsyncAgentDecisionReason,
     ClassifierDecisionReason,
     PermissionAllowDecision,

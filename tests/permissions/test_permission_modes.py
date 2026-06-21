@@ -9,7 +9,7 @@ from src.permissions.modes import (
     permission_mode_symbol,
     permission_mode_title,
 )
-from src.permissions.types import PERMISSION_MODES
+from clawcodex_ext.permissions.types import PERMISSION_MODES
 
 
 class TestPermissionModeConfig(unittest.TestCase):

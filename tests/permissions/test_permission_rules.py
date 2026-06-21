@@ -18,7 +18,7 @@ from src.permissions.rules import (
     get_rule_by_contents_for_tool,
     tool_always_allowed_rule,
 )
-from src.permissions.types import (
+from clawcodex_ext.permissions.types import (
     PermissionRuleValue,
     ToolPermissionContext,
 )

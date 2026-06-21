@@ -12,7 +12,7 @@ from src.permissions.setup import (
     setup_permissions,
     validate_permission_rules,
 )
-from src.permissions.types import PermissionRuleValue
+from clawcodex_ext.permissions.types import PermissionRuleValue
 
 
 class TestSetupPermissionsBasic(unittest.TestCase):

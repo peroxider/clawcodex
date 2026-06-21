@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from src.agent.agent_definitions import (
+from clawcodex_ext.agent.agent_definitions import (
     EXPLORE_AGENT,
     GENERAL_PURPOSE_AGENT,
     PLAN_AGENT,
@@ -22,7 +22,7 @@ from src.agent.agent_tool_utils import (
     filter_tools_for_agent,
     resolve_agent_tools,
 )
-from src.agent.constants import (
+from clawcodex_ext.agent.constants import (
     ALL_AGENT_DISALLOWED_TOOLS,
     ASYNC_AGENT_ALLOWED_TOOLS,
 )
@@ -30,11 +30,11 @@ from src.agent.subagent_context import (
     SubagentContextOverrides,
     create_subagent_context,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.tool_system.build_tool import build_tool, Tool
 from src.tool_system.context import QueryChainTracking, ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.utils.abort_controller import create_abort_controller
 
 

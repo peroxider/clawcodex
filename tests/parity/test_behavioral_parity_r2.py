@@ -25,7 +25,7 @@ from src.services.api.claude import (
     UsageEvent,
 )
 from src.services.api.logging import NonNullableUsage
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import (
     AssistantMessage,
     UserMessage,
@@ -343,7 +343,7 @@ class TestAgentFlowBackground(unittest.TestCase):
     """Agent tool → background async → notification."""
 
     def test_async_agent_allowed_tools(self) -> None:
-        from src.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
+        from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 
         self.assertIsInstance(ASYNC_AGENT_ALLOWED_TOOLS, (list, tuple, set, frozenset))
         self.assertGreater(len(ASYNC_AGENT_ALLOWED_TOOLS), 0)
@@ -483,7 +483,7 @@ class TestCommandFlowCompact(unittest.TestCase):
         self.assertTrue(COMPACT_COMMAND.supports_non_interactive)
 
     def test_compact_conversation_interface(self) -> None:
-        from src.services.compact.compact import CompactContext, compact_conversation
+        from clawcodex_ext.services.compact.compact import CompactContext, compact_conversation
 
         self.assertTrue(callable(compact_conversation))
         self.assertIn("messages", CompactContext.__dataclass_fields__)

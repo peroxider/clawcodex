@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.agent.constants import (
+from clawcodex_ext.agent.constants import (
     AGENT_TOOL_NAME,
     ALL_AGENT_DISALLOWED_TOOLS,
     ASYNC_AGENT_ALLOWED_TOOLS,
@@ -23,7 +23,7 @@ from src.agent.constants import (
     LEGACY_AGENT_TOOL_NAME,
     ONE_SHOT_BUILTIN_AGENT_TYPES,
 )
-from src.agent.agent_definitions import (
+from clawcodex_ext.agent.agent_definitions import (
     EXPLORE_AGENT,
     FORK_AGENT,
     GENERAL_PURPOSE_AGENT,
@@ -36,7 +36,7 @@ from src.agent.subagent_context import (
     SubagentContextOverrides,
     create_subagent_context,
 )
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.tool_system.context import QueryChainTracking, ToolContext
 from src.utils.abort_controller import AbortController, create_abort_controller
 

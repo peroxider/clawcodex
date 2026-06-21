@@ -220,7 +220,7 @@ class TestQueryLoopStreamingFlow(unittest.TestCase):
 
 class TestQueryReactiveCompact(unittest.TestCase):
     def test_reactive_compact_result_fields(self) -> None:
-        from src.services.compact.reactive_compact import ReactiveCompactResult
+        from clawcodex_ext.services.compact.reactive_compact import ReactiveCompactResult
 
         r = ReactiveCompactResult(
             compacted=True,
@@ -233,7 +233,7 @@ class TestQueryReactiveCompact(unittest.TestCase):
         self.assertEqual(r.tokens_after, 5000)
 
     def test_is_withheld_prompt_too_long(self) -> None:
-        from src.services.compact.reactive_compact import is_withheld_prompt_too_long
+        from clawcodex_ext.services.compact.reactive_compact import is_withheld_prompt_too_long
 
         self.assertTrue(is_withheld_prompt_too_long(Exception("prompt_too_long error")))
         self.assertTrue(is_withheld_prompt_too_long(Exception("Prompt is too long")))
@@ -932,7 +932,7 @@ class TestSkills3LayerLoading(unittest.TestCase):
 
 class TestReactiveCompactRecovery(unittest.TestCase):
     def test_emergency_drop_reduces_messages(self) -> None:
-        from src.services.compact.reactive_compact import _drop_oldest_messages
+        from clawcodex_ext.services.compact.reactive_compact import _drop_oldest_messages
         from src.types.messages import UserMessage
 
         messages = [UserMessage(content=f"msg {i}") for i in range(20)]
