@@ -12,7 +12,7 @@ by the chapter-10 ``stop_task`` wiring.
 
 from __future__ import annotations
 
-from src.task_registry import register_task
+from clawcodex_ext.task_registry import register_task
 from src.tasks.dream.dream_task import (
     MAX_DREAM_TURNS,
     DreamTask,

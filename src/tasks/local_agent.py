@@ -26,11 +26,11 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TYPE_CHECKING
 
-from src.tasks_core import TaskStateBase, is_terminal_task_status
+from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry
-    from src.tasks.progress import AgentProgress
+    from clawcodex_ext.tasks.progress import AgentProgress
 
 
 @dataclass(kw_only=True)

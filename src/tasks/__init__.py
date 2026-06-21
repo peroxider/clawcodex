@@ -31,7 +31,7 @@ from __future__ import annotations
 # LocalShellTask`` works. Submodule imports are listed individually
 # (rather than ``import *``) so removing a future task type is a
 # localized edit.
-from src.task_registry import register_task
+from clawcodex_ext.task_registry import register_task
 from src.tasks.dream import DreamTask, DreamTaskState
 from src.tasks.in_process_teammate import (
     InProcessTeammateTask,

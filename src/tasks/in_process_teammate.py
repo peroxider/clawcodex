@@ -45,7 +45,7 @@ import asyncio
 from dataclasses import dataclass, field, replace
 from typing import Any, Awaitable, Callable, Literal, TYPE_CHECKING, TypeVar
 
-from src.tasks_core import TaskStateBase, is_terminal_task_status
+from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry

@@ -29,7 +29,7 @@ import time
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from src.tasks_core import TaskStateBase, is_terminal_task_status
+from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry

@@ -39,7 +39,7 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TYPE_CHECKING
 
-from src.tasks_core import (
+from clawcodex_ext.tasks_core import (
     TaskStateBase,
     create_task_state_base,
     generate_task_id,

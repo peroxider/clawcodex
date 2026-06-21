@@ -21,8 +21,8 @@ import asyncio
 from dataclasses import dataclass
 from typing import Literal, TYPE_CHECKING
 
-from src.task_registry import RuntimeTaskRegistry, get_task_by_type
-from src.tasks_core import is_terminal_task_status
+from clawcodex_ext.task_registry import RuntimeTaskRegistry, get_task_by_type
+from clawcodex_ext.tasks_core import is_terminal_task_status
 
 if TYPE_CHECKING:
     from src.tool_system.context import ToolContext

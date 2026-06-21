@@ -20,7 +20,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import IO, Any, Literal, TYPE_CHECKING
 
-from src.tasks_core import TaskStateBase
+from clawcodex_ext.tasks_core import TaskStateBase
 
 if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry
