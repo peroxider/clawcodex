@@ -43,7 +43,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Callable
 
-from src.agent.constants import ALL_AGENT_DISALLOWED_TOOLS
+from clawcodex_ext.agent.constants import ALL_AGENT_DISALLOWED_TOOLS
 
 if TYPE_CHECKING:
     from src.agent.agent_definitions import AgentDefinition, AgentSource

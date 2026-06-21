@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from src.types.messages import SystemMessage
+from clawcodex_ext.types.messages import SystemMessage
 
 
 def create_away_summary_message(

@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal
 
-from ..permissions.types import PermissionMode
+from clawcodex_ext.permissions.types import PermissionMode
 
 
 AgentSource = Literal[

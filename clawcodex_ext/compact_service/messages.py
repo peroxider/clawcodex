@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
-from ..types.content_blocks import TextBlock
-from ..types.messages import Message, SystemMessage, UserMessage
+from clawcodex_ext.types.content_blocks import TextBlock
+from clawcodex_ext.types.messages import Message, SystemMessage, UserMessage
 
 
 @dataclass

@@ -17,7 +17,7 @@ import os
 from datetime import datetime
 from typing import Any
 
-from src.types.messages import Message, UserMessage
+from clawcodex_ext.types.messages import Message, UserMessage
 from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
 from src.context_system.claude_md import (
     _should_disable_claude_md,
@@ -720,7 +720,7 @@ def build_full_system_prompt_blocks(
     # Partition by scope. We import CacheScope locally to avoid a top-level
     # circular import (system_prompt_cache imports from this module's
     # peers; a top-level import here closes the cycle).
-    from .system_prompt_cache import CacheScope
+    from src.context_system.system_prompt_cache import CacheScope
 
     global_sections = [s for s in sections if s.cache_scope is CacheScope.GLOBAL and s.content]
     session_sections = [s for s in sections if s.cache_scope is CacheScope.SESSION and s.content]

@@ -72,7 +72,7 @@ def _truncate_transcript(transcript: str, *, max_input_tokens: int) -> str:
 
 def _estimate_tokens(text: str) -> int:
     try:
-        from src.token_estimation import count_tokens
+        from clawcodex_ext.utils.token_estimation import count_tokens
 
         return int(count_tokens(text))
     except Exception:

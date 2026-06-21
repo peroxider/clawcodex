@@ -22,7 +22,7 @@ from .registry import CommandRegistry
 from .types import Command
 
 if TYPE_CHECKING:
-    from src.types.content_blocks import ImageBlock
+    from clawcodex_ext.types.content_blocks import ImageBlock
 
 # Regex patterns
 _COMMAND_RE = re.compile(r"^/([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+(.*))?$", re.DOTALL)
@@ -705,7 +705,7 @@ def build_image_content_blocks(
     the API receives a mixed text+image content list, matching the TS
     @-mention flow which auto-Reads the image and inlines it.
     """
-    from src.types.content_blocks import ImageBlock
+    from clawcodex_ext.types.content_blocks import ImageBlock
 
     blocks: list[ImageBlock] = []
     for att in attachments:

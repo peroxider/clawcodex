@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.types.messages import AssistantMessage
+    from clawcodex_ext.types.messages import AssistantMessage
 
 
 # Cap for the recent-activities ring buffer. Chapter §"Progress Tracking".
@@ -142,8 +142,8 @@ def update_progress_from_message(
     """
     # Local imports defer the cycle: ``progress`` doesn't need to know
     # about message types at module load.
-    from src.types.content_blocks import ToolUseBlock
-    from src.types.messages import AssistantMessage
+    from clawcodex_ext.types.content_blocks import ToolUseBlock
+    from clawcodex_ext.types.messages import AssistantMessage
 
     if not isinstance(message, AssistantMessage):
         return

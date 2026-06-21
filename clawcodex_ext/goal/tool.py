@@ -28,7 +28,7 @@ from typing import Any
 from src.tool_system.build_tool import build_tool
 from src.tool_system.context import ToolContext
 from src.tool_system.errors import ToolInputError
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 from . import prompts
 from .controller import GoalController

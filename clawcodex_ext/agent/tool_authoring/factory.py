@@ -7,7 +7,7 @@ from typing import Any
 
 from src.tool_system.build_tool import Tool, build_tool
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
 from clawcodex_ext.agent.tool_authoring.validators import validate_spec, ValidationError
 from clawcodex_ext.agent.tool_authoring.call_handlers import (

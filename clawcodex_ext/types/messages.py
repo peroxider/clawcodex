@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Literal, Mapping, TypeAlias
 from uuid import uuid4
 
-from .content_blocks import ContentBlock, content_block_to_dict, normalize_content_blocks
+from clawcodex_ext.types.content_blocks import ContentBlock, content_block_to_dict, normalize_content_blocks
 
 
 MessageContent: TypeAlias = str | list[ContentBlock]

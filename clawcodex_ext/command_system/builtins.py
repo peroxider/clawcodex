@@ -17,10 +17,10 @@ from src.context_system.context_analyzer import (
     format_context_as_markdown,
     get_context_window_for_model,
 )
-from src.context_system.microcompact import microcompact_messages, strip_images_from_messages
+from clawcodex_ext.context_system.microcompact import microcompact_messages, strip_images_from_messages
 from src.cost_tracker import CostTracker
 from src.history import HistoryLog
-from src.providers.base import BaseProvider
+from clawcodex_ext.providers.base import BaseProvider
 from .engine import CommandContext, CommandResult, LocalCommandResult
 from .registry import CommandRegistry, get_command_registry, list_commands
 from .types import Command, CommandType, CompactionResult, LocalCommand, PromptCommand
@@ -259,7 +259,7 @@ def _call_cron_tool(
     if registry is None or tool_context is None:
         raise ValueError("Cron runtime is not available in this command context")
 
-    from src.tool_system.protocol import ToolCall
+    from clawcodex_ext.tool_system.protocol import ToolCall
 
     result = registry.dispatch(ToolCall(name=name, input=tool_input), tool_context)
     if result.is_error:
@@ -1109,13 +1109,13 @@ def _sync_compact_fallback(context: CommandContext) -> LocalCommandResult:
 
     # Get messages after last boundary
     try:
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             create_compact_boundary_message,
             create_compact_summary_message,
             get_messages_after_boundary,
             is_compact_boundary_message,
         )
-        from src.token_estimation import count_messages_tokens
+        from clawcodex_ext.utils.token_estimation import count_messages_tokens
 
         after_boundary = get_messages_after_boundary(messages)
         if len(after_boundary) < 2:

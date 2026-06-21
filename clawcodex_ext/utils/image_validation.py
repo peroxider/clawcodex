@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.utils.image_processor import API_IMAGE_MAX_BASE64_SIZE
+# Anthropic API 5 MB base64 limit. Inlined from src.utils.image_processor
+# (image_processor.py stays in src/ for now — not yet migrated to ext)
+# to avoid pulling image_processor into the ext-layer import graph.
+API_IMAGE_MAX_BASE64_SIZE = 5 * 1024 * 1024
 
 
 class ImageSizeError(Exception):
