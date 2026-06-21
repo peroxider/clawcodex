@@ -12,18 +12,18 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 from uuid import uuid4
 
-from ..permissions.types import PermissionMode, ToolPermissionContext
-from ..providers.base import BaseProvider
+from clawcodex_ext.permissions.types import PermissionMode, ToolPermissionContext
+from clawcodex_ext.providers.base import BaseProvider
 from ..tool_system.build_tool import Tools
 from ..tool_system.context import ToolContext
 from ..tool_system.registry import ToolRegistry
-from ..types.content_blocks import ToolUseBlock
-from ..types.messages import AssistantMessage, Message, UserMessage
+from clawcodex_ext.types.content_blocks import ToolUseBlock
+from clawcodex_ext.types.messages import AssistantMessage, Message, UserMessage
 from ..utils.abort_controller import AbortController
 
-from .agent_definitions import AgentDefinition, is_built_in_agent
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, is_built_in_agent
 from .agent_tool_utils import resolve_agent_tools, count_tool_uses
-from .constants import AGENT_TOOL_NAME
+from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
 from .prompt import get_agent_system_prompt
 from .subagent_context import SubagentContextOverrides, create_subagent_context
 

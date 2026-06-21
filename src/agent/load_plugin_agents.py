@@ -19,7 +19,7 @@ import logging
 from dataclasses import replace
 from pathlib import Path
 
-from src.agent.agent_definitions import AgentDefinition
+from clawcodex_ext.agent.agent_definitions import AgentDefinition
 from src.agent.parse_agent_markdown import parse_agent_from_markdown
 from src.plugins.types import LoadedPlugin
 from src.skills.frontmatter import parse_frontmatter

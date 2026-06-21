@@ -5,14 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..types.content_blocks import (
+from clawcodex_ext.types.content_blocks import (
     ContentBlock,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
     normalize_content_blocks,
 )
-from ..types.messages import (
+from clawcodex_ext.types.messages import (
     Message,
     MessageContent,
     create_message,

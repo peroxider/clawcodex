@@ -205,7 +205,7 @@ def get_agent_system_prompt(
     For fork agents: uses the parent's system prompt.
     For custom agents: uses the agent's system prompt, falling back to a default.
     """
-    from .constants import DEFAULT_AGENT_PROMPT, FORK_SUBAGENT_TYPE
+    from clawcodex_ext.agent.constants import DEFAULT_AGENT_PROMPT, FORK_SUBAGENT_TYPE
 
     # Fork agents inherit parent system prompt
     if agent_definition.agent_type == FORK_SUBAGENT_TYPE and parent_system_prompt:

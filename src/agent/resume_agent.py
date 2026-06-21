@@ -47,7 +47,7 @@ from src.tasks.local_agent import (
     LocalAgentTaskState,
     register_async_agent,
 )
-from src.tasks_core import is_terminal_task_status
+from clawcodex_ext.tasks_core import is_terminal_task_status
 
 if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry

@@ -3,7 +3,7 @@
 from .conversation import Conversation, Message
 from .session import Session
 
-from .agent_definitions import (
+from clawcodex_ext.agent.agent_definitions import (
     AgentDefinition,
     AgentSource,
     BuiltInAgentDefinition,
@@ -24,7 +24,7 @@ from .agent_tool_utils import (
     finalize_agent_tool,
     resolve_agent_tools,
 )
-from .constants import (
+from clawcodex_ext.agent.constants import (
     AGENT_TOOL_NAME,
     ALL_AGENT_DISALLOWED_TOOLS,
     ASYNC_AGENT_ALLOWED_TOOLS,

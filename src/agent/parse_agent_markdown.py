@@ -38,7 +38,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from src.agent.agent_definitions import AgentDefinition, AgentSource
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, AgentSource
 from src.utils.frontmatter_validators import (
     parse_effort_value,
     parse_hooks,

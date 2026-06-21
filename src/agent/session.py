@@ -240,7 +240,7 @@ class Session:
             ):
                 continue
             try:
-                from src.types.messages import message_from_dict
+                from clawcodex_ext.types.messages import message_from_dict
 
                 messages.append(message_from_dict(entry))
             except Exception:
@@ -399,7 +399,7 @@ def _load_from_enhanced_transcript(
     model = ""
     created_at = ""
 
-    from src.types.messages import message_from_dict
+    from clawcodex_ext.types.messages import message_from_dict
 
     messages: list = []
     found_init = False

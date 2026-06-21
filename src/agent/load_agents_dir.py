@@ -21,7 +21,7 @@ import logging
 import os
 from typing import Iterable
 
-from src.agent.agent_definitions import AgentDefinition, get_built_in_agents
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, get_built_in_agents
 from src.agent.parse_agent_markdown import parse_agent_from_markdown
 from src.utils.markdown_config_loader import (
     SOURCE_MANAGED,

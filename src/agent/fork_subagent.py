@@ -41,8 +41,8 @@ from ..types.messages import (
     create_user_message,
 )
 
-from .agent_definitions import FORK_AGENT
-from .constants import (
+from clawcodex_ext.agent.agent_definitions import FORK_AGENT
+from clawcodex_ext.agent.constants import (
     FORK_BOILERPLATE_TAG,
     FORK_DIRECTIVE_PREFIX,
     FORK_SUBAGENT_TYPE,

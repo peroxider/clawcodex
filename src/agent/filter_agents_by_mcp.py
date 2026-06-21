@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from src.agent.agent_definitions import AgentDefinition, is_built_in_agent
+from clawcodex_ext.agent.agent_definitions import AgentDefinition, is_built_in_agent
 
 
 def has_required_mcp_servers(

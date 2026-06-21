@@ -45,7 +45,7 @@ from typing import Any, AsyncIterator, TYPE_CHECKING
 from src.tasks.local_agent import LocalAgentTaskState
 
 if TYPE_CHECKING:
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
-from ..permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from ..tool_system.context import (
     FileReadingLimits,
     QueryChainTracking,
