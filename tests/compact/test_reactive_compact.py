@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.services.compact.reactive_compact import (
+from clawcodex_ext.services.compact.reactive_compact import (
     ReactiveCompactResult,
     is_prompt_too_long_error,
     is_withheld_prompt_too_long,

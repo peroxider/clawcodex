@@ -31,7 +31,7 @@ from clawcodex_ext.dreaming import (
 )
 from clawcodex_ext.dreaming.config import DreamConfig
 from clawcodex_ext.dreaming.lock import LOCK_FILE_NAME
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 
 # ---------------------------------------------------------------------------

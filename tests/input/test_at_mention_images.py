@@ -25,7 +25,7 @@ from src.command_system.input_processing import (
     expand_at_mentions,
     format_at_mention_attachments,
 )
-from src.types.content_blocks import ImageBlock, TextBlock
+from clawcodex_ext.types.content_blocks import ImageBlock, TextBlock
 from src.types.messages import UserMessage, normalize_messages_for_api
 
 

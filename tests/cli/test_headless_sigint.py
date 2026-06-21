@@ -46,7 +46,7 @@ import pytest
 from src.cli_core import UserInputMessage
 from src.entrypoints import HeadlessOptions, run_headless
 from src.entrypoints import headless as headless_mod
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.utils.abort_controller import AbortController, AbortError
 
 
@@ -79,7 +79,7 @@ class _CancellingProvider:
 def _patch_provider_only(monkeypatch, *, on_chat=None):
     """Patch the provider getters and registry with cancelling fakes."""
 
-    from src.tool_system.protocol import ToolResult
+    from clawcodex_ext.tool_system.protocol import ToolResult
     from src.tool_system.build_tool import build_tool
 
     def _fake_tool_call(_input, context):

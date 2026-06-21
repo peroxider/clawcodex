@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.content_blocks import ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import ToolResultBlock, ToolUseBlock
 from src.types.messages import UserMessage, AssistantMessage
-from src.services.compact.snip_compact import snip_compact, SNIPPED_MARKER
+from clawcodex_ext.services.compact.snip_compact import snip_compact, SNIPPED_MARKER
 
 
 def _make_assistant(tool_id: str, tool_name: str = "Read") -> AssistantMessage:

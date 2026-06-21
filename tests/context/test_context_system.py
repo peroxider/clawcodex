@@ -11,7 +11,7 @@ from src.agent.conversation import Conversation
 from src.context_system import build_context_prompt
 from src.context_system.claude_md import clear_memory_file_caches
 from src.context_system.git_context import clear_git_caches, collect_git_context
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.agent_loop import run_agent_loop
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry

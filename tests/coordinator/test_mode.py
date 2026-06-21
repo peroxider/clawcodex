@@ -234,7 +234,7 @@ def test_user_context_worker_tools_matches_async_allowed_tools(
     time. Per Chunk-G deviation #1, the list is hardcoded (registry-
     construction order makes a live read awkward); this guard ensures
     it stays in sync."""
-    from src.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
+    from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 
     monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
     ctx = get_coordinator_user_context()
@@ -307,7 +307,7 @@ def test_user_context_default_branch_matches_async_allowed_exactly(
     * Tool added to coordinator user context but not ASYNC list →
       this test catches it.
     """
-    from src.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
+    from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 
     monkeypatch.setenv("CLAUDE_CODE_COORDINATOR_MODE", "1")
     monkeypatch.delenv("CLAUDE_CODE_SIMPLE", raising=False)

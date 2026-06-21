@@ -1,4 +1,4 @@
-"""Tests for src.utils.image_validation — port of TS imageValidation.ts."""
+"""Tests for clawcodex_ext.utils.image_validation — port of TS imageValidation.ts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import unittest
 from typing import Any
 
 from src.utils.image_processor import API_IMAGE_MAX_BASE64_SIZE
-from src.utils.image_validation import ImageSizeError, validate_images_for_api
+from clawcodex_ext.utils.image_validation import ImageSizeError, validate_images_for_api
 
 
 def _img_block(b64_len: int) -> dict:

@@ -8,12 +8,12 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.types.content_blocks import TextBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.providers.base import ChatResponse
-from src.compact_service.messages import is_compact_boundary_message
+from clawcodex_ext.providers.base import ChatResponse
+from clawcodex_ext.compact_service.messages import is_compact_boundary_message
 
-from src.services.compact.compact import (
+from clawcodex_ext.services.compact.compact import (
     CompactContext,
     CompactionResult,
     COMPACT_SYSTEM_PROMPT,

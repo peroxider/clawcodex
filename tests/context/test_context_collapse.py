@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import unittest
 
-from src.types.content_blocks import TextBlock
+from clawcodex_ext.types.content_blocks import TextBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.services.compact.context_collapse import (
+from clawcodex_ext.services.compact.context_collapse import (
     CollapseCommit,
     ContextCollapseStore,
     is_context_collapse_enabled,

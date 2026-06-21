@@ -13,9 +13,9 @@ from typing import Any, Optional, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.agent.conversation import Conversation
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 
 
 class MockConversation:
@@ -36,7 +36,7 @@ class TestCompactBoundaryMessages(unittest.TestCase):
 
     def test_creates_boundary_message(self):
         """Boundary message is created with correct properties."""
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             create_compact_boundary_message,
             is_compact_boundary_message,
         )
@@ -52,14 +52,14 @@ class TestCompactBoundaryMessages(unittest.TestCase):
 
     def test_non_boundary_is_not_boundary(self):
         """Regular messages are not boundary messages."""
-        from src.compact_service.messages import is_compact_boundary_message
+        from clawcodex_ext.compact_service.messages import is_compact_boundary_message
 
         msg = Message(role="user", content="Hello")
         self.assertFalse(is_compact_boundary_message(msg))
 
     def test_get_messages_after_boundary_with_no_boundary(self):
         """Returns all messages when no boundary exists."""
-        from src.compact_service.messages import get_messages_after_boundary
+        from clawcodex_ext.compact_service.messages import get_messages_after_boundary
 
         messages = [
             Message(role="user", content="Hello"),
@@ -70,7 +70,7 @@ class TestCompactBoundaryMessages(unittest.TestCase):
 
     def test_get_messages_after_boundary_with_boundary(self):
         """Returns only messages after last boundary."""
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             create_compact_boundary_message,
             get_messages_after_boundary,
         )
@@ -91,7 +91,7 @@ class TestCompactBoundaryMessages(unittest.TestCase):
 
     def test_summary_message_format(self):
         """Summary message has correct role and content."""
-        from src.compact_service.messages import create_compact_summary_message
+        from clawcodex_ext.compact_service.messages import create_compact_summary_message
 
         msg = create_compact_summary_message(
             "The user was working on a Python project. They asked about implementing a feature."
@@ -233,7 +233,7 @@ class TestCompactIntegration(unittest.TestCase):
 
     def test_compact_preserves_boundary_marker_in_serialization(self):
         """Boundary markers are preserved when conversation is serialized."""
-        from src.compact_service.messages import create_compact_boundary_message
+        from clawcodex_ext.compact_service.messages import create_compact_boundary_message
 
         conv = Conversation()
         conv.messages.append(Message(role="user", content="Hello"))
@@ -282,7 +282,7 @@ class TestPreservedSegment(unittest.TestCase):
     """Tests for PreservedSegment and annotate_boundary_with_preserved_segment."""
 
     def test_preserved_segment_dataclass(self):
-        from src.compact_service.messages import PreservedSegment
+        from clawcodex_ext.compact_service.messages import PreservedSegment
 
         ps = PreservedSegment(
             head_uuid="head-1234",
@@ -294,7 +294,7 @@ class TestPreservedSegment(unittest.TestCase):
         self.assertEqual(ps.tail_uuid, "tail-9abc")
 
     def test_metadata_includes_preserved_segment(self):
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             CompactBoundaryMetadata,
             PreservedSegment,
             _serialize_metadata,
@@ -313,7 +313,7 @@ class TestPreservedSegment(unittest.TestCase):
         self.assertIn("preserved=h1234567..t1234567", serialized)
 
     def test_annotate_boundary_no_keep(self):
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             create_compact_boundary_message,
             annotate_boundary_with_preserved_segment,
         )
@@ -323,7 +323,7 @@ class TestPreservedSegment(unittest.TestCase):
         self.assertIs(result, boundary)
 
     def test_annotate_boundary_with_keep(self):
-        from src.compact_service.messages import (
+        from clawcodex_ext.compact_service.messages import (
             create_compact_boundary_message,
             annotate_boundary_with_preserved_segment,
         )
@@ -346,31 +346,31 @@ class TestParsePromptTooLongTokenGap(unittest.TestCase):
     """Tests for parse_prompt_too_long_token_gap (port of TS regex)."""
 
     def test_standard_anthropic_message(self):
-        from src.services.compact.compact import parse_prompt_too_long_token_gap
+        from clawcodex_ext.services.compact.compact import parse_prompt_too_long_token_gap
 
         gap = parse_prompt_too_long_token_gap("prompt is too long: 137500 tokens > 135000 maximum")
         self.assertEqual(gap, 2500)
 
     def test_case_insensitive(self):
-        from src.services.compact.compact import parse_prompt_too_long_token_gap
+        from clawcodex_ext.services.compact.compact import parse_prompt_too_long_token_gap
 
         gap = parse_prompt_too_long_token_gap("PROMPT IS TOO LONG: 200 tokens > 100")
         self.assertEqual(gap, 100)
 
     def test_singular_token_unit(self):
-        from src.services.compact.compact import parse_prompt_too_long_token_gap
+        from clawcodex_ext.services.compact.compact import parse_prompt_too_long_token_gap
 
         gap = parse_prompt_too_long_token_gap("prompt is too long: 101 token > 100")
         self.assertEqual(gap, 1)
 
     def test_unparseable_returns_none(self):
-        from src.services.compact.compact import parse_prompt_too_long_token_gap
+        from clawcodex_ext.services.compact.compact import parse_prompt_too_long_token_gap
 
         self.assertIsNone(parse_prompt_too_long_token_gap("rate limit exceeded"))
         self.assertIsNone(parse_prompt_too_long_token_gap(""))
 
     def test_zero_or_negative_gap_returns_none(self):
-        from src.services.compact.compact import parse_prompt_too_long_token_gap
+        from clawcodex_ext.services.compact.compact import parse_prompt_too_long_token_gap
 
         self.assertIsNone(parse_prompt_too_long_token_gap("prompt is too long: 100 tokens > 100"))
         self.assertIsNone(parse_prompt_too_long_token_gap("prompt is too long: 50 tokens > 100"))
@@ -380,7 +380,7 @@ class TestCollectDiscoveredToolNames(unittest.TestCase):
     """Tests for the discovered-tools collector used by boundary metadata."""
 
     def test_collects_unique_sorted_names(self):
-        from src.services.compact.compact import _collect_discovered_tool_names
+        from clawcodex_ext.services.compact.compact import _collect_discovered_tool_names
         from src.types.messages import AssistantMessage
 
         msgs = [
@@ -403,13 +403,13 @@ class TestCollectDiscoveredToolNames(unittest.TestCase):
         )
 
     def test_skips_user_messages(self):
-        from src.services.compact.compact import _collect_discovered_tool_names
+        from clawcodex_ext.services.compact.compact import _collect_discovered_tool_names
 
         msgs = [Message(role="user", content="hello")]
         self.assertEqual(_collect_discovered_tool_names(msgs), [])
 
     def test_handles_dict_blocks(self):
-        from src.services.compact.compact import _collect_discovered_tool_names
+        from clawcodex_ext.services.compact.compact import _collect_discovered_tool_names
         from src.types.messages import AssistantMessage
 
         msgs = [
@@ -422,7 +422,7 @@ class TestCollectDiscoveredToolNames(unittest.TestCase):
         self.assertEqual(_collect_discovered_tool_names(msgs), ["Glob"])
 
     def test_empty_messages(self):
-        from src.services.compact.compact import _collect_discovered_tool_names
+        from clawcodex_ext.services.compact.compact import _collect_discovered_tool_names
 
         self.assertEqual(_collect_discovered_tool_names([]), [])
 

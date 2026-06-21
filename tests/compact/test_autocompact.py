@@ -10,11 +10,11 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 
-from src.services.compact.autocompact import (
+from clawcodex_ext.services.compact.autocompact import (
     AutoCompactTracking,
     should_auto_compact,
     auto_compact_if_needed,

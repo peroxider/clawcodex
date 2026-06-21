@@ -9,7 +9,7 @@ import tempfile
 import time
 import unittest
 
-from src.services.compact.post_compact_attachments import (
+from clawcodex_ext.services.compact.post_compact_attachments import (
     create_post_compact_file_attachments,
     create_plan_attachment_if_needed,
     create_skill_attachment_if_needed,
@@ -21,7 +21,7 @@ from src.services.compact.post_compact_attachments import (
     _collect_read_tool_file_paths,
     _truncate_to_tokens,
 )
-from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from src.types.messages import UserMessage, AssistantMessage
 
 

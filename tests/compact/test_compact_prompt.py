@@ -1,6 +1,6 @@
 import pytest
 
-from src.services.compact.prompt import (
+from clawcodex_ext.services.compact.prompt import (
     BASE_COMPACT_PROMPT,
     NO_TOOLS_PREAMBLE,
     NO_TOOLS_TRAILER,

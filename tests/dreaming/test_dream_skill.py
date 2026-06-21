@@ -22,7 +22,7 @@ from extensions.skills_ext.bundled.dream import (
     _dream_status,
     register_dream_skill,
 )
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 
 # ---------------------------------------------------------------------------

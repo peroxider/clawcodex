@@ -30,7 +30,7 @@ from clawcodex_ext.dreaming.runner import (
     DreamRunResult,
     set_dream_runner_factory,
 )
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 
 @pytest.fixture(autouse=True)

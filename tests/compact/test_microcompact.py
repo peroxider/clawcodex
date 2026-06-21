@@ -12,7 +12,7 @@ class TestStripImagesFromMessages(unittest.TestCase):
 
     def test_passes_through_non_user_messages(self):
         """Non-user messages pass through unchanged."""
-        from src.context_system.microcompact import strip_images_from_messages
+        from clawcodex_ext.context_system.microcompact import strip_images_from_messages
 
         messages = [
             {"role": "assistant", "content": "Hello"},
@@ -23,7 +23,7 @@ class TestStripImagesFromMessages(unittest.TestCase):
 
     def test_passes_through_user_with_string_content(self):
         """User message with string content passes through."""
-        from src.context_system.microcompact import strip_images_from_messages
+        from clawcodex_ext.context_system.microcompact import strip_images_from_messages
 
         messages = [{"role": "user", "content": "Hello world"}]
         result = strip_images_from_messages(messages)
@@ -31,7 +31,7 @@ class TestStripImagesFromMessages(unittest.TestCase):
 
     def test_replaces_image_block_with_text(self):
         """Image blocks are replaced with [image] text."""
-        from src.context_system.microcompact import strip_images_from_messages
+        from clawcodex_ext.context_system.microcompact import strip_images_from_messages
 
         messages = [
             {
@@ -50,7 +50,7 @@ class TestStripImagesFromMessages(unittest.TestCase):
 
     def test_replaces_document_block_with_text(self):
         """Document blocks are replaced with [document] text."""
-        from src.context_system.microcompact import strip_images_from_messages
+        from clawcodex_ext.context_system.microcompact import strip_images_from_messages
 
         messages = [
             {
@@ -69,7 +69,7 @@ class TestStripImagesFromMessages(unittest.TestCase):
 
     def test_strips_nested_images_in_tool_result(self):
         """Images nested in tool_result content are stripped."""
-        from src.context_system.microcompact import strip_images_from_messages
+        from clawcodex_ext.context_system.microcompact import strip_images_from_messages
 
         messages = [
             {
@@ -108,7 +108,7 @@ class TestMicrocompactMessages(unittest.TestCase):
 
     def test_no_messages_returns_unchanged(self):
         """Empty message list returns unchanged."""
-        from src.context_system.microcompact import microcompact_messages
+        from clawcodex_ext.context_system.microcompact import microcompact_messages
 
         messages = []
         result, saved = microcompact_messages(messages)
@@ -117,7 +117,7 @@ class TestMicrocompactMessages(unittest.TestCase):
 
     def test_no_tool_results_returns_unchanged(self):
         """Messages without tool results pass through unchanged."""
-        from src.context_system.microcompact import microcompact_messages
+        from clawcodex_ext.context_system.microcompact import microcompact_messages
 
         messages = [
             {"role": "user", "content": "Hello"},
@@ -129,7 +129,7 @@ class TestMicrocompactMessages(unittest.TestCase):
 
     def test_keeps_recent_tool_results(self):
         """Recent tool results (within keep_recent) are not cleared."""
-        from src.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
+        from clawcodex_ext.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
 
         messages = [
             {
@@ -187,7 +187,7 @@ class TestMicrocompactMessages(unittest.TestCase):
 
     def test_clears_old_tool_results(self):
         """Old tool results beyond keep_recent are cleared."""
-        from src.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
+        from clawcodex_ext.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
 
         messages = [
             {
@@ -266,7 +266,7 @@ class TestMicrocompactMessages(unittest.TestCase):
 
     def test_non_compactable_tools_not_cleared(self):
         """Tool results from non-compactable tools are not cleared."""
-        from src.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
+        from clawcodex_ext.context_system.microcompact import microcompact_messages, CLEARED_MESSAGE
 
         messages = [
             {

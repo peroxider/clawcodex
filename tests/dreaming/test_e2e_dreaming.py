@@ -49,7 +49,7 @@ from clawcodex_ext.dreaming.runner import (
     set_dream_runner_factory,
 )
 from extensions.skills_ext.bundled.dream import _dream_call
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 
 # ---------------------------------------------------------------------------

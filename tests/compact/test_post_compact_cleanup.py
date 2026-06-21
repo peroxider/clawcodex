@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.compact.post_compact_cleanup import (
+from clawcodex_ext.services.compact.post_compact_cleanup import (
     PostCompactContext,
     run_post_compact_cleanup,
 )

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from src.agent.agent_definitions import AgentDefinition
-from src.agent.constants import ALL_AGENT_DISALLOWED_TOOLS
+from clawcodex_ext.agent.agent_definitions import AgentDefinition
+from clawcodex_ext.agent.constants import ALL_AGENT_DISALLOWED_TOOLS
 
 from clawcodex_ext.agent.registry import (
     SOURCE_CLAWCODEX_EXT,
