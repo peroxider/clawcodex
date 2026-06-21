@@ -153,20 +153,17 @@ def run_tui(options: TUIOptions) -> int:
 
 
 def _print_resume_hint_after_tui(app) -> None:
-    """Print resume hint to the host terminal after TUI teardown."""
-    import sys
+    """Print resume hint to the host terminal after TUI teardown.
 
-    if not sys.stdout.isatty():
-        return
+    Delegates to the centralised helper so the TUI upstream/downstream
+    and the REPL all share one implementation (and one process-wide
+    idempotency latch)."""
+    from clawcodex_ext.utils.resume_hint import print_resume_hint
+
     session = getattr(app, "session", None)
-    if session is None:
-        return
-    sid = getattr(session, "session_id", None) or ""
-    if not sid:
-        return
-    from rich.console import Console
-
-    Console().print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
+    print_resume_hint(
+        getattr(session, "session_id", None) if session is not None else None
+    )
 
 
 def _replay_transcript_to_host(app) -> None:

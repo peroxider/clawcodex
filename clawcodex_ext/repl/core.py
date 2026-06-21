@@ -3353,10 +3353,11 @@ class ClawcodexREPL:
                 self.session.save()
             except Exception:
                 pass
-            sid = getattr(self.session, 'session_id', '') or ''
             self.console.print("[blue]Goodbye![/blue]")
-            if sid:
-                self.console.print(f"[dim]Resume with: clawcodex --resume {sid}[/dim]")
+            # Delegate to the centralised helper so the hint format matches
+            # CCB's ``printResumeHint()`` and shares the process-wide
+            # idempotency latch with the atexit cleanup.
+            self._print_resume_hint()
             raise SystemExit(0)
 
         elif cmd == '/login':
@@ -4745,14 +4746,12 @@ class ClawcodexREPL:
 
     def _print_resume_hint(self) -> None:
         """Print a hint showing the session ID for ``--resume``, matching CCB's
-        ``printResumeHint()``.  Only printed when stdout is a TTY and the
-        session has a valid session ID."""
-        if not sys.stdout.isatty():
-            return
-        sid = getattr(self.session, "session_id", None) or ""
-        if not sid:
-            return
-        self.console.print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
+        ``printResumeHint()``. Delegates to the centralised helper so the
+        inline ``/exit`` path and the atexit cleanup share one
+        implementation (including the process-wide idempotency latch)."""
+        from clawcodex_ext.utils.resume_hint import print_resume_hint
+
+        print_resume_hint(getattr(self.session, "session_id", None))
 
     def _handle_background_escape(self) -> None:
         """Handle Ctrl+B background escape: fork the agent into a background process.

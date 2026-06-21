@@ -16,12 +16,19 @@ from src.repl import ClawcodexREPL
 from src.agent import Session, Conversation
 from src.providers.base import ChatMessage, ChatResponse
 
+from clawcodex_ext.utils.resume_hint import reset_resume_hint_for_test_only
+
 
 class TestREPL(unittest.TestCase):
     """Test REPL functionality."""
 
     def setUp(self):
         """Set up test fixtures."""
+        # Clear the process-wide resume-hint latch so a print in one test
+        # does not bleed into another (the latch is intentional in
+        # production but must be reset between test cases).
+        reset_resume_hint_for_test_only()
+
         # Create a temporary config directory
         self.temp_dir = tempfile.mkdtemp()
         self.config_dir = Path(self.temp_dir) / ".clawcodex"
@@ -127,6 +134,190 @@ class TestREPL(unittest.TestCase):
 
                     with self.assertRaises(SystemExit):
                         repl.handle_command("/exit")
+
+    def test_handle_command_exit_prints_resume_hint_on_tty(self):
+        """S-R1: /exit on a TTY should print the standard resume hint
+        using the session_id, matching CCB's ``printResumeHint()``.
+        """
+        import io
+        import sys
+
+        expected_sid = "0123456789abcdef0123456789abcdef"
+
+        class _FakeTTYStdout:
+            """A stdout stand-in that pretends to be a TTY and buffers writes."""
+
+            def __init__(self) -> None:
+                self._buf = io.StringIO()
+
+            def isatty(self) -> bool:
+                return True
+
+            def write(self, s: str) -> int:
+                return self._buf.write(s)
+
+            def flush(self) -> None:
+                self._buf.flush()
+
+            def getvalue(self) -> str:
+                return self._buf.getvalue()
+
+        fake_stdout = _FakeTTYStdout()
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = expected_sid
+                mock_session_instance.save = Mock()
+                mock_session.return_value = mock_session_instance
+
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawcodexREPL(provider_name="glm")
+
+                    # Patch sys.stdout to a TTY-pretending stream so the
+                    # resume-hint gate opens and the write is captured.
+                    with patch.object(sys, "stdout", fake_stdout):
+                        with self.assertRaises(SystemExit):
+                            repl.handle_command("/exit")
+
+                    rendered = fake_stdout.getvalue()
+                    self.assertIn("Resume this session with:", rendered)
+                    self.assertIn(f"clawcodex --resume {expected_sid}", rendered)
+                    mock_session_instance.save.assert_called_once()
+
+    def test_handle_command_exit_prints_hint_exactly_once_on_tty(self):
+        """S-R1: the inline ``/exit`` path must emit the hint exactly once.
+
+        Without the process-wide latch in :func:`print_resume_hint`, this
+        test would fail because the same hint could be emitted by both the
+        inline ``/exit`` print and the atexit cleanup registered in
+        ``frontend/repl_extensions.py:_register_signal_session_save``.
+        """
+        import io
+        import sys
+
+        expected_sid = "fedcba9876543210fedcba9876543210"
+
+        class _CountingTTYStdout:
+            """TTY-pretending stdout that records every flush."""
+
+            def __init__(self) -> None:
+                self._buf = io.StringIO()
+                self.flushes = 0
+
+            def isatty(self) -> bool:
+                return True
+
+            def write(self, s: str) -> int:
+                return self._buf.write(s)
+
+            def flush(self) -> None:
+                self._buf.flush()
+                self.flushes += 1
+
+            def getvalue(self) -> str:
+                return self._buf.getvalue()
+
+        fake_stdout = _CountingTTYStdout()
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = expected_sid
+                mock_session_instance.save = Mock()
+                mock_session.return_value = mock_session_instance
+
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawcodexREPL(provider_name="glm")
+
+                    with patch.object(sys, "stdout", fake_stdout):
+                        with self.assertRaises(SystemExit):
+                            repl.handle_command("/exit")
+
+        rendered = fake_stdout.getvalue()
+        # Exactly-once: the latch in print_resume_hint must suppress the
+        # duplicate if a second call ever fires in the same process.
+        self.assertEqual(
+            rendered.count("Resume this session with:"),
+            1,
+            f"resume hint emitted multiple times:\n{rendered}",
+        )
+        self.assertEqual(
+            rendered.count(f"clawcodex --resume {expected_sid}"),
+            1,
+        )
+
+    def test_resume_hint_latch_suppresses_double_print_across_paths(self):
+        """S-R1: when BOTH the inline ``/exit`` print and the atexit
+        cleanup try to print, the latch keeps the output to a single hint.
+
+        The inline ``/exit`` path runs the print inside
+        ``ClawcodexREPL.handle_command``; the atexit path is the cleanup
+        callback registered by ``_register_signal_session_save``. We
+        trigger the atexit callback manually after ``/exit`` to simulate
+        a SIGTERM landing during shutdown.
+        """
+        import io
+        import sys
+
+        from clawcodex_ext.utils.resume_hint import print_resume_hint
+
+        expected_sid = "abcdef0123456789abcdef0123456789"
+
+        class _CountingTTYStdout:
+            def __init__(self) -> None:
+                self._buf = io.StringIO()
+
+            def isatty(self) -> bool:
+                return True
+
+            def write(self, s: str) -> int:
+                return self._buf.write(s)
+
+            def flush(self) -> None:
+                self._buf.flush()
+
+            def getvalue(self) -> str:
+                return self._buf.getvalue()
+
+        fake_stdout = _CountingTTYStdout()
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = expected_sid
+                mock_session_instance.save = Mock()
+                mock_session.return_value = mock_session_instance
+
+                with patch("clawcodex_ext.repl.core.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawcodexREPL(provider_name="glm")
+
+                    with patch.object(sys, "stdout", fake_stdout):
+                        with self.assertRaises(SystemExit):
+                            repl.handle_command("/exit")
+                        # Inline /exit has already emitted once. Now fire
+                        # the helper a second time to simulate the atexit
+                        # cleanup re-printing. The latch must no-op.
+                        print_resume_hint(expected_sid, stream=fake_stdout)
+
+        rendered = fake_stdout.getvalue()
+        self.assertEqual(
+            rendered.count("Resume this session with:"),
+            1,
+            f"resume hint emitted twice across /exit + atexit:\n{rendered}",
+        )
 
     def test_handle_command_clear(self):
         """Test /clear command."""

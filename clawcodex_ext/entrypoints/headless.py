@@ -502,6 +502,11 @@ def run_headless(options: HeadlessOptions) -> int:
         if final_text:
             stdout.write(final_text + "\n")
             stdout.flush()
+        # S-R1: print resume hint to TTY after text output. JSON / stream-json
+        # already carry session_id in their structured payload, so skip them.
+        from clawcodex_ext.utils.resume_hint import print_resume_hint
+
+        print_resume_hint(getattr(session, "session_id", None), stream=stdout)
     elif options.output_format == "json":
         if exit_code == 0:
             json_subtype = "success"

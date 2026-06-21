@@ -177,48 +177,44 @@ def _register_signal_session_save(repl: "ClawcodexREPL") -> None:
 
     Uses the upstream ``register_cleanup`` from ``src.utils.graceful_shutdown``
     which is already installed by ``init()``.
+
+    The print is delegated to :func:`clawcodex_ext.utils.resume_hint.print_resume_hint`
+    so the hint is centralised — and that helper's process-wide latch
+    keeps the hint to a single emission even if the inline REPL ``/exit``
+    path has already printed one. The ``session.save()`` call is
+    unconditional because persistence must run regardless of whether the
+    user has already seen the hint.
     """
     try:
         from src.utils.graceful_shutdown import register_cleanup
     except ImportError:
         return
 
-    # Capture session reference once at registration time.
-    sid_ref = {  # mutable container so the closure can re-read .session_id
-        "session": None,
-        "printed": False,
-    }
+    # Capture session reference once at registration time and again
+    # just before the cleanup runs (the REPL may swap sessions mid-run).
+    sid_ref = {"session": None}
 
     def _capture_ref() -> None:
         sid_ref["session"] = getattr(repl, "session", None)
 
-    # Snapshot the session now and also just before the cleanup runs.
     _capture_ref()
 
     def _cleanup() -> None:
-        if sid_ref["printed"]:
-            return
-        sid_ref["printed"] = True
         _capture_ref()
         session = sid_ref["session"]
         if session is None:
             return
-        # Save session state
+        # Always persist — independent of whether the hint gets printed.
         try:
             session.save()
         except Exception:
             pass
-        # Print resume hint (only if stdout is a TTY)
-        sid = getattr(session, "session_id", None) or ""
-        if not sid:
-            return
+        # Print via the canonical helper. Its process-wide latch
+        # suppresses the duplicate if ``/exit`` already printed.
         try:
-            import sys
+            from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-            if sys.stdout.isatty():
-                from rich.console import Console
-
-                Console().print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
+            print_resume_hint(getattr(session, "session_id", None))
         except Exception:
             pass
 

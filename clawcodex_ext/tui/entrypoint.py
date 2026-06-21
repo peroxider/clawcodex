@@ -251,34 +251,26 @@ def _run_tui_with_app(
 
 def _register_tui_signal_save(session: Session) -> None:
     """Register graceful-shutdown cleanup that saves the TUI session and
-    prints a resume hint when the process receives SIGTERM/SIGINT."""
+    prints a resume hint when the process receives SIGTERM/SIGINT.
+
+    The print delegates to :func:`clawcodex_ext.utils.resume_hint.print_resume_hint`
+    so the helper's process-wide latch keeps the hint to a single
+    emission even if the inline TUI teardown path also fires one.
+    """
     try:
         from src.utils.graceful_shutdown import register_cleanup
     except ImportError:
         return
 
-    ref = {"printed": False}
-
     def _cleanup() -> None:
-        if ref["printed"]:
-            return
-        ref["printed"] = True
-        # Save session state
         try:
             session.save()
         except Exception:
             pass
-        # Print resume hint
-        sid = getattr(session, "session_id", None) or ""
-        if not sid:
-            return
         try:
-            import sys
+            from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-            if sys.stdout.isatty():
-                from rich.console import Console
-
-                Console().print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
+            print_resume_hint(getattr(session, "session_id", None))
         except Exception:
             pass
 
@@ -288,18 +280,13 @@ def _register_tui_signal_save(session: Session) -> None:
 def _print_resume_hint(session: Session) -> None:
     """Print resume hint to the host terminal after TUI teardown.
 
-    Matches CCB's ``printResumeHint()`` behaviour: only print when the
-    host stdout is a TTY and the session has a valid ID.
+    Delegates to the centralised helper so the TUI upstream/downstream
+    and the REPL all share one implementation (including the
+    process-wide idempotency latch that suppresses atexit double-fires).
     """
-    if not sys.stdout.isatty():
-        return
-    sid = getattr(session, "session_id", None) or ""
-    if not sid:
-        return
-    from rich.console import Console
+    from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-    console = Console()
-    console.print(f"\n[dim]Resume this session with: clawcodex --resume {sid}[/dim]")
+    print_resume_hint(getattr(session, "session_id", None))
 
 
 def _filter_registry(registry, *, keep) -> None:
