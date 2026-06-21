@@ -38,7 +38,7 @@ from typing import Any, Callable
 
 from src.permissions.cycle import cycle_permission_mode, get_next_permission_mode
 from src.permissions.modes import has_allow_bypass_permissions_mode
-from src.permissions.types import PermissionMode, PermissionUpdateSetMode
+from clawcodex_ext.permissions.types import PermissionMode, PermissionUpdateSetMode
 from src.permissions.updates import apply_permission_update
 from src.state.app_state import replace_state
 from src.utils.store import Store

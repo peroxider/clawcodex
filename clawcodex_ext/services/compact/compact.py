@@ -14,26 +14,26 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-from ...types.content_blocks import TextBlock, ToolUseBlock
-from ...types.messages import (
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
+from clawcodex_ext.types.messages import (
     Message,
     UserMessage,
     AssistantMessage,
     normalize_messages_for_api,
 )
-from ...compact_service.messages import (
+from clawcodex_ext.compact_service.messages import (
     annotate_boundary_with_preserved_segment,
     create_compact_boundary_message,
     create_compact_summary_message,
     get_messages_after_boundary,
     is_compact_boundary_message,
 )
-from ...context_system.microcompact import (
+from clawcodex_ext.context_system.microcompact import (
     strip_images_from_messages,
     strip_images_from_typed_messages,
     microcompact_messages,
 )
-from ...token_estimation import (
+from clawcodex_ext.utils.token_estimation import (
     count_messages_tokens,
     count_tokens,
     rough_token_count_estimation_for_messages,

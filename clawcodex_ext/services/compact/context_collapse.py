@@ -16,8 +16,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...types.content_blocks import TextBlock
-from ...types.messages import Message, UserMessage
+from clawcodex_ext.types.content_blocks import TextBlock
+from clawcodex_ext.types.messages import Message, UserMessage
 
 logger = logging.getLogger(__name__)
 

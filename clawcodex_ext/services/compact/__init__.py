@@ -46,6 +46,7 @@ from .post_compact_attachments import (
     POST_COMPACT_TOKEN_BUDGET,
     POST_COMPACT_MAX_TOKENS_PER_FILE,
 )
+from . import reactive_compact
 
 __all__ = [
     "CompressionPipeline",
@@ -79,4 +80,5 @@ __all__ = [
     "POST_COMPACT_MAX_FILES_TO_RESTORE",
     "POST_COMPACT_TOKEN_BUDGET",
     "POST_COMPACT_MAX_TOKENS_PER_FILE",
+    "reactive_compact",
 ]

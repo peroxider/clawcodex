@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...types.messages import Message
+from clawcodex_ext.types.messages import Message
 
 SNIPPED_MARKER = "[Snipped: tool result too old]"
 DEFAULT_KEEP_RECENT = 10

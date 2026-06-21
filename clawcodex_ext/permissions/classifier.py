@@ -22,8 +22,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.permissions.check import AutoModeDecision
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 
 from .danger_detector import detect_dangerous_tool_call
 
@@ -267,6 +266,7 @@ def auto_mode_classify_with_llm(
 ) -> AutoModeDecision:
     if _original_classify is None:
         from src.permissions.check import auto_mode_classify as _original_classify
+        from src.permissions.check import AutoModeDecision
 
     rule_result = _original_classify(tool_name, tool_input, context)
     log.info(

@@ -4,14 +4,14 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from ...types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
-from ...types.messages import (
+from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
+from clawcodex_ext.types.messages import (
     Message,
     UserMessage,
     AssistantMessage,
     normalize_messages_for_api,
 )
-from ...token_estimation import count_messages_tokens
+from clawcodex_ext.utils.token_estimation import count_messages_tokens
 
 from .compact import (
     CompactContext,

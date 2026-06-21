@@ -16,8 +16,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...types.messages import Message
-from ...providers.base import BaseProvider
+from clawcodex_ext.types.messages import Message
+from clawcodex_ext.providers.base import BaseProvider
 
 from .compact import (
     CompactContext,

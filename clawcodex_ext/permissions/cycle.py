@@ -13,9 +13,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from src.permissions.types import PermissionMode, ToolPermissionContext
-from src.permissions.updates import apply_permission_update
-from src.permissions.types import PermissionUpdateSetMode
+from clawcodex_ext.permissions.types import PermissionMode, ToolPermissionContext
+from clawcodex_ext.permissions.types import PermissionUpdateSetMode
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +100,7 @@ def cycle_permission_mode(
     consistently.
     """
     next_mode = get_next_permission_mode(context)
+    from src.permissions.updates import apply_permission_update
     next_context = apply_permission_update(
         context,
         PermissionUpdateSetMode(

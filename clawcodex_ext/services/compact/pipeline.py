@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ...types.messages import Message
-from ...providers.base import BaseProvider
+from clawcodex_ext.types.messages import Message
+from clawcodex_ext.providers.base import BaseProvider
 
 from .tool_result_budget import apply_tool_result_budget
 from .snip_compact import snip_compact
@@ -30,7 +30,7 @@ from .autocompact import (
     auto_compact_if_needed,
     should_auto_compact,
 )
-from ...context_system.microcompact import (
+from clawcodex_ext.context_system.microcompact import (
     microcompact_typed_messages,
     TimeBasedMCConfig,
 )
