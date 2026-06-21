@@ -19,7 +19,7 @@ from src.buddy.feature import is_buddy_enabled
 from src.config import load_config
 
 try:
-    from src.types.messages import AttachmentMessage
+    from clawcodex_ext.types.messages import AttachmentMessage
 except ImportError:
     AttachmentMessage = object  # type: ignore[misc, assignment]
 

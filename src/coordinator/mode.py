@@ -24,7 +24,7 @@ import logging
 import os
 from typing import Final, Iterable, Literal, TYPE_CHECKING
 
-from src.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
+from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
 from src.utils.env import is_env_truthy
 
 if TYPE_CHECKING:

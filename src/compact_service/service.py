@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from ..agent.conversation import Conversation, Message
-from ..providers.base import BaseProvider
-from ..services.compact.compact import (
+from clawcodex_ext.providers.base import BaseProvider
+from clawcodex_ext.services.compact.compact import (
     compact_conversation as _pipeline_compact,
     CompactContext,
     CompactionResult as PipelineResult,

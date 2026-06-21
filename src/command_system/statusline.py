@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.agent.constants import AGENT_TOOL_NAME
+from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
 
 from .types import CommandContext, PromptCommand
 

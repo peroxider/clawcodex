@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from src.agent.agent_definitions import (
+from clawcodex_ext.agent.agent_definitions import (
     EXPLORE_AGENT,
     GENERAL_PURPOSE_AGENT,
     PLAN_AGENT,

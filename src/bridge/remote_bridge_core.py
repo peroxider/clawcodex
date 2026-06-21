@@ -86,7 +86,7 @@ from src.bridge.repl_bridge_transport import (
 )
 from src.bridge.session_id_compat import to_compat_session_id
 from src.bridge.work_secret import build_ccr_v2_sdk_url
-from src.types.messages import Message
+from clawcodex_ext.types.messages import Message
 from src.utils.message_mappers import to_sdk_messages
 
 logger = logging.getLogger(__name__)

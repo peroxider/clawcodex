@@ -30,7 +30,7 @@ from src.hooks.hook_types import (
     HookResult,
 )
 from src.hooks.trust_gate import should_skip_hook_due_to_trust
-from src.types.messages import (
+from clawcodex_ext.types.messages import (
     create_attachment_message,
     create_progress_message,
 )

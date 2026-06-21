@@ -66,7 +66,7 @@ from src.utils.env import is_env_truthy
 # Tool-name constants — match TS source. Pulled from the agent /
 # send-message / task-stop modules' canonical names so a future
 # rename ripples through the prompt automatically.
-from src.agent.constants import AGENT_TOOL_NAME
+from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
 
 # SendMessage and TaskStop are not import-stable from their tool
 # modules at this layer (would cycle), so we hardcode the literals
