@@ -60,7 +60,7 @@ from src.services.swarm.leader_permission_bridge import deliver_permission_decis
 from src.services.swarm.mailbox import get_inbox_path, read_mailbox
 
 if TYPE_CHECKING:
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 logger = logging.getLogger(__name__)
 

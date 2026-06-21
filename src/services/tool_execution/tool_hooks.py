@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
-from src.types.messages import (
+from clawcodex_ext.types.messages import (
     AssistantMessage,
     Message,
     create_attachment_message,

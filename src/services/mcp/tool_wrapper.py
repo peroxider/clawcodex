@@ -28,10 +28,10 @@ import logging
 import re
 from typing import Any, Optional
 
-from src.permissions.types import PermissionPassthroughResult, PermissionResult
+from clawcodex_ext.permissions.types import PermissionPassthroughResult, PermissionResult
 from src.tool_system.build_tool import McpInfo, Tool, build_tool
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 from .client import McpClient
 from .mcp_string_utils import build_mcp_tool_name

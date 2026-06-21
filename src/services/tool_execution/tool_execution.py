@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 
-from src.types.messages import (
+from clawcodex_ext.types.messages import (
     CANCEL_MESSAGE,
     AssistantMessage,
     Message,
@@ -413,7 +413,7 @@ async def _check_permissions_and_call_tool(
                 resulting_messages.append(MessageUpdateLazy(message=msg))
 
         if should_prevent_continuation:
-            from src.types.messages import create_attachment_message
+            from clawcodex_ext.types.messages import create_attachment_message
 
             resulting_messages.append(
                 MessageUpdateLazy(
@@ -498,7 +498,7 @@ async def _check_permissions_and_call_tool(
 
 
 async def _call_tool(tool: Tool, tool_input: dict[str, Any], context: ToolContext) -> Any:
-    from src.tool_system.protocol import ToolResult
+    from clawcodex_ext.tool_system.protocol import ToolResult
 
     call_fn = tool.call
     import asyncio

@@ -18,7 +18,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Generator, Literal
 
-from src.types.messages import (
+from clawcodex_ext.types.messages import (
     AssistantMessage,
     Message,
     create_user_message,
@@ -178,7 +178,7 @@ class StreamingToolExecutor:
         assistant_message: AssistantMessage,
     ) -> Message:
         if reason == "user_interrupted":
-            from src.types.messages import REJECT_MESSAGE
+            from clawcodex_ext.types.messages import REJECT_MESSAGE
 
             return create_user_message(
                 content=[
