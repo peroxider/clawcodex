@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.tool_system.registry import ToolRegistry
 from src.tool_system.tools import (
     AskUserQuestionTool,

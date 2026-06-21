@@ -11,12 +11,12 @@ import time
 
 import pytest
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     LocalAgentTaskState,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 from src.utils.message_queue_manager import (
     clear_pending_notifications,
     drain_pending_notifications,

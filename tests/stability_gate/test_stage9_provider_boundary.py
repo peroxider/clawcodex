@@ -12,7 +12,7 @@ P1#7（Tool 异常隔离）、P0#4（无 API key 配置时的 fallback）。
 
 from __future__ import annotations
 
-from src.providers.base import ChatResponse, ChatMessage, BaseProvider
+from clawcodex_ext.providers.base import ChatResponse, ChatMessage, BaseProvider
 
 
 class TestStage9ChatResponseBoundary:

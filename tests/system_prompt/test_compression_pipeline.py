@@ -14,15 +14,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.providers.base import ChatResponse
-from src.services.compact.pipeline import (
+from clawcodex_ext.providers.base import ChatResponse
+from clawcodex_ext.services.compact.pipeline import (
     CompressionPipeline,
     CompressionResult,
     PipelineConfig,
     run_compression_pipeline,
 )
-from src.services.compact.context_collapse import ContextCollapseStore
-from src.services.compact.autocompact import (
+from clawcodex_ext.services.compact.context_collapse import ContextCollapseStore
+from clawcodex_ext.services.compact.autocompact import (
     AutoCompactTracking,
     get_auto_compact_threshold,
 )

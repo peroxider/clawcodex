@@ -5,11 +5,11 @@ import unittest
 from pathlib import Path
 from typing import Any
 
-from src.permissions.types import ToolPermissionContext
+from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.tool_system.build_tool import Tool, build_tool
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall, ToolResult
+from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
 from src.tool_system.registry import (
     ToolRegistry,
     assemble_tool_pool,

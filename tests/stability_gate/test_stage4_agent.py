@@ -131,7 +131,7 @@ class TestStage4SubagentInParentSession:
       ``<parent_session_id>/subagents/agent-<agent_id>.jsonl``，与
       主 session 的 ``<parent_session_id>/transcript.jsonl`` 同根不同枝。
     - 该路径在 ``src.init.init()`` 之后由
-      ``clawcodex_ext.transcript.nested_path.nested_session_path_resolver``
+      ``clawcodex_ext.agent.transcript.nested_session_path_resolver``
       提供；若 init 被旁路，则落到 flat
       ``~/.clawcodex/transcripts/<agent_id>.jsonl``，不污染主 session。
 
@@ -160,7 +160,7 @@ class TestStage4SubagentInParentSession:
             # Also clear HOMEDRIVE/HOMEPATH so they don't bypass USERPROFILE
             monkeypatch.delenv("HOMEDRIVE", raising=False)
             monkeypatch.delenv("HOMEPATH", raising=False)
-        import src.agent.transcript as transcript
+        import clawcodex_ext.agent.transcript as transcript
         from src.init import init as init_callable
         from src.init import reset_init_for_test_only
         import clawcodex_ext
@@ -207,7 +207,7 @@ class TestStage4SubagentInParentSession:
                 "path resolver so sub-agent JSONL files land under "
                 "<parent_session_id>/subagents/. See "
                 "src/init.py:init() substep 6 and "
-                "clawcodex_ext/transcript/nested_path.py"
+                "clawcodex_ext/agent/transcript.py"
             )
         finally:
             transcript._transcript_path_resolver = None
@@ -307,7 +307,7 @@ class TestStage4SubagentInParentSession:
     def test_subagent_filename_is_agent_dash_id_jsonl(self, monkeypatch, tmp_path):
         """子 agent 文件名遵循 ``agent-<agent_id>.jsonl`` 格式。
 
-        与 ``clawcodex_ext/transcript/nested_path.py:35`` 中的字面量
+        与 ``clawcodex_ext/agent/transcript.py`` 中的字面量
         ``f"agent-{agent_id}.jsonl"`` 同步——任何变更需要两边一起改。
         """
         (

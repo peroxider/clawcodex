@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.services.compact.tool_result_budget import (
+from clawcodex_ext.services.compact.tool_result_budget import (
     apply_tool_result_budget,
     cleanup_budget_dir,
     BudgetManifest,

@@ -25,8 +25,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src import token_estimation
-from src.token_estimation import (
+from clawcodex_ext.utils import token_estimation
+from clawcodex_ext.utils.token_estimation import (
     _MAX_TEXT_CACHE,
     count_messages_tokens,
     count_tokens,

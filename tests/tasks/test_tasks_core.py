@@ -10,7 +10,7 @@ import re
 
 import pytest
 
-from src.tasks_core import (
+from clawcodex_ext.tasks_core import (
     TaskStateBase,
     create_task_state_base,
     generate_task_id,

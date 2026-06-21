@@ -13,13 +13,13 @@ from dataclasses import replace
 
 import pytest
 
-from src.task_registry import (
+from clawcodex_ext.task_registry import (
     RuntimeTaskRegistry,
     Task,
     get_all_tasks,
     get_task_by_type,
 )
-from src.tasks_core import TaskStateBase
+from clawcodex_ext.tasks_core import TaskStateBase
 
 
 def _make_state(task_id: str = "b1", status: str = "running") -> TaskStateBase:
@@ -234,7 +234,7 @@ def test_in_process_teammate_registered_post_chunk_f() -> None:
 
 def test_register_task_is_idempotent() -> None:
     """Re-registering the same Task implementation is a no-op."""
-    from src.task_registry import register_task
+    from clawcodex_ext.task_registry import register_task
     from src.tasks.local_shell import LocalShellTask
 
     before = len(get_all_tasks())

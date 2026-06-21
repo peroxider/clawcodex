@@ -8,7 +8,7 @@ import unittest
 
 from src.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import Message, UserMessage, AssistantMessage
-from src.services.compact.session_memory_compact import (
+from clawcodex_ext.services.compact.session_memory_compact import (
     calculate_messages_to_keep_index,
     adjust_index_to_preserve_api_invariants,
     try_session_memory_compaction,

@@ -310,7 +310,7 @@ class TestProcessToolResultBlock(unittest.TestCase):
 
     def test_routes_through_persistence(self) -> None:
         from src.tool_system.build_tool import build_tool
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         big_output = "z" * 80_000
 
@@ -335,7 +335,7 @@ class TestProcessToolResultBlock(unittest.TestCase):
 
     def test_below_threshold_unchanged(self) -> None:
         from src.tool_system.build_tool import build_tool
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         small = "small output"
 
@@ -358,7 +358,7 @@ class TestProcessToolResultBlock(unittest.TestCase):
 
     def test_empty_result_replaced_with_marker(self) -> None:
         from src.tool_system.build_tool import build_tool
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         def _call(_inp: dict[str, Any], _ctx: Any) -> ToolResult:
             return ToolResult(name="QuietTool", output="")
@@ -390,7 +390,7 @@ class TestProcessToolResultBlock(unittest.TestCase):
         Reader".
         """
         from src.tool_system.build_tool import build_tool
-        from src.tool_system.protocol import ToolResult
+        from clawcodex_ext.tool_system.protocol import ToolResult
 
         # 500K characters -- well above DEFAULT_MAX_RESULT_SIZE_CHARS (50K).
         # Without the Infinity opt-out, this would be persisted.

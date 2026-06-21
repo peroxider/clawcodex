@@ -1,6 +1,6 @@
 import pytest
 
-from src.services.compact.session_memory_compact import (
+from clawcodex_ext.services.compact.session_memory_compact import (
     SessionMemory,
     SessionMemoryEntry,
     SESSION_MEMORY_PROMPT,

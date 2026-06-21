@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from src.task_registry import RuntimeTaskRegistry, get_task_by_type
+from clawcodex_ext.task_registry import RuntimeTaskRegistry, get_task_by_type
 from src.tasks.in_process_teammate import (
     CurrentWorkAbortedError,
     InProcessTeammateTask,
@@ -21,7 +21,7 @@ from src.tasks.in_process_teammate import (
     outer_lifecycle_should_catch,
     run_with_two_level_abort,
 )
-from src.tasks_core import is_terminal_task_status
+from clawcodex_ext.tasks_core import is_terminal_task_status
 
 
 def _make_running_state(task_id: str = "t1abc1234") -> InProcessTeammateTaskState:

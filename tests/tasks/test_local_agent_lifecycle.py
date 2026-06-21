@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     LocalAgentTaskState,
     complete_agent_task,
@@ -32,11 +32,11 @@ from src.tasks.local_agent import (
     register_async_agent,
     update_agent_progress,
 )
-from src.tasks.progress import AgentProgress
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks.progress import AgentProgress
+from clawcodex_ext.tasks_core import generate_task_id
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.types.content_blocks import TextBlock, ToolUseBlock
 from src.types.messages import AssistantMessage
 
@@ -400,7 +400,7 @@ def test_async_agent_finalize_total_tokens_is_no_longer_zero(tmp_path: Path) -> 
     # total_tokens is non-zero. This is the unit-level proof that the
     # WI-2.4 refactor lands.
     from src.agent.agent_tool_utils import finalize_agent_tool
-    from src.tasks.progress import ProgressTracker, update_progress_from_message
+    from clawcodex_ext.tasks.progress import ProgressTracker, update_progress_from_message
 
     tracker = ProgressTracker()
     msgs = []

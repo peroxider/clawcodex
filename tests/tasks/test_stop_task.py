@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     LocalAgentTaskState,
     complete_agent_task,
@@ -30,7 +30,7 @@ from src.tasks.stop_task import (
     StopTaskResult,
     stop_task,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 from src.tool_system.context import ToolContext
 
 
@@ -137,7 +137,7 @@ def test_unsupported_type_when_no_kill_impl(tmp_path: Path) -> None:
     unregistered forever, mock ``get_task_by_type`` to return None.
     Decouples the test from registry contents — a future registration
     of ``dream`` won't silently break this assertion."""
-    from src.tasks_core import TaskStateBase
+    from clawcodex_ext.tasks_core import TaskStateBase
 
     ctx = ToolContext(workspace_root=tmp_path)
     state = TaskStateBase(

@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     LocalAgentTaskState,
     complete_agent_task,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 from src.tool_system.context import ToolContext
 from src.tool_system.tools.tasks_v2 import TaskOutputTool
 
@@ -40,7 +40,7 @@ def test_dispatch_loop_branches_on_iscoroutinefunction(tmp_path: Path) -> None:
         name = "AsyncStub"
 
         async def call(self, _input, _ctx):
-            from src.tool_system.protocol import ToolResult
+            from clawcodex_ext.tool_system.protocol import ToolResult
 
             return ToolResult(name="AsyncStub", output={"ok": True})
 
@@ -48,7 +48,7 @@ def test_dispatch_loop_branches_on_iscoroutinefunction(tmp_path: Path) -> None:
         name = "SyncStub"
 
         def call(self, _input, _ctx):
-            from src.tool_system.protocol import ToolResult
+            from clawcodex_ext.tool_system.protocol import ToolResult
 
             return ToolResult(name="SyncStub", output={"ok": True})
 

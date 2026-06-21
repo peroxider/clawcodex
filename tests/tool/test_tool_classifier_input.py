@@ -268,7 +268,7 @@ TOOLS_TABLE: list[tuple[Tool, dict[str, Any], object, str]] = [
 
 
 def _noop_call(tool_input: dict[str, Any], context: Any) -> Any:  # pragma: no cover
-    from src.tool_system.protocol import ToolResult
+    from clawcodex_ext.tool_system.protocol import ToolResult
 
     return ToolResult(name="Noop", output={})
 

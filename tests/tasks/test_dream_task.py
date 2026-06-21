@@ -13,7 +13,7 @@ import time
 
 import pytest
 
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.dream import (
     MAX_DREAM_TURNS,
     DreamTask,
@@ -26,7 +26,7 @@ from src.tasks.dream import (
     register_dream_task,
     rollback_dream_lock_after_kill,
 )
-from src.tasks_core import is_terminal_task_status
+from clawcodex_ext.tasks_core import is_terminal_task_status
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ def test_dream_task_adapter_kill_no_op_on_terminal() -> None:
 
 
 def test_dream_task_registered_via_src_tasks_init() -> None:
-    from src.task_registry import get_task_by_type
+    from clawcodex_ext.task_registry import get_task_by_type
     from src.tasks import dream  # noqa: F401  (trigger registration)
 
     impl = get_task_by_type("dream")
@@ -273,7 +273,7 @@ def test_dream_task_registered_via_src_tasks_init() -> None:
 
 
 def test_dream_task_idempotent_registration() -> None:
-    from src.task_registry import get_all_tasks, register_task
+    from clawcodex_ext.task_registry import get_all_tasks, register_task
     from src.tasks.dream import DreamTask
 
     before = len(get_all_tasks())

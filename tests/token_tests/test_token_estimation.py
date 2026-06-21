@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.token_estimation import (
+from clawcodex_ext.utils.token_estimation import (
     bytes_per_token_for_file_type,
     count_messages_tokens,
     count_tokens,

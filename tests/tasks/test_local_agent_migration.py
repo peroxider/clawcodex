@@ -16,7 +16,7 @@ from unittest.mock import patch
 from src.tasks.local_agent import LocalAgentTaskState, is_local_agent_task
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.types.content_blocks import TextBlock
 from src.types.messages import AssistantMessage
 

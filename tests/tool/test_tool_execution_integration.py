@@ -24,7 +24,7 @@ from src.services.tool_execution.tool_result_persistence import (
 )
 from src.tool_system.build_tool import build_tool
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 
 def _make_context() -> ToolContext:

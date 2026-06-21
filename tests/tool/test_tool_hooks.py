@@ -8,7 +8,7 @@ from pathlib import Path
 from src.services.tool_execution.tool_hooks import resolve_hook_permission_decision
 from src.tool_system.build_tool import build_tool, Tool
 from src.tool_system.context import ToolContext, ToolUseOptions
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 from src.types.messages import AssistantMessage, create_assistant_message
 
 

@@ -9,7 +9,7 @@ import pytest
 
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.types.content_blocks import TextBlock
 from src.types.messages import AssistantMessage
 
@@ -166,11 +166,11 @@ def test_concurrent_same_name_spawn_only_one_wins(tmp_path: Path) -> None:
     """
     import threading
 
-    from src.services.swarm.agent_name_registry import (
+    from clawcodex_ext.services.swarm.agent_name_registry import (
         AgentNameAlreadyClaimedError,
         AgentNameRegistry,
     )
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
     from src.tasks.local_agent import register_async_agent
 
     runtime = RuntimeTaskRegistry()

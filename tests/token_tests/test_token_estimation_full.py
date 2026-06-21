@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.token_estimation import (
+from clawcodex_ext.utils.token_estimation import (
     estimate_cache_aware_tokens,
     estimate_image_tokens,
     estimate_system_prompt_sections_tokens,

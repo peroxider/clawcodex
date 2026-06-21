@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from src.providers.base import ChatResponse
+from clawcodex_ext.providers.base import ChatResponse
 
 
 class FakeProvider:

@@ -26,12 +26,12 @@ from src.agent.foreground_promotion import (
     run_with_background_escape,
     unregister_agent_foreground,
 )
-from src.task_registry import RuntimeTaskRegistry
+from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from src.tasks.local_agent import (
     LocalAgentTaskState,
     register_async_agent,
 )
-from src.tasks_core import generate_task_id
+from clawcodex_ext.tasks_core import generate_task_id
 
 
 def _spawn_running(reg: RuntimeTaskRegistry, *, is_backgrounded: bool = True) -> str:

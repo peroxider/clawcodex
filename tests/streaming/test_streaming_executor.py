@@ -14,7 +14,7 @@ from src.services.tool_execution.streaming_executor import (
 )
 from src.tool_system.build_tool import build_tool, Tool
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 from src.types.messages import AssistantMessage, create_assistant_message
 from src.utils.abort_controller import AbortController
 

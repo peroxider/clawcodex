@@ -26,7 +26,7 @@ from clawcodex_ext.mcp_ext import (
     wrap_mcp_resource_call,
 )
 from src.tool_system.context import ToolContext
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 
 # ============================================================================

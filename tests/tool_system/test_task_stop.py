@@ -203,7 +203,7 @@ def test_async_kill_returns_error_on_timeout(ctx: ToolContext) -> None:
     import time
     from unittest.mock import patch
 
-    from src.tasks_core import generate_task_id
+    from clawcodex_ext.tasks_core import generate_task_id
     from src.tasks.local_shell import LocalShellTask, LocalShellTaskState
 
     task_id = generate_task_id("local_bash")

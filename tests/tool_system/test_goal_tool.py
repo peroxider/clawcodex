@@ -17,7 +17,7 @@ from clawcodex_ext.goal import (
 from clawcodex_ext.goal.controller import GoalController
 from clawcodex_ext.goal.tool import GoalTool
 from src.tool_system.errors import ToolInputError
-from src.tool_system.protocol import ToolResult
+from clawcodex_ext.tool_system.protocol import ToolResult
 
 
 # ---------------------------------------------------------------------------
