@@ -177,7 +177,7 @@ class BaseProvider(ABC):
         prepared = [msg if isinstance(msg, dict) else msg.to_dict() for msg in messages]
         # Local import to avoid a top-level dependency from base.py into
         # the utils package, matching the style of ``_get_model``.
-        from src.utils.image_validation import validate_images_for_api
+        from clawcodex_ext.utils.image_validation import validate_images_for_api
 
         validate_images_for_api(prepared)
         return prepared

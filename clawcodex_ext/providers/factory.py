@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.providers import PROVIDER_INFO, _EXTRA_PROVIDER_CLASSES, get_provider_class
-from src.providers.base import BaseProvider
+from clawcodex_ext.providers.base import BaseProvider
 
 if TYPE_CHECKING:
     from src.providers import ProviderInfo

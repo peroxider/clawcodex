@@ -314,18 +314,18 @@ from src.config import get_provider_config
 from src.outputStyles import resolve_output_style
 from src.providers.runtime import build_provider_from_config
 from src.providers.anthropic_provider import AnthropicProvider
-from src.providers.base import ChatMessage
+from clawcodex_ext.providers.base import ChatMessage
 from src.providers.minimax_provider import MinimaxProvider
 from src.providers import get_provider_class
 from src.services.api.claude import tool_to_api_schema
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
-from src.tool_system.protocol import ToolCall
+from clawcodex_ext.tool_system.protocol import ToolCall
 from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
 from src.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import StreamEvent
-from src.types.messages import NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
-from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
+from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
+from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from src.utils.abort_controller import AbortController
 
 # New command system imports
@@ -1520,7 +1520,7 @@ class ClawcodexREPL:
             messages = getattr(conv, "messages", None)
             if messages is None:
                 return []
-            from src.types.messages import UserMessage
+            from clawcodex_ext.types.messages import UserMessage
 
             result: list[str] = []
             for msg in messages:
@@ -2724,7 +2724,7 @@ class ClawcodexREPL:
 
         try:
             from src.services.session_storage import SessionStorage
-            from src.types.messages import message_from_dict
+            from clawcodex_ext.types.messages import message_from_dict
 
             storage = SessionStorage(session_id=session_id)
             entries = storage.read_transcript()
@@ -2761,8 +2761,8 @@ class ClawcodexREPL:
         This mirrors the rendering logic in ``chat()``'s engine-stream handler
         but operates on the static message list rather than a live stream.
         """
-        from src.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
-        from src.types.content_blocks import ThinkingBlock, RedactedThinkingBlock
+        from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
+        from clawcodex_ext.types.content_blocks import ThinkingBlock, RedactedThinkingBlock
         from src.tool_system.renderers import summarize_tool_use
 
         self.console.print()
@@ -4097,7 +4097,7 @@ class ClawcodexREPL:
         (test_repl_conversation_sanitization).
         """
         if getattr(msg, "_api_error", None) == "image_unsupported":
-            from src.context_system.microcompact import (
+            from clawcodex_ext.context_system.microcompact import (
                 strip_images_from_typed_messages,
             )
             self.session.conversation.messages = (
@@ -4127,7 +4127,7 @@ class ClawcodexREPL:
             expand_at_mentions,
             format_at_mention_attachments,
         )
-        from src.types.content_blocks import TextBlock
+        from clawcodex_ext.types.content_blocks import TextBlock
 
         cwd_for_mentions = str(self.tool_context.cwd or self.tool_context.workspace_root)
         _, at_attachments = expand_at_mentions(user_input, cwd=cwd_for_mentions)
@@ -4185,7 +4185,7 @@ class ClawcodexREPL:
             intro_text = format_companion_intro_attachments(intro_attachments)
             if intro_text:
                 user_input = f"{intro_text}\n\n{user_input}" if user_input else intro_text
-            from src.types.messages import AttachmentMessage
+            from clawcodex_ext.types.messages import AttachmentMessage
             self.session.conversation._messages.append(  # type: ignore[attr-defined]
                 AttachmentMessage(attachments=intro_attachments)
             )

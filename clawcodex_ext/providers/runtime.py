@@ -32,7 +32,7 @@ from src.auth.codex_oauth import CodexAuthError, resolve_codex_runtime_credentia
 from src.config import get_provider_config
 from clawcodex_ext.providers.factory import create_provider
 
-from src.providers.base import BaseProvider
+from clawcodex_ext.providers.base import BaseProvider
 
 OAUTH_PROVIDERS = {"openai-codex"}
 

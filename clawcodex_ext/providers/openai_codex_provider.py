@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from src.auth.codex_oauth import CODEX_BASE_URL, resolve_codex_runtime_credentials
 
-from src.providers.base import ChatResponse, MessageInput
+from clawcodex_ext.providers.base import ChatResponse, MessageInput
 from clawcodex_ext.providers.codex_models import CODEX_FALLBACK_MODELS, get_codex_model_ids
 from src.providers.openai_compatible import (
     OpenAICompatibleProvider,

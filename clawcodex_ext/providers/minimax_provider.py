@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Any, Optional, TYPE_CHECKING
 
 from src.providers.minimax_provider import MinimaxProvider
-from src.providers.base import ChatResponse, MessageInput, TextChunkCallback
+from clawcodex_ext.providers.base import ChatResponse, MessageInput, TextChunkCallback
 
 from clawcodex_ext.providers._stream_drain import drain_text_stream_with_abort_poll
 
