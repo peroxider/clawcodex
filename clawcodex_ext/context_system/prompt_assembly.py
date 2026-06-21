@@ -18,19 +18,19 @@ from datetime import datetime
 from typing import Any
 
 from clawcodex_ext.types.messages import Message, UserMessage
-from src.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-from src.context_system.claude_md import (
+from clawcodex_ext.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+from clawcodex_ext.context_system.claude_md import (
     _should_disable_claude_md,
     clear_memory_file_caches,
     get_claude_mds,
     get_memory_files,
 )
-from src.context_system.git_context import (
+from clawcodex_ext.context_system.git_context import (
     clear_git_caches,
     collect_git_context,
     format_git_status,
 )
-from src.context_system.models import SystemPromptParts
+from clawcodex_ext.context_system.models import SystemPromptParts
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +371,7 @@ def _compute_env_info(cwd: str) -> str:
 # Full system prompt builder (R2-WS-5)
 # ---------------------------------------------------------------------------
 
-from src.context_system.system_prompt_cache import (
+from clawcodex_ext.context_system.system_prompt_cache import (
     CacheScope,
     SystemPromptCache,
     SystemPromptSection,
@@ -720,7 +720,7 @@ def build_full_system_prompt_blocks(
     # Partition by scope. We import CacheScope locally to avoid a top-level
     # circular import (system_prompt_cache imports from this module's
     # peers; a top-level import here closes the cycle).
-    from src.context_system.system_prompt_cache import CacheScope
+    from clawcodex_ext.context_system.system_prompt_cache import CacheScope
 
     global_sections = [s for s in sections if s.cache_scope is CacheScope.GLOBAL and s.content]
     session_sections = [s for s in sections if s.cache_scope is CacheScope.SESSION and s.content]

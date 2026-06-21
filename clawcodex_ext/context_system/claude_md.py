@@ -23,7 +23,7 @@ import re
 from pathlib import Path
 from typing import Sequence
 
-from ..skills.frontmatter import parse_frontmatter
+from clawcodex_ext.skills.frontmatter import parse_frontmatter
 from .models import (
     MAX_INCLUDE_DEPTH,
     MAX_MEMORY_CHARACTER_COUNT,

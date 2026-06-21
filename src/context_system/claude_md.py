@@ -1,9 +1,9 @@
-"""Facade — tool_system/tools/bash/bash_tool.py moved to clawcodex_ext.tool_system.tools.bash.bash_tool (sys.modules swap).
+"""Facade — context_system/claude_md.py moved to clawcodex_ext.context_system.claude_md (sys.modules swap).
 
 Some tests introspect private internals (functions whose names start
-with ``_``) and rely on ``from src.tool_system.tools.bash.bash_tool import _something``
+with ``_``) and rely on ``from src.context_system.claude_md import _something``
 resolving against the real module object. The plain
-``from clawcodex_ext.tool_system.tools.bash.bash_tool import *`` form would silently drop those
+``from clawcodex_ext.context_system.claude_md import *`` form would silently drop those
 underscore-prefixed names. A ``sys.modules`` swap preserves the
 underlying ext module as the canonical object so attribute access,
 ``inspect.getsource()``, and AST walking keep working unchanged.
@@ -13,5 +13,5 @@ from __future__ import annotations
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.tool_system.tools.bash.bash_tool")
+_ext_mod = importlib.import_module("clawcodex_ext.context_system.claude_md")
 sys.modules[__name__] = _ext_mod

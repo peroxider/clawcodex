@@ -186,7 +186,7 @@ def clear_system_prompt_sections() -> None:
     # dependency that the file's "from .system_prompt_cache import ..."
     # block already comments on.
     try:
-        from src.context_system.prompt_assembly import get_system_prompt_cache
+        from clawcodex_ext.context_system.prompt_assembly import get_system_prompt_cache
 
         get_system_prompt_cache().invalidate_all()
     except ImportError:

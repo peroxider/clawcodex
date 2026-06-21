@@ -17,8 +17,8 @@ from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.utils.abort_controller import AbortController, create_abort_controller
 from clawcodex_ext.providers.base import BaseProvider
-from src.context_system import build_context_prompt
-from src.context_system.prompt_assembly import (
+from clawcodex_ext.context_system import build_context_prompt
+from clawcodex_ext.context_system.prompt_assembly import (
     append_system_context,
     append_system_context_blocks,
     build_full_system_prompt,
