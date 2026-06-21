@@ -43,8 +43,8 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from src.constants.xml import TASK_NOTIFICATION_TAG
-from src.types.content_blocks import content_block_to_dict
-from src.types.messages import (
+from clawcodex_ext.types.content_blocks import content_block_to_dict
+from clawcodex_ext.types.messages import (
     INTERRUPT_MESSAGE,
     INTERRUPT_MESSAGE_FOR_TOOL_USE,
     SYNTHETIC_TOOL_RESULT_PLACEHOLDER,

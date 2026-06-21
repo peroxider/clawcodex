@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from src.permissions.types import EXTERNAL_PERMISSION_MODES, ExternalPermissionMode
+from clawcodex_ext.permissions.types import EXTERNAL_PERMISSION_MODES, ExternalPermissionMode
 
 logger = logging.getLogger(__name__)
 

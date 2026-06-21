@@ -34,8 +34,8 @@ from __future__ import annotations
 from typing import Any
 
 from src.bootstrap.state import get_session_id
-from src.types.content_blocks import content_block_to_dict
-from src.types.messages import (
+from clawcodex_ext.types.content_blocks import content_block_to_dict
+from clawcodex_ext.types.messages import (
     AssistantMessage,
     Message,
     SystemMessage,

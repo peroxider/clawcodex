@@ -18,7 +18,7 @@ from ..types.content_blocks import (
     ImageBlock,
     content_block_to_dict,
 )
-from ..types.messages import (
+from clawcodex_ext.types.messages import (
     AssistantMessage,
     Message,
     MessageContent,
