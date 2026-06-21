@@ -21,7 +21,6 @@ from extensions.tool_system_ext.team_filter import (
     filter_team_only_tools,
     has_team_context,
 )
-from src.tool_system.registry import ToolRegistry
 
 
 def get_team_aware_tool_list(
