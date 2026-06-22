@@ -19,12 +19,11 @@ This test is the cross-validation: write the transcript the way
 exercises the full integration surface described in
 ``docs/FEATURE_PLAN.md`` §3.1.11 Phase 0.2.
 
-Patches ``Path.home()`` to a tmp dir so the test does not touch
+Patches ``SESSIONS_DIR`` to a tmp dir so the test does not touch
 the user's real ``~/.clawcodex/sessions``. Both
-:class:`SessionStorage` and :meth:`Session.load` derive their
-session directory from ``Path.home()``, so patching it once in the
-write phase ensures the read phase (``Session.resume`` →
-``Session.load``) finds the same data.
+:class:`SessionStorage` and :meth:`Session.load` resolve their
+session directory from ``SESSIONS_DIR``, so a single patch ensures
+write and read paths are aligned.
 """
 
 from __future__ import annotations
@@ -97,12 +96,16 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
         consumable by the same readers that ``--resume`` invokes.
         """
         with TemporaryDirectory() as tmp:
+            sessions_dir = Path(tmp) / "sessions"
             run_id = "run-f49-validation-1"
 
-            # Patch Path.home() so both SessionStorage (via SESSIONS_DIR)
-            # and Session.load() (hardcoded Path.home()) resolve to the
-            # same tmp dir — $TMP/.clawcodex/sessions/<run_id>/.
-            with patch("pathlib.Path.home", return_value=Path(tmp)):
+            # Patch SESSIONS_DIR so both SessionStorage (write) and
+            # Session.load → SESSIONS_DIR (read via Session.resume)
+            # resolve to the same tmp dir.
+            with patch(
+                "src.services.session_storage.SESSIONS_DIR",
+                sessions_dir,
+            ):
                 # 1. Orchestrator side: write the transcript the way
                 #    AgentRunner does in ``_flush_turn_transcript``.
                 storage = SessionStorage(session_id=run_id)
@@ -111,35 +114,35 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
                     cwd="/work",
                     title="orchestrator-F-49-validation",
                 )
-            _write_orchestrator_turn(
-                storage,
-                user_text="Fix the bug in the F-49 orchestrator",
-                assistant_text="Reading the relevant file first.",
-                tool_name="Read",
-            )
-            _write_orchestrator_turn(
-                storage,
-                user_text="Continue",
-                assistant_text="Applying the fix now.",
-            )
+                _write_orchestrator_turn(
+                    storage,
+                    user_text="Fix the bug in the F-49 orchestrator",
+                    assistant_text="Reading the relevant file first.",
+                    tool_name="Read",
+                )
+                _write_orchestrator_turn(
+                    storage,
+                    user_text="Continue",
+                    assistant_text="Applying the fix now.",
+                )
 
-            # 2. ``--resume`` side: read the transcript back the way
-            #    the top-level CLI does. Path.home() is still patched
-            #    so both Session.resume → Session.load (which hardcodes
-            #    Path.home()) and resume_session (which reads via
-            #    SessionStorage) find the same data.
-            from src.agent.session import Session
+                # 2. ``--resume`` side: read the transcript back.
+                #    SESSIONS_DIR is still patched so both
+                #    Session.resume (Session.load → SESSIONS_DIR) and
+                #    resume_session (SessionStorage → SESSIONS_DIR)
+                #    find the same data.
+                from src.agent.session import Session
 
-            session = Session.resume(run_id)
-            self.assertIsNotNone(session)
-            assert session is not None
-            self.assertEqual(session.session_id, run_id)
-            self.assertEqual(
-                session.model,
-                "claude-sonnet-4-20250514",
-            )
+                session = Session.resume(run_id)
+                self.assertIsNotNone(session)
+                assert session is not None
+                self.assertEqual(session.session_id, run_id)
+                self.assertEqual(
+                    session.model,
+                    "claude-sonnet-4-20250514",
+                )
 
-            result = resume_session(run_id)
+                result = resume_session(run_id)
             self.assertTrue(result.success)
             self.assertIsNotNone(result.metadata)
             assert result.metadata is not None
@@ -187,7 +190,11 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
         than raising.
         """
         with TemporaryDirectory() as tmp:
-            with patch("pathlib.Path.home", return_value=Path(tmp)):
+            sessions_dir = Path(tmp) / "sessions"
+            with patch(
+                "src.services.session_storage.SESSIONS_DIR",
+                sessions_dir,
+            ):
                 # ``Session.resume`` returns ``None`` when the
                 # session_id file does not exist (see
                 # ``Session.load`` at src/agent/session.py:121).
@@ -210,9 +217,13 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
         context is broken on the next round).
         """
         with TemporaryDirectory() as tmp:
+            sessions_dir = Path(tmp) / "sessions"
             run_id = "run-orphan"
 
-            with patch("pathlib.Path.home", return_value=Path(tmp)):
+            with patch(
+                "src.services.session_storage.SESSIONS_DIR",
+                sessions_dir,
+            ):
                 storage = SessionStorage(session_id=run_id)
                 storage.init_metadata(
                     model="claude-sonnet-4-20250514",

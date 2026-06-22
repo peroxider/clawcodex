@@ -167,7 +167,9 @@ class Session:
         covers orchestrator/cron sessions that only write metadata +
         plain message JSONL (no session_init marker).
         """
-        session_dir = Path.home() / ".clawcodex" / "sessions" / session_id
+        from src.services.session_storage import SESSIONS_DIR
+
+        session_dir = SESSIONS_DIR / session_id
         transcript_path = session_dir / "transcript.jsonl"
         session_file = session_dir / "session.json"
 
