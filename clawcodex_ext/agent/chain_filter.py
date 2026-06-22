@@ -227,20 +227,38 @@ def walk_chain_before_parse(
         parent_uuids[idx] = parent_uuid if isinstance(parent_uuid, str) else None
 
     # The leaf is the message whose uuid is not anyone's parent.
-    referenced_as_parent = set(parent_uuids.values())
-    leaf_candidates = [idx for uuid, idx in uuid_to_line.items() if uuid not in referenced_as_parent]
+    # In a /rewind scenario the file can carry TWO leaves: the
+    # end of the dead branch (e.g. u4) and the end of the new
+    # branch (e.g. u5). Both qualify under the "no child"
+    # criterion. To pick the right one we use **on-disk line
+    # order**, not chain length — the latest leaf in the file
+    # is the most recently appended message, which is what the
+    # user just sent. This also handles forks: each fork's
+    # tail is its own leaf, and the most recently written fork
+    # wins.
+    referenced_as_parent = set(parent_uuids.values()) - {None}
+    leaf_candidates = [
+        idx for uuid, idx in uuid_to_line.items() if uuid not in referenced_as_parent
+    ]
 
-    # Walk from each leaf candidate. Multiple leaves can exist if
-    # the user forked the conversation — we want the longest
-    # chain (the most recent branch wins ties by line order).
+    # Walk from the latest leaf back to the root. ``max`` on
+    # line indices gives us the right answer both for rewinds
+    # (the new branch is appended after the dead branch) and
+    # for forks (the most recent fork is written last).
     best_chain: set[int] = set()
-    for leaf_idx in leaf_candidates:
+    if leaf_candidates:
+        leaf_idx = max(leaf_candidates)
         chain: set[int] = set()
         cursor = leaf_idx
         seen: set[int] = set()
         while cursor is not None and cursor not in seen:
             seen.add(cursor)
-            if cursor not in uuid_to_line:
+            # ``parent_uuids`` is keyed by line index (int), so
+            # checking membership tells us whether this line
+            # carries a parentUuid at all. ``uuid_to_line`` is
+            # keyed by uuid (str) and would never match an int
+            # cursor — that's the trap we just fell into.
+            if cursor not in parent_uuids:
                 # Parent uuid points to a line we couldn't read —
                 # stop walking rather than crash. Defensive against
                 # partial writes.
@@ -248,8 +266,7 @@ def walk_chain_before_parse(
             chain.add(cursor)
             parent_uuid = parent_uuids.get(cursor)
             cursor = uuid_to_line.get(parent_uuid) if parent_uuid else None
-        if len(chain) > len(best_chain):
-            best_chain = chain
+        best_chain = chain
 
     # If we couldn't find any leaf, fall back to "everything is
     # active" — better to over-include than to lose the entire
@@ -348,6 +365,13 @@ def build_conversation_chain(
         parent_of[uuid] = parent_uuid if isinstance(parent_uuid, str) else None
 
     if not by_uuid:
+        return msg_list
+
+    # No chain topology at all — every message has parentUuid=None.
+    # Returning the input as-is keeps the helper a no-op for legacy
+    # transcripts that don't carry parentUuid fields, instead of
+    # collapsing to a single-entry chain.
+    if not any(p is not None for p in parent_of.values()) and leaf_uuid is None:
         return msg_list
 
     # If an explicit leaf was given, use it. Otherwise infer: pick

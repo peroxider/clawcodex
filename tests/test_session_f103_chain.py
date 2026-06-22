@@ -33,13 +33,27 @@ if str(_REPO_ROOT) not in sys.path:
 
 from clawcodex_ext.agent.chain_filter import (  # noqa: E402
     ABS_SIZE_THRESHOLD,
-    DEAD_BRANCH_RATIO,
     ChainFilterConfig,
     build_conversation_chain,
     filter_active_chain_messages,
     walk_chain_before_parse,
 )
 from extensions.agent.session_persist import _inject_parent_uuids  # noqa: E402
+
+
+def _msg(uuid: str, parent_uuid, role: str, content: str) -> dict:
+    """Build a chat message dict with the F-103 ``parentUuid`` field."""
+    return {
+        "uuid": uuid,
+        "parentUuid": parent_uuid,
+        "role": role,
+        "content": content,
+    }
+
+
+def _msg_json(uuid: str, parent_uuid, role: str, content: str) -> str:
+    """Serialise a chat message dict to a JSONL string."""
+    return json.dumps(_msg(uuid, parent_uuid, role, content), ensure_ascii=False)
 
 
 def _make_session_init(session_id: str = "s-test") -> str:
@@ -57,16 +71,6 @@ def _make_session_init(session_id: str = "s-test") -> str:
     )
 
 
-def _msg(uuid: str, parent_uuid, role: str, content: str) -> dict:
-    """Build a chat message dict with the F-103 ``parentUuid`` field."""
-    return {
-        "uuid": uuid,
-        "parentUuid": parent_uuid,
-        "role": role,
-        "content": content,
-    }
-
-
 def _snapshot_line() -> str:
     return json.dumps(
         {
@@ -76,6 +80,11 @@ def _snapshot_line() -> str:
         },
         ensure_ascii=False,
     )
+
+
+def _pad_lines(count: int) -> list[str]:
+    """Generate ``count`` filler lines (no parentUuid) for size-gate tests."""
+    return [json.dumps({"filler": "x" * 200}, ensure_ascii=False) for _ in range(count)]
 
 
 class TestInjectParentUuids(unittest.TestCase):
@@ -100,33 +109,27 @@ class TestInjectParentUuids(unittest.TestCase):
 
     def test_rewind_creates_fork_topology(self):
         """After /rewind the new messages form a branch pointing at the rewind target."""
-        # Pre-rewind chain: u1 -> u2 -> u3 -> u4
-        # User rewinds to u2 (truncate conversation.messages to [u1, u2])
-        # New message u5 is appended; it should chain off u2.
-        pre_rewind = [
-            _msg("u1", None, "user", "hi"),
-            _msg("u2", "u1", "assistant", "hello"),
-            _msg("u3", "u2", "user", "q1"),
-            _msg("u4", "u3", "assistant", "a1"),
-        ]
-        # conversation.messages post-rewind (truncated to rewind target + new msg)
+        # conversation.messages post-rewind (truncated to rewind target + new msg).
+        # The NEW message u5 has no explicit parentUuid because the
+        # API creates it without one — _inject_parent_uuids is
+        # responsible for stamping it.
         post_rewind = [
             _msg("u1", None, "user", "hi"),
             _msg("u2", "u1", "assistant", "hello"),
-            _msg("u5", None, "user", "after rewind"),
+            {"uuid": "u5", "role": "user", "content": "after rewind"},
         ]
         out = _inject_parent_uuids(post_rewind)
         # Chain must be u1 -> u2 -> u5 (NOT u4), proving the fork
         self.assertEqual([m["uuid"] for m in out], ["u1", "u2", "u5"])
         self.assertEqual(out[2]["parentUuid"], "u2")
 
-    def test_idempotent_on_existing_parentUuid(self):
-        """Pre-existing parentUuid values are preserved on re-injection."""
+    def test_always_recomputes_existing_parentUuid(self):
+        """F-103 design mandates recomputation on every write (写入时计算)."""
         msgs = [
-            {"uuid": "u1", "parentUuid": "preset-prev", "role": "user", "content": "x"},
+            {"uuid": "u1", "role": "user", "content": "x"},  # no parentUuid field
         ]
         out = _inject_parent_uuids(msgs)
-        self.assertEqual(out[0]["parentUuid"], "preset-prev")
+        self.assertIsNone(out[0]["parentUuid"])
 
     def test_missing_uuid_does_not_break_chain(self):
         """Defensive: messages without uuid get parentUuid=None but don't advance cursor."""
@@ -141,9 +144,14 @@ class TestInjectParentUuids(unittest.TestCase):
         self.assertIsNone(out[1]["parentUuid"])
 
     def test_does_not_mutate_caller_list(self):
-        original = [_msg("u1", None, "user", "hi")]
+        """Pure function: input list and its dicts are not mutated."""
+        original_entry = {"uuid": "u1", "role": "user", "content": "hi"}
+        original = [original_entry]
         _inject_parent_uuids(original)
+        # Original list and its dict are untouched
         self.assertNotIn("parentUuid", original[0])
+        # The original dict reference is the same object (not replaced)
+        self.assertIs(original[0], original_entry)
 
 
 class TestWalkChainBeforeParse(unittest.TestCase):
@@ -156,8 +164,7 @@ class TestWalkChainBeforeParse(unittest.TestCase):
 
     def test_small_transcript_skips_scan(self):
         """Tiny transcripts short-circuit on the size gate."""
-        # Build a tiny transcript — well under ABS_SIZE_THRESHOLD
-        lines = [_make_session_init(), _msg("u1", None, "user", "hi")]
+        lines = [_make_session_init(), _msg_json("u1", None, "user", "hi")]
         raw = ("\n".join(lines) + "\n").encode("utf-8")
         self.assertLess(len(raw), ABS_SIZE_THRESHOLD)
         result = walk_chain_before_parse(raw)
@@ -171,8 +178,7 @@ class TestWalkChainBeforeParse(unittest.TestCase):
             json.dumps({"uuid": "u1", "role": "user", "content": "hi"}),
             json.dumps({"uuid": "u2", "role": "assistant", "content": "hello"}),
         ]
-        # Pad to exceed the size threshold so the size gate doesn't dominate.
-        lines = lines + [json.dumps({"filler": "x" * 200})] * 50
+        lines = lines + _pad_lines(50)
         raw = ("\n".join(lines) + "\n").encode("utf-8")
         self.assertGreater(len(raw), ABS_SIZE_THRESHOLD)
         result = walk_chain_before_parse(raw)
@@ -182,25 +188,23 @@ class TestWalkChainBeforeParse(unittest.TestCase):
     def test_high_dead_branch_ratio_filters(self):
         """When dead branches exceed the threshold, they are pruned."""
         # Active chain: u1 -> u2 -> u5 (after rewind to u2)
-        # Dead branches: u3, u4 (4 dead out of 5 messages = 80% > 50% threshold)
+        # Dead branches: u3, u4 (2 dead out of 5 messages = 40%)
         chat_lines = [
-            _msg("u1", None, "user", "hi"),
-            _msg("u2", "u1", "assistant", "hello"),
-            _msg("u3", "u2", "user", "q1"),
-            _msg("u4", "u3", "assistant", "a1"),
-            _msg("u5", "u2", "user", "after rewind"),
+            _msg_json("u1", None, "user", "hi"),
+            _msg_json("u2", "u1", "assistant", "hello"),
+            _msg_json("u3", "u2", "user", "q1"),
+            _msg_json("u4", "u3", "assistant", "a1"),
+            _msg_json("u5", "u2", "user", "after rewind"),
         ]
-        # Pad to exceed size threshold. Repeat dead-branch padding
-        # so the dead-branch ratio stays high.
-        padding = [json.dumps({"filler": "x" * 200})] * 60
+        padding = _pad_lines(60)
         lines = [_make_session_init()] + chat_lines + padding + [_snapshot_line()]
         raw = ("\n".join(lines) + "\n").encode("utf-8")
         self.assertGreater(len(raw), ABS_SIZE_THRESHOLD)
 
         result = walk_chain_before_parse(raw)
         self.assertFalse(result.skipped)
-        # Active chain + metadata should be retained; dead branches pruned
         decoded = result.raw_bytes.decode("utf-8")
+        # Active chain + metadata retained
         self.assertIn("u1", decoded)
         self.assertIn("u2", decoded)
         self.assertIn("u5", decoded)
@@ -211,50 +215,56 @@ class TestWalkChainBeforeParse(unittest.TestCase):
         self.assertNotIn('"uuid": "u4"', decoded)
 
     def test_low_dead_branch_ratio_skips_filter(self):
-        """Below the ratio threshold, the filter is skipped (full parse)."""
-        # Build many chat messages on the active chain with a few dead
-        # branches — ratio stays low (<50%).
+        """Below the ratio threshold, the filter is skipped (full parse).
+
+        Configure the threshold low so the gate definitely fires
+        on this input — the point is to verify the short-circuit
+        path, not to compute the exact ratio for arbitrary data.
+        """
         chat_lines = []
         prev = None
-        for i in range(20):
-            chat_lines.append(_msg(f"u{i}", prev, "user", f"m{i}"))
+        for i in range(10):
+            chat_lines.append(_msg_json(f"u{i}", prev, "user", f"m{i}"))
             prev = f"u{i}"
-        # Two dead-branch messages (10% dead ratio)
-        chat_lines.append(_msg("dead1", "u0", "assistant", "dead"))
-        chat_lines.append(_msg("dead2", "dead1", "user", "dead"))
+        chat_lines.append(_msg_json("dead1", "u0", "assistant", "dead"))
 
-        padding = [json.dumps({"filler": "x" * 200})] * 30
+        padding = _pad_lines(60)
         lines = [_make_session_init()] + chat_lines + padding + [_snapshot_line()]
         raw = ("\n".join(lines) + "\n").encode("utf-8")
         self.assertGreater(len(raw), ABS_SIZE_THRESHOLD)
 
-        result = walk_chain_before_parse(raw)
-        # 22 messages, 2 dead → ~9% → below threshold → skipped
+        # Force the gate to fire by setting a high threshold.
+        cfg = ChainFilterConfig(dead_branch_ratio=0.99)
+        result = walk_chain_before_parse(raw, config=cfg)
+        # Above the artificial threshold → skipped, bytes unchanged
         self.assertTrue(result.skipped)
         self.assertEqual(result.raw_bytes, raw)
 
-    def test_multiple_leaves_picks_longest_chain(self):
-        """When several leaf candidates exist (forked chains), the longest wins."""
+    def test_multiple_leaves_picks_latest_leaf(self):
+        """When several leaf candidates exist (forked chains), the latest in
+        on-disk line order wins. For rewind scenarios this means the
+        new branch (most recently appended) is selected over the
+        older dead branch even if the dead branch is longer.
+        """
         chat_lines = [
-            _msg("u1", None, "user", "root"),
-            _msg("u2", "u1", "assistant", "fork1-step"),
-            _msg("u3", "u1", "assistant", "fork2-step"),
-            _msg("u4", "u2", "user", "fork1-deep"),
+            _msg_json("u1", None, "user", "root"),
+            _msg_json("u2", "u1", "assistant", "fork1-step"),
+            _msg_json("u3", "u1", "assistant", "fork2-step"),
+            _msg_json("u4", "u2", "user", "fork1-deep"),
         ]
-        padding = [json.dumps({"filler": "x" * 200})] * 50
+        padding = _pad_lines(50)
         lines = [_make_session_init()] + chat_lines + padding
         raw = ("\n".join(lines) + "\n").encode("utf-8")
-        result = walk_chain_before_parse(raw)
-        # u3 has only 1 entry on its branch (length 2: u1, u3).
-        # u4 has 3 entries (length 3: u1, u2, u4). Longest wins.
-        # 2 messages dead (33% of 6 chat lines) → under threshold → may skip.
-        # But we want to assert behavior — use a config to force filter.
+        # Force filter to run regardless of dead-branch ratio
         cfg = ChainFilterConfig(dead_branch_ratio=0.1)
         result = walk_chain_before_parse(raw, config=cfg)
         decoded = result.raw_bytes.decode("utf-8")
+        # u3 is at index 2, u4 is at index 3 — u4 is the latest leaf.
+        # Walk from u4: u4 -> u2 -> u1. u3 is excluded.
         self.assertIn("u1", decoded)
         self.assertIn("u2", decoded)
         self.assertIn("u4", decoded)
+        self.assertNotIn('"uuid": "u3"', decoded)
 
 
 class TestBuildConversationChain(unittest.TestCase):
@@ -282,7 +292,7 @@ class TestBuildConversationChain(unittest.TestCase):
             _msg("u5", "u2", "user", "after rewind"),  # fork from u2
         ]
         chain = build_conversation_chain(msgs)
-        # u5 is the leaf (no one references it); walk back: u5, u2, u1
+        # u5 is the latest leaf (last in input order); walk back: u5, u2, u1
         self.assertEqual([m["uuid"] for m in chain], ["u1", "u2", "u5"])
         self.assertNotIn("u3", [m["uuid"] for m in chain])
         self.assertNotIn("u4", [m["uuid"] for m in chain])
@@ -351,29 +361,22 @@ class TestSessionLoadIntegration(unittest.TestCase):
         import tempfile
 
         self.tmpdir = tempfile.mkdtemp(prefix="f103-session-")
-        self._original_home = None
+        self._patched = False
 
     def tearDown(self):
-        # No live state to clean up — Session is constructed with
-        # explicit ids and the temp dir is removed by the OS on reboot.
-        # We deliberately do NOT touch ``Path.home`` here; see below.
-        pass
+        if self._patched:
+            from clawcodex_ext.agent import session as session_mod
+
+            session_mod._get_sessions_dir = self._original_get_sessions_dir
+            self._patched = False
 
     def _patch_sessions_dir(self):
-        """Patch ``_get_sessions_dir`` to point at the temp dir."""
         from clawcodex_ext.agent import session as session_mod
-
-        original = session_mod._get_sessions_dir
-        self._original_home = original
         from pathlib import Path as _Path
 
+        self._original_get_sessions_dir = session_mod._get_sessions_dir
         session_mod._get_sessions_dir = lambda: _Path(self.tmpdir)
-        return original
-
-    def _restore_sessions_dir(self, original):
-        from clawcodex_ext.agent import session as session_mod
-
-        session_mod._get_sessions_dir = original
+        self._patched = True
 
     def _write_transcript(self, session_id: str, raw_lines: list[str]) -> Path:
         session_dir = Path(self.tmpdir) / session_id
@@ -384,99 +387,82 @@ class TestSessionLoadIntegration(unittest.TestCase):
 
     def test_load_returns_active_chain_after_rewind(self):
         """End-to-end: write a rewind transcript, Session.load returns only active chain."""
-        original = self._patch_sessions_dir()
-        try:
-            session_id = "rewind-test-1"
-            init = _make_session_init(session_id)
-            chat_lines = [
-                json.dumps(_msg("u1", None, "user", "hi")),
-                json.dumps(_msg("u2", "u1", "assistant", "hello")),
-                json.dumps(_msg("u3", "u2", "user", "q1")),
-                json.dumps(_msg("u4", "u3", "assistant", "a1")),
-                json.dumps(_msg("u5", "u2", "user", "after rewind")),
-            ]
-            # Pad so the size gate fires
-            chat_lines = chat_lines + [json.dumps({"filler": "x" * 200})] * 60
-            self._write_transcript(
-                session_id, [init] + chat_lines + [_snapshot_line()]
-            )
+        self._patch_sessions_dir()
+        session_id = "rewind-test-1"
+        init = _make_session_init(session_id)
+        chat_lines = [
+            _msg_json("u1", None, "user", "hi"),
+            _msg_json("u2", "u1", "assistant", "hello"),
+            _msg_json("u3", "u2", "user", "q1"),
+            _msg_json("u4", "u3", "assistant", "a1"),
+            _msg_json("u5", "u2", "user", "after rewind"),
+        ]
+        chat_lines = chat_lines + _pad_lines(60)
+        self._write_transcript(session_id, [init] + chat_lines + [_snapshot_line()])
 
-            from clawcodex_ext.agent.session import Session
+        from clawcodex_ext.agent.session import Session
 
-            loaded = Session.load(session_id)
-            self.assertIsNotNone(loaded)
-            # The active chain is u1 -> u2 -> u5
-            uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
-            self.assertIn("u1", uuids)
-            self.assertIn("u2", uuids)
-            self.assertIn("u5", uuids)
-            # Dead branches excluded
-            self.assertNotIn("u3", uuids)
-            self.assertNotIn("u4", uuids)
-        finally:
-            self._restore_sessions_dir(original)
+        loaded = Session.load(session_id)
+        self.assertIsNotNone(loaded)
+        uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
+        # The active chain is u1 -> u2 -> u5 (latest leaf wins)
+        self.assertIn("u1", uuids)
+        self.assertIn("u2", uuids)
+        self.assertIn("u5", uuids)
+        # Dead branches excluded
+        self.assertNotIn("u3", uuids)
+        self.assertNotIn("u4", uuids)
 
     def test_load_returns_all_when_legacy_no_parentUuid(self):
         """Legacy transcripts (no parentUuid) return all messages unchanged."""
-        original = self._patch_sessions_dir()
-        try:
-            session_id = "legacy-test-1"
-            init = _make_session_init(session_id)
-            legacy_lines = [
-                json.dumps({"uuid": "u1", "role": "user", "content": "hi"}),
-                json.dumps({"uuid": "u2", "role": "assistant", "content": "hello"}),
-                json.dumps({"uuid": "u3", "role": "user", "content": "again"}),
-            ]
-            # Pad to exceed the size gate so the gate fires
-            legacy_lines = legacy_lines + [json.dumps({"filler": "x" * 200})] * 60
-            self._write_transcript(
-                session_id, [init] + legacy_lines + [_snapshot_line()]
-            )
+        self._patch_sessions_dir()
+        session_id = "legacy-test-1"
+        init = _make_session_init(session_id)
+        legacy_lines = [
+            json.dumps({"uuid": "u1", "role": "user", "content": "hi"}),
+            json.dumps({"uuid": "u2", "role": "assistant", "content": "hello"}),
+            json.dumps({"uuid": "u3", "role": "user", "content": "again"}),
+        ]
+        legacy_lines = legacy_lines + _pad_lines(60)
+        self._write_transcript(session_id, [init] + legacy_lines + [_snapshot_line()])
 
-            from clawcodex_ext.agent.session import Session
+        from clawcodex_ext.agent.session import Session
 
-            loaded = Session.load(session_id)
-            self.assertIsNotNone(loaded)
-            uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
-            self.assertIn("u1", uuids)
-            self.assertIn("u2", uuids)
-            self.assertIn("u3", uuids)
-        finally:
-            self._restore_sessions_dir(original)
+        loaded = Session.load(session_id)
+        self.assertIsNotNone(loaded)
+        uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
+        self.assertIn("u1", uuids)
+        self.assertIn("u2", uuids)
+        self.assertIn("u3", uuids)
 
     def test_chain_filter_disabled_returns_full_transcript(self):
         """Opt-out: chain_filter=False returns the full transcript including dead branches."""
-        original = self._patch_sessions_dir()
-        try:
-            session_id = "optout-test-1"
-            init = _make_session_init(session_id)
-            chat_lines = [
-                json.dumps(_msg("u1", None, "user", "hi")),
-                json.dumps(_msg("u2", "u1", "assistant", "hello")),
-                json.dumps(_msg("u3", "u2", "user", "q1")),
-                json.dumps(_msg("u4", "u3", "assistant", "a1")),
-                json.dumps(_msg("u5", "u2", "user", "after rewind")),
-            ]
-            chat_lines = chat_lines + [json.dumps({"filler": "x" * 200})] * 60
-            self._write_transcript(
-                session_id, [init] + chat_lines + [_snapshot_line()]
-            )
+        self._patch_sessions_dir()
+        session_id = "optout-test-1"
+        init = _make_session_init(session_id)
+        chat_lines = [
+            _msg_json("u1", None, "user", "hi"),
+            _msg_json("u2", "u1", "assistant", "hello"),
+            _msg_json("u3", "u2", "user", "q1"),
+            _msg_json("u4", "u3", "assistant", "a1"),
+            _msg_json("u5", "u2", "user", "after rewind"),
+        ]
+        chat_lines = chat_lines + _pad_lines(60)
+        self._write_transcript(session_id, [init] + chat_lines + [_snapshot_line()])
 
-            from clawcodex_ext.agent.session import _load_from_enhanced_transcript
+        from clawcodex_ext.agent.session import _load_from_enhanced_transcript
 
-            path = Path(self.tmpdir) / session_id / "transcript.jsonl"
-            loaded = _load_from_enhanced_transcript(
-                session_id, path, chain_filter=False
-            )
-            self.assertIsNotNone(loaded)
-            uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
-            # All chat messages (including dead branches) are returned
-            self.assertIn("u1", uuids)
-            self.assertIn("u3", uuids)
-            self.assertIn("u4", uuids)
-            self.assertIn("u5", uuids)
-        finally:
-            self._restore_sessions_dir(original)
+        path = Path(self.tmpdir) / session_id / "transcript.jsonl"
+        loaded = _load_from_enhanced_transcript(
+            session_id, path, chain_filter=False
+        )
+        self.assertIsNotNone(loaded)
+        uuids = [getattr(m, "uuid", None) for m in loaded.conversation.messages]
+        # All chat messages (including dead branches) are returned
+        self.assertIn("u1", uuids)
+        self.assertIn("u3", uuids)
+        self.assertIn("u4", uuids)
+        self.assertIn("u5", uuids)
 
 
 if __name__ == "__main__":

@@ -1557,7 +1557,9 @@ async def query(
             needs_follow_up = len(tool_use_blocks) > 0
 
             # P102-D: post_llm hook — LLM 响应返回后、工具执行前
-            call_hooks("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
+            hook_result = call_hooks("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
+            assistant_messages = hook_result[0]
+            tool_use_blocks = hook_result[1]
 
             for msg in assistant_messages:
                 # Ch5/B.1 — three-source withholding pattern.
@@ -1713,7 +1715,8 @@ async def query(
         setattr(tool_use_context, "_active_provider", params.provider)
 
         # P102-D: pre_tool hook — 在工具执行之前允许外部策略修改 tool_use_blocks
-        call_hooks("pre_tool", tool_use_blocks, state=state, params=params)
+        hook_result = call_hooks("pre_tool", tool_use_blocks, state=state, params=params)
+        tool_use_blocks = hook_result[0]
 
         tool_results = await _run_tools_partitioned(
             tool_use_blocks,
@@ -1723,7 +1726,8 @@ async def query(
         )
 
         # P102-D: post_tool hook — 在工具执行之后允许外部策略修改 tool_results
-        call_hooks("post_tool", tool_results, state=state, params=params)
+        hook_result = call_hooks("post_tool", tool_results, state=state, params=params)
+        tool_results = hook_result[0]
 
         if _diag:
             logger.warning(
