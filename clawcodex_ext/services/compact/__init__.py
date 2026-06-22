@@ -46,6 +46,12 @@ from .post_compact_attachments import (
     POST_COMPACT_TOKEN_BUDGET,
     POST_COMPACT_MAX_TOKENS_PER_FILE,
 )
+from .gating import (
+    DEFAULT_COMPRESSION_GATE_SKIP_RATIO,
+    ENV_COMPRESSION_GATE_SKIP_RATIO,
+    resolve_skip_ratio_from_env,
+    should_run_compression_pipeline,
+)
 from . import reactive_compact
 
 __all__ = [
@@ -80,5 +86,9 @@ __all__ = [
     "POST_COMPACT_MAX_FILES_TO_RESTORE",
     "POST_COMPACT_TOKEN_BUDGET",
     "POST_COMPACT_MAX_TOKENS_PER_FILE",
+    "DEFAULT_COMPRESSION_GATE_SKIP_RATIO",
+    "ENV_COMPRESSION_GATE_SKIP_RATIO",
+    "resolve_skip_ratio_from_env",
+    "should_run_compression_pipeline",
     "reactive_compact",
 ]

@@ -34,6 +34,10 @@ from clawcodex_ext.context_system.microcompact import (
     microcompact_typed_messages,
     TimeBasedMCConfig,
 )
+from .gating import (
+    resolve_skip_ratio_from_env,
+    should_run_compression_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,20 @@ class PipelineConfig:
     context_window: int = 200_000
     autocompact_threshold: float = 0.80
     autocompact_tracking: AutoCompactTracking | None = None
+
+    # F-106: lazy compression gate. When ``est_input_tokens`` is below
+    # ``context_window * gate_skip_ratio``, the pipeline short-circuits
+    # and returns an empty result instead of running all 5 layers. Set
+    # to 0 to disable the gate (always run). Overridable at runtime via
+    # the ``CLAWCODEX_COMPRESSION_GATE_SKIP_RATIO`` env var.
+    gate_skip_ratio: float = 0.6
+    # Force-run overrides for the gate. Forwarded by the caller when
+    # the current turn is a compact/session_memory flow, a recovery
+    # retry, or follows a pipeline error. The defaults are permissive
+    # — they must be set explicitly for the gate to actually skip.
+    gate_query_source: str = ""
+    gate_transition_reason: str | None = None
+    gate_previous_pipeline_errored: bool = False
 
     # Layer 5: post-compact attachment context
     # Forwarded into auto_compact_if_needed → CompactContext so post-compact
@@ -125,6 +143,31 @@ class CompressionPipeline:
         total_saved = 0
         layers_applied: list[str] = []
         current_messages = messages
+
+        # F-106: lazy compression gate. When est_input_tokens is well
+        # below context_window * skip_ratio, all five layers would be
+        # no-ops; short-circuit before doing any work.
+        effective_ratio = resolve_skip_ratio_from_env(cfg.gate_skip_ratio)
+        gate_should_run, gate_reason = should_run_compression_pipeline(
+            est_input_tokens=input_token_count,
+            context_window=cfg.context_window,
+            skip_ratio=effective_ratio,
+            query_source=cfg.gate_query_source,
+            transition_reason=cfg.gate_transition_reason,
+            previous_pipeline_errored=cfg.gate_previous_pipeline_errored,
+        )
+        if not gate_should_run:
+            logger.debug(
+                "F-106 compression pipeline skipped reason=%s est=%d threshold=%d",
+                gate_reason,
+                input_token_count,
+                int(cfg.context_window * effective_ratio),
+            )
+            return CompressionResult(
+                messages=messages,
+                tokens_saved=0,
+                layers_applied=[f"skipped:{gate_reason}"],
+            )
 
         # --- Layer 1: Tool Result Budget ---
         try:
