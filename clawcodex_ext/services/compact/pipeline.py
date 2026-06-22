@@ -146,28 +146,31 @@ class CompressionPipeline:
 
         # F-106: lazy compression gate. When est_input_tokens is well
         # below context_window * skip_ratio, all five layers would be
-        # no-ops; short-circuit before doing any work.
-        effective_ratio = resolve_skip_ratio_from_env(cfg.gate_skip_ratio)
-        gate_should_run, gate_reason = should_run_compression_pipeline(
-            est_input_tokens=input_token_count,
-            context_window=cfg.context_window,
-            skip_ratio=effective_ratio,
-            query_source=cfg.gate_query_source,
-            transition_reason=cfg.gate_transition_reason,
-            previous_pipeline_errored=cfg.gate_previous_pipeline_errored,
-        )
-        if not gate_should_run:
-            logger.debug(
-                "F-106 compression pipeline skipped reason=%s est=%d threshold=%d",
-                gate_reason,
-                input_token_count,
-                int(cfg.context_window * effective_ratio),
+        # no-ops; short-circuit before doing any work.  A zero (or
+        # negative) input_token_count means "not measured" — skip the
+        # gate so the pipeline runs normally for backward compat.
+        if input_token_count > 0:
+            effective_ratio = resolve_skip_ratio_from_env(cfg.gate_skip_ratio)
+            gate_should_run, gate_reason = should_run_compression_pipeline(
+                est_input_tokens=input_token_count,
+                context_window=cfg.context_window,
+                skip_ratio=effective_ratio,
+                query_source=cfg.gate_query_source,
+                transition_reason=cfg.gate_transition_reason,
+                previous_pipeline_errored=cfg.gate_previous_pipeline_errored,
             )
-            return CompressionResult(
-                messages=messages,
-                tokens_saved=0,
-                layers_applied=[f"skipped:{gate_reason}"],
-            )
+            if not gate_should_run:
+                logger.debug(
+                    "F-106 compression pipeline skipped reason=%s est=%d threshold=%d",
+                    gate_reason,
+                    input_token_count,
+                    int(cfg.context_window * effective_ratio),
+                )
+                return CompressionResult(
+                    messages=messages,
+                    tokens_saved=0,
+                    layers_applied=[f"skipped:{gate_reason}"],
+                )
 
         # --- Layer 1: Tool Result Budget ---
         try:

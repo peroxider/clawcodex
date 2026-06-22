@@ -98,9 +98,10 @@ class TestIssueStateCacheSkipPolicy(unittest.TestCase):
             )
         self.assertFalse(self.cache.should_skip_poll("ISSUE-1", turn=3))
 
-    def test_inactive_state_in_history_resets_skip(self) -> None:
-        # Snapshot 0: inactive; snapshot 1: active. Last snapshot
-        # active, but window of 3 has an inactive → no skip.
+    def test_inactive_snapshot_outside_window_allows_skip(self) -> None:
+        # Snapshot 0: inactive; snapshots 1-3: active.
+        # Only the last N=3 snapshots matter for the skip decision.
+        # Window [1,2,3] is all active+same state → skip is True.
         self.cache.record(
             issue_id="ISSUE-1", is_active=False,
             state="closed", observed_at_turn=0,
@@ -110,7 +111,21 @@ class TestIssueStateCacheSkipPolicy(unittest.TestCase):
                 issue_id="ISSUE-1", is_active=True,
                 state="open", observed_at_turn=turn,
             )
-        self.assertFalse(self.cache.should_skip_poll("ISSUE-1", turn=4))
+        self.assertTrue(self.cache.should_skip_poll("ISSUE-1", turn=4))
+
+    def test_inactive_snapshot_within_window_blocks_skip(self) -> None:
+        # Snapshot 0: active; snapshot 1: active; snapshot 2: inactive.
+        # Window [0,1,2] contains an inactive → skip is False.
+        for turn in (0, 1):
+            self.cache.record(
+                issue_id="ISSUE-1", is_active=True,
+                state="open", observed_at_turn=turn,
+            )
+        self.cache.record(
+            issue_id="ISSUE-1", is_active=False,
+            state="closed", observed_at_turn=2,
+        )
+        self.assertFalse(self.cache.should_skip_poll("ISSUE-1", turn=3))
 
     def test_last_snapshot_not_from_previous_turn_blocks_skip(self) -> None:
         # Snapshots from turns 0, 2, 3 — calling at turn=4 the last
@@ -221,17 +236,21 @@ class TestIssueStateCacheConcurrentSessions(unittest.TestCase):
     def test_two_caches_have_independent_state(self) -> None:
         cache_a = IssueStateCache(stable_skip_turns=2)
         cache_b = IssueStateCache(stable_skip_turns=2)
+        # Populate both caches with the same issue
         for turn in range(2):
             cache_a.record(
                 issue_id="ISSUE-1", is_active=True,
                 state="open", observed_at_turn=turn,
             )
-        # cache_b is empty — must not skip
-        self.assertFalse(cache_b.should_skip_poll("ISSUE-1", turn=2))
-        # cache_a is full — must skip
+            cache_b.record(
+                issue_id="ISSUE-1", is_active=True,
+                state="open", observed_at_turn=turn,
+            )
+        # Both caches are full — both must skip
         self.assertTrue(cache_a.should_skip_poll("ISSUE-1", turn=2))
+        self.assertTrue(cache_b.should_skip_poll("ISSUE-1", turn=2))
 
-        # invalidate cache_a — cache_b unaffected
+        # invalidate cache_a — cache_b must remain populated
         cache_a.invalidate()
         self.assertFalse(cache_a.should_skip_poll("ISSUE-1", turn=2))
         self.assertTrue(cache_b.should_skip_poll("ISSUE-1", turn=2))

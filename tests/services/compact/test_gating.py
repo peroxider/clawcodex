@@ -207,9 +207,9 @@ class TestResolveSkipRatioFromEnv(unittest.TestCase):
         self.assertEqual(resolve_skip_ratio_from_env(0.4), 0.4)
 
     def test_invalid_configured_falls_back_to_default(self) -> None:
-        # resolve_skip_ratio_from_env wraps float() in try/except
+        # Non-numeric string can't be converted via float(); falls back.
         self.assertEqual(
-            resolve_skip_ratio_from_env("0.4"),  # type: ignore[arg-type]
+            resolve_skip_ratio_from_env("not-a-number"),  # type: ignore[arg-type]
             DEFAULT_COMPRESSION_GATE_SKIP_RATIO,
         )
 
