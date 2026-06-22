@@ -225,12 +225,12 @@ class TestIsForkSubagentEnabled(unittest.TestCase):
     def test_uses_global_state_when_no_context(self) -> None:
         os.environ["CLAUDE_FORK_SUBAGENT"] = "1"
         with patch(
-            "src.agent.fork_subagent.get_is_non_interactive_session",
+            "clawcodex_ext.agent.fork_subagent.get_is_non_interactive_session",
             return_value=False,
         ):
             self.assertTrue(is_fork_subagent_enabled())
         with patch(
-            "src.agent.fork_subagent.get_is_non_interactive_session",
+            "clawcodex_ext.agent.fork_subagent.get_is_non_interactive_session",
             return_value=True,
         ):
             self.assertFalse(is_fork_subagent_enabled())

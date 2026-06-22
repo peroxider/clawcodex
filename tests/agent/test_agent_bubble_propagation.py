@@ -29,10 +29,8 @@ from pathlib import Path
 import pytest
 
 from clawcodex_ext.agent.agent_definitions import AgentDefinition
-from src.agent.run_agent import (
-    _build_permission_context,
-    resolve_permission_mode,
-)
+from clawcodex_ext.agent.run_agent import _build_permission_context
+from src.agent.run_agent import resolve_permission_mode
 from clawcodex_ext.permissions.types import PermissionMode, ToolPermissionContext
 from src.tool_system.context import ToolContext
 from src.utils.abort_controller import AbortController

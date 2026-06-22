@@ -1014,7 +1014,7 @@ class TestSession(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             session_dir = Path(temp_dir) / ".clawcodex" / "sessions"
 
-            with patch("src.agent.session.Path.home", return_value=Path(temp_dir)):
+            with patch("clawcodex_ext.agent.session.Path.home", return_value=Path(temp_dir)):
                 # Create and save
                 session = Session.create("glm", "glm-4.5")
                 session.conversation.add_message("user", "Test message")

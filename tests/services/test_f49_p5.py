@@ -35,7 +35,8 @@ from uuid import uuid4
 
 import pytest
 
-from src.agent.session import Session, _load_from_enhanced_transcript
+from src.agent.session import Session
+from clawcodex_ext.agent.session import _load_from_enhanced_transcript
 from src.bootstrap.state import (
     ModelUsage,
     add_to_tool_duration,

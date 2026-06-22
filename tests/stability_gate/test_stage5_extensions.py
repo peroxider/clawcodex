@@ -166,6 +166,93 @@ class TestStage5ExtAgent:
         assert callable(list_tools)
         assert callable(add_tool)
 
+    def test_phase2b_conversation_facade(self):
+        """Phase 2-B: src/agent/conversation.py → clawcodex_ext/agent/conversation.py"""
+        from src.agent.conversation import Conversation, Message
+
+        assert Conversation is not None
+        assert Message is not None
+
+    def test_phase2b_session_facade(self):
+        """Phase 2-B: src/agent/session.py → clawcodex_ext/agent/session.py"""
+        from src.agent.session import Session
+
+        assert Session is not None
+
+    def test_phase2b_run_agent_facade(self):
+        """Phase 2-B: src/agent/run_agent.py → clawcodex_ext/agent/run_agent.py"""
+        from src.agent.run_agent import (
+            RunAgentParams,
+            RunAgentResult,
+            filter_incomplete_tool_calls,
+            resolve_permission_mode,
+            run_agent,
+        )
+
+        assert RunAgentParams is not None
+        assert RunAgentResult is not None
+        assert callable(filter_incomplete_tool_calls)
+        assert callable(resolve_permission_mode)
+        assert callable(run_agent)
+
+    def test_phase2b_resume_agent_facade(self):
+        """Phase 2-B: src/agent/resume_agent.py → clawcodex_ext/agent/resume_agent.py"""
+        from src.agent.resume_agent import resume_agent_background
+
+        assert callable(resume_agent_background)
+
+    def test_phase2b_foreground_promotion_facade(self):
+        """Phase 2-B: src/agent/foreground_promotion.py → clawcodex_ext/agent/foreground_promotion.py"""
+        from src.agent.foreground_promotion import LocalAgentTaskState
+
+        assert LocalAgentTaskState is not None
+
+    def test_phase2b_fork_subagent_facade(self):
+        """Phase 2-B: src/agent/fork_subagent.py → clawcodex_ext/agent/fork_subagent.py"""
+        from src.agent.fork_subagent import (
+            FORK_AGENT,
+            FORK_BOILERPLATE_TAG,
+            FORK_DIRECTIVE_PREFIX,
+            build_worktree_notice,
+            is_fork_subagent_enabled,
+            is_in_fork_child,
+        )
+
+        assert FORK_AGENT is not None
+        assert FORK_BOILERPLATE_TAG is not None
+        assert FORK_DIRECTIVE_PREFIX is not None
+        assert callable(build_worktree_notice)
+        assert callable(is_fork_subagent_enabled)
+        assert callable(is_in_fork_child)
+
+    def test_phase2b_prompt_facade(self):
+        """Phase 2-B: src/agent/prompt.py → clawcodex_ext/agent/prompt.py"""
+        from src.agent.prompt import (
+            format_agent_line,
+            get_agent_prompt,
+            get_agent_system_prompt,
+        )
+
+        assert callable(get_agent_prompt)
+        assert callable(get_agent_system_prompt)
+        assert callable(format_agent_line)
+
+    def test_phase2b_subagent_context_facade(self):
+        """Phase 2-B: src/agent/subagent_context.py → clawcodex_ext/agent/subagent_context.py"""
+        from src.agent.subagent_context import (
+            SubagentContextOverrides,
+            create_subagent_context,
+        )
+
+        assert SubagentContextOverrides is not None
+        assert callable(create_subagent_context)
+
+    def test_phase2b_parse_agent_markdown_facade(self):
+        """Phase 2-B: src/agent/parse_agent_markdown.py → clawcodex_ext/agent/parse_agent_markdown.py"""
+        from src.agent.parse_agent_markdown import parse_agent_from_markdown
+
+        assert callable(parse_agent_from_markdown)
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""

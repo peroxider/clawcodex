@@ -425,7 +425,7 @@ def test_fork_subagent_enabled_when_coordinator_mode_off(
     from unittest.mock import patch
 
     with patch(
-        "src.agent.fork_subagent.get_is_non_interactive_session",
+        "clawcodex_ext.agent.fork_subagent.get_is_non_interactive_session",
         return_value=False,
     ):
         assert is_fork_subagent_enabled() is True
