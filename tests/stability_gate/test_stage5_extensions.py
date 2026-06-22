@@ -529,6 +529,42 @@ class TestStage5ExtAgent:
         assert Skill is not None
         assert callable(render_skill_prompt)
 
+    def test_phase2d_query_facade(self):
+        """Phase 2-D: 9 src/query/ files → clawcodex_ext/query/"""
+        from src.query.agent_loop_compat import (
+            AgentLoopRunResult,
+            run_query_as_agent_loop,
+            run_query_as_agent_loop_sync,
+        )
+        from src.query.config import QueryConfig, build_query_config
+        from src.query.deps import QueryDeps
+        from src.query.engine import QueryEngine, QueryEngineConfig
+        from src.query.query import QueryParams, StreamEvent, query
+        from src.query.stop_hooks import StopHookInfo, handle_stop_hooks
+        from src.query.streaming import QueryEvent, streaming_query
+        from src.query.token_budget import parse_token_budget
+        from src.query.transitions import QueryState, Terminal, Transition
+
+        assert AgentLoopRunResult is not None
+        assert callable(run_query_as_agent_loop)
+        assert callable(run_query_as_agent_loop_sync)
+        assert QueryConfig is not None
+        assert callable(build_query_config)
+        assert QueryDeps is not None
+        assert QueryEngine is not None
+        assert QueryEngineConfig is not None
+        assert QueryParams is not None
+        assert StreamEvent is not None
+        assert callable(query)
+        assert StopHookInfo is not None
+        assert callable(handle_stop_hooks)
+        assert QueryEvent is not None
+        assert callable(streaming_query)
+        assert callable(parse_token_budget)
+        assert QueryState is not None
+        assert Terminal is not None
+        assert Transition is not None
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""
