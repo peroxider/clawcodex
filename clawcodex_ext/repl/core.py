@@ -2292,7 +2292,25 @@ class ClawcodexREPL:
         drained: list[str] = []
         while outbox:
             entry = outbox.pop(0)
-            if isinstance(entry, dict):
+            if hasattr(entry, "get"):
+                etype = entry.get("type", "")
+                if etype == "cron_prompt":
+                    prompt = (entry.get("prompt") or "").strip()
+                    task_id = entry.get("task_id", "")
+                    run_id = entry.get("run_id", "")
+                    if task_id and task_id in self._cron_active_tasks:
+                        self._finalize_cron_run(run_id, "cancelled")
+                        continue
+                    if prompt:
+                        if task_id and run_id:
+                            self._cron_active_tasks[task_id] = run_id
+                        drained.append(_wrap_cron_prompt(prompt, task_id=task_id))
+                elif etype == "cron_missed":
+                    notification = (entry.get("notification") or "").strip()
+                    if notification:
+                        drained.append(notification)
+            elif isinstance(entry, dict):
+                # Fallback for legacy dict entries (backward compat)
                 etype = entry.get("type", "")
                 if etype == "cron_prompt":
                     prompt = (entry.get("prompt") or "").strip()

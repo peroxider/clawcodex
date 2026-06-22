@@ -289,6 +289,9 @@ def _cron_session_store(context: CommandContext) -> Any:
     return getattr(tool_context, "crons", None)
 
 
+from clawcodex_ext.query.outbox_types import CronPromptEvent
+
+
 def _cron_deep_arg(args: str) -> bool:
     return "--deep" in (args or "").split()
 
@@ -300,12 +303,11 @@ def _append_cron_outbox(context: CommandContext, run: dict[str, Any]) -> bool:
         return False
     try:
         outbox.append(
-            {
-                "type": "cron_prompt",
-                "prompt": run["prompt"],
-                "task_id": run["task_id"],
-                "run_id": run["id"],
-            }
+            CronPromptEvent(
+                prompt=run["prompt"],
+                task_id=run["task_id"],
+                run_id=run["id"],
+            )
         )
     except Exception:
         return False

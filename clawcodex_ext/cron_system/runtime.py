@@ -9,6 +9,7 @@ from .models import CronTask, is_cron_disabled, load_jitter_config
 from .runs import CronRun
 from .scheduler import CronScheduler
 from .tools import CronCreateTool, CronDeleteTool, CronListTool, CronRunTool
+from clawcodex_ext.query.outbox_types import CronMissedEvent, CronPromptEvent
 
 _log = logging.getLogger(__name__)
 
@@ -63,29 +64,27 @@ def attach_cron_runtime(
     def on_fire(prompt: str) -> None:
         if is_cron_disabled():
             return
-        outbox.append({"type": "cron_prompt", "prompt": prompt})
+        outbox.append(CronPromptEvent(prompt=prompt))
 
     def on_fire_task(task: CronTask, run: CronRun) -> None:
         if is_cron_disabled():
             return
         outbox.append(
-            {
-                "type": "cron_prompt",
-                "prompt": task.prompt,
-                "task_id": task.id,
-                "run_id": run.id,
-            }
+            CronPromptEvent(
+                prompt=task.prompt,
+                task_id=task.id,
+                run_id=run.id,
+            )
         )
 
     def on_missed(tasks: list[CronTask], notification: str) -> None:
         if is_cron_disabled():
             return
         outbox.append(
-            {
-                "type": "cron_missed",
-                "tasks": [task.id for task in tasks],
-                "notification": notification,
-            }
+            CronMissedEvent(
+                tasks=[task.id for task in tasks],
+                notification=notification,
+            )
         )
 
     # F-22-G7: opt-in observability sink — by default just logs at debug.
