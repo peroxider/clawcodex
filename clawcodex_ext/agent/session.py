@@ -36,6 +36,10 @@ from src.bootstrap.state import (
 from .conversation import Conversation
 
 
+def _get_sessions_dir() -> Path:
+    return Path.home() / ".clawcodex" / "sessions"
+
+
 @dataclass
 class Session:
     """Session manager with persistence."""
@@ -68,7 +72,7 @@ class Session:
         auto-detects legacy ``session.json`` and falls back to reading
         it when ``transcript.jsonl`` lacks a ``session_init`` line.
         """
-        session_dir = Path.home() / ".clawcodex" / "sessions" / self.session_id
+        session_dir = _get_sessions_dir() / self.session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
         cost_block = _snapshot_cost_block()
@@ -108,7 +112,7 @@ class Session:
         """
         try:
             transcript_path = (
-                Path.home() / ".clawcodex" / "sessions" / self.session_id / "transcript.jsonl"
+                _get_sessions_dir() / self.session_id / "transcript.jsonl"
             )
             payload: dict = {
                 "type": "session_snapshot",
@@ -167,9 +171,7 @@ class Session:
         covers orchestrator/cron sessions that only write metadata +
         plain message JSONL (no session_init marker).
         """
-        from src.services.session_storage import SESSIONS_DIR
-
-        session_dir = SESSIONS_DIR / session_id
+        session_dir = _get_sessions_dir() / session_id
         transcript_path = session_dir / "transcript.jsonl"
         session_file = session_dir / "session.json"
 
