@@ -1,18 +1,25 @@
-"""Voice subsystem.
+"""Facade — services/voice/__init__.py has been moved to clawcodex_ext.
 
-Provides speech-to-text and voice activity detection.
-Mirrors TypeScript voice/ directory.
+Real implementations live in ``clawcodex_ext.services.voice``.  Existing
+``from src.services.voice import …`` call sites continue to work during
+the migration.  New code should import from
+``clawcodex_ext.services.voice`` directly.
 """
 
-from __future__ import annotations
-
-from .stt import STTProvider, STTResult, STTConfig
-from .detection import VoiceActivityDetector, VoiceActivityState
+from clawcodex_ext.services.voice import (  # noqa: F401
+    STTConfig,
+    STTProvider,
+    STTResult,
+    VoiceActivityConfig,
+    VoiceActivityDetector,
+    VoiceActivityState,
+)
 
 __all__ = [
     "STTConfig",
     "STTProvider",
     "STTResult",
+    "VoiceActivityConfig",
     "VoiceActivityDetector",
     "VoiceActivityState",
 ]

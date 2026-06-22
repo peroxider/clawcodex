@@ -1,75 +1,28 @@
-"""Analytics event types and logging.
+"""Facade — services/analytics/events.py has been moved to clawcodex_ext.
 
-Mirrors TypeScript analytics/events.ts.
+Real implementation lives in ``clawcodex_ext.services.analytics.events``.
+Existing ``from src.services.analytics.events import …`` call sites
+continue to work during the migration.  New code should import from
+``clawcodex_ext.services.analytics.events`` directly.
+
+The module-level ``_global_sink`` singleton lives in the canonical
+``clawcodex_ext`` module; ``set_analytics_sink`` / ``get_analytics_sink``
+/ ``log_event`` re-exported here operate on the same state, so callers
+using either path see consistent behavior.
 """
 
-from __future__ import annotations
+from clawcodex_ext.services.analytics.events import (  # noqa: F401
+    AnalyticsEvent,
+    EventType,
+    get_analytics_sink,
+    log_event,
+    set_analytics_sink,
+)
 
-import time
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
-
-from .sink import AnalyticsSink, NullSink
-
-
-class EventType(str, Enum):
-    SESSION_START = "session_start"
-    SESSION_END = "session_end"
-    TURN_START = "turn_start"
-    TURN_END = "turn_end"
-    TOOL_USE = "tool_use"
-    TOOL_RESULT = "tool_result"
-    COMPACT = "compact"
-    ERROR = "error"
-    PERMISSION_PROMPT = "permission_prompt"
-    PERMISSION_DECISION = "permission_decision"
-    MODEL_SWITCH = "model_switch"
-    AGENT_SPAWN = "agent_spawn"
-    AGENT_COMPLETE = "agent_complete"
-    # Image pipeline events (resize, compress, PDF extraction, pre-API
-    # validation). Subtype in data["subtype"] distinguishes specific
-    # operations; mirrors TS tengu_image_* events from imageResizer.ts.
-    IMAGE_PROCESSING = "image_processing"
-
-
-@dataclass
-class AnalyticsEvent:
-    """A single analytics event."""
-
-    type: EventType
-    timestamp: float = field(default_factory=time.time)
-    session_id: str = ""
-    model: str = ""
-    data: dict[str, Any] = field(default_factory=dict)
-
-
-_global_sink: AnalyticsSink = NullSink()
-
-
-def set_analytics_sink(sink: AnalyticsSink) -> None:
-    """Set the global analytics sink."""
-    global _global_sink
-    _global_sink = sink
-
-
-def get_analytics_sink() -> AnalyticsSink:
-    """Get the current global analytics sink."""
-    return _global_sink
-
-
-def log_event(
-    event_type: EventType,
-    session_id: str = "",
-    model: str = "",
-    **data: Any,
-) -> AnalyticsEvent:
-    """Log an analytics event to the global sink."""
-    event = AnalyticsEvent(
-        type=event_type,
-        session_id=session_id,
-        model=model,
-        data=data,
-    )
-    _global_sink.emit(event)
-    return event
+__all__ = [
+    "AnalyticsEvent",
+    "EventType",
+    "get_analytics_sink",
+    "log_event",
+    "set_analytics_sink",
+]

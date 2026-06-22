@@ -1,39 +1,19 @@
-"""JSON Lines codec for Pipe IPC messages."""
+"""Facade — services/pipe_ipc/codec.py has been moved to clawcodex_ext.
 
-from __future__ import annotations
+Real implementation lives in ``clawcodex_ext.services.pipe_ipc.codec``.
+Existing ``from src.services.pipe_ipc.codec import …`` call sites
+continue to work during the migration.  New code should import from
+``clawcodex_ext.services.pipe_ipc.codec`` directly.
+"""
 
-import json
+from clawcodex_ext.services.pipe_ipc.codec import (  # noqa: F401
+    PipeJsonCodec,
+    decode_message,
+    encode_message,
+)
 
-from .models import PipeMessage
-
-
-class PipeJsonCodec:
-    @staticmethod
-    def encode_message(message: PipeMessage) -> bytes:
-        return (json.dumps(message.to_dict(), ensure_ascii=False, separators=(",", ":")) + "\n").encode(
-            "utf-8"
-        )
-
-    @staticmethod
-    def decode_message(raw: bytes | str) -> PipeMessage:
-        if isinstance(raw, bytes):
-            raw_text = raw.decode("utf-8")
-        else:
-            raw_text = raw
-
-        try:
-            data = json.loads(raw_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError("Invalid Pipe IPC JSON") from exc
-
-        if not isinstance(data, dict):
-            raise ValueError("Pipe IPC message must be a JSON object")
-        return PipeMessage.from_dict(data)
-
-
-def encode_message(message: PipeMessage) -> bytes:
-    return PipeJsonCodec.encode_message(message)
-
-
-def decode_message(raw: bytes | str) -> PipeMessage:
-    return PipeJsonCodec.decode_message(raw)
+__all__ = [
+    "PipeJsonCodec",
+    "decode_message",
+    "encode_message",
+]

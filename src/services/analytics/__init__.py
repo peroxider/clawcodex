@@ -1,14 +1,24 @@
-"""Analytics subsystem.
+"""Facade — services/analytics/__init__.py has been moved to clawcodex_ext.
 
-Event logging, session metadata, and event sinks.
-Mirrors TypeScript analytics/ directory.
+Real implementations live in ``clawcodex_ext.services.analytics``.
+Existing ``from src.services.analytics import …`` call sites continue to
+work during the migration.  New code should import from
+``clawcodex_ext.services.analytics`` directly.
 """
 
-from __future__ import annotations
-
-from .events import AnalyticsEvent, EventType, log_event
-from .metadata import SessionAnalyticsMetadata, collect_session_metadata
-from .sink import AnalyticsSink, ConsoleSink, FileSink, NullSink
+from clawcodex_ext.services.analytics import (  # noqa: F401
+    AnalyticsEvent,
+    AnalyticsSink,
+    ConsoleSink,
+    EventType,
+    FileSink,
+    NullSink,
+    SessionAnalyticsMetadata,
+    collect_session_metadata,
+    get_analytics_sink,
+    log_event,
+    set_analytics_sink,
+)
 
 __all__ = [
     "AnalyticsEvent",
@@ -19,5 +29,7 @@ __all__ = [
     "NullSink",
     "SessionAnalyticsMetadata",
     "collect_session_metadata",
+    "get_analytics_sink",
     "log_event",
+    "set_analytics_sink",
 ]
