@@ -440,6 +440,71 @@ class TestStage5ExtBridge:
 
         assert TailFollower is not None
 
+    # ------------------------------------------------------------------
+    # Phase 2-A: extensions/ports/ + clawcodex_ext/services/context_collapse
+    # ------------------------------------------------------------------
+
+    def test_phase2a_ports_bridge_repl_bridge(self):
+        import extensions.ports.bridge.repl_bridge as m
+
+        assert hasattr(m, "ReplBridgeHandle")
+        assert hasattr(m, "BridgeCoreParams")
+        assert callable(m.init_bridge_core)
+
+    def test_phase2a_ports_bridge_bridge_main(self):
+        import extensions.ports.bridge.bridge_main as m
+
+        assert hasattr(m, "BackoffConfig")
+        assert callable(m.run_bridge_loop)
+
+    def test_phase2a_ports_bridge_session_runner(self):
+        import extensions.ports.bridge.session_runner as m
+
+        assert hasattr(m, "SessionSpawnerDeps")
+        assert callable(m.create_session_spawner)
+
+    def test_phase2a_ports_bridge_remote_bridge_core(self):
+        import extensions.ports.bridge.remote_bridge_core as m
+
+        assert hasattr(m, "RemoteBridgeHandle")
+        assert callable(m.init_env_less_bridge_core)
+
+    def test_phase2a_ports_transports_websocket_v1(self):
+        import extensions.ports.transports.websocket_v1 as m
+
+        assert hasattr(m, "WebSocketTransport")
+        assert hasattr(m, "WebSocketTransportState")
+
+    def test_phase2a_ports_transports_serial_uploader(self):
+        import extensions.ports.transports.serial_uploader as m
+
+        assert hasattr(m, "SerialBatchEventUploader")
+        assert hasattr(m, "SerialBatchEventUploaderConfig")
+
+    def test_phase2a_ports_transports_hybrid_v1(self):
+        import extensions.ports.transports.hybrid_v1 as m
+
+        assert hasattr(m, "HybridTransport")
+
+    def test_phase2a_clawcodex_ext_context_collapse(self):
+        import clawcodex_ext.services.context_collapse as m
+
+        # Top-level package re-exports the full public surface
+        assert hasattr(m, "CollapseEngine")
+        assert hasattr(m, "BoundaryDetector")
+        assert hasattr(m, "CollapseStateFile")
+        assert hasattr(m, "TokenCounter")
+        assert hasattr(m, "SummaryGenerator")
+        assert hasattr(m, "Trigger")
+        # Submodules accessible via the package
+        assert hasattr(m, "boundary")
+        assert hasattr(m, "engine")
+        assert hasattr(m, "exceptions")
+        assert hasattr(m, "persistence")
+        assert hasattr(m, "summary")
+        assert hasattr(m, "tokens")
+        assert hasattr(m, "trigger")
+
 
 class TestStage5Resilience:
     """扩展加载健壮性 — P1#9 坏扩展不阻塞启动, P2#12 Hook 异常隔离。"""

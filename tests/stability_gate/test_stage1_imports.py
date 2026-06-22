@@ -166,3 +166,76 @@ class TestStage1CoreImports:
         null.record_tool_summary(session_id="x", tool_name="bash")
         null.flush()
         null.close()
+
+    # ------------------------------------------------------------------
+    # Phase 2-A decoupling: 8 new src/ facades preserve import paths
+    # ------------------------------------------------------------------
+
+    def test_phase2a_bridge_repl_bridge_facade(self):
+        import src.bridge.repl_bridge as m
+
+        assert hasattr(m, "ReplBridgeHandle")
+        assert hasattr(m, "BridgeState")
+        assert hasattr(m, "BridgeCoreParams")
+        assert callable(m.init_bridge_core)
+
+    def test_phase2a_bridge_bridge_main_facade(self):
+        import src.bridge.bridge_main as m
+
+        assert hasattr(m, "BackoffConfig")
+        assert hasattr(m, "ParsedArgs")
+        assert callable(m.parse_args)
+        assert callable(m.run_bridge_loop)
+        assert callable(m.bridge_main)
+
+    def test_phase2a_bridge_session_runner_facade(self):
+        import src.bridge.session_runner as m
+
+        assert hasattr(m, "SessionSpawnerDeps")
+        assert hasattr(m, "CHILD_ENV_ALLOWLIST")
+        assert callable(m.create_session_spawner)
+        assert callable(m.build_child_env)
+
+    def test_phase2a_bridge_remote_bridge_core_facade(self):
+        import src.bridge.remote_bridge_core as m
+
+        assert hasattr(m, "RemoteBridgeHandle")
+        assert hasattr(m, "EnvLessBridgeParams")
+        assert callable(m.init_env_less_bridge_core)
+
+    def test_phase2a_transports_websocket_facade(self):
+        import src.transports.websocket_transport as m
+
+        assert hasattr(m, "WebSocketTransport")
+        assert hasattr(m, "WebSocketTransportOptions")
+        assert hasattr(m, "WebSocketTransportState")
+
+    def test_phase2a_transports_serial_uploader_facade(self):
+        import src.transports.serial_batch_event_uploader as m
+
+        assert hasattr(m, "SerialBatchEventUploader")
+        assert hasattr(m, "SerialBatchEventUploaderConfig")
+        assert hasattr(m, "RetryableError")
+
+    def test_phase2a_transports_hybrid_facade(self):
+        import src.transports.hybrid_transport as m
+
+        assert hasattr(m, "HybridTransport")
+        assert hasattr(m, "BATCH_FLUSH_INTERVAL_S")
+        assert hasattr(m, "POST_TIMEOUT_S")
+
+    def test_phase2a_services_context_collapse_facade(self):
+        import src.services.context_collapse as m
+
+        assert hasattr(m, "CollapseEngine")
+        assert hasattr(m, "BoundaryDetector")
+        assert hasattr(m, "CollapseStateFile")
+        assert hasattr(m, "TokenCounter")
+        assert hasattr(m, "SummaryGenerator")
+        assert hasattr(m, "Trigger")
+        # Submodule facades also work
+        from src.services.context_collapse import exceptions
+        from src.services.context_collapse import persistence
+
+        assert hasattr(exceptions, "ContextCollapseError")
+        assert hasattr(persistence, "load_store")
