@@ -253,6 +253,66 @@ class TestStage5ExtAgent:
 
         assert callable(parse_agent_from_markdown)
 
+    def test_phase2b_filter_agents_by_mcp_facade(self):
+        """Phase 2-B part 2: src/agent/filter_agents_by_mcp.py → clawcodex_ext/agent/filter_agents_by_mcp.py"""
+        from src.agent.filter_agents_by_mcp import (
+            filter_agents_by_mcp_requirements,
+            has_required_mcp_servers,
+        )
+
+        assert callable(filter_agents_by_mcp_requirements)
+        assert callable(has_required_mcp_servers)
+
+    def test_phase2b_load_agents_dir_facade(self):
+        """Phase 2-B part 2: src/agent/load_agents_dir.py → clawcodex_ext/agent/load_agents_dir.py"""
+        from src.agent.load_agents_dir import (
+            SOURCE_MANAGED,
+            SOURCE_PROJECT,
+            SOURCE_USER,
+            clear_agent_definitions_cache,
+            get_active_agents_from_list,
+            get_agent_definitions_with_overrides,
+        )
+
+        assert SOURCE_MANAGED is not None
+        assert SOURCE_PROJECT is not None
+        assert SOURCE_USER is not None
+        assert callable(clear_agent_definitions_cache)
+        assert callable(get_active_agents_from_list)
+        assert callable(get_agent_definitions_with_overrides)
+
+    def test_phase2b_load_plugin_agents_facade(self):
+        """Phase 2-B part 2: src/agent/load_plugin_agents.py → clawcodex_ext/agent/load_plugin_agents.py"""
+        from src.agent.load_plugin_agents import load_plugin_agents
+
+        assert callable(load_plugin_agents)
+
+    def test_phase2b_report_store_facade(self):
+        """Phase 2-B part 2: src/agent/report_store.py → clawcodex_ext/agent/report_store.py"""
+        from src.agent.report_store import (
+            ExploreReport,
+            PlanDocument,
+            ReportStore,
+            now_iso_utc,
+            parse_critical_files,
+        )
+
+        assert ExploreReport is not None
+        assert PlanDocument is not None
+        assert ReportStore is not None
+        assert callable(now_iso_utc)
+        assert callable(parse_critical_files)
+
+    def test_phase2b_routing_facade(self):
+        """Phase 2-B part 2: src/agent/routing.py → clawcodex_ext/agent/routing.py"""
+        from src.agent.routing import (
+            GENERAL_PURPOSE_FALLBACK,
+            classify_prompt_to_subagent_type,
+        )
+
+        assert GENERAL_PURPOSE_FALLBACK is not None
+        assert callable(classify_prompt_to_subagent_type)
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""

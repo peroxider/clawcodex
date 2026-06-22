@@ -16,10 +16,10 @@ from src.agent.report_store import (
     ExploreReport,
     PlanDocument,
     ReportStore,
-    _atomic_write_json,
     now_iso_utc,
     parse_critical_files,
 )
+from clawcodex_ext.agent.report_store import _atomic_write_json
 
 
 # ---------------------------------------------------------------------------
