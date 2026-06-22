@@ -302,6 +302,12 @@ class AgentConfig:
     max_no_op_turns: int = 3
     loop_detection_window: int = 5
     loop_detection_threshold: int = 3
+    # F-105: skip the tracker poll in ``_should_continue`` when the
+    # issue state has been identical across ``N`` consecutive polls.
+    # Set to 0 to disable the cache and always poll (identical to
+    # pre-F-105 behaviour). The cache lives on the ``AgentSession``
+    # instance — concurrent sessions never share state.
+    perf_should_continue_skip_turns: int = 3
     # F-40: ProgressReporter Sink 协议重构. ``phases`` is the ordered
     # list of named workflow phases the orchestrator drives a session
     # through. When the LLM completes a phase, :class:`ToolContextProgressSink`

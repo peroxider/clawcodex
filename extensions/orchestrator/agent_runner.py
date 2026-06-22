@@ -26,6 +26,7 @@ from src.utils.git import get_file_status
 from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
+from .issue_state_cache import IssueStateCache
 from .prompt_builder import PromptBuilder, resolve_python_executable
 from .tool_event_log import ToolEventLog
 from .workspace import Workspace
@@ -159,6 +160,11 @@ class AgentSession:
     verification_status: str | None = None
     verification_output: str | None = None
     report_path: str | None = None
+    # F-105: per-session cache for the tracker poll in ``_should_continue``.
+    # Initialised by ``AgentRunner.run()`` from
+    # ``agent_config.perf_should_continue_skip_turns``. When ``None`` the
+    # runner falls back to the pre-F-105 behaviour of always polling.
+    state_cache: "IssueStateCache | None" = None
     # F-45: canonical path to ~/.clawcodex/tool-events/{run_id}/events.ndjson.
     # Set in AgentRunner.run() at session start; consumed by
     # report_writer.write() to dual-write the NDJSON to the persistent layer.
@@ -752,6 +758,24 @@ class AgentRunner:
         # exception / early return.
         session._snapshot_provider = self.agent_config.provider or ""
         session._snapshot_model = self.agent_config.model or ""
+        # F-105: initialise the per-session tracker poll cache. Built
+        # once at run() start so the rest of the loop shares a single
+        # instance; concurrent sessions still get their own. Setting
+        # ``perf_should_continue_skip_turns=0`` on the agent config
+        # disables the cache (the runner always polls).
+        if session.state_cache is None:
+            session.state_cache = IssueStateCache(
+                stable_skip_turns=max(
+                    0,
+                    int(
+                        getattr(
+                            self.agent_config,
+                            "perf_should_continue_skip_turns",
+                            3,
+                        )
+                    ),
+                )
+            )
         if comment_tracker is not None and issue.id:
             await self._post_summary_placeholder(session, comment_tracker)
 
@@ -2006,9 +2030,39 @@ class AgentRunner:
         uncommitted or committed changes that satisfy the issue, so
         the agent does not keep spinning in continuation loops after
         completing its work.
+
+        F-105 perf optimisation: when a per-session ``IssueStateCache``
+        is attached to ``session.state_cache`` and the issue state has
+        been identical across ``N`` consecutive polls, skip the tracker
+        HTTP call and return the cached active state. See
+        ``extensions/orchestrator/issue_state_cache.py`` for the skip
+        policy.
         """
         if not issue.id:
             return False, issue
+
+        # F-105: cache lookup before the tracker round-trip. Forced-poll
+        # conditions mirror the spec: never skip on the first turn, never
+        # skip when the most recent snapshot reported inactive, and never
+        # skip while a user-interrupt flag is set on the session.
+        cache = getattr(session, "state_cache", None) if session is not None else None
+        if cache is not None:
+            turn = int(getattr(session, "turn_count", 0) or 0)
+            user_interrupted = bool(getattr(session, "user_interrupted", False))
+            recent_inactive = cache.has_recent_inactive(issue.id, turn - 1)
+            if (
+                turn > 0
+                and not user_interrupted
+                and not recent_inactive
+                and cache.should_skip_poll(issue.id, turn)
+            ):
+                logger.debug(
+                    "F-105 skip tracker poll issue=%s turn=%d cache=%s",
+                    issue.id,
+                    turn,
+                    cache.stats(),
+                )
+                return True, issue
 
         refreshed = await tracker.fetch_issue_states_by_ids([issue.id])
         refreshed_issue = refreshed.get(issue.id)
@@ -2020,6 +2074,19 @@ class AgentRunner:
             refreshed_issue.state is not None
             and refreshed_issue.state.strip().lower() in active_states
         )
+
+        # F-105: record the freshly-fetched snapshot so future calls can
+        # skip the HTTP round-trip. Only record active results; an
+        # inactive snapshot will force a re-poll on the next call via
+        # ``has_recent_inactive``.
+        if cache is not None and is_active and session is not None:
+            cache.record(
+                issue_id=issue.id,
+                is_active=is_active,
+                state=getattr(refreshed_issue, "state", None),
+                observed_at_turn=int(getattr(session, "turn_count", 0) or 0),
+            )
+
         if not is_active:
             return False, refreshed_issue
 
