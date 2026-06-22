@@ -84,12 +84,95 @@ def save_to_session_storage(session: Any) -> None:
         messages_list = (
             conv_dict.get("messages", []) if isinstance(conv_dict, dict) else []
         )
-        for msg_data in messages_list:
+
+        # F-103 P103-E: compute ``parentUuid`` for each message and
+        # stamp it onto the dict before writing. ``parentUuid``
+        # encodes the chain topology so ``walkChainBeforeParse`` can
+        # prune dead branches (from /rewind / fork) on read.
+        #
+        # The chain is rebuilt from scratch each save rather than
+        # patched onto existing entries: this naturally reflects
+        # rewinds (truncation breaks the previous chain, new
+        # messages start a fresh branch pointing at the rewind
+        # target) and stays robust against uuid regeneration on
+        # resume. We only stamp messages whose uuid differs from
+        # what's already on disk, so dedup in ``flush()`` remains
+        # untouched and the on-disk history is never rewritten.
+        messages_with_parent = _inject_parent_uuids(messages_list)
+
+        for msg_data in messages_with_parent:
             if isinstance(msg_data, dict):
                 storage.write_raw(msg_data)
         storage.flush()
     except Exception:
         pass  # Best-effort; not critical if this fails.
+
+
+def _inject_parent_uuids(
+    messages_list: list,
+) -> list[dict[str, Any]]:
+    """Return a copy of ``messages_list`` with ``parentUuid`` populated.
+
+    F-103 P103-E: each message's ``parentUuid`` is set to the previous
+    message's ``uuid`` in the conversation list. Root message
+    (index 0) gets ``parentUuid = None``.
+
+    Behavioural notes:
+
+    * **Only walks the in-memory conversation, not the on-disk
+      transcript.** This is intentional: the chain is rebuilt from
+      whatever the model is currently looking at, so rewinds (which
+      truncate ``conversation.messages``) automatically produce a new
+      chain pointing at the rewind target. The old messages remain
+      on disk as a dead branch until ``walkChainBeforeParse``
+      prunes them on read.
+    * **Defensive against missing uuids.** If a message dict lacks
+      a string uuid, its parentUuid is left untouched (we don't
+      invent one); subsequent messages still chain off whatever
+      previous uuid was last seen. This avoids breaking messages
+      that originated from non-standard writers (e.g. legacy
+      session_init / session_snapshot stubs).
+    * **Idempotent.** Re-running this on the same list yields the
+      same chain; we only overwrite an explicit ``None`` if a
+      previous uuid exists, so the function is safe to call on
+      dicts that already carry a ``parentUuid`` (legacy entries
+      or test fixtures).
+    * **Pure function.** No I/O. Returns a new list of dict copies
+      so the caller's ``messages_list`` is not mutated.
+
+    Args:
+        messages_list: list of message dicts (typically from
+            ``Conversation.to_dict()``). Non-dict entries are
+            passed through unchanged.
+
+    Returns:
+        A new list of message dicts with ``parentUuid`` stamped.
+    """
+    out: list[dict[str, Any]] = []
+    prev_uuid: Optional[str] = None
+    for entry in messages_list:
+        if not isinstance(entry, dict):
+            out.append(entry)
+            continue
+        new_entry = dict(entry)
+        uuid = entry.get("uuid")
+        if isinstance(uuid, str) and uuid:
+            # Only stamp when caller has not already set an explicit
+            # value. This preserves any pre-existing parentUuid that
+            # was loaded from disk (e.g. legacy branch entries we
+            # want to keep around for visualisation).
+            if "parentUuid" not in new_entry:
+                new_entry["parentUuid"] = prev_uuid
+            prev_uuid = uuid
+        else:
+            # No usable uuid — leave any existing parentUuid as-is
+            # and don't advance the chain pointer. This prevents a
+            # chain break from cascading into a wrong topology when
+            # an entry happens to be malformed.
+            if "parentUuid" not in new_entry:
+                new_entry["parentUuid"] = None
+        out.append(new_entry)
+    return out
 
 
 def _has_session_init(storage: Any) -> bool:

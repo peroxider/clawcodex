@@ -372,6 +372,8 @@ def _snapshot_cost_block() -> dict:
 def _load_from_enhanced_transcript(
     session_id: str,
     transcript_path: Path,
+    *,
+    chain_filter: bool = True,
 ) -> Optional[Session]:
     """F-49 P5-B: load a session from the enhanced transcript JSONL format.
 
@@ -386,6 +388,16 @@ def _load_from_enhanced_transcript(
     ``cost_block`` (legacy) and ``session_snapshot`` (new) tail lines
     are skipped here; their cost block is consumed by ``cost_restore``
     at resume time so this method stays a pure conversation reader.
+
+    F-103 P103-D: when ``chain_filter`` is True (default), the
+    transcript is first run through
+    :func:`clawcodex_ext.agent.chain_filter.walk_chain_before_parse`,
+    which byte-level prunes any dead-branch messages left over from
+    ``/rewind`` / fork. Legacy transcripts (no ``parentUuid``
+    fields) skip the filter automatically — see the chain_filter
+    docstring for the gating rules. Set ``chain_filter=False`` to
+    load the full transcript including dead branches (used by
+    Visualizer / Telemetry consumers that need the entire history).
 
     Returns ``None`` when the transcript is empty OR when its first
     non-blank line is not a ``session_init`` marker — signalling the
@@ -405,64 +417,89 @@ def _load_from_enhanced_transcript(
 
     from clawcodex_ext.types.messages import message_from_dict
 
+    # F-103: byte-level chain pruning. ``walk_chain_before_parse``
+    # short-circuits on legacy transcripts (no parentUuid tokens)
+    # and on small / low-dead-branch-ratio files, in which case
+    # ``result.raw_bytes`` equals the input and parsing cost is
+    # unchanged. When pruning fires, we save JSON-parse work on
+    # every dead-branch line.
+    try:
+        raw_bytes = transcript_path.read_bytes()
+    except OSError:
+        return None
+
+    if chain_filter:
+        from clawcodex_ext.agent.chain_filter import walk_chain_before_parse
+
+        filter_result = walk_chain_before_parse(raw_bytes)
+        parse_source = filter_result.raw_bytes
+    else:
+        parse_source = raw_bytes
+
     messages: list = []
     found_init = False
     try:
-        with open(transcript_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    # Skip malformed lines, mirroring
-                    # ``SessionStorage.read_transcript``.
-                    continue
-                if not isinstance(entry, dict):
-                    continue
+        for raw_line in parse_source.split(b"\n"):
+            if not raw_line.strip():
+                continue
+            try:
+                line = raw_line.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                # Skip malformed lines, mirroring
+                # ``SessionStorage.read_transcript``.
+                continue
+            if not isinstance(entry, dict):
+                continue
 
-                # ---- First non-blank line: must be session_init ----
-                if not found_init:
-                    if entry.get("type") != "session_init":
-                        # Not the new format — caller falls back to
-                        # ``session.json`` or metadata-based reconstruction.
-                        return None
-                    found_init = True
-                    provider = entry.get("provider", "") or ""
-                    model = entry.get("model", "") or ""
-                    created_at = entry.get("created_at", "") or ""
-                    continue
+            # ---- First non-blank line: must be session_init ----
+            if not found_init:
+                if entry.get("type") != "session_init":
+                    # Not the new format — caller falls back to
+                    # ``session.json`` or metadata-based reconstruction.
+                    return None
+                found_init = True
+                provider = entry.get("provider", "") or ""
+                model = entry.get("model", "") or ""
+                created_at = entry.get("created_at", "") or ""
+                continue
 
-                # ---- Middle / tail lines ----
-                entry_type = entry.get("type")
-                if entry_type in (
-                    "cost_block",
-                    "session_snapshot",
-                    "session_init",
-                ):
-                    # cost_block: legacy cost entry written by
-                    # pre-P5-E session_persist (kept for backward
-                    # compat with already-existing transcripts).
-                    # session_snapshot: tail line from Session.save();
-                    # cost_restore owns reading the cost block from
-                    # this line so this method stays pure.
-                    # session_init: defensive — a second init line
-                    # should not happen but we tolerate it.
-                    continue
-                if (
-                    entry.get("role") == "system"
-                    and entry.get("content") == "__background_complete__"
-                ):
-                    continue
+            # ---- Middle / tail lines ----
+            entry_type = entry.get("type")
+            if entry_type in (
+                "cost_block",
+                "session_snapshot",
+                "session_init",
+            ):
+                # cost_block: legacy cost entry written by
+                # pre-P5-E session_persist (kept for backward
+                # compat with already-existing transcripts).
+                # session_snapshot: tail line from Session.save();
+                # cost_restore owns reading the cost block from
+                # this line so this method stays pure.
+                # session_init: defensive — a second init line
+                # should not happen but we tolerate it.
+                continue
+            if (
+                entry.get("role") == "system"
+                and entry.get("content") == "__background_complete__"
+            ):
+                continue
 
-                try:
-                    messages.append(message_from_dict(entry))
-                except Exception:
-                    # Skip unparseable message entries; the transcript
-                    # remains valid overall.
-                    continue
-    except OSError:
+            try:
+                messages.append(message_from_dict(entry))
+            except Exception:
+                # Skip unparseable message entries; the transcript
+                # remains valid overall.
+                continue
+    except Exception:
+        # F-103: any failure while iterating filtered bytes is
+        # treated as "transcript unreadable" so the caller falls
+        # back to ``session.json`` rather than silently returning
+        # a partially-reconstructed Session.
         return None
 
     # No session_init seen — the transcript is empty or contains only
@@ -472,6 +509,32 @@ def _load_from_enhanced_transcript(
     # model, which masks the legacy session.json entirely.
     if not found_init:
         return None
+
+    # F-103 P103-C: rebuild the conversation chain from the leaf so
+    # the returned messages are guaranteed to follow the
+    # ``parentUuid`` topology (rather than the on-disk append
+    # order, which may include dead-branch lines if the gate did
+    # not fire). This is a no-op on transcripts where every line
+    # is on the active chain — the leaf walk collapses to a
+    # single in-order pass.
+    if chain_filter:
+        from clawcodex_ext.agent.chain_filter import build_conversation_chain
+        from src.types.messages import message_to_dict
+
+        serialised = [message_to_dict(m) if not isinstance(m, dict) else m for m in messages]
+        chained = build_conversation_chain(serialised)
+        rebuilt: list = []
+        # ``build_conversation_chain`` returns the original dict
+        # objects (not copies), so we map them back to typed
+        # Message instances by re-parsing. This is cheap relative
+        # to the file read and keeps the public surface (typed
+        # messages) intact.
+        for d in chained:
+            try:
+                rebuilt.append(message_from_dict(d))
+            except Exception:
+                continue
+        messages = rebuilt
 
     return Session(
         session_id=session_id,
