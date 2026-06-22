@@ -63,7 +63,17 @@ def resolve_permission_state(args) -> None:
         settings_default_mode=settings_default_mode,
     )
 
-    is_bypass_available = dangerously or allow_dangerously or has_allow_bypass_permissions_mode()
+    # When the user explicitly passes --permission-mode bypassPermissions,
+    # treat bypass as available for the Shift+Tab cycle even without
+    # --dangerously-skip-permissions.  Without this, the cycle guard
+    # in get_next_permission_mode blocks plan → bypassPermissions →
+    # default, and the user can never return to bypass after cycling away.
+    is_bypass_available = (
+        dangerously
+        or allow_dangerously
+        or has_allow_bypass_permissions_mode()
+        or mode == "bypassPermissions"
+    )
 
     # Stash on args so downstream entrypoints don't need to re-derive.
     args._resolved_permission_mode = mode
