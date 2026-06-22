@@ -27,7 +27,7 @@ import threading as _threading
 from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.providers._stream_abort import StreamAbortGuard
+    from clawcodex_ext.providers._stream_abort import StreamAbortGuard
     from src.utils.stream_watchdog import StreamWatchdog
 
 

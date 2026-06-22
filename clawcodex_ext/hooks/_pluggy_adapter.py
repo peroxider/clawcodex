@@ -25,7 +25,7 @@ from typing import Any
 
 import pluggy
 
-from src.hooks.hook_types import (
+from clawcodex_ext.hooks.hook_types import (
     ALL_HOOK_EVENTS,
     HookConfig,
     HookEvent,

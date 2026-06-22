@@ -15,7 +15,7 @@ from src.auth.codex_oauth import CODEX_BASE_URL, resolve_codex_runtime_credentia
 
 from clawcodex_ext.providers.base import ChatResponse, MessageInput
 from clawcodex_ext.providers.codex_models import CODEX_FALLBACK_MODELS, get_codex_model_ids
-from src.providers.openai_compatible import (
+from clawcodex_ext.providers.openai_compatible import (
     OpenAICompatibleProvider,
     _convert_anthropic_messages_to_openai,
     _convert_to_openai_tool_schema,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 from collections.abc import Callable
 
 SubcommandHandler = Callable[[list[str]], int]
@@ -37,7 +39,8 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli import telemetry_cmd as _telemetry_cmd  # noqa: F401
 
     # F-85 P85-D: ``clawcodex template list|show|create`` subcommand
-    from clawcodex_ext.cli import template_cmd as _template_cmd  # noqa: F401
+    if importlib.util.find_spec("clawcodex_ext.cli.template_cmd") is not None:
+        importlib.import_module("clawcodex_ext.cli.template_cmd")
 
     # F-49 P5-H: ``clawcodex-dev session migrate`` subcommand for
     # converting legacy 3-file sessions to the unified 2-file format.

@@ -29,7 +29,7 @@ def _codex_api_discovery() -> list[str]:
         status = get_codex_auth_status()
         if not status.is_authenticated or not status.access_token:
             return []  # no token yet — stick with the static baseline
-        from src.providers.codex_models import get_codex_model_ids
+        from clawcodex_ext.providers.codex_models import get_codex_model_ids
 
         return get_codex_model_ids(status.access_token)
     except Exception:

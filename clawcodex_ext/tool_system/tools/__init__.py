@@ -27,6 +27,7 @@ from .read import ReadTool
 from .send_message import SendMessageTool
 from .send_user_message import SendUserMessageTool
 from .skill import SkillTool
+from .snip import SnipTool
 from .sleep import SleepTool
 from .structured_output import StructuredOutputTool
 from .task_stop import TaskStopTool
@@ -73,6 +74,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     SendUserMessageTool,
     SkillTool,
     SleepTool,
+    SnipTool,
     StatusTool,
     StructuredOutputTool,
     TaskCreateTool,
@@ -118,6 +120,7 @@ __all__ = [
     "SendUserMessageTool",
     "SkillTool",
     "SleepTool",
+    "SnipTool",
     "StatusTool",
     "StructuredOutputTool",
     "TaskCreateTool",

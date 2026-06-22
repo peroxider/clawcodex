@@ -1,34 +1,291 @@
-"""Cancel-latency-fixed Minimax provider — clawcodex_ext extension.
+"""Minimax AI provider (Anthropic-compatible) — clawcodex_ext canonical implementation.
 
-Subclasses :class:`src.providers.minimax_provider.MinimaxProvider` and
-overrides :meth:`chat_stream_response` to use the worker-thread +
-100ms queue-poll drain from
-:mod:`clawcodex_ext.providers._stream_drain`.
+Contains both:
 
-The body otherwise mirrors the parent method (``get_final_message()``,
-the abort translation in the ``except`` block, the post-abort recheck).
-The only behavior change is cancel latency: bounded to ~100ms instead
-of the worst-case HTTP read timeout (~60s on platforms where
-``response.close()`` from another thread does not interrupt the
-blocking httpx read).
+* :class:`MinimaxProvider` — the base provider.  Minimax exposes an
+  Anthropic-compatible endpoint at ``api.minimaxi.com/anthropic`` and
+  is driven by the ``anthropic`` SDK.  The base implementation handles
+  the lazy SDK import (degrades to a stub if the optional dependency
+  is missing) and the standard chat / chat_stream / chat_stream_response
+  surfaces.
+* :class:`ClawcodexMinimaxProvider` — subclass that overrides
+  :meth:`chat_stream_response` to route the synchronous ``text_stream``
+  iteration through :func:`clawcodex_ext.providers._stream_drain.
+  drain_text_stream_with_abort_poll`.  This bounds cancel latency to
+  ~100ms on platforms where ``response.close()`` from another thread is
+  advisory only and does NOT interrupt the blocking httpx read.
 
 Registered in :mod:`clawcodex_ext.providers` via
 ``register_provider("minimax", …)``; the hook in
 ``src.providers.get_provider_class`` makes the override win over the
 upstream hardcoded branch.
+
+Backward-compat: ``src.providers.minimax_provider`` is a
+``sys.modules`` swap facade that resolves to this module, so test
+imports like ``from src.providers.minimax_provider import
+MinimaxProvider`` continue to work transparently.
 """
 
 from __future__ import annotations
 
-from typing import Any, Optional, TYPE_CHECKING
-
-from src.providers.minimax_provider import MinimaxProvider
-from clawcodex_ext.providers.base import ChatResponse, MessageInput, TextChunkCallback
+from typing import Any, Generator, Optional, TYPE_CHECKING
 
 from clawcodex_ext.providers._stream_drain import drain_text_stream_with_abort_poll
 
+try:
+    import anthropic  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+
+    class _MissingAnthropic:
+        class Anthropic:  # type: ignore[no-redef]
+            def __init__(self, *args, **kwargs):
+                raise ModuleNotFoundError(
+                    "anthropic package is not installed. Install optional dependencies to use MinimaxProvider."
+                )
+
+    anthropic = _MissingAnthropic()
+
+from clawcodex_ext.providers.base import (
+    BaseProvider,
+    ChatResponse,
+    MessageInput,
+    TextChunkCallback,
+)
+
 if TYPE_CHECKING:
     from src.utils.abort_controller import AbortSignal
+
+
+class MinimaxProvider(BaseProvider):
+    """Minimax AI provider using Anthropic-compatible API.
+
+    Minimax provides an Anthropic-compatible endpoint at api.minimaxi.com/anthropic.
+    Uses the Anthropic SDK with Minimax-specific models.
+    """
+
+    DEFAULT_BASE_URL = "https://api.minimaxi.com/anthropic"
+
+    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
+        """Initialize Minimax provider.
+
+        Args:
+            api_key: Minimax API key
+            base_url: Base URL (optional, defaults to Minimax Anthropic-compatible endpoint)
+            model: Default model (default: MiniMax-M2.7)
+        """
+        resolved_base_url = base_url or self.DEFAULT_BASE_URL
+        super().__init__(api_key, resolved_base_url, model or "MiniMax-M2.7")
+
+        self._client_kwargs: dict[str, Any] = {"api_key": api_key}
+        if resolved_base_url:
+            self._client_kwargs["base_url"] = resolved_base_url
+        self.client = None
+
+    def _ensure_client(self):
+        if self.client is not None:
+            return self.client
+        self.client = anthropic.Anthropic(**self._client_kwargs)
+        return self.client
+
+    def _build_chat_response(self, response: Any) -> ChatResponse:
+        content_text = ""
+        tool_uses: list[dict[str, Any]] = []
+
+        for block in response.content:
+            block_type = getattr(block, "type", "text")
+            if block_type == "text":
+                text_val = getattr(block, "text", "")
+                if text_val is not None:
+                    content_text += str(text_val)
+            elif block_type == "tool_use":
+                tool_uses.append(
+                    {
+                        "id": str(getattr(block, "id", "")),
+                        "name": str(getattr(block, "name", "")),
+                        "input": dict(getattr(block, "input", {})),
+                    }
+                )
+
+        usage = getattr(response, "usage", None)
+        return ChatResponse(
+            content=content_text,
+            model=getattr(response, "model", self.model or ""),
+            usage={
+                "input_tokens": getattr(usage, "input_tokens", 0),
+                "output_tokens": getattr(usage, "output_tokens", 0),
+            },
+            finish_reason=str(getattr(response, "stop_reason", "stop")),
+            tool_uses=tool_uses if tool_uses else None,
+        )
+
+    def chat(
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
+    ) -> ChatResponse:
+        """Synchronous chat completion.
+
+        Args:
+            messages: List of chat messages
+            tools: Optional list of tool schemas
+            **kwargs: Additional parameters
+
+        Returns:
+            Chat response
+        """
+        model = self._get_model(**kwargs)
+        max_tokens = kwargs.get("max_tokens", 4096)
+
+        system = kwargs.pop("system", None)
+
+        # Convert messages
+        minimax_messages = self._prepare_messages(messages)
+
+        # Make API call
+        client = self._ensure_client()
+        extra_kwargs: dict[str, Any] = {}
+        if tools:
+            extra_kwargs["tools"] = tools
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=minimax_messages,
+            **({"system": system} if system else {}),
+            **extra_kwargs,
+            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
+        )
+
+        return self._build_chat_response(response)
+
+    def chat_stream(
+        self, messages: list[MessageInput], tools: Optional[list[dict[str, Any]]] = None, **kwargs
+    ) -> Generator[str, None, None]:
+        """Streaming chat completion.
+
+        Args:
+            messages: List of chat messages
+            tools: Optional list of tool schemas
+            **kwargs: Additional parameters
+
+        Yields:
+            Chunks of response content
+        """
+        model = self._get_model(**kwargs)
+        max_tokens = kwargs.get("max_tokens", 4096)
+
+        # Convert messages
+        minimax_messages = self._prepare_messages(messages)
+
+        # Stream API call
+        client = self._ensure_client()
+        extra_kwargs: dict[str, Any] = {}
+        if tools:
+            extra_kwargs["tools"] = tools
+
+        with client.messages.stream(
+            model=model,
+            max_tokens=max_tokens,
+            messages=minimax_messages,
+            **extra_kwargs,
+            **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
+        ) as stream:
+            for text in stream.text_stream:
+                yield text
+
+    def chat_stream_response(
+        self,
+        messages: list[MessageInput],
+        tools: Optional[list[dict[str, Any]]] = None,
+        on_text_chunk: TextChunkCallback | None = None,
+        abort_signal: Any = None,
+        **kwargs,
+    ) -> ChatResponse:
+        """Stream Minimax response with abort-signal-aware cancellation.
+
+        Minimax wraps the anthropic SDK against its compatible
+        endpoint, so the same response-close listener pattern
+        AnthropicProvider uses works here too. The bookkeeping lives
+        in ``StreamAbortGuard``; this provider only owns the
+        SDK-specific iteration shape (``with client.messages.stream``
+        + ``stream.text_stream`` + ``get_final_message``).
+        """
+        from clawcodex_ext.providers._stream_abort import StreamAbortGuard
+
+        guard = StreamAbortGuard(abort_signal)
+        guard.raise_if_pre_aborted()
+
+        model = self._get_model(**kwargs)
+        max_tokens = kwargs.get("max_tokens", 4096)
+        system = kwargs.pop("system", None)
+        minimax_messages = self._prepare_messages(messages)
+
+        client = self._ensure_client()
+        extra_kwargs: dict[str, Any] = {}
+        if tools:
+            extra_kwargs["tools"] = tools
+
+        streamed_text = ""
+        final_message: Any = None
+        try:
+            with (
+                client.messages.stream(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=minimax_messages,
+                    **({"system": system} if system else {}),
+                    **extra_kwargs,
+                    **{
+                        k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]
+                    },
+                ) as stream,
+                guard.attach(stream),
+            ):
+                for text in stream.text_stream:
+                    if not text:
+                        continue
+                    streamed_text += text
+                    if on_text_chunk is not None:
+                        on_text_chunk(text)
+                try:
+                    final_message = stream.get_final_message()
+                except Exception:
+                    final_message = None
+        except Exception as streaming_exc:
+            guard.reraise_if_aborted(streaming_exc)
+            raise
+
+        # Stream exited normally but abort may have fired between
+        # ``__exit__`` and here.
+        guard.raise_if_post_aborted()
+
+        if final_message is not None:
+            return self._build_chat_response(final_message)
+
+        return ChatResponse(
+            content=streamed_text,
+            model=model,
+            usage={},
+            finish_reason="stop",
+            tool_uses=None,
+        )
+
+    def get_available_models(self) -> list[str]:
+        """Get list of available Minimax models.
+
+        Returns:
+            List of model names
+        """
+        return [
+            # M2 series (latest)
+            "MiniMax-M2.7",
+            "MiniMax-M2.7-highspeed",
+            "MiniMax-M2.5",
+            "MiniMax-M2.5-highspeed",
+            "M2-her",
+            # Historical
+            "MiniMax-M2.1",
+            "MiniMax-M2.1-highspeed",
+            "MiniMax-M2",
+        ]
 
 
 class ClawcodexMinimaxProvider(MinimaxProvider):
@@ -49,7 +306,7 @@ class ClawcodexMinimaxProvider(MinimaxProvider):
         abort_signal: "AbortSignal | None" = None,
         **kwargs,
     ) -> ChatResponse:
-        from src.providers._stream_abort import StreamAbortGuard
+        from clawcodex_ext.providers._stream_abort import StreamAbortGuard
 
         guard = StreamAbortGuard(abort_signal)
         guard.raise_if_pre_aborted()
@@ -123,4 +380,4 @@ class ClawcodexMinimaxProvider(MinimaxProvider):
         )
 
 
-__all__ = ["ClawcodexMinimaxProvider"]
+__all__ = ["MinimaxProvider", "ClawcodexMinimaxProvider"]
