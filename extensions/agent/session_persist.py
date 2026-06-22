@@ -157,20 +157,20 @@ def _inject_parent_uuids(
         new_entry = dict(entry)
         uuid = entry.get("uuid")
         if isinstance(uuid, str) and uuid:
-            # Only stamp when caller has not already set an explicit
-            # value. This preserves any pre-existing parentUuid that
-            # was loaded from disk (e.g. legacy branch entries we
-            # want to keep around for visualisation).
-            if "parentUuid" not in new_entry:
-                new_entry["parentUuid"] = prev_uuid
+            # Always recompute parentUuid from the previous message
+            # in the conversation list. The F-103 design doc
+            # explicitly mandates "写入时计算" (compute on write);
+            # we never trust a pre-existing value because rewinds
+            # truncate the in-memory conversation and a stale
+            # parentUuid on a "new" message would point at the
+            # dead branch instead of the rewind target.
+            new_entry["parentUuid"] = prev_uuid
             prev_uuid = uuid
         else:
-            # No usable uuid — leave any existing parentUuid as-is
-            # and don't advance the chain pointer. This prevents a
-            # chain break from cascading into a wrong topology when
-            # an entry happens to be malformed.
-            if "parentUuid" not in new_entry:
-                new_entry["parentUuid"] = None
+            # No usable uuid — fall back to whatever the caller
+            # already wrote (preserves legacy behaviour for
+            # metadata stubs) or set None.
+            new_entry["parentUuid"] = entry.get("parentUuid")
         out.append(new_entry)
     return out
 
