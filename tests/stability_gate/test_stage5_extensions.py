@@ -531,6 +531,7 @@ class TestStage5ExtAgent:
 
     def test_phase2d_query_facade(self):
         """Phase 2-D: 9 src/query/ files → clawcodex_ext/query/"""
+        from src.query import QueryParams as PackageQueryParams
         from src.query.agent_loop_compat import (
             AgentLoopRunResult,
             run_query_as_agent_loop,
@@ -553,6 +554,7 @@ class TestStage5ExtAgent:
         assert QueryDeps is not None
         assert QueryEngine is not None
         assert QueryEngineConfig is not None
+        assert PackageQueryParams is QueryParams
         assert QueryParams is not None
         assert StreamEvent is not None
         assert callable(query)

@@ -12,6 +12,8 @@ definitions.
 """
 from __future__ import annotations
 
+import importlib
+
 __all__ = [
     "QueryConfig",
     "QueryEngine",
@@ -28,15 +30,11 @@ __all__ = [
 
 def __getattr__(name: str):
     if name in {"QueryConfig", "build_query_config"}:
-        from . import config as _mod
-        return getattr(_mod, name)
+        return getattr(importlib.import_module("src.query.config"), name)
     if name in {"QueryEngine", "QueryEngineConfig"}:
-        from . import engine as _mod
-        return getattr(_mod, name)
+        return getattr(importlib.import_module("src.query.engine"), name)
     if name in {"QueryParams", "StreamEvent", "query"}:
-        from . import query as _mod
-        return getattr(_mod, name)
+        return getattr(importlib.import_module("src.query.query"), name)
     if name in {"QueryState", "Terminal", "Transition"}:
-        from . import transitions as _mod
-        return getattr(_mod, name)
+        return getattr(importlib.import_module("src.query.transitions"), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
