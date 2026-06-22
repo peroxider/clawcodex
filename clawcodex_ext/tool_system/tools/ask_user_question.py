@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from clawcodex_ext.query.outbox_types import GenericOutboxEvent
+
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
@@ -46,7 +48,9 @@ def _ask_user_question_call(tool_input: dict[str, Any], context: ToolContext) ->
         answers = context.ask_user(normalized)
         return ToolResult(name="AskUserQuestion", output={"answers": answers})
 
-    context.outbox.append({"tool": "AskUserQuestion", "questions": normalized})
+    context.outbox.append(
+        GenericOutboxEvent.from_dict({"tool": "AskUserQuestion", "questions": normalized})
+    )
     return ToolResult(name="AskUserQuestion", output={"questions": normalized, "status": "pending"})
 
 

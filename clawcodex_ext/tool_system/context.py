@@ -12,6 +12,8 @@ from clawcodex_ext.services.swarm.agent_name_registry import AgentNameRegistry
 from clawcodex_ext.task_registry import RuntimeTaskRegistry
 from clawcodex_ext.utils.abort_controller import AbortController
 
+from clawcodex_ext.query.outbox_types import OutboxEvent
+
 
 def _resolve_path(p: str | Path) -> Path:
     return Path(p).expanduser().resolve()
@@ -173,7 +175,7 @@ class ToolContext:
     background_bash_tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
     plan_mode: bool = False
     worktree_root: Path | None = None
-    outbox: list[dict[str, Any]] = field(default_factory=list)
+    outbox: list[OutboxEvent] = field(default_factory=list)
     ask_user: Callable[[list[dict[str, Any]]], dict[str, str]] | None = None
     crons: dict[str, dict[str, Any]] = field(default_factory=dict)
     team: dict[str, Any] | None = None

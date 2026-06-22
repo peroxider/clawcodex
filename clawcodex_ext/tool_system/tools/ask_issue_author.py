@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from clawcodex_ext.query.outbox_types import GenericOutboxEvent
 from src.tool_system.build_tool import Tool, build_tool
 from src.tool_system.context import ToolContext
 from src.tool_system.errors import ToolInputError
@@ -86,13 +87,15 @@ def _ask_issue_author_call(
 
     # Fallback: append to outbox for orchestrator to pick up
     context.outbox.append(
-        {
-            "tool": "AskIssueAuthor",
-            "question": question,
-            "options": options,
-            "context_summary": context_summary,
-            "issue_id": issue_id,
-        }
+        GenericOutboxEvent.from_dict(
+            {
+                "tool": "AskIssueAuthor",
+                "question": question,
+                "options": options,
+                "context_summary": context_summary,
+                "issue_id": issue_id,
+            }
+        )
     )
 
     return ToolResult(

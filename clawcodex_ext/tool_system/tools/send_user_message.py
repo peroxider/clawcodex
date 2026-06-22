@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from clawcodex_ext.query.outbox_types import GenericOutboxEvent
+
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
@@ -44,12 +46,14 @@ def _send_user_message_call(tool_input: dict[str, Any], context: ToolContext) ->
 
     sent_at = datetime.now(timezone.utc).isoformat()
     context.outbox.append(
-        {
-            "tool": "SendUserMessage",
-            "status": status,
-            "message": message,
-            "attachments": resolved_attachments,
-        }
+        GenericOutboxEvent.from_dict(
+            {
+                "tool": "SendUserMessage",
+                "status": status,
+                "message": message,
+                "attachments": resolved_attachments,
+            }
+        )
     )
     return ToolResult(
         name="SendUserMessage",

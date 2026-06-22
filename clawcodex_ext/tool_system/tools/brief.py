@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from clawcodex_ext.query.outbox_types import GenericOutboxEvent
+
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..errors import ToolInputError
@@ -24,7 +26,7 @@ def _brief_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     else:
         preview = text
 
-    context.outbox.append({"tool": "Brief", "text": preview})
+    context.outbox.append(GenericOutboxEvent.from_dict({"tool": "Brief", "text": preview}))
     return ToolResult(name="Brief", output={"preview": preview, "text": text})
 
 

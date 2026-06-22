@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from clawcodex_ext.query.outbox_types import GenericOutboxEvent
+
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
 from ..protocol import ToolResult
 
 
 def _structured_output_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
-    context.outbox.append({"tool": "StructuredOutput", "structured_output": tool_input})
+    context.outbox.append(GenericOutboxEvent.from_dict({"tool": "StructuredOutput", "structured_output": tool_input}))
     return ToolResult(
         name="StructuredOutput",
         output={
