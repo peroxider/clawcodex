@@ -2,13 +2,17 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.12
+> 版本: v3.13
 > 更新日期: 2026-06-22
 > 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
 >
 > **v3.12 变更**：F-102 Agent Loop Hook 扩展点规划。
 >   - F-102 Agent Loop Hook 扩展点增强：代码审计发现 5 个 hook 缺口（pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调），§十五记录完整设计。
 >   - 附录 F-Number 快速索引同步更新：F-102 新增。
+> **v3.13 变更**：Agent 执行性能优化规划。
+>   - 新增 FEATURE_PLAN.md §十一「Agent 执行性能优化」，识别 17 个性能阻塞点（P0×7, P1×3, P2×3, P3×4），规划 15 个优化方案（A-O），含优先级/改动量/预期收益/风险评估。
+>   - 性能门禁纳入规划：新增 `test_stage7_perf_turn.py` 度量空轮次完成时间。
+>   - PROGRESS.md 同步更新：新增 F-N 任务总览行、§十六详细进度章节。
 >
 > **v3.11 变更**：F-71 SnipTool 完成。
 
@@ -170,6 +174,7 @@
 | F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
+| F-N | Agent 执行性能优化 | P1 | 📋 规划中 | 17 个阻塞点（P0×7, P1×3, P2×3, P3×4），15 个优化方案 A~O。效果分支：Phase 1（P0, 2-3d）→ Phase 2（P1, 3-5d）→ Phase 3（P2, 5-8d）→ Phase 4（P3, >8d）。详见 FEATURE_PLAN.md §十一。 |
 
 
 ---
@@ -1822,3 +1827,74 @@ Phase 4 (P102-D): formal registry ──→ Phase 5 (P102-B): 恢复策略注册
 | F-84 Context Collapse | P102-B 可替代当前 CollapseEngine 特殊参数 |
 
 
+
+---
+
+## 十六、Agent 执行性能优化
+
+**状态**: 🟢 P0 两项已落地（F-105 + F-106，2026-06-22） | **优先级**: P0 / P1 | **登记日期**: 2026-06-22
+
+**目标**: 减少 Agent 执行任务的轮次间空闲开销，缩短无变更轮次延迟，降低事件分发摩擦。
+
+**详细设计**: 见 `docs/FEATURE_PLAN.md §十一` — 包含 17 个阻塞点识别、15 个优化方案（A-O）、验收标准、依赖与协同、实施建议顺序、实施状态。
+
+**F-105 / F-106 实施摘要**（2026-06-22 提交）：
+
+- **F-105** — `_should_continue` 轮询缓存：`extensions/orchestrator/issue_state_cache.py` 新增 `IssueStateCache` dataclass，`AgentSession.state_cache` 在 `run()` 顶部初始化；`_should_continue` 顶部查询、底部 record。配置 `AgentConfig.perf_should_continue_skip_turns=3` 默认开启。`tests/orchestrator/test_issue_state_cache.py` 9 个用例全绿。
+- **F-106** — 懒压缩管线门控：`clawcodex_ext/services/compact/gating.py` 新增 `should_run_compression_pipeline` 纯函数，`CompressionPipeline.run()` 顶部插入门控；`PipelineConfig.gate_skip_ratio=0.6` 默认开启，支持 `CLAWCODEX_COMPRESSION_GATE_SKIP_RATIO` env 覆盖。`clawcodex_ext/query/query.py` 0 改动。`tests/services/compact/test_gating.py` 14 个用例全绿。
+- **回滚**：`perf_should_continue_skip_turns=0` / `gate_skip_ratio=0` 还原为旧行为。
+
+### 阻塞点总览
+
+| 级别 | 数量 | 描述 | 每轮影响 |
+|:----:|:----:|------|:--------:|
+| 🔴 P0 | 7 | 每轮调用都有的持续性开销 | 1-500ms |
+| 🟡 P1 | 3 | 轮次边界的网络/文件系统开销 | 10-2000ms |
+| 🟠 P2 | 3 | 会话/运行初始化的开销 | 10-500ms |
+| 🔵 P3 | 4 | 特定情况/异常路径开销 | 50ms-数分钟 |
+
+### 子特性（优化方案）
+
+| # | 方案 | 级别 | 对应阻塞点 | 预计工时 | 状态 |
+|---|------|:----:|:----------:|:--------:|:----:|
+| A | 轮询跳过缓存（_should_continue 跳过） | P0 | #8 Tracker API 调用 | 0.5d | 🟢 F-105 已完成 |
+| B | 惰性压缩流水线（低于窗口跳过） | P0 | #3 压缩流水线 | 1d | 🟢 F-106 已完成 |
+| C | git status 缓存（仅 Write/Edit 轮次运行） | P0 | #9 git status | 0.5d | 📋 待实现 |
+| D | 工具注册表缓存（LRU 缓存 prompt + input_schema） | P1 | #7 工具枚举 | 1d | 📋 待实现 |
+| E | 事件分发去重合并（100ms 批量推送） | P1 | #4 三重分发 | 2d | 📋 待实现 |
+| F | Debug 日志按需写入（env guard） | P1 | #5 NDJSON 写入 | 0.5d | 📋 待实现 |
+| G | 转录刷新异步化（asyncio.create_task） | P1 | #10 flush | 1d | 📋 待实现 |
+| H | Advisor 决策缓存（会话级一次决策） | P1 | #2 Advisor 决策 | 0.5d | 📋 待实现 |
+| I | 首轮初始化预加载（async preload） | P2 | #11 首轮 init | 2d | 📋 待实现 |
+| J | 延迟请求门禁内联（仅 delay>0 时执行） | P2 | #1 enforce_request_delay | 0.5d | 📋 待实现 |
+| K | _aggregate_lock 无竞争短路 | P2 | #6 锁争用 | 1d | 📋 待实现 |
+| L | sys.modules 交换移除 | P2 | #12 facade 模块 | 3d | 📋 待实现 |
+| M | PR 双写去重（.tmp rename） | P3 | #17 报告双写 | 1d | 📋 待实现 |
+| N | _find_pr_fallback 缓存（TTL 30s） | P3 | #16 PR 扫描 | 0.5d | 📋 待实现 |
+| O | 非 Anthropic Provider 系统提示缓存 | P3 | — provider 路径 | 2d | 📋 待实现 |
+
+### 实施建议顺序
+
+```
+Phase 1 (2-3d): [A] 轮询跳过 ──→ [B] 惰性压缩 ──→ [C] git status 缓存
+  P0 三项，收益最高，改动最小
+   
+Phase 2 (3-5d): [D] 工具缓存 ──→ [E] 事件合并 ──→ [F] 日志按需 ──→ [G] 异步刷新 ──→ [H] Advisor 缓存
+  P1 五项，快速见效
+
+Phase 3 (5-8d): [I] 首轮预加载 ──→ [J] 门禁内联 ──→ [K] 锁短路 ──→ [L] sys.modules 移除(可选)
+  P2 四项，中等收益
+
+Phase 4 (>8d): [M] PR 双写去重 ──→ [N] PR 回退缓存 ──→ [O] 系统提示缓存
+  P3 三项，长周期/低收益
+```
+
+### 验收标准
+
+1. **新增性能门禁** `test_stage7_perf_turn.py`：空轮次（max_turns=1, test_command=""）完成时间 < 2s
+2. **回归检测**：`test_stage6_perf.py` 全通过（CLI --help < 3s, Conversation import < 2s）
+3. **无功能退化**：`tests/orchestrator/manual_e2e_f38.py` F-38 E2E 四种测试场景全通过
+4. **独立开关**：P0/P1 优化项默认开启，P2/P3 优化项默认关闭，`AgentConfig` 中以 `perf_*` 前缀控制
+5. **稳定性门禁**：`tests/stability_gate/` 全量测试通过
+
+---

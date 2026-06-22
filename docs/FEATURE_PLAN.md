@@ -1733,7 +1733,7 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 ---
 #### 2.18 Agent Loop Hook 扩展点增强（F-102）
 
-**状态**: 📋 设计完成 | **优先级**: P1 | **登记日期**: 2026-06-22
+**状态**: 🟡 部分完成（P102-A~E 全部实现，待 mypy 严格模式验证） | **优先级**: P1 | **登记日期**: 2026-06-22
 
 **目标**: 填补 agent loop（`query()`）中 5 个 hook 扩展点缺口，为 F-68 Feature Gate / F-70 Plugin 系统提供基础设施，使新特性无需修改 `query()` 函数体即可注入自定义逻辑。
 
@@ -1745,11 +1745,11 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 
 | 编号 | 子特性 | 说明 | 状态 | 预计工时 |
 |:----:|--------|------|:----:|:--------:|
-| P102-A | **pre-LLM 通用扩展钩子** | 在 `query()` Phase 0（压缩流水线）之后、`_call_model_sync` 之前添加 `call_hooks("pre_llm", messages, system_prompt) -> (messages, system_prompt)` 回调链 | 📋 设计完成 | 2-3天 |
-| P102-B | **post-LLM 恢复策略注册表** | 将 B.1/B.2 阶段的 `if/elif` 硬编码恢复链（max_tokens/PTL/media_size）改为注册式 `RecoveryStrategy` 列表 | 📋 设计完成 | 3-5天 |
-| P102-C | **outbox 类型化** | `ToolContext.outbox` 从 `list[dict]` 改为 `list[OutboxEvent]` Union dataclass | 📋 设计完成 | 1-2天 |
-| P102-D | **formal plugin hook registry** | 新增 `register_loop_hook(name, fn, phase)` API，统一管理 pre_llm / post_llm / pre_tool / post_tool / on_turn_end 等阶段的钩子注册与去注册 | 📋 设计完成 | 2-3天 |
-| P102-E | **逐 turn 回调注册** | `QueryState` 添加 `on_turn_start` / `on_turn_end` callback 列表 | 📋 设计完成 | 1-2天 |
+| P102-A | **pre-LLM 通用扩展钩子** | 在 `query()` Phase 0（压缩流水线）之后、`_call_model_sync` 之前添加 `call_hooks("pre_llm", messages, system_prompt) -> (messages, system_prompt)` 回调链 | ✅ 已实现 | 2-3天 |
+| P102-B | **post-LLM 恢复策略注册表** | 将 B.1/B.2 阶段的 `if/elif` 硬编码恢复链（max_tokens/PTL/media_size）改为注册式 `RecoveryStrategy` 列表 | ✅ 已实现 | 3-5天 |
+| P102-C | **outbox 类型化** | `ToolContext.outbox` 从 `list[dict]` 改为 `list[OutboxEvent]` Union dataclass | ✅ 已实现 | 1-2天 |
+| P102-D | **formal plugin hook registry** | 新增 `register_loop_hook(name, fn, phase)` API，统一管理 pre_llm / post_llm / pre_tool / post_tool / on_turn_end 等阶段的钩子注册与去注册 | ✅ 已实现 | 2-3天 |
+| P102-E | **逐 turn 回调注册** | `QueryState` 添加 `on_turn_start` / `on_turn_end` callback 列表 | ✅ 已实现 | 1-2天 |
 
 #### 影响范围
 
@@ -6147,6 +6147,96 @@ class DigestStats:
 > 生成时间: 2026-06-29T08:00:00Z
 > 覆盖范围: 7 个项目 · 12 个新 release · 18 条特性记录
 
+## 十一、Agent 执行性能优化
+
+> **状态**: 🟢 P0 两项已落地（F-105 + F-106，2026-06-22） | **优先级**: P0 / P1 | **F-Number**: F-105, F-106
+
+ClawCodex Agent（Orchestrator 模式）的执行热点集中在两条每轮必走的同步路径上：(1) `_should_continue` 中的 Tracker HTTP 轮询，(2) 5 层压缩管线。本章记录 P0 两项已落地的优化（F-105 / F-106），以及剩余 P1-P3 阻塞点（待跟进）。
+
+### 11.1 阻塞点概览
+
+| # | 阻塞点 | 代码位置 | 状态 |
+|---|--------|----------|------|
+| 3 | 压缩流水线（即使上下文远低于限制） | `clawcodex_ext/query/query.py:1419-1442` | 🟢 **F-106 已落地** |
+| 8 | `_should_continue` — Tracker API 调用 | `extensions/orchestrator/agent_runner.py:1996+` | 🟢 **F-105 已落地** |
+| 1, 2, 4-7, 9-17 | 其余 P0-P3 项 | 见后续章节 | 📋 规划中 |
+
+### 11.2 F-105 — `_should_continue` 轮询缓存
+
+#### 11.2.1 问题
+
+`AgentRunner._should_continue`（`extensions/orchestrator/agent_runner.py:1996+`）在每轮成功后调用 `tracker.fetch_issue_states_by_ids([issue.id])`（HTTP GET）。对于 GitHub/Gitee/GitCode，每次 200-1500ms；当 issue 状态稳定时这部分开销完全可省。
+
+#### 11.2.2 方案
+
+引入 `extensions/orchestrator/issue_state_cache.py` 的 `IssueStateCache` dataclass，按 `AgentSession` 实例化（每 session 一个，互不影响）。当连续 N 轮返回相同 active 状态时跳过下一次 HTTP 调用。
+
+- **默认**：`AgentConfig.perf_should_continue_skip_turns = 3`
+- **强制轮询条件**（任一满足即不跳过）：
+  - `session.turn_count <= 0`（首次）
+  - `session.user_interrupted == True`
+  - 最近一次快照 `is_active == False`
+  - 最近 N 次快照存在 turn 间隔（非连续轮询）
+- **回滚**：`AgentConfig.perf_should_continue_skip_turns = 0`（恢复为每轮都轮询）
+
+#### 11.2.3 解耦边界
+
+| 项 | 位置 | 层 |
+|----|------|-----|
+| 缓存 dataclass | `extensions/orchestrator/issue_state_cache.py` | Layer 2 |
+| 注入点 | `extensions/orchestrator/agent_runner.py:run()` 顶部 + `_should_continue` 顶部/底部 | Layer 2 |
+| 配置 | `extensions/orchestrator/config/schema.py:AgentConfig.perf_should_continue_skip_turns` | Layer 2 |
+
+#### 11.2.4 验证
+
+- 单元测试：`tests/orchestrator/test_issue_state_cache.py`（skip policy / forced-poll / invalidate / 0-disable / 并发隔离）
+- 集成测试：`tests/orchestrator/test_orchestrator_agent_runner.py` 既有 case 不变绿即阻止合并
+- Bench（建议）：5 turn 跑 + stable_skip_turns=3 → tracker 调用次数 5 → 3
+
+### 11.3 F-106 — 懒压缩管线门控
+
+#### 11.3.1 问题
+
+`clawcodex_ext/query/query.py:1419-1442` 每轮调用 5 层管线（toolResultBudget → snip → microcompact → collapse → autocompact），即使 est_input_tokens 远低于上下文窗口亦然。短对话场景下 20-500ms 纯浪费。TS 上游在上下文低于阈值时跳过此步骤。
+
+#### 11.3.2 方案
+
+在 `clawcodex_ext/services/compact/pipeline.py:CompressionPipeline.run()` 顶部插入门控判定（`clawcodex_ext/services/compact/gating.py` 中的纯函数 `should_run_compression_pipeline`）。当 `est_input_tokens < context_window * gate_skip_ratio` 时跳过全部 5 层。
+
+- **默认**：`PipelineConfig.gate_skip_ratio = 0.6`
+- **强制走管线分支**：
+  - `query_source ∈ {"compact", "session_memory"}`（缩减型流程）
+  - `transition_reason ∈ {"reactive_compact_retry", "collapse_drain_retry"}`（重试过渡）
+  - `previous_pipeline_errored == True`
+  - `skip_ratio <= 0` 或 `context_window <= 0`（防御性默认运行）
+- **Env 覆盖**：`CLAWCODEX_COMPRESSION_GATE_SKIP_RATIO`（float, 0<x<1）优先级 > `PipelineConfig.gate_skip_ratio` > 默认 0.6
+- **回滚**：`PipelineConfig.gate_skip_ratio = 0` 或 `CLAWCODEX_COMPRESSION_GATE_SKIP_RATIO=0`
+
+#### 11.3.3 解耦边界
+
+| 项 | 位置 | 层 |
+|----|------|-----|
+| 纯函数 | `clawcodex_ext/services/compact/gating.py` | Layer 1 |
+| 集成点 | `clawcodex_ext/services/compact/pipeline.py:PipelineConfig.gate_skip_ratio` + `CompressionPipeline.run()` 顶部 | Layer 1 |
+| 不修改 | `clawcodex_ext/query/query.py` 保持原样（门控内嵌在管线层） | — |
+
+#### 11.3.4 验证
+
+- 单元测试：`tests/services/compact/test_gating.py`（threshold / forced / env override / defensive）
+- 集成测试：`tests/system_prompt/test_compression_pipeline.py` 既有 case 不变绿即阻止合并
+- Bench（建议）：est_input=2k / window=200k → 管线调用次数 1 → 0
+
+### 11.4 剩余 P1-P3 项（待跟进）
+
+- **P0 #1, #2**：`query.py:575-580` 延迟请求门禁 + `query.py:344-368` Advisor 模式决策 — 微优化，单函数 inline 即可
+- **P0 #4-7**：事件分发去重 / debug 日志按需 / `_aggregate_lock` 短路 / 工具注册表缓存
+- **P1 #8-10**：`_flush_turn_transcript` 异步化、`get_file_status` 缓存、首轮初始化预加载
+- **P2-P3**：PR 双写去重、`_find_pr_fallback` 缓存、系统提示缓存
+
+每项独立提交；不允许跨项合并。F-107+ 起依次分配。
+
+---
+
 ## 摘要
 
 本周社区新特性集中在 **MCP 工具扩展** 和 **Agent 自纠正** 两个方向。
@@ -6345,6 +6435,145 @@ clawcodex_ext/community_radar/
 | httpx / aiohttp | 必需 | GitHub API 客户端 |
 | scikit-learn | 可选（Phase 2+） | TF-IDF 去重向量化 |
 | Jinja2 | 必需（Phase 3+） | 报告模板渲染 |
+
+---
+
+## 十一、Agent 执行性能优化
+
+> **状态**: 📋 规划中 | **优先级**: P1 | **F-Number**: 待分配
+>
+> **说明**：本章记录 ClawCodex Agent 在执行任务过程中识别的性能阻塞点及对应优化方案。基于 2026-06 代码审计，覆盖 orchestrator agent_runner、query 主循环、git_sync 同步管线及 LLM-provider 调用链。优化目标为：减少轮次间空闲开销、缩短无变更轮次延迟、降低事件分发摩擦。
+
+---
+
+### 11.1 背景与目标
+
+ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **turn**（一轮 LLM 调用 → 工具执行 → 结果回送）。典型业务流程：
+
+```
+启动 → 首轮初始化（~500ms）→ 压缩流水线 → LLM API 往返（2-30s）→ 工具执行（N × 10ms-30s）
+→ 事件分发（N × 0.5ms）→ 调试日志写入（N × 0.3ms）→ _should_continue API 调用（200-1500ms）
+→ git status（200-2000ms）→ 下一轮
+```
+
+对于 **含代码变更的轮次**，LLM API 往返（2-30s）是主导耗时，轮次边界开销（500ms-4s）相对可接受。但对于 **无变更轮次**（agent 认为工作已完成、空转检测触发等情形），轮次边界开销可能接近甚至超过 LLM 调用时间，成为明显的性能瓶颈。
+
+**优化目标**：
+- 无变更轮次：将轮次边界开销从 500ms-4s 降至 <200ms
+- 含变更轮次：将轮次边界开销控制在 <500ms
+- LLM 调用阶段：减少不必要的预热/决策/枚举开销
+
+---
+
+### 11.2 当前性能阻塞点
+
+#### 11.2.1 🔴 P0 — 每轮调用都有的持续性开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 每轮影响 |
+|---|--------|----------|------|---------|
+| 1 | **延迟请求门禁** `enforce_request_delay()` | `query.py:575-580` | 每次 LLM API 调用都执行 `from extensions.api.query_middleware import enforce_request_delay` + 空函数调用。默认 `delay_between_requests_ms=0` 时仍产生调用开销。 | 1-2ms |
+| 2 | **Advisor 模式决策** | `query.py:344-368` | 每次 `_call_model_sync` 都运行完整决策树：import settings → get_settings → `canonical_model_name()` → `decide_advisor_mode()`。即使 advisor 被禁用（`advisor_model=""`）仍执行 import + getattr 链。 | 2-5ms |
+| 3 | **压缩流水线（即使上下文远低于限制）** | `query.py:1414-1437` | 每轮执行完整的 `run_compression_pipeline(messages)`（toolResultBudget → snip → microcompact → collapse → autocompact）。短对话场景纯浪费。**TS 上游在上下文低于阈值时跳过此步骤。** | 20-500ms（含 LLM 调用时更久） |
+| 4 | **三重事件分发路径** | `agent_runner.py:1069-1097, 1142-1170, 1202-1228` | 每个 `TextDelta` / `ToolCallEvent` / `ToolResultEvent` 都依次经过：(1) `status_dashboard.on_event()` (2) `session.event_queue.put_nowait()` (3) `control_socket.send_event()`。每个包在 `try/except Exception: pass` 中。一轮 20+ 事件 = 60 次 try/except 调用。 | N × 0.5ms（N=事件数） |
+| 5 | **调试日志 NDJSON 写入** | `agent_runner.py:1054-1064` | `append_debug_event()` 在事件循环的每个事件中调用 — 同步文件 I/O，需 `Path` 拼接 + `json.dumps`。 | N × 0.3ms（N=事件数） |
+| 6 | **_aggregate_lock 序列化安全工具** | `_dispatch_single_tool:1011` | `process_tool_result_block` + `compute_block_chars` 在 `_aggregate_lock` 临界区内执行，序列化所有并发安全工具（Read/Grep/Glob）。 | N × 0.5ms（临界区争用） |
+| 7 | **工具注册表枚举** | `query.py:436-469` | 每次 LLM 调用枚举所有工具构建 `tool_schemas` 列表：调用 `tool.prompt()` + `dict(tool.input_schema)` + 检查每个 `is_enabled()`。80+ 注册工具时累积明显。 | 5-10ms |
+
+#### 11.2.2 🟡 P1 — 轮次边界的网络/文件系统开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 每轮影响 |
+|---|--------|----------|------|---------|
+| 8 | **_should_continue — Tracker API 调用** | `agent_runner.py:1421-1424` | 每轮成功后调用 `tracker.fetch_issue_states_by_ids()` — 对 GitHub/Gitee/GitCode 进行 HTTP GET。 | 200-1500ms |
+| 9 | **`get_file_status()` — git status** | `agent_runner.py:1669-1670` | 每轮运行 `bool(get_file_status(workspace_path))`，内部执行 `git status`。大仓库（5000+ 文件）无更改时也需 500ms-2s。 | 200-2000ms |
+| 10 | **转录刷新 `_flush_turn_transcript` + `flush()`** | `agent_runner.py:1355-1363` | 每轮结束写入 SessionStorage（NDJSON 文件），同步文件 I/O。 | 10-100ms |
+
+#### 11.2.3 🟠 P2 — 会话/运行初始化的开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 影响 |
+|---|--------|----------|------|------|
+| 11 | **首轮延迟初始化** | `agent_runner.py:948-1011` | 首轮聚合初始化：import `SessionStorage` → `init_metadata()` → import `ControlSocket` → `await cs.start()`（Unix 域套接字绑定）→ import `types.messages` → `create_user_message()`。各包 try/except 中。 | ~500ms |
+| 12 | **`sys.modules` 交换 facade** | `src/query/query.py`, `src/query/engine.py` | 通过 `importlib.import_module()` + `sys.modules[name] = ext_mod` 替换自身。首次导入有 ~10-50ms 开销，多个模块累积。 | 10-50ms（仅首次） |
+| 13 | **`run_verification` 测试命令** | `agent_runner.py:1489-1506, 1767` | agent 放弃时运行 `test_command`（如 `pytest -x`）。慢测试套件（>10s）增加最终轮次延迟。 | 0-30s（仅结束轮次） |
+
+#### 11.2.4 🔵 P3 — 特定情况/异常路径
+
+| # | 阻塞点 | 代码位置 | 描述 | 影响 |
+|---|--------|----------|------|------|
+| 14 | **429 指数退避** | `agent_runner.py:1280-1300` | 被限速时指数级睡眠。预期行为，但频繁限速可累积数分钟。 | 5s-数分钟 |
+| 15 | **`reactive_compact` 额外 LLM 调用** | `query.py:1735-1802` | 提示太长或媒体大小错误触发 `reactive_compact()` — 额外 LLM 调用来总结上下文。 | 5-30s（仅异常路径） |
+| 16 | **`_find_pr_fallback` O(n) PR 扫描** | `git_sync.py:264-269` | PR 创建未立即可见 number/url 时列出所有开 PR 按分支匹配。100+ 开 PR 仓库较慢。 | 1-5s（仅首次 PR） |
+| 17 | **`ensure_pull_request` + 报告双写** | `git_sync.py:248-306` | `ensure_pull_request` 网络调用后，`_write_report()` 被调用两次（PR 创建前和 PR 更新后），每次 markdown + JSON 双写。 | 50-200ms |
+
+---
+
+### 11.3 优化方案与优先级
+
+#### 11.3.1 P0 — 项目优先（预计 1-2 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **A: 轮询跳过缓存** — `_should_continue` 在连续 N 轮 issue 状态不变时跳过 API 调用，直接返回 active。N=3 默认，`AgentConfig` 可配。 | #8 | 小（1 函数） | 节省 200-1500ms/轮 | 低 — issue 状态变化延迟最多 3 轮 |
+| **B: 惰性压缩流水线** — 消息总字符不足上下文窗口 60% 时跳过 `run_compression_pipeline()`。 | #3 | 中（gate + 阈值） | 节省 20-500ms/轮 | 低 — 阈值可配，低于窗口不压缩 |
+| **C: git status 缓存** — 使用 `os.stat` 轮询文件 mtime，仅在本轮有 `Write`/`Edit` 工具执行记录时才运行 `get_file_status()`。无修改工具轮次直接返回 clean。 | #9 | 小（1 条件判断） | 节省 200-2000ms/轮 | 极低 — 仅在脏推测错误时多跑一轮 |
+
+#### 11.3.2 P1 — 快速见效（预计 3-5 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **D: 工具注册表缓存** — 会话期间工具列表不变时缓存 `tool.prompt()` + `input_schema`，每次 `_call_model_sync` 复用缓存的 `tool_schemas`。 | #7 | 小（LRU 缓存） | 节省 5-10ms/轮 | 低 — 运行时工具动态增减时需刷新 |
+| **E: 事件分发去重合并** — `TextDelta` 事件批量推送（每 100ms 合并一次），减少 `control_socket` 写入和 `status_dashboard` 调用。 | #4 | 中（批量合并） | 减少 50% 分发开销 | 中 — `TextDelta` 实时性略降，100ms 延迟可接受 |
+| **F: Debug 日志按需写入** — 仅当 `CLAWCODEX_DEBUG` 环境变量为真时写入 `debug.ndjson`；默认跳过 `append_debug_event` 的同步 I/O。 | #5 | 小（env guard） | 节省 N × 0.3ms/轮 | 低 — 与现有 diag 变量行为正交 |
+| **G: 转录刷新异步化** — `_flush_turn_transcript` 改为 `asyncio.create_task`，不阻塞事件循环。 | #10 | 中（异步化改造） | 节省 10-100ms/轮 | 中 — 异常不可达调用方需额外处理 |
+| **H: Advisor 决策缓存** — 会话开始时决策一次，将 `advisor_mode` / `advisor_model_normalized` 存入 `session_state`，后续轮次复用。 | #2 | 小（1 次缓存） | 节省 2-5ms/轮 | 低 — advisor 不支持运行时切换 |
+
+#### 11.3.3 P2 — 中收益（预计 5-8 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **I: 首轮初始化预加载** — 在 `session.run_id` 构造完成后的 async gap 中提前初始化 `SessionStorage`，避免首轮 `while` 循环中阻塞。 | #11 | 中（异步预加载） | 节省 ~500ms（启动） | 低 — 为首轮创建异步任务即可 |
+| **J: 延迟请求门禁合并** — 将 `enforce_request_delay()` 内联到 `_call_model_sync` 的条件判断中，避免模块导入 + 函数调用。仅当 delay > 0 时才执行时间计算。 | #1 | 小（inline） | 节省 1-2ms/轮 | 极低 |
+| **K: `_aggregate_lock` 无竞争短路** — `tool_result_chars_so_far = 0` 且块远小于 200K 阈值时跳过锁。 | #6 | 小（CAS 风格） | 节省并发工具争用 | 低 — 需保证计数器读一致性 |
+| **L: sys.modules 交换移除** — 将 facade 模块替换为直接 import `clawcodex_ext` 的对应模块，避免 `importlib.import_module` + `sys.modules` 赋值。 | #12 | 大（全量替换 import） | 节省 10-50ms（启动） | 高 — 影响整个 import 图，需全量测试 |
+
+#### 11.3.4 P3 — 低收益 / 长周期（预计 >8 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **M: PR 双写去重** — `_write_report()` 在 `update_pull_request` 前只写 `.tmp`；`update_pull_request` 后 rename 为 `.md` + 写 `.json`，避免一次完整双写。 | #17 | 小（rename 改造） | 节省 50-100ms（仅 PR 路径） | 低 |
+| **N: `_find_pr_fallback` 缓存** — 缓存最近一次 `list_open_prs` 结果，短时间内复用。 | #16 | 小（TTL 缓存） | 节省 1-5s（仅首次 PR） | 低 — 短 TTL（30s）足够 |
+| **O: 非 Anthropic Provider 系统提示缓存** — 非 Anthropic 提供商的 `flattened` 系统提示在会话期间不变，可在首轮缓存。 | —（隐含在 provider 调用路径） | 中 | 节省 1-3ms/轮 | 低 — 需监听 provider 切换事件 |
+
+---
+
+### 11.4 验收标准
+
+1. **性能门禁**：新增 `test_stage7_perf_turn.py`，度量空轮次（max_turns=1, test_command=""）的完成时间 < 2s
+2. **回归检测**：原有 `test_stage6_perf.py` 的所有测试仍通过（CLI --help < 3s, Conversation import < 2s）
+3. **无功能退化**：`tests/orchestrator/manual_e2e_f38.py` F-38 E2E 四种测试场景全部通过
+4. **每项优化独立开关**：P0/P1 优化项默认开启，P2/P3 优化项默认关闭；`AgentConfig` 中以 `perf_*` 前缀的可配置选项控制
+5. **稳定性门禁**：`tests/stability_gate/` 全量测试通过
+
+---
+
+### 11.5 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| F-38 验证门 | 参考 | 性能优化的无退化验证依赖 F-38 E2E 测试 |
+| F-49 会话存储 | 参考 | 转录刷新异步化（G）依赖 F-49 的 SessionStorage 接口稳定 |
+| F-99 中断响应 | 参考 | 事件分发去重（E）需与 F-99 控制套接字协调避免冲突 |
+| `test_stage6_perf.py` | 参考 | 新增性能门禁应与已有 stage6 性能守卫对齐 |
+| `test_stage7_*` 目录 | 新建 | 新增 stage7（性能优化专测）目录 |
+
+---
+
+### 11.6 实施建议顺序
+
+1. **Phase 1**（2-3 天）：P0 三项（A: 轮询跳过缓存, B: 惰性压缩流水线, C: git status 缓存）— 收益最高，改动最小
+2. **Phase 2**（3-5 天）：P1 五项（D: 工具注册表缓存, E: 事件分发去重, F: Debug 日志按需写入, G: 转录刷新异步化, H: Advisor 决策缓存）
+3. **Phase 3**（5-8 天）：P2 四项（I: 首轮初始化预加载, J: 延迟请求门禁合并, K: 无竞争锁短路, L: sys.modules 交换移除 — 可选高收益低风险项）
+4. **Phase 4**（>8 天）：P3 三项（M: PR 双写去重, N: `_find_pr_fallback` 缓存, O: 系统提示缓存）
+5. **Phase 5**（2-3 天）：性能门禁编写 + 回归测试 + `AgentConfig` perf_* 配置项补充
 
 ---
 
