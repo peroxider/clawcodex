@@ -313,6 +313,77 @@ class TestStage5ExtAgent:
         assert GENERAL_PURPOSE_FALLBACK is not None
         assert callable(classify_prompt_to_subagent_type)
 
+    def test_phase2c_auth_facade(self):
+        """Phase 2-C: src/auth/auth.py → clawcodex_ext/auth/auth.py"""
+        from src.auth.auth import (
+            ApiKeyInfo,
+            ApiKeySource,
+            get_api_key_source,
+            load_api_key,
+            validate_api_key,
+        )
+
+        assert ApiKeyInfo is not None
+        assert ApiKeySource is not None
+        assert callable(load_api_key)
+        assert callable(validate_api_key)
+        assert callable(get_api_key_source)
+
+    def test_phase2c_aws_facade(self):
+        """Phase 2-C: src/auth/aws.py → clawcodex_ext/auth/aws.py"""
+        from src.auth.aws import AwsAuth, AwsCredentials
+
+        assert AwsAuth is not None
+        assert AwsCredentials is not None
+
+    def test_phase2c_gemini_facade(self):
+        """Phase 2-C: src/auth/gemini.py → clawcodex_ext/auth/gemini.py"""
+        from src.auth.gemini import GeminiAuth
+
+        assert GeminiAuth is not None
+
+    def test_phase2c_oauth_facade(self):
+        """Phase 2-C: src/auth/oauth.py → clawcodex_ext/auth/oauth.py"""
+        from src.auth.oauth import (
+            DEFAULT_AUTH_URL,
+            DEFAULT_CLIENT_ID,
+            DEFAULT_REDIRECT_PORT,
+            DEFAULT_TOKEN_URL,
+            OAuthFlow,
+            OAuthTokens,
+        )
+
+        assert DEFAULT_AUTH_URL is not None
+        assert DEFAULT_TOKEN_URL is not None
+        assert DEFAULT_REDIRECT_PORT is not None
+        assert DEFAULT_CLIENT_ID is not None
+        assert OAuthFlow is not None
+        assert OAuthTokens is not None
+
+    def test_phase2c_claude_ai_facade(self):
+        """Phase 2-C: src/auth/claude_ai.py → clawcodex_ext/auth/claude_ai.py"""
+        from src.auth.claude_ai import (
+            ENV_ACCESS_TOKEN,
+            ENV_ORG_UUID,
+            OAuthAccountInfo,
+            check_and_refresh_oauth_token_if_needed,
+            get_claude_ai_oauth_tokens,
+            get_oauth_account_info,
+            handle_oauth_401_error,
+            has_profile_scope,
+            is_claude_ai_subscriber,
+        )
+
+        assert ENV_ACCESS_TOKEN is not None
+        assert ENV_ORG_UUID is not None
+        assert OAuthAccountInfo is not None
+        assert callable(get_claude_ai_oauth_tokens)
+        assert callable(get_oauth_account_info)
+        assert callable(is_claude_ai_subscriber)
+        assert callable(has_profile_scope)
+        assert callable(check_and_refresh_oauth_token_if_needed)
+        assert callable(handle_oauth_401_error)
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""

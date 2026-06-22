@@ -1,36 +1,15 @@
-"""Gemini API key authentication."""
+"""Facade — auth/gemini.py has been moved to clawcodex_ext/auth/gemini.
 
-from __future__ import annotations
+The F-88 Gemini authentication (``GeminiAuth``) now lives in
+:mod:`clawcodex_ext.auth.gemini`. This module re-exports the public
+surface so existing ``from src.auth.gemini import ...`` callers keep
+working without modification.
 
-import os
-from dataclasses import dataclass
+Uses ``globals().update()`` to preserve access to all public names
+regardless of ``__all__`` — the source module has no ``__all__``.
+"""
 
+import clawcodex_ext.auth.gemini as _mod
 
-@dataclass
-class GeminiAuth:
-    """Gemini API key authentication handler."""
-
-    def load_api_key(self) -> str | None:
-        """Load Gemini API key from environment or config."""
-        # Env vars
-        for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
-            key = os.environ.get(var)
-            if key:
-                return key
-
-        # Config
-        try:
-            from ..config import load_config
-
-            config = load_config()
-            key = config.get("providers", {}).get("gemini", {}).get("api_key", "")
-            if key:
-                return key
-        except Exception:
-            pass
-
-        return None
-
-    def is_configured(self) -> bool:
-        """Check if a Gemini API key is available."""
-        return self.load_api_key() is not None
+_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
+globals().update(_globals)

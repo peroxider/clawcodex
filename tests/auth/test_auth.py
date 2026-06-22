@@ -62,7 +62,7 @@ class TestLoadApiKey:
     def test_returns_none_when_no_key(self):
         with patch.dict(os.environ, {}, clear=True):
             with patch("src.config.load_config", return_value={"providers": {}}):
-                with patch("src.auth.auth._load_from_keychain", return_value=None):
+                with patch("clawcodex_ext.auth.auth._load_from_keychain", return_value=None):
                     info = load_api_key("anthropic")
                     assert info is None
 
