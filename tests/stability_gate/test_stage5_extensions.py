@@ -423,6 +423,44 @@ class TestStage5ExtAgent:
         assert ToolUseEvent is not None
         assert UserInputMessage is not None
 
+    def test_phase2c_buddy_facade(self):
+        """Phase 2-C: 8 src/buddy/ files → clawcodex_ext/buddy/"""
+        from src.buddy.companion import Roll, SALT, get_companion, roll
+        from src.buddy.feature import is_buddy_enabled
+        from src.buddy.notification import find_buddy_trigger_positions
+        from src.buddy.observer import fire_companion_observer
+        from src.buddy.prompt import companion_intro_text
+        from src.buddy.soul import PERSONALITIES, create_stored_companion
+        from src.buddy.sprites import render_sprite
+        from src.buddy.types import (
+            Companion,
+            CompanionSoul,
+            EYES,
+            HATS,
+            RARITIES,
+            SPECIES,
+            StoredCompanion,
+        )
+
+        assert Roll is not None
+        assert SALT is not None
+        assert callable(get_companion)
+        assert callable(roll)
+        assert callable(is_buddy_enabled)
+        assert callable(find_buddy_trigger_positions)
+        assert callable(fire_companion_observer)
+        assert callable(companion_intro_text)
+        assert PERSONALITIES is not None
+        assert callable(create_stored_companion)
+        assert callable(render_sprite)
+        assert Companion is not None
+        assert CompanionSoul is not None
+        assert EYES is not None
+        assert HATS is not None
+        assert RARITIES is not None
+        assert SPECIES is not None
+        assert StoredCompanion is not None
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""
