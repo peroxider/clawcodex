@@ -1,8 +1,27 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.9（代码审计综合对齐：F-9/F-11/F-37/F-64/F-65/F-70/F-78/F-80 状态修正）
-> 更新日期: 2026-06-19 | 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.13（代码审计综合对齐：F-9/F-11/F-37/F-49/F-62/F-65/F-67/F-70/F-71/F-78/F-80/F-88/F-102 状态修正）
+> 更新日期: 2026-06-22 | 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.10 变更（F-49 状态修正——代码实现交叉验证）**：
+>   - F-49 Phase 0.4（全场景会话恢复统一闭包）：§1.4.3 从 📋 设计草稿中 → ✅ 已完成（`Session.resume()` JSONL 消息加载、REPL/TUI/CLI 三端 resume 路径修复、Cron/Orch .json 快照写入，已在 `clawcodex_ext/agent/session.py` + `clawcodex_ext/repl/core.py` + `clawcodex_ext/tui/app.py` + `clawcodex_ext/cli/dispatch.py` + `clawcodex_ext/agent/background_runner.py` 完整落地）。
+>   - F-49 Phase 5（session.json + transcript.jsonl 合并）：§1.4.5 从 📋 设计完成 → ✅ 已完成（P5-A~G 全部落地：`Session.save()` 不再写 session.json、`Session.load()` 读 enhanced transcript JSONL、cost_restore 读尾行、session_persist 写 session_init 首行、metadata.json 精简单字段）。
+>   - 附录 F-Number 快速索引同步更新：F-49 状态修正。
+>
+> **v3.11 变更（F-71 SnipTool 完成 + 多特性状态对齐）**：
+>   - F-71 SnipTool 实现：「历史消息片段截取工具」落地 `clawcodex_ext/tool_system/tools/snip.py`（282 行）。支持按索引范围/角色/关键词过滤对话历史，text/json/summary 三种输出格式，只读且并发安全。注册于 `ALL_STATIC_TOOLS`（共 42 工具），别名 `context_snip` / `history_snip`。稳定性门禁 245/245 全绿。F-71 状态从 ⏳ 待开始 → 🟡 部分完成。
+>   - F-62 Chrome 自动化：从 ⏳ 待开始 → ✅ 已完成（`src/services/chrome/` Playwright/MCP/Null 三后端 + 7 个 chrome_* 工具已注册到 `EXTENSION_TOOLS`）。
+>   - F-65 Langfuse 可观测性：从 🟡 部分完成 → ✅ 已完成（`src/services/analytics/` + `src/services/langfuse/` 全链路实现）。
+>   - F-67 Buddy/Proactive：从 ⏳ 待开始 → ✅ 已完成（`src/buddy/` 8 文件完整实现：companion/observer/soul/sprites/types/prompt/notification/feature）。
+>   - F-88 Explore/Plan Agent：从 ⏳ 待开始 → ✅ 已完成（P88-A~D 全部完成：内置 Agent 定义 + `routing.py` 自动路由 + `report_store.py` 双格式写盘；17 个新单测）。
+>   - 附录 F-Number 快速索引同步更新：F-62/F-65/F-67/F-71/F-88 状态修正。
+>
+> **v3.12 变更（F-102 Agent Loop Hook 扩展点规划）**：
+>   - Agent loop 代码审计发现 5 个 hook 缺口：pre-LLM 通用扩展钩子、post-LLM/pre-tool 恢复策略注册表、outbox 类型化、formal plugin hook registry、逐 turn 回调注册。
+>   - F-102 作为基础设施特性纳入规划管线，§2.18 记录完整详细设计。新增 5 子特性 P102-A~E，总预计 9-15 天。
+>   - 附录 F-Number 快速索引同步更新：F-102 新增。
+>
 >
 > **v3.9 变更（代码审计综合对齐）**：
 >   - F-9 /goal 命令：§2.6 从 ⏳ 待实现 → ✅ 已完成（`clawcodex_ext/goal/` 9 文件 2538 行完整实现：状态机/持久化/续跑/Tool/prompt/CLI 命令 6 大子系统全）。
@@ -456,8 +475,8 @@ class ControlSocket:
 
 #### 1.4.2 Issue 会话统一存储与实时介入协议（F-49）
 
-**状态**: 📋 设计完成（Phase 5 新增: session.json + transcript.jsonl 合并）
-**状态**: 📋 设计完成（Phase 5 新增: session.json + transcript.jsonl 合并）
+**状态**: ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地）
+**状态**: ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地）
 **优先级**: P1
 **依赖**: F-21（后台运行 + 恢复同步）、F-38（验证与报告闭环）、F-40（ProgressReporter Sink 协议重构）
 
@@ -636,7 +655,7 @@ clawcodex --resume <run_id> --readonly    → 只读查看历史，不进入交�
 
 #### 1.4.3 全场景会话恢复统一闭包（F-49 Phase 0.4 — Session Resume 统一）
 
-**状态**: 📋 设计草稿中
+**状态**: ✅ 已完成
 **优先级**: P1
 **依赖**: F-49 Phase 0 ~ 0.3（统一事件存储），F-21（后台运行 + 恢复同步）
 
@@ -926,7 +945,7 @@ Message 类型体系 (src/types/messages.py)
 ---
 #### 1.4.5 F-49 Phase 5 — session.json + transcript.jsonl 合并（方案C：JSONL + 精简 metadata）
 
-**状态**: 📋 设计完成
+**状态**: ✅ 已完成
 **优先级**: P1
 **工作量**: 2-3天
 **依赖**: F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
@@ -1702,6 +1721,53 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 | `/dream` slash skill | `extensions/skills_ext/bundled/dream.py`（`run`/`once`/`status`/`help` 子命令） |
 | 永久 cron 集成 | `clawcodex_ext/dreaming/cron_integration.py`（`DREAM_DEFAULT_CRON="0 3 * * *"` + well-known task_id=`dream`） |
 | 测试 | `tests/dreaming/` 106 单测 + 6 E2E + `tests/stability_gate/` 12 门禁 |
+
+---
+#### 2.18 Agent Loop Hook 扩展点增强（F-102）
+
+**状态**: 📋 设计完成 | **优先级**: P1 | **登记日期**: 2026-06-22
+
+**目标**: 填补 agent loop（`query()`）中 5 个 hook 扩展点缺口，为 F-68 Feature Gate / F-70 Plugin 系统提供基础设施，使新特性无需修改 `query()` 函数体即可注入自定义逻辑。
+
+#### 背景
+
+对 `clawcodex_ext/query/query.py` 的代码审计发现，agent loop 虽然已有 7 类 18 个扩展点（压缩流水线、ProgressSink、StopHooks、TokenBudget、ToolContext、F-45 审计、F-75 统计），但均为**命名参数式**硬编码扩展，缺少统一的、可注册的钩子注册表。新特性（如 F-69 Budget Mode 在 pre-LLM 注入提示）需要直接修改 `query()` 函数体。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工时 |
+|:----:|--------|------|:----:|:--------:|
+| P102-A | **pre-LLM 通用扩展钩子** | 在 `query()` Phase 0（压缩流水线）之后、`_call_model_sync` 之前添加 `call_hooks("pre_llm", messages, system_prompt) -> (messages, system_prompt)` 回调链 | 📋 设计完成 | 2-3天 |
+| P102-B | **post-LLM 恢复策略注册表** | 将 B.1/B.2 阶段的 `if/elif` 硬编码恢复链（max_tokens/PTL/media_size）改为注册式 `RecoveryStrategy` 列表 | 📋 设计完成 | 3-5天 |
+| P102-C | **outbox 类型化** | `ToolContext.outbox` 从 `list[dict]` 改为 `list[OutboxEvent]` Union dataclass | 📋 设计完成 | 1-2天 |
+| P102-D | **formal plugin hook registry** | 新增 `register_loop_hook(name, fn, phase)` API，统一管理 pre_llm / post_llm / pre_tool / post_tool / on_turn_end 等阶段的钩子注册与去注册 | 📋 设计完成 | 2-3天 |
+| P102-E | **逐 turn 回调注册** | `QueryState` 添加 `on_turn_start` / `on_turn_end` callback 列表 | 📋 设计完成 | 1-2天 |
+
+#### 影响范围
+
+| 依赖特性 | 关系 | 说明 |
+|---------|------|------|
+| F-68 Feature Gate | **消费者** | P102-A pre-LLM 钩子是条件启用的注入点 |
+| F-69 Budget Mode | **消费者** | P102-A pre-LLM 钩子用于注入节俭提示 |
+| F-70 Plugin 系统 | **前置依赖** | P102-D formal registry 是插件注册机制的基础 |
+| F-84 Context Collapse | **协同** | P102-B 恢复策略注册表可替代当前 CollapseEngine 特殊参数 |
+
+#### 验收标准
+
+| # | 验收项 |
+|:--:|--------|
+| 1 | `register_loop_hook("pre_llm", fn)` 注册后，`query()` 每次 LLM 调用前调用 `fn(messages, system_prompt)` |
+| 2 | `register_recovery_strategy(err_type, fn)` 注册后，API 返回对应错误时优先调用注册的恢复策略 |
+| 3 | `ToolContext.outbox` 元素有类型标注，`mypy --strict` 通过 |
+| 4 | 现有 245/245 稳定性门禁 + 全部 orchestrator 测试通过 |
+
+#### 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| `clawcodex_ext/query/query.py` | 核心文件 | 5 处 hook 注入点均在 `query()` 函数中 |
+| `clawcodex_ext/tool_system/context.py` | 修改文件 | outbox 字段类型变更 |
+| `clawcodex_ext/cron_system/runtime.py` | 消费者 | cron outbox drain 适配新类型 |
 
 ---
 
@@ -5899,10 +5965,10 @@ CCB 内置 `explore`（代码库探索）和 `plan`（实施规划）两种专�
 | F-62 | Chrome 浏览器控制 | P1 | 🟡 重要缺口 | ✅ 已完成 | 1-2周 |
 | F-63 | Channels 频道通知 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/channels/` 2097 行 |
 | F-64 | Voice Mode 语音输入 | P2 | 🟢 增强体验 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
-| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
+| F-65 | Langfuse 可观测性 | P1 | 🟡 重要缺口 | ✅ 已完成 | `src/services/analytics/` + `src/services/langfuse/` 全链路 |
 | F-66 | ACP 协议支持 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1-2周 |
-| F-67 | Buddy / Proactive | P2 | 🟢 增强体验 | ⏳ 待开始 | 2周 |
-| F-71 | 4 个未实现工具（Execute/RemoteTrigger/WebBrowser/Snip） | P1 | 🟡 重要缺口 | ⏳ 待开始 | 2周 |
+| F-67 | Buddy / Proactive | P2 | 🟢 增强体验 | ✅ 已完成 | `src/buddy/` 8 文件完整实现 |
+| F-71 | 4 个未实现工具（Execute/RemoteTrigger/WebBrowser/Snip） | P1 | 🟡 重要缺口 | 🟡 部分完成（SnipTool 已完成） | 剩余 3 工具待实现 |
 | — | Notifier + PreventSleep 通知与防休眠服务 | P2 | 🟢 增强体验 | ⏳ 待开始 | 1周 |
 | **F-70** | **Plugin 系统** | **P1** | 🟡 重要缺口 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行基础框架 |
 | **F-78** | **Issue 语义澄清** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行 |
@@ -7098,7 +7164,7 @@ clawcodex-dev sandbox status    # 查看当前模式
 | F-68 | Feature Gate 运行时特性开关 | P1 | ⏳ 待开始 | 1-2周 |
 | F-69 | Budget / Poor Mode 节俭模式 | P1 | ⏳ 待开始 | 1-2周 |
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
-| F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
+| F-71 | 内置工具补齐（4个剩余工具） | P1 | 🟡 部分完成（SnipTool已实现） | 剩余 3 工具待实现 |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
 | F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | changed pytest 自动追加与 stability-gate pytest 已落地；远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
@@ -8064,16 +8130,16 @@ clawcodex_ext/community_radar/
 | F-55 | SOP 分组策略增强 | §4.2.1 | ✅ 完成 |
 | F-60 | Pipe IPC 群控 | §7.1 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行 + 11 测试 |
 | F-61 | Computer Use | §7.2 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行 + 15 测试 |
-| F-62 | Chrome 自动化 | §7.2 | ⏳ 待开始 |
+| F-62 | Chrome 自动化 | §7.2 | ✅ 已完成（2026-06-22） |
 | F-63 | Channels 通知 | §7.3 | ✅ 已完成（2026-06-19） | `src/services/channels/` 2097 行 + 18 测试 |
 | F-64 | Voice Mode | §7.3 | 🟡 进行中（接口层已完成） | `src/services/voice/` 检测+STT 抽象类 188 行 |
-| F-65 | Langfuse 可观测 | §7.4 | 🟡 部分完成（基础分析层） | `src/services/analytics/` 247 行；Langfuse SDK 集成待补 |
+| F-65 | Langfuse 可观测 | §7.4 | ✅ 已完成（2026-06-22） | `src/services/analytics/` + `src/services/langfuse/` 全链路 |
 | F-66 | ACP 协议 | §7.4 | ⏳ 待开始 |
-| F-67 | Buddy/Proactive | §7.5 | ⏳ 待开始 |
+| F-67 | Buddy/Proactive | §7.5 | ✅ 已完成 | `src/buddy/` 8 文件完整实现 |
 | F-68 | Feature Gate | §7.6 | ⏳ 待开始 |
 | F-69 | Budget/Poor Mode | §7.5 | ⏳ 待开始 |
 | F-70 | Plugin 系统 | §4.3 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行基础框架 |
-| F-71 | 内置工具补齐 | §7.6 | ⏳ 待开始 |
+| F-71 | 内置工具补齐 | §7.6 | 🟡 部分完成（SnipTool 已完成，3工具待实现） |
 | F-72 | Multi-API 适配器 | §7.2 | ⏳ 待开始 |
 | F-73 | CI/CD 流水线 | §7.6 | ✅ 本地已完成 / 🟡 远端待验证 |
 | F-74 | Sandbox 沙箱 | §7.2 | ⏳ 待开始 |
@@ -8087,7 +8153,7 @@ clawcodex_ext/community_radar/
 | F-85 | Templates 模板 | §7.6 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行 + 11 测试 |
 | F-86 | Kairos/Brief 调度 | §7.5 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `periodic/` 2022 行 + 13 测试 |
 | F-87 | Workflow Scripts | §7.5 | ⏳ 待开始 |
-| F-88 | Explore/Plan Agent | §7.5 | ⏳ 待开始 |
+| F-88 | Explore/Plan Agent | §7.5 | ✅ 已完成（2026-06-22） | P88-A~D 全部完成：Agent 定义 + 自动路由 + 双格式写盘 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
 | F-90 | Hermes Gateway OpenAI API 参考（remote_api） | §7.1 | ✅ 已完成 |
 | **F-91** | **Visualizer 核心数据管道** | §8.3 | ✅ **已完成** |

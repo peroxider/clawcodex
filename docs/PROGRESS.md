@@ -2,19 +2,20 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.9
-> 更新日期: 2026-06-19
+> 版本: v3.12
+> 更新日期: 2026-06-22
 > 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
 >
-> **v3.9 变更**：代码库审计综合对齐 — 8 项 F-Number 状态修正。
->   - F-9 /goal 命令：从 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/goal/` 9 文件 2538 行：状态机/持久化/续跑/Tool/prompt/CLI 完整）。
->   - F-11 sessionStorage 容量限制：从 ⏳ 待开始 → ✅ 已完成（`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000`）。
->   - F-37 PR 检视意见自动修复：从 🔄 进行中 → ✅ 已完成（`extensions/orchestrator/review_feedback.py` + GitSync follow-up 全链路）。
->   - F-64 Voice Mode：确认 🟡 进行中（接口层已完成）（`src/services/voice/` 检测 + STT 抽象类 188 行）。
->   - F-65 Langfuse/Analytics：从 ⏳ 待开始 → ✅ 已完成（`src/services/analytics/` 事件/元数据/导出 sink + `src/services/langfuse/` 客户端/Sink/Exporter 全链路；49 测试通过）。
->   - F-70 Plugin 系统：从 ⏳ 待开始 → 🟡 部分完成（`src/plugins/` 8 文件 1070 行：注册表/加载器/校验/市场/LSP/MCP 基础框架）。
->   - F-78 Issue 语义澄清：从 ⏳ 待开始 → ✅ 已完成（`extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行三通道完整实现）。
->   - F-80 Agent 间自主观察与消息交互：从 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/tool_system/tools/task_inspect.py` + `task_directives.py` 642 行，已注册 EXTENSION_TOOLS）。
+> **v3.12 变更**：F-102 Agent Loop Hook 扩展点规划。
+>   - F-102 Agent Loop Hook 扩展点增强：代码审计发现 5 个 hook 缺口（pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调），§十五记录完整设计。
+>   - 附录 F-Number 快速索引同步更新：F-102 新增。
+>
+> **v3.11 变更**：F-71 SnipTool 完成。
+
+>   - F-71 SnipTool：实现历史消息片段截取工具 `clawcodex_ext/tool_system/tools/snip.py`（282 行）。
+>   - 支持按索引范围/角色/关键词过滤 conversation history，三种输出格式（text/json/summary），只读且并发安全。
+>   - 注册于 `ALL_STATIC_TOOLS`（共 42 工具），别名 `context_snip` / `history_snip`。稳定性门禁 245/245 全绿。
+>   - F-71 状态从 ⏳ 待开始 → 🟡 部分完成。4 个待实现工具减少为 3 个。
 >
 > **v3.6 变更**：F-100 Dreaming 状态与 F-73 CI/CD 状态同步对齐。
 >   - F-100 Dreaming 后台记忆整合系统主体已完成，Phase B 30min TTL 增强保留为后续增量。
@@ -143,7 +144,7 @@
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
 | F-69 | Budget/Poor Mode | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-70 | Plugin 系统 | P1 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/ LSP 集成/MCP 集成等基础框架已存在；Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。 |
-| F-71 | 内置工具补齐 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.6 |
+| F-71 | 内置工具补齐 | P1 | 🟡 部分完成（SnipTool 已完成） | SnipTool 已落地 `clawcodex_ext/tool_system/tools/snip.py`，3 个工具待实现；见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、changed pytest 自动追加、stability-gate pytest、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
@@ -167,6 +168,9 @@
 | F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
 | F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
 | F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 三方案组合：① `AnthropicProvider._ensure_client` 默认注入 `timeout=5.0`（httpx read_timeout bound）② `_close_response_safely` 增加 `response._transport.close()`（Windows 跳过）③ `_run_tools_partitioned` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` + 100ms abort poll + 合成 cancelled tool_result 保持配对。新增 10 个单测覆盖方案2/3 + 6 个覆盖方案1。Cancel latency bound：直连 Anthropic <500ms，LiteLLM 代理 bound 在 read_timeout=5s |
+| F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | `clawcodex_ext/providers/media/` 9 文件 1005 行：MediaProvider/ImageProvider/VideoProvider ABC + MediaProviderRegistry + AgnesImageProvider + AgnesVideoProvider 完整实现；CAP_IMAGE_GENERATION / CAP_VIDEO_GENERATION；稳定性门禁 245/245 全绿。 |
+| F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
+
 
 ---
 
@@ -595,238 +599,11 @@
 
 ## F-49: Issue 会话统一存储与实时介入协议
 
-**状态**: 📋 设计完成（Phase 0.4 + Phase 5: 全场景统一闭包 + 会话格式合并）
+**状态**: ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地）
 **优先级**: P1
-**规划文档**: `docs/FEATURE_PLAN.md` → `§1.4.2 Issue 会话统一存储与实时介入协议（F-49）` + `§1.4.3 全场景会话恢复统一闭包（F-49 Phase 0.4）`
 **依赖**: F-21（后台运行 + 恢复同步）、F-38（验证与报告闭环）、F-40（ProgressReporter Sink 协议重构）
 
-### 问题现状
-
-当前系统存在两套互不兼容的事件记录系统：
-
-| 维度 | REPL 会话（`SessionStorage`） | Headless Issue Agent（`_write_event_log`） |
-|------|------|------|
-| 存储位置 | `~/.clawcodex/sessions/{sid}/transcript.jsonl` | `{workspace}/.event_logs/{issue_id}.ndjson` |
-| 格式 | Message dict (role, content blocks, tool_use_id) | 扁平 `{timestamp, type, tool_name, params}` |
-| 配套设施 | `TailFollower`、`Session.load/resume`、`session_resume.resume_session()` | 仅 `_run_tail` CLI |
-| 可恢复性 | ✅ 可重建 LLM context | ❌ 不能用于 `--resume` |
-| 控制通道 | asyncio.Event + Unix socket（F-21） | 文件轮询 `{.orchestrator_control/}` |
-
-核心矛盾：headless agent 写 `.event_logs/` 扁平 NDJSON，上游已完备的 `SessionStorage` + `TailFollower` + `session_resume` 基础设施完全无法消费。Observe/tail/takeover/resume 每个功能都需要在两条路径上重复实现。
-
-### 目标
-
-统一 headless agent 和 REPL 会话的存储格式，在此之上建立 Unix socket 双向实时介入协议，使 operator 可通过 `attach` CLI 观察、中断、接管、恢复 issue agent 的运行。
-
-| 场景 | 当前 | 目标 |
-|------|------|------|
-| 实时观察 | `tail` CLI 读 `.event_logs/` | `attach` CLI 通过 socket 流式接收事件 |
-| Ctrl+C 中断 | ❌ 不支持 | socket `pause` → agent 挂起等待 operator |
-| 人工接管 | ❌ 不支持 | pause 后 operator 键入 hint |
-| `/resume` 恢复 | ❌ 不支持 | socket `resume`（可选附带 prompt） |
-| Session 恢复 | ❌ `.event_logs/` 无法重建 | 统一 `SessionStorage` → `session_resume.resume_session()` |
-| detach | ❌ 不支持 | socket `detach` → agent 继续运行 |
-
-### 实施阶段
-
-#### Phase 0 — 统一事件存储：Message 转录接入（1-2天）
-
-统一 headless agent 和 REPL 会话的存储格式，使 headless agent 的每个 tool_use / tool_result / text_delta 以 **Message dict 格式**写入 `~/.clawcodex/sessions/{run_id}/transcript.jsonl`，替换现有的 `.event_logs/{issue_id}.ndjson` 扁平格式。
-
-| 文件 | 改动 |
-|------|------|
-| `extensions/orchestrator/agent_runner.py` | `AgentSession` 增加 `session_storage: SessionStorage`；`run()` 中 `init_metadata(model, cwd, title)`；替换 `_write_event_log()` → `session_storage.write_raw(msg_dict)` + `flush()` |
-| `extensions/orchestrator/agent_runner.py` | 删除 `_write_event_log()` 方法；删除 `.event_logs/` 目录创建逻辑 |
-| `extensions/orchestrator/cli/issue.py` | `_run_tail` 改为读 `transcript.jsonl`（或保留兼容双读） |
-
-**Phase 0.1 — Message 转录映射规则**（核心契约）
-
-`QueryRunner.stream()` 产出的扁平事件必须按 LLM 响应轮次分组为 `assistant` / `user` Message：
-
-```
-一轮 LLM 响应（TurnComplete 为止）：
-  TextDelta × N                          ─┐
-  ToolCallEvent(tool_use_id=T1) × M      ─┤→ AssistantMessage
-                                           │   content = [TextBlock, ToolUseBlock, …]
-                                           │   按事件流顺序交替排列
-                                           └→ SessionStorage.write_raw(assistant_msg_dict)
-
-  ToolResultEvent(tool_use_id=T1) × M     ──→ UserMessage
-                                                content = [ToolResultBlock, …]
-                                                ↓ SessionStorage.write_raw(user_msg_dict)
-
-  下一轮 prompt 写入                      ──→ UserMessage
-                                                content = [TextBlock(text=continuation)]
-                                                ↓ SessionStorage.write_raw(continuation_msg_dict)
-```
-
-| 事件序列 | Message 类型 | `content` 结构 |
-|----------|-------------|----------------|
-| 首个 turn 的 user prompt | `UserMessage` | `[TextBlock(text=prompt)]` |
-| `TextDelta` × N + `ToolCallEvent` × 0 | `AssistantMessage` | `[TextBlock(text=concat(deltas))]` |
-| `TextDelta` × N + `ToolCallEvent` × M | `AssistantMessage` | `[TextBlock, ToolUseBlock, ...]` 交替排列 |
-| `ToolResultEvent` × M | `UserMessage` | `[ToolResultBlock(tool_use_id, content), ...]` |
-| 后续 turn 的 continuation prompt | `UserMessage` | `[TextBlock(text=continuation_prompt)]` |
-| `SessionComplete` | 不写 Message | 调用 `flush()` 确保缓冲落盘 |
-
-关键约束：ToolResultEvent 可能乱序，需用 `dict[tool_use_id]` 累积；被 approval policy 拒绝的 tool call 也要写入 result（`is_error=True`）；TurnComplete 时才知道本轮 LLM 输出结束，此时一次性组装 assistant message。
-
-**Phase 0.2 — CLI 介入：会话恢复（--resume）+ 实时观察 + 问题追溯**
-
-统一格式后的核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator headless agent run 的完整对话，进入交互式 REPL**，operator 可继续对话，新内容追加到同一 transcript。
-
-| 场景 | 机制 | 代码来源 |
-|------|------|---------|
-| **完整会话恢复（核心）** | `clawcodex --resume <run_id>` → `Session.resume(run_id)` 读取 transcript + metadata，重建 Conversation，进入交互式 REPL | `src.agent.session.Session.resume()` — 完全复用，0 改动 |
-| **TUI 实时增量观察** | `clawcodex --tui --resume <run_id>` → TailFollower 从 transcript 末尾输出增量 | `src.services.tail_follower.TailFollower` — 完全复用 |
-| **接管 agent run** | operator 在 REPL 中直接输入指令替代 headless agent 的下一 turn；退出可选 detach / finish / re-orchestrate | `Session.resume()` + 前台 REPL |
-| **崩溃恢复** | orchestrator 检测到 agent 进程退出后，用 `Session.resume()` 重建 context，在新的 `AgentRunner` 中继续 | `Session.resume()` → `session_resume.resume_session()` |
-| **只读追溯** | `issue transcript --run <run_id>` 文本输出对话历史，适合管道处理 | 新增 `_run_transcript` 子命令 |
-
-`--resume` 三种模式：
-
-```
-clawcodex --resume <run_id>               → 完整会话恢复，进入交互式 REPL
-clawcodex --tui --resume <run_id>         → TUI 模式，TailFollower 增量显示 + 可输入
-clawcodex --resume <run_id> --readonly    → 只读查看历史，不进入交互模式
-```
-
-并发安全：agent 已结束时正常恢复可写；agent 正在运行时 `--resume` 获得只读历史快照不干扰运行中 agent；需写入需通过 socket 先 pause。
-
-**Phase 0.3 — 大内容文件引用**
-
-复用 `SessionStorage._replace_large_content()` 内置行为，自动将大 tool result 替换为文件引用（存储于 `~/.clawcodex/sessions/<run_id>/content/`），AgentRunner 无需感知。
-
-验收标准：headless agent 的每轮 tool_use / tool_result / text_delta 以 Message dict 格式写入 session JSONL，`TailFollower` 可直接 follow，`session_resume` 可直接重建 LLM context。整个 Phase 0 不修改 `src/services/session_storage.py` 一行代码。
-
-#### Phase 0.4 — Session Resume 全场景统一闭包（新增，2-3天）
-
-F-49 Phase 0 ~ 0.3 统一了事件存储格式，但 `Session.resume()` 在 SessionStorage 回退路径下返回**空 Conversation**，导致 CLI/TUI 的 `--resume` 对 Cron/Orchestrator 写入的会话无法完整恢复。
-
-详见 FEATURE_PLAN.md §1.4.3。
-
-| 编号 | 子特性 | 文件 | 改动说明 | 状态 | 工作量 |
-|:----:|--------|------|---------|:----:|:------:|
-| P49-4A | `Session.resume()` JSONL 消息自愈 | `src/agent/session.py` | SessionStorage 回退路径末尾加载 `SessionStorage.read_transcript()` 到 `conversation.messages` | ⏳ 待开始 | 0.5天 |
-| P49-4B | REPL `_sync_conversation` 降级为防御性 double-check | `clawcodex_ext/repl/core.py` | early-return if `conversation.messages` 已非空 | ⏳ 待开始 | 0.25天 |
-| P49-4C | TUI resume 完整消息恢复 | `clawcodex_ext/tui/entrypoint.py` + `app.py` | `on_mount()` 改为在 Phase 0.4.1 保证下无条件渲染历史（或添加 double-check） | ⏳ 待开始 | 0.5天 |
-| P49-4D | CLI dispatch resume 完整消息恢复 | `clawcodex_ext/cli/dispatch.py` | 依赖 Phase 0.4.1 核心修复自动生效 | ⏳ 待开始 | 0.25天 |
-| P49-4E | Cron bg_runner 结束写 `.json` 快照 | `clawcodex_ext/agent/background_runner.py` | `_run_agent_headless()` finally 块中调用 `session.save()` | ⏳ 待开始 | 0.5天 |
-| P49-4F | Orchestrator agent_runner 结束写 `.json` 快照 | `extensions/orchestrator/agent_runner.py` | `run()` 末尾（异常/正常退出）调用 `session.save()` | ⏳ 待开始 | 0.5天 |
-| P49-4G | 递归 resume 一致性测试 | `tests/test_session_resume_unified.py` | 新增 E2E 测试：JSONL → resume → save → 再次 resume → 消息一致 | ⏳ 待开始 | 0.5天 |
-
-**验收标准**：
-
-| # | 验收场景 | 预期行为 |
-|---|---------|---------|
-| 1 | CLI 交互 → exit → --resume | 完整 Conversation，消息不变 |
-| 2 | REPL 交互 → exit → --resume | 完整 Conversation，消息不变 |
-| 3 | TUI 交互 → exit → --resume (TUI 或 REPL) | 完整 Conversation，历史可见 |
-| 4 | Cron bg_runner 运行 → --resume | 完整 Conversation，含所有 tool_use / tool_result |
-| 5 | Orchestrator agent_runner 运行 → --resume | 完整 Conversation，含所有 tool_use / tool_result |
-| 6 | Cron/Orch → --resume → exit → 再次 --resume | 递归一致 |
-| 7 | 跨场景混合写入（eg: Orchestrator 写 → --resume REPL 追加 → exit → --resume TUI） | 所有消息（原始 + 追加）完整 |
-| 8 | `.json` 快照不存在时，`--resume` 也能恢复 | 依赖 SessionStorage JSONL fallback |
-
-**依赖**：F-49 Phase 0 ~ 0.3（统一事件存储）
-
-#### Phase 5 — session.json + transcript.jsonl 合并（方案C，2-3天）
-
-**背景**：Phase 0 ~ 0.4 完成了事件存储统一和全场景会话恢复闭包，但仍有 3 个文件（session.json + metadata.json + transcript.jsonl）管理会话数据，消息在 session.json 和 transcript.jsonl 之间双重存储，存在不一致风险。
-
-**目标**：消除 session.json，将其承载的 provider + cost 信息嵌入 transcript.jsonl 首/末行，保留 metadata.json 仅做 O(1) 列表查询。
-
-详见 FEATURE_PLAN.md §1.4.5。
-
-| 编号 | 子特性 | 文件 | 改动说明 | 状态 | 工作量 |
-|:----:|--------|------|---------|:----:|:------:|
-| P5-A | save() 停写 session.json | `src/agent/session.py` | 删除 session.json 写入，改为追加 `type:"session_snapshot"` 行到 transcript.jsonl | ⏳ 待开始 | 0.5天 |
-| P5-B | load() 改读 transcript.jsonl | `src/agent/session.py` | 首行→provider, 消息行→conversation, 尾行→cost | ⏳ 待开始 | 1天 |
-| P5-C | cost_restore 改读 tail -1 | `src/services/cost_restore.py` | 从 transcript.jsonl 最后一行读 cost 块，不依赖 session.json | ⏳ 待开始 | 0.5天 |
-| P5-D | resume() 简化降级路径 | `src/agent/session.py` | 删除 Session.load() 回退到 load_from_session_storage 的双路径 | ⏳ 待开始 | 0.25天 |
-| P5-E | session_persist 写 session_init 行 | `extensions/agent/session_persist.py` | 写入第 1 行含 provider + model；删除多余 cost_block 双写 | ⏳ 待开始 | 0.5天 |
-| P5-F | metadata.json 精简 | `src/services/session_storage.py` | 移除 cwd/total_cost/last_user_input/agent_name/cost | ⏳ 待开始 | 0.5天 |
-| P5-G | 旧 session 迁移脚本 | `clawcodex-dev session migrate` | 读取旧 .json 转换为新 transcript.jsonl 格式 | ⏳ 待开始 | 1天 |
-
-**验收标准**：
-
-| # | 场景 | 预期 |
-|---|------|------|
-| 1 | REPL 交互 → exit → Session.load() | provider + 全量消息 + cost 正确恢复，无 session.json |
-| 2 | cost_restore.restore_cost_state_for_session() | 从 transcript.jsonl tail -1 恢复 cost |
-| 3 | SessionStorage.list_sessions() | 50 个会话 < 200ms |
-| 4 | 旧 session.json 存在时自动降级 | 日志提示建议迁移，行为不变 |
-| 5 | save → load → save → load 消息一致 | 条数/顺序/uuid 一致 |
-
-**依赖**：F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
-
-#### Phase 1 — Unix Socket 控制通道（2-3天）
-
-新增 `extensions/orchestrator/control_socket.py`：
-
-```
-ControlSocket
-  ├── start()        → 监听 {workspace}/.run_control/{id}.sock
-  ├── poll_commands() → AsyncIterator[ControlCommand]
-  ├── send_event()   → 广播事件给所有客户端
-  └── stop()         → 关闭 socket
-```
-
-`ControlCommand` 类型：
-
-```python
-@dataclass
-class ControlCommand:
-    cmd: Literal["pause", "resume", "inject", "stop", "detach", "takeover"]
-    payload: str = ""
-```
-
-集成到 `AgentRunner.run()`：每轮 turn 前调用 `poll_commands()`；pause 时 await `pause_resume_event.wait()`；resume 时 set event + 可选覆盖 prompt。
-
-#### Phase 2 — `attach` CLI TUI（2-3天）
-
-新增 `extensions/orchestrator/cli/attach.py`，提供实时 TUI：
-
-| 交互 | 动作 |
-|------|------|
-| 连接 | 发送 attach → 接收 session state + 最近事件 |
-| Ctrl+C | 发送 pause → 显示 `(Paused) >` 提示符 |
-| 普通文本 | 发送 inject hint |
-| `/resume` | 发送 resume |
-| `/resume ...` | resume + prompt payload |
-| `/inspect` | 从 `SessionStorage.read_transcript()` 读取消息历史 |
-| `/stop` | 停止 agent |
-| `/takeover` | 停止 agent + 启动 REPL |
-| `/detach` / Ctrl+D | 断开 socket，agent 继续运行 |
-
-#### Phase 3 — Session 恢复（0.5天，Phase 0 增量产出）
-
-统一存储后，Session 恢复变为零额外工作：
-
-```python
-session = Session.resume(issue_session_id)
-# SessionStorage 已包含所有历史消息
-# session_resume.resume_session() 重建 LLM context
-# 新的 AgentRunner 可从此处继续
-```
-
-### 风险与约束
-
-| 风险 | 缓解 |
-|------|------|
-| `.event_logs/` 存量用户 | Phase 0 向后兼容双写，Phase 2 发 deprecation warning |
-| Windows 无 Unix socket | 回退 Named Pipe 或 TCP localhost；`BindAddress` Protocol |
-| pause 时 agent 在 tool call 中间 | 不中断执行中 tool call，返回后检查 paused flag |
-| 多客户端冲突 | `ControlSocket` 广播 + last-write-wins |
-| 安全 | socket `umask 0077`；`/takeover` 需身份确认 |
-
-### 设计决定
-
-1. **Phase 0 优先于一切** — 存储不统一，后面所有基础设施用不上
-2. **Unix domain socket** — 非文件轮询、非 SSE、非 gRPC；asyncio 原生最轻量双向方案
-3. **`SessionStorage` 不改一行** — `write_raw()` 就是为此场景设计的
-4. **`ControlSocket` 在 `extensions/orchestrator/`** — 遵守 F-48 解耦约束
-5. **attach TUI 不需 curses/textual** — `select.poll()` + `sys.stdin.read()` + `print()` 避免新增依赖
+> 完整进度（问题现状、目标、实施阶段 Phase 0~5、ControlSocket、attach CLI、Session 恢复、风险与约束、设计决定）已归档至 [ARCHIVED_PROGRESS.md §十](./ARCHIVED_PROGRESS.md#十f-49-issue-会话统一存储与实时介入协议进度归档)。
 
 ---
 
@@ -1350,16 +1127,11 @@ CronTask due
 
 ### F-62: Chrome 浏览器自动化控制
 
-**状态**: ⏳ 待开始 | **优先级**: P1 | **对标**: CCB Chrome Use
+**状态**: ✅ 已完成 | **优先级**: P1 | **对标**: CCB Chrome Use
 
-| 编号 | 子特性 | 状态 | 预计工作量 |
-|:----:|--------|:----:|:----------:|
-| P62-A | Chrome MCP 扩展桥接 | ⏳ 待开始 | 3-5天 |
-| P62-B | 页面导航与元素交互 | ⏳ 待开始 | 2-3天 |
-| P62-C | 截图与 JS 执行 | ⏳ 待开始 | 2-3天 |
-| P62-D | 操作 GIF 录制 | ⏳ 待开始 | 2-3天 |
+**实现**: `src/services/chrome/` 8 模块 ~1700 行：ChromeController ABC + PlaywrightChromeController（主） + MCPChromeController（CHROME_MCP_URL） + NullChromeController（降级） + RecordingChromeController（Pillow GIF） + build_chrome_tools() 7 个 chrome_* 工具已注册到 EXTENSION_TOOLS。P62-A/B/C/D 全部完成。153 测试通过。
 
-**估算总工时**: 1-2 周
+> 详细进度已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
 
 ### F-63: Channels 频道通知系统
 
@@ -1578,12 +1350,12 @@ CronTask due
 
 ```
 建议优先实施剩余缺口：
-F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan) ──→ F-66+F-67+F-64完整
-   ↑ 自动化             ↑ 可观测性              ↑ F-61/F-64 前置          ↑ 远程管理             ↑ 工作流脚本             ↑ 内置 Agent              ↑ 体验增强
-   P1                  P1                      P1                       P1                     P2                       P2                       P2
+F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan) ──→ F-66+F-67+F-64完整
+   ↑ 可观测性              ↑ F-61/F-64 前置          ↑ 远程管理             ↑ 工作流脚本             ↑ 内置 Agent              ↑ 体验增强
+   P1                     P1                       P1                     P2                       P2                       P2
 ```
 
-> **说明**: 第一期 7 个 CCB 对标特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）于 2026-06-19 批次落地。F-78（Issue 语义澄清）和 F-80（Agent 间交互）经代码审计确认为 ✅ 已完成。当前 CCB 对标剩余缺口为 F-62（Chrome）、F-64（Voice 运行时集成）、F-65（Langfuse SDK 集成）、F-66（ACP）、F-67（Buddy/Proactive 需确认）、F-70（Plugin 待完善）、F-81（Native）、F-82（Remote Control）、F-87（Workflow）、F-88（Explore/Plan）。建议按低风险/高感知优先原则推进 F-62/F-65。
+> **说明**: 第一期 7 个 CCB 对标特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）于 2026-06-19 批次落地。F-78（Issue 语义澄清）和 F-80（Agent 间交互）经代码审计确认为 ✅ 已完成。F-62（Chrome 浏览器控制）后经开发确认为 ✅ 已完成（`src/services/chrome/` 8 模块 ~1700 行，153 测试通过）。当前 CCB 对标剩余缺口为 F-64（Voice 运行时集成）、F-66（ACP）、F-67（Buddy/Proactive 需确认）、F-70（Plugin 待完善）、F-81（Native）、F-82（Remote Control）、F-87（Workflow）、F-88（Explore/Plan）。建议按低风险/高感知优先原则推进 F-65。
 
 ---
 
@@ -1643,26 +1415,29 @@ F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ 
 
 ### F-71: 内置工具补齐（缺失工具批量实现）
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（SnipTool 已完成） | **优先级**: P1
 
 | 编号 | 子特性 | Python 依赖 | 状态 | 预计工作量 |
 |:----:|--------|:-----------:|:----:|:----------:|
-| P71-A | AgentTool 子 Agent 生成 | 无 | ⏳ 待开始 | 5-7天 |
+| P71-A | AgentTool 子 Agent 生成 | 无 | ✅ 已完成 | 5-7天 |
 | P71-B | WebBrowserTool 浏览器控制 | `playwright` | ⏳ 待开始 | 5-7天 |
-| P71-C | CtxInspectTool 上下文检查 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-D | DiscoverSkillsTool 技能发现 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-E | VerifyPlanExecutionTool 计划验证 | 无 | ⏳ 待开始 | 3-5天 |
-| P71-F | WorkflowTool 工作流执行 | 无 | ⏳ 待开始 | 3-5天 |
-| P71-G | PushNotificationTool 桌面通知 | `plyer`/`notify-py` | ⏳ 待开始 | 2-3天 |
-| P71-H | MonitorTool 健康监控 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-I | SendUserFileTool 文件传输 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-J | SubscribePRTool PR 订阅 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-K | TerminalCaptureTool 终端捕获 | `ptyprocess` | ⏳ 待开始 | 3-5天 |
-| P71-L | ReviewArtifactTool Review 产物 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-M | ListPeersTool 对等节点列表 | 无 | ⏳ 待开始 | 1-2天 |
-| P71-N | ExecuteTool 代理工具执行 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-C | SendMessageTool Agent 消息发送 | 无 | ✅ 已完成 | 2-3天 |
+| P71-D | TaskStopTool 任务停止 | 无 | ✅ 已完成 | 2-3天 |
+| P71-E | TeamCreateTool 团队创建 | 无 | ✅ 已完成 | 2-3天 |
+| P71-F | TeamDeleteTool 团队删除 | 无 | ✅ 已完成 | 2-3天 |
+| P71-G | BriefTool 摘要简报 | 无 | ✅ 已完成 | 2-3天 |
+| P71-H | ExitPlanModeTool 退出计划模式 | 无 | ✅ 已完成 | 1-2天 |
+| P71-I | EnterPlanModeTool 进入计划模式 | 无 | ✅ 已完成 | 1-2天 |
+| P71-J | LSPTool LSP 代码分析 | 无 | ✅ 已完成 | 3-5天 |
+| P71-K | ExecuteTool 代理工具执行 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-L | CronCreate/Delete/ListTool 定时任务 | 无 | ✅ 已完成 | 5-7天 |
+| P71-M | RemoteTriggerTool 远程触发 | `httpx` | ⏳ 待开始 | 3-5天 |
+| P71-N | WebBrowserTool 浏览器控制 | `playwright` | ⏳ 待开始 | 5-7天 |
+| P71-O | **SnipTool** 历史消息截取 | 无 | ✅ **已完成（2026-06-22）** | 2-3天 |
 
-**估算总工时**: 3-4 周（可分批并行推进，优先 P71-A/C/D/F/N）
+**已落地**: `clawcodex_ext/tool_system/tools/snip.py`（282 行），支持按索引范围/角色/关键词过滤 conversation history，三种输出格式（text/json/summary），只读且并发安全。注册于 `ALL_STATIC_TOOLS`（共 42 工具），别名 `context_snip` / `history_snip`。稳定性门禁 245/245 全绿。
+
+**估算总工时**: 已耗 2-3天（SnipTool），剩余约 2-3 周（3工具待实现）
 
 **详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-71 内置工具补齐`
 
@@ -1739,26 +1514,29 @@ F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ 
 
 ### F-71: 内置工具补齐（缺失工具批量实现）
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（SnipTool 已完成） | **优先级**: P1
 
 | 编号 | 子特性 | Python 依赖 | 状态 | 预计工作量 |
 |:----:|--------|:-----------:|:----:|:----------:|
-| P71-A | AgentTool 子 Agent 生成 | 无 | ⏳ 待开始 | 5-7天 |
+| P71-A | AgentTool 子 Agent 生成 | 无 | ✅ 已完成 | 5-7天 |
 | P71-B | WebBrowserTool 浏览器控制 | `playwright` | ⏳ 待开始 | 5-7天 |
-| P71-C | CtxInspectTool 上下文检查 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-D | DiscoverSkillsTool 技能发现 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-E | VerifyPlanExecutionTool 计划验证 | 无 | ⏳ 待开始 | 3-5天 |
-| P71-F | WorkflowTool 工作流执行 | 无 | ⏳ 待开始 | 3-5天 |
-| P71-G | PushNotificationTool 桌面通知 | `plyer`/`notify-py` | ⏳ 待开始 | 2-3天 |
-| P71-H | MonitorTool 健康监控 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-I | SendUserFileTool 文件传输 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-J | SubscribePRTool PR 订阅 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-K | TerminalCaptureTool 终端捕获 | `ptyprocess` | ⏳ 待开始 | 3-5天 |
-| P71-L | ReviewArtifactTool Review 产物 | 无 | ⏳ 待开始 | 2-3天 |
-| P71-M | ListPeersTool 对等节点列表 | 无 | ⏳ 待开始 | 1-2天 |
-| P71-N | ExecuteTool 代理工具执行 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-C | SendMessageTool Agent 消息发送 | 无 | ✅ 已完成 | 2-3天 |
+| P71-D | TaskStopTool 任务停止 | 无 | ✅ 已完成 | 2-3天 |
+| P71-E | TeamCreateTool 团队创建 | 无 | ✅ 已完成 | 2-3天 |
+| P71-F | TeamDeleteTool 团队删除 | 无 | ✅ 已完成 | 2-3天 |
+| P71-G | BriefTool 摘要简报 | 无 | ✅ 已完成 | 2-3天 |
+| P71-H | ExitPlanModeTool 退出计划模式 | 无 | ✅ 已完成 | 1-2天 |
+| P71-I | EnterPlanModeTool 进入计划模式 | 无 | ✅ 已完成 | 1-2天 |
+| P71-J | LSPTool LSP 代码分析 | 无 | ✅ 已完成 | 3-5天 |
+| P71-K | ExecuteTool 代理工具执行 | 无 | ⏳ 待开始 | 3-5天 |
+| P71-L | CronCreate/Delete/ListTool 定时任务 | 无 | ✅ 已完成 | 5-7天 |
+| P71-M | RemoteTriggerTool 远程触发 | `httpx` | ⏳ 待开始 | 3-5天 |
+| P71-N | WebBrowserTool 浏览器控制 | `playwright` | ⏳ 待开始 | 5-7天 |
+| P71-O | **SnipTool** 历史消息截取 | 无 | ✅ **已完成（2026-06-22）** | 2-3天 |
 
-**估算总工时**: 3-4 周（可分批并行推进，优先 P71-A/C/D/F/N）
+**已落地**: `clawcodex_ext/tool_system/tools/snip.py`（282 行），支持按索引范围/角色/关键词过滤 conversation history，三种输出格式（text/json/summary），只读且并发安全。注册于 `ALL_STATIC_TOOLS`（共 42 工具），别名 `context_snip` / `history_snip`。稳定性门禁 245/245 全绿。
+
+**估算总工时**: 已耗 2-3天（SnipTool），剩余约 2-3 周（3工具待实现）
 
 **详细设计**: `docs/FEATURE_PLAN.md` → `§十 F-71 内置工具补齐`
 
@@ -1827,7 +1605,7 @@ F-62 (Chrome) ──→ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ 
 | F-68 | Feature Gate 运行时特性开关 | P1 | ⏳ 待开始 | 1-2周 |
 | F-69 | Budget / Poor Mode 节俭模式 | P1 | ⏳ 待开始 | 1-2周 |
 | F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
-| F-71 | 内置工具补齐（14个工具） | P1 | ⏳ 待开始 | 3-4周 |
+| F-71 | 内置工具补齐（14个工具） | P1 | 🟡 部分完成（SnipTool 已完成） | 已耗 2-3天（SnipTool），剩余约 2-3 周（3工具待实现） |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
 | F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | changed pytest 自动追加与 stability-gate pytest 已落地；远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
 | F-74 | Sandbox/SSH Remote 沙箱远程执行 | P2 | ⏳ 待开始 | 2周 |
@@ -1989,3 +1767,58 @@ F-74 (Sandbox) ──→ 长期迭代（P2）
 | `src/memory/`（auto-memory 模块） | consolidate 读写目标 |
 | `extensions/orchestrator/workspace.py` lock | 防用户编辑竞态 |
 | 上游参考 | `/mnt/c/Workspace/claude-code-best/src/tasks/DreamTask/` + `src/services/autoDream/` + `src/skills/bundled/dream.ts` |
+
+
+
+## 十四、Media Generation Provider Abstraction（F-101）
+
+**状态**: ✅ 已完成 | **优先级**: P2 | **登记日期**: 2026-06-22 | **完成日期**: 2026-06-22
+
+**目标**: 为 clawcodex 添加图像/视频生成能力，通过解耦的 `MediaProvider` 抽象层实现，完全独立于 Chat `BaseProvider` 体系。
+
+> 完整进度（实现文件、架构要点、关键设计决定、验证、验收标准）已归档至 [ARCHIVED_PROGRESS.md §十一](./ARCHIVED_PROGRESS.md#十一f-101-media-generation-provider-abstraction进度归档)。
+
+
+## 十五、Agent Loop Hook 扩展点增强（F-102）
+
+**状态**: 📋 设计完成 | **优先级**: P1 | **登记日期**: 2026-06-22
+
+**目标**: 填补 agent loop（`query()`）中 5 个 hook 扩展点缺口，为 F-68 Feature Gate / F-70 Plugin 系统提供基础设施，使新特性无需修改 `query()` 函数体即可注入自定义逻辑。详细设计见 `docs/FEATURE_PLAN.md §2.18`。
+
+### 背景
+
+对 `clawcodex_ext/query/query.py` 的代码审计发现，agent loop 已有 7 类 18 个扩展点（压缩流水线、ProgressSink、StopHooks、TokenBudget、ToolContext、F-45 审计、F-75 统计），但均为**命名参数式**硬编码扩展，缺少统一的、可注册的钩子注册表。新特性需要直接修改 `query()` 函数体。
+
+### 子特性
+
+| # | 子特性 | 优先级 | 预计工时 | 状态 |
+|---|--------|:------:|:--------:|:----:|
+| 102.1 | pre-LLM 通用扩展钩子（P102-A） | P1 | 2-3天 | 📋 待实现 |
+| 102.2 | post-LLM 恢复策略注册表（P102-B） | P1 | 3-5天 | 📋 待实现 |
+| 102.3 | outbox 类型化（P102-C） | P1 | 1-2天 | 📋 待实现 |
+| 102.4 | formal plugin hook registry（P102-D） | P1 | 2-3天 | 📋 待实现 |
+| 102.5 | 逐 turn 回调注册（P102-E） | P1 | 1-2天 | 📋 待实现 |
+
+### 实施建议顺序
+
+```
+Phase 1 (P102-C): outbox 类型化 ──→ Phase 2 (P102-A): pre-LLM 钩子 ──→ Phase 3 (P102-E): turn 回调
+  低风险，1-2天              F-69 前置依赖                   简单独立
+   
+Phase 4 (P102-D): formal registry ──→ Phase 5 (P102-B): 恢复策略注册表
+   F-70 前置依赖                   中等风险，需兼容 B.1/B.2
+```
+
+### 依赖与协同
+
+| 依赖 | 说明 |
+|------|------|
+| `clawcodex_ext/query/query.py` | 5 处 hook 注入点均在 `query()` 函数中 |
+| `clawcodex_ext/tool_system/context.py` | outbox 字段类型变更 |
+| `clawcodex_ext/cron_system/runtime.py` | cron outbox drain 适配新类型 |
+| F-68 Feature Gate | P102-A 是条件启用的注入点 |
+| F-69 Budget Mode | P102-A 用于注入节俭提示 |
+| F-70 Plugin 系统 | P102-D 是插件注册机制的基础 |
+| F-84 Context Collapse | P102-B 可替代当前 CollapseEngine 特殊参数 |
+
+
