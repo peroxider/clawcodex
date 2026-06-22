@@ -466,12 +466,12 @@ async def run_query_as_agent_loop(
         outbox = getattr(tool_context, "outbox", None) or []
         for entry in reversed(outbox):
             if (
-                isinstance(entry, dict)
+                hasattr(entry, "get")
                 and entry.get("tool") == "SendUserMessage"
                 and isinstance(entry.get("message"), str)
-                and entry["message"]
+                and entry.get("message")
             ):
-                response_text = entry["message"]
+                response_text = entry.get("message")
                 break
 
     # Close the main transcript. Single close call (no try/finally

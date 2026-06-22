@@ -26,6 +26,8 @@ from clawcodex_ext.utils.image_validation import ImageSizeError
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse
 
 from .config import QueryConfig, build_query_config
+from .hook_registry import call_hooks, LoopHookPhase
+from .recovery_strategies import RecoveryContext, find_recovery_strategies
 from .transitions import (
     QueryState,
     Terminal,
@@ -1385,6 +1387,9 @@ async def query(
 
     while True:
         messages = state.messages
+        # P102-E: 逐 turn 回调 — 在 turn 开始时调用
+        for cb in state.on_turn_start_callbacks:
+            cb(state)
         if _diag:
             logger.warning(
                 "[DIAG] query loop: turn=%d  messages=%d  transition=%s",
@@ -1435,6 +1440,16 @@ async def query(
                 logger.warning(
                     "Compression pipeline failed, continuing with original messages", exc_info=True
                 )
+
+        # P102-A: pre-LLM 通用扩展钩子
+        # 允许外部策略（如 F-69 Budget Mode）在 _call_model_sync 之前
+        # 修改 messages 或 system_prompt，无需修改 query() 函数体。
+        current_system_prompt = params.system_prompt
+        hook_result = call_hooks(
+            "pre_llm", messages, current_system_prompt, state=state, params=params
+        )
+        messages = hook_result[0]
+        current_system_prompt = hook_result[1]
 
         # Ch5/B.4 + B.5 — pre-emption guards before the API call.
         # Two distinct guards:
@@ -1530,7 +1545,7 @@ async def query(
             returned_assistants, returned_tool_blocks = await _call_model_sync(
                 provider=params.provider,
                 messages=messages,
-                system_prompt=params.system_prompt,
+                system_prompt=current_system_prompt,
                 tools=params.tools,
                 max_output_tokens_override=max_output_tokens_override,
                 abort_signal=params.abort_controller.signal,
@@ -1540,6 +1555,9 @@ async def query(
             assistant_messages = returned_assistants
             tool_use_blocks = returned_tool_blocks
             needs_follow_up = len(tool_use_blocks) > 0
+
+            # P102-D: post_llm hook — LLM 响应返回后、工具执行前
+            call_hooks("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
 
             for msg in assistant_messages:
                 # Ch5/B.1 — three-source withholding pattern.
@@ -1590,233 +1608,65 @@ async def query(
         if not needs_follow_up:
             last_message = assistant_messages[-1] if assistant_messages else None
 
+            # P102-B: 使用恢复策略注册表处理 withheld 错误
+            error_type = None
             if _is_withheld_max_output_tokens(last_message):
-                if max_output_tokens_override is None and max_output_tokens_recovery_count == 0:
-                    state = QueryState(
-                        messages=messages,
-                        tool_use_context=tool_use_context,
-                        auto_compact_tracking=state.auto_compact_tracking,
-                        max_output_tokens_recovery_count=max_output_tokens_recovery_count,
-                        has_attempted_reactive_compact=has_attempted_reactive_compact,
-                        max_output_tokens_override=ESCALATED_MAX_TOKENS,
-                        stop_hook_active=None,
-                        turn_count=turn_count,
-                        transition=Transition(reason="max_output_tokens_escalate"),
-                    )
-                    continue
+                error_type = "max_output_tokens"
+            elif _is_withheld_prompt_too_long(last_message):
+                error_type = "prompt_too_long"
+            elif _is_withheld_media_size(last_message):
+                error_type = "media_size"
 
-                if max_output_tokens_recovery_count < MAX_OUTPUT_TOKENS_RECOVERY_LIMIT:
-                    recovery_message = _create_user_message(
-                        "Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
-                        "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-                        is_meta=True,
-                    )
-                    state = QueryState(
-                        messages=[*messages, *assistant_messages, recovery_message],
-                        tool_use_context=tool_use_context,
-                        auto_compact_tracking=state.auto_compact_tracking,
-                        max_output_tokens_recovery_count=max_output_tokens_recovery_count + 1,
-                        has_attempted_reactive_compact=has_attempted_reactive_compact,
-                        max_output_tokens_override=None,
-                        stop_hook_active=None,
-                        turn_count=turn_count,
-                        transition=Transition(
-                            reason="max_output_tokens_recovery",
-                            attempt=max_output_tokens_recovery_count + 1,
-                        ),
-                    )
-                    continue
-
-                yield last_message  # type: ignore[arg-type]
-
-            # Ch5/B.2 — PTL / media-size recovery via reactive_compact.
-            # Mirrors TS query.ts:1195-1260. When the streaming model
-            # returned a withheld PTL or media-size error AND we have
-            # not yet attempted reactive_compact in this loop iteration,
-            # try to compact and retry. The one-shot guard
-            # (``has_attempted_reactive_compact``) prevents the
-            # death-spiral failure mode documented in chapter §"Death
-            # Spiral Guard": without it, a compact-then-still-413 loop
-            # burns thousands of API calls.
-            is_withheld_ptl = _is_withheld_prompt_too_long(last_message)
-            is_withheld_media = _is_withheld_media_size(last_message)
-
-            # Phase B post-critic: if the guard ALREADY tripped (we tried
-            # reactive_compact this turn and the post-compact retry STILL
-            # raised PTL/media), surface the withheld error and emit the
-            # appropriate Terminal — do NOT fall through to the
-            # "API error → Terminal(completed)" path. Mirrors TS at
-            # query.ts:1244-1252.
-            if (is_withheld_ptl or is_withheld_media) and has_attempted_reactive_compact:
-                if last_message is not None:
-                    yield last_message
-                set_terminal(
-                    holder,
-                    natural_termination,
-                    Terminal(reason="image_error" if is_withheld_media else "prompt_too_long"),
-                )
-                return
-
-            # P84-F: when a ``CollapseEngine`` is configured, prefer
-            # ``engine.recover_from_413`` over the LLM-driven
-            # ``reactive_compact`` path. The engine records a context
-            # collapse commit and projects the messages; the retry
-            # therefore has fewer tokens to send. This is cheaper than
-            # the LLM summary that ``reactive_compact`` produces and
-            # preserves the audit log via the engine's store. If the
-            # engine path doesn't apply (no engine, not a PTL error,
-            # or recovery returned ``applied=False``), we fall through
-            # to the existing reactive_compact block below.
-            if (
-                is_withheld_ptl
-                and not has_attempted_reactive_compact
-                and params.collapse_engine is not None
-            ):
-                from clawcodex_ext.services.api.errors import PromptTooLongError
-
-                # The message must contain "too long" so the engine's
-                # default_error_predicate (Emergency413Trigger) classifies
-                # the synthetic error as a 413-class emergency and
-                # triggers the FULL collapse decision. Without this the
-                # predicate returns NOOP and ``recover_from_413`` raises
-                # ``ContextLengthExceededError("still over budget")``,
-                # defeating the recovery.
-                synthetic_err = PromptTooLongError(
-                    "synthetic 413: prompt is too long, recovering via CollapseEngine"
-                )
-                try:
-                    recovery = params.collapse_engine.recover_from_413(
-                        messages=messages, error=synthetic_err
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "CollapseEngine.recover_from_413 raised %r; "
-                        "falling back to reactive_compact",
-                        exc,
-                    )
-                    recovery = None
-                if recovery is not None and getattr(recovery, "applied", False):
-                    # Re-project the original message list through the
-                    # engine's store. The store now has the new commit
-                    # so the archived messages are replaced by the
-                    # synthetic [Collapsed context] user-message and
-                    # the kept messages pass through.
-                    projected = params.collapse_engine.store.project_view(list(messages))
-                    for msg in projected:
-                        yield msg
-                    # Mirror the reactive_compact success path: reset
-                    # the autocompact circuit-breaker so the next
-                    # iteration's B.5 guard does not trip on a stale
-                    # ``consecutive_failures`` count.
-                    if (
-                        params.pipeline_config is not None
-                        and params.pipeline_config.autocompact_tracking is not None
-                    ):
-                        params.pipeline_config.autocompact_tracking.consecutive_failures = 0
-                    state = QueryState(
-                        messages=projected,
-                        tool_use_context=tool_use_context,
-                        auto_compact_tracking=(
-                            params.pipeline_config.autocompact_tracking
-                            if params.pipeline_config is not None
-                            else None
-                        ),
-                        max_output_tokens_recovery_count=max_output_tokens_recovery_count,
-                        has_attempted_reactive_compact=True,  # one-shot
-                        max_output_tokens_override=None,
-                        stop_hook_active=state.stop_hook_active,
-                        turn_count=turn_count,
-                        pending_tool_use_summary=state.pending_tool_use_summary,
-                        continuation_nudge_count=state.continuation_nudge_count,
-                        transition=Transition(reason="collapse_engine_retry"),
-                    )
-                    continue
-
-            if (
-                (is_withheld_ptl or is_withheld_media)
-                and not has_attempted_reactive_compact
-                and config.reactive_compact_enabled
-            ):
-                from clawcodex_ext.services.compact.reactive_compact import (
-                    ReactiveCompactResult,
-                    reactive_compact,
-                )
-                from clawcodex_ext.services.api.errors import PromptTooLongError
-
-                # Synthesize an exception for reactive_compact's
-                # is_prompt_too_long_error check. The withheld
-                # message holds the original error string; we don't
-                # need to round-trip it precisely because
-                # reactive_compact only uses the exception for
-                # classification.
-                synthetic_err = PromptTooLongError("withheld during streaming, recovering")
-                result: ReactiveCompactResult = await reactive_compact(
+            if error_type is not None:
+                recovery_ctx = RecoveryContext(
+                    state=state,
+                    last_message=last_message,
+                    config=config,
+                    params=params,
                     messages=messages,
-                    error=synthetic_err,
-                    provider=params.provider,
-                    model=config.model,
+                    assistant_messages=assistant_messages,
+                    error_type=error_type,
                 )
-                if result.compacted:
-                    # ReactiveCompactResult.messages is list[Message]
-                    # (verified 2026-05-12 against reactive_compact.py
-                    # :33-39, :205-210, :230-236; the field
-                    # concatenates CompactionResult.summary_messages
-                    # which is list[UserMessage], with
-                    # messages_to_keep which is list[Message]).
-                    post_compact_messages: list[Message] = result.messages
-                    for msg in post_compact_messages:
-                        yield msg
-                    # Critic finding (Phase B post-review): a successful
-                    # reactive_compact MUST reset the engine's autocompact
-                    # circuit-breaker counter. Otherwise the next iteration's
-                    # B.5 guard re-reads the engine's persistent
-                    # ``consecutive_failures`` (still ≥3 if the breaker
-                    # tripped earlier in the session) and would trip
-                    # ``Terminal(blocking_limit)`` immediately even though
-                    # we just successfully compacted. Mirrors TS query.ts
-                    # auto-compact success path (resets failures to 0).
-                    if (
-                        params.pipeline_config is not None
-                        and params.pipeline_config.autocompact_tracking is not None
-                    ):
-                        params.pipeline_config.autocompact_tracking.consecutive_failures = 0
-                    state = QueryState(
-                        messages=post_compact_messages,
-                        tool_use_context=tool_use_context,
-                        # Carry the engine's tracking through the retry so
-                        # next iteration's B.5 reads the post-reset count.
-                        auto_compact_tracking=(
-                            params.pipeline_config.autocompact_tracking
-                            if params.pipeline_config is not None
-                            else None
-                        ),
-                        max_output_tokens_recovery_count=max_output_tokens_recovery_count,
-                        has_attempted_reactive_compact=True,  # one-shot
-                        max_output_tokens_override=None,
-                        stop_hook_active=state.stop_hook_active,
-                        turn_count=turn_count,
-                        pending_tool_use_summary=state.pending_tool_use_summary,
-                        continuation_nudge_count=state.continuation_nudge_count,
-                        transition=Transition(reason="reactive_compact_retry"),
-                    )
-                    continue
-
-                # No recovery — surface the (until-now withheld) error
-                # and exit with the appropriate Terminal reason.
-                # DEATH-SPIRAL GUARD: do NOT fall through to a future
-                # stop-hooks call here. Mirrors TS query.ts:1244-1252
-                # ("error -> hook blocking -> retry -> error -> ...
-                # the hook injects more tokens each cycle"). When C.1
-                # lands the stop-hooks dispatch, this early return
-                # must remain.
-                if last_message is not None:
+                strategy_applied = False
+                for strategy in find_recovery_strategies(error_type, state):
+                    try:
+                        raw_result = strategy.fn(recovery_ctx)
+                        if asyncio.iscoroutine(raw_result):
+                            result = await raw_result
+                        else:
+                            result = raw_result
+                    except Exception:
+                        logger.exception("Recovery strategy %r failed", strategy.name)
+                        continue
+                    if result is not None:
+                        strategy_applied = True
+                        new_state, yield_messages = result
+                        for msg in yield_messages:
+                            yield msg
+                        if new_state is not None:
+                            state = new_state
+                            continue  # while True
+                        # new_state is None: terminate
+                        if error_type == "media_size":
+                            set_terminal(
+                                holder,
+                                natural_termination,
+                                Terminal(reason="image_error"),
+                            )
+                        else:
+                            set_terminal(
+                                holder,
+                                natural_termination,
+                                Terminal(
+                                    reason="prompt_too_long"
+                                    if error_type == "prompt_too_long"
+                                    else "completed"
+                                ),
+                            )
+                        return
+                # 如果没有任何策略适用，yield last_message 并 fallthrough
+                if not strategy_applied and last_message is not None:
                     yield last_message
-                set_terminal(
-                    holder,
-                    natural_termination,
-                    Terminal(reason="image_error" if is_withheld_media else "prompt_too_long"),
-                )
-                return
 
             if last_message and getattr(last_message, "isApiErrorMessage", False):
                 set_terminal(holder, natural_termination, Terminal(reason="completed"))
@@ -1862,12 +1712,18 @@ async def query(
         # to avoid touching ToolContext's public surface.
         setattr(tool_use_context, "_active_provider", params.provider)
 
+        # P102-D: pre_tool hook — 在工具执行之前允许外部策略修改 tool_use_blocks
+        call_hooks("pre_tool", tool_use_blocks, state=state, params=params)
+
         tool_results = await _run_tools_partitioned(
             tool_use_blocks,
             params.tool_registry,
             tool_use_context,
             params.tools,
         )
+
+        # P102-D: post_tool hook — 在工具执行之后允许外部策略修改 tool_results
+        call_hooks("post_tool", tool_results, state=state, params=params)
 
         if _diag:
             logger.warning(
@@ -1944,6 +1800,12 @@ async def query(
         injected_messages = _drain_pending_user_messages(tool_use_context)
         for inj in injected_messages:
             yield inj
+
+        # P102-E: 逐 turn 回调 — 在 turn 结束时调用
+        for cb in state.on_turn_end_callbacks:
+            cb(state)
+        # P102-D: on_turn_end hook
+        call_hooks("on_turn_end", state, params=params)
 
         state = QueryState(
             messages=[*messages, *assistant_messages, *tool_results, *injected_messages],

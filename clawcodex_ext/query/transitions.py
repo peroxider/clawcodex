@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from clawcodex_ext.types.messages import Message
 from clawcodex_ext.tool_system.context import ToolContext
@@ -110,3 +110,8 @@ class QueryState:
     # Mirrors TS State.continuationNudgeCount at query.ts:218.
     continuation_nudge_count: int = 0
     transition: Transition | None = None
+    # P102-E: 逐 turn 回调注册。外部消费者（如 F-69 Budget Mode）可以
+    # 在 turn 开始/结束时注入自定义逻辑，无需修改 query() 函数体。
+    on_turn_start_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)
+    on_turn_end_callbacks: list[Callable[["QueryState"], None]] = field(default_factory=list)
+
