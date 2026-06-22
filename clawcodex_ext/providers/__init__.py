@@ -90,3 +90,67 @@ register_provider(
     PROVIDER_INFO["minimax"],  # type: ignore[arg-type]
     _ClawcodexMinimaxProvider_lazy,  # type: ignore[arg-type]
 )
+
+
+# ---------------------------------------------------------------------------
+# Agnes AI — media generation provider (image + video)
+#
+# Registered as a provider info entry (for config / UI) and in the
+# **media** provider registry (separate from the chat-provider
+# hierarchy).  Image and video are registered independently so they
+# can be looked up by category.
+#
+# Config file convention (same as all providers):
+#   ~/.clawcodex/config.json -> providers.agnes = {
+#       "api_key": "...",
+#       "base_url": "https://apihub.agnes-ai.com/v1",
+#       "default_model": "agnes-image-2.1-flash",
+#       "models": ["agnes-image-2.1-flash", "agnes-image-2.0-flash",
+#                  "agnes-video-v2.0", "agnes-2.0-flash"]
+#   }
+# Env-var fallback: AGNES_API_KEY, AGNES_BASE_URL, AGNES_MODEL
+# ---------------------------------------------------------------------------
+
+# Register provider info so the config system picks up Agnes credentials.
+register_provider_info(
+    "agnes",
+    {
+        "label": "Agnes AI (Image + Video)",
+        "default_base_url": "https://apihub.agnes-ai.com/v1",
+        "default_model": "agnes-image-2.1-flash",
+        "available_models": [
+            # Image models
+            "agnes-image-2.1-flash",
+            "agnes-image-2.0-flash",
+            # Video models
+            "agnes-video-v2.0",
+            # Text model (chat-compatible, for prompt expansion)
+            "agnes-2.0-flash",
+        ],
+    },
+)
+
+
+def _AgnesImageProvider_lazy():
+    """Lazy accessor -- import AgnesImageProvider on first use."""
+    from clawcodex_ext.providers.media.image.agnes import (  # noqa: F401
+        AgnesImageProvider,
+    )
+
+    return AgnesImageProvider
+
+
+def _AgnesVideoProvider_lazy():
+    """Lazy accessor -- import AgnesVideoProvider on first use."""
+    from clawcodex_ext.providers.media.video.agnes import (  # noqa: F401
+        AgnesVideoProvider,
+    )
+
+    return AgnesVideoProvider
+
+
+# Register in the media provider registry (decoupled from chat).
+from clawcodex_ext.providers.media.registry import media_registry
+
+media_registry.register_image("agnes", _AgnesImageProvider_lazy)
+media_registry.register_video("agnes", _AgnesVideoProvider_lazy)
