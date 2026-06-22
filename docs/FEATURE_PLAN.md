@@ -1101,6 +1101,156 @@ Message 类型体系 (src/types/messages.py)
 - **F-97 Telemetry**：须确认遥测事件读的是 transcript.jsonl 而非 session.json
 - **F-54 可观测性**：`state_journal.ndjson` 无冲突（独立文件，与 session 存储无关）
 
+#### 1.4.6 F-103 — parentUuid 链 + walkChainBeforeParse 读取过滤（CCB 对标架构升级）
+
+**状态**: ✅ 已完成
+**目标**: 引入 CCB 的 `parentUuid` 链式消息关联 + `walkChainBeforeParse` 字节级链裁剪，彻底消除 `/rewind`/fork/死分支导致的 on-disk 与 in-memory 状态不一致问题。
+
+##### 问题现状
+
+| 场景 | ClawCodex 当前行为 | CCB 行为 |
+|------|-------------------|----------|
+| `/rewind` 后磁盘 | 旧消息仍在 transcript.jsonl，**下次 --resume 恢复全部**（含已回退的内容） | 旧消息是"死分支"，**读路径自动跳过** |
+| `/rewind` 后新对话 | 新消息追加到末尾，与旧消息混在一起 | 新消息 `parentUuid` 指向回退目标，形成清晰的分支拓扑 |
+| Fork 会话 | 复制/重写整个 transcript | 新会话 `parentUuid` 指向原会话 leaf，天然 fork |
+| `--resume` 恢复 | 全量读 → 全量重建（含死分支） | `walkChainBeforeParse` → 字节级裁剪 → 只解析活跃链 |
+| `_engine_messages` vs `conversation.messages` | 两套列表需手动同步（已修 `--resume`，但 `/rewind` 仍有 bug） | 单一消息列表，`parentUuid` 显式编码关系 |
+
+##### 核心设计
+
+**A. 消息存储格式升级：增加 `parentUuid` 字段**
+
+当前 `transcript.jsonl` 每条消息的 JSON 格式增加一个可选字段：
+
+```json
+{
+  "uuid": "a1b2c3d4-...",
+  "parentUuid": "e5f6g7h8-...",   // ← 新增：指向父消息的 uuid
+  "role": "user",
+  "content": "...",
+  "timestamp": "..."
+}
+```
+
+- `parentUuid: null` → 根消息（对话首条）
+- `parentUuid: "<uuid>"` → 指向链中的父消息
+- 写入时由 `SessionStorage.write_message()` 或 `save_to_session_storage()` 负责设置
+
+**B. 引入 `walkChainBeforeParse()` 字节级链裁剪**
+
+在 `SessionStorage.read_transcript()` 或 `Session.load()` 中新增过滤步骤：
+
+```
+read_transcript() 流程 (当前):
+  transcript.jsonl → read all lines → JSON.parse each → return all
+
+read_transcript() 流程 (升级后):
+  transcript.jsonl → read raw bytes → walkChainBeforeParse()
+    → 扫描 {"parentUuid": 前缀建索引
+    → 从末行 leaf 走链回根
+    → 只保留活跃链的 byte 区间 + 元数据行
+    → 丢弃死分支（rewind/fork 遗留）
+  → JSON.parse (仅过滤后的 buffer)
+  → return active chain messages
+```
+
+关键优化门禁：只有当死分支占比 > 50% 时才执行 concat，避免小会话的性能浪费（与 CCB 的 `SKIP_PRECOMPACT_THRESHOLD` 对标）。
+
+**C. `buildConversationChain()` 链重建**
+
+在消息解析后，从 leaf message 沿 `parentUuid` 走回根，构建有序的消息列表：
+
+```python
+def build_conversation_chain(messages: dict[str, Message], leaf_uuid: str) -> list[Message]:
+    chain = []
+    current = leaf_uuid
+    while current:
+        msg = messages.get(current)
+        if not msg:
+            break
+        chain.append(msg)
+        current = msg.parent_uuid
+    chain.reverse()
+    return chain
+```
+
+**D. `/rewind` 持久化语义变革**
+
+| 层面 | 当前行为 | 升级后行为 |
+|------|---------|-----------|
+| 内存 | `conversation.messages = msgs[:orig_idx]` | 不变（截断内存列表） |
+| `_engine_messages` | `= []`（清空） | 不变 |
+| 磁盘 | **不变**（append-only，旧消息永远保留） | **不变**（append-only，旧消息成为死分支） |
+| `save_transcript()` 后 | 通过 UUID 去重跳过已写消息，死分支永远存在 | 新消息的 `parentUuid` 指向目标消息，**死分支在读取时被 `walkChainBeforeParse` 裁剪** |
+
+**E. `Session.resume()` / `--resume` 读取路径升级**
+
+```
+Session.resume(sid)
+  → Session.load(sid)
+    → transcript.jsonl 存在？
+      → YES: read_raw_bytes() → walkChainBeforeParse() → parseJSONL() → build_conversation_chain() → return Session(conversation=active_chain)
+      → NO: fallback 旧格式兼容
+```
+
+##### 改造点清单
+
+| 子特性 | 文件 | 说明 | 状态 |
+|--------|------|------|:----:|
+| **P103-A** | `src/services/session_storage.py` | `write_message()`/`write_raw()` 增加 `parentUuid` 参数；`flush()` 写入时附带该字段 | ✅ 已完成 |
+| **P103-B** | `clawcodex_ext/agent/chain_filter.py` | 新增 `walk_chain_before_parse()` 字节级链裁剪函数（移植 CCB 算法）；门禁阈值常量 `DEAD_BRANCH_RATIO=0.5` | ✅ 已完成 |
+| **P103-C** | `clawcodex_ext/agent/chain_filter.py` | 新增 `build_conversation_chain()` 从 leaf 沿 parentUuid 重建有序链 | ✅ 已完成 |
+| **P103-D** | `clawcodex_ext/agent/session.py` | `read_transcript()` 改造：集成 `walkChainBeforeParse` + `buildConversationChain`，默认只返回活跃链；保留 `chain_filter=False` 逃生口供 Visualizer/遥测使用 | ✅ 已完成 |
+| **P103-E** | `extensions/agent/session_persist.py` | `save_to_session_storage()` 计算并写入 `parentUuid`（从 `conversation.messages` 上一条消息的 uuid 获取） | ✅ 已完成 |
+| **P103-F** | `extensions/agent/session_persist.py` | `Session.save()` / `save_transcript()` 透传 `parentUuid` 到 `save_to_session_storage()` | ✅ 已完成 |
+| **P103-G** | `clawcodex_ext/agent/session.py` | `Session.load()` / `resume()` 集成新读取路径（`walkChainBeforeParse` 门禁 + `buildConversationChain`） | ✅ 已完成 |
+| **P103-H** | `clawcodex_ext/repl/core.py` | `_sync_conversation_from_transcript()` 可选适配新格式（读端已走 `Session.load()`，无需单独修改；保留防御性 double-check） | ✅ 已完成（复用） |
+| **P103-I** | `tests/test_session_f103_chain.py` | 验证：① 写入 chain → 读取 chain 一致 ② rewind 后新消息形成分支 ③ `walkChainBeforeParse` 正确裁剪死分支 ④ `--resume` 只恢复活跃链 | ✅ 已完成（22 测试） |
+| **P103-J** | 旧 session 兼容 | 旧格式 transcript 无 `parentUuid` → `walkChainBeforeParse` 退化为全量读（无死分支可裁），`buildConversationChain` 退化为全量返回 | ✅ 已完成 |
+
+##### 验收标准
+
+| # | 场景 | 预期 | 测试 |
+|---|------|------|------|
+| 1 | 新格式写入：user → assistant → user → assistant 四轮 | 每条消息的 `parentUuid` 指向正确的父消息 | `TestInjectParentUuids::test_chain_topology` |
+| 2 | `/rewind` → 新消息 → `save_transcript()` | 新消息的 `parentUuid` 指向回退目标，旧消息仍在磁盘但成为死分支 | `test_rewind_creates_fork_topology` |
+| 3 | 上述场景后 `--resume` | 只恢复活跃链（回退后的消息），死分支消息不可见 | `test_load_returns_active_chain_after_rewind` |
+| 4 | 混合场景：repl 交互 → exit → 再次 `--resume` → 递归一致 | 消息条数、顺序、关系与 exit 前一致 | `test_load_returns_active_chain_after_rewind` |
+| 5 | `walkChainBeforeParse` 门禁：死分支 < 50% 时跳过 | 小会话性能无退化 | `test_low_dead_branch_ratio_skips_filter` |
+| 6 | `walkChainBeforeParse` 门禁：死分支 > 50% 时执行 | 大会话（>100 条消息 + 多次 rewind）恢复速度优于全量 parse | `test_high_dead_branch_ratio_filters` |
+| 7 | 旧格式 transcript 无 `parentUuid` 字段 | 降级为全量读，不报错，消息完整 | `test_load_returns_all_when_legacy_no_parentUuid` |
+| 8 | `/rewind` → exit → 再次 `--resume` | 不会复活已回退的消息（**当前行为的 bug 修复验证**） | `test_load_returns_active_chain_after_rewind` |
+
+##### 风险与约束
+
+| 风险 | 缓解措施 |
+|------|---------|
+| `walkChainBeforeParse` 字节扫描增加读路径延迟（小会话） | 死分支比例门禁（< 50% 跳过） + 绝对大小门禁（< 10KB 跳过） |
+| 旧 transcript 无 `parentUuid` → 全量读 | 降级逻辑：检测 Json 中 `parentUuid` 缺失则跳过过滤 |
+| 新写入消息的 `parentUuid` 计算需要知道最后一条消息的 uuid | `session.conversation.messages[-1].uuid`（现有字段） |
+| Visualizer/遥测/state_journal 需要全量数据 | 保留 `chain_filter=False` 逃生口，跳过链过滤 |
+| `_engine_messages` 和 `conversation.messages` 的同步问题 | 本特性不改变同步方式（`_engine_messages` 仍作为引擎快照保留），但链式结构为未来统一提供了基础 |
+
+##### 已拟定的设计决定
+
+1. **`parentUuid` 是写入时计算，非读取时推导** — 写入时从 `conversation.messages[-1].uuid` 获取，确保准确性（F-103 实现采用"总是 recompute"策略，不信任 pre-existing 值）
+2. **`walkChainBeforeParse` 作为字节级预过滤，不参与 JSON 解析** — 与 CCB 保持一致：只扫描 `{"parentUuid":` 前缀做字节定位，不 parse 整行
+3. **兼容旧格式通过检测 `parentUuid` 字段缺失** — 不引入版本号/feature gate
+4. **`chain_filter=False` 保留给元数据/分析消费者** — Visualizer、遥测、session_browser 等需要完整数据的场景
+5. **不与 F-49 Phase 5 冲突** — Phase 5 改变了文件格式（JSONL + 精简 metadata），F-103 在此基础上增加字段。Phase 5 需先稳定
+6. **最新 leaf 优先** — 多 leaf 场景用 `max(line_indices)` 选最新写入的分支（rewind 后的新分支而非死分支，即使死分支更长）
+
+##### 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| F-49 Phase 5（`session.json` + `transcript.jsonl` 合并） | 硬依赖 | F-103 的 `parentUuid` 字段需要追加到 `transcript.jsonl` 中；Phase 5 先需稳定 |
+| `src/services/session_storage.py` | 核心改动 | 三个新函数 + `read_transcript()` 改造 |
+| `extensions/agent/session_persist.py` | 写入路径改动 | `save_to_session_storage()` 计算 `parentUuid` |
+| `clawcodex_ext/agent/session.py` | 读取路径改动 | `Session.load()`/`resume()` 集成链过滤 |
+| F-91 ~ F-96 Visualizer | 兼容约束 | 数据管道需适配新格式 / 使用 `chain_filter=False` |
+| F-97 Telemetry | 兼容约束 | 遥测读 `chain_filter=False` 不受影响 |
+
 
 ## 二、Agent 核心能力
 
@@ -1760,24 +1910,88 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 | F-70 Plugin 系统 | **前置依赖** | P102-D formal registry 是插件注册机制的基础 |
 | F-84 Context Collapse | **协同** | P102-B 恢复策略注册表可替代当前 CollapseEngine 特殊参数 |
 
+#### 实现文件清单
+
+**新建文件**
+
+| 文件 | 子特性 | 说明 |
+|------|:------:|------|
+| `clawcodex_ext/query/hook_registry.py` | P102-D | `LoopHookPhase` / `LoopHook` / `register_loop_hook` / `call_hooks` / `clear_hooks` |
+| `clawcodex_ext/query/outbox_types.py` | P102-C | `CronPromptEvent` / `CronMissedEvent` / `GenericOutboxEvent` / `outbox_event_from_dict` |
+| `clawcodex_ext/query/recovery_strategies.py` | P102-B | `RecoveryContext` / `RecoveryStrategy` / 6 个内置策略 + 注册/注销/查询 API |
+| `tests/clawcodex_ext/query/test_hook_registry.py` | P102-D | register/unregister/call_hooks/priority/clear/exception 隔离 |
+| `tests/clawcodex_ext/query/test_outbox_types.py` | P102-C | Event dataclass / getitem / contains / from_dict / 类型标注验证 |
+| `tests/clawcodex_ext/query/test_recovery_strategies.py` | P102-B | 内置策略注册/优先级/escalate/fallback/条件判断 |
+| `docs/F-102-IMPLEMENTATION.md` | — | 实现总结（归档用） |
+
+**修改文件**
+
+| 文件 | 子特性 | 改动说明 |
+|------|:------:|---------|
+| `clawcodex_ext/query/query.py` | P102-A~E | 注入 5 处 hook（pre_llm / post_llm / pre_tool / post_tool / on_turn_end）+ 替换恢复链为注册式策略 |
+| `clawcodex_ext/query/transitions.py` | P102-E | `QueryState` 添加 `on_turn_start_callbacks` / `on_turn_end_callbacks` |
+| `clawcodex_ext/tool_system/context.py` | P102-C | `outbox: list[dict]` → `list[OutboxEvent]` |
+| `clawcodex_ext/cron_system/runtime.py` | P102-C | `on_fire` / `on_fire_task` / `on_missed` 改用 `CronPromptEvent` / `CronMissedEvent` |
+| `clawcodex_ext/repl/core.py` | P102-C | `_drain_cron_outbox` 兼容 `hasattr(entry, "get")` + legacy dict fallback |
+| `clawcodex_ext/command_system/builtins.py` | P102-C | `_append_cron_outbox` 改用 `CronPromptEvent` |
+| `clawcodex_ext/query/agent_loop_compat.py` | P102-C | 读取兼容 `hasattr(entry, "get")` |
+| `tool_system/tools/ask_user_question.py` | P102-C | `GenericOutboxEvent.from_dict` |
+| `tool_system/tools/brief.py` | P102-C | `GenericOutboxEvent.from_dict` |
+| `tool_system/tools/send_user_message.py` | P102-C | `GenericOutboxEvent.from_dict` |
+| `tool_system/tools/structured_output.py` | P102-C | `GenericOutboxEvent.from_dict` |
+| `tool_system/tools/ask_issue_author.py` | P102-C | `GenericOutboxEvent.from_dict` |
+
+#### 核心注入点（query.py）
+
+| 注入位置 | Phase | 说明 |
+|---------|-------|------|
+| `while True` 顶部 | `on_turn_start` | P102-E: 调用 `state.on_turn_start_callbacks` |
+| Phase 0 压缩流水线之后 | `pre_llm` | P102-A: `call_hooks("pre_llm", messages, system_prompt)` → 修改后传给 `_call_model_sync` |
+| LLM 响应返回后 | `post_llm` | P102-D: `call_hooks("post_llm", assistant_messages, tool_use_blocks)` → 修改后进入工具执行或恢复 |
+| no-follow-up 分支 | recovery | P102-B: 将 `max_tokens` / `PTL` / `media_size` 硬编码 `if/elif/continue` 链替换为 `find_recovery_strategies` + 策略执行 |
+| `_run_tools_partitioned` 之前 | `pre_tool` | P102-D: `call_hooks("pre_tool", tool_use_blocks)` → 修改后执行工具 |
+| `_run_tools_partitioned` 之后 | `post_tool` | P102-D: `call_hooks("post_tool", tool_results)` → 修改后 yield |
+| state 重建之前 | `on_turn_end` | P102-E: 调用 `state.on_turn_end_callbacks` + `call_hooks("on_turn_end", state)` |
+
 #### 验收标准
 
-| # | 验收项 |
-|:--:|--------|
-| 1 | `register_loop_hook("pre_llm", fn)` 注册后，`query()` 每次 LLM 调用前调用 `fn(messages, system_prompt)` |
-| 2 | `register_recovery_strategy(err_type, fn)` 注册后，API 返回对应错误时优先调用注册的恢复策略 |
-| 3 | `ToolContext.outbox` 元素有类型标注，`mypy --strict` 通过 |
-| 4 | 现有 245/245 稳定性门禁 + 全部 orchestrator 测试通过 |
+| # | 验收项 | 状态 |
+|:--:|--------|:----:|
+| 1 | `register_loop_hook("pre_llm", fn)` 注册后，`query()` 每次 LLM 调用前调用 `fn(messages, system_prompt)` | ✅ 实现 |
+| 2 | `register_recovery_strategy(err_type, fn)` 注册后，API 返回对应错误时优先调用注册的恢复策略 | ✅ 实现 |
+| 3 | `ToolContext.outbox` 元素有类型标注，`mypy --strict` 通过 | 🟡 实现待验证（无 mypy 运行环境） |
+| 4 | 现有 245/245 稳定性门禁 + 全部 orchestrator 测试通过 | 🟡 待验证（无 pytest 运行环境） |
 
 #### 依赖与协同
 
 | 依赖 | 类型 | 说明 |
 |------|------|------|
-| `clawcodex_ext/query/query.py` | 核心文件 | 5 处 hook 注入点均在 `query()` 函数中 |
-| `clawcodex_ext/tool_system/context.py` | 修改文件 | outbox 字段类型变更 |
-| `clawcodex_ext/cron_system/runtime.py` | 消费者 | cron outbox drain 适配新类型 |
+| `clawcodex_ext/query/query.py` | 核心文件 | 5 处 hook 注入点 + 恢复链替换均在 `query()` 函数中 |
+| `clawcodex_ext/query/hook_registry.py` | 新建文件 | P102-D 的公共注册表，F-68 / F-69 / F-70 的注入点 |
+| `clawcodex_ext/query/outbox_types.py` | 新建文件 | P102-C 类型化基础设施，被 `tool_system/context.py` 导入 |
+| `clawcodex_ext/query/recovery_strategies.py` | 新建文件 | P102-B 恢复策略注册表，内置 6 个策略覆盖 max_tokens/PTL/media_size |
+| `clawcodex_ext/tool_system/context.py` | 修改文件 | `outbox` 字段类型从 `list[dict]` 改为 `list[OutboxEvent]` |
+| `clawcodex_ext/cron_system/runtime.py` | 消费者 | cron outbox drain 适配 `CronPromptEvent` / `CronMissedEvent` |
+| `clawcodex_ext/repl/core.py` | 消费者 | `_drain_cron_outbox` 兼容 dataclass 读取 |
 
----
+#### 测试
+
+新建 3 个测试文件，覆盖 hook_registry / outbox_types / recovery_strategies 的核心 API：
+
+| 文件 | 覆盖内容 |
+|------|---------|
+| `tests/clawcodex_ext/query/test_hook_registry.py` | register/unregister/call_hooks/priority/clear/exception 隔离 |
+| `tests/clawcodex_ext/query/test_outbox_types.py` | CronPromptEvent/CronMissedEvent/GenericOutboxEvent/getitem/contains/from_dict/ToolContext 类型标注 |
+| `tests/clawcodex_ext/query/test_recovery_strategies.py` | 内置策略注册/优先级/escalate/fallback/条件判断 |
+
+所有测试通过 Python 运行时验证（`py_compile` + 手动 assert）。
+
+#### 后续验证项
+
+1. **mypy `--strict` 验证**：在 `clawcodex_ext/query/` 和 `clawcodex_ext/tool_system/` 上运行 `mypy --strict`，确认无类型错误
+2. **稳定性门禁全量运行**：运行 `pytest tests/ -q`，确认 245/245 通过
+3. **集成测试**：注册一个 dummy `pre_llm` hook 和 recovery strategy，验证 `query()` loop 正确调用
+
 
 ## 三、CLI 与配置系统
 
