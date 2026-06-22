@@ -1,0 +1,185 @@
+diff --git a/bridge/bridge_pointer.py b/bridge/bridge_pointer.py
+--- a/bridge/bridge_pointer.py	2026-06-18 10:10:15.921093 +0000
++++ b/bridge/bridge_pointer.py	2026-06-22 09:03:22.180480 +0000
+@@ -56,7 +56,7 @@
+ logger = logging.getLogger(__name__)
+ 
+ _SCHEMA_VERSION = 1
+-_POINTER_REL = os.path.join('.claude', 'bridge-pointer.json')
++_POINTER_REL = os.path.join(".claude", "bridge-pointer.json")
+ 
+ 
+ @dataclass
+@@ -94,7 +94,7 @@
+ 
+     def to_json(self) -> dict[str, object]:
+         d = asdict(self)
+-        d['schema_version'] = _SCHEMA_VERSION
++        d["schema_version"] = _SCHEMA_VERSION
+         return d
+ 
+ 
+@@ -107,7 +107,9 @@
+ 
+ 
+ def read_pointer(
+-    working_dir: str, *, machine_name: str,
++    working_dir: str,
++    *,
++    machine_name: str,
+ ) -> BridgePointer | None:
+     """Return the pointer for ``working_dir`` if one exists and is
+     valid for the current host, else ``None``.
+@@ -119,65 +121,72 @@
+     """
+     path = _pointer_path(working_dir)
+     try:
+-        with open(path, 'r', encoding='utf-8') as fh:
++        with open(path, "r", encoding="utf-8") as fh:
+             raw = fh.read()
+     except FileNotFoundError:
+         return None
+     except OSError as err:
+         logger.warning(
+-            '[bridge:pointer] read %s failed: %s — treating as absent',
+-            path, err,
++            "[bridge:pointer] read %s failed: %s — treating as absent",
++            path,
++            err,
+         )
+         return None
+     try:
+         data = json.loads(raw)
+     except json.JSONDecodeError as err:
+         logger.warning(
+-            '[bridge:pointer] %s is not valid JSON (%s) — treating as absent',
+-            path, err,
++            "[bridge:pointer] %s is not valid JSON (%s) — treating as absent",
++            path,
++            err,
+         )
+         return None
+     if not isinstance(data, dict):
+         return None
+-    if data.get('schema_version') != _SCHEMA_VERSION:
++    if data.get("schema_version") != _SCHEMA_VERSION:
+         logger.info(
+-            '[bridge:pointer] schema_version mismatch in %s '
+-            '(file=%r, expected=%r) — treating as absent',
+-            path, data.get('schema_version'), _SCHEMA_VERSION,
++            "[bridge:pointer] schema_version mismatch in %s "
++            "(file=%r, expected=%r) — treating as absent",
++            path,
++            data.get("schema_version"),
++            _SCHEMA_VERSION,
+         )
+         return None
+     # Required string fields.
+     try:
+-        bridge_id = str(data['bridge_id'])
+-        environment_id = str(data['environment_id'])
+-        file_machine = str(data['machine_name'])
+-        file_dir = str(data['dir'])
+-        created_at_ms = int(data['created_at_ms'])
+-        updated_at_ms = int(data['updated_at_ms'])
++        bridge_id = str(data["bridge_id"])
++        environment_id = str(data["environment_id"])
++        file_machine = str(data["machine_name"])
++        file_dir = str(data["dir"])
++        created_at_ms = int(data["created_at_ms"])
++        updated_at_ms = int(data["updated_at_ms"])
+     except (KeyError, TypeError, ValueError) as err:
+         logger.info(
+-            '[bridge:pointer] %s missing or malformed required fields '
+-            '(%s) — treating as absent', path, err,
++            "[bridge:pointer] %s missing or malformed required fields (%s) — treating as absent",
++            path,
++            err,
+         )
+         return None
+-    session_id_raw = data.get('session_id')
+-    session_id = (
+-        str(session_id_raw) if isinstance(session_id_raw, str) else None
+-    )
++    session_id_raw = data.get("session_id")
++    session_id = str(session_id_raw) if isinstance(session_id_raw, str) else None
+ 
+     # Host/dir staleness check. Two daemons running in different
+     # checkouts of the same repo (or different machines mounting the
+     # same NFS HOME) could otherwise collide on each other's pointers.
+     if file_machine != machine_name:
+         logger.info(
+-            '[bridge:pointer] %s machine mismatch (file=%r, current=%r) '
+-            '— treating as absent', path, file_machine, machine_name,
++            "[bridge:pointer] %s machine mismatch (file=%r, current=%r) — treating as absent",
++            path,
++            file_machine,
++            machine_name,
+         )
+         return None
+     if os.path.abspath(file_dir) != os.path.abspath(working_dir):
+         logger.info(
+-            '[bridge:pointer] %s dir mismatch (file=%r, current=%r) '
+-            '— treating as absent', path, file_dir, working_dir,
++            "[bridge:pointer] %s dir mismatch (file=%r, current=%r) — treating as absent",
++            path,
++            file_dir,
++            working_dir,
+         )
+         return None
+ 
+@@ -193,7 +202,8 @@
+ 
+ 
+ def write_pointer(
+-    working_dir: str, *,
++    working_dir: str,
++    *,
+     bridge_id: str,
+     environment_id: str,
+     session_id: str | None,
+@@ -225,19 +235,21 @@
+         os.makedirs(os.path.dirname(path), exist_ok=True)
+     except OSError as err:
+         logger.warning(
+-            '[bridge:pointer] mkdir(%s) failed: %s — pointer not written',
+-            os.path.dirname(path), err,
++            "[bridge:pointer] mkdir(%s) failed: %s — pointer not written",
++            os.path.dirname(path),
++            err,
+         )
+         return
+-    tmp_path = f'{path}.tmp'
++    tmp_path = f"{path}.tmp"
+     try:
+-        with open(tmp_path, 'w', encoding='utf-8') as fh:
++        with open(tmp_path, "w", encoding="utf-8") as fh:
+             json.dump(pointer.to_json(), fh, indent=2)
+         os.replace(tmp_path, path)
+     except OSError as err:
+         logger.warning(
+-            '[bridge:pointer] write %s failed: %s — pointer not written',
+-            path, err,
++            "[bridge:pointer] write %s failed: %s — pointer not written",
++            path,
++            err,
+         )
+         # Best-effort cleanup of the tmpfile.
+         try:
+@@ -255,5 +267,15 @@
+         return
+     except OSError as err:
+         logger.warning(
+-            '[bridge:pointer] unlink(%s) failed: %s', path, err,
++            "[bridge:pointer] unlink(%s) failed: %s",
++            path,
++            err,
+         )
++
++
++__all__ = [
++    "BridgePointer",
++    "clear_pointer",
++    "read_pointer",
++    "write_pointer",
++]

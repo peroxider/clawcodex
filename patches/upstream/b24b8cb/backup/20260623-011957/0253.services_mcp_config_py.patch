@@ -1,0 +1,185 @@
+diff --git a/services/mcp/config.py b/services/mcp/config.py
+--- a/services/mcp/config.py	2026-06-18 10:10:16.300502 +0000
++++ b/services/mcp/config.py	2026-06-22 09:03:25.988683 +0000
+@@ -74,8 +74,7 @@
+     if not servers:
+         return {}
+     return {
+-        name: ScopedMcpServerConfig(config=config, scope=scope)
+-        for name, config in servers.items()
++        name: ScopedMcpServerConfig(config=config, scope=scope) for name, config in servers.items()
+     }
+ 
+ 
+@@ -118,7 +117,8 @@
+             logger.warning(
+                 "MCP CCR-proxy unwrap: %d 'mcp_url' params present; refusing "
+                 "to guess. Keeping original URL: %s",
+-                len(wrapped), url,
++                len(wrapped),
++                url,
+             )
+             return url
+         candidate = unquote(wrapped[0])
+@@ -187,9 +187,7 @@
+         )
+     elif isinstance(config, (McpSSEServerConfig, McpHTTPServerConfig, McpWebSocketServerConfig)):
+         expanded_headers = (
+-            {k: _expand(v) for k, v in config.headers.items()}
+-            if config.headers
+-            else None
++            {k: _expand(v) for k, v in config.headers.items()} if config.headers else None
+         )
+         if isinstance(config, McpSSEServerConfig):
+             return (
+@@ -399,8 +397,7 @@
+         )
+         if result.config is None:
+             non_missing = [
+-                e for e in result.errors
+-                if not e.message.startswith("MCP config file not found")
++                e for e in result.errors if not e.message.startswith("MCP config file not found")
+             ]
+             return {}, non_missing
+         return _add_scope_to_servers(result.config, "local"), result.errors
+@@ -447,7 +444,8 @@
+             )
+             if result.config is None:
+                 non_missing = [
+-                    e for e in result.errors
++                    e
++                    for e in result.errors
+                     if not e.message.startswith("MCP config file not found")
+                 ]
+                 if non_missing:
+@@ -487,8 +485,7 @@
+         )
+         if result.config is None:
+             non_missing = [
+-                e for e in result.errors
+-                if not e.message.startswith("MCP config file not found")
++                e for e in result.errors if not e.message.startswith("MCP config file not found")
+             ]
+             return {}, non_missing
+         return _add_scope_to_servers(result.config, "enterprise"), result.errors
+@@ -536,9 +533,7 @@
+     if not isinstance(name, str) or not name:
+         raise ValueError("Dynamic MCP server name must be a non-empty string")
+     with _dynamic_mcp_lock:
+-        _dynamic_mcp_configs[name] = ScopedMcpServerConfig(
+-            config=config, scope="dynamic"
+-        )
++        _dynamic_mcp_configs[name] = ScopedMcpServerConfig(config=config, scope="dynamic")
+ 
+ 
+ def remove_dynamic_mcp_config(name: str) -> bool:
+@@ -616,6 +611,7 @@
+     # tick. The next merge cycle picks them up. Dedup against manual
+     # entries (WI-7.5) happens below.
+     from .claudeai import get_cached_claudeai_mcp_configs  # local import to avoid cycle
++
+     claudeai_servers = get_cached_claudeai_mcp_configs()
+ 
+     merged: dict[str, ScopedMcpServerConfig] = {}
+@@ -635,7 +631,7 @@
+     # claudeai one so the operator's explicit config takes precedence.
+     dedup_notice_strings: list[str] = []
+     if claudeai_servers:
+-        manual_keys = (set(user_servers) | set(project_servers) | set(local_servers))
++        manual_keys = set(user_servers) | set(project_servers) | set(local_servers)
+         manual_only_servers = {
+             k: merged[k] for k in manual_keys if k in merged and merged[k].scope != "claudeai"
+         }
+@@ -659,7 +655,10 @@
+     filtered, notices = filter_mcp_servers_by_policy(merged)
+ 
+     all_errors = (
+-        enterprise_errors + user_errors + project_errors + local_errors
++        enterprise_errors
++        + user_errors
++        + project_errors
++        + local_errors
+         + _notices_to_validation_errors(notices)
+         + _notices_to_validation_errors(dedup_notice_strings)
+     )
+@@ -848,12 +847,23 @@
+ 
+ def get_claude_desktop_config_path() -> Path:
+     import platform
++
+     system = platform.system()
+     if system == "Darwin":
+-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
++        return (
++            Path.home()
++            / "Library"
++            / "Application Support"
++            / "Claude"
++            / "claude_desktop_config.json"
++        )
+     elif system == "Windows":
+         appdata = os.environ.get("APPDATA", "")
+-        return Path(appdata) / "Claude" / "claude_desktop_config.json" if appdata else Path.home() / "Claude" / "claude_desktop_config.json"
++        return (
++            Path(appdata) / "Claude" / "claude_desktop_config.json"
++            if appdata
++            else Path.home() / "Claude" / "claude_desktop_config.json"
++        )
+     else:
+         return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+ 
+@@ -866,12 +876,14 @@
+     try:
+         data = json.loads(config_path.read_text(encoding="utf-8"))
+     except (json.JSONDecodeError, OSError):
+-        return {}, [ValidationError(
+-            path="",
+-            message=f"Failed to parse Claude Desktop config: {config_path}",
+-            file=str(config_path),
+-            severity="warning",
+-        )]
++        return {}, [
++            ValidationError(
++                path="",
++                message=f"Failed to parse Claude Desktop config: {config_path}",
++                file=str(config_path),
++                severity="warning",
++            )
++        ]
+ 
+     mcp_servers = data.get("mcpServers", {})
+     if not mcp_servers:
+@@ -936,6 +948,7 @@
+ 
+     if isinstance(config, McpStdioServerConfig):
+         import shutil
++
+         cmd = config.command
+         if cmd and not shutil.which(cmd):
+             issues.append(f"Command '{cmd}' not found in PATH")
+@@ -944,6 +957,7 @@
+         url = config.url
+         if url:
+             from urllib.parse import urlparse
++
+             parsed = urlparse(url)
+             if not parsed.scheme or not parsed.hostname:
+                 issues.append(f"Invalid URL: {url}")
+@@ -1006,15 +1020,12 @@
+ 
+     if _policy_flag("disable_all_mcp", "disableAllMcp"):
+         if configs:
+-            notices.append(
+-                "All MCP servers disabled by policy (settings.disable_all_mcp)."
+-            )
++            notices.append("All MCP servers disabled by policy (settings.disable_all_mcp).")
+         return {}, notices
+ 
+     if _policy_flag("allow_managed_only_mcp", "allowManagedOnlyMcp"):
+         kept = {
+-            name: cfg for name, cfg in configs.items()
+-            if cfg.scope in ("enterprise", "managed")
++            name: cfg for name, cfg in configs.items() if cfg.scope in ("enterprise", "managed")
+         }
+         dropped = set(configs) - set(kept)
+         if dropped:

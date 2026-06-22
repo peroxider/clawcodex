@@ -1,0 +1,74 @@
+diff --git a/bridge/poll_config.py b/bridge/poll_config.py
+--- a/bridge/poll_config.py	2026-06-18 10:10:15.890409 +0000
++++ b/bridge/poll_config.py	2026-06-22 09:03:22.303958 +0000
+@@ -89,7 +89,7 @@
+         ge=0,
+     )
+ 
+-    @model_validator(mode='after')
++    @model_validator(mode="after")
+     def _validate_at_capacity_liveness(self) -> Self:
+         """Enforce the two TS ``.refine()`` cross-field invariants.
+ 
+@@ -99,27 +99,24 @@
+         poll interval. All-zero is rejected; the caller falls back to
+         ``DEFAULT_POLL_CONFIG`` via ``get_poll_interval_config``.
+         """
+-        if (
+-            self.non_exclusive_heartbeat_interval_ms == 0
+-            and self.poll_interval_ms_at_capacity == 0
+-        ):
++        if self.non_exclusive_heartbeat_interval_ms == 0 and self.poll_interval_ms_at_capacity == 0:
+             raise ValueError(
+-                'at-capacity liveness requires '
+-                'non_exclusive_heartbeat_interval_ms > 0 or '
+-                'poll_interval_ms_at_capacity > 0'
++                "at-capacity liveness requires "
++                "non_exclusive_heartbeat_interval_ms > 0 or "
++                "poll_interval_ms_at_capacity > 0"
+             )
+         if (
+             self.non_exclusive_heartbeat_interval_ms == 0
+             and self.multisession_poll_interval_ms_at_capacity == 0
+         ):
+             raise ValueError(
+-                'at-capacity liveness requires '
+-                'non_exclusive_heartbeat_interval_ms > 0 or '
+-                'multisession_poll_interval_ms_at_capacity > 0'
++                "at-capacity liveness requires "
++                "non_exclusive_heartbeat_interval_ms > 0 or "
++                "multisession_poll_interval_ms_at_capacity > 0"
+             )
+         return self
+ 
+-    @model_validator(mode='after')
++    @model_validator(mode="after")
+     def _validate_at_capacity_zero_or_min(self) -> Self:
+         """``poll_interval_ms_at_capacity`` must be 0 (disabled) OR >= 100.
+ 
+@@ -128,14 +125,11 @@
+         """
+         v = self.poll_interval_ms_at_capacity
+         if v != 0 and v < 100:
+-            raise ValueError(
+-                'poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms'
+-            )
++            raise ValueError("poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms")
+         v = self.multisession_poll_interval_ms_at_capacity
+         if v != 0 and v < 100:
+             raise ValueError(
+-                'multisession_poll_interval_ms_at_capacity must be 0 '
+-                '(disabled) or ≥100ms'
++                "multisession_poll_interval_ms_at_capacity must be 0 (disabled) or ≥100ms"
+             )
+         return self
+ 
+@@ -181,6 +175,6 @@
+ 
+ 
+ __all__ = [
+-    'get_poll_interval_config',
+-    'validate_poll_interval_config_raw',
++    "get_poll_interval_config",
++    "validate_poll_interval_config_raw",
+ ]

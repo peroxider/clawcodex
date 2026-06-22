@@ -1,0 +1,32 @@
+diff --git a/tool_system/defaults.py b/tool_system/defaults.py
+--- a/tool_system/defaults.py	2026-06-18 10:10:17.109730 +0000
++++ b/tool_system/defaults.py	2026-06-22 09:03:26.855798 +0000
+@@ -1,26 +1,2 @@
+-from __future__ import annotations
+-
+-from typing import Any, Callable
+-
+-from .registry import ToolRegistry
+-from .tools import ALL_STATIC_TOOLS, make_agent_tool, make_tool_search_tool
+-
+-
+-def build_default_registry(
+-    *,
+-    include_user_tools: bool = True,
+-    provider: "Any | None" = None,
+-    get_available_mcp_servers: Callable[[], list[str]] | None = None,
+-) -> ToolRegistry:
+-    registry = ToolRegistry()
+-    for tool in ALL_STATIC_TOOLS:
+-        registry.register(tool)
+-    registry.register(
+-        make_agent_tool(
+-            registry,
+-            provider=provider,
+-            get_available_mcp_servers=get_available_mcp_servers,
+-        )
+-    )
+-    registry.register(make_tool_search_tool(registry))
+-    return registry
++"""Facade — tool_system/defaults.py moved to clawcodex_ext/tool_system/."""
++from clawcodex_ext.tool_system.defaults import *  # noqa: F401,F403

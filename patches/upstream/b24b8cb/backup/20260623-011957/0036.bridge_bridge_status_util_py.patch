@@ -1,0 +1,258 @@
+diff --git a/bridge/bridge_status_util.py b/bridge/bridge_status_util.py
+--- a/bridge/bridge_status_util.py	2026-06-18 10:10:15.956652 +0000
++++ b/bridge/bridge_status_util.py	2026-06-22 09:03:22.186881 +0000
+@@ -51,7 +51,7 @@
+ # Constants
+ # ---------------------------------------------------------------------------
+ 
+-StatusState = Literal['idle', 'attached', 'titled', 'reconnecting', 'failed']
++StatusState = Literal["idle", "attached", "titled", "reconnecting", "failed"]
+ """Mirrors TS ``StatusState`` on ``bridgeStatusUtil.ts:10-15``."""
+ 
+ TOOL_DISPLAY_EXPIRY_MS: int = 30_000
+@@ -66,14 +66,14 @@
+ Mirrors TS ``SHIMMER_INTERVAL_MS`` on ``bridgeStatusUtil.ts:21``.
+ """
+ 
+-FAILED_FOOTER_TEXT: str = 'Something went wrong, please try again'
++FAILED_FOOTER_TEXT: str = "Something went wrong, please try again"
+ """Footer text shown when the bridge has failed.
+ 
+ Mirrors TS ``FAILED_FOOTER_TEXT`` on ``bridgeStatusUtil.ts:154``.
+ """
+ 
+ 
+-_CLAUDE_AI_PRODUCTION_BASE: str = 'https://claude.ai'
++_CLAUDE_AI_PRODUCTION_BASE: str = "https://claude.ai"
+ """Production claude.ai base URL.
+ 
+ Inlined substitute for TS ``getClaudeAiBaseUrl()`` happy-path return.
+@@ -119,11 +119,11 @@
+     append ``'\\x1b[0m'`` to the result to avoid color bleed.
+     """
+     if max_width <= 0:
+-        return ''
++        return ""
+     if string_width(s) <= max_width:
+         return s
+     if max_width == 1:
+-        return '…'
++        return "…"
+     # Walk the string as a sequence of (token, visible_width) pairs where
+     # token is either an ANSI escape (width 0, kept whole) or a Unicode
+     # grapheme (width per wcwidth). Accumulate visible tokens until
+@@ -146,19 +146,19 @@
+             continue
+         out.append(token)
+         acc += width
+-    return ''.join(out) + '…'
++    return "".join(out) + "…"
+ 
+ 
+ # Backwards-compat alias matching TS export name ``truncatePrompt``.
+ truncate_prompt = truncate_to_width
+ 
+ 
+-_ANSI_RE = regex.compile(r'\x1b\[[0-9;]*m|\x1b\]8;;[^\x07]*\x07')
++_ANSI_RE = regex.compile(r"\x1b\[[0-9;]*m|\x1b\]8;;[^\x07]*\x07")
+ 
+ 
+ def _strip_ansi(s: str) -> str:
+     """Strip ANSI SGR + OSC 8 hyperlink sequences for width calculation."""
+-    return _ANSI_RE.sub('', s)
++    return _ANSI_RE.sub("", s)
+ 
+ 
+ def _grapheme_split(s: str) -> list[str]:
+@@ -168,7 +168,7 @@
+     ``\\X`` (extended grapheme cluster) pattern, which is the canonical
+     Unicode definition.
+     """
+-    return regex.findall(r'\X', s)
++    return regex.findall(r"\X", s)
+ 
+ 
+ def _iter_tokens(s: str):
+@@ -182,12 +182,12 @@
+     pos = 0
+     for match in _ANSI_RE.finditer(s):
+         if match.start() > pos:
+-            for grapheme in regex.findall(r'\X', s[pos:match.start()]):
++            for grapheme in regex.findall(r"\X", s[pos : match.start()]):
+                 yield grapheme, max(wcwidth.wcswidth(grapheme), 0)
+         yield match.group(0), 0
+         pos = match.end()
+     if pos < len(s):
+-        for grapheme in regex.findall(r'\X', s[pos:]):
++        for grapheme in regex.findall(r"\X", s[pos:]):
+             yield grapheme, max(wcwidth.wcswidth(grapheme), 0)
+ 
+ 
+@@ -212,11 +212,11 @@
+     Performs the same ``cse_`` → ``session_`` retag the TS version does
+     (so the URL is browser-routable through the v1 compat layer).
+     """
+-    if session_id.startswith('cse_'):
+-        compat_id = 'session_' + session_id[len('cse_'):]
++    if session_id.startswith("cse_"):
++        compat_id = "session_" + session_id[len("cse_") :]
+     else:
+         compat_id = session_id
+-    return f'{get_claude_ai_base_url(ingress_url)}/code/{compat_id}'
++    return f"{get_claude_ai_base_url(ingress_url)}/code/{compat_id}"
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -230,7 +230,7 @@
+     Mirrors TS ``timestamp`` on ``bridgeStatusUtil.ts:23-29``.
+     """
+     now = time.localtime()
+-    return f'{now.tm_hour:02d}:{now.tm_min:02d}:{now.tm_sec:02d}'
++    return f"{now.tm_hour:02d}:{now.tm_min:02d}:{now.tm_sec:02d}"
+ 
+ 
+ def abbreviate_activity(summary: str) -> str:
+@@ -255,7 +255,7 @@
+     Mirrors TS ``buildBridgeConnectUrl`` on ``bridgeStatusUtil.ts:39-45``.
+     """
+     base = get_claude_ai_base_url(ingress_url)
+-    return f'{base}/code?bridge={environment_id}'
++    return f"{base}/code?bridge={environment_id}"
+ 
+ 
+ def build_bridge_session_url(
+@@ -270,7 +270,7 @@
+     then appends the v1-specific ``?bridge={environment_id}`` query.
+     """
+     base = get_remote_session_url(session_id, ingress_url)
+-    return f'{base}?bridge={environment_id}'
++    return f"{base}?bridge={environment_id}"
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -318,7 +318,7 @@
+     shimmer_end = glimmer_index + 1
+ 
+     if shimmer_start >= message_width or shimmer_end < 0:
+-        return ShimmerSegments(before=text, shimmer='', after='')
++        return ShimmerSegments(before=text, shimmer="", after="")
+ 
+     clamped_start = max(0, shimmer_start)
+     col_pos = 0
+@@ -336,9 +336,9 @@
+         col_pos += seg_width
+ 
+     return ShimmerSegments(
+-        before=''.join(before),
+-        shimmer=''.join(shimmer),
+-        after=''.join(after),
++        before="".join(before),
++        shimmer="".join(shimmer),
++        after="".join(after),
+     )
+ 
+ 
+@@ -355,7 +355,7 @@
+     """
+ 
+     label: str
+-    color: Literal['error', 'warning', 'success']
++    color: Literal["error", "warning", "success"]
+ 
+ 
+ def get_bridge_status(
+@@ -372,18 +372,12 @@
+     object literal; Python uses kw-only).
+     """
+     if error:
+-        return BridgeStatusInfo(label='Remote Control failed', color='error')
++        return BridgeStatusInfo(label="Remote Control failed", color="error")
+     if reconnecting:
+-        return BridgeStatusInfo(
+-            label='Remote Control reconnecting', color='warning'
+-        )
++        return BridgeStatusInfo(label="Remote Control reconnecting", color="warning")
+     if session_active or connected:
+-        return BridgeStatusInfo(
+-            label='Remote Control active', color='success'
+-        )
+-    return BridgeStatusInfo(
+-        label='Remote Control connecting…', color='warning'
+-    )
++        return BridgeStatusInfo(label="Remote Control active", color="success")
++    return BridgeStatusInfo(label="Remote Control connecting…", color="warning")
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -396,7 +390,7 @@
+ 
+     Mirrors TS ``buildIdleFooterText`` on ``bridgeStatusUtil.ts:144-146``.
+     """
+-    return f'Code everywhere with the Claude app or {url}'
++    return f"Code everywhere with the Claude app or {url}"
+ 
+ 
+ def build_active_footer_text(url: str) -> str:
+@@ -404,7 +398,7 @@
+ 
+     Mirrors TS ``buildActiveFooterText`` on ``bridgeStatusUtil.ts:149-151``.
+     """
+-    return f'Continue coding in the Claude app or {url}'
++    return f"Continue coding in the Claude app or {url}"
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -419,30 +413,30 @@
+     Strippable by ``_strip_ansi`` so ``string_width`` returns the visible
+     text width only.
+     """
+-    return f'\x1b]8;;{url}\x07{text}\x1b]8;;\x07'
++    return f"\x1b]8;;{url}\x07{text}\x1b]8;;\x07"
+ 
+ 
+ __all__ = [
+-    'BridgeStatusInfo',
+-    'FAILED_FOOTER_TEXT',
+-    'SHIMMER_INTERVAL_MS',
+-    'ShimmerSegments',
+-    'StatusState',
+-    'TOOL_DISPLAY_EXPIRY_MS',
+-    'abbreviate_activity',
+-    'build_active_footer_text',
+-    'build_bridge_connect_url',
+-    'build_bridge_session_url',
+-    'build_idle_footer_text',
+-    'compute_glimmer_index',
+-    'compute_shimmer_segments',
+-    'format_duration',
+-    'get_bridge_status',
+-    'get_claude_ai_base_url',
+-    'get_remote_session_url',
+-    'string_width',
+-    'timestamp',
+-    'truncate_prompt',
+-    'truncate_to_width',
+-    'wrap_with_osc8_link',
++    "BridgeStatusInfo",
++    "FAILED_FOOTER_TEXT",
++    "SHIMMER_INTERVAL_MS",
++    "ShimmerSegments",
++    "StatusState",
++    "TOOL_DISPLAY_EXPIRY_MS",
++    "abbreviate_activity",
++    "build_active_footer_text",
++    "build_bridge_connect_url",
++    "build_bridge_session_url",
++    "build_idle_footer_text",
++    "compute_glimmer_index",
++    "compute_shimmer_segments",
++    "format_duration",
++    "get_bridge_status",
++    "get_claude_ai_base_url",
++    "get_remote_session_url",
++    "string_width",
++    "timestamp",
++    "truncate_prompt",
++    "truncate_to_width",
++    "wrap_with_osc8_link",
+ ]

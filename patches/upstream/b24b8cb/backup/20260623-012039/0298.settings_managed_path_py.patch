@@ -1,0 +1,11 @@
+diff --git a/settings/managed_path.py b/settings/managed_path.py
+--- a/settings/managed_path.py	2026-06-18 10:10:16.650598 +0000
++++ b/settings/managed_path.py	2026-06-22 09:03:26.626714 +0000
+@@ -24,6 +24,7 @@
+ 
+     # Platform-specific defaults
+     import platform
++
+     system = platform.system()
+ 
+     if system == "Darwin":

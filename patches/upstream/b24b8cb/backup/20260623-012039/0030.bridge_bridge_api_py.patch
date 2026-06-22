@@ -1,0 +1,625 @@
+diff --git a/bridge/bridge_api.py b/bridge/bridge_api.py
+--- a/bridge/bridge_api.py	2026-06-18 10:10:15.860564 +0000
++++ b/bridge/bridge_api.py	2026-06-22 09:03:22.151785 +0000
+@@ -48,9 +48,9 @@
+ 
+ # Anthropic-beta header value for the environments API. Mirrors TS
+ # ``BETA_HEADER`` on ``bridgeApi.ts:38``.
+-BETA_HEADER = 'environments-2025-11-01'
++BETA_HEADER = "environments-2025-11-01"
+ 
+-ANTHROPIC_VERSION = '2023-06-01'
++ANTHROPIC_VERSION = "2023-06-01"
+ 
+ # httpx default timeout for bridge requests (seconds). Matches TS
+ # axios ``timeout: 10_000`` / ``15_000`` on the registration call.
+@@ -60,7 +60,7 @@
+ 
+ # Allowlist pattern for server-provided IDs used in URL path segments.
+ # Mirrors TS ``SAFE_ID_PATTERN`` on ``bridgeApi.ts:41``.
+-_SAFE_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
++_SAFE_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+ 
+ 
+ def validate_bridge_id(value: str, label: str) -> str:
+@@ -72,7 +72,7 @@
+     bug surfaces at the call site rather than producing a malformed URL.
+     """
+     if not value or not _SAFE_ID_PATTERN.match(value):
+-        raise ValueError(f'Invalid {label}: contains unsafe characters')
++        raise ValueError(f"Invalid {label}: contains unsafe characters")
+     return value
+ 
+ 
+@@ -87,7 +87,7 @@
+     """
+     if not error_type:
+         return False
+-    return 'expired' in error_type or 'lifetime' in error_type
++    return "expired" in error_type or "lifetime" in error_type
+ 
+ 
+ def is_suppressible_403(err: BridgeFatalError) -> bool:
+@@ -101,10 +101,7 @@
+     if err.status != 403:
+         return False
+     message = str(err)
+-    return (
+-        'external_poll_sessions' in message
+-        or 'environments:manage' in message
+-    )
++    return "external_poll_sessions" in message or "environments:manage" in message
+ 
+ 
+ # ── Factory + client implementation ───────────────────────────────────────
+@@ -186,7 +183,7 @@
+         get_trusted_device_token: GetTrustedDeviceToken | None,
+         client: httpx.AsyncClient | None,
+     ) -> None:
+-        self._base_url = base_url.rstrip('/')
++        self._base_url = base_url.rstrip("/")
+         self._get_access_token = get_access_token
+         self._runner_version = runner_version
+         self._on_debug = on_debug
+@@ -206,16 +203,16 @@
+     def _headers(self, access_token: str) -> dict[str, str]:
+         """Mirror TS ``getHeaders`` on ``bridgeApi.ts:76-89``."""
+         headers = {
+-            'Authorization': f'Bearer {access_token}',
+-            'Content-Type': 'application/json',
+-            'anthropic-version': ANTHROPIC_VERSION,
+-            'anthropic-beta': BETA_HEADER,
+-            'x-environment-runner-version': self._runner_version,
++            "Authorization": f"Bearer {access_token}",
++            "Content-Type": "application/json",
++            "anthropic-version": ANTHROPIC_VERSION,
++            "anthropic-beta": BETA_HEADER,
++            "x-environment-runner-version": self._runner_version,
+         }
+         if self._get_trusted_device_token is not None:
+             token = self._get_trusted_device_token()
+             if token:
+-                headers['X-Trusted-Device-Token'] = token
++                headers["X-Trusted-Device-Token"] = token
+         return headers
+ 
+     def _resolve_auth(self) -> str:
+@@ -251,15 +248,15 @@
+         loops. Production callers should pass a long-lived ``client``;
+         see the factory docstring.
+         """
+-        url = f'{self._base_url}{path}'
++        url = f"{self._base_url}{path}"
+         kwargs: dict[str, Any] = {
+-            'headers': self._headers(access_token),
+-            'timeout': timeout_seconds,
++            "headers": self._headers(access_token),
++            "timeout": timeout_seconds,
+         }
+         if json_body is not None:
+-            kwargs['json'] = json_body
++            kwargs["json"] = json_body
+         if params is not None:
+-            kwargs['params'] = params
++            kwargs["params"] = params
+         if self._client is not None:
+             return await self._client.request(method, url, **kwargs)
+         return await self._send_with_fresh_client(method, url, kwargs)
+@@ -296,87 +293,73 @@
+         if response.status_code != 401:
+             return response
+         if self._on_auth_401 is None:
+-            self._debug(
+-                f'[bridge:api] {context}: 401 received, no refresh handler'
+-            )
++            self._debug(f"[bridge:api] {context}: 401 received, no refresh handler")
+             return response
+-        self._debug(
+-            f'[bridge:api] {context}: 401 received, attempting token refresh'
+-        )
++        self._debug(f"[bridge:api] {context}: 401 received, attempting token refresh")
+         refreshed = await self._on_auth_401(access_token)
+         if refreshed:
+-            self._debug(
+-                f'[bridge:api] {context}: Token refreshed, retrying request'
+-            )
++            self._debug(f"[bridge:api] {context}: Token refreshed, retrying request")
+             new_token = self._resolve_auth()
+             retry_response = await do_request(new_token)
+             if retry_response.status_code != 401:
+                 return retry_response
+-            self._debug(
+-                f'[bridge:api] {context}: Retry after refresh also got 401'
+-            )
++            self._debug(f"[bridge:api] {context}: Retry after refresh also got 401")
+         else:
+-            self._debug(f'[bridge:api] {context}: Token refresh failed')
++            self._debug(f"[bridge:api] {context}: Token refresh failed")
+         return response
+ 
+     # ── BridgeApiClient methods ─────────────────────────────────────────
+ 
+-    async def register_bridge_environment(
+-        self, config: BridgeConfig
+-    ) -> dict[str, str]:
++    async def register_bridge_environment(self, config: BridgeConfig) -> dict[str, str]:
+         """POST ``/v1/environments/bridge``. Mirror TS lines 142-197."""
+-        self._debug(
+-            f'[bridge:api] POST /v1/environments/bridge '
+-            f'bridgeId={config.bridge_id}'
+-        )
++        self._debug(f"[bridge:api] POST /v1/environments/bridge bridgeId={config.bridge_id}")
+ 
+         body: dict[str, Any] = {
+-            'machine_name': config.machine_name,
+-            'directory': config.dir,
+-            'branch': config.branch,
+-            'git_repo_url': config.git_repo_url,
+-            'max_sessions': config.max_sessions,
+-            'metadata': {'worker_type': config.worker_type},
++            "machine_name": config.machine_name,
++            "directory": config.dir,
++            "branch": config.branch,
++            "git_repo_url": config.git_repo_url,
++            "max_sessions": config.max_sessions,
++            "metadata": {"worker_type": config.worker_type},
+         }
+         if config.reuse_environment_id:
+-            body['environment_id'] = config.reuse_environment_id
++            body["environment_id"] = config.reuse_environment_id
+ 
+         async def do(access_token: str) -> httpx.Response:
+             return await self._request(
+-                'POST',
+-                '/v1/environments/bridge',
++                "POST",
++                "/v1/environments/bridge",
+                 access_token=access_token,
+                 json_body=body,
+                 timeout_seconds=_REGISTRATION_TIMEOUT_SECONDS,
+             )
+ 
+-        response = await self._with_oauth_retry(do, 'Registration')
++        response = await self._with_oauth_retry(do, "Registration")
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'Registration')
++        _handle_error_status(response.status_code, data, "Registration")
+         # Mirror the defensive guard pattern from heartbeat_work — a 200
+         # with a non-JSON body (gateway HTML page, truncated response,
+         # content-type mismatch) surfaces as ``data == None`` here, and
+         # ``data.get(...)`` below would crash with ``AttributeError``.
+         if not isinstance(data, dict):
+             raise BridgeFatalError(
+-                'Registration: malformed response — non-JSON body',
++                "Registration: malformed response — non-JSON body",
+                 status=response.status_code,
+             )
+-        env_id = data.get('environment_id')
+-        env_secret = data.get('environment_secret')
++        env_id = data.get("environment_id")
++        env_secret = data.get("environment_secret")
+         if not isinstance(env_id, str) or not isinstance(env_secret, str):
+             raise BridgeFatalError(
+-                'Registration: malformed response — '
+-                'missing environment_id / environment_secret',
++                "Registration: malformed response — missing environment_id / environment_secret",
+                 status=response.status_code,
+             )
+         self._debug(
+-            f'[bridge:api] POST /v1/environments/bridge -> '
+-            f'{response.status_code} environment_id={env_id}'
++            f"[bridge:api] POST /v1/environments/bridge -> "
++            f"{response.status_code} environment_id={env_id}"
+         )
+-        self._debug(f'[bridge:api] >>> {debug_body(body)}')
+-        self._debug(f'[bridge:api] <<< {debug_body(data)}')
+-        return {'environment_id': env_id, 'environment_secret': env_secret}
++        self._debug(f"[bridge:api] >>> {debug_body(body)}")
++        self._debug(f"[bridge:api] <<< {debug_body(data)}")
++        return {"environment_id": env_id, "environment_secret": env_secret}
+ 
+     async def poll_for_work(
+         self,
+@@ -394,25 +377,25 @@
+         cancellation requires only task cancellation (``task.cancel()``)
+         which httpx honors natively.
+         """
+-        validate_bridge_id(environment_id, 'environment_id')
++        validate_bridge_id(environment_id, "environment_id")
+ 
+         # Reset and capture; restore only when the response is truly empty.
+         prev_empty_polls = self._consecutive_empty_polls
+         self._consecutive_empty_polls = 0
+ 
+         params: dict[str, Any] | None = (
+-            {'reclaim_older_than_ms': reclaim_older_than_ms}
++            {"reclaim_older_than_ms": reclaim_older_than_ms}
+             if reclaim_older_than_ms is not None
+             else None
+         )
+         response = await self._request(
+-            'GET',
+-            f'/v1/environments/{environment_id}/work/poll',
++            "GET",
++            f"/v1/environments/{environment_id}/work/poll",
+             access_token=environment_secret,
+             params=params,
+         )
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'Poll')
++        _handle_error_status(response.status_code, data, "Poll")
+ 
+         # ``data is None`` → no work. Matches TS ``!response.data`` for the
+         # null branch exactly. Anything else (including malformed empty
+@@ -426,87 +409,75 @@
+                 or self._consecutive_empty_polls % self._EMPTY_POLL_LOG_INTERVAL == 0
+             ):
+                 self._debug(
+-                    f'[bridge:api] GET .../work/poll -> '
+-                    f'{response.status_code} (no work, '
+-                    f'{self._consecutive_empty_polls} consecutive empty polls)'
++                    f"[bridge:api] GET .../work/poll -> "
++                    f"{response.status_code} (no work, "
++                    f"{self._consecutive_empty_polls} consecutive empty polls)"
+                 )
+             return None
+ 
+-        inner = data.get('data') if isinstance(data, dict) else None
+-        inner_type = inner.get('type') if isinstance(inner, dict) else None
+-        inner_id = inner.get('id') if isinstance(inner, dict) else None
+-        self._debug(
+-            f'[bridge:api] GET .../work/poll -> {response.status_code} '
+-            f'workId={data.get("id")} type={inner_type}'
+-            + (f' sessionId={inner_id}' if inner_id else '')
++        inner = data.get("data") if isinstance(data, dict) else None
++        inner_type = inner.get("type") if isinstance(inner, dict) else None
++        inner_id = inner.get("id") if isinstance(inner, dict) else None
++        self._debug(
++            f"[bridge:api] GET .../work/poll -> {response.status_code} "
++            f"workId={data.get('id')} type={inner_type}"
++            + (f" sessionId={inner_id}" if inner_id else "")
+         )
+-        self._debug(f'[bridge:api] <<< {debug_body(data)}')
++        self._debug(f"[bridge:api] <<< {debug_body(data)}")
+         return data  # type: ignore[return-value]
+ 
+-    async def acknowledge_work(
+-        self, environment_id: str, work_id: str, session_token: str
+-    ) -> None:
++    async def acknowledge_work(self, environment_id: str, work_id: str, session_token: str) -> None:
+         """POST ``.../work/{id}/ack``. Mirror TS lines 249-271."""
+-        validate_bridge_id(environment_id, 'environment_id')
+-        validate_bridge_id(work_id, 'work_id')
+-        self._debug(f'[bridge:api] POST .../work/{work_id}/ack')
++        validate_bridge_id(environment_id, "environment_id")
++        validate_bridge_id(work_id, "work_id")
++        self._debug(f"[bridge:api] POST .../work/{work_id}/ack")
+         response = await self._request(
+-            'POST',
+-            f'/v1/environments/{environment_id}/work/{work_id}/ack',
++            "POST",
++            f"/v1/environments/{environment_id}/work/{work_id}/ack",
+             access_token=session_token,
+             json_body={},
+         )
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'Acknowledge')
+-        self._debug(
+-            f'[bridge:api] POST .../work/{work_id}/ack -> {response.status_code}'
+-        )
++        _handle_error_status(response.status_code, data, "Acknowledge")
++        self._debug(f"[bridge:api] POST .../work/{work_id}/ack -> {response.status_code}")
+ 
+-    async def stop_work(
+-        self, environment_id: str, work_id: str, force: bool
+-    ) -> None:
++    async def stop_work(self, environment_id: str, work_id: str, force: bool) -> None:
+         """POST ``.../work/{id}/stop``. Mirror TS lines 273-299."""
+-        validate_bridge_id(environment_id, 'environment_id')
+-        validate_bridge_id(work_id, 'work_id')
+-        self._debug(
+-            f'[bridge:api] POST .../work/{work_id}/stop force={force}'
+-        )
++        validate_bridge_id(environment_id, "environment_id")
++        validate_bridge_id(work_id, "work_id")
++        self._debug(f"[bridge:api] POST .../work/{work_id}/stop force={force}")
+ 
+         async def do(access_token: str) -> httpx.Response:
+             return await self._request(
+-                'POST',
+-                f'/v1/environments/{environment_id}/work/{work_id}/stop',
++                "POST",
++                f"/v1/environments/{environment_id}/work/{work_id}/stop",
+                 access_token=access_token,
+-                json_body={'force': force},
++                json_body={"force": force},
+             )
+ 
+-        response = await self._with_oauth_retry(do, 'StopWork')
++        response = await self._with_oauth_retry(do, "StopWork")
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'StopWork')
+-        self._debug(
+-            f'[bridge:api] POST .../work/{work_id}/stop -> {response.status_code}'
+-        )
++        _handle_error_status(response.status_code, data, "StopWork")
++        self._debug(f"[bridge:api] POST .../work/{work_id}/stop -> {response.status_code}")
+ 
+     async def deregister_environment(self, environment_id: str) -> None:
+         """DELETE ``/v1/environments/bridge/{id}``. Mirror TS lines 301-323."""
+-        validate_bridge_id(environment_id, 'environment_id')
+-        self._debug(
+-            f'[bridge:api] DELETE /v1/environments/bridge/{environment_id}'
+-        )
++        validate_bridge_id(environment_id, "environment_id")
++        self._debug(f"[bridge:api] DELETE /v1/environments/bridge/{environment_id}")
+ 
+         async def do(access_token: str) -> httpx.Response:
+             return await self._request(
+-                'DELETE',
+-                f'/v1/environments/bridge/{environment_id}',
++                "DELETE",
++                f"/v1/environments/bridge/{environment_id}",
+                 access_token=access_token,
+             )
+ 
+-        response = await self._with_oauth_retry(do, 'Deregister')
++        response = await self._with_oauth_retry(do, "Deregister")
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'Deregister')
++        _handle_error_status(response.status_code, data, "Deregister")
+         self._debug(
+-            f'[bridge:api] DELETE /v1/environments/bridge/{environment_id} '
+-            f'-> {response.status_code}'
++            f"[bridge:api] DELETE /v1/environments/bridge/{environment_id} "
++            f"-> {response.status_code}"
+         )
+ 
+     async def archive_session(self, session_id: str) -> None:
+@@ -514,81 +485,75 @@
+ 
+         409 is treated as success (idempotent — session already archived).
+         """
+-        validate_bridge_id(session_id, 'session_id')
+-        self._debug(f'[bridge:api] POST /v1/sessions/{session_id}/archive')
++        validate_bridge_id(session_id, "session_id")
++        self._debug(f"[bridge:api] POST /v1/sessions/{session_id}/archive")
+ 
+         async def do(access_token: str) -> httpx.Response:
+             return await self._request(
+-                'POST',
+-                f'/v1/sessions/{session_id}/archive',
++                "POST",
++                f"/v1/sessions/{session_id}/archive",
+                 access_token=access_token,
+                 json_body={},
+             )
+ 
+-        response = await self._with_oauth_retry(do, 'ArchiveSession')
++        response = await self._with_oauth_retry(do, "ArchiveSession")
+         if response.status_code == 409:
+             self._debug(
+-                f'[bridge:api] POST /v1/sessions/{session_id}/archive '
+-                f'-> 409 (already archived)'
++                f"[bridge:api] POST /v1/sessions/{session_id}/archive -> 409 (already archived)"
+             )
+             return
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'ArchiveSession')
++        _handle_error_status(response.status_code, data, "ArchiveSession")
+         self._debug(
+-            f'[bridge:api] POST /v1/sessions/{session_id}/archive '
+-            f'-> {response.status_code}'
++            f"[bridge:api] POST /v1/sessions/{session_id}/archive -> {response.status_code}"
+         )
+ 
+-    async def reconnect_session(
+-        self, environment_id: str, session_id: str
+-    ) -> None:
++    async def reconnect_session(self, environment_id: str, session_id: str) -> None:
+         """POST ``.../bridge/reconnect``. Mirror TS lines 358-385."""
+-        validate_bridge_id(environment_id, 'environment_id')
+-        validate_bridge_id(session_id, 'session_id')
++        validate_bridge_id(environment_id, "environment_id")
++        validate_bridge_id(session_id, "session_id")
+         self._debug(
+-            f'[bridge:api] POST /v1/environments/{environment_id}'
+-            f'/bridge/reconnect session_id={session_id}'
++            f"[bridge:api] POST /v1/environments/{environment_id}"
++            f"/bridge/reconnect session_id={session_id}"
+         )
+ 
+         async def do(access_token: str) -> httpx.Response:
+             return await self._request(
+-                'POST',
+-                f'/v1/environments/{environment_id}/bridge/reconnect',
++                "POST",
++                f"/v1/environments/{environment_id}/bridge/reconnect",
+                 access_token=access_token,
+-                json_body={'session_id': session_id},
++                json_body={"session_id": session_id},
+             )
+ 
+-        response = await self._with_oauth_retry(do, 'ReconnectSession')
++        response = await self._with_oauth_retry(do, "ReconnectSession")
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'ReconnectSession')
+-        self._debug(
+-            f'[bridge:api] POST .../bridge/reconnect -> {response.status_code}'
+-        )
++        _handle_error_status(response.status_code, data, "ReconnectSession")
++        self._debug(f"[bridge:api] POST .../bridge/reconnect -> {response.status_code}")
+ 
+     async def heartbeat_work(
+         self, environment_id: str, work_id: str, session_token: str
+     ) -> dict[str, Any]:
+         """POST ``.../work/{id}/heartbeat``. Mirror TS lines 387-417."""
+-        validate_bridge_id(environment_id, 'environment_id')
+-        validate_bridge_id(work_id, 'work_id')
+-        self._debug(f'[bridge:api] POST .../work/{work_id}/heartbeat')
++        validate_bridge_id(environment_id, "environment_id")
++        validate_bridge_id(work_id, "work_id")
++        self._debug(f"[bridge:api] POST .../work/{work_id}/heartbeat")
+         response = await self._request(
+-            'POST',
+-            f'/v1/environments/{environment_id}/work/{work_id}/heartbeat',
++            "POST",
++            f"/v1/environments/{environment_id}/work/{work_id}/heartbeat",
+             access_token=session_token,
+             json_body={},
+         )
+         data = _safe_json(response)
+-        _handle_error_status(response.status_code, data, 'Heartbeat')
++        _handle_error_status(response.status_code, data, "Heartbeat")
+         if not isinstance(data, dict):
+             raise BridgeFatalError(
+-                'Heartbeat: malformed response',
++                "Heartbeat: malformed response",
+                 status=response.status_code,
+             )
+         self._debug(
+-            f'[bridge:api] POST .../work/{work_id}/heartbeat -> '
+-            f'{response.status_code} lease_extended={data.get("lease_extended")} '
+-            f'state={data.get("state")}'
++            f"[bridge:api] POST .../work/{work_id}/heartbeat -> "
++            f"{response.status_code} lease_extended={data.get('lease_extended')} "
++            f"state={data.get('state')}"
+         )
+         return data
+ 
+@@ -599,29 +564,21 @@
+         session_token: str,
+     ) -> None:
+         """POST ``/v1/sessions/{id}/events``. Mirror TS lines 419-450."""
+-        validate_bridge_id(session_id, 'session_id')
+-        event_type = event.get('type', '<unknown>')
+-        self._debug(
+-            f'[bridge:api] POST /v1/sessions/{session_id}/events '
+-            f'type={event_type}'
+-        )
+-        body = {'events': [event]}
++        validate_bridge_id(session_id, "session_id")
++        event_type = event.get("type", "<unknown>")
++        self._debug(f"[bridge:api] POST /v1/sessions/{session_id}/events type={event_type}")
++        body = {"events": [event]}
+         response = await self._request(
+-            'POST',
+-            f'/v1/sessions/{session_id}/events',
++            "POST",
++            f"/v1/sessions/{session_id}/events",
+             access_token=session_token,
+             json_body=body,
+         )
+         data = _safe_json(response)
+-        _handle_error_status(
+-            response.status_code, data, 'SendPermissionResponseEvent'
+-        )
+-        self._debug(
+-            f'[bridge:api] POST /v1/sessions/{session_id}/events '
+-            f'-> {response.status_code}'
+-        )
+-        self._debug(f'[bridge:api] >>> {debug_body(body)}')
+-        self._debug(f'[bridge:api] <<< {debug_body(data)}')
++        _handle_error_status(response.status_code, data, "SendPermissionResponseEvent")
++        self._debug(f"[bridge:api] POST /v1/sessions/{session_id}/events -> {response.status_code}")
++        self._debug(f"[bridge:api] >>> {debug_body(body)}")
++        self._debug(f"[bridge:api] <<< {debug_body(data)}")
+ 
+ 
+ # ── Error handling ────────────────────────────────────────────────────────
+@@ -636,10 +593,10 @@
+     """
+     if not isinstance(data, dict):
+         return None
+-    error = data.get('error')
++    error = data.get("error")
+     if not isinstance(error, dict):
+         return None
+-    error_type = error.get('type')
++    error_type = error.get("type")
+     if isinstance(error_type, str):
+         return error_type
+     return None
+@@ -680,31 +637,31 @@
+ 
+     if status == 401:
+         raise BridgeFatalError(
+-            f'{context}: Authentication failed (401)'
+-            + (f': {detail}' if detail else '')
+-            + f'. {BRIDGE_LOGIN_INSTRUCTION}',
++            f"{context}: Authentication failed (401)"
++            + (f": {detail}" if detail else "")
++            + f". {BRIDGE_LOGIN_INSTRUCTION}",
+             status=401,
+             error_type=error_type,
+         )
+     if status == 403:
+         if is_expired_error_type(error_type):
+             message = (
+-                'Remote Control session has expired. Please restart '
+-                'with `claude remote-control` or /remote-control.'
++                "Remote Control session has expired. Please restart "
++                "with `claude remote-control` or /remote-control."
+             )
+         else:
+             message = (
+-                f'{context}: Access denied (403)'
+-                + (f': {detail}' if detail else '')
+-                + '. Check your organization permissions.'
++                f"{context}: Access denied (403)"
++                + (f": {detail}" if detail else "")
++                + ". Check your organization permissions."
+             )
+         raise BridgeFatalError(message, status=403, error_type=error_type)
+     if status == 404:
+         raise BridgeFatalError(
+             detail
+             or (
+-                f'{context}: Not found (404). Remote Control may not be '
+-                'available for this organization.'
++                f"{context}: Not found (404). Remote Control may not be "
++                "available for this organization."
+             ),
+             status=404,
+             error_type=error_type,
+@@ -713,28 +670,23 @@
+         raise BridgeFatalError(
+             detail
+             or (
+-                'Remote Control session has expired. Please restart with '
+-                '`claude remote-control` or /remote-control.'
++                "Remote Control session has expired. Please restart with "
++                "`claude remote-control` or /remote-control."
+             ),
+             status=410,
+-            error_type=error_type or 'environment_expired',
++            error_type=error_type or "environment_expired",
+         )
+     if status == 429:
+-        raise Exception(
+-            f'{context}: Rate limited (429). Polling too frequently.'
+-        )
+-    raise Exception(
+-        f'{context}: Failed with status {status}'
+-        + (f': {detail}' if detail else '')
+-    )
++        raise Exception(f"{context}: Rate limited (429). Polling too frequently.")
++    raise Exception(f"{context}: Failed with status {status}" + (f": {detail}" if detail else ""))
+ 
+ 
+ __all__ = [
+-    'ANTHROPIC_VERSION',
+-    'BETA_HEADER',
+-    'BridgeFatalError',  # re-exported for callers that catch it
+-    'create_bridge_api_client',
+-    'is_expired_error_type',
+-    'is_suppressible_403',
+-    'validate_bridge_id',
++    "ANTHROPIC_VERSION",
++    "BETA_HEADER",
++    "BridgeFatalError",  # re-exported for callers that catch it
++    "create_bridge_api_client",
++    "is_expired_error_type",
++    "is_suppressible_403",
++    "validate_bridge_id",
+ ]

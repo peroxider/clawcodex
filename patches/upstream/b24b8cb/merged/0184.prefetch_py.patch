@@ -1,0 +1,14 @@
+diff --git a/prefetch.py b/prefetch.py
+--- a/prefetch.py	2026-06-18 10:10:16.905382 +0000
++++ b/prefetch.py	2026-06-22 09:03:23.480168 +0000
+@@ -159,9 +159,7 @@
+         return handle
+ 
+ 
+-def wait_and_read_keychain(
+-    handle: PrefetchHandle, timeout: float = 5.0
+-) -> str | None:
++def wait_and_read_keychain(handle: PrefetchHandle, timeout: float = 5.0) -> str | None:
+     """Block until the prefetch child process exits; return stdout text.
+ 
+     Returns ``None`` for the skipped-prefetch case (non-macOS or

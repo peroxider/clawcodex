@@ -1,0 +1,11 @@
+diff --git a/services/ide/__init__.py b/services/ide/__init__.py
+--- a/services/ide/__init__.py	2026-06-18 10:10:16.272123 +0000
++++ b/services/ide/__init__.py	2026-06-22 09:03:25.247861 +0000
+@@ -3,6 +3,7 @@
+ Provides types and connection management for IDE integration (VSCode, JetBrains, etc.)
+ via JSON-RPC. Mirrors TypeScript ide/ directory.
+ """
++
+ from __future__ import annotations
+ 
+ from .types import (

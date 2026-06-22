@@ -1,21 +1,17 @@
-"""Computer Use domain exceptions."""
+"""Facade — src/services/computer_use/exceptions.py has been moved to clawcodex_ext.
 
+The full implementation now lives in
+:mod:`clawcodex_ext.services.computer_use.exceptions`. This module re-exports the public surface so
+existing ``from src.services.computer_use.exceptions import ...``
+call sites keep working without modification.
+"""
 
-class ComputerUseError(RuntimeError):
-    """Base error for Computer Use failures."""
+from clawcodex_ext.services.computer_use.exceptions import (  # noqa: F401
+    ComputerUseError,
+    BinaryNotFoundError,
+    SafetyViolationError,
+    CoordinatesOutOfBoundsError,
+    WindowNotFoundError,
+)
 
-
-class BinaryNotFoundError(ComputerUseError):
-    """Raised when a required system binary (e.g. xdotool, scrot) is missing."""
-
-
-class SafetyViolationError(ComputerUseError):
-    """Raised when an action is blocked by the safety policy / dry-run gate."""
-
-
-class CoordinatesOutOfBoundsError(ComputerUseError):
-    """Raised when a coordinate is outside the validated region."""
-
-
-class WindowNotFoundError(ComputerUseError):
-    """Raised when a window lookup cannot find a matching window."""
+__all__ = ['ComputerUseError', 'BinaryNotFoundError', 'SafetyViolationError', 'CoordinatesOutOfBoundsError', 'WindowNotFoundError']

@@ -1,0 +1,16 @@
+diff --git a/services/mcp/in_process_transport.py b/services/mcp/in_process_transport.py
+--- a/services/mcp/in_process_transport.py	2026-06-18 10:10:16.406882 +0000
++++ b/services/mcp/in_process_transport.py	2026-06-22 09:03:26.045270 +0000
+@@ -101,11 +101,7 @@
+ 
+     @property
+     def is_connected(self) -> bool:
+-        return (
+-            not self._closed
+-            and self._peer is not None
+-            and not self._peer._closed
+-        )
++        return not self._closed and self._peer is not None and not self._peer._closed
+ 
+ 
+ def create_linked_transport_pair() -> tuple[InProcessTransport, InProcessTransport]:

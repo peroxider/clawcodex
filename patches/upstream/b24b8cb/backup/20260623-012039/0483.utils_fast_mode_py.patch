@@ -1,0 +1,19 @@
+diff --git a/utils/fast_mode.py b/utils/fast_mode.py
+--- a/utils/fast_mode.py	2026-06-18 10:10:15.723161 +0000
++++ b/utils/fast_mode.py	2026-06-22 09:03:28.300282 +0000
+@@ -12,6 +12,7 @@
+ @dataclass
+ class FastModeState:
+     """Track fast mode on/off per session."""
++
+     _enabled: bool = False
+     _session_override: bool | None = None
+ 
+@@ -58,6 +59,7 @@
+         # late-import to avoid a top-level circular dependency between
+         # state/cache_state.py and src.providers (used by is_first_party_provider).
+         from src.state.cache_state import get_beta_header_latches
++
+         latches = get_beta_header_latches()
+         if not latches.fast_mode_header_latched:
+             latches.fast_mode_header_latched = True

@@ -1,0 +1,13 @@
+diff --git a/utils/keychain_stash.py b/utils/keychain_stash.py
+--- a/utils/keychain_stash.py	2026-06-18 10:10:15.749246 +0000
++++ b/utils/keychain_stash.py	2026-06-22 09:03:28.347129 +0000
+@@ -50,8 +50,6 @@
+ def reset_stashed_keychain_for_test_only() -> None:
+     """Reset the stash. Test-only — gated by ``PYTEST_CURRENT_TEST``."""
+     if os.environ.get("PYTEST_CURRENT_TEST") is None:
+-        raise RuntimeError(
+-            "reset_stashed_keychain_for_test_only can only be called in tests"
+-        )
++        raise RuntimeError("reset_stashed_keychain_for_test_only can only be called in tests")
+     global _KEYCHAIN_VALUE
+     _KEYCHAIN_VALUE = None

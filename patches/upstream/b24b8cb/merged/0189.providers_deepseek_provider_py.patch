@@ -1,0 +1,25 @@
+diff --git a/providers/deepseek_provider.py b/providers/deepseek_provider.py
+--- a/providers/deepseek_provider.py	2026-06-18 10:10:16.716827 +0000
++++ b/providers/deepseek_provider.py	2026-06-22 09:03:23.560731 +0000
+@@ -24,9 +24,7 @@
+ 
+     DEFAULT_BASE_URL = "https://api.deepseek.com"
+ 
+-    def __init__(
+-        self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None
+-    ):
++    def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
+         """Initialize DeepSeek provider.
+ 
+         Args:
+@@ -51,8 +49,10 @@
+             "base_url": self.base_url or self.DEFAULT_BASE_URL,
+         }
+         import os
++
+         if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
+             import httpx
++
+             kwargs["http_client"] = httpx.Client(verify=False)
+         return OpenAI(**kwargs)
+ 

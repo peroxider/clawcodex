@@ -1,0 +1,42 @@
+diff --git a/services/mcp/auth_provider.py b/services/mcp/auth_provider.py
+--- a/services/mcp/auth_provider.py	2026-06-18 10:10:16.346900 +0000
++++ b/services/mcp/auth_provider.py	2026-06-22 09:03:25.933566 +0000
+@@ -190,10 +190,7 @@
+             authorization_endpoint = metadata.get("authorization_endpoint")
+             token_endpoint = metadata.get("token_endpoint")
+             if not authorization_endpoint or not token_endpoint:
+-                msg = (
+-                    "OAuth metadata missing authorization_endpoint or "
+-                    "token_endpoint"
+-                )
++                msg = "OAuth metadata missing authorization_endpoint or token_endpoint"
+                 self.mark_needs_auth(server_name, reason=msg)
+                 return AuthResult(success=False, error=msg)
+ 
+@@ -233,7 +230,8 @@
+ 
+             logger.info(
+                 "MCP OAuth: opening browser for %r (url=%s)",
+-                server_name, redact_sensitive_params(url),
++                server_name,
++                redact_sensitive_params(url),
+             )
+             if open_browser:
+                 try:
+@@ -241,13 +239,12 @@
+                 except Exception as exc:  # pragma: no cover
+                     logger.warning(
+                         "MCP OAuth: webbrowser.open failed for %r: %s",
+-                        server_name, exc,
++                        server_name,
++                        exc,
+                     )
+ 
+             try:
+-                callback = await wait_for_callback(
+-                    port=port, expected_state=state
+-                )
++                callback = await wait_for_callback(port=port, expected_state=state)
+             except OAuthCallbackError as exc:
+                 msg = f"OAuth callback failed: {exc}"
+                 self.mark_needs_auth(server_name, reason=msg)

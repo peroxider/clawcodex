@@ -1,0 +1,347 @@
+diff --git a/bridge/messaging.py b/bridge/messaging.py
+--- a/bridge/messaging.py	2026-06-18 10:10:15.847236 +0000
++++ b/bridge/messaging.py	2026-06-22 09:03:22.280118 +0000
+@@ -47,19 +47,13 @@
+     Mirrors ``bridgeMessaging.ts:36-43``. Permissive on purpose — callers
+     narrow further by branching on ``type``.
+     """
+-    return (
+-        isinstance(value, dict)
+-        and 'type' in value
+-        and isinstance(value.get('type'), str)
+-    )
++    return isinstance(value, dict) and "type" in value and isinstance(value.get("type"), str)
+ 
+ 
+ def is_sdk_control_response(value: object) -> bool:
+     """True for ``{type:'control_response', response}``-shaped dicts."""
+     return (
+-        isinstance(value, dict)
+-        and value.get('type') == 'control_response'
+-        and 'response' in value
++        isinstance(value, dict) and value.get("type") == "control_response" and "response" in value
+     )
+ 
+ 
+@@ -67,9 +61,9 @@
+     """True for ``{type:'control_request', request_id, request}``-shaped dicts."""
+     return (
+         isinstance(value, dict)
+-        and value.get('type') == 'control_request'
+-        and 'request_id' in value
+-        and 'request' in value
++        and value.get("type") == "control_request"
++        and "request_id" in value
++        and "request" in value
+     )
+ 
+ 
+@@ -79,21 +73,21 @@
+ # (referenced by ``bridgeMessaging.ts:141``). Unknown keys pass through
+ # unchanged with a debug log entry.
+ _KNOWN_CAMEL_TO_SNAKE: dict[str, str] = {
+-    'requestId': 'request_id',
+-    'toolUseId': 'tool_use_id',
+-    'parentToolUseId': 'parent_tool_use_id',
+-    'controlRequest': 'control_request',
+-    'controlResponse': 'control_response',
+-    'controlCancelRequest': 'control_cancel_request',
+-    'sessionId': 'session_id',
+-    'workerEpoch': 'worker_epoch',
+-    'workerJwt': 'worker_jwt',
+-    'apiBaseUrl': 'api_base_url',
+-    'expiresIn': 'expires_in',
+-    'updatedInput': 'updated_input',
+-    'maxThinkingTokens': 'max_thinking_tokens',
+-    'permissionMode': 'permission_mode',
+-    'toolName': 'tool_name',
++    "requestId": "request_id",
++    "toolUseId": "tool_use_id",
++    "parentToolUseId": "parent_tool_use_id",
++    "controlRequest": "control_request",
++    "controlResponse": "control_response",
++    "controlCancelRequest": "control_cancel_request",
++    "sessionId": "session_id",
++    "workerEpoch": "worker_epoch",
++    "workerJwt": "worker_jwt",
++    "apiBaseUrl": "api_base_url",
++    "expiresIn": "expires_in",
++    "updatedInput": "updated_input",
++    "maxThinkingTokens": "max_thinking_tokens",
++    "permissionMode": "permission_mode",
++    "toolName": "tool_name",
+ }
+ 
+ 
+@@ -115,7 +109,7 @@
+         normalized_key = _KNOWN_CAMEL_TO_SNAKE.get(key, key)
+         if normalized_key == key and _looks_camel_case(key):
+             logger.debug(
+-                '[bridge:messaging] Unknown camelCase key passed through unchanged: %s',
++                "[bridge:messaging] Unknown camelCase key passed through unchanged: %s",
+                 key,
+             )
+         out[normalized_key] = normalize_control_message_keys(val)
+@@ -159,20 +153,20 @@
+     try:
+         raw = json.loads(data)
+     except json.JSONDecodeError as exc:
+-        logger.debug('[bridge:messaging] Failed to parse ingress message: %s', exc)
++        logger.debug("[bridge:messaging] Failed to parse ingress message: %s", exc)
+         return
+ 
+     parsed = normalize_control_message_keys(raw)
+ 
+     if is_sdk_control_response(parsed):
+-        logger.debug('[bridge:messaging] Ingress message type=control_response')
++        logger.debug("[bridge:messaging] Ingress message type=control_response")
+         if on_permission_response is not None:
+             on_permission_response(parsed)  # type: ignore[arg-type]
+         return
+ 
+     if is_sdk_control_request(parsed):
+-        subtype = parsed.get('request', {}).get('subtype', '<unknown>')  # type: ignore[union-attr]
+-        logger.debug('[bridge:messaging] Inbound control_request subtype=%s', subtype)
++        subtype = parsed.get("request", {}).get("subtype", "<unknown>")  # type: ignore[union-attr]
++        logger.debug("[bridge:messaging] Inbound control_request subtype=%s", subtype)
+         if on_control_request is not None:
+             on_control_request(parsed)  # type: ignore[arg-type]
+         return
+@@ -181,32 +175,32 @@
+         return
+ 
+     msg = parsed  # narrowed to dict by is_sdk_message
+-    msg_uuid = msg.get('uuid') if isinstance(msg.get('uuid'), str) else None  # type: ignore[union-attr]
++    msg_uuid = msg.get("uuid") if isinstance(msg.get("uuid"), str) else None  # type: ignore[union-attr]
+ 
+     if msg_uuid is not None and recent_posted_uuids.has(msg_uuid):
+         logger.debug(
+-            '[bridge:messaging] Ignoring echo: type=%s uuid=%s',
+-            msg.get('type'),  # type: ignore[union-attr]
++            "[bridge:messaging] Ignoring echo: type=%s uuid=%s",
++            msg.get("type"),  # type: ignore[union-attr]
+             msg_uuid,
+         )
+         return
+ 
+     if msg_uuid is not None and recent_inbound_uuids.has(msg_uuid):
+         logger.debug(
+-            '[bridge:messaging] Ignoring re-delivered inbound: type=%s uuid=%s',
+-            msg.get('type'),  # type: ignore[union-attr]
++            "[bridge:messaging] Ignoring re-delivered inbound: type=%s uuid=%s",
++            msg.get("type"),  # type: ignore[union-attr]
+             msg_uuid,
+         )
+         return
+ 
+-    msg_type = msg.get('type')  # type: ignore[union-attr]
++    msg_type = msg.get("type")  # type: ignore[union-attr]
+     logger.debug(
+-        '[bridge:messaging] Ingress message type=%s%s',
++        "[bridge:messaging] Ingress message type=%s%s",
+         msg_type,
+-        f' uuid={msg_uuid}' if msg_uuid else '',
++        f" uuid={msg_uuid}" if msg_uuid else "",
+     )
+ 
+-    if msg_type == 'user':
++    if msg_type == "user":
+         if msg_uuid is not None:
+             recent_inbound_uuids.add(msg_uuid)
+         if on_inbound_message is not None:
+@@ -221,7 +215,7 @@
+                 asyncio.get_running_loop().create_task(result)  # type: ignore[arg-type]
+     else:
+         logger.debug(
+-            '[bridge:messaging] Ignoring non-user inbound message: type=%s',
++            "[bridge:messaging] Ignoring non-user inbound message: type=%s",
+             msg_type,
+         )
+ 
+@@ -237,13 +231,13 @@
+     Forwards user/assistant turns and ``system`` messages of subtype
+     ``local_command``.
+     """
+-    msg_type = message.get('type')
+-    if msg_type in ('user', 'assistant'):
+-        if message.get('isVirtual'):
++    msg_type = message.get("type")
++    if msg_type in ("user", "assistant"):
++        if message.get("isVirtual"):
+             return False
+         return True
+-    if msg_type == 'system':
+-        return message.get('subtype') == 'local_command'
++    if msg_type == "system":
++        return message.get("subtype") == "local_command"
+     return False
+ 
+ 
+@@ -253,7 +247,7 @@
+ # mismatched ``<foo>x</bar>`` is left alone), optional attributes,
+ # multi-line content (``[\s\S]`` is the JS equivalent of ``re.DOTALL``).
+ # Trailing ``\n?`` strips the newline that wraps system-injected blocks.
+-_DISPLAY_TAG_RE = re.compile(r'<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?</\1>\n?')
++_DISPLAY_TAG_RE = re.compile(r"<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?</\1>\n?")
+ 
+ 
+ def _strip_display_tags(text: str) -> str:
+@@ -264,7 +258,7 @@
+     ``extract_title_text`` to skip pure-XML messages during bridge title
+     derivation.
+     """
+-    return _DISPLAY_TAG_RE.sub('', text).strip()
++    return _DISPLAY_TAG_RE.sub("", text).strip()
+ 
+ 
+ def extract_title_text(message: dict[str, Any]) -> str | None:
+@@ -276,32 +270,32 @@
+ 
+     Mirrors ``bridgeMessaging.ts:103-122``.
+     """
+-    if message.get('type') != 'user':
++    if message.get("type") != "user":
+         return None
+     # Match JS truthy semantics: ``isMeta``/``isCompactSummary`` are
+     # bool flags (False/None means "not meta"), but ``toolUseResult`` is
+     # a dict where even ``{}`` should disqualify (in JS ``{}`` is truthy;
+     # in Python ``{}`` is falsy, so we check for *presence*, not truthiness).
+-    if message.get('isMeta'):
++    if message.get("isMeta"):
+         return None
+-    if 'toolUseResult' in message and message.get('toolUseResult') is not None:
++    if "toolUseResult" in message and message.get("toolUseResult") is not None:
+         return None
+-    if message.get('isCompactSummary'):
++    if message.get("isCompactSummary"):
+         return None
+-    origin = message.get('origin')
+-    if isinstance(origin, dict) and origin.get('kind') != 'human':
++    origin = message.get("origin")
++    if isinstance(origin, dict) and origin.get("kind") != "human":
+         return None
+ 
+-    inner = message.get('message') or {}
+-    content = inner.get('content') if isinstance(inner, dict) else None
++    inner = message.get("message") or {}
++    content = inner.get("content") if isinstance(inner, dict) else None
+     raw: str | None
+     if isinstance(content, str):
+         raw = content
+     elif isinstance(content, list):
+         raw = None
+         for block in content:
+-            if isinstance(block, dict) and block.get('type') == 'text':
+-                raw = block.get('text')
++            if isinstance(block, dict) and block.get("type") == "text":
++                raw = block.get("text")
+                 if isinstance(raw, str):
+                     break
+                 raw = None
+@@ -324,20 +318,20 @@
+     Mirrors ``bridgeMessaging.ts:399-416``.
+     """
+     return {
+-        'type': 'result',
+-        'subtype': 'success',
+-        'duration_ms': 0,
+-        'duration_api_ms': 0,
+-        'is_error': False,
+-        'num_turns': 0,
+-        'result': '',
+-        'stop_reason': None,
+-        'total_cost_usd': 0.0,
+-        'usage': {},
+-        'modelUsage': {},
+-        'permission_denials': [],
+-        'session_id': session_id,
+-        'uuid': str(_uuid.uuid4()),
++        "type": "result",
++        "subtype": "success",
++        "duration_ms": 0,
++        "duration_api_ms": 0,
++        "is_error": False,
++        "num_turns": 0,
++        "result": "",
++        "stop_reason": None,
++        "total_cost_usd": 0.0,
++        "usage": {},
++        "modelUsage": {},
++        "permission_denials": [],
++        "session_id": session_id,
++        "uuid": str(_uuid.uuid4()),
+     }
+ 
+ 
+@@ -349,7 +343,7 @@
+     """Permission allow with possibly-rewritten input."""
+ 
+     updated_input: dict[str, Any] = field(default_factory=dict)
+-    behavior: str = 'allow'
++    behavior: str = "allow"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -357,7 +351,7 @@
+     """Permission deny with a user-visible message."""
+ 
+     message: str
+-    behavior: str = 'deny'
++    behavior: str = "deny"
+ 
+ 
+ # Discriminated union — callers branch on ``isinstance(...)``.
+@@ -370,33 +364,33 @@
+     Mirrors ``RemotePermissionResponse`` discriminated union from
+     ``remote/RemoteSessionManager.ts:40-48``.
+     """
+-    behavior = payload.get('behavior')
+-    if behavior == 'allow':
+-        updated = payload.get('updated_input') or payload.get('updatedInput') or {}
++    behavior = payload.get("behavior")
++    if behavior == "allow":
++        updated = payload.get("updated_input") or payload.get("updatedInput") or {}
+         if not isinstance(updated, dict):
+             raise ValueError(
+-                f'allow response: updated_input must be dict, got {type(updated).__name__}'
++                f"allow response: updated_input must be dict, got {type(updated).__name__}"
+             )
+         return AllowResponse(updated_input=updated)
+-    if behavior == 'deny':
+-        msg = payload.get('message')
++    if behavior == "deny":
++        msg = payload.get("message")
+         if not isinstance(msg, str):
+-            raise ValueError('deny response: message must be a string')
++            raise ValueError("deny response: message must be a string")
+         return DenyResponse(message=msg)
+-    raise ValueError(f'unknown permission behavior: {behavior!r}')
++    raise ValueError(f"unknown permission behavior: {behavior!r}")
+ 
+ 
+ __all__ = [
+-    'AllowResponse',
+-    'DenyResponse',
+-    'RemotePermissionResponse',
+-    'extract_title_text',
+-    'handle_ingress_message',
+-    'is_eligible_bridge_message',
+-    'is_sdk_control_request',
+-    'is_sdk_control_response',
+-    'is_sdk_message',
+-    'make_result_message',
+-    'normalize_control_message_keys',
+-    'remote_permission_response_from_dict',
++    "AllowResponse",
++    "DenyResponse",
++    "RemotePermissionResponse",
++    "extract_title_text",
++    "handle_ingress_message",
++    "is_eligible_bridge_message",
++    "is_sdk_control_request",
++    "is_sdk_control_response",
++    "is_sdk_message",
++    "make_result_message",
++    "normalize_control_message_keys",
++    "remote_permission_response_from_dict",
+ ]

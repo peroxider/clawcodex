@@ -1,0 +1,20 @@
+diff --git a/services/periodic/__init__.py b/services/periodic/__init__.py
+new file mode 100644
+--- /dev/null
++++ b/services/periodic/__init__.py	2026-06-22 09:03:26.209027 +0000
+@@ -0,0 +1,15 @@
++"""Facade — services/periodic/__init__.py has been moved to clawcodex_ext.
++
++Real implementation lives in ``clawcodex_ext.services.periodic``.
++Existing ``from src.services.periodic import …`` call sites continue to
++work during the migration.  New code should import from
++``clawcodex_ext.services.periodic`` directly.
++"""
++
++from clawcodex_ext.services.periodic import (  # noqa: F401
++    PeriodicDaemon,
++)
++
++__all__ = [
++    "PeriodicDaemon",
++]

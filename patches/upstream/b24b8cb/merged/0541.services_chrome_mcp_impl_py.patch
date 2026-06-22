@@ -1,0 +1,13 @@
+diff --git a/services/chrome/mcp_impl.py b/services/chrome/mcp_impl.py
+new file mode 100644
+--- /dev/null
++++ b/services/chrome/mcp_impl.py	2026-06-22 09:14:29.763444 +0000
+@@ -0,0 +1,8 @@
++"""Compatibility facade — see :mod:`clawcodex_ext.services.chrome.mcp_impl`."""
++
++from __future__ import annotations
++
++from clawcodex_ext.services.chrome.mcp_impl import *  # noqa: F401,F403
++from clawcodex_ext.services.chrome.mcp_impl import MCPChromeController  # noqa: F401
++
++__all__ = ["MCPChromeController"]

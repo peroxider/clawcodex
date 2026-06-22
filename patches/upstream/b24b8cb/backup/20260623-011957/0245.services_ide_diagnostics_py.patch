@@ -1,0 +1,11 @@
+diff --git a/services/ide/diagnostics.py b/services/ide/diagnostics.py
+--- a/services/ide/diagnostics.py	2026-06-18 10:10:16.281105 +0000
++++ b/services/ide/diagnostics.py	2026-06-22 09:03:25.379558 +0000
+@@ -3,6 +3,7 @@
+ Mirrors TypeScript ide/diagnostics.ts — collects LSP diagnostics from the IDE
+ and makes them available to the agent context.
+ """
++
+ from __future__ import annotations
+ 
+ import logging

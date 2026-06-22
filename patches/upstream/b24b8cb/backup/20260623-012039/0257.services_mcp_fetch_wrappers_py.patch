@@ -1,0 +1,14 @@
+diff --git a/services/mcp/fetch_wrappers.py b/services/mcp/fetch_wrappers.py
+--- a/services/mcp/fetch_wrappers.py	2026-06-18 10:10:16.371159 +0000
++++ b/services/mcp/fetch_wrappers.py	2026-06-22 09:03:26.035855 +0000
+@@ -60,7 +60,9 @@
+         pass
+     logger.warning(
+         "%s=%r is not a positive float; using default %s",
+-        name, raw, default,
++        name,
++        raw,
++        default,
+     )
+     return default
+ 

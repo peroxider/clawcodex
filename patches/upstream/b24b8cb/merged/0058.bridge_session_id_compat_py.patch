@@ -1,0 +1,43 @@
+diff --git a/bridge/session_id_compat.py b/bridge/session_id_compat.py
+--- a/bridge/session_id_compat.py	2026-06-18 10:10:15.952091 +0000
++++ b/bridge/session_id_compat.py	2026-06-22 09:03:22.349305 +0000
+@@ -18,8 +18,8 @@
+ 
+ from typing import Callable
+ 
+-_CSE_PREFIX = 'cse_'
+-_SESSION_PREFIX = 'session_'
++_CSE_PREFIX = "cse_"
++_SESSION_PREFIX = "session_"
+ 
+ _cse_shim_enabled: Callable[[], bool] | None = None
+ 
+@@ -47,7 +47,7 @@
+         return session_id
+     if _cse_shim_enabled is not None and not _cse_shim_enabled():
+         return session_id
+-    return _SESSION_PREFIX + session_id[len(_CSE_PREFIX):]
++    return _SESSION_PREFIX + session_id[len(_CSE_PREFIX) :]
+ 
+ 
+ def to_infra_session_id(session_id: str) -> str:
+@@ -61,7 +61,7 @@
+     """
+     if not session_id.startswith(_SESSION_PREFIX):
+         return session_id
+-    return _CSE_PREFIX + session_id[len(_SESSION_PREFIX):]
++    return _CSE_PREFIX + session_id[len(_SESSION_PREFIX) :]
+ 
+ 
+ def _reset_shim_gate_for_testing() -> None:
+@@ -75,7 +75,7 @@
+ 
+ 
+ __all__ = [
+-    'set_cse_shim_gate',
+-    'to_compat_session_id',
+-    'to_infra_session_id',
++    "set_cse_shim_gate",
++    "to_compat_session_id",
++    "to_infra_session_id",
+ ]

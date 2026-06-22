@@ -1,0 +1,21 @@
+diff --git a/services/pipe_ipc/permissions.py b/services/pipe_ipc/permissions.py
+new file mode 100644
+--- /dev/null
++++ b/services/pipe_ipc/permissions.py	2026-06-22 09:08:41.818862 +0000
+@@ -0,0 +1,16 @@
++"""Facade — services/pipe_ipc/permissions.py has been moved to clawcodex_ext.
++
++Real implementation lives in
++``clawcodex_ext.services.pipe_ipc.permissions``.  Existing
++``from src.services.pipe_ipc.permissions import …`` call sites continue
++to work during the migration.  New code should import from
++``clawcodex_ext.services.pipe_ipc.permissions`` directly.
++"""
++
++from clawcodex_ext.services.pipe_ipc.permissions import (  # noqa: F401
++    PipePermissionForwarder,
++)
++
++__all__ = [
++    "PipePermissionForwarder",
++]

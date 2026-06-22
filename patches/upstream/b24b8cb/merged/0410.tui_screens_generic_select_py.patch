@@ -1,0 +1,20 @@
+diff --git a/tui/screens/generic_select.py b/tui/screens/generic_select.py
+--- a/tui/screens/generic_select.py	2026-06-18 10:10:15.061443 +0000
++++ b/tui/screens/generic_select.py	2026-06-22 09:03:27.736129 +0000
+@@ -71,14 +71,10 @@
+             self._select.focus()
+ 
+     # ---- events ----
+-    def on_select_list_option_selected(
+-        self, event: SelectList.OptionSelected
+-    ) -> None:
++    def on_select_list_option_selected(self, event: SelectList.OptionSelected) -> None:
+         self.dismiss(str(event.option.value))
+ 
+-    def on_select_list_selection_cancelled(
+-        self, _: SelectList.SelectionCancelled
+-    ) -> None:
++    def on_select_list_selection_cancelled(self, _: SelectList.SelectionCancelled) -> None:
+         self.dismiss(None)
+ 
+ 

@@ -1,0 +1,9 @@
+diff --git a/assistant/session_chooser.py b/assistant/session_chooser.py
+--- a/assistant/session_chooser.py	2026-06-18 10:10:16.663796 +0000
++++ b/assistant/session_chooser.py	2026-06-22 09:03:22.104248 +0000
+@@ -34,4 +34,4 @@
+     return None
+ 
+ 
+-__all__ = ['AssistantSessionChooser']
++__all__ = ["AssistantSessionChooser"]

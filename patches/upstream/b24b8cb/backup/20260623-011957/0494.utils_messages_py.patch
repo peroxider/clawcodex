@@ -1,0 +1,49 @@
+diff --git a/utils/messages.py b/utils/messages.py
+--- a/utils/messages.py	2026-06-18 10:10:15.715946 +0000
++++ b/utils/messages.py	2026-06-22 09:03:28.376143 +0000
+@@ -18,7 +18,7 @@
+     ImageBlock,
+     content_block_to_dict,
+ )
+-from ..types.messages import (
++from clawcodex_ext.types.messages import (
+     AssistantMessage,
+     Message,
+     MessageContent,
+@@ -103,7 +103,8 @@
+     if not isinstance(content, list):
+         return 0
+     return sum(
+-        1 for b in content
++        1
++        for b in content
+         if getattr(b, "type", None) == "tool_use"
+         or (isinstance(b, dict) and b.get("type") == "tool_use")
+     )
+@@ -113,7 +114,7 @@
+     """Get messages after the last compact boundary."""
+     for i in range(len(messages) - 1, -1, -1):
+         if is_compact_boundary(messages[i]):
+-            return messages[i + 1:]
++            return messages[i + 1 :]
+     return list(messages)
+ 
+ 
+@@ -259,10 +260,13 @@
+                         existing = [{"type": "text", "text": existing}]
+                     messages[i + 1]["content"] = synthetic_blocks + existing
+                 else:
+-                    messages.insert(i + 1, {
+-                        "role": "user",
+-                        "content": synthetic_blocks,
+-                    })
++                    messages.insert(
++                        i + 1,
++                        {
++                            "role": "user",
++                            "content": synthetic_blocks,
++                        },
++                    )
+                 break
+ 
+ 

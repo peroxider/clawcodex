@@ -1,0 +1,11 @@
+diff --git a/utils/env.py b/utils/env.py
+--- a/utils/env.py	2026-06-18 10:10:15.671604 +0000
++++ b/utils/env.py	2026-06-22 09:03:28.276241 +0000
+@@ -10,6 +10,7 @@
+ constant frozenset rather than membership tests against a tuple gives
+ O(1) lookup and pins the set to "exactly these values."
+ """
++
+ from __future__ import annotations
+ 
+ import os

@@ -1,0 +1,11 @@
+diff --git a/command_system/output_style_command.py b/command_system/output_style_command.py
+--- a/command_system/output_style_command.py	2026-06-18 10:10:17.264220 +0000
++++ b/command_system/output_style_command.py	2026-06-22 09:03:22.496106 +0000
+@@ -11,6 +11,7 @@
+ the deprecation :class:`InteractiveOutcome` directly, so it behaves identically
+ on every surface (REPL, Textual, and ``NullUIHost`` headless).
+ """
++
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass

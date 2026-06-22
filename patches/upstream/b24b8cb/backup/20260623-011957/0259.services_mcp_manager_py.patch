@@ -1,0 +1,38 @@
+diff --git a/services/mcp/manager.py b/services/mcp/manager.py
+--- a/services/mcp/manager.py	2026-06-18 10:10:16.314874 +0000
++++ b/services/mcp/manager.py	2026-06-22 09:03:26.053918 +0000
+@@ -54,20 +54,14 @@
+         return
+ 
+     try:
+-        mcp_client, connection = await connect_to_server(
+-            name, config, auth_provider=auth_provider
+-        )
++        mcp_client, connection = await connect_to_server(name, config, auth_provider=auth_provider)
+ 
+         if not isinstance(connection, ConnectedMCPServer):
+-            on_connection_attempt(
+-                ConnectionAttemptResult(client=connection)
+-            )
++            on_connection_attempt(ConnectionAttemptResult(client=connection))
+             return
+ 
+         tools_raw = await mcp_client.list_tools()
+-        wrapped_tools = wrap_mcp_tools_for_server(
+-            connection, tools_raw, mcp_client
+-        )
++        wrapped_tools = wrap_mcp_tools_for_server(connection, tools_raw, mcp_client)
+ 
+         resources: list[Any] = []
+         if connection.capabilities.resources:
+@@ -107,9 +101,7 @@
+ 
+     async def _run(name: str, config: ScopedMcpServerConfig) -> None:
+         async with semaphore:
+-            await _process_server(
+-                name, config, on_connection_attempt, auth_provider=auth_provider
+-            )
++            await _process_server(name, config, on_connection_attempt, auth_provider=auth_provider)
+ 
+     await asyncio.gather(
+         *[_run(name, config) for name, config in servers],

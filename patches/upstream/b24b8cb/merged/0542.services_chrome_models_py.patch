@@ -1,0 +1,16 @@
+diff --git a/services/chrome/models.py b/services/chrome/models.py
+new file mode 100644
+--- /dev/null
++++ b/services/chrome/models.py	2026-06-22 09:14:30.503954 +0000
+@@ -0,0 +1,11 @@
++"""Compatibility facade — see :mod:`clawcodex_ext.services.chrome.models`."""
++
++from __future__ import annotations
++
++from clawcodex_ext.services.chrome.models import *  # noqa: F401,F403
++from clawcodex_ext.services.chrome.models import (  # noqa: F401
++    ChromeActionResult,
++    ChromeActionType,
++)
++
++__all__ = ["ChromeActionResult", "ChromeActionType"]

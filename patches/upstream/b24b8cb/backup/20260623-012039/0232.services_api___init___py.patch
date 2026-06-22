@@ -1,0 +1,41 @@
+diff --git a/services/api/__init__.py b/services/api/__init__.py
+--- a/services/api/__init__.py	2026-06-18 10:10:16.259304 +0000
++++ b/services/api/__init__.py	2026-06-22 09:03:23.981836 +0000
+@@ -1,35 +1,2 @@
+-from .claude import StreamEvent, add_cache_breakpoints, call_model, tool_to_api_schema
+-from .errors import (
+-    FallbackTriggeredError,
+-    MaxOutputTokensError,
+-    OverloadedError,
+-    PromptTooLongError,
+-    RateLimitError,
+-    categorize_retryable_api_error,
+-)
+-from .logging import NonNullableUsage, accumulate_usage, update_usage
+-from .provider_config import ProviderOverride, resolve_agent_provider
+-from .retry import CannotRetryError, RetryContext, with_retry
+-from .tool_normalization import normalize_tool_arguments
+-
+-__all__ = [
+-    "CannotRetryError",
+-    "FallbackTriggeredError",
+-    "MaxOutputTokensError",
+-    "NonNullableUsage",
+-    "OverloadedError",
+-    "PromptTooLongError",
+-    "ProviderOverride",
+-    "RateLimitError",
+-    "RetryContext",
+-    "StreamEvent",
+-    "accumulate_usage",
+-    "add_cache_breakpoints",
+-    "call_model",
+-    "categorize_retryable_api_error",
+-    "normalize_tool_arguments",
+-    "resolve_agent_provider",
+-    "tool_to_api_schema",
+-    "update_usage",
+-    "with_retry",
+-]
++"""Facade — services/api/ moved to clawcodex_ext/services/api/."""
++from clawcodex_ext.services.api import *  # noqa: F401,F403

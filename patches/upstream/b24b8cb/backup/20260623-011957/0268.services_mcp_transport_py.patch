@@ -1,0 +1,52 @@
+diff --git a/services/mcp/transport.py b/services/mcp/transport.py
+--- a/services/mcp/transport.py	2026-06-18 10:10:16.331635 +0000
++++ b/services/mcp/transport.py	2026-06-22 09:03:26.149504 +0000
+@@ -87,25 +87,20 @@
+ 
+ class McpTransport(ABC):
+     @abstractmethod
+-    async def start(self) -> None:
+-        ...
++    async def start(self) -> None: ...
+ 
+     @abstractmethod
+-    async def send(self, message: JsonRpcMessage) -> None:
+-        ...
++    async def send(self, message: JsonRpcMessage) -> None: ...
+ 
+     @abstractmethod
+-    async def receive(self) -> JsonRpcMessage | None:
+-        ...
++    async def receive(self) -> JsonRpcMessage | None: ...
+ 
+     @abstractmethod
+-    async def close(self) -> None:
+-        ...
++    async def close(self) -> None: ...
+ 
+     @property
+     @abstractmethod
+-    def is_connected(self) -> bool:
+-        ...
++    def is_connected(self) -> bool: ...
+ 
+ 
+ class _SdkTransportAdapter(McpTransport):
+@@ -250,6 +245,7 @@
+         )
+         return stdio_client(params)
+ 
++
+ class HttpTransport(_SdkTransportAdapter):
+     """Streamable HTTP transport (POST + optional SSE response channel).
+ 
+@@ -396,7 +392,8 @@
+                 "WebSocketTransport received %d header(s) but the mcp SDK's "
+                 "websocket_client does not accept headers; they will NOT be "
+                 "sent on the WebSocket handshake. Affected URL: %s",
+-                len(self._headers), self._url,
++                len(self._headers),
++                self._url,
+             )
+ 
+     def _open(self) -> Any:

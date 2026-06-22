@@ -1,0 +1,133 @@
+diff --git a/bridge/debug_utils.py b/bridge/debug_utils.py
+--- a/bridge/debug_utils.py	2026-06-18 10:10:15.886344 +0000
++++ b/bridge/debug_utils.py	2026-06-22 09:03:22.220233 +0000
+@@ -20,15 +20,15 @@
+ DEBUG_MSG_LIMIT = 2000
+ 
+ _SECRET_FIELD_NAMES = (
+-    'session_ingress_token',
+-    'environment_secret',
+-    'access_token',
+-    'secret',
+-    'token',
++    "session_ingress_token",
++    "environment_secret",
++    "access_token",
++    "secret",
++    "token",
+ )
+ 
+ _SECRET_PATTERN = re.compile(
+-    r'"(' + '|'.join(_SECRET_FIELD_NAMES) + r')"\s*:\s*"([^"]*)"',
++    r'"(' + "|".join(_SECRET_FIELD_NAMES) + r')"\s*:\s*"([^"]*)"',
+ )
+ 
+ _REDACT_MIN_LENGTH = 16
+@@ -57,10 +57,10 @@
+ 
+     Mirrors TS ``debugTruncate`` on ``debugUtils.ts:37-43``.
+     """
+-    flat = s.replace('\n', '\\n')
++    flat = s.replace("\n", "\\n")
+     if len(flat) <= DEBUG_MSG_LIMIT:
+         return flat
+-    return flat[:DEBUG_MSG_LIMIT] + f'... ({len(flat)} chars)'
++    return flat[:DEBUG_MSG_LIMIT] + f"... ({len(flat)} chars)"
+ 
+ 
+ def debug_body(data: Any) -> str:
+@@ -86,7 +86,7 @@
+     s = redact_secrets(raw)
+     if len(s) <= DEBUG_MSG_LIMIT:
+         return s
+-    return s[:DEBUG_MSG_LIMIT] + f'... ({len(s)} chars)'
++    return s[:DEBUG_MSG_LIMIT] + f"... ({len(s)} chars)"
+ 
+ 
+ def describe_http_error(err: object) -> str:
+@@ -101,16 +101,16 @@
+     returns just ``str(err)`` when the response isn't structured.
+     """
+     msg = str(err)
+-    response = getattr(err, 'response', None)
++    response = getattr(err, "response", None)
+     if response is None:
+         return msg
+     try:
+-        data = response.json() if hasattr(response, 'json') else None
++        data = response.json() if hasattr(response, "json") else None
+     except Exception:
+         return msg
+     detail = extract_error_detail(data)
+     if detail:
+-        return f'{msg}: {detail}'
++        return f"{msg}: {detail}"
+     return msg
+ 
+ 
+@@ -121,14 +121,14 @@
+     ``None`` for non-HTTP errors (network failures, timeouts without a
+     response).
+     """
+-    response = getattr(err, 'response', None)
++    response = getattr(err, "response", None)
+     if response is None:
+         return None
+-    status = getattr(response, 'status_code', None)
++    status = getattr(response, "status_code", None)
+     if isinstance(status, int):
+         return status
+     # httpx uses ``status_code``; some libraries use ``status``.
+-    status = getattr(response, 'status', None)
++    status = getattr(response, "status", None)
+     if isinstance(status, int):
+         return status
+     return None
+@@ -142,12 +142,12 @@
+     """
+     if not isinstance(data, dict):
+         return None
+-    message = data.get('message')
++    message = data.get("message")
+     if isinstance(message, str):
+         return message
+-    error = data.get('error')
++    error = data.get("error")
+     if isinstance(error, dict):
+-        inner = error.get('message')
++        inner = error.get("message")
+         if isinstance(inner, str):
+             return inner
+     return None
+@@ -167,20 +167,19 @@
+     """
+     if debug_msg:
+         logger.debug(debug_msg)
+-    extra: dict[str, Any] = {'reason': reason}
++    extra: dict[str, Any] = {"reason": reason}
+     if v2 is not None:
+-        extra['v2'] = v2
+-    logger.info('bridge_skip reason=%s%s', reason,
+-                f' v2={v2}' if v2 is not None else '')
++        extra["v2"] = v2
++    logger.info("bridge_skip reason=%s%s", reason, f" v2={v2}" if v2 is not None else "")
+ 
+ 
+ __all__ = [
+-    'DEBUG_MSG_LIMIT',
+-    'debug_body',
+-    'debug_truncate',
+-    'describe_http_error',
+-    'extract_error_detail',
+-    'extract_http_status',
+-    'log_bridge_skip',
+-    'redact_secrets',
++    "DEBUG_MSG_LIMIT",
++    "debug_body",
++    "debug_truncate",
++    "describe_http_error",
++    "extract_error_detail",
++    "extract_http_status",
++    "log_bridge_skip",
++    "redact_secrets",
+ ]

@@ -1,0 +1,10 @@
+diff --git a/tool_system/tools/bash/__init__.py b/tool_system/tools/bash/__init__.py
+deleted file mode 100644
+--- a/tool_system/tools/bash/__init__.py	2026-06-18 10:10:16.918711 +0000
++++ /dev/null
+@@ -1,5 +0,0 @@
+-"""Bash tool package -- shell command execution with safety analysis."""
+-
+-from .bash_tool import BashTool
+-
+-__all__ = ["BashTool"]

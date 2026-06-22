@@ -1,0 +1,329 @@
+diff --git a/repl/live_status.py b/repl/live_status.py
+--- a/repl/live_status.py	2026-06-18 10:10:15.403886 +0000
++++ b/repl/live_status.py	2026-06-22 00:50:05.521516 +0000
+@@ -34,8 +34,9 @@
+ import asyncio
+ import threading
+ import time
++import warnings
+ from contextlib import contextmanager
+-from typing import Callable, Iterator
++from typing import Any, Callable, Iterator
+ 
+ from src.utils.format import format_duration, format_number
+ 
+@@ -68,7 +69,16 @@
+ # avoids pulling rich's spinner internals across a process boundary and
+ # keeps the live region self-contained.
+ _SPINNER_FRAMES: tuple[str, ...] = (
+-    "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏",
++    "⠋",
++    "⠙",
++    "⠹",
++    "⠸",
++    "⠼",
++    "⠴",
++    "⠦",
++    "⠧",
++    "⠇",
++    "⠏",
+ )
+ _FRAME_INTERVAL = 0.08
+ # Mirrors ``SHOW_TOKENS_AFTER_MS`` in
+@@ -108,8 +118,11 @@
+         on_cancel: Callable[[], None] | None = None,
+         on_submit: Callable[[str], None] | None = None,
+         on_expand: Callable[[], None] | None = None,
++        on_background: Callable[[], None] | None = None,
++        on_permission_cycle: Callable[[], None] | None = None,
+         completer=None,
+         verbose: bool = False,
++        history: Any = None,
+     ) -> None:
+         if not _HAS_PROMPT_TOOLKIT:
+             raise RuntimeError(
+@@ -120,6 +133,14 @@
+         self._on_cancel = on_cancel
+         self._on_submit = on_submit
+         self._on_expand = on_expand
++        self._on_background = on_background
++        # Preferred Shift+Tab handler. When set, the s-tab key binding
++        # invokes this callback (typically ``repl._apply_permission_mode_cycle``,
++        # which routes through ``RuntimePermissionController``). When unset,
++        # the binding falls back to the legacy ``getattr(on_submit, "__self__")``
++        # path with a one-shot ``DeprecationWarning`` — the legacy path
++        # exists for downstream callers that haven't migrated yet.
++        self._on_permission_cycle = on_permission_cycle
+         # Optional ``prompt_toolkit.completion.Completer``. When set,
+         # the live input buffer surfaces completions (e.g. ``@`` file
+         # mentions, slash commands) in a popup above the input row —
+@@ -144,6 +165,13 @@
+         # Force-show the elapsed/token suffix before the 30s threshold.
+         # Maps to the TS ``verbose`` prop in ``SpinnerWithVerb``.
+         self._verbose = verbose
++        # Shared prompt ``History`` (typically the same ``FileHistory``
++        # used by the foreground ``PromptSession``). When set, the input
++        # buffer supports up/down history navigation during agent work.
++        self._history = history
++        # Unsubmitted buffer text captured at teardown so ``chat()`` can
++        # enqueue it rather than losing what the user was typing.
++        self._pending_text = ""
+ 
+     # ---- public API ----
+     def update(self, message: str) -> None:
+@@ -203,6 +231,7 @@
+         on_cancel = self._on_cancel
+         on_submit = self._on_submit
+         on_expand = self._on_expand
++        on_background = self._on_background
+         completer = self._completer
+         # Preserve the timer / token counter across the pause so the
+         # spinner picks up where it left off after the foreground prompt
+@@ -217,6 +246,7 @@
+             self._on_cancel = on_cancel
+             self._on_submit = on_submit
+             self._on_expand = on_expand
++            self._on_background = on_background
+             self._completer = completer
+             self._frame_index = 0
+             self._started_at = started_at
+@@ -249,6 +279,25 @@
+             except Exception:
+                 pass
+ 
++        @bindings.add("c-b")
++        def _on_background_key(event):  # type: ignore[no-untyped-def]
++            """Ctrl+B: send the agent to the background (REPL mode).
++
++            When the user presses Ctrl+B during an active agent run,
++            this invokes the ``on_background`` callback (if set), which
++            signals the REPL's ``chat()`` to raise a
++            :class:`BackgroundEscape` and fork the agent into a
++            background process.  When ``on_background`` is ``None``
++            (e.g. TUI mode), the binding is a no-op.
++            """
++            cb = self._on_background
++            if cb is None:
++                return
++            try:
++                cb()
++            except Exception:
++                pass
++
+         @bindings.add("c-m")
+         def _enter(event):  # type: ignore[no-untyped-def]
+             """Enter: accept a highlighted completion, else submit.
+@@ -279,6 +328,7 @@
+             # region instead of fighting the spinner row's redraw.
+             try:
+                 from prompt_toolkit.application import run_in_terminal
++
+                 run_in_terminal(cb)
+             except Exception:
+                 try:
+@@ -286,6 +336,110 @@
+                 except Exception:
+                     pass
+ 
++        @bindings.add("c-t")
++        def _on_toggle_thinking(event):  # type: ignore[no-untyped-def]
++            """Ctrl+T: toggle thinking content visibility during agent work."""
++            on_submit = self._on_submit
++            if on_submit is None:
++                return
++            repl = getattr(on_submit, "__self__", None)
++            if repl is not None and hasattr(repl, "_thinking_visible"):
++                repl._thinking_visible = not repl._thinking_visible
++                label = "shown" if repl._thinking_visible else "hidden"
++                try:
++                    from prompt_toolkit.application import run_in_terminal
++
++                    run_in_terminal(
++                        lambda: repl.console.print(f"[dim]Thinking content: {label}[/dim]")
++                    )
++                except Exception:
++                    try:
++                        repl.console.print(f"[dim]Thinking content: {label}[/dim]")
++                    except Exception:
++                        pass
++
++        @bindings.add("s-tab")
++        def _cycle_permission_mode(event):  # type: ignore[no-untyped-def]
++            """Shift+Tab: cycle permission modes during agent work.
++
++            Delegates to the REPL's permission context if available.
++            """
++            # Preferred path: caller-supplied callback (e.g.
++            # ``repl._apply_permission_mode_cycle``) routes through the
++            # runtime permission controller and handles thread safety,
++            # AppState listener firing, and UI notification in one place.
++            cb = self._on_permission_cycle
++            if cb is not None:
++                try:
++                    cb()
++                except Exception:
++                    pass
++                return
++
++            # Legacy fallback: ``getattr(on_submit, "__self__")`` reaches
++            # the REPL instance via the bound method's reference. Kept
++            # for backward compatibility with downstream callers that
++            # haven't migrated to ``on_permission_cycle``; the warning
++            # fires once per ``LiveStatus`` instance, not on every
++            # Shift+Tab press, so the log stays quiet at runtime.
++            try:
++                from src.permissions import cycle_permission_mode
++                from src.permissions.types import ToolPermissionContext
++
++                on_submit = self._on_submit
++                if on_submit is not None:
++                    repl = getattr(on_submit, "__self__", None)
++                    if repl is not None and hasattr(repl, "_permission_mode"):
++                        if not getattr(self, "_legacy_perm_cycle_warned", False):
++                            self._legacy_perm_cycle_warned = True
++                            warnings.warn(
++                                "LiveStatus Shift+Tab falling back to legacy "
++                                "on_submit.__self__ path; pass on_permission_cycle "
++                                "explicitly to silence this DeprecationWarning.",
++                                DeprecationWarning,
++                                stacklevel=2,
++                            )
++                        current_mode = repl._permission_mode
++                        is_bypass_available = getattr(
++                            repl, "_is_bypass_permissions_mode_available", False
++                        )
++                        cycle_ctx = ToolPermissionContext(
++                            mode=current_mode,
++                            is_bypass_permissions_mode_available=is_bypass_available,
++                        )
++                        next_mode, next_ctx = cycle_permission_mode(cycle_ctx)
++                        repl._permission_mode = next_mode
++                        if repl.tool_context is not None:
++                            repl.tool_context.permission_context = next_ctx
++                            if next_mode == "bypassPermissions":
++                                repl.tool_context.permission_handler = lambda _tn, _msg, _sug: (
++                                    True,
++                                    False,
++                                )
++                                repl.tool_context.allow_docs = True
++                            else:
++                                repl.tool_context.permission_handler = (
++                                    repl._handle_permission_request
++                                )
++                                repl.tool_context.allow_docs = False
++                        self.update(f"[mode: {next_mode}]")
++            except Exception:
++                pass
++
++        @bindings.add("up")
++        def _history_backward(event):  # type: ignore[no-untyped-def]
++            """Up arrow: navigate to previous history entry."""
++            buf = event.current_buffer
++            if buf.history:
++                buf.history_backward()
++
++        @bindings.add("down")
++        def _history_forward(event):  # type: ignore[no-untyped-def]
++            """Down arrow: navigate to next history entry."""
++            buf = event.current_buffer
++            if buf.history:
++                buf.history_forward()
++
+         # Editable input field — accepts keystrokes during agent work and
+         # queues submissions back to the REPL via ``on_submit``.
+         def _accept(buf: "Buffer") -> bool:
+@@ -312,6 +466,7 @@
+             accept_handler=_accept,
+             completer=self._completer,
+             complete_while_typing=self._completer is not None,
++            history=self._history,
+         )
+ 
+         spinner_control = FormattedTextControl(
+@@ -409,6 +564,31 @@
+             except Exception:
+                 pass
+ 
++    @staticmethod
++    def _parse_rich_markup(text: str, base_style: str = "") -> list[tuple[str, str]]:
++        """Convert Rich ``[tag]text[/tag]`` markup to prompt_toolkit style tuples.
++
++        Rich uses ``[yellow]text[/yellow]`` to colour text; prompt_toolkit's
++        ``FormattedText`` expects ``(style, text)`` tuples instead.  This parser
++        handles the subset of Rich markup commonly used by caller code so that
++        branded messages (e.g. ``[yellow]Cancelling…[/yellow]``) render with the
++        intended colour rather than leaking the tag source.
++        """
++        import re
++
++        _rich_tag_re = re.compile(r"\[(\w+(?:[ -]\w+)*)\](.*?)\[/\1\]")
++        parts: list[tuple[str, str]] = []
++        pos = 0
++        for m in _rich_tag_re.finditer(text):
++            if m.start() > pos:
++                parts.append((base_style, text[pos : m.start()]))
++            tag_style = f"{base_style} {m.group(1)}" if base_style else m.group(1)
++            parts.append((tag_style, m.group(2)))
++            pos = m.end()
++        if pos < len(text):
++            parts.append((base_style, text[pos:]))
++        return parts
++
+     def _render_spinner_text(self) -> "FormattedText":
+         with self._lock:
+             message = self._message
+@@ -419,27 +599,31 @@
+         self._frame_index += 1
+ 
+         # Spinner suffix layout:
+-        # ``(esc to interrupt · enter to queue · 12s · ↓ 1.2k tokens)``.
+-        # ``esc to interrupt · enter to queue`` is always shown — it tells
+-        # the user how to cancel the run and that typing-while-thinking
+-        # queues the next prompt (a Python-only affordance not present in
+-        # the TS reference's ``SpinnerAnimationRow.tsx``). Timer + token
+-        # parts mirror the TS suffix and stay gated by 30s elapsed (or
+-        # ``verbose``); tokens additionally require a non-zero count.
++        # ``(esc to interrupt · ctrl+b background · enter to queue · 12s · ↓ 1.2k tokens)``.
++        # ``esc to interrupt · ctrl+b background · enter to queue`` is always shown —
++        # it tells the user how to cancel the run, send it to the background,
++        # and that typing-while-thinking queues the next prompt (a Python-only
++        # affordance not present in the TS reference's ``SpinnerAnimationRow.tsx``).
++        # Timer + token parts mirror the TS suffix and stay gated by 30s elapsed
++        # (or ``verbose``); tokens additionally require a non-zero count.
+         elapsed_ms = (time.monotonic() - started_at) * 1000 if started_at else 0.0
+         wants_timer = verbose or elapsed_ms > _SHOW_TIMER_AFTER_MS
+-        suffix = "  (esc to interrupt · enter to queue"
++        suffix = "  (esc to interrupt · ctrl+b background · enter to queue"
+         if wants_timer:
+             suffix += f" · {format_duration(elapsed_ms)}"
+             if tokens > 0:
+                 suffix += f" · ↓ {format_number(tokens)} tokens"
+         suffix += ")"
+ 
++        # Parse Rich-style markup so ``[yellow]Cancelling…[/yellow]`` is
++        # rendered as yellow text instead of leaking the tag source.
++        status_parts = self._parse_rich_markup(message, "class:status")
++
+         return FormattedText(
+             [
+                 ("class:spinner", frame),
+                 ("", " "),
+-                ("class:status", message),
++                *status_parts,
+                 ("class:hint", suffix),
+             ]
+         )
+@@ -456,6 +640,13 @@
+     def _stop(self) -> None:
+         app = self._app
+         loop = self._loop
++
++        # Capture unsubmitted buffer text *before* the Application is
++        # torn down so ``chat()`` can preserve it across turns.
++        if self._input_buffer is not None:
++            raw = self._input_buffer.text
++            self._pending_text = raw if raw and raw.strip() else ""
++
+         if app is not None and loop is not None and not loop.is_closed():
+             try:
+                 loop.call_soon_threadsafe(app.exit)
