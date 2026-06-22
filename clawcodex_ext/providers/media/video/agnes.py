@@ -122,7 +122,7 @@ class AgnesVideoProvider(VideoProvider):
             if val is not None:
                 body[key] = val
 
-        resp = self._client.post("/v1/videos", json=body)
+        resp = self._client.post("/videos", json=body)
         resp.raise_for_status()
         data = resp.json()
 
@@ -147,7 +147,7 @@ class AgnesVideoProvider(VideoProvider):
         Raises:
             httpx.HTTPStatusError: On API error.
         """
-        resp = self._client.get(f"/v1/videos/{task_id}")
+        resp = self._client.get(f"/videos/{task_id}")
         resp.raise_for_status()
         data = resp.json()
 
@@ -180,7 +180,7 @@ class AgnesVideoProvider(VideoProvider):
             RuntimeError: If the task hasn't completed yet.
             httpx.HTTPStatusError: On API error.
         """
-        resp = self._client.get(f"/v1/videos/{task_id}")
+        resp = self._client.get(f"/videos/{task_id}")
         resp.raise_for_status()
         data = resp.json()
 
