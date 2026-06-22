@@ -122,6 +122,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             return
 
         # ---- Session: create or resume ----
+        self._engine_messages: list[Any] = []
         self._resume_session_id = resume_session_id
         self._session_metadata: dict[str, Any] | None = None  # S-R4-M: cached metadata
         if session is not None:
@@ -138,6 +139,10 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     f"Model: {loaded_session.model}[/dim]"
                 )
                 self._sync_conversation_from_transcript(resume_session_id)
+                # Sync historical messages into _engine_messages so the
+                # QueryEngine receives the full conversation context
+                # (not just new messages from this REPL session).
+                self._engine_messages = list(self.session.conversation.messages or [])
                 # S-R4-M: load and display session metadata
                 self._load_session_metadata(resume_session_id)
             else:
@@ -163,7 +168,6 @@ class ClawCodexExtREPL(ClawcodexREPL):
             provider=self.provider,
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
         )
-        self._engine_messages: list[Any] = []
 
         from src.permissions.types import ToolPermissionContext
         from src.tool_system.context import ToolContext
