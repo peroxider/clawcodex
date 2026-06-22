@@ -17,6 +17,7 @@ def _make_repl(tmp_path):
     repl.tool_context = SimpleNamespace(workspace_root=tmp_path, outbox=[])
     repl._cron_active_tasks = {}
     repl._queued_prompts = deque()
+    repl._cron_queued_prompts = deque()
     repl._queued_prompts_lock = threading.Lock()
     return repl
 
@@ -33,8 +34,9 @@ def test_cron_prompt_claims_and_completes_run(tmp_path) -> None:
     )
 
     repl._drain_cron_outbox()
-    queued = repl._pop_queued_prompt()
-    task_id = repl._extract_cron_task_id(queued or "")
+    result = repl._pop_queued_prompt()
+    queued = result[0] if result else ""
+    task_id = repl._extract_cron_task_id(queued)
 
     assert task_id == "task1"
     repl._claim_cron_task(task_id)

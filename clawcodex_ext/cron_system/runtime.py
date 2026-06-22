@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from .models import CronTask, is_cron_disabled, load_jitter_config
 from .runs import CronRun
@@ -34,12 +34,23 @@ def attach_cron_runtime(
     *,
     autostart: bool = False,
     is_killed: Any | None = None,
+    is_loading: Callable[[], bool] | None = None,
+    assistant_mode: bool = False,
 ) -> CronScheduler:
     """Wire Cron tools + scheduler to a session context.
 
     ``is_killed`` is the F-22-G1 kill switch. When None, falls back to
     ``is_cron_disabled`` (reads ``CLAWCODEX_DISABLE_CRON``). When provided,
     it takes precedence — daemon callers can pass a GrowthBook-style flag.
+
+    ``is_loading`` is polled before each scheduler tick. When it returns
+    True (and ``assistant_mode`` is False), the entire tick is skipped —
+    cron fires are deferred until the agent is idle. Mirrors TS
+    ``isLoading`` gate in ``cronScheduler.ts``.
+
+    ``assistant_mode`` bypasses the ``is_loading`` gate so cron fires
+    proceed even while the agent is busy. Used by assistant/daemon
+    sub-modes where cron must not be starved.
     """
     if is_killed is None:
         is_killed = is_cron_disabled
@@ -103,6 +114,8 @@ def attach_cron_runtime(
         on_missed_event=_log_event,
         on_expired_event=_log_event,
         session_store=session_store,
+        is_loading=is_loading,
+        assistant_mode=assistant_mode,
     )
     setattr(ctx, "cron_scheduler", scheduler)
     setattr(ctx, "cron_jitter_config", lambda: load_jitter_config(ctx.workspace_root))

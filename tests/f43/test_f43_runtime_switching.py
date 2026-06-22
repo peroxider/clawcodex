@@ -52,7 +52,7 @@ def test_runtime_context_build_uses_model_resolver(monkeypatch, tmp_path: Path) 
     )
     monkeypatch.setattr(
         "clawcodex_ext.runtime.context.attach_cron_runtime",
-        lambda runtime: None,
+        lambda runtime, **kwargs: None,
     )
 
     options = RuntimeOptions(

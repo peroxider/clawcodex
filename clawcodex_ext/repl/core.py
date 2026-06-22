@@ -613,7 +613,11 @@ class ClawcodexREPL:
             ),
         )
         if _HAS_CRON:
-            attach_cron_runtime(self.tool_context, autostart=True)
+            attach_cron_runtime(
+                self.tool_context,
+                autostart=True,
+                is_loading=lambda: self._active_live_status is not None,
+            )
         self._cron_active_tasks: dict[str, str] = {}
         self.tool_context.ask_user = self._ask_user_questions
         # Permission handler with status control for proper input handling
@@ -670,6 +674,7 @@ class ClawcodexREPL:
         # under the per-turn lock. See ``clear_pending_turn_buffers`` for
         # the turn-end reset that runs even on small queues.
         self._queued_prompts: deque[str] = deque(maxlen=100)
+        self._cron_queued_prompts: deque[str] = deque(maxlen=100)
         self._queued_prompts_lock = threading.Lock()
         self._background_outputs: list[str] = []
         self._background_outputs_lock = threading.Lock()
@@ -2171,7 +2176,7 @@ class ClawcodexREPL:
             return list(get_built_in_agents())
 
     def _enqueue_prompt(self, text: str) -> None:
-        """Append a user-typed prompt to the queue from any thread."""
+        """Append a user-typed prompt to the user queue from any thread."""
 
         text = (text or "").strip()
         if not text:
@@ -2179,11 +2184,30 @@ class ClawcodexREPL:
         with self._queued_prompts_lock:
             self._queued_prompts.append(text)
 
-    def _pop_queued_prompt(self) -> str | None:
+    def _enqueue_cron_prompt(self, text: str) -> None:
+        """Append a cron-generated prompt to the cron queue from any thread.
+
+        Cron prompts are consumed with lower priority than user input —
+        see ``_pop_queued_prompt``.
+        """
+        text = (text or "").strip()
+        if not text:
+            return
         with self._queued_prompts_lock:
-            if not self._queued_prompts:
-                return None
-            return self._queued_prompts.popleft()
+            self._cron_queued_prompts.append(text)
+
+    def _pop_queued_prompt(self) -> tuple[str, str] | None:
+        """Pop next prompt. User queue has priority over cron queue.
+
+        Returns (text, source) where source is ``'user'`` or ``'cron'``,
+        or None if both queues are empty.
+        """
+        with self._queued_prompts_lock:
+            if self._queued_prompts:
+                return (self._queued_prompts.popleft(), "user")
+            if self._cron_queued_prompts:
+                return (self._cron_queued_prompts.popleft(), "cron")
+            return None
 
     def _ensure_background_output_queue(self) -> None:
         if not hasattr(self, "_background_outputs_lock"):
@@ -2286,7 +2310,7 @@ class ClawcodexREPL:
                     if notification:
                         drained.append(notification)
         for text in drained:
-            self._enqueue_prompt(text)
+            self._enqueue_cron_prompt(text)
 
     def _extract_cron_task_id(self, user_input: str) -> str | None:
         first_line = user_input.split("\n", 1)[0]
@@ -2348,7 +2372,7 @@ class ClawcodexREPL:
 
     def _queued_count(self) -> int:
         with self._queued_prompts_lock:
-            return len(self._queued_prompts)
+            return len(self._queued_prompts) + len(self._cron_queued_prompts)
 
     def clear_pending_turn_buffers(self) -> None:
         """Reset per-turn transient UI buffers at the end of each chat() turn.
@@ -3080,15 +3104,16 @@ class ClawcodexREPL:
                 self._refresh_completer()
                 self._drain_cron_outbox()
                 self._drain_background_outputs()
-                queued = self._pop_queued_prompt()
-                if queued is not None:
+                result = self._pop_queued_prompt()
+                if result is not None:
+                    queued, source = result
                     # Echo queued submissions with a dim background so
                     # they read as a discrete user-message block when
                     # they land in scrollback alongside the agent's
                     # transcript output.
                     # For cron prompts, only display the header line (first line)
                     # to avoid showing the prelude text to the user.
-                    if queued.startswith("✻ Running scheduled task"):
+                    if source == "cron":
                         first_line = queued.split("\n")[0]
                         self._echo_user_input(first_line)
                     else:
