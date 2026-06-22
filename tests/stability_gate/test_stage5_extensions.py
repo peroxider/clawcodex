@@ -461,6 +461,50 @@ class TestStage5ExtAgent:
         assert SPECIES is not None
         assert StoredCompanion is not None
 
+    def test_phase2c_memdir_facade(self):
+        """Phase 2-C: 8 src/memdir/ files → clawcodex_ext/memdir/"""
+        from src.memdir.find_relevant_memories import (
+            MAX_RELEVANT_MEMORIES,
+            RelevantMemory,
+            find_relevant_memories,
+        )
+        from src.memdir.memdir import (
+            ENTRYPOINT_NAME,
+            EntrypointTruncation,
+            build_memory_prompt,
+            load_memory_prompt,
+        )
+        from src.memdir.memory_age import memory_age_days
+        from src.memdir.memory_scan import format_memory_manifest, scan_memory_files
+        from src.memdir.memory_types import MEMORY_TYPES, MemoryType, parse_memory_type
+        from src.memdir.paths import get_memory_base_dir, is_auto_memory_enabled
+        from src.memdir.team_mem_paths import (
+            PathTraversalError,
+            get_team_mem_path,
+            is_team_memory_enabled,
+        )
+        from src.memdir.team_mem_prompts import build_combined_memory_prompt
+
+        assert MAX_RELEVANT_MEMORIES is not None
+        assert RelevantMemory is not None
+        assert callable(find_relevant_memories)
+        assert ENTRYPOINT_NAME is not None
+        assert EntrypointTruncation is not None
+        assert callable(build_memory_prompt)
+        assert callable(load_memory_prompt)
+        assert callable(memory_age_days)
+        assert callable(format_memory_manifest)
+        assert callable(scan_memory_files)
+        assert MEMORY_TYPES is not None
+        assert MemoryType is not None
+        assert callable(parse_memory_type)
+        assert callable(get_memory_base_dir)
+        assert callable(is_auto_memory_enabled)
+        assert PathTraversalError is not None
+        assert callable(get_team_mem_path)
+        assert callable(is_team_memory_enabled)
+        assert callable(build_combined_memory_prompt)
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""
