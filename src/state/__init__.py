@@ -1,18 +1,17 @@
-"""Python package placeholder for the archived `state` subsystem."""
+"""Compatibility facade — see :mod:`clawcodex_ext.state`.
+
+Module-identity swap. ``src.state.__init__`` is consumed by tooling that
+inspects the package's archive metadata (e.g. ``from src.state import
+ARCHIVE_NAME``); the canonical implementation is registered under the
+legacy import path so those reads resolve to the same module object.
+"""
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import sys
 
-SNAPSHOT_PATH = (
-    Path(__file__).resolve().parent.parent / "reference_data" / "subsystems" / "state.json"
-)
-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
+import clawcodex_ext.state as _ext_pkg
 
-ARCHIVE_NAME = _SNAPSHOT["archive_name"]
-MODULE_COUNT = _SNAPSHOT["module_count"]
-SAMPLE_FILES = tuple(_SNAPSHOT["sample_files"])
-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
+sys.modules[__name__] = _ext_pkg
 
-__all__ = ["ARCHIVE_NAME", "MODULE_COUNT", "PORTING_NOTE", "SAMPLE_FILES"]
+__all__ = getattr(_ext_pkg, "__all__", [])
