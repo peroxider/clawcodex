@@ -384,6 +384,45 @@ class TestStage5ExtAgent:
         assert callable(check_and_refresh_oauth_token_if_needed)
         assert callable(handle_oauth_401_error)
 
+    def test_phase2c_cli_core_exit_facade(self):
+        """Phase 2-C: src/cli_core/exit.py → clawcodex_ext/cli_core/exit.py"""
+        from src.cli_core.exit import cli_error, cli_ok
+
+        assert callable(cli_error)
+        assert callable(cli_ok)
+
+    def test_phase2c_cli_core_ndjson_facade(self):
+        """Phase 2-C: src/cli_core/ndjson.py → clawcodex_ext/cli_core/ndjson.py"""
+        from src.cli_core.ndjson import ndjson_safe_dumps
+
+        assert callable(ndjson_safe_dumps)
+
+    def test_phase2c_cli_core_structured_io_facade(self):
+        """Phase 2-C: src/cli_core/structured_io.py → clawcodex_ext/cli_core/structured_io.py"""
+        from src.cli_core.structured_io import (
+            AssistantEvent,
+            HeadlessEvent,
+            PartialTextEvent,
+            ResultEvent,
+            StreamJsonReader,
+            StreamJsonWriter,
+            SystemEvent,
+            ToolResultEvent,
+            ToolUseEvent,
+            UserInputMessage,
+        )
+
+        assert AssistantEvent is not None
+        assert HeadlessEvent is not None
+        assert PartialTextEvent is not None
+        assert ResultEvent is not None
+        assert StreamJsonReader is not None
+        assert StreamJsonWriter is not None
+        assert SystemEvent is not None
+        assert ToolResultEvent is not None
+        assert ToolUseEvent is not None
+        assert UserInputMessage is not None
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""
