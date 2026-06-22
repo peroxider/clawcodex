@@ -5056,3 +5056,1873 @@ media_registry.register_video("runway", RunwayVideoProvider)
 | `clawcodex_ext/providers/media/registry.py` | 新增文件，引用 `base.py` |
 | `clawcodex_ext/providers/__init__.py` | 注册 Agnes provider info + media registry |
 | `httpx` | 已有依赖，用于 API 调用 |
+
+## 三十、已完成特性设计归档（FEATURE_PLAN v3.14）
+
+以下特性已完成实现，详细设计从 FEATURE_PLAN.md §七 迁移至此。
+
+
+---
+
+#### F-73: CI/CD 质量门禁与 PyPI 发布流水线
+
+**状态**: ✅ 本地已完成 / 🟡 远端待验证 | **优先级**: P0
+
+#### 背景
+
+CCB 配备完整的 CI/CD 基础设施：4 个 GitHub Actions（ci/publish/release/contributors）+ Codecov 覆盖率 + husky pre-commit 钩子。F-73 的目标是在 GitCode 仓库中补齐质量门禁、本地 fallback、包构建 smoke 和 TestPyPI-first 发布链路。
+
+当前提交已完成本地与目标配置层面的落地：`.gitcode/workflows/` 包含 ci / agent-smoke / security / release-preflight / publish，`scripts/ci/local_ci.py` 可在 GitCode Pipeline 暂不可用时本地复现主要门禁。pytest 门禁采用固定 smoke + changed-test 自动追加，新增/修改的 pytest 文件会随 PR/push 范围运行；`tests/stability_gate` 已拆成独立 pytest job，触发范围与 core pytest 相同。远端 CodeCheck、GitCode Release 附件上传、TestPyPI/PyPI 真实发布仍依赖仓库 Pipeline、Release 权限和 token 开通，后续在仓库能力开通后继续验证。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 工具链 | 当前状态 |
+|:----:|--------|------|:------:|:----------:|
+| P73-A | ruff lint/format CI | 在 push/PR 时自动运行 ruff lint + format 检查 | `ruff` | ✅ 本地/目标 workflow 已完成 |
+| P73-B | pytest 测试流水线 | 安装依赖 → 运行 core/stability/orchestrator/agent smoke → 自动追加 changed pytest → 报告结果 | `pytest` | ✅ 本地/目标 workflow 已完成 |
+| P73-C | pre-commit 本地钩子 | ruff + 基础检查在 commit 前自动运行 | `pre-commit` | ✅ 已完成 |
+| P73-D | PyPI 自动发布 | tag/manual → build wheel/sdist → TestPyPI → GitCode Release → 手动 PyPI 晋升 | `build` + `twine` | 🟡 脚本与 workflow 已完成，远端发布待开通验证 |
+| P73-E | 测试覆盖率门禁 | 输出 coverage.xml 和终端覆盖率报告，先报告不阻塞 | `pytest-cov` | 🟡 已接入报告，阈值待历史基线修复后提升 |
+| P73-F | pyproject.toml 规范 | 完整声明 project metadata、entry_points、optional-dependencies、classifiers | 无 | ✅ 已完成 |
+| P73-G | mypy 类型检查（阻塞） | Python 3.10+ 类型标注验证 | `mypy` | ✅ 本地/目标 workflow 已完成，legacy baseline 待持续收缩 |
+
+#### CI 流水线设计
+
+落地形态：
+
+- `.gitcode/workflows/ci.yml`：docs、ruff、required mypy、core pytest + changed pytest、stability-gate pytest、orchestrator pytest + coverage、package smoke。
+- `.gitcode/workflows/agent-smoke.yml`：mock LLM text/tool loop、权限拒绝、transcript、resume、workspace hooks，并追加 changed agent pytest。
+- `.gitcode/workflows/security.yml`：本地 supply-chain audit + GitCode CodeCheck（远端待验证）。
+- `.gitcode/workflows/release-preflight.yml`：发布候选 ref/tag/commit 的手动质量复核。
+- `.gitcode/workflows/publish.yml`：TestPyPI-first、GitCode Release 附件、生产 PyPI 手动晋升。
+- `scripts/ci/local_ci.py`：默认检查当前 HEAD commit，交互式终端显示 Rich live dashboard；远端或破坏性步骤在本地明确 skip。
+
+#### PyPI 发布配置
+
+```toml
+# pyproject.toml（已有扩展）
+[project]
+name = "clawcodex"
+version = "0.x.y"
+description = "Claude Code Python reimplementation with autonomous orchestration"
+authors = [{name = "Chadwweng"}]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [...]
+
+[project.scripts]
+clawcodex-dev = "src.cli:main"
+```
+
+#### 本地 pre-commit 配置
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-lint
+        name: ruff lint
+        entry: ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format
+        language: system
+        types: [python]
+```
+
+#### 依赖
+
+- `ruff`（lint/format，纯 Rust 实现，毫秒级检查）
+- `pytest` + `pytest-cov`（测试与覆盖率）
+- `build` + `twine`（PyPI 发布）
+- `pre-commit`（本地钩子）
+- 所有工具均为 `[project.optional-dependencies] dev` 组
+
+---
+
+
+---
+
+#### F-88: Explore / Plan 内置 Agent
+
+**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB BUILTIN_EXPLORE_PLAN_AGENTS — 内置探索与规划 Agent
+
+CCB 内置 `explore`（代码库探索）和 `plan`（实施规划）两种专用 Agent 类型，分别用于理解代码结构和制定实施计划。ClawCodex 的 agent_definitions 中已定义多种 agent type，但缺少这两个 CCB 标配的专用 Agent。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P88-A | Explore Agent 定义（工具集：Read/Grep/Glob/WebSearch/WebFetch） | ✅ 已完成 | 1-2天 |
+| P88-B | Plan Agent 定义（工具集：Read/Grep/Glob + 结构化 plan 输出 prompt） | ✅ 已完成 | 1-2天 |
+| P88-C | 自动路由逻辑：根据 user query 自动选择 explore/plan agent | ✅ 已完成 | 2-3天 |
+| P88-D | 探索报告与计划文档的自动保存 | ✅ 已完成 | 1-2天 |
+
+**估算总工时**: 1 周
+
+---
+
+
+---
+
+#### F-86: Kairos / Brief 调度模式
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/kairos/` + `src/services/periodic/`） | **优先级**: P2 | **对标**: CCB FEATURE_KAIROS / FEATURE_KAIROS_BRIEF — Tick 驱动调度引擎 + 简报模式
+
+CCB 的 Kairos 子系统提供定时唤醒 Agent 执行任务的调度能力（Tick 驱动），配合 Brief 模式提供轻量级状态简报。ClawCodex 代码中已有 KAIROS 注释（`bridge_main.py`、`memdir/paths.py`）但明确标注 deferred。此特性与 F-67 Proactive 模式有重叠，但 KAIROS 侧重于定时调度（周期性 Tick），Proactive 侧重于用户空闲时自主工作。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P86-A | Tick 调度核心（时基触发 + 周期性唤醒） | ⏳ 待开始 | 3-5天 |
+| P86-B | SleepTool 工具（Agent 控制休眠时长） | ⏳ 待开始 | 2-3天 |
+| P86-C | Brief 简报模式（轻量级状态摘要输出） | ⏳ 待开始 | 2-3天 |
+| P86-D | Tick 消息注入对话流（含本地时间戳） | ⏳ 待开始 | 1-2天 |
+| P86-E | 每日日志自动生成（`logs/YYYY/MM/YYYY-MM-DD.md`） | ⏳ 待开始 | 2-3天 |
+| P86-F | CLI 控制命令（`/tick on/off/status`、`/brief`） | ⏳ 待开始 | 2-3天 |
+
+**估算总工时**: 2 周
+
+---
+
+
+---
+
+#### F-85: Templates 模板系统
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/templates/`） | **优先级**: P1 | **对标**: CCB FEATURE_TEMPLATES — Agent 配置模板系统
+
+CCB 的 Template 系统允许用户定义可复用的 Agent 配置模板（包含 tools、model、prompt、max_turns 等），在创建 Agent 时引用模板名快速构建。ClawCodex 当前使用 Agent 定义文件，但缺少模板化复用机制。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P85-A | 模板定义格式（YAML/JSON schema + agent: template_name 引用） | ✅ 已完成 | 2-3天 |
+| P85-B | 模板注册表（`~/.clawcodex/templates/` + 项目级 `.clawcodex/templates/`） | ✅ 已完成 | 2-3天 |
+| P85-C | Agent 创建时模板解析与字段合并（template base + inline override） | ✅ 已完成 | 3-5天 |
+| P85-D | CLI 管理命令（`/template list`、`/template show`、`/template create`） | ✅ 已完成 | 2-3天 |
+| P85-E | 内置默认模板（general-purpose、explore、plan、fix、review 等） | ✅ 已完成 | 2-3天 |
+
+**估算总工时**: 1-2 周
+
+---
+
+
+---
+
+#### F-84: Context Collapse 上下文折叠
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/context_collapse/`） | **优先级**: P1 | **对标**: CCB FEATURE_CONTEXT_COLLAPSE — 上下文智能压缩引擎
+
+CCB 实现 5 层上下文清理流水线（toolResultBudget → snip → microcompact → contextCollapse → autocompact），在接近 token 限制时自动将旧消息折叠为压缩摘要。ClawCodex 已有 `src/services/context/collapse/` 基础骨架与 `ContextCollapseStore` 数据模型，但完整的折叠触发、LLM 摘要生成、持久化与恢复链路尚未实现为独立特性。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P84-A | Token 阈值检测与溢出预警（基于 tiktoken） | ⏳ 待开始 | 2-3天 |
+| P84-B | LLM 驱动的旧消息摘要生成（折叠核心） | ⏳ 待开始 | 3-5天 |
+| P84-C | 折叠后历史占位符注入（ContextCollapseBoundary） | ⏳ 待开始 | 2-3天 |
+| P84-D | 折叠元数据持久化与会话恢复时重建 | ⏳ 待开始 | 2-3天 |
+| P84-E | 413 紧急折叠恢复（API 413 时自动触发） | ⏳ 待开始 | 2-3天 |
+| P84-F | QueryEngine 集成与全链路 5 层协作（复用已有 Snip/compact） | ⏳ 待开始 | 3-5天 |
+
+**估算总工时**: 2-3 周
+
+**依赖**: F-68 Feature Gate（context_collapse feature flag 管理）、现有 `src/services/context/collapse/` 骨架
+
+---
+
+
+
+---
+
+#### F-83: Ultraplan 高级规划模式
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/ultraplan/`） | **优先级**: P1 | **对标**: CCB FEATURE_ULTRAPLAN — `/ultraplan` 多步高级规划命令
+
+CCB 提供 `/ultraplan` 命令，让 AI 对复杂多步骤任务生成结构化的分层规划（目标 → 子任务 → 步骤 → 验收标准），并可在规划执行过程中动态调整。ClawCodex 当前无此功能。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P83-A | Ultraplan 核心 prompt 与规划输出模板 | ⏳ 待开始 | 2-3天 |
+| P83-B | `/ultraplan` CLI 斜杠命令注册与用户交互 | ⏳ 待开始 | 2-3天 |
+| P83-C | 多步计划的分层执行与进度追踪 | ⏳ 待开始 | 3-5天 |
+| P83-D | 执行中途动态调整计划（替换/添加/删除步骤） | ⏳ 待开始 | 2-3天 |
+| P83-E | 计划完成后自动验证各步骤验收标准 | ⏳ 待开始 | 3-5天 |
+| P83-F | 计划持久化到磁盘（`~/.clawcodex/plans/`）与 resume | ✅ 已完成（2026-06-19，PlanStore.default / resolve_default_dir / save_executor / resume） | 2-3天 |
+
+P83-F env vars: `CLAWCODEX_PLANS_DIR` (full dir) > `CLAWCODEX_HOME`/plans > `~/.clawcodex/plans`.
+
+**估算总工时**: 2-3 周
+
+---
+
+
+---
+
+#### F-67: Buddy 伴侣 / Proactive 自主模式
+
+**状态**: ✅ 已完成 | **优先级**: P2 | **对标**: CCB Buddy + Proactive
+
+> `src/buddy/` 共 8 个文件完整实现（companion.py、observer.py、soul.py、sprites.py、types.py、prompt.py、notification.py、feature.py），支持后台 AI 伴侣异步观察会话、主动提供调试建议、文件变更监听。已列为 Phase 5 解耦对象。
+
+#### 背景
+
+CCB 的 Buddy 是一个"后台 AI 伴侣"，在用户工作的同时异步观察会话，主动提供调试建议。Proactive 模式则是 Agent 在文件变更时主动发起建议。clawcodex 目前两者均无。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P67-A | 后台 AI 伴侣异步观察会话 | 独立进程运行，消费 transcript 流，提供异步建议 | ⏳ 待开始 | 3-5天 |
+| P67-B | 主动提供调试建议 | 在 Agent 遇到困难时，Buddy 从旁观察并给出建议 | ⏳ 待开始 | 2-3天 |
+| P67-C | 文件变更自动检测与优化建议 | 监听工作区文件变更，自动提出优化/修复建议 | ⏳ 待开始 | 3-5天 |
+| P67-D | Proactive 自主模式 | Agent 自主检查项目状态（无需用户触发），提出改进建议 | ⏳ 待开始 | 3-5天 |
+
+#### 核心数据模型
+
+```python
+# src/services/buddy/models.py
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+from datetime import datetime
+
+class BuddySuggestionLevel(Enum):
+    INFO = "info"           # 普通信息提示
+    WARNING = "warning"     # 潜在问题警告
+    SUGGESTION = "suggestion"  # 改进建议
+    CRITICAL = "critical"   # 严重问题（如安全漏洞）
+
+class BuddyEventType(Enum):
+    SESSION_START = "session/start"
+    SESSION_MESSAGE = "session/message"
+    FILE_CHANGE = "file/change"
+    FILE_SAVE = "file/save"
+    TOOL_EXECUTE = "tool/execute"
+    TOOL_ERROR = "tool/error"
+    AGENT_STUCK = "agent/stuck"       # Agent 陷入循环/卡住
+    AGENT_COMPLETE = "agent/complete"
+    PROJECT_SCAN = "project/scan"     # 定时项目扫描
+    USER_IDLE = "user/idle"           # 用户空闲
+
+@dataclass
+class BuddySuggestion:
+    """Buddy 观察后生成的建议。"""
+    id: str = field(default_factory=lambda: uuid4().hex[:12])
+    level: BuddySuggestionLevel = BuddySuggestionLevel.INFO
+    title: str = ""
+    detail: str = ""
+    source_event: BuddyEventType | None = None
+    source_file: str | None = None
+    source_line: int | None = None
+    code_snippet: str | None = None
+    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    dismissed: bool = False
+
+@dataclass
+class BuddyState:
+    """Buddy 观察状态。"""
+    session_id: str
+    message_count: int = 0
+    tool_error_count: int = 0
+    consecutive_steps: int = 0          # 连续步骤数（检测卡住）
+    last_message_at: str | None = None
+    suggestions: list[BuddySuggestion] = field(default_factory=list)
+    active: bool = True
+```
+
+#### 核心接口
+
+```python
+# src/services/buddy/base.py
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+
+class EventObserver(ABC):
+    """事件观察者（Buddy 消费的 event stream）。"""
+
+    @abstractmethod
+    async def on_event(self, event: BuddyEvent) -> None:
+        """消费一个事件。"""
+
+    @abstractmethod
+    async def start_observing(self, session_id: str) -> None:
+        """开始观察指定会话。"""
+
+    @abstractmethod
+    async def stop_observing(self) -> None:
+        """停止观察。"""
+
+
+class SuggestionProvider(ABC):
+    """建议提供者。"""
+
+    @abstractmethod
+    async def analyze(self, state: BuddyState) -> list[BuddySuggestion]:
+        """分析当前状态，生成建议列表。"""
+
+    @abstractmethod
+    async def should_interrupt(self, suggestion: BuddySuggestion) -> bool:
+        """判断是否应该打断用户（临界建议）。"""
+
+
+class FileWatcher(ABC):
+    """文件变更监听器。"""
+
+    @abstractmethod
+    async def watch(self, path: str) -> AsyncIterator[BuddyEvent]:
+        """监听指定路径的文件变更事件流。"""
+
+    @abstractmethod
+    async def stop_watch(self) -> None:
+        """停止监听。"""
+```
+
+#### 核心观察者实现示例
+
+```python
+# src/services/buddy/observer.py
+import asyncio
+from collections import deque
+
+class ClawCodexBuddy(EventObserver):
+    """ClawCodex Buddy 主实现。
+
+    运行在独立协程中，消费会话事件流，通过启发式规则 + LLM 分析生成建议。
+    """
+
+    def __init__(self, llm_provider: BaseProvider | None = None):
+        self._state: BuddyState | None = None
+        self._providers: list[SuggestionProvider] = [
+            StuckDetector(),
+            ToolErrorAnalyzer(),
+            ProjectHealthAnalyzer(),
+        ]
+        self._suggestion_queue: deque[BuddySuggestion] = deque(maxlen=50)
+        self._llm = llm_provider
+        self._file_watcher: FileWatcher | None = None
+
+    async def start_observing(self, session_id: str) -> None:
+        self._state = BuddyState(session_id=session_id)
+        # 启动文件变更监听
+        self._file_watcher = WatchdogFileWatcher()
+        asyncio.create_task(self._consume_file_events())
+
+    async def on_event(self, event: BuddyEvent) -> None:
+        """处理每个事件。"""
+        if self._state is None:
+            return
+
+        self._state.message_count += 1
+        self._state.last_message_at = datetime.utcnow().isoformat()
+
+        if event.type == BuddyEventType.TOOL_ERROR:
+            self._state.tool_error_count += 1
+        elif event.type == BuddyEventType.SESSION_MESSAGE:
+            self._state.consecutive_steps += 1
+        elif event.type == BuddyEventType.AGENT_STUCK:
+            self._state.consecutive_steps = 999  # 触发卡住检测
+
+        # 运行所有分析器
+        for provider in self._providers:
+            new_suggestions = await provider.analyze(self._state)
+            for s in new_suggestions:
+                self._suggestion_queue.append(s)
+
+        # 如果有 LLM，对紧急建议进行 LLM 验证
+        if self._llm and new_suggestions:
+            await self._llm_validate_suggestions(new_suggestions)
+
+    async def _consume_file_events(self) -> None:
+        if self._state is None or not self._file_watcher:
+            return
+        async for event in self._file_watcher.watch("."):
+            await self.on_event(event)
+
+    async def _llm_validate_suggestions(self, suggestions: list) -> None:
+        """用 LLM 验证建议是否值得展示。"""
+        for s in suggestions:
+            if s.level in (BuddySuggestionLevel.CRITICAL, BuddySuggestionLevel.WARNING):
+                should = await self._providers[-1].should_interrupt(s)
+                if should:
+                    await self._notify_user(s)
+
+    async def _notify_user(self, suggestion: BuddySuggestion) -> None:
+        """通过通知渠道（stdout / Channels / GUI）展示建议。"""
+        icon = {"info": "💡", "warning": "⚠️", "suggestion": "🔧", "critical": "🚨"}
+        level_icon = icon.get(suggestion.level.value, "💡")
+        print(f"\n[{level_icon} Buddy] {suggestion.title}")
+        if suggestion.detail:
+            print(f"  {suggestion.detail}")
+```
+
+#### 卡住检测器
+
+```python
+# src/services/buddy/detectors.py
+class StuckDetector(SuggestionProvider):
+    """检测 Agent 是否陷入循环（连续 8+ 步无有效输出）。"""
+
+    MAX_CONSECUTIVE_STEPS = 8
+
+    async def analyze(self, state: BuddyState) -> list[BuddySuggestion]:
+        if state.consecutive_steps >= self.MAX_CONSECUTIVE_STEPS:
+            return [BuddySuggestion(
+                level=BuddySuggestionLevel.WARNING,
+                title="Agent 似乎卡住了",
+                detail=f"已连续执行 {state.consecutive_steps} 步未产生有效输出。"
+                       "建议：终止当前任务并重新描述目标。",
+                source_event=BuddyEventType.AGENT_STUCK,
+            )]
+        return []
+
+    async def should_interrupt(self, suggestion: BuddySuggestion) -> bool:
+        return suggestion.level == BuddySuggestionLevel.WARNING
+
+
+class ToolErrorAnalyzer(SuggestionProvider):
+    """分析工具调用错误，给出修复建议。"""
+
+    ERROR_PATTERNS = {
+        "ModuleNotFoundError": "缺少依赖模块，尝试 `pip install`",
+        "FileNotFoundError": "文件路径不存在，检查工作目录",
+        "PermissionError": "权限不足，尝试 `sudo`",
+        "ConnectionError": "网络连接失败，检查代理配置",
+    }
+
+    async def analyze(self, state: BuddyState) -> list[BuddySuggestion]:
+        if state.tool_error_count == 0:
+            return []
+        return [BuddySuggestion(
+            level=BuddySuggestionLevel.WARNING,
+            title=f"工具调用失败 {state.tool_error_count} 次",
+            detail="检测到多次工具调用错误。常见原因与修复见 ERROR_PATTERNS。",
+            source_event=BuddyEventType.TOOL_ERROR,
+        )]
+
+    async def should_interrupt(self, suggestion: BuddySuggestion) -> bool:
+        return state.tool_error_count >= 3
+```
+
+#### Watchdog 文件变更监听
+
+```python
+# src/services/buddy/watcher.py
+import asyncio
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
+class WatchdogFileWatcher(FileWatcher, FileSystemEventHandler):
+    """基于 watchdog 的文件变更监听器。"""
+
+    def __init__(self, debounce_sec: float = 2.0):
+        self._observer = Observer()
+        self._debounce = debounce_sec
+        self._queue: asyncio.Queue[BuddyEvent] = asyncio.Queue()
+        self._running = False
+
+    def on_modified(self, event):
+        if not event.is_directory:
+            self._queue.put_nowait(BuddyEvent(
+                type=BuddyEventType.FILE_CHANGE,
+                data={"path": event.src_path},
+            ))
+
+    async def watch(self, path: str) -> AsyncIterator[BuddyEvent]:
+        self._observer.schedule(self, path, recursive=True)
+        self._observer.start()
+        self._running = True
+        while self._running:
+            event = await self._queue.get()
+            yield event
+
+    async def stop_watch(self) -> None:
+        self._running = False
+        self._observer.stop()
+        self._observer.join()
+```
+
+#### Proactive Scheduler（自主检查模式）
+
+```python
+# src/services/buddy/proactive.py
+import asyncio
+from datetime import datetime, timedelta
+
+class ProactiveScheduler:
+    """Proactive 自主模式调度器。
+
+    按固定间隔自动执行项目健康检查，无需用户触发。
+    """
+
+    def __init__(self, buddy: ClawCodexBuddy, interval_minutes: int = 15):
+        self._buddy = buddy
+        self._interval = timedelta(minutes=interval_minutes)
+        self._running = False
+
+    async def start(self) -> None:
+        """启动定期检查循环。"""
+        self._running = True
+        while self._running:
+            await asyncio.sleep(self._interval.total_seconds())
+            await self._run_health_check()
+
+    async def stop(self) -> None:
+        self._running = False
+
+    async def _run_health_check(self) -> None:
+        """执行项目健康检查。"""
+        issues = await self._scan_project()
+        if not issues:
+            return
+        for issue in issues:
+            suggestion = BuddySuggestion(
+                level=BuddySuggestionLevel.SUGGESTION,
+                title=issue["title"],
+                detail=issue["detail"],
+                source_event=BuddyEventType.PROJECT_SCAN,
+            )
+            await self._buddy._notify_user(suggestion)
+
+    async def _scan_project(self) -> list[dict]:
+        """扫描项目状态，发现潜在问题。"""
+        issues = []
+        # 1. 检查依赖是否过期
+        issues.extend(await self._check_dependencies())
+        # 2. 检查未提交的变更
+        issues.extend(await self._check_git_status())
+        # 3. 检查未使用的导入/变量（快速扫描）
+        issues.extend(await self._check_code_quality())
+        return issues
+
+    async def _check_dependencies(self) -> list[dict]:
+        # 简单示例：读取 requirements.txt / pyproject.toml 检查已知漏洞
+        return []
+
+    async def _check_git_status(self) -> list[dict]:
+        # 检查是否有未提交的变更
+        return []
+
+    async def _check_code_quality(self) -> list[dict]:
+        # 快速代码质量扫描（长用时建议在后台异步运行）
+        return []
+```
+
+#### 集成到 Tool 工厂
+
+```python
+# src/services/buddy/__init__.py
+from clawcodex.config import settings
+
+_buddy: ClawCodexBuddy | None = None
+
+async def init_buddy(llm_provider: BaseProvider | None = None) -> ClawCodexBuddy:
+    global _buddy
+    if _buddy is None:
+        _buddy = ClawCodexBuddy(llm_provider=llm_provider)
+    return _buddy
+
+def build_buddy_tools(buddy: ClawCodexBuddy) -> list[Tool]:
+    return [
+        Tool(name="buddy_get_suggestions",
+             description="获取 Buddy 当前待处理的建议列表",
+             parameters={},
+             call=lambda: buddy.get_pending_suggestions()),
+        Tool(name="buddy_dismiss_suggestion",
+             description="忽略某条建议",
+             parameters={"suggestion_id": {"type": "string"}},
+             call=lambda suggestion_id: buddy.dismiss_suggestion(suggestion_id)),
+        Tool(name="buddy_start_proactive",
+             description="启动 Proactive 自主检查模式",
+             parameters={"interval_minutes": {"type": "integer", "default": 15}},
+             call=lambda interval_minutes=15:
+                 ProactiveScheduler(buddy, interval_minutes).start()),
+        Tool(name="buddy_stop_proactive",
+             description="停止 Proactive 自主检查模式",
+             parameters={},
+             call=lambda: buddy.stop_proactive()),
+    ]
+```
+
+#### 依赖
+
+- `watchdog`（文件系统变更监听）
+- 可选：`safety` / `bandit`（安全扫描，Proactive 模式用）
+
+
+---
+
+#### F-65: Langfuse Agent 可观测性
+
+**状态**: ✅ 已完成 | **优先级**: P1 | **对标**: CCB Langfuse
+
+#### 背景
+
+CCB 集成 Langfuse（OpenTelemetry 兼容）实现 Agent Loop 级可观测性：记录每次 LLM 调用的输入/输出/token 用量/延迟，并支持一键导出为训练数据集。clawcodex 目前仅通过 Bridge Dashboard 提供有限的远程可观测性。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P65-A | OpenTelemetry + Langfuse SDK 集成 | 引入 OpenTelemetry Python SDK + Langfuse exporter | ✅ 已完成 | 3-5天 |
+| P65-B | Agent Loop 级追踪 | 每次 request/response 自动追踪：model/prompt/completion/token/timing | ✅ 已完成 | 2-3天 |
+| P65-C | 一键转化为训练数据集 | 将追踪数据导出为训练集格式（JSONL/ChatML） | ✅ 已完成 | 2-3天 |
+
+#### 核心数据模型
+
+```python
+# src/services/langfuse/models.py
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+@dataclass
+class TraceSpan:
+    """一次 Agent Loop 调用追踪。"""
+    trace_id: str
+    name: str                                  # 如 "llm_call", "tool_execute"
+    input: dict[str, Any] | None = None
+    output: dict[str, Any] | None = None
+    model: str | None = None                   # 使用的模型名称
+    token_input: int = 0
+    token_output: int = 0
+    duration_ms: float = 0.0
+    tags: list[str] = field(default_factory=list)
+    parent_span_id: str | None = None          # 父 Span（支持嵌套）
+    metadata: dict[str, Any] = field(default_factory=dict)
+    start_time: datetime = field(default_factory=datetime.utcnow)
+    end_time: datetime | None = None
+
+@dataclass
+class TrainingSample:
+    """从追踪导出的训练样本。"""
+    messages: list[dict]                       # [{"role":"user","content":...}, ...]
+    model: str
+    token_count: int
+    timestamp: str
+    tags: list[str]
+    metadata: dict[str, Any]
+```
+
+#### Langfuse Provider Wrapper
+
+```python
+# src/services/langfuse/wrapper.py
+from langfuse import Langfuse
+from langfuse.model import CreateSpan, CreateGeneration
+
+class LangfuseProviderWrapper(BaseProvider):
+    """在 Provider 层注入 Langfuse 追踪。
+
+    包装原始 LLM Provider，自动记录每次 request/response 的：
+    - model, prompt, completion
+    - token 用量 (input/output)
+    - 延迟 (duration_ms)
+    """
+
+    def __init__(self, inner: BaseProvider,
+                 langfuse: Langfuse | None = None,
+                 session_id: str | None = None):
+        self._inner = inner
+        self._langfuse = langfuse or Langfuse()
+        self._session_id = session_id
+        self._trace_map: dict[str, Any] = {}  # request_id → Langfuse trace
+
+    async def stream(self, request: ProviderRequest) -> AsyncIterator[str]:
+        """包装流式请求。
+
+        记录输入 prompt，收集完整 completion，结束时写 span。
+        """
+        trace = self._langfuse.trace(
+            name="llm_stream",
+            session_id=self._session_id,
+            input=request.messages,
+            metadata={"model": request.model, "params": request.params},
+        )
+        generation = trace.generation(
+            name=request.model or "unknown",
+            model=request.model,
+            input=request.messages,
+        )
+
+        start = datetime.utcnow()
+        full_output: list[str] = []
+        try:
+            async for chunk in self._inner.stream(request):
+                full_output.append(chunk)
+                yield chunk
+        except Exception as e:
+            generation.end(
+                output=str(e),
+                level="ERROR",
+                status_message=str(e),
+            )
+            raise
+        finally:
+            duration = (datetime.utcnow() - start).total_seconds() * 1000
+            usage = self._estimate_tokens(request.messages, "".join(full_output))
+            generation.end(
+                output="".join(full_output),
+                usage=usage,
+                metadata={"duration_ms": duration},
+            )
+
+    def _estimate_tokens(self, messages: list, completion: str) -> dict:
+        """粗略估算 token 用量（生产环境使用 tiktoken）。"""
+        input_tokens = sum(len(m.get("content", "")) // 2 for m in messages)
+        output_tokens = len(completion) // 2
+        return {"input": input_tokens, "output": output_tokens}
+
+
+class LangfuseToolWrapper:
+    """包装 Tool 执行，记录调用链。"""
+
+    def __init__(self, langfuse: Langfuse, trace: Any):
+        self._langfuse = langfuse
+        self._trace = trace
+
+    def wrap(self, tool: Tool) -> Tool:
+        original_call = tool.call
+        async def traced_call(**kwargs):
+            span = self._trace.span(
+                name=f"tool_{tool.name}",
+                input=kwargs,
+            )
+            start = datetime.utcnow()
+            try:
+                result = await original_call(**kwargs)
+                span.end(output=str(result)[:500])
+                return result
+            except Exception as e:
+                span.end(level="ERROR", status_message=str(e))
+                raise
+        tool.call = traced_call
+        return tool
+```
+
+#### 导出为训练数据集
+
+```python
+# src/services/langfuse/exporter.py
+import json
+from pathlib import Path
+from datetime import datetime
+
+class TrainingDataExporter:
+    """从 Langfuse 将追踪数据导出为训练集。"""
+
+    def __init__(self, langfuse: Langfuse):
+        self._langfuse = langfuse
+
+    async def export_jsonl(self, trace_name: str = "llm_stream",
+                           output_path: str = "./training_data.jsonl",
+                           limit: int = 1000) -> int:
+        """导出为 JSONL 格式（每行一个 TrainingSample）。"""
+        traces = self._langfuse.fetch_traces(name=trace_name, limit=limit)
+        count = 0
+        with open(output_path, "w", encoding="utf-8") as f:
+            for t in traces:
+                sample = self._trace_to_sample(t)
+                if sample:
+                    f.write(json.dumps(sample, ensure_ascii=False) + "\n")
+                    count += 1
+        return count
+
+    def _trace_to_sample(self, trace: Any) -> dict | None:
+        generations = getattr(trace, "generations", [])
+        if not generations:
+            return None
+        gen = generations[0]
+        messages = gen.input if isinstance(gen.input, list) else []
+        if gen.output:
+            messages.append({"role": "assistant", "content": gen.output})
+        return {
+            "messages": messages,
+            "model": gen.model or "unknown",
+            "token_count": (gen.usage or {}).get("input", 0),
+            "timestamp": trace.timestamp,
+            "tags": trace.tags or [],
+            "metadata": trace.metadata or {},
+        }
+```
+
+#### 配置与初始化
+
+```python
+# src/services/langfuse/__init__.py
+from langfuse import Langfuse
+
+_langfuse: Langfuse | None = None
+
+def init_langfuse(public_key: str | None = None,
+                  secret_key: str | None = None,
+                  host: str = "https://cloud.langfuse.com") -> Langfuse:
+    """初始化 Langfuse 客户端（全局单例）。"""
+    global _langfuse
+    if _langfuse is None:
+        _langfuse = Langfuse(
+            public_key=public_key or os.environ["LANGFUSE_PUBLIC_KEY"],
+            secret_key=secret_key or os.environ["LANGFUSE_SECRET_KEY"],
+            host=host,
+        )
+    return _langfuse
+
+def wrap_provider(provider: BaseProvider) -> BaseProvider:
+    """包装 Provider 使其自动上报追踪数据。"""
+    lf = init_langfuse()
+    return LangfuseProviderWrapper(provider, lf)
+
+def build_langfuse_tools() -> list[Tool]:
+    return [
+        Tool(name="langfuse_export_training_data",
+             description="将追踪数据导出为训练数据集（JSONL）",
+             parameters={
+                 "output_path": {"type": "string", "description": "输出文件路径"},
+                 "limit": {"type": "integer", "default": 1000},
+             },
+             call=lambda output_path="./training_data.jsonl", limit=1000:
+                 TrainingDataExporter(init_langfuse()).export_jsonl(output_path=output_path, limit=limit)),
+    ]
+```
+
+#### 依赖
+
+- `langfuse`（Python SDK，`pip install langfuse`）
+- `opentelemetry-api`（可选，用于 OpenTelemetry 桥接）
+- `tiktoken`（可选，精确 token 计数）
+        finally:
+            span.end(...)
+```
+
+---
+
+
+---
+
+#### F-63: Channels 频道通知系统
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/channels/`） | **优先级**: P1 | **对标**: CCB Channels
+
+#### 背景
+
+CCB 的 Channels 系统支持多渠道消息通知推送，包括飞书、Slack、Discord、微信（企业微信），可在任务完成/出错时自动通知团队。clawcodex 目前无任何通知推送机制。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P63-A | 飞书通知集成 | 通过飞书 Webhook/Bot API 发送消息 | ⏳ 待开始 | 3-5天 |
+| P63-B | Slack 通知集成 | 通过 Slack Webhook/API 发送消息 | ⏳ 待开始 | 2-3天 |
+| P63-C | Discord 通知集成 | 通过 Discord Webhook 发送消息 | ⏳ 待开始 | 2-3天 |
+| P63-D | 微信通知集成 | 通过企业微信 Bot Webhook 发送消息 | ⏳ 待开始 | 3-5天 |
+| P63-E | MCP 服务器推送外部消息 | 通过 MCP 协议推送通知到外部系统 | ⏳ 待开始 | 2-3天 |
+
+#### 核心数据模型
+
+```python
+# src/services/channels/models.py
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
+
+class ChannelType(Enum):
+    FEISHU = "feishu"
+    SLACK = "slack"
+    DISCORD = "discord"
+    WECHAT = "wechat"
+    MCP_PUSH = "mcp_push"
+
+class MessageLevel(Enum):
+    INFO = "info"
+    WARN = "warn"
+    ERROR = "error"
+    SUCCESS = "success"
+
+@dataclass
+class ChannelMessage:
+    text: str
+    level: MessageLevel = MessageLevel.INFO
+    title: str | None = None          # 可选消息标题
+    markdown: bool = True              # 是否支持 Markdown
+    attachments: list[dict[str, Any]] | None = None  # 可选附件/卡片
+    metadata: dict[str, Any] | None = None
+
+@dataclass
+class ChannelConfig:
+    type: ChannelType
+    webhook_url: str
+    name: str                         # 频道别名（如"线上报警"）
+    enabled: bool = True
+    extra: dict[str, Any] | None = None  # 渠道特定配置（如飞书签名密钥）
+```
+
+#### 抽象接口
+
+```python
+# src/services/channels/base.py
+from abc import ABC, abstractmethod
+
+class BaseChannel(ABC):
+    """消息通道抽象基类。"""
+
+    def __init__(self, config: ChannelConfig):
+        self.config = config
+
+    @abstractmethod
+    async def send(self, message: ChannelMessage) -> bool:
+        """发送消息到目标频道。返回是否成功。"""
+
+    @abstractmethod
+    async def validate(self) -> bool:
+        """校验 Webhook 配置是否有效。"""
+
+    @classmethod
+    @abstractmethod
+    def format_message(cls, message: ChannelMessage) -> Any:
+        """将 ChannelMessage 格式化为目标平台消息体。"""
+
+
+class ChannelManager:
+    """统一注册和分发消息到所有活跃频道。"""
+
+    def __init__(self):
+        self._channels: dict[str, BaseChannel] = {}
+
+    def register(self, channel: BaseChannel) -> None:
+        self._channels[channel.config.name] = channel
+
+    async def broadcast(self, message: ChannelMessage) -> dict[str, bool]:
+        """向所有已注册频道广播消息。"""
+        results = {}
+        for name, ch in self._channels.items():
+            if ch.config.enabled:
+                results[name] = await ch.send(message)
+        return results
+
+    async def send_to(self, name: str, message: ChannelMessage) -> bool:
+        """向指定频道发送消息。"""
+        ch = self._channels.get(name)
+        if ch and ch.config.enabled:
+            return await ch.send(message)
+        return False
+```
+
+#### 飞书实现示例
+
+```python
+# src/services/channels/feishu.py
+import hashlib, base64, hmac, json, time
+
+class FeishuChannel(BaseChannel):
+    """飞书机器人 Webhook 通道。"""
+
+    def format_message(self, message: ChannelMessage) -> dict:
+        return {
+            "msg_type": "interactive" if message.title else "text",
+            "content": json.dumps({
+                "title": message.title or "",
+                "text": message.text,
+            }) if message.title else {"text": message.text},
+        }
+
+    async def send(self, message: ChannelMessage) -> bool:
+        body = self.format_message(message)
+        timestamp = str(int(time.time()))
+        sign = self._sign(timestamp) if self.config.extra.get("secret") else None
+        if sign:
+            body["timestamp"] = timestamp
+            body["sign"] = sign
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(self.config.webhook_url, json=body)
+            return resp.status_code == 200
+
+    def _sign(self, timestamp: str) -> str:
+        secret = self.config.extra["secret"]
+        string_to_sign = f"{timestamp}\n{secret}"
+        return base64.b64encode(
+            hmac.new(secret.encode(), string_to_sign.encode(), hashlib.sha256).digest()
+        ).decode()
+
+    async def validate(self) -> bool:
+        return await self.send(ChannelMessage(text="✅ 频道连接测试成功"))
+```
+
+#### 集成到 Tool 工厂
+
+```python
+# src/services/channels/__init__.py
+from clawcodex.config import settings
+
+def init_channels() -> ChannelManager:
+    """从配置文件中读取 Channel 配置并初始化。"""
+    manager = ChannelManager()
+    for cfg_dict in settings.get("channels", []):
+        config = ChannelConfig(**cfg_dict)
+        channel = _build_channel(config)
+        if channel:
+            manager.register(channel)
+    return manager
+
+def _build_channel(config: ChannelConfig) -> BaseChannel | None:
+    mapping = {
+        ChannelType.FEISHU: FeishuChannel,
+        ChannelType.SLACK: SlackChannel,
+        ChannelType.DISCORD: DiscordChannel,
+        ChannelType.WECHAT: WechatChannel,
+    }
+    cls = mapping.get(config.type)
+    return cls(config) if cls else None
+
+# Agent Tool 注册
+def build_channel_tools(manager: ChannelManager) -> list[Tool]:
+    return [
+        Tool(name="channel_broadcast",
+             description="向所有已注册的频道广播消息通知",
+             parameters={
+                 "text": {"type": "string", "description": "消息内容"},
+                 "level": {"type": "string", "enum": ["info","warn","error","success"]},
+             },
+             call=lambda text, level="info":
+                 manager.broadcast(ChannelMessage(text=text, level=MessageLevel(level)))),
+        Tool(name="channel_send",
+             description="向指定频道发送消息",
+             parameters={
+                 "channel": {"type": "string", "description": "频道名称"},
+                 "text": {"type": "string"},
+             },
+             call=lambda channel, text: manager.send_to(channel, ChannelMessage(text=text))),
+    ]
+```
+
+---
+
+
+---
+
+#### F-62: Chrome 浏览器自动化控制
+
+**状态**: ✅ 已完成 | **优先级**: P1 | **对标**: CCB Chrome Use
+
+#### 背景
+
+CCB 通过 Chrome MCP 扩展桥接，可以在浏览器中执行导航、点击、填表、截图、执行 JS 等操作，并录制操作过程为 GIF。clawcodex 目前没有任何 Web 自动化能力。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P62-A | Chrome MCP 扩展桥接 | 通过 MCP 协议桥接 Chrome DevTools Protocol | ✅ 已完成 | 3-5天 |
+| P62-B | 页面导航与元素交互 | 导航到 URL、点击按钮、填写表单、选择下拉 | ✅ 已完成 | 2-3天 |
+| P62-C | 截图与 JS 执行 | 页面截图/元素截图，在页面中执行任意 JS | ✅ 已完成 | 2-3天 |
+| P62-D | 操作 GIF 录制 | 记录浏览器操作过程并合成为 GIF | ✅ 已完成 | 2-3天 |
+
+#### 核心数据模型
+
+```python
+# src/services/chrome/models.py
+from dataclasses import dataclass
+from enum import Enum
+
+class ChromeActionType(Enum):
+    NAVIGATE = "navigate"           # 导航到 URL
+    CLICK = "click"                 # 点击元素
+    TYPE = "type"                   # 输入文本
+    SELECT = "select"               # 选择下拉选项
+    SCREENSHOT = "screenshot"       # 截图
+    EVAL_JS = "eval_js"             # 执行 JavaScript
+    GET_HTML = "get_html"           # 获取页面 HTML
+    GET_TEXT = "get_text"           # 获取页面可见文本
+    HOVER = "hover"                 # 悬停
+    SCROLL = "scroll"               # 滚动
+
+@dataclass
+class ChromeActionResult:
+    success: bool
+    data: str | bytes | None = None   # 文本/截图 bytes/JSON
+    error: str | None = None
+    screenshot_path: str | None = None  # GIF 录制路径
+```
+
+#### 核心接口
+
+```python
+# src/services/chrome/base.py
+from abc import ABC, abstractmethod
+
+class ChromeController(ABC):
+    """浏览器控制抽象接口（Playwright 实现）。"""
+
+    @abstractmethod
+    async def start(self, headless: bool = True) -> None:
+        """启动浏览器实例。"""
+
+    @abstractmethod
+    async def stop(self) -> None:
+        """关闭浏览器。"""
+
+    @abstractmethod
+    async def navigate(self, url: str) -> ChromeActionResult:
+        """导航到指定 URL。"""
+
+    @abstractmethod
+    async def click(self, selector: str) -> ChromeActionResult:
+        """点击页面中的 CSS 选择器元素。"""
+
+    @abstractmethod
+    async def type_text(self, selector: str, text: str,
+                        clear_first: bool = True) -> ChromeActionResult:
+        """在输入框中输入文本。"""
+
+    @abstractmethod
+    async def select_option(self, selector: str, value: str) -> ChromeActionResult:
+        """选择下拉框选项。"""
+
+    @abstractmethod
+    async def screenshot(self, selector: str | None = None) -> ChromeActionResult:
+        """截取页面/元素截图。"""
+
+    @abstractmethod
+    async def eval_js(self, script: str) -> ChromeActionResult:
+        """在页面中执行 JavaScript 并返回结果。"""
+
+    @abstractmethod
+    async def get_visible_text(self) -> ChromeActionResult:
+        """获取页面可见文本（用于 Agent 理解页面内容）。"""
+
+    @abstractmethod
+    async def start_recording(self, output_path: str) -> None:
+        """开始录制页面操作为 GIF。"""
+
+    @abstractmethod
+    async def stop_recording(self) -> str:
+        """停止录制并返回 GIF 文件路径。"""
+
+
+class ChromeToolFactory:
+    """创建 Agent 可用的 Chrome Tool 列表。"""
+
+    @staticmethod
+    def build_tools(controller: ChromeController) -> list[Tool]:
+        """由 build_tool() 调用，注入已初始化的 ChromeController。"""
+        return [
+            Tool(name="chrome_navigate",
+                 description="在浏览器中导航到指定 URL",
+                 parameters={"url": {"type": "string", "description": "目标 URL"}},
+                 call=lambda url: controller.navigate(url)),
+            Tool(name="chrome_click",
+                 description="点击页面中的对应元素",
+                 parameters={"selector": {"type": "string"}},
+                 call=lambda selector: controller.click(selector)),
+            Tool(name="chrome_type",
+                 description="在输入框中输入文本",
+                 parameters={
+                     "selector": {"type": "string"},
+                     "text": {"type": "string"},
+                     "clear_first": {"type": "boolean", "default": True},
+                 },
+                 call=lambda **kw: controller.type_text(**kw)),
+            Tool(name="chrome_screenshot",
+                 description="截取当前页面截图",
+                 parameters={},
+                 call=lambda: controller.screenshot()),
+            Tool(name="chrome_eval_js",
+                 description="在页面中执行自定义 JavaScript",
+                 parameters={"script": {"type": "string"}},
+                 call=lambda script: controller.eval_js(script)),
+        ]
+```
+
+#### Playwright 实现示例
+
+```python
+# src/services/chrome/playwright_impl.py
+from playwright.async_api import async_playwright, Page
+
+class PlaywrightController(ChromeController):
+    """基于 Playwright 的浏览器控制器。"""
+
+    def __init__(self):
+        self._playwright = None
+        self._browser = None
+        self._page: Page | None = None
+        self._recording = False
+
+    async def start(self, headless: bool = True) -> None:
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.launch(headless=headless)
+        self._page = await self._browser.new_page()
+
+    async def stop(self) -> None:
+        if self._browser:
+            await self._browser.close()
+        if self._playwright:
+            await self._playwright.stop()
+
+    async def navigate(self, url: str) -> ChromeActionResult:
+        try:
+            await self._page.goto(url, wait_until="domcontentloaded")
+            return ChromeActionResult(success=True, data=url)
+        except Exception as e:
+            return ChromeActionResult(success=False, error=str(e))
+
+    async def click(self, selector: str) -> ChromeActionResult:
+        try:
+            await self._page.click(selector)
+            return ChromeActionResult(success=True)
+        except Exception as e:
+            return ChromeActionResult(success=False, error=str(e))
+
+    async def screenshot(self, selector: str | None = None) -> ChromeActionResult:
+        try:
+            if selector:
+                el = await self._page.query_selector(selector)
+                data = await el.screenshot() if el else None
+            else:
+                data = await self._page.screenshot(full_page=True)
+            return ChromeActionResult(success=True, data=data)
+        except Exception as e:
+            return ChromeActionResult(success=False, error=str(e))
+
+    async def eval_js(self, script: str) -> ChromeActionResult:
+        try:
+            result = await self._page.evaluate(script)
+            return ChromeActionResult(success=True, data=str(result))
+        except Exception as e:
+            return ChromeActionResult(success=False, error=str(e))
+```
+
+#### 集成到 Tool 工厂
+
+```python
+# src/services/chrome/__init__.py
+_chrome_controller: PlaywrightController | None = None
+
+async def ensure_chrome():
+    """延迟初始化 Chrome 控制器。"""
+    global _chrome_controller
+    if _chrome_controller is None:
+        _chrome_controller = PlaywrightController()
+        await _chrome_controller.start()
+    return _chrome_controller
+
+def build_chrome_tools() -> list[Tool]:
+    """创建 Chrome Tool 集（由 build_tool() 调用）。"""
+    return ChromeToolFactory.build_tools(ensure_chrome())
+```
+
+#### 依赖
+
+- `playwright`（`pip install playwright && playwright install chromium`）
+- `PIL` 用于 GIF 录制合成（`pip install pillow`）
+- Chrome MCP 扩展作为可选备选方案
+
+---
+
+
+
+---
+
+#### F-61: Computer Use 屏幕操控
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/computer_use/`） | **优先级**: P0 | **对标**: CCB Computer Use
+
+#### 背景
+
+CCB 的 Computer Use 功能允许 Claude 截图分析屏幕画面、操控鼠标键盘、管理应用窗口、读写剪贴板。这是实现"AI 操作桌面"场景的核心能力。clawcodex 的 `src/services/computer_use/` 已支持跨平台截图（Linux scrot/xdotool + Null/DryRun 降级模式）、键鼠模拟（Linux xdotool）、平台抽象工厂，共 413 行 + 15 测试。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P61-A | 跨平台截图 | macOS: `screencapture` / Windows: `[System.Drawing]` / Linux: `scrot`/`import` | ✅ 已完成（Linux `platform/linux.py` + DryRun 降级模式，macOS/Windows 接口已定义） | 3-5天 |
+| P61-B | 跨平台键鼠模拟 | macOS: `CGEvent` / Windows: `SendInput` / Linux: `xdotool` / `ydotool` | 🟡 部分完成（Linux xdotool 已实现，macOS/Windows 接口已定义） | 5-7天 |
+| P61-C | 应用/窗口管理 | 打开/关闭/焦点/移动/resize | ⏳ 待开始 | 3-5天 |
+| P61-D | 剪贴板读/写 | 文本/图片/文件跨应用粘贴 | ⏳ 待开始 | 2-3天 |
+
+#### 核心接口
+
+```python
+# src/services/computer_use/base.py
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class ScreenRegion:
+    """屏幕区域描述，用于定位元素。"""
+    x: int = 0
+    y: int = 0
+    width: int = 1920
+    height: int = 1080
+
+class ScreenshotProvider(ABC):
+    """跨平台截图统一接口。"""
+
+    @abstractmethod
+    def capture_fullscreen(self) -> bytes:
+        """截取全屏，返回 PNG bytes。"""
+
+    @abstractmethod
+    def capture_region(self, region: ScreenRegion) -> bytes:
+        """截取指定区域。"""
+
+    @abstractmethod
+    def capture_window(self, window_title: str) -> bytes | None:
+        """按窗口标题截图，返回 None 表示窗口未找到。"""
+
+
+class InputSimulator(ABC):
+    """跨平台键鼠模拟统一接口。"""
+
+    @abstractmethod
+    def move_mouse(self, x: int, y: int) -> None: ...
+
+    @abstractmethod
+    def click(self, button: str = "left", x: int | None = None,
+              y: int | None = None) -> None: ...
+
+    @abstractmethod
+    def double_click(self, x: int | None = None,
+                     y: int | None = None) -> None: ...
+
+    @abstractmethod
+    def type_text(self, text: str) -> None: ...
+
+    @abstractmethod
+    def press_key(self, key: str) -> None:
+        """发送单个按键（如 'enter', 'escape', 'ctrl+c'）。"""
+
+    @abstractmethod
+    def scroll(self, dx: int = 0, dy: int = 1) -> None:
+        """滚动鼠标滚轮。"""
+
+    @abstractmethod
+    def drag(self, start_x: int, start_y: int,
+             end_x: int, end_y: int) -> None: ...
+
+
+class ClipboardManager(ABC):
+    """跨平台剪贴板统一接口。"""
+
+    @abstractmethod
+    def get_text(self) -> str: ...
+
+    @abstractmethod
+    def set_text(self, text: str) -> None: ...
+
+    @abstractmethod
+    def has_image(self) -> bool: ...
+
+
+class WindowManager(ABC):
+    """跨平台窗口管理统一接口。"""
+
+    @abstractmethod
+    def list_windows(self) -> list[dict]: ...
+
+    @abstractmethod
+    def focus_window(self, title: str) -> bool: ...
+
+    @abstractmethod
+    def resize_window(self, title: str,
+                      width: int, height: int) -> bool: ...
+
+    @abstractmethod
+    def move_window(self, title: str, x: int, y: int) -> bool: ...
+
+    @abstractmethod
+    def close_window(self, title: str) -> bool: ...
+```
+
+#### Linux 实现示例（scrot + xdotool）
+
+```python
+# src/services/computer_use/platform/linux.py
+import subprocess, tempfile
+from pathlib import Path
+
+class LinuxScreenshot(ScreenshotProvider):
+    def capture_fullscreen(self) -> bytes:
+        result = subprocess.run(["scrot", "-o", "-"], capture_output=True)
+        return result.stdout  # PNG bytes
+
+    def capture_region(self, region: ScreenRegion) -> bytes:
+        result = subprocess.run(
+            ["scrot", "-o", "-a", f"{region.x},{region.y},{region.width},{region.height}", "-"],
+            capture_output=True,
+        )
+        return result.stdout
+
+    def capture_window(self, window_title: str) -> bytes | None:
+        # 使用 xdotool 查找窗口 ID
+        wid = subprocess.run(
+            ["xdotool", "search", "--name", window_title],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        if not wid:
+            return None
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            subprocess.run(["import", "-window", wid, f.name], check=True)
+            return Path(f.name).read_bytes()
+
+class LinuxInput(InputSimulator):
+    def move_mouse(self, x: int, y: int) -> None:
+        subprocess.run(["xdotool", "mousemove", str(x), str(y)])
+
+    def click(self, button: str = "left", x=None, y=None) -> None:
+        btn = {"left": 1, "middle": 2, "right": 3}.get(button, "1")
+        if x is not None and y is not None:
+            subprocess.run(["xdotool", "mousemove", str(x), str(y)])
+        subprocess.run(["xdotool", "click", str(btn)])
+
+    def type_text(self, text: str) -> None:
+        subprocess.run(["xdotool", "type", "--", text])
+
+    def press_key(self, key: str) -> None:
+        subprocess.run(["xdotool", "key", key])
+
+    def scroll(self, dx=0, dy=1) -> None:
+        subprocess.run(["xdotool", "click", "5" if dy > 0 else "4"])
+
+    def drag(self, start_x, start_y, end_x, end_y):
+        subprocess.run(["xdotool", "mousemove", str(start_x), str(start_y)])
+        subprocess.run(["xdotool", "mousedown", "1"])
+        subprocess.run(["xdotool", "mousemove", str(end_x), str(end_y)])
+        subprocess.run(["xdotool", "mouseup", "1"])
+```
+
+#### macOS 实现示例（screencapture + pyobjc）
+
+```python
+# src/services/computer_use/platform/macos.py
+import subprocess, Quartz
+
+class MacOSScreenshot(ScreenshotProvider):
+    def capture_fullscreen(self) -> bytes:
+        result = subprocess.run(
+            ["screencapture", "-c", "-x", "-t", "png", "-"],
+            capture_output=True,
+        )
+        return result.stdout
+
+    def capture_region(self, region: ScreenRegion) -> bytes:
+        result = subprocess.run(
+            ["screencapture", "-R", f"{region.x},{region.y},{region.width},{region.height}",
+             "-x", "-t", "png", "-"],
+            capture_output=True,
+        )
+        return result.stdout
+
+    def capture_window(self, window_title: str) -> bytes | None:
+        # 使用 pyobjc Quartz bindings
+        options = Quartz.CGWindowListOptionOnScreenOnly
+        window_list = Quartz.CGWindowListCopyWindowInfo(options, 0)
+        for win in window_list:
+            name = win.get("kCGWindowName", "") or ""
+            if window_title in name:
+                wid = win["kCGWindowNumber"]
+                image = Quartz.CGWindowListCreateImage(
+                    Quartz.CGRectNull,
+                    Quartz.kCGWindowListOptionIncludingWindow,
+                    wid,
+                    Quartz.kCGWindowImageDefault,
+                )
+                # 转为 PNG bytes
+                return self._cgimage_to_png(image)
+        return None
+
+class MacOSInput(InputSimulator):
+    """使用 CGEvent（pyobjc）。"""
+    def move_mouse(self, x: int, y: int) -> None:
+        event = Quartz.CGEventCreateMouseEvent(
+            None, Quartz.kCGEventMouseMoved, (x, y), 0)
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, event)
+    # ...（其他方法类似）
+```
+
+#### 集成到 Tool 工厂
+
+```python
+# src/services/computer_use/__init__.py
+def build_computer_use_tools() -> list[Tool]:
+    """创建 Computer Use 工具集（由 build_tool() 调用）。"""
+    import platform as pf
+    system = pf.system().lower()
+    if "linux" in system:
+        screenshot = LinuxScreenshot()
+        input_sim = LinuxInput()
+    elif "darwin" in system:
+        screenshot = MacOSScreenshot()
+        input_sim = MacOSInput()
+    elif "windows" in system:
+        screenshot = WindowsScreenshot()   # 使用 pywin32 实现
+        input_sim = WindowsInput()
+    else:
+        return []  # 不支持的平台
+
+    return [
+        Tool(name="computer_screenshot",
+             description="截取桌面屏幕画面",
+             parameters={...},  # region/window 参数
+             call=lambda **kw: screenshot.capture_fullscreen()),
+        Tool(name="computer_mouse",
+             description="操控鼠标移动/点击",
+             parameters={...},
+             call=lambda **kw: input_sim.click(**kw)),
+        Tool(name="computer_keyboard",
+             description="键盘输入/按键",
+             parameters={...},
+             call=lambda **kw: input_sim.type_text(**kw)),
+        Tool(name="computer_window",
+             description="窗口管理（列表/聚焦/移动/关闭）",
+             parameters={...},
+             call=lambda **kw: WindowManager.focus_window(**kw)),
+    ]
+```
+
+#### 依赖
+
+- Linux: `scrot` / `xdotool`（可选 `ydotool` 用于 Wayland）
+- macOS: 系统内置 `screencapture` + `Quartz`/`CGEvent`（via `pyobjc` 或 `subprocess`）
+- Windows: `pywin32` + `PIL`（`python -m pip install pywin32 pillow`）
+
+---
+
+
+---
+
+#### F-60: Pipe IPC + LAN 群控系统
+
+**状态**: ✅ 已完成（2026-06-19，`src/services/pipe_ipc/`） | **优先级**: P0 | **对标**: CCB Pipe IPC + LAN Pipes
+
+#### 背景
+
+CCB 的 Pipe IPC 是其最独特的能力之一：在同机或 LAN 上、通过 Unix Domain Socket / UDP Multicast 将多个 claude-code 实例组成协作网络。核心体验包括 `/pipes` 面板、Shift+↓ 跨实例选择、Source/Destination 路由、权限转发。clawcodex 的 `src/services/pipe_ipc/` 已实现 UDS 命名管道、编解码、权限转发与注册表（967 行 + 11 测试），但多实例面板 UI、LAN UDP 发现等高级特性待补。
+
+#### 子特性分解
+
+| 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
+|:----:|--------|------|:----:|:----------:|
+| P60-A | Unix Domain Socket 命名管道 | 同机多实例间通过 UDS 建立双向通信管道 | ✅ 已完成（`src/services/pipe_ipc/uds.py`） | 5-7天 |
+| P60-B | 多实例主从编排 + 面板选择 | 主实例管理子实例列表、面板 UI 展示/Pick | ⏳ 待开始 | 3-5天 |
+| P60-C | LAN UDP Multicast 自动发现 | 跨机器零配置发现：UDP Multicast 广播心跳 | ⏳ 待开始 | 5-7天 |
+| P60-D | 消息广播路由与权限转发 | 实例间消息路由、Slave 权限自动转发到 Master 确认 | ✅ 已完成（`permissions.py` 权限转发 + `registry.py` 注册表） | 3-5天 |
+| P60-E | 跨机器 Source/Destination 选择 | 跨局域网实例的选择与消息路由 | ⏳ 待开始 | 3-5天 |
+| P60-F | `/pipes` 面板与 Shfit+↓ 面板切换 | 面板 UI：列出所有可用管道/实例，键盘快速切换 | ⏳ 待开始 | 5-7天 |
+
+#### 核心数据模型
+
+```python
+# src/services/pipe_ipc/models.py
+from dataclasses import dataclass, field
+from enum import Enum
+import uuid
+from datetime import datetime
+
+class PipeMessageType(Enum):
+    HEARTBEAT = "heartbeat"               # 心跳
+    COMMAND = "command"                    # 命令消息
+    REPLY = "reply"                        # 回复
+    BROADCAST = "broadcast"                # 广播
+    PERMISSION_REQUEST = "permission_req"  # 权限请求（Slave→Master）
+    PERMISSION_GRANT = "permission_grant"  # 权限授权（Master→Slave）
+    PERMISSION_DENY = "permission_deny"    # 权限拒绝
+    PEER_JOIN = "peer_join"                # 实例加入
+    PEER_LEAVE = "peer_leave"              # 实例离开
+    AGENT_STREAM = "agent_stream"          # Agent 输出流转发
+
+@dataclass
+class PipeMessage:
+    """统一线缆格式（JSON 序列化）。"""
+    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    type: PipeMessageType = PipeMessageType.COMMAND
+    source_id: str = ""                    # 发送方实例 ID
+    target_id: str = ""                    # 接收方实例 ID（空=广播）
+    payload: dict = field(default_factory=dict)  # 消息体
+    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    ttl: int = 3                          # 跳数（防止广播环）
+    permission_token: str | None = None    # 权限转发令牌
+
+@dataclass
+class PipePeer:
+    """管道对端实例信息。"""
+    instance_id: str
+    hostname: str
+    pid: int
+    version: str
+    addr: str                              # UDS path 或 IP:port
+    transport: Literal["uds", "tcp", "udp"] = "uds"
+    last_seen: float = 0.0                 # time.monotonic()
+    is_master: bool = False
+    capabilities: list[str] = field(default_factory=list)
+```
+
+#### 核心接口
+
+```python
+# src/services/pipe_ipc/base.py
+from abc import ABC, abstractmethod
+
+class PipeTransport(ABC):
+    """管道传输层抽象（UDS / TCP / UDP）。"""
+
+    @abstractmethod
+    async def send(self, msg: PipeMessage) -> None:
+        """发送消息到对端。"""
+
+    @abstractmethod
+    async def receive(self) -> PipeMessage | None:
+        """接收消息（非阻塞或超时）。"""
+
+    @abstractmethod
+    async def broadcast(self, msg: PipeMessage) -> None:
+        """广播消息到所有已连接对端。"""
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+
+class PipeRegistry:
+    """对端实例注册表（内存 + 本地持久化）。"""
+
+    def __init__(self, data_dir: str = "~/.clawcodex/pipes"):
+        self._peers: dict[str, PipePeer] = {}
+        self._data_dir = Path(data_dir).expanduser()
+
+    def register(self, peer: PipePeer) -> None:
+        """注册（或更新）一个对端实例。"""
+        self._peers[peer.instance_id] = peer
+        self._persist()
+
+    def unregister(self, instance_id: str) -> None:
+        self._peers.pop(instance_id, None)
+        self._persist()
+
+    def get(self, instance_id: str) -> PipePeer | None:
+        return self._peers.get(instance_id)
+
+    def list_peers(self) -> list[PipePeer]:
+        return list(self._peers.values())
+
+    def _persist(self) -> None:
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        path = self._data_dir / "peers.json"
+        data = [dataclasses.asdict(p) for p in self._peers.values()]
+        path.write_text(json.dumps(data, indent=2, default=str))
+
+
+class PipePermissionForwarder:
+    """权限转发器：Slave 请求→Master 确认→Slave 执行。"""
+
+    def __init__(self, transport: PipeTransport, my_id: str, master_id: str):
+        self._transport = transport
+        self._my_id = my_id
+        self._master_id = master_id
+        self._pending: dict[str, asyncio.Future] = {}
+
+    async def request_permission(self, action: str, **kwargs) -> bool:
+        """请求 Master 授权执行敏感操作。
+
+        向 Master 发送 PERMISSION_REQUEST，等待 PERMISSION_GRANT/DENY。
+        """
+        req = PipeMessage(
+            type=PipeMessageType.PERMISSION_REQUEST,
+            source_id=self._my_id,
+            target_id=self._master_id,
+            payload={"action": action, **kwargs},
+        )
+        fut: asyncio.Future[bool] = asyncio.get_event_loop().create_future()
+        self._pending[req.id] = fut
+        await self._transport.send(req)
+        try:
+            return await asyncio.wait_for(fut, timeout=30.0)
+        except asyncio.TimeoutError:
+            return False
+        finally:
+            self._pending.pop(req.id, None)
+
+    async def handle_permission_response(self, msg: PipeMessage) -> None:
+        fut = self._pending.get(msg.id)
+        if fut and not fut.done():
+            fut.set_result(msg.type == PipeMessageType.PERMISSION_GRANT)
+```
+
+#### 服务端示例（UDS）
+
+```python
+# src/services/pipe_ipc/server.py
+import asyncio, json
+from pathlib import Path
+
+class UdsServer:
+    """Unix Domain Socket 服务端（Master 实例）。"""
+
+    def __init__(self, sock_path: str = "~/.clawcodex/pipes/master.sock"):
+        self._sock_path = Path(sock_path).expanduser()
+        self._clients: dict[str, asyncio.StreamWriter] = {}
+        self.registry = PipeRegistry()
+        self._router = PipeRouter(self)
+
+    async def start(self):
+        self._sock_path.parent.mkdir(parents=True, exist_ok=True)
+        if self._sock_path.exists():
+            self._sock_path.unlink()
+        server = await asyncio.start_unix_server(
+            self._handle_client, path=str(self._sock_path),
+        )
+        async with server:
+            await server.serve_forever()
+
+    async def _handle_client(self, reader: asyncio.StreamReader,
+                               writer: asyncio.StreamWriter):
+        """处理单个客户端连接（JSON 行协议）。"""
+        peer_addr = writer.get_extra_info("peername")
+        try:
+            while True:
+                data = await reader.readline()
+                if not data:
+                    break
+                msg = PipeMessage(**json.loads(data))
+                await self._router.route(msg)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    def broadcast(self, msg: PipeMessage) -> None:
+        """向所有连接的客户端广播。"""
+        data = json.dumps(dataclasses.asdict(msg)) + "\n"
+        for cid, w in list(self._clients.items()):
+            try:
+                w.write(data.encode())
+            except Exception:
+                self._clients.pop(cid, None)
+
+
+class PipeRouter:
+    """消息路由器：按类型和 target_id 分发。"""
+
+    def __init__(self, server: UdsServer):
+        self._server = server
+
+    async def route(self, msg: PipeMessage) -> None:
+        """路由消息到适当处理器。"""
+        if msg.type == PipeMessageType.HEARTBEAT:
+            await self._handle_heartbeat(msg)
+        elif msg.type == PipeMessageType.PERMISSION_REQUEST:
+            await self._handle_permission_request(msg)
+        elif msg.type == PipeMessageType.COMMAND:
+            await self._handle_command(msg)
+        elif msg.type == PipeMessageType.AGENT_STREAM:
+            await self._forward_agent_stream(msg)
+```
+
+#### 客户端示例
+
+```python
+# src/services/pipe_ipc/client.py
+class PipeClient:
+    """Pipe 客户端（Slave 实例或 Worker）。"""
+
+    def __init__(self, instance_id: str, master_sock: str):
+        self.instance_id = instance_id
+        self._master_sock = Path(master_sock).expanduser()
+        self._reader: asyncio.StreamReader | None = None
+        self._writer: asyncio.StreamWriter | None = None
+
+    async def connect(self):
+        """连接到 Master UDS。"""
+        self._reader, self._writer = await asyncio.open_unix_connection(
+            str(self._master_sock),
+        )
+        # 立即发送 PEER_JOIN
+        await self.send(PipeMessage(
+            type=PipeMessageType.PEER_JOIN,
+            source_id=self.instance_id,
+            payload={"pid": os.getpid(), "hostname": socket.gethostname()},
+        ))
+        # 启动心跳
+        asyncio.create_task(self._heartbeat_loop())
+
+    async def send(self, msg: PipeMessage) -> None:
+        data = json.dumps(dataclasses.asdict(msg)) + "\n"
+        self._writer.write(data.encode())
+        await self._writer.drain()
+
+    async def _heartbeat_loop(self, interval: float = 5.0):
+        while True:
+            await asyncio.sleep(interval)
+            await self.send(PipeMessage(
+                type=PipeMessageType.HEARTBEAT,
+                source_id=self.instance_id,
+            ))
+
+    async def listen(self):
+        """持续读取 Master 分发过来的消息。"""
+        while True:
+            data = await self._reader.readline()
+            if not data:
+                break
+            msg = PipeMessage(**json.loads(data))
+            # 交由上层处理
+            yield msg
+
+    async def close(self):
+        if self._writer:
+            self._writer.close()
+            await self._writer.wait_closed()
+```
+
+#### 架构图
+
+```
+┌───────────────────────────────────────────────────┐
+│                  Master Instance                   │
+│  ┌──────────────┐  ┌──────────────┐               │
+│  │ PipeRegistry  │  │ Panel UI     │               │
+│  │ (peer list)   │  │ (/pipes)     │               │
+│  └──────┬───────┘  └──────────────┘               │
+│         │                                          │
+│  ┌──────▼───────┐                                 │
+│  │ PipeRouter   │  (UDS server / UDP listener)    │
+│  └──────────────┘                                 │
+└──────────────────┬────────────────────────────────┘
+                   │ UDS / LAN
+    ┌───────────────┴───────────────┐
+    │          Slave Instance        │
+    │  ┌──────────┐  ┌────────────┐ │
+    │  │Permission│  │ PipeClient │ │
+    │  │Forwarder │  │ (heartbeat) │ │
+    │  └──────────┘  └────────────┘ │
+    └───────────────────────────────┘
+```
+
+#### 使用模式
+
+```python
+# 在 Manager/Worker 通信中集成 Pipe IPC
+# Manager 启动时：
+#   server = UdsServer()
+#   asyncio.create_task(server.start())
+
+# Worker 启动时：
+#   client = PipeClient(instance_id=worker_id, master_sock=...)
+#   await client.connect()
+#   async for msg in client.listen():
+#       handle_message(msg)
+
+# CLI /pipes 面板命令：
+#   @app.command()
+#   def pipes():
+#       """显示所有已连接对端实例。"""
+#       for peer in pipe_registry.list_peers():
+#           echo(f"  {peer.instance_id} @ {peer.hostname}  [{peer.transport}]")
+```
+
+#### 依赖
+
+- Python `asyncio` / `socket` / `multiprocessing`（标准库）
+- UDP Multicast 使用标准 socket API
+- TUI 扩展点用于 `/pipes` 面板（Textual Screen override）
+- UDS 路径 `~/.clawcodex/pipes/*.sock`
+
+---
+
+

@@ -81,94 +81,94 @@
 
 | ID | 模块 | 优先级 | 状态 | 备注 |
 |----|------|--------|------|------|
-| F-1 | Orchestrator 自主模式 | P0 | ✅ 完成 | Symphony 集成 |
+| F-1 | Orchestrator 自主模式 | P0 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-2 | Team 成员管理 (Phase-7) | P1 | 🔄 进行中 | members 数组，SendMessage 消息交互 + resume_agent 恢复已完成，TeamCreate/TeamDelete 待实现 |
-| F-3 | MCP 协议扩展 | P1 | ✅ 基础完成 | Stdio/HTTP/SSE/WS |
-| F-4 | 结构化输出集成 | P2 | ✅ 已完成 | Outlines 适配器已完整实现并迁移至 clawcodex_ext/agent/，src/ 仅留 facade |
+| F-3 | MCP 协议扩展 | P1 | ✅ 基础完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-4 | 结构化输出集成 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-5 | Voice Mode | P2 | ⏳ →F-64 | 已合并至 F-64（Voice Mode 语音输入） |
 | F-6 | Computer Use | P0 | ⏳ →F-61 | 已合并至 F-61（Computer Use 屏幕操控） |
 | F-7 | Remote Control | P2 | ⏳ →F-82 | 已合并至 F-82（Remote Control Server） |
 | F-8 | ACP/Zed/Cursor 集成 | P2 | ⏳ →F-66 | 已合并至 F-66（ACP 协议支持） |
-| F-9 | /goal 命令 | P2 | ✅ 已完成（2026-06-19 审计） | `clawcodex_ext/goal/` 9 文件 2538 行：状态机+持久化+续跑+Tool/prompt/CLI 命令。 |
+| F-9 | /goal 命令 | P2 | ✅ 已完成（2026-06-19 审计） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-10 | ExecuteExtraTool 延迟工具系统 | P2 | ⏳ 待开始 | TF-IDF 工具搜索 + 子代理执行 |
-| F-11 | sessionStorage 容量限制 | P2 | ✅ 已完成 | 防止 daemon 会话内存泄漏；`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000` |
+| F-11 | sessionStorage 容量限制 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-12 | cacheWarning 容量限制 | P2 | ⏳ 待开始 | 防止 source 类型内存泄漏 |
-| F-13 | Agent 记忆作用域隔离 | P1 | ✅ 完成 | 按需加载不同作用域记忆，clawcodex_ext try-import 降级模式 |
-| F-14 | 三层解耦架构（Layer Isolation） | P1 | ✅ 完成 | upstream/capabilities/features 三层分离，零层违规 |
-| F-15 | 权限模式切换 (Shift+Tab) | P1 | ✅ 完成 | REPL/LiveStatus/TUI 中支持 `default→acceptEdits→plan→bypassPermissions` 循环切换，状态栏显示当前模式，/permission 命令 |
-| F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ✅ 已完成 | `auto_mode_classify()` + `AutoModeDecision` + `DenialTracker` 完整实现在 `src/permissions/check.py`；`to_auto_classifier_input` 覆盖所有工具；`tests/permissions/test_permission_classifier.py` + `tests/tool/test_tool_classifier_input.py` 两套测试 |
-| F-17 | 工具系统按需加载（Tool System Extension） | P1 | ✅ 完成 | 四种工具模式（bare/default/clawcodex/all），4 bundle 简化设计，bundle 引用前缀 ":"，与上游解耦 |
-| F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 已完成 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。基础实现在 `clawcodex_ext/tool_system/tools/create_agent_tool.py` + `clawcodex_ext/agent/tool_authoring/factory.py`。commit 59d8243 补齐集成闭环：（1）已注册为内置工具 (`extensions/tool_system_ext/registration.py` `EXTENSION_TOOLS`)；（2）启动时自动加载持久化 Agent 工具 (`src/tool_system/defaults.py` `load_agent_tools=True`)；（3）`ToolContext.tool_registry` 运行时注册表字段 + 创建工具时自动注册到活动 registry；（4）模板 `{param}` → `{{param}}` 语法修复；（5）输出字段 `tool.*` → `spec.*` 修复 |
-| F-19 | SOP 转化模式 | P2 | ✅ 已完成 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；`clawcodex-dev pos convert` CLI 子命令已注册在 `subcommand_registry.py:36`，- `clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）；输出包含 `.claude/agents/<name>.md` agent 定义 + skill 文件 + orchestrator workflow |
-| F-20 | Agent 阶段性进度汇报 | P2 | ✅ 完成 | 三组合方案：检查点触发 + ProgressReportTool + ToolContext.tasks 持久化；PhaseComplete 时双重调用 ProgressReportTool + TaskUpdateTool 更新 metadata |
-| F-21 | 后台运行 + 恢复同步 | P1 | ✅ 完成 | Ctrl+B 后台化 + TailFollower 实时同步 + SessionWatcher 多终端感知，补丁 0067-0074 |
+| F-13 | Agent 记忆作用域隔离 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-14 | 三层解耦架构（Layer Isolation） | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-15 | 权限模式切换 (Shift+Tab) | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-16 | Auto 模式 (TRANSCRIPT_CLASSIFIER) | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-17 | 工具系统按需加载（Tool System Extension） | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-18 | CreateAgentTool 动态工具创建 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-19 | SOP 转化模式 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-20 | Agent 阶段性进度汇报 | P2 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-21 | 后台运行 + 恢复同步 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-22 | Cron 系统执行引擎 | P0 | 🔄 进行中（Phase A ✅ 已完成） | `clawcodex_ext/cron_system/` 已补齐 parser/storage/scheduler/jitter/lock/permanent/inFlight/基础 runs/status；历史 G1~G8 已落地；Phase A runtime-first 接线完成——REPL/TUI/headless 均通过 `RuntimeContext.build()` 获得后台 cron 调度器，REPL 新增 `_drain_cron_outbox()` 将 `tool_context.outbox` 中的 `cron_prompt`/`cron_missed` 事件经 `_enqueue_prompt` 注入为自动用户输入。剩余缺口保持 F22-R2~R8：scheduled fire 执行队列、run lifecycle finalize、用户管理/status 入口、busy gate/filter、durable reload、teammate ownership 与 CCB env gate 兼容。 |
-| F-23 | Bridge Phase 8-11 多 Session Daemon | P1 | ✅ 完成 | 多会话桥接器完整实现，bridge_main/repl_bridge/remote_bridge_core/session_runner，Phase 1-11 全部完成 |
-| F-24 | Agent Loop Consolidation (Stage 4) | P1 | ✅ 完成 | 删除 agent_loop.py (537 行)，新增 renderers.py (+257) 和 advisor.py (+125)，重构到 src/query/ |
-| F-25 | Advisor Token 计数与状态显示 | P2 | ✅ 完成 | max_history 100→2000，Provider token 追踪增强，client-side advisor mode |
-| F-26 | Away-Summary（离开摘要） | P2 | ✅ 已完成 | `clawcodex_ext/away_summary/` 共 10 个文件完整实现：service.py（6346 行）、controller.py（4655 行）、config.py、command.py、fingerprint.py、messages.py、prompt.py、registration.py；支持终端失焦检测、※ 标记 + 浅灰色、/recap 手动命令 |
-| F-27 | TUI 响应性修复（LLM 超时后 Ctrl+C/ESC 无响应） | P1 | ✅ 完成 | StreamWatchdog 超时时触发 AbortSignal；Ctrl+C 先尝试取消 agent 再退出 |
-| F-28 | Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话 | P1 | ✅ 完成 | Fork-Continue 模式：Ctrl+B 后 fork 子进程继续运行 agent，--resume 通过 TailFollower 实时显示增量输出。`clawcodex_ext/agent/background_runner.py`（417 行）完整实现 `launch_background_runner`/`get_background_runner_status`/`wait_for_background_runner`/`cleanup_background_runner`；REPL `live_status.py` 有 Ctrl+B 接线 |
-| F-29 | TaskInspect/TaskDirectives 工具注册 | P2 | ✅ 完成 | 将 TaskInspectTool 和 TaskDirectivesTool 注册到 ALL_STATIC_TOOLS，实现 Manager Agent 查询/指令 Worker |
-| F-30 | ProgressReportTool 工具注册 | P2 | ✅ 完成 | 将 ProgressReportTool 注册到 ALL_STATIC_TOOLS，Agent 可调用阶段性进度汇报 |
-| F-31 | TUI 权限模式选择器 | P1 | ✅ 完成 | 模态对话框支持 5 种权限模式切换 (default/acceptEdits/plan/bypassPermissions/dontAsk) |
-| F-32 | 会话恢复浏览器 (Resume Conversation) | P1 | ✅ 完成 | 模糊搜索、实时过滤、会话元数据展示，支持 /resume 命令和 --tui --resume 启动选项 |
-| F-36 | LocalTracker 本地 Issue 文档源 | P1 | ✅ 完成 | 新增 `tracker.kind: local`，从本地 Markdown/JSON issue 文档读取待处理任务，支持离线测试与私有本地工作流 |
-| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | ✅ 已完成 | `extensions/orchestrator/review_feedback.py`（157 行）— `ReviewFeedbackService` + `ReviewFollowup`；已接线到 `orchestrator.py:_process_review_feedback()`；GitSync follow-up 全链路 |
-| F-38 | Orchestrator 验证与报告闭环（verification + report → PR） | P0 | ✅ 完成 | commit/push 前自动跑 verification gate（pre_push hook + test_command），agent 跑完写结构化报告，git_sync 用报告改写 PR body 并合并为单条 issue 汇总评论；进度由 dead-code `progress_reporter` 接入主流程 |
-| F-39 | Orchestrator Issue 重跑入口（label + comment 命令双通道） | P0 | ✅ 完成（Sub-A~F） | 三种 label 表达重做意图：`agent:retry`（重置本地状态、关旧 PR、重跑整个 issue）、`agent:follow-up`（保留 PR、叠 commit、对应 F-37 follow-up）、`agent:blocked`（永久跳过）；comment 命令 `/agent retry` / `/agent follow-up` 由原作者或 maintainer 触发并限频；CLI 兜底 `issue retry --id 1 --mode reset`。Sub-A label 解析+意图分发、Sub-B 重置重跑、Sub-C follow-up 叠 commit、Sub-D comment 命令解析、Sub-E CLI 兜底、Sub-F 限频+角色校验均已落地；端到端 10-11 阶段（实际 GitCode/GitHub issue 联动）待真实环境验证 |
-| F-40 | ProgressReporter Sink 协议重构 | P1 | ✅ 已完成 | 把 `Orchestrator` 上 `ProgressReporter` 单例拆为每 session 独立的 `ProgressSink` 实例（`progress_sink.py` 已完整落地）；新增 `CompositeProgressSink` 扇出支持 F-37/F-39 零侵入接入；补全 `SessionComplete` / `TurnComplete` 转发；引入 `WorkflowConfig.phases` 做真实进度计算，淘汰 `phase_count * 25` 假数据 |
-| F-41 | Coordinator 轻量工具集 | P1 | ✅ 已完成 | 给 Coordinator 配置独立的轻量工具集（Read、WebSearch、WebFetch），加上原有的 Agent、SendMessage、TaskStop，共 6 个工具。Coordinator 可直接处理简单查询（搜网页、读文件），无需为每个请求创建 Worker。所有写操作工具（Write、Edit、Bash、Grep、Glob）仍隔离，强制委派复杂任务给 Worker。涉及 `src/coordinator/mode.py` 的 `_COORDINATOR_ALLOWED_TOOLS` 扩展 + `src/coordinator/prompt.py` 的 "Your Tools" 提示词更新 + `src/repl/core.py` 注释同步。231/231 orchestrator 测试通过 |
-| F-42 | Orchestrator Shared / Sequential Workspace 策略 | P0 | ✅ 完成 | 扩展 `workspace.strategy: isolated \| shared \| sequential`，保留现有 per-issue workspace，同时支持本地 feature-plan issue 在同一 working tree / integration branch 上串行叠加开发；包含单并发校验、顺序锁、dirty tree guard、每 issue commit 链元数据、shared cleanup preserve 与两 issue 端到端验收 |
-| F-43 | CLI 模型供应商与模型切换 | P1 | ✅ 已完成 (2026-06-02) | 新增 `clawcodex provider` / `clawcodex model` 子命令族（list/show/current/use/unset）+ REPL/TUI 内 `/provider` / `/model` 斜杠命令；fast-path 注册表 + `ModelRegistry` / `ModelStore` / `Resolver` + `RuntimeContext.swap_provider` 热切换；所有新代码落在 `clawcodex_ext/cli/`，`src/*` 仅追加 `CommandContext.runtime_context` seam 与 `TUIOptions.runtime_context` 透传；持久化借道 `src.config` 不重写 I/O；错误文案统一英文；`--scope project` 落入后续规划 |
-| F-44 | Orchestrator 人工检视闸门（Review Gate） | P1 | ✅ 完成 | 可选的人工检视闸门，`workflow.md` 中 `agent.review_required: true` 启用。sync 后有代码变更时标记 `PENDING_REVIEW` 而非直接 `COMPLETED`；CLI `issue review --approve/--reject` 审批或驳回；驳回自动触发 F-39 retry。向后兼容，默认关闭。 |
-| F-45 | Orchestrator tool-call 审计旁路（tool-events.ndjson + 报告登记） | P1 | ✅ 已完成 (2026-06-02) | 在 `extensions/orchestrator/agent_runner.py:_handle_tool_call` 之后追加 NDJSON 旁路落盘到 `~/.clawcodex/tool-events/{run_id}/events.ndjson`，与 `permission_mode` 解耦（`bypassPermissions` / `dontAsk` / `acceptEdits` / `default` 一视同仁全写）；扩展 `report_writer.RunReport` 加 `tool_events_path` 字段并在 markdown 模板登记路径，让审计员从 run 报告直接定位完整 per-tool 决策流水。修复 TS 注释 "bypass = no logging" 在 Python 端的事实偏差 —— `ApprovalPolicy` 一直在跑，只是决策没落盘。落地时同步修复了 `_handle_tool_call` 死代码调用链 + 加 50MB rotate + `.reports` 进默认 gitignore。16 个新测试 + 全 271 回归 + F-38 E2E 4/4 全绿。 |
+| F-23 | Bridge Phase 8-11 多 Session Daemon | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-24 | Agent Loop Consolidation (Stage 4) | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-25 | Advisor Token 计数与状态显示 | P2 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-26 | Away-Summary（离开摘要） | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-27 | TUI 响应性修复（LLM 超时后 Ctrl+C/ESC 无响应） | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-28 | Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-29 | TaskInspect/TaskDirectives 工具注册 | P2 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-30 | ProgressReportTool 工具注册 | P2 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-31 | TUI 权限模式选择器 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-32 | 会话恢复浏览器 (Resume Conversation) | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-36 | LocalTracker 本地 Issue 文档源 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-37 | Orchestrator PR 检视意见自动修复闭环 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-38 | Orchestrator 验证与报告闭环（verification + report → PR） | P0 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-39 | Orchestrator Issue 重跑入口（label + comment 命令双通道） | P0 | ✅ 完成（Sub-A~F） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-40 | ProgressReporter Sink 协议重构 | P1 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-41 | Coordinator 轻量工具集 | P1 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-42 | Orchestrator Shared / Sequential Workspace 策略 | P0 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) | shared \| sequential`，保留现有 per-issue workspace，同时支持本地 feature-plan issue 在同一 working tree / integration branch 上串行叠加开发；包含单并发校验、顺序锁、dirty tree guard、每 issue commit 链元数据、shared cleanup preserve 与两 issue 端到端验收 |
+| F-43 | CLI 模型供应商与模型切换 | P1 | ✅ 已完成 (2026-06-02) | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-44 | Orchestrator 人工检视闸门（Review Gate） | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-45 | Orchestrator tool-call 审计旁路（tool-events.ndjson + 报告登记） | P1 | ✅ 已完成 (2026-06-02) | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-46 | permission_mode enum 正交拆分 | P2 | ⏳ 规划中 | 把 `permission_mode` 混合 enum（`default` / `plan` / `bypassPermissions` / `acceptEdits` / `dontAsk` / `auto` / `bubble`）拆为三个正交字段：`interactive: bool`（是否要 TTY 弹 prompt）、`default_decision: Literal["allow", "deny", "ask"]`（无人值守默认）、`audit_log: Literal["none", "minimal", "full"]`（per-tool 决策是否落盘）。**F-46.0 暂未实现**：`schema.py` 中仍为单一的 `permission_mode` 字段，`WorkflowConfig.audit_log` 字段未落地；F-45 的 NDJSON 旁路（`tool-events.ndjson`）已独立实现，可消费。`permission_mode` 保留为 backward-compat shim；F-46.1+ 拆其余两字段推到后续。 |
-| F-47 | Permission Settings Schema 重构（`permissions` 改 dict 形态 + plumb 启动模式） | P1 | ✅ 完成（含 F-47.1 hotfix） | 修四层串联 bug：`SettingsSchema.permissions: list[PermissionRule]` 与磁盘实际 dict 形态不一致 → dict 落进 known 字段，`allowBypassPermissionsMode` 进不到 `extra` → `has_allow_bypass_permissions_mode` 永远 False → Shift+Tab cycle 看不到 Bypass；同时 `resolve_permission_state` 没把 `permissions.defaultMode` 喂给 `initial_permission_mode_from_cli`、顶层 `settings.permission_mode` 字段未读。引入 `PermissionsConfig` dataclass 对齐磁盘 + TS 上游契约；`has_allow_bypass_permissions_mode` 加 `extra["permissions"]` fallback；`resolve_permission_state` 真正 plumb `settings_default_mode`；删除 settings 层"假" `PermissionRule` 死代码。**F-47.1 (2026-06-02) hotfix**：项目尚未发布、磁盘上没有需要迁移的旧配置，直接删除原本保留的顶层 `settings.permission_mode` back-compat 读取通道——`SettingsSchema.permission_mode` 字段保留为兼容形态但启动时不再被读；详见 风险 #3 / 设计决定 #3 / F-47.1 备注。 |
+| F-47 | Permission Settings Schema 重构（`permissions` 改 dict 形态 + plumb 启动模式） | P1 | ✅ 完成（含 F-47.1 hotfix） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-48 | src/ 核心路径二开修改解耦 | P0 | 📋 设计完成 | 将 `src/` 中 **29 个纯新增文件 + 10 个功能修改文件**全部解耦到 `clawcodex_ext/` 和 `extensions/`。新增 7 个外部库适配器统一迁移（F-48.1 子特性）、Orchestrator 配套工具 5 个、Provider 扩展 3 个、Auth 子系统 2 个、TUI 屏幕 2 个、服务/工具 5 个、工具编写系统 1 个。修改文件解耦沿用 Phase 1~3（注册表/Protocol 扩展 → 子类覆盖 → 入口点恢复）。目标：src/ 二开新增文件数从 29 → 0，功能修改文件数从 10 → 0 |
 | F-49 | Issue 会话统一存储与实时介入协议 | P1 | 🔄 进行中 | 将 headless agent 的 `.event_logs/` 扁平 NDJSON 统一为 `SessionStorage` 的 `transcript.jsonl` 格式。核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator run 的完整对话进入交互式 REPL**。`extensions/agent/session_persist.py`（130 行）— `save_to_session_storage`/`load_from_session_storage` 已实现并通过 `src/agent/session.py` 接线；`extensions/orchestrator/control_socket.py`（272 行）— F-49 Phase 1 Unix Socket 控制通道完整实现，已接入 `agent_runner.py`：`ControlSocket.send_event`/`ControlCommand` 支持 pause/resume/stop/inject/status。Phase 0.2 session resume + Phase 2 attach TUI 待补齐 |
-| F-50 | SOP 转换器固化 | P2 | ✅ 已完成 | 三层映射（SOP/workflow→Skill、SDK→工具）全链路实现：`extensions/pos_converter/` 共 9 文件 2,429 行 — `SourceCodeParser`(563)、`SkillGrouper`(251)、`AgentBuilder`(326)、`AgentMarkdownWriter`(446)、`sdk_parser`(149)、`templates`(194)、`convert_pos_skill`(237)、`default_agent`(222)。`clawcodex-dev pos convert` CLI 子命令已注册（`subcommand_registry.py:36`），`clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）。F-55 分组策略增强已完成。 |
-| F-51 | AgentRunner 空转检测机制（no-op detection） | P0 | ✅ 完成 | 在 `extensions/orchestrator/agent_runner.py` 中添加连续 5 轮工作区文件无变更检测，防止 agent 在 issue deliverables 已存在的场景下陷入无限 busy-work 循环。对应 PR 检视意见自动修复闭环（F-37）中的已修复前置问题。|
-| F-52 | Python SDK 方法注册为 Tool | P2 | ✅ 已完成 | `clawcodex_ext/agent/tool_authoring/validators.py` 含 `register_python_function()` + `list_python_functions()`；`factory.py` 的 `build_tool_from_spec()` 支持 python/http/bash 三种 call_type；`spec.py` 定义 `AgentToolSpec` 数据模型；`persistence.py` 支持本地持久化。`CreateAgentTool`（F-18）已集成本能力 |
+| F-50 | SOP 转换器固化 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-51 | AgentRunner 空转检测机制（no-op detection） | P0 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-52 | Python SDK 方法注册为 Tool | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-53 | Tool 自动暴露为 CLI 斜杠命令 | P3 | 📋 规划中 | 已注册的 Tool 自动映射为 REPL/TUI 中的 `/tool-name` 命令（如 `/detect_modality --path /data/raw`），参数从 Tool schema 自动推导。`clawcodex_ext/cli/tool_cmd/`。依赖 F-52。 |
 | F-54 | AgentRunner / QueryRunner 运行期可观测性 | P0 | 🔄 进行中 | 补齐 headless issue agent 从 provider request 到 `SessionComplete` 之间的 debug 观测点。已落地：`extensions/orchestrator/debug_log.py`（29 行）— `append_debug_event` + `ObservabilityConfig` schema；`agent_runner.py:751` 写 `debug.ndjson`。仪表盘/query-runner heartbeat/CLI 诊断字段待补齐 |
-| F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
-| F-60 | Pipe IPC + LAN 群控系统 | P0 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行：UDS 命名管道、权限转发、注册表、编解码；11 测试文件。详见 §十一。 |
-| F-61 | Computer Use 屏幕操控 | P0 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行：跨平台截图/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun 模式；平台抽象工厂；15 测试文件。详见 §十一。 |
-| F-62 | Chrome 浏览器自动化控制 | P1 | ✅ 已完成 | 对标 CCB Chrome Use。`src/services/chrome/` 8 模块 ~1700 行：ChromeController ABC + PlaywrightChromeController（主） + MCPChromeController（CHROME_MCP_URL） + NullChromeController（降级） + RecordingChromeController（Pillow GIF） + build_chrome_tools() 7 个 chrome_* 工具已注册到 EXTENSION_TOOLS。P62-A/B/C/D 全部完成。详见 §十一。 |
-| F-63 | Channels 频道通知系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/channels/` 2097 行：飞书/Lark、Slack、Discord 推送、传输层重试、空通道降级；18 测试文件。详见 §十一。 |
+| F-55 | SOP 分组策略增强 | P1 | ✅ 完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-60 | Pipe IPC + LAN 群控系统 | P0 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-61 | Computer Use 屏幕操控 | P0 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-62 | Chrome 浏览器自动化控制 | P1 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-63 | Channels 频道通知系统 | P1 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-64 | Voice Mode 语音输入 | P2 | 🟡 进行中（接口层已完成） | `src/services/voice/` 含 `detection.py`（VoiceActivityDetector）和 `stt.py`（STTProvider 抽象类），但运行时集成与端到端实现待补齐。ASR 语音识别、Push-to-Talk 语音交互、音频流 WebSocket 传输待后续。 |
-| F-65 | Langfuse Agent 可观测性 | P1 | ✅ 已完成（2026-06-21） | `src/services/analytics/`（247 行）+ `src/services/langfuse/`：客户端/Sink/Exporter 全链路；可选 SDK 依赖 + 优雅降级；49 测试通过。 |
+| F-65 | Langfuse Agent 可观测性 | P1 | ✅ 已完成（2026-06-21） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-66 | ACP 协议支持 | P2 | ⏳ 待开始 | 对标 CCB ACP（Agent Client Protocol）。Zed/Cursor 等 IDE 集成协议支持，会话恢复与 Skills 桥接。预计 1-2 周。 |
-| F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | `src/buddy/` 共 8 个文件完整实现：`companion.py`(5693)、`observer.py`(3447)、`soul.py`(1875)、`sprites.py`(13463)、`types.py`(5278)、`prompt.py`(3320)、`notification.py`(1957)、`feature.py`(341)；支持后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。已列为 Phase 5 解耦对象。 |
+| F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
 | F-69 | Budget/Poor Mode | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
 | F-70 | Plugin 系统 | P1 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/ LSP 集成/MCP 集成等基础框架已存在；Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。 |
 | F-71 | 内置工具补齐 | P1 | 🟡 部分完成（SnipTool 已完成） | SnipTool 已落地 `clawcodex_ext/tool_system/tools/snip.py`，3 个工具待实现；见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
-| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、changed pytest 自动追加、stability-gate pytest、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
+| F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-74 | Sandbox 沙箱 | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
 | F-75 | 工具/Skill 调用统计（跨会话） | P2 | ⏳ 待开始 | 跨会话工具使用统计与策略优化；见 FEATURE_PLAN §4.8（F-75） |
-| F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ✅ 已完成（2026-06-19 审计） | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行：三通道优先机制（Dashboard/ClarificationQueue/@mention）完整实现。 |
-| F-80 | Agent 间自主观察与消息交互 | P2 | ✅ 已完成（2026-06-19 审计） | `TaskInspectTool` + `TaskDirectivesTool` 在 `clawcodex_ext/tool_system/tools/` 642 行，已注册到 `EXTENSION_TOOLS`。 |
+| F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ✅ 已完成（2026-06-19 审计） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-80 | Agent 间自主观察与消息交互 | P2 | ✅ 已完成（2026-06-19 审计） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-81 | Native 原生模块系统（Python） | P1 | ⏳ 待开始 | 对标 CCB Rust/NAPI 原生模块，用纯 Python 等价实现音频捕获(sounddevice)、图像差异对比(Pillow+NumPy)、URL Scheme注册(webbrowser+xdg)、修饰键检测。F-61/F-64 前置依赖。预计 1 周。 |
 | F-82 | Remote Control Server 远程控制 | P1 | ⏳ 待开始 | 对标 CCB remote-control-server。FastAPI 实现：会话管理、Worker 调度/心跳/长轮询、SSE/WebSocket 事件流、ACP 中继、环境管理、Web 管理面板。预计 3-4 周。 |
 | F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | P2 | 📋 参考实现 | 来自 hermes-agent 的 OpenAI 兼容 API 服务器参考（aiohttp, 4305 行），为 F-82 提供 Chat Completions/Session/Runs/Cron 等端点实现参考。hermes 已完整实现，ClawCodex 可复用设计模式。详见 FEATURE_PLAN §7.1（F-90）。 |
-| F-83 | Ultraplan 高级规划系统 | P2 | ✅ 已完成（2026-06-19） | `src/services/ultraplan/` 3454 行：规划模型/执行器/调整器/验证器/持久化存储；13 测试文件。详见 §十一。 |
-| F-84 | Context Collapse 上下文折叠引擎 | P2 | ✅ 已完成（2026-06-19） | `src/services/context_collapse/` 3366 行：阈值检测/摘要生成/折叠注入/边界管理/持久化；14 测试文件。详见 §十一。 |
-| F-85 | Templates 模板系统 | P1 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行：模板模型/注册表/解析器/持久化；11 测试文件。详见 §十一。 |
-| F-86 | Kairos/Brief 调度 + Periodic 任务引擎 | P2 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `src/services/periodic/` 2022 行：Tick 调度/简报模式/每日日志/周期性任务注册；13 测试文件。详见 §十一。 |
+| F-83 | Ultraplan 高级规划系统 | P2 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-84 | Context Collapse 上下文折叠引擎 | P2 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-85 | Templates 模板系统 | P1 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-86 | Kairos/Brief 调度 + Periodic 任务引擎 | P2 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-87 | Workflow Scripts | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
-| F-88 | Explore/Plan Agent | P2 | ✅ 已完成（2026-06-21） | P88-A/B 定义 Explore / Plan 内置 agent；P88-C `src/agent/routing.py` 短语表自动路由（20 关键词 × 2 类别，Plan 优先 tie-break）；P88-D `src/agent/report_store.py` 双格式（MD+JSON）原子写盘，~330 LOC。Agent 工具集成 3 钩子：显式 type 之前的分类填充 + sync/async 完成时 best-effort 持久化。17 个新单测覆盖纯函数 + 端到端 dispatch。详见 §七。 |
-| F-89 | @agent-name 多入口统一支持 | P1 | ✅ 已完成 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI/Headless/API 四入口 `@agent-name` 引用统一自动解析。 |
-| F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 5 模型 / 4 解析器 / 7 构建器 |
-| F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 15 REST 端点 + WebSocket live tail |
-| F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
-| F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | clawcodex viz 子命令 + workspaces.json |
-| F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
-| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
-| F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 三方案组合：① `AnthropicProvider._ensure_client` 默认注入 `timeout=5.0`（httpx read_timeout bound）② `_close_response_safely` 增加 `response._transport.close()`（Windows 跳过）③ `_run_tools_partitioned` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` + 100ms abort poll + 合成 cancelled tool_result 保持配对。新增 10 个单测覆盖方案2/3 + 6 个覆盖方案1。Cancel latency bound：直连 Anthropic <500ms，LiteLLM 代理 bound 在 read_timeout=5s |
-| F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | `clawcodex_ext/providers/media/` 9 文件 1005 行：MediaProvider/ImageProvider/VideoProvider ABC + MediaProviderRegistry + AgnesImageProvider + AgnesVideoProvider 完整实现；CAP_IMAGE_GENERATION / CAP_VIDEO_GENERATION；稳定性门禁 245/245 全绿。 |
+| F-88 | Explore/Plan Agent | P2 | ✅ 已完成（2026-06-21） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-89 | @agent-name 多入口统一支持 | P1 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-91 | Visualizer 核心数据管道 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-92 | Visualizer 后端 API + WebSocket | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-93 | Visualizer 前端（Jinja2 + ECharts CDN） | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-94 | Visualizer CLI + workspace 扫描 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-95 | Visualizer Orchestrator 协同 + 分享持久化 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-97 | 独立遥测系统（Issue-based Telemetry） | P1 | ✅ 第二期实现完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
+| F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
 
 

@@ -2353,3 +2353,598 @@ session = Session.resume(issue_session_id)
 - **Stable Diffusion / Flux Provider**：通过 Replicate 或直接 API 接入
 - **Runway Gen-3 / Pika / Sora VideoProvider**：实现 `VideoProvider` ABC，复用异步轮询模式
 - **Agent Tool 集成**：将 MediaProvider 封装为 agent tool（如 `/imagine`、`/animate`），让 agent 在对话中直接生成媒体
+
+## 十二、已完成特性归档（PROGRESS v3.13）
+
+以下特性已完成实现，详细说明从 PROGRESS.md 迁移至此。
+
+### F-9: /goal 命令
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex_ext/goal/` 9 文件 2538 行：状态机+持久化+续跑+Tool/prompt/CLI 命令。 |
+
+---
+
+### F-11: sessionStorage 容量限制
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 防止 daemon 会话内存泄漏；`src/services/session_storage.py` `MAX_CACHED_SESSION_FILES=1000` |
+
+---
+
+### F-13: Agent 记忆作用域隔离
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 按需加载不同作用域记忆，clawcodex_ext try-import 降级模式 |
+
+---
+
+### F-14: 三层解耦架构（Layer Isolation）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | upstream/capabilities/features 三层分离，零层违规 |
+
+---
+
+### F-15: 权限模式切换
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | REPL/LiveStatus/TUI 中支持 `default→acceptEdits→plan→bypassPermissions` 循环切换，状态栏显示当前模式，/permission 命令 |
+
+---
+
+### F-16: Auto 模式
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `auto_mode_classify()` + `AutoModeDecision` + `DenialTracker` 完整实现在 `src/permissions/check.py`；`to_auto_classifier_input` 覆盖所有工具；`tests/permissions/test_permission_classifier.py` + `tests/tool/test_tool_classifier_input.py` 两套测试 |
+
+---
+
+### F-17: 工具系统按需加载（Tool System Extension）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 四种工具模式（bare/default/clawcodex/all），4 bundle 简化设计，bundle 引用前缀 ":"，与上游解耦 |
+
+---
+
+### F-18: CreateAgentTool 动态工具创建
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | Agent 可根据 CLI/API 规范动态创建工具，Meta Tool 能力，bash/http/python 三种 call_impl 安全限制。基础实现在 `clawcodex_ext/tool_system/tools/create_agent_tool.py` + `clawcodex_ext/agent/tool_authoring/factory.py`。commit 59d8243 补齐集成闭环：（1）已注册为内置工具 (`extensions/tool_system_ext/registration.py` `EXTENSION_TOOLS`)；（2）启动时自动加载持久化 Agent 工具 (`src/tool_system/defaults.py` `load_agent_tools=True`)；（3）`ToolContext.tool_registry` 运行时注册表字段 + 创建工具时自动注册到活动 registry；（4）模板 `{param}` → `{{param}}` 语法修复；（5）输出字段 `tool.*` → `spec.*` 修复 |
+
+---
+
+### F-19: SOP 转化模式
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 三层映射（SOP、workflow→Skill、SDK→工具），SDK 解析 + Skill 分组 + Agent 构建 + 持久化已完成；`clawcodex-dev pos convert` CLI 子命令已注册在 `subcommand_registry.py:36`，- `clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）；输出包含 `.claude/agents/<name>.md` agent 定义 + skill 文件 + orchestrator workflow |
+
+---
+
+### F-20: Agent 阶段性进度汇报
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 三组合方案：检查点触发 + ProgressReportTool + ToolContext.tasks 持久化；PhaseComplete 时双重调用 ProgressReportTool + TaskUpdateTool 更新 metadata |
+
+---
+
+### F-21: 后台运行 + 恢复同步
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | Ctrl+B 后台化 + TailFollower 实时同步 + SessionWatcher 多终端感知，补丁 0067-0074 |
+
+---
+
+### F-23: Bridge Phase 8-11 多 Session Daemon
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 多会话桥接器完整实现，bridge_main/repl_bridge/remote_bridge_core/session_runner，Phase 1-11 全部完成 |
+
+---
+
+### F-24: Agent Loop Consolidation
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 删除 agent_loop.py (537 行)，新增 renderers.py (+257) 和 advisor.py (+125)，重构到 src/query/ |
+
+---
+
+### F-25: Advisor Token 计数与状态显示
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | max_history 100→2000，Provider token 追踪增强，client-side advisor mode |
+
+---
+
+### F-26: Away-Summary（离开摘要）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex_ext/away_summary/` 共 10 个文件完整实现：service.py（6346 行）、controller.py（4655 行）、config.py、command.py、fingerprint.py、messages.py、prompt.py、registration.py；支持终端失焦检测、※ 标记 + 浅灰色、/recap 手动命令 |
+
+---
+
+### F-27: TUI 响应性修复（LLM 超时后 Ctrl+C/ESC 无响应）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | StreamWatchdog 超时时触发 AbortSignal；Ctrl+C 先尝试取消 agent 再退出 |
+
+---
+
+### F-28: Ctrl+B Agent 后台持续运行 + `--resume` 恢复会话
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | Fork-Continue 模式：Ctrl+B 后 fork 子进程继续运行 agent，--resume 通过 TailFollower 实时显示增量输出。`clawcodex_ext/agent/background_runner.py`（417 行）完整实现 `launch_background_runner`/`get_background_runner_status`/`wait_for_background_runner`/`cleanup_background_runner`；REPL `live_status.py` 有 Ctrl+B 接线 |
+
+---
+
+### F-29: TaskInspect/TaskDirectives 工具注册
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 将 TaskInspectTool 和 TaskDirectivesTool 注册到 ALL_STATIC_TOOLS，实现 Manager Agent 查询/指令 Worker |
+
+---
+
+### F-30: ProgressReportTool 工具注册
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 将 ProgressReportTool 注册到 ALL_STATIC_TOOLS，Agent 可调用阶段性进度汇报 |
+
+---
+
+### F-31: TUI 权限模式选择器
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 模态对话框支持 5 种权限模式切换 (default/acceptEdits/plan/bypassPermissions/dontAsk) |
+
+---
+
+### F-32: 会话恢复浏览器
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 模糊搜索、实时过滤、会话元数据展示，支持 /resume 命令和 --tui --resume 启动选项 |
+
+---
+
+### F-36: LocalTracker 本地 Issue 文档源
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 新增 `tracker.kind: local`，从本地 Markdown/JSON issue 文档读取待处理任务，支持离线测试与私有本地工作流 |
+
+---
+
+### F-37: Orchestrator PR 检视意见自动修复闭环
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | `extensions/orchestrator/review_feedback.py`（157 行）— `ReviewFeedbackService` + `ReviewFollowup`；已接线到 `orchestrator.py:_process_review_feedback()`；GitSync follow-up 全链路 |
+
+---
+
+### F-38: Orchestrator 验证与报告闭环（verification + report → PR）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | commit/push 前自动跑 verification gate（pre_push hook + test_command），agent 跑完写结构化报告，git_sync 用报告改写 PR body 并合并为单条 issue 汇总评论；进度由 dead-code `progress_reporter` 接入主流程 |
+
+---
+
+### F-39: Orchestrator Issue 重跑入口（label + comment 命令双通道）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 三种 label 表达重做意图：`agent:retry`（重置本地状态、关旧 PR、重跑整个 issue）、`agent:follow-up`（保留 PR、叠 commit、对应 F-37 follow-up）、`agent:blocked`（永久跳过）；comment 命令 `/agent retry` / `/agent follow-up` 由原作者或 maintainer 触发并限频；CLI 兜底 `issue retry --id 1 --mode reset`。Sub-A label 解析+意图分发、Sub-B 重置重跑、Sub-C follow-up 叠 commit、Sub-D comment 命令解析、Sub-E CLI 兜底、Sub-F 限频+角色校验均已落地；端到端 10-11 阶段（实际 GitCode/GitHub issue 联动）待真实环境验证 |
+
+---
+
+### F-40: ProgressReporter Sink 协议重构
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 把 `Orchestrator` 上 `ProgressReporter` 单例拆为每 session 独立的 `ProgressSink` 实例（`progress_sink.py` 已完整落地）；新增 `CompositeProgressSink` 扇出支持 F-37/F-39 零侵入接入；补全 `SessionComplete` / `TurnComplete` 转发；引入 `WorkflowConfig.phases` 做真实进度计算，淘汰 `phase_count * 25` 假数据 |
+
+---
+
+### F-41: Coordinator 轻量工具集
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 给 Coordinator 配置独立的轻量工具集（Read、WebSearch、WebFetch），加上原有的 Agent、SendMessage、TaskStop，共 6 个工具。Coordinator 可直接处理简单查询（搜网页、读文件），无需为每个请求创建 Worker。所有写操作工具（Write、Edit、Bash、Grep、Glob）仍隔离，强制委派复杂任务给 Worker。涉及 `src/coordinator/mode.py` 的 `_COORDINATOR_ALLOWED_TOOLS` 扩展 + `src/coordinator/prompt.py` 的 "Your Tools" 提示词更新 + `src/repl/core.py` 注释同步。231/231 orchestrator 测试通过 |
+
+---
+
+### F-42: Orchestrator Shared / Sequential Workspace 策略
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 扩展 `workspace.strategy: isolated \ |
+
+---
+
+### F-43: CLI 模型供应商与模型切换
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 新增 `clawcodex provider` / `clawcodex model` 子命令族（list/show/current/use/unset）+ REPL/TUI 内 `/provider` / `/model` 斜杠命令；fast-path 注册表 + `ModelRegistry` / `ModelStore` / `Resolver` + `RuntimeContext.swap_provider` 热切换；所有新代码落在 `clawcodex_ext/cli/`，`src/*` 仅追加 `CommandContext.runtime_context` seam 与 `TUIOptions.runtime_context` 透传；持久化借道 `src.config` 不重写 I/O；错误文案统一英文；`--scope project` 落入后续规划 |
+
+---
+
+### F-44: Orchestrator 人工检视闸门（Review Gate）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 可选的人工检视闸门，`workflow.md` 中 `agent.review_required: true` 启用。sync 后有代码变更时标记 `PENDING_REVIEW` 而非直接 `COMPLETED`；CLI `issue review --approve/--reject` 审批或驳回；驳回自动触发 F-39 retry。向后兼容，默认关闭。 |
+
+---
+
+### F-45: Orchestrator tool-call 审计旁路（tool-events.ndjson + 报告登记）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 在 `extensions/orchestrator/agent_runner.py:_handle_tool_call` 之后追加 NDJSON 旁路落盘到 `~/.clawcodex/tool-events/{run_id}/events.ndjson`，与 `permission_mode` 解耦（`bypassPermissions` / `dontAsk` / `acceptEdits` / `default` 一视同仁全写）；扩展 `report_writer.RunReport` 加 `tool_events_path` 字段并在 markdown 模板登记路径，让审计员从 run 报告直接定位完整 per-tool 决策流水。修复 TS 注释 "bypass = no logging" 在 Python 端的事实偏差 —— `ApprovalPolicy` 一直在跑，只是决策没落盘。落地时同步修复了 `_handle_tool_call` 死代码调用链 + 加 50MB rotate + `.reports` 进默认 gitignore。16 个新测试 + 全 271 回归 + F-38 E2E 4/4 全绿。 |
+
+---
+
+### F-47: Permission Settings Schema 重构（`permissions` 改 dict 形态 + plumb 启动模式）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 修四层串联 bug：`SettingsSchema.permissions: list[PermissionRule]` 与磁盘实际 dict 形态不一致 → dict 落进 known 字段，`allowBypassPermissionsMode` 进不到 `extra` → `has_allow_bypass_permissions_mode` 永远 False → Shift+Tab cycle 看不到 Bypass；同时 `resolve_permission_state` 没把 `permissions.defaultMode` 喂给 `initial_permission_mode_from_cli`、顶层 `settings.permission_mode` 字段未读。引入 `PermissionsConfig` dataclass 对齐磁盘 + TS 上游契约；`has_allow_bypass_permissions_mode` 加 `extra["permissions"]` fallback；`resolve_permission_state` 真正 plumb `settings_default_mode`；删除 settings 层"假" `PermissionRule` 死代码。**F-47.1 (2026-06-02) hotfix**：项目尚未发布、磁盘上没有需要迁移的旧配置，直接删除原本保留的顶层 `settings.permission_mode` back-compat 读取通道——`SettingsSchema.permission_mode` 字段保留为兼容形态但启动时不再被读；详见 风险 #3 / 设计决定 #3 / F-47.1 备注。 |
+
+---
+
+### F-50: SOP 转换器固化
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | 三层映射（SOP/workflow→Skill、SDK→工具）全链路实现：`extensions/pos_converter/` 共 9 文件 2,429 行 — `SourceCodeParser`(563)、`SkillGrouper`(251)、`AgentBuilder`(326)、`AgentMarkdownWriter`(446)、`sdk_parser`(149)、`templates`(194)、`convert_pos_skill`(237)、`default_agent`(222)。`clawcodex-dev pos convert` CLI 子命令已注册（`subcommand_registry.py:36`），`clawcodex_ext/cli/pos_cmd/commands.py` 完整实现 CLI 入口（含 SourceCodeParser 源码模式 + 传统 spec 模式）。F-55 分组策略增强已完成。 |
+
+---
+
+### F-51: AgentRunner 空转检测机制（no-op detection）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 在 `extensions/orchestrator/agent_runner.py` 中添加连续 5 轮工作区文件无变更检测，防止 agent 在 issue deliverables 已存在的场景下陷入无限 busy-work 循环。对应 PR 检视意见自动修复闭环（F-37）中的已修复前置问题。 |
+
+---
+
+### F-52: Python SDK 方法注册为 Tool
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex_ext/agent/tool_authoring/validators.py` 含 `register_python_function()` + `list_python_functions()`；`factory.py` 的 `build_tool_from_spec()` 支持 python/http/bash 三种 call_type；`spec.py` 定义 `AgentToolSpec` 数据模型；`persistence.py` 支持本地持久化。`CreateAgentTool`（F-18）已集成本能力 |
+
+---
+
+### F-55: SOP 分组策略增强
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | F-50 增强子特性，解决"模块多时 Agent 过多"问题，详见 FEATURE_PLAN §4.2.1 |
+
+---
+
+### F-60: Pipe IPC + LAN 群控系统
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/pipe_ipc/` 967 行：UDS 命名管道、权限转发、注册表、编解码；11 测试文件。详见 §十一。 |
+
+---
+
+### F-61: Computer Use 屏幕操控
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/computer_use/` 1797 行：跨平台截图/键鼠/窗口/剪贴板；Linux scrot/xdotool + Null/DryRun 模式；平台抽象工厂；15 测试文件。详见 §十一。 |
+
+---
+
+### F-62: Chrome 浏览器自动化控制
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | 对标 CCB Chrome Use。`src/services/chrome/` 8 模块 ~1700 行：ChromeController ABC + PlaywrightChromeController（主） + MCPChromeController（CHROME_MCP_URL） + NullChromeController（降级） + RecordingChromeController（Pillow GIF） + build_chrome_tools() 7 个 chrome_* 工具已注册到 EXTENSION_TOOLS。P62-A/B/C/D 全部完成。详见 §十一。 |
+
+---
+
+### F-63: Channels 频道通知系统
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/channels/` 2097 行：飞书/Lark、Slack、Discord 推送、传输层重试、空通道降级；18 测试文件。详见 §十一。 |
+
+---
+
+### F-65: Langfuse Agent 可观测性
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/analytics/`（247 行）+ `src/services/langfuse/`：客户端/Sink/Exporter 全链路；可选 SDK 依赖 + 优雅降级；49 测试通过。 |
+
+---
+
+### F-67: Buddy 伴侣 / Proactive 自主模式
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/buddy/` 共 8 个文件完整实现：`companion.py`(5693)、`observer.py`(3447)、`soul.py`(1875)、`sprites.py`(13463)、`types.py`(5278)、`prompt.py`(3320)、`notification.py`(1957)、`feature.py`(341)；支持后台 AI 伴侣异步观察会话、主动提供调试建议、检测文件变更自动提出优化。已列为 Phase 5 解耦对象。 |
+
+---
+
+### F-73: CI/CD 流水线
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | GitCode workflow 目标配置、本地 CI fallback、pre-commit、changed pytest 自动追加、stability-gate pytest、package/release helper 已落地；Pipeline/CodeCheck/Release/PyPI 待仓库能力开通后验证 |
+
+---
+
+### F-78: Issue 语义澄清流程（自主模式扩展）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `extensions/orchestrator/clarification.py` + `clarification_queue.py` 865 行：三通道优先机制（Dashboard/ClarificationQueue/@mention）完整实现。 |
+
+---
+
+### F-80: Agent 间自主观察与消息交互
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `TaskInspectTool` + `TaskDirectivesTool` 在 `clawcodex_ext/tool_system/tools/` 642 行，已注册到 `EXTENSION_TOOLS`。 |
+
+---
+
+### F-83: Ultraplan 高级规划系统
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/ultraplan/` 3454 行：规划模型/执行器/调整器/验证器/持久化存储；13 测试文件。详见 §十一。 |
+
+---
+
+### F-84: Context Collapse 上下文折叠引擎
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/context_collapse/` 3366 行：阈值检测/摘要生成/折叠注入/边界管理/持久化；14 测试文件。详见 §十一。 |
+
+---
+
+### F-85: Templates 模板系统
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/templates/` 2076 行：模板模型/注册表/解析器/持久化；11 测试文件。详见 §十一。 |
+
+---
+
+### F-86: Kairos/Brief 调度 + Periodic 任务引擎
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `src/services/kairos/` + `src/services/periodic/` 2022 行：Tick 调度/简报模式/每日日志/周期性任务注册；13 测试文件。详见 §十一。 |
+
+---
+
+### F-88: Explore/Plan Agent
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | P88-A/B 定义 Explore / Plan 内置 agent；P88-C `src/agent/routing.py` 短语表自动路由（20 关键词 × 2 类别，Plan 优先 tie-break）；P88-D `src/agent/report_store.py` 双格式（MD+JSON）原子写盘，~330 LOC。Agent 工具集成 3 钩子：显式 type 之前的分类填充 + sync/async 完成时 best-effort 持久化。17 个新单测覆盖纯函数 + 端到端 dispatch。详见 §七。 |
+
+---
+
+### F-89: @agent-name 多入口统一支持
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex_ext/cli/dispatch.py` 含 `_resolve_startup_agent()` 完整实现，`--agent <name>` CLI 标志 + `.claude/agents/<name>.md` 自动发现 + 启动 banner；`clawcodex-dev pos convert` 输出格式兼容 `.claude/agents/<name>.md`，支持 `@agent-name` 加载。REPL/TUI/Headless/API 四入口 `@agent-name` 引用统一自动解析。 |
+
+---
+
+### F-91: Visualizer 核心数据管道
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 5 模型 / 4 解析器 / 7 构建器 |
+
+---
+
+### F-92: Visualizer 后端 API + WebSocket
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 15 REST 端点 + WebSocket live tail |
+
+---
+
+### F-93: Visualizer 前端（Jinja2 + ECharts CDN）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 甘特图三模式 / 搜索 / 异常面板 / 对比页面 |
+
+---
+
+### F-94: Visualizer CLI + workspace 扫描
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | clawcodex viz 子命令 + workspaces.json |
+
+---
+
+### F-95: Visualizer Orchestrator 协同 + 分享持久化
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | F-38/F-45/F-54 链接 + 7天 TTL 磁盘持久化 |
+
+---
+
+### F-97: 独立遥测系统（Issue-based Telemetry）
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P1 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex/telemetry` 独立包，本地聚合 + 主 CLI telemetry 命令 + GitHub/Gitee/GitCode Issue 上报 |
+
+---
+
+### F-99: Ctrl+C/B 即时中断响应优化
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P0 |
+| 状态 | ✅ 已归档 |
+| 备注 | 三方案组合：① `AnthropicProvider._ensure_client` 默认注入 `timeout=5.0`（httpx read_timeout bound）② `_close_response_safely` 增加 `response._transport.close()`（Windows 跳过）③ `_run_tools_partitioned` 改用 `asyncio.wait(FIRST_COMPLETED)` + `task.cancel()` + 100ms abort poll + 合成 cancelled tool_result 保持配对。新增 10 个单测覆盖方案2/3 + 6 个覆盖方案1。Cancel latency bound：直连 Anthropic <500ms，LiteLLM 代理 bound 在 read_timeout=5s |
+
+---
+
+### F-101: Media Generation Provider Abstraction + Agnes AI
+
+| 属性 | 值 |
+|------|-----|
+| 优先级 | P2 |
+| 状态 | ✅ 已归档 |
+| 备注 | `clawcodex_ext/providers/media/` 9 文件 1005 行：MediaProvider/ImageProvider/VideoProvider ABC + MediaProviderRegistry + AgnesImageProvider + AgnesVideoProvider 完整实现；CAP_IMAGE_GENERATION / CAP_VIDEO_GENERATION；稳定性门禁 245/245 全绿。 |
+
+---
+
