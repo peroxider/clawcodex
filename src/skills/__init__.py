@@ -1,6 +1,22 @@
-from .argument_substitution import parse_arguments, substitute_arguments
-from .bundled import init_bundled_skills
-from .bundled_skills import (
+"""Skills package — Phase 2-C re-exports.
+
+The skill modules have been moved to :mod:`clawcodex_ext.skills`.
+This ``__init__`` re-exports the same public surface that the
+pre-move package exposed, but does so by importing from the new
+``clawcodex_ext.skills.*`` locations (the ``src.skills.*`` facades
+create a cycle because they live inside this package).
+
+The public surface and ``__all__`` are unchanged.
+"""
+
+from __future__ import annotations
+
+from clawcodex_ext.skills.argument_substitution import (
+    parse_arguments,
+    substitute_arguments,
+)
+from clawcodex_ext.skills.bundled import init_bundled_skills
+from clawcodex_ext.skills.bundled_skills import (
     BundledSkillDefinition,
     SkillValidationError,
     clear_bundled_skills,
@@ -11,9 +27,9 @@ from .bundled_skills import (
     validate_skill,
     validate_skill_definition,
 )
-from .create import create_skill
-from .frontmatter import parse_frontmatter
-from .loader import (
+from clawcodex_ext.skills.create import create_skill
+from clawcodex_ext.skills.frontmatter import parse_frontmatter
+from clawcodex_ext.skills.loader import (
     activate_conditional_skills_for_paths,
     add_skill_directories,
     clear_dynamic_skills,
@@ -31,9 +47,12 @@ from .loader import (
     load_skills_from_skills_dir,
     parse_skill_frontmatter_fields,
 )
-from .mcp_skill_builders import get_mcp_skill_builders, register_mcp_skill_builders
-from .model import PromptSkill, Skill
-from .runtime_substitution import (
+from clawcodex_ext.skills.mcp_skill_builders import (
+    get_mcp_skill_builders,
+    register_mcp_skill_builders,
+)
+from clawcodex_ext.skills.model import PromptSkill, Skill
+from clawcodex_ext.skills.runtime_substitution import (
     find_shell_blocks,
     format_shell_error,
     format_shell_output,

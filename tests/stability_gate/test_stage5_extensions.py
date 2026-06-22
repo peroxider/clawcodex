@@ -505,6 +505,30 @@ class TestStage5ExtAgent:
         assert callable(is_team_memory_enabled)
         assert callable(build_combined_memory_prompt)
 
+    def test_phase2c_skills_facade(self):
+        """Phase 2-C: 7 src/skills/ files + bundled/ → clawcodex_ext/skills/"""
+        from src.skills.argument_substitution import parse_arguments, substitute_arguments
+        from src.skills.bundled_skills import (
+            BundledSkillDefinition,
+            register_bundled_skill,
+        )
+        from src.skills.create import create_skill
+        from src.skills.loader import get_all_skills, get_skills_path
+        from src.skills.mcp_skill_builders import register_mcp_skill_builders
+        from src.skills.model import Skill
+        from src.skills.runtime_substitution import render_skill_prompt
+
+        assert callable(parse_arguments)
+        assert callable(substitute_arguments)
+        assert BundledSkillDefinition is not None
+        assert callable(register_bundled_skill)
+        assert callable(create_skill)
+        assert callable(get_all_skills)
+        assert callable(get_skills_path)
+        assert callable(register_mcp_skill_builders)
+        assert Skill is not None
+        assert callable(render_skill_prompt)
+
 
 class TestStage5ExtCommandSystem:
     """命令系统扩展测试。"""
