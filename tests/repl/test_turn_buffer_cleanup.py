@@ -31,6 +31,7 @@ class TestTurnBufferCleanup(unittest.TestCase):
         """
         repl = ClawcodexREPL.__new__(ClawcodexREPL)
         repl._queued_prompts = deque(maxlen=100)
+        repl._cron_queued_prompts = deque(maxlen=100)
         repl._queued_prompts_lock = Lock()
         repl._thinking_chunks = deque(maxlen=1000)
         repl._expandable_blocks = deque(maxlen=20)
@@ -55,9 +56,9 @@ class TestTurnBufferCleanup(unittest.TestCase):
         repl._enqueue_prompt("first")
         repl._enqueue_prompt("second")
         repl._enqueue_prompt("third")
-        self.assertEqual(repl._pop_queued_prompt(), "first")
-        self.assertEqual(repl._pop_queued_prompt(), "second")
-        self.assertEqual(repl._pop_queued_prompt(), "third")
+        self.assertEqual(repl._pop_queued_prompt(), ("first", "user"))
+        self.assertEqual(repl._pop_queued_prompt(), ("second", "user"))
+        self.assertEqual(repl._pop_queued_prompt(), ("third", "user"))
         self.assertIsNone(repl._pop_queued_prompt())
 
     def test_queued_prompts_count_zero_when_empty(self) -> None:
@@ -142,8 +143,8 @@ class TestTurnBufferCleanup(unittest.TestCase):
         self.assertEqual(len(repl._queued_prompts), 2)
         # FIFO order preserved so the next ``_pop_queued_prompt()`` returns
         # the earliest typed input first.
-        self.assertEqual(repl._pop_queued_prompt(), "typed-during-turn-1")
-        self.assertEqual(repl._pop_queued_prompt(), "typed-during-turn-2")
+        self.assertEqual(repl._pop_queued_prompt(), ("typed-during-turn-1", "user"))
+        self.assertEqual(repl._pop_queued_prompt(), ("typed-during-turn-2", "user"))
         self.assertIsNone(repl._pop_queued_prompt())
 
     def test_clear_pending_turn_buffers_idempotent(self) -> None:
@@ -197,6 +198,66 @@ class TestTurnBufferCleanup(unittest.TestCase):
             # Now the turn boundary fires.
             repl.clear_pending_turn_buffers()
             self.assertEqual(len(repl._thinking_chunks), 0)
+
+    def test_user_queue_has_priority_over_cron_queue(self) -> None:
+        """User prompts are consumed before cron prompts."""
+        repl = self._make_repl()
+        repl._enqueue_cron_prompt("cron-first")
+        repl._enqueue_prompt("user-input")
+        repl._enqueue_cron_prompt("cron-second")
+
+        result = repl._pop_queued_prompt()
+        self.assertEqual(result, ("user-input", "user"))
+
+        result = repl._pop_queued_prompt()
+        self.assertEqual(result, ("cron-first", "cron"))
+
+        result = repl._pop_queued_prompt()
+        self.assertEqual(result, ("cron-second", "cron"))
+
+        self.assertIsNone(repl._pop_queued_prompt())
+
+    def test_cron_prompt_consumed_when_user_queue_empty(self) -> None:
+        """Cron prompts are consumed when no user prompts are queued."""
+        repl = self._make_repl()
+        repl._enqueue_cron_prompt("cron-task")
+
+        result = repl._pop_queued_prompt()
+        self.assertEqual(result, ("cron-task", "cron"))
+
+    def test_mixed_user_and_cron_ordering(self) -> None:
+        """Multiple user + cron prompts: all user first, then all cron."""
+        repl = self._make_repl()
+        repl._enqueue_cron_prompt("cron-a")
+        repl._enqueue_prompt("user-1")
+        repl._enqueue_cron_prompt("cron-b")
+        repl._enqueue_prompt("user-2")
+
+        results = []
+        while True:
+            r = repl._pop_queued_prompt()
+            if r is None:
+                break
+            results.append(r)
+
+        self.assertEqual(
+            results,
+            [
+                ("user-1", "user"),
+                ("user-2", "user"),
+                ("cron-a", "cron"),
+                ("cron-b", "cron"),
+            ],
+        )
+
+    def test_queued_count_includes_both_queues(self) -> None:
+        """_queued_count returns total of user + cron queues."""
+        repl = self._make_repl()
+        self.assertEqual(repl._queued_count(), 0)
+        repl._enqueue_prompt("user-1")
+        repl._enqueue_cron_prompt("cron-1")
+        repl._enqueue_cron_prompt("cron-2")
+        self.assertEqual(repl._queued_count(), 3)
 
 
 if __name__ == "__main__":

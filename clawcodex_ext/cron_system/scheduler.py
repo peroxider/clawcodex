@@ -70,6 +70,8 @@ class CronScheduler:
     # behaviour.
     dir_override: Path | None = None
     lock_identity: str | None = None
+    is_loading: Callable[[], bool] | None = None
+    assistant_mode: bool = False
 
     _thread: threading.Thread | None = field(default=None, init=False)
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
@@ -143,8 +145,28 @@ class CronScheduler:
         except Exception:  # pragma: no cover - defensive
             return False
 
+    def _is_loading_gate(self) -> bool:
+        """True if agent is busy AND assistant_mode is off.
+
+        Mirrors TS ``check()``: ``if isLoading() && !assistantMode: return``.
+        When the gate is active, the entire tick is skipped — no tasks are
+        evaluated, no fires occur. Overdue tasks fire on the first tick
+        where the gate opens (their ``next_fire_at`` is already in the past).
+        """
+        if self.assistant_mode:
+            return False
+        if self.is_loading is None:
+            return False
+        try:
+            return bool(self.is_loading())
+        except Exception:  # pragma: no cover - defensive
+            return False
+
     def check_once(self, at_ms: int | None = None) -> list[CronTask]:
         if self.is_disabled():
+            return []
+
+        if self._is_loading_gate():
             return []
 
         timestamp = at_ms if at_ms is not None else now_ms()

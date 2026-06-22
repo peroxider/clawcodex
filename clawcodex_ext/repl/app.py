@@ -107,6 +107,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             # under the per-turn lock. See ``clear_pending_turn_buffers`` in
             # core.py for the turn-end reset that runs even on small queues.
             self._queued_prompts: deque[str] = deque(maxlen=100)
+            self._cron_queued_prompts: deque[str] = deque(maxlen=100)
             self._queued_prompts_lock = threading.Lock()
             self._original_built_ins = [
                 "/", "/help", "/exit", "/quit", "/q", "/clear",
@@ -237,10 +238,16 @@ class ClawCodexExtREPL(ClawcodexREPL):
         # under the per-turn lock. See ``clear_pending_turn_buffers`` in
         # core.py for the turn-end reset that runs even on small queues.
         self._queued_prompts: deque[str] = deque(maxlen=100)
+        self._cron_queued_prompts: deque[str] = deque(maxlen=100)
         self._queued_prompts_lock = threading.Lock()
         self._permission_prompt_lock = threading.Lock()
         self._permission_decision_cache: dict[str, bool] = {}
         self._active_live_status: Any = None
+        # Wire is_loading on the pre-existing cron scheduler (created by
+        # RuntimeContext.build before this REPL was constructed).
+        _cron_sched = getattr(self.tool_context, "cron_scheduler", None)
+        if _cron_sched is not None:
+            _cron_sched.is_loading = lambda: self._active_live_status is not None
         self._expandable_blocks: deque[tuple[str, str]] = deque(maxlen=20)
 
         # ---- Downstream-only state ----

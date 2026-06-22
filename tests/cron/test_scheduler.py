@@ -428,3 +428,98 @@ def test_daemon_mode_async_scheduler(tmp_path: Path) -> None:
     )
     assert scheduler.workspace_root == alt_root
     assert scheduler.lock_identity == "async-daemon"
+
+
+def test_check_once_skips_when_is_loading(tmp_path) -> None:
+    """is_loading=True → check_once returns empty, no fire."""
+    fired: list[str] = []
+    task = add_cron_task(
+        tmp_path, cron="* * * * *", prompt="ping", recurring=True, created_at=1_000
+    )
+    write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
+
+    scheduler = CronScheduler(
+        tmp_path, on_fire=fired.append, is_loading=lambda: True
+    )
+    due = scheduler.check_once(at_ms=3_000)
+
+    assert due == []
+    assert fired == []
+
+
+def test_check_once_fires_after_is_loading_clears(tmp_path) -> None:
+    """is_loading flips True→False → overdue task fires on next tick."""
+    fired: list[str] = []
+    task = add_cron_task(
+        tmp_path, cron="* * * * *", prompt="ping", recurring=True, created_at=1_000
+    )
+    write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
+
+    busy = True
+    scheduler = CronScheduler(
+        tmp_path, on_fire=fired.append, is_loading=lambda: busy
+    )
+
+    due1 = scheduler.check_once(at_ms=3_000)
+    assert due1 == []
+    assert fired == []
+
+    busy = False
+    due2 = scheduler.check_once(at_ms=3_000)
+    assert len(due2) == 1
+    assert fired == ["ping"]
+
+
+def test_assistant_mode_bypasses_is_loading(tmp_path) -> None:
+    """is_loading=True + assistant_mode=True → fire proceeds normally."""
+    fired: list[str] = []
+    task = add_cron_task(
+        tmp_path, cron="* * * * *", prompt="ping", recurring=True, created_at=1_000
+    )
+    write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
+
+    scheduler = CronScheduler(
+        tmp_path,
+        on_fire=fired.append,
+        is_loading=lambda: True,
+        assistant_mode=True,
+    )
+    due = scheduler.check_once(at_ms=3_000)
+
+    assert len(due) == 1
+    assert fired == ["ping"]
+
+
+def test_is_loading_exception_treated_as_not_loading(tmp_path) -> None:
+    """is_loading callback raises → treated as False (defensive)."""
+    fired: list[str] = []
+    task = add_cron_task(
+        tmp_path, cron="* * * * *", prompt="ping", recurring=True, created_at=1_000
+    )
+    write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
+
+    def broken_loading():
+        raise RuntimeError("boom")
+
+    scheduler = CronScheduler(
+        tmp_path, on_fire=fired.append, is_loading=broken_loading
+    )
+    due = scheduler.check_once(at_ms=3_000)
+
+    assert len(due) == 1
+    assert fired == ["ping"]
+
+
+def test_is_loading_none_means_never_busy(tmp_path) -> None:
+    """is_loading=None (default) → gate never activates."""
+    fired: list[str] = []
+    task = add_cron_task(
+        tmp_path, cron="* * * * *", prompt="ping", recurring=True, created_at=1_000
+    )
+    write_cron_tasks(tmp_path, [replace(task, next_fire_at=2_000)])
+
+    scheduler = CronScheduler(tmp_path, on_fire=fired.append)
+    due = scheduler.check_once(at_ms=3_000)
+
+    assert len(due) == 1
+    assert fired == ["ping"]
