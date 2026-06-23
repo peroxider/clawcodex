@@ -23,7 +23,7 @@ from unittest import mock
 
 import pytest
 
-from src import init as init_module
+import clawcodex_ext.init as init_module
 from src.bootstrap.state import reset_state_for_tests
 from src.utils import graceful_shutdown as gs
 from src.utils import startup_profiler
@@ -91,7 +91,7 @@ class TestFastPathSkipsInit(unittest.TestCase):
 
     def test_version_fast_path_does_not_call_pre_action(self) -> None:
         # The pre-argparse fast-path checks for one-flag --version.
-        with mock.patch("src.init.run_pre_action") as mock_pre_action:
+        with mock.patch("clawcodex_ext.init.run_pre_action") as mock_pre_action:
             with mock.patch.object(sys, "argv", ["clawcodex", "--version"]):
                 from src import cli
 
@@ -102,7 +102,7 @@ class TestFastPathSkipsInit(unittest.TestCase):
         # Multi-arg argv triggers argparse (pre-argparse fast-path
         # requires len(sys.argv) == 2). The args.version short-circuit
         # at cli.py:92-95 must also skip init.
-        with mock.patch("src.init.run_pre_action") as mock_pre_action:
+        with mock.patch("clawcodex_ext.init.run_pre_action") as mock_pre_action:
             with mock.patch.object(sys, "argv", ["clawcodex", "--version", "--debug"]):
                 # argparse rejects unknown flags, so use a known one
                 # that doesn't change behavior:
@@ -120,7 +120,7 @@ class TestFastPathSkipsInit(unittest.TestCase):
     def test_post_argparse_config_short_circuit_skips_init(self) -> None:
         # Same property for --config short-circuit.
         with (
-            mock.patch("src.init.run_pre_action") as mock_pre_action,
+            mock.patch("clawcodex_ext.init.run_pre_action") as mock_pre_action,
             mock.patch("src.cli.show_config", return_value=0),
         ):
             with mock.patch.object(sys, "argv", ["clawcodex", "--config", "--legacy-repl"]):
@@ -141,7 +141,7 @@ class TestPreActionRunsForDefaultInvocation(unittest.TestCase):
         # in the full provider/registry/etc. stack. _resolve_permission_state
         # is allowed to run because cli.start_repl reads args._resolved_*.
         with (
-            mock.patch("src.init.run_pre_action") as mock_pre,
+            mock.patch("clawcodex_ext.init.run_pre_action") as mock_pre,
             mock.patch("src.cli.start_repl", return_value=0),
             mock.patch("src.entrypoints.tui.should_use_tui", return_value=False),
             mock.patch.object(sys, "argv", ["clawcodex"]),

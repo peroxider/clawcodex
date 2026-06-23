@@ -157,21 +157,21 @@ class InitConsumesPrefetchesTests(unittest.TestCase):
         mdm_payload: str | None,
     ):
         # Patch the symbols where init.py imported them — not at source.
-        keychain_patch = mock.patch("src.init.wait_and_read_keychain", return_value=keychain_value)
-        mdm_patch = mock.patch("src.init.wait_and_read_mdm", return_value=mdm_payload)
+        keychain_patch = mock.patch("clawcodex_ext.init.wait_and_read_keychain", return_value=keychain_value)
+        mdm_patch = mock.patch("clawcodex_ext.init.wait_and_read_mdm", return_value=mdm_payload)
         # Avoid spawning real Popens during the test.
         ks_patch = mock.patch(
-            "src.init.get_or_start_keychain_prefetch",
+            "clawcodex_ext.init.get_or_start_keychain_prefetch",
             return_value=mock.MagicMock(),
         )
         ms_patch = mock.patch(
-            "src.init.get_or_start_mdm_raw_read",
+            "clawcodex_ext.init.get_or_start_mdm_raw_read",
             return_value=mock.MagicMock(),
         )
         # Avoid network preconnect during the test.
-        preconnect_patch = mock.patch("src.init.start_api_preconnect")
+        preconnect_patch = mock.patch("clawcodex_ext.init.start_api_preconnect")
         # Don't touch signal handlers.
-        shutdown_patch = mock.patch("src.init.setup_graceful_shutdown")
+        shutdown_patch = mock.patch("clawcodex_ext.init.setup_graceful_shutdown")
         return (
             keychain_patch,
             mdm_patch,

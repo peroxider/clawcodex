@@ -14,7 +14,7 @@ from unittest import mock
 
 import pytest
 
-from src import init as init_module
+import clawcodex_ext.init as init_module
 from src.bootstrap.state import (
     get_client_type,
     get_is_interactive,
