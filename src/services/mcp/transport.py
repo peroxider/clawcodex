@@ -24,12 +24,71 @@ from typing import Any
 
 import anyio
 import httpx
-from mcp.client.sse import sse_client
-from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp.client.streamable_http import streamable_http_client
-from mcp.client.websocket import websocket_client
-from mcp.shared.message import SessionMessage
-from mcp.types import JSONRPCMessage
+
+# Lazy imports for optional mcp SDK transports -- the SDK submodules
+# (sse, stdio, streamable_http, websocket) were added after v1.27.
+# We import them on demand so this module loads even with an older SDK.
+_MCP_CLIENT_SSE = None
+_MCP_CLIENT_STDIO = None
+_MCP_CLIENT_STREAMABLE_HTTP = None
+_MCP_CLIENT_WEBSOCKET = None
+_MCP_SHARED_MESSAGE = None
+_MCP_TYPES_JSONRPC = None
+
+
+def _lazy_sse():
+    global _MCP_CLIENT_SSE
+    if _MCP_CLIENT_SSE is None:
+        from mcp.client.sse import sse_client
+
+        _MCP_CLIENT_SSE = sse_client
+    return _MCP_CLIENT_SSE
+
+
+def _lazy_stdio():
+    global _MCP_CLIENT_STDIO
+    if _MCP_CLIENT_STDIO is None:
+        from mcp.client.stdio import StdioServerParameters, stdio_client
+
+        _MCP_CLIENT_STDIO = StdioServerParameters, stdio_client
+    return _MCP_CLIENT_STDIO
+
+
+def _lazy_streamable_http():
+    global _MCP_CLIENT_STREAMABLE_HTTP
+    if _MCP_CLIENT_STREAMABLE_HTTP is None:
+        from mcp.client.streamable_http import streamable_http_client
+
+        _MCP_CLIENT_STREAMABLE_HTTP = streamable_http_client
+    return _MCP_CLIENT_STREAMABLE_HTTP
+
+
+def _lazy_websocket():
+    global _MCP_CLIENT_WEBSOCKET
+    if _MCP_CLIENT_WEBSOCKET is None:
+        from mcp.client.websocket import websocket_client
+
+        _MCP_CLIENT_WEBSOCKET = websocket_client
+    return _MCP_CLIENT_WEBSOCKET
+
+
+def _lazy_shared():
+    global _MCP_SHARED_MESSAGE
+    if _MCP_SHARED_MESSAGE is None:
+        from mcp.shared.message import SessionMessage
+
+        _MCP_SHARED_MESSAGE = SessionMessage
+    return _MCP_SHARED_MESSAGE
+
+
+def _lazy_types():
+    global _MCP_TYPES_JSONRPC
+    if _MCP_TYPES_JSONRPC is None:
+        from mcp.types import JSONRPCMessage
+
+        _MCP_TYPES_JSONRPC = JSONRPCMessage
+    return _MCP_TYPES_JSONRPC
+
 
 from .fetch_wrappers import (
     DEFAULT_CONNECT_TIMEOUT_S,
@@ -108,7 +167,7 @@ class _SdkTransportAdapter(McpTransport):
     start/send/receive/close lifecycle.
 
     Subclasses override ``_open()`` to return the SDK's ``@asynccontextmanager``
-    transport (e.g. ``stdio_client(params)``). We enter it through an
+    transport (e.g. ``_lazy_stdio()[1](params)``). We enter it through an
     ``AsyncExitStack`` in ``start()`` and exit in ``close()``. The streams
     yielded by the SDK are anyio memory object streams; anyio runs on top of
     asyncio when called from an asyncio loop, so they integrate transparently.
@@ -164,8 +223,8 @@ class _SdkTransportAdapter(McpTransport):
     async def send(self, message: JsonRpcMessage) -> None:
         if self._write_stream is None or self._closed:
             raise RuntimeError("Transport not started or already closed")
-        sdk_msg = JSONRPCMessage.model_validate(message.to_dict())
-        await self._write_stream.send(SessionMessage(sdk_msg))
+        sdk_msg = _lazy_types().model_validate(message.to_dict())
+        await self._write_stream.send(_lazy_shared()(sdk_msg))
 
     async def receive(self) -> JsonRpcMessage | None:
         """Read one valid message from the SDK stream.
@@ -238,12 +297,12 @@ class StdioTransport(_SdkTransportAdapter):
         self._env = dict(env) if env else None
 
     def _open(self) -> Any:
-        params = StdioServerParameters(
+        params = _lazy_stdio()[0](
             command=self._command,
             args=self._args,
             env=self._env,
         )
-        return stdio_client(params)
+        return _lazy_stdio()[1](params)
 
 
 class HttpTransport(_SdkTransportAdapter):
@@ -288,7 +347,7 @@ class HttpTransport(_SdkTransportAdapter):
             # handshakes.
             self._http_client = build_mcp_http_client(headers=self._headers)
             self._stack.push_async_callback(self._http_client.aclose)
-            cm = streamable_http_client(url=self._url, http_client=self._http_client)
+            cm = _lazy_streamable_http()(url=self._url, http_client=self._http_client)
             yielded = await self._stack.enter_async_context(cm)
             self._read_stream, self._write_stream = self._unpack(yielded)
         except BaseException:
@@ -361,7 +420,7 @@ class SseTransport(_SdkTransportAdapter):
         self._headers = dict(headers) if headers else None
 
     def _open(self) -> Any:
-        return sse_client(
+        return _lazy_sse()(
             url=self._url,
             headers=self._headers,
             timeout=DEFAULT_CONNECT_TIMEOUT_S,
@@ -381,7 +440,7 @@ class WebSocketTransport(_SdkTransportAdapter):
     def __init__(self, url: str, headers: dict[str, str] | None = None) -> None:
         super().__init__()
         self._url = url
-        # SDK's websocket_client(url) doesn't accept headers as of v1.27.x;
+        # SDK's _lazy_websocket()(url) doesn't accept headers as of v1.27.x;
         # we accept the kwarg for config-schema parity but warn loudly so
         # users debugging an auth failure don't have to chase a silently-
         # dropped Authorization header. If the SDK adds header support in a
@@ -397,4 +456,4 @@ class WebSocketTransport(_SdkTransportAdapter):
             )
 
     def _open(self) -> Any:
-        return websocket_client(url=self._url)
+        return _lazy_websocket()(url=self._url)

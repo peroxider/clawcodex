@@ -19,12 +19,27 @@ import logging
 from typing import Any
 
 import httpx
-from mcp.client.auth.utils import (
-    build_oauth_authorization_server_metadata_discovery_urls,
-    build_protected_resource_metadata_discovery_urls,
-    handle_auth_metadata_response,
-    handle_protected_resource_response,
-)
+
+# ``mcp.client.auth.utils`` was added after SDK v1.27. Import lazily.
+_mcp_auth_utils = None
+
+
+def _lazy_auth_utils():
+    global _mcp_auth_utils
+    if _mcp_auth_utils is None:
+        from mcp.client.auth.utils import (
+            build_oauth_authorization_server_metadata_discovery_urls as _build_oauth_server_meta,
+            build_protected_resource_metadata_discovery_urls as _build_protected_resource,
+            handle_auth_metadata_response as _handle_auth_meta,
+            handle_protected_resource_response as _handle_protected_resource,
+        )
+        _mcp_auth_utils = {
+            "build_oauth_server_meta": _build_oauth_server_meta,
+            "build_protected_resource": _build_protected_resource,
+            "handle_auth_meta": _handle_auth_meta,
+            "handle_protected_resource": _handle_protected_resource,
+        }
+    return _mcp_auth_utils
 
 from .oauth_redaction import redact_sensitive_params
 
@@ -170,7 +185,7 @@ async def discover_oauth_metadata(
             raise OAuthDiscoveryError(server_url, attempted)
 
         # 2) RFC 9728 PRM probe.
-        prm_urls = build_protected_resource_metadata_discovery_urls(
+        prm_urls = _lazy_auth_utils()["build_protected_resource"](
             www_auth_resource_url, server_url
         )
         for url in prm_urls:
@@ -186,7 +201,7 @@ async def discover_oauth_metadata(
             # 3) Follow authorization_servers[0] to RFC 8414 metadata.
             # AnyUrl → str adds trailing slash; downstream is robust to that.
             as_url = str(authorization_servers[0])
-            as_urls = build_oauth_authorization_server_metadata_discovery_urls(as_url, server_url)
+            as_urls = _lazy_auth_utils()["build_oauth_server_meta"](as_url, server_url)
             for as_candidate in as_urls:
                 attempted.append(as_candidate)
                 metadata = await _try_as_metadata(client, as_candidate)
@@ -194,7 +209,7 @@ async def discover_oauth_metadata(
                     return metadata
 
         # 4) Fallback: probe AS metadata directly against the server URL.
-        as_urls = build_oauth_authorization_server_metadata_discovery_urls(None, server_url)
+        as_urls = _lazy_auth_utils()["build_oauth_server_meta"](None, server_url)
         for as_candidate in as_urls:
             if as_candidate in attempted:
                 continue
@@ -223,7 +238,7 @@ async def _try_prm(client: httpx.AsyncClient, url: str) -> list[Any] | None:
         logger.debug("PRM probe %s failed: %s", url, exc)
         return None
     try:
-        prm = await handle_protected_resource_response(response)
+        prm = await _lazy_auth_utils()["handle_protected_resource"](response)
     except Exception as exc:  # pragma: no cover - SDK-internal parse edges
         logger.debug("PRM probe %s SDK parse failed: %s", url, exc)
         return None
@@ -244,7 +259,7 @@ async def _try_as_metadata(client: httpx.AsyncClient, url: str) -> dict[str, Any
         logger.debug("AS-metadata probe %s failed: %s", url, exc)
         return None
     try:
-        result = await handle_auth_metadata_response(response)
+        result = await _lazy_auth_utils()["handle_auth_meta"](response)
     except Exception as exc:  # pragma: no cover
         logger.debug("AS-metadata probe %s SDK parse failed: %s", url, exc)
         return None
