@@ -123,6 +123,20 @@ class RuntimeContext:
         # every second and pushes cron_prompt events to the outbox.
         attach_cron_runtime(tool_context, autostart=True)
 
+        # F-100: Wire the dreaming system (background memory consolidation).
+        try:
+            from clawcodex_ext.dreaming.runner import wire_real_dream_runner
+            from clawcodex_ext.dreaming.service import init_auto_dream
+
+            wire_real_dream_runner()
+            init_auto_dream(registry=tool_context.runtime_tasks)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).debug(
+                "dreaming system wiring failed; dream feature may be unavailable",
+                exc_info=True,
+            )
+
         # Resume session if requested
         session = None
         if options.resume_session_id:

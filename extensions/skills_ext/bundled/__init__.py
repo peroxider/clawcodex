@@ -11,13 +11,14 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from src.skills.bundled_skills import BundledSkillDefinition, register_bundled_skill
-from extensions.pos_converter.convert_pos_skill import get_prompt_for_command
 
 from .dream import register_dream_skill
 
 
 def register_convert_pos_skill() -> None:
     """Register the convert-pos-to-agent bundled skill."""
+    from extensions.pos_converter.convert_pos_skill import get_prompt_for_command
+
     register_bundled_skill(
         BundledSkillDefinition(
             name="convert-pos-to-agent",

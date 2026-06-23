@@ -491,6 +491,12 @@ class ClawCodexExtREPL(ClawcodexREPL):
         register_away_summary_commands(self.command_registry)
         register_away_summary_commands(None)
 
+        try:
+            from extensions.skills_ext import init_skills_ext
+            init_skills_ext()
+        except Exception:
+            pass
+
         self.command_context = create_command_context(
             workspace_root=self.workspace_root,
             conversation=self.session.conversation,

@@ -1220,8 +1220,8 @@ class TestStage5ExtDreaming:
 
         # Filename matches the upstream consolidation lock file.
         assert lock_mod.LOCK_FILE_NAME == ".consolidate-lock"
-        # 60 minutes — matches upstream HOLDER_STALE_MS.
-        assert lock_mod.HOLDER_STALE_MS == 60 * 60 * 1000
+        # 30 minutes — Phase B TTL enhancement (reduced from upstream 60min).
+        assert lock_mod.HOLDER_STALE_MS == 30 * 60 * 1000
         # Public lock helpers are callable.
         for fn in (
             lock_mod.try_acquire_consolidation_lock,
