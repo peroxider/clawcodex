@@ -606,6 +606,17 @@ class TestModelProviderFallback:
 class TestRuntimeCommandsWithArgs:
     """/provider <name> 和 /model <name> 带参调用不崩溃、不报 Unknown command。"""
 
+    @pytest.fixture(autouse=True)
+    def _no_config_persistence(self):
+        """阻止测试中的 /provider 写入 ~/.clawcodex/config.json。
+
+        /provider <name> 在生产中会持久化默认供应商（已知或未知）。
+        测试不应触及实际配置文件，因此 mock 掉 set_default_provider。
+        """
+        from unittest.mock import patch
+        with patch("src.config.set_default_provider"):
+            yield
+
     def _ensure_registered(self):
         from clawcodex_ext.command_system import get_command_registry
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands

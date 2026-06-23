@@ -86,7 +86,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         self._repl_ptk_style = build_ptk_style(_REPL_DARK)
         self._repl_palette = _REPL_DARK
-        self.console = Console(theme=_RichTheme(build_rich_theme(_REPL_DARK)))
+        self.console = Console(theme=_RichTheme(build_rich_theme(_REPL_DARK)), highlight=False)
 
         self.runtime_context = runtime_context
         self.provider_name = provider_name
