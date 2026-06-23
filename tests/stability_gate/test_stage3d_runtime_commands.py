@@ -174,8 +174,10 @@ class TestRuntimeCommandsWithRuntimeContext:
         )
         assert success is True, f"expected success, got error={error!r}"
         assert result_text is not None, "expected result text"
-        # 当前状态行
-        assert "provider:" in result_text, "output should show current provider"
+        # 当前状态行 (OKLCH-colored Rich markup) (OKLCH-colored Rich markup)
+        assert "[primary]provider[/primary]" in result_text, (
+            "output should show current provider"
+        )
         assert "test-model" in result_text, "output should show current model"
         # 列表
         assert "Models:" in result_text, "output should contain 'Models:'"
@@ -190,8 +192,10 @@ class TestRuntimeCommandsWithRuntimeContext:
         )
         assert success is True, f"expected success, got error={error!r}"
         assert result_text is not None, "expected result text"
-        # 当前状态行
-        assert "provider:" in result_text, "output should show current provider"
+        # 当前状态行 (OKLCH-colored Rich markup) (OKLCH-colored Rich markup)
+        assert "[primary]provider[/primary]" in result_text, (
+            "output should show current provider"
+        )
         assert "test-model" in result_text, "output should show current model"
         # 列表
         assert "Providers:" in result_text, "output should contain 'Providers:'"

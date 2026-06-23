@@ -39,6 +39,11 @@ def _safe_session_id() -> str:
 
 
 def _emit(exc: BaseException) -> None:
+    """Record an error and immediately flush to remote reporter.
+
+    Runs inside sys.excepthook, BEFORE atexit shutdown starts, so
+    asyncio HTTP requests to GitCode/GitHub still work reliably.
+    """
     try:
         from .recorder import get_recorder
 
@@ -46,6 +51,31 @@ def _emit(exc: BaseException) -> None:
         if not getattr(recorder, "enabled", False):
             return
         recorder.record_error(session_id=_safe_session_id(), exc=exc)
+        # Flush immediately so the crash appears in the remote Issue
+        # before the process exits. This runs inside sys.excepthook
+        # (before atexit), so async HTTP is still available.
+        try:
+            recorder.flush()
+            # Notify user on stderr (runs before traceback is printed)
+            try:
+                from .storage import LocalJsonlStorage, utc_date, utc_now
+                storage = LocalJsonlStorage(recorder.config.storage_dir, recorder.config.retention_days)
+                cursor = storage.read_reporter_cursor("issue")
+                issue_id = cursor.get("issue_id", "")
+                if issue_id:
+                    platform = cursor.get("platform", "")
+                    owner = cursor.get("owner", "")
+                    repo = cursor.get("repo", "")
+                    url = {"gitcode": f"https://gitcode.com/{owner}/{repo}/issues/{issue_id}",
+                           "github": f"https://github.com/{owner}/{repo}/issues/{issue_id}",
+                           "gitee": f"https://gitee.com/{owner}/{repo}/issues/{issue_id}"}.get(platform, "")
+                    if url:
+                        import sys
+                        sys.stderr.write("\nTelemetry: error report pushed to %s\n" % url)
+            except Exception:
+                pass
+        except Exception as flush_exc:  # noqa: BLE001
+            logger.debug("telemetry: post-error flush failed: %s", flush_exc)
     except Exception as exc_inner:  # noqa: BLE001
         logger.debug("telemetry: hook emit failed: %s", exc_inner)
 

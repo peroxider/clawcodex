@@ -273,6 +273,13 @@ def build_rich_theme(palette: REPLPalette | None = None) -> dict:
         "user_bg": p.user_bg,
         "diff_add": p.diff_add,
         "diff_remove": p.diff_remove,
+        # Provider/model output — OKLCH equivalents for Rich's default
+        # syntax-highlighter colours (yellow→amber, magenta→purple,
+        # cyan→sky-blue) so `/provider` REPL output uses the same
+        # perceptually-uniform palette as the rest of the UI.
+        "key_label": p.warning,     # amber — key names (model=, configured=)
+        "value_text": p.secondary,  # purple — string values (MiniMax-M3, yes)
+        "version_num": p.info,      # sky-blue — version numbers (2.0)
     }
     return theme_dict
 

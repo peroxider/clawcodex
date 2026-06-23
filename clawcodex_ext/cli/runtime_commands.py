@@ -17,13 +17,65 @@ slash command behaves identically in REPL and TUI.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
+from clawcodex_ext.cli.model_cmd.store import ModelStore
 from clawcodex_ext.cli.model_cmd.errors import UnknownModelError, ProviderMismatchError
 from clawcodex_ext.cli.provider_cmd.commands import format_provider_list
 from clawcodex_ext.cli.provider_cmd.errors import UnknownProviderError
 from src.command_system.types import LocalCommand, LocalCommandResult
+
+# ── OKLCH-based markup helpers for REPL provider/model output ──────────
+# Semantic names registered in clawcodex_ext/repl/color_scheme.py's
+# build_rich_theme() — key_label (amber), value_text (purple),
+# version_num (sky-blue), primary (blue).
+
+_VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
+
+
+def _colorize_model_name(model: str) -> str:
+    """Wrap version numbers in ``[version_num]…[/version_num]`` markup."""
+    return _VERSION_RE.sub(r"[version_num]\1[/version_num]", model)
+
+
+def _colorize_provider_list_text(plain: str) -> str:
+    """Add Rich markup to ``format_provider_list()`` output.
+
+    Transforms ``  name\\tlabel\\tmodel=X\\tconfigured=Y`` lines into
+    OKLCH-coloured Rich markup using the theme from ``build_rich_theme()``.
+    """
+    lines = plain.split("\n")
+    out: list[str] = []
+    for line in lines:
+        # "Providers:" header — keep as-is
+        if not line.startswith(" "):
+            out.append(line)
+            continue
+        # Data lines: "  name\\tlabel\\tmodel=value\\tconfigured=value"
+        parts = line.split("\t")
+        if len(parts) >= 4:
+            # Provider name → primary (blue)
+            name_col = f"[primary]{parts[0].strip()}[/primary]"
+            label_col = parts[1]  # untouched
+            # model=… key-label + value
+            model_str = _colorize_model_name(parts[2])
+            model_kv = re.sub(
+                r"^(\w+)=(.+)$",
+                r"[key_label]\1=[/key_label][value_text]\2[/value_text]",
+                model_str,
+            )
+            # configured=yes/no
+            configured_kv = re.sub(
+                r"^(\w+)=(.+)$",
+                r"[key_label]\1=[/key_label][value_text]\2[/value_text]",
+                parts[3],
+            )
+            out.append(f"  {name_col}\t{label_col}\t{model_kv}\t{configured_kv}")
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 def register_runtime_commands(registry: Any | None = None) -> None:
@@ -159,7 +211,9 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
 
     if not tokens:
         current = _format_runtime_current(context)
-        lines = [current, "", format_provider_list()] if current else [format_provider_list()]
+        plain_list = format_provider_list()
+        colored_list = _colorize_provider_list_text(plain_list)
+        lines = [current, "", colored_list] if current else [colored_list]
         return _text("\n".join(lines))
 
     provider = tokens[0]
@@ -324,19 +378,20 @@ def _sync_context(context: Any, runtime: Any) -> None:
 
 
 def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str | None:
-    """Return a ``"provider: …\nmodel: …"`` snippet, or *None* when the
-    runtime context is missing (callers that tolerate absence should
-    simply omit the block)."""
+    """Return an OKLCH-coloured ``"provider: …\nmodel: …"`` snippet with
+    Rich markup, or *None* when the runtime context is missing."""
     runtime = _runtime(context)
     if runtime is None:
         return None
     lines = []
     if prefix:
         lines.append(prefix)
+    raw_model = getattr(runtime.provider, "model", runtime.options.model)
+    colored_model = _colorize_model_name(raw_model)
     lines.extend(
         [
-            f"provider: {runtime.provider_name}",
-            f"model: {getattr(runtime.provider, 'model', runtime.options.model)}",
+            f"[primary]provider[/primary]: [value_text]{runtime.provider_name}[/value_text]",
+            f"[primary]model[/primary]: {colored_model}",
         ]
     )
     return "\n".join(lines)

@@ -78,8 +78,9 @@ def _telemetry_shutdown_flush() -> None:
         except Exception as exc:  # noqa: BLE001 — best-effort
             logger.debug("telemetry: shutdown flush failed: %s", exc)
 
-    t = threading.Thread(target=_do_flush, name="telemetry-shutdown-flush", daemon=True)
+    t = threading.Thread(target=_do_flush, name="telemetry-shutdown-flush", daemon=False)
     t.start()
+    t.join(timeout=20)
 
 
 def install_telemetry_shutdown_flush() -> None:

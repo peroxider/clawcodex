@@ -3544,11 +3544,15 @@ class ClawcodexREPL:
             provider_args = parts[1] if len(parts) > 1 else ""
             try:
                 handled, text = self._try_execute_new_command('provider', provider_args)
-                if handled and text:
-                    self.console.print("\n" + text)
-                self.console.print()
-            except Exception:
-                self.console.print("[error]Failed to execute /provider command.[/error]")
+                if handled:
+                    if text:
+                        self.console.print("\n" + text)
+                    self.console.print()
+                else:
+                    # Execution failed — show error text to the user
+                    self.console.print(f"\n[error]{text or 'Unknown error'}[/error]\n")
+            except Exception as exc:
+                self.console.print(f"\n[error]Failed to execute /provider command: {exc}[/error]\n")
 
         elif cmd.startswith('/model'):
             # Safety fallback: same as /provider above.
@@ -3556,11 +3560,14 @@ class ClawcodexREPL:
             model_args = parts[1] if len(parts) > 1 else ""
             try:
                 handled, text = self._try_execute_new_command('model', model_args)
-                if handled and text:
-                    self.console.print("\n" + text)
-                self.console.print()
-            except Exception:
-                self.console.print("[error]Failed to execute /model command.[/error]")
+                if handled:
+                    if text:
+                        self.console.print("\n" + text)
+                    self.console.print()
+                else:
+                    self.console.print(f"\n[error]{text or 'Unknown error'}[/error]\n")
+            except Exception as exc:
+                self.console.print(f"\n[error]Failed to execute /model command: {exc}[/error]\n")
 
         else:
             if raw.startswith("/"):
