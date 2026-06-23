@@ -25,8 +25,8 @@ from src.bootstrap.state import (
     switch_session,
 )
 from src.cost_tracker import CostTracker
-from src.services import cost_restore as cost_restore_mod
 from src.services.cost_restore import restore_cost_state_for_session
+from clawcodex_ext.services import cost_restore as cost_restore_mod
 from src.services.pricing import (
     DEFAULT_PRICING,
     PRICING,

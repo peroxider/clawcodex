@@ -304,7 +304,7 @@ class Session:
         supplied by the caller (REPL config, env, etc.).
         """
         from src.bootstrap.state import SessionId, switch_session
-        from src.services.cost_restore import restore_cost_state_for_session
+        from clawcodex_ext.services.cost_restore import restore_cost_state_for_session
 
         loaded = cls.load(session_id)
         if loaded is None:
