@@ -1121,7 +1121,7 @@ def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
         )
         return 1
 
-    from src.services.session_storage import SESSIONS_DIR
+    from clawcodex_ext.services.session_storage import SESSIONS_DIR
 
     transcript_path = SESSIONS_DIR / run_id / "transcript.jsonl"
     if not transcript_path.exists():
@@ -1326,7 +1326,7 @@ def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int
         return 2
 
     import json
-    from src.services.session_storage import SESSIONS_DIR
+    from clawcodex_ext.services.session_storage import SESSIONS_DIR
 
     run_id = _resolve_tail_run_id(registry_path, issue_id, run_id)
     if not run_id:
