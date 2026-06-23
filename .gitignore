@@ -192,3 +192,6 @@ coverage/
 /tests/session_analyzer/
 /.codebase-memory/
 /patches/upstream/b24b8cb/backup/
+
+# Telemetry config (contains local secrets — do not commit)
+telemetry.toml
