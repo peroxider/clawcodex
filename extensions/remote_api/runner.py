@@ -9,13 +9,17 @@ from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from clawcodex_ext.types.messages import Message
 
 from .errors import RemoteAPIError
 
+if TYPE_CHECKING:
+    from ..capabilities.agent_protocol import AgentLoopProtocol
+    from ..capabilities.provider_protocol import LLMProviderProtocol
+    from ..capabilities.tool_protocol import ToolSystemProtocol
 
 logger = logging.getLogger(__name__)
 

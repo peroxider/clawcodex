@@ -9,12 +9,15 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from jinja2 import Environment, StrictUndefined, TemplateError
 
 from .tracker import PullRequestFeedback, PullRequestRef
 from .workflow_store import get_workflow_store
+
+if TYPE_CHECKING:
+    from ..capabilities.context_protocol import ContextBuilderProtocol
 
 logger = logging.getLogger(__name__)
 

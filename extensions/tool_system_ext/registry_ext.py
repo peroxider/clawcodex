@@ -19,6 +19,7 @@ from .bundles import (
 )
 
 if TYPE_CHECKING:
+    from ..capabilities.tool_protocol import ToolSystemProtocol
     from src.tool_system.build_tool import Tool, Tools
     from src.tool_system.registry import ToolRegistry
     from .agent_config import AgentToolConfig

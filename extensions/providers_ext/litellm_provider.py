@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from typing import Any, Generator, Optional
+from typing import TYPE_CHECKING, Any, Generator, Optional
 
 from clawcodex_ext.providers.base import (
     BaseProvider,
@@ -13,6 +13,9 @@ from clawcodex_ext.providers.base import (
     TextChunkCallback,
     ThinkingChunkCallback,
 )
+
+if TYPE_CHECKING:
+    from ..capabilities.provider_protocol import LLMProviderProtocol
 from src.providers.openai_compatible import (
     _convert_anthropic_messages_to_openai,
     _convert_to_openai_tool_schema,

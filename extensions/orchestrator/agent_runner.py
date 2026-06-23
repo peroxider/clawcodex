@@ -39,6 +39,8 @@ from src.services.api.errors import (
 )
 
 if TYPE_CHECKING:
+    from ..capabilities.agent_protocol import AgentLoopProtocol
+    from ..capabilities.event_protocol import ToolEventProtocol
     from .progress_reporter import ProgressReporter
 
 logger = logging.getLogger(__name__)
