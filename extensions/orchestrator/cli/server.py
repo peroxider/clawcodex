@@ -210,16 +210,18 @@ def _find_metadata(args: argparse.Namespace) -> tuple[Path | None, dict | None]:
                     except Exception:
                         pass
 
-    # Fallback: latest metadata
-    latest = _find_latest_metadata()
-    if latest and latest.exists():
-        import json
+    # Fallback: latest metadata (only when no explicit --workspace/--workflow)
+    has_explicit = getattr(args, "workspace", None) or getattr(args, "workflow", None)
+    if not has_explicit:
+        latest = _find_latest_metadata()
+        if latest and latest.exists():
+            import json
 
-        try:
-            data = json.loads(latest.read_text(encoding="utf-8"))
-            return latest, data
-        except Exception:
-            pass
+            try:
+                data = json.loads(latest.read_text(encoding="utf-8"))
+                return latest, data
+            except Exception:
+                pass
 
     return None, None
 
