@@ -3528,6 +3528,31 @@ class ClawcodexREPL:
             self._engine_messages = []
             self.console.print("[success]Conversation cleared.[/success]")
 
+        elif cmd.startswith('/provider'):
+            # Safety fallback: /provider may have failed through the new
+            # command system path (F-43). Try direct sync execution.
+            parts = raw.split(maxsplit=1)
+            provider_args = parts[1] if len(parts) > 1 else ""
+            try:
+                handled, text = self._try_execute_new_command('provider', provider_args)
+                if handled and text:
+                    self.console.print("\n" + text)
+                self.console.print()
+            except Exception:
+                self.console.print("[error]Failed to execute /provider command.[/error]")
+
+        elif cmd.startswith('/model'):
+            # Safety fallback: same as /provider above.
+            parts = raw.split(maxsplit=1)
+            model_args = parts[1] if len(parts) > 1 else ""
+            try:
+                handled, text = self._try_execute_new_command('model', model_args)
+                if handled and text:
+                    self.console.print("\n" + text)
+                self.console.print()
+            except Exception:
+                self.console.print("[error]Failed to execute /model command.[/error]")
+
         else:
             if raw.startswith("/"):
                 if self._try_run_skill_slash(raw):
