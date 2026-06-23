@@ -2048,4 +2048,155 @@ Phase 3 (2-3d): [F] 安全分析 → [G] 技能传播
 
 ---
 
+## 十八、Freeze Detection & Auto-Recovery（F-108）
+
+**状态**: 📋 设计完成 | **优先级**: P0 | **登记日期**: 2026-06-23
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§2.20 Freeze Detection & Auto-Recovery（F-108）`
+
+**目标**: 系统性解决 clawcodex 偶发软件卡死与 LLM 对话卡死问题。全链路代码审计发现 8 个卡死风险点（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW），采用四层混合方案——Layer 0 快速修复 + Layer 1 冻结检测 + Layer 2 硬超时 + Layer 3 自动恢复 + Layer 4 诊断命令，确保用户在卡死发生后 < 30s 内自动恢复或收到明确诊断。
+
+### 问题根因
+
+经对 `clawcodex_ext/agent/run_agent.py`、`clawcodex_ext/entrypoints/headless.py`、`clawcodex_ext/tui/agent_bridge.py`、`clawcodex_ext/query/query.py`、`extensions/api/query.py`、`clawcodex_ext/providers/anthropic_provider.py`、`src/utils/stream_watchdog.py` 全链路代码审计，发现 8 个卡死风险点：
+
+| # | 卡死点 | 位置 | 严重度 | 现有防护 | 根因 |
+|---|--------|------|:------:|----------|------|
+| 1 | **API 流式响应无任何 chunk 到达** | `_call_model_sync` → `provider.chat_stream_response()` | **CRITICAL** | ✅ StreamWatchdog (90s) + F-99 read_timeout (5s) | LLM 服务端卡死/网络断开 |
+| 2 | **TUI 权限弹窗不响应 → 工作线程永久阻塞** | `AgentBridge._permission_handler` → `done.wait()` | **CRITICAL** | ❌ 无超时 | UI bug / 模态弹窗未渲染 |
+| 3 | **AskUserQuestion 弹窗不响应 → 同上** | `AgentBridge._ask_user_handler` → `done.wait()` | **CRITICAL** | ❌ 无超时 | UI bug / 模态弹窗未渲染 |
+| 4 | **Agent loop 转永久死循环（LLM 不停调用工具）** | `query()` while-true 循环 | **HIGH** | ❌ 只有 max_turns 计次防护 | LLM 行为失控 |
+| 5 | **headless future 永远不完成** | `QueryRunner.stream()` → `future = run_in_executor()` | **HIGH** | ❌ 无硬超时（仅有 30s heartbeat） | 工作线程死锁/挂起 |
+| 6 | **Bash/Edit 工具执行挂起（子进程永久等待）** | tool_system tools/ | **HIGH** | ❌ 无工具级超时 | 子进程 I/O 阻塞 |
+| 7 | **TUI 主渲染线程死锁** | Textual 事件循环 | **MEDIUM** | ❌ 无 UI 级 watchdog | `_post()` 队列满/竞争条件 |
+| 8 | **conversation persistence 阻塞** | `session.save_transcript()` + `add_message()` | **LOW** | ❌ 有 try/except 但 I/O 可能挂住 | 磁盘故障/NFS 挂住 |
+
+### 方案架构
+
+```
+      ┌─────────────────────────────────────────────────┐
+      │                 Layer 4: 诊断命令                │
+      │     freeze-report / diag viewer / SIGUSR1 dump   │
+      ├─────────────────────────────────────────────────┤
+      │               Layer 3: 自动恢复                   │
+      │  permission 超时→auto-deny │ tool 超时→cancel      │
+      │  turn 超时→abort │ agent 超时→保存已做完部分       │
+      ├─────────────────────────────────────────────────┤
+      │               Layer 2: 硬超时防护                  │
+      │  CLAWCODEX_AGENT_LOOP_TIMEOUT (600s)             │
+      │  CLAWCODEX_TURN_TIMEOUT (300s)                   │
+      │  CLAWCODEX_TOOL_TIMEOUT (120s)                   │
+      │  CLAWCODEX_PERMISSION_TIMEOUT (30s)              │
+      │  CLAWCODEX_FREEZE_THRESHOLD (60s)                │
+      ├─────────────────────────────────────────────────┤
+      │             Layer 1: 冻结检测 (FreezeDetector)     │
+      │  on_event/on_text_chunk 打 heartbeat              │
+      │  watchdog 线程每 10s 检查 → 超时 60s → dump 线程栈  │
+      ├─────────────────────────────────────────────────┤
+      │             Layer 0: 快速修复（立即生效）           │
+      │  P108-A: done.wait(timeout=30) → auto-deny        │
+      │  P108-B: asyncio.wait_for(future, 300)            │
+      │  P108-C: asyncio.wait_for(tool_exec, 120)          │
+      └─────────────────────────────────────────────────┘
+```
+
+### 子特性
+
+| # | 子特性 | 改动文件 | 改动量 | 风险 | 预计工时 | 状态 |
+|:-:|--------|----------|:------:|:----:|:--------:|:----:|
+| **A** | Permission/AskUser `done.wait()` 超时 → auto-deny | `clawcodex_ext/tui/agent_bridge.py` | ~20 行 | 低 | 0.5d | 📋 待实现 |
+| **B** | headless query future `asyncio.wait_for(300)` | `extensions/api/query.py` | ~10 行 | 低 | 0.5d | 📋 待实现 |
+| **C** | Tool 执行 `asyncio.wait_for(120)` | `clawcodex_ext/tool_system/` | ~50 行 | 中 | 1d | 📋 待实现 |
+| **D** | FreezeDetector 冻结检测 + thread stack dump | 新建 `clawcodex_ext/diagnostics/freeze_detector.py` | ~200 行 | 低 | 1.5d | 📋 待实现 |
+| **E** | 超时配置 schema 扩展（env + AgentConfig） | `extensions/orchestrator/config/schema.py` + `clawcodex_ext/settings/` | ~80 行 | 低 | 1d | 📋 待实现 |
+| **F** | Agent loop / turn / tool 三层硬超时贯穿 | `clawcodex_ext/query/query.py` + `_call_model_sync` | ~150 行 | 中 | 1.5d | 📋 待实现 |
+| **G** | 自动恢复策略实现（超时→cancel→继续） | `clawcodex_ext/tui/agent_bridge.py` + `extensions/api/query.py` | ~100 行 | 中 | 1.5d | 📋 待实现 |
+| **H** | freeze-report CLI 子命令 + diag viewer | 新建 CLI 命令 | ~150 行 | 低 | 1d | 📋 待实现 |
+
+### 当前基线
+
+| 组件 | 当前行为 | 文件 |
+|------|---------|------|
+| Permission handler | `done.wait()` 无超时 → 工作线程永久阻塞 | `clawcodex_ext/tui/agent_bridge.py:726-773` |
+| AskUser handler | `done.wait()` 无超时 → 同上 | `clawcodex_ext/tui/agent_bridge.py:776-819` |
+| Headless future | `await future` 无超时 → 等待工作线程永远不返回 | `extensions/api/query.py:247-251` |
+| Tool 执行 | 无超时 → 子进程挂住 agent loop | `clawcodex_ext/tool_system/` |
+| Agent loop | `while True` 仅受 max_turns 约束 | `clawcodex_ext/query/query.py:1388` |
+| 超时配置 | 无（仅有 `CLAUDE_STREAM_IDLE_TIMEOUT_MS` = 90s） | `src/utils/stream_watchdog.py` |
+| 冻结诊断 | 无（仅有 heartbeat logging 每 30s） | `extensions/api/query.py:234-244` |
+| CLI 诊断 | 无 | N/A |
+
+**已有基础设施**: F-99 已落地 `_F99_READ_TIMEOUT=5.0`（`clawcodex_ext/providers/anthropic_provider.py:61`）和 `StreamWatchdog` 90s 空闲超时（`src/utils/stream_watchdog.py:46`），但仅覆盖 HTTP 流式读取层，不覆盖 agent loop / tool / permission 层。
+
+### 实施进度
+
+| 阶段 | 内容 | 预计工时 | 状态 |
+|------|------|:--------:|:----:|
+| Phase 1 | P108-A + P108-B：Permission 超时 + headless future 超时（覆盖 #2 #3 #5） | 1d | 📋 待实现 |
+| Phase 2 | P108-C：Tool 执行超时（覆盖 #6） | 1d | 📋 待实现 |
+| Phase 3 | P108-D + P108-E：FreezeDetector + 配置 schema（诊断基础设施） | 2d | 📋 待实现 |
+| Phase 4 | P108-F：Agent loop / turn 超时贯穿（覆盖 #4） | 1.5d | 📋 待实现 |
+| Phase 5 | P108-G：自动恢复策略 | 1.5d | 📋 待实现 |
+| Phase 6 | P108-H：freeze-report CLI 命令 + 门禁 test | 1d | 📋 待实现 |
+
+### 验收标准
+
+| # | 验收项 | 验收方式 |
+|:-:|--------|---------|
+| 1 | Permission 弹窗不响应 ≥30s → agent loop 自动继续 | 单元测试 mock UI 不响应 |
+| 2 | headless run 超过 300s → `SessionComplete(reason="timeout")` | 单元测试 + E2E |
+| 3 | Tool 执行超过 120s → `ToolResult(is_error=True, error="...timed out")` | 单元测试 mock 慢工具 |
+| 4 | `FreezeDetector` 60s 无 heartbeat → dump thread stacks → `debug_log.ndjson` | 单元测试 |
+| 5 | `CLAWCODEX_FREEZE_DIAG=1` 环境变量生效 | 单元测试 mock env |
+| 6 | `clawcodex-dev diag freeze-report` 输出非空诊断报告 | 手动 + E2E |
+| 7 | 所有超时配置默认值合理，`0` = 不超时（回退旧行为） | 单元测试 |
+| 8 | 稳定性门禁全量通过 | `pytest tests/stability_gate/ -q --tb=short -x` |
+| 9 | 0 个 `src/` 文件被修改（完全解耦扩展实现） | `git diff --stat src/` 为 0 |
+
+### 关键设计决定
+
+1. **Permission/AskUser 超时值 30s**: 低于 TUI 渲染超时（通常 <5s）但足够用户响应。如果 30s 内用户已看到弹窗但未操作，auto-deny 是安全的默认行为。
+2. **Agent loop 超时 600s**: 足够大多数任务完成，超长任务可通过 `AgentConfig.freeze.agent_loop_timeout_s` 或 `max_turns` 独立控制。
+3. **FreezeDetector 60s 阈值**: 与 StreamWatchdog 的 90s 错开，FreezeDetector 先检测到问题并 dump 诊断，StreamWatchdog 再触发 fallback。两阶段互不干扰。
+4. **不修改 `src/` 任何文件**: 所有修改落在 `clawcodex_ext/`、`extensions/`、和新建 `clawcodex_ext/diagnostics/` 中。
+5. **`timeout=0` = 不超时**: 提供快速回退路径，用户可通过 env var 一键关闭任何新增超时。
+6. **FreezeDetector 使用 `sys._current_frames()`**: Python 唯一能获取所有线程栈的 API，无外部依赖。
+
+### 风险与约束
+
+| 风险 | 影响 | 缓解 |
+|------|------|------|
+| Permission 超时 auto-deny 误拦截合法审批 | 高 | 超时值 30s 足够用户响应；用户可在下次 turn 重新触发同一个工具 |
+| Tool 超时 120s 对慢工具（WebSearch, git push）不够 | 中 | 工具名级别可配；`AgentConfig.freeze.tool_timeout_s` 可调大 |
+| FreezeDetector watchdog 线程空转 CPU | 低 | `time.sleep(10)` 10s 周期，几乎 0 CPU 占用 |
+| 超时配置未能传达给用户 | 低 | `clawcodex-dev diag freeze-report` 可查看当前配置 |
+
+### 依赖与协同
+
+| 依赖 | 说明 |
+|------|------|
+| `clawcodex_ext/tui/agent_bridge.py` | P108-A：Permission/AskUser 超时 |
+| `extensions/api/query.py` | P108-B：headless future 超时 |
+| `clawcodex_ext/tool_system/` | P108-C：Tool 执行超时（`StreamingToolExecutor`） |
+| `clawcodex_ext/query/query.py` | P108-F：turn/agent loop 超时（`_call_model_sync`） |
+| `extensions/orchestrator/config/schema.py` | P108-E：超时配置 |
+| `clawcodex_ext/settings/` | P108-E：环境变量映射 |
+| `clawcodex_ext/diagnostics/` | P108-D+H：新建目录 + FreezeDetector + CLI |
+| F-99 Ctrl+C 中断优化 | 互不影响：F-99 处理用户主动中断，F-108 处理被动卡死 |
+
+### 实现位置
+
+| 文件 | 子特性 | 改动说明 |
+|------|:------:|---------|
+| `clawcodex_ext/tui/agent_bridge.py` | A/G | `_permission_handler` + `_ask_user_handler` `done.wait(timeout=30)`；自动恢复策略 |
+| `extensions/api/query.py` | B/G | `await asyncio.wait_for(future, timeout=300)`；自动恢复 |
+| `clawcodex_ext/tool_system/` | C | `asyncio.wait_for(tool_call, timeout=120)` |
+| `clawcodex_ext/diagnostics/freeze_detector.py` | D | 新建：FreezeDetector 类 + watchdog 线程 |
+| `extensions/orchestrator/config/schema.py` | E | AgentConfig 增加 `freeze.*` 字段 |
+| `clawcodex_ext/settings/` | E | env var → config 映射 |
+| `clawcodex_ext/query/query.py` | F | `_call_model_sync` + `query()` 外围 `wait_for` |
+| `clawcodex_ext/diagnostics/` | H | 新建：`freeze-report` / `diag viewer` CLI |
+
+---
+
 
