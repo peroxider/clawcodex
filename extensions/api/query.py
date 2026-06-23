@@ -20,6 +20,30 @@ if TYPE_CHECKING:
     from ..capabilities.headless_runner import HeadlessSessionOptions
 
 
+# F-108 P108-B — wall-clock budget for a single headless query run.
+# The runner spawns ``run_headless_session`` on the default executor and
+# awaits the resulting future; without a bound that future can hang
+# forever (see F-108 §十八 risk #5). ``asyncio.wait_for`` below cuts the
+# wait at ``_QUERY_TIMEOUT_S`` seconds, yielding
+# ``SessionComplete(reason="exit_code=124")`` so callers can detect the
+# timeout via the conventional GNU exit code.
+#
+# ``asyncio.wait_for`` does NOT cancel an executor future — Python's
+# executor futures cannot be killed from the event loop — so the
+# underlying thread may keep running until ``run_headless_session``
+# returns naturally. The headless session is expected to honour
+# ``AbortController`` for cooperative cancellation in F-108 P108-G;
+# until then this is a known limitation called out in F-108 §十八 risk
+# table.
+#
+# Set to ``0`` to disable the timeout (F-108 §十八 design decision #5:
+# every Layer-2 budget has a ``0`` escape hatch).
+#
+# TODO(F-108 P108-E): plumb this through ``AgentConfig.freeze.agent_loop_timeout_s``
+# so the value is configurable per-run instead of being hard-coded.
+_QUERY_TIMEOUT_S = 300.0
+
+
 @dataclass
 class QueryConfig:
     """Configuration for a single query run."""
@@ -213,6 +237,16 @@ class QueryRunner:
 
         # Drain the event queue while the headless session runs in the background.
         # A short timeout lets us poll for completion without busy-waiting.
+        #
+        # F-108 P108-B: the polling loop also enforces ``_QUERY_TIMEOUT_S``
+        # (default 300 s). ``asyncio.wait_for`` cannot cancel an executor
+        # future — ``future.done()`` would stay False even after
+        # ``wait_for`` raised — so the budget check lives INSIDE the
+        # loop instead of wrapping the final ``await future``. On
+        # timeout we break out and surface ``exit_code=124``.
+        timeout_s = _QUERY_TIMEOUT_S
+        loop_started_at = time.monotonic()
+        timed_out = False
         while True:
             try:
                 ev: Any = event_queue.get(timeout=0.05)
@@ -231,6 +265,13 @@ class QueryRunner:
                             yield event
                     break
                 now = time.monotonic()
+                # F-108 P108-B: budget enforcement inside the polling
+                # loop. Conventional GNU ``timeout`` exit code (124)
+                # distinguishes "wall-clock budget exhausted" from
+                # other non-zero exits.
+                if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
+                    timed_out = True
+                    break
                 if now >= next_heartbeat_at:
                     append_debug_event(
                         debug_log_path,
@@ -244,11 +285,26 @@ class QueryRunner:
                     next_heartbeat_at = now + 30.0
                 await asyncio.sleep(0.01)
 
-        try:
-            exit_code = await future
-        except SystemExit as exc:
-            code = exc.code
-            exit_code = code if isinstance(code, int) else 1
+        if timed_out:
+            # F-108 P108-B: headless future is still running on the
+            # executor — we cannot kill it from Python — but the
+            # caller sees a definitive ``SessionComplete`` and the
+            # debug log carries enough context for postmortem.
+            append_debug_event(
+                debug_log_path,
+                "query_runner.timeout",
+                run_id=self.config.run_id,
+                timeout_s=timeout_s,
+                seconds_since_start=round(time.monotonic() - loop_started_at, 3),
+                stdout_len=len(stdout.getvalue()),
+            )
+            exit_code = 124
+        else:
+            try:
+                exit_code = await future
+            except SystemExit as exc:
+                code = exc.code
+                exit_code = code if isinstance(code, int) else 1
         result_text = stdout.getvalue()
         if result_text:
             yield TextDelta(content=result_text)

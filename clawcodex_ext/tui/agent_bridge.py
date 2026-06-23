@@ -51,6 +51,22 @@ from .messages import (
 from .state import AppState
 
 
+# F-108 P108-A — modal timeout for permission / AskUserQuestion prompts.
+# When the UI side fails to respond within this many seconds the worker
+# thread auto-resolves the prompt (auto-deny for permissions, empty
+# answers for AskUser) so a stuck modal can no longer hang the agent
+# loop indefinitely. See F-108 §十八 risks #2 #3 and design decision #1
+# (30 s is well below any plausible modal render time but long enough
+# for the user to react).
+#
+# Set to ``0`` to disable the timeout and fall back to the legacy
+# unbounded ``done.wait()`` (F-108 §十八 design decision #5).
+#
+# TODO(F-108 P108-E): plumb this through ``AgentConfig.freeze.permission_timeout_s``
+# so the value is configurable per-run instead of being hard-coded.
+_PERMISSION_TIMEOUT_S = 30.0
+
+
 class AgentBridge:
     """Owns the agent-loop worker thread on behalf of the TUI."""
 
@@ -761,12 +777,22 @@ class AgentBridge:
                 tool_input=None,
             )
         )
-        # Wait for the UI to call ``_decide``. No timeout — the UI is
-        # expected to always resolve the request (defaulting to deny on
-        # Escape / Ctrl+C). A stuck permission will hold the worker
-        # thread, which is the same failure mode as the legacy REPL's
-        # ``input()`` call.
-        done.wait()
+        # F-108 P108-A: bound the wait so a stuck modal cannot hang the
+        # worker thread indefinitely (risk #2). After the timeout we
+        # fall back to the safest default — deny without remembering —
+        # which mirrors the legacy ESC behaviour.
+        timeout_s = _PERMISSION_TIMEOUT_S
+        if timeout_s > 0:
+            done.wait(timeout=timeout_s)
+            if not done.is_set():
+                # F-108 P108-A: UI never responded within the budget;
+                # auto-deny. The pending modal is still in state — the
+                # eventual UI ``decide()`` call (or Escape) will call
+                # ``resolve_permission`` and drop it; that is idempotent.
+                outcome["allowed"] = False
+                outcome["enable"] = False
+        else:
+            done.wait()
         # Remove the entry from the state queue; the modal already
         # dismissed itself and emitted ``PermissionResolved``.
         self._state.resolve_permission(pending.request_id)
@@ -806,13 +832,20 @@ class AgentBridge:
                 questions=list(questions),
             )
         )
-        # Same "no timeout" contract as permissions: a stuck modal will
-        # hold the worker, which is the same failure mode as the legacy
-        # REPL's ``_ask_user_questions``. The agent loop can be cancelled
-        # via ESC → ``AgentBridge.cancel()`` → AbortController, which
-        # raises through the call into this handler and unwinds the
-        # worker thread.
-        done.wait()
+        # F-108 P108-A: bound the wait so a stuck AskUserQuestion modal
+        # cannot hang the worker thread indefinitely (risk #3). After
+        # the timeout we return ``{}`` (parity with the Esc-cancel path)
+        # so the agent loop can recover without a real answer.
+        timeout_s = _PERMISSION_TIMEOUT_S
+        if timeout_s > 0:
+            done.wait(timeout=timeout_s)
+            if not done.is_set():
+                # F-108 P108-A: UI never responded; return empty answers.
+                # Same idempotency reasoning as ``_permission_handler`` —
+                # the modal's eventual decide() will still drain state.
+                outcome["answers"] = {}
+        else:
+            done.wait()
         # Remove the entry from the state queue; the modal already
         # dismissed itself and emitted ``AskUserQuestionResolved``.
         self._state.resolve_ask_user(pending.request_id)
