@@ -321,6 +321,8 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
 
     # ---- Runtime switch (session-scoped only) ----
     runtime = _runtime(context)
+    if runtime is None:
+        return _text("Runtime context is not available — cannot switch model.")
     runtime.swap_provider(provider, model)  # type: ignore[union-attr]
     _sync_context(context, runtime)
     lines = [f"Model switched to: {model} (provider: {provider})"]

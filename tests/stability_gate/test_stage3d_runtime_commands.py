@@ -596,3 +596,132 @@ class TestModelProviderFallback:
         assert "provider: openai" in (result_text or ""), (
             f"expected 'provider: openai', got {result_text!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 带参数的 /provider xxx 和 /model xxx 命令测试
+# ---------------------------------------------------------------------------
+
+
+class TestRuntimeCommandsWithArgs:
+    """/provider <name> 和 /model <name> 带参调用不崩溃、不报 Unknown command。"""
+
+    def _ensure_registered(self):
+        from clawcodex_ext.command_system import get_command_registry
+        from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+
+        get_command_registry().clear()
+        register_runtime_commands(None)
+
+    # ── /model <name> ─────────────────────────────────────────────────
+
+    def test_model_known_arg_without_context(self):
+        """/model <已知模型> 无 runtime_context，返回成功且不报 Unknown command。"""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "model", "claude-sonnet-4-6", _build_context(runtime_context=False)
+        )
+        assert success is True, f"expected success, got error={error!r}"
+
+    def test_model_unknown_arg_does_not_crash(self):
+        """/model <未知模型> 不崩溃、不报 Unknown command。"""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "model", "truly-nonexistent-model-xyz-12345",
+            _build_context(runtime_context=False),
+        )
+        assert success is True, (
+            f"should not crash on unknown model; got error={error!r}"
+        )
+        assert result_text is not None
+
+    # ── /provider <name> ─────────────────────────────────────────────
+
+    def test_provider_known_arg_without_context(self):
+        """/provider <已知供应商> 无 runtime_context，不报 Unknown command。"""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "provider", "openai", _build_context(runtime_context=False)
+        )
+        assert success is True, f"expected success, got error={error!r}"
+        assert result_text is not None
+
+    def test_provider_unknown_arg_does_not_crash(self):
+        """/provider <未知供应商> 不崩溃，返回友好提示。"""
+        self._ensure_registered()
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "provider", "nonexistent-provider-xyz",
+            _build_context(runtime_context=False),
+        )
+        assert success is True, (
+            f"should not crash on unknown provider; got error={error!r}"
+        )
+        assert result_text is not None
+        assert "provider" in result_text.lower(), (
+            f"expected provider-related output, got {result_text!r}"
+        )
+
+    def test_provider_arg_with_runtime_context_does_not_crash(self):
+        """/provider <name> 有 runtime_context，不因 model=None 崩溃（regression）。"""
+        self._ensure_registered()
+
+        from types import SimpleNamespace
+        from clawcodex_ext.command_system.engine import create_command_context
+
+        provider = SimpleNamespace(model="gpt-4", get_available_models=lambda: ["gpt-4"])
+        context = create_command_context(
+            workspace_root=Path("/tmp"),
+            provider=provider,
+            runtime_context=SimpleNamespace(
+                provider_name="openai",
+                options=SimpleNamespace(model="gpt-4"),
+                provider=provider,
+                tool_registry=None,
+                tool_context=None,
+                swap_provider=lambda p, m=None: None,
+            ),
+        )
+
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync("provider", "openai", context)
+        assert success is True, f"expected success, got error={error!r}"
+        assert result_text is not None
+
+    def test_provider_unknown_arg_with_runtime_context_does_not_crash(self):
+        """/provider <未知供应商> 有 runtime_context 不崩溃
+        （regression：_colorize_model_name 收到 model=None 时崩溃）。"""
+        self._ensure_registered()
+
+        from types import SimpleNamespace
+        from clawcodex_ext.command_system.engine import create_command_context
+
+        provider = SimpleNamespace(model="gpt-4", get_available_models=lambda: ["gpt-4"])
+        context = create_command_context(
+            workspace_root=Path("/tmp"),
+            provider=provider,
+            runtime_context=SimpleNamespace(
+                provider_name="openai",
+                options=SimpleNamespace(model="gpt-4"),
+                provider=provider,
+                tool_registry=None,
+                tool_context=None,
+                swap_provider=lambda p, m=None: None,
+            ),
+        )
+
+        from clawcodex_ext.command_system.builtins import execute_command_sync
+
+        success, result_text, error = execute_command_sync(
+            "provider", "nonexistent-provider-xyz", context
+        )
+        assert success is True, f"should not crash; got error={error!r}"
+        assert result_text is not None
