@@ -2,9 +2,17 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/FEATURE_PLAN.md`
-> 版本: v3.15
+> 版本: v3.17
 > 更新日期: 2026-06-23
 > 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.17 变更（2026-06-23 F-108 Freeze Detection & Auto-Recovery 规划）**：
+>   - F-108 Freeze Detection & Auto-Recovery：全链路代码审计发现 8 个卡死风险点（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW），采用四层混合方案解决——Layer 0 快速修复（Permission/AskUser 超时、headless future 硬超时、Tool 级超时）+ Layer 1 轻量冻结检测（FreezeDetector）+ Layer 2 配置化硬超时防护 + Layer 3 自动恢复策略 + Layer 4 诊断命令。§十八记录完整详细设计。新增 8 子特性 P108-A~H，总预计 7 天。
+>   - 附录 F-Number 快速索引同步更新：F-108 新增。
+>
+> **v3.16 变更（2026-06-23 F-107 PowerShell 支持增强规划）**：
+>   - F-107 PowerShell 支持增强作为跨平台适配特性纳入规划管线，§十七记录完整详细设计。新增 8 子特性 P107-A~H，覆盖工具 schema 扩展/进程启动适配/命令分类/安全分析/技能传播全链路，总预计 6-8 天。
+>   - 附录 F-Number 快速索引同步更新：F-107 新增。
 >
 > **v3.15 变更（2026-06-23 代码实现交叉验证）**：以下特性状态与代码实现对齐修正。
 >   - F-12 cacheWarning 容量限制：§一总览表 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/utils/cache_warning.py` `CacheWarning` + `CacheWarningState` LRU OrderedDict 已落地，`MAX_SOURCE_ENTRIES = 10_000`；`src/utils/cache_warning.py` 为薄 facade re-export）。
@@ -182,6 +190,8 @@
 | F-99 | Ctrl+C/B 即时中断响应优化 | P0 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-101 | Media Generation Provider Abstraction + Agnes AI | P2 | ✅ 已完成（2026-06-22） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
+| F-107 | PowerShell 支持增强 | P2 | 📋 设计完成 | 8 子特性 P107-A~H：工具 schema 扩展/进程启动适配/命令分类/安全分析/技能传播。总预计 6-8 天。详见 §十七。 |
+| F-108 | Freeze Detection & Auto-Recovery | P0 | 📋 设计完成 | 8 子特性 P108-A~H：四层混合方案（Layer0 快速修复 + Layer1 冻结检测 + Layer2 硬超时 + Layer3 自动恢复 + Layer4 诊断命令）。总预计 7 天。详见 §十八。 |
 | F-N | Agent 执行性能优化 | P1 | 📋 规划中 | 17 个阻塞点（P0×7, P1×3, P2×3, P3×4），15 个优化方案 A~O。效果分支：Phase 1（P0, 2-3d）→ Phase 2（P1, 3-5d）→ Phase 3（P2, 5-8d）→ Phase 4（P3, >8d）。详见 FEATURE_PLAN.md §十一。 |
 
 
@@ -1947,3 +1957,95 @@ Phase 4 (>8d): [M] PR 双写去重 ──→ [N] PR 回退缓存 ──→ [O] �
 5. **稳定性门禁**：`tests/stability_gate/` 全量测试通过
 
 ---
+
+## 十七、PowerShell 支持增强（F-107）
+
+**状态**: 📋 设计完成 | **优先级**: P2 | **登记日期**: 2026-06-23
+
+**目标**: 让 ClawCodex 的 BashTool 能够感知并适配 Windows 原生 shell（PowerShell），涵盖工具级 shell 选择、PowerShell 兼容的进程启动与 CWD 追踪、PowerShell 命令集分类/安全/只读/语义适配，以及 Windows 平台自动检测与优雅降级。
+
+**详细设计**: `docs/FEATURE_PLAN.md` → `§2.19 PowerShell 支持增强（F-107）`
+
+### 当前基线
+
+| 组件 | 当前行为 | 文件 |
+|------|---------|------|
+| 进程启动 | 硬编码 `["bash", "-lc", wrapped]` | `bash_tool.py:349` |
+| 后台执行 | 硬编码 `["bash", "-lc", wrapped]` | `background.py:76` |
+| CWD 追踪 | `pwd > {path}` + bash 包装 | `bash_tool.py:338-339` |
+| 搜索分类 | 仅 POSIX 命令集 | `search_classification.py` |
+| 只读验证 | 仅 POSIX 命令集 | `read_only_validation.py` |
+| 命令语义 | 仅 POSIX 退出码解释 | `command_semantics.py` |
+| 安全分析 | `tree-sitter-bash` AST | `permissions/bash_security.py` |
+| 破坏性警告 | bash 特有正则 | `destructive_warnings.py` |
+| 工具 Prompt | bash 语法范例 | `prompt.py` |
+
+**已有基础设施**: Hook 系统已有 `shell_invocation.py` 中的 `build_powershell_args` / `find_powershell_path`（仅用于 hook 执行，BashTool 未接入）。
+
+### 子特性
+
+| # | 子特性 | 改动文件 | 改动量 | 预计工时 |
+|:-:|--------|----------|:------:|:--------:|
+| **A** | 工具 schema 扩展 + shell 检测 | `bash_tool.py` | ~80 行 | 0.5d |
+| **B** | 进程启动层适配（argv + CWD 包装） | `bash_tool.py`, `background.py` | ~120 行 | 1d |
+| **C** | 工具 Prompt 适配 | `prompt.py` | ~60 行 | 0.5d |
+| **D** | 命令分类适配（PowerShell 命令集） | `search_classification.py`, `read_only_validation.py` | ~120 行 | 1d |
+| **E** | 命令语义 & 退出码适配 | `command_semantics.py` | ~40 行 | 0.5d |
+| **F** | PowerShell 安全分析 | `bash_security.py` + 新建 `powershell_security.py` | ~200 行 | 1.5d |
+| **G** | 技能系统 shell 传播 | `skill.py`, `runtime_substitution.py` | ~30 行 | 0.5d |
+| **H** | Shell 基础设施统一（hooks + BashTool 共用） | 新建 `utils/shell_resolver.py` | ~80 行 | 0.5d |
+
+**预计总工时**: 6-8 天
+
+### 关键设计决定
+
+1. **工具不重命名** — 保持 `BashTool` / `Bash` 向后兼容名（上游 TS 也是 `BashTool`），shell 参数切换解释器
+2. **`"auto"` 检测规则** — `sys.platform == "win32"` + `find_powershell_path()` 非 None → PowerShell；否则 bash
+3. **不引入 `tree-sitter-powershell`** — 社区版本不稳定，安全分析用启发式正则 + `Get-Command` 探测
+4. **无 `cmd.exe` 支持** — 保留 README 中原生 cmd.exe 不支持的声明
+
+### 实施建议顺序
+
+```
+Phase 1 (1-2d): [H] 基础设施统一 → [A] schema 扩展 + shell 检测 → [B] 进程启动适配
+  打通端到端执行路径
+
+Phase 2 (2-3d): [C] Prompt 适配 → [D] 命令分类 → [E] 语义适配
+  完善模型侧使用体验
+
+Phase 3 (2-3d): [F] 安全分析 → [G] 技能传播
+  补全安全和技能集成
+```
+
+### 验收标准
+
+| # | 验收项 | 验收方式 |
+|:-:|--------|---------|
+| 1 | `BashTool.call({"command":"...", "shell":"powershell"})` 调用 pwsh 执行 | 单元测试 + Windows 手动验证 |
+| 2 | `BashTool.call({"command":"...", "shell":"auto"})` 在 win32 上自动选择 PowerShell | 单元测试 mock `sys.platform` |
+| 3 | PowerShell cmdlet 被正确分类为 search/read | `test_search_classification.py` |
+| 4 | `Select-String` RC=1 解释为"无匹配" | `test_command_semantics.py` |
+| 5 | `Remove-Item -Recurse -Force` 标记为 destructive | `test_bash_security.py` |
+| 6 | 技能 frontmatter `shell: powershell` 生效 | 集成测试 |
+| 7 | hooks + BashTool 共用 `shell_resolver.py` | 导入测试 |
+| 8 | 稳定性门禁全量通过 | `pytest tests/stability_gate/ -q --tb=short -x` |
+
+### 修改文件清单
+
+| 文件 | 子特性 | 改动说明 |
+|------|:------:|---------|
+| `clawcodex_ext/tool_system/tools/bash/bash_tool.py` | A/B | 添加 `shell` schema 字段 + `_resolve_shell` + `_build_shell_argv` + `_build_cwd_wrapper` |
+| `clawcodex_ext/tool_system/tools/bash/background.py` | B | `spawn_background_bash` 接受 `shell` 参数 |
+| `clawcodex_ext/tool_system/tools/bash/prompt.py` | C | 添加 shell 选择指导和 PowerShell 语法提示 |
+| `clawcodex_ext/tool_system/tools/bash/search_classification.py` | D | 新增 `PWSH_SEARCH_READ_LIST_COMMANDS` |
+| `clawcodex_ext/tool_system/tools/bash/read_only_validation.py` | D | 新增 `PWSH_READONLY_COMMANDS` |
+| `clawcodex_ext/tool_system/tools/bash/command_semantics.py` | E | `interpret_command_result` 接受 `shell` 参数 |
+| `clawcodex_ext/permissions/bash_security.py` | F | `check_bash_command_safety` 接受 `shell` 参数 |
+| `clawcodex_ext/permissions/powershell_security.py` | F | 新建：PowerShell 安全分析（启发式正则） |
+| `clawcodex_ext/tool_system/tools/skill.py` | G | `_make_shell_executor` 接受并传播 `shell` |
+| `clawcodex_ext/utils/shell_resolver.py` | H | 新建：`build_powershell_args` / `find_powershell_path` / `resolve_shell` |
+| `clawcodex_ext/hooks/shell_invocation.py` | H | 降级为 `shell_resolver.py` 的 re-export 或删除 |
+
+---
+
+

@@ -1,8 +1,16 @@
 # ClawCodex 特性规划与设计文档
 
 > 文档路径: `docs/FEATURE_PLAN.md`
-> 版本: v3.14（代码实现交叉验证：F-22/F-65/F-67/F-69/F-70/Cron Phases 状态修正）
-> 更新日期: 2026-06-22 | 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+> 版本: v3.16（F-108 Freeze Detection & Auto-Recovery 规划）
+> 更新日期: 2026-06-23 | 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.16 变更（F-108 Freeze Detection & Auto-Recovery 规划）**：
+>   - F-108 Freeze Detection & Auto-Recovery：全链路代码审计发现 8 个卡死风险点（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW），采用四层混合方案解决——Layer 0 快速修复（Permission/AskUser 超时、headless future 硬超时、Tool 级超时）、Layer 1 轻量冻结检测（FreezeDetector）、Layer 2 配置化硬超时防护、Layer 3 自动恢复策略、Layer 4 诊断命令。新增 8 子特性 P108-A~H，总预计 7 天。
+>   - 附录 F-Number 快速索引同步更新：F-108 新增。
+>
+> **v3.15 变更（F-107 PowerShell 支持增强规划）**：
+>   - F-107 PowerShell 支持增强作为跨平台适配特性纳入规划管线，§2.19 记录完整详细设计。新增 8 子特性 P107-A~H，覆盖工具 schema 扩展、进程启动适配、命令分类、安全分析、技能传播等全链路，总预计 6-8 天。
+>   - 附录 F-Number 快速索引同步更新：F-107 新增。
 >
 > **v3.10 变更（F-49 状态修正——代码实现交叉验证）**：
 >   - F-49 Phase 0.4（全场景会话恢复统一闭包）：§1.4.3 从 📋 设计草稿中 → ✅ 已完成（`Session.resume()` JSONL 消息加载、REPL/TUI/CLI 三端 resume 路径修复、Cron/Orch .json 快照写入，已在 `clawcodex_ext/agent/session.py` + `clawcodex_ext/repl/core.py` + `clawcodex_ext/tui/app.py` + `clawcodex_ext/cli/dispatch.py` + `clawcodex_ext/agent/background_runner.py` 完整落地）。
@@ -1991,6 +1999,481 @@ clawcodex 已在多处为 dreaming 预留"字面量桩"，但**没有运行实�
 1. **mypy `--strict` 验证**：在 `clawcodex_ext/query/` 和 `clawcodex_ext/tool_system/` 上运行 `mypy --strict`，确认无类型错误
 2. **稳定性门禁全量运行**：运行 `pytest tests/ -q`，确认 245/245 通过
 3. **集成测试**：注册一个 dummy `pre_llm` hook 和 recovery strategy，验证 `query()` loop 正确调用
+
+
+### 2.19 PowerShell 支持增强（F-107）
+
+**状态**: 📋 设计完成 | **优先级**: P2 | **登记日期**: 2026-06-23
+
+**目标**: 让 ClawCodex 的 BashTool 能够感知并适配 Windows 原生 shell（PowerShell），涵盖工具级 shell 选择、PowerShell 兼容的进程启动与 CWD 追踪、PowerShell 命令集分类/安全/只读/语义适配，以及 Windows 平台自动检测与优雅降级。
+
+#### 当前基线
+
+| 组件 | 当前行为 | 文件 |
+|------|---------|------|
+| 进程启动 | 硬编码 `["bash", "-lc", wrapped]` | `clawcodex_ext/tool_system/tools/bash/bash_tool.py:349` |
+| 后台执行 | 硬编码 `["bash", "-lc", wrapped]` | `clawcodex_ext/tool_system/tools/bash/background.py:76` |
+| 工具名 | `BASH_TOOL_NAME = "Bash"` | `clawcodex_ext/tool_system/tools/bash/bash_tool.py:199,608` |
+| CWD 追踪 | `pwd > {path}` + `{ cmd; }; __rc=$?` 包装 | `bash_tool.py:338-339` |
+| 搜索分类 | 仅 POSIX 命令集（`grep`/`find`/`cat`/`ls`） | `search_classification.py` |
+| 只读验证 | 仅 POSIX 命令集 | `read_only_validation.py` |
+| 命令语义 | 仅 POSIX 退出码解释（`grep` RC=1=无匹配） | `command_semantics.py` |
+| 安全分析 | `tree-sitter-bash` AST 解析器 | `permissions/bash_security.py` |
+| 破坏性警告 | bash 特有正则模式 | `destructive_warnings.py` |
+| 工具 Prompt | bash 语法范例、bash 文档 | `prompt.py` |
+
+**已有基础设施**：Hook 系统已有 `shell_invocation.py` 中的 `build_powershell_args` / `find_powershell_path`，但仅适用于 hook 执行，BashTool 完全未接入。
+
+#### 子特性分解
+
+| # | 子特性 | 改动文件 | 改动量 | 风险 | 预计工时 |
+|:-:|--------|----------|:------:|:----:|:--------:|
+| **A** | 工具 schema 扩展 + shell 检测 | `bash_tool.py` | ~80 行 | 低 | 0.5d |
+| **B** | 进程启动层适配（argv 生成 + CWD 包装） | `bash_tool.py`, `background.py` | ~120 行 | 低 | 1d |
+| **C** | 工具 Prompt 适配 | `prompt.py` | ~60 行 | 低 | 0.5d |
+| **D** | 命令分类适配（PowerShell 命令集） | `search_classification.py`, `read_only_validation.py` | ~120 行 | 中 | 1d |
+| **E** | 命令语义 & 退出码适配 | `command_semantics.py` | ~40 行 | 低 | 0.5d |
+| **F** | PowerShell 安全分析 | `bash_security.py` + 新建 `powershell_parser/` | ~200 行 | 中 | 1.5d |
+| **G** | 技能系统 shell 传播 | `skill.py`, `runtime_substitution.py` | ~30 行 | 中 | 0.5d |
+| **H** | Shell 基础设施统一（hooks + BashTool 共用） | 新建 `utils/shell_resolver.py` | ~80 行 | 低 | 0.5d |
+
+**预计总工时**: 6-8 天
+
+#### 详细设计
+
+##### P107-A — 工具 schema 扩展 + shell 检测
+
+在 `BashTool.input_schema.properties` 中新增可选字段：
+
+```python
+"shell": {
+    "type": "string",
+    "enum": ["bash", "powershell", "auto"],
+    "description": "Shell to use for execution. 'auto' detects platform default.",
+    "default": "auto",
+}
+```
+
+添加检测函数 `_resolve_shell(shell_param, command)` -> `(shell_kind, argv_list)`，在 `_bash_call` 开头 resolve。
+
+##### P107-B — 进程启动层适配
+
+`_build_shell_argv(shell, wrapped_command)`:
+- `shell=="powershell"` → `[pwsh_path, "-NoProfile", "-NonInteractive", "-Command", wrapped_command]`
+- 默认 → `["bash", "-lc", wrapped_command]`
+
+CWD 追踪包装：
+- `shell=="powershell"` → `{command}; $__rc = $LASTEXITCODE; (Get-Location).Path | Out-File -Encoding UTF8 {path}; exit $__rc`
+- 默认 → 当前 `{ cmd }); __rc=$?; pwd > {path} 2>/dev/null; exit $__rc`
+
+后台 CWD 包装同理。
+
+##### P107-C — 工具 Prompt 适配
+
+在 `get_bash_prompt()` 中标注支持 `shell` 参数，添加 PowerShell 路径写法说明（反斜杠、引号差异）、`$LASTEXITCODE` vs `$?` 提示。
+
+##### P107-D — 命令分类适配
+
+`search_classification.py` 新增 PowerShell 等效命令集：
+- **搜索**: `Select-String`/`sls`、`Get-ChildItem`/`gci`、`Get-Command`/`gcm`
+- **读取**: `Get-Content`/`gc`/`type`、`Get-Item`/`gi`、`Measure-Object`/`measure`
+- **静默**: `New-Item`/`ni`/`md`、`Remove-Item`/`ri`/`rm`/`del`、`Move-Item`/`mi`、`Copy-Item`/`ci`/`cp`、`Set-Content`/`sc`、`Set-Location`/`sl`/`cd`
+
+分类函数根据 shell 参数选择对应的命令集。只读验证同理。
+
+##### P107-E — 命令语义适配
+
+PowerShell 退出码语义不同：原生 cmdlet 不设 `$LASTEXITCODE`（除非显式 exit），外部程序才用退出码。
+- `Select-String` → 0=found, 1=not_found, 2=error（与 grep 同语义）
+- 默认：`$LASTEXITCODE` 0=成功，非 0=失败
+
+##### P107-F — PowerShell 安全分析
+
+不引入 `tree-sitter-powershell`（社区版本不稳定），采用启发式正则 + `Get-Command` 探测：
+
+| bash 级别 | PowerShell 等效 |
+|-----------|----------------|
+| safe (`echo`, `true`) | `Write-Host`, `$true`, 纯管道 |
+| read_only (`cat`, `grep`) | `Get-Content`, `Select-String`（纯读 cmdlet） |
+| write (`sed -i`, `>` 重定向) | `Set-Content`, `Out-File`, `Add-Content` |
+| destructive (`rm -rf`, `DROP TABLE`) | `Remove-Item -Recurse -Force`, `Clear-*`, `Invoke-SqlCmd` |
+| dangerous (`sudo`, `eval`) | `Invoke-Expression`/`iex`, `Start-Process -Verb RunAs` |
+
+##### P107-G — 技能系统 shell 传播
+
+技能 markdown 已能声明 `shell: powershell` frontmatter，但 `_make_shell_executor` 创建 BashTool 调用时**未传播 shell 类型**。
+改动：`_make_shell_executor` 接受 `shell: str | None` 参数 → `_exec` 闭包中调用 `BashTool.call({"command": c, "shell": shell}, ...)`。
+
+##### P107-H — Shell 基础设施统一
+
+将 `build_powershell_args()` / `find_powershell_path()` 从 `clawcodex_ext/hooks/shell_invocation.py` 提取到 `clawcodex_ext/utils/shell_resolver.py`，hooks 和 BashTool 都引用同一份实现。添加 `resolve_shell(shell_type) -> (shell_kind, argv_fn, str)` 统一入口。
+
+#### 验收标准
+
+| # | 验收项 | 验收方式 |
+|:-:|--------|---------|
+| 1 | `BashTool.call({"command":"...", "shell":"powershell"})` 调用 pwsh 执行 | 单元测试 + Windows 手动验证 |
+| 2 | `BashTool.call({"command":"...", "shell":"auto"})` 在 win32 上自动选择 PowerShell | 单元测试 mock `sys.platform` |
+| 3 | PowerShell 纯 cmdlet pipeline（`Get-ChildItem \| Select-String "txt"`）被正确分类为 search/read | `test_search_classification.py` |
+| 4 | `Select-String` RC=1 正确解释为"无匹配"而非"失败" | `test_command_semantics.py` |
+| 5 | `Remove-Item -Recurse -Force` 被标记为 destructive | `test_bash_security.py` |
+| 6 | 技能 frontmatter `shell: powershell` 实际生效 | 集成测试 |
+| 7 | hooks + BashTool 共用 `shell_resolver.py`，`find_powershell_path()` 单点维护 | 导入测试 |
+| 8 | 稳定性门禁全量通过 | `pytest tests/stability_gate/ -q --tb=short -x` |
+
+#### 不纳入范围
+
+- **`cmd.exe` 支持**：保留 README 中原生 cmd.exe 不支持的声明
+- **PowerShell 7 vs Windows PowerShell 5.1 行为差异**：统一通过 `pwsh`（PS 6+）路径，Windows PowerShell 仅作为 fallback
+- **PowerShell 特有的 `-Encoding`/`-ErrorAction` 参数自动适配**：由 agent 在 prompt 指导下自行书写
+- **PowerShell 工作流（PSWorkflow）**、**PowerShell DSC**：不在 AI coding agent 场景内
+
+#### 风险与约束
+
+| 风险 | 等级 | 缓解措施 |
+|------|:----:|---------|
+| Windows CI 无 runner | 中 | 本地手动验证；`sys.platform` mock 覆盖单元测试 |
+| `pwsh` 在 Windows Server Core 镜像上不可用 | 低 | `find_powershell_path()` 返回 None 时报清晰错误 |
+| PowerShell `$LASTEXITCODE` 行为复杂（原生 cmdlet vs 外部命令） | 中 | 在 prompt 中强调行为差异，语义层仅覆盖明确的 cmdlet |
+| CWD 追踪在 PowerShell 路径含空格/Unicode 时的可靠性 | 低 | 使用 `Out-File -Encoding UTF8` + 与 bash 路径相同的 OSError 容错 |
+
+#### 已拟定的设计决定
+
+1. **工具不重命名** — 保持 `BashTool` / `Bash` 作为向后兼容名，因为上游 TS 也是 `BashTool`。在 prompt 和注释中说明 shell 参数可切换解释器。
+2. **`"auto"` 检测规则** — 仅当 `sys.platform == "win32"` 且 `find_powershell_path()` 返回非 None 时默认 PowerShell；否则默认 bash。
+3. **CWD 追踪优雅降级** — 若 PowerShell 的 CWD 读取失败，工具不失败，仅不更新 context.cwd——与 bash 路径的 OSError 处理一致。
+4. **不引入 `tree-sitter-powershell`** — 当前 `tree-sitter-bash` 是 ~1,500 行替代方案的结果。PowerShell 语法更复杂（社区版本不稳定），安全分析用启发式正则 + `Get-Command` 探测足够。
+
+#### 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| F-48（`src/` 解耦） | 软约束 | P107-H 的 `shell_resolver.py` 落在 `clawcodex_ext/utils/` 中，不侵入 `src/` |
+| F-43（CLI Provider 命令） | 可选 | 若添加 `/shell` 运行时命令切换默认 shell，依赖 F-43 的 `RuntimeContext` 框架 |
+| 现有 `clawcodex_ext/hooks/shell_invocation.py` | 代码源 | P107-H 从中提取通用逻辑到 `shell_resolver.py`，保留 hooks 侧导入兼容 |
+
+#### 实施建议顺序
+
+```
+Phase 1 (1-2d): [H] 基础设施统一 ──→ [A] schema + shell 检测 ──→ [B] 进程启动适配
+  打通端到端执行路径
+
+Phase 2 (2-3d): [C] Prompt 适配 ──→ [D] 命令分类 ──→ [E] 语义适配
+  完善模型侧使用体验
+
+Phase 3 (2-3d): [F] 安全分析 ──→ [G] 技能传播
+  补全安全和技能集成
+```
+
+#### 测试
+
+| 文件 | 覆盖内容 |
+|------|---------|
+| `tests/tool_system/tools/bash/test_shell_selection.py` | P107-A/B: shell 参数解析、argv 生成、CWD 包装 |
+| `tests/tool_system/tools/bash/test_powershell_classification.py` | P107-D: PowerShell 命令集分类 |
+| `tests/permissions/test_powershell_security.py` | P107-F: PowerShell 安全分析 |
+| `tests/tool_system/tools/skill/test_shell_propagation.py` | P107-G: 技能 shell 传播 |
+| `tests/utils/test_shell_resolver.py` | P107-H: 统一入口 |
+
+#### 修改文件
+
+| 文件 | 子特性 | 改动说明 |
+|------|:------:|---------|
+| `clawcodex_ext/tool_system/tools/bash/bash_tool.py` | P107-A/B | 添加 `shell` schema 字段 + `_resolve_shell` + `_build_shell_argv` + `_build_cwd_wrapper` |
+| `clawcodex_ext/tool_system/tools/bash/background.py` | P107-B | `spawn_background_bash` 接受 `shell` 参数，改用 `_build_bg_wrapper` |
+| `clawcodex_ext/tool_system/tools/bash/prompt.py` | P107-C | 添加 shell 选择指导和 PowerShell 语法提示 |
+| `clawcodex_ext/tool_system/tools/bash/search_classification.py` | P107-D | 新增 `PWSH_SEARCH_COMMANDS` / `PWSH_READ_COMMANDS` / `PWSH_SILENT_COMMANDS` |
+| `clawcodex_ext/tool_system/tools/bash/read_only_validation.py` | P107-D | 新增 `PWSH_READONLY_COMMANDS` |
+| `clawcodex_ext/tool_system/tools/bash/command_semantics.py` | P107-E | `interpret_command_result` 接受 `shell` 参数，新增 `PWSH_COMMAND_SEMANTICS` |
+| `clawcodex_ext/permissions/bash_security.py` | P107-F | `check_bash_command_safety` 接受 `shell` 参数，新增 PowerShell 安全分级映射 |
+| `clawcodex_ext/permissions/powershell_security.py` | P107-F | 新建：PowerShell 命令安全分析（启发式正则） |
+| `clawcodex_ext/tool_system/tools/skill.py` | P107-G | `_make_shell_executor` 接受并传播 `shell` 参数 |
+| `clawcodex_ext/utils/shell_resolver.py` | P107-H | 新建：`build_powershell_args` / `find_powershell_path` / `resolve_shell` 统一入口 |
+| `clawcodex_ext/hooks/shell_invocation.py` | P107-H | 降级为 `shell_resolver.py` 的 re-export 或删除 |
+
+
+### 2.20 Freeze Detection & Auto-Recovery（F-108）
+
+**状态**: 📋 设计完成 | **优先级**: P0 | **登记日期**: 2026-06-23
+
+**目标**: 系统性解决 clawcodex 偶发软件卡死与 LLM 对话卡死问题。全链路代码审计发现 8 个卡死风险点（2 CRITICAL + 3 HIGH + 2 MEDIUM + 1 LOW），采用四层混合方案（Layer 0 快速修复 + Layer 1 冻结检测 + Layer 2 硬超时 + Layer 3 自动恢复 + Layer 4 诊断命令），确保用户在卡死发生后 < 30s 内自动恢复或收到明确诊断。
+
+**详细设计**: `docs/PROGRESS.md §十八 F-108 Freeze Detection & Auto-Recovery`
+
+#### 当前基线（卡死风险点审计）
+
+经对 `clawcodex_ext/agent/run_agent.py`、`clawcodex_ext/entrypoints/headless.py`、`clawcodex_ext/tui/agent_bridge.py`、`clawcodex_ext/query/query.py`、`extensions/api/query.py`、`clawcodex_ext/providers/anthropic_provider.py`、`src/utils/stream_watchdog.py` 全链路代码审计，发现以下 8 个卡死风险点：
+
+| # | 卡死点 | 位置 | 严重度 | 现有防护 | 根因 |
+|---|--------|------|:------:|----------|------|
+| 1 | **API 流式响应无任何 chunk 到达** | `_call_model_sync` → `provider.chat_stream_response()` | **CRITICAL** | ✅ StreamWatchdog (90s) + F-99 read_timeout (5s) | LLM 服务端卡死/网络断开 |
+| 2 | **TUI 权限弹窗不响应 → 工作线程永久阻塞** | `AgentBridge._permission_handler` → `done.wait()` | **CRITICAL** | ❌ 无超时 | UI bug / 模态弹窗未渲染 |
+| 3 | **AskUserQuestion 弹窗不响应 → 同上** | `AgentBridge._ask_user_handler` → `done.wait()` | **CRITICAL** | ❌ 无超时 | UI bug / 模态弹窗未渲染 |
+| 4 | **Agent loop 转永久死循环（LLM 不停调用工具）** | `query()` while-true 循环 | **HIGH** | ❌ 只有 max_turns 计次防护 | LLM 行为失控 |
+| 5 | **headless future 永远不完成** | `QueryRunner.stream()` → `future = run_in_executor()` | **HIGH** | ❌ 无硬超时（仅有 30s heartbeat） | 工作线程死锁/挂起 |
+| 6 | **Bash/Edit 工具执行挂起（子进程永久等待）** | tool_system tools/ | **HIGH** | ❌ 无工具级超时 | 子进程 I/O 阻塞 |
+| 7 | **TUI 主渲染线程死锁** | Textual 事件循环 | **MEDIUM** | ❌ 无 UI 级 watchdog | `_post()` 队列满/竞争条件 |
+| 8 | **conversation persistence 阻塞** | `session.save_transcript()` + `add_message()` | **LOW** | ❌ 有 try/except 但 I/O 可能挂住 | 磁盘故障/NFS 挂住 |
+
+#### 方案架构：四层混合方案（Layer 0 ~ Layer 4）
+
+```
+      ┌─────────────────────────────────────────────────┐
+      │                 Layer 4: 诊断命令                │
+      │     freeze-report / diag viewer / SIGUSR1 dump   │
+      ├─────────────────────────────────────────────────┤
+      │               Layer 3: 自动恢复                   │
+      │  permission 超时→auto-deny │ tool 超时→cancel      │
+      │  turn 超时→abort │ agent 超时→保存已做完部分       │
+      ├─────────────────────────────────────────────────┤
+      │               Layer 2: 硬超时防护                  │
+      │  CLAWCODEX_AGENT_LOOP_TIMEOUT (600s)             │
+      │  CLAWCODEX_TURN_TIMEOUT (300s)                   │
+      │  CLAWCODEX_TOOL_TIMEOUT (120s)                   │
+      │  CLAWCODEX_PERMISSION_TIMEOUT (30s)              │
+      │  CLAWCODEX_FREEZE_THRESHOLD (60s)                │
+      ├─────────────────────────────────────────────────┤
+      │             Layer 1: 冻结检测 (FreezeDetector)     │
+      │  on_event/on_text_chunk 打 heartbeat              │
+      │  watchdog 线程每 10s 检查 → 超时 60s → dump 线程栈  │
+      ├─────────────────────────────────────────────────┤
+      │             Layer 0: 快速修复（立即生效）           │
+      │  P108-A: done.wait(timeout=30) → auto-deny        │
+      │  P108-B: asyncio.wait_for(future, 300)            │
+      │  P108-C: asyncio.wait_for(tool_exec, 120)          │
+      └─────────────────────────────────────────────────┘
+```
+
+#### 子特性分解
+
+| # | 子特性 | 改动文件 | 改动量 | 风险 | 预计工时 |
+|:-:|--------|----------|:------:|:----:|:--------:|
+| **A** | Permission/AskUser `done.wait()` 超时 → auto-deny | `clawcodex_ext/tui/agent_bridge.py` | ~20 行 | 低 | 0.5d |
+| **B** | headless query future `asyncio.wait_for(300)` | `extensions/api/query.py` | ~10 行 | 低 | 0.5d |
+| **C** | Tool 执行 `asyncio.wait_for(120)` | `clawcodex_ext/tool_system/` | ~50 行 | 中 | 1d |
+| **D** | FreezeDetector 冻结检测 + thread stack dump | 新建 `clawcodex_ext/diagnostics/freeze_detector.py` | ~200 行 | 低 | 1.5d |
+| **E** | 超时配置 schema 扩展（env + AgentConfig） | `extensions/orchestrator/config/schema.py` + `clawcodex_ext/settings/` | ~80 行 | 低 | 1d |
+| **F** | Agent loop / turn / tool 三层硬超时贯穿 | `clawcodex_ext/query/query.py` + `_call_model_sync` | ~150 行 | 中 | 1.5d |
+| **G** | 自动恢复策略实现（超时→cancel→继续） | `clawcodex_ext/tui/agent_bridge.py` + `extensions/api/query.py` | ~100 行 | 中 | 1.5d |
+| **H** | freeze-report CLI 子命令 + diag viewer | 新建 CLI 命令 | ~150 行 | 低 | 1d |
+
+**预计总工时**: 7 天
+
+#### 详细设计
+
+##### P108-A — Permission/AskUser 超时（Layer 0，#2 #3）
+
+修改 `clawcodex_ext/tui/agent_bridge.py` 中 `_permission_handler` 和 `_ask_user_handler` 的 `done.wait()` 调用，添加 `timeout=30.0` 参数。超时后：
+
+```python
+# _permission_handler: 超时 → auto-deny
+done.wait(timeout=30.0)
+if not done.is_set():
+    outcome["allowed"] = False
+    outcome["enable"] = False  # 不记住此决定
+
+# _ask_user_handler: 超时 → 返回空 dict
+done.wait(timeout=30.0)
+if not done.is_set():
+    outcome["answers"] = {}
+```
+
+**恢复行为**: 当前 turn 继续执行（工具被拒绝不会中断 agent loop），用户无明显感知。
+
+##### P108-B — Headless Query Future 超时（Layer 0，#5）
+
+修改 `extensions/api/query.py` 中 `QueryRunner.stream()` 的 `await future` 调用：
+
+```python
+exit_code = await asyncio.wait_for(future, timeout=300.0)
+```
+
+超时触发 `TimeoutError` → `SessionComplete(reason="timeout")` → 下游 `AgentRunner.run()` 正常退出，不丢失已完成的 turn 结果。
+
+##### P108-C — Tool 执行超时（Layer 0，#6）
+
+在 `StreamingToolExecutor` 或等效工具调度路径中，用 `asyncio.wait_for` 包裹工具异步调用，默认 120s。超时触发 `CancelledError` → agent loop 继续下一 turn。
+
+```python
+try:
+    result = await asyncio.wait_for(
+        execute_tool(tool_call, context),
+        timeout=_resolve_tool_timeout(tool_call.name),
+    )
+except asyncio.TimeoutError:
+    result = ToolResult(is_error=True, error=f"Tool {tool_call.name} timed out after 120s")
+```
+
+##### P108-D — FreezeDetector 冻结检测（Layer 1）
+
+新建 `clawcodex_ext/diagnostics/freeze_detector.py`，作为解耦扩展：
+
+```python
+class FreezeDetector:
+    """监控 agent loop 活动，检测到冻结时 dump 诊断信息。
+
+    机制：
+    - on_event / on_text_chunk 回调时调用 .heartbeat() 打时间戳
+    - 后台 watchdog 线程每 10s 检查 .check()
+    - 连续 60s 无心跳 → dump threading.enumerate() 全线程栈 → 写入 debug_log.ndjson
+    """
+
+    def __init__(self, threshold: float = 60.0, check_interval: float = 10.0):
+        self._threshold = threshold
+        self._check_interval = check_interval
+        self._last_heartbeat: float = time.monotonic()
+        self._lock = threading.Lock()
+        self._watchdog: threading.Thread | None = None
+
+    def heartbeat(self) -> None:
+        with self._lock:
+            self._last_heartbeat = time.monotonic()
+
+    def check(self) -> bool:
+        """返回 True 表示检测到冻结且已 dump 诊断信息。"""
+        elapsed = time.monotonic() - self._last_heartbeat
+        if elapsed >= self._threshold:
+            stacks = self._dump_thread_stacks()
+            # 写入 debug_log.ndjson
+            append_debug_event(None, "freeze_detected",
+                elapsed_seconds=round(elapsed, 1),
+                thread_stacks=stacks,
+            )
+            return True
+        return False
+
+    def _dump_thread_stacks(self) -> list[dict]:
+        """获取所有线程的当前栈帧。"""
+        result = []
+        for tid, frame in sys._current_frames().items():
+            stack = "".join(traceback.format_stack(frame))
+            result.append({"thread_id": tid, "stack": stack})
+        return result
+
+    def start(self) -> None:
+        if self._watchdog is not None:
+            return
+        self._watchdog = threading.Thread(target=self._run, daemon=True, name="freeze-detector")
+        self._watchdog.start()
+
+    def _run(self) -> None:
+        while True:
+            time.sleep(self._check_interval)
+            self.check()
+```
+
+**注入方式**: 通过 `on_event` / `on_text_chunk` / `on_thinking_chunk` 钩子注入，不对 `src/` 做任何修改。`AgentBridge._run_agent_in_thread` 中创建 detector 实例并传给 `run_query_as_agent_loop`。
+
+**效果**: 卡死后第一个检测周期（60s+10s=70s）内 dump 全线程栈到 `debug_log.ndjson`，开发人员可通过 `freeze-report` 命令查看。
+
+##### P108-E — 超时配置 schema 扩展（Layer 2）
+
+在 `extensions/orchestrator/config/schema.py` 的 `AgentConfig` 和 `clawcodex_ext/settings/` 中添加：
+
+| 配置键 | 类型 | 默认值 | 环境变量 |
+|--------|------|:------:|---------|
+| `freeze.agent_loop_timeout_s` | int | 600 | `CLAWCODEX_AGENT_LOOP_TIMEOUT` |
+| `freeze.turn_timeout_s` | int | 300 | `CLAWCODEX_TURN_TIMEOUT` |
+| `freeze.tool_timeout_s` | int | 120 | `CLAWCODEX_TOOL_TIMEOUT` |
+| `freeze.permission_timeout_s` | int | 30 | `CLAWCODEX_PERMISSION_TIMEOUT` |
+| `freeze.threshold_s` | int | 60 | `CLAWCODEX_FREEZE_THRESHOLD` |
+
+所有超时项支持 `0` 表示"不超时"（还原为旧行为），确保安全回退。
+
+##### P108-F — Agent loop / turn / tool 三层硬超时（Layer 2）
+
+在 `clawcodex_ext/query/query.py` 的 `query()` 函数中：
+
+1. **Agent loop 超时**（最外层）：在 `asyncio.run()` / `run_until_complete()` 外侧包裹 `asyncio.wait_for(..., timeout=agent_loop_timeout_s)`
+2. **Turn 超时**（中间层）：在 `_call_model_sync` 外围包裹 `asyncio.wait_for(..., timeout=turn_timeout_s)`
+3. **Tool 超时**（内层）：在工具执行路径包裹（同 P108-C）
+
+超时触发时，agent loop 不会硬崩溃——而是通过 `AbortController.abort()` 发起协作式取消，保存已完成 turn 的结果，发送 `SessionComplete(reason="timeout")`。
+
+##### P108-G — 自动恢复策略（Layer 3）
+
+| 卡死类型 | 恢复策略 | 用户感知 |
+|----------|---------|---------|
+| Permission 弹窗超时 | auto-deny → 继续 agent loop | 无（工具被拒绝） |
+| AskUser 超时 | 返回空 dict → 继续 agent loop | 模型可能重试 |
+| 单 LLM turn 超时 | `AbortController.abort()` → 取消当前 turn → 进入下一 turn | 短暂"连接超时"提示 |
+| 工具执行超时 | `CancelledError` → agent 继续（不丢失对话） | "工具执行超时"提示 |
+| Agent loop 总超时 | abort → 保存已完成内容 → `SessionComplete` | 完整的结果输出 |
+
+所有的恢复行为都**不丢失已完成的对话内容**。超时的 turn/tool 被标记为错误但不丢弃已有结果。
+
+##### P108-H — freeze-report CLI 子命令（Layer 4）
+
+```bash
+clawcodex-dev diag freeze-report        # 生成最近的 freeze dump
+clawcodex-dev diag viewer               # 查看诊断日志
+CLAWCODEX_FREEZE_DIAG=1 clawcodex-dev   # 实时启用冻结检测
+```
+
+`freeze-report` 输出包含：
+
+1. 最后 N 个事件的时间线（从 `debug_log.ndjson` 读取）
+2. 各线程最后的 stack trace（从 freeze dump 读取）
+3. 最后 N 秒的 heartbeat gap 分布
+4. 每个卡死点的命中统计
+
+#### 实施建议顺序
+
+```
+Phase 1 (0.5d): [A] Permission 超时 + [B] headless future 超时
+  最小改动覆盖 2 个 CRITICAL 级卡死点
+
+Phase 2 (1d): [C] Tool 超时
+  覆盖 #6 HIGH 级卡死点
+
+Phase 3 (1.5d): [D] FreezeDetector + [E] 配置 schema
+  诊断基础设施 + 所有超时可配置
+
+Phase 4 (1.5d): [F] 三层硬超时贯穿
+  Agent loop + turn 级别超时，覆盖 #4 HIGH + #5 HIGH
+
+Phase 5 (1.5d): [G] 自动恢复策略
+  所有超时触发协作式取消而非硬崩溃
+
+Phase 6 (1d): [H] freeze-report CLI
+  诊断命令 + 稳定性门禁新增冻结检测 test
+```
+
+#### 验收标准
+
+| # | 验收项 | 验收方式 |
+|:-:|--------|---------|
+| 1 | Permission 弹窗不响应 ≥30s → agent loop 自动继续 | 单元测试 mock UI 不响应 |
+| 2 | headless run 超过 300s → `SessionComplete(reason="timeout")` | 单元测试 + E2E |
+| 3 | Tool 执行超过 120s → `ToolResult(is_error=True, error="...timed out")` | 单元测试 mock 慢工具 |
+| 4 | `FreezeDetector` 60s 无 heartbeat → dump thread stacks → `debug_log.ndjson` | 单元测试 |
+| 5 | `CLAWCODEX_FREEZE_DIAG=1` 环境变量生效 | 单元测试 mock env |
+| 6 | `clawcodex-dev diag freeze-report` 输出非空诊断报告 | 手动 + E2E |
+| 7 | 所有超时配置默认值合理，`0` = 不超时（回退旧行为） | 单元测试 |
+| 8 | 稳定性门禁全量通过 | `pytest tests/stability_gate/ -q --tb=short -x` |
+| 9 | 0 个 `src/` 文件被修改（完全解耦扩展实现） | `git diff --stat src/` 为 0 |
+
+#### 关键设计决定
+
+1. **Permission/AskUser 超时值 30s**: 低于 TUI 渲染超时（通常 <5s）但足够用户响应。如果 30s 内用户已看到弹窗但未操作，auto-deny 是安全的默认行为。
+2. **Agent loop 超时 600s**: 足够大多数任务完成，超长任务可通过 `AgentConfig.freeze.agent_loop_timeout_s` 或 `max_turns` 独立控制。
+3. **FreezeDetector 60s 阈值**: 与 StreamWatchdog 的 90s 错开，FreezeDetector 先检测到问题并 dump 诊断，StreamWatchdog 再触发 fallback。两阶段互不干扰。
+4. **不修改 `src/` 任何文件**: 所有修改落在 `clawcodex_ext/`、`extensions/`、和新建 `clawcodex_ext/diagnostics/` 中。
+5. **`timeout=0` = 不超时**: 提供快速回退路径，用户可通过 env var 一键关闭任何新增超时。
+6. **FreezeDetector 使用 `sys._current_frames()`**: Python 唯一能获取所有线程栈的 API，无外部依赖。`CPython` 专用但无需 ctypes/gdb。
+
+#### 依赖与协同
+
+| 依赖 | 说明 |
+|------|------|
+| `clawcodex_ext/tui/agent_bridge.py` | P108-A：Permission/AskUser 超时 |
+| `extensions/api/query.py` | P108-B：headless future 超时 |
+| `clawcodex_ext/tool_system/` | P108-C：Tool 执行超时（`StreamingToolExecutor`） |
+| `clawcodex_ext/query/query.py` | P108-F：turn/agent loop 超时（`_call_model_sync`） |
+| `extensions/orchestrator/config/schema.py` | P108-E：超时配置 |
+| `clawcodex_ext/settings/` | P108-E：环境变量映射 |
+| `clawcodex_ext/diagnostics/` | P108-D+H：新建目录 |
+| F-99 Ctrl+C 中断优化 | 互不冲突，F-99 处理用户主动中断，F-108 处理被动卡死 |
 
 
 ## 三、CLI 与配置系统
@@ -6864,3 +7347,5 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | F-97 | 独立遥测系统（Issue-based Telemetry） | §9 | ✅ 第一期实现完成（A~E + G，IssueReporter 推迟到二期） |
 | F-99 | Ctrl+C/B 即时中断响应优化 | §2.15 | ✅ 已完成（2026-06-17） | 三方案组合：`AnthropicProvider._ensure_client` 默认 `timeout=5.0` + `_close_response_safely` 关 transport（Win 跳过） + `_run_tools_partitioned` 改 `asyncio.wait(FIRST_COMPLETED)` + 100ms abort poll + synth cancelled result 保配对。Cancel bound：直连 <500ms，LiteLLM bound 在 5s |
 | F-100 | Dreaming 后台记忆整合系统 | §2.16 | 🟡 部分完成（2026-06-18） | 主体 7 子特性全 ✅：DreamTask + autoDream + consolidationLock（PID+mtime 锁） + `/dream` slash skill + permanent cron 集成 + 测试不变量解锁；106 单测 + 12 门禁 + 6 E2E 场景全绿。Phase B（lock 30min TTL 增强，0.5天）待补 |
+| F-107 | PowerShell 支持增强 | §2.19 | 📋 设计完成（2026-06-23） | 8 子特性 P107-A~H：工具 schema 扩展/进程启动适配/命令分类/安全分析/技能传播。总预计 6-8 天。 |
+| F-108 | Freeze Detection & Auto-Recovery | §2.20 | 📋 设计完成（2026-06-23） | 8 子特性 P108-A~H：四层混合方案（Layer0 快速修复 + Layer1 冻结检测 + Layer2 硬超时 + Layer3 自动恢复 + Layer4 诊断命令）。总预计 7 天。 |
