@@ -130,20 +130,19 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
         lines.append("- Providers: " + ", ".join(f"{k} {v}" for k, v in sorted(providers.items())))
     lines.append("")
 
-    top_commands = summary.get("top_commands", []) or []
-    if top_commands:
-        lines.append("## Top commands")
-        lines.append("")
-        for entry in top_commands:
-            lines.append(f"- {entry.get('name', '?')}: {entry.get('count', 0)}")
-
-    tools = summary.get("tools", {}) or {}
-    top_tools = tools.get("top", []) if isinstance(tools, dict) else []
-    if top_tools:
-        lines.append("")
-        lines.append("## Top tools")
-        for entry in top_tools:
-            lines.append(f"- {entry.get('name', '?')}: {entry.get('count', 0)}")
+    # Show commands that had failures (excludes noise like version/telemetry).
+    cmd_failures = summary.get("command_failure", {}) or {}
+    # Filter out infrastructure noise.
+    _NOISE_COMMANDS = frozenset({"version", "help", "telemetry", "config", "login", "mcp", "daemon", "doctor", "orchestrator", "viz", "autonomy", "schedule"})
+    sig_failures = {k: v for k, v in cmd_failures.items() if k not in _NOISE_COMMANDS}
+    if sig_failures:
+        lines.append("## Command failures")
+        for name, count in sorted(sig_failures.items(), key=lambda x: -x[1]):
+            lines.append(f"- {name}: {count}")
+    elif summary.get("exit_status_counts", {}).get("error", 0) > 0:
+        # No per-command failures tracked, but errors exist
+        err_count = summary["exit_status_counts"]["error"]
+        lines.append(f"- Error exits: {err_count}")
 
     lines.append("")
     lines.append(
