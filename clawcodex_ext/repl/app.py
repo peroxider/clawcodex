@@ -142,7 +142,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             if loaded_session is not None:
                 self.session = loaded_session
                 self.console.print(
-                    f"[green]Resumed session: {resume_session_id}[/green]"
+                    f"[success]Resumed session: {resume_session_id}[/success]"
                 )
                 self.console.print(
                     f"[dim]Provider: {loaded_session.provider}, "
@@ -157,8 +157,8 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 self._load_session_metadata(resume_session_id)
             else:
                 self.console.print(
-                    f"[yellow]Session not found: {resume_session_id}. "
-                    "Starting new session.[/yellow]"
+                    f"[warning]Session not found: {resume_session_id}. "
+                    "Starting new session.[/warning]"
                 )
                 self.session = Session.create(provider_name, self.provider.model)
         else:
@@ -541,7 +541,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 pass
             return
         try:
-            self.console.print(f"[green]Permission mode: {mode}[/green]")
+            self.console.print(f"[success]Permission mode: {mode}[/success]")
         except Exception:
             pass
 
