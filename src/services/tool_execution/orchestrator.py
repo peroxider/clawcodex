@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from src.tool_system.build_tool import Tools
     from src.tool_system.context import ToolContext
-    from clawcodex_ext.types.messages import AssistantMessage
+    from src.types.messages import AssistantMessage
 
 
 def _get_max_tool_use_concurrency() -> int:
@@ -219,7 +219,7 @@ async def _run_tools_concurrently(
     unmatched tool_use block and the next API turn 400s.
     """
     from src.services.tool_execution.tool_execution import run_tool_use
-    from clawcodex_ext.types.messages import create_user_message
+    from src.types.messages import create_user_message
 
     max_concurrency = _get_max_tool_use_concurrency()
     semaphore = asyncio.Semaphore(max_concurrency)
@@ -313,6 +313,6 @@ def _find_assistant_message(
                         return msg
     if assistant_messages:
         return assistant_messages[-1]
-    from clawcodex_ext.types.messages import AssistantMessage as AM
+    from src.types.messages import AssistantMessage as AM
 
     return AM(role="assistant", content=[])

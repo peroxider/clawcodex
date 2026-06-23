@@ -611,7 +611,7 @@ def build_advisor_forwarded_messages(
     Returns a plain list of dicts safe to send to any provider.
     """
     # Local imports — same cycle-avoidance reason as elsewhere.
-    from clawcodex_ext.types.messages import normalize_messages_for_api
+    from src.types.messages import normalize_messages_for_api
 
     api_messages = normalize_messages_for_api(messages)
     api_messages = strip_advisor_blocks(api_messages)

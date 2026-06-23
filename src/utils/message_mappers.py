@@ -35,7 +35,7 @@ from typing import Any
 
 from src.bootstrap.state import get_session_id
 from clawcodex_ext.types.content_blocks import content_block_to_dict
-from clawcodex_ext.types.messages import (
+from src.types.messages import (
     AssistantMessage,
     Message,
     SystemMessage,
