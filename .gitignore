@@ -190,3 +190,5 @@ coverage/
 /sessions-v0-dev/
 /extensions/session_analyzer/
 /tests/session_analyzer/
+/.codebase-memory/
+/patches/upstream/b24b8cb/backup/
