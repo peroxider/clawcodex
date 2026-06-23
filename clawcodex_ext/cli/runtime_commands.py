@@ -20,7 +20,6 @@ from __future__ import annotations
 from typing import Any
 
 from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
-from clawcodex_ext.cli.model_cmd.store import ModelStore
 from clawcodex_ext.cli.model_cmd.errors import UnknownModelError, ProviderMismatchError
 from clawcodex_ext.cli.provider_cmd.commands import format_provider_list
 from clawcodex_ext.cli.provider_cmd.errors import UnknownProviderError
@@ -198,7 +197,8 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
 
     if not tokens:
         current = _format_runtime_current(context)
-        model_list = format_model_list()
+        current_provider = _current_provider_name(context)
+        model_list = format_model_list(provider=current_provider)
         lines = [current, "", model_list] if current else [model_list]
         return _text("\n".join(lines))
 
@@ -240,35 +240,18 @@ def _model_call(args: str, context: Any) -> LocalCommandResult:
             if suggestions:
                 warnings.append(f"Did you mean: {', '.join(suggestions)}?")
 
-    # ---- Check if the model is known for this provider ----
-    # Registry validation controls the user-facing warning. The config's
-    # ``models`` list only controls whether we need to persist the model again.
-    should_persist_model = False
+    # ---- Validate and warn about unknown models ----
+    # /model is session-scoped only — it never modifies the persisted config.
+    # For persistent changes, use ``clawcodex model use <name>`` from the CLI.
     try:
         registry.validate_model(model, provider)
     except (UnknownModelError, ProviderMismatchError):
-        warnings.append(f"Warning: unknown model '{model}' — proceeding anyway")
-        should_persist_model = not _model_is_in_config_models(model, provider)
+        warnings.append(
+            f"Unknown model '{model}' — proceeding anyway (session only; "
+            "use 'clawcodex model use' to persist)"
+        )
 
-    # ---- Persist unknown model to config so it's available next session ----
-    if should_persist_model:
-        try:
-            ModelStore(registry).set_default_provider(provider)
-        except Exception:
-            from src.config import set_default_provider as _set_dp
-
-            _set_dp(provider)
-        # ``persist_unknown`` skips registry validation and tolerates a missing
-        # provider config (it falls back to the registry default base URL).
-        # Adjacent hint to the warning tells the user whether their switch
-        # will survive the next REPL launch.
-        try:
-            ModelStore(registry).set_default_model_persist_unknown(provider, model)
-            warnings.append("(saved to config; will survive restart)")
-        except Exception as exc:
-            warnings.append(f"(session only; not persisted: {exc})")
-
-    # ---- Runtime switch (always, regardless of persistence) ----
+    # ---- Runtime switch (session-scoped only) ----
     runtime = _runtime(context)
     runtime.swap_provider(provider, model)  # type: ignore[union-attr]
     _sync_context(context, runtime)
@@ -353,20 +336,3 @@ def _format_runtime_current(context: Any, *, prefix: str | None = None) -> str |
 
 def _text(value: str) -> LocalCommandResult:
     return LocalCommandResult(type="text", value=value)
-
-
-def _model_is_in_config_models(model: str, provider: str) -> bool:
-    """Check whether *model* is in the config's ``models`` list for *provider*.
-
-    Used to avoid re-warning about a model that was already persisted by a
-    previous ``/model <unknown>`` invocation.
-    """
-    try:
-        from src.config import get_provider_config
-
-        pc = get_provider_config(provider)
-        if not pc:
-            return False
-        return model in (pc.get("models") or [])
-    except Exception:
-        return False
