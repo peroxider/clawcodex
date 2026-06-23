@@ -8,8 +8,12 @@ __all__ = []
 def __getattr__(name: str):
     import clawcodex_ext.tui.screens as _mod
 
-    if name in _mod.__dict__:
-        val = _mod.__dict__[name]
-        globals()[name] = val
-        return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # Use getattr() so clawcodex_ext's own lazy __getattr__ fires for
+    # screens that aren't in _mod.__dict__ (the package itself uses
+    # lazy loading via _NAME_TO_MODULE).
+    try:
+        val = getattr(_mod, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    globals()[name] = val
+    return val

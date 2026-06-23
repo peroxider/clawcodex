@@ -8,8 +8,18 @@ call sites keep working without modification.
 
 from clawcodex_ext.services.langfuse.exporter import (  # noqa: F401
     ExportResult,
+    FORMAT_CHATML,
+    FORMAT_JSONL,
+    FORMAT_SFT,
     TrainingDataExporter,
     export_training_data,
 )
 
-__all__ = ['ExportResult', 'TrainingDataExporter', 'export_training_data']
+__all__ = [
+    'ExportResult',
+    'FORMAT_CHATML',
+    'FORMAT_JSONL',
+    'FORMAT_SFT',
+    'TrainingDataExporter',
+    'export_training_data',
+]

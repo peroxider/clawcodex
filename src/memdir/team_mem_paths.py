@@ -19,3 +19,10 @@ import clawcodex_ext.memdir.team_mem_paths as _mod
 
 _globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 globals().update(_globals)
+
+# Explicitly re-export test helpers that are private (underscore-prefixed)
+# in the implementation module but relied upon by downstream tests.
+from clawcodex_ext.memdir.team_mem_paths import (  # noqa: F401,E402
+    _realpath_deepest_existing,
+    _sanitize_path_key,
+)
