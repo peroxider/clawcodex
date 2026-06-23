@@ -35,8 +35,14 @@ from src.command_system.types import LocalCommand, LocalCommandResult
 _VERSION_RE = re.compile(r"(\d+\.\d+(?:\.\d+)?)")
 
 
-def _colorize_model_name(model: str) -> str:
-    """Wrap version numbers in ``[version_num]…[/version_num]`` markup."""
+def _colorize_model_name(model: str | None) -> str:
+    """Wrap version numbers in ``[version_num]…[/version_num]`` markup.
+
+    Handles *None* gracefully (unknown provider case) so callers don't
+    need to guard against ``re.sub`` ``TypeError``.
+    """
+    if model is None:
+        return "[dim]unknown[/dim]"
     return _VERSION_RE.sub(r"[version_num]\1[/version_num]", model)
 
 
