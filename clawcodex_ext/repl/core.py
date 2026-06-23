@@ -559,7 +559,16 @@ class ClawcodexREPL:
             is_bypass_permissions_mode_available
         )
 
-        self.console = Console()
+        from clawcodex_ext.repl.color_scheme import (
+            build_rich_theme,
+            build_ptk_style,
+            DARK as _REPL_DARK,
+        )
+        from rich.theme import Theme as _RichTheme
+
+        self._repl_ptk_style = build_ptk_style(_REPL_DARK)
+        self._repl_palette = _REPL_DARK
+        self.console = Console(theme=_RichTheme(build_rich_theme(_REPL_DARK)))
         self.provider_name = provider_name
         self.stream = stream
 
@@ -946,26 +955,7 @@ class ClawcodexREPL:
                 has_tab_alias=_accept_tab_alias,
             ),
             completer=self.completer,
-            style=Style.from_dict({
-                # Dim background on the ``❯`` marker so the user
-                # input row reads as a discrete block above the
-                # transcript — matches Claude Code's input
-                # background highlight.
-                'prompt': 'bold fg:ansiblue bg:#262626',
-                'bottom-toolbar': 'fg:#888888 bg:default',
-                # Slash-command completion menu (two-column layout:
-                # /name on the left, [tag] + description on the right).
-                # Mirrors the TS reference where unselected rows are dim
-                # and the highlighted row inverts on a tinted background.
-                'completion-menu': 'bg:default',
-                'completion-menu.completion': 'fg:#bfbfbf bg:default',
-                'completion-menu.completion.current': 'fg:#ffffff bg:#005f87 bold',
-                'completion-menu.meta.completion': 'fg:#7a7a7a bg:default',
-                'completion-menu.meta.completion.current': 'fg:#dadada bg:#005f87',
-                'completion.command': 'bold fg:ansigreen',
-                'completion.tag': 'italic fg:ansicyan',
-                'completion.description': 'fg:#9a9a9a',
-            }),
+            style=Style.from_dict(self._repl_ptk_style),
             key_bindings=self.bindings,
             complete_while_typing=True,
             multiline=True,
@@ -1099,7 +1089,7 @@ class ClawcodexREPL:
 
         from rich.text import Text
 
-        bg_style = "on grey15"
+        bg_style = f"on {self._repl_palette.user_bg}"
         prefix = "❯ "
         for idx, line in enumerate(text.split("\n")):
             body = (prefix if idx == 0 else "  ") + line
@@ -1782,9 +1772,9 @@ class ClawcodexREPL:
                     visible = len(gutter) + 1 + cell_len(body)
                     padding = max(0, target_right - len(lead) - visible)
                     diff.append(lead)
-                    diff.append(gutter, style="on rgb(34,92,43)")
-                    diff.append("+", style="bold on rgb(34,92,43)")
-                    diff.append(body + " " * padding, style="on rgb(34,92,43)")
+                    diff.append(gutter, style=f"on {self._repl_palette.diff_add}")
+                    diff.append("+", style=f"bold on {self._repl_palette.diff_add}")
+                    diff.append(body + " " * padding, style=f"on {self._repl_palette.diff_add}")
                     diff.append("\n")
                     new_lineno += 1
                 elif stripped.startswith("-"):
@@ -1795,9 +1785,9 @@ class ClawcodexREPL:
                     visible = len(gutter) + 1 + cell_len(body)
                     padding = max(0, target_right - len(lead) - visible)
                     diff.append(lead)
-                    diff.append(gutter, style="on rgb(122,41,54)")
-                    diff.append("-", style="bold on rgb(122,41,54)")
-                    diff.append(body + " " * padding, style="on rgb(122,41,54)")
+                    diff.append(gutter, style=f"on {self._repl_palette.diff_remove}")
+                    diff.append("-", style=f"bold on {self._repl_palette.diff_remove}")
+                    diff.append(body + " " * padding, style=f"on {self._repl_palette.diff_remove}")
                     diff.append("\n")
                     old_lineno += 1
                 else:
