@@ -1,17 +1,14 @@
-"""
-Compact service — boundary markers and command-facing compaction wrapper.
+"""Facade — src/compact_service/__init__.py has been moved to clawcodex_ext.
 
-``compact_service.messages`` provides boundary-marker dataclasses and
-factory functions used by the compaction pipeline (``services/compact/``).
-
-``compact_service.service`` provides the ``compact_conversation()`` wrapper
-that the ``/compact`` command handler expects: it accepts a ``Conversation``
-object, delegates to the unified pipeline, and mutates the conversation in place.
+The full implementation now lives in
+:mod:`clawcodex_ext.compact_service`. This module re-exports the public
+surface so existing ``from src.compact_service import ...`` call sites
+keep working without modification.
 """
 
 from __future__ import annotations
 
-from .messages import (
+from clawcodex_ext.compact_service import (  # noqa: F401
     CompactBoundaryMetadata,
     PreservedSegment,
     annotate_boundary_with_preserved_segment,
@@ -20,11 +17,6 @@ from .messages import (
     get_messages_after_boundary,
     is_compact_boundary_message,
 )
-
-# NOTE: service.py is intentionally NOT imported here to avoid a circular
-# import chain: compact_service.__init__ → service → services.compact.compact
-# → compact_service.messages. Import it directly when needed:
-#   from src.compact_service.service import compact_conversation
 
 __all__ = [
     "CompactBoundaryMetadata",

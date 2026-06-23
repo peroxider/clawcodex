@@ -1,19 +1,14 @@
-"""``dream`` task type — F-100.
+"""Facade — src/tasks/dream/__init__.py has been moved to clawcodex_ext.
 
-Mirrors ``typescript/src/tasks/DreamTask/DreamTask.ts`` in shape: a
-typed ``DreamTaskState`` dataclass with extension fields plus a
-``DreamTask`` adapter registered into the ``RuntimeTaskRegistry``.
-
-The actual spawn / run loop lives in ``clawcodex_ext.dreaming.service``
-(Python analog of upstream ``autoDream.ts``); this package only owns
-the state machine and the polymorphic ``kill`` dispatch target used
-by the chapter-10 ``stop_task`` wiring.
+The full implementation now lives in :mod:`clawcodex_ext.tasks.dream`.
+This module re-exports the public surface so existing
+``from src.tasks.dream import ...`` call sites keep working without
+modification.
 """
 
 from __future__ import annotations
 
-from clawcodex_ext.task_registry import register_task
-from src.tasks.dream.dream_task import (
+from clawcodex_ext.tasks.dream import (  # noqa: F401
     MAX_DREAM_TURNS,
     DreamTask,
     DreamTaskState,
@@ -25,10 +20,6 @@ from src.tasks.dream.dream_task import (
     register_dream_task,
     rollback_dream_lock_after_kill,
 )
-
-# N1-style centralized registration (mirrors ``src/tasks/__init__.py``).
-# Idempotent — re-imports are no-ops.
-register_task(DreamTask())
 
 __all__ = [
     "DreamTask",
