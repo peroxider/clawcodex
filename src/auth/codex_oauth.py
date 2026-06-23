@@ -28,6 +28,13 @@ from clawcodex_ext.auth.codex_oauth import (  # noqa: F401
     get_codex_auth_status,
 )
 
+# Re-exported from codex_store for backward compat — these types are
+# used by tests and internal callers that import from src.auth.codex_oauth.
+from clawcodex_ext.auth.codex_store import (  # noqa: F401
+    CodexAuthRecord,
+    CodexOAuthTokens,
+)
+
 __all__ = [
     "CODEX_BASE_URL",
     "CODEX_OAUTH_CLIENT_ID",
@@ -41,6 +48,8 @@ __all__ = [
     "CodexDeviceFlow",
     "CodexRuntimeCredentials",
     "CodexAuthStatus",
+    "CodexAuthRecord",
+    "CodexOAuthTokens",
     "start_codex_device_flow",
     "poll_codex_device_flow",
     "exchange_codex_authorization",
