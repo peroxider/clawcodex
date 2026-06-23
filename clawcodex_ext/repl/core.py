@@ -1692,16 +1692,25 @@ class ClawcodexREPL:
 
         # Sort and display
         all_commands.sort(key=lambda x: x[0].lower())
-        for name, desc, cmd_type in all_commands:
-            if cmd_type == "skill":
-                self.console.print(f"  [secondary]{name}[/secondary]")
-                if desc:
-                    self.console.print(f"    [dim]{desc}[/dim]")
-            else:
-                if desc:
-                    self.console.print(f"  {name}  [dim]- {desc}[/dim]")
+        if not all_commands and q:
+            # No matches for the query — show a helpful hint instead of an empty list
+            self.console.print(
+                f"  [dim]No matching commands for [warning]/{q}[/warning].[/dim]"
+            )
+            self.console.print(
+                f"  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]"
+            )
+        else:
+            for name, desc, cmd_type in all_commands:
+                if cmd_type == "skill":
+                    self.console.print(f"  [secondary]{name}[/secondary]")
+                    if desc:
+                        self.console.print(f"    [dim]{desc}[/dim]")
                 else:
-                    self.console.print(f"  {name}")
+                    if desc:
+                        self.console.print(f"  {name}  [dim]- {desc}[/dim]")
+                    else:
+                        self.console.print(f"  {name}")
 
         self.console.print()
 
@@ -3558,6 +3567,9 @@ class ClawcodexREPL:
                 if self._try_run_skill_slash(raw):
                     return
             self.console.print(f"[error]Unknown command: {command}[/error]")
+            self.console.print(
+                "  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]"
+            )
 
     # ── REPL-native handlers for Phase-2/3 commands ────────────────────
 
