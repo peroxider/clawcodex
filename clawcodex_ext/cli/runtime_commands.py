@@ -176,7 +176,15 @@ def _provider_call(args: str, context: Any) -> LocalCommandResult:
 
         _set_dp(provider)
 
-    runtime.swap_provider(provider)
+    try:
+        runtime.swap_provider(provider)
+    except Exception as exc:
+        return _text(
+            f"Failed to switch to provider '{provider}': {exc}\n"
+            "Check that the provider is configured (api_key, base_url) "
+            "and try again."
+        )
+
     _sync_context(context, runtime)
 
     lines = [f"Provider switched to: {provider}"]
