@@ -189,6 +189,7 @@ def check_bash_command_safety(
     command: str,
     cwd: str | None = None,
     allowed_directories: list[str] | None = None,
+        shell: str | None = None,
 ) -> PermissionResult | None:
     if shell == "powershell":
         return check_powershell_command_safety(command, cwd=cwd, allowed_directories=allowed_directories)
