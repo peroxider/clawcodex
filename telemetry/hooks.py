@@ -71,7 +71,7 @@ def _emit(exc: BaseException) -> None:
                            "gitee": f"https://gitee.com/{owner}/{repo}/issues/{issue_id}"}.get(platform, "")
                     if url:
                         import sys
-                        sys.stderr.write("\nTelemetry: error report pushed to %s\n" % url)
+                        sys.stderr.write("\n\033[1;33m⚠ Telemetry: error report pushed to %s\033[0m\n" % url)
             except Exception:
                 pass
         except Exception as flush_exc:  # noqa: BLE001
