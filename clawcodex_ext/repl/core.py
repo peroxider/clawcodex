@@ -341,7 +341,7 @@ from src.cost_tracker import CostTracker
 from src.history import HistoryLog
 from src.repl.agent_mention_completer import AgentMentionCompleter
 from src.repl.at_file_completer import AtFileCompleter
-from src.repl.live_status import LiveStatus
+from clawcodex_ext.repl.live_status import LiveStatus
 
 try:
     from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
