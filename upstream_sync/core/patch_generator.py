@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import difflib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -94,6 +95,19 @@ class RegenerateResult:
 REGENERATE_SKIP_DIRS: set[str] = {"__pycache__"}
 REGENERATE_SKIP_SUFFIXES: tuple[str, ...] = (".pyc", ".pyo")
 REGENERATE_SKIP_PREFIXES: tuple[str, ...] = ("upstream/", "orchestrator/")
+
+
+# Match a Python single-quoted string literal that should be safely rewritable
+# as a double-quoted literal - i.e. no embedded single quotes and not flanked
+# by alphanumerics/underscores (so `it's`, `don't`, `Class'` stay untouched).
+# Bytes-only literal (no non-ASCII chars allowed inside `rb"""..."""`).
+_QUOTE_RE = re.compile(
+    rb"(?<![A-Za-z0-9_'\\])"
+    rb"'"
+    rb"([^'\n\\]*?)"
+    rb"'"
+    rb"(?![A-Za-z0-9_'])"
+)
 
 
 class PatchGenerator:
@@ -383,8 +397,37 @@ class PatchGenerator:
         return raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
 
     @staticmethod
-    def files_differ_norm(upstream_path: Path, src_path: Path) -> bool:
-        """Compare two files with normalised line endings."""
+    def read_normalised_loose(path: Path) -> bytes:
+        """Read file bytes with line endings AND single-quote → double-quote normalised.
+
+        Used by ``files_differ_norm(..., loose=True)`` to skip patch emission for
+        files that differ only in cosmetic quote style. The substitution targets
+        single-quoted Python string literals (no escaped quotes inside, no
+        apostrophes adjacent to alphanumerics to avoid mangling comments / docs).
+        """
+        normalised = PatchGenerator.read_normalised(path)
+        # `'foo'` → `"foo"` — only inside Python string-literal contexts.
+        # The negative look-behind / look-ahead rules out:
+        # - `\'` (escaped single quote, will not appear at this position)
+        # - leading/trailing alphanumerics/underscores (`it's` should stay)
+        # - opening single quote preceded by `\` (escape in raw source)
+        return _QUOTE_RE.sub(b'"\\1"', normalised)
+
+    @staticmethod
+    def files_differ_norm(
+        upstream_path: Path, src_path: Path, loose: bool = False
+    ) -> bool:
+        """Compare two files with normalised line endings.
+
+        When ``loose`` is True, also normalise single-quote → double-quote inside
+        Python string literals so cosmetic quote-style-only diffs are treated as
+        equal (used by the ``--ignore-quote-style`` CLI flag).
+        """
+        if loose:
+            return (
+                PatchGenerator.read_normalised_loose(upstream_path)
+                != PatchGenerator.read_normalised_loose(src_path)
+            )
         return PatchGenerator.read_normalised(upstream_path) != PatchGenerator.read_normalised(
             src_path
         )
@@ -664,6 +707,7 @@ class PatchGenerator:
         skip_prefixes: tuple[str, ...] = REGENERATE_SKIP_PREFIXES,
         skip_dirs: set[str] | None = None,
         skip_suffixes: tuple[str, ...] = REGENERATE_SKIP_SUFFIXES,
+        ignore_quote_style: bool = False,
     ) -> RegenerateResult:
         """Regenerate all overlay patches from an upstream snapshot.
 
@@ -685,6 +729,11 @@ class PatchGenerator:
             skip_prefixes: File path prefixes to skip.
             skip_dirs: Directory names to skip.
             skip_suffixes: File extensions to skip.
+            ignore_quote_style: When True, treat files that differ only in
+                Python string-literal quote style (``'x'`` vs ``"x"``) and
+                CRLF→LF line endings as identical so they do not produce a
+                modified patch. Use for noisy diffs from upstream tooling that
+                re-quotes strings on save.
 
         Returns:
             ``RegenerateResult`` with summary and file paths.
@@ -732,7 +781,11 @@ class PatchGenerator:
             relative_path
             for relative_path in both
             if relative_path not in preserve
-            and self.files_differ_norm(upstream / relative_path, src / relative_path)
+            and self.files_differ_norm(
+                upstream / relative_path,
+                src / relative_path,
+                loose=ignore_quote_style,
+            )
         )
         new_files = sorted(src_files - upstream_files)
 

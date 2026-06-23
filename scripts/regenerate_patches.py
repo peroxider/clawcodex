@@ -84,6 +84,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="File containing one relative path per line of files to preserve.",
     )
+    parser.add_argument(
+        "--ignore-quote-style",
+        action="store_true",
+        help="Skip diffs that differ only in Python string-literal quote style "
+        "('x' vs \"x\") and CRLF→LF line endings. Useful when upstream tooling "
+        "re-quotes strings on save without functional change.",
+    )
     return parser.parse_args(argv)
 
 
@@ -107,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             patch_root=args.patch_root / args.commit,
             allow_deletes=args.allow_deletes,
             preserve=preserve,
+            ignore_quote_style=args.ignore_quote_style,
         )
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
