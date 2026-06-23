@@ -94,6 +94,18 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
                     last=row.get("last_seen_iso", "?"),
                 )
             )
+            # Include a representative stacktrace for debugging.
+            # Stacktraces are redacted at record time (paths normalized,
+            # secrets scrubbed) and then verified by scan_secrets before
+            # the report is pushed remotely.
+            st = row.get("stacktrace")
+            if st:
+                lines.append("")
+                lines.append("```")
+                for frame in st:
+                    lines.append(frame.rstrip())
+                lines.append("```")
+                lines.append("")
         lines.append("")
 
     # Stats section secondary — provides context around the error.

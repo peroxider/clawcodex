@@ -209,6 +209,7 @@ class DailyAggregator:
                     "error_class": fields.get("error_class") or "unknown",
                     "first_seen": None,
                     "last_seen": None,
+                    "stacktrace": [],
                 },
             )
             bucket["count"] += 1
@@ -216,6 +217,11 @@ class DailyAggregator:
             if isinstance(ts, (int, float)):
                 if bucket["first_seen"] is None or ts < bucket["first_seen"]:
                     bucket["first_seen"] = ts
+                    # Capture the full stacktrace from the first occurrence
+                    # as a representative sample for the report.
+                    st = fields.get("stacktrace")
+                    if st:
+                        bucket["stacktrace"] = list(st)
                 if bucket["last_seen"] is None or ts > bucket["last_seen"]:
                     bucket["last_seen"] = ts
 
