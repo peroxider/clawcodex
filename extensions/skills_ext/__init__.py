@@ -30,9 +30,17 @@ def init_skills_ext() -> None:
     """Initialize skills_ext bundled skills.
 
     Registers clawcodex-native skills that are not part of upstream.
-    Called by SkillRegistryExt when loading skills from clawscodex paths.
+    Each skill is registered independently — one failure does not
+    block others.
     """
     from .bundled import register_convert_pos_skill, register_dream_skill
 
-    register_convert_pos_skill()
-    register_dream_skill()
+    try:
+        register_convert_pos_skill()
+    except Exception:
+        pass
+
+    try:
+        register_dream_skill()
+    except Exception:
+        pass

@@ -33,7 +33,7 @@ LOCK_FILE_NAME = ".consolidate-lock"
 
 # Stale past this even if PID is live (PID-reuse guard). Matches
 # upstream ``HOLDER_STALE_MS`` (60min).
-HOLDER_STALE_MS = 60 * 60 * 1000
+HOLDER_STALE_MS = 30 * 60 * 1000
 
 
 def _lock_path() -> Path:

@@ -75,7 +75,7 @@ _runner_factory: RunnerFactory | None = None
 def set_dream_runner_factory(factory: RunnerFactory | None) -> None:
     """Install or clear the runner factory.
 
-    Pass ``None`` to fall back to the built-in Phase A stub.
+    Pass ``None`` to fall back to the built-in stub.
     """
     global _runner_factory
     _runner_factory = factory
@@ -123,3 +123,211 @@ def run_dream_consolidation(
         except Exception:  # pragma: no cover - defensive
             _log.debug("dream on_message callback raised", exc_info=True)
     return DreamRunResult(files_touched=[], usage={}, summary="(stub run)")
+
+# ---------------------------------------------------------------------------
+# Real LLM-backed runner
+# ---------------------------------------------------------------------------
+
+DREAM_MAX_TURNS: int = 25
+
+DREAM_ALLOWED_TOOL_NAMES: frozenset[str] = frozenset({
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
+})
+
+DREAM_SYSTEM_PROMPT: str = (
+    "You are running a dream \u2014 a background memory consolidation pass.\n\n"
+    "Your PRIMARY goal is to WRITE memory files. You must produce or update "
+    "at least one .md file in the memory directory during this run. "
+    "Exploration without writing is a failed run.\n\n"
+    "Follow the 4 phases in the user prompt in order:\n"
+    "1. Orient \u2014 quickly scan what exists (2-3 tool calls max)\n"
+    "2. Gather \u2014 search transcripts for new signal (3-5 tool calls max)\n"
+    "3. Consolidate \u2014 WRITE new or updated memory files using the Write tool\n"
+    "4. Prune \u2014 update MEMORY.md index to match actual files on disk\n\n"
+    "Tool usage:\n"
+    "- Bash: read-only commands only (ls, find, grep, cat, head, tail, wc, stat)\n"
+    "- Read: read any file in the project or memory directory\n"
+    "- Write/Edit: use these to CREATE and UPDATE memory files \u2014 this is your main job\n"
+    "- Glob/Grep: search for files and content\n\n"
+    "Memory file format: each .md file should have YAML frontmatter with "
+    "name, description, and type fields. Keep files focused on one topic.\n\n"
+    "Be decisive. If you find signal worth remembering, write it now. "
+    "Do not defer or summarize without writing."
+)
+
+
+def _create_provider(model: str | None = None) -> Any:
+    from src.config import get_default_provider, get_provider_config
+    from src.providers import get_provider_class
+
+    provider_name = get_default_provider()
+    provider_cfg = get_provider_config(provider_name)
+    if not provider_cfg.get("api_key"):
+        raise DreamRunnerUnavailable(
+            f"API key for provider '{provider_name}' is not configured. "
+            "Run `clawcodex login` to set it up."
+        )
+    provider_cls = get_provider_class(provider_name)
+    return provider_cls(
+        api_key=provider_cfg["api_key"],
+        base_url=provider_cfg.get("base_url"),
+        model=model or provider_cfg.get("default_model"),
+    )
+
+
+def _build_dream_tool_registry(provider: Any) -> Any:
+    from clawcodex_ext.tool_system.registry import ToolRegistry
+    from clawcodex_ext.tool_system.tools import ALL_STATIC_TOOLS
+
+    registry = ToolRegistry()
+    for tool in ALL_STATIC_TOOLS:
+        if tool.name in DREAM_ALLOWED_TOOL_NAMES:
+            registry.register(tool)
+    return registry
+
+
+def _build_dream_context(workspace_root: Path, abort_controller: Any) -> Any:
+    from clawcodex_ext.tool_system.context import ToolContext
+    from clawcodex_ext.permissions.types import ToolPermissionContext
+
+    context = ToolContext(
+        workspace_root=workspace_root,
+        permission_context=ToolPermissionContext(
+            mode="bypassPermissions",
+            is_bypass_permissions_mode_available=True,
+        ),
+        abort_controller=abort_controller,
+    )
+    context.options.is_non_interactive_session = True
+    context.ask_user = None
+    return context
+
+
+def _make_on_event_handler(
+    on_message: Callable | None,
+    files_touched: list[str],
+) -> Callable | None:
+    if on_message is None:
+        return None
+
+    def on_event(event: Any) -> None:
+        if getattr(event, "kind", None) != "tool_use":
+            return
+        tool_name = getattr(event, "tool_name", "")
+        tool_input = getattr(event, "tool_input", {}) or {}
+        paths: list[str] = []
+        if tool_name in ("Write", "Edit"):
+            fp = tool_input.get("file_path") or tool_input.get("filePath")
+            if fp:
+                paths.append(fp)
+                if fp not in files_touched:
+                    files_touched.append(fp)
+        try:
+            on_message(
+                text="",
+                tool_use_count=1,
+                touched_paths=paths,
+            )
+        except Exception:
+            _log.debug("dream on_event callback raised", exc_info=True)
+
+    return on_event
+
+
+async def _run_dream_async(
+    prompt: str,
+    on_message: Callable | None,
+    workspace_root: Path,
+    max_turns: int,
+) -> DreamRunResult:
+    from clawcodex_ext.utils.abort_controller import AbortController
+    from clawcodex_ext.types.messages import UserMessage
+    from clawcodex_ext.query.agent_loop_compat import run_query_as_agent_loop
+
+    try:
+        provider = _create_provider()
+    except DreamRunnerUnavailable:
+        raise
+    except Exception as e:
+        raise DreamRunnerUnavailable(f"provider creation failed: {e}") from e
+
+    try:
+        tool_registry = _build_dream_tool_registry(provider)
+    except Exception as e:
+        raise DreamRunnerUnavailable(f"tool registry build failed: {e}") from e
+
+    abort_controller = AbortController()
+    tool_context = _build_dream_context(workspace_root, abort_controller)
+
+    files_touched: list[str] = []
+    on_event = _make_on_event_handler(on_message, files_touched)
+
+    try:
+        result = await run_query_as_agent_loop(
+            initial_messages=[UserMessage(content=prompt)],
+            system_prompt=DREAM_SYSTEM_PROMPT,
+            provider=provider,
+            tool_registry=tool_registry,
+            tool_context=tool_context,
+            max_turns=max_turns,
+            on_event=on_event,
+            abort_controller=abort_controller,
+        )
+    except Exception as e:
+        raise DreamRunnerUnavailable(f"agent loop failed: {e}") from e
+
+    return DreamRunResult(
+        files_touched=list(files_touched),
+        usage=dict(getattr(result, "usage", {}) or {}),
+        summary=getattr(result, "response_text", "") or "",
+    )
+
+
+def run_dream_with_llm(
+    prompt: str,
+    on_message: Callable | None = None,
+    *,
+    workspace_root: Path | None = None,
+    max_turns: int = DREAM_MAX_TURNS,
+) -> DreamRunResult:
+    """Run a dream consolidation pass using the real LLM agent loop."""
+    ws = workspace_root or Path.cwd()
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop is not None and loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(
+                asyncio.run,
+                _run_dream_async(prompt, on_message, ws, max_turns),
+            )
+            return future.result()
+    else:
+        return asyncio.run(
+            _run_dream_async(prompt, on_message, ws, max_turns)
+        )
+
+
+def create_real_dream_runner_factory() -> RunnerFactory:
+    """Return a :data:`RunnerFactory` that produces the real LLM runner."""
+
+    def factory() -> Callable:
+        return run_dream_with_llm
+
+    return factory
+
+
+def wire_real_dream_runner() -> None:
+    """Install the real LLM-backed dream runner globally."""
+    set_dream_runner_factory(create_real_dream_runner_factory())
+    _log.info("dream: real LLM runner installed")

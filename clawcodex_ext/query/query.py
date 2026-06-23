@@ -346,7 +346,7 @@ async def _call_model_sync(
     advisor_mode = ADVISOR_MODE_INACTIVE
     advisor_model_normalized: str | None = None
     try:
-        from clawcodex_ext.settings.settings import get_settings
+        from src.settings.settings import get_settings
 
         settings = get_settings()
         configured = (getattr(settings, "advisor_model", "") or "").strip()
