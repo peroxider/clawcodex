@@ -1,0 +1,203 @@
+diff --git a/skills/__init__.py b/skills/__init__.py
+--- a/skills/__init__.py	2026-06-18 10:10:16.143121 +0000
++++ b/skills/__init__.py	2026-06-22 02:40:33.193905 +0000
+@@ -1,90 +1,109 @@
+-from .argument_substitution import parse_arguments, substitute_arguments
+-from .bundled import init_bundled_skills
+-from .bundled_skills import (
+-    BundledSkillDefinition,
+-    SkillValidationError,
+-    clear_bundled_skills,
+-    get_bundled_skill_by_name,
+-    get_bundled_skills,
+-    register_bundled_skill,
+-    skill_from_mcp_tool,
+-    validate_skill,
+-    validate_skill_definition,
+-)
+-from .create import create_skill
+-from .frontmatter import parse_frontmatter
+-from .loader import (
+-    activate_conditional_skills_for_paths,
+-    add_skill_directories,
+-    clear_dynamic_skills,
+-    clear_skill_caches,
+-    clear_skill_registry,
+-    create_skill_command,
+-    discover_skill_dirs_for_paths,
+-    get_all_skills,
+-    get_conditional_skill_count,
+-    get_dynamic_skills,
+-    get_registered_skill,
+-    get_skill_dir_commands,
+-    get_skills_path,
+-    load_skills_from_dir,
+-    load_skills_from_skills_dir,
+-    parse_skill_frontmatter_fields,
+-)
+-from .mcp_skill_builders import get_mcp_skill_builders, register_mcp_skill_builders
+-from .model import PromptSkill, Skill
+-from .runtime_substitution import (
+-    find_shell_blocks,
+-    format_shell_error,
+-    format_shell_output,
+-    has_shell_blocks,
+-    prepend_base_dir_header,
+-    render_skill_prompt,
+-    substitute_session_id,
+-    substitute_skill_dir,
+-)
+-
+-__all__ = [
+-    "Skill",
+-    "PromptSkill",
+-    "BundledSkillDefinition",
+-    "SkillValidationError",
+-    "register_bundled_skill",
+-    "get_bundled_skills",
+-    "get_bundled_skill_by_name",
+-    "clear_bundled_skills",
+-    "validate_skill",
+-    "validate_skill_definition",
+-    "skill_from_mcp_tool",
+-    "create_skill",
+-    "create_skill_command",
+-    "parse_frontmatter",
+-    "parse_arguments",
+-    "substitute_arguments",
+-    "parse_skill_frontmatter_fields",
+-    "get_skill_dir_commands",
+-    "get_skills_path",
+-    "load_skills_from_skills_dir",
+-    "load_skills_from_dir",
+-    "discover_skill_dirs_for_paths",
+-    "add_skill_directories",
+-    "activate_conditional_skills_for_paths",
+-    "get_dynamic_skills",
+-    "get_conditional_skill_count",
+-    "clear_skill_caches",
+-    "clear_dynamic_skills",
+-    "clear_skill_registry",
+-    "get_all_skills",
+-    "get_registered_skill",
+-    "register_mcp_skill_builders",
+-    "get_mcp_skill_builders",
+-    "render_skill_prompt",
+-    "prepend_base_dir_header",
+-    "substitute_skill_dir",
+-    "substitute_session_id",
+-    "find_shell_blocks",
+-    "has_shell_blocks",
+-    "format_shell_output",
+-    "format_shell_error",
+-    "init_bundled_skills",
+-]
++"""Skills package — Phase 2-C re-exports.
++
++The skill modules have been moved to :mod:`clawcodex_ext.skills`.
++This ``__init__`` re-exports the same public surface that the
++pre-move package exposed, but does so by importing from the new
++``clawcodex_ext.skills.*`` locations (the ``src.skills.*`` facades
++create a cycle because they live inside this package).
++
++The public surface and ``__all__`` are unchanged.
++"""
++
++from __future__ import annotations
++
++from clawcodex_ext.skills.argument_substitution import (
++    parse_arguments,
++    substitute_arguments,
++)
++from clawcodex_ext.skills.bundled import init_bundled_skills
++from clawcodex_ext.skills.bundled_skills import (
++    BundledSkillDefinition,
++    SkillValidationError,
++    clear_bundled_skills,
++    get_bundled_skill_by_name,
++    get_bundled_skills,
++    register_bundled_skill,
++    skill_from_mcp_tool,
++    validate_skill,
++    validate_skill_definition,
++)
++from clawcodex_ext.skills.create import create_skill
++from clawcodex_ext.skills.frontmatter import parse_frontmatter
++from clawcodex_ext.skills.loader import (
++    activate_conditional_skills_for_paths,
++    add_skill_directories,
++    clear_dynamic_skills,
++    clear_skill_caches,
++    clear_skill_registry,
++    create_skill_command,
++    discover_skill_dirs_for_paths,
++    get_all_skills,
++    get_conditional_skill_count,
++    get_dynamic_skills,
++    get_registered_skill,
++    get_skill_dir_commands,
++    get_skills_path,
++    load_skills_from_dir,
++    load_skills_from_skills_dir,
++    parse_skill_frontmatter_fields,
++)
++from clawcodex_ext.skills.mcp_skill_builders import (
++    get_mcp_skill_builders,
++    register_mcp_skill_builders,
++)
++from clawcodex_ext.skills.model import PromptSkill, Skill
++from clawcodex_ext.skills.runtime_substitution import (
++    find_shell_blocks,
++    format_shell_error,
++    format_shell_output,
++    has_shell_blocks,
++    prepend_base_dir_header,
++    render_skill_prompt,
++    substitute_session_id,
++    substitute_skill_dir,
++)
++
++__all__ = [
++    "Skill",
++    "PromptSkill",
++    "BundledSkillDefinition",
++    "SkillValidationError",
++    "register_bundled_skill",
++    "get_bundled_skills",
++    "get_bundled_skill_by_name",
++    "clear_bundled_skills",
++    "validate_skill",
++    "validate_skill_definition",
++    "skill_from_mcp_tool",
++    "create_skill",
++    "create_skill_command",
++    "parse_frontmatter",
++    "parse_arguments",
++    "substitute_arguments",
++    "parse_skill_frontmatter_fields",
++    "get_skill_dir_commands",
++    "get_skills_path",
++    "load_skills_from_skills_dir",
++    "load_skills_from_dir",
++    "discover_skill_dirs_for_paths",
++    "add_skill_directories",
++    "activate_conditional_skills_for_paths",
++    "get_dynamic_skills",
++    "get_conditional_skill_count",
++    "clear_skill_caches",
++    "clear_dynamic_skills",
++    "clear_skill_registry",
++    "get_all_skills",
++    "get_registered_skill",
++    "register_mcp_skill_builders",
++    "get_mcp_skill_builders",
++    "render_skill_prompt",
++    "prepend_base_dir_header",
++    "substitute_skill_dir",
++    "substitute_session_id",
++    "find_shell_blocks",
++    "has_shell_blocks",
++    "format_shell_output",
++    "format_shell_error",
++    "init_bundled_skills",
++]

@@ -1,0 +1,19 @@
+diff --git a/utils/deep_link.py b/utils/deep_link.py
+--- a/utils/deep_link.py	2026-06-18 10:10:15.720573 +0000
++++ b/utils/deep_link.py	2026-06-22 09:03:28.266134 +0000
+@@ -3,6 +3,7 @@
+ Mirrors TypeScript utils/deepLink.ts — parses and constructs deep links
+ for sharing prompts, sessions, and configurations.
+ """
++
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass, field
+@@ -17,6 +18,7 @@
+ @dataclass
+ class DeepLink:
+     """A parsed deep link."""
++
+     action: str
+     params: dict[str, str] = field(default_factory=dict)
+ 

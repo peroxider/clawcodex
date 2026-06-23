@@ -1,0 +1,22 @@
+diff --git a/services/pipe_ipc/uds.py b/services/pipe_ipc/uds.py
+new file mode 100644
+--- /dev/null
++++ b/services/pipe_ipc/uds.py	2026-06-22 09:08:44.234580 +0000
+@@ -0,0 +1,17 @@
++"""Facade — services/pipe_ipc/uds.py has been moved to clawcodex_ext.
++
++Real implementation lives in ``clawcodex_ext.services.pipe_ipc.uds``.
++Existing ``from src.services.pipe_ipc.uds import …`` call sites continue
++to work during the migration.  New code should import from
++``clawcodex_ext.services.pipe_ipc.uds`` directly.
++"""
++
++from clawcodex_ext.services.pipe_ipc.uds import (  # noqa: F401
++    UdsPipeClient,
++    UdsPipeServer,
++)
++
++__all__ = [
++    "UdsPipeClient",
++    "UdsPipeServer",
++]

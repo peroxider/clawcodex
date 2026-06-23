@@ -1,0 +1,120 @@
+diff --git a/services/tool_execution/orchestrator.py b/services/tool_execution/orchestrator.py
+--- a/services/tool_execution/orchestrator.py	2026-06-18 10:10:16.594758 +0000
++++ b/services/tool_execution/orchestrator.py	2026-06-23 00:32:30.861126 +0000
+@@ -115,7 +115,8 @@
+                     tool_use_id, modify_fn = _extract_modifier(ctx_mod)
+                     if modify_fn is not None:
+                         queued_context_modifiers.setdefault(
+-                            tool_use_id, [],
++                            tool_use_id,
++                            [],
+                         ).append(modify_fn)
+ 
+                 yield MessageUpdate(message=msg, new_context=current_context)
+@@ -166,9 +167,7 @@
+ 
+     for tool_use in tool_use_messages:
+         if current_context.set_in_progress_tool_use_ids:
+-            current_context.set_in_progress_tool_use_ids(
+-                lambda prev: prev | {tool_use.id}
+-            )
++            current_context.set_in_progress_tool_use_ids(lambda prev: prev | {tool_use.id})
+ 
+         assistant_msg = _find_assistant_message(tool_use, assistant_messages)
+ 
+@@ -178,11 +177,23 @@
+             can_use_tool,
+             current_context,
+         ):
+-            msg = update.get("message") if isinstance(update, dict) else getattr(update, "message", None)
+-            ctx_mod = update.get("context_modifier") if isinstance(update, dict) else getattr(update, "context_modifier", None)
++            msg = (
++                update.get("message")
++                if isinstance(update, dict)
++                else getattr(update, "message", None)
++            )
++            ctx_mod = (
++                update.get("context_modifier")
++                if isinstance(update, dict)
++                else getattr(update, "context_modifier", None)
++            )
+ 
+             if ctx_mod:
+-                modify_fn = ctx_mod.get("modify_context") if isinstance(ctx_mod, dict) else getattr(ctx_mod, "modify_context", None)
++                modify_fn = (
++                    ctx_mod.get("modify_context")
++                    if isinstance(ctx_mod, dict)
++                    else getattr(ctx_mod, "modify_context", None)
++                )
+                 if modify_fn:
+                     current_context = modify_fn(current_context)
+ 
+@@ -220,9 +231,7 @@
+         try:
+             async with semaphore:
+                 if tool_use_context.set_in_progress_tool_use_ids:
+-                    tool_use_context.set_in_progress_tool_use_ids(
+-                        lambda prev: prev | {tool_use.id}
+-                    )
++                    tool_use_context.set_in_progress_tool_use_ids(lambda prev: prev | {tool_use.id})
+                 assistant_msg = _find_assistant_message(tool_use, assistant_messages)
+                 try:
+                     async for update in run_tool_use(
+@@ -240,34 +249,33 @@
+                     # the failure.
+                     logger.exception(
+                         "Unhandled error in concurrent tool %s (%s)",
+-                        tool_use.name, tool_use.id,
++                        tool_use.name,
++                        tool_use.id,
+                     )
+                     err_msg = create_user_message(
+-                        content=[{
+-                            "type": "tool_result",
+-                            "content": (
+-                                f"<tool_use_error>Error: {exc}"
+-                                "</tool_use_error>"
+-                            ),
+-                            "is_error": True,
+-                            "tool_use_id": tool_use.id,
+-                        }],
++                        content=[
++                            {
++                                "type": "tool_result",
++                                "content": (f"<tool_use_error>Error: {exc}</tool_use_error>"),
++                                "is_error": True,
++                                "tool_use_id": tool_use.id,
++                            }
++                        ],
+                         toolUseResult=f"Error: {exc}",
+                     )
+-                    await results_queue.put({
+-                        "message": err_msg,
+-                        "context_modifier": None,
+-                    })
++                    await results_queue.put(
++                        {
++                            "message": err_msg,
++                            "context_modifier": None,
++                        }
++                    )
+         finally:
+             _mark_tool_use_as_complete(tool_use_context, tool_use.id)
+             pending -= 1
+             if pending == 0:
+                 await results_queue.put(None)
+ 
+-    tasks = [
+-        asyncio.ensure_future(_run_single(tool_use))
+-        for tool_use in tool_use_messages
+-    ]
++    tasks = [asyncio.ensure_future(_run_single(tool_use)) for tool_use in tool_use_messages]
+ 
+     try:
+         while True:
+@@ -306,4 +314,5 @@
+     if assistant_messages:
+         return assistant_messages[-1]
+     from src.types.messages import AssistantMessage as AM
++
+     return AM(role="assistant", content=[])

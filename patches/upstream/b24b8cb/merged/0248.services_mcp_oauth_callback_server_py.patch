@@ -1,0 +1,81 @@
+diff --git a/services/mcp/oauth_callback_server.py b/services/mcp/oauth_callback_server.py
+--- a/services/mcp/oauth_callback_server.py	2026-06-18 10:10:16.412168 +0000
++++ b/services/mcp/oauth_callback_server.py	2026-06-22 09:03:26.070727 +0000
+@@ -91,9 +91,7 @@
+     loop = asyncio.get_event_loop()
+     result_future: asyncio.Future[CallbackResult] = loop.create_future()
+ 
+-    async def handle_client(
+-        reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+-    ) -> None:
++    async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+         try:
+             request_line_b = await reader.readline()
+             request_line = request_line_b.decode("latin-1", errors="replace").strip()
+@@ -102,9 +100,7 @@
+                 line = await reader.readline()
+                 if not line or line in (b"\r\n", b"\n"):
+                     break
+-            await _process_request(
+-                request_line, expected_state, path, result_future, writer
+-            )
++            await _process_request(request_line, expected_state, path, result_future, writer)
+         except Exception as exc:
+             logger.debug("OAuth callback handler error: %s", exc)
+             if not result_future.done():
+@@ -121,9 +117,7 @@
+     try:
+         return await asyncio.wait_for(result_future, timeout=timeout)
+     except asyncio.TimeoutError as exc:
+-        raise OAuthCallbackError(
+-            f"OAuth callback timed out after {timeout:.0f}s"
+-        ) from exc
++        raise OAuthCallbackError(f"OAuth callback timed out after {timeout:.0f}s") from exc
+     finally:
+         server.close()
+         try:
+@@ -142,9 +136,12 @@
+     """Parse the GET request line, validate, resolve the future."""
+     parts = request_line.split(" ", 2)
+     if len(parts) < 2 or parts[0] != "GET":
+-        _write_response(writer, 405, "Method Not Allowed", _error_body(
+-            "Only GET is supported on the callback endpoint."
+-        ))
++        _write_response(
++            writer,
++            405,
++            "Method Not Allowed",
++            _error_body("Only GET is supported on the callback endpoint."),
++        )
+         if not result_future.done():
+             result_future.set_exception(OAuthCallbackError("non-GET callback"))
+         return
+@@ -152,9 +149,14 @@
+     request_target = parts[1]
+     parsed = urlparse(request_target)
+     if parsed.path != expected_path:
+-        _write_response(writer, 404, "Not Found", _error_body(
+-            f"Unexpected path: {parsed.path}",
+-        ))
++        _write_response(
++            writer,
++            404,
++            "Not Found",
++            _error_body(
++                f"Unexpected path: {parsed.path}",
++            ),
++        )
+         # Don't resolve — wait for the real callback.
+         return
+ 
+@@ -190,9 +192,7 @@
+         result_future.set_result(CallbackResult(code=code, state=state))
+ 
+ 
+-def _write_response(
+-    writer: asyncio.StreamWriter, status: int, reason: str, body: str
+-) -> None:
++def _write_response(writer: asyncio.StreamWriter, status: int, reason: str, body: str) -> None:
+     body_bytes = body.encode("utf-8")
+     lines = [
+         f"HTTP/1.1 {status} {reason}",

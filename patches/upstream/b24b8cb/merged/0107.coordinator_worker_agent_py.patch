@@ -1,0 +1,17 @@
+diff --git a/coordinator/worker_agent.py b/coordinator/worker_agent.py
+--- a/coordinator/worker_agent.py	2026-06-18 10:10:16.801317 +0000
++++ b/coordinator/worker_agent.py	2026-06-22 09:03:22.833416 +0000
+@@ -18,11 +18,12 @@
+ ``get_coordinator_agents()`` returns the canonical agent list for
+ coordinator-mode sessions (matches ``workerAgent.ts:16-18``).
+ """
++
+ from __future__ import annotations
+ 
+ from dataclasses import replace
+ 
+-from src.agent.agent_definitions import (
++from clawcodex_ext.agent.agent_definitions import (
+     EXPLORE_AGENT,
+     GENERAL_PURPOSE_AGENT,
+     PLAN_AGENT,
