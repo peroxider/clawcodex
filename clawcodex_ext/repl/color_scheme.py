@@ -229,12 +229,12 @@ def get_repl_palette(name: str | None = None) -> REPLPalette:
 # Rich Theme builder  —  map ANSI colour names to OKLCH palette values
 # ---------------------------------------------------------------------------
 # Rich's ``Console(theme=Theme(...))`` overrides named styles so that
-# inline markup like ``[red]error[/red]`` renders with our OKLCH red
+# inline markup like ``[error]error[/error]`` renders with our OKLCH red
 # instead of the terminal's default ANSI colour.
 #
 # We also register custom semantic names (``muted``, ``call``, ``agent``)
 # for explicit use in new code; the legacy ANSI names ensure every
-# existing ``[red]`` / ``[green]`` / ``[yellow]`` etc. in the codebase
+# existing ``[error]`` / ``[success]`` / ``[warning]`` etc. in the codebase
 # instantly picks up the new palette.
 
 
@@ -242,39 +242,37 @@ def build_rich_theme(palette: REPLPalette | None = None) -> dict:
     """Build a Rich ``Theme``-compatible style dict.
 
     Returns a dict suitable for ``Console(theme=Theme(...))``.
+
+    NOTE: only custom semantic names are registered here.  We intentionally
+    do NOT override ANSI colour names (``red``, ``green``, ``yellow``,
+    ``blue``, ``cyan``, ``magenta``) because Rich's markup parser resolves
+    those names differently in combined styles (e.g. ``[bold red]``) and
+    can produce ``MarkupError`` with certain version / render-path
+    combinations.  Instead, use the semantic names below for reliable
+    OKLCH color output.
     """
     import rich.theme
 
     p = palette or DARK
     theme_dict: dict[str, str] = {
-        # Override ANSI colour names
-        "red": p.error,
-        "green": p.success,
-        "yellow": p.warning,
-        "blue": p.primary,
-        "cyan": p.info,
-        "magenta": p.secondary,
-        # Bright variants (used in some places for emphasis)
-        "bright_red": p.error,
-        "bright_green": p.success,
-        "bright_yellow": p.warning,
-        "bright_blue": p.primary,
-        "bright_cyan": p.info,
-        "bright_magenta": p.secondary,
-        "bright_black": p.text_muted,
-        "bright_white": p.text,
-        # grey / greyN for dimmed backgrounds
-        "grey15": p.user_bg,
-        "grey37": p.surface_alt,
-        "grey50": p.text_muted,
-        "grey62": p.toolbar,
-        # Custom semantic names for convenient use
+        # Custom semantic names for explicit use in all markup
+        "error": p.error,
+        "success": p.success,
+        "warning": p.warning,
+        "info": p.info,
         "muted": p.text_muted,
         "agent": p.agent_label,
         "tool": p.tool_name,
         "call": p.tool_call,
         "result": p.tool_result,
         "spinner": p.spinner,
+        "primary": p.primary,
+        "secondary": p.secondary,
+        # grey tones (some are resolved via 256-color table by Rich,
+        # these serve as fallback names)
+        "user_bg": p.user_bg,
+        "diff_add": p.diff_add,
+        "diff_remove": p.diff_remove,
     }
     return theme_dict
 

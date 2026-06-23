@@ -575,7 +575,7 @@ class ClawcodexREPL:
         # Load configuration
         config = get_provider_config(provider_name)
         if not config.get("api_key"):
-            self.console.print("[red]Error: API key not configured.[/red]")
+            self.console.print("[error]Error: API key not configured.[/error]")
             self.console.print("Run [bold]clawcodex login[/bold] to configure.")
             sys.exit(1)
 
@@ -1287,7 +1287,7 @@ class ClawcodexREPL:
 
         if setting_name == "allow_docs":
             self.tool_context.allow_docs = True
-            self.console.print(f"[green]✓ {setting_name} enabled for this session[/green]")
+            self.console.print(f"[success]✓ {setting_name} enabled for this session[/success]")
             return
 
         self.console.print(f"[dim]Could not enable {setting_name}.[/dim]")
@@ -1432,7 +1432,7 @@ class ClawcodexREPL:
         """
         if not result.success:
             if result.error:
-                self.console.print(f"[red]{result.error}[/red]")
+                self.console.print(f"[error]{result.error}[/error]")
             return True
 
         if result.result_type == "text":
@@ -1694,7 +1694,7 @@ class ClawcodexREPL:
         all_commands.sort(key=lambda x: x[0].lower())
         for name, desc, cmd_type in all_commands:
             if cmd_type == "skill":
-                self.console.print(f"  [magenta]{name}[/magenta]")
+                self.console.print(f"  [secondary]{name}[/secondary]")
                 if desc:
                     self.console.print(f"    [dim]{desc}[/dim]")
             else:
@@ -2570,7 +2570,7 @@ class ClawcodexREPL:
             parts.append(f"[bold]{in_progress}[/bold] in progress")
         parts.append(f"[bold]{pending}[/bold] open")
         header = (
-            f"[green]●[/green] [bold {self._p.info}]Tasks[/bold] "
+            f"[success]●[/success] [bold {self._p.info}]Tasks[/bold] "
             f"[dim]([bold]{len(sorted_tasks)}[/bold] total: {', '.join(parts)})[/dim]"
         )
         self.console.print(header)
@@ -2670,15 +2670,15 @@ class ClawcodexREPL:
             from src.tui.app import ClawCodexTUI
         except Exception as exc:
             self.console.print(
-                f"[red]Textual TUI is unavailable: {exc}[/red]\n"
+                f"[error]Textual TUI is unavailable: {exc}[/error]\n"
                 "[dim]Install it with `pip install 'textual>=0.79'`.[/dim]"
             )
             return
 
         if self.tool_context is None:
             self.console.print(
-                "[red]TUI requires an API key to function.[/red]\n"
-                "[dim]Use [bold]/login[/bold] to configure, or set [cyan]ANTHROPIC_API_KEY[/cyan] env var, then restart.[/dim]"
+                "[error]TUI requires an API key to function.[/error]\n"
+                "[dim]Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.[/dim]"
             )
             return
 
@@ -2698,7 +2698,7 @@ class ClawcodexREPL:
         except KeyboardInterrupt:
             pass
         except Exception as exc:
-            self.console.print(f"[red]TUI exited with error: {exc}[/red]")
+            self.console.print(f"[error]TUI exited with error: {exc}[/error]")
         finally:
             # Dump the transcript we captured right before exit so the
             # conversation stays in the host's scrollback — matching
@@ -2716,7 +2716,7 @@ class ClawcodexREPL:
                 has_bg_agent = result[2] if len(result) > 2 else False
                 if has_bg_agent:
                     self.console.print(
-                        "\n  [bold][green]Agent is running in background[/green][/bold]"
+                        "\n  [bold][success]Agent is running in background[/success][/bold]"
                     )
                 else:
                     if session_id:
@@ -2724,7 +2724,7 @@ class ClawcodexREPL:
                             f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold]"
                         )
                     else:
-                        self.console.print("\n  [yellow]Session saved.[/yellow]")
+                        self.console.print("\n  [warning]Session saved.[/warning]")
                 self.console.print("[dim]Exiting clawcodex...[/dim]")
                 raise SystemExit(0)
 
@@ -2734,7 +2734,7 @@ class ClawcodexREPL:
                 if session_id:
                     self.console.print(
                         f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold] Resume with:\n"
-                        f"    [cyan]clawcodex --tui --resume {session_id}[/cyan]"
+                        f"    [info]clawcodex --tui --resume {session_id}[/info]"
                     )
                 else:
                     self.console.print("\n  [dim]Session saved.[/dim]")
@@ -2851,7 +2851,7 @@ class ClawcodexREPL:
                             # Print result line
                             if block.is_error:
                                 err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                self.console.print(f"[red]  ⎿  {err_text or 'Error'}[/red]")
+                                self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
                             else:
                                 preview = self._format_tool_result_preview(
                                     block, tool_use_map.get(block.tool_use_id),
@@ -2907,7 +2907,7 @@ class ClawcodexREPL:
                             else:
                                 call_args = ""
                             pending_tool_use_prints[block.id] = (
-                                f"[green]●[/green] [bold {self._p.info}]{block.name}[/bold]"
+                                f"[success]●[/success] [bold {self._p.info}]{block.name}[/bold]"
                                 + (f" {call_args}" if call_args else "")
                             )
                         elif isinstance(block, ThinkingBlock):
@@ -3062,7 +3062,7 @@ class ClawcodexREPL:
         header = Panel(
             body,
             border_style="bright_black",
-            title="[bold][cyan] CLAWCODEX [/cyan][/bold]",
+            title="[bold][info] CLAWCODEX [/info][/bold]",
             subtitle="[dim]interactive terminal[/dim]",
             padding=(1, 2),
         )
@@ -3072,7 +3072,7 @@ class ClawcodexREPL:
         from src.coordinator.mode import is_coordinator_mode
         if is_coordinator_mode():
             self.console.print(
-                "[bold][yellow]  ⚡ Coordinator Mode ACTIVE[/yellow][/bold]  "
+                "[bold][warning]  ⚡ Coordinator Mode ACTIVE[/warning][/bold]  "
                 "[dim]— Agent / SendMessage / TaskStop only[/dim]"
             )
             self.console.print()
@@ -3084,8 +3084,8 @@ class ClawcodexREPL:
         self._print_startup_header()
 
         if getattr(self, '_api_key_missing', False):
-            self.console.print("[yellow]No API key configured — REPL is in read-only mode.[/yellow]")
-            self.console.print("Use [bold]/login[/bold] to configure, or set [cyan]ANTHROPIC_API_KEY[/cyan] env var, then restart.")
+            self.console.print("[warning]No API key configured — REPL is in read-only mode.[/warning]")
+            self.console.print("Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.")
             self.console.print("Type [bold]/exit[/bold] to quit.\n")
 
         # Print conversation history when resuming a session
@@ -3170,7 +3170,7 @@ class ClawcodexREPL:
                     except Exception:
                         pass
                     self._print_resume_hint()
-                    self.console.print("\n[blue]Goodbye![/blue]")
+                    self.console.print("\n[primary]Goodbye![/primary]")
                     break
 
                 if user_input is _CRON_WAKE:
@@ -3228,7 +3228,7 @@ class ClawcodexREPL:
                     self.session.save()
                 except Exception:
                     pass
-                self.console.print("\n[yellow]Interrupted. Type /exit to quit.[/yellow]")
+                self.console.print("\n[warning]Interrupted. Type /exit to quit.[/warning]")
                 self._print_resume_hint()
                 continue
             except EOFError:
@@ -3237,7 +3237,7 @@ class ClawcodexREPL:
                 except Exception:
                     pass
                 self._print_resume_hint()
-                self.console.print("\n[blue]Goodbye![/blue]")
+                self.console.print("\n[primary]Goodbye![/primary]")
                 break
 
     def handle_command(self, command: str):
@@ -3344,9 +3344,9 @@ class ClawcodexREPL:
                     if result.success:
                         self._handle_command_result(result)
                     elif result.error:
-                        self.console.print(f"[red]{result.error}[/red]")
+                        self.console.print(f"[error]{result.error}[/error]")
                 except Exception as e:
-                    self.console.print(f"[red]Error executing /init: {e}[/red]")
+                    self.console.print(f"[error]Error executing /init: {e}[/error]")
                 return
 
             if cmd_name == 'permission':
@@ -3391,7 +3391,7 @@ class ClawcodexREPL:
                 self.session.save()
             except Exception:
                 pass
-            self.console.print("[blue]Goodbye![/blue]")
+            self.console.print("[primary]Goodbye![/primary]")
             # Delegate to the centralised helper so the hint format matches
             # CCB's ``printResumeHint()`` and shares the process-wide
             # idempotency latch with the atexit cleanup.
@@ -3399,7 +3399,7 @@ class ClawcodexREPL:
             raise SystemExit(0)
 
         elif cmd == '/login':
-            self.console.print("[cyan]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/cyan]")
+            self.console.print("[info]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/info]")
             self.console.print("[dim]Then restart clawcodex to use the REPL.[/dim]")
 
         elif cmd == '/tui':
@@ -3419,7 +3419,7 @@ class ClawcodexREPL:
         elif cmd.startswith('/tool'):
             parts = command.strip().split(maxsplit=2)
             if len(parts) < 2:
-                self.console.print("[red]Usage: /tool <name> <json-input>[/red]")
+                self.console.print("[error]Usage: /tool <name> <json-input>[/error]")
                 return
             name = parts[1]
             payload = {}
@@ -3427,12 +3427,12 @@ class ClawcodexREPL:
                 try:
                     payload = json.loads(parts[2])
                 except json.JSONDecodeError as e:
-                    self.console.print(f"[red]Invalid JSON input: {e}[/red]")
+                    self.console.print(f"[error]Invalid JSON input: {e}[/error]")
                     return
             try:
                 result = self.tool_registry.dispatch(ToolCall(name=name, input=payload), self.tool_context)
             except Exception as e:
-                self.console.print(f"[red]Tool error: {e}[/red]")
+                self.console.print(f"[error]Tool error: {e}[/error]")
                 return
             self.console.print("\n[bold]Tool result:[/bold]")
             self.console.print(json.dumps(result.output, indent=2, ensure_ascii=False))
@@ -3443,14 +3443,14 @@ class ClawcodexREPL:
             try:
                 handled, result_text = self._try_execute_new_command('clear', '')
                 if handled and result_text:
-                    self.console.print("\n[green]" + result_text + "[/green]")
+                    self.console.print("\n[success]" + result_text + "[/success]")
                     return
             except Exception:
                 pass
             # Original implementation
             self.session.conversation.clear()
             self._engine_messages = []
-            self.console.print("[green]Conversation cleared.[/green]")
+            self.console.print("[success]Conversation cleared.[/success]")
 
         elif cmd == '/save':
             self.save_session()
@@ -3459,7 +3459,7 @@ class ClawcodexREPL:
             parts = raw.split(maxsplit=1)
             if len(parts) == 1:
                 status = "enabled" if self.stream else "disabled"
-                self.console.print(f"[green]Stream mode {status}.[/green]")
+                self.console.print(f"[success]Stream mode {status}.[/success]")
                 return
 
             action = parts[1].strip().lower()
@@ -3470,21 +3470,21 @@ class ClawcodexREPL:
             elif action == "toggle":
                 self.stream = not self.stream
             else:
-                self.console.print("[red]Usage: /stream [on|off|toggle][/red]")
+                self.console.print("[error]Usage: /stream [on|off|toggle][/error]")
                 return
 
             status = "enabled" if self.stream else "disabled"
-            self.console.print(f"[green]Stream mode {status}.[/green]")
+            self.console.print(f"[success]Stream mode {status}.[/success]")
 
         elif cmd == '/render-last':
             rendered = self._render_last_assistant_message()
             if not rendered:
-                self.console.print("[yellow]No assistant response available to render.[/yellow]")
+                self.console.print("[warning]No assistant response available to render.[/warning]")
 
         elif cmd.startswith('/load'):
             parts = command.strip().split(maxsplit=1)
             if len(parts) < 2:
-                self.console.print("[red]Usage: /load <session-id>[/red]")
+                self.console.print("[error]Usage: /load <session-id>[/error]")
             else:
                 session_id = parts[1]
                 self.load_session(session_id)
@@ -3508,7 +3508,7 @@ class ClawcodexREPL:
                     return
             except Exception:
                 pass
-            self.console.print("[yellow]/context analysis unavailable in this context.[/yellow]")
+            self.console.print("[warning]/context analysis unavailable in this context.[/warning]")
 
         elif cmd == '/compact':
             # Populate command context config for compact
@@ -3519,20 +3519,20 @@ class ClawcodexREPL:
             try:
                 handled, result_text = self._try_execute_new_command('compact', '')
                 if handled and result_text:
-                    self.console.print("\n[green]" + result_text + "[/green]")
+                    self.console.print("\n[success]" + result_text + "[/success]")
                     return
             except Exception:
                 pass
             # Simple fallback: just clear conversation
             self.session.conversation.clear()
             self._engine_messages = []
-            self.console.print("[green]Conversation cleared.[/green]")
+            self.console.print("[success]Conversation cleared.[/success]")
 
         else:
             if raw.startswith("/"):
                 if self._try_run_skill_slash(raw):
                     return
-            self.console.print(f"[red]Unknown command: {command}[/red]")
+            self.console.print(f"[error]Unknown command: {command}[/error]")
 
     # ── REPL-native handlers for Phase-2/3 commands ────────────────────
 
@@ -3576,11 +3576,11 @@ class ClawcodexREPL:
             lines = patch.splitlines()
             for line in lines[:30]:
                 if line.startswith("+"):
-                    self.console.print(f"    [green]{line}[/green]")
+                    self.console.print(f"    [success]{line}[/success]")
                 elif line.startswith("-"):
-                    self.console.print(f"    [red]{line}[/red]")
+                    self.console.print(f"    [error]{line}[/error]")
                 elif line.startswith("@@"):
-                    self.console.print(f"    [cyan]{line}[/cyan]")
+                    self.console.print(f"    [info]{line}[/info]")
             if len(lines) > 30:
                 self.console.print(f"    [dim]… {len(lines) - 30} more lines[/dim]")
         self.console.print()
@@ -3644,15 +3644,15 @@ class ClawcodexREPL:
         try:
             target = int(choice) - 1
             if target < 0 or target >= len(user_msgs):
-                self.console.print("[red]Invalid turn number.[/red]")
+                self.console.print("[error]Invalid turn number.[/error]")
                 return
             orig_idx = user_msgs[target][0]
             # Truncate conversation to before this message
             self.session.conversation.messages = msgs[:orig_idx]
             self._engine_messages = []
-            self.console.print(f"[green]Rewound to turn {target + 1}.[/green]")
+            self.console.print(f"[success]Rewound to turn {target + 1}.[/success]")
         except (ValueError, IndexError):
-            self.console.print("[red]Invalid input. Use a number from the list.[/red]")
+            self.console.print("[error]Invalid input. Use a number from the list.[/error]")
 
     def _handle_repl_effort(self, args: str) -> None:
         """Show or set reasoning effort level."""
@@ -3660,7 +3660,7 @@ class ClawcodexREPL:
         args = args.strip()
 
         if not args:
-            self.console.print(f"\n[bold {self._p.info}]Reasoning effort[/bold]  [dim]current:[/dim] {current or '[green]auto[/green]'}")
+            self.console.print(f"\n[bold {self._p.info}]Reasoning effort[/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}")
             self.console.print("  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]")
             self.console.print()
             return
@@ -3668,9 +3668,9 @@ class ClawcodexREPL:
         valid = {"auto", "low", "medium", "high"}
         if args.lower() in valid:
             self._effort = args.lower()
-            self.console.print(f"[green]Reasoning effort set to {self._effort}.[/green]")
+            self.console.print(f"[success]Reasoning effort set to {self._effort}.[/success]")
         else:
-            self.console.print(f"[red]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/red]")
+            self.console.print(f"[error]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/error]")
 
     def _handle_repl_history(self) -> None:
         """Show recent session history."""
@@ -3694,12 +3694,12 @@ class ClawcodexREPL:
         except Exception:
             cfg = None
 
-        self.console.print("\n[bold][cyan]Idle Configuration[/cyan][/bold]")
+        self.console.print("\n[bold][info]Idle Configuration[/info][/bold]")
         if cfg is not None:
-            self.console.print(f"  Auto-summary:    [green]enabled[/green]" if cfg.enabled else f"  Auto-summary:    [dim]disabled[/dim]")
+            self.console.print(f"  Auto-summary:    [success]enabled[/success]" if cfg.enabled else f"  Auto-summary:    [dim]disabled[/dim]")
             self.console.print(f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)")
             self.console.print(f"  Min turns:       {cfg.min_turns}")
-            self.console.print(f"  /recap command:  [green]available[/green]" if cfg.recap_command_enabled else f"  /recap command:  [dim]disabled[/dim]")
+            self.console.print(f"  /recap command:  [success]available[/success]" if cfg.recap_command_enabled else f"  /recap command:  [dim]disabled[/dim]")
             self.console.print()
             self.console.print("  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]")
         else:
@@ -3732,14 +3732,14 @@ class ClawcodexREPL:
             if mode not in EXTERNAL_PERMISSION_MODES:
                 valid = ", ".join(EXTERNAL_PERMISSION_MODES)
                 self.console.print(
-                    f"[red]Invalid permission mode: '{mode}'[/red]\n"
+                    f"[error]Invalid permission mode: '{mode}'[/error]\n"
                     f"[dim]Valid modes: {valid}[/dim]"
                 )
                 return
 
             self._apply_permission_mode(mode)
             title = permission_mode_title(mode)
-            self.console.print(f"[green]Permission mode set to: {title}[/green]")
+            self.console.print(f"[success]Permission mode set to: {title}[/success]")
             return
 
         # Interactive mode: show current mode + numbered menu
@@ -3757,7 +3757,7 @@ class ClawcodexREPL:
             title = permission_mode_title(m)
             desc = self._permission_mode_description(m)
             marker = " ✓" if m == current else ""
-            self.console.print(f"  [cyan]{i}.[/cyan] {title}{' [green]' + marker + '[/green]' if marker else ''}")
+            self.console.print(f"  [info]{i}.[/info] {title}{' [success]' + marker + '[/success]' if marker else ''}")
             self.console.print(f"       [dim]{desc}[/dim]")
 
         self.console.print()
@@ -3782,9 +3782,9 @@ class ClawcodexREPL:
                     return
                 self._apply_permission_mode(chosen)
                 title = permission_mode_title(chosen)
-                self.console.print(f"[green]Permission mode set to: {title}[/green]")
+                self.console.print(f"[success]Permission mode set to: {title}[/success]")
             else:
-                self.console.print(f"[red]Invalid choice: {idx}. Enter 1–{len(modes)}.[/red]")
+                self.console.print(f"[error]Invalid choice: {idx}. Enter 1–{len(modes)}.[/error]")
         except ValueError:
             self.console.print("[dim]Cancelled.[/dim]")
 
@@ -3867,13 +3867,13 @@ class ClawcodexREPL:
                 self.tool_context,
             )
         except Exception as e:
-            self.console.print(f"[red]Skill error: {e}[/red]")
+            self.console.print(f"[error]Skill error: {e}[/error]")
             return True
 
         payload = result.output if isinstance(result.output, dict) else {}
         if result.is_error or not payload.get("success"):
             err = payload.get("error") if isinstance(payload.get("error"), str) else "Unknown skill error"
-            self.console.print(f"[red]{err}[/red]")
+            self.console.print(f"[error]{err}[/error]")
             return True
 
         self.console.print(f"[dim]Launching skill: {payload.get('commandName', skill_name)}[/dim]")
@@ -3894,7 +3894,7 @@ class ClawcodexREPL:
 
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            self.console.print("[red]Skill produced empty prompt[/red]")
+            self.console.print("[error]Skill produced empty prompt[/error]")
             return True
 
         self.chat(prompt)
@@ -3955,17 +3955,17 @@ class ClawcodexREPL:
             self.console.print(f"\n[bold]Available Skills ({len(skills)}):[/bold]")
             for source in sorted(by_source.keys()):
                 source_skills = by_source[source]
-                self.console.print(f"\n[cyan]{source.title()} Skills:[/cyan]")
+                self.console.print(f"\n[info]{source.title()} Skills:[/info]")
                 for s in source_skills:
                     desc = (getattr(s, "description", None) or "").strip()
                     user_invocable = getattr(s, "user_invocable", True)
                     inv_str = "" if user_invocable else " [dim](not user-invocable)[/dim]"
-                    self.console.print(f"  [green]/{s.name}[/green]{inv_str}")
+                    self.console.print(f"  [success]/{s.name}[/success]{inv_str}")
                     if desc:
                         self.console.print(f"    [dim]{desc}[/dim]")
             self.console.print()
         except Exception as e:
-            self.console.print(f"[red]Error loading skills: {e}[/red]")
+            self.console.print(f"[error]Error loading skills: {e}[/error]")
 
     def _is_recoverable_tool_error(self, tool_name: str, tool_output) -> bool:
         if not isinstance(tool_name, str):
@@ -4285,7 +4285,7 @@ class ClawcodexREPL:
                     status = getattr(self, '_active_live_status', None)
                     if status is not None:
                         try:
-                            status.update("[yellow]Cancelling…[/yellow]")
+                            status.update("[warning]Cancelling…[/warning]")
                         except Exception:
                             pass
 
@@ -4547,7 +4547,7 @@ class ClawcodexREPL:
                                     else:
                                         call_args = ""
                                     pending_tool_use_prints[block.id] = (
-                                        f"[green]●[/green] [bold {self._p.info}]{block.name}[/bold]"
+                                        f"[success]●[/success] [bold {self._p.info}]{block.name}[/bold]"
                                         + (f" {call_args}" if call_args else "")
                                     )
                         continue
@@ -4558,8 +4558,8 @@ class ClawcodexREPL:
                             _stop_status_once()
                             stream_started = True
                             self.console.print(
-                                f"[yellow]Reached maximum number of turns. "
-                                f"The task may be incomplete.[/yellow]"
+                                f"[warning]Reached maximum number of turns. "
+                                f"The task may be incomplete.[/warning]"
                             )
                         continue
 
@@ -4580,7 +4580,7 @@ class ClawcodexREPL:
                                         if block.is_error:
                                             _flush_task_snapshot_if_any()
                                             err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                            self.console.print(f"[red]  ⎿  {err_text or 'Error'}[/red]")
+                                            self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
                                         continue
                                     # Print the deferred ``● Tool(args)``
                                     # header right above this result so each
@@ -4597,7 +4597,7 @@ class ClawcodexREPL:
                                     # ``typescript/src/components/MessageResponse.tsx``).
                                     if block.is_error:
                                         err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                        self.console.print(f"[red]  ⎿  {err_text or 'Error'}[/red]")
+                                        self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
                                     else:
                                         preview = self._format_tool_result_preview(
                                             block, tool_use_map.get(block.tool_use_id),
@@ -4651,7 +4651,7 @@ class ClawcodexREPL:
                 status = getattr(self, '_active_live_status', None)
                 if status is not None:
                     try:
-                        status.update("[yellow]Cancelling…[/yellow]")
+                        status.update("[warning]Cancelling…[/warning]")
                     except Exception:
                         pass
 
@@ -4760,8 +4760,8 @@ class ClawcodexREPL:
             error_str = str(e)
 
             if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:
-                self.console.print(f"\n[red]❌ Authentication Error: {e}[/red]")
-                self.console.print("\n[yellow]Your API key appears to be invalid or expired.[/yellow]")
+                self.console.print(f"\n[error]❌ Authentication Error: {e}[/error]")
+                self.console.print("\n[warning]Your API key appears to be invalid or expired.[/warning]")
 
                 from rich.prompt import Prompt
                 choice = Prompt.ask(
@@ -4775,7 +4775,7 @@ class ClawcodexREPL:
                 else:
                     self.console.print("\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]")
             else:
-                self.console.print(f"\n[red]Error: {e}[/red]")
+                self.console.print(f"\n[error]Error: {e}[/error]")
                 import traceback
                 traceback.print_exc()
             return False
@@ -4821,7 +4821,7 @@ class ClawcodexREPL:
 
         if pid is not None:
             self.console.print(
-                f"\n[green]⏎ Agent sent to background (pid {pid}).[/green]"
+                f"\n[success]⏎ Agent sent to background (pid {pid}).[/success]"
             )
             self.console.print(
                 f"[dim]Resume with: clawcodex --resume {self.session.session_id}[/dim]"
@@ -4832,7 +4832,7 @@ class ClawcodexREPL:
             # Windows graceful degradation — no os.fork(), subprocess
             # launch may also have failed.
             self.console.print(
-                "\n[yellow]Background mode is not supported on this platform.[/yellow]"
+                "\n[warning]Background mode is not supported on this platform.[/warning]"
             )
             self.console.print(
                 "[dim]Press Ctrl+C to cancel the current run instead.[/dim]"
@@ -4844,12 +4844,12 @@ class ClawcodexREPL:
         from src.config import set_api_key, set_default_provider
         from src.providers import PROVIDER_INFO
 
-        self.console.print("\n[bold][blue]Reconfigure Provider Credentials[/blue][/bold]\n")
+        self.console.print("\n[bold][primary]Reconfigure Provider Credentials[/primary][/bold]\n")
 
         provider_names = list(PROVIDER_INFO.keys())
         self.console.print("[bold]Available providers:[/bold]")
         for name, info in PROVIDER_INFO.items():
-            self.console.print(f"  [cyan]{name}[/cyan] - {info['label']} (default model: {info['default_model']})")
+            self.console.print(f"  [info]{name}[/info] - {info['label']} (default model: {info['default_model']})")
         self.console.print()
 
         provider = Prompt.ask(
@@ -4879,7 +4879,7 @@ class ClawcodexREPL:
                 default_model=default_model,
             )
             set_default_provider(provider)
-            self.console.print("\n[green]OpenAI Codex login completed successfully![/green]\n")
+            self.console.print("\n[success]OpenAI Codex login completed successfully![/success]\n")
         else:
             api_key = Prompt.ask(
                 f"Enter {provider.upper()} API Key",
@@ -4887,7 +4887,7 @@ class ClawcodexREPL:
             )
 
             if not api_key:
-                self.console.print("\n[red]Error: API Key cannot be empty[/red]")
+                self.console.print("\n[error]Error: API Key cannot be empty[/error]")
                 return
 
             self.console.print(f"\n[dim]Default:[/dim] {info['default_base_url']}")
@@ -4906,7 +4906,7 @@ class ClawcodexREPL:
             set_api_key(provider, api_key=api_key, base_url=base_url, default_model=default_model)
             set_default_provider(provider)
 
-            self.console.print(f"\n[green]{provider.upper()} API Key updated successfully![/green]\n")
+            self.console.print(f"\n[success]{provider.upper()} API Key updated successfully![/success]\n")
 
         self.provider = build_provider_from_config(provider)
         self.provider_name = provider
@@ -4924,12 +4924,12 @@ class ClawcodexREPL:
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
         )
 
-        self.console.print("[green]✓ Provider reinitialized. You can continue chatting![/green]\n")
+        self.console.print("[success]✓ Provider reinitialized. You can continue chatting![/success]\n")
 
     def save_session(self):
         """Save current session."""
         self.session.save()
-        self.console.print(f"[green]Session saved: {self.session.session_id}[/green]")
+        self.console.print(f"[success]Session saved: {self.session.session_id}[/success]")
 
     def load_session(self, session_id: str):
         """Load a previous session.
@@ -4949,13 +4949,13 @@ class ClawcodexREPL:
 
         loaded_session = Session.resume(session_id)
         if loaded_session is None:
-            self.console.print(f"[red]Session not found: {session_id}[/red]")
+            self.console.print(f"[error]Session not found: {session_id}[/error]")
             return
 
         # Replace current session (bootstrap id + cost already restored
         # by Session.resume).
         self.session = loaded_session
-        self.console.print(f"[green]Session loaded: {session_id}[/green]")
+        self.console.print(f"[success]Session loaded: {session_id}[/success]")
         self.console.print(f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]")
         self.console.print(f"[dim]Messages: {len(loaded_session.conversation.messages)}[/dim]")
         restored_cost = get_total_cost_usd()
