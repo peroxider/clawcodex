@@ -149,7 +149,7 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 workspace = Workspace(
@@ -942,7 +942,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 workspace = Workspace(
@@ -1016,7 +1016,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 workspace = Workspace(
@@ -1072,7 +1072,7 @@ class TestAgentRunnerTranscriptPhase01(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 workspace = Workspace(

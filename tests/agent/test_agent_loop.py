@@ -9,7 +9,7 @@ from src.agent.conversation import Conversation
 from clawcodex_ext.providers.base import ChatResponse
 from src.tool_system.defaults import build_default_registry
 from src.tool_system.context import ToolContext
-from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
+from tests.helpers.agent_loop import run_agent_loop
 from src.tool_system.renderers import AgentLoopResult
 
 

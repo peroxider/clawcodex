@@ -103,7 +103,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             # Session.load → SESSIONS_DIR (read via Session.resume)
             # resolve to the same tmp dir.
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_dir,
             ):
                 # 1. Orchestrator side: write the transcript the way
@@ -192,7 +192,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
         with TemporaryDirectory() as tmp:
             sessions_dir = Path(tmp) / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_dir,
             ):
                 # ``Session.resume`` returns ``None`` when the
@@ -221,7 +221,7 @@ class TestOrchestratorResumeRoundTrip(unittest.IsolatedAsyncioTestCase):
             run_id = "run-orphan"
 
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_dir,
             ):
                 storage = SessionStorage(session_id=run_id)

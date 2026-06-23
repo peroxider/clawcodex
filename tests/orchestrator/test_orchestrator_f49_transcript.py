@@ -205,7 +205,7 @@ class TestRunTranscript(unittest.TestCase):
                 ],
             )
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 buf = io.StringIO()
@@ -240,7 +240,7 @@ class TestRunTranscript(unittest.TestCase):
                 ],
             )
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 buf = io.StringIO()
@@ -299,7 +299,7 @@ class TestRunTranscript(unittest.TestCase):
                 ],
             )
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 buf = io.StringIO()
@@ -345,7 +345,7 @@ class TestRunTranscript(unittest.TestCase):
                 ],
             )
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 buf = io.StringIO()
@@ -377,7 +377,7 @@ class TestRunTranscript(unittest.TestCase):
             tmp_path = Path(tmp)
             sessions_root = tmp_path / "sessions"
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 rc = _run_transcript(
@@ -404,7 +404,7 @@ class TestRunTranscript(unittest.TestCase):
                 run_id,
             )
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_root,
             ):
                 buf = io.StringIO()

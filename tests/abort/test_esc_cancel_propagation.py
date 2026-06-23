@@ -33,7 +33,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from clawcodex_ext.providers.base import ChatResponse
-from src.query.agent_loop_compat import run_query_as_agent_loop_sync as run_agent_loop
+from tests.helpers.agent_loop import run_agent_loop
 from src.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolResult
 from src.tool_system.registry import ToolRegistry

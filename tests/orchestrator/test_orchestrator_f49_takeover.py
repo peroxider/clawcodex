@@ -719,7 +719,7 @@ class TestTakeoverEndToEnd(unittest.IsolatedAsyncioTestCase):
             )
 
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_dir,
             ):
                 storage = SessionStorage(

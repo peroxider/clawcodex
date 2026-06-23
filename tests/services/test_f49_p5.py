@@ -102,7 +102,7 @@ def fake_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """
     reset_state_for_tests()
     sessions_root = tmp_path / ".clawcodex" / "sessions"
-    monkeypatch.setattr("src.services.session_storage.SESSIONS_DIR", sessions_root)
+    monkeypatch.setattr("clawcodex_ext.services.session_storage.SESSIONS_DIR", sessions_root)
     patch = mock.patch.object(Path, "home", return_value=tmp_path)
     patch.start()
     try:

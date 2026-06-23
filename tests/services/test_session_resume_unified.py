@@ -50,7 +50,7 @@ def mock_sessions_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(
-        "src.services.session_storage.SESSIONS_DIR",
+        "clawcodex_ext.services.session_storage.SESSIONS_DIR",
         sessions_dir,
     )
     monkeypatch.setattr(Path, "home", lambda: tmp_path)

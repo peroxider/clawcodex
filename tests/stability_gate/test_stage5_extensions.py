@@ -535,7 +535,6 @@ class TestStage5ExtAgent:
         from src.query.agent_loop_compat import (
             AgentLoopRunResult,
             run_query_as_agent_loop,
-            run_query_as_agent_loop_sync,
         )
         from src.query.config import QueryConfig, build_query_config
         from src.query.deps import QueryDeps
@@ -548,7 +547,6 @@ class TestStage5ExtAgent:
 
         assert AgentLoopRunResult is not None
         assert callable(run_query_as_agent_loop)
-        assert callable(run_query_as_agent_loop_sync)
         assert QueryConfig is not None
         assert callable(build_query_config)
         assert QueryDeps is not None

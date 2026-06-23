@@ -443,7 +443,7 @@ class TestResumeSessionEndToEnd(unittest.IsolatedAsyncioTestCase):
             # Patch the singleton SESSIONS_DIR so resume_session()
             # reads from our tmp dir.
             with patch(
-                "src.services.session_storage.SESSIONS_DIR",
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
                 sessions_dir,
             ):
                 buf = io.StringIO()

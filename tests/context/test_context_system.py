@@ -1,3 +1,12 @@
+"""Tests for the context system: build_context_prompt, collect_git_context,
+and the agent-loop context-injection path.
+
+The agent-loop integration test uses the async ``run_query_as_agent_loop``
+adapter (the legacy sync ``run_agent_loop`` was removed during the query
+consolidation).  We construct a thin sync shim in this module so the test
+structure stays readable.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -12,13 +21,56 @@ from src.context_system import build_context_prompt
 from src.context_system.claude_md import clear_memory_file_caches
 from src.context_system.git_context import clear_git_caches, collect_git_context
 from clawcodex_ext.providers.base import ChatResponse
-from src.tool_system.agent_loop import run_agent_loop
+from clawcodex_ext.query.agent_loop_compat import (
+    build_effective_system_prompt,
+    run_query_as_agent_loop,
+)
 from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def _run_agent_loop_sync(
+    conversation: Conversation,
+    provider,
+    tool_registry,
+    tool_context: ToolContext,
+    verbose: bool = False,
+):
+    """Thin sync shim matching the legacy ``run_agent_loop`` signature.
+
+    Builds the effective system prompt the same way the cutover code does
+    (``build_effective_system_prompt`` + ``resolve_output_style``) and
+    delegates to the async adapter.
+    """
+    from src.outputStyles import resolve_output_style
+
+    style_prompt = resolve_output_style(
+        getattr(tool_context, "output_style_name", None),
+        getattr(tool_context, "output_style_dir", None),
+    ).prompt
+    system_prompt = build_effective_system_prompt(style_prompt, tool_context)
+
+    async def _run_inner():
+        result = await run_query_as_agent_loop(
+            initial_messages=list(conversation.messages),
+            provider=provider,
+            tool_registry=tool_registry,
+            tool_context=tool_context,
+            system_prompt=system_prompt,
+        )
+        # Persist the assistant message back so the conversation
+        # reflects the round-trip (matching legacy contract).
+        if result.response_text:
+            conversation.add_existing_message(
+                conversation.create_assistant_message(result.response_text)
+            )
+        return result
+
+    return asyncio.run(_run_inner())
 
 
 class TestContextSystem(unittest.TestCase):
@@ -78,7 +130,7 @@ class TestContextSystem(unittest.TestCase):
                 tool_uses=None,
             )
 
-            out = run_agent_loop(conversation, provider, registry, ctx, verbose=False)
+            out = _run_agent_loop_sync(conversation, provider, registry, ctx, verbose=False)
             self.assertEqual(out.response_text, "ok")
             system_message = provider.chat.call_args.args[0][0]
             self.assertEqual(system_message["role"], "system")

@@ -39,7 +39,7 @@ async def test_resume_screen_shows_empty_state_when_no_sessions(tmp_path, monkey
     wiring made the screen actually read from disk).
     """
 
-    monkeypatch.setattr("src.services.session_storage.SESSIONS_DIR", tmp_path)
+    monkeypatch.setattr("clawcodex_ext.services.session_storage.SESSIONS_DIR", tmp_path)
 
     class _Harness(App):
         async def on_mount(self) -> None:
