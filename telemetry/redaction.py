@@ -150,31 +150,40 @@ class Redactor:
             tb = traceback.format_exception(type(exc), exc, exc.__traceback__)
         except Exception:
             return []
-        # Keep only project frames. We rely on ``traceback`` walking
-        # through __traceback__ which works for any chained exception
-        # that hasn't been replaced.
         lines: list[str] = []
+        in_project_block = False
         for line in tb:
             if not line:
                 continue
-            if self.project_roots and not any(marker in line for marker in self.project_roots):
-                # Keep the first line of the traceback (exception line);
-                # drop frames that don't mention any project root.
-                if line.startswith("Traceback") or "Error" in line.split(":")[0]:
+            is_project_line = bool(
+                self.project_roots
+                and any(marker in line for marker in self.project_roots)
+            )
+            # Track whether we are inside a project-owned frame block.
+            if is_project_line:
+                in_project_block = True
+            # Always keep the "Traceback" header and the final error line.
+            is_header = line.startswith("Traceback")
+            # Determine if this is the error line (e.g. "ValueError: ..." or "SyntaxError: ...").
+            is_error = "Error" in line.split(":")[0] if ":" in line else False
+            # Keep indented context lines (code, caret) that follow a project frame.
+            is_context = in_project_block and (line.startswith(" ") or line.startswith("\t"))
+
+            if is_project_line or is_header or is_error or is_context:
+                if is_project_line:
+                    safe_line = line.rstrip()
+                    for root in self.project_roots:
+                        if not root:
+                            continue
+                        norm_root = os.path.normpath(root)
+                        if norm_root in safe_line:
+                            safe_line = safe_line.replace(norm_root, "<project>")
+                            break
+                    lines.append(safe_line)
+                else:
                     lines.append(line.rstrip())
-                continue
-            # Replace absolute project paths with <project>/... for privacy.
-            safe_line = line.rstrip()
-            for root in self.project_roots:
-                if not root:
-                    continue
-                norm_root = os.path.normpath(root)
-                if norm_root in safe_line:
-                    safe_line = safe_line.replace(norm_root, "<project>")
+                if len(lines) >= self.cfg.stacktrace_max_lines:
                     break
-            lines.append(safe_line)
-            if len(lines) >= self.cfg.stacktrace_max_lines:
-                break
         return lines
 
     def redact_event(self, event: TelemetryEvent) -> TelemetryEvent:
