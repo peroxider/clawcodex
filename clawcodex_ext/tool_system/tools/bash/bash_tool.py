@@ -184,6 +184,16 @@ from clawcodex_ext.permissions.types import PermissionPassthroughResult, Permiss
 from src.utils.format import format_duration
 
 from .background import spawn_background_bash
+from clawcodex_ext.utils.shell_resolver import (
+    build_cwd_wrapper,
+    build_shell_argv,
+    resolve_shell,
+)
+from clawcodex_ext.utils.shell_resolver import (
+    build_cwd_wrapper,
+    build_shell_argv,
+    resolve_shell,
+)
 from .command_semantics import interpret_command_result
 from .destructive_warnings import get_destructive_command_warning
 from .prompt import get_bash_prompt, get_default_timeout_ms, get_max_timeout_ms
@@ -199,6 +209,14 @@ from .utils import strip_empty_lines, strip_leading_blank_lines, truncate_output
 BASH_TOOL_NAME = "Bash"
 
 TOOL_SUMMARY_MAX_LENGTH = 80
+
+
+def _resolve_shell_from_input(tool_input: dict) -> tuple[str, list[str]]:
+    """Resolve the shell parameter from *tool_input* into (kind, argv_list)."""
+    raw = tool_input.get("shell")
+    if raw is not None and not isinstance(raw, str):
+        raw = None
+    return build_shell_argv(raw or "auto")
 
 
 def _try_extract_cd(command: str) -> Path | None:
@@ -275,11 +293,13 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     # behaviour: we return immediately with a task id and let the model poll
     # the output via ``TaskOutput``.
     if tool_input.get("run_in_background"):
+        shell_kind, _shell_argv = _resolve_shell_from_input(tool_input)
         bg_output = spawn_background_bash(
             command=command,
             cwd=cwd,
             description=tool_input.get("description"),
             context=context,
+            shell=shell_kind,
         )
         return ToolResult(name=BASH_TOOL_NAME, output=bg_output)
 
@@ -636,6 +656,11 @@ BashTool: Tool = build_tool(
             "run_in_background": {
                 "type": "boolean",
                 "description": "Set to true to run this command in the background.",
+            },
+            "shell": {
+                "type": "string",
+                "enum": ["bash", "powershell", "auto"],
+                "description": "Shell to use. \"auto\" detects platform default (PowerShell on Windows, bash on POSIX).",
             },
         },
         "required": ["command"],

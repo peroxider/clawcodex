@@ -26,6 +26,8 @@ from pathlib import Path
 from typing import Any
 
 from ...context import ToolContext
+from clawcodex_ext.utils.shell_resolver import build_bg_wrapper, build_shell_argv
+
 from src.tasks.local_shell import LocalShellTaskState
 from clawcodex_ext.tasks_core import generate_task_id
 
@@ -47,6 +49,7 @@ def spawn_background_bash(
     cwd: Path,
     description: str | None,
     context: ToolContext,
+    shell: str = "bash",
 ) -> dict[str, Any]:
     """Spawn *command* in the background and register it on *context*.
 
@@ -72,8 +75,9 @@ def spawn_background_bash(
     # ``stdin=DEVNULL`` mirrors the foreground bash path: prevents background
     # commands that read fd 0 from blocking on a TTY inherited from clawcodex's
     # REPL (see bash_tool.py:_run_bash_with_abort for the same reasoning).
+    _, shell_argv = build_shell_argv(shell, wrapped)
     proc = subprocess.Popen(
-        ["bash", "-lc", wrapped],
+        shell_argv,
         cwd=str(cwd),
         stdin=subprocess.DEVNULL,
         stdout=output_handle,

@@ -3,12 +3,6 @@
 Headless and TUI production paths invoke ``run_query_as_agent_loop``
 (async) to drive the canonical ``query()`` loop while keeping the
 legacy ``AgentLoopResult`` return contract. Tests inherited from the
-pre-consolidation era call the sync wrapper ``run_query_as_agent_loop_sync``
-which mimics the deleted ``run_agent_loop`` signature exactly so per-
-test churn is just an import swap. The original
-``src.tool_system.agent_loop`` module is gone (Stage 4 of the
-consolidation, PR #N).
-
 Event-loop ownership patterns the callers use:
 
   * **Headless callers** (single-shot ``claude -p``) wrap the adapter
@@ -61,90 +55,6 @@ from src.tool_system.renderers import (
     summarize_tool_result,
 )
 
-
-def run_query_as_agent_loop_sync(
-    conversation: Any,
-    provider: BaseProvider,
-    tool_registry: ToolRegistry,
-    tool_context: ToolContext,
-    max_turns: int = 20,
-    stream: bool = True,  # kept for signature compat; adapter always streams
-    verbose: bool = False,  # kept for signature compat; ignored
-    on_event: ToolEventHandler | None = None,
-    on_text_chunk: TextChunkHandler | None = None,
-    cancel_signal: AbortSignal | None = None,
-) -> "AgentLoopResult":
-    """Sync wrapper around :func:`run_query_as_agent_loop` with the
-    signature of the legacy ``run_agent_loop``.
-
-    The async adapter is the canonical API; this wrapper exists so
-    sync call sites (mainly tests inherited from the pre-cutover
-    era) don't need to thread their own asyncio.run + initial_messages
-    + on_message persistence boilerplate at every call site. The
-    semantics match legacy ``run_agent_loop``:
-
-    * Pre-built effective system prompt (CLAUDE.md + style + git status).
-    * In-place conversation mutation (legacy contract — multi-prompt
-      sessions need this so subsequent turns see prior history).
-    * Returns a legacy ``AgentLoopResult`` shape.
-
-    Use the async adapter (:func:`run_query_as_agent_loop`) directly
-    for new code that owns its event loop.
-    """
-    import asyncio as _asyncio
-    from src.outputStyles import resolve_output_style
-
-    style_prompt = resolve_output_style(
-        getattr(tool_context, "output_style_name", None),
-        getattr(tool_context, "output_style_dir", None),
-    ).prompt
-    effective_system_prompt = build_effective_system_prompt(
-        style_prompt,
-        tool_context,
-    )
-
-    def _persist(msg: Any) -> None:
-        # Mirror the legacy contract: append assistant text + tool
-        # result blocks to the conversation in place so the next call
-        # in a multi-turn test sequence sees prior history.
-        # Stage 4 critic S3: match the production policy (log + raise
-        # on failure). Swallowing here would mask a corrupted
-        # conversation; the next API call would 400 with
-        # ``tool_use IDs must match tool_result IDs`` and the
-        # proximate cause would be invisible.
-        try:
-            # ``add_existing_message`` preserves ``usage``/``model``/
-            # ``requestId`` set on AssistantMessage; ``add_message`` would
-            # drop them by rebuilding via ``create_message``.
-            conversation.add_existing_message(msg)
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "Failed to persist message into conversation: role=%s",
-                getattr(msg, "role", "?"),
-            )
-            raise
-
-    compat_result = _asyncio.run(
-        run_query_as_agent_loop(
-            initial_messages=list(conversation.messages),
-            provider=provider,
-            tool_registry=tool_registry,
-            tool_context=tool_context,
-            system_prompt=effective_system_prompt,
-            max_turns=max_turns,
-            on_event=on_event,
-            on_text_chunk=on_text_chunk,
-            on_message=_persist,
-            cancel_signal=cancel_signal,
-        )
-    )
-    return AgentLoopResult(
-        response_text=compat_result.response_text,
-        usage=(compat_result.usage if compat_result.num_turns > 0 else None),
-        num_turns=compat_result.num_turns,
-    )
 
 
 def build_effective_system_prompt(style_prompt: str, tool_context: ToolContext) -> str:

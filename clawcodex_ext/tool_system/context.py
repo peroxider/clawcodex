@@ -166,6 +166,18 @@ class ToolContext:
     # Tool registry reference — allows CreateAgentTool to register new tools
     # into the active registry. Set by build_default_registry and runtime contexts.
     tool_registry: Any = None
+    # Active provider reference -- set by query() before each tool-dispatch
+    # turn so the client-side advisor (advisor.py) can reuse the same
+    # provider (and its config) when advising the model. Read via
+    # getattr(context, "_active_provider", None) at advisor.py:66.
+    _active_provider: Any = None
+
+    # Cron scheduler instance -- set by attach_cron_runtime() on REPL init.
+    # Read via getattr(ctx, "cron_scheduler", None) at runtime.py:97.
+    cron_scheduler: Any = None
+    # Cron jitter config loader -- set by attach_cron_runtime() on REPL init.
+    # Read via getattr(ctx, "cron_jitter_config", None) at runtime.py:97.
+    cron_jitter_config: Any = None
     # Background Bash commands spawned via ``run_in_background: true``.
     # Kept as a deprecated dict-of-dicts compatibility view during the
     # Chunk-B migration cycle; the bash spawn writer now populates
