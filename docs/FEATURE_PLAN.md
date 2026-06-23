@@ -80,7 +80,7 @@
     - [1.3.2 运行期可观测性与 stuck-run debug（F-54 🔄）](#1-3-2-运行期可观测性与-stuck-run-debug)
     - [1.3.3 Tool-call 审计旁路（F-45 ✅）](#1-3-3-tool-call-审计旁路)
     - [1.3.4 Coordinator 轻量工具集（F-41 ✅）](#1-3-4-coordinator-轻量工具集)
-    - [1.4.2 Issue 会话统一存储与实时介入（F-49 🔄）](#1-4-2-issue-会话统一存储与实时介入)
+    - [1.4.2 Issue 会话统一存储与实时介入（F-49 ✅ Phase 0.4 + Phase 5）](#1-4-2-issue-会话统一存储与实时介入)
 - [二、Agent 核心能力](#二、agent-核心能力)
     - [2.1 Agent 阶段性进度汇报（F-20 ✅）](#2-1-agent-阶段性进度汇报)
     - [2.2 Team 成员管理（F-2 🔄）](#2-2-team-成员管理)
@@ -266,7 +266,7 @@ F-34/F-35 中"CLI/TUI 新功能"的描述扩展为全项目范围：所有 front
 >
 > 仍处规划/设计阶段、保留详细设计稿的子节如下：
 > - §1.1.2 PR 检视意见自动修复闭环设计（F-37，📋 规划中）
-> - §1.3.2 运行期可观测性与 stuck-run debug（F-54，📋 设计完成）
+> - §1.3.2 运行期可观测性与 stuck-run debug（F-54，🔄 进行中 — debug_log.py / tool_event_log.py / ObservabilityConfig schema 已落地，query-runner heartbeat 与 CLI 诊断字段待补）
 >
 > 已完成但仍保留设计稿的子节：
 > - §1.2.2 ProgressReporter Sink 协议重构设计（F-40，✅ 已完成 — `ProgressSink`/`CompositeProgressSink`/`ToolContextProgressSink` 已在 `progress_sink.py` 落地，`progress_reporter.py` 降级为兼容 shim）
@@ -6806,7 +6806,7 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | F-16 | Auto 模式 | §2.13 | 📋 规划中 |
 | F-18 | CreateAgentTool | §2.9 | ✅ 已完成 |
 | F-20 | Agent 进度汇报 | §2.1 | ✅ 完成 |
-| F-22 | Cron 系统 | §五 | 🔄 进行中 |
+| F-22 | Cron 系统 | §五 | 🟡 部分完成（Phase A~E ✅，Phase F teammate ownership 待补） |
 | F-36 | LocalTracker | §1.1.1 | ✅ 完成 |
 | F-37 | PR 检视意见自动修复 | §1.1.2 | ✅ 已完成 |
 | F-38 | 验证与报告闭环 | §1.1.3 | ✅ 完成 |
@@ -6820,12 +6820,12 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | F-46 | permission_mode 拆分 | §3.2 | 📋 设计完成 |
 | F-47 | Settings 重构 | §3.3 | ✅ 完成 |
 | F-48 | src/ 解耦方案 | §4.1 | 📋 设计完成 |
-| F-49 | 会话统一存储（含 Phase 5 格式合并） | §1.4.2 / §1.4.5 | 📋 设计完成（Phase 5 新增） |
-| F-50 | SOP 转换器固化 | §4.2 | 📋 设计完成 |
+| F-49 | 会话统一存储（含 Phase 5 格式合并） | §1.4.2 / §1.4.5 | ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G） |
+| F-50 | SOP 转换器固化 | §4.2 | ✅ 已完成（SourceCodeParser / SkillGrouper / AgentMarkdownWriter 全部落地 `extensions/pos_converter/`） |
 | F-51 | AgentRunner 空转检测 | §1.3.1 | ✅ 完成 |
-| F-52 | SDK→Tool 注册 | §4.3 | 📋 设计完成 |
+| F-52 | SDK→Tool 注册 | §4.3 | ✅ 已完成（`clawcodex_ext/agent/tool_authoring/` factory/spec/persistence 已落地：`build_tool_from_spec` / `AgentToolSpec` / `register_python_function` / `list_python_functions` / python/http/bash 支持） |
 | F-53 | Tool→CLI 命令映射 | §4.4 | 📋 设计完成 |
-| F-54 | 运行期可观测性 | §1.3.2 | 📋 设计完成 |
+| F-54 | 运行期可观测性 | §1.3.2 | 🔄 进行中（debug_log.py + tool_event_log.py + ObservabilityConfig schema 已落地，query-runner heartbeat/CLI 诊断字段待补） |
 | F-55 | SOP 分组策略增强 | §4.2.1 | ✅ 完成 |
 | F-60 | Pipe IPC 群控 | §7.1 | ✅ 已完成（2026-06-19） | `src/services/pipe_ipc/` 967 行 + 11 测试 |
 | F-61 | Computer Use | §7.2 | ✅ 已完成（2026-06-19） | `src/services/computer_use/` 1797 行 + 15 测试 |

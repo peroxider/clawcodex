@@ -2,9 +2,17 @@
 
 > 文档路径: `docs/PROGRESS.md`
 > 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
-> 版本: v3.13
-> 更新日期: 2026-06-22
+> 版本: v3.15
+> 更新日期: 2026-06-23
 > 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)
+>
+> **v3.15 变更（2026-06-23 代码实现交叉验证）**：以下特性状态与代码实现对齐修正。
+>   - F-12 cacheWarning 容量限制：§一总览表 ⏳ 待开始 → ✅ 已完成（`clawcodex_ext/utils/cache_warning.py` `CacheWarning` + `CacheWarningState` LRU OrderedDict 已落地，`MAX_SOURCE_ENTRIES = 10_000`；`src/utils/cache_warning.py` 为薄 facade re-export）。
+>   - F-22 Cron 系统执行引擎：§一总览表 🔄 进行中（Phase A ✅） → 🟡 部分完成（Phase A~E ✅），与 FEATURE_PLAN v3.14 对齐。Phase B（存储与模型对齐）、Phase C（调度器语义对齐）、Phase D（执行队列与结果追踪）、Phase E（skills 与用户命令）经代码验证全部完成。剩余 Phase F teammate/agent ownership 与 F22-R2~R8 用户入口。
+>   - F-49 Issue 会话统一存储：§一总览表 🔄 进行中 → ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地，`control_socket.py` 实际为 288 行而非 272 行）。
+>   - F-69 Budget/Poor Mode：§十详细 P69-E 状态 ⏳ 待开始 → 🟡 部分完成（`clawcodex_ext/query/token_budget.py` BudgetTracker/ContinueDecision/StopDecision 已实现 ~159 行）。
+>   - F-70 Plugin 系统：§十详细状态 ⏳ 待开始 → 🟡 部分完成（`src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/LSP 集成/MCP 集成等基础框架已存在）。
+>   - FEATURE_PLAN.md 附录 F-Number 快速索引同步修正：F-22（🔄 → 🟡）、F-49（📋 → ✅）、F-50（📋 → ✅）、F-52（📋 → ✅）、F-54（📋 → 🔄）、F-49 ToC（🔄 → ✅）、F-54 §1.3.2 描述（📋 → 🔄）。
 >
 > **v3.12 变更**：F-102 Agent Loop Hook 扩展点规划。
 >   - F-102 Agent Loop Hook 扩展点增强：代码审计发现 5 个 hook 缺口（pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调），§十五记录完整设计。
@@ -146,7 +154,7 @@
 | F-66 | ACP 协议支持 | P2 | ⏳ 待开始 | 对标 CCB ACP（Agent Client Protocol）。Zed/Cursor 等 IDE 集成协议支持，会话恢复与 Skills 桥接。预计 1-2 周。 |
 | F-67 | Buddy 伴侣 / Proactive 自主模式 | P2 | ✅ 已完成 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-68 | Orchestrator CLI 运维操作界面 | P2 | ⏳ 待开始 | issue/wf 管理、状态查看、dashboard 渲染；见 FEATURE_PLAN §3.2（F-68） |
-| F-69 | Budget/Poor Mode | P2 | ⏳ 待开始 | 见 FEATURE_PLAN §7.5 |
+| F-69 | Budget/Poor Mode | P2 | 🟡 部分完成（token_budget 已落地） | `clawcodex_ext/query/token_budget.py`（~159 行）BudgetTracker/ContinueDecision/StopDecision 已实现；query pipeline 深度集成待补。见 FEATURE_PLAN §7.5 |
 | F-70 | Plugin 系统 | P1 | 🟡 部分完成 | `src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/ LSP 集成/MCP 集成等基础框架已存在；Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。 |
 | F-71 | 内置工具补齐 | P1 | 🟡 部分完成（SnipTool 已完成） | SnipTool 已落地 `clawcodex_ext/tool_system/tools/snip.py`，3 个工具待实现；见 FEATURE_PLAN §7.6 |
 | F-72 | Multi-API 适配器 | P1 | ⏳ 待开始 | 见 FEATURE_PLAN §7.2 |
@@ -945,7 +953,7 @@ clawcodex --resume <session_id>                # 按 ID 恢复（不变）
 
 ## F-22: Cron 系统执行引擎
 
-**状态**: 🔄 进行中（Phase A runtime-first 接线 ✅ 已完成：REPL/TUI/headless 运行路径打通，调度器后台运行，REPL 主循环通过 `_drain_cron_outbox()` 消费 `cron_prompt`/`cron_missed` 事件；G1~G8 缺口全部闭合 ✅；CCB 4 层任务累计防护（D1~D4）设计完成 📋，待集成验证；Phase B~F 分阶段推进）
+**状态**: 🟡 部分完成（Phase A runtime-first 接线 ✅；Phase B 存储与模型对齐 ✅；Phase C 调度器语义对齐 ✅；Phase D 执行队列与结果追踪 ✅；Phase E skills 与用户命令 ✅；Phase F teammate/agent ownership ⏳；G1~G8 缺口全部闭合 ✅；CCB 4 层任务累计防护 D1~D4 设计完成 📋，待集成验证）
 **优先级**: P0
 **参考实现**: claude-code-best `src/utils/cron*.ts`, `src/hooks/useScheduledTasks.ts`, `src/utils/autonomyRuns.ts`, `src/utils/autonomyStatus.ts`, `src/commands/autonomy*.ts`, `src/cli/print.ts`
 
@@ -1421,7 +1429,7 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 
 ### F-69: Budget / Poor Mode 资源节俭模式
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（token_budget 已落地，query pipeline 集成待补） | **优先级**: P1
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
@@ -1429,7 +1437,9 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 | P69-B | Agent 循环节俭钩子（skip memory/verification） | ⏳ 待开始 | 3-5天 |
 | P69-C | Tool 级别节俭策略（降级搜索深度/禁用高消耗工具） | ⏳ 待开始 | 2-3天 |
 | P69-D | `/budget` CLI 斜杠命令 | ⏳ 待开始 | 2-3天 |
-| P69-E | Token 用量实时统计与自动降级告警 | ⏳ 待开始 | 3-5天 |
+| P69-E | Token 用量实时统计与自动降级告警 | 🟡 部分完成（`clawcodex_ext/query/token_budget.py` BudgetTracker/ContinueDecision/StopDecision 已实现，~159 行） | 3-5天 |
+
+**已落地**：`clawcodex_ext/query/token_budget.py`（~159 行），提供 `BudgetTracker` / `ContinueDecision` / `StopDecision` 数据结构与 per-turn / per-session 计数。
 
 **估算总工时**: 1-2 周
 
@@ -1437,15 +1447,17 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 
 ### F-70: Plugin 插件系统基础框架
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（注册表/加载器/依赖/校验/LSP/MCP/IDE集成基础已存在） | **优先级**: P1
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P70-A | BasePlugin 协议接口定义 | ⏳ 待开始 | 3-5天 |
-| P70-B | Plugin 发现（entry_points + 目录扫描） | ⏳ 待开始 | 2-3天 |
+| P70-A | BasePlugin 协议接口定义 | ✅ 已完成（`src/plugins/` 8 文件 1070 行） | 3-5天 |
+| P70-B | Plugin 发现（entry_points + 目录扫描） | 🟡 部分完成 | 2-3天 |
 | P70-C | Plugin 生命周期管理（install/uninstall/enable/disable） | ⏳ 待开始 | 5-7天 |
 | P70-D | 子进程沙箱隔离 | ⏳ 待开始 | 5-7天 |
-| P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | ⏳ 待开始 | 2-3天 |
+| P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | 🟡 部分完成 | 2-3天 |
+
+**已落地**：`src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/LSP 集成/MCP 集成等基础框架已存在。Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。
 
 **估算总工时**: 2-3 周
 
@@ -1520,7 +1532,7 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 
 ### F-69: Budget / Poor Mode 资源节俭模式
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（token_budget 已落地，query pipeline 集成待补） | **优先级**: P1
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
@@ -1528,7 +1540,9 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 | P69-B | Agent 循环节俭钩子（skip memory/verification） | ⏳ 待开始 | 3-5天 |
 | P69-C | Tool 级别节俭策略（降级搜索深度/禁用高消耗工具） | ⏳ 待开始 | 2-3天 |
 | P69-D | `/budget` CLI 斜杠命令 | ⏳ 待开始 | 2-3天 |
-| P69-E | Token 用量实时统计与自动降级告警 | ⏳ 待开始 | 3-5天 |
+| P69-E | Token 用量实时统计与自动降级告警 | 🟡 部分完成（`clawcodex_ext/query/token_budget.py` BudgetTracker/ContinueDecision/StopDecision 已实现，~159 行） | 3-5天 |
+
+**已落地**：`clawcodex_ext/query/token_budget.py`（~159 行），提供 `BudgetTracker` / `ContinueDecision` / `StopDecision` 数据结构与 per-turn / per-session 计数。
 
 **估算总工时**: 1-2 周
 
@@ -1536,15 +1550,17 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 
 ### F-70: Plugin 插件系统基础框架
 
-**状态**: ⏳ 待开始 | **优先级**: P1
+**状态**: 🟡 部分完成（注册表/加载器/依赖/校验/LSP/MCP/IDE集成基础已存在） | **优先级**: P1
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P70-A | BasePlugin 协议接口定义 | ⏳ 待开始 | 3-5天 |
-| P70-B | Plugin 发现（entry_points + 目录扫描） | ⏳ 待开始 | 2-3天 |
+| P70-A | BasePlugin 协议接口定义 | ✅ 已完成（`src/plugins/` 8 文件 1070 行） | 3-5天 |
+| P70-B | Plugin 发现（entry_points + 目录扫描） | 🟡 部分完成 | 2-3天 |
 | P70-C | Plugin 生命周期管理（install/uninstall/enable/disable） | ⏳ 待开始 | 5-7天 |
 | P70-D | 子进程沙箱隔离 | ⏳ 待开始 | 5-7天 |
-| P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | ⏳ 待开始 | 2-3天 |
+| P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | 🟡 部分完成 | 2-3天 |
+
+**已落地**：`src/plugins/` 8 文件 1070 行：注册表/加载器/依赖/校验/市场/LSP 集成/MCP 集成等基础框架已存在。Plugin 发现/沙箱隔离/install/uninstall 生命周期待补。
 
 **估算总工时**: 2-3 周
 
@@ -1641,8 +1657,8 @@ F-65 (Langfuse完整) ──→ F-81 (Native) ──→ F-82 (RCS) ──→ F-8
 | 编号 | 特性 | 优先级 | 状态 | 工时估算 |
 |:----:|------|:------:|:----:|:--------:|
 | F-68 | Feature Gate 运行时特性开关 | P1 | ⏳ 待开始 | 1-2周 |
-| F-69 | Budget / Poor Mode 节俭模式 | P1 | ⏳ 待开始 | 1-2周 |
-| F-70 | Plugin 插件系统基础框架 | P1 | ⏳ 待开始 | 2-3周 |
+| F-69 | Budget / Poor Mode 节俭模式 | P1 | 🟡 部分完成（token_budget 已落地） | 1-2周 |
+| F-70 | Plugin 插件系统基础框架 | P1 | 🟡 部分完成（注册表/加载器等基础已落地） | 2-3周 |
 | F-71 | 内置工具补齐（14个工具） | P1 | 🟡 部分完成（SnipTool 已完成） | 已耗 2-3天（SnipTool），剩余约 2-3 周（3工具待实现） |
 | F-72 | Multi-API 原生适配器 | P1 | ⏳ 待开始 | 2周 |
 | F-73 | CI/CD 质量门禁与 PyPI 发布 | P0 | ✅ 本地已完成 / 🟡 远端待验证 | changed pytest 自动追加与 stability-gate pytest 已落地；远端 Pipeline/CodeCheck/Release/PyPI 开通后收口 |
