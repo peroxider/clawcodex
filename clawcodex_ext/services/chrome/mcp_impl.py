@@ -174,7 +174,7 @@ class MCPChromeController(ChromeController):
 
         manager = self._manager
         if manager is None:
-            from src.services.mcp.connection_manager import (  # type: ignore[import-not-found]
+            from clawcodex_ext.services.mcp.connection_manager import (  # type: ignore[import-not-found]
                 MCPConnectionManager,
             )
 
@@ -428,7 +428,7 @@ class MCPChromeController(ChromeController):
         """Concatenate content blocks into a single payload.
 
         Mirrors the helpers in
-        :mod:`src.services.mcp.tool_wrapper` — text blocks are
+        :mod:`clawcodex_ext.services.mcp.tool_wrapper` — text blocks are
         joined; an image block becomes raw bytes; a resource
         block is rendered as a path reference.
 
@@ -492,7 +492,7 @@ class MCPChromeController(ChromeController):
         pick whichever the Chrome DevTools MCP server ships.
         """
         try:
-            from src.services.mcp.types import (  # type: ignore[import-not-found]
+            from clawcodex_ext.services.mcp.types import (  # type: ignore[import-not-found]
                 McpHTTPServerConfig,
                 McpSSEServerConfig,
                 McpStdioServerConfig,

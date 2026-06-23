@@ -164,22 +164,39 @@ class TestNoRootLevelShadow:
         )
 
     def test_known_special_case_litellm_adapter_documented(self) -> None:
-        """``src/providers/_litellm_adapter.py`` 是从 ``extensions.providers_ext``
-        (而非 ``clawcodex_ext.providers``) 桥接的特殊情况, 被
-        ``tests/provider/test_litellm_adapter.py:12`` 消费 — 须保留。"""
+        """``src/providers/_litellm_adapter.py`` 是 Pattern D facade,从
+        ``clawcodex_ext.providers._litellm_adapter``(canonical) 转发, 被
+        ``tests/provider/test_litellm_adapter.py:12`` 消费 — 须保留。
+
+        ``extensions/providers_ext/`` 现已降级为 deprecated re-export shim,
+        仅为向后兼容而存在;新代码应直接 import canonical 路径。
+        """
         shim = ROOT / "src" / "providers" / "_litellm_adapter.py"
         assert shim.exists(), (
-            f"Expected compat shim still present: {shim} "
+            f"Expected Pattern D facade still present: {shim} "
             "(consumed by tests/provider/test_litellm_adapter.py)"
         )
         content = shim.read_text(encoding="utf-8")
-        assert "from extensions.providers_ext import" in content, (
-            f"{shim} should re-export from extensions.providers_ext, "
-            "not from clawcodex_ext.providers"
+        assert "from clawcodex_ext.providers._litellm_adapter import" in content, (
+            f"{shim} should re-export from clawcodex_ext.providers._litellm_adapter "
+            "(Phase K migration target — canonical location)"
         )
-        assert "from clawcodex_ext.providers" not in content, (
-            f"{shim} unexpectedly re-exports from clawcodex_ext.providers "
-            "— this special case exists to bridge extensions.providers_ext"
+        assert "from extensions.providers_ext import" not in content, (
+            f"{shim} unexpectedly re-exports from extensions.providers_ext "
+            "— extensions/ is now a deprecated shim; src/ facade should "
+            "point at clawcodex_ext.providers._litellm_adapter"
+        )
+        # The canonical implementation must exist in clawcodex_ext.
+        canonical = ROOT / "clawcodex_ext" / "providers" / "_litellm_adapter.py"
+        assert canonical.exists(), (
+            f"Expected canonical implementation at {canonical} "
+            "after Phase K migration"
+        )
+        # The deprecated extensions/ shim must still exist for backward compat.
+        deprecated_shim = ROOT / "extensions" / "providers_ext" / "__init__.py"
+        assert deprecated_shim.exists(), (
+            f"Expected deprecated extensions shim at {deprecated_shim} "
+            "for backward compatibility"
         )
 
     def test_known_legit_root_py_unchanged(self) -> None:

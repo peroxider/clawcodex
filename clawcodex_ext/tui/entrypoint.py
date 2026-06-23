@@ -159,11 +159,11 @@ def _run_tui_with_app(
         if loaded is not None:
             used_session = loaded
         else:
-            from rich.console import Console
+            from clawcodex_ext.repl.color_scheme import build_oklch_console
 
-            console = Console()
+            console = build_oklch_console()
             console.print(
-                f"[yellow]Session not found: {resume_session_id}. Starting new session.[/yellow]"
+                f"[warning]Session not found: {resume_session_id}. Starting new session.[/warning]"
             )
             used_session = Session.create(provider_name, model_label)
     else:

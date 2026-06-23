@@ -16,7 +16,7 @@ Public surface:
   imports it lazily).
 * :class:`MCPChromeController` — opt-in backend that talks to
   a running Chrome DevTools MCP server via
-  :class:`src.services.mcp.MCPConnectionManager`.
+  :class:`clawcodex_ext.services.mcp.MCPConnectionManager`.
 * :class:`RecordingChromeController` — wrapper that adds GIF
   frame capture to any backend.
 * :func:`build_chrome_controller` — resolves the best available

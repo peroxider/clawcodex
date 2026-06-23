@@ -276,6 +276,7 @@ try:
     from rich.cells import cell_len
     from rich.console import Console, Group
     from rich.align import Align
+    from rich.markup import escape
     from rich.panel import Panel
     from rich.table import Table
     from rich.text import Text
@@ -1221,7 +1222,7 @@ class ClawcodexREPL:
                     pass
 
             self.console.print("")
-            self.console.print(f"[bold {self._p.warning}]⚠ Permission Required[/bold]")
+            self.console.print(f"[bold][warning]⚠ Permission Required[/warning][/bold]")
             self.console.print(f"  {message}")
             self.console.print("")
 
@@ -2579,7 +2580,7 @@ class ClawcodexREPL:
             parts.append(f"[bold]{in_progress}[/bold] in progress")
         parts.append(f"[bold]{pending}[/bold] open")
         header = (
-            f"[success]●[/success] [bold {self._p.info}]Tasks[/bold] "
+            f"[success]●[/success] [bold][info]Tasks[/info][/bold] "
             f"[dim]([bold]{len(sorted_tasks)}[/bold] total: {', '.join(parts)})[/dim]"
         )
         self.console.print(header)
@@ -2730,7 +2731,7 @@ class ClawcodexREPL:
                 else:
                     if session_id:
                         self.console.print(
-                            f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold]"
+                            f"\n  [bold][warning]Session {session_id} saved.[/warning][/bold]"
                         )
                     else:
                         self.console.print("\n  [warning]Session saved.[/warning]")
@@ -2742,7 +2743,7 @@ class ClawcodexREPL:
                 session_id = result[1] if len(result) > 1 else ""
                 if session_id:
                     self.console.print(
-                        f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold] Resume with:\n"
+                        f"\n  [bold][warning]Session {session_id} saved.[/warning][/bold] Resume with:\n"
                         f"    [info]clawcodex --tui --resume {session_id}[/info]"
                     )
                 else:
@@ -2860,7 +2861,7 @@ class ClawcodexREPL:
                             # Print result line
                             if block.is_error:
                                 err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
+                                self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
                             else:
                                 preview = self._format_tool_result_preview(
                                     block, tool_use_map.get(block.tool_use_id),
@@ -2912,11 +2913,11 @@ class ClawcodexREPL:
                             if isinstance(summary, str) and summary:
                                 summary = self._shorten_path_text(summary)
                             if summary:
-                                call_args = f"[dim]([/dim]{summary}[dim])[/dim]"
+                                call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                             else:
                                 call_args = ""
                             pending_tool_use_prints[block.id] = (
-                                f"[success]●[/success] [bold {self._p.info}]{block.name}[/bold]"
+                                f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
                                 + (f" {call_args}" if call_args else "")
                             )
                         elif isinstance(block, ThinkingBlock):
@@ -3605,7 +3606,7 @@ class ClawcodexREPL:
                 from src.utils.git import get_session_diff
                 diff = get_session_diff(cwd=str(self.tool_context.workspace_root))
                 if diff.files_changed:
-                    self.console.print(f"\n[bold {self._p.info}]Pending changes[/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
+                    self.console.print(f"\n[bold][info]Pending changes[/info][/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
                     self.console.print(diff.patch[:4000] + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else ""))
                     self.console.print()
                     return
@@ -3614,7 +3615,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No pending diffs to display.[/dim]")
             return
 
-        self.console.print(f"\n[bold {self._p.info}]Diff — {len(files)} file(s) changed[/bold]")
+        self.console.print(f"\n[bold][info]Diff — {len(files)} file(s) changed[/info][/bold]")
         for path, patch, _summary in files[:10]:
             self.console.print(f"  [bold]{path}[/bold]")
             lines = patch.splitlines()
@@ -3650,7 +3651,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No MCP servers configured.[/dim]")
             return
 
-        self.console.print(f"\n[bold {self._p.info}]MCP Servers ({len(servers)})[/bold]")
+        self.console.print(f"\n[bold][info]MCP Servers ({len(servers)})[/info][/bold]")
         for s in servers:
             status_style = "green" if s["status"] == "connected" else "yellow" if s["status"] in ("connecting", "running") else "dim"
             self.console.print(f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]")
@@ -3673,7 +3674,7 @@ class ClawcodexREPL:
             self.console.print("[dim]Nothing to rewind — no user messages in conversation.[/dim]")
             return
 
-        self.console.print(f"\n[bold {self._p.info}]Conversation history ({len(user_msgs)} user turns)[/bold]")
+        self.console.print(f"\n[bold][info]Conversation history ({len(user_msgs)} user turns)[/info][/bold]")
         for idx, (orig_idx, msg) in enumerate(user_msgs):
             text = self._flatten_message_content(msg.content)
             preview = text[:80].replace("\n", " ")
@@ -3704,7 +3705,7 @@ class ClawcodexREPL:
         args = args.strip()
 
         if not args:
-            self.console.print(f"\n[bold {self._p.info}]Reasoning effort[/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}")
+            self.console.print(f"\n[bold][info]Reasoning effort[/info][/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}")
             self.console.print("  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]")
             self.console.print()
             return
@@ -3723,7 +3724,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No history events recorded this session.[/dim]")
             return
 
-        self.console.print(f"\n[bold {self._p.info}]Session History ({len(events)} events)[/bold]")
+        self.console.print(f"\n[bold][info]Session History ({len(events)} events)[/info][/bold]")
         for ev in events[-20:]:  # Show last 20
             self.console.print(f"  [bold]{ev.title}[/bold]")
             if ev.detail:
@@ -4516,12 +4517,14 @@ class ClawcodexREPL:
                     if isinstance(msg, StreamEvent):
                         if msg.type == "stream_request_start":
                             api_call_count += 1
-                            # The TypeScript reference does not print a
-                            # ``Thinking…`` line between API calls — the
-                            # spinner already communicates activity. Printing
-                            # it between every tool round-trip clutters the
-                            # transcript, so we suppress it here to match
-                            # ``typescript/src/components/REPL.tsx``.
+                            # Reset spinner status to "Thinking…" when a
+                            # new API round-trip starts, so the user sees
+                            # the LLM is reasoning again (rather than the
+                            # previous tool name left from the last turn).
+                            if _engine_status_ref:
+                                _engine_status_ref[0].update(
+                                    self._status_message()
+                                )
                         continue
 
                     if isinstance(msg, AssistantMessage):
@@ -4564,6 +4567,13 @@ class ClawcodexREPL:
                                     last_text_was_printed = True
                                 elif isinstance(block, ToolUseBlock):
                                     tool_use_map[block.id] = (block.name, block.input)
+                                    # Show the tool name in the spinner
+                                    # so "Thinking…" → "● Bash" / "● Read"
+                                    # instead of a static message.
+                                    if _engine_status_ref:
+                                        _engine_status_ref[0].update(
+                                            f"● {block.name}"
+                                        )
                                     if block.name in _TASK_WIDGET_TOOL_NAMES:
                                         task_tool_ids.add(block.id)
                                         pending_task_flush = True
@@ -4587,11 +4597,11 @@ class ClawcodexREPL:
                                     # meaningful to show so ``● ToolName`` reads
                                     # cleaner than a literal ``ToolName()``.
                                     if summary:
-                                        call_args = f"[dim]([/dim]{summary}[dim])[/dim]"
+                                        call_args = f"[dim]([/dim]{escape(summary)}[dim])[/dim]"
                                     else:
                                         call_args = ""
                                     pending_tool_use_prints[block.id] = (
-                                        f"[success]●[/success] [bold {self._p.info}]{block.name}[/bold]"
+                                        f"[success]●[/success] [bold][info]{block.name}[/info][/bold]"
                                         + (f" {call_args}" if call_args else "")
                                     )
                         continue
@@ -4624,7 +4634,7 @@ class ClawcodexREPL:
                                         if block.is_error:
                                             _flush_task_snapshot_if_any()
                                             err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                            self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
+                                            self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
                                         continue
                                     # Print the deferred ``● Tool(args)``
                                     # header right above this result so each
@@ -4641,7 +4651,7 @@ class ClawcodexREPL:
                                     # ``typescript/src/components/MessageResponse.tsx``).
                                     if block.is_error:
                                         err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                        self.console.print(f"[error]  ⎿  {err_text or 'Error'}[/error]")
+                                        self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
                                     else:
                                         preview = self._format_tool_result_preview(
                                             block, tool_use_map.get(block.tool_use_id),
@@ -4804,7 +4814,7 @@ class ClawcodexREPL:
             error_str = str(e)
 
             if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:
-                self.console.print(f"\n[error]❌ Authentication Error: {e}[/error]")
+                self.console.print(f"\n[error]❌ Authentication Error: {escape(str(e))}[/error]")
                 self.console.print("\n[warning]Your API key appears to be invalid or expired.[/warning]")
 
                 from rich.prompt import Prompt
@@ -4819,7 +4829,7 @@ class ClawcodexREPL:
                 else:
                     self.console.print("\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]")
             else:
-                self.console.print(f"\n[error]Error: {e}[/error]")
+                self.console.print(f"\n[error]Error: {escape(str(e))}[/error]")
                 import traceback
                 traceback.print_exc()
             return False

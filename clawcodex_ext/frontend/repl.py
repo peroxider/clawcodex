@@ -19,16 +19,16 @@ class REPLFrontend(FrontendPlugin):
         # Resolve session ID: --resume <id> or --resume (browse) via REPL browser
         session_id = ctx.options.resume_session_id
         if ctx.options.resume_browse and not session_id:
+            from clawcodex_ext.repl.color_scheme import build_oklch_console
             from clawcodex_ext.repl.session_browser import browse_sessions_interactive
-            from rich.console import Console
 
-            console = Console()
+            console = build_oklch_console()
             console.print("[dim]No session ID specified. Opening session browser...[/dim]")
             picked = browse_sessions_interactive(console=console)
             if picked:
                 session_id = picked
             else:
-                console.print("[yellow]No session selected. Starting a new session.[/yellow]")
+                console.print("[dim]No session selected. Starting a new session.[/dim]")
 
         repl = ClawCodexExtREPL(
             provider_name=ctx.provider_name,

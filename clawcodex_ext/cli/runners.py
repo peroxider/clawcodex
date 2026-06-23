@@ -199,10 +199,10 @@ def _show_provider_defaults_table() -> None:
     """Print a table showing available providers and their defaults."""
     from src.providers import PROVIDER_INFO
 
-    from rich.console import Console
     from rich.table import Table
+    from clawcodex_ext.repl.color_scheme import build_oklch_console
 
-    console = Console()
+    console = build_oklch_console()
     table = Table(title="Available Providers & Defaults", show_header=True, header_style="bold")
     table.add_column("Provider", style="cyan")
     table.add_column("Default Model", style="magenta")
@@ -226,11 +226,11 @@ def _show_provider_defaults_table() -> None:
 
 def handle_login() -> int:
     """Interactive provider credential configuration."""
-    from rich.console import Console
     from rich.prompt import Prompt
+    from clawcodex_ext.repl.color_scheme import build_oklch_console
 
-    console = Console()
-    console.print("\n[bold blue]ClawCodex - Provider Configuration[/bold blue]\n")
+    console = build_oklch_console()
+    console.print("\n[bold primary]ClawCodex - Provider Configuration[/bold primary]\n")
 
     _show_provider_defaults_table()
 
@@ -288,9 +288,9 @@ def handle_login() -> int:
 
 def show_config() -> int:
     """Show current configuration."""
-    from rich.console import Console
+    from clawcodex_ext.repl.color_scheme import build_oklch_console
 
-    console = Console()
+    console = build_oklch_console()
 
     try:
         from src.config import load_config, get_config_path

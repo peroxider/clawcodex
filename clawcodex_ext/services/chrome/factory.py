@@ -20,7 +20,7 @@ to fill in the standard hook defaults — the raw ``Tool(...)``
 constructor in the spec sketch would skip ``is_enabled=True`` and
 friends. Each tool's ``call`` bridges the sync ``Tool`` interface
 to the async controller using the same loop-detection pattern as
-:mod:`src.services.mcp.tool_wrapper` (lines 213-232).
+:mod:`clawcodex_ext.services.mcp.tool_wrapper` (lines 213-232).
 """
 
 from __future__ import annotations
@@ -170,7 +170,7 @@ def build_chrome_tools() -> list[Any]:
     def _async_runner(coro: Any) -> Any:
         """Run ``coro`` to completion, returning the result.
 
-        Mirrors :mod:`src.services.mcp.tool_wrapper` lines
+        Mirrors :mod:`clawcodex_ext.services.mcp.tool_wrapper` lines
         213-232. The running loop branch is for callers that
         happen to be inside an event loop already.
         """

@@ -191,3 +191,108 @@ class TestStage3bConversationBoundary:
         conv.add_user_message("temp")
         conv.clear()
         assert conv.get_messages() == []
+
+
+class TestStage3bRichMarkupEscape:
+    """Rich markup 转义防护 — 异常消息含 `[/bold]` 时不抛出 MarkupError。
+
+    回归防护：clawcodex_ext/repl/core.py chat() 中 error/authentication error
+    的 console.print 必须使用 escape(str(e)) 而非裸 {e}，否则异常消息中
+    的 [/bold] 等 Rich 标记会导致 MarkupError 击穿。
+
+    相关问题：chat() 第 4832 行 `Error: {escape(str(e))}` 路径。
+    """
+
+    # Rich 标记样式的异常消息样本
+    _MARKUP_LIKE_ERRORS = [
+        "unexpected token [/bold] found",
+        "[/color] without matching [color]",
+        "provider response: [bold]ERROR[/bold] occurred",
+        "malformed [link=xxx] without close",
+        "nested [bold][italic]test[/bold][/italic] misorder",
+    ]
+
+    def test_escape_marks_up_brackets(self):
+        """escape() 将 `[` 转义为反斜杠加左方括号，防止被 Rich 解析为标记起始。"""
+        from rich.markup import escape
+
+        raw = "[/bold]"
+        escaped = escape(raw)
+        # Rich 只转义 [（标记起始），] 独立时无歧义无需转义
+        assert escaped == r"\[/bold]", (
+            f"escape() should escape `[`, got: {escaped!r}"
+        )
+
+    def test_escape_idempotent_on_clean_text(self):
+        """escape() 对不含标记的纯文本保持恒等。"""
+        from rich.markup import escape
+
+        clean = "Error 401: authentication failed"
+        assert escape(clean) == clean
+
+    def test_console_print_escaped_error_no_markup_error(self):
+        """console.print 使用 escape() 后在 error 标签内打印不抛 MarkupError。
+
+        对多种 Rich 标记样式逐一验证。
+        """
+        from io import StringIO
+
+        from rich.console import Console
+        from rich.markup import escape
+
+        for msg in self._MARKUP_LIKE_ERRORS:
+            buf = StringIO()
+            c = Console(file=buf, force_terminal=False, safe_box=False)
+            # 不应抛出 MarkupError
+            c.print(f"\n[error]Error: {escape(msg)}[/error]")
+            output = buf.getvalue()
+            assert msg in output, (
+                f"Expected original message in output, msg={msg!r}, output={output!r}"
+            )
+
+    def test_console_print_raises_without_escape(self):
+        """console.print 对裸 `[/bold]` 抛出 MarkupError — 确认测试有效性。"""
+        from io import StringIO
+
+        import pytest
+        from rich.console import Console
+        from rich.errors import MarkupError
+
+        buf = StringIO()
+        c = Console(file=buf, force_terminal=False)
+        with pytest.raises(MarkupError):
+            c.print("\n[error]Error: [/bold][/error]")
+
+    def test_all_console_print_in_chat_use_escape(self):
+        """chat() 中所有嵌不可信变量的 console.print 行都使用 escape()。
+
+        来源检查：确保 repair 不会因后续重构退化。
+        覆盖模式：
+        - {escape(str(e))} 用于异常 e
+        - {escape(err_text)} 用于工具输出
+        - call_args 构造中 escape(summary) 用于工具调用摘要
+        """
+        import inspect
+
+        from clawcodex_ext.repl.core import ClawcodexREPL
+
+        src = inspect.getsource(ClawcodexREPL.chat)
+        lines = src.splitlines()
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+
+            # 检查 console.print 中的不可信变量
+            if stripped.startswith("self.console.print"):
+                contains_untrusted = "{e" in stripped or "{err_text" in stripped
+                if contains_untrusted:
+                    assert "escape(" in stripped, (
+                        f"chat() line {i} embeds untrusted content without escape(): "
+                        f"{stripped!r}"
+                    )
+
+            # 检查 call_args 构造（summary 来自工具输入，用户可控制）
+            if "call_args =" in stripped and "{summary}" in stripped:
+                assert "escape(summary)" in stripped, (
+                    f"chat() line {i} constructs call_args with summary without escape(): "
+                    f"{stripped!r}"
+                )

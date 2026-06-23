@@ -12,6 +12,7 @@ from typing import Sequence
 from rich.console import Console
 from rich.table import Table
 
+from clawcodex_ext.repl.color_scheme import build_oklch_console
 from src.services.session_storage import SessionMetadata, SessionStorage
 
 
@@ -30,7 +31,7 @@ def browse_sessions_interactive(
     Returns the selected ``session_id`` or ``None`` if cancelled.
     """
     if console is None:
-        console = Console()
+        console = build_oklch_console()
 
     metas = SessionStorage.list_sessions(limit=50)
     if not metas:

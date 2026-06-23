@@ -60,7 +60,9 @@ def _shared_console() -> Console:
     fresh instance to see the change.
     """
 
-    return Console()
+    from clawcodex_ext.repl.color_scheme import build_oklch_console
+
+    return build_oklch_console()
 
 
 def is_hyperlink_supported(console: Console | None = None) -> bool:

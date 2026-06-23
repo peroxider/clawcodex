@@ -64,7 +64,7 @@ def test_create_provider_uses_litellm_when_enabled(monkeypatch):
 
     monkeypatch.setenv("CLAW_USE_LITELLM", "1")
     monkeypatch.setattr(
-        "extensions.providers_ext.create_litellm_provider",
+        "clawcodex_ext.providers._litellm_adapter.create_litellm_provider",
         fake_create_litellm_provider,
     )
 

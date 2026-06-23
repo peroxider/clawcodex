@@ -8,11 +8,12 @@ facade re-exports in ``src/providers/__init__.py``).
 
 Architecture::
 
-    src/providers/__init__.py           ← upstream built-in registry (get_provider_class, PROVIDER_INFO)
-        ↑ import                        ← _EXTRA_PROVIDER_CLASSES dict lives here
-    clawcodex_ext/providers/factory.py  ← this module (二开 factory + registration)
+    src/providers/__init__.py                       ← upstream built-in registry (get_provider_class, PROVIDER_INFO)
+        ↑ import                                    ← _EXTRA_PROVIDER_CLASSES dict lives here
+    clawcodex_ext/providers/factory.py              ← this module (二开 factory + registration)
         ↑ import
-    extensions/providers_ext/           ← LiteLLM fallback provider
+    clawcodex_ext/providers/_litellm_adapter.py     ← LiteLLM fallback provider (canonical)
+    extensions/providers_ext/                       ← deprecated re-export shim (backward compat)
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ def should_use_litellm() -> bool:
 def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
     """Create a provider instance for runtime use."""
     if should_use_litellm():
-        from extensions.providers_ext import create_litellm_provider
+        from clawcodex_ext.providers._litellm_adapter import create_litellm_provider
 
         return create_litellm_provider(provider_name, *args, **kwargs)
 
@@ -54,7 +55,7 @@ def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
         provider_cls = get_provider_class(provider_name)
     except ValueError:
         # Unknown provider — fallback to LiteLLM
-        from extensions.providers_ext import create_litellm_provider
+        from clawcodex_ext.providers._litellm_adapter import create_litellm_provider
 
         return create_litellm_provider(provider_name, *args, **kwargs)
 

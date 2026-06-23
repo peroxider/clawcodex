@@ -1,0 +1,11 @@
+diff --git a/command_system/moved_to_plugin.py b/command_system/moved_to_plugin.py
+--- a/command_system/moved_to_plugin.py	2026-06-18 10:10:17.239434 +0000
++++ b/command_system/moved_to_plugin.py	2026-06-22 09:03:22.488700 +0000
+@@ -4,6 +4,7 @@
+ static "this command moved to a plugin" message; everyone else dispatches to a private
+ prompt builder (the command's real implementation while the marketplace is private).
+ """
++
+ from __future__ import annotations
+ 
+ import inspect

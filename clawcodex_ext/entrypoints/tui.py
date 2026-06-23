@@ -171,8 +171,9 @@ def _replay_transcript_to_host(app) -> None:
 
     Mirrors ink's non-fullscreen behaviour: when the app exits, the
     conversation the user saw stays in scrollback. Textual runs in
-    the alt-screen by default which would otherwise wipe the rendered
-    transcript on teardown.
+    the alt-screen by default which wofrom clawcodex_ext.repl.color_scheme import build_oklch_console
+
+        console = build_oklch_console()
     """
 
     snapshot = getattr(app, "exit_snapshot", None)

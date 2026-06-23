@@ -298,6 +298,10 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     # ``typescript/src/tools/BashTool/BashTool.tsx`` ``spawnBackgroundTask``
     # behaviour: we return immediately with a task id and let the model poll
     # the output via ``TaskOutput``.
+    #
+    # Default to "bash" — the non-background path (below) hard-codes
+    # ``["bash", "-lc", …]`` at line 374.
+    shell_kind = "bash"
     if tool_input.get("run_in_background"):
         shell_kind, _shell_argv = _resolve_shell_from_input(tool_input)
         bg_output = spawn_background_bash(

@@ -1,0 +1,56 @@
+diff --git a/utils/export_renderer.py b/utils/export_renderer.py
+--- a/utils/export_renderer.py	2026-06-18 10:10:15.757148 +0000
++++ b/utils/export_renderer.py	2026-06-23 00:32:10.516005 +0000
+@@ -43,7 +43,7 @@
+ from typing import Any, List, Optional
+ 
+ from src.constants.xml import TASK_NOTIFICATION_TAG
+-from src.types.content_blocks import content_block_to_dict
++from clawcodex_ext.types.content_blocks import content_block_to_dict
+ from src.types.messages import (
+     INTERRUPT_MESSAGE,
+     INTERRUPT_MESSAGE_FOR_TOOL_USE,
+@@ -80,9 +80,7 @@
+     }
+ )
+ 
+-_SYSTEM_REMINDER_RE = re.compile(
+-    r"<system-reminder\b[^>]*>.*?</system-reminder>", re.DOTALL
+-)
++_SYSTEM_REMINDER_RE = re.compile(r"<system-reminder\b[^>]*>.*?</system-reminder>", re.DOTALL)
+ 
+ 
+ def _internal_tag_regex(tag: str) -> "re.Pattern[str]":
+@@ -339,9 +337,7 @@
+     content = extract_message_content(msg)
+     if is_synthetic_content(content):
+         return False
+-    return has_exportable_structured_content(content) or not is_known_message_type(
+-        msg_type
+-    )
++    return has_exportable_structured_content(content) or not is_known_message_type(msg_type)
+ 
+ 
+ # --------------------------------------------------------------------------- #
+@@ -349,7 +345,9 @@
+ # --------------------------------------------------------------------------- #
+ 
+ 
+-def message_heading(message_type: str) -> str:
++def message_heading(message_type: str, display_name: Optional[str] = None) -> str:
++    if display_name is not None:
++        return display_name
+     if message_type == "user":
+         return "User"
+     if message_type == "assistant":
+@@ -743,9 +741,7 @@
+                     content_lines.append(str(block))
+                     content_lines.append("")
+                     continue
+-                _plain_block_lines(
+-                    _normalize_block(block), content_lines, is_tool_result_message
+-                )
++                _plain_block_lines(_normalize_block(block), content_lines, is_tool_result_message)
+         else:
+             content_lines.append(str(content))
+             content_lines.append("")

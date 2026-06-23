@@ -6,9 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from extensions.providers_ext import LiteLLMProvider as ExtensionLiteLLMProvider
-from extensions.providers_ext import create_litellm_provider as extension_create_litellm_provider
-from extensions.providers_ext import is_litellm_available as extension_is_litellm_available
+from clawcodex_ext.providers._litellm_adapter import (
+    LiteLLMProvider as ExtensionLiteLLMProvider,
+    create_litellm_provider as extension_create_litellm_provider,
+    is_litellm_available as extension_is_litellm_available,
+)
 from src.providers._litellm_adapter import (
     LiteLLMProvider,
     create_litellm_provider,
@@ -169,7 +171,7 @@ class TestChatCompletion:
     def test_chat_passes_external_api_parameters(self, monkeypatch):
         fake_litellm = FakeLiteLLM(_message_response())
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+            "clawcodex_ext.providers._litellm_adapter._load_litellm", lambda: fake_litellm
         )
 
         provider = LiteLLMProvider(
@@ -216,7 +218,7 @@ class TestChatCompletion:
             )
         )
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+            "clawcodex_ext.providers._litellm_adapter._load_litellm", lambda: fake_litellm
         )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o", provider_name="openai")
@@ -246,7 +248,7 @@ class TestChatCompletion:
         )
         fake_litellm = FakeLiteLLM(response)
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+            "clawcodex_ext.providers._litellm_adapter._load_litellm", lambda: fake_litellm
         )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
@@ -265,7 +267,7 @@ class TestStreaming:
             ]
         )
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+            "clawcodex_ext.providers._litellm_adapter._load_litellm", lambda: fake_litellm
         )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
@@ -309,7 +311,7 @@ class TestStreaming:
             ]
         )
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider._load_litellm", lambda: fake_litellm
+            "clawcodex_ext.providers._litellm_adapter._load_litellm", lambda: fake_litellm
         )
 
         provider = LiteLLMProvider(api_key="sk-key", model="gpt-4o")
@@ -358,7 +360,7 @@ class TestBackwardCompatibility:
 
     def test_missing_litellm_dependency_raises_clear_error(self, monkeypatch):
         monkeypatch.setattr(
-            "extensions.providers_ext.litellm_provider.is_litellm_available", lambda: False
+            "clawcodex_ext.providers._litellm_adapter.is_litellm_available", lambda: False
         )
         provider = LiteLLMProvider(api_key="test", model="gpt-4o")
 

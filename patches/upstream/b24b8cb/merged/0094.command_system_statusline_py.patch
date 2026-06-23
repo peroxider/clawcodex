@@ -1,0 +1,26 @@
+diff --git a/command_system/statusline.py b/command_system/statusline.py
+--- a/command_system/statusline.py	2026-06-18 10:10:17.205625 +0000
++++ b/command_system/statusline.py	2026-06-22 09:03:22.548492 +0000
+@@ -10,19 +10,18 @@
+ relies on a separately-registered agent. Porting ``tools/AgentTool/built-in/
+ statuslineSetup.ts`` is a deferred follow-up.
+ """
++
+ from __future__ import annotations
+ 
+ from dataclasses import dataclass
+ from typing import Any
+ 
+-from src.agent.constants import AGENT_TOOL_NAME
++from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
+ 
+ from .types import CommandContext, PromptCommand
+ 
+ # TS: args.trim() || 'Configure my statusLine from my shell PS1 configuration'
+-_DEFAULT_STATUSLINE_INSTRUCTION = (
+-    "Configure my statusLine from my shell PS1 configuration"
+-)
++_DEFAULT_STATUSLINE_INSTRUCTION = "Configure my statusLine from my shell PS1 configuration"
+ 
+ 
+ @dataclass(frozen=True)

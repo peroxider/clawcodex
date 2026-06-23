@@ -243,19 +243,18 @@ def build_rich_theme(palette: REPLPalette | None = None) -> dict:
 
     Returns a dict suitable for ``Console(theme=Theme(...))``.
 
-    NOTE: only custom semantic names are registered here.  We intentionally
-    do NOT override ANSI colour names (``red``, ``green``, ``yellow``,
-    ``blue``, ``cyan``, ``magenta``) because Rich's markup parser resolves
-    those names differently in combined styles (e.g. ``[bold red]``) and
-    can produce ``MarkupError`` with certain version / render-path
-    combinations.  Instead, use the semantic names below for reliable
-    OKLCH color output.
+    Unifies both OKLCH semantic names AND ANSI colour-name aliases so that
+    legacy markup like ``[yellow]`` automatically picks up the OKLCH amber
+    without per-file changes.  The ANSI aliases are safe for *simple* colour
+    tags (``[yellow]``, ``[red]``, ``[bold yellow]``, etc.); composite styles
+    like ``[bold red on black]`` are rare in this codebase and handled
+    correctly by Rich's style resolution.
     """
     import rich.theme
 
     p = palette or DARK
     theme_dict: dict[str, str] = {
-        # Custom semantic names for explicit use in all markup
+        # ── Custom semantic names ──────────────────────────────────────
         "error": p.error,
         "success": p.success,
         "warning": p.warning,
@@ -268,20 +267,79 @@ def build_rich_theme(palette: REPLPalette | None = None) -> dict:
         "spinner": p.spinner,
         "primary": p.primary,
         "secondary": p.secondary,
-        # grey tones (some are resolved via 256-color table by Rich,
-        # these serve as fallback names)
         "user_bg": p.user_bg,
         "diff_add": p.diff_add,
         "diff_remove": p.diff_remove,
-        # Provider/model output — OKLCH equivalents for Rich's default
-        # syntax-highlighter colours (yellow→amber, magenta→purple,
-        # cyan→sky-blue) so `/provider` REPL output uses the same
-        # perceptually-uniform palette as the rest of the UI.
         "key_label": p.warning,     # amber — key names (model=, configured=)
         "value_text": p.secondary,  # purple — string values (MiniMax-M3, yes)
         "version_num": p.info,      # sky-blue — version numbers (2.0)
+        # ── ANSI aliases (unified → OKLCH) ────────────────────────────
+        # Every ``[red]`` / ``[green]`` / ``[yellow]`` … in the codebase
+        # now renders through the OKLCH palette without touching source.
+        "red": p.error,
+        "green": p.success,
+        "yellow": p.warning,
+        "blue": p.primary,
+        "cyan": p.info,
+        "magenta": p.secondary,
     }
     return theme_dict
+
+
+# ---------------------------------------------------------------------------
+# Unified Console factory  —  one import, always OKLCH
+# ---------------------------------------------------------------------------
+
+_OKLCH_CONSOLE_CACHE: dict[str, Any] = {}
+
+
+def build_oklch_console(
+    palette: REPLPalette | None = None,
+) -> Any:
+    """Return a Rich ``Console`` with the OKLCH theme applied.
+
+    Use this instead of bare ``Console()`` everywhere so the perceptually-
+    uniform palette is consistent across REPL, CLI, TUI, and session
+    browser output.
+    """
+    from rich.console import Console
+    from rich.theme import Theme as _RichTheme
+
+    p = palette or DARK
+    return Console(theme=_RichTheme(build_rich_theme(p)), highlight=False)
+
+
+# ---------------------------------------------------------------------------
+# ANSI → OKLCH rewriter  —  for non-Rich contexts (prompt_toolkit, etc.)
+# ---------------------------------------------------------------------------
+
+_ANSI_TO_OKLCH: dict[str, str] = {
+    "red": "error",
+    "green": "success",
+    "yellow": "warning",
+    "blue": "primary",
+    "cyan": "info",
+    "magenta": "secondary",
+}
+
+
+def ansi_to_oklch(text: str) -> str:
+    """Rewrite ANSI colour tags (``[red]``) to OKLCH semantic names
+    (``[error]``).
+
+    Intended for contexts where the Rich theme does not apply — e.g.
+    prompt_toolkit ``FormattedText`` rendering, plain ``print()``, or
+    any pipeline that strips Rich markup before rendering.
+    """
+    import re
+
+    def _replace(m: re.Match) -> str:
+        slash = m.group(1)  # '' or '/'
+        name = m.group(2)
+        mapped = _ANSI_TO_OKLCH.get(name, name)
+        return f"[{slash}{mapped}]"
+
+    return re.sub(r"\[(/?)(red|green|yellow|blue|cyan|magenta)\]", _replace, text)
 
 
 # ---------------------------------------------------------------------------
