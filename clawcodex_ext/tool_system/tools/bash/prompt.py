@@ -1,4 +1,7 @@
-"""Prompt generation and timeout configuration for the bash tool."""
+"""Prompt generation and timeout configuration for the bash tool.
+
+F-107: Extended with shell selection guidance and PowerShell syntax tips.
+"""
 
 from __future__ import annotations
 
@@ -81,6 +84,26 @@ def get_bash_prompt() -> str:
         ]
     )
 
+    shell_selection = "\n".join(
+        [
+            "",
+            "# Shell Selection",
+            "- The `shell` parameter controls which interpreter runs your command.",
+            '  - `"bash"` -- Use POSIX shell (Linux/macOS default).',
+            '  - `"powershell"` -- Use PowerShell on Windows.',
+            '  - `"auto"` (default) -- Auto-detect: PowerShell on Windows when available, bash otherwise.',
+            "",
+            "# PowerShell Tips (when shell=\"powershell\")",
+            "- Use `$LASTEXITCODE` (not `$?`) to check the exit code of external programs.",
+            "- Use `(Get-Location).Path` instead of `pwd` for the current directory.",
+            "- Native cmdlets (e.g. `Get-ChildItem`, `Select-String`) set `$?` but NOT `$LASTEXITCODE`.",
+            "- To redirect output: use `Out-File -Encoding UTF8 <path>` instead of `>`.",
+            "- Use backslash `\\\\` for path separators, but forwardslash `/` also works in most cases.",
+            "- Quote file paths containing spaces with single quotes in PowerShell.",
+            "- PowerShell cmdlets are case-insensitive: `get-childitem`, `Get-ChildItem`, `GCI` all work.",
+        ]
+    )
+
     avoid_commands = "`find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo`"
 
     return "\n".join(
@@ -118,5 +141,6 @@ def get_bash_prompt() -> str:
             git_instructions,
             "- Avoid unnecessary `sleep` commands:",
             sleep_instructions,
+            shell_selection,
         ]
     )

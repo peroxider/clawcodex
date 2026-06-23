@@ -202,8 +202,9 @@ def _run_markdown_skill(skill_name: str, args: str, context: ToolContext) -> Too
     else:
         body = skill.markdown_content or skill.content or ""
         base_dir = skill.base_dir or skill.skill_root
+        skill_shell = getattr(skill, "shell", "auto") or "auto"
         executor = _make_shell_executor(
-            context, skill.allowed_tools, slash_command_name=f"/{skill_name}"
+            context, skill.allowed_tools, slash_command_name=f"/{skill_name}", shell=skill_shell
         )
         prompt = render_skill_prompt(
             body=body,
@@ -239,6 +240,7 @@ def _make_shell_executor(
     allowed_tools: list[str] | None,
     *,
     slash_command_name: str,
+    shell: str = "auto",
 ):
     """Return a callable that runs a shell command via BashTool.
 
@@ -267,7 +269,7 @@ def _make_shell_executor(
 
     def _exec(command: str, inline: bool) -> str:
         try:
-            tr = BashTool.call({"command": command}, context)
+            tr = BashTool.call({"command": command, "shell": shell}, context)
         except Exception as exc:  # noqa: BLE001 — surface every failure
             return format_shell_error(exc, command, inline=inline)
 

@@ -12,6 +12,7 @@ from .bash_parser.commands import (
     is_read_only_command,
 )
 from .bash_parser.parser import ParseResult, extract_all_commands, parse_command
+from clawcodex_ext.permissions.powershell_security import check_powershell_command_safety
 from clawcodex_ext.permissions.types import (
     PermissionAllowDecision,
     PermissionAskDecision,
@@ -189,6 +190,9 @@ def check_bash_command_safety(
     cwd: str | None = None,
     allowed_directories: list[str] | None = None,
 ) -> PermissionResult | None:
+    if shell == "powershell":
+        return check_powershell_command_safety(command, cwd=cwd, allowed_directories=allowed_directories)
+
     analysis = analyze_bash_command(command)
 
     if analysis.is_complex:

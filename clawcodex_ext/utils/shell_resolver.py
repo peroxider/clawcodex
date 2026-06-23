@@ -93,8 +93,11 @@ def _bash_argv(cmd: str) -> list[str]:
 def _powershell_argv(cmd: str) -> list[str]:
     pwsh = find_powershell_path()
     if pwsh is None:
-        # Fall back to bash if PowerShell is unexpectedly missing.
-        return ["bash", "-lc", cmd]
+        raise RuntimeError(
+            "PowerShell requested but 'pwsh'/'powershell' not found on PATH. "
+            "Install PowerShell 7+ (https://github.com/PowerShell/PowerShell) "
+            "or use shell=\"bash\"."
+        )
     return [pwsh, *build_powershell_args(cmd)]
 
 
@@ -136,6 +139,15 @@ def resolve_shell(
         )
     elif shell_param in _SHELL_ARGV_FACTORIES:
         resolved = shell_param
+        # When "powershell" is explicitly requested but pwsh is not available,
+        # fall back to bash with a warning rather than crashing.
+        if resolved == "powershell" and find_powershell_path() is None:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "shell=\'powershell\' requested but pwsh not found on PATH. "
+                "Falling back to bash."
+            )
+            resolved = "bash"
     else:
         resolved = _auto_detect_shell() if platform is None else "bash"
 

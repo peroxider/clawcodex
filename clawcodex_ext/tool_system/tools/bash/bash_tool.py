@@ -216,7 +216,8 @@ def _resolve_shell_from_input(tool_input: dict) -> tuple[str, list[str]]:
     raw = tool_input.get("shell")
     if raw is not None and not isinstance(raw, str):
         raw = None
-    return build_shell_argv(raw or "auto")
+    from clawcodex_ext.utils.shell_resolver import resolve_shell as _rs
+    return _rs(raw or "auto")
 
 
 def _try_extract_cd(command: str) -> Path | None:
@@ -241,7 +242,12 @@ def _bash_check_permissions(
         return PermissionPassthroughResult()
 
     cwd_str = str(context.cwd) if context.cwd else None
-    result = check_bash_command_safety(command, cwd=cwd_str)
+    shell = (tool_input or {}).get("shell", "auto")
+    if shell == "auto":
+        import sys as _sys_mod2
+        from clawcodex_ext.utils.shell_resolver import find_powershell_path
+        shell = "powershell" if _sys_mod2.platform == "win32" and find_powershell_path() is not None else "bash"
+    result = check_bash_command_safety(command, cwd=cwd_str, shell=shell)
     if result is not None:
         return result
 
@@ -472,6 +478,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         completed_returncode,
         completed_stdout,
         completed_stderr,
+        shell=shell_kind,
     )
 
     output: dict[str, Any] = {
@@ -493,7 +500,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
 
     if interpretation.message:
         output["returnCodeInterpretation"] = interpretation.message
-    if is_silent_command(command):
+    if is_silent_command(command, shell=shell_kind):
         output["noOutputExpected"] = True
 
     return ToolResult(
@@ -587,7 +594,8 @@ def _bash_prompt_fn() -> str:
 
 def _bash_search_or_read(input_data: dict) -> SearchOrReadResult:
     cmd = (input_data or {}).get("command", "")
-    result = is_search_or_read_command(cmd)
+    shell = (input_data or {}).get("shell", "auto")
+    result = is_search_or_read_command(cmd, shell=shell)
     return SearchOrReadResult(
         is_search=result.is_search,
         is_read=result.is_read,
@@ -672,9 +680,9 @@ BashTool: Tool = build_tool(
     map_result_to_api=_bash_map_result_to_api,
     check_permissions=_bash_check_permissions,
     validate_input=_bash_validate_input,
-    is_read_only=lambda _input: is_command_read_only((_input or {}).get("command", "")),
-    is_concurrency_safe=lambda _input: is_command_read_only((_input or {}).get("command", "")),
-    is_destructive=lambda _input: not is_command_read_only((_input or {}).get("command", "")),
+    is_read_only=lambda _input: is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
+    is_concurrency_safe=lambda _input: is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
+    is_destructive=lambda _input: not is_command_read_only((_input or {}).get("command", ""), shell=(_input or {}).get("shell", "auto")),
     user_facing_name=_bash_user_facing_name,
     search_hint="shell terminal execute run command",
     to_auto_classifier_input=_bash_classifier_input,
