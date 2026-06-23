@@ -130,17 +130,26 @@ def _render_markdown(summary: dict[str, Any], date: str) -> str:
         lines.append("- Providers: " + ", ".join(f"{k} {v}" for k, v in sorted(providers.items())))
     lines.append("")
 
-    # Show commands that had failures (excludes noise like version/telemetry).
+    # Show top meaningful commands (excludes infrastructure noise).
+    top_commands = summary.get("top_commands", []) or []
+    _NOISE_COMMANDS = frozenset({"version", "help", "telemetry", "config", "login",
+                                 "mcp", "daemon", "doctor", "orchestrator", "viz",
+                                 "autonomy", "schedule", "other"})
+    sig_commands = [e for e in top_commands if e.get("name") not in _NOISE_COMMANDS][:10]
     cmd_failures = summary.get("command_failure", {}) or {}
-    # Filter out infrastructure noise.
-    _NOISE_COMMANDS = frozenset({"version", "help", "telemetry", "config", "login", "mcp", "daemon", "doctor", "orchestrator", "viz", "autonomy", "schedule"})
-    sig_failures = {k: v for k, v in cmd_failures.items() if k not in _NOISE_COMMANDS}
-    if sig_failures:
-        lines.append("## Command failures")
-        for name, count in sorted(sig_failures.items(), key=lambda x: -x[1]):
-            lines.append(f"- {name}: {count}")
+    if sig_commands:
+        lines.append("## Top commands")
+        lines.append("*(meaningful user-facing commands; infrastructure noise excluded)*")
+        lines.append("")
+        for entry in sig_commands:
+            name = entry.get("name", "?")
+            total = entry.get("count", 0)
+            failed = cmd_failures.get(name, 0)
+            parts = [f"**{name}**: {total}"]
+            if failed:
+                parts.append(f"({failed} failed)")
+            lines.append("- " + " ".join(parts))
     elif summary.get("exit_status_counts", {}).get("error", 0) > 0:
-        # No per-command failures tracked, but errors exist
         err_count = summary["exit_status_counts"]["error"]
         lines.append(f"- Error exits: {err_count}")
 
