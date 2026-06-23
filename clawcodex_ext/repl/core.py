@@ -1221,7 +1221,7 @@ class ClawcodexREPL:
                     pass
 
             self.console.print("")
-            self.console.print("[bold yellow]⚠ Permission Required[/bold yellow]")
+            self.console.print(f"[bold {self._p.warning}]⚠ Permission Required[/bold]")
             self.console.print(f"  {message}")
             self.console.print("")
 
@@ -2415,6 +2415,11 @@ class ClawcodexREPL:
         """
         self._thinking_chunks.clear()
 
+    @property
+    def _p(self) -> "REPLPalette":
+        """Convenience access to the active REPL palette."""
+        return self._repl_palette
+
     def _status_message(self) -> str:
         """Spinner status text. Includes queued-prompt count when non-zero."""
 
@@ -2565,7 +2570,7 @@ class ClawcodexREPL:
             parts.append(f"[bold]{in_progress}[/bold] in progress")
         parts.append(f"[bold]{pending}[/bold] open")
         header = (
-            f"[green]●[/green] [bold cyan]Tasks[/bold cyan] "
+            f"[green]●[/green] [bold {self._p.info}]Tasks[/bold] "
             f"[dim]([bold]{len(sorted_tasks)}[/bold] total: {', '.join(parts)})[/dim]"
         )
         self.console.print(header)
@@ -2711,12 +2716,12 @@ class ClawcodexREPL:
                 has_bg_agent = result[2] if len(result) > 2 else False
                 if has_bg_agent:
                     self.console.print(
-                        "\n  [bold green]Agent is running in background[/bold green]"
+                        "\n  [bold][green]Agent is running in background[/green][/bold]"
                     )
                 else:
                     if session_id:
                         self.console.print(
-                            f"\n  [bold yellow]Session {session_id} saved.[/bold yellow]"
+                            f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold]"
                         )
                     else:
                         self.console.print("\n  [yellow]Session saved.[/yellow]")
@@ -2728,7 +2733,7 @@ class ClawcodexREPL:
                 session_id = result[1] if len(result) > 1 else ""
                 if session_id:
                     self.console.print(
-                        f"\n  [bold yellow]Session {session_id} saved.[/bold yellow] Resume with:\n"
+                        f"\n  [bold {self._p.warning}]Session {session_id} saved.[/bold] Resume with:\n"
                         f"    [cyan]clawcodex --tui --resume {session_id}[/cyan]"
                     )
                 else:
@@ -2902,7 +2907,7 @@ class ClawcodexREPL:
                             else:
                                 call_args = ""
                             pending_tool_use_prints[block.id] = (
-                                f"[green]●[/green] [bold cyan]{block.name}[/bold cyan]"
+                                f"[green]●[/green] [bold {self._p.info}]{block.name}[/bold]"
                                 + (f" {call_args}" if call_args else "")
                             )
                         elif isinstance(block, ThinkingBlock):
@@ -3020,10 +3025,10 @@ class ClawcodexREPL:
         table = Table.grid(padding=(0, 1))
         table.add_column(style="bright_black", justify="right", no_wrap=True)
         table.add_column(style="white", ratio=1)
-        table.add_row("Version", Text.assemble(("ClawCodex", "bold white"), ("  ", ""), (f"v{__version__}", "bold cyan")))
-        table.add_row("Model", Text(model_label, style="bold magenta"))
-        table.add_row("Provider", Text(provider_label, style="bold green"))
-        table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style="bold blue"))
+        table.add_row("Version", Text.assemble(("ClawCodex", f"bold {self._p.text}"), ("  ", ""), (f"v{__version__}", f"bold {self._p.info}")))
+        table.add_row("Model", Text(model_label, style=f"bold {self._p.secondary}"))
+        table.add_row("Provider", Text(provider_label, style=f"bold {self._p.success}"))
+        table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style=f"bold {self._p.primary}"))
 
         footer = Text("/help  •  /tools  •  /tui  •  /stream  •  /exit", style="dim")
 
@@ -3057,7 +3062,7 @@ class ClawcodexREPL:
         header = Panel(
             body,
             border_style="bright_black",
-            title="[bold bright_cyan] CLAWCODEX [/bold bright_cyan]",
+            title="[bold][cyan] CLAWCODEX [/cyan][/bold]",
             subtitle="[dim]interactive terminal[/dim]",
             padding=(1, 2),
         )
@@ -3067,7 +3072,7 @@ class ClawcodexREPL:
         from src.coordinator.mode import is_coordinator_mode
         if is_coordinator_mode():
             self.console.print(
-                "[bold yellow]  ⚡ Coordinator Mode ACTIVE[/bold yellow]  "
+                "[bold][yellow]  ⚡ Coordinator Mode ACTIVE[/yellow][/bold]  "
                 "[dim]— Agent / SendMessage / TaskStop only[/dim]"
             )
             self.console.print()
@@ -3556,7 +3561,7 @@ class ClawcodexREPL:
                 from src.utils.git import get_session_diff
                 diff = get_session_diff(cwd=str(self.tool_context.workspace_root))
                 if diff.files_changed:
-                    self.console.print(f"\n[bold cyan]Pending changes[/bold cyan] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
+                    self.console.print(f"\n[bold {self._p.info}]Pending changes[/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
                     self.console.print(diff.patch[:4000] + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else ""))
                     self.console.print()
                     return
@@ -3565,7 +3570,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No pending diffs to display.[/dim]")
             return
 
-        self.console.print(f"\n[bold cyan]Diff — {len(files)} file(s) changed[/bold cyan]")
+        self.console.print(f"\n[bold {self._p.info}]Diff — {len(files)} file(s) changed[/bold]")
         for path, patch, _summary in files[:10]:
             self.console.print(f"  [bold]{path}[/bold]")
             lines = patch.splitlines()
@@ -3601,7 +3606,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No MCP servers configured.[/dim]")
             return
 
-        self.console.print(f"\n[bold cyan]MCP Servers ({len(servers)})[/bold cyan]")
+        self.console.print(f"\n[bold {self._p.info}]MCP Servers ({len(servers)})[/bold]")
         for s in servers:
             status_style = "green" if s["status"] == "connected" else "yellow" if s["status"] in ("connecting", "running") else "dim"
             self.console.print(f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]")
@@ -3624,7 +3629,7 @@ class ClawcodexREPL:
             self.console.print("[dim]Nothing to rewind — no user messages in conversation.[/dim]")
             return
 
-        self.console.print(f"\n[bold cyan]Conversation history ({len(user_msgs)} user turns)[/bold cyan]")
+        self.console.print(f"\n[bold {self._p.info}]Conversation history ({len(user_msgs)} user turns)[/bold]")
         for idx, (orig_idx, msg) in enumerate(user_msgs):
             text = self._flatten_message_content(msg.content)
             preview = text[:80].replace("\n", " ")
@@ -3655,7 +3660,7 @@ class ClawcodexREPL:
         args = args.strip()
 
         if not args:
-            self.console.print(f"\n[bold cyan]Reasoning effort[/bold cyan]  [dim]current:[/dim] {current or '[green]auto[/green]'}")
+            self.console.print(f"\n[bold {self._p.info}]Reasoning effort[/bold]  [dim]current:[/dim] {current or '[green]auto[/green]'}")
             self.console.print("  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]")
             self.console.print()
             return
@@ -3674,7 +3679,7 @@ class ClawcodexREPL:
             self.console.print("[dim]No history events recorded this session.[/dim]")
             return
 
-        self.console.print(f"\n[bold cyan]Session History ({len(events)} events)[/bold cyan]")
+        self.console.print(f"\n[bold {self._p.info}]Session History ({len(events)} events)[/bold]")
         for ev in events[-20:]:  # Show last 20
             self.console.print(f"  [bold]{ev.title}[/bold]")
             if ev.detail:
@@ -3689,7 +3694,7 @@ class ClawcodexREPL:
         except Exception:
             cfg = None
 
-        self.console.print("\n[bold cyan]Idle Configuration[/bold cyan]")
+        self.console.print("\n[bold][cyan]Idle Configuration[/cyan][/bold]")
         if cfg is not None:
             self.console.print(f"  Auto-summary:    [green]enabled[/green]" if cfg.enabled else f"  Auto-summary:    [dim]disabled[/dim]")
             self.console.print(f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)")
@@ -4542,7 +4547,7 @@ class ClawcodexREPL:
                                     else:
                                         call_args = ""
                                     pending_tool_use_prints[block.id] = (
-                                        f"[green]●[/green] [bold cyan]{block.name}[/bold cyan]"
+                                        f"[green]●[/green] [bold {self._p.info}]{block.name}[/bold]"
                                         + (f" {call_args}" if call_args else "")
                                     )
                         continue
@@ -4839,7 +4844,7 @@ class ClawcodexREPL:
         from src.config import set_api_key, set_default_provider
         from src.providers import PROVIDER_INFO
 
-        self.console.print("\n[bold blue]Reconfigure Provider Credentials[/bold blue]\n")
+        self.console.print("\n[bold][blue]Reconfigure Provider Credentials[/blue][/bold]\n")
 
         provider_names = list(PROVIDER_INFO.keys())
         self.console.print("[bold]Available providers:[/bold]")
