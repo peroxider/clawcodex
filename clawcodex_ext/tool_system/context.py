@@ -38,7 +38,7 @@ def _is_within(child: Path, parent: Path) -> bool:
         return False
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolUseOptions:
     commands: list[Any] = field(default_factory=list)
     tools: list[Any] = field(default_factory=list)
@@ -59,24 +59,24 @@ class ToolUseOptions:
     hooks: dict[str, list[Any]] | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class QueryChainTracking:
     chain_id: str = ""
     depth: int = 0
 
 
-@dataclass
+@dataclass(slots=True)
 class FileReadingLimits:
     max_tokens: int | None = None
     max_size_bytes: int | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class GlobLimits:
     max_results: int | None = None
 
 
-@dataclass
+@dataclass(slots=True)
 class ToolContext:
     workspace_root: Path
     permission_context: ToolPermissionContext = field(

@@ -17,6 +17,13 @@ from clawcodex_ext.auth.codex_store import (  # noqa: F401
     save_codex_tokens,
     delete_codex_tokens,
     import_codex_cli_tokens,
+    AUTH_MAGIC,
+    logout,
+    zeroize_auth,
+    zeroize_token_objects,
+    _encrypt,
+    _decrypt,
+    _read_json,
 )
 
 __all__ = [
@@ -30,4 +37,11 @@ __all__ = [
     "save_codex_tokens",
     "delete_codex_tokens",
     "import_codex_cli_tokens",
+    "AUTH_MAGIC",
+    "logout",
+    "zeroize_auth",
+    "zeroize_token_objects",
+    "_encrypt",
+    "_decrypt",
+    "_read_json",
 ]

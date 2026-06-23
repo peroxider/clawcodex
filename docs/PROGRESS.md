@@ -1,7 +1,7 @@
 # ClawCodex 开发进度跟踪文档
 
 > 文档路径: `docs/PROGRESS.md`
-> 基于: `docs/open-source-replacement-progress.md`, `docs/FEATURE_PLAN.md`
+> 基于: `docs/FEATURE_PLAN.md`
 > 版本: v3.15
 > 更新日期: 2026-06-23
 > 上游同步: f32e6b0 (dev-decoupling-refactor-b24b8cb)

@@ -87,6 +87,9 @@ dependencies = [
     # F-??: shell tab completion for the ``clawcodex-dev`` entrypoint
     "argcomplete>=3.5.0",
     "jinja2>=3.1.0",
+    # F-88: At-rest encryption of ~/.clawcodex/auth.json via AES-256-GCM
+    # (machine-id derived key, transparent encrypt/decrypt in codex_store).
+    "cryptography>=42.0.0",
     # F-91~F-95: Multi-Session Visualizer backend
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",

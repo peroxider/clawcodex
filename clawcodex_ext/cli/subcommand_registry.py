@@ -38,6 +38,9 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli.pos_cmd import commands as _pos_commands  # noqa: F401
     from clawcodex_ext.cli import telemetry_cmd as _telemetry_cmd  # noqa: F401
 
+    # F-88: ``clawcodex auth logout|status|zeroize``
+    from clawcodex_ext.cli import auth_cmd as _auth_cmd  # noqa: F401
+
     # F-85 P85-D: ``clawcodex template list|show|create`` subcommand
     if importlib.util.find_spec("clawcodex_ext.cli.template_cmd") is not None:
         importlib.import_module("clawcodex_ext.cli.template_cmd")
