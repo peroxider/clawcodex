@@ -217,13 +217,17 @@ class DailyAggregator:
             if isinstance(ts, (int, float)):
                 if bucket["first_seen"] is None or ts < bucket["first_seen"]:
                     bucket["first_seen"] = ts
-                    # Capture the full stacktrace from the first occurrence
-                    # as a representative sample for the report.
-                    st = fields.get("stacktrace")
-                    if st:
-                        bucket["stacktrace"] = list(st)
                 if bucket["last_seen"] is None or ts > bucket["last_seen"]:
                     bucket["last_seen"] = ts
+                    # Capture the stacktrace from the most recent occurrence,
+                    # which typically has the most complete frame chain.
+                    st = fields.get("stacktrace")
+                    if st and len(st) > len(bucket["stacktrace"]):
+                        bucket["stacktrace"] = list(st)
+                # Also update if current stacktrace is longer than stored.
+                st = fields.get("stacktrace")
+                if st and len(st) > len(bucket["stacktrace"]):
+                    bucket["stacktrace"] = list(st)
 
         top = sorted(
             buckets.values(),
