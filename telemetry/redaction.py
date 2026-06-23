@@ -163,7 +163,16 @@ class Redactor:
                 if line.startswith("Traceback") or "Error" in line.split(":")[0]:
                     lines.append(line.rstrip())
                 continue
-            lines.append(line.rstrip())
+            # Replace absolute project paths with <project>/... for privacy.
+            safe_line = line.rstrip()
+            for root in self.project_roots:
+                if not root:
+                    continue
+                norm_root = os.path.normpath(root)
+                if norm_root in safe_line:
+                    safe_line = safe_line.replace(norm_root, "<project>")
+                    break
+            lines.append(safe_line)
             if len(lines) >= self.cfg.stacktrace_max_lines:
                 break
         return lines
