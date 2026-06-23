@@ -7,6 +7,8 @@ from clawcodex_ext.utils.completers import (
     rank_message_history,
     rank_suggestions,
 )
+from clawcodex_ext.permissions.types import PermissionMode
+from clawcodex_ext.repl.color_scheme import REPLPalette
 
 try:
     from prompt_toolkit import PromptSession

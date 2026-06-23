@@ -122,19 +122,20 @@ clawcodex_ext/services/langfuse/         Langfuse 集成 (4 文件, src/ 4 文�
 clawcodex_ext/services/session_migrate.py F-49 P5-H 会话格式迁移 (1 文件 17.8KB) ✅ Phase 2-D
 clawcodex_ext/utils/agent_mention_completer.py @agent- 自动补全 (1 文件, src/utils + src/repl/ 双 facade) ✅ Phase 2-D
 
-# 🔄 双位置（src/ + ext/ 均有），待统一为单 ext 入口
-src/services/analytics/                  事件埋点 (F-?) [4 src | 4 ext]
-src/services/api/                        API 适配层 [7 src | 7 ext]
-src/services/chrome/                     Chrome 自动化 [8 src | 8 ext]
-src/services/oauth/                      第三方 OAuth [2 src | 2 ext]
-src/services/periodic/                   F-86 周期任务 [1 src | 1 ext]
-src/services/pipe_ipc/                  F-60 进程管道 [6 src | 6 ext]
-src/services/voice/                      语音 I/O [3 src | 3 ext]
+# ✅ 已迁至 clawcodex_ext/services/（src/ 仅留最小 facade）
+clawcodex_ext/services/analytics/        事件埋点 (4 文件, src/ 4 个 3 行 facade)
+clawcodex_ext/services/api/              API 适配层 (7 文件, src/ 7 个 3 行 facade)
+clawcodex_ext/services/chrome/           Chrome 自动化 (8 文件, src/ 5 个 3 行 facade + 3 个 sys.modules swap facade)
+clawcodex_ext/services/oauth/            第三方 OAuth (2 文件, src/ 2 个 3 行 facade)
+clawcodex_ext/services/periodic/         F-86 周期任务 (1 文件, src/ 1 个 3 行 facade)
+clawcodex_ext/services/pipe_ipc/         F-60 进程管道 (6 文件, src/ 6 个 3 行 facade)
+clawcodex_ext/services/voice/            语音 I/O (3 文件, src/ 3 个 3 行 facade)
+clawcodex_ext/services/ide/              IDE 适配 (5 文件, src/ 5 个 3 行 facade)
+clawcodex_ext/services/tool_execution/   工具执行 (6 文件, src/ 6 个 3 行 facade)
+clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp/ 无 live .py 残留)
 
 # ❌ 仍在 src/（待迁 ext）
-src/services/ide/                        IDE 适配 (5 文件)
-src/services/mcp/                        MCP 协议 (32 文件 — 单一最大残余)
-src/services/tool_execution/             工具执行 (6 文件)
+# 当前无已确认的 services 子目录残留；后续需继续审计非 services 核心路径。
 ```
 
 ---

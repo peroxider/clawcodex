@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 from src.agent import Session
 from src.providers.runtime import build_provider_from_config
 from src.repl.core import ClawcodexREPL, _MessageHistoryCompleter, _SlashOnlyCompleter
+from src.utils.abort_controller import AbortController
 
 if TYPE_CHECKING:
     pass
