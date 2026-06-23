@@ -31,8 +31,8 @@ layers:
 
   - name: "features"
     paths:
-      - "src/orchestrator"
-      - "src/api"
+      - "extensions/orchestrator"
+      - "extensions/api"
       - "src/providers"
       - "src/hooks"
       - "src/permissions"
