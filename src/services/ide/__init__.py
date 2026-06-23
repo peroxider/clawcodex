@@ -1,22 +1,24 @@
-"""IDE Integration subsystem.
+"""Facade — src/services/ide/ has been moved to clawcodex_ext.
 
-Provides types and connection management for IDE integration (VSCode, JetBrains, etc.)
-via JSON-RPC. Mirrors TypeScript ide/ directory.
+The full implementation now lives in :mod:`clawcodex_ext.services.ide`.
+This module re-exports the public surface so existing
+``from src.services.ide import ...`` call sites keep working without
+modification.
 """
 
 from __future__ import annotations
 
-from .types import (
+from clawcodex_ext.services.ide import (
+    DiagnosticsCollector,
     IDEConnection,
+    IDEConnectionManager,
     IDEDiagnostic,
     IDEDiagnosticSeverity,
     IDERange,
     IDESelection,
     IDEType,
+    SelectionTracker,
 )
-from .connection import IDEConnectionManager
-from .selection import SelectionTracker
-from .diagnostics import DiagnosticsCollector
 
 __all__ = [
     "DiagnosticsCollector",
