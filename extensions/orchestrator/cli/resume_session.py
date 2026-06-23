@@ -154,7 +154,7 @@ def _run_resume_session(
     session = Session.resume(target_run_id)
 
     # Read the JSONL transcript (the canonical LLM context).
-    from src.services.session_resume import resume_session
+    from clawcodex_ext.services.session_resume import resume_session
 
     result = resume_session(target_run_id)
 

@@ -307,8 +307,8 @@ def load_from_session_storage(session_id: str) -> Optional[dict[str, Any]]:
     or ``None`` when no SessionStorage directory exists for ``session_id``.
     """
     try:
-        from src.services.session_resume import resume_session
-        from src.services.session_storage import SESSIONS_DIR
+        from clawcodex_ext.services.session_resume import resume_session
+        from clawcodex_ext.services.session_storage import SESSIONS_DIR
     except ImportError:
         return None
 
