@@ -1,7 +1,0 @@
-diff --git a/tool_system/tools/create_agent_tool.py b/tool_system/tools/create_agent_tool.py
-new file mode 100644
---- /dev/null
-+++ b/tool_system/tools/create_agent_tool.py	2026-06-22 09:03:27.206674 +0000
-@@ -0,0 +1,2 @@
-+"""Facade — tool_system/tools/create_agent_tool.py moved to clawcodex_ext/tool_system/tools/."""
-+from clawcodex_ext.tool_system.tools.create_agent_tool import *  # noqa: F401,F403
