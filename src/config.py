@@ -7,9 +7,10 @@ Three-level config hierarchy matching TypeScript config.ts:
 
 Inheritance: local > project > global (deep merge).
 
-This module supports both the legacy JSON config backend and the new
-pydantic-settings backend. Use CLAW_USE_PYDANTIC_SETTINGS=true to
-enable the new backend (pydantic-settings must be installed).
+The pydantic-settings backend lives in
+``clawcodex_ext/settings/pydantic_adapter.py`` (gate controlled by
+``CLAW_USE_PYDANTIC_SETTINGS``). This module only implements the
+legacy JSON backend.
 """
 
 from __future__ import annotations
@@ -23,15 +24,6 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
-
-# pydantic-settings is the preferred configuration backend (optional)
-try:
-    from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore[import]
-    from pydantic import Field  # type: ignore[import]
-
-    _PYDANTIC_SETTINGS_AVAILABLE = True
-except ImportError:
-    _PYDANTIC_SETTINGS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
