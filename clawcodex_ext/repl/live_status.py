@@ -571,10 +571,35 @@ class LiveStatus:
         Rich uses ``[yellow]text[/yellow]`` to colour text; prompt_toolkit's
         ``FormattedText`` expects ``(style, text)`` tuples instead.  This parser
         handles the subset of Rich markup commonly used by caller code so that
-        branded messages (e.g. ``[yellow]Cancelling…[/yellow]``) render with the
-        intended colour rather than leaking the tag source.
+        branded messages render with the intended colour rather than leaking the
+        tag source.
+
+        Both ANSI colour tags (``[yellow]``, ``[red]``, ...) AND OKLCH semantic
+        names (``[warning]``, ``[error]``, ``[success]``, ``[info]``, ...) are
+        mapped to OKLCH hex values from :class:`REPLPalette` so the spinner
+        status row is visually consistent with the rest of the REPL.
+
+        Why both: caller code (e.g. ``repl.chat()`` cancel paths) emits
+        ``status.update("[warning]Cancelling…[/warning]")`` on ESC/Ctrl+C.
+        The Rich Theme maps ``"warning"`` to OKLCH amber for Rich Console
+        rendering, but prompt_toolkit's style parser does not know the
+        semantic name and raises ``ValueError: Wrong color format 'warning'``
+        during the next redraw.  Folding both vocabularies into a single
+        name→hex dict here closes that gap without touching the Rich Theme.
         """
         import re
+
+        from clawcodex_ext.repl.color_scheme import build_rich_theme, get_repl_palette
+
+        _palette = get_repl_palette()
+        # ``build_rich_theme`` already maps every OKLCH semantic name plus the
+        # ANSI aliases (``red``, ``green``, ``yellow``, ...) to hex strings —
+        # the exact contract prompt_toolkit's ``parse_color`` requires.  We
+        # only need to add ``white`` (which Rich's theme does not include).
+        _TAG_TO_HEX: dict[str, str] = {
+            **build_rich_theme(_palette),
+            "white": _palette.text,
+        }
 
         _rich_tag_re = re.compile(r"\[(\w+(?:[ -]\w+)*)\](.*?)\[/\1\]")
         parts: list[tuple[str, str]] = []
@@ -582,12 +607,23 @@ class LiveStatus:
         for m in _rich_tag_re.finditer(text):
             if m.start() > pos:
                 parts.append((base_style, text[pos : m.start()]))
-            tag_style = f"{base_style} {m.group(1)}" if base_style else m.group(1)
-            parts.append((tag_style, m.group(2)))
+            tag = m.group(1)
+            content = m.group(2)
+            if tag in _TAG_TO_HEX:
+                tag_style = f"{base_style} fg:{_TAG_TO_HEX[tag]}"
+            else:
+                # Unknown tag — fall back to ``class:status`` (or the base
+                # style if provided) so prompt_toolkit never sees a bare
+                # semantic name and never raises ``Wrong color format``.
+                # The tag source is intentionally dropped here; leaking it
+                # verbatim was what crashed the renderer in the first place.
+                tag_style = base_style
+            parts.append((tag_style, content))
             pos = m.end()
         if pos < len(text):
             parts.append((base_style, text[pos:]))
         return parts
+
 
     def _render_spinner_text(self) -> "FormattedText":
         with self._lock:

@@ -132,3 +132,116 @@ class TestStage3eReplColors:
         c.print(f"\n[error]Error: {err_msg}[/error]")
         c.print(f"\n[warning]Warning: {err_msg}[/warning]")
         c.print(f"\n[success]Success: {err_msg}[/success]")
+
+
+# ── prompt_toolkit 路径回归（与上面 Rich Console 路径并列）────────────
+# ``LiveStatus._parse_rich_markup`` 把 ``[warning]text[/warning]`` 转成
+# prompt_toolkit ``FormattedText`` 元组。prompt_toolkit 的样式解析器
+# 不识别 OKLCH 语义名，遇到 ``warning`` 会抛
+# ``ValueError: Wrong color format 'warning'`` —— 这一组测试守住
+# ESC/Ctrl+C 时 ``status.update("[warning]Cancelling…[/warning]")``
+# 的 redraw 路径，避免回归到那一帧崩溃的状态。
+#
+# 不真正启动 prompt_toolkit Application（CI 终端环境不稳），直接调用
+# 静态解析函数并断言产物里没有裸语义名，只有 ``fg:#xxxxxx`` 或基础类名。
+
+import re as _re
+
+from clawcodex_ext.repl.live_status import LiveStatus
+
+_PTK_BASE_STYLE = "class:status"
+_OKLCH_SEMANTIC_TAGS = [
+    "error", "success", "warning", "info",
+    "primary", "secondary", "muted", "agent", "tool",
+    "call", "result", "spinner", "diff_add", "diff_remove",
+]
+_ANSI_TAGS_FOR_PTK = ["red", "green", "yellow", "blue", "cyan", "magenta", "white"]
+
+_HEX_RE = _re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+class TestStage3ePromptToolkitMarkup:
+    """``LiveStatus._parse_rich_markup`` —— prompt_toolkit 路径不抛
+    ``ValueError: Wrong color format``，所有 OKLCH 语义名映射到 hex。"""
+
+    @pytest.mark.parametrize("name", _OKLCH_SEMANTIC_TAGS)
+    def test_oklch_semantic_tag_maps_to_hex(self, name: str) -> None:
+        """每个 OKLCH 语义名都映射成 ``fg:#xxxxxx``，不再出现裸语义名。"""
+        parts = LiveStatus._parse_rich_markup(
+            f"[{name}]sample text[/{name}]", _PTK_BASE_STYLE
+        )
+        styled = [s for s, _ in parts if s != _PTK_BASE_STYLE]
+        assert styled, f"[{name}] 没有产生任何 styled 行"
+        for style in styled:
+            assert "fg:#" in style, (
+                f"[{name}] 样式里缺 fg:#xxxxxx：{style!r} "
+                f"—— 可能是裸语义名泄露到 prompt_toolkit"
+            )
+            for tok in style.split():
+                if tok.startswith("fg:") or tok.startswith("bg:"):
+                    value = tok.split(":", 1)[1]
+                    assert _HEX_RE.match(value), (
+                        f"[{name}] 颜色值 {value!r} 不是 hex —— "
+                        f"prompt_toolkit 会抛 Wrong color format"
+                    )
+
+    @pytest.mark.parametrize("name", _ANSI_TAGS_FOR_PTK)
+    def test_ansi_alias_tag_maps_to_hex(self, name: str) -> None:
+        """``[red]`` / ``[yellow]`` 等 ANSI 别名也映射到 hex。"""
+        parts = LiveStatus._parse_rich_markup(
+            f"[{name}]text[/{name}]", _PTK_BASE_STYLE
+        )
+        styled = [s for s, _ in parts if s != _PTK_BASE_STYLE]
+        assert styled
+        for style in styled:
+            assert "fg:#" in style
+
+    def test_cancelling_message_used_by_repl_core(self) -> None:
+        """回归测试：repl/core.py cancel 路径使用的
+        ``[warning]Cancelling…[/warning]`` 必须能干净地解析，不抛
+        ``ValueError: Wrong color format 'warning'``。
+
+        这正是 ESC/Ctrl+C 时跑出 ``Unhandled exception in event loop``
+        那条 traceback 的来源。
+        """
+        parts = LiveStatus._parse_rich_markup(
+            "[warning]Cancelling…[/warning]", _PTK_BASE_STYLE
+        )
+        cancel_styles = [
+            s for s, txt in parts if txt and s != _PTK_BASE_STYLE
+        ]
+        assert cancel_styles, "未找到 Cancelling 文本对应的样式行"
+        for style in cancel_styles:
+            assert "fg:#" in style, (
+                f"cancel 样式缺 fg:#xxxxxx：{style!r}"
+            )
+            assert "warning" not in style.split(), (
+                f"裸语义名 'warning' 泄露到 prompt_toolkit 样式：{style!r}"
+            )
+
+    def test_unknown_tag_falls_back_to_base_style(self) -> None:
+        """未知 tag 退回 base_style，绝不裸传（防止未来再回归）。"""
+        parts = LiveStatus._parse_rich_markup(
+            "[not_a_real_tag]text[/not_a_real_tag]", _PTK_BASE_STYLE
+        )
+        for style, _ in parts:
+            assert "not_a_real_tag" not in style.split(), (
+                f"未知 tag 被裸传到样式：{style!r}"
+            )
+
+    def test_plain_text_unchanged(self) -> None:
+        """无 markup 的纯文本保持 base_style。"""
+        parts = LiveStatus._parse_rich_markup("hello world", _PTK_BASE_STYLE)
+        assert parts == [(_PTK_BASE_STYLE, "hello world")]
+
+    def test_mixed_markup_and_plain_text(self) -> None:
+        """普通文本与 markup 混合时，普通段保持 base_style，标记段带 fg:。"""
+        parts = LiveStatus._parse_rich_markup(
+            "before [success]ok[/success] after", _PTK_BASE_STYLE
+        )
+        assert (_PTK_BASE_STYLE, "before ") in parts
+        assert (_PTK_BASE_STYLE, " after") in parts
+        ok_styles = [s for s, txt in parts if txt == "ok"]
+        assert ok_styles
+        for style in ok_styles:
+            assert "fg:#" in style
