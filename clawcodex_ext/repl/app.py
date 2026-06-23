@@ -77,8 +77,17 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._append_system_prompt = append_system_prompt
 
         from rich.console import Console
+        from clawcodex_ext.repl.color_scheme import (
+            build_rich_theme,
+            build_ptk_style,
+            DARK as _REPL_DARK,
+        )
+        from rich.theme import Theme as _RichTheme
 
-        self.console = Console()
+        self._repl_ptk_style = build_ptk_style(_REPL_DARK)
+        self._repl_palette = _REPL_DARK
+        self.console = Console(theme=_RichTheme(build_rich_theme(_REPL_DARK)))
+
         self.runtime_context = runtime_context
         self.provider_name = provider_name
         self.stream = stream
@@ -446,18 +455,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 has_tab_alias=_accept_tab_alias,
             ),
             completer=self.completer,
-            style=Style.from_dict({
-                "prompt": "bold fg:ansiblue bg:#262626",
-                "bottom-toolbar": "fg:#888888 bg:default",
-                "completion-menu": "bg:default",
-                "completion-menu.completion": "fg:#bfbfbf bg:default",
-                "completion-menu.completion.current": "fg:#ffffff bg:#005f87 bold",
-                "completion-menu.meta.completion": "fg:#7a7a7a bg:default",
-                "completion-menu.meta.completion.current": "fg:#dadada bg:#005f87",
-                "completion.command": "bold fg:ansigreen",
-                "completion.tag": "italic fg:ansicyan",
-                "completion.description": "fg:#9a9a9a",
-            }),
+            style=Style.from_dict(self._repl_ptk_style),
             key_bindings=self.bindings,
             complete_while_typing=True,
             multiline=True,
