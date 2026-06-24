@@ -15,9 +15,9 @@ from typing import Any
 
 import pytest
 
-import src.services.chrome.mcp_impl as mcp_module
-from src.services.chrome.base import ChromeController
-from src.services.chrome.mcp_impl import MCPChromeController
+import clawcodex_ext.services.chrome.mcp_impl as mcp_module
+from clawcodex_ext.services.chrome.base import ChromeController
+from clawcodex_ext.services.chrome.mcp_impl import MCPChromeController
 
 
 # ---------------------------------------------------------------------------
@@ -435,10 +435,10 @@ async def test_unknown_operation(configured_env, fake_manager: _FakeManager) -> 
     ctrl = MCPChromeController(manager=bare, server_name="chrome")
     await ctrl.start()
     # Force the lookup to find a non-mapped action.
-    import src.services.chrome.models as m
+    import clawcodex_ext.services.chrome.models as m
 
     # Manually invoke the internal _call with an unsupported type.
-    from src.services.chrome.models import ChromeActionType
+    from clawcodex_ext.services.chrome.models import ChromeActionType
 
     # Use TYPE (mapped) but mask it as unmapped via the private helper.
     result = await ctrl._call(

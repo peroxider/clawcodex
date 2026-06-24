@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.voice.detection import (
+from clawcodex_ext.services.voice.detection import (
     VoiceActivityConfig,
     VoiceActivityDetector,
     VoiceActivityState,
 )
-from src.services.voice.stt import STTConfig, STTResult
+from clawcodex_ext.services.voice.stt import STTConfig, STTResult
 
 
 class TestSTTTypes(unittest.TestCase):

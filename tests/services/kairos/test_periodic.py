@@ -16,7 +16,7 @@ import time
 
 import pytest
 
-from src.services.periodic import PeriodicDaemon
+from clawcodex_ext.services.periodic import PeriodicDaemon
 
 
 class CountingDaemon(PeriodicDaemon):

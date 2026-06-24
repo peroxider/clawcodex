@@ -6,7 +6,7 @@ import inspect
 
 import pytest
 
-from src.services.chrome.base import ChromeController, ChromeError
+from clawcodex_ext.services.chrome.base import ChromeController, ChromeError
 
 
 def test_chrome_controller_cannot_be_instantiated_directly() -> None:
@@ -82,52 +82,52 @@ def test_complete_subclass_is_instantiable() -> None:
             return None
 
         async def navigate(self, url: str):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, url=url)
 
         async def click(self, selector: str):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=selector)
 
         async def type_text(self, selector: str, text: str, *, clear_first: bool = True):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=text)
 
         async def select_option(self, selector: str, value: str):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=value)
 
         async def hover(self, selector: str):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=selector)
 
         async def scroll(self, *, dx: int = 0, dy: int = 1):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=f"dx={dx},dy={dy}")
 
         async def screenshot(self, selector: str | None = None, *, full_page: bool = True):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data=b"")
 
         async def eval_js(self, script: str):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data="null")
 
         async def get_visible_text(self):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data="")
 
         async def get_html(self):
-            from src.services.chrome.models import ChromeActionResult
+            from clawcodex_ext.services.chrome.models import ChromeActionResult
 
             return ChromeActionResult(success=True, data="")
 

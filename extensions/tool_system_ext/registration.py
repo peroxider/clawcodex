@@ -29,7 +29,7 @@ EXTENSION_TOOLS: list[Tool] = [
 # unconditionally and degrade gracefully to a ``NullChromeController``
 # that surfaces an install-hint error on every call.
 try:
-    from src.services.chrome import build_chrome_tools
+    from clawcodex_ext.services.chrome import build_chrome_tools
 
     EXTENSION_TOOLS.extend(build_chrome_tools())
 except Exception:  # noqa: BLE001 — defensive, never break tool registration

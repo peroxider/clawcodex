@@ -160,7 +160,7 @@ def _log_image_event(subtype: str, **fields: Any) -> None:
     break the image pipeline.
     """
     try:
-        from src.services.analytics.events import EventType, log_event
+        from clawcodex_ext.services.analytics.events import EventType, log_event
 
         log_event(EventType.IMAGE_PROCESSING, subtype=subtype, **fields)
     except Exception:  # pragma: no cover - telemetry is best-effort

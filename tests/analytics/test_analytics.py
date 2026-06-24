@@ -7,17 +7,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.services.analytics.events import (
+from clawcodex_ext.services.analytics.events import (
     AnalyticsEvent,
     EventType,
     log_event,
     set_analytics_sink,
 )
-from src.services.analytics.metadata import (
+from clawcodex_ext.services.analytics.metadata import (
     SessionAnalyticsMetadata,
     collect_session_metadata,
 )
-from src.services.analytics.sink import ConsoleSink, FileSink, NullSink
+from clawcodex_ext.services.analytics.sink import ConsoleSink, FileSink, NullSink
 
 
 class TestEventTypes(unittest.TestCase):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.api.tool_normalization import (
+from clawcodex_ext.services.api.tool_normalization import (
     has_tool_field_mapping,
     normalize_tool_arguments,
 )

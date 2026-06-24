@@ -74,7 +74,7 @@ from src.bridge.repl_bridge import (
     ReplBridgeHandle,
     init_bridge_core,
 )
-from src.services.oauth.client import get_organization_uuid
+from clawcodex_ext.services.oauth.client import get_organization_uuid
 
 logger = logging.getLogger(__name__)
 

@@ -12,15 +12,15 @@ from src.permissions.setup import setup_permissions
 from clawcodex_ext.permissions.types import ToolPermissionContext
 from src.query.config import FrozenQueryConfig, QueryConfig, build_query_config
 from src.query.streaming import QueryEvent, StreamingQueryState, streaming_query
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     PromptTooLongError,
     RateLimitError,
     categorize_retryable_api_error,
 )
-from src.services.api.logging import NonNullableUsage, accumulate_usage
-from src.services.api.retry import RetryOptions, _compute_backoff_ms
-from src.services.api.tool_normalization import normalize_tool_arguments
-from src.services.api.provider_config import resolve_agent_provider
+from clawcodex_ext.services.api.logging import NonNullableUsage, accumulate_usage
+from clawcodex_ext.services.api.retry import RetryOptions, _compute_backoff_ms
+from clawcodex_ext.services.api.tool_normalization import normalize_tool_arguments
+from clawcodex_ext.services.api.provider_config import resolve_agent_provider
 
 
 class TestBashParserToPermissionsIntegration(unittest.TestCase):

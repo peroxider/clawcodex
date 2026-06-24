@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from src.services.chrome.models import ChromeActionResult, ChromeActionType
+from clawcodex_ext.services.chrome.models import ChromeActionResult, ChromeActionType
 
 
 def test_enum_completeness() -> None:

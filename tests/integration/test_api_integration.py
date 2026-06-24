@@ -9,7 +9,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.services.api.claude import (
+from clawcodex_ext.services.api.claude import (
     CallModelOptions,
     ContentBlockStop,
     MessageDelta,
@@ -21,13 +21,13 @@ from src.services.api.claude import (
     UsageEvent,
     call_model,
 )
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     OverloadedError,
     PromptTooLongError,
     RateLimitError,
 )
-from src.services.api.logging import NonNullableUsage
-from src.services.api.retry import RetryOptions, with_retry
+from clawcodex_ext.services.api.logging import NonNullableUsage
+from clawcodex_ext.services.api.retry import RetryOptions, with_retry
 
 
 class TestApiStreamingPipeline(unittest.TestCase):
@@ -106,7 +106,7 @@ class TestApiRetryIntegration(unittest.TestCase):
         async def run():
             return await with_retry(op, RetryOptions(max_retries=5, model="test"))
 
-        from src.services.api.retry import CannotRetryError
+        from clawcodex_ext.services.api.retry import CannotRetryError
 
         with self.assertRaises(CannotRetryError):
             asyncio.run(run())
@@ -116,13 +116,13 @@ class TestApiErrorClassification(unittest.TestCase):
     """Error types are correctly classified."""
 
     def test_retryable_errors(self) -> None:
-        from src.services.api.errors import categorize_retryable_api_error
+        from clawcodex_ext.services.api.errors import categorize_retryable_api_error
 
         self.assertTrue(categorize_retryable_api_error(RateLimitError("", status=429)).retryable)
         self.assertTrue(categorize_retryable_api_error(OverloadedError("", status=529)).retryable)
 
     def test_non_retryable_errors(self) -> None:
-        from src.services.api.errors import categorize_retryable_api_error
+        from clawcodex_ext.services.api.errors import categorize_retryable_api_error
 
         self.assertFalse(categorize_retryable_api_error(ValueError("bad input")).retryable)
         self.assertFalse(categorize_retryable_api_error(PromptTooLongError("too long")).retryable)

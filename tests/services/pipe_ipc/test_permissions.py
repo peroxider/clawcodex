@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from src.services.pipe_ipc import PipeMessage, PipeMessageType
-from src.services.pipe_ipc.permissions import PipePermissionForwarder
+from clawcodex_ext.services.pipe_ipc import PipeMessage, PipeMessageType
+from clawcodex_ext.services.pipe_ipc.permissions import PipePermissionForwarder
 
 
 class FakeTransport:

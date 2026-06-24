@@ -330,7 +330,7 @@ class TestTickSchedulerJitter:
 
 class TestTickSchedulerInheritsPeriodicDaemon:
     def test_is_a_periodic_daemon(self) -> None:
-        from src.services.periodic import PeriodicDaemon
+        from clawcodex_ext.services.periodic import PeriodicDaemon
 
         cfg = TickConfig(id="x", interval_seconds=60.0, enabled=False)
         s = TickScheduler(cfg)

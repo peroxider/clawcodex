@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.services.pipe_ipc import PipeMessage, PipeMessageType, PipePeer
+from clawcodex_ext.services.pipe_ipc import PipeMessage, PipeMessageType, PipePeer
 
 
 def test_message_round_trip_serializes_enum_as_string() -> None:

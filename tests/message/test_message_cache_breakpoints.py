@@ -14,8 +14,8 @@ from typing import Any
 
 import pytest
 
-from src.services.api import add_cache_breakpoints
-from src.services.api.claude import CallModelOptions, call_model
+from clawcodex_ext.services.api import add_cache_breakpoints
+from clawcodex_ext.services.api.claude import CallModelOptions, call_model
 
 
 # ---------------------------------------------------------------------------

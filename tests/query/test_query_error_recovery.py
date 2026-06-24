@@ -494,7 +494,7 @@ class TestImageUnsupportedClassification(unittest.TestCase):
         path, so dropping it would re-introduce the context-stuck bug."""
         from unittest.mock import MagicMock
         from src.types.content_blocks import ImageBlock, TextBlock
-        from src.services.api.errors import IMAGE_UNSUPPORTED_ERROR_MESSAGE
+        from clawcodex_ext.services.api.errors import IMAGE_UNSUPPORTED_ERROR_MESSAGE
 
         provider = MagicMock()
         # _call_model_sync prefers chat_stream_response; falling back to

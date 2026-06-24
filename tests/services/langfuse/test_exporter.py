@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from src.services.analytics.events import AnalyticsEvent, EventType
+from clawcodex_ext.services.analytics.events import AnalyticsEvent, EventType
 from src.services.langfuse.exporter import (
     ExportResult,
     FORMAT_CHATML,

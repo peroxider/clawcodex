@@ -28,8 +28,8 @@ import logging
 import time
 from typing import Any
 
-from src.services.analytics.events import AnalyticsEvent, set_analytics_sink
-from src.services.analytics.sink import AnalyticsSink
+from clawcodex_ext.services.analytics.events import AnalyticsEvent, set_analytics_sink
+from clawcodex_ext.services.analytics.sink import AnalyticsSink
 from .events import EventType, TelemetryEvent
 from .fingerprint import _normalize_message
 from .recorder import get_recorder

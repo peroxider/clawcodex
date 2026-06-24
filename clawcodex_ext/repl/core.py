@@ -376,7 +376,7 @@ def _load_heavy_runtime() -> None:
     from clawcodex_ext.providers.base import ChatMessage
     from src.providers.minimax_provider import MinimaxProvider
     from src.providers import get_provider_class
-    from src.services.api.claude import tool_to_api_schema
+    from clawcodex_ext.services.api.claude import tool_to_api_schema
     from src.tool_system.context import ToolContext
     from src.tool_system.defaults import build_default_registry
     from clawcodex_ext.tool_system.protocol import ToolCall

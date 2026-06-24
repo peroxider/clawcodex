@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.services.chrome.base import ChromeController
-from src.services.chrome.models import ChromeActionType
-from src.services.chrome.null_impl import NullChromeController
+from clawcodex_ext.services.chrome.base import ChromeController
+from clawcodex_ext.services.chrome.models import ChromeActionType
+from clawcodex_ext.services.chrome.null_impl import NullChromeController
 
 
 def test_null_controller_is_a_chrome_controller() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.api.provider_config import ProviderOverride, resolve_agent_provider
+from clawcodex_ext.services.api.provider_config import ProviderOverride, resolve_agent_provider
 
 
 class TestResolveAgentProvider(unittest.TestCase):

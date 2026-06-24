@@ -17,7 +17,7 @@ from extensions.orchestrator.agent_runner import AgentRunner, AgentSession
 from extensions.orchestrator.config.schema import AgentConfig, SandboxConfig, WorkflowConfig
 from extensions.orchestrator.issue import Issue
 from extensions.orchestrator.workspace import Workspace
-from src.services.api.errors import RateLimitError
+from clawcodex_ext.services.api.errors import RateLimitError
 
 
 class _QueryRunnerStub:

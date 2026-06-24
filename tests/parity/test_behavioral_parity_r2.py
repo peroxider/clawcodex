@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.services.api.claude import (
+from clawcodex_ext.services.api.claude import (
     ContentBlockStop,
     MessageDelta,
     MessageStart,
@@ -24,7 +24,7 @@ from src.services.api.claude import (
     ToolUseStart,
     UsageEvent,
 )
-from src.services.api.logging import NonNullableUsage
+from clawcodex_ext.services.api.logging import NonNullableUsage
 from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from src.types.messages import (
     AssistantMessage,
@@ -120,8 +120,8 @@ class TestConversationFlowErrorRecovery(unittest.TestCase):
     """API error → retry → success."""
 
     def test_retry_recovers_from_transient_error(self) -> None:
-        from src.services.api.errors import OverloadedError
-        from src.services.api.retry import RetryOptions, with_retry
+        from clawcodex_ext.services.api.errors import OverloadedError
+        from clawcodex_ext.services.api.retry import RetryOptions, with_retry
 
         call_count = 0
 

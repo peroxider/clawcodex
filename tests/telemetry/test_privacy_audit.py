@@ -19,7 +19,7 @@ from telemetry.redaction import RedactionConfig, Redactor
 from telemetry.reporters.dry_run import DryRunReporter
 from telemetry.reporters.issue import IssueReporter
 from telemetry.storage import LocalJsonlStorage, utc_date, utc_now
-from src.services.analytics.events import (
+from clawcodex_ext.services.analytics.events import (
     AnalyticsEvent,
     EventType as AnalyticsEventType,
     set_analytics_sink,

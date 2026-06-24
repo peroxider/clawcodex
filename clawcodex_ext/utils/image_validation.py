@@ -147,7 +147,7 @@ def validate_images_for_api(messages: list[Any]) -> None:
     if oversized:
         # Emit analytics for the failure (best-effort).
         try:
-            from src.services.analytics.events import EventType, log_event
+            from clawcodex_ext.services.analytics.events import EventType, log_event
 
             log_event(
                 EventType.IMAGE_PROCESSING,

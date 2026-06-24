@@ -33,7 +33,7 @@ from .workspace import Workspace
 
 # Reuse the project's typed rate-limit error and helpers so the 429
 # detection logic stays in lockstep with the rest of the codebase.
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     RateLimitError,
     is_rate_limit_error,
 )

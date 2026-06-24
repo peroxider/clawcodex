@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from src.services.pipe_ipc import PipeMessage, PipeMessageType, UdsPipeClient, UdsPipeServer
-from src.services.pipe_ipc.codec import PipeJsonCodec
+from clawcodex_ext.services.pipe_ipc import PipeMessage, PipeMessageType, UdsPipeClient, UdsPipeServer
+from clawcodex_ext.services.pipe_ipc.codec import PipeJsonCodec
 
 pytestmark = pytest.mark.skipif(
     not hasattr(asyncio, "start_unix_server"),

@@ -11,7 +11,7 @@ from src.query.streaming import (
     streaming_query,
 )
 from src.query.config import QueryConfig
-from src.services.api.logging import NonNullableUsage
+from clawcodex_ext.services.api.logging import NonNullableUsage
 
 
 class TestQueryEvent(unittest.TestCase):

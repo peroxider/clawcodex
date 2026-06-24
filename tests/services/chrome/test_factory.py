@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import pytest
 
-import src.services.chrome.factory as factory_module
-from src.services.chrome import _reset_chrome_singleton
-from src.services.chrome.base import ChromeController
-from src.services.chrome.factory import build_chrome_controller
-from src.services.chrome.mcp_impl import MCPChromeController
-from src.services.chrome.null_impl import NullChromeController
-from src.services.chrome.playwright_impl import PlaywrightChromeController
+import clawcodex_ext.services.chrome.factory as factory_module
+from clawcodex_ext.services.chrome import _reset_chrome_singleton
+from clawcodex_ext.services.chrome.base import ChromeController
+from clawcodex_ext.services.chrome.factory import build_chrome_controller
+from clawcodex_ext.services.chrome.mcp_impl import MCPChromeController
+from clawcodex_ext.services.chrome.null_impl import NullChromeController
+from clawcodex_ext.services.chrome.playwright_impl import PlaywrightChromeController
 
 
 # ---------------------------------------------------------------------------

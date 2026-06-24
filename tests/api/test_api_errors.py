@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     APIConnectionError,
     APITimeoutError,
     ErrorClassification,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.services.pipe_ipc import PipePeer, PipeRegistry
+from clawcodex_ext.services.pipe_ipc import PipePeer, PipeRegistry
 
 
 def make_peer(instance_id: str, *, last_seen: float = 100.0) -> PipePeer:

@@ -223,7 +223,7 @@ class _TelemetryRecorderImpl:
             or extra is None
         ):
             try:
-                from src.services.analytics.metadata import collect_session_metadata
+                from clawcodex_ext.services.analytics.metadata import collect_session_metadata
 
                 meta = collect_session_metadata(
                     session_id=session_id,

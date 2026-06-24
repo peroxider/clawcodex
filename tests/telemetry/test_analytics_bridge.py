@@ -28,7 +28,7 @@ from telemetry.recorder import (
 )
 from telemetry.redaction import RedactionConfig, Redactor
 from telemetry.storage import utc_date, utc_now
-from src.services.analytics.events import (
+from clawcodex_ext.services.analytics.events import (
     AnalyticsEvent,
     EventType as AnalyticsEventType,
     set_analytics_sink,
@@ -103,7 +103,7 @@ def test_emit_is_noop_when_telemetry_disabled(tmp_path):
     # No exception, no storage side-effects (NullSink is still the
     # global sink at this point because install_analytics_bridge was
     # not called).
-    from src.services.analytics.events import get_analytics_sink
+    from clawcodex_ext.services.analytics.events import get_analytics_sink
 
     assert isinstance(get_analytics_sink(), _NullAnalyticsSink)
 
@@ -404,7 +404,7 @@ def test_install_analytics_bridge_is_idempotent():
 
 
 def test_install_analytics_bridge_installs_into_global_sink():
-    from src.services.analytics.events import get_analytics_sink
+    from clawcodex_ext.services.analytics.events import get_analytics_sink
 
     bridge = install_analytics_bridge()
     assert get_analytics_sink() is bridge

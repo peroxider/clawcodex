@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
-import src.services.chrome.playwright_impl as pw_module
-from src.services.chrome.base import ChromeController
-from src.services.chrome.models import ChromeActionType
-from src.services.chrome.playwright_impl import PlaywrightChromeController
+import clawcodex_ext.services.chrome.playwright_impl as pw_module
+from clawcodex_ext.services.chrome.base import ChromeController
+from clawcodex_ext.services.chrome.models import ChromeActionType
+from clawcodex_ext.services.chrome.playwright_impl import PlaywrightChromeController
 
 
 # ---------------------------------------------------------------------------

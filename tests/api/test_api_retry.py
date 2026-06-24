@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
-from src.services.api.retry import (
+from clawcodex_ext.services.api.retry import (
     CannotRetryError,
     RetryContext,
     RetryOptions,
@@ -12,7 +12,7 @@ from src.services.api.retry import (
     _parse_retry_after,
     with_retry,
 )
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     OverloadedError,
     RateLimitError,
 )

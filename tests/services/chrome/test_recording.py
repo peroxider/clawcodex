@@ -7,9 +7,9 @@ from typing import Any
 
 import pytest
 
-import src.services.chrome.recording as rec_module
-from src.services.chrome.models import ChromeActionResult, ChromeActionType
-from src.services.chrome.recording import RecordingChromeController
+import clawcodex_ext.services.chrome.recording as rec_module
+from clawcodex_ext.services.chrome.models import ChromeActionResult, ChromeActionType
+from clawcodex_ext.services.chrome.recording import RecordingChromeController
 
 
 # ---------------------------------------------------------------------------

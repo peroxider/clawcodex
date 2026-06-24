@@ -52,7 +52,7 @@ def _have_pdftoppm() -> bool:
 
 def _log_pdf_event(success: bool, **fields: Any) -> None:
     try:
-        from src.services.analytics.events import EventType, log_event
+        from clawcodex_ext.services.analytics.events import EventType, log_event
 
         log_event(
             EventType.IMAGE_PROCESSING,

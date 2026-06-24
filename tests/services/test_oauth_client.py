@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from src.auth.claude_ai import ENV_ORG_UUID
-from src.services.oauth.client import get_organization_uuid
+from clawcodex_ext.services.oauth.client import get_organization_uuid
 
 
 def _no_claude_env() -> dict[str, str]:

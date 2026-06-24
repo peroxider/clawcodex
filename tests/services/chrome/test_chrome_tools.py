@@ -20,11 +20,11 @@ from typing import Any
 
 import pytest
 
-import src.services.chrome.factory as factory_module
-from src.services.chrome import _reset_chrome_singleton, build_chrome_tools
-from src.services.chrome.factory import build_chrome_controller
-from src.services.chrome.models import ChromeActionResult, ChromeActionType
-from src.services.chrome.null_impl import NullChromeController
+import clawcodex_ext.services.chrome.factory as factory_module
+from clawcodex_ext.services.chrome import _reset_chrome_singleton, build_chrome_tools
+from clawcodex_ext.services.chrome.factory import build_chrome_controller
+from clawcodex_ext.services.chrome.models import ChromeActionResult, ChromeActionType
+from clawcodex_ext.services.chrome.null_impl import NullChromeController
 from src.tool_system.build_tool import Tool
 from src.tool_system.context import ToolContext
 from src.tool_system.protocol import ToolResult
@@ -381,7 +381,7 @@ def test_null_backend_returns_install_hint_error() -> None:
     a clear install message so the agent knows what to do."""
     _reset_chrome_singleton()
     # Force Null by patching both helpers to return Null.
-    import src.services.chrome.factory as fm
+    import clawcodex_ext.services.chrome.factory as fm
 
     original_pw = fm._build_playwright_controller
     original_mcp = fm._build_mcp_controller

@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # 1. API Client: StreamEvent sequence
 # ---------------------------------------------------------------------------
 
-from src.services.api.claude import (
+from clawcodex_ext.services.api.claude import (
     CallModelOptions,
     ContentBlockStop,
     ErrorEvent,
@@ -35,7 +35,7 @@ from src.services.api.claude import (
     call_model,
     tool_to_api_schema,
 )
-from src.services.api.errors import (
+from clawcodex_ext.services.api.errors import (
     ErrorClassification,
     FallbackTriggeredError,
     MaxOutputTokensError,
@@ -47,8 +47,8 @@ from src.services.api.errors import (
     is_prompt_too_long_error,
     is_rate_limit_error,
 )
-from src.services.api.logging import NonNullableUsage, update_usage
-from src.services.api.retry import (
+from clawcodex_ext.services.api.logging import NonNullableUsage, update_usage
+from clawcodex_ext.services.api.retry import (
     CannotRetryError,
     RetryOptions,
     RetryStatusMessage,

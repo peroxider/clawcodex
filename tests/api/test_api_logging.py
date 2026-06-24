@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.api.logging import (
+from clawcodex_ext.services.api.logging import (
     APICallLog,
     NonNullableUsage,
     accumulate_usage,
