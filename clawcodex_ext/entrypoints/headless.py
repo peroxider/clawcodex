@@ -51,7 +51,7 @@ from src.cli_core import (
 from src.config import get_default_provider, get_provider_config
 from src.providers import get_provider_class
 from src.tool_system.renderers import AgentLoopResult, ToolEvent
-from src.query.agent_loop_compat import (
+from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
 )
@@ -283,10 +283,10 @@ def run_headless(options: HeadlessOptions) -> int:
                 # F-89: expand @agent-name mentions before sending to LLM.
                 text = user_msg.text
                 try:
-                    from src.agent.load_agents_dir import (
+                    from clawcodex_ext.agent.load_agents_dir import (
                         get_agent_definitions_with_overrides,
                     )
-                    from src.agent.agent_definitions import get_built_in_agents
+                    from clawcodex_ext.agent.agent_definitions import get_built_in_agents
                     from src.command_system.input_processing import (
                         expand_agent_mentions,
                         format_at_mention_attachments,

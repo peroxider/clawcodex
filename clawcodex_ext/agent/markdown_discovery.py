@@ -28,7 +28,7 @@ from src.skills.frontmatter import parse_frontmatter
 from clawcodex_ext.agent.registry import SOURCE_CLAWCODEX_EXT, SOURCE_EXTENSIONS
 
 if TYPE_CHECKING:
-    from src.agent.agent_definitions import AgentDefinition
+    from clawcodex_ext.agent.agent_definitions import AgentDefinition
 
 logger = logging.getLogger(__name__)
 

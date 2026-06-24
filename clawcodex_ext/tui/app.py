@@ -1327,8 +1327,8 @@ class ClawCodexTUI(App):
     def _available_agents(self) -> list[Any]:
         """Return available agent definitions for ``@agent-<type>`` completion."""
         try:
-            from src.agent.agent_definitions import get_built_in_agents
-            from src.agent.load_agents_dir import (
+            from clawcodex_ext.agent.agent_definitions import get_built_in_agents
+            from clawcodex_ext.agent.load_agents_dir import (
                 get_agent_definitions_with_overrides,
             )
         except Exception:

@@ -1003,7 +1003,7 @@ def _dispatch_single_tool(
             # under threshold it just returns the block (no I/O); the
             # rare persist-to-disk path runs while serialized but those
             # are at most O(1) per turn (typically <5%).
-            from src.services.tool_execution.tool_result_persistence import (
+            from clawcodex_ext.services.tool_execution.tool_result_persistence import (
                 compute_block_chars,
                 process_tool_result_block,
                 resolve_tool_results_dir,

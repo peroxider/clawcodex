@@ -30,7 +30,7 @@ from typing import Any, Callable
 
 from src.agent import Session
 from src.tool_system.renderers import AgentLoopResult, ToolEvent
-from src.query.agent_loop_compat import (
+from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
 )

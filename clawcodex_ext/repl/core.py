@@ -325,7 +325,7 @@ from src.tool_system.context import ToolContext
 from src.tool_system.defaults import build_default_registry
 from clawcodex_ext.tool_system.protocol import ToolCall
 from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
-from src.query.engine import QueryEngine, QueryEngineConfig
+from clawcodex_ext.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import StreamEvent
 from clawcodex_ext.types.messages import (
     NO_CONTENT_MESSAGE,
@@ -2121,8 +2121,8 @@ class ClawcodexREPL:
         list/dict form so existing harnesses keep working.
         """
         try:
-            from src.agent.agent_definitions import get_built_in_agents
-            from src.agent.load_agents_dir import (
+            from clawcodex_ext.agent.agent_definitions import get_built_in_agents
+            from clawcodex_ext.agent.load_agents_dir import (
                 get_agent_definitions_with_overrides,
             )
         except Exception:

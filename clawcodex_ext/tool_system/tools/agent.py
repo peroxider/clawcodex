@@ -50,7 +50,7 @@ from src.agent.fork_subagent import (
     is_in_fork_child,
 )
 from src.agent.prompt import get_agent_prompt, get_agent_system_prompt
-from src.agent.run_agent import RunAgentParams, run_agent
+from clawcodex_ext.agent.run_agent import RunAgentParams, run_agent
 
 logger = logging.getLogger(__name__)
 

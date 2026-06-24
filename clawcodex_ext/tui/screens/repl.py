@@ -246,10 +246,10 @@ class REPLScreen(Screen):
                 return
         # F-89: expand @agent-name mentions in TUI.
         try:
-            from src.agent.load_agents_dir import (
+            from clawcodex_ext.agent.load_agents_dir import (
                 get_agent_definitions_with_overrides,
             )
-            from src.agent.agent_definitions import get_built_in_agents
+            from clawcodex_ext.agent.agent_definitions import get_built_in_agents
             from src.command_system.input_processing import (
                 expand_agent_mentions,
                 format_at_mention_attachments,

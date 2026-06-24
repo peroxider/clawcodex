@@ -46,7 +46,7 @@ from typing import TYPE_CHECKING, Callable
 from clawcodex_ext.agent.constants import ALL_AGENT_DISALLOWED_TOOLS
 
 if TYPE_CHECKING:
-    from src.agent.agent_definitions import AgentDefinition, AgentSource
+    from clawcodex_ext.agent.agent_definitions import AgentDefinition, AgentSource
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ class AgentRegistry:
         """
 
         def decorator(prompt_fn: Callable[..., str]) -> "AgentDefinition":
-            from src.agent.agent_definitions import AgentDefinition
+            from clawcodex_ext.agent.agent_definitions import AgentDefinition
 
             normalised = _normalise_disallowed(disallowed_tools)
             agent = AgentDefinition(
