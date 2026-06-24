@@ -738,7 +738,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 - Stage 6 perf: 6 passed in 11.86s。
 - Facade 设计修正：最初 eager package aggregation 会拉高 `test_tool_execution_path_latency`；最终改为 lazy `__getattr__` package facade，仅对 `memdir` 两个同名 function/submodule 出口做低成本显式绑定。
 
-**独立 verification 子代理**：待最终 diff 固化后执行 12 项矩阵验证，并将 VERDICT 回填本节。
+**独立 verification 子代理**：12 项矩阵验证全 PASS；Stage 1-5 stability gate 257 passed in 25.66s，orchestrator 全量 483 passed in 16.06s，Stage 6 perf 6 passed in 11.86s；额外确认 `permissions/bash_parser` 不受影响、`src.permissions` wildcard re-export 样本身份一致、`init_bundled_skills` 经 `clawcodex_ext.skills.bundled` 暴露且 `src.skills` 身份保持一致。**VERDICT: PASS**。
 
 ---
 
@@ -756,7 +756,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 2026-06-24 | §3.1 / §4 / §10b | Phase 2-F P1 agent_definitions + run_agent 验证 + 文档对齐（无新代码改动） |
 | 2026-06-24 | §3.2 / §4 / §10c | Phase 2-F P2 src/query/* 8 文件 + __init__.py 验证 + 文档对齐（无新代码改动） |
 | 2026-06-24 | §12 / §10d | **Phase 2-G ext→src 反向 import 清理（12 sites, 9 files, 纯路径重写，VERDICT: PASS）** |
-| 2026-06-24 | §3.6 / §4 / §10e | **Phase 3-A §3.6 五模块 facade 化（38 src files；Stage 1-6 + orchestrator 当前主线程全 PASS，verification 待回填）** |
+| 2026-06-24 | §3.6 / §4 / §10e | **Phase 3-A §3.6 五模块 facade 化（38 src files；Stage 1-6 + orchestrator + 独立 verification 12 项矩阵全 PASS）** |
 
 ---
 
