@@ -2,7 +2,7 @@
 
 > **目标**：将 `src/` 中所有 ClawCodex 定制逻辑迁至 `clawcodex_ext/` 与 `extensions/`，使上游（`src/upstreamproxy/...`）与本地 `src/` 的差异仅保留**架构重构**、**bug fix** 和**纯新增子系统**，所有「功能增量」通过扩展层注入。
 >
-> **最近更新**：2026-06-24，Phase 2-H（解耦收尾批次）— `src/services/computer_use/platform/` 3 文件 facade 化（Pattern C + 2×Pattern D）；`src/services/{pricing,cost_tracker,session_title}.py` 3 文件迁至 `clawcodex_ext/services/`（Pattern D + Pattern C + Pattern D），更新 2 处 `clawcodex_ext/` 中的 `from src.services.pricing` 反向 import 为 ext 直连。Stage 1-5 门禁 321 passed（41s），cost_tracker 测试 63 passed（2 pre-existing failures unchanged），computer_use 测试 54 passed（1 pre-existing failure unchanged）。6 个非 facade src 文件退化为 facade，累计 **`src/` 含本地增量的非 facade 文件数降至 ~7**（从 ~13 减至 ~7）。
+> **最近更新**：2026-06-24，Phase 2-J（双位置包收敛）— 7 个双位置包 `{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 收敛为单一 ext 入口，删除 31 个 src 侧 facade 文件（analytics×4, api×7, chrome×8, oauth×2, periodic×1, pipe_ipc×6, voice×3）；跨层 import（`clawcodex_ext/` 3 处、`extensions/` 2 处、`telemetry/` 3 处、`src/utils/` 2 处、`tests/` 100+ 处）从 `src.services.{pkg}` 改为 `clawcodex_ext.services.{pkg}` 直连；保留 `patches/` 中历史补丁不变。Stage 1-5 门禁 321 passed（32s）；受影响 7 包专项测试 363 passed ✅。含本地增量非 facade 文件数 ~7 不变（本次不涉及）。
 
 ---
 
@@ -314,13 +314,13 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 | ✅ **已迁** | `ultraplan` | 1 facade | 7 个 .py | `0dacfa8d` |
 | ✅ **已迁** | `context_collapse` | 8 个 facade | 8 个 .py | `43870e45` |
 | ✅ **已迁** | `compact` | 2 个 facade | 15 个 .py | `0dacfa8d` |
-| 🔄 **双位置** | `analytics` | 4 | 4 | src/ 内容应审，可整体迁 ext |
-| 🔄 **双位置** | `api` | 7 | 7 | 同上 |
-| 🔄 **双位置** | `chrome` | 8 | 8 | 同上 |
-| 🔄 **双位置** | `oauth` | 2 | 2 | 同上 |
-| 🔄 **双位置** | `periodic` | 1 | 1 | 同上 |
-| 🔄 **双位置** | `pipe_ipc` | 6 | 6 | 同上 |
-| 🔄 **双位置** | `voice` | 3 | 3 | 同上 |
+| ✅ **已收敛** | `analytics` | **0**（已删除） | 4 | Phase 2-J 删除 31 个 src facade |
+| ✅ **已收敛** | `api` | **0**（已删除） | 7 | Phase 2-J（含 Pattern C retry.py → ext 直连） |
+| ✅ **已收敛** | `chrome` | **0**（已删除） | 8 | Phase 2-J（含 3 个 Pattern C → ext 直连） |
+| ✅ **已收敛** | `oauth` | **0**（已删除） | 2 | Phase 2-J |
+| ✅ **已收敛** | `periodic` | **0**（已删除） | 1 | Phase 2-J |
+| ✅ **已收敛** | `pipe_ipc` | **0**（已删除） | 6 | Phase 2-J |
+| ✅ **已收敛** | `voice` | **0**（已删除） | 3 | Phase 2-J |
 | ✅ **已迁** | `computer_use` | 6 个 facade | 8 个 .py（含 platform/） | Phase 2-D 本轮 |
 | ✅ **已迁** | `kairos` | 6 个 facade | 6 个 .py | Phase 2-D 本轮 |
 | ✅ **已迁** | `langfuse` | 4 个 facade | 4 个 .py | Phase 2-D 本轮 |
@@ -330,11 +330,9 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 | ✅ **已迁** | `tool_execution` | 5 Pattern D + 1 Pattern C (sys.modules swap) | 6 个 .py (2340-22081B) | `720cd5de`（Phase 2-F P0 本轮验证 + 文档对齐） |
 | ❌ **未迁** | `mcp` | 32 | 0 | 单一最大残余，单独评估是否要 facade 化 |
 
-### 3.5 `src/services/api/*`（7 个文件）— 已在双位置
+### 3.5 `src/services/api/*` — ✅ 已收敛（Phase 2-J）
 
-| 文件 | 决策 |
-|---|---|
-| `claude.py`、`provider_config.py`、`retry.py`、`tool_normalization.py`、`errors.py`、`logging.py` | 评估后多数为上游原样，少量增量已可走 ext；统一后 src/ 退化为 facade |
+7 文件全部删除，唯一入口 `clawcodex_ext/services/api/`。含 Pattern C retry.py（sys.modules swap）随 facade 删除后不再需要，所有 import 直连 ext。
 
 ### 3.6 `src/auth/*`、`src/permissions/*`、`src/buddy/*`、`src/skills/*`、`src/memdir/*`、`src/context_system/*`
 
@@ -361,12 +359,12 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 ## 4. 当前需要立即处理的剩余解耦项
 
 > 原 §4 的 Top 5 经 Phase 3-A、Phase 2-F/G/H 后已全部解决或降级。以下为当前确认为仍含本地增量的非 facade 文件。
-> **本轮更新（2026-06-24 Phase 2-H）**：`services/computer_use/platform/` × 3、`services/pricing`、`services/cost_tracker`、`services/session_title` 已处理，含本地增量非 facade 文件 ~13 → **~7**。
+> **本轮更新（2026-06-24 Phase 2-J）**：7 个双位置包 `{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 收敛为单 ext 入口，删除 31 个 src facade。含本地增量非 facade 文件 ~7 不变（本次不涉及）。
 
 | 排序 | 建议关注项 | 说明 | 建议方案 |
 |---|---|---|---|
 | 1 | `src/` 中 ~7 个含本地增量非 facade 文件 | config / utils/git / utils/image 等核心内联 diff | 评估是否有足够解耦价值，部分可能只能保留上游原地 diff |
-| 2 | 7 个双位置包（`analytics/api/chrome/oauth/periodic/pipe_ipc/voice`） | 当前 src 侧已全部是 2-3 行 facade，但双位置仍需维护；有变化时注意只用 ext 侧 | 已是最优状态，保持监控即可 |
+| 2 | ~~7 个双位置包~~ | ✅ **Phase 2-J 已收敛** — 31 个 src facade 全删除，单 ext 入口 | — |
 | 3 | `tests/` 中仍有 20+ 处 `from src.*` 引用 | 合法的 facade 契约测试，不是违规 | 保留，不作清理 |
 | 4 | 补丁队列重生成 | 待 `regenerate_patches.py --allow-deletes` 重核 | 在下一个较大批处理前统一执行 |
 
@@ -529,7 +527,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 已 facade 化文件 | ≥ 150 | **91** | **~264** | **~281** (117 lazy + 149 wildcard + ~15 sys.modules) |
 | 含本地增量的非 facade 文件 | ≤ 30 | **~50** | **~30** | **~13** |
 | src/ 中无上游对应物的"纯新增"目录 | 0 | **~12** | **6** | **3** (computer_use/kairos/langfuse 已迁 ext，仅 ide/mcp/tool_execution 仍 src-only) |
-| 双位置包（src + ext 都有） | 0 | 未规划 | **7** | **7** (analytics/api/chrome/oauth/periodic/pipe_ipc/voice — 待收敛) |
+| 双位置包（src + ext 都有） | 0 | 未规划 | **7** | **0** — ✅ **Phase 2-J 已收敛** |
 | src/services/mcp/（最大残余） | 迁 ext | 未规划 | ❌ 32 文件待迁 | ❌ 32 文件待迁 |
 | **内容级 modified 文件** | ≤ 400 | 578 | 578 | **504** (−74，74 个仅行尾差异剥离) |
 | **补丁队列体积** | < 5 MB | ~1 MB | ~1 MB | **3.7 MB** (619 patches, byte-identical 幂等) |
@@ -564,7 +562,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | Phase 2-B（services/ + query/ 批量） | 规划中 | ✅ 已完成（swarm 4 commits / channels / context_collapse / 0dacfa8d bundled） |
 | Adapter 统一解耦 | 隐含 | ✅ 已完成（F-48.1） |
 | 冗余委托层清理 | 未规划 | ✅ 已完成（`6518dab5`） |
-| 双位置包（src + ext 都有） | 未考虑 | 新增观察项：`analytics` / `api` / `chrome` / `oauth` / `periodic` / `pipe_ipc` / `voice`（7 个包）— 待收敛为单 ext 入口 |
+| 双位置包（src + ext 都有） | 未考虑 | 新增观察项：`analytics` / `api` / `chrome` / `oauth` / `periodic` / `pipe_ipc` / `voice`（7 个包）— ✅ **Phase 2-J 已收敛** |
 | Facade 形态细分 | 仅 "wildcard re-export" | **5 种形态**（Pattern A 适配器 / B lazy proxy / C sys.modules swap / D wildcard re-export / E 完整 facade）— 见 §7 选型决策表 |
 | 待迁 ext 的"纯新增"包 | 仅 §1.4 列出的 12 个 | 仍剩 6 个：`computer_use` / `kairos` / `ide` / `langfuse` / `mcp` / `tool_execution` |
 
@@ -802,6 +800,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 2026-06-24 | §12 / §10d | **Phase 2-G ext→src 反向 import 清理（12 sites, 9 files, 纯路径重写，VERDICT: PASS）** |
 | 2026-06-24 | §3.6 / §4 / §10e | **Phase 3-A §3.6 五模块 facade 化（38 src files；Stage 1-6 + orchestrator + 独立 verification 12 项矩阵全 PASS）** |
 | 2026-06-24 | §3.4 / §4 / §10f | **Phase 2-H 解耦收尾批次 — computer_use/platform/ 3 文件 facade + pricing/cost_tracker/session_title 迁 ext（6 文件，非 facade 文件 ~13→~7）** |
+| 2026-06-24 | §3.4 / §3.5 / §4 / §9 | **Phase 2-J 双位置包收敛 — 7 包 31 个 src facade 全删除，跨层 import 100+ 处重写为 ext 直连，Stage 1-5 门禁 321 passed + 7 包专项 363 passed** ✅ |
 
 ---
 
