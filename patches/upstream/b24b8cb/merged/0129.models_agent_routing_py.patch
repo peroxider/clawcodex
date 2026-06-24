@@ -1,0 +1,11 @@
+diff --git a/models/agent_routing.py b/models/agent_routing.py
+--- a/models/agent_routing.py	2026-06-18 10:10:16.061977 +0000
++++ b/models/agent_routing.py	2026-06-22 09:03:23.109316 +0000
+@@ -9,6 +9,7 @@
+ @dataclass
+ class AgentModelConfig:
+     """Model configuration for an agent."""
++
+     model: str = ""
+     inherit_parent: bool = True
+ 

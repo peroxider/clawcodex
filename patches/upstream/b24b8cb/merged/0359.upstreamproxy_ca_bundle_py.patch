@@ -1,0 +1,100 @@
+diff --git a/upstreamproxy/ca_bundle.py b/upstreamproxy/ca_bundle.py
+--- a/upstreamproxy/ca_bundle.py	2026-06-18 10:10:17.164717 +0000
++++ b/upstreamproxy/ca_bundle.py	2026-06-22 09:03:28.181520 +0000
+@@ -35,9 +35,7 @@
+ #: ensures multiple blocks in a bundle are matched separately. This
+ #: regex is structural-only; we don't parse the cert itself (the OpenSSL
+ #: layer downstream of ``SSL_CERT_FILE`` will reject malformed certs).
+-_PEM_BLOCK_RE = re.compile(
+-    rb'-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----'
+-)
++_PEM_BLOCK_RE = re.compile(rb"-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----")
+ 
+ DEFAULT_CA_FETCH_TIMEOUT_SECONDS = 5.0
+ 
+@@ -56,7 +54,7 @@
+     if isinstance(content, str):
+         if not content.strip():
+             return False
+-        data = content.encode('utf-8', errors='replace')
++        data = content.encode("utf-8", errors="replace")
+     else:
+         if not content.strip():
+             return False
+@@ -94,7 +92,7 @@
+     """
+     out_path = Path(out_path)
+     system_ca_path = Path(system_ca_path)
+-    url = f'{base_url}/v1/code/upstreamproxy/ca-cert'
++    url = f"{base_url}/v1/code/upstreamproxy/ca-cert"
+ 
+     try:
+         if client is None:
+@@ -103,20 +101,16 @@
+         else:
+             resp = await client.get(url, timeout=timeout_seconds)
+     except (httpx.HTTPError, httpx.TimeoutException) as exc:
+-        logger.warning('[upstreamproxy] ca-cert download failed: %s; proxy disabled', exc)
++        logger.warning("[upstreamproxy] ca-cert download failed: %s; proxy disabled", exc)
+         return False
+ 
+     if resp.status_code < 200 or resp.status_code >= 300:
+-        logger.warning(
+-            '[upstreamproxy] ca-cert fetch %d; proxy disabled', resp.status_code
+-        )
++        logger.warning("[upstreamproxy] ca-cert fetch %d; proxy disabled", resp.status_code)
+         return False
+ 
+     ccr_ca = resp.content
+     if not is_valid_pem_content(ccr_ca):
+-        logger.warning(
+-            '[upstreamproxy] ca-cert response is not valid PEM; proxy disabled'
+-        )
++        logger.warning("[upstreamproxy] ca-cert response is not valid PEM; proxy disabled")
+         return False
+ 
+     # System bundle may not exist (alpine, distroless); empty fallback
+@@ -124,7 +118,7 @@
+     try:
+         system_ca = system_ca_path.read_bytes()
+     except OSError:
+-        system_ca = b''
++        system_ca = b""
+ 
+     try:
+         out_path.parent.mkdir(parents=True, exist_ok=True)
+@@ -132,12 +126,12 @@
+         # rename is atomic when both paths are on the same filesystem.
+         # Linux/macOS guarantee this; Windows raises if dst exists, but
+         # the upstreamproxy is Linux-only in production.
+-        fd, tmp_path = tempfile.mkstemp(dir=out_path.parent, prefix='.ca-bundle.', suffix='.tmp')
++        fd, tmp_path = tempfile.mkstemp(dir=out_path.parent, prefix=".ca-bundle.", suffix=".tmp")
+         try:
+-            with os.fdopen(fd, 'wb') as fh:
++            with os.fdopen(fd, "wb") as fh:
+                 fh.write(system_ca)
+-                if system_ca and not system_ca.endswith(b'\n'):
+-                    fh.write(b'\n')
++                if system_ca and not system_ca.endswith(b"\n"):
++                    fh.write(b"\n")
+                 fh.write(ccr_ca)
+                 fh.flush()
+                 os.fsync(fh.fileno())
+@@ -150,13 +144,13 @@
+                 pass
+             raise
+     except OSError as exc:
+-        logger.warning('[upstreamproxy] ca-bundle write failed: %s; proxy disabled', exc)
++        logger.warning("[upstreamproxy] ca-bundle write failed: %s; proxy disabled", exc)
+         return False
+     return True
+ 
+ 
+ __all__ = [
+-    'DEFAULT_CA_FETCH_TIMEOUT_SECONDS',
+-    'download_ca_bundle',
+-    'is_valid_pem_content',
++    "DEFAULT_CA_FETCH_TIMEOUT_SECONDS",
++    "download_ca_bundle",
++    "is_valid_pem_content",
+ ]

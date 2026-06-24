@@ -1,0 +1,35 @@
+diff --git a/models/configs.py b/models/configs.py
+--- a/models/configs.py	2026-06-18 10:10:16.046000 +0000
++++ b/models/configs.py	2026-06-22 09:03:23.129971 +0000
+@@ -8,6 +8,7 @@
+ @dataclass(frozen=True)
+ class ModelConfig:
+     """Configuration for a specific model."""
++
+     model_id: str
+     display_name: str
+     context_window: int
+@@ -50,7 +51,6 @@
+         cost_cache_create_per_mtok=18.75,
+         cost_cache_read_per_mtok=1.50,
+     ),
+-
+     # Claude 3.7 series
+     "claude-3-7-sonnet-20250219": ModelConfig(
+         model_id="claude-3-7-sonnet-20250219",
+@@ -61,7 +61,6 @@
+         cost_input_per_mtok=3.0,
+         cost_output_per_mtok=15.0,
+     ),
+-
+     # Claude 3.5 series
+     "claude-3-5-sonnet-20241022": ModelConfig(
+         model_id="claude-3-5-sonnet-20241022",
+@@ -94,7 +93,6 @@
+         cost_cache_create_per_mtok=1.25,
+         cost_cache_read_per_mtok=0.10,
+     ),
+-
+     # Claude 3 series
+     "claude-3-opus-20240229": ModelConfig(
+         model_id="claude-3-opus-20240229",

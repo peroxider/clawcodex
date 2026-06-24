@@ -46,6 +46,26 @@ providers/glm_provider.py
 state/app_state.py
 transports/__init__.py
 utils/markdown_config_loader.py
+# 2026-06-24 Phase 4 P1 Step 2a: Black formatter drift only (line joining,
+# trailing newlines, string concatenation). Verified via `diff
+# src/upstream/b24b8cb/utils/X.py src/utils/X.py` — all 15 files differ
+# only in formatting, no functional fork delta. Adding to section (b)
+# eliminates the corresponding modify patches (266 → 251).
+utils/__init__.py
+utils/api_preconnect.py
+utils/deep_link.py
+utils/effort.py
+utils/env.py
+utils/fast_mode.py
+utils/file_history.py
+utils/graceful_shutdown.py
+utils/keychain_stash.py
+utils/message_queue_manager.py
+utils/pdf_extraction.py
+utils/peer_address.py
+utils/session_ingress_auth.py
+utils/startup_profiler.py
+utils/task_notification.py
 
 # (d) Facade-only fork delta — clawcodex_ext/ mirrors upstream 1:1
 # Phase 4 P0 路径 H：src/<f>.py 仅有 ~150-200B 的 Facade docstring + `from clawcodex_ext.X import *`

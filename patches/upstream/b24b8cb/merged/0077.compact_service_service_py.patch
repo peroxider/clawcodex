@@ -1,0 +1,32 @@
+diff --git a/compact_service/service.py b/compact_service/service.py
+--- a/compact_service/service.py	2026-06-18 10:10:17.441868 +0000
++++ b/compact_service/service.py	2026-06-22 09:03:22.601071 +0000
+@@ -13,8 +13,8 @@
+ from typing import Any, Optional
+ 
+ from ..agent.conversation import Conversation, Message
+-from ..providers.base import BaseProvider
+-from ..services.compact.compact import (
++from clawcodex_ext.providers.base import BaseProvider
++from clawcodex_ext.services.compact.compact import (
+     compact_conversation as _pipeline_compact,
+     CompactContext,
+     CompactionResult as PipelineResult,
+@@ -27,6 +27,7 @@
+ @dataclass
+ class CompactResult:
+     """Result of a compaction operation (command-handler facing)."""
++
+     boundary_message: Message
+     summary_message: Message
+     tokens_saved: int
+@@ -86,8 +87,7 @@
+ 
+     # Apply the pipeline result to the conversation in place
+     boundary_indices = [
+-        i for i, m in enumerate(conversation.messages)
+-        if is_compact_boundary_message(m)
++        i for i, m in enumerate(conversation.messages) if is_compact_boundary_message(m)
+     ]
+ 
+     if boundary_indices:

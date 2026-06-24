@@ -1,0 +1,109 @@
+diff --git a/providers/__init__.py b/providers/__init__.py
+--- a/providers/__init__.py	2026-06-18 10:10:16.696128 +0000
++++ b/providers/__init__.py	2026-06-22 09:03:23.494865 +0000
+@@ -4,8 +4,6 @@
+ 
+ from typing import TypedDict
+ 
+-from .base import BaseProvider, ChatMessage, ChatResponse
+-
+ 
+ # Provider metadata for login/UI
+ class ProviderInfo(TypedDict):
+@@ -180,8 +178,32 @@
+     return PROVIDER_INFO[provider_name]
+ 
+ 
++# Lazy registry for providers added by clawcodex_ext / extensions.
++# Populated by ``clawcodex_ext.providers.factory.register_provider()``.
++_EXTRA_PROVIDER_CLASSES: dict[str, type] = {}
++
++
+ def get_provider_class(provider_name: str):
+-    """Get provider class by name."""
++    """Get provider class by name.
++
++    Resolution order:
++
++    1. ``_EXTRA_PROVIDER_CLASSES`` — populated by
++       ``clawcodex_ext.providers.factory.register_provider()`` and
++       checked FIRST so downstream can override any built-in
++       provider. Values may be a class or a zero-arg callable that
++       returns one (lazy import).
++    2. The hardcoded ``if`` branches below — upstream built-in
++       defaults (anthropic, openai, glm, minimax, openrouter,
++       deepseek, gemini). Used as fallbacks when no downstream
++       override is registered.
++    """
++    if provider_name in _EXTRA_PROVIDER_CLASSES:
++        entry = _EXTRA_PROVIDER_CLASSES[provider_name]
++        if callable(entry) and not isinstance(entry, type):
++            entry = entry()
++            _EXTRA_PROVIDER_CLASSES[provider_name] = entry
++        return entry
+     if provider_name == "anthropic":
+         from .anthropic_provider import AnthropicProvider
+ 
+@@ -217,12 +239,62 @@
+ AVAILABLE_PROVIDERS: dict[str, str] = {k: v["label"] for k, v in PROVIDER_INFO.items()}
+ 
+ 
++# ---------------------------------------------------------------------------
++# Facade re-exports — 二开 provider factory + registration API
++#
++# The real implementations live in ``clawcodex_ext/providers/factory.py``.
++# They are imported lazily so that the upstream core remains usable even
++# when the extension package is not installed.
++# ---------------------------------------------------------------------------
++
++
++def __getattr__(name: str):
++    """Lazy re-export for 二开 provider API symbols."""
++    _FACADE_NAMES = frozenset(
++        {
++            "create_provider",
++            "should_use_litellm",
++            "register_provider",
++            "register_provider_info",
++        }
++    )
++    if name in _FACADE_NAMES:
++        from clawcodex_ext.providers.factory import (  # noqa: F401
++            create_provider as _create_provider,
++            should_use_litellm as _should_use_litellm,
++            register_provider as _register_provider,
++            register_provider_info as _register_provider_info,
++        )
++
++        # Cache on the module so subsequent lookups skip __getattr__
++        import sys
++
++        mod = sys.modules[__name__]
++        mod.create_provider = _create_provider
++        mod.should_use_litellm = _should_use_litellm
++        mod.register_provider = _register_provider
++        mod.register_provider_info = _register_provider_info
++        return locals()[
++            {
++                "create_provider": "_create_provider",
++                "should_use_litellm": "_should_use_litellm",
++                "register_provider": "_register_provider",
++                "register_provider_info": "_register_provider_info",
++            }[name]
++        ]
++    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
++
++
+ __all__ = [
+     "BaseProvider",
+     "ChatMessage",
+     "ChatResponse",
++    "create_provider",
+     "get_provider_class",
+     "get_provider_info",
+     "PROVIDER_INFO",
+     "AVAILABLE_PROVIDERS",
++    "should_use_litellm",
++    "register_provider",
++    "register_provider_info",
+ ]

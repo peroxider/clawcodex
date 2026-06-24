@@ -1,0 +1,14 @@
+diff --git a/models/validation.py b/models/validation.py
+--- a/models/validation.py	2026-06-18 10:10:16.054892 +0000
++++ b/models/validation.py	2026-06-22 09:03:23.143080 +0000
+@@ -8,9 +8,7 @@
+ from .configs import MODEL_CONFIGS
+ 
+ # Pattern for valid Claude model IDs
+-_CLAUDE_PATTERN = re.compile(
+-    r"^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$"
+-)
++_CLAUDE_PATTERN = re.compile(r"^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$")
+ 
+ 
+ def validate_model_name(name: str) -> bool:

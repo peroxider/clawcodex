@@ -1,0 +1,36 @@
+diff --git a/bridge/bridge_permission_callbacks.py b/bridge/bridge_permission_callbacks.py
+--- a/bridge/bridge_permission_callbacks.py	2026-06-18 10:10:15.998077 +0000
++++ b/bridge/bridge_permission_callbacks.py	2026-06-22 09:03:22.173573 +0000
+@@ -52,8 +52,8 @@
+     """
+     if not isinstance(value, dict):
+         return False
+-    behavior = value.get('behavior')
+-    return behavior == 'allow' or behavior == 'deny'
++    behavior = value.get("behavior")
++    return behavior == "allow" or behavior == "deny"
+ 
+ 
+ class BridgePermissionCallbacks(Protocol):
+@@ -77,9 +77,7 @@
+         blocked_path: str | None = None,
+     ) -> None: ...
+ 
+-    def send_response(
+-        self, request_id: str, response: BridgePermissionResponse
+-    ) -> None: ...
++    def send_response(self, request_id: str, response: BridgePermissionResponse) -> None: ...
+ 
+     def cancel_request(self, request_id: str) -> None:
+         """Cancel a pending control_request so the web app can dismiss its prompt."""
+@@ -95,7 +93,7 @@
+ 
+ 
+ __all__ = [
+-    'BridgePermissionCallbacks',
+-    'BridgePermissionResponse',
+-    'is_bridge_permission_response',
++    "BridgePermissionCallbacks",
++    "BridgePermissionResponse",
++    "is_bridge_permission_response",
+ ]
