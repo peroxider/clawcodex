@@ -195,3 +195,4 @@ utils/git.py
 utils/message_mappers.py
 utils/messages.py
 utils/frontmatter_validators.py
+utils/stream_watchdog.py
