@@ -14,25 +14,25 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from src.services.mcp.auth import McpTokenStore, TokenData
-from src.services.mcp.auth_discovery import (
+from clawcodex_ext.services.mcp.auth import McpTokenStore, TokenData
+from clawcodex_ext.services.mcp.auth_discovery import (
     EscapeHatchScopeRejectedError,
     OAuthDiscoveryError,
     discover_oauth_metadata,
 )
-from src.services.mcp.config import filter_mcp_servers_by_policy
-from src.services.mcp.connection_manager import (
+from clawcodex_ext.services.mcp.config import filter_mcp_servers_by_policy
+from clawcodex_ext.services.mcp.connection_manager import (
     MCPConnectionManager,
     bootstrap_mcp_runtime,
 )
-from src.services.mcp.fetch_wrappers import (
+from clawcodex_ext.services.mcp.fetch_wrappers import (
     DEFAULT_CONNECT_TIMEOUT_S,
     DEFAULT_READ_TIMEOUT_S,
     build_mcp_http_client,
     build_mcp_timeout,
 )
-from src.services.mcp.tool_wrapper import wrap_mcp_tool
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.tool_wrapper import wrap_mcp_tool
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     DisabledMCPServer,
     FailedMCPServer,
@@ -69,7 +69,7 @@ class TestPolicyFailClosed:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=None,
         ):
             filtered, notices = filter_mcp_servers_by_policy(configs)
@@ -88,7 +88,7 @@ class TestPolicyFailClosed:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=None,
         ):
             filtered, notices = filter_mcp_servers_by_policy(configs)
@@ -196,7 +196,7 @@ class TestEscapeHatchScopeGating:
     @pytest.mark.asyncio
     async def test_user_scope_escape_hatch_attempted(self):
         with patch(
-            "src.services.mcp.auth_discovery._try_as_metadata",
+            "clawcodex_ext.services.mcp.auth_discovery._try_as_metadata",
             new=AsyncMock(return_value=None),
         ) as mock_try:
             with pytest.raises(OAuthDiscoveryError) as exc_info:
@@ -213,7 +213,7 @@ class TestEscapeHatchScopeGating:
     @pytest.mark.asyncio
     async def test_enterprise_scope_escape_hatch_attempted(self):
         with patch(
-            "src.services.mcp.auth_discovery._try_as_metadata",
+            "clawcodex_ext.services.mcp.auth_discovery._try_as_metadata",
             new=AsyncMock(
                 return_value={"issuer": "x", "authorization_endpoint": "y", "token_endpoint": "z"}
             ),
@@ -231,7 +231,7 @@ class TestEscapeHatchScopeGating:
         # Internal callers (tests, legacy) may not pass the scope; that
         # branch must still work.
         with patch(
-            "src.services.mcp.auth_discovery._try_as_metadata",
+            "clawcodex_ext.services.mcp.auth_discovery._try_as_metadata",
             new=AsyncMock(return_value=None),
         ):
             with pytest.raises(OAuthDiscoveryError):
@@ -273,15 +273,15 @@ class TestPendingDuringReconnect:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect,
             ),
             patch(
-                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                "clawcodex_ext.services.mcp.connection_manager.wrap_mcp_tools_for_server",
                 return_value=[],
             ),
         ):
@@ -317,27 +317,27 @@ class TestBootstrapMcpRuntime:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect,
             ),
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                "clawcodex_ext.services.mcp.connection_manager.wrap_mcp_tools_for_server",
                 return_value=[],
             ),
             patch(
-                "src.services.mcp.config.get_all_mcp_configs",
+                "clawcodex_ext.services.mcp.config.get_all_mcp_configs",
                 return_value=({"srv1": config, "srv2": config}, []),
             ),
             patch(
-                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                "clawcodex_ext.services.mcp.connection_manager.is_mcp_server_disabled",
                 return_value=False,
             ),
             patch(
-                "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
+                "clawcodex_ext.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
                 new=fake_fetch,
             ),
         ):
@@ -361,15 +361,15 @@ class TestBootstrapMcpRuntime:
 
         with (
             patch(
-                "src.services.mcp.config.get_all_mcp_configs",
+                "clawcodex_ext.services.mcp.config.get_all_mcp_configs",
                 return_value=({"disabled_srv": config}, []),
             ),
             patch(
-                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                "clawcodex_ext.services.mcp.connection_manager.is_mcp_server_disabled",
                 return_value=True,
             ),
             patch(
-                "src.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
+                "clawcodex_ext.services.mcp.claudeai.fetch_claudeai_mcp_configs_if_eligible",
                 new=fake_fetch,
             ),
         ):
@@ -539,11 +539,11 @@ class TestReconnectExceptionClearsPending:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect_raises,
             ),
         ):
@@ -568,11 +568,11 @@ class TestReconnectExceptionClearsPending:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect_cancels,
             ),
         ):
@@ -595,7 +595,7 @@ class TestSseTransportTimeouts:
     def test_sse_transport_uses_mcp_timeouts(self):
         """SseTransport._open should call sse_client with MCP-appropriate
         timeout and sse_read_timeout, plus the httpx factory adapter."""
-        from src.services.mcp.transport import SseTransport, _mcp_sse_http_client_factory
+        from clawcodex_ext.services.mcp.transport import SseTransport, _mcp_sse_http_client_factory
 
         captured: dict[str, Any] = {}
 
@@ -605,7 +605,7 @@ class TestSseTransportTimeouts:
             return MagicMock()
 
         transport = SseTransport(url="https://example.com/sse", headers={"X": "y"})
-        with patch("src.services.mcp.transport.sse_client", side_effect=fake_sse_client):
+        with patch("clawcodex_ext.services.mcp.transport.sse_client", side_effect=fake_sse_client):
             transport._open()
 
         assert captured["url"] == "https://example.com/sse"
@@ -617,7 +617,7 @@ class TestSseTransportTimeouts:
         assert captured["httpx_client_factory"] is _mcp_sse_http_client_factory
 
     def test_mcp_sse_factory_returns_httpx_async_client(self):
-        from src.services.mcp.transport import _mcp_sse_http_client_factory
+        from clawcodex_ext.services.mcp.transport import _mcp_sse_http_client_factory
 
         c = _mcp_sse_http_client_factory(headers={"X": "y"})
         try:

@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from src.services.mcp.client import McpClient, clear_connection_cache
-from src.services.mcp.config import parse_mcp_config
-from src.services.mcp.mcp_string_utils import build_mcp_tool_name
-from src.services.mcp.tool_wrapper import wrap_mcp_tool
-from src.services.mcp.transport import StdioTransport, JsonRpcMessage
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.client import McpClient, clear_connection_cache
+from clawcodex_ext.services.mcp.config import parse_mcp_config
+from clawcodex_ext.services.mcp.mcp_string_utils import build_mcp_tool_name
+from clawcodex_ext.services.mcp.tool_wrapper import wrap_mcp_tool
+from clawcodex_ext.services.mcp.transport import StdioTransport, JsonRpcMessage
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     McpStdioServerConfig,
     McpToolSchema,
@@ -298,7 +298,7 @@ class TestMcpConfigIntegration:
         }
         config_file.write_text(json.dumps(config_data))
 
-        from src.services.mcp.config import parse_mcp_config_from_file_path
+        from clawcodex_ext.services.mcp.config import parse_mcp_config_from_file_path
 
         result = parse_mcp_config_from_file_path(str(config_file), expand_vars=False)
         assert result.config is not None
@@ -324,7 +324,7 @@ class TestFullMcpPipeline:
         tools = await client.list_tools()
         assert len(tools) == 2
 
-        from src.services.mcp.tool_wrapper import wrap_mcp_tools_for_server
+        from clawcodex_ext.services.mcp.tool_wrapper import wrap_mcp_tools_for_server
 
         wrapped_tools = wrap_mcp_tools_for_server(connection, tools, client)
         assert len(wrapped_tools) == 2

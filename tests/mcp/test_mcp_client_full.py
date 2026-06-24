@@ -4,13 +4,13 @@ import builtins
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.services.mcp.client import (
+from clawcodex_ext.services.mcp.client import (
     McpClient,
     MAX_RECONNECT_ATTEMPTS,
     _cache_key_for,
     _unwrap_exception_group_message,
 )
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     FailedMCPServer,
     McpHTTPServerConfig,
@@ -222,8 +222,8 @@ class TestSessionExpiryRetry:
 
     @pytest.mark.asyncio
     async def test_session_expired_triggers_reconnect_and_retry_succeeds(self):
-        from src.services.mcp.errors import McpToolCallError
-        from src.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
+        from clawcodex_ext.services.mcp.errors import McpToolCallError
+        from clawcodex_ext.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
 
         client = McpClient()
         client._name = "test-server"
@@ -265,8 +265,8 @@ class TestSessionExpiryRetry:
     async def test_session_expired_retry_propagates_second_failure(self):
         """If the retry also fails with session-expired, surface the error
         instead of looping (no infinite recovery storm)."""
-        from src.services.mcp.errors import McpToolCallError
-        from src.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
+        from clawcodex_ext.services.mcp.errors import McpToolCallError
+        from clawcodex_ext.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
 
         client = McpClient()
         client._name = "test-server"
@@ -299,8 +299,8 @@ class TestSessionExpiryRetry:
         """A non-session-expired McpToolCallError must NOT trigger reconnect.
         E.g., a tool returning a regular invalid-input error should fail
         immediately with no extra connect overhead."""
-        from src.services.mcp.errors import McpToolCallError
-        from src.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
+        from clawcodex_ext.services.mcp.errors import McpToolCallError
+        from clawcodex_ext.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
 
         client = McpClient()
         client._name = "test-server"
@@ -338,8 +338,8 @@ class TestSessionExpiryRetry:
         Identity assertion guards against a regression where the recovery path
         might lose the original exception's traceback / context.
         """
-        from src.services.mcp.errors import McpToolCallError
-        from src.services.mcp.types import (
+        from clawcodex_ext.services.mcp.errors import McpToolCallError
+        from clawcodex_ext.services.mcp.types import (
             FailedMCPServer,
             McpStdioServerConfig,
             ScopedMcpServerConfig,
@@ -376,8 +376,8 @@ class TestSessionExpiryRetry:
         session must NOT trigger N reconnects — one reconnect serves all.
         Verified by counting reconnect invocations under N=10 parallel
         callers, where the first call to each invokes session-expired."""
-        from src.services.mcp.errors import McpToolCallError
-        from src.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
+        from clawcodex_ext.services.mcp.errors import McpToolCallError
+        from clawcodex_ext.services.mcp.types import McpStdioServerConfig, ScopedMcpServerConfig
 
         client = McpClient()
         client._name = "test-server"

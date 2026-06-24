@@ -4,13 +4,13 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from src.services.mcp.config import (
+from clawcodex_ext.services.mcp.config import (
     get_claude_desktop_config_path,
     import_from_claude_desktop,
     discover_vscode_mcp_servers,
     validate_server_connectivity,
 )
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     McpStdioServerConfig,
     McpSSEServerConfig,
     McpHTTPServerConfig,
@@ -51,7 +51,7 @@ class TestVscodeDiscovery:
             )
         )
 
-        monkeypatch.setattr("src.services.mcp.config._get_cwd", lambda: str(tmp_path))
+        monkeypatch.setattr("clawcodex_ext.services.mcp.config._get_cwd", lambda: str(tmp_path))
         servers, errors = discover_vscode_mcp_servers()
         assert "test-server" in servers
 
@@ -72,7 +72,7 @@ class TestVscodeDiscovery:
             )
         )
 
-        monkeypatch.setattr("src.services.mcp.config._get_cwd", lambda: str(tmp_path))
+        monkeypatch.setattr("clawcodex_ext.services.mcp.config._get_cwd", lambda: str(tmp_path))
         servers, errors = discover_vscode_mcp_servers()
         assert "settings-server" in servers
 
@@ -102,7 +102,7 @@ class TestValidateServerConnectivity:
 
 class TestChannelPermissions:
     def test_import(self):
-        from src.services.mcp.channel_permissions import (
+        from clawcodex_ext.services.mcp.channel_permissions import (
             ChannelPermission,
             ChannelPermissionManager,
         )
@@ -111,7 +111,7 @@ class TestChannelPermissions:
         assert manager.list_servers() == []
 
     def test_set_and_check(self):
-        from src.services.mcp.channel_permissions import (
+        from clawcodex_ext.services.mcp.channel_permissions import (
             ChannelPermission,
             ChannelPermissionManager,
         )
@@ -128,7 +128,7 @@ class TestChannelPermissions:
         assert manager.is_tool_allowed("unknown", "anything") is True
 
     def test_filter_tools(self):
-        from src.services.mcp.channel_permissions import (
+        from clawcodex_ext.services.mcp.channel_permissions import (
             ChannelPermission,
             ChannelPermissionManager,
         )
@@ -144,7 +144,7 @@ class TestChannelPermissions:
         assert filtered == ["read", "write"]
 
     def test_allow_all_with_deny(self):
-        from src.services.mcp.channel_permissions import (
+        from clawcodex_ext.services.mcp.channel_permissions import (
             ChannelPermission,
             ChannelPermissionManager,
         )
@@ -161,7 +161,7 @@ class TestChannelPermissions:
         assert manager.is_tool_allowed("test", "dangerous") is False
 
     def test_from_config(self):
-        from src.services.mcp.channel_permissions import ChannelPermissionManager
+        from clawcodex_ext.services.mcp.channel_permissions import ChannelPermissionManager
 
         config = {
             "server1": {
@@ -177,7 +177,7 @@ class TestChannelPermissions:
         assert len(manager.list_servers()) == 2
 
     def test_remove_and_clear(self):
-        from src.services.mcp.channel_permissions import (
+        from clawcodex_ext.services.mcp.channel_permissions import (
             ChannelPermission,
             ChannelPermissionManager,
         )

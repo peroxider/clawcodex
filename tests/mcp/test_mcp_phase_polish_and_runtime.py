@@ -17,33 +17,33 @@ import asyncio
 
 import pytest
 
-from src.services.mcp.claudeai import (
+from clawcodex_ext.services.mcp.claudeai import (
     fetch_claudeai_mcp_configs_if_eligible,
     reset_claudeai_cache,
 )
-from src.services.mcp.connection_manager import MCPConnectionManager
-from src.services.mcp.normalization import (
+from clawcodex_ext.services.mcp.connection_manager import MCPConnectionManager
+from clawcodex_ext.services.mcp.normalization import (
     MAX_MCP_NAME_LENGTH,
     normalize_name_for_mcp,
 )
-from src.services.mcp.official_registry import (
+from clawcodex_ext.services.mcp.official_registry import (
     _normalize_url,
     is_official_mcp_url,
 )
-from src.services.mcp.output_storage import (
+from clawcodex_ext.services.mcp.output_storage import (
     get_binary_blob_saved_message,
     persist_binary_content,
 )
-from src.services.mcp.telemetry import (
+from clawcodex_ext.services.mcp.telemetry import (
     MCP_AUTH_REQUIRED,
     emit,
     register_sink,
 )
-from src.services.mcp.text_truncation import (
+from clawcodex_ext.services.mcp.text_truncation import (
     MAX_MCP_DESCRIPTION_LENGTH,
     truncate_description,
 )
-from src.services.mcp.xaa import normalize_url, redact_tokens
+from clawcodex_ext.services.mcp.xaa import normalize_url, redact_tokens
 
 
 # ----------------------------------------------------------------------
@@ -146,7 +146,7 @@ class TestTelemetry:
             assert received == [(MCP_AUTH_REQUIRED, {"server": "srv"})]
         finally:
             # Restore default sink so other tests don't see our list.
-            from src.services.mcp.telemetry import _default_sink
+            from clawcodex_ext.services.mcp.telemetry import _default_sink
 
             register_sink(_default_sink)
 
@@ -159,7 +159,7 @@ class TestTelemetry:
             # Must not raise.
             emit(MCP_AUTH_REQUIRED, x=1)
         finally:
-            from src.services.mcp.telemetry import _default_sink
+            from clawcodex_ext.services.mcp.telemetry import _default_sink
 
             register_sink(_default_sink)
 

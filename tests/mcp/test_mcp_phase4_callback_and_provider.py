@@ -12,19 +12,19 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from src.services.mcp.auth import McpTokenStore, TokenData
-from src.services.mcp.auth_provider import (
+from clawcodex_ext.services.mcp.auth import McpTokenStore, TokenData
+from clawcodex_ext.services.mcp.auth_provider import (
     AUTH_CACHE_TTL_S,
     McpAuthProvider,
     is_oauth_required_error,
 )
-from src.services.mcp.client import McpClient, _is_remote_config
-from src.services.mcp.oauth_callback_server import (
+from clawcodex_ext.services.mcp.client import McpClient, _is_remote_config
+from clawcodex_ext.services.mcp.oauth_callback_server import (
     OAuthCallbackError,
     wait_for_callback,
 )
-from src.services.mcp.oauth_port import find_available_port
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.oauth_port import find_available_port
+from clawcodex_ext.services.mcp.types import (
     McpHTTPServerConfig,
     McpSSEServerConfig,
     McpStdioServerConfig,
@@ -242,7 +242,7 @@ class TestClientConnectNeedsAuth:
         )
         result = await client.connect("remote", config)
         # Should attempt + fail (FileNotFound), not produce NeedsAuth.
-        from src.services.mcp.types import FailedMCPServer
+        from clawcodex_ext.services.mcp.types import FailedMCPServer
 
         assert isinstance(result, FailedMCPServer)
 

@@ -23,4 +23,10 @@ except Exception:
     SAMPLE_FILES = ()
     PORTING_NOTE = "Services package (archive metadata unavailable)."
 
-__all__ = ["ARCHIVE_NAME", "MODULE_COUNT", "PORTING_NOTE", "SAMPLE_FILES", "mcp"]
+__all__ = ["ARCHIVE_NAME", "MODULE_COUNT", "PORTING_NOTE", "SAMPLE_FILES"]
+
+
+# The ``mcp`` package is intentionally NOT re-exported here — the canonical
+# implementation lives at :mod:`clawcodex_ext.services.mcp`. All call sites
+# must import from that path; see ``docs/decoupling/decisions/stage-j-rollback.md``
+# for the architectural rationale.

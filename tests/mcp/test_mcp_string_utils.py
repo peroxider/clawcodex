@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from src.services.mcp.mcp_string_utils import (
+from clawcodex_ext.services.mcp.mcp_string_utils import (
     McpInfoParsed,
     build_mcp_tool_name,
     extract_mcp_tool_display_name,

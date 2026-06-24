@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     DisabledMCPServer,
     FailedMCPServer,

@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.services.mcp.tool_wrapper import wrap_mcp_tool, wrap_mcp_tools_for_server
-from src.services.mcp.types import ConnectedMCPServer, McpToolSchema, ServerCapabilities
-from src.services.mcp.client import McpClient
+from clawcodex_ext.services.mcp.tool_wrapper import wrap_mcp_tool, wrap_mcp_tools_for_server
+from clawcodex_ext.services.mcp.types import ConnectedMCPServer, McpToolSchema, ServerCapabilities
+from clawcodex_ext.services.mcp.client import McpClient
 
 
 class TestWrapMcpTool:

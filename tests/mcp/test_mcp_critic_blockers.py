@@ -15,24 +15,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from src.services.mcp.auth import (
+from clawcodex_ext.services.mcp.auth import (
     AuthResult,
     McpAuthManager,
     McpTokenStore,
     OAuthConfig,
 )
-from src.services.mcp.auth_discovery import (
+from clawcodex_ext.services.mcp.auth_discovery import (
     OAuthDiscoveryError,
     discover_oauth_metadata,
 )
-from src.services.mcp.client import connect_to_server
-from src.services.mcp.oauth_callback_server import (
+from clawcodex_ext.services.mcp.client import connect_to_server
+from clawcodex_ext.services.mcp.oauth_callback_server import (
     OAuthCallbackError,
     _error_body,
     wait_for_callback,
 )
-from src.services.mcp.oauth_port import find_available_port
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.oauth_port import find_available_port
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     McpHTTPServerConfig,
     ScopedMcpServerConfig,
@@ -72,7 +72,7 @@ class TestAuthProviderWiring:
             return ConnectedMCPServer(name=name)
 
         with patch(
-            "src.services.mcp.client.McpClient.connect",
+            "clawcodex_ext.services.mcp.client.McpClient.connect",
             new=fake_connect,
         ):
             client, conn = await connect_to_server(
@@ -94,7 +94,7 @@ class TestAuthProviderWiring:
             return ConnectedMCPServer(name=name)
 
         with patch(
-            "src.services.mcp.client.McpClient.connect",
+            "clawcodex_ext.services.mcp.client.McpClient.connect",
             new=fake_connect,
         ):
             client, _ = await connect_to_server("test-server", config)
@@ -134,7 +134,7 @@ class TestEscapeHatchHttpsEnforcement:
         # Even when the upstream fetch fails, we should attempt to fetch
         # rather than reject at the input gate.
         with patch(
-            "src.services.mcp.auth_discovery._try_as_metadata",
+            "clawcodex_ext.services.mcp.auth_discovery._try_as_metadata",
             new=AsyncMock(return_value=None),
         ) as mock_try:
             with pytest.raises(OAuthDiscoveryError):
@@ -241,7 +241,7 @@ class TestRedirectUriLocalhost:
 
     @pytest.mark.asyncio
     async def test_auth_provider_builds_localhost_redirect_uri(self, tmp_path):
-        from src.services.mcp.auth_provider import McpAuthProvider
+        from clawcodex_ext.services.mcp.auth_provider import McpAuthProvider
 
         store = McpTokenStore(store_path=tmp_path / "tokens.json")
         provider = McpAuthProvider(token_store=store)
@@ -263,12 +263,12 @@ class TestRedirectUriLocalhost:
 
         with (
             patch(
-                "src.services.mcp.auth_provider.discover_oauth_metadata",
+                "clawcodex_ext.services.mcp.auth_provider.discover_oauth_metadata",
                 new=fake_discover,
             ),
             patch.object(provider._manager, "build_oauth_url", side_effect=fake_build),
             patch(
-                "src.services.mcp.auth_provider.wait_for_callback",
+                "clawcodex_ext.services.mcp.auth_provider.wait_for_callback",
                 new=fake_wait,
             ),
         ):
@@ -287,7 +287,7 @@ class TestRedirectUriLocalhost:
         """Smoke check the literal 'localhost' in the xaa_idp_login source."""
         import inspect
 
-        from src.services.mcp import xaa_idp_login
+        from clawcodex_ext.services.mcp import xaa_idp_login
 
         source = inspect.getsource(xaa_idp_login.acquire_idp_id_token)
         assert "http://localhost:" in source, (
@@ -343,7 +343,7 @@ class TestAsyncTokenEndpoint:
 
     @pytest.mark.asyncio
     async def test_refresh_token_uses_httpx_async(self, tmp_path):
-        from src.services.mcp.auth import TokenData
+        from clawcodex_ext.services.mcp.auth import TokenData
 
         store = McpTokenStore(store_path=tmp_path / "tokens.json")
         store.store_token(
@@ -381,7 +381,7 @@ class TestAsyncTokenEndpoint:
     async def test_refresh_token_handles_slack_200_with_error_body(self, tmp_path):
         """Slack-style 200+error must be normalized to a raised error,
         not silently stored as a garbage token."""
-        from src.services.mcp.auth import TokenData
+        from clawcodex_ext.services.mcp.auth import TokenData
 
         store = McpTokenStore(store_path=tmp_path / "tokens.json")
         store.store_token(

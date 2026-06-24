@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     DisabledMCPServer,
     FailedMCPServer,
@@ -40,7 +40,7 @@ class TestMcpServerConfig(unittest.TestCase):
     """Server configuration types."""
 
     def test_scoped_config_stdio(self) -> None:
-        from src.services.mcp.types import McpStdioServerConfig
+        from clawcodex_ext.services.mcp.types import McpStdioServerConfig
 
         inner = McpStdioServerConfig(
             command="npx", args=["-y", "@example/mcp-server"], type="stdio"
@@ -50,7 +50,7 @@ class TestMcpServerConfig(unittest.TestCase):
         self.assertEqual(config.config.command, "npx")
 
     def test_scoped_config_sse(self) -> None:
-        from src.services.mcp.types import McpSSEServerConfig
+        from clawcodex_ext.services.mcp.types import McpSSEServerConfig
 
         inner = McpSSEServerConfig(url="http://localhost:3000/sse")
         config = ScopedMcpServerConfig(config=inner, scope="project")
@@ -75,23 +75,23 @@ class TestMcpClientStructure(unittest.TestCase):
     """MCP client has required interface."""
 
     def test_client_class_exists(self) -> None:
-        from src.services.mcp.client import McpClient
+        from clawcodex_ext.services.mcp.client import McpClient
 
         client = McpClient()
         self.assertIsNotNone(client)
 
     def test_client_has_connect(self) -> None:
-        from src.services.mcp.client import McpClient
+        from clawcodex_ext.services.mcp.client import McpClient
 
         self.assertTrue(hasattr(McpClient, "connect"))
 
     def test_client_has_close(self) -> None:
-        from src.services.mcp.client import McpClient
+        from clawcodex_ext.services.mcp.client import McpClient
 
         self.assertTrue(hasattr(McpClient, "close"))
 
     def test_client_has_list_tools(self) -> None:
-        from src.services.mcp.client import McpClient
+        from clawcodex_ext.services.mcp.client import McpClient
 
         self.assertTrue(hasattr(McpClient, "list_tools"))
         self.assertTrue(hasattr(McpClient, "call_tool"))

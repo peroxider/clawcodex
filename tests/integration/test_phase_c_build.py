@@ -37,19 +37,19 @@ class TestPhaseCImports:
         assert hasattr(mod, "HookConfigManager")
 
     def test_mcp_auth(self):
-        mod = importlib.import_module("src.services.mcp.auth")
+        mod = importlib.import_module("clawcodex_ext.services.mcp.auth")
         assert hasattr(mod, "McpAuthManager")
 
     def test_mcp_elicitation(self):
-        mod = importlib.import_module("src.services.mcp.elicitation")
+        mod = importlib.import_module("clawcodex_ext.services.mcp.elicitation")
         assert hasattr(mod, "ElicitationHandler")
 
     def test_mcp_channel_permissions(self):
-        mod = importlib.import_module("src.services.mcp.channel_permissions")
+        mod = importlib.import_module("clawcodex_ext.services.mcp.channel_permissions")
         assert hasattr(mod, "ChannelPermissionManager")
 
     def test_mcp_doctor(self):
-        mod = importlib.import_module("src.services.mcp.doctor")
+        mod = importlib.import_module("clawcodex_ext.services.mcp.doctor")
         assert hasattr(mod, "run_diagnostics")
 
     def test_compact_reactive(self):

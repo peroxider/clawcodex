@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.services.mcp.config import parse_mcp_config
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.config import parse_mcp_config
+from clawcodex_ext.services.mcp.types import (
     McpHTTPServerConfig,
     McpSSEServerConfig,
     McpStdioServerConfig,

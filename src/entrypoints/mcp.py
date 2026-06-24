@@ -2,7 +2,7 @@
 
 WI-4.3: invoked from ``src/cli.py``'s pre-argparse subcommand sieve so the
 MCP tooling path doesn't load the TUI/REPL/full tool registry. Imports
-only what it needs (the ``src.services.mcp`` package) and exits.
+only what it needs (the ``clawcodex_ext.services.mcp`` package) and exits.
 
 Mirrors the chapter's "fast-path dispatch" pattern (TS ``main.tsx:914+``):
 specialized subcommands get an early-return that skips the React REPL.
@@ -54,7 +54,7 @@ def _list_servers() -> int:
         # Local imports keep the module-load cost off the hot cold-start
         # path of the interactive CLI. ``get_all_mcp_configs`` returns
         # ``(dict[str, ScopedMcpServerConfig], list[ValidationError])``.
-        from src.services.mcp.config import get_all_mcp_configs
+        from clawcodex_ext.services.mcp.config import get_all_mcp_configs
     except Exception as exc:  # pragma: no cover
         print(f"clawcodex mcp list: cannot load MCP config: {exc}", file=sys.stderr)
         return 1

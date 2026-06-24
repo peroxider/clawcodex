@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import pytest
-from src.services.mcp.transport import (
+from clawcodex_ext.services.mcp.transport import (
     JsonRpcMessage,
     StdioTransport,
     HttpTransport,
@@ -160,7 +160,7 @@ class TestWebSocketTransport:
     """WebSocketTransport wraps ``mcp.client.websocket.websocket_client``."""
 
     def test_init(self) -> None:
-        from src.services.mcp.transport import WebSocketTransport
+        from clawcodex_ext.services.mcp.transport import WebSocketTransport
 
         transport = WebSocketTransport(url="ws://example.com/mcp")
         assert transport.is_connected is False

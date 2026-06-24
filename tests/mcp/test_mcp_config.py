@@ -6,7 +6,7 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from src.services.mcp.config import (
+from clawcodex_ext.services.mcp.config import (
     add_mcp_config,
     dedup_plugin_mcp_servers,
     get_mcp_server_signature,
@@ -16,7 +16,7 @@ from src.services.mcp.config import (
     remove_mcp_config,
     set_mcp_server_enabled,
 )
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     McpHTTPServerConfig,
     McpSSEServerConfig,
     McpStdioServerConfig,

@@ -32,7 +32,7 @@ def run_doctor() -> int:
     if "--mcp" in sys.argv:
         try:
             import asyncio
-            from src.services.mcp.doctor import run_diagnostics
+            from clawcodex_ext.services.mcp.doctor import run_diagnostics
 
             print("")
             print("MCP diagnostics")

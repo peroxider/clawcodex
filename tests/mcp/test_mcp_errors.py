@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from src.services.mcp.errors import (
+from clawcodex_ext.services.mcp.errors import (
     McpAuthError,
     McpSessionExpiredError,
     McpToolCallError,

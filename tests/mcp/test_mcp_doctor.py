@@ -1,14 +1,14 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.services.mcp.doctor import (
+from clawcodex_ext.services.mcp.doctor import (
     DiagnosticReport,
     ServerDiagnostic,
     _validate_stdio_config,
     _validate_url_config,
     run_diagnostics,
 )
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     McpStdioServerConfig,
     McpSSEServerConfig,
 )
@@ -142,13 +142,13 @@ class TestValidateUrlConfig:
 class TestRunDiagnostics:
     @pytest.mark.asyncio
     async def test_skip_connection_test(self):
-        with patch("src.services.mcp.doctor.get_all_mcp_configs", return_value=({}, [])):
+        with patch("clawcodex_ext.services.mcp.doctor.get_all_mcp_configs", return_value=({}, [])):
             report = await run_diagnostics(skip_connection_test=True)
             assert isinstance(report, DiagnosticReport)
             assert report.total_count == 0
 
     @pytest.mark.asyncio
     async def test_no_configs(self):
-        with patch("src.services.mcp.doctor.get_all_mcp_configs", return_value=({}, [])):
+        with patch("clawcodex_ext.services.mcp.doctor.get_all_mcp_configs", return_value=({}, [])):
             report = await run_diagnostics()
             assert report.total_count == 0

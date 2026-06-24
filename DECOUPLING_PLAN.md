@@ -784,6 +784,85 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 - 7 个双位置包已是最优状态，保持监控即可。
 - 补丁队列重生成可在下一批较大变更时统一执行。
 
+---
+
+## 10g. 续本次会话（2026-06-24 同日 Phase 3-B）— `src/services/mcp/*` 调用点全量迁移
+
+> **本轮性质**：不是 facade 化，也不是新 ext 迁移——而是 **「调用点（call site）迁移」**：把仍指向 `src.services.mcp.*` 的外部 import 全部改写为 `clawcodex_ext.services.mcp.*`。`src/services/mcp/` 在 `d90b584c` 起就不存在于工作树，真实实装自始就在 `clawcodex_ext/services/mcp/`（32 文件 / 完整 `__init__.py`）。本次之前 `src.services.mcp.*` 的 import 在运行时实际抛 `ModuleNotFoundError`，仅因 `clawcodex_ext/services/chrome/{mcp_impl,factory}.py` 5 处已完成迁移而 chrome 路径仍能跑通。本次工作彻底收敛这一未完成状态。
+
+### 审计发现（写在前面）
+
+| 项 | 现状（HEAD） |
+|---|---|
+| `src/services/mcp/*.py` 在 git ls-tree HEAD | **不存在**（0 个 tracked file） |
+| 上次删除 commit | `d90b584c fix(repl): 未注册命令提示不明朗，增加匹配失败提示`（删除 17+ 文件） |
+| `clawcodex_ext/services/mcp/` | 32 个 .py 完整实装（`__init__.py` 228 行 `__all__`，覆盖 103 个公开符号） |
+| `src/upstream/b24b8cb/services/mcp/` | 32 个 .py 上游副本（quilt 同步参考用） |
+| 决策文档 | `docs/decoupling/decisions/stage-j-rollback.md`（2026-06-23）标注「rollback completed」但工作树与之矛盾——rollback 实际未真正还原 32 文件 |
+| `from src.services.mcp.types import X` | 抛 `ModuleNotFoundError: No module named 'src.services.mcp'` |
+| `src/services/__init__.py` `__all__` | 含 `"mcp"`（stale） |
+| `clawcodex_ext/__init__.py` | 无 `sys.modules['src.services.mcp.*']` 重定向 |
+
+### 结论：迁移路径不是 A/B/C 三选一，而是「拆解半成品」
+
+原 §4 Top 1 把 `src/services/mcp/*` 列为「32 文件待迁」，前提不成立——文件早已迁出 src/。真实待决的是 **HEAD 处于半完成状态**：所有外部调用点需要重新指向 `clawcodex_ext.services.mcp.*`，并清理 `src/services/__init__.py` 的 stale 出口。详见 §10g「决策与执行」。
+
+### 决策与执行
+
+| 决策 | 选项 | 结果 |
+|---|---|---|
+| 处理方式 | A. 全量迁移调用点（Recommended）| **已采纳**：27 个文件 / 177 处 import 改写为 `clawcodex_ext.services.mcp.*` |
+| 处理方式 | B. 在 `src/services/mcp/` 重建 Pattern D 门面 | 已拒绝：会重新引入 phase J-4 失败的 patch 膨胀风险（见 stage-j-rollback.md §「Why J-4 failed」） |
+| 处理方式 | C. 把 32 文件从 ext 复制回 src/services/mcp/ | 已拒绝：字面符合 rollback 决策但会显著增加 src/ 维护负担，与最近几条 `refactor(decoupling)` 提交方向相反 |
+| `src/services/__init__.py` `__all__` | 删除 stale `"mcp"` 项 + 注释指向 ext | **已采纳**：替换为 4 项 archive 元数据 + 3 行注释 |
+
+### 改动覆盖（27 文件 / 177 import 重写）
+
+| 类别 | 文件数 | 改动量 | 代表 |
+|---|---|---|---|
+| tests/mcp/* | 21 | 144 处 | `test_mcp_critic_majors.py`(39), `test_mcp_critic_followups.py`(31), `test_mcp_critic_blockers.py`(15), `test_mcp_client_full.py`(12), `test_mcp_phase_polish_and_runtime.py`(10) |
+| tests/integration/* | 4 | 21 处 | `test_mcp_integration.py`(8), `test_mcp_integration_full.py`(7), `test_phase_c_build.py`(4), `test_real_mcp_server.py`(2) |
+| tests/services/chrome/test_mcp_impl.py | 1 | 5 处 | 含 `sys.modules["src.services.mcp.types"]` stub → 改为 `sys.modules["clawcodex_ext.services.mcp.types"]` stub |
+| src/entrypoints/* | 2 | 3 处 | `mcp.py`(2), `doctor.py`(1) |
+| **合计** | **27** | **177** | 全部为机械替换 `src.services.mcp` → `clawcodex_ext.services.mcp`（含 `from ... import`、`patch("...", ...)`、`monkeypatch.setattr("...", ...)`、`importlib.import_module("...")` 等 4 种调用语法） |
+
+### 唯一未迁移的 Python 残留（非违规）
+
+`patches/upstream/b24b8cb/merged/0121.entrypoints_doctor_py.patch:15` 出现 `from src.services.mcp.doctor import run_diagnostics`——这是 **历史 patch artifact**，是 patch 工具链用来记录 src→upstream 差异的，不应改写（改了会破坏上游 sync 与 patch 三方校验）。类似地 `clawcodex_ext/services/mcp/*.py` docstring 内 `typescript/src/services/mcp/...` 是 TS 镜像路径引用，非 Python import。
+
+### 验证证据
+
+| 维度 | 命令 | 结果 |
+|---|---|---|
+| 残留扫描 | `grep -rn 'src\.services\.mcp' --include='*.py' src/ tests/ clawcodex_ext/` | 0 个 Python 代码命中 ✅ |
+| Runtime import | `python3 -c "from clawcodex_ext.services.mcp.types import McpStdioServerConfig"` | OK（`__module__` = `clawcodex_ext.services.mcp.types`）✅ |
+| Runtime 关闭 | `python3 -c "import src.services.mcp.types"` | `ModuleNotFoundError`（与迁移前一致，符合预期）✅ |
+| Chrome 联动 | `python3 -c "import clawcodex_ext.services.chrome.mcp_impl; import clawcodex_ext.services.chrome.factory"` | OK ✅ |
+| `src.services.__all__` | 不含 `"mcp"` | `['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']` ✅ |
+| 5 个轻量 MCP 测试 | `pytest tests/mcp/{test_mcp_types,test_mcp_normalization,test_mcp_env_expansion,test_mcp_errors,test_mcp_string_utils}.py -q` | 67 passed in 4.38s ✅ |
+| Chrome MCP test | `pytest tests/services/chrome/test_mcp_impl.py -q` | 24 passed in 1.76s ✅ |
+| `tests/mcp/` 全量 | `pytest tests/mcp/ -q` | **375 passed / 14 failed** ⚠️ |
+| Stage 1-5 stability gate | `pytest tests/stability_gate/test_stage[1-5]*.py -q` | 257 passed in 23.19s ✅ |
+| Orchestrator 全量 | `pytest tests/orchestrator/test_orchestrator_*.py -q` | 483 passed in 17.67s ✅ |
+
+### 已知遗留（不属于本次 follow-up）
+
+`tests/mcp/` 下 14 个 fail 是 **预存环境约束**，与本次迁移无关：
+- 失败原因：`tests/mcp/__init__.py` 是 0 字节空包，pytest collection 把 `tests/` 加入 `sys.path[0]`，导致 `import mcp` 解析到 `tests/mcp/__init__.py`（空包）而非已安装的 `mcp` SDK。
+- 迁移前状态：同样会失败，但失败模式是 `from src.services.mcp.X import Y` 在 import 时抛 `ModuleNotFoundError`（整个测试文件无法被 pytest 收集）。
+- 迁移后状态：调用点能被解析，pytest 收集成功，运行时才暴露 `mcp.client` 子模块缺失。
+- 修复方向（独立 follow-up）：把 `tests/mcp/` 改名 `tests/mcp_tests/`，或删除 `tests/mcp/__init__.py`，让 `mcp` 包名解析到上游 SDK。这与解耦无关，**不在本次 PR 范围内**。
+
+### 与 stage-j-rollback.md 的关系
+
+本次实际执行的是「rollback decision 的 spirit（恢复 import 可达性）」但不是「rollback decision 的 letter（物理还原 32 文件到 src/）」。如果未来真的要按 letter 重新走 J-4，需要先解决：
+1. 修复 `tests/mcp/` 同名包冲突（见上节）
+2. 评估当前 b24b8cb patch series 状态是否支持再次尝试 facade 化（详见 `docs/decoupling/b24b8cb_diff_summary.txt`）
+
+建议 follow-up：把本节链接添加到 `docs/decoupling/decisions/stage-j-rollback.md` 的「Follow-up actions」段，作为「decided to migrate call sites instead of restoring src/」的正式记录。
+
+---
+
 ## 11. 历史会话索引
 
 | 日期 | 章节 | 主要工作 |
@@ -801,6 +880,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 2026-06-24 | §3.6 / §4 / §10e | **Phase 3-A §3.6 五模块 facade 化（38 src files；Stage 1-6 + orchestrator + 独立 verification 12 项矩阵全 PASS）** |
 | 2026-06-24 | §3.4 / §4 / §10f | **Phase 2-H 解耦收尾批次 — computer_use/platform/ 3 文件 facade + pricing/cost_tracker/session_title 迁 ext（6 文件，非 facade 文件 ~13→~7）** |
 | 2026-06-24 | §3.4 / §3.5 / §4 / §9 | **Phase 2-J 双位置包收敛 — 7 包 31 个 src facade 全删除，跨层 import 100+ 处重写为 ext 直连，Stage 1-5 门禁 321 passed + 7 包专项 363 passed** ✅ |
+| 2026-06-24 | §3.5 / §4 / §10g | **Phase 3-B `src/services/mcp/*` 调用点迁移 — 27 文件 / 177 import 改写为 `clawcodex_ext.services.mcp.*`，清理 stale `src/services/__init__.py` `__all__`，Stage 1-5 257 + Orchestrator 483 全 PASS；遗留 `tests/mcp/` 同名包冲突作为独立 follow-up** |
 
 ---
 

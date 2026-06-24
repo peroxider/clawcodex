@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import pytest
-from src.services.mcp.env_expansion import expand_env_vars_in_string
+from clawcodex_ext.services.mcp.env_expansion import expand_env_vars_in_string
 
 
 class TestExpandEnvVarsInString:

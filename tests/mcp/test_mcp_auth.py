@@ -4,7 +4,7 @@ import tempfile
 import time
 import pytest
 
-from src.services.mcp.auth import (
+from clawcodex_ext.services.mcp.auth import (
     McpAuthManager,
     McpTokenStore,
     OAuthConfig,

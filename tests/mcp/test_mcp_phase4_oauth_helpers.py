@@ -7,16 +7,16 @@ from unittest.mock import patch
 
 import pytest
 
-from src.services.mcp.oauth_error_normalization import (
+from clawcodex_ext.services.mcp.oauth_error_normalization import (
     normalize_oauth_error_body,
 )
-from src.services.mcp.oauth_port import (
+from clawcodex_ext.services.mcp.oauth_port import (
     _FALLBACK_PORT,
     _is_port_free,
     _port_range,
     find_available_port,
 )
-from src.services.mcp.oauth_redaction import (
+from clawcodex_ext.services.mcp.oauth_redaction import (
     SENSITIVE_OAUTH_PARAMS,
     redact_sensitive_params,
 )
@@ -67,7 +67,7 @@ class TestFindAvailablePort:
         """When 100 attempts all fail, the allocator returns
         ``_FALLBACK_PORT`` rather than raising."""
         monkeypatch.delenv("MCP_OAUTH_CALLBACK_PORT", raising=False)
-        with patch("src.services.mcp.oauth_port._is_port_free", return_value=False):
+        with patch("clawcodex_ext.services.mcp.oauth_port._is_port_free", return_value=False):
             assert find_available_port() == _FALLBACK_PORT
 
 

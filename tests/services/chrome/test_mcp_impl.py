@@ -21,7 +21,7 @@ from clawcodex_ext.services.chrome.mcp_impl import MCPChromeController
 
 
 # ---------------------------------------------------------------------------
-# Stub the upstream ``mcp`` SDK + src.services.mcp.types if missing.
+# Stub the upstream ``mcp`` SDK + clawcodex_ext.services.mcp.types if missing.
 # The real SDK isn't installed in this test environment, but
 # the chrome MCP controller only needs the type symbols to build
 # its server config — a sentinel dataclass suffices.
@@ -29,10 +29,10 @@ from clawcodex_ext.services.chrome.mcp_impl import MCPChromeController
 
 
 def _install_mcp_type_stubs() -> None:
-    """Create a fake ``src.services.mcp.types`` module exposing
+    """Create a fake ``clawcodex_ext.services.mcp.types`` module exposing
     the four McpServerConfig dataclasses the chrome controller
     imports. Idempotent; safe to call multiple times."""
-    if "src.services.mcp.types" in sys.modules:
+    if "clawcodex_ext.services.mcp.types" in sys.modules:
         return
 
     @dataclass
@@ -53,12 +53,12 @@ def _install_mcp_type_stubs() -> None:
     class _StubSSE:
         url: str
 
-    stub = types.ModuleType("src.services.mcp.types")
+    stub = types.ModuleType("clawcodex_ext.services.mcp.types")
     stub.McpStdioServerConfig = _StubStdio  # type: ignore[attr-defined]
     stub.McpHTTPServerConfig = _StubHTTP  # type: ignore[attr-defined]
     stub.McpWebSocketServerConfig = _StubWS  # type: ignore[attr-defined]
     stub.McpSSEServerConfig = _StubSSE  # type: ignore[attr-defined]
-    sys.modules["src.services.mcp.types"] = stub
+    sys.modules["clawcodex_ext.services.mcp.types"] = stub
 
 
 @pytest.fixture(autouse=True)

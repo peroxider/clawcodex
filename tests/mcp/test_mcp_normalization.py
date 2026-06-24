@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from src.services.mcp.normalization import normalize_name_for_mcp
+from clawcodex_ext.services.mcp.normalization import normalize_name_for_mcp
 
 
 class TestNormalizeNameForMcp:

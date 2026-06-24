@@ -21,18 +21,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from src.services.mcp import (
+from clawcodex_ext.services.mcp import (
     InProcessTransport,
     create_linked_transport_pair,
     truncate_mcp_content_if_needed,
 )
-from src.services.mcp.connection_manager import MCPConnectionManager
-from src.services.mcp.in_process_transport import _ClosedSentinel
-from src.services.mcp.tool_wrapper import (
+from clawcodex_ext.services.mcp.connection_manager import MCPConnectionManager
+from clawcodex_ext.services.mcp.in_process_transport import _ClosedSentinel
+from clawcodex_ext.services.mcp.tool_wrapper import (
     _flatten_content_blocks_to_text,
     wrap_mcp_tool,
 )
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     DisabledMCPServer,
     FailedMCPServer,
@@ -44,7 +44,7 @@ from src.services.mcp.types import (
     ScopedMcpServerConfig,
     ServerCapabilities,
 )
-from src.services.mcp.xaa import (
+from clawcodex_ext.services.mcp.xaa import (
     ID_JAG_TOKEN_TYPE,
     ID_TOKEN_TYPE,
     JWT_BEARER_GRANT,
@@ -230,34 +230,34 @@ def _build_jwt_with_exp(exp: int) -> str:
 
 class TestXaaIdpLogin:
     def test_jwt_exp_decoded_from_payload(self):
-        from src.services.mcp.xaa_idp_login import jwt_exp as _jwt_exp
+        from clawcodex_ext.services.mcp.xaa_idp_login import jwt_exp as _jwt_exp
 
         future = 9_999_999_999
         token = _build_jwt_with_exp(future)
         assert _jwt_exp(token) == future
 
     def test_jwt_exp_malformed_returns_none(self):
-        from src.services.mcp.xaa_idp_login import jwt_exp as _jwt_exp
+        from clawcodex_ext.services.mcp.xaa_idp_login import jwt_exp as _jwt_exp
 
         assert _jwt_exp("not.a.jwt") is None
         assert _jwt_exp("") is None
         assert _jwt_exp("only.two") is None
 
     def test_is_xaa_enabled_off_by_default(self, monkeypatch):
-        from src.services.mcp.xaa_idp_login import is_xaa_enabled
+        from clawcodex_ext.services.mcp.xaa_idp_login import is_xaa_enabled
 
         monkeypatch.delenv("ENABLE_MCP_XAA", raising=False)
         assert is_xaa_enabled() is False
 
     def test_is_xaa_enabled_on_when_env_set(self, monkeypatch):
-        from src.services.mcp.xaa_idp_login import is_xaa_enabled
+        from clawcodex_ext.services.mcp.xaa_idp_login import is_xaa_enabled
 
         monkeypatch.setenv("ENABLE_MCP_XAA", "1")
         monkeypatch.setenv("MCP_XAA_ISSUER", "https://idp.example.com")
         assert is_xaa_enabled() is True
 
     def test_is_xaa_enabled_off_without_issuer(self, monkeypatch):
-        from src.services.mcp.xaa_idp_login import is_xaa_enabled
+        from clawcodex_ext.services.mcp.xaa_idp_login import is_xaa_enabled
 
         monkeypatch.setenv("ENABLE_MCP_XAA", "1")
         monkeypatch.delenv("MCP_XAA_ISSUER", raising=False)
@@ -291,7 +291,7 @@ class TestOutputValidationTruncation:
         """Token estimate for a 1MB repetitive string must complete in
         constant-ish time (not the 100+ seconds tiktoken takes natively).
         We use a small budget so the truncation branch is exercised."""
-        from src.services.mcp.output_validation import get_content_size_estimate
+        from clawcodex_ext.services.mcp.output_validation import get_content_size_estimate
 
         big = "a" * 600_000
         blocks = [{"type": "text", "text": big}]
@@ -411,15 +411,15 @@ class TestConnectionManagerWriteMethods:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect,
             ),
             patch(
-                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                "clawcodex_ext.services.mcp.connection_manager.wrap_mcp_tools_for_server",
                 return_value=[],
             ),
         ):
@@ -436,7 +436,7 @@ class TestConnectionManagerWriteMethods:
     async def test_reconnect_for_unknown_server_returns_failed(self):
         mgr = MCPConnectionManager()
         with patch(
-            "src.services.mcp.connection_manager.get_mcp_config_by_name",
+            "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
             return_value=None,
         ):
             result = await mgr.reconnect_mcp_server("ghost")
@@ -459,22 +459,22 @@ class TestConnectionManagerWriteMethods:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                "clawcodex_ext.services.mcp.connection_manager.is_mcp_server_disabled",
                 return_value=True,
             ),
             patch(
-                "src.services.mcp.connection_manager.set_mcp_server_enabled",
+                "clawcodex_ext.services.mcp.connection_manager.set_mcp_server_enabled",
             ) as mock_set,
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect,
             ),
             patch(
-                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                "clawcodex_ext.services.mcp.connection_manager.wrap_mcp_tools_for_server",
                 return_value=[],
             ),
         ):
@@ -493,11 +493,11 @@ class TestConnectionManagerWriteMethods:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.is_mcp_server_disabled",
+                "clawcodex_ext.services.mcp.connection_manager.is_mcp_server_disabled",
                 return_value=False,
             ),
             patch(
-                "src.services.mcp.connection_manager.set_mcp_server_enabled",
+                "clawcodex_ext.services.mcp.connection_manager.set_mcp_server_enabled",
             ) as mock_set,
         ):
             result = await mgr.toggle_mcp_server("srv")
@@ -533,15 +533,15 @@ class TestConnectionManagerWriteMethods:
 
         with (
             patch(
-                "src.services.mcp.connection_manager.get_mcp_config_by_name",
+                "clawcodex_ext.services.mcp.connection_manager.get_mcp_config_by_name",
                 return_value=config,
             ),
             patch(
-                "src.services.mcp.connection_manager.connect_to_server",
+                "clawcodex_ext.services.mcp.connection_manager.connect_to_server",
                 new=fake_connect,
             ),
             patch(
-                "src.services.mcp.connection_manager.wrap_mcp_tools_for_server",
+                "clawcodex_ext.services.mcp.connection_manager.wrap_mcp_tools_for_server",
                 return_value=[],
             ),
         ):
@@ -615,7 +615,7 @@ class TestBinaryContentPersistence:
         raw base64 (or the old '[image content]' placeholder) into the
         model-facing text. Instead, persist the bytes and substitute a
         path-reference line."""
-        from src.services.mcp import output_storage
+        from clawcodex_ext.services.mcp import output_storage
 
         monkeypatch.setattr(output_storage, "_BLOB_DIR", tmp_path)
         pixel = base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"fake_image_bytes" * 50).decode()
@@ -650,7 +650,7 @@ class TestBinaryContentPersistence:
         assert "Hello, world" in text
 
     def test_resource_with_blob_persists(self, tmp_path, monkeypatch):
-        from src.services.mcp import output_storage
+        from clawcodex_ext.services.mcp import output_storage
 
         monkeypatch.setattr(output_storage, "_BLOB_DIR", tmp_path)
         blob_b64 = base64.b64encode(b"some binary payload").decode()
@@ -682,7 +682,7 @@ class TestPolicyFilterReadsExtra:
     in the ``extra`` dict, so the gate was silently inactive."""
 
     def test_disable_all_mcp_via_extra_dict_filters_everything(self):
-        from src.services.mcp.config import filter_mcp_servers_by_policy
+        from clawcodex_ext.services.mcp.config import filter_mcp_servers_by_policy
         from src.settings.types import SettingsSchema
 
         settings = SettingsSchema(extra={"disable_all_mcp": True})
@@ -693,7 +693,7 @@ class TestPolicyFilterReadsExtra:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=settings,
         ):
             filtered, notices = filter_mcp_servers_by_policy(configs)
@@ -702,7 +702,7 @@ class TestPolicyFilterReadsExtra:
         assert "disable_all_mcp" in notices[0]
 
     def test_allow_managed_only_mcp_via_extra_drops_non_managed(self):
-        from src.services.mcp.config import filter_mcp_servers_by_policy
+        from clawcodex_ext.services.mcp.config import filter_mcp_servers_by_policy
         from src.settings.types import SettingsSchema
 
         settings = SettingsSchema(extra={"allow_managed_only_mcp": True})
@@ -717,7 +717,7 @@ class TestPolicyFilterReadsExtra:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=settings,
         ):
             filtered, notices = filter_mcp_servers_by_policy(configs)
@@ -727,7 +727,7 @@ class TestPolicyFilterReadsExtra:
     def test_camelcase_alias_is_accepted(self):
         """JSON files commonly use camelCase. The lookup must accept both
         the snake_case canonical and the camelCase alias."""
-        from src.services.mcp.config import filter_mcp_servers_by_policy
+        from clawcodex_ext.services.mcp.config import filter_mcp_servers_by_policy
         from src.settings.types import SettingsSchema
 
         settings = SettingsSchema(extra={"disableAllMcp": True})
@@ -738,14 +738,14 @@ class TestPolicyFilterReadsExtra:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=settings,
         ):
             filtered, notices = filter_mcp_servers_by_policy(configs)
         assert filtered == {}
 
     def test_no_policy_flag_keeps_all_servers(self):
-        from src.services.mcp.config import filter_mcp_servers_by_policy
+        from clawcodex_ext.services.mcp.config import filter_mcp_servers_by_policy
         from src.settings.types import SettingsSchema
 
         settings = SettingsSchema()  # nothing set
@@ -756,7 +756,7 @@ class TestPolicyFilterReadsExtra:
             ),
         }
         with patch(
-            "src.services.mcp.config._safe_load_settings",
+            "clawcodex_ext.services.mcp.config._safe_load_settings",
             return_value=settings,
         ):
             filtered, _ = filter_mcp_servers_by_policy(configs)
@@ -775,19 +775,19 @@ class TestSessionExpiryRegexTightening:
     session-expiry code (-32001 or 32600)."""
 
     def test_invalid_params_with_session_terminated_text_does_not_match(self):
-        from src.services.mcp.errors import is_mcp_session_expired_error
+        from clawcodex_ext.services.mcp.errors import is_mcp_session_expired_error
 
         err = Exception('{"code":-32602,"message":"Session terminated"}')
         assert is_mcp_session_expired_error(err) is False
 
     def test_recognized_neg32001_still_matches(self):
-        from src.services.mcp.errors import is_mcp_session_expired_error
+        from clawcodex_ext.services.mcp.errors import is_mcp_session_expired_error
 
         err = Exception('{"code":-32001,"message":"Session terminated"}')
         assert is_mcp_session_expired_error(err) is True
 
     def test_recognized_32600_still_matches(self):
-        from src.services.mcp.errors import is_mcp_session_expired_error
+        from clawcodex_ext.services.mcp.errors import is_mcp_session_expired_error
 
         err = Exception('{"code":32600,"message":"Session terminated"}')
         assert is_mcp_session_expired_error(err) is True

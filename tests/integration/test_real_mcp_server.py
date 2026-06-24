@@ -17,8 +17,8 @@ import shutil
 
 import pytest
 
-from src.services.mcp.client import McpClient
-from src.services.mcp.types import (
+from clawcodex_ext.services.mcp.client import McpClient
+from clawcodex_ext.services.mcp.types import (
     ConnectedMCPServer,
     McpStdioServerConfig,
     ScopedMcpServerConfig,

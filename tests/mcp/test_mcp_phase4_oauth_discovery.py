@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from src.services.mcp.auth_discovery import (
+from clawcodex_ext.services.mcp.auth_discovery import (
     OAuthDiscoveryError,
     discover_oauth_metadata,
 )
