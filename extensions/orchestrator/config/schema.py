@@ -266,6 +266,11 @@ class AgentConfig:
     # default (which may be a placeholder like ``gpt-5.4`` that does
     # not exist on the real API — see F-40 root-cause analysis).
     model: str | None = None
+    # Multi-model stage overrides: keyed by run_kind (e.g. "review_followup",
+    # "agent_followup"), each value is a dict with optional "provider" and/or
+    # "model" keys. The orchestrator builds per-stage AgentRunners on top of
+    # the main agent config; missing keys inherit from the parent.
+    stage_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
     # the inter-run retry queue between separate AgentRunner.run()
     # invocations; these fields govern backoff WITHIN a single run.
     rate_limit_base_delay_ms: int = 30_000
@@ -501,6 +506,21 @@ class WorkflowConfig:
         )
 
         verification_raw = agent_raw.get("verification", {})
+        # Multi-model stage overrides: parse agent.stages YAML dict.
+        stages_raw = agent_raw.get("stages", {}) or {}
+        stage_overrides: dict[str, dict[str, Any]] = {}
+        for stage_name, stage_cfg in stages_raw.items():
+            if not isinstance(stage_cfg, dict):
+                continue
+            override: dict[str, Any] = {}
+            provider = _resolve_env_value(stage_cfg.get("provider"))
+            model = _resolve_env_value(stage_cfg.get("model"))
+            if provider:
+                override["provider"] = provider
+            if model:
+                override["model"] = model
+            if override:
+                stage_overrides[stage_name] = override
         agent = AgentConfig(
             max_concurrent_agents=agent_raw.get("max_concurrent_agents", 10),
             max_turns=agent_raw.get("max_turns", 600),
@@ -559,6 +579,8 @@ class WorkflowConfig:
             loop_detection_threshold=int(agent_raw.get("loop_detection_threshold", 3)),
             # F-40 root-cause fix: model name override.
             model=_resolve_env_value(agent_raw.get("model")) or None,
+            # Multi-model stage overrides (parsed above).
+            stage_overrides=stage_overrides,
         )
         if workspace.strategy == "sequential":
             if agent.max_concurrent_agents != 1:

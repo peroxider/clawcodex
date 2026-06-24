@@ -82,11 +82,14 @@ class Orchestrator:
         workspace: WorkspaceManager,
         agent_runner: AgentRunner,
         status_dashboard: StatusDashboard | None = None,
+        *,
+        stage_runners: dict[str, "AgentRunner"] | None = None,
     ) -> None:
         self.workflow = workflow
         self.tracker = tracker
         self.workspace = workspace
         self.agent_runner = agent_runner
+        self.stage_runners = stage_runners or {}
         self.status_dashboard = status_dashboard or StatusDashboard()
         self._validate_workspace_strategy()
         self.git_sync = GitSyncService(
@@ -1108,6 +1111,9 @@ class Orchestrator:
             return
         start_commit_sha = await self.workspace.current_head(workspace.path)
 
+        # Select per-stage runner when configured, else fall back to
+        # the main agent runner (backward-compatible).
+        runner = self.stage_runners.get("review_followup", self.agent_runner)
         session = AgentSession(
             issue=issue,
             workspace=workspace,
@@ -1392,10 +1398,13 @@ class Orchestrator:
                     # ``on_turn_complete`` / ``on_session_complete``
                     # methods works.
                     progress_sink = self._build_session_sink(session.issue.id or "")
+                    # Per-stage runner lookup by session run_kind.
+                    # Falls back to main runner when no override is configured.
+                    runner = self.stage_runners.get(session.run_kind, self.agent_runner)
                     run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
                     session.timeout_deadline_at = time.time() + run_timeout_seconds
                     await asyncio.wait_for(
-                        self.agent_runner.run(
+                        runner.run(
                             session,
                             self.workflow,
                             status_dashboard=self.status_dashboard,

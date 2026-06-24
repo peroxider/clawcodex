@@ -319,6 +319,26 @@ class IssueRegistry:
             record.last_hook_error = existing.last_hook_error
             record.summary_comment_id = existing.summary_comment_id
             record.last_followup_commit_sha = existing.last_followup_commit_sha
+            # Re-register overwrites branch_name with the issue's default
+            # (usually "main").  Preserve the actual feature branch name
+            # set by a prior `mark_synced` so followup sessions push to
+            # the right branch.
+            if existing.branch_name:
+                record.branch_name = existing.branch_name
+            # F-39: preserve operator intent + retry bookkeeping so a
+            # label-driven FOLLOWUP/RETRY is not silently wiped.
+            record.intent = existing.intent
+            record.intent_source = existing.intent_source
+            record.retry_count = existing.retry_count
+            record.last_command = existing.last_command
+            record.command_cursor = existing.command_cursor
+            # F-37: preserve review-feedback tracking across re-launches.
+            record.processed_feedback_ids = list(existing.processed_feedback_ids)
+            record.pending_feedback_ids = list(existing.pending_feedback_ids)
+            record.pending_feedback_since = existing.pending_feedback_since
+            record.feedback_cursor = existing.feedback_cursor
+            record.followup_attempt_count = existing.followup_attempt_count
+            record.last_feedback_checked_at = existing.last_feedback_checked_at
         self._records[issue_id] = record
         self._save()
         return record
