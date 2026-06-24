@@ -138,7 +138,7 @@ clawcodex_ext/services/ide/              IDE 适配 (5 文件, src/ 5 个 3 行 
 clawcodex_ext/services/tool_execution/   工具执行 (6 文件, src/ 6 个 3 行 facade) ✅ Phase 2-E 复核
 clawcodex_ext/providers/native/          F-72 原生模型适配 (6 文件, src/ 6 个 facade) ✅ Phase 2-E 复核（Pattern C sys.modules swap + Pattern D 5 子模块）
 clawcodex_ext/command_system/            src 独有 11 命令整迁 (aggregator/effort/export/model/moved_to_plugin/output_style/safe_commands/security_review/shell_prompt/statusline/theme, src/ 11 个 Pattern B lazy proxy facade) ✅ Phase 2-E T4 本轮
-clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp/ 无 live .py 残留)
+clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp/ 无 live .py 残留) ✅ Phase 3-B 调用点迁移（27 文件 / 177 import 改写为 `clawcodex_ext.services.mcp.*`，详见 §10g）
 
 # ❌ 仍在 src/（待迁 ext）
 # 当前无已确认的 services 子目录残留；后续需继续审计非 services 核心路径。
@@ -358,15 +358,17 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 
 ## 4. 当前需要立即处理的剩余解耦项
 
-> 原 §4 的 Top 5 经 Phase 3-A、Phase 2-F/G/H 后已全部解决或降级。以下为当前确认为仍含本地增量的非 facade 文件。
+> 原 §4 的 Top 5 经 Phase 3-A、Phase 2-F/G/H 后已全部解决或降级；Phase 3-B 又闭合了原 Top 1（`src/services/mcp/*`）— 详见 §10g 调用点迁移。
 > **本轮更新（2026-06-24 Phase 2-J）**：7 个双位置包 `{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 收敛为单 ext 入口，删除 31 个 src facade。含本地增量非 facade 文件 ~7 不变（本次不涉及）。
+> **本轮更新（2026-06-24 Phase 3-B）**：`src/services/mcp/*` 以「调用点迁移」形式闭合（27 文件 / 177 import 重写），无 `src/` 侧新文件落地；唯一非文件 follow-up 是 `tests/mcp/` 与上游 `mcp` SDK 同名包冲突（与解耦无关，独立跟进）。
 
 | 排序 | 建议关注项 | 说明 | 建议方案 |
 |---|---|---|---|
 | 1 | `src/` 中 ~7 个含本地增量非 facade 文件 | config / utils/git / utils/image 等核心内联 diff | 评估是否有足够解耦价值，部分可能只能保留上游原地 diff |
 | 2 | ~~7 个双位置包~~ | ✅ **Phase 2-J 已收敛** — 31 个 src facade 全删除，单 ext 入口 | — |
-| 3 | `tests/` 中仍有 20+ 处 `from src.*` 引用 | 合法的 facade 契约测试，不是违规 | 保留，不作清理 |
-| 4 | 补丁队列重生成 | 待 `regenerate_patches.py --allow-deletes` 重核 | 在下一个较大批处理前统一执行 |
+| 3 | ~~`src/services/mcp/*` 调用点~~ | ✅ **Phase 3-B 已闭合** — 27 文件 / 177 import 改写为 `clawcodex_ext.services.mcp.*`，详见 §10g | — |
+| 4 | `tests/` 中仍有 20+ 处 `from src.*` 引用 | 合法的 facade 契约测试，不是违规 | 保留，不作清理 |
+| 5 | 补丁队列重生成 | 待 `regenerate_patches.py --allow-deletes` 重核 | 在下一个较大批处理前统一执行 |
 
 ---
 
