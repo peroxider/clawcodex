@@ -209,7 +209,7 @@ class StatusLine(Static):
             # prices; proxies (litellm/openrouter/bedrock) may bill
             # differently. Hidden when zero.
             try:
-                from src.services.pricing import (
+                from clawcodex_ext.services.pricing import (
                     compute_session_cost,
                     format_cost_usd,
                 )

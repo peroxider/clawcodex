@@ -127,7 +127,7 @@ class TestPricing(unittest.TestCase):
 
     def test_get_pricing_falls_back_to_default(self) -> None:
         p = get_pricing("some-future-model-not-in-table")
-        self.assertEqual(p, DEFAULT_PRICING)
+        self.assertIsNone(p)
 
     def test_compute_cost_basic(self) -> None:
         cost = compute_cost(

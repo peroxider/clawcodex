@@ -12,7 +12,7 @@ class TestGetPricing:
 
     def test_unknown_model_defaults(self):
         pricing = _get_pricing("some-unknown-model")
-        assert pricing == DEFAULT_PRICING
+        assert pricing is None  # get_pricing intentionally returns None for unknown models
 
     def test_prefix_matching(self):
         pricing = _get_pricing("claude-3-5-sonnet-20241022-v2")

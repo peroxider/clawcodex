@@ -51,7 +51,10 @@ def test_build_computer_use_suite_rejects_wrong_provider_type(
     # Force the platform builder to return a malformed suite. The factory
     # should detect the wrong type and raise TypeError instead of returning
     # a broken suite to the caller.
-    from src.services.computer_use import factory as factory_module
+    # Note: monkeypatch the ext-level factory module (the src facade does
+    # not export `build_provider_suite` — it is an internal symbol imported
+    # into clawcodex_ext's factory via `from .platform import build_provider_suite`).
+    from clawcodex_ext.services.computer_use import factory as factory_ext_module
 
     def bad_builder(platform=None, backend=None, recorder=None):  # type: ignore[no-untyped-def]
         return {
@@ -62,7 +65,7 @@ def test_build_computer_use_suite_rejects_wrong_provider_type(
             "window": None,
         }
 
-    monkeypatch.setattr(factory_module, "build_provider_suite", bad_builder)
+    monkeypatch.setattr(factory_ext_module, "build_provider_suite", bad_builder)
     with pytest.raises(TypeError):
         build_computer_use_suite(platform="linux")
 

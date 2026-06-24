@@ -1066,7 +1066,7 @@ class ClawcodexREPL:
             # displayed number is the upstream-list cost, not the
             # exact invoice. Hidden when zero (no API turns yet this
             # session).
-            from src.services.pricing import (
+            from clawcodex_ext.services.pricing import (
                 compute_session_cost,
                 format_cost_usd,
             )
