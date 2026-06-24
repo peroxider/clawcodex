@@ -26,7 +26,6 @@ command_system/export_command.py
 command_system/model_command.py
 command_system/moved_to_plugin.py
 command_system/output_style_command.py
-command_system/permissions_command.py
 command_system/safe_commands.py
 command_system/security_review.py
 command_system/shell_prompt.py
@@ -47,3 +46,120 @@ providers/glm_provider.py
 state/app_state.py
 transports/__init__.py
 utils/markdown_config_loader.py
+
+# (d) Facade-only fork delta — clawcodex_ext/ mirrors upstream 1:1
+# Phase 4 P0 路径 H：src/<f>.py 仅有 ~150-200B 的 Facade docstring + `from clawcodex_ext.X import *`
+# 而 clawcodex_ext/X.py 与 src/upstream/b24b8cb/X.py 完全一致（byte-identical）。
+# 保留 src/ = upstream 内容，运行时 `from src.X import Y` 加载 upstream 字节，
+# 因 clawcodex_ext == upstream，运行行为与 Facade 等价。详见 Phase 4 解耦路线图 P0 路径 H。
+context_system/cache_boundary.py
+context_system/workspace_snapshot.py
+permissions/bash_parser/__init__.py
+permissions/bash_parser/ast_nodes.py
+permissions/dangerous_safety.py
+query/config.py
+query/deps.py
+skills/frontmatter.py
+tool_system/protocol.py
+tool_system/tools/advisor.py
+tool_system/tools/bash/sleep_detection.py
+tool_system/tools/lsp.py
+tool_system/tools/misc.py
+tool_system/tools/sleep.py
+tool_system/tools/tool_search.py
+tool_system/utils/__init__.py
+tool_system/utils/path_utils.py
+tui/a11y.py
+tui/focus_router.py
+tui/frame_metrics.py
+tui/paste.py
+tui/terminal_chrome.py
+tui/vim_find.py
+tui/widgets/__init__.py
+tui/widgets/fullscreen_layout.py
+tui/widgets/messages/__init__.py
+tui/widgets/prompt_input_footer.py
+tui/widgets/prompt_input_mode_indicator.py
+tui/widgets/session_preview.py
+tui/widgets/structured_diff.py
+tui/widgets/task_list.py
+tui/widgets/tool_activity/__init__.py
+tui/widgets/tool_activity/base.py
+tui/widgets/tool_activity/bash.py
+tui/widgets/tool_activity/default.py
+tui/widgets/tool_activity/edit.py
+tui/widgets/tool_activity/glob.py
+tui/widgets/tool_activity/grep.py
+tui/widgets/tool_activity/read.py
+tui/widgets/tool_activity/task.py
+tui/widgets/tool_activity/write.py
+utils/abort_controller.py
+
+# (c) Vendored, mirrored 1:1 in clawcodex_ext/services/ — no fork patch needed
+# Phase 4 P0 路径 E：本地通过 clawcodex_ext.services.{mcp,api,analytics,voice,oauth}
+# 访问上游实现，src/ 内零残留引用。保留 src/upstream/b24b8cb/ 中的原快照作为
+# "vendored base"，未来上游 sync 时不再生成 delete patch（patch_generator.py L773-775
+# 的 preserved_new 分支）。详见 Phase 4 解耦路线图 P0 路径 E。
+services/analytics/__init__.py
+services/analytics/events.py
+services/analytics/metadata.py
+services/analytics/sink.py
+services/api/__init__.py
+services/api/claude.py
+services/api/errors.py
+services/api/logging.py
+services/api/provider_config.py
+services/api/retry.py
+services/api/tool_normalization.py
+services/mcp/__init__.py
+services/mcp/auth.py
+services/mcp/auth_discovery.py
+services/mcp/auth_provider.py
+services/mcp/channel_permissions.py
+services/mcp/claudeai.py
+services/mcp/client.py
+services/mcp/config.py
+services/mcp/connection_manager.py
+services/mcp/doctor.py
+services/mcp/elicitation.py
+services/mcp/env_expansion.py
+services/mcp/errors.py
+services/mcp/fetch_wrappers.py
+services/mcp/in_process_transport.py
+services/mcp/manager.py
+services/mcp/mcp_string_utils.py
+services/mcp/normalization.py
+services/mcp/oauth_callback_server.py
+services/mcp/oauth_error_normalization.py
+services/mcp/oauth_port.py
+services/mcp/oauth_redaction.py
+services/mcp/official_registry.py
+services/mcp/output_storage.py
+services/mcp/output_validation.py
+services/mcp/telemetry.py
+services/mcp/text_truncation.py
+services/mcp/tool_wrapper.py
+services/mcp/transport.py
+services/mcp/types.py
+services/mcp/xaa.py
+services/mcp/xaa_idp_login.py
+services/oauth/__init__.py
+services/oauth/client.py
+services/voice/__init__.py
+services/voice/detection.py
+services/voice/stt.py
+
+
+
+
+# (e) REMOVED — was based on flawed star-import facade assumption. Inspection on
+# 2026-06-24 showed all 205 src/X.py files in this list are FULL lazy-proxy
+# facades ("""\nFacade ... lazy proxy\n""" + __getattr__ re-export), not
+# simple `from clawcodex_ext.X import *` star-import facades. The src/X.py
+# facade itself routes to clawcodex_ext.X, so the swap mechanism was
+# redundant AND harmful — it pre-populated sys.modules with the ext module,
+# which then caused Python to re-execute clawcodex_ext/X.py during the
+# facade's own `import clawcodex_ext.X as _mod`, creating duplicate module
+# instances with separate `_REGISTRY` (or similar singleton) state. The
+# 205 modify patches that maintain the src/X.py facade content stay.
+# See PATH_I_REVERT.md for the full post-mortem.
