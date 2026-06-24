@@ -410,7 +410,7 @@ if __name__ == "__main__":
     )
 
     # Reconstruct session + provider + tool context from saved state
-    from src.agent.session import Session as AgentSession
+    from clawcodex_ext.agent.session import Session as AgentSession
     from src.services.session_storage import SessionStorage
 
     restored = AgentSession.resume(args.session_id)

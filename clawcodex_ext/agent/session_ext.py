@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from src.agent.session import Session
+from clawcodex_ext.agent.session import Session
 
 logger = logging.getLogger(__name__)
 

@@ -43,7 +43,7 @@ from clawcodex_ext.agent.constants import (
     LEGACY_AGENT_TOOL_NAME,
     ONE_SHOT_BUILTIN_AGENT_TYPES,
 )
-from src.agent.fork_subagent import (
+from clawcodex_ext.agent.fork_subagent import (
     build_forked_messages,
     build_worktree_notice,
     is_fork_subagent_enabled,

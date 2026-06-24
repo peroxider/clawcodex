@@ -191,7 +191,7 @@ async def _route_in_process(
 
     # Terminal — attempt auto-resume. Race-guarded by
     # ``resume_agent_background``: only one concurrent caller wins.
-    from src.agent.resume_agent import resume_agent_background
+    from clawcodex_ext.agent.resume_agent import resume_agent_background
 
     result = await resume_agent_background(
         agent_id=agent_id,

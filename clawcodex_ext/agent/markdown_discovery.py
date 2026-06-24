@@ -23,7 +23,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
-from src.agent.parse_agent_markdown import parse_agent_from_markdown
+from clawcodex_ext.agent.parse_agent_markdown import parse_agent_from_markdown
 from src.skills.frontmatter import parse_frontmatter
 from clawcodex_ext.agent.registry import SOURCE_CLAWCODEX_EXT, SOURCE_EXTENSIONS
 

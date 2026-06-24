@@ -149,7 +149,7 @@ def _run_resume_session(
     # We deliberately do NOT mutate bootstrap state when the load
     # fails — the resume_session() reader below will produce a
     # well-defined empty result.
-    from src.agent.session import Session
+    from clawcodex_ext.agent.session import Session
 
     session = Session.resume(target_run_id)
 
