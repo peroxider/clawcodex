@@ -35,6 +35,7 @@ from .builders.timeline_builder import TimelineBuilder
 from .builders.multi_session_view_builder import MultiSessionViewBuilder
 from .import_router import create_import_router
 from .ws import create_ws_router, create_orch_ws_router
+from .parsers.stats_parser import StatsFileParser
 
 logger = logging.getLogger(__name__)
 
@@ -714,7 +715,12 @@ def create_app(
         """F-75: Tool/Skill stats dashboard page."""
         parser = StatsFileParser()
         summary = parser.get_summary()
-        return templates.TemplateResponse("stats_panel.html", {"request": request, "summary": summary})
+        templates = getattr(app.state, "templates", None)
+        if templates is None:
+            return HTMLResponse("<h1>Templates not found</h1>", status_code=500)
+        return templates.TemplateResponse(
+            "stats_panel.html", {"request": request, "summary": summary}
+        )
 
     @app.get("/viz/orchestrator", response_class=HTMLResponse, tags=["frontend"])
     async def orchestrator_dashboard(request: Request):
