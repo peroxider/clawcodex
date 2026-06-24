@@ -1,6 +1,9 @@
 """Claw Codex - Claude Code Python Implementation."""
 
-__version__ = "0.5.0"
+try:
+    from clawcodex_ext._version import __version__  # type: ignore[assignment]
+except ImportError:
+    __version__ = "0.0.0-dev"
 __author__ = "Claw Codex Team"
 
 from .config import load_config, get_provider_config

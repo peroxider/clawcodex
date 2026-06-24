@@ -43,7 +43,7 @@ def test_append_rejects_unknown_kind(tmp_path):
 def test_write_summary_round_trip(tmp_path):
     storage = _make_storage(tmp_path)
     today = utc_date(utc_now())
-    payload = {"date": today, "version": "0.5.0", "sessions": 3}
+    payload = {"date": today, "version": "2026.6.24", "sessions": 3}
     assert storage.write_summary(today, payload) is True
     out = storage.read_latest_summary(today)
     assert out == payload

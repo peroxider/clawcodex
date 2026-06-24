@@ -38,7 +38,7 @@ def test_peer_round_trip() -> None:
         instance_id="peer-1",
         hostname="host",
         pid=123,
-        version="0.5.0",
+        version="2026.6.24",
         addr="/tmp/pipe.sock",
         transport="uds",
         last_seen=42.0,

@@ -62,8 +62,8 @@ trap 'log_err "Installer crash at line $LINENO: $BASH_COMMAND"' ERR
 # If REPO_REF doesn't resolve on the remote, the install falls back to the
 # default branch with a loud warning — useful during the pre-tag period of
 # a release but should never ship in a tagged installer.
-readonly INSTALLER_VERSION="0.5.0"
-readonly CLAWCODEX_VERSION="0.5.0"
+readonly INSTALLER_VERSION="2026.6.24"
+readonly CLAWCODEX_VERSION="2026.6.24"
 # REPO_REF is intentionally NOT readonly — it gets reassigned when the user
 # passes --ref. Same for CLAWCODEX_HOME / CLAWCODEX_PARENT_DIR / CONFIG_DIR
 # (derived from overridable defaults below).

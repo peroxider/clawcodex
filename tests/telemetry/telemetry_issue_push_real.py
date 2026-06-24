@@ -73,7 +73,7 @@ def build_events(storage: Any) -> None:
                     "model": mdl,
                     "client_type": "cli",
                     "is_non_interactive": False,
-                    "app_version": "0.5.0-e2e-test",
+                    "app_version": "2026.6.24-e2e-test",
                 },
             ).to_dict(),
             date=DATE,

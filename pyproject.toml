@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clawcodex-dev-mind"
-version = "0.5.0"
+# version is dynamic - computed from date via clawcodex_ext._version.__version__
+dynamic = ["version"]
 description = "A production-oriented Python rebuild of Claude Code — real architecture, reliable CLI agent"
 readme = "README.md"
 license = "MIT"
@@ -167,6 +168,9 @@ filterwarnings = [
     # test suite.
     "ignore::DeprecationWarning:scripts.audit.remote_runtime",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "clawcodex_ext._version.__version__"}
 
 [tool.ruff]
 target-version = "py310"

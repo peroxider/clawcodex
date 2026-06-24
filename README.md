@@ -6,7 +6,7 @@
 
 *Built on top of the upstream Python reimplementation of Claude Code. This repo adds the multi-agent orchestration, scheduling, and LLM-routing layers that the upstream does not ship.*
 
-> 📍 **Repo location:** [`https://gitcode.com/chadwweng/clawcodex`](https://gitcode.com/chadwweng/clawcodex) — the project is **not yet open-sourced**, so public search engines / GitHub search will not find it. Use this URL directly to clone and browse.
+> 📍 **Repo location:** [`https://gitcode.com/chadwweng/clawcodex`](https://gitcode.com/chadwweng/clawcodex) — the project is now **open-sourced** under the MIT license. Public contributions, issues, and discussions are welcome.
 
 [English](README.md) · [中文](docs/i18n/README_ZH.md) · [Original upstream README](README.md.raw)
 
