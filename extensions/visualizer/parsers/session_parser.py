@@ -1,77 +1,43 @@
-"""Session metadata parser for the new ClawCodeX session format.
-
-Reads the on-disk shapes produced by ``src/services/session_storage.py``
-and ``src/agent/transcript.py`` (the new wire format):
-
-- Main transcript:    ``~/.clawcodex/sessions/<sid>/transcript.jsonl``
-- Sub-agent (flat):   ``~/.clawcodex/transcripts/<agent_id>.jsonl``
-- Sub-agent (nested): ``~/.clawcodex/sessions/<sid>/subagents/agent-<agent_id>.jsonl``
-- Optional metadata:  ``~/.clawcodex/sessions/<sid>/metadata.json``
-- Orchestrator state: ``~/.clawcodex/reports/run_*/state_journal.ndjson``
-
-No backward-compat shims — the parser assumes the new shape throughout
-(ISO-8601 timestamps, content-as-list, ``isMeta`` / ``isVirtual`` /
-``isCompactSummary`` / ``parent_session_id`` semantics, ``cost_block``
-transcript entries, etc.).
-"""
+"""Discover and summarize local ClawCodex sessions."""
 
 from __future__ import annotations
 
 import json
 import logging
-import re
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import SessionVizData
+from .transcript_parser import coerce_timestamp, load_transcript_records
 
 logger = logging.getLogger(__name__)
 
-# A session is considered "running" if its transcript file's mtime OR
-# the metadata's ``last_updated`` field has been touched within this
-# window. 5 minutes is generous enough to cover the longest-known LLM
-# calls while still flipping to "completed" within a reasonable time
-# after the agent finishes.
 _RUNNING_RECENCY_SECONDS = 300
 
-# Sub-agent filename pattern: ``agent-<id>.jsonl`` (the convention used by
-# ``clawcodex_ext.transcript.nested_path`` when a parent session is
-# registered).
-_SUBAGENT_RE = re.compile(r"^agent-(?P<agent_id>.+)\.jsonl$")
+
+def _string(data: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
-def _coerce_iso_ts(value: Any) -> float:
-    """Coerce an ISO 8601 string timestamp to a float Unix epoch.
-
-    The new on-disk format only stores ISO 8601 timestamps (see
-    ``src.types.messages.message_to_dict``); float epochs are not
-    written. Returns 0.0 for anything unparseable.
-    """
-    if not isinstance(value, str) or not value:
-        return 0.0
-    try:
-        # ``Z`` suffix is not handled by fromisoformat in Python <3.11
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return 0.0
+def _timestamp(data: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        value = coerce_timestamp(data.get(key))
+        if value:
+            return value
+    return 0.0
 
 
 class SessionMetadataParser:
-    """Parse a session directory into ``SessionVizData``.
+    """Build the light session record used by index and detail APIs.
 
-    The new format does not separate "metadata.json vs transcript.jsonl
-    vs session.json" — all three are unified under the on-disk shape
-    above. This parser:
-
-      1. Walks the main ``transcript.jsonl`` to recover wall-clock
-         anchors, model, cost, and the user/assistant/tool block list.
-      2. Reads ``metadata.json`` only when present (it is now optional —
-         only written when ``SessionStorage`` happens to manage the
-         session) and pulls ``cwd`` / ``title`` / ``tags`` / ``agent_name``.
-      3. Walks the orchestrator state journal under
-         ``~/.clawcodex/reports/run_*`` for F-96 issue association.
+    ``session.json`` wins whenever it exists.  Only when it is absent do we
+    read ``transcript.jsonl``; ``metadata.json`` remains a field fallback for
+    either layout.
     """
 
     def __init__(
@@ -84,330 +50,252 @@ class SessionMetadataParser:
         self.transcripts_dir = transcripts_dir or (Path.home() / ".clawcodex" / "transcripts")
         self.reports_dir = reports_dir or (Path.home() / ".clawcodex" / "reports")
 
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def parse(self, session_id: str) -> SessionVizData | None:
-        """Parse a single session directory into ``SessionVizData``."""
         session_dir = self.sessions_dir / session_id
-        if not session_dir.exists():
-            logger.debug("Session dir not found: %s", session_dir)
+        if not session_dir.is_dir():
             return None
 
+        session_path = session_dir / "session.json"
         transcript_path = session_dir / "transcript.jsonl"
         metadata_path = session_dir / "metadata.json"
+        source_path = session_path if session_path.exists() else transcript_path
 
-        # Start from an empty record; transcript is the source of truth.
+        meta, meta_warning = self._read_object(metadata_path)
+        records: list[dict[str, Any]] = []
+        source_warnings: list[str] = []
+        session_doc: dict[str, Any] = {}
+        if source_path.exists():
+            records, source_warnings, session_doc = load_transcript_records(source_path)
+
+        # session.json fields are authoritative; metadata fills holes.
+        primary = session_doc if session_path.exists() else meta
+        secondary = meta if session_path.exists() else {}
         viz = SessionVizData(session_id=session_id)
+        viz.parse_warnings.extend(source_warnings)
+        if meta_warning:
+            viz.parse_warnings.append(meta_warning)
 
-        # Optional metadata: only fields that are NOT recoverable from
-        # the transcript (cwd, title, tags, agent_name). Everything
-        # else (start_time, end_time, model, cost, message_count) is
-        # computed from the transcript.
-        meta: dict[str, Any] = {}
-        if metadata_path.exists():
-            try:
-                meta = json.loads(metadata_path.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning("Failed to load metadata for %s: %s", session_id, e)
+        record_summary = self._summarize_records(records)
+        viz.model = (
+            _string(primary, "model") or _string(secondary, "model") or record_summary["model"]
+        )
+        viz.provider = (
+            _string(primary, "provider")
+            or _string(secondary, "provider")
+            or record_summary["provider"]
+        )
+        viz.title = (
+            _string(primary, "title", "name")
+            or _string(secondary, "title", "name")
+            or viz.model
+            or session_id[:8]
+        )
+        viz.workspace = _string(primary, "cwd", "workspace", "working_directory") or _string(
+            secondary, "cwd", "workspace", "working_directory"
+        )
+        viz.agent_name = _string(primary, "agent_name", "agent") or _string(
+            secondary, "agent_name", "agent"
+        )
+        raw_tags = (
+            primary.get("tags") if isinstance(primary.get("tags"), list) else secondary.get("tags")
+        )
+        if isinstance(raw_tags, list):
+            viz.tags = [str(tag) for tag in raw_tags]
 
-        # Transcript-driven fields (start / end / model / cost / counts)
-        if transcript_path.exists():
-            self._enrich_from_transcript(viz, transcript_path)
-        else:
-            # Without a transcript we cannot recover any wall-clock
-            # information. Use metadata as a last-resort fallback.
-            start_time = meta.get("start_time", 0.0)
-            last_updated = meta.get("last_updated", start_time)
-            viz.start_time = start_time
-            viz.end_time = last_updated or start_time
-            viz.duration_ms = (
-                int((viz.end_time - viz.start_time) * 1000) if viz.end_time > viz.start_time else 0
-            )
+        declared_start = _timestamp(
+            primary, "created_at", "start_time", "started_at"
+        ) or _timestamp(secondary, "created_at", "start_time", "started_at")
+        declared_end = _timestamp(
+            primary, "updated_at", "last_updated", "end_time", "completed_at"
+        ) or _timestamp(secondary, "updated_at", "last_updated", "end_time", "completed_at")
+        viz.start_time = record_summary["start_time"] or declared_start
+        viz.end_time = record_summary["end_time"] or declared_end or viz.start_time
+        if declared_start and (not record_summary["start_time"] or declared_start < viz.start_time):
+            viz.start_time = declared_start
+        if declared_end and declared_end > (viz.end_time or 0):
+            viz.end_time = declared_end
+        viz.duration_ms = max(0, int(round(((viz.end_time or 0) - viz.start_time) * 1000)))
+        viz.turn_count = record_summary["turn_count"]
+        viz.tool_count = record_summary["tool_count"]
+        viz.stats.context_tokens = record_summary["context_tokens"]
+        viz.stats.cost_usd = record_summary["cost_usd"]
+        viz.status = self._infer_status(primary, secondary, source_path)
+        viz.transcripts_dir = str(self.transcripts_dir)
+        if source_path.exists():
+            viz.transcript_path = str(source_path)
 
-        # Metadata-only fields (not recoverable from transcript)
-        viz.workspace = meta.get("cwd", "")
-        viz.title = meta.get("title", "") or session_id[:8]
-        viz.tags = list(meta.get("tags", []))
-        viz.agent_name = meta.get("agent_name", "")
+        report_path = session_dir / "report.md"
+        tool_events_path = session_dir / "events.ndjson"
+        debug_log_path = session_dir / "debug.ndjson"
+        if report_path.is_file():
+            viz.report_path = str(report_path)
+        if tool_events_path.is_file():
+            viz.tool_events_path = str(tool_events_path)
+        if debug_log_path.is_file():
+            viz.debug_log_path = str(debug_log_path)
 
-        viz.status = self._infer_status(meta, transcript_path)
-
-        if transcript_path.exists():
-            viz.transcript_path = str(transcript_path)
-
-        # F-96-E: orchestrator issue association
         self._enrich_from_state_journal(viz)
-
         return viz
 
     def list_sessions(self, limit: int = 100) -> list[SessionVizData]:
-        """List recent sessions sorted by start_time descending."""
-        results: list[SessionVizData] = []
-        if not self.sessions_dir.exists():
-            return results
-        for entry in self.sessions_dir.iterdir():
-            if not entry.is_dir():
-                continue
-            sid = entry.name
-            viz = self.parse(sid)
-            if viz is not None:
-                results.append(viz)
-        results.sort(key=lambda v: v.start_time or 0, reverse=True)
-        return results[:limit]
+        if not self.sessions_dir.is_dir():
+            return []
+        ranked = [
+            (entry.stat().st_mtime, parsed)
+            for entry in self.sessions_dir.iterdir()
+            if entry.is_dir() and (parsed := self.parse(entry.name)) is not None
+        ]
+        ranked.sort(
+            key=lambda item: max(item[0], item[1].end_time or 0, item[1].start_time or 0),
+            reverse=True,
+        )
+        return [item for _, item in ranked[:limit]]
 
-    # ------------------------------------------------------------------
-    # Transcript enrichment
-    # ------------------------------------------------------------------
+    @staticmethod
+    def _read_object(path: Path) -> tuple[dict[str, Any], str | None]:
+        if not path.exists():
+            return {}, None
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return {}, f"{path.name}: {exc}"
+        if not isinstance(value, dict):
+            return {}, f"{path.name}: top-level JSON must be an object"
+        return value, None
 
-    def _enrich_from_transcript(
-        self,
-        viz: SessionVizData,
-        transcript_path: Path,
-    ) -> None:
-        """Walk the JSONL transcript and fill the transcript-driven fields.
-
-        Reads the file once. Collects:
-
-        - ``start_time`` / ``end_time`` — from the first / last
-          parseable ISO timestamp. Snip boundaries
-          (``isCompactSummary=True``) are honored: only the last
-          boundary is kept, and timestamps are anchored to it.
-        - ``model`` — first non-null ``model`` on a non-meta
-          ``assistant`` entry that has real content.
-        - ``turn_count`` — non-meta, non-virtual user+assistant pair count.
-        - ``tool_count`` — count of ``tool_use`` blocks across
-          non-meta assistant entries.
-        - ``context_tokens`` — sum of ``usage.input_tokens +
-          output_tokens + cache_creation_input_tokens +
-          cache_read_input_tokens`` across non-meta assistant entries.
-        - ``cost_block`` entries — folded into ``stats.cost_usd``
-          (last cost_block wins; matches the cumulative cost semantics
-          written by ``extensions.agent.session_persist``).
-        """
-        start_time: float = 0.0
-        end_time: float = 0.0
-        snip_anchor: float | None = None
-        model: str = ""
+    @staticmethod
+    def _summarize_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+        timestamps: list[float] = []
+        model = ""
+        provider = ""
         turn_count = 0
         tool_count = 0
         context_tokens = 0
-        cost_usd: float = 0.0
+        cost_usd = 0.0
+        cumulative_tokens: int | None = None
 
-        try:
-            with open(transcript_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(entry, dict):
-                        continue
+        for record in records:
+            if record.get("type") == "cost_block":
+                cost = record.get("cost") if isinstance(record.get("cost"), dict) else {}
+                try:
+                    cost_usd = float(cost.get("total_cost_usd", cost_usd) or cost_usd)
+                except (TypeError, ValueError):
+                    pass
+                usage_by_model = cost.get("model_usage")
+                if isinstance(usage_by_model, dict):
+                    total = 0
+                    for usage in usage_by_model.values():
+                        if not isinstance(usage, dict):
+                            continue
+                        for key in (
+                            "input_tokens",
+                            "output_tokens",
+                            "cache_creation_input_tokens",
+                            "cache_read_input_tokens",
+                        ):
+                            value = usage.get(key)
+                            if isinstance(value, (int, float)):
+                                total += int(value)
+                    if total:
+                        cumulative_tokens = total
+                continue
+            if record.get("type") == "progress" or record.get("isMeta") or record.get("isVirtual"):
+                continue
+            if record.get("isCompactSummary"):
+                continue
+            ts = coerce_timestamp(record.get("timestamp"))
+            if ts:
+                timestamps.append(ts)
+            role = record.get("role")
+            if role in {"user", "assistant"}:
+                turn_count += 1
+            if role == "assistant":
+                if not model:
+                    model = _string(record, "model")
+                if not provider:
+                    provider = _string(record, "provider")
+                usage = record.get("usage") if isinstance(record.get("usage"), dict) else {}
+                for key in (
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_creation_input_tokens",
+                    "cache_read_input_tokens",
+                ):
+                    value = usage.get(key)
+                    if isinstance(value, (int, float)):
+                        context_tokens += int(value)
+                for block in record.get("content", []):
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_count += 1
 
-                    # ``cost_block`` entries are written by
-                    # ``session_persist.save_to_session_storage`` as
-                    # ``{"type": "cost_block", "cost": {...}}``. They
-                    # are not Messages; skip the user/assistant logic
-                    # but still fold the cost.
-                    if entry.get("type") == "cost_block":
-                        cb = entry.get("cost", {})
-                        if isinstance(cb, dict):
-                            try:
-                                cost_usd = float(cb.get("total_cost_usd", cost_usd) or cost_usd)
-                            except (TypeError, ValueError):
-                                pass
-                            mu = cb.get("model_usage")
-                            if isinstance(mu, dict):
-                                # Replace the running context_tokens
-                                # sum with the cumulative figure from
-                                # the cost block — it accounts for
-                                # cache tokens that the per-message
-                                # usage fields also report, so summing
-                                # both would double-count.
-                                total = 0
-                                for u in mu.values():
-                                    if isinstance(u, dict):
-                                        total += int(u.get("input_tokens", 0) or 0)
-                                        total += int(u.get("output_tokens", 0) or 0)
-                                        total += int(u.get("cache_creation_input_tokens", 0) or 0)
-                                        total += int(u.get("cache_read_input_tokens", 0) or 0)
-                                if total > 0:
-                                    context_tokens = total
-                        continue
+        return {
+            "start_time": min(timestamps) if timestamps else 0.0,
+            "end_time": max(timestamps) if timestamps else 0.0,
+            "model": model,
+            "provider": provider,
+            "turn_count": turn_count,
+            "tool_count": tool_count,
+            "context_tokens": cumulative_tokens
+            if cumulative_tokens is not None
+            else context_tokens,
+            "cost_usd": cost_usd,
+        }
 
-                    ts = _coerce_iso_ts(entry.get("timestamp"))
-
-                    # Snip boundaries mark the start of the kept
-                    # window after a /compact. Anchor the timeline to
-                    # the LAST snip boundary so the bars align with
-                    # the post-compact segment, not pre-compact noise.
-                    if entry.get("isCompactSummary"):
-                        snip_anchor = ts or snip_anchor
-                        # Reset the start to the snip timestamp so
-                        # the visible window starts here.
-                        if snip_anchor:
-                            start_time = snip_anchor
-                            end_time = max(end_time, snip_anchor)
-                        continue
-
-                    # Skip meta / virtual / progress entries — they
-                    # are not real conversation turns and would
-                    # inflate the counts. The new wire format
-                    # explicitly tags these.
-                    if entry.get("isMeta") or entry.get("isVirtual"):
-                        continue
-                    if entry.get("type") == "progress":
-                        continue
-                    if entry.get("isApiErrorMessage"):
-                        # API errors are real events but should not
-                        # count as turns / tools.
-                        if ts:
-                            start_time = start_time or ts
-                            end_time = max(end_time, ts)
-                        continue
-
-                    # Anchor wall-clock bounds.
-                    if ts:
-                        start_time = start_time or ts
-                        end_time = max(end_time, ts)
-
-                    role = entry.get("role", "")
-                    if role in ("user", "assistant"):
-                        turn_count += 1
-
-                    if role == "assistant":
-                        # Model label: prefer the first non-null one.
-                        if not model:
-                            m = entry.get("model")
-                            if isinstance(m, str) and m:
-                                model = m
-                        # Usage totals — accumulate per-message so
-                        # callers without a cost_block still get a
-                        # number. The cost_block branch above
-                        # overrides this with the cumulative figure
-                        # if present.
-                        usage = entry.get("usage")
-                        if isinstance(usage, dict):
-                            context_tokens += int(usage.get("input_tokens", 0) or 0)
-                            context_tokens += int(usage.get("output_tokens", 0) or 0)
-                            context_tokens += int(usage.get("cache_creation_input_tokens", 0) or 0)
-                            context_tokens += int(usage.get("cache_read_input_tokens", 0) or 0)
-                        # Real LLM duration, when stamped by the call
-                        # site — informs the StatsBuilder's average.
-                        dur = entry.get("duration_ms")
-                        if isinstance(dur, (int, float)) and dur:
-                            # Stash on stats later via StatsBuilder.
-                            pass
-                        # tool_use blocks
-                        content = entry.get("content")
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") == "tool_use":
-                                    tool_count += 1
-        except OSError as e:
-            logger.debug("Failed to read transcript %s: %s", transcript_path, e)
-
-        viz.start_time = start_time
-        viz.end_time = end_time
-        viz.duration_ms = int((end_time - start_time) * 1000) if end_time > start_time else 0
-        if model:
-            viz.model = model
-        viz.turn_count = turn_count
-        viz.tool_count = tool_count
-        if context_tokens:
-            viz.stats.context_tokens = context_tokens
-        if cost_usd:
-            viz.stats.cost_usd = cost_usd
-
-    # ------------------------------------------------------------------
-    # Status inference
-    # ------------------------------------------------------------------
-
-    def _infer_status(
-        self,
-        meta: dict[str, Any],
-        transcript_path: Path,
-    ) -> str:
-        """Infer session status from transcript freshness and metadata.
-
-        Resolution order (first match wins):
-
-          1. ``status`` field explicitly set in ``metadata.json``.
-          2. Transcript file's mtime is within ``_RUNNING_RECENCY_SECONDS``
-             → still being written, so ``"running"``.
-          3. ``metadata.json:last_updated`` is within the recency window
-             → ``"running"``.
-          4. Transcript missing → ``"unknown"``.
-          5. Otherwise → ``"completed"``.
-        """
-        status = meta.get("status")
-        if isinstance(status, str) and status:
+    @staticmethod
+    def _infer_status(primary: dict[str, Any], secondary: dict[str, Any], source_path: Path) -> str:
+        status = _string(primary, "status") or _string(secondary, "status")
+        if status:
             return status
-
         now = time.time()
-        if transcript_path.exists():
+        if source_path.exists():
             try:
-                if now - transcript_path.stat().st_mtime < _RUNNING_RECENCY_SECONDS:
+                if now - source_path.stat().st_mtime < _RUNNING_RECENCY_SECONDS:
                     return "running"
             except OSError:
                 pass
-
-        last_updated = meta.get("last_updated") or 0
-        if last_updated and now - float(last_updated) < _RUNNING_RECENCY_SECONDS:
+        updated = _timestamp(primary, "updated_at", "last_updated", "end_time") or _timestamp(
+            secondary, "updated_at", "last_updated", "end_time"
+        )
+        if updated and now - updated < _RUNNING_RECENCY_SECONDS:
             return "running"
-
-        if not transcript_path.exists():
-            return "unknown"
-
-        return "completed"
-
-    # ------------------------------------------------------------------
-    # Orchestrator enrichment (F-96-E)
-    # ------------------------------------------------------------------
+        return "completed" if source_path.exists() else "unknown"
 
     def _enrich_from_state_journal(self, viz: SessionVizData) -> None:
-        """Pull ``issue_id`` and ``verification_status`` from the orchestrator state journal.
-
-        Scans ``~/.clawcodex/reports/run_*/state_journal.ndjson`` for a
-        ``session_ref`` event matching this session's id, then a
-        ``verification`` event for that issue.
-        """
-        if not self.reports_dir.exists():
+        """Read the existing Orchestrator journal without changing its protocol."""
+        if not self.reports_dir.is_dir():
             return
         for run_dir in sorted(self.reports_dir.iterdir()):
-            if not run_dir.is_dir() or not run_dir.name.startswith("run_"):
-                continue
             journal = run_dir / "state_journal.ndjson"
-            if not journal.exists():
+            if not run_dir.is_dir() or not run_dir.name.startswith("run_") or not journal.exists():
                 continue
             try:
-                events: list[dict[str, Any]] = []
-                with open(journal, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            try:
-                                events.append(json.loads(line))
-                            except json.JSONDecodeError:
-                                pass
-                issue_id = ""
-                for ev in events:
-                    if ev.get("type") == "session_ref" and ev.get("session_id") == viz.session_id:
-                        issue_id = str(ev.get("issue_id", ""))
-                        break
-                if issue_id:
-                    viz.issue_id = issue_id
-                    for ev in events:
-                        if (
-                            ev.get("type") == "verification"
-                            and str(ev.get("issue_id", "")) == issue_id
-                        ):
-                            viz.verification_status = str(ev.get("verification_status", ""))
-                            break
-            except Exception as e:
-                logger.debug("State journal enrich failed for %s: %s", viz.session_id, e)
+                events = [
+                    json.loads(line)
+                    for line in journal.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+            except (OSError, json.JSONDecodeError):
                 continue
+            issue_id = next(
+                (
+                    str(event.get("issue_id", ""))
+                    for event in events
+                    if event.get("type") == "session_ref"
+                    and event.get("session_id") == viz.session_id
+                ),
+                "",
+            )
+            if not issue_id:
+                continue
+            viz.issue_id = issue_id
+            for event in events:
+                if (
+                    event.get("type") == "verification"
+                    and str(event.get("issue_id", "")) == issue_id
+                ):
+                    viz.verification_status = str(event.get("verification_status", ""))
+                    break
+            break
+
+
+__all__ = ["SessionMetadataParser"]

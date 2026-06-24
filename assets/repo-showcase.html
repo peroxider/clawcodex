@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawCodex DevMind — 仓库展示</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --muted: #8b949e;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #7ee787;
+    --accent3: #f78166;
+    --card-bg: #161b22;
+    --tag-bg: #1f2937;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .hero {
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1a2332 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 60px 24px 48px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 50%, rgba(88,166,255,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 50%, rgba(126,231,135,0.04) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: 2.8rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    position: relative;
+    color: #fff;
+  }
+  .hero h1 span { color: var(--accent); }
+  .hero .subtitle {
+    font-size: 1.15rem;
+    color: var(--muted);
+    margin-top: 12px;
+    position: relative;
+    max-width: 640px;
+    margin-inline: auto;
+  }
+  .hero .badges {
+    margin-top: 24px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    position: relative;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 14px; border-radius: 20px;
+    font-size: 0.85rem; font-weight: 500;
+    background: var(--tag-bg); border: 1px solid var(--border);
+  }
+  .badge.accent { border-color: rgba(88,166,255,0.3); color: var(--accent); }
+  .badge.green { border-color: rgba(126,231,135,0.3); color: var(--accent2); }
+  .badge.orange { border-color: rgba(247,129,102,0.3); color: var(--accent3); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  section { padding: 48px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  .section-title {
+    font-size: 1.5rem; font-weight: 600; color: #fff;
+    margin-bottom: 24px; display: flex; align-items: center; gap: 10px;
+  }
+  .section-title .icon { font-size: 1.4rem; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 22px 20px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .stat-card:hover { border-color: var(--accent); }
+  .stat-value { font-size: 2rem; font-weight: 700; color: #fff; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-label { font-size: 0.88rem; color: var(--muted); margin-top: 4px; }
+
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+  @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+  .dir-card, .branch-card, .commit-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .dir-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 0.92rem;
+  }
+  .dir-item:hover { background: rgba(88,166,255,0.06); }
+  .dir-icon { font-size: 1.1rem; width: 24px; text-align: center; }
+  .dir-name { font-weight: 500; color: var(--accent); }
+  .dir-desc { font-size: 0.82rem; color: var(--muted); margin-left: auto; }
+
+  .branch-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 0.9rem; font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  }
+  .branch-item.current { background: rgba(88,166,255,0.08); border: 1px solid rgba(88,166,255,0.2); border-radius: 6px; }
+  .branch-tag {
+    font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;
+    background: var(--accent); color: #000; font-weight: 600;
+  }
+  .branch-remote { font-size: 0.75rem; color: var(--muted); }
+
+  .commit-item {
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 12px;
+    font-size: 0.9rem;
+  }
+  .commit-item:last-child { border-bottom: none; }
+  .commit-hash {
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 0.8rem; color: var(--accent); min-width: 70px;
+  }
+  .commit-msg { flex: 1; }
+  .commit-type {
+    font-size: 0.72rem; padding: 1px 7px; border-radius: 8px;
+    font-weight: 500; white-space: nowrap;
+  }
+  .type-feat { background: rgba(126,231,135,0.15); color: var(--accent2); }
+  .type-fix { background: rgba(247,129,102,0.15); color: var(--accent3); }
+  .type-refactor { background: rgba(188,140,255,0.15); color: #bc8cff; }
+  .type-docs { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  .endpoint-table { width: 100%; border-collapse: collapse; }
+  .endpoint-table th, .endpoint-table td {
+    padding: 10px 14px; text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .endpoint-table th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .method { font-family: monospace; font-weight: 600; font-size: 0.82rem; }
+  .method.get { color: var(--accent2); }
+  .method.post { color: var(--accent); }
+  .method.delete { color: var(--accent3); }
+  .path { font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 0.85rem; }
+
+  .contributor-list {
+    display: flex; flex-wrap: wrap; gap: 10px;
+  }
+  .contributor {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px;
+    background: var(--tag-bg); border: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .contributor .count {
+    font-weight: 700; color: var(--accent);
+    font-size: 0.78rem;
+  }
+
+  .dep-cloud {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .dep-tag {
+    font-size: 0.78rem; padding: 4px 12px; border-radius: 14px;
+    background: var(--tag-bg); border: 1px solid var(--border);
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: var(--muted);
+  }
+  .dep-tag.core { border-color: rgba(88,166,255,0.3); color: var(--accent); }
+
+  footer {
+    text-align: center; padding: 40px 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 0.85rem;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  .layer-diagram {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px;
+  }
+  .layer-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px; margin: 6px 0;
+    border-radius: 8px; font-size: 0.9rem;
+  }
+  .layer-label {
+    font-weight: 600; min-width: 140px; font-family: 'SF Mono', monospace;
+    font-size: 0.82rem; color: var(--accent);
+  }
+  .layer-bar {
+    flex: 1; height: 8px; border-radius: 4px;
+    background: var(--border); overflow: hidden;
+  }
+  .layer-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .fill-ext { background: linear-gradient(90deg, #58a6ff, #79c0ff); }
+  .fill-core { background: linear-gradient(90deg, #7ee787, #56d364); }
+  .fill-extensions { background: linear-gradient(90deg, #bc8cff, #d2a8ff); }
+  .fill-tests { background: linear-gradient(90deg, #f78166, #f0883e); }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>🦞 <span>ClawCodex</span> DevMind</h1>
+  <p class="subtitle">
+    一个面向生产环境的 Python 重构版 Claude Code —— <br>
+    支持多智能体编排、REST API、Cron 调度、LiteLLM 路由的 CLI Agent 框架
+  </p>
+  <div class="badges">
+    <span class="badge accent">🐍 Python 3.10+</span>
+    <span class="badge green">📦 v0.5.0</span>
+    <span class="badge orange">⚡ MIT License</span>
+    <span class="badge">🔒 Auth: Bearer Token</span>
+    <span class="badge green">🚀 FastAPI + Stdlib</span>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- 仓库统计 -->
+  <section>
+    <h2 class="section-title"><span class="icon">📊</span> 仓库统计</h2>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value accent">809</div>
+        <div class="stat-label">Commits</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">1,567</div>
+        <div class="stat-label">Python 文件</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value accent">317k</div>
+        <div class="stat-label">代码行数 (.py)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">610</div>
+        <div class="stat-label">测试文件</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value accent">256 MB</div>
+        <div class="stat-label">仓库大小 (不含 .git)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">10</div>
+        <div class="stat-label">贡献者</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 架构层次 -->
+  <section>
+    <h2 class="section-title"><span class="icon">🏗️</span> 架构层次</h2>
+    <div class="two-col">
+      <div class="layer-diagram">
+        <div class="layer-row">
+          <span class="layer-label">clawcodex_ext/</span>
+          <span style="color: var(--accent); font-size:0.85rem; font-weight:500;">主要开发层</span>
+        </div>
+        <div class="layer-row">
+          <span class="layer-label">extensions/</span>
+          <span style="color: #bc8cff; font-size:0.85rem; font-weight:500;">通用扩展</span>
+        </div>
+        <div class="layer-row">
+          <span class="layer-label">src/</span>
+          <span style="color: var(--accent2); font-size:0.85rem; font-weight:500;">上游核心 (只读)</span>
+        </div>
+        <div class="layer-row">
+          <span class="layer-label">tests/</span>
+          <span style="color: var(--accent3); font-size:0.85rem; font-weight:500;">测试套件</span>
+        </div>
+      </div>
+      <div class="layer-diagram" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="font-weight:600;color:#fff;font-size:0.92rem;margin-bottom:8px;">📁 关键子目录</div>
+        <div class="dir-item"><span class="dir-icon">🔧</span><span class="dir-name">cli/</span><span class="dir-desc">CLI 入口 & 命令</span></div>
+        <div class="dir-item"><span class="dir-icon">🔌</span><span class="dir-name">providers/</span><span class="dir-desc">LLM 提供商</span></div>
+        <div class="dir-item"><span class="dir-icon">🛠️</span><span class="dir-name">tool_system/</span><span class="dir-desc">工具实现</span></div>
+        <div class="dir-item"><span class="dir-icon">⏰</span><span class="dir-name">cron_system/</span><span class="dir-desc">定时任务</span></div>
+        <div class="dir-item"><span class="dir-icon">🔐</span><span class="dir-name">permissions/</span><span class="dir-desc">权限系统</span></div>
+        <div class="dir-item"><span class="dir-icon">🖥️</span><span class="dir-name">tui/</span><span class="dir-desc">终端 UI</span></div>
+        <div class="dir-item"><span class="dir-icon">🌐</span><span class="dir-name">extensions/remote_api/</span><span class="dir-desc">REST API 服务</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 分支信息 -->
+  <section>
+    <h2 class="section-title"><span class="icon">🌿</span> 分支</h2>
+    <div class="two-col">
+      <div class="branch-card">
+        <div style="font-weight:600;color:#fff;font-size:0.9rem;margin-bottom:12px;">本地分支</div>
+        <div class="branch-item current">
+          ⭐ <span style="color:var(--accent2);">codex/remote-api</span>
+          <span class="branch-tag">当前</span>
+        </div>
+        <div class="branch-item">
+          └─ <span>dev-decoupling-refactor-b24b8cb</span>
+          <span class="branch-remote">(主分支)</span>
+        </div>
+      </div>
+      <div class="branch-card">
+        <div style="font-weight:600;color:#fff;font-size:0.9rem;margin-bottom:12px;">远程源</div>
+        <div class="branch-item" style="font-size:0.85rem;">
+          <strong>origin</strong>
+          <span style="font-size:0.8rem;color:var(--muted);">git@gitcode.com:gcw_mXl4v8WS/clawcodex.git</span>
+        </div>
+        <div class="branch-item" style="font-size:0.85rem;">
+          <strong>upstream</strong>
+          <span style="font-size:0.8rem;color:var(--muted);">https://gitcode.com/chadwweng/clawcodex.git</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 最近提交 -->
+  <section>
+    <h2 class="section-title"><span class="icon">📝</span> 最近提交</h2>
+    <div class="commit-card">
+      <div class="commit-item">
+        <span class="commit-hash">b031aac</span>
+        <span class="commit-msg">fix(remote-api): 解决权限问题</span>
+        <span class="commit-type type-fix">fix</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">18fd595</span>
+        <span class="commit-msg">fix(remote-api): 支持流式输出</span>
+        <span class="commit-type type-fix">fix</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">792dc0e</span>
+        <span class="commit-msg">feat(remote-api): 新增支持 Responses API</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">795c0c4</span>
+        <span class="commit-msg">feat(model): 添加模型名称前缀匹配和建议功能</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">9dc4229</span>
+        <span class="commit-msg">feat(cron): 增强定时任务系统功能</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">d7ddc5c</span>
+        <span class="commit-msg">feat(pos): SOP To Agent 筛选 Python SDK 外部接口</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">67f6bd3</span>
+        <span class="commit-msg">fix(auto mode): 修复 Auto 模式本地命令识别问题</span>
+        <span class="commit-type type-fix">fix</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">e654c7a</span>
+        <span class="commit-msg">feat(cli): 完善模型和提供商命令行界面</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">cc55e02</span>
+        <span class="commit-msg">refactor(visualizer): 贝塞尔曲线详情弹窗改为侧抽屉</span>
+        <span class="commit-type type-refactor">refactor</span>
+      </div>
+      <div class="commit-item">
+        <span class="commit-hash">9f0596e</span>
+        <span class="commit-msg">feat(dreaming): 完成 F-100 Dreaming 后台记忆整合系统</span>
+        <span class="commit-type type-feat">feat</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Remote API -->
+  <section>
+    <h2 class="section-title"><span class="icon">🌐</span> Remote API 端点 (当前分支特性)</h2>
+    <div class="commit-card" style="overflow-x:auto;">
+      <table class="endpoint-table">
+        <thead>
+          <tr><th>方法</th><th>路径</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/health</td>
+            <td>健康检查 (无需认证)</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/health/detailed</td>
+            <td>详细健康状态 + 统计</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/v1/models</td>
+            <td>列出可用模型</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/v1/capabilities</td>
+            <td>能力标志 (Hermes 格式)</td>
+          </tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td class="path">/v1/chat/completions</td>
+            <td>Chat Completions API (OpenAI 兼容)</td>
+          </tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td class="path">/v1/responses</td>
+            <td>Responses API (OpenAI 兼容)</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/v1/responses/{id}</td>
+            <td>获取存储的响应</td>
+          </tr>
+          <tr>
+            <td><span class="method get">GET</span></td>
+            <td class="path">/v1/responses/{id}/input_items</td>
+            <td>获取响应的输入项</td>
+          </tr>
+          <tr>
+            <td><span class="method delete">DELETE</span></td>
+            <td class="path">/v1/responses/{id}</td>
+            <td>删除存储的响应</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 贡献者 -->
+  <section>
+    <h2 class="section-title"><span class="icon">👥</span> 贡献者 Top 10</h2>
+    <div class="contributor-list">
+      <span class="contributor">👤 <strong>chadweng</strong> <span class="count">260</span></span>
+      <span class="contributor">👤 <strong>chadwweng</strong> <span class="count">242</span></span>
+      <span class="contributor">👤 <strong>agentforce314</strong> <span class="count">121</span></span>
+      <span class="contributor">👤 <strong>Eric Lee</strong> <span class="count">96</span></span>
+      <span class="contributor">👤 <strong>ericleepi314</strong> <span class="count">87</span></span>
+      <span class="contributor">👤 <strong>Fumian Chen</strong> <span class="count">10</span></span>
+      <span class="contributor">👤 <strong>root</strong> <span class="count">8</span></span>
+      <span class="contributor">👤 <strong>gcw_mXl4v8WS</strong> <span class="count">7</span></span>
+      <span class="contributor">👤 <strong>qq_49552963</strong> <span class="count">6</span></span>
+      <span class="contributor">👤 <strong>tree-zby</strong> <span class="count">3</span></span>
+    </div>
+  </section>
+
+  <!-- 依赖 -->
+  <section>
+    <h2 class="section-title"><span class="icon">📦</span> 核心依赖</h2>
+    <div class="dep-cloud">
+      <span class="dep-tag core">anthropic</span>
+      <span class="dep-tag core">openai</span>
+      <span class="dep-tag core">litellm</span>
+      <span class="dep-tag core">fastapi</span>
+      <span class="dep-tag core">uvicorn</span>
+      <span class="dep-tag">zhipuai</span>
+      <span class="dep-tag">rich</span>
+      <span class="dep-tag">textual</span>
+      <span class="dep-tag">prompt-toolkit</span>
+      <span class="dep-tag">tiktoken</span>
+      <span class="dep-tag">pluggy</span>
+      <span class="dep-tag">pydantic-settings</span>
+      <span class="dep-tag">websockets</span>
+      <span class="dep-tag">httpx-sse</span>
+      <span class="dep-tag">GitPython</span>
+      <span class="dep-tag">PyYAML</span>
+      <span class="dep-tag">outlines</span>
+      <span class="dep-tag">Pillow</span>
+      <span class="dep-tag">tree-sitter</span>
+      <span class="dep-tag">jinja2</span>
+      <span class="dep-tag">pathspec</span>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    <strong>ClawCodex DevMind</strong> v0.5.0 &nbsp;·&nbsp;
+    分支 <code>codex/remote-api</code> &nbsp;·&nbsp;
+    构建于 2026-06-22 &nbsp;·&nbsp;
+    <a href="https://gitcode.com/gcw_mXl4v8WS/clawcodex" target="_blank">GitCode →</a>
+  </p>
+  <p style="margin-top:8px;">Claude Code 下游分支 — 多智能体编排 · 生产级 CLI Agent 框架</p>
+</footer>
+
+</body>
+</html>

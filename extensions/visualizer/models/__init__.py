@@ -11,7 +11,6 @@ from .viz_models import (
     OperationStats,
     SessionVizData,
     ShareLink,
-    TimeMode,
     TimelineBar,
     WorkspaceInfo,
 )
@@ -27,7 +26,6 @@ __all__ = [
     "OperationStats",
     "SessionVizData",
     "ShareLink",
-    "TimeMode",
     "TimelineBar",
     "WorkspaceInfo",
 ]

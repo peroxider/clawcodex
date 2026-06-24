@@ -1,439 +1,226 @@
-/**
- * ClawCodex Visualizer — Main App (Index Page)
- */
+(() => {
+    const VALID_STATUSES = new Set(['all', 'running', 'completed', 'success', 'failed', 'error', 'unknown', 'aborted', 'cancelled']);
+    const VALID_LAYOUTS = new Set(['grid', 'list']);
 
-let currentWorkspace = null;
-let allSessions = [];
-
-// Polling state — refreshes the workspace tabs and session list every
-// POLL_INTERVAL_MS so running sessions show up without a manual refresh.
-// Only the DOM is touched when the data actually changes, so an idle page
-// is silent (no flicker, no scroll jumps).
-const POLL_INTERVAL_MS = 5000;
-let pollTimer = null;
-let pollInFlight = false;
-let lastWorkspacesSig = '';
-let lastSessionsSig = '';
-let lastWorkspacesData = null;
-
-// ---- Filter / layout state (persisted to localStorage) ----
-// "default" → only the "live" set: running, completed, success.
-// "all"     → no status filter.
-// Otherwise → exact match against session.status.
-const DEFAULT_STATUS_SET = new Set(['running', 'completed', 'success']);
-let statusFilter = _loadPref('statusFilter', 'default');
-// 'grid' | 'list'
-let layoutMode = _loadPref('layoutMode', 'grid');
-// Sort key for list view (see _SORT_COLUMNS). Default: newest first.
-let sortBy = _loadPref('sortBy', 'start_time');
-// 'asc' | 'desc'
-let sortDir = _loadPref('sortDir', 'desc');
-let searchQuery = '';
-
-function _loadPref(key, fallback) {
-    try {
-        const v = localStorage.getItem('viz.' + key);
-        return v === null ? fallback : v;
-    } catch (_) { return fallback; }
-}
-function _savePref(key, value) {
-    try { localStorage.setItem('viz.' + key, value); } catch (_) { /* private mode */ }
-}
-
-function _workspaceSig(workspaces) {
-    // Compact signature: id + name + session_count. Skips last_updated
-    // (jittery on re-stat) and path (irrelevant to UI).
-    return JSON.stringify(workspaces.map(w => [w.id, w.name, w.session_count]));
-}
-
-function _sessionSig(sessions) {
-    // Status + counters drive the visible card; ignore heavy detail
-    // fields (title / metadata) so a sub-second update to one card
-    // doesn't cascade into a full re-render.
-    return JSON.stringify(sessions.map(s => [
-        s.session_id,
-        s.status,
-        s.tool_count,
-        s.turn_count,
-        s.model,
-        s.end_time,
-    ]));
-}
-
-function _setLiveState(state) {
-    // state: 'live' | 'paused' | 'error'
-    const el = document.getElementById('live-indicator');
-    if (!el) return;
-    el.classList.remove('live', 'paused', 'error');
-    el.classList.add(state);
-    const label = el.querySelector('.live-label');
-    if (label) {
-        label.textContent = state === 'live' ? 'Live'
-            : state === 'paused' ? 'Paused (typing)'
-            : 'Offline';
-    }
-}
-
-// Helper: push the current data into the bottom status bar so its
-// fields (Sessions / Last Updated / Auto-refresh) reflect real state.
-// All three VizStatusBar methods are no-ops on pages where the bar
-// isn't rendered, so it's safe to call unconditionally.
-function _pushStatusBar() {
-    if (typeof window.VizStatusBar !== 'object' || !window.VizStatusBar) return;
-    window.VizStatusBar.updateSessionCount(allSessions.length);
-    window.VizStatusBar.updateLastUpdated();
-}
-
-function startLivePolling() {
-    if (pollTimer) return;
-    _setLiveState('live');
-    pollTimer = setInterval(_pollOnce, POLL_INTERVAL_MS);
-    if (typeof window.VizStatusBar === 'object' && window.VizStatusBar) {
-        window.VizStatusBar.setAutoRefresh(true);
-    }
-}
-
-function stopLivePolling() {
-    if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-    }
-    if (typeof window.VizStatusBar === 'object' && window.VizStatusBar) {
-        window.VizStatusBar.setAutoRefresh(false);
-    }
-}
-
-async function _pollOnce() {
-    if (pollInFlight) return;  // Skip tick if previous fetch is still in flight.
-    pollInFlight = true;
-    try {
-        // Always refresh workspace tabs (cheap, low frequency).
-        const workspaces = await VizUtils.apiFetch('/api/viz/workspaces');
-        const wsSig = _workspaceSig(workspaces);
-        if (wsSig !== lastWorkspacesSig) {
-            lastWorkspacesSig = wsSig;
-            lastWorkspacesData = workspaces;
-            _renderWorkspaces(workspaces);
+    const readChoice = (key, allowed, fallback) => {
+        try {
+            const value = localStorage.getItem(key);
+            return allowed.has(value) ? value : fallback;
+        } catch (_) {
+            return fallback;
         }
-        // Refresh session list only when not actively filtering.
-        const searchEl = document.getElementById('search-input');
-        if (!(searchEl && document.activeElement === searchEl
-              && (searchEl.value || '').length > 0)) {
-            await _refreshSessionsList();
-        } else {
-            _setLiveState('paused');
+    };
+
+    const writeChoice = (key, value) => {
+        try { localStorage.setItem(key, value); } catch (_) { /* storage may be blocked */ }
+    };
+
+    const state = {
+        workspace: 'default',
+        workspaces: [],
+        sessions: [],
+        query: '',
+        status: readChoice('viz.statusFilter', VALID_STATUSES, 'all'),
+        layout: readChoice('viz.layoutMode', VALID_LAYOUTS, 'grid'),
+        timer: null,
+        sessionRequestSeq: 0,
+    };
+
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+
+    const safeClassPart = (value) => String(value || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_') || 'unknown';
+
+    const formatTime = (seconds) => {
+        if (!seconds) return 'Not recorded';
+        return new Intl.DateTimeFormat('zh-CN', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+        }).format(new Date(seconds * 1000));
+    };
+
+    const formatDuration = (ms) => {
+        if (!ms) return 'Not recorded';
+        const seconds = Math.round(ms / 1000);
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes}m ${seconds % 60}s`;
+    };
+
+    async function requestJson(url) {
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        return response.json();
+    }
+
+    async function loadWorkspaces() {
+        state.workspaces = await requestJson('/api/viz/workspaces');
+        if (!state.workspaces.some((item) => item.id === state.workspace)) {
+            state.workspace = state.workspaces[0]?.id || 'default';
         }
-    } catch (e) {
-        console.warn('Live poll error:', e);
-        _setLiveState('error');
-    } finally {
-        pollInFlight = false;
+        renderWorkspaces();
     }
-}
 
-function _renderWorkspaces(workspaces) {
-    const tabsEl = document.getElementById('workspace-tabs');
-    if (!tabsEl) return;
-    if (workspaces.length === 0) {
-        tabsEl.innerHTML = '<div class="workspace-tab active">Default</div>';
-        currentWorkspace = 'default';
-        return;
+    function sessionsUrl() {
+        const params = new URLSearchParams();
+        const query = state.query.trim();
+        if (query) params.set('q', query);
+        if (state.status !== 'all') params.set('status', state.status);
+        const suffix = params.toString();
+        return `/api/viz/workspaces/${encodeURIComponent(state.workspace)}/sessions${suffix ? `?${suffix}` : ''}`;
     }
-    // Preserve the active tab across re-renders so the user doesn't get
-    // bounced back to the first tab every 5 seconds.
-    const activeId = currentWorkspace || workspaces[0].id;
-    tabsEl.innerHTML = workspaces.map(ws =>
-        `<div class="workspace-tab ${ws.id === activeId ? 'active' : ''}"
-              data-ws-id="${ws.id}"
-              onclick="selectWorkspace('${ws.id}', this)">${ws.name} (${ws.session_count})</div>`
-    ).join('');
-    if (!workspaces.some(w => w.id === activeId)) {
-        currentWorkspace = workspaces[0].id;
-    }
-}
 
-async function _refreshSessionsList() {
-    const grid = document.getElementById('sessions-grid');
-    if (!grid) return;
-    let url = '/api/viz/workspaces/default/sessions';
-    if (currentWorkspace && currentWorkspace !== 'default') {
-        url = `/api/viz/workspaces/${currentWorkspace}/sessions`;
-    }
-    const sessions = await VizUtils.apiFetch(url);
-    const sig = _sessionSig(sessions);
-    if (sig === lastSessionsSig) return;  // No change — leave the DOM alone.
-    lastSessionsSig = sig;
-    allSessions = sessions;
-    _pushStatusBar();
-    _applyFiltersAndRender();
-}
-
-async function loadWorkspaces() {
-    try {
-        const workspaces = await VizUtils.apiFetch('/api/viz/workspaces');
-        lastWorkspacesSig = _workspaceSig(workspaces);
-        lastWorkspacesData = workspaces;
-        _renderWorkspaces(workspaces);
-    } catch (e) {
-        console.error('Failed to load workspaces:', e);
-    }
-}
-
-async function loadSessions() {
-    const grid = document.getElementById('sessions-grid');
-    if (!grid) return;
-    try {
-        let url = '/api/viz/workspaces/default/sessions';
-        if (currentWorkspace && currentWorkspace !== 'default') {
-            url = `/api/viz/workspaces/${currentWorkspace}/sessions`;
+    async function loadSessions({ quiet = false } = {}) {
+        const grid = document.getElementById('sessions-grid');
+        const requestSeq = ++state.sessionRequestSeq;
+        if (!quiet) grid.innerHTML = '<div class="loading">Loading sessions...</div>';
+        try {
+            const sessions = await requestJson(sessionsUrl());
+            if (requestSeq !== state.sessionRequestSeq) return;
+            state.sessions = sessions;
+            state.sessions.sort((a, b) => (b.end_time || b.start_time || 0) - (a.end_time || a.start_time || 0));
+            renderSessions();
+            setLiveState('live');
+        } catch (error) {
+            if (requestSeq !== state.sessionRequestSeq) return;
+            if (!quiet) grid.innerHTML = `<div class="empty-state error-state"><strong>Load failed</strong><span>${escapeHtml(error.message)}</span></div>`;
+            setLiveState('error');
         }
-        const sessions = await VizUtils.apiFetch(url);
-        allSessions = sessions;
-        lastSessionsSig = _sessionSig(sessions);
-        _pushStatusBar();
-        _applyFiltersAndRender();
-    } catch (e) {
-        grid.innerHTML = `<div class="empty-state">Error loading sessions: ${e.message}</div>`;
-        console.error('Failed to load sessions:', e);
     }
-}
 
-function renderSessionCard(s) {
-    const statusClass = VizUtils.statusClass(s.status);
-    const duration = VizUtils.formatDuration(s.duration_ms);
-    const startTime = VizUtils.formatTime(s.start_time);
+    function renderWorkspaces() {
+        const tabs = document.getElementById('workspace-tabs');
+        tabs.innerHTML = state.workspaces.map((item) => `
+            <button type="button" class="workspace-tab ${item.id === state.workspace ? 'active' : ''}" data-workspace="${escapeHtml(item.id)}">
+                ${escapeHtml(item.name)} <span>${item.session_count ?? 0}</span>
+            </button>`).join('');
+        tabs.querySelectorAll('[data-workspace]').forEach((button) => button.addEventListener('click', () => {
+            state.workspace = button.dataset.workspace;
+            renderWorkspaces();
+            loadSessions();
+        }));
+    }
 
-    return `
-        <div class="session-card" onclick="window.location.href='/session/${s.session_id}'">
-            <h4>${s.title || s.session_id}</h4>
-            <div class="meta">
-                <span class="status-badge ${statusClass}">${s.status}</span>
-                <div>🕐 ${startTime}</div>
-                <div>⏱ ${duration}</div>
-                ${s.model ? `<div>🤖 ${s.model}</div>` : ''}
-                ${s.agent_name ? `<div>👤 ${s.agent_name}</div>` : ''}
-                ${s.turn_count ? `<div>🔄 ${s.turn_count} turns</div>` : ''}
-                ${s.tool_count ? `<div>🔧 ${s.tool_count} tools</div>` : ''}
+    function filteredSessions() {
+        const needle = state.query.trim().toLowerCase();
+        return state.sessions.filter((session) => {
+            if (state.status !== 'all' && session.status !== state.status) return false;
+            if (!needle) return true;
+            return [session.session_id, session.title, session.model, session.provider, session.workspace, session.agent_name]
+                .some((value) => String(value || '').toLowerCase().includes(needle));
+        });
+    }
+
+    function sessionCard(session) {
+        const warning = session.parse_warnings?.length
+            ? `<span class="warning-chip" title="${escapeHtml(session.parse_warnings.join('\n'))}">Warnings ${session.parse_warnings.length}</span>` : '';
+        const href = `/session/${encodeURIComponent(session.session_id)}`;
+        return `<a class="session-card" href="${href}" aria-label="Open session ${escapeHtml(session.title || session.session_id)}">
+            <div class="session-card-top">
+                <span class="status-badge status-${safeClassPart(session.status)}">${escapeHtml(session.status)}</span>${warning}
+                <time>${formatTime(session.end_time || session.start_time)}</time>
             </div>
-        </div>
-    `;
-}
-
-// Columns available for list-view sort. Each entry maps a sort key to a
-// human label and an extractor that returns the comparable value from a
-// session. Missing fields sort to the bottom regardless of direction.
-const _SORT_COLUMNS = {
-    start_time: { label: 'Start', get: s => s.start_time || 0 },
-    session_id: { label: 'ID', get: s => (s.session_id || '').toLowerCase() },
-    title:      { label: 'Title', get: s => (s.title || s.session_id || '').toLowerCase() },
-    status:     { label: 'Status', get: s => s.status || '' },
-    model:      { label: 'Model', get: s => s.model || '' },
-    duration_ms:{ label: 'Duration', get: s => s.duration_ms || 0 },
-    turn_count: { label: 'Turns', get: s => s.turn_count || 0 },
-    tool_count: { label: 'Tools', get: s => s.tool_count || 0 },
-};
-
-function _sortedSessions(arr) {
-    const col = _SORT_COLUMNS[sortBy] || _SORT_COLUMNS.start_time;
-    const sign = sortDir === 'asc' ? 1 : -1;
-    return arr.slice().sort((a, b) => {
-        const av = col.get(a);
-        const bv = col.get(b);
-        if (av < bv) return -1 * sign;
-        if (av > bv) return 1 * sign;
-        return 0;
-    });
-}
-
-function renderSessionRow(s) {
-    const statusClass = VizUtils.statusClass(s.status);
-    const duration = VizUtils.formatDuration(s.duration_ms);
-    const startTime = VizUtils.formatTime(s.start_time);
-    const titleEsc = (s.title || s.session_id || '').replace(/[<&>]/g, c =>
-        ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-    const idShort = (s.session_id || '').slice(0, 8);
-    return `
-        <div class="session-row" onclick="window.location.href='/session/${s.session_id}'">
-            <div class="cell cell-time">${startTime}</div>
-            <div class="cell cell-id" title="${s.session_id || ''}">${idShort}</div>
-            <div class="cell cell-title">${titleEsc}</div>
-            <div class="cell cell-status"><span class="status-badge ${statusClass}">${s.status || 'unknown'}</span></div>
-            <div class="cell cell-model">${s.model || '—'}</div>
-            <div class="cell cell-duration">${duration}</div>
-            <div class="cell cell-turns">${s.turn_count || 0}</div>
-            <div class="cell cell-tools">${s.tool_count || 0}</div>
-        </div>
-    `;
-}
-
-function _renderListHeader() {
-    const cols = [
-        ['start_time', 'Start'],
-        ['session_id', 'ID'],
-        ['title', 'Title'],
-        ['status', 'Status'],
-        ['model', 'Model'],
-        ['duration_ms', 'Duration'],
-        ['turn_count', 'Turns'],
-        ['tool_count', 'Tools'],
-    ];
-    return cols.map(([key, label]) => {
-        const isActive = sortBy === key;
-        const arrow = isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
-        return `<div class="cell cell-sortable${isActive ? ' active' : ''}"
-                     onclick="event.stopPropagation();onSortColumn('${key}')">${label}${arrow}</div>`;
-    }).join('');
-}
-
-function onSortColumn(key) {
-    if (sortBy === key) {
-        sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-        sortBy = key;
-        sortDir = (key === 'start_time' || key === 'duration_ms'
-                   || key === 'turn_count' || key === 'tool_count') ? 'desc' : 'asc';
+            <h3>${escapeHtml(session.title || session.session_id)}</h3>
+            <code>${escapeHtml(session.session_id)}</code>
+            <div class="session-card-meta">
+                <span>${escapeHtml(session.provider || 'provider not recorded')}</span>
+                <span>${escapeHtml(session.model || 'model not recorded')}</span>
+            </div>
+            <div class="session-card-stats">
+                <span>${session.turn_count || 0} LLM</span><span>${session.tool_count || 0} tools</span><span>${formatDuration(session.duration_ms)}</span>
+            </div>
+        </a>`;
     }
-    _savePref('sortBy', sortBy);
-    _savePref('sortDir', sortDir);
-    _applyFiltersAndRender();
-}
 
-function setLayoutMode(mode) {
-    if (mode !== 'grid' && mode !== 'list') return;
-    layoutMode = mode;
-    _savePref('layoutMode', mode);
-    const gridBtn = document.getElementById('layout-toggle-grid');
-    const listBtn = document.getElementById('layout-toggle-list');
-    if (gridBtn) gridBtn.classList.toggle('active', mode === 'grid');
-    if (listBtn) listBtn.classList.toggle('active', mode === 'list');
-    const grid = document.getElementById('sessions-grid');
-    if (grid) {
-        grid.classList.toggle('sessions-grid', mode === 'grid');
-        grid.classList.toggle('sessions-list', mode === 'list');
+    function sessionRow(session) {
+        const href = `/session/${encodeURIComponent(session.session_id)}`;
+        return `<a class="session-row" href="${href}" aria-label="Open session ${escapeHtml(session.title || session.session_id)}">
+            <span class="cell">${formatTime(session.end_time || session.start_time)}</span>
+            <span class="cell"><span class="status-badge status-${safeClassPart(session.status)}">${escapeHtml(session.status)}</span></span>
+            <span class="cell cell-title">${escapeHtml(session.title || session.session_id)}</span>
+            <span class="cell">${escapeHtml(session.provider || '-')}</span>
+            <span class="cell">${escapeHtml(session.model || '-')}</span>
+            <span class="cell">${formatDuration(session.duration_ms)}</span>
+            <span class="cell">${session.turn_count || 0}</span>
+            <span class="cell">${session.tool_count || 0}</span>
+        </a>`;
     }
-    _applyFiltersAndRender();
-}
 
-function onStatusFilterChange() {
-    const sel = document.getElementById('status-filter-select');
-    if (!sel) return;
-    statusFilter = sel.value;
-    _savePref('statusFilter', statusFilter);
-    _applyFiltersAndRender();
-}
-
-function _filteredSessions() {
-    let arr = allSessions;
-    // Status filter
-    if (statusFilter === 'default') {
-        arr = arr.filter(s => DEFAULT_STATUS_SET.has((s.status || '').toLowerCase()));
-    } else if (statusFilter !== 'all') {
-        const target = statusFilter.toLowerCase();
-        arr = arr.filter(s => (s.status || '').toLowerCase() === target);
+    function renderSessions() {
+        const sessions = filteredSessions();
+        const grid = document.getElementById('sessions-grid');
+        const total = state.sessions.length;
+        document.getElementById('session-count').textContent = sessions.length === total
+            ? `${sessions.length} sessions`
+            : `${sessions.length} / ${total} sessions`;
+        grid.className = state.layout === 'list' ? 'sessions-list' : 'sessions-grid';
+        if (!sessions.length) {
+            const hasFilters = Boolean(state.query.trim()) || state.status !== 'all';
+            grid.innerHTML = hasFilters
+                ? '<div class="empty-state"><strong>No matching sessions</strong><span>Adjust search or status filters and try again.</span></div>'
+                : '<div class="empty-state"><strong>No sessions yet</strong><span>Start a ClawCodex session and local records will appear here automatically.</span></div>';
+            return;
+        }
+        if (state.layout === 'list') {
+            grid.innerHTML = `<div class="list-header">
+                <span class="cell">Updated</span><span class="cell">Status</span><span class="cell">Title</span>
+                <span class="cell">Provider</span><span class="cell">Model</span><span class="cell">Duration</span>
+                <span class="cell">LLM</span><span class="cell">Tools</span>
+            </div>${sessions.map(sessionRow).join('')}`;
+        } else {
+            grid.innerHTML = sessions.map(sessionCard).join('');
+        }
     }
-    // Search filter (id / title / agent / model)
-    if (searchQuery) {
-        const q = searchQuery;
-        arr = arr.filter(s =>
-            (s.session_id || '').toLowerCase().includes(q) ||
-            (s.title || '').toLowerCase().includes(q) ||
-            (s.agent_name || '').toLowerCase().includes(q) ||
-            (s.model || '').toLowerCase().includes(q)
-        );
+
+    function setLayout(layout) {
+        state.layout = layout;
+        writeChoice('viz.layoutMode', layout);
+        const gridButton = document.getElementById('layout-toggle-grid');
+        const listButton = document.getElementById('layout-toggle-list');
+        gridButton.classList.toggle('active', layout === 'grid');
+        listButton.classList.toggle('active', layout === 'list');
+        gridButton.setAttribute('aria-pressed', String(layout === 'grid'));
+        listButton.setAttribute('aria-pressed', String(layout === 'list'));
+        renderSessions();
     }
-    return arr;
-}
 
-function _applyFiltersAndRender() {
-    const grid = document.getElementById('sessions-grid');
-    if (!grid) return;
-    const filtered = _filteredSessions();
-    if (filtered.length === 0) {
-        grid.innerHTML = '<div class="empty-state">No matching sessions</div>';
-        return;
+    function setLiveState(kind) {
+        const indicator = document.getElementById('live-indicator');
+        indicator.className = `live-indicator ${kind}`;
     }
-    if (layoutMode === 'list') {
-        const sorted = _sortedSessions(filtered);
-        grid.innerHTML = `<div class="list-header">${_renderListHeader()}</div>`
-            + sorted.map(renderSessionRow).join('');
-    } else {
-        grid.innerHTML = filtered.map(renderSessionCard).join('');
+
+    function stopPolling() {
+        if (state.timer) {
+            window.clearInterval(state.timer);
+            state.timer = null;
+        }
     }
-}
 
-// Restore persisted UI state into the controls on first paint.
-function _restoreUiState() {
-    const sel = document.getElementById('status-filter-select');
-    if (sel) sel.value = statusFilter;
-    const gridBtn = document.getElementById('layout-toggle-grid');
-    const listBtn = document.getElementById('layout-toggle-list');
-    const grid = document.getElementById('sessions-grid');
-    if (grid) {
-        grid.classList.toggle('sessions-grid', layoutMode === 'grid');
-        grid.classList.toggle('sessions-list', layoutMode === 'list');
+    async function initialize() {
+        document.getElementById('status-filter-select').value = state.status;
+        document.getElementById('search-input').addEventListener('input', (event) => {
+            state.query = event.target.value; loadSessions({ quiet: true });
+        });
+        document.getElementById('status-filter-select').addEventListener('change', (event) => {
+            state.status = event.target.value;
+            writeChoice('viz.statusFilter', state.status);
+            loadSessions({ quiet: true });
+        });
+        document.getElementById('layout-toggle-grid').addEventListener('click', () => setLayout('grid'));
+        document.getElementById('layout-toggle-list').addEventListener('click', () => setLayout('list'));
+        document.getElementById('refresh-button').addEventListener('click', async () => { await loadWorkspaces(); await loadSessions(); });
+        setLayout(state.layout);
+        try { await loadWorkspaces(); await loadSessions(); }
+        catch (error) {
+            document.getElementById('sessions-grid').innerHTML = `<div class="empty-state error-state"><strong>Cannot scan sessions</strong><span>${escapeHtml(error.message)}</span></div>`;
+            setLiveState('error');
+        }
+        state.timer = window.setInterval(() => {
+            if (!document.hidden) { loadWorkspaces().then(() => loadSessions({ quiet: true })).catch(() => setLiveState('error')); }
+        }, 5000);
     }
-    if (gridBtn) gridBtn.classList.toggle('active', layoutMode === 'grid');
-    if (listBtn) listBtn.classList.toggle('active', layoutMode === 'list');
-}
 
-function filterSessions() {
-    const input = document.getElementById('search-input');
-    searchQuery = (input ? input.value : '').toLowerCase();
-    _applyFiltersAndRender();
-}
-
-function openCompareDialog() {
-    document.getElementById('compare-dialog').style.display = 'flex';
-}
-
-function closeCompareDialog() {
-    document.getElementById('compare-dialog').style.display = 'none';
-}
-
-async function doCompare() {
-    const ids = document.getElementById('compare-ids').value.trim();
-    if (!ids) return;
-    closeCompareDialog();
-    // Navigate to comparison view
-    window.location.href = `/compare?sessions=${encodeURIComponent(ids)}`;
-}
-
-function openMultiSessionDialog() {
-    document.getElementById('multi-session-dialog').style.display = 'flex';
-    // Pre-fill with the first two session cards if any
-    if (allSessions && allSessions.length >= 1) {
-        const ids = allSessions.slice(0, 2).map(s => s.session_id).join(',');
-        document.getElementById('multi-session-ids').value = ids;
-    }
-}
-
-function closeMultiSessionDialog() {
-    document.getElementById('multi-session-dialog').style.display = 'none';
-}
-
-function openMultiSessionPage() {
-    const ids = document.getElementById('multi-session-ids').value.trim();
-    if (!ids) {
-        alert('请输入至少一个 session ID');
-        return;
-    }
-    closeMultiSessionDialog();
-    window.location.href = `/multi?session_ids=${encodeURIComponent(ids)}`;
-}
-
-// Make functions globally available
-window.loadWorkspaces = loadWorkspaces;
-window.loadSessions = loadSessions;
-window.refreshSessions = refreshSessions;
-window.filterSessions = filterSessions;
-window.selectWorkspace = selectWorkspace;
-window.openCompareDialog = openCompareDialog;
-window.closeCompareDialog = closeCompareDialog;
-window.doCompare = doCompare;
-window.openMultiSessionDialog = openMultiSessionDialog;
-window.closeMultiSessionDialog = closeMultiSessionDialog;
-window.openMultiSessionPage = openMultiSessionPage;
-window.setLayoutMode = setLayoutMode;
-window.onStatusFilterChange = onStatusFilterChange;
-window.onSortColumn = onSortColumn;
-window._restoreUiState = _restoreUiState;
+    window.addEventListener('pagehide', stopPolling);
+    window.addEventListener('beforeunload', stopPolling);
+    document.addEventListener('DOMContentLoaded', initialize);
+})();

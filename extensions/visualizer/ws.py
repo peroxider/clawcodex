@@ -116,6 +116,9 @@ class SessionLiveTail:
           which avoids the cost of a server round-trip per event.
         """
         self._running = True
+        if self.transcript_path and self.transcript_path.name == "session.json":
+            await self._watch_session_json(interval)
+            return
         while self._running and self.transcript_path and self.transcript_path.exists():
             try:
                 with open(self.transcript_path, "r", encoding="utf-8") as f:
@@ -151,6 +154,38 @@ class SessionLiveTail:
                 logger.debug("Error tailing transcript for %s", self.session_id, exc_info=True)
 
             await asyncio.sleep(interval)
+
+    async def _watch_session_json(self, interval: float) -> None:
+        """Broadcast a coarse change notification for single-file sessions.
+
+        ``session.json`` is rewritten as one JSON object, so byte-offset
+        tailing is not meaningful.  Clients deliberately refetch the complete
+        Session API payload after this notification.
+        """
+        if not self.transcript_path:
+            return
+        try:
+            last_mtime = self.transcript_path.stat().st_mtime_ns
+        except OSError:
+            last_mtime = 0
+        while self._running and self.transcript_path.exists():
+            await asyncio.sleep(interval)
+            try:
+                current_mtime = self.transcript_path.stat().st_mtime_ns
+            except OSError:
+                continue
+            if current_mtime == last_mtime:
+                continue
+            last_mtime = current_mtime
+            await self.broadcast(
+                {
+                    "type": "transcript_event",
+                    "session_id": self.session_id,
+                    "source": "session.json",
+                    "changed": True,
+                    "timestamp": time.time(),
+                }
+            )
 
     def _entry_to_bar_update(
         self,
@@ -272,15 +307,16 @@ def create_ws_router() -> APIRouter:
         app = websocket.app
         state: _AppState = app.state.viz
 
-        # The main session transcript is at
-        # ``<sessions_dir>/<session_id>/transcript.jsonl`` (same path
-        # in the new format).
+        # Match the API's source priority: session.json first, then JSONL.
         transcript_path: Path | None = None
         session_dir = state.sessions_dir / session_id
         if session_dir.is_dir():
-            tp = session_dir / "transcript.jsonl"
-            if tp.exists():
-                transcript_path = tp
+            session_json = session_dir / "session.json"
+            transcript_jsonl = session_dir / "transcript.jsonl"
+            if session_json.exists():
+                transcript_path = session_json
+            elif transcript_jsonl.exists():
+                transcript_path = transcript_jsonl
 
         # Get or create the live tail
         if session_id not in _active_tails:

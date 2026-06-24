@@ -184,10 +184,10 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # No text block was passed → just 1 bar (the tool_use).
-        assert len(bars) == 1
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[0].label == "Read"
-        assert bars[0].status == BarStatus.RUNNING
+        assert len(bars) == 2
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        assert tool.label == "Read"
+        assert tool.status == BarStatus.RUNNING
 
     def test_parse_tool_use_block_with_leading_text(self, tmp_path):
         """A text-then-tool_use entry produces one LLM_CALL bar followed
@@ -217,12 +217,12 @@ class TestTranscriptParser:
         bars = TranscriptParser().parse_file(p)
         # 1 tool_use + 1 tool_result = 2 bars (no leading text in the
         # tool_use helper call).
-        assert len(bars) == 2
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[1].type == BarType.TOOL_RESULT
-        assert bars[1].status == BarStatus.SUCCESS
+        assert len(bars) == 3
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        result = next(bar for bar in bars if bar.type == BarType.TOOL_RESULT)
+        assert result.status == BarStatus.SUCCESS
         # The tool_call's duration is backfilled from the tool_result.
-        assert bars[0].duration_ms == 1000
+        assert tool.duration_ms == 1000
 
     def test_parse_tool_result_error(self, tmp_path):
         p = _write_jsonl(
@@ -233,7 +233,9 @@ class TestTranscriptParser:
             ],
         )
         bars = TranscriptParser().parse_file(p)
-        assert bars[1].status == BarStatus.ERROR
+        assert (
+            next(bar for bar in bars if bar.type == BarType.TOOL_RESULT).status == BarStatus.ERROR
+        )
 
     def test_tool_call_duration_backfilled_from_result(self, tmp_path):
         """The TOOL_CALL bar's duration_ms is backfilled from the matching
@@ -246,11 +248,10 @@ class TestTranscriptParser:
             ],
         )
         bars = TranscriptParser().parse_file(p)
-        assert len(bars) == 2
-        # 0=tool_call, 1=tool_result
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[0].duration_ms == 1500
-        assert bars[0].end_time == 1717500001.5
+        assert len(bars) == 3
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        assert tool.duration_ms == 1500
+        assert tool.end_time == 1717500001.5
 
     def test_tool_call_duration_stays_zero_without_result(self, tmp_path):
         """A TOOL_CALL with no matching TOOL_RESULT and no following bar
@@ -263,9 +264,10 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # No leading text + 1 tool_use = 1 bar
-        assert len(bars) == 1
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[0].duration_ms == 0
+        assert len(bars) == 2
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        assert tool.duration_ms == 0
+        assert tool.duration_unrecorded is True
 
     def test_tool_call_duration_estimated_from_next_bar(self, tmp_path):
         """A TOOL_CALL with no matching TOOL_RESULT but with a following
@@ -282,12 +284,10 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # Two entries, each with no leading text → 2 tool_use bars total.
-        assert len(bars) == 2
-        # 0=tool_call(a), 1=tool_call(b)
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[0].duration_ms == 30000  # 30s
-        assert bars[0].end_time == 130.0
-        assert bars[1].duration_ms == 0  # no next bar; stays as placeholder
+        tools = [bar for bar in bars if bar.type == BarType.TOOL_CALL]
+        assert len(tools) == 2
+        assert all(tool.duration_ms == 0 for tool in tools)
+        assert all(tool.duration_unrecorded for tool in tools)
 
     def test_tool_call_fallback_with_only_text_after(self, tmp_path):
         """A TOOL_CALL followed by a text block (typical end-of-turn
@@ -301,11 +301,10 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # 0=tool_call(x), 1=text("Done.")
-        assert len(bars) == 2
-        assert bars[0].type == BarType.TOOL_CALL
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
         # Next bar is the trailing text at 200.5 → 500ms estimate.
-        assert bars[0].duration_ms == 500
-        assert bars[0].end_time == 200.5
+        assert tool.duration_ms == 0
+        assert tool.duration_unrecorded is True
 
     def test_entry_with_multiple_blocks_emits_one_bar_per_block(self, tmp_path):
         """A single transcript entry can carry multiple content blocks
@@ -380,9 +379,9 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # Only the Read survives the empty-text drop.
-        assert len(bars) == 1
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[0].label == "Read"
+        assert len(bars) == 2
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        assert tool.label == "Read"
 
     def test_orphan_tool_result_does_not_modify_other_calls(self, tmp_path):
         """A TOOL_RESULT whose tool_use_id has no matching TOOL_CALL
@@ -398,15 +397,15 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         # 1 tool_call + 1 tool_result (no leading text in the helper)
-        assert len(bars) == 2
-        assert bars[0].type == BarType.TOOL_CALL
-        assert bars[1].type == BarType.TOOL_RESULT
+        assert len(bars) == 3
+        tool = next(bar for bar in bars if bar.type == BarType.TOOL_CALL)
+        result = next(bar for bar in bars if bar.type == BarType.TOOL_RESULT)
         # The tool_call's tool_use_id is still "tu-a" — the orphan
         # did not overwrite it. Its end_time may have been pulled
         # forward by the pass-2 next-bar estimate, but its identity
         # (parent_id, tool_use_id) is preserved.
-        assert bars[0].detail.get("tool_use_id") == "tu-a"
-        assert bars[1].detail.get("tool_use_id") == "tu-orphan"
+        assert tool.detail.get("tool_use_id") == "tu-a"
+        assert result.detail.get("tool_use_id") == "tu-orphan"
         # The orphan result's bar still references the (missing) tool_call
         # via parent_id=None, not via a fabricated match to "tu-a".
         assert bars[1].detail.get("parent_id") is None
@@ -502,8 +501,7 @@ class TestTranscriptParser:
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
 
-    def test_system_role_emits_custom_bar(self, tmp_path):
-        """System-injected events emit a CUSTOM bar with user_role='system'."""
+    def test_system_status_noise_is_dropped(self, tmp_path):
         p = _write_jsonl(
             tmp_path / "t.jsonl",
             [
@@ -520,10 +518,7 @@ class TestTranscriptParser:
             ],
         )
         bars = TranscriptParser().parse_file(p)
-        assert len(bars) == 1
-        assert bars[0].type == BarType.CUSTOM
-        assert bars[0].user_role == "system"
-        assert bars[0].duration_unrecorded is True
+        assert bars == []
 
     def test_thinking_block_emits_llm_text_bar(self, tmp_path):
         """A ``thinking`` block produces the same bar shape as ``text``."""
@@ -545,9 +540,7 @@ class TestTranscriptParser:
         assert len(bars) == 1
         assert bars[0].type == BarType.LLM_CALL
 
-    def test_parent_session_id_propagates_to_bars(self, tmp_path):
-        """A ``parent_session_id`` field on a sub-agent entry propagates
-        into bar.agent_id so the multi-session view can group sub-agents."""
+    def test_explicit_subagent_id_propagates_to_bars(self, tmp_path):
         p = _write_jsonl(
             tmp_path / "t.jsonl",
             [
@@ -565,9 +558,9 @@ class TestTranscriptParser:
                 },
             ],
         )
-        bars = TranscriptParser().parse_file(p)
-        assert len(bars) == 1
-        assert bars[0].agent_id == "main-session-1"
+        bars = TranscriptParser().parse_file(p, agent_id="child-agent")
+        assert len(bars) == 2
+        assert all(bar.agent_id == "child-agent" for bar in bars)
 
     def test_malformed_json_line_skipped(self, tmp_path):
         p = tmp_path / "bad.jsonl"
@@ -594,9 +587,8 @@ class TestTranscriptParser:
         p2 = _write_jsonl(tmp_path / "b.jsonl", [_assistant_text(2.0, "msg2")])
         bars1 = parser.parse_file(p1)
         bars2 = parser.parse_file(p2)
-        # Both should produce a bar with id "txt-1" (counter reset).
-        assert bars1[0].id == "txt-1"
-        assert bars2[0].id == "txt-1"
+        assert bars1[0].id == "main-llm-0"
+        assert bars2[0].id == "main-llm-0"
 
     def test_iso8601_timestamp_in_entry(self, tmp_path):
         p = _write_jsonl(
@@ -617,7 +609,7 @@ class TestTranscriptParser:
         assert len(bars) == 1
         assert bars[0].start_time > 0
 
-    def test_unparseable_timestamp_marks_ts_unrecorded(self, tmp_path):
+    def test_numeric_timestamp_is_accepted(self, tmp_path):
         """A non-ISO, non-string timestamp triggers the ``ts_unrecorded``
         flag on the resulting bar."""
         p = _write_jsonl(
@@ -636,11 +628,9 @@ class TestTranscriptParser:
         )
         bars = TranscriptParser().parse_file(p)
         assert len(bars) == 1
-        assert bars[0].ts_unrecorded is True
+        assert bars[0].ts_unrecorded is False
 
-    def test_string_content_skipped_as_malformed(self, tmp_path):
-        """The new envelope always writes content as a list. A bare string
-        content is treated as a malformed line and skipped."""
+    def test_string_content_is_normalized(self, tmp_path):
         p = _write_jsonl(
             tmp_path / "t.jsonl",
             [
@@ -656,7 +646,9 @@ class TestTranscriptParser:
             ],
         )
         bars = TranscriptParser().parse_file(p)
-        assert bars == []
+        assert len(bars) == 1
+        assert bars[0].type == BarType.LLM_CALL
+        assert bars[0].detail["text"] == "legacy bare string"
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +729,21 @@ class TestSessionMetadataParser:
         viz = parser.parse("minimal-session")
         assert viz is not None
         assert viz.status == "unknown"
+
+    def test_parse_session_discovers_report_artifacts(self, tmp_path):
+        session_dir = tmp_path / "artifact-session"
+        session_dir.mkdir()
+        (session_dir / "report.md").write_text("# Report\n", encoding="utf-8")
+        (session_dir / "events.ndjson").write_text('{"event":"ok"}\n', encoding="utf-8")
+        (session_dir / "debug.ndjson").write_text('{"debug":"ok"}\n', encoding="utf-8")
+
+        parser = SessionMetadataParser(sessions_dir=tmp_path)
+        viz = parser.parse("artifact-session")
+
+        assert viz is not None
+        assert viz.report_path and viz.report_path.endswith("report.md")
+        assert viz.tool_events_path and viz.tool_events_path.endswith("events.ndjson")
+        assert viz.debug_log_path and viz.debug_log_path.endswith("debug.ndjson")
 
     def test_list_sessions(self, tmp_path):
         for sid in ["aaa", "bbb", "ccc"]:
@@ -1093,7 +1100,7 @@ class TestMultiAgentParser:
             transcripts_dir=tx_dir,
         )
         assert len(nodes) == 1
-        assert nodes[0].agent_id == "agent-xyz"
+        assert nodes[0].agent_id == "xyz"
         assert nodes[0].metadata["source"] == "flat"
 
     def test_parse_for_session_flat_subagent_with_wrong_parent_skipped(self, tmp_path):

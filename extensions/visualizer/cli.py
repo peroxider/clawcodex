@@ -45,7 +45,7 @@ def run_viz(args: list[str] | None = None) -> int:
     """Entry point for the ``clawcodex viz`` subcommand."""
     parser = argparse.ArgumentParser(
         prog="clawcodex viz",
-        description="Start the Multi-Session Visualizer web server",
+        description="Start the local Session Visualizer web server",
     )
     parser.add_argument(
         "--port",
@@ -146,7 +146,7 @@ def run_viz(args: list[str] | None = None) -> int:
 
         threading.Thread(target=_open_browser, daemon=True).start()
 
-    print(f"🖥  ClawCodex Visualizer starting at {url}")
+    print(f"ClawCodex Visualizer starting at {url}")
     print(f"   Sessions dir: {parsed.sessions_dir or '~/.clawcodex/sessions'}")
     print(f"   Transcripts dir: {parsed.transcripts_dir or '~/.clawcodex/transcripts'}")
     print(f"   Import: {'enabled' if parsed.allow_import else 'disabled'}")

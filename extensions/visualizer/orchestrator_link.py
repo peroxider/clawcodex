@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from urllib.parse import quote
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,11 @@ class OrchestratorLink:
 
     def generate_links(self, session_id: str, session_dir: Path | None = None) -> dict[str, Any]:
         """Generate all orchestrator links for a session."""
+        sid_url = quote(session_id, safe="")
         links: dict[str, Any] = {
             "session_id": session_id,
             "api_base": f"{self.base_url}/api/viz",
-            "frontend": f"{self.base_url}/session/{session_id}",
+            "frontend": f"{self.base_url}/session/{sid_url}",
         }
 
         if session_dir is None:
@@ -54,7 +56,7 @@ class OrchestratorLink:
         if report_md.exists() or report_json.exists():
             links["f38_report"] = {
                 "type": "verification_report",
-                "api_url": f"{self.base_url}/api/viz/sessions/{session_id}/report",
+                "api_url": f"{self.base_url}/api/viz/sessions/{sid_url}/report",
                 "file_path": str(report_md if report_md.exists() else report_json),
                 "available": True,
             }
@@ -75,7 +77,7 @@ class OrchestratorLink:
         if events_file.exists():
             links["f45_events"] = {
                 "type": "tool_events",
-                "api_url": f"{self.base_url}/api/viz/sessions/{session_id}/report",
+                "api_url": f"{self.base_url}/api/viz/sessions/{sid_url}/report",
                 "file_path": str(events_file),
                 "available": True,
                 "event_count": self._count_ndjson_lines(events_file),
@@ -91,7 +93,7 @@ class OrchestratorLink:
         if debug_file.exists():
             links["f54_debug"] = {
                 "type": "debug_timeline",
-                "api_url": f"{self.base_url}/api/viz/sessions/{session_id}/report",
+                "api_url": f"{self.base_url}/api/viz/sessions/{sid_url}/report",
                 "file_path": str(debug_file),
                 "available": True,
                 "entry_count": self._count_ndjson_lines(debug_file),
@@ -112,10 +114,9 @@ class OrchestratorLink:
         except Exception:
             return 0
 
-    def generate_share_link(self, session_id: str, view_type: str = "session") -> dict[str, str]:
-        """Generate a share link payload for the API."""
+    def generate_share_link(self, session_id: str) -> dict[str, str]:
+        """Generate a single-session share payload for the API."""
         return {
             "session_id": session_id,
-            "view_type": view_type,
             "format": "json",
         }

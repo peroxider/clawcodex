@@ -1,8 +1,4 @@
-"""Pydantic data models for the Multi-Session Visualizer (F-91-A).
-
-Five core models that map 1:1 to frontend TypeScript types.
-All datetime fields use Unix timestamps (float) for JSON compactness.
-"""
+"""Pydantic models shared by the local session visualizer APIs."""
 
 from __future__ import annotations
 
@@ -32,6 +28,8 @@ class BarType(str, Enum):
     LLM_CALL = "llm_call"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+    USER = "user"
+    SYSTEM = "system"
     PHASE = "phase"
     TURN = "turn"
     SESSION = "session"
@@ -127,14 +125,6 @@ class AnomalySeverity(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
-
-
-class TimeMode(str, Enum):
-    """Time axis display mode for the gantt chart."""
-
-    RELATIVE = "relative"  # start from 0
-    ABSOLUTE = "absolute"  # wall-clock timestamps
-    WINDOW = "window"  # configurable sliding window
 
 
 class ExportFormat(str, Enum):
@@ -385,6 +375,10 @@ class SessionVizData(BaseModel):
     phase_count: int = 0
     detected_mode: str = ""  # e.g. "headless", "interactive"
     config_summary: dict[str, Any] = Field(default_factory=dict)
+    parse_warnings: list[str] = Field(
+        default_factory=list,
+        description="Non-fatal damaged or unsupported transcript records.",
+    )
 
     # Session end reason (F-09 / F-40)
     end_reason: str | None = None
@@ -414,24 +408,14 @@ class WorkspaceInfo(BaseModel):
 
 
 class ShareLink(BaseModel):
-    """Share link record (F-92-D / F-95-B)."""
+    """Share link record for a single session."""
 
     id: str
     session_id: str
     created_at: float
     expires_at: float
     format: ExportFormat = ExportFormat.JSON
-    view_type: str = "session"  # session | comparison
     payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class ComparisonResult(BaseModel):
-    """Cross-session comparison payload."""
-
-    sessions: list[str] = Field(default_factory=list)
-    common_metrics: dict[str, Any] = Field(default_factory=dict)
-    per_session: dict[str, OperationStats] = Field(default_factory=dict)
-    delta: dict[str, Any] = Field(default_factory=dict)
 
 
 class ImportStatus(BaseModel):

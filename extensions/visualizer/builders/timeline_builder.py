@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..models.viz_models import SessionVizData, TimelineBar
+from ..models.viz_models import BarType, SessionVizData, TimelineBar
 from ..parsers.session_parser import SessionMetadataParser
 from ..parsers.transcript_parser import TranscriptParser
 from ..parsers.tool_events_parser import ToolEventsParser
@@ -49,6 +49,7 @@ class TimelineBuilder:
         if viz.transcript_path:
             transcript_bars = self.transcript_parser.parse_file(viz.transcript_path)
             viz.timeline.extend(transcript_bars)
+            viz.parse_warnings.extend(self.transcript_parser.warnings)
 
         # Parse tool events bars
         if viz.tool_events_path:
@@ -67,8 +68,28 @@ class TimelineBuilder:
         )
         viz.agent_tree = agent_tree
 
+        # A discovered child is only useful when its real events are placed on
+        # the shared timeline.  Parse every nested/flat transcript separately
+        # and stamp the filename-derived agent id onto all emitted bars.
+        for node in agent_tree:
+            transcript_path = node.metadata.get("transcript_path")
+            if not transcript_path:
+                continue
+            child_parser = TranscriptParser()
+            child_bars = child_parser.parse_file(
+                transcript_path,
+                agent_id=node.agent_id,
+                llm_duration_strategy="unrecorded",
+            )
+            viz.timeline.extend(child_bars)
+            viz.parse_warnings.extend(child_parser.warnings)
+
+        self._apply_spawn_metadata(viz)
+
         # Sort timeline by start time
         viz.timeline.sort(key=lambda b: b.start_time)
+        viz.tool_count = sum(1 for bar in viz.timeline if bar.type == BarType.TOOL_CALL)
+        viz.turn_count = sum(1 for bar in viz.timeline if bar.type == BarType.LLM_CALL)
 
         # Compute stats — pass the pre-enriched ``viz.stats`` as a base so
         # cost_usd / context_tokens populated by ``_enrich_from_transcript``
@@ -93,7 +114,57 @@ class TimelineBuilder:
         except Exception as e:
             logger.debug("AgentTreeLayout failed for %s: %s", session_id, e)
 
+        viz.parse_warnings = self._dedupe_warnings(viz.parse_warnings)
         return viz
+
+    @staticmethod
+    def _dedupe_warnings(warnings: list[str]) -> list[str]:
+        seen: set[str] = set()
+        deduped: list[str] = []
+        for warning in warnings:
+            if warning in seen:
+                continue
+            seen.add(warning)
+            deduped.append(warning)
+        return deduped
+
+    @staticmethod
+    def _apply_spawn_metadata(viz: SessionVizData) -> None:
+        """Match Agent/Task calls to transcript lanes and improve labels."""
+        spawn_bars = [
+            bar
+            for bar in viz.timeline
+            if bar.type == BarType.TOOL_CALL
+            and (bar.detail or {}).get("is_agent_invocation")
+            and not bar.agent_id
+        ]
+        unused = list(viz.agent_tree)
+        for bar in spawn_bars:
+            detail = bar.detail or {}
+            explicit = next(
+                (
+                    detail.get(key)
+                    for key in ("agent_id", "subagent_id", "agentId", "subagentId")
+                    if detail.get(key)
+                ),
+                None,
+            )
+            node = next(
+                (item for item in unused if explicit and item.agent_id == str(explicit)), None
+            )
+            if node is None and unused:
+                node = unused[0]
+            if node is None:
+                continue
+            unused.remove(node)
+            subagent_type = detail.get("subagent_type") or detail.get("agent_type")
+            description = detail.get("subagent_description") or detail.get("description")
+            if isinstance(subagent_type, str) and subagent_type:
+                node.name = subagent_type
+                node.metadata["subagent_type"] = subagent_type
+            elif isinstance(description, str) and description:
+                node.name = description[:60]
+            node.metadata["spawn_bar_id"] = bar.id
 
     def build_for_sessions(self, session_ids: list[str]) -> list[SessionVizData]:
         """Build viz data for multiple sessions."""
