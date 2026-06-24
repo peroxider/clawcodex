@@ -17,7 +17,10 @@ from src.context_system.context_analyzer import (
     format_context_as_markdown,
     get_context_window_for_model,
 )
-from clawcodex_ext.context_system.microcompact import microcompact_messages, strip_images_from_messages
+from clawcodex_ext.context_system.microcompact import (
+    microcompact_messages,
+    strip_images_from_messages,
+)
 from src.cost_tracker import CostTracker
 from src.history import HistoryLog
 from clawcodex_ext.providers.base import BaseProvider
@@ -394,7 +397,9 @@ def cron_run_command_call(args: str, context: CommandContext) -> LocalCommandRes
 
     output = _call_cron_tool(context, "CronRun", {"id": cron_id})
     if isinstance(output, dict) and output.get("disabled"):
-        return LocalCommandResult(type="text", value=str(output.get("message") or "Cron is disabled."))
+        return LocalCommandResult(
+            type="text", value=str(output.get("message") or "Cron is disabled.")
+        )
     if isinstance(output, dict) and output.get("not_found"):
         return LocalCommandResult(
             type="text",
