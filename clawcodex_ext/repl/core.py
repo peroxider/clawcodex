@@ -50,6 +50,7 @@ try:
     except Exception:  # pragma: no cover
         FuzzyCompleter = None  # type: ignore
     from prompt_toolkit.key_binding import KeyBindings
+
     _HAS_PROMPT_TOOLKIT = True
 except ModuleNotFoundError:  # pragma: no cover
     _HAS_PROMPT_TOOLKIT = False
@@ -174,9 +175,7 @@ class _SlashOnlyCompleter(Completer):
             if description:
                 # Collapse internal whitespace so multi-line descriptions
                 # render as one row in the prompt_toolkit menu.
-                meta_parts.append(
-                    ("class:completion.description", " ".join(description.split()))
-                )
+                meta_parts.append(("class:completion.description", " ".join(description.split())))
             yield Completion(
                 text=f"/{sugg.name}",
                 start_position=start_position,
@@ -241,7 +240,7 @@ class _MessageHistoryCompleter(Completer):
         else:
             # Is there whitespace (or nothing) before this word?
             if cursor_pos < len(text):
-                prefix = text[:cursor_pos - len(current_word)]
+                prefix = text[: cursor_pos - len(current_word)]
                 if prefix and not prefix[-1].isspace():
                     return  # mid-word completion — don't trigger
                 start_pos = len(text) - len(text[:cursor_pos])
@@ -263,9 +262,7 @@ class _MessageHistoryCompleter(Completer):
         # Rank matches via the shared helper. The REPL surfaces at most
         # 5 suggestions, mirrors the prior behaviour.
         start_position = -len(current_word)
-        for full_msg in rank_message_history(
-            history, partial.lower(), limit=5
-        ):
+        for full_msg in rank_message_history(history, partial.lower(), limit=5):
             yield Completion(
                 text=full_msg,
                 start_position=start_position,
@@ -285,6 +282,7 @@ try:
     from rich.markdown import Markdown
     from rich.columns import Columns
 except ModuleNotFoundError:  # pragma: no cover
+
     class Console:  # type: ignore
         def print(self, *args, **kwargs):
             return None
@@ -302,6 +300,8 @@ except ModuleNotFoundError:  # pragma: no cover
     class Markdown:  # type: ignore
         def __init__(self, text: str):
             self.text = text
+
+
 from pathlib import Path
 import asyncio
 import sys
@@ -327,7 +327,12 @@ from clawcodex_ext.tool_system.protocol import ToolCall
 from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
 from src.query.engine import QueryEngine, QueryEngineConfig
 from src.query.query import StreamEvent
-from clawcodex_ext.types.messages import NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
+from clawcodex_ext.types.messages import (
+    NO_CONTENT_MESSAGE,
+    AssistantMessage,
+    SystemMessage,
+    UserMessage,
+)
 from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from src.utils.abort_controller import AbortController
 
@@ -349,6 +354,7 @@ from clawcodex_ext.repl.live_status import LiveStatus
 try:
     from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
     from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
+
     _HAS_CRON = True
 except ImportError:
     _HAS_CRON = False
@@ -370,6 +376,7 @@ def _wrap_cron_prompt(prompt: str, *, task_id: str = "") -> str:
     if task_id:
         header += f" · {task_id}"
     return f"{header}\n\n{_CRON_PROMPT_PRELUDE}\n\n---\n\n{prompt}"
+
 
 try:
     from prompt_toolkit.patch_stdout import patch_stdout as _pt_patch_stdout
@@ -458,9 +465,7 @@ class _HintedAutoSuggest(AutoSuggestFromHistory):
         # Refresh the module-level visibility snapshot so the Tab
         # binding's filter can decide whether to fire.
         _ghost_state["suggestion"] = suggestion.text if suggestion else None
-        _ghost_state["complete_active"] = bool(
-            getattr(buffer, "complete_state", None)
-        )
+        _ghost_state["complete_active"] = bool(getattr(buffer, "complete_state", None))
         if suggestion and suggestion.text:
             return Suggestion(suggestion.text + self._hint)
         return suggestion
@@ -509,9 +514,8 @@ def _patch_accept_suggestion_bindings(
         # returns False, prompt_toolkit's default Tab handler runs
         # (cycle completion menu / insert a tab).
         def _tab_filter() -> bool:
-            return (
-                _ghost_state.get("suggestion") is not None
-                and not _ghost_state.get("complete_active", False)
+            return _ghost_state.get("suggestion") is not None and not _ghost_state.get(
+                "complete_active", False
             )
 
         @bindings.add("tab", filter=Condition(_tab_filter))
@@ -558,9 +562,7 @@ class ClawcodexREPL:
         # ``--dangerously-skip-permissions`` / ``--permission-mode`` flags
         # passed at startup. See ``src/cli.py:_resolve_permission_state``.
         self._permission_mode = permission_mode
-        self._is_bypass_permissions_mode_available = bool(
-            is_bypass_permissions_mode_available
-        )
+        self._is_bypass_permissions_mode_available = bool(is_bypass_permissions_mode_available)
 
         from clawcodex_ext.repl.color_scheme import (
             build_rich_theme,
@@ -587,14 +589,11 @@ class ClawcodexREPL:
         self.provider = provider_class(
             api_key=config["api_key"],
             base_url=config.get("base_url"),
-            model=config.get("default_model")
+            model=config.get("default_model"),
         )
 
         # Create session
-        self.session = Session.create(
-            provider_name,
-            self.provider.model
-        )
+        self.session = Session.create(provider_name, self.provider.model)
 
         # Late-binding closure: ``tool_context`` is built below, but the
         # Agent tool's prompt builder won't read this until much later,
@@ -619,9 +618,7 @@ class ClawcodexREPL:
             workspace_root=Path.cwd(),
             permission_context=ToolPermissionContext(
                 mode=self._permission_mode,  # type: ignore[arg-type]
-                is_bypass_permissions_mode_available=(
-                    self._is_bypass_permissions_mode_available
-                ),
+                is_bypass_permissions_mode_available=(self._is_bypass_permissions_mode_available),
             ),
         )
         if _HAS_CRON:
@@ -640,9 +637,7 @@ class ClawcodexREPL:
             # handler directly (e.g. the doc-write gate). Auto-allow there
             # too so the user's explicit opt-in is honored end-to-end.
             self.tool_context.allow_docs = True
-            self.tool_context.permission_handler = (
-                lambda _tn, _msg, _sug: (True, False)
-            )
+            self.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
         else:
             self.tool_context.permission_handler = self._handle_permission_request
 
@@ -781,17 +776,16 @@ class ClawcodexREPL:
             self._get_slash_command_words,
             suggestions_provider=self._get_slash_command_suggestions,
         )
-        self._at_completer = AtFileCompleter(
-            cwd=str(self.tool_context.workspace_root)
-        )
-        self._agent_completer = AgentMentionCompleter(
-            self._available_agents
-        )
-        self._message_history_completer = _MessageHistoryCompleter(
-            self._get_user_message_history
-        )
+        self._at_completer = AtFileCompleter(cwd=str(self.tool_context.workspace_root))
+        self._agent_completer = AgentMentionCompleter(self._available_agents)
+        self._message_history_completer = _MessageHistoryCompleter(self._get_user_message_history)
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
+            [
+                self._slash_completer,
+                self._at_completer,
+                self._agent_completer,
+                self._message_history_completer,
+            ]
         )
 
         # Warm the slash-command suggestion cache in the background so the
@@ -828,6 +822,7 @@ class ClawcodexREPL:
         # in multiline mode is "insert newline").
         self.bindings = KeyBindings()
         if hasattr(self.bindings, "add"):
+
             @self.bindings.add("/")  # type: ignore[attr-defined]
             def _show_slash_completions(event):  # type: ignore[no-untyped-def]
                 # Always insert the literal ``/`` — earlier versions
@@ -856,23 +851,17 @@ class ClawcodexREPL:
                 deleter(buf)
                 if not (buf.completer and buf.complete_while_typing()):
                     return
-                token, _ = _SlashOnlyCompleter._current_slash_token(
-                    buf.document.text_before_cursor
-                )
+                token, _ = _SlashOnlyCompleter._current_slash_token(buf.document.text_before_cursor)
                 if token is not None:
                     buf.start_completion(select_first=False)
 
             @self.bindings.add("backspace")  # type: ignore[attr-defined]
             def _backspace_refreshes_slash_menu(event):  # type: ignore[no-untyped-def]
-                _refresh_slash_menu_after_deletion(
-                    event, lambda b: b.delete_before_cursor(count=1)
-                )
+                _refresh_slash_menu_after_deletion(event, lambda b: b.delete_before_cursor(count=1))
 
             @self.bindings.add("delete")  # type: ignore[attr-defined]
             def _delete_refreshes_slash_menu(event):  # type: ignore[no-untyped-def]
-                _refresh_slash_menu_after_deletion(
-                    event, lambda b: b.delete(count=1)
-                )
+                _refresh_slash_menu_after_deletion(event, lambda b: b.delete(count=1))
 
             @self.bindings.add("c-m")  # type: ignore[attr-defined]
             def _enter_submits_or_backslash_newline(event):  # type: ignore[no-untyped-def]
@@ -909,6 +898,7 @@ class ClawcodexREPL:
 
                 try:
                     from prompt_toolkit.application import run_in_terminal
+
                     run_in_terminal(self._do_expand_last)
                 except Exception:
                     # Fallback: print directly. Prompt may redraw oddly
@@ -941,12 +931,8 @@ class ClawcodexREPL:
             from src.settings.settings import get_settings as _get_settings
 
             _settings = _get_settings()
-            _accept_key = getattr(
-                _settings, "accept_suggestion_key", "c-e"
-            ) or "c-e"
-            _accept_tab_alias = bool(
-                getattr(_settings, "accept_suggestion_tab_alias", True)
-            )
+            _accept_key = getattr(_settings, "accept_suggestion_key", "c-e") or "c-e"
+            _accept_tab_alias = bool(getattr(_settings, "accept_suggestion_tab_alias", True))
         except Exception:
             _accept_key = "c-e"
             _accept_tab_alias = True
@@ -981,11 +967,7 @@ class ClawcodexREPL:
         """
 
         try:
-            provider = (
-                getattr(self.provider, "provider_name", None)
-                or self.provider_name
-                or "?"
-            )
+            provider = getattr(self.provider, "provider_name", None) or self.provider_name or "?"
             model = getattr(self.provider, "model", "") or "?"
             cwd_full = str(self.tool_context.cwd or self.tool_context.workspace_root)
             cwd = self._shorten_path_text(cwd_full) or cwd_full
@@ -996,6 +978,7 @@ class ClawcodexREPL:
             # unsupported provider shows "(inactive)" rather than lying.
             from src.utils.advisor import format_advisor_status
             from src.permissions import permission_mode_short_title
+
             advisor_seg = format_advisor_status(self.provider, model)
             advisor_part = f" {advisor_seg} ·" if advisor_seg else ""
             # Advisor token counts — accumulated on the ToolContext
@@ -1007,8 +990,7 @@ class ClawcodexREPL:
             adv_in = int(getattr(self.tool_context, "advisor_input_tokens", 0) or 0)
             adv_out = int(getattr(self.tool_context, "advisor_output_tokens", 0) or 0)
             advisor_tokens = (
-                f" (advisor: {adv_in} in / {adv_out} out)"
-                if (adv_in or adv_out) else ""
+                f" (advisor: {adv_in} in / {adv_out} out)" if (adv_in or adv_out) else ""
             )
             # F-9 / `/goal`: surface the active long-running goal as a
             # compact pill next to the token counts. We pull directly
@@ -1021,6 +1003,7 @@ class ClawcodexREPL:
             try:
                 from clawcodex_ext.goal.registry import get_goal_registry
                 from clawcodex_ext.goal.prompts import format_pill
+
                 _sid = getattr(self.tool_context, "session_id", None)
                 if _sid:
                     _state = get_goal_registry().get(_sid)
@@ -1038,8 +1021,10 @@ class ClawcodexREPL:
                 compute_session_cost,
                 format_cost_usd,
             )
+
             try:
                 from src.settings.settings import get_settings as _gs
+
                 _settings = _gs()
                 _advisor_model = (getattr(_settings, "advisor_model", "") or "").strip()
             except Exception:
@@ -1054,10 +1039,7 @@ class ClawcodexREPL:
             )
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
-            cost_part = (
-                f" · cost {format_cost_usd(total_cost)}"
-                if total_cost > 0 else ""
-            )
+            cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
             return (
                 f" {provider} · {model} · {cwd} · "
                 f"mode: {permission_mode_short_title(self._permission_mode)} · "
@@ -1086,6 +1068,7 @@ class ClawcodexREPL:
 
         try:
             import shutil
+
             width = shutil.get_terminal_size((100, 24)).columns
         except Exception:
             width = 80
@@ -1363,9 +1346,7 @@ class ClawcodexREPL:
             Tuple of (handled: bool, result_text: str | None)
         """
         try:
-            success, result_text, error = execute_command_sync(
-                command, args, self.command_context
-            )
+            success, result_text, error = execute_command_sync(command, args, self.command_context)
             if success:
                 return True, result_text
             else:
@@ -1627,22 +1608,26 @@ class ClawcodexREPL:
             from prompt_toolkit.completion import merge_completers
 
             if not hasattr(self, "_at_completer") or self._at_completer is None:
-                self._at_completer = AtFileCompleter(
-                    cwd=str(self.tool_context.workspace_root)
-                )
+                self._at_completer = AtFileCompleter(cwd=str(self.tool_context.workspace_root))
             if not hasattr(self, "_slash_completer") or self._slash_completer is None:
                 self._slash_completer = _SlashOnlyCompleter(
                     self._get_slash_command_words,
                     suggestions_provider=self._get_slash_command_suggestions,
                 )
             if not hasattr(self, "_agent_completer") or self._agent_completer is None:
-                self._agent_completer = AgentMentionCompleter(
-                    self._available_agents
-                )
+                self._agent_completer = AgentMentionCompleter(self._available_agents)
             self.completer = merge_completers(
-                [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
+                [
+                    self._slash_completer,
+                    self._at_completer,
+                    self._agent_completer,
+                    self._message_history_completer,
+                ]
             )
-            if hasattr(self, "prompt_session") and getattr(self.prompt_session, "completer", None) is not None:
+            if (
+                hasattr(self, "prompt_session")
+                and getattr(self.prompt_session, "completer", None) is not None
+            ):
                 self.prompt_session.completer = self.completer
         except Exception:
             return
@@ -1697,9 +1682,7 @@ class ClawcodexREPL:
         all_commands.sort(key=lambda x: x[0].lower())
         if not all_commands and q:
             # No matches for the query — show a helpful hint instead of an empty list
-            self.console.print(
-                f"  [dim]No matching commands for [warning]/{q}[/warning].[/dim]"
-            )
+            self.console.print(f"  [dim]No matching commands for [warning]/{q}[/warning].[/dim]")
             self.console.print(
                 f"  [dim]Type [secondary]/[/secondary] to browse all available commands or [secondary]/help[/secondary] for details.[/dim]"
             )
@@ -1815,8 +1798,7 @@ class ClawcodexREPL:
             total = sum(len(h.get("lines") or []) for h in hunks)
             remaining = max(0, total - rendered)
             diff.append(
-                f"     … +{remaining} more diff "
-                f"{'line' if remaining == 1 else 'lines'}\n",
+                f"     … +{remaining} more diff {'line' if remaining == 1 else 'lines'}\n",
                 style="dim",
             )
 
@@ -1952,7 +1934,8 @@ class ClawcodexREPL:
 
             header = (
                 f"Wrote {n} {'line' if n == 1 else 'lines'} to {short}"
-                if n else f"Wrote to {short}"
+                if n
+                else f"Wrote to {short}"
             )
             if is_update or not content:
                 return header
@@ -1965,13 +1948,13 @@ class ClawcodexREPL:
                 content_lines = content_lines[:-1]
             preview_lines = content_lines[:MAX]
             body = "\n".join(
-                f"     {i:>3}  {line}"
-                for i, line in enumerate(preview_lines, start=1)
+                f"     {i:>3}  {line}" for i, line in enumerate(preview_lines, start=1)
             )
             extra = max(0, len(content_lines) - MAX)
             footer = (
                 f"\n     … +{extra} {'line' if extra == 1 else 'lines'} (ctrl+o to expand)"
-                if extra else ""
+                if extra
+                else ""
             )
             if extra:
                 # Stash the full content so ``ctrl+o`` can re-print it as
@@ -2003,7 +1986,8 @@ class ClawcodexREPL:
                         short = self._shorten_path_text(path)
                         return (
                             f"Wrote {n} {'line' if n == 1 else 'lines'} to {short}"
-                            if n else f"Wrote to {short}"
+                            if n
+                            else f"Wrote to {short}"
                         )
             return "done"
 
@@ -2025,8 +2009,7 @@ class ClawcodexREPL:
                 status_change = parsed.get("statusChange") or {}
                 if status_change:
                     return (
-                        f"Task #{task_id}: {status_change.get('from')} → "
-                        f"{status_change.get('to')}"
+                        f"Task #{task_id}: {status_change.get('from')} → {status_change.get('to')}"
                     )
                 if "deleted" in changed:
                     return f"Task #{task_id} deleted"
@@ -2156,9 +2139,7 @@ class ClawcodexREPL:
                 return list(active)
 
         try:
-            cwd = str(
-                self.tool_context.cwd or self.tool_context.workspace_root
-            )
+            cwd = str(self.tool_context.cwd or self.tool_context.workspace_root)
             agents = list(get_agent_definitions_with_overrides(cwd))
 
             # If a runtime-context agent_dir_override exists, also load
@@ -2340,7 +2321,7 @@ class ClawcodexREPL:
         idx = first_line.find(sep)
         if idx == -1:
             return None
-        task_id = first_line[idx + len(sep):].strip()
+        task_id = first_line[idx + len(sep) :].strip()
         return task_id if task_id else None
 
     def _claim_cron_task(self, task_id: str) -> str | None:
@@ -2503,9 +2484,7 @@ class ClawcodexREPL:
         # so we don't render a phantom blank line at the end.
         if content.endswith("\n") and lines and lines[-1] == "":
             lines = lines[:-1]
-        self.console.print(
-            f"  [dim]── Expanded {label} ──[/dim]", highlight=False
-        )
+        self.console.print(f"  [dim]── Expanded {label} ──[/dim]", highlight=False)
         for i, line in enumerate(lines, start=1):
             # markup=False / highlight=False so a stray ``[`` or ``$`` in
             # the file content can't be interpreted as Rich markup or a
@@ -2526,9 +2505,7 @@ class ClawcodexREPL:
         lines = thinking_text.split("\n")
         if thinking_text.endswith("\n") and lines and lines[-1] == "":
             lines = lines[:-1]
-        self.console.print(
-            "  [dim]── Expanded thinking ──[/dim]", highlight=False
-        )
+        self.console.print("  [dim]── Expanded thinking ──[/dim]", highlight=False)
         for i, line in enumerate(lines, start=1):
             self.console.print(
                 f"     {i:>3}  {line}",
@@ -2545,7 +2522,7 @@ class ClawcodexREPL:
         for base in (cwd, root):
             prefix = base.rstrip("/") + "/"
             if text.startswith(prefix):
-                return "./" + text[len(prefix):]
+                return "./" + text[len(prefix) :]
             text = text.replace(prefix, "")
         return text
 
@@ -2599,9 +2576,7 @@ class ClawcodexREPL:
             else:
                 icon, style, subject_style = "◻", "dim", ""
 
-            blocked_by = [
-                bid for bid in (task.get("blockedBy") or []) if bid in unresolved
-            ]
+            blocked_by = [bid for bid in (task.get("blockedBy") or []) if bid in unresolved]
             owner = task.get("owner")
             suffix_parts: list[str] = []
             if owner:
@@ -2614,9 +2589,7 @@ class ClawcodexREPL:
             subject_markup = (
                 f"[{subject_style}]{subject}[/{subject_style}]" if subject_style else subject
             )
-            self.console.print(
-                f"  [{style}]{icon}[/{style}] {subject_markup}{suffix}"
-            )
+            self.console.print(f"  [{style}]{icon}[/{style}] {subject_markup}{suffix}")
 
     def _collect_task_entries(self) -> list[dict[str, Any]]:
         """Return a normalised list of task dicts from the tool context.
@@ -2631,26 +2604,30 @@ class ClawcodexREPL:
             for tid, t in v2.items():
                 if not isinstance(t, dict):
                     continue
-                entries.append({
-                    "id": str(t.get("id", tid)),
-                    "status": t.get("status", "pending"),
-                    "subject": t.get("subject", ""),
-                    "owner": t.get("owner"),
-                    "blockedBy": list(t.get("blockedBy") or []),
-                })
+                entries.append(
+                    {
+                        "id": str(t.get("id", tid)),
+                        "status": t.get("status", "pending"),
+                        "subject": t.get("subject", ""),
+                        "owner": t.get("owner"),
+                        "blockedBy": list(t.get("blockedBy") or []),
+                    }
+                )
             return entries
 
         todos = getattr(self.tool_context, "todos", None) or []
         for td in todos:
             if not isinstance(td, dict):
                 continue
-            entries.append({
-                "id": str(td.get("id", "")),
-                "status": td.get("status", "pending"),
-                "subject": td.get("content") or td.get("activeForm") or "",
-                "owner": None,
-                "blockedBy": [],
-            })
+            entries.append(
+                {
+                    "id": str(td.get("id", "")),
+                    "status": td.get("status", "pending"),
+                    "subject": td.get("content") or td.get("activeForm") or "",
+                    "owner": None,
+                    "blockedBy": [],
+                }
+            )
         return entries
 
     def _display_cwd(self) -> str:
@@ -2694,7 +2671,9 @@ class ClawcodexREPL:
             )
             return
 
-        self.console.print("[dim]Entering Textual TUI. Press Ctrl+B to exit to shell, or /exit / Ctrl+D to return to CLI.[/dim]")
+        self.console.print(
+            "[dim]Entering Textual TUI. Press Ctrl+B to exit to shell, or /exit / Ctrl+D to return to CLI.[/dim]"
+        )
         app = ClawCodexTUI(
             provider=self.provider,
             provider_name=self.provider_name,
@@ -2784,7 +2763,10 @@ class ClawcodexREPL:
             # Rebuild message list from transcript
             messages = []
             for entry in entries:
-                if entry.get("role") == "system" and entry.get("content") == "__background_complete__":
+                if (
+                    entry.get("role") == "system"
+                    and entry.get("content") == "__background_complete__"
+                ):
                     continue  # Skip completion marker
                 try:
                     msg = message_from_dict(entry)
@@ -2826,47 +2808,51 @@ class ClawcodexREPL:
         tool_block_needs_leading_space = False
 
         for msg in self.session.conversation.messages:
-            role = getattr(msg, 'role', '') or ''
-            content = getattr(msg, 'content', None)
+            role = getattr(msg, "role", "") or ""
+            content = getattr(msg, "content", None)
 
-            if role == 'system':
+            if role == "system":
                 # F-103: Render away_summary (Recapitulate) system messages
                 # instead of skipping them, matching live-chat behaviour where
                 # _print_local_command_text renders /recap output as Markdown.
-                subtype = getattr(msg, 'subtype', None) or ''
-                if subtype == 'away_summary':
+                subtype = getattr(msg, "subtype", None) or ""
+                if subtype == "away_summary":
                     try:
                         from clawcodex_ext.away_summary.messages import (
                             format_away_summary_for_display,
                         )
-                        display = format_away_summary_for_display(
-                            getattr(msg, 'content', '') or ''
-                        )
+
+                        display = format_away_summary_for_display(getattr(msg, "content", "") or "")
                     except Exception:
-                        display = str(getattr(msg, 'content', '') or '')
+                        display = str(getattr(msg, "content", "") or "")
                     self.console.print()
                     self.console.print(Markdown(display))
                 continue
 
-            if role == 'user':
+            if role == "user":
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, ToolResultBlock):
                             # Print the deferred ● ToolName(args) header
-                            header = pending_tool_use_prints.pop(
-                                block.tool_use_id, None
-                            )
+                            header = pending_tool_use_prints.pop(block.tool_use_id, None)
                             if header is not None:
                                 if tool_block_needs_leading_space:
                                     self.console.print()
                                 self.console.print(header)
                             # Print result line
                             if block.is_error:
-                                err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
+                                err_text = (
+                                    block.content
+                                    if isinstance(block.content, str)
+                                    else str(block.content)
+                                )
+                                self.console.print(
+                                    f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
+                                )
                             else:
                                 preview = self._format_tool_result_preview(
-                                    block, tool_use_map.get(block.tool_use_id),
+                                    block,
+                                    tool_use_map.get(block.tool_use_id),
                                 )
                                 if isinstance(preview, str):
                                     if "\n" in preview:
@@ -2888,13 +2874,13 @@ class ClawcodexREPL:
                     self._echo_user_input(content)
                 continue
 
-            if role == 'assistant':
+            if role == "assistant":
                 # Use the agent type from tool_context (set by @agent-mention
                 # or agent config) just like live chat does — fall back to
                 # "Assistant" for the default case.
-                _agent_label = getattr(
-                    getattr(self, 'tool_context', None), 'agent_type', None
-                ) or "Assistant"
+                _agent_label = (
+                    getattr(getattr(self, "tool_context", None), "agent_type", None) or "Assistant"
+                )
                 # Print the agent label once per message, matching live-chat
                 # behaviour where chat() prints "[bold]Assistant[/bold]" before
                 # the streaming response even starts (core.py:4072).
@@ -2928,7 +2914,13 @@ class ClawcodexREPL:
                             thinking_text = block.thinking or ""
                             if thinking_text:
                                 if self._thinking_visible:
-                                    self.console.print(thinking_text, end="", markup=False, highlight=False, soft_wrap=True)
+                                    self.console.print(
+                                        thinking_text,
+                                        end="",
+                                        markup=False,
+                                        highlight=False,
+                                        soft_wrap=True,
+                                    )
                                 else:
                                     self._thinking_chunks.append(thinking_text)
                         elif isinstance(block, RedactedThinkingBlock):
@@ -2959,22 +2951,28 @@ class ClawcodexREPL:
             parts: list[str] = []
             for item in content:
                 # Handle dataclass blocks (TextBlock, ToolUseBlock, ToolResultBlock, etc.)
-                item_type = getattr(item, 'type', None) if hasattr(item, 'type') else None
+                item_type = getattr(item, "type", None) if hasattr(item, "type") else None
                 if item_type is None and isinstance(item, dict):
                     item_type = item.get("type")
 
                 if item_type == "text":
-                    text = getattr(item, 'text', None) or (item.get("text") if isinstance(item, dict) else "")
+                    text = getattr(item, "text", None) or (
+                        item.get("text") if isinstance(item, dict) else ""
+                    )
                     if text:
                         parts.append(text)
                 elif item_type == "tool_use":
-                    name = getattr(item, 'name', None) or (item.get("name") if isinstance(item, dict) else "")
+                    name = getattr(item, "name", None) or (
+                        item.get("name") if isinstance(item, dict) else ""
+                    )
                     if not name and isinstance(item, dict):
                         name = item.get("input", {}).get("description", "")
                     if name:
                         parts.append(f"[tool:{name}]")
                 elif item_type == "tool_result":
-                    result = getattr(item, 'content', None) or (item.get("content") if isinstance(item, dict) else "")
+                    result = getattr(item, "content", None) or (
+                        item.get("content") if isinstance(item, dict) else ""
+                    )
                     if result:
                         parts.append(str(result))
                 elif item_type is None and isinstance(item, str):
@@ -3026,7 +3024,14 @@ class ClawcodexREPL:
         provider_label = f"{self.provider_name.upper()} Provider"
         model_label = self.provider.model if self.provider else "N/A"
 
-        if Panel is None or Group is None or Align is None or Table is None or Text is None or Columns is None:
+        if (
+            Panel is None
+            or Group is None
+            or Align is None
+            or Table is None
+            or Text is None
+            or Columns is None
+        ):
             print(f"ClawCodex v{__version__}")
             print(f"{model_label} · {provider_label}")
             print(f"{display_path}\n")
@@ -3037,10 +3042,23 @@ class ClawcodexREPL:
         table = Table.grid(padding=(0, 1))
         table.add_column(style="bright_black", justify="right", no_wrap=True)
         table.add_column(style="white", ratio=1)
-        table.add_row("Version", Text.assemble(("ClawCodex", f"bold {self._p.text}"), ("  ", ""), (f"v{__version__}", f"bold {self._p.info}")))
+        table.add_row(
+            "Version",
+            Text.assemble(
+                ("ClawCodex", f"bold {self._p.text}"),
+                ("  ", ""),
+                (f"v{__version__}", f"bold {self._p.info}"),
+            ),
+        )
         table.add_row("Model", Text(model_label, style=f"bold {self._p.secondary}"))
         table.add_row("Provider", Text(provider_label, style=f"bold {self._p.success}"))
-        table.add_row("Workspace", Text(self._truncate_middle(display_path, content_width - 12), style=f"bold {self._p.primary}"))
+        table.add_row(
+            "Workspace",
+            Text(
+                self._truncate_middle(display_path, content_width - 12),
+                style=f"bold {self._p.primary}",
+            ),
+        )
 
         footer = Text("/help  •  /tools  •  /tui  •  /stream  •  /exit", style="dim")
 
@@ -3082,6 +3100,7 @@ class ClawcodexREPL:
 
         # Show coordinator mode badge when active
         from src.coordinator.mode import is_coordinator_mode
+
         if is_coordinator_mode():
             self.console.print(
                 "[bold][warning]  ⚡ Coordinator Mode ACTIVE[/warning][/bold]  "
@@ -3095,15 +3114,19 @@ class ClawcodexREPL:
         """Run the REPL."""
         self._print_startup_header()
 
-        if getattr(self, '_api_key_missing', False):
-            self.console.print("[warning]No API key configured — REPL is in read-only mode.[/warning]")
-            self.console.print("Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart.")
+        if getattr(self, "_api_key_missing", False):
+            self.console.print(
+                "[warning]No API key configured — REPL is in read-only mode.[/warning]"
+            )
+            self.console.print(
+                "Use [bold]/login[/bold] to configure, or set [info]ANTHROPIC_API_KEY[/info] env var, then restart."
+            )
             self.console.print("Type [bold]/exit[/bold] to quit.\n")
 
         # Print conversation history when resuming a session
         # — renders identically to live chat output so the user sees
         # the same transcript they would have seen before exiting.
-        resumed = getattr(self, '_resume_session_id', None)
+        resumed = getattr(self, "_resume_session_id", None)
         if resumed and self.session.conversation.messages:
             self._replay_resume_history()
 
@@ -3155,8 +3178,8 @@ class ClawcodexREPL:
                     # up front so that newlines (via Shift+Enter / Meta+Enter
                     # / ``\`` + Enter) can live in the buffer. Plain Enter
                     # still submits via our custom ``c-m`` binding.
-                    if getattr(self, '_api_key_missing', False):
-                        user_input = input('❯ ')
+                    if getattr(self, "_api_key_missing", False):
+                        user_input = input("❯ ")
                     else:
                         # Phase B-2 wake: run prompt_async with a
                         # concurrent outbox watcher in the same event loop.
@@ -3194,7 +3217,7 @@ class ClawcodexREPL:
                 if not user_input.strip():
                     continue
 
-                if user_input.startswith('/'):
+                if user_input.startswith("/"):
                     self.handle_command(user_input)
                     continue
 
@@ -3284,7 +3307,11 @@ class ClawcodexREPL:
                 self._handle_repl_idle()
                 return
 
-        if raw.startswith("/") and " " not in raw and raw.lower() not in (c.lower() for c in self._built_in_commands):
+        if (
+            raw.startswith("/")
+            and " " not in raw
+            and raw.lower() not in (c.lower() for c in self._built_in_commands)
+        ):
             query = raw[1:]
             if query:
                 self._show_slash_palette(query=query)
@@ -3301,46 +3328,57 @@ class ClawcodexREPL:
             # Note: /context, /compact, /skill need special handling, don't route through new system
             # /init is handled via new command system (PromptCommand) so it's NOT in special_commands
             special_commands = {
-                'exit', 'quit', 'q',
-                'help', 'tools', 'tool',
-                'save', 'load', 'stream', 'render-last',
-                'skill',
-                'context', 'compact',  # These need special handling
-                'permission',  # REPL-native permission mode command
-                'tui',  # handoff to Textual TUI
+                "exit",
+                "quit",
+                "q",
+                "help",
+                "tools",
+                "tool",
+                "save",
+                "load",
+                "stream",
+                "render-last",
+                "skill",
+                "context",
+                "compact",  # These need special handling
+                "permission",  # REPL-native permission mode command
+                "tui",  # handoff to Textual TUI
                 # TUI-only commands — keep only the truly TUI-specific ones here
-                'repl', 'theme',
+                "repl",
+                "theme",
                 # F-43 runtime commands: /provider and /model are routed via
                 # the new command system (clawcodex_ext/cli/runtime_commands.py)
                 # and work in both REPL and TUI; do NOT mark them TUI-only.
-                ''
+                "",
             }
 
             # Handle truly TUI-only commands (/repl, /theme)
-            if cmd_name in ('repl', 'theme'):
-                self.console.print(f"[dim]/{cmd_name} is only available in the Textual TUI. Use /tui to switch.[/dim]")
+            if cmd_name in ("repl", "theme"):
+                self.console.print(
+                    f"[dim]/{cmd_name} is only available in the Textual TUI. Use /tui to switch.[/dim]"
+                )
                 return
 
             # ── REPL-native implementations for Phase-2/3 commands ──────
-            if cmd_name == 'diff':
+            if cmd_name == "diff":
                 self._handle_repl_diff()
                 return
-            if cmd_name == 'mcp':
+            if cmd_name == "mcp":
                 self._handle_repl_mcp()
                 return
-            if cmd_name == 'tasks':
+            if cmd_name == "tasks":
                 self._handle_repl_tasks()
                 return
-            if cmd_name == 'rewind':
+            if cmd_name == "rewind":
                 self._handle_repl_rewind()
                 return
-            if cmd_name == 'effort':
+            if cmd_name == "effort":
                 self._handle_repl_effort(args_raw)
                 return
-            if cmd_name == 'history':
+            if cmd_name == "history":
                 self._handle_repl_history()
                 return
-            if cmd_name == 'idle':
+            if cmd_name == "idle":
                 self._handle_repl_idle()
                 return
 
@@ -3348,7 +3386,7 @@ class ClawcodexREPL:
             args = args_raw
 
             # Handle /init through the new command system (PromptCommand path)
-            if cmd_name == 'init':
+            if cmd_name == "init":
                 # Use async path for PromptCommand
                 try:
                     result = self._run_command_async_with_status(cmd_name, args)
@@ -3361,7 +3399,7 @@ class ClawcodexREPL:
                     self.console.print(f"[error]Error executing /init: {e}[/error]")
                 return
 
-            if cmd_name == 'permission':
+            if cmd_name == "permission":
                 self._handle_permission_command(args)
                 return
 
@@ -3397,7 +3435,7 @@ class ClawcodexREPL:
         # Fall back to original command handling
         cmd = raw.lower()
 
-        if cmd in ['/exit', '/quit', '/q']:
+        if cmd in ["/exit", "/quit", "/q"]:
             # Save session and print resume hint before exiting.
             try:
                 self.session.save()
@@ -3410,17 +3448,19 @@ class ClawcodexREPL:
             self._print_resume_hint()
             raise SystemExit(0)
 
-        elif cmd == '/login':
-            self.console.print("[info]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/info]")
+        elif cmd == "/login":
+            self.console.print(
+                "[info]Use [bold]clawcodex login[/bold] in a separate terminal to configure your API key.[/info]"
+            )
             self.console.print("[dim]Then restart clawcodex to use the REPL.[/dim]")
 
-        elif cmd == '/tui':
+        elif cmd == "/tui":
             self._handoff_to_textual_tui()
 
-        elif cmd == '/help':
+        elif cmd == "/help":
             self.show_help()
 
-        elif cmd == '/tools':
+        elif cmd == "/tools":
             names = [spec.name for spec in self.tool_registry.list_tools()]
             names.sort(key=str.lower)
             self.console.print("\n[bold]Available tools:[/bold]")
@@ -3428,7 +3468,7 @@ class ClawcodexREPL:
                 self.console.print(f"  - {name}")
             self.console.print()
 
-        elif cmd.startswith('/tool'):
+        elif cmd.startswith("/tool"):
             parts = command.strip().split(maxsplit=2)
             if len(parts) < 2:
                 self.console.print("[error]Usage: /tool <name> <json-input>[/error]")
@@ -3442,7 +3482,9 @@ class ClawcodexREPL:
                     self.console.print(f"[error]Invalid JSON input: {e}[/error]")
                     return
             try:
-                result = self.tool_registry.dispatch(ToolCall(name=name, input=payload), self.tool_context)
+                result = self.tool_registry.dispatch(
+                    ToolCall(name=name, input=payload), self.tool_context
+                )
             except Exception as e:
                 self.console.print(f"[error]Tool error: {e}[/error]")
                 return
@@ -3450,10 +3492,10 @@ class ClawcodexREPL:
             self.console.print(json.dumps(result.output, indent=2, ensure_ascii=False))
             self.console.print()
 
-        elif cmd == '/clear':
+        elif cmd == "/clear":
             # Try new command system first, fall back to original
             try:
-                handled, result_text = self._try_execute_new_command('clear', '')
+                handled, result_text = self._try_execute_new_command("clear", "")
                 if handled and result_text:
                     self.console.print("\n[success]" + result_text + "[/success]")
                     return
@@ -3464,10 +3506,10 @@ class ClawcodexREPL:
             self._engine_messages = []
             self.console.print("[success]Conversation cleared.[/success]")
 
-        elif cmd == '/save':
+        elif cmd == "/save":
             self.save_session()
 
-        elif cmd == '/stream' or cmd.startswith('/stream '):
+        elif cmd == "/stream" or cmd.startswith("/stream "):
             parts = raw.split(maxsplit=1)
             if len(parts) == 1:
                 status = "enabled" if self.stream else "disabled"
@@ -3488,12 +3530,12 @@ class ClawcodexREPL:
             status = "enabled" if self.stream else "disabled"
             self.console.print(f"[success]Stream mode {status}.[/success]")
 
-        elif cmd == '/render-last':
+        elif cmd == "/render-last":
             rendered = self._render_last_assistant_message()
             if not rendered:
                 self.console.print("[warning]No assistant response available to render.[/warning]")
 
-        elif cmd.startswith('/load'):
+        elif cmd.startswith("/load"):
             parts = command.strip().split(maxsplit=1)
             if len(parts) < 2:
                 self.console.print("[error]Usage: /load <session-id>[/error]")
@@ -3501,10 +3543,10 @@ class ClawcodexREPL:
                 session_id = parts[1]
                 self.load_session(session_id)
 
-        elif cmd == '/skill':
+        elif cmd == "/skill":
             self._handle_skill_command()
 
-        elif cmd == '/context':
+        elif cmd == "/context":
             # Populate command context config for context analysis
             self.command_context.config["provider"] = self.provider
             self.command_context.config["model"] = self.provider.model
@@ -3514,7 +3556,7 @@ class ClawcodexREPL:
             self.command_context.config["system_prompt"] = ""
             # Try new command system
             try:
-                handled, result_text = self._try_execute_new_command('context', '')
+                handled, result_text = self._try_execute_new_command("context", "")
                 if handled and result_text:
                     self.console.print(Markdown(result_text))
                     return
@@ -3522,14 +3564,14 @@ class ClawcodexREPL:
                 pass
             self.console.print("[warning]/context analysis unavailable in this context.[/warning]")
 
-        elif cmd == '/compact':
+        elif cmd == "/compact":
             # Populate command context config for compact
             self.command_context.config["provider"] = self.provider
             self.command_context.config["model"] = self.provider.model
             self.command_context.config["system_prompt"] = ""
             # Try new command system
             try:
-                handled, result_text = self._try_execute_new_command('compact', '')
+                handled, result_text = self._try_execute_new_command("compact", "")
                 if handled and result_text:
                     self.console.print("\n[success]" + result_text + "[/success]")
                     return
@@ -3540,13 +3582,13 @@ class ClawcodexREPL:
             self._engine_messages = []
             self.console.print("[success]Conversation cleared.[/success]")
 
-        elif cmd.startswith('/provider'):
+        elif cmd.startswith("/provider"):
             # Safety fallback: /provider may have failed through the new
             # command system path (F-43). Try direct sync execution.
             parts = raw.split(maxsplit=1)
             provider_args = parts[1] if len(parts) > 1 else ""
             try:
-                handled, text = self._try_execute_new_command('provider', provider_args)
+                handled, text = self._try_execute_new_command("provider", provider_args)
                 if handled:
                     if text:
                         self.console.print("\n" + text)
@@ -3557,12 +3599,12 @@ class ClawcodexREPL:
             except Exception as exc:
                 self.console.print(f"\n[error]Failed to execute /provider command: {exc}[/error]\n")
 
-        elif cmd.startswith('/model'):
+        elif cmd.startswith("/model"):
             # Safety fallback: same as /provider above.
             parts = raw.split(maxsplit=1)
             model_args = parts[1] if len(parts) > 1 else ""
             try:
-                handled, text = self._try_execute_new_command('model', model_args)
+                handled, text = self._try_execute_new_command("model", model_args)
                 if handled:
                     if text:
                         self.console.print("\n" + text)
@@ -3591,12 +3633,12 @@ class ClawcodexREPL:
             content = msg.content
             if isinstance(content, list):
                 for block in content:
-                    item_type = getattr(block, 'type', None)
+                    item_type = getattr(block, "type", None)
                     if item_type == "tool_result":
-                        result_text = getattr(block, 'content', None) or ""
+                        result_text = getattr(block, "content", None) or ""
                         if isinstance(result_text, str) and "patch" in result_text.lower():
                             # Try to extract file path + patch from structured edit result
-                            result_data = getattr(block, 'content', None)
+                            result_data = getattr(block, "content", None)
                             if isinstance(result_data, str):
                                 files.append(("(inline)", result_data, ""))
             if files:
@@ -3606,10 +3648,16 @@ class ClawcodexREPL:
             # Fall back: show git diff for workspace
             try:
                 from src.utils.git import get_session_diff
+
                 diff = get_session_diff(cwd=str(self.tool_context.workspace_root))
                 if diff.files_changed:
-                    self.console.print(f"\n[bold][info]Pending changes[/info][/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]")
-                    self.console.print(diff.patch[:4000] + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else ""))
+                    self.console.print(
+                        f"\n[bold][info]Pending changes[/info][/bold] [dim]({diff.files_changed} files, +{diff.insertions} -{diff.deletions})[/dim]"
+                    )
+                    self.console.print(
+                        diff.patch[:4000]
+                        + ("\n[dim]… (truncated)[/dim]" if len(diff.patch) > 4000 else "")
+                    )
                     self.console.print()
                     return
             except Exception:
@@ -3636,6 +3684,7 @@ class ClawcodexREPL:
         """List configured MCP servers."""
         try:
             from src.config import load_config
+
             cfg = load_config() or {}
             raw = cfg.get("mcp_servers") or cfg.get("mcpServers") or {}
         except Exception:
@@ -3645,9 +3694,20 @@ class ClawcodexREPL:
         if isinstance(raw, dict):
             for server_id, entry in raw.items():
                 name = entry.get("name", server_id) if isinstance(entry, dict) else server_id
-                status = entry.get("status", "disconnected") if isinstance(entry, dict) else "disconnected"
+                status = (
+                    entry.get("status", "disconnected")
+                    if isinstance(entry, dict)
+                    else "disconnected"
+                )
                 tools = entry.get("tools", []) if isinstance(entry, dict) else []
-                servers.append({"id": str(server_id), "name": str(name), "status": str(status), "tools": str(len(tools))})
+                servers.append(
+                    {
+                        "id": str(server_id),
+                        "name": str(name),
+                        "status": str(status),
+                        "tools": str(len(tools)),
+                    }
+                )
 
         if not servers:
             self.console.print("[dim]No MCP servers configured.[/dim]")
@@ -3655,8 +3715,16 @@ class ClawcodexREPL:
 
         self.console.print(f"\n[bold][info]MCP Servers ({len(servers)})[/info][/bold]")
         for s in servers:
-            status_style = "green" if s["status"] == "connected" else "yellow" if s["status"] in ("connecting", "running") else "dim"
-            self.console.print(f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]")
+            status_style = (
+                "green"
+                if s["status"] == "connected"
+                else "yellow"
+                if s["status"] in ("connecting", "running")
+                else "dim"
+            )
+            self.console.print(
+                f"  [bold]{s['name']}[/bold] — [{status_style}]{s['status']}[/{status_style}]  [dim]({s['tools']} tools)[/dim]"
+            )
         self.console.print()
 
     def _handle_repl_tasks(self) -> None:
@@ -3676,11 +3744,17 @@ class ClawcodexREPL:
             self.console.print("[dim]Nothing to rewind — no user messages in conversation.[/dim]")
             return
 
-        self.console.print(f"\n[bold][info]Conversation history ({len(user_msgs)} user turns)[/info][/bold]")
+        self.console.print(
+            f"\n[bold][info]Conversation history ({len(user_msgs)} user turns)[/info][/bold]"
+        )
         for idx, (orig_idx, msg) in enumerate(user_msgs):
             text = self._flatten_message_content(msg.content)
             preview = text[:80].replace("\n", " ")
-            self.console.print(f"  [bold]{idx + 1}[/bold]  {preview}[dim]…[/dim]" if len(text) > 80 else f"  [bold]{idx + 1}[/bold]  {preview}")
+            self.console.print(
+                f"  [bold]{idx + 1}[/bold]  {preview}[dim]…[/dim]"
+                if len(text) > 80
+                else f"  [bold]{idx + 1}[/bold]  {preview}"
+            )
 
         self.console.print()
         choice = self._safe_input("Rewind to turn (number) or leave empty to cancel: ").strip()
@@ -3707,8 +3781,12 @@ class ClawcodexREPL:
         args = args.strip()
 
         if not args:
-            self.console.print(f"\n[bold][info]Reasoning effort[/info][/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}")
-            self.console.print("  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]")
+            self.console.print(
+                f"\n[bold][info]Reasoning effort[/info][/bold]  [dim]current:[/dim] {current or '[success]auto[/success]'}"
+            )
+            self.console.print(
+                "  Usage: [bold]/effort <level>[/bold]  where level is: [dim]auto, low, medium, high[/dim]"
+            )
             self.console.print()
             return
 
@@ -3717,7 +3795,9 @@ class ClawcodexREPL:
             self._effort = args.lower()
             self.console.print(f"[success]Reasoning effort set to {self._effort}.[/success]")
         else:
-            self.console.print(f"[error]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/error]")
+            self.console.print(
+                f"[error]Invalid effort level: {args}. Use one of: {', '.join(sorted(valid))}[/error]"
+            )
 
     def _handle_repl_history(self) -> None:
         """Show recent session history."""
@@ -3737,18 +3817,31 @@ class ClawcodexREPL:
         """Show idle / away-summary configuration."""
         try:
             from clawcodex_ext.away_summary.config import load_away_summary_config
+
             cfg = load_away_summary_config()
         except Exception:
             cfg = None
 
         self.console.print("\n[bold][info]Idle Configuration[/info][/bold]")
         if cfg is not None:
-            self.console.print(f"  Auto-summary:    [success]enabled[/success]" if cfg.enabled else f"  Auto-summary:    [dim]disabled[/dim]")
-            self.console.print(f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)")
+            self.console.print(
+                f"  Auto-summary:    [success]enabled[/success]"
+                if cfg.enabled
+                else f"  Auto-summary:    [dim]disabled[/dim]"
+            )
+            self.console.print(
+                f"  Idle timeout:    [bold]{cfg.idle_seconds}s[/bold] ({cfg.idle_seconds // 60} min)"
+            )
             self.console.print(f"  Min turns:       {cfg.min_turns}")
-            self.console.print(f"  /recap command:  [success]available[/success]" if cfg.recap_command_enabled else f"  /recap command:  [dim]disabled[/dim]")
+            self.console.print(
+                f"  /recap command:  [success]available[/success]"
+                if cfg.recap_command_enabled
+                else f"  /recap command:  [dim]disabled[/dim]"
+            )
             self.console.print()
-            self.console.print("  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]")
+            self.console.print(
+                "  [dim]Set these via [bold]settings.away_summary[/bold] in your config file.[/dim]"
+            )
         else:
             self.console.print("  [dim]Away summary config not available.[/dim]")
         self.console.print()
@@ -3795,7 +3888,9 @@ class ClawcodexREPL:
         current_short = permission_mode_short_title(current)
 
         self.console.print()
-        self.console.print(f"[bold]Current permission mode:[/bold] {current_title} ({current_short})")
+        self.console.print(
+            f"[bold]Current permission mode:[/bold] {current_title} ({current_short})"
+        )
         self.console.print()
         self.console.print("[bold]Select a permission mode:[/bold]")
 
@@ -3804,7 +3899,9 @@ class ClawcodexREPL:
             title = permission_mode_title(m)
             desc = self._permission_mode_description(m)
             marker = " ✓" if m == current else ""
-            self.console.print(f"  [info]{i}.[/info] {title}{' [success]' + marker + '[/success]' if marker else ''}")
+            self.console.print(
+                f"  [info]{i}.[/info] {title}{' [success]' + marker + '[/success]' if marker else ''}"
+            )
             self.console.print(f"       [dim]{desc}[/dim]")
 
         self.console.print()
@@ -3899,7 +3996,9 @@ class ClawcodexREPL:
         body = text[1:]
         if not body:
             return False
-        if body.split(maxsplit=1)[0].lower() in {c.lstrip("/").lower() for c in self._built_in_commands if c != "/"}:
+        if body.split(maxsplit=1)[0].lower() in {
+            c.lstrip("/").lower() for c in self._built_in_commands if c != "/"
+        }:
             return False
 
         parts = body.split(maxsplit=1)
@@ -3919,7 +4018,11 @@ class ClawcodexREPL:
 
         payload = result.output if isinstance(result.output, dict) else {}
         if result.is_error or not payload.get("success"):
-            err = payload.get("error") if isinstance(payload.get("error"), str) else "Unknown skill error"
+            err = (
+                payload.get("error")
+                if isinstance(payload.get("error"), str)
+                else "Unknown skill error"
+            )
             self.console.print(f"[error]{err}[/error]")
             return True
 
@@ -3989,11 +4092,14 @@ class ClawcodexREPL:
             if not skills:
                 self.console.print("\n[bold]Available Skills:[/bold]")
                 self.console.print("[dim]No skills found.[/dim]")
-                self.console.print("[dim]Create skills in ~/.clawcodex/skills/ or ~/.claude/skills/ or .clawcodex/skills/ in your project.[/dim]")
+                self.console.print(
+                    "[dim]Create skills in ~/.clawcodex/skills/ or ~/.claude/skills/ or .clawcodex/skills/ in your project.[/dim]"
+                )
                 return
 
             # Group skills by source
             from collections import defaultdict
+
             by_source: dict[str, list] = defaultdict(list)
             for s in skills:
                 loaded = getattr(s, "loaded_from", "") or "unknown"
@@ -4026,7 +4132,12 @@ class ClawcodexREPL:
         e = err.lower()
         if name == "read" and e.startswith("file not found:"):
             p = err.split(":", 2)[-1].strip()
-            if "/.clawcodex/skills/" in p or "\\.clawcodex\\skills\\" in p or "/.claude/skills/" in p or "\\.claude\\skills\\" in p:
+            if (
+                "/.clawcodex/skills/" in p
+                or "\\.clawcodex\\skills\\" in p
+                or "/.claude/skills/" in p
+                or "\\.claude\\skills\\" in p
+            ):
                 return True
         return False
 
@@ -4061,15 +4172,65 @@ class ClawcodexREPL:
             return False
 
         code_task_markers = (
-            "/", "\\", "src/", "tests/", ".py", ".ts", ".md",
-            "file", "files", "read", "write", "edit", "modify", "change",
-            "search", "grep", "glob", "bash", "shell", "command", "run",
-            "test", "fix", "bug", "refactor", "repo", "repository",
-            "project", "workspace", "folder", "directory", "function",
-            "class", "module", "code", "implementation", "readme",
-            "pyproject", "package.json", "git", "commit", "diff", "tool",
-            "文件", "代码", "仓库", "项目", "目录", "读取", "写入", "修改",
-            "搜索", "运行", "测试", "修复", "命令", "工具", "函数", "类",
+            "/",
+            "\\",
+            "src/",
+            "tests/",
+            ".py",
+            ".ts",
+            ".md",
+            "file",
+            "files",
+            "read",
+            "write",
+            "edit",
+            "modify",
+            "change",
+            "search",
+            "grep",
+            "glob",
+            "bash",
+            "shell",
+            "command",
+            "run",
+            "test",
+            "fix",
+            "bug",
+            "refactor",
+            "repo",
+            "repository",
+            "project",
+            "workspace",
+            "folder",
+            "directory",
+            "function",
+            "class",
+            "module",
+            "code",
+            "implementation",
+            "readme",
+            "pyproject",
+            "package.json",
+            "git",
+            "commit",
+            "diff",
+            "tool",
+            "文件",
+            "代码",
+            "仓库",
+            "项目",
+            "目录",
+            "读取",
+            "写入",
+            "修改",
+            "搜索",
+            "运行",
+            "测试",
+            "修复",
+            "命令",
+            "工具",
+            "函数",
+            "类",
         )
         return not any(marker in text for marker in code_task_markers)
 
@@ -4082,7 +4243,7 @@ class ClawcodexREPL:
         instead of waiting for the next chunk to arrive.
         """
 
-        abort_controller = getattr(self, '_direct_abort_controller', None)
+        abort_controller = getattr(self, "_direct_abort_controller", None)
         if abort_controller is None:
             abort_controller = AbortController()
         abort_signal = abort_controller.signal
@@ -4094,7 +4255,8 @@ class ClawcodexREPL:
             api_messages, call_kwargs = self._build_direct_stream_payload()
             try:
                 response = self.provider.chat_stream_response(
-                    api_messages, tools=None,
+                    api_messages,
+                    tools=None,
                     abort_signal=abort_signal,
                     on_text_chunk=on_text_chunk,
                     **call_kwargs,
@@ -4185,10 +4347,9 @@ class ClawcodexREPL:
             from clawcodex_ext.context_system.microcompact import (
                 strip_images_from_typed_messages,
             )
-            self.session.conversation.messages = (
-                strip_images_from_typed_messages(
-                    self.session.conversation.messages
-                )
+
+            self.session.conversation.messages = strip_images_from_typed_messages(
+                self.session.conversation.messages
             )
 
     def chat(self, user_input: str, max_turns: int | None = None):
@@ -4235,26 +4396,20 @@ class ClawcodexREPL:
                     # TS shows "Read 1 file (ctrl+o to expand)" for image
                     # @-mentions; we mirror the user-facing intent without
                     # the count (one mention -> one line).
-                    self.console.print(
-                        f"[dim]  ⎿  Read image {att['display_path']}[/dim]"
-                    )
+                    self.console.print(f"[dim]  ⎿  Read image {att['display_path']}[/dim]")
                 elif kind == "binary":
                     # Binary file (PDF, archive, ...) — show what happened
                     # so the user isn't surprised that no content was
                     # inlined. The reminder text already nudges the model
                     # toward the Read tool.
-                    self.console.print(
-                        f"[dim]  ⎿  Skipped binary file {att['display_path']}[/dim]"
-                    )
+                    self.console.print(f"[dim]  ⎿  Skipped binary file {att['display_path']}[/dim]")
                 else:
                     label = "directory" if kind == "directory" else "file"
                     self.console.print(
                         f"[dim]  ⎿  Listed {label} {att['display_path']}{'/' if kind == 'directory' else ''}[/dim]"
                     )
             for att in agent_attachments:
-                self.console.print(
-                    f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]"
-                )
+                self.console.print(f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]")
 
         # Companion intro — build and prepend companion intro attachment
         # if a companion has been hatched and not yet announced.
@@ -4263,6 +4418,7 @@ class ClawcodexREPL:
             build_companion_intro_attachment,
             format_companion_intro_attachments,
         )
+
         intro_attachments = build_companion_intro_attachment(
             self.session.conversation.messages,  # type: ignore[attr-defined]
         )
@@ -4271,6 +4427,7 @@ class ClawcodexREPL:
             if intro_text:
                 user_input = f"{intro_text}\n\n{user_input}" if user_input else intro_text
             from clawcodex_ext.types.messages import AttachmentMessage
+
             self.session.conversation._messages.append(  # type: ignore[attr-defined]
                 AttachmentMessage(attachments=intro_attachments)
             )
@@ -4317,6 +4474,7 @@ class ClawcodexREPL:
             # text. If the user attached an image, fall through to the
             # full engine path so the image content block survives.
             if not image_blocks and self._should_try_direct_stream(user_input):
+
                 def on_text_chunk_direct(chunk: str) -> None:
                     if not chunk:
                         return
@@ -4329,7 +4487,7 @@ class ClawcodexREPL:
                     if self._direct_abort_controller is not None:
                         self._direct_abort_controller.abort("user_interrupt")
                     # Immediate visual feedback — update the LiveStatus message
-                    status = getattr(self, '_active_live_status', None)
+                    status = getattr(self, "_active_live_status", None)
                     if status is not None:
                         try:
                             status.update("[warning]Cancelling…[/warning]")
@@ -4391,8 +4549,10 @@ class ClawcodexREPL:
                     return True
                 # User pressed ESC/Ctrl+C during direct stream — skip the
                 # engine path entirely instead of falling through.
-                if (self._direct_abort_controller is not None
-                        and self._direct_abort_controller.signal.aborted):
+                if (
+                    self._direct_abort_controller is not None
+                    and self._direct_abort_controller.signal.aborted
+                ):
                     return False
                 if _background_requested_direct:
                     raise BackgroundEscape()
@@ -4404,6 +4564,7 @@ class ClawcodexREPL:
             style_prompt = resolve_output_style(style_name, style_dir).prompt
 
             from clawcodex_ext.tool_system import get_team_aware_tool_list
+
             tools = get_team_aware_tool_list(self.tool_registry, self.tool_context.team)
 
             # Coordinator Mode — when ``CLAUDE_CODE_COORDINATOR_MODE=true``,
@@ -4421,9 +4582,7 @@ class ClawcodexREPL:
             if is_coordinator_mode():
                 tools = filter_coordinator_tools(tools)
                 # Get MCP clients for worker context block
-                mcp_clients = getattr(
-                    self.tool_context, "mcp_clients", None
-                ) or {}
+                mcp_clients = getattr(self.tool_context, "mcp_clients", None) or {}
                 engine_system_prompt = get_coordinator_system_prompt()
                 engine_user_context = get_coordinator_user_context(
                     mcp_clients=mcp_clients.values(),
@@ -4507,7 +4666,9 @@ class ClawcodexREPL:
                     """Accumulate thinking chunks for later expansion."""
                     if self._thinking_visible:
                         # Print thinking content directly when visible
-                        self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
+                        self.console.print(
+                            chunk, end="", markup=False, highlight=False, soft_wrap=True
+                        )
                     else:
                         # Stash for later expansion via ctrl+o
                         self._thinking_chunks.append(chunk)
@@ -4524,9 +4685,7 @@ class ClawcodexREPL:
                             # the LLM is reasoning again (rather than the
                             # previous tool name left from the last turn).
                             if _engine_status_ref:
-                                _engine_status_ref[0].update(
-                                    self._status_message()
-                                )
+                                _engine_status_ref[0].update(self._status_message())
                         continue
 
                     if isinstance(msg, AssistantMessage):
@@ -4573,9 +4732,7 @@ class ClawcodexREPL:
                                     # so "Thinking…" → "● Bash" / "● Read"
                                     # instead of a static message.
                                     if _engine_status_ref:
-                                        _engine_status_ref[0].update(
-                                            f"● {block.name}"
-                                        )
+                                        _engine_status_ref[0].update(f"● {block.name}")
                                     if block.name in _TASK_WIDGET_TOOL_NAMES:
                                         task_tool_ids.add(block.id)
                                         pending_task_flush = True
@@ -4635,15 +4792,19 @@ class ClawcodexREPL:
                                         # instead) so nothing to flush.
                                         if block.is_error:
                                             _flush_task_snapshot_if_any()
-                                            err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                            self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
+                                            err_text = (
+                                                block.content
+                                                if isinstance(block.content, str)
+                                                else str(block.content)
+                                            )
+                                            self.console.print(
+                                                f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
+                                            )
                                         continue
                                     # Print the deferred ``● Tool(args)``
                                     # header right above this result so each
                                     # call renders as a self-contained block.
-                                    header = pending_tool_use_prints.pop(
-                                        block.tool_use_id, None
-                                    )
+                                    header = pending_tool_use_prints.pop(block.tool_use_id, None)
                                     if header is not None:
                                         if tool_block_needs_leading_space:
                                             self.console.print()
@@ -4652,11 +4813,18 @@ class ClawcodexREPL:
                                     # ``  ⎿  `` (see
                                     # ``typescript/src/components/MessageResponse.tsx``).
                                     if block.is_error:
-                                        err_text = block.content if isinstance(block.content, str) else str(block.content)
-                                        self.console.print(f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]")
+                                        err_text = (
+                                            block.content
+                                            if isinstance(block.content, str)
+                                            else str(block.content)
+                                        )
+                                        self.console.print(
+                                            f"[error]  ⎿  {escape(err_text) if err_text else 'Error'}[/error]"
+                                        )
                                     else:
                                         preview = self._format_tool_result_preview(
-                                            block, tool_use_map.get(block.tool_use_id),
+                                            block,
+                                            tool_use_map.get(block.tool_use_id),
                                         )
                                         if isinstance(preview, str):
                                             # Multi-line previews indent
@@ -4704,7 +4872,7 @@ class ClawcodexREPL:
                 # Immediate visual feedback — update the LiveStatus message
                 # so the user sees "Cancelling…" without waiting for the
                 # abort to propagate through the provider stream.
-                status = getattr(self, '_active_live_status', None)
+                status = getattr(self, "_active_live_status", None)
                 if status is not None:
                     try:
                         status.update("[warning]Cancelling…[/warning]")
@@ -4750,10 +4918,15 @@ class ClawcodexREPL:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
                             import concurrent.futures
+
                             with concurrent.futures.ThreadPoolExecutor() as pool:
-                                response_text, last_text_was_printed = pool.submit(lambda: asyncio.run(_run_query())).result()
+                                response_text, last_text_was_printed = pool.submit(
+                                    lambda: asyncio.run(_run_query())
+                                ).result()
                         else:
-                            response_text, last_text_was_printed = loop.run_until_complete(_run_query())
+                            response_text, last_text_was_printed = loop.run_until_complete(
+                                _run_query()
+                            )
                     except RuntimeError:
                         response_text, last_text_was_printed = asyncio.run(_run_query())
                     finally:
@@ -4785,8 +4958,10 @@ class ClawcodexREPL:
             # appear in the user's message. Currently a no-op until Textual
             # sprite rendering is available.
             from src.buddy.observer import fire_companion_observer
+
             def _no_op_reaction(quip: str | None) -> None:
                 return
+
             fire_companion_observer(
                 self.session.conversation.messages,  # type: ignore[attr-defined]
                 _no_op_reaction,
@@ -4817,22 +4992,28 @@ class ClawcodexREPL:
 
             if "401" in error_str or "authentication" in error_str.lower() or "令牌" in error_str:
                 self.console.print(f"\n[error]❌ Authentication Error: {escape(str(e))}[/error]")
-                self.console.print("\n[warning]Your API key appears to be invalid or expired.[/warning]")
+                self.console.print(
+                    "\n[warning]Your API key appears to be invalid or expired.[/warning]"
+                )
 
                 from rich.prompt import Prompt
+
                 choice = Prompt.ask(
                     "\nWould you like to reconfigure your API key now?",
                     choices=["y", "n"],
-                    default="y"
+                    default="y",
                 )
 
                 if choice == "y":
                     self._handle_relogin()
                 else:
-                    self.console.print("\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]")
+                    self.console.print(
+                        "\n[dim]You can run [bold]clawcodex login[/bold] later to update your API key.[/dim]"
+                    )
             else:
                 self.console.print(f"\n[error]Error: {escape(str(e))}[/error]")
                 import traceback
+
                 traceback.print_exc()
             return False
 
@@ -4876,9 +5057,7 @@ class ClawcodexREPL:
         )
 
         if pid is not None:
-            self.console.print(
-                f"\n[success]⏎ Agent sent to background (pid {pid}).[/success]"
-            )
+            self.console.print(f"\n[success]⏎ Agent sent to background (pid {pid}).[/success]")
             self.console.print(
                 f"[dim]Resume with: clawcodex --resume {self.session.session_id}[/dim]"
             )
@@ -4890,9 +5069,7 @@ class ClawcodexREPL:
             self.console.print(
                 "\n[warning]Background mode is not supported on this platform.[/warning]"
             )
-            self.console.print(
-                "[dim]Press Ctrl+C to cancel the current run instead.[/dim]"
-            )
+            self.console.print("[dim]Press Ctrl+C to cancel the current run instead.[/dim]")
 
     def _handle_relogin(self):
         """Handle re-authentication when credentials fail."""
@@ -4905,13 +5082,15 @@ class ClawcodexREPL:
         provider_names = list(PROVIDER_INFO.keys())
         self.console.print("[bold]Available providers:[/bold]")
         for name, info in PROVIDER_INFO.items():
-            self.console.print(f"  [info]{name}[/info] - {info['label']} (default model: {info['default_model']})")
+            self.console.print(
+                f"  [info]{name}[/info] - {info['label']} (default model: {info['default_model']})"
+            )
         self.console.print()
 
         provider = Prompt.ask(
             "Select LLM provider",
             choices=provider_names,
-            default=self.provider_name if self.provider_name in provider_names else "anthropic"
+            default=self.provider_name if self.provider_name in provider_names else "anthropic",
         )
 
         info = PROVIDER_INFO[provider]
@@ -4922,7 +5101,9 @@ class ClawcodexREPL:
 
             login_codex_device_flow(console=self.console)
             config = get_provider_config(provider)
-            self.console.print(f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}")
+            self.console.print(
+                f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}"
+            )
             self.console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
             default_model = Prompt.ask(
                 f"{provider.upper()} Default Model",
@@ -4937,32 +5118,29 @@ class ClawcodexREPL:
             set_default_provider(provider)
             self.console.print("\n[success]OpenAI Codex login completed successfully![/success]\n")
         else:
-            api_key = Prompt.ask(
-                f"Enter {provider.upper()} API Key",
-                password=True
-            )
+            api_key = Prompt.ask(f"Enter {provider.upper()} API Key", password=True)
 
             if not api_key:
                 self.console.print("\n[error]Error: API Key cannot be empty[/error]")
                 return
 
             self.console.print(f"\n[dim]Default:[/dim] {info['default_base_url']}")
-            base_url = Prompt.ask(
-                f"{provider.upper()} Base URL",
-                default=info["default_base_url"]
-            )
+            base_url = Prompt.ask(f"{provider.upper()} Base URL", default=info["default_base_url"])
 
-            self.console.print(f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}")
+            self.console.print(
+                f"\n[dim]Available models:[/dim] {', '.join(info['available_models'])}"
+            )
             self.console.print(f"[dim]Default:[/dim] [bold]{info['default_model']}[/bold]")
             default_model = Prompt.ask(
-                f"{provider.upper()} Default Model",
-                default=info["default_model"]
+                f"{provider.upper()} Default Model", default=info["default_model"]
             )
 
             set_api_key(provider, api_key=api_key, base_url=base_url, default_model=default_model)
             set_default_provider(provider)
 
-            self.console.print(f"\n[success]{provider.upper()} API Key updated successfully![/success]\n")
+            self.console.print(
+                f"\n[success]{provider.upper()} API Key updated successfully![/success]\n"
+            )
 
         self.provider = build_provider_from_config(provider)
         self.provider_name = provider
@@ -4980,7 +5158,9 @@ class ClawcodexREPL:
             get_available_mcp_servers=_get_mcp_servers_for_prompt,
         )
 
-        self.console.print("[success]✓ Provider reinitialized. You can continue chatting![/success]\n")
+        self.console.print(
+            "[success]✓ Provider reinitialized. You can continue chatting![/success]\n"
+        )
 
     def save_session(self):
         """Save current session."""
@@ -5012,7 +5192,9 @@ class ClawcodexREPL:
         # by Session.resume).
         self.session = loaded_session
         self.console.print(f"[success]Session loaded: {session_id}[/success]")
-        self.console.print(f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]")
+        self.console.print(
+            f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]"
+        )
         self.console.print(f"[dim]Messages: {len(loaded_session.conversation.messages)}[/dim]")
         restored_cost = get_total_cost_usd()
         if restored_cost > 0:

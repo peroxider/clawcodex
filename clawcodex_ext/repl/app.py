@@ -72,9 +72,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
     ) -> None:
         # ---- Shared setup (identical to upstream) ----
         self._permission_mode = permission_mode
-        self._is_bypass_permissions_mode_available = bool(
-            is_bypass_permissions_mode_available
-        )
+        self._is_bypass_permissions_mode_available = bool(is_bypass_permissions_mode_available)
         self._append_system_prompt = append_system_prompt
 
         from rich.console import Console
@@ -120,15 +118,29 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self._cron_queued_prompts: deque[str] = deque(maxlen=100)
             self._queued_prompts_lock = threading.Lock()
             self._original_built_ins = [
-                "/", "/help", "/exit", "/quit", "/q", "/clear",
-                "/save", "/load", "/stream", "/render-last", "/tools",
-                "/tool", "/skills", "/init", "/tui", "/login",
+                "/",
+                "/help",
+                "/exit",
+                "/quit",
+                "/q",
+                "/clear",
+                "/save",
+                "/load",
+                "/stream",
+                "/render-last",
+                "/tools",
+                "/tool",
+                "/skills",
+                "/init",
+                "/tui",
+                "/login",
             ]
             self._built_in_commands = list(self._original_built_ins)
 
             # Minimal prompt session for the missing-key case so that
             # run() doesn't crash on ``self.prompt_session.prompt()``.
             from prompt_toolkit import PromptSession as _P
+
             self.prompt_session = _P()  # type: ignore[call-arg]
             return
 
@@ -142,12 +154,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
             loaded_session = Session.resume(resume_session_id)
             if loaded_session is not None:
                 self.session = loaded_session
+                self.console.print(f"[success]Resumed session: {resume_session_id}[/success]")
                 self.console.print(
-                    f"[success]Resumed session: {resume_session_id}[/success]"
-                )
-                self.console.print(
-                    f"[dim]Provider: {loaded_session.provider}, "
-                    f"Model: {loaded_session.model}[/dim]"
+                    f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]"
                 )
                 self._sync_conversation_from_transcript(resume_session_id)
                 # Sync historical messages into _engine_messages so the
@@ -198,17 +207,13 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self.tool_context.workspace_root = self.workspace_root
             self.tool_context.permission_context = ToolPermissionContext(
                 mode=self._permission_mode,  # type: ignore[arg-type]
-                is_bypass_permissions_mode_available=(
-                    self._is_bypass_permissions_mode_available
-                ),
+                is_bypass_permissions_mode_available=(self._is_bypass_permissions_mode_available),
             )
         self.tool_context.ask_user = self._ask_user_questions
         self._current_status = None
         if self._permission_mode == "bypassPermissions":
             self.tool_context.allow_docs = True
-            self.tool_context.permission_handler = (
-                lambda _tn, _msg, _sug: (True, False)
-            )
+            self.tool_context.permission_handler = lambda _tn, _msg, _sug: (True, False)
         else:
             self.tool_context.permission_handler = self._handle_permission_request
 
@@ -225,9 +230,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         # OUT of ``bypassPermissions`` without reaching back into
         # ``self._handle_permission_request``.
         if self.tool_context is not None:
-            self.tool_context.default_permission_handler = (
-                self._handle_permission_request
-            )
+            self.tool_context.default_permission_handler = self._handle_permission_request
         from clawcodex_ext.permissions.runtime import (
             RuntimePermissionController,
         )
@@ -333,17 +336,16 @@ class ClawCodexExtREPL(ClawcodexREPL):
             self._get_slash_command_words,
             suggestions_provider=self._get_slash_command_suggestions,
         )
-        self._at_completer = AtFileCompleter(
-            cwd=str(self.tool_context.workspace_root)
-        )
-        self._agent_completer = AgentMentionCompleter(
-            self._available_agents
-        )
-        self._message_history_completer = _MessageHistoryCompleter(
-            self._get_user_message_history
-        )
+        self._at_completer = AtFileCompleter(cwd=str(self.tool_context.workspace_root))
+        self._agent_completer = AgentMentionCompleter(self._available_agents)
+        self._message_history_completer = _MessageHistoryCompleter(self._get_user_message_history)
         self.completer = merge_completers(
-            [self._slash_completer, self._at_completer, self._agent_completer, self._message_history_completer]
+            [
+                self._slash_completer,
+                self._at_completer,
+                self._agent_completer,
+                self._message_history_completer,
+            ]
         )
 
         # Warm the slash-command suggestion cache in the background.
@@ -372,23 +374,17 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 deleter(buf)
                 if not (buf.completer and buf.complete_while_typing()):
                     return
-                token, _ = _SlashOnlyCompleter._current_slash_token(
-                    buf.document.text_before_cursor
-                )
+                token, _ = _SlashOnlyCompleter._current_slash_token(buf.document.text_before_cursor)
                 if token is not None:
                     buf.start_completion(select_first=False)
 
             @self.bindings.add("backspace")
             def _backspace_refreshes_slash_menu(event):
-                _refresh_slash_menu_after_deletion(
-                    event, lambda b: b.delete_before_cursor(count=1)
-                )
+                _refresh_slash_menu_after_deletion(event, lambda b: b.delete_before_cursor(count=1))
 
             @self.bindings.add("delete")
             def _delete_refreshes_slash_menu(event):
-                _refresh_slash_menu_after_deletion(
-                    event, lambda b: b.delete(count=1)
-                )
+                _refresh_slash_menu_after_deletion(event, lambda b: b.delete(count=1))
 
             @self.bindings.add("c-m")
             def _enter_submits_or_backslash_newline(event):
@@ -412,6 +408,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             def _expand_last(event):
                 try:
                     from prompt_toolkit.application import run_in_terminal
+
                     run_in_terminal(self._do_expand_last)
                 except Exception:
                     self._do_expand_last()
@@ -438,12 +435,8 @@ class ClawCodexExtREPL(ClawcodexREPL):
             from src.settings.settings import get_settings as _get_settings
 
             _settings = _get_settings()
-            _accept_key = getattr(
-                _settings, "accept_suggestion_key", "c-e"
-            ) or "c-e"
-            _accept_tab_alias = bool(
-                getattr(_settings, "accept_suggestion_tab_alias", True)
-            )
+            _accept_key = getattr(_settings, "accept_suggestion_key", "c-e") or "c-e"
+            _accept_tab_alias = bool(getattr(_settings, "accept_suggestion_tab_alias", True))
         except Exception:
             _accept_key = "c-e"
             _accept_tab_alias = True
@@ -486,14 +479,17 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
         # Register downstream runtime commands (/provider, /model)
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+
         register_runtime_commands(self.command_registry)  # instance registry (autocomplete)
         register_runtime_commands(None)  # global registry (execute_command_sync lookup)
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
+
         register_away_summary_commands(self.command_registry)
         register_away_summary_commands(None)
 
         try:
             from extensions.skills_ext import init_skills_ext
+
             init_skills_ext()
         except Exception:
             pass
@@ -558,6 +554,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
         """Load metadata from SessionStorage and cache it on the instance."""
         try:
             from src.services.session_storage import SessionStorage
+
             storage = SessionStorage(session_id=session_id)
             meta = storage.get_metadata()
             if meta is not None:
@@ -583,6 +580,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             return
         try:
             from src.services.session_storage import SessionStorage
+
             storage = SessionStorage(session_id=self.session.session_id)
             storage.update_metadata(last_user_input=text[:200])  # cap at 200 chars
         except Exception:
@@ -596,6 +594,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             return
         try:
             from src.services.session_storage import SessionStorage
+
             storage = SessionStorage(session_id=self.session.session_id)
             storage.update_metadata(agent_name=agent_name)
         except Exception:
