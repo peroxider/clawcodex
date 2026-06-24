@@ -863,6 +863,28 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 
 建议 follow-up：把本节链接添加到 `docs/decoupling/decisions/stage-j-rollback.md` 的「Follow-up actions」段，作为「decided to migrate call sites instead of restoring src/」的正式记录。
 
+### 独立 verification 子代理（补完）
+
+第一次 spawn 的 verification 子代理跑完所有检查 + 4 项对抗探针但未写出 explicit `VERDICT:` 行（仅 block 22 单独报告 probe B/C/D PASS、block 18 报告 probe A pre-migration 失败复现 PASS）；第二次 spawn 的 verification 子代理（`acbf046fc5cfcb9b6`，HEAD `e48592dc`）补跑 Check 1-13 并显式输出 verdict：
+
+| # | 检查 | 结果 |
+|---|---|---|
+| 1 | `grep -rn 'src\.services\.mcp' --include='*.py' src/ tests/ clawcodex_ext/` | PASS — 5 hit 全部位于 `src/upstream/{58ea488,68dc3c5}/entrypoints/`（历史 archive 快照，非 active code）|
+| 2 | `src/services.__all__` 不含 `mcp` | PASS — `['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']` |
+| 3 | canonical ext import OK | PASS |
+| 4 | `src.services.mcp` 不可达 | PASS — `ModuleNotFoundError`（符合预期）|
+| 5 | chrome MCP modules 加载 | PASS |
+| 6 | 5 轻量 MCP 测试 | PASS — 67 passed in 2.83s |
+| 7 | chrome MCP test | PASS — 24 passed in 1.58s |
+| 8 | Stage 1-5 stability gate | PASS — 257 passed in 20.81s |
+| 9 | Orchestrator 全量 | PASS — 483 passed in 15.77s |
+| 10 | `git log --oneline -3` | PASS — HEAD `e48592dc` 在 `c0b73976` 之上 |
+| 11 | `git status --short` | **PARTIAL** — 33 个 dirty file 全部位于 `visualizer/` / `tui/screens/` / `export_formats.py` / `ci/test_local_ci.py` 等无关目录，与 MCP 迁移无关；不属于本 verification scope |
+| 12 | migration script idempotent | PASS — `TOTAL: 0 files, 0 matches (dry-run)` |
+| 13 | `tests/mcp/` shadowing 检查 | PASS — `PYTHONPATH=.../tests/mcp` 路径下 sys.path 顺序保留 site-packages 优先级，空 `__init__.py` 共存不破 import |
+
+**Verification 子代理 VERDICT: PASS**（Check 11 PARTIAL 为本任务 scope 外的工作树脏文件，与 MCP 迁移正确性无关）。
+
 ---
 
 ## 11. 历史会话索引
