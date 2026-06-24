@@ -49,6 +49,7 @@ class SourceOperation:
     class_name: str | None = None  # 所属类名（用于 IO_RELATION 的 ClassName.methodName 命名）
     file_stem: str = ""  # 源文件名（不含 .py，用于顶层函数去歧义）
     has_docstring: bool = False  # 原始 docstring 是否非空
+    is_async: bool = False  # 是否为 async def
 
 
 @dataclass
@@ -265,9 +266,27 @@ class SourceCodeParser:
 
             all_ops.extend(file_ops)
 
-        # Build a component for this directory
+        # Build a component for this directory.
+        # Derive the component name from the relative path under source_dir
+        # so it is globally unique — two directories with the same basename
+        # at different levels (e.g. openjiuwen/harness vs tools/harness)
+        # must not produce the same component name.
+        try:
+            rel_path = dir_path.relative_to(self._source_dir)
+        except ValueError:
+            rel_path = dir_path
+        if str(rel_path) == ".":
+            # The source_dir itself contains .py files — use its basename.
+            component_name = self._source_dir.name.replace("-", "_").replace(" ", "_")
+        else:
+            component_name = (
+                str(rel_path)
+                .replace("\\", "/")
+                .replace("/", ".")
+                .replace("-", "_")
+                .replace(" ", "_")
+            )
         if all_ops:
-            component_name = dir_path.name.replace("-", "_").replace(" ", "_")
             input_schema, output_schema = self._build_io_schema(all_ops)
 
             components.append(
@@ -391,6 +410,7 @@ class SourceCodeParser:
             source_code=source_code,
             file_stem=file_path.stem if file_path else "",
             has_docstring=has_doc,
+            is_async=isinstance(node, ast.AsyncFunctionDef),
         )
 
     # ---- docstring parsing ------------------------------------------------
@@ -554,6 +574,24 @@ class SourceCodeParser:
             name = arg.arg
             type_hint = self._resolve_type_hint(arg.annotation)
             default = defaults[i] if i < len(defaults) else None
+            required = default is None
+            params.append(
+                ParamSpec(
+                    name=name,
+                    type_hint=type_hint,
+                    default=ast.unparse(default) if default is not None else None,
+                    required=required,
+                )
+            )
+
+        # Handle keyword-only arguments (after * or *args)
+        kw_defaults = list(args.kw_defaults) if args.kw_defaults else []
+        # Pad kw_defaults to match kwonlyargs length (defaults align to the right)
+        kw_defaults = [None] * (len(args.kwonlyargs) - len(kw_defaults)) + kw_defaults
+        for i, arg in enumerate(args.kwonlyargs):
+            name = arg.arg
+            type_hint = self._resolve_type_hint(arg.annotation)
+            default = kw_defaults[i] if i < len(kw_defaults) else None
             required = default is None
             params.append(
                 ParamSpec(

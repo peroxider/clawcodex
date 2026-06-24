@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import sys
 from typing import Any
 
 from src.tool_system.build_tool import Tool, build_tool
@@ -13,6 +15,7 @@ from clawcodex_ext.agent.tool_authoring.validators import validate_spec, Validat
 from clawcodex_ext.agent.tool_authoring.call_handlers import (
     BashCallError,
     execute_bash,
+    parse_pos_wrapper_stdout,
     HttpCallError,
     execute_http,
     PythonCallError,
@@ -43,7 +46,21 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
         try:
             if spec.call_type == "bash":
-                output = execute_bash(spec.call_impl, input)
+                # Auto-inject {json_args} for pos-converter bridge tools
+                # (and any other tool whose template uses this placeholder).
+                # Harmless no-op when the template doesn't contain {json_args}.
+                enriched = input
+                if "{json_args}" in spec.call_impl and "json_args" not in enriched:
+                    enriched = {**input, "json_args": json.dumps(input)}
+                # Persisted specs use bare ``python``; on many Linux systems that
+                # resolves to Python 2. Always run bridge scripts with the
+                # current interpreter (the venv that loaded clawcodex).
+                call_impl = spec.call_impl
+                if call_impl.startswith("python ") or call_impl.startswith("python3 "):
+                    call_impl = f"{sys.executable} {call_impl.split(' ', 1)[1]}"
+                output = execute_bash(call_impl, enriched)
+                if "{json_args}" in spec.call_impl:
+                    output = parse_pos_wrapper_stdout(output)
             elif spec.call_type == "http":
                 output = execute_http(spec.call_impl, input)
             elif spec.call_type == "python":

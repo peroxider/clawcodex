@@ -580,13 +580,15 @@ class SkillGrouper:
             return []
 
         # Build flat item list from SourceComponents, now including file_path.
-        items: list[tuple[str, str, str, str]] = []  # (op_name, desc, comp_name, file_path)
+        items: list[
+            tuple[str, str, str, str, str | None]
+        ] = []  # (op_name, desc, comp_name, file_path, class_name)
         for comp in self._source_components:
             for op in comp.operations:
-                items.append((op.name, op.description, comp.name, comp.file_path))
+                items.append((op.name, op.description, comp.name, comp.file_path, op.class_name))
 
         # Phase 1 — explicit MappingRule matching (MatchType + MatchTarget aware).
-        for op_name, desc, comp_name, file_path in items:
+        for op_name, desc, comp_name, file_path, class_name in items:
             for rule in self._rules:
                 if rule.match_against(op_name, comp_name, file_path):
                     if rule.skill_name not in skill_map:
@@ -595,29 +597,37 @@ class SkillGrouper:
                             description=rule.description or f"Skill: {rule.skill_name}",
                             allowed_tools=[],
                         )
-                    qualified = f"{comp_name}.{op_name}"
-                    key = f"{comp_name}.{op_name}"
+                    qualified = (
+                        f"{comp_name}.{class_name}.{op_name}"
+                        if class_name
+                        else f"{comp_name}.{op_name}"
+                    )
+                    key = qualified
                     if qualified not in skill_map[rule.skill_name].allowed_tools:
                         skill_map[rule.skill_name].allowed_tools.append(qualified)
                     matched_keys.add(key)
                     break
 
         # Phase 2 — auto prefix inference for unmatched operations.
-        unmatched = [(n, c) for n, _, c, _ in items if f"{c}.{n}" not in matched_keys]
+        unmatched = [
+            (n, c, cl)
+            for n, _, c, _, cl in items
+            if (f"{c}.{cl}.{n}" if cl else f"{c}.{n}") not in matched_keys
+        ]
         if unmatched:
-            prefix_groups: dict[str, list[tuple[str, str]]] = {}
-            single_segment: list[tuple[str, str]] = []
+            prefix_groups: dict[str, list[tuple[str, str, str | None]]] = {}
+            single_segment: list[tuple[str, str, str | None]] = []
 
-            for name, comp_name in unmatched:
+            for name, comp_name, class_name in unmatched:
                 if "_" in name:
                     prefix = name.split("_")[0]
                     # Skip empty prefix from names like _private or __dunder
                     if prefix:
-                        prefix_groups.setdefault(prefix, []).append((name, comp_name))
+                        prefix_groups.setdefault(prefix, []).append((name, comp_name, class_name))
                     else:
-                        single_segment.append((name, comp_name))
+                        single_segment.append((name, comp_name, class_name))
                 else:
-                    single_segment.append((name, comp_name))
+                    single_segment.append((name, comp_name, class_name))
 
             # Prefix groups with ≥ 2 members → "{prefix}_ops" Skill.
             for prefix, members in prefix_groups.items():
@@ -629,8 +639,12 @@ class SkillGrouper:
                             description=f"Auto-grouped operations with prefix '{prefix}'",
                             allowed_tools=[],
                         )
-                    for name, comp_name in members:
-                        qualified = f"{comp_name}.{name}"
+                    for name, comp_name, class_name in members:
+                        qualified = (
+                            f"{comp_name}.{class_name}.{name}"
+                            if class_name
+                            else f"{comp_name}.{name}"
+                        )
                         if qualified not in skill_map[skill_name].allowed_tools:
                             skill_map[skill_name].allowed_tools.append(qualified)
                 else:
@@ -641,8 +655,12 @@ class SkillGrouper:
                             description="Miscellaneous operations (small prefix groups)",
                             allowed_tools=[],
                         )
-                    for name, comp_name in members:
-                        qualified = f"{comp_name}.{name}"
+                    for name, comp_name, class_name in members:
+                        qualified = (
+                            f"{comp_name}.{class_name}.{name}"
+                            if class_name
+                            else f"{comp_name}.{name}"
+                        )
                         if qualified not in skill_map["misc"].allowed_tools:
                             skill_map["misc"].allowed_tools.append(qualified)
 
@@ -653,8 +671,10 @@ class SkillGrouper:
                     description="Utility operations (single-segment names)",
                     allowed_tools=[],
                 )
-                for name, comp_name in single_segment:
-                    qualified = f"{comp_name}.{name}"
+                for name, comp_name, class_name in single_segment:
+                    qualified = (
+                        f"{comp_name}.{class_name}.{name}" if class_name else f"{comp_name}.{name}"
+                    )
                     if qualified not in skill_map["utility"].allowed_tools:
                         skill_map["utility"].allowed_tools.append(qualified)
 
@@ -695,7 +715,12 @@ class SkillGrouper:
 
         skills: list[SkillSpec] = []
         for component in self._source_components:
-            tools = [f"{component.name}.{op.name}" for op in component.operations]
+            tools = [
+                f"{component.name}.{op.class_name}.{op.name}"
+                if op.class_name
+                else f"{component.name}.{op.name}"
+                for op in component.operations
+            ]
             skills.append(
                 SkillSpec(
                     name=component.name,
@@ -1237,12 +1262,12 @@ def group_source_components(
     """Convenience function to group source components into Skills by strategy.
 
     Tool naming varies by strategy:
-      COMPONENT_GROUP / KEYWORD_MATCH → ``compName.methodName``
+      COMPONENT_GROUP / KEYWORD_MATCH / LLM_SEMANTIC →
+          ``compName.className.methodName`` (class methods) or
+          ``compName.methodName`` (top-level functions).
       IO_RELATION → ``ClassName.methodName`` (class methods) or
                     ``compName.fileStem.methodName`` / ``compName.methodName``
                     (top-level functions), to disambiguate across files.
-      LLM_SEMANTIC → ``compName.methodName`` (same as KEYWORD_MATCH),
-                    since LLM groups by business semantics not type signatures.
 
     Args:
         components: Source components parsed from Python source code.
@@ -1276,6 +1301,15 @@ def group_source_components(
             for op in c.operations
         }
     else:
-        component_tools = {f"{c.name}.{op.name}" for c in components for op in c.operations}
+        # COMPONENT_GROUP / KEYWORD_MATCH / LLM_SEMANTIC all use the
+        # same naming convention: compName.className.methodName for
+        # class methods, compName.methodName for top-level functions.
+        # This must match the format used by _keyword_match_group()
+        # and _component_group() so the unmatched-tool check is accurate.
+        component_tools = {
+            (f"{c.name}.{op.class_name}.{op.name}" if op.class_name else f"{c.name}.{op.name}")
+            for c in components
+            for op in c.operations
+        }
     unmatched = [t for t in component_tools if t not in all_tools]
     return GroupResult(skills=skills, unmatched_tools=unmatched)

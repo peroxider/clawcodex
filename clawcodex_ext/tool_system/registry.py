@@ -10,7 +10,7 @@ from typing import Any, Iterable
 from .build_tool import Tool, Tools, tool_matches_name
 from .context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
-from .schema_validation import validate_json_schema
+from .schema_validation import coerce_tool_input, validate_json_schema
 from clawcodex_ext.permissions.check import has_permissions_to_use_tool
 from clawcodex_ext.permissions.handler import handle_permission_ask
 from clawcodex_ext.permissions.types import (
@@ -124,7 +124,18 @@ class ToolRegistry:
             )
 
         context.ensure_tool_allowed(tool.name)
-        validate_json_schema(call.input, tool.input_schema, root_name=tool.name)
+        coerced_input = coerce_tool_input(
+            call.input,
+            tool.input_schema,
+            root_name=tool.name,
+        )
+        validate_json_schema(coerced_input, tool.input_schema, root_name=tool.name)
+        if coerced_input is not call.input:
+            call = ToolCall(
+                name=call.name,
+                input=coerced_input,
+                tool_use_id=call.tool_use_id,
+            )
 
         # Plan mode runtime gate: block destructive tools unless targeting
         # a temporary / scratch path.

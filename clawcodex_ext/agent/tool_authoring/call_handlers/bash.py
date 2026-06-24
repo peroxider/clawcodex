@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 from typing import Any
@@ -54,3 +55,31 @@ def execute_bash(command_template: str, params: dict[str, Any]) -> str:
         )
 
     return result.stdout
+
+
+def parse_pos_wrapper_stdout(raw: str) -> Any:
+    """Extract the JSON payload printed by a pos-converter wrapper script.
+
+    Wrapper subprocesses may emit SDK init logs on stdout before the final
+    ``json.dumps(...)`` line.  Walk lines bottom-up and return the last line
+    that parses as JSON; fall back to the trimmed raw text when none match.
+    """
+    text = raw.strip()
+    if not text:
+        return text
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    for line in reversed(text.splitlines()):
+        candidate = line.strip()
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    return text

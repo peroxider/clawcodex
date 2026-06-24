@@ -34,6 +34,35 @@ def _as_set(values: Iterable[str] | None) -> set[str]:
     return set(values or [])
 
 
+def coerce_tool_input(value: Any, schema: Mapping[str, Any], *, root_name: str = "input") -> Any:
+    """Correct common LLM type mistakes before schema validation.
+
+    Currently handles:
+    * ``array`` fields passed as a single string → ``[string]``
+    * nested object fields (recursive)
+    """
+    expected_type = schema.get("type")
+    if expected_type == "object":
+        if not isinstance(value, dict):
+            return value
+        properties = schema.get("properties") or {}
+        if not isinstance(properties, dict):
+            return value
+        return {
+            key: coerce_tool_input(
+                val,
+                prop_schema,
+                root_name=f"{root_name}.{key}",
+            )
+            if isinstance(prop_schema := properties.get(key), dict)
+            else val
+            for key, val in value.items()
+        }
+    if expected_type == "array" and isinstance(value, str):
+        return [value]
+    return value
+
+
 def validate_json_schema(
     value: Any, schema: Mapping[str, Any], *, root_name: str = "input"
 ) -> None:

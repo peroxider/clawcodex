@@ -6,6 +6,7 @@ Mirrors typescript/src/tools/AgentTool/agentToolUtils.ts.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -129,10 +130,18 @@ def resolve_agent_tools(
             resolved_tools=allowed_available_tools,
         )
 
-    # Build map of available tools
+    # Build map of available tools (name + aliases + normalized variants)
     available_map: dict[str, Tool] = {}
     for tool in allowed_available_tools:
         available_map[tool.name] = tool
+        # Index aliases so agent markdown can use dot-separated original names
+        for alias in tool.aliases or ():
+            if alias not in available_map:
+                available_map[alias] = tool
+        # Index the "reversed" normalization: kebab → dots (for backward compat)
+        normalized_dots = tool.name.replace("-", ".").replace("_", ".")
+        if normalized_dots != tool.name and normalized_dots not in available_map:
+            available_map[normalized_dots] = tool
 
     valid_tools: list[str] = []
     invalid_tools: list[str] = []
@@ -152,6 +161,9 @@ def resolve_agent_tools(
             continue
 
         tool = available_map.get(tool_name)
+        if tool is None:
+            # Try kebab-case normalization: "LLM.invoke" → "llm-invoke"
+            tool = available_map.get(_normalize_tool_name(tool_name))
         if tool:
             valid_tools.append(tool_spec)
             if tool.name not in resolved_set:
@@ -463,3 +475,28 @@ def _extract_rule_content(tool_spec: str) -> str | None:
     if paren_idx != -1 and tool_spec.endswith(")"):
         return tool_spec[paren_idx + 1 : -1].strip()
     return None
+
+
+def _normalize_tool_name(name: str) -> str:
+    """Normalize an agent-markdown tool name for ToolRegistry lookup.
+
+    Converts dot.separated / snake_case → kebab-case so that names
+    written by ``pos convert`` (e.g. ``"LLM.invoke"``, ``"video_ops.transcode"``)
+    can find their registered counterparts (``"llm-invoke"``, ``"video-ops-transcode"``).
+
+    Only dots, double-underscores, and single underscores act as word
+    separators.  CamelCase within a segment stays as one word.
+
+    >>> _normalize_tool_name("LLM.invoke")
+    'llm-invoke'
+    >>> _normalize_tool_name("video_ops.transcode")
+    'video-ops-transcode'
+    >>> _normalize_tool_name("already-kebab")
+    'already-kebab'
+    >>> _normalize_tool_name("VideoProcessor.transcode")
+    'videoprocessor-transcode'
+    """
+    s = name.replace(".", "-").replace("__", "-")
+    s = s.replace("_", "-")
+    s = re.sub(r"-+", "-", s)
+    return s.strip("-").lower()
