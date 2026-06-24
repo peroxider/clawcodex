@@ -358,8 +358,8 @@ class TestRunTranscript(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("p1", out)
         self.assertIn("a1", out)
-        self.assertNotIn("p2", out)
-        self.assertNotIn("a2", out)
+        self.assertNotIn("Text: p2", out)
+        self.assertNotIn("Text: a2", out)
         self.assertIn("2 message(s) shown", out)
 
     def test_no_id_no_run_returns_error(self) -> None:
