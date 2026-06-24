@@ -27,6 +27,12 @@ jobs:
           cd repo_workspace
           python -m pip install --upgrade pip uv
           uv sync --locked --python 3.11 --extra dev
+      - name: Bump static version refs to today's CalVer date
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          source .venv/bin/activate
+          python scripts/ci/bump_version.py --apply
       - name: Build, verify, and publish package
         env:
           TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
