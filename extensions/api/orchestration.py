@@ -74,6 +74,29 @@ class OrchestrationSubsystem:
             sandbox_config=workflow_config.sandbox,
             workspace_cfg=workflow_config.workspace,
         )
+        # Build per-stage AgentRunners for multi-model stage overrides.
+        # Each stage inherits all settings from the main agent config;
+        # only provider and/or model are replaced.
+        self.stage_runners: dict[str, AgentRunner] = {}
+        for stage_name, override in workflow_config.agent.stage_overrides.items():
+            from dataclasses import replace
+
+            stage_config = replace(
+                workflow_config.agent,
+                provider=override.get("provider", workflow_config.agent.provider),
+                model=override.get("model", workflow_config.agent.model),
+            )
+            self.stage_runners[stage_name] = AgentRunner(
+                agent_config=stage_config,
+                sandbox_config=workflow_config.sandbox,
+                workspace_cfg=workflow_config.workspace,
+            )
+            logger.info(
+                "stage runner [%s]: provider=%s model=%s",
+                stage_name,
+                stage_config.provider,
+                stage_config.model,
+            )
         self.status_dashboard = StatusDashboard()
         self._orchestrator = None
 
@@ -87,6 +110,7 @@ class OrchestrationSubsystem:
             workspace=self.workspace_manager,
             agent_runner=self.agent_runner,
             status_dashboard=self.status_dashboard,
+            stage_runners=self.stage_runners,
         )
         await self._orchestrator.run()
 
