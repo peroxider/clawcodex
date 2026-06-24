@@ -338,13 +338,13 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 
 ### 3.6 `src/auth/*`、`src/permissions/*`、`src/buddy/*`、`src/skills/*`、`src/memdir/*`、`src/context_system/*`
 
-按 §1.2 的 Pattern B/D 继续推进；当前：
-- `src/auth/{auth,aws,claude_ai,gemini,oauth}.py` —— 4–6 个文件保留上游核心，OAuth 扩展迁 `clawcodex_ext/auth/`
-- `src/permissions/check.py`、`src/permissions/bash_parser/*` —— 多数已 facade 化（132 个 wildcard re-export 中包含）
-- `src/buddy/{companion,feature,notification,observer,prompt,soul,sprites,types}.py` —— 7 个文件已迁 `clawcodex_ext/buddy/`
-- `src/skills/_frontmatter_adapter.py` 等 —— 已 Pattern A
-- `src/memdir/*` —— 8 个文件已迁 `clawcodex_ext/memdir/`
-- `src/context_system/*` —— 多数 facade 化（builder/cache_boundary/context_analyzer/memory_prefetch/models/system_prompt_cache/workspace_snapshot）
+**Phase 3-A（2026-06-24）已完成 5 个模块分类 facade 化**：
+- ✅ `src/permissions/{_treesitter_adapter,cycle,modes,types}.py` —— 4 个剩余实装文件退化为 Pattern D wildcard facade；12 个既有 facade 文件保持不变。
+- ✅ `src/auth/` —— `__init__.py` 改为 lazy package facade，7 个 submodule 改为 Pattern D；3 处 within-module reverse import 先行改为 `clawcodex_ext.*` 直连以避免 facade split 循环。
+- ✅ `src/buddy/` —— `__init__.py` 改为 lazy package facade，8 个 submodule 改为 Pattern D。
+- ✅ `src/skills/` —— `__init__.py` 改为 lazy package facade，7 个 submodule 改为 Pattern D；`init_bundled_skills` 经 `clawcodex_ext.skills.bundled` 暴露。
+- ✅ `src/memdir/` —— `__init__.py` 改为 lazy package facade，8 个 submodule 改为 Pattern D；`find_relevant_memories` / `memory_age` 两个同名 submodule/function 出口在 ext package 层显式绑定以保留 public API identity。
+- `src/context_system/*` —— 多数已 facade 化（builder/cache_boundary/context_analyzer/memory_prefetch/models/system_prompt_cache/workspace_snapshot），未纳入本轮 5 模块范围。
 
 ### 3.7 `src/cli_core/*`、`src/bootstrap/*`、`src/state/*`
 
@@ -361,15 +361,15 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 ## 4. 当前需要立即处理的 5 个高优先级文件
 
 > 原 §4.1 / §4.2 / §4.3 / §4.4 / §4.5 全部已完成 ✅。Phase 2-D 后剩余 ~13 个非 facade 文件，下方为基于当前状态重排的**新一轮** Top 5。
-> **本轮更新（2026-06-24 Phase 2-F P2）**：src/query/* 7 文件 + deps.py + __init__.py 已完成 ✅（先前 `73c750c0 refactor(decouple): move src/query files to clawcodex_ext/query` 落地，本轮仅做验证 + 文档对齐），下方 Top 5 已重新编号。
+> **本轮更新（2026-06-24 Phase 3-A）**：`src/permissions/*`、`src/auth/*`、`src/buddy/*`、`src/skills/*`、`src/memdir/*` 已按 §3.6 完成分类 facade 化，原 Top 5 #4 移除，下方重新编号。
 
 | 排序 | 文件 | 行数 | 风险 | 建议方案 |
 |---|---|---|---|---|
 | 1 | `src/services/mcp/*` (32 文件) | ~5,000+ | 上游冲突面积最大 | 评估是否纯新增，若否则按 services/ 双位置策略迁 ext |
 | 2 | 7 个双位置包收敛 → 单 ext 入口 | ~70 文件 | 一致性 | `analytics` / `api` / `chrome` / `oauth` / `periodic` / `pipe_ipc` / `voice` 收敛 |
 | 3 | `src/agent/{session,parse_agent_markdown,resume_agent,foreground_promotion,fork_subagent}.py` | 590-800 × 5 | 高 | 内部增量解耦 / 迁 ext |
-| 4 | `src/permissions/*`、`src/auth/*`、`src/buddy/*`、`src/skills/*`、`src/memdir/*` | ~4000+ | 中-高 | 按 §3.6 分类逐步 facade 化 |
-| 5 | `src/services/{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 各模块 `__init__.py` | ~14 × 7 | 中 | 收敛 src/__init__.py 为 3 行 facade，删除 src 侧内容 |
+| 4 | `src/services/{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 各模块 `__init__.py` | ~14 × 7 | 中 | 收敛 src/__init__.py 为 3 行 facade，删除 src 侧内容 |
+| 5 | `src/context_system/*` 剩余非 facade 文件 | 待重核 | 中 | 复核 §3.6 未覆盖项，能直连 ext 的继续 facade 化 |
 
 ---
 
@@ -717,6 +717,31 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 
 ---
 
+## 10e. 续本次会话（2026-06-24 同日 Phase 3-A）— §3.6 五模块 facade 化
+
+> 继 Phase 2-G 完成后推进 §3.6：将 `src/permissions/*`、`src/auth/*`、`src/buddy/*`、`src/skills/*`、`src/memdir/*` 中剩余实装文件退化为兼容 facade，真实实现集中在 `clawcodex_ext/`。本轮共覆盖 38 个 src 文件，并先修复 3 处同模块 ext→src import 以避免 facade split 循环。
+
+**迁移范围**：
+
+| 模块 | src 侧结果 | ext 侧补齐 |
+|---|---|---|
+| `permissions` | 4 个剩余 submodule 改为 Pattern D；既有 12 个 facade 保持不变 | `_treesitter_adapter.py` / `runtime.py` 同模块 import 改为 ext 直连 |
+| `auth` | `__init__.py` lazy package facade + 7 个 submodule Pattern D | `__init__.py` 补齐 lazy public surface；`claude_ai.py` 同模块 import 改为 ext 直连 |
+| `buddy` | `__init__.py` lazy package facade + 8 个 submodule Pattern D | `__init__.py` 补齐 lazy public surface |
+| `skills` | `__init__.py` lazy package facade + 7 个 submodule Pattern D | `__init__.py` 补齐 lazy public surface；`init_bundled_skills` 通过 `clawcodex_ext.skills.bundled` 暴露 |
+| `memdir` | `__init__.py` lazy package facade + 8 个 submodule Pattern D | `__init__.py` 补齐 lazy public surface；显式绑定 `find_relevant_memories` / `memory_age` 避免同名 submodule 覆盖 function export |
+
+**验证证据（当前主线程已完成）**：
+- Package public API identity: `src.auth` 9/9、`src.buddy` 4/4、`src.memdir` 52/52、`src.skills` 42/42 全 PASS。
+- Stage 1-5 stability gate: 257 passed in 26.43s。
+- Orchestrator 全量: 483 passed in 16.89s。
+- Stage 6 perf: 6 passed in 11.86s。
+- Facade 设计修正：最初 eager package aggregation 会拉高 `test_tool_execution_path_latency`；最终改为 lazy `__getattr__` package facade，仅对 `memdir` 两个同名 function/submodule 出口做低成本显式绑定。
+
+**独立 verification 子代理**：待最终 diff 固化后执行 12 项矩阵验证，并将 VERDICT 回填本节。
+
+---
+
 ## 11. 历史会话索引
 
 | 日期 | 章节 | 主要工作 |
@@ -731,6 +756,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 2026-06-24 | §3.1 / §4 / §10b | Phase 2-F P1 agent_definitions + run_agent 验证 + 文档对齐（无新代码改动） |
 | 2026-06-24 | §3.2 / §4 / §10c | Phase 2-F P2 src/query/* 8 文件 + __init__.py 验证 + 文档对齐（无新代码改动） |
 | 2026-06-24 | §12 / §10d | **Phase 2-G ext→src 反向 import 清理（12 sites, 9 files, 纯路径重写，VERDICT: PASS）** |
+| 2026-06-24 | §3.6 / §4 / §10e | **Phase 3-A §3.6 五模块 facade 化（38 src files；Stage 1-6 + orchestrator 当前主线程全 PASS，verification 待回填）** |
 
 ---
 

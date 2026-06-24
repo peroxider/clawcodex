@@ -20,14 +20,13 @@ Switch:
 
 from __future__ import annotations
 
-from clawcodex_ext.capabilities import AdapterRegistry, env_switch, dependency_available
+from clawcodex_ext.capabilities import AdapterRegistry, dependency_available, env_switch
 import logging
-import os
 from typing import Any
 
 from tree_sitter import Language, Parser
 
-from src.permissions.bash_parser.commands import CommandSafety, classify_command
+from clawcodex_ext.permissions.bash_parser.commands import CommandSafety, classify_command
 
 logger = logging.getLogger(__name__)
 

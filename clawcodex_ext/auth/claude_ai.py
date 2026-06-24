@@ -44,7 +44,7 @@ import os
 import time
 from dataclasses import dataclass
 
-from src.auth.oauth import OAuthTokens
+from clawcodex_ext.auth.oauth import OAuthTokens
 
 logger = logging.getLogger(__name__)
 

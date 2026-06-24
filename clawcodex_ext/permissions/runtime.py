@@ -36,10 +36,10 @@ import logging
 import threading
 from typing import Any, Callable
 
-from src.permissions.cycle import cycle_permission_mode, get_next_permission_mode
-from src.permissions.modes import has_allow_bypass_permissions_mode
+from clawcodex_ext.permissions.cycle import cycle_permission_mode, get_next_permission_mode
+from clawcodex_ext.permissions.modes import has_allow_bypass_permissions_mode
 from clawcodex_ext.permissions.types import PermissionMode, PermissionUpdateSetMode
-from src.permissions.updates import apply_permission_update
+from clawcodex_ext.permissions.updates import apply_permission_update
 from src.state.app_state import replace_state
 from src.utils.store import Store
 from src.tool_system.context import ToolContext
@@ -261,7 +261,7 @@ def ToolPermissionContextFactory(  # type: ignore[no-redef]
     mode: str,
     is_bypass_permissions_mode_available: bool,
 ) -> Any:
-    from src.permissions.types import ToolPermissionContext
+    from clawcodex_ext.permissions.types import ToolPermissionContext
 
     return ToolPermissionContext(
         mode=mode,
