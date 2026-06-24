@@ -24,6 +24,8 @@ ALLOWED_BASH_COMMANDS: frozenset[str] = frozenset(
         "docker",
         "npm",
         "pip",
+        "python",
+        "python3",
     }
 )
 

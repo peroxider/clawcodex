@@ -7,7 +7,7 @@ Usage::
         [--strategy <strategy>] [--skills <skills_dir>]
         [--max-groups <N>] [--mapping-rules <file>]
         [--llm-provider <provider>] [--llm-model <model>]
-        [--preview] [--all]
+        [--preview] [--all] [--register-tools]
 
     clawcodex-dev pos convert docker_build,k8s_apply \\
         --out ./.clawcodex --requirements "CI/CD pipeline" --name cicd-agent
@@ -23,6 +23,10 @@ Options:
     --skills <skills_dir>   Output path for generated skill files.
     --all                   Include all public methods (disable external
                             interface filtering).  Default: extern-only.
+    --register-tools        Register each operation as an executable Tool
+                            (bash call_type + wrapper script) and persist
+                            specs to ~/.clawcodex/agent-tools/.  Off by
+                            default for backward compatibility.
 """
 
 from __future__ import annotations
@@ -57,10 +61,10 @@ def run_pos_command(args: list[str]) -> int:
 
 def _parse_convert_args(
     args: list[str],
-) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool]:
+) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool, bool]:
     """Parse ``pos convert`` arguments.
 
-    Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods).
+    Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods, register_tools).
     """
     if not args:
         print("error: missing <sdk_spec> argument", file=sys.stderr)
@@ -82,6 +86,7 @@ def _parse_convert_args(
     llm_model = ""
     preview = False
     all_methods = False
+    register_tools = False
 
     i = 1
     while i < len(args):
@@ -125,6 +130,9 @@ def _parse_convert_args(
         elif token == "--all":
             all_methods = True
             i += 1
+        elif token == "--register-tools":
+            register_tools = True
+            i += 1
         else:
             print(f"error: unknown argument: {token}", file=sys.stderr)
             raise SystemExit(2)
@@ -142,6 +150,7 @@ def _parse_convert_args(
         llm_model,
         preview,
         all_methods,
+        register_tools,
     )
 
 
@@ -161,6 +170,7 @@ def _handle_convert(args: list[str]) -> int:
             llm_model,
             preview,
             all_methods,
+            register_tools,
         ) = _parse_convert_args(args)
     except SystemExit:
         return 2
@@ -182,6 +192,7 @@ def _handle_convert(args: list[str]) -> int:
             llm_model,
             preview,
             all_methods,
+            register_tools,
         )
 
     # Legacy path: sdk_spec is a comma-separated spec string
@@ -231,6 +242,7 @@ def _handle_convert_from_source(
     llm_model: str = "",
     preview: bool = False,
     all_methods: bool = False,
+    register_tools: bool = False,
 ) -> int:
     """Convert a source code directory into Agents via SourceCodeParser + grouping strategy.
 
@@ -301,6 +313,45 @@ def _handle_convert_from_source(
         llm_provider=llm_provider_obj,
     )
     grouped_skills: list[SkillSpec] = group_result.skills
+
+    # ── Tool registration ──
+    # Convert each SourceOperation into an executable Tool (bash call_type +
+    # wrapper script), persist specs to ~/.clawcodex/agent-tools/, and
+    # rewrite skill.allowed_tools with kebab-case names so agent markdown
+    # can find them in the ToolRegistry at runtime.
+    if register_tools and not preview:
+        try:
+            from extensions.pos_converter.tool_registry_bridge import (
+                register_component_tools,
+                _to_kebab_case,
+            )
+
+            registered = register_component_tools(
+                components,
+                str(sdk_path),
+                persist=True,
+            )
+            # Rewrite tool names in skills to match what was actually
+            # registered in the ToolRegistry.  The name_map returned by
+            # register_component_tools maps every naming convention
+            # (file_stem-based, grouper-based, fully-qualified) to the
+            # actual kebab-case spec name.
+            for skill in grouped_skills:
+                skill.allowed_tools = [
+                    registered.get(t, _to_kebab_case(t)) for t in skill.allowed_tools
+                ]
+            if registered:
+                print(f"   Registered tools: {len(registered)}")
+        except ImportError as exc:
+            print(
+                f"   Warning: tool registration skipped (missing module: {exc})",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            print(
+                f"   Warning: tool registration failed: {exc}",
+                file=sys.stderr,
+            )
 
     # Build per-skill AgentComponentInfo for the overview agent.
     overview_info: list[AgentComponentInfo] = []

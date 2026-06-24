@@ -92,6 +92,24 @@ sessions/
 CLAUDE.local.md
 /AGENTS.md
 
+# Local agent runtime artifacts (generated during sessions, not for upstream)
+/AGENT.md
+/HEARTBEAT.md
+/IDENTITY.md
+/SOUL.md
+/USER.md
+/workflow.md
+/_diag_tools.py
+/_test_reg.py
+**/.workspace
+/coding_memory/
+/context/
+/memory/
+/messages/
+/todo/
+/config/jiuwen_mapping_rules.yaml
+/clawcodex_ext/services/team_launch.py
+
 /reference_projects/
 /my-prompts/
 

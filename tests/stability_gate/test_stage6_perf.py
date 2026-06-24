@@ -83,18 +83,19 @@ class TestStage6Perf:
 
         start = time.monotonic()
         proc = subprocess.run(
-            [sys.executable, "-c",
-             "from src.query import query, QueryParams, "
-             "QueryEngine, QueryEngineConfig, StreamEvent"],
+            [
+                sys.executable,
+                "-c",
+                "from src.query import query, QueryParams, "
+                "QueryEngine, QueryEngineConfig, StreamEvent",
+            ],
             capture_output=True,
             text=True,
             timeout=15,
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 3.0, (
-            f"Agent loop warm-start took {elapsed:.2f}s, expected < 3s"
-        )
+        assert elapsed < 3.0, f"Agent loop warm-start took {elapsed:.2f}s, expected < 3s"
 
     # ── Tool execution budget ────────────────────────────────────
 
@@ -109,42 +110,41 @@ class TestStage6Perf:
 
         start = time.monotonic()
         proc = subprocess.run(
-            [sys.executable, "-c",
-             "from src.tool_system.registry import ToolRegistry, get_all_base_tools; "
-             "from src.tool_system.build_tool import find_tool_by_name, Tool"],
+            [
+                sys.executable,
+                "-c",
+                "from src.tool_system.registry import ToolRegistry, get_all_base_tools; "
+                "from src.tool_system.build_tool import find_tool_by_name, Tool",
+            ],
             capture_output=True,
             text=True,
             timeout=15,
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 2.0, (
-            f"Tool execution path took {elapsed:.2f}s, expected < 2s"
-        )
+        assert elapsed < 2.0, f"Tool execution path took {elapsed:.2f}s, expected < 2s"
 
     # ── REPL / Headless budget ───────────────────────────────────
 
     def test_repl_input_pipeline_cold_start(self):
-        """REPL 输入管线冷启动（ClawcodexREPL 导入）不应超过 5s。
+        """REPL 类导入（不实例化）不应超过 5s。
 
-        测量从零冷启动导入 REPL 核心类 ClawcodexREPL 的时间。
-        该导入的权重来自其传递依赖（Session、providers、streaming），
-        这些是 REPL 交互所需的基础设施。budget 设在当前基线
-        ~4.5s 之上留 0.5s 余量，防止意外引入额外重型依赖。
+        测量从零冷启动 ``from src.repl import ClawcodexREPL`` 的时间。
+        重型依赖（Session、providers、tools）在首次实例化时通过
+        ``_load_heavy_runtime()`` 加载，因此本测试只覆盖类导入成本。
+        budget 设在 prompt_toolkit + rich + completer 基线 ~4.5s 之上
+        留 0.5s 余量。
         """
         import subprocess
         import sys
 
         start = time.monotonic()
         proc = subprocess.run(
-            [sys.executable, "-c",
-             "from src.repl import ClawcodexREPL"],
+            [sys.executable, "-c", "from src.repl import ClawcodexREPL"],
             capture_output=True,
             text=True,
             timeout=15,
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 5.0, (
-            f"REPL cold start took {elapsed:.2f}s, expected < 5s"
-        )
+        assert elapsed < 5.0, f"REPL cold start took {elapsed:.2f}s, expected < 5s"

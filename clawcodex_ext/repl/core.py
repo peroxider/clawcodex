@@ -312,56 +312,103 @@ from collections import deque
 from datetime import datetime
 from typing import Any
 
-from src.agent import Session
-from src.config import get_provider_config
-from src.outputStyles import resolve_output_style
-from src.providers.runtime import build_provider_from_config
-from src.providers.anthropic_provider import AnthropicProvider
-from clawcodex_ext.providers.base import ChatMessage
-from src.providers.minimax_provider import MinimaxProvider
-from src.providers import get_provider_class
-from src.services.api.claude import tool_to_api_schema
-from src.tool_system.context import ToolContext
-from src.tool_system.defaults import build_default_registry
-from clawcodex_ext.tool_system.protocol import ToolCall
-from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
-from clawcodex_ext.query.engine import QueryEngine, QueryEngineConfig
-from src.query.query import StreamEvent
-from clawcodex_ext.types.messages import (
-    NO_CONTENT_MESSAGE,
-    AssistantMessage,
-    SystemMessage,
-    UserMessage,
-)
-from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
-from src.utils.abort_controller import AbortController
+# Heavy runtime deps are loaded lazily via ``_load_heavy_runtime()`` so
+# ``from src.repl import ClawcodexREPL`` stays within the Stage-6 perf
+# budget. Full stack (Session, providers, tools, commands) loads on first
+# REPL instantiation, before the interactive loop starts.
+_heavy_runtime_loaded = False
+_cron_runtime_loaded = False
+_HAS_CRON = False
+attach_cron_runtime = None  # type: ignore[assignment,misc]
+replace_cron_tools = None  # type: ignore[assignment,misc]
+claim_cron_run = None  # type: ignore[assignment,misc]
+finalize_cron_run = None  # type: ignore[assignment,misc]
 
-# New command system imports
-from src.command_system import (
-    CommandRegistry,
-    CommandResult,
-    create_command_context,
-    execute_command_async,
-    execute_command_sync,
-    register_builtin_commands,
-)
-from src.cost_tracker import CostTracker
-from src.history import HistoryLog
-from src.repl.agent_mention_completer import AgentMentionCompleter
-from src.repl.at_file_completer import AtFileCompleter
-from clawcodex_ext.repl.live_status import LiveStatus
 
-try:
-    from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
-    from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
+def _load_cron_runtime() -> None:
+    """Import cron helpers without pulling the full REPL runtime stack."""
+    global _cron_runtime_loaded, _HAS_CRON, attach_cron_runtime
+    global replace_cron_tools, claim_cron_run, finalize_cron_run
 
-    _HAS_CRON = True
-except ImportError:
-    _HAS_CRON = False
-    attach_cron_runtime = None  # type: ignore[assignment]
-    replace_cron_tools = None  # type: ignore[assignment]
-    claim_cron_run = None  # type: ignore[assignment]
-    finalize_cron_run = None  # type: ignore[assignment]
+    if _cron_runtime_loaded:
+        return
+
+    try:
+        from clawcodex_ext.cron_system.runtime import attach_cron_runtime, replace_cron_tools
+        from clawcodex_ext.cron_system.runs import claim_cron_run, finalize_cron_run
+
+        _HAS_CRON = True
+    except ImportError:
+        _HAS_CRON = False
+        attach_cron_runtime = None  # type: ignore[assignment]
+        replace_cron_tools = None  # type: ignore[assignment]
+        claim_cron_run = None  # type: ignore[assignment]
+        finalize_cron_run = None  # type: ignore[assignment]
+
+    _cron_runtime_loaded = True
+
+
+def _load_heavy_runtime() -> None:
+    """Import agent/provider/tool/command deps on first REPL use."""
+    global _heavy_runtime_loaded
+    global Session, get_provider_config, resolve_output_style
+    global build_provider_from_config, AnthropicProvider, ChatMessage
+    global MinimaxProvider, get_provider_class, tool_to_api_schema
+    global ToolContext, build_default_registry, ToolCall
+    global ToolEvent, summarize_tool_result, summarize_tool_use
+    global QueryEngine, QueryEngineConfig, StreamEvent
+    global NO_CONTENT_MESSAGE, AssistantMessage, SystemMessage, UserMessage
+    global TextBlock, ToolUseBlock, ToolResultBlock, AbortController
+    global CommandRegistry, CommandResult, create_command_context
+    global execute_command_async, execute_command_sync, register_builtin_commands
+    global CostTracker, HistoryLog, AgentMentionCompleter, AtFileCompleter
+    global LiveStatus, _HAS_CRON, attach_cron_runtime, replace_cron_tools
+    global claim_cron_run, finalize_cron_run
+
+    if _heavy_runtime_loaded:
+        return
+
+    from src.agent import Session
+    from src.config import get_provider_config
+    from src.outputStyles import resolve_output_style
+    from src.providers.runtime import build_provider_from_config
+    from src.providers.anthropic_provider import AnthropicProvider
+    from clawcodex_ext.providers.base import ChatMessage
+    from src.providers.minimax_provider import MinimaxProvider
+    from src.providers import get_provider_class
+    from src.services.api.claude import tool_to_api_schema
+    from src.tool_system.context import ToolContext
+    from src.tool_system.defaults import build_default_registry
+    from clawcodex_ext.tool_system.protocol import ToolCall
+    from src.tool_system.renderers import ToolEvent, summarize_tool_result, summarize_tool_use
+    from clawcodex_ext.query.engine import QueryEngine, QueryEngineConfig
+    from src.query.query import StreamEvent
+    from clawcodex_ext.types.messages import (
+        NO_CONTENT_MESSAGE,
+        AssistantMessage,
+        SystemMessage,
+        UserMessage,
+    )
+    from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
+    from src.utils.abort_controller import AbortController
+    from src.command_system import (
+        CommandRegistry,
+        CommandResult,
+        create_command_context,
+        execute_command_async,
+        execute_command_sync,
+        register_builtin_commands,
+    )
+    from src.cost_tracker import CostTracker
+    from src.history import HistoryLog
+    from src.repl.agent_mention_completer import AgentMentionCompleter
+    from src.repl.at_file_completer import AtFileCompleter
+    from clawcodex_ext.repl.live_status import LiveStatus
+
+    _load_cron_runtime()
+
+    _heavy_runtime_loaded = True
+
 
 _CRON_WAKE = object()
 
@@ -550,6 +597,8 @@ class ClawcodexREPL:
         is_bypass_permissions_mode_available: bool = False,
         **kwargs: Any,
     ):
+        _load_heavy_runtime()
+
         # ``is_interactive`` is set during bootstrap phase 2 by
         # ``src.init.run_pre_action`` (called from ``cli.main``) before
         # the REPL constructor runs. Previously we set it here too,
@@ -2247,6 +2296,7 @@ class ClawcodexREPL:
                 pass
 
     def _drain_cron_outbox(self) -> None:
+        _load_cron_runtime()
         """Drain ``cron_prompt`` / ``cron_missed`` events from the
         tool context outbox and enqueue them as user-submitted prompts.
 
@@ -3111,6 +3161,7 @@ class ClawcodexREPL:
         self.console.print()
 
     def run(self):
+        _load_heavy_runtime()
         """Run the REPL."""
         self._print_startup_header()
 
@@ -3276,6 +3327,7 @@ class ClawcodexREPL:
                 break
 
     def handle_command(self, command: str):
+        _load_heavy_runtime()
         """Handle slash commands."""
         raw = command.strip()
         if raw == "/":
@@ -4142,6 +4194,9 @@ class ClawcodexREPL:
         return False
 
     def _provider_uses_system_kwarg(self) -> bool:
+        from src.providers.anthropic_provider import AnthropicProvider
+        from src.providers.minimax_provider import MinimaxProvider
+
         return isinstance(self.provider, (AnthropicProvider, MinimaxProvider))
 
     def _build_direct_stream_payload(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -4353,6 +4408,7 @@ class ClawcodexREPL:
             )
 
     def chat(self, user_input: str, max_turns: int | None = None):
+        _load_heavy_runtime()
         """Send message to LLM and display response.
 
         Uses the new QueryEngine (WS-4) state machine to drive the query loop.
