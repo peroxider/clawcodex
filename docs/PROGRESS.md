@@ -182,12 +182,12 @@
 | F-72 | Multi-API 适配器 | P1 | 📋 规划中 | 见 FEATURE_PLAN §7.2 |
 | F-73 | CI/CD 流水线 | P0 | ✅ 本地已完成 / 🔄 远端待验证 | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-74 | Sandbox 沙箱 | P2 | 📋 规划中 | 见 FEATURE_PLAN §7.2 |
-| F-75 | 工具/Skill 调用统计（跨会话） | P2 | ✅ 已完成 | `tool_stats.py` + `stats_cmd.py` 已验证可用，JSONL 追加写 + CLI stats 子命令 |
+| F-75 | 工具/Skill 调用统计（跨会话） | P2 | ✅ 已完成 | `tool_stats.py` + `stats_cmd.py` 已验证可用，JSONL 追加写 + CLI stats 子命令。详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-78 | Issue 语义澄清流程（自主模式扩展） | P1 | ✅ 已完成（2026-06-19 审计） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-80 | Agent 间自主观察与消息交互 | P2 | ✅ 已完成（2026-06-19 审计） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-81 | Native 原生模块系统（Python） | P1 | 📋 规划中 | 对标 CCB Rust/NAPI 原生模块，用纯 Python 等价实现音频捕获(sounddevice)、图像差异对比(Pillow+NumPy)、URL Scheme注册(webbrowser+xdg)、修饰键检测。F-61/F-64 前置依赖。预计 1 周。 |
 | F-82 | Remote Control Server 远程控制 | P1 | 🔄 进行中 | `extensions/remote_api/` 已有 Hermes 兼容 API（11 模块 2597 行），含 completion/responses API、SSE 流式、Bearer 认证、CLI `clawcodex api serve` 子命令。完整 F-82 设计（Worker 调度/长轮询等）待补 |
-| F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | P2 | ✅ 已完成 | `extensions/remote_api/` 已完整实现 Hermes 兼容 API（11 模块 2597 行），含 completion/responses API、SSE 流式、Bearer 认证、CLI 子命令；测试见 `tests/remote_api/` |
+| F-90 | Hermes Gateway OpenAI 兼容 API 参考实现 | P2 | ✅ 已完成 | `extensions/remote_api/` 已完整实现 Hermes 兼容 API（11 模块 2597 行），含 completion/responses API、SSE 流式、Bearer 认证、CLI 子命令；测试见 `tests/remote_api/`。详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-83 | Ultraplan 高级规划系统 | P2 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-84 | Context Collapse 上下文折叠引擎 | P2 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 | F-85 | Templates 模板系统 | P1 | ✅ 已完成（2026-06-19） | 详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
@@ -208,7 +208,7 @@
 | F-102 | Agent Loop Hook 扩展点增强 | P1 | 📋 设计完成 | 5 子特性 P102-A~E：pre-LLM 钩子/恢复策略注册表/outbox 类型化/formal registry/turn 回调。总预计 9-15 天。详见 §十五。 |
 | F-107 | PowerShell 支持增强 | P2 | 📋 设计完成 | 8 子特性 P107-A~H：工具 schema 扩展/进程启动适配/命令分类/安全分析/技能传播。总预计 6-8 天。详见 §十七。 |
 | F-108 | Freeze Detection & Auto-Recovery | P0 | 📋 设计完成 | 8 子特性 P108-A~H：四层混合方案（Layer0 快速修复 + Layer1 冻结检测 + Layer2 硬超时 + Layer3 自动恢复 + Layer4 诊断命令）。总预计 7 天。详见 §十八。 |
-| F-105 / F-106 | Agent 执行性能优化 | P0 / P1 | ✅ F-105 已完成 / ✅ F-106 已完成 | `_should_continue` 轮询缓存 + 懒压缩管线门控已落地。剩余 P1-P3 优化项（A~O）待跟进。详见 FEATURE_PLAN.md §十一。 |
+| F-105 / F-106 | Agent 执行性能优化 | P0 / P1 | ✅ F-105 已完成 / ✅ F-106 已完成 | `_should_continue` 轮询缓存 + 懒压缩管线门控已落地。剩余 P1-P3 优化项（A~O）待跟进。详见 FEATURE_PLAN.md §十一。详见 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md) |
 
 
 ---
@@ -1299,9 +1299,7 @@ CronTask due
 
 ### F-90: Hermes Gateway OpenAI 兼容 API 参考实现
 
-**状态**: ✅ 已完成（2026-07-07，`extensions/remote_api/`）| **优先级**: P2
-
-> 完整实现（11 模块 2597 行）已归档至 [ARCHIVED_PROGRESS.md §九](./ARCHIVED_PROGRESS.md#九2026-06-19-归档——已完成进度详情progress-v39)。
+> ✅ 已归档至 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md)
 
 ### F-83: Ultraplan 高级规划模式
 
@@ -1905,74 +1903,9 @@ Phase 4 (P102-D): formal registry ──→ Phase 5 (P102-B): 恢复策略注册
 
 ---
 
-## 十六、Agent 执行性能优化
+## 十六、Agent 执行性能优化（F-105 ✅ / F-106 ✅）
 
-**状态**: 🟢 P0 两项已落地（F-105 + F-106，2026-06-22） | **优先级**: P0 / P1 | **登记日期**: 2026-06-22
-
-**目标**: 减少 Agent 执行任务的轮次间空闲开销，缩短无变更轮次延迟，降低事件分发摩擦。
-
-**详细设计**: 见 `docs/FEATURE_PLAN.md §十一` — 包含 17 个阻塞点识别、15 个优化方案（A-O）、验收标准、依赖与协同、实施建议顺序、实施状态。
-
-**F-105 / F-106 实施摘要**（2026-06-22 提交）：
-
-- **F-105** — `_should_continue` 轮询缓存：`extensions/orchestrator/issue_state_cache.py` 新增 `IssueStateCache` dataclass，`AgentSession.state_cache` 在 `run()` 顶部初始化；`_should_continue` 顶部查询、底部 record。配置 `AgentConfig.perf_should_continue_skip_turns=3` 默认开启。`tests/orchestrator/test_issue_state_cache.py` 9 个用例全绿。
-- **F-106** — 懒压缩管线门控：`clawcodex_ext/services/compact/gating.py` 新增 `should_run_compression_pipeline` 纯函数，`CompressionPipeline.run()` 顶部插入门控；`PipelineConfig.gate_skip_ratio=0.6` 默认开启，支持 `CLAWCODEX_COMPRESSION_GATE_SKIP_RATIO` env 覆盖。`clawcodex_ext/query/query.py` 0 改动。`tests/services/compact/test_gating.py` 14 个用例全绿。
-- **回滚**：`perf_should_continue_skip_turns=0` / `gate_skip_ratio=0` 还原为旧行为。
-
-### 阻塞点总览
-
-| 级别 | 数量 | 描述 | 每轮影响 |
-|:----:|:----:|------|:--------:|
-| 🔴 P0 | 7 | 每轮调用都有的持续性开销 | 1-500ms |
-| 🔄 P1 | 3 | 轮次边界的网络/文件系统开销 | 10-2000ms |
-| 🟠 P2 | 3 | 会话/运行初始化的开销 | 10-500ms |
-| 🔵 P3 | 4 | 特定情况/异常路径开销 | 50ms-数分钟 |
-
-### 子特性（优化方案）
-
-| # | 方案 | 级别 | 对应阻塞点 | 预计工时 | 状态 |
-|---|------|:----:|:----------:|:--------:|:----:|
-| A | 轮询跳过缓存（_should_continue 跳过） | P0 | #8 Tracker API 调用 | 0.5d | 🟢 F-105 已完成 |
-| B | 惰性压缩流水线（低于窗口跳过） | P0 | #3 压缩流水线 | 1d | 🟢 F-106 已完成 |
-| C | git status 缓存（仅 Write/Edit 轮次运行） | P0 | #9 git status | 0.5d | 📋 待实现 |
-| D | 工具注册表缓存（LRU 缓存 prompt + input_schema） | P1 | #7 工具枚举 | 1d | 📋 待实现 |
-| E | 事件分发去重合并（100ms 批量推送） | P1 | #4 三重分发 | 2d | 📋 待实现 |
-| F | Debug 日志按需写入（env guard） | P1 | #5 NDJSON 写入 | 0.5d | 📋 待实现 |
-| G | 转录刷新异步化（asyncio.create_task） | P1 | #10 flush | 1d | 📋 待实现 |
-| H | Advisor 决策缓存（会话级一次决策） | P1 | #2 Advisor 决策 | 0.5d | 📋 待实现 |
-| I | 首轮初始化预加载（async preload） | P2 | #11 首轮 init | 2d | 📋 待实现 |
-| J | 延迟请求门禁内联（仅 delay>0 时执行） | P2 | #1 enforce_request_delay | 0.5d | 📋 待实现 |
-| K | _aggregate_lock 无竞争短路 | P2 | #6 锁争用 | 1d | 📋 待实现 |
-| L | sys.modules 交换移除 | P2 | #12 facade 模块 | 3d | 📋 待实现 |
-| M | PR 双写去重（.tmp rename） | P3 | #17 报告双写 | 1d | 📋 待实现 |
-| N | _find_pr_fallback 缓存（TTL 30s） | P3 | #16 PR 扫描 | 0.5d | 📋 待实现 |
-| O | 非 Anthropic Provider 系统提示缓存 | P3 | — provider 路径 | 2d | 📋 待实现 |
-
-### 实施建议顺序
-
-```
-Phase 1 (2-3d): [A] 轮询跳过 ──→ [B] 惰性压缩 ──→ [C] git status 缓存
-  P0 三项，收益最高，改动最小
-   
-Phase 2 (3-5d): [D] 工具缓存 ──→ [E] 事件合并 ──→ [F] 日志按需 ──→ [G] 异步刷新 ──→ [H] Advisor 缓存
-  P1 五项，快速见效
-
-Phase 3 (5-8d): [I] 首轮预加载 ──→ [J] 门禁内联 ──→ [K] 锁短路 ──→ [L] sys.modules 移除(可选)
-  P2 四项，中等收益
-
-Phase 4 (>8d): [M] PR 双写去重 ──→ [N] PR 回退缓存 ──→ [O] 系统提示缓存
-  P3 三项，长周期/低收益
-```
-
-### 验收标准
-
-1. **新增性能门禁** `test_stage7_perf_turn.py`：空轮次（max_turns=1, test_command=""）完成时间 < 2s
-2. **回归检测**：`test_stage6_perf.py` 全通过（CLI --help < 3s, Conversation import < 2s）
-3. **无功能退化**：`tests/orchestrator/manual_e2e_f38.py` F-38 E2E 四种测试场景全通过
-4. **独立开关**：P0/P1 优化项默认开启，P2/P3 优化项默认关闭，`AgentConfig` 中以 `perf_*` 前缀控制
-5. **稳定性门禁**：`tests/stability_gate/` 全量测试通过
-
----
+> ✅ 已归档至 [ARCHIVED_PROGRESS.md](./ARCHIVED_PROGRESS.md)
 
 ## 十七、PowerShell 支持增强（F-107）
 

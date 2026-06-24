@@ -6923,6 +6923,916 @@ class PipeClient:
 - TUI 扩展点用于 `/pipes` 面板（Textual Screen override）
 - UDS 路径 `~/.clawcodex/pipes/*.sock`
 
+
+
+## 新归档条目（FEATURE_PLAN v3.18）
+
+#### 1.4.2 Issue 会话统一存储与实时介入协议（F-49 ✅）
+
+**状态**: ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地）
+**状态**: ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G 已落地）
+**优先级**: P1
+**依赖**: F-21（后台运行 + 恢复同步）、F-38（验证与报告闭环）、F-40（ProgressReporter Sink 协议重构）
+
+##### 问题现状：两条互不兼容的事件路径
+
+当前系统存在**两套并行但不可互操作的事件记录系统**：
+
+| 维度 | 路径 A：正常 REPL 会话（`SessionStorage`） | 路径 B：Headless Issue Agent（旧格式 `_write_event_log` → 已统一） |
+|------|------|------|
+| 存储位置 | `~/.clawcodex/sessions/{sid}/` | 已统一为 `~/.clawcodex/sessions/{run_id}/`（与路径 A 相同） |
+| 格式 | `transcript.jsonl` — 每行一个 `Message` dict (`role`, `content` blocks, `tool_use_id`) | 已统一，同上格式 |
+| 可读性 | `session_resume.py` → `list[Message]` | 已统一 |
+| 配套设施 | `TailFollower`、`Session.load/resume`、`SessionStorage.read_transcript()` | 已统一 |
+| 可恢复性 | ✅ 可重建 LLM context | ✅ 已统一，可重建 LLM context |
+| 控制通道 | `asyncio.Event` + Unix socket（F-21） | 文件轮询 `{.orchestrator_control/{cmd}.control}`（待 F-54 Phase 1 统一） |
+
+**改造前**：Headless agent 写 `.event_logs/{id}.ndjson` 扁平 NDJSON；REPL 写 `transcript.jsonl`。两路不可互通。Observe/tail/takeover/resume 每个功能都需要在两条路径上重复实现。
+
+**F-49 Phase 0 已完成**：统一为 `~/.clawcodex/sessions/{run_id}/transcript.jsonl`，`.event_logs/` 已完全移除。
+
+##### 目标
+
+统一 headless agent 和 REPL 会话的存储格式，在此之上建立双向实时介入协议（Unix socket），使 operator 可以通过 `attach` CLI 观察、中断、接管、恢复 issue agent 的运行。
+
+| 场景 | F-49 Phase 0 后状态 | 目标状态（Phase 1+） |
+|------|-------------------|---------|
+| 实时观察 | `attach` CLI 读 `transcript.jsonl`（F-49） | `attach` CLI 通过 socket 流式接收 `TextDelta` / `ToolCallEvent` / `ToolResultEvent` / `PhaseComplete` |
+| Ctrl+C 中断 | ❌ 不支持（仅 `stop` 控制文件） | socket 发送 `pause` → agent 挂起等待 operator 输入 |
+| 人工接管 | ❌ 不支持 | `pause` 后 operator 键入 hint，agent 恢复后消费 |
+| `/resume` 恢复自动值守 | ❌ 不支持 | socket 发送 `resume`（可选附带 prompt）→ agent 继续 loop |
+| Session 恢复崩溃 | ✅ `SessionStorage` → `session_resume.resume_session()`（F-49 已完成） | 已达目标 |
+| detach | ❌ 不支持 | socket `detach` → agent 继续运行，operator 断开 |
+
+##### 核心设计
+
+```
+AgentRunner (headless)
+  │
+  ├── prompt → QueryRunner → LLM → events
+  │                                  │
+  │                                  ├── SessionStorage.write_raw(msg_dict)
+  │                                  │    └── ~/.clawcodex/sessions/{run_id}/transcript.jsonl
+  │                                  │         （同一格式，非 .event_logs/）
+  │                                  │
+  │                                  ├── event_bus (asyncio.Queue)
+  │                                  │    └── ControlSocket → Unix socket
+  │                                  │         └── attach CLI (TUI)
+  │                                  │
+  │                                  └── ProgressSink (F-40)
+  │
+  └── session.pause_resume_event (asyncio.Event)
+       └── ControlSocket → "pause" / "resume" / "inject"
+```
+
+##### 改造点清单
+
+**Phase 0 — 统一事件存储** ✅ 已完成
+
+| 文件 | 改动 | 状态 |
+|------|------|------|
+| `extensions/orchestrator/agent_runner.py` | `AgentSession` 增加 `session_storage: SessionStorage`；`run()` 中 `init_metadata(model, cwd, title)`；替换 `_write_event_log()` → `session_storage.write_raw(msg_dict)` + `flush()` | ✅ 完成 |
+| `extensions/orchestrator/agent_runner.py` | 删除 `_write_event_log()` 方法；删除 `.event_logs/` 目录创建逻辑 | ✅ 完成 |
+| `extensions/orchestrator/cli/issue.py` | `_run_tail` 改为读 `transcript.jsonl` | ✅ 完成 |
+| `src/services/session_storage.py` | 无改动（复用现有 `SessionStorage`） | ✅ 无需改动 |
+| (新增) `extensions/orchestrator/debug_log.py` | `append_debug_event()` — 写入 `.orchestrator_control/runs/{run_id}/debug.ndjson` | ✅ 完成 |
+
+统一后的效果：headless agent 的每个 tool_use / tool_result / text_delta **都以 Message dict 格式写入 session JSONL**，`TailFollower` 可以直接 follow，`session_resume` 可以直接重建 LLM context。
+
+**Phase 0.1 — Message 转录映射规则（F-49.0 核心契约）**
+
+Phase 0 只说"用 Message dict 格式写"，但未定义 `QueryEvent` 流 → `Message` dict 的具体映射规则。headless agent 的 `QueryRunner.stream()` 产出的是一系列扁平事件（`TextDelta` / `ToolCallEvent` / `ToolResultEvent`），它们必须被正确分组为 `role="assistant"` 和 `role="user"` 的 Message 才能写入 `SessionStorage`。
+
+**核心原则**：一次 LLM 响应（一个 agent turn）对应一个 `assistant` Message 和一个 `user` Message（含 tool results），遵循 `session_storage` 的 `write_message(Message)` 契约。
+
+```
+LLM 响应开始
+  ├── TextDelta(n) × N
+  ├── ToolCallEvent(tool_use_id=T1, tool_name="Read", params={...})
+  ├── TextDelta(m) × N
+  ├── ToolCallEvent(tool_use_id=T2, tool_name="Edit", params={...})
+  │
+  └── TurnComplete
+        │
+        ├── 组装成 AssistantMessage:
+        │     role="assistant"
+        │     content = [
+        │       TextBlock(text=concat(TextDelta...)),
+        │       ToolUseBlock(id=T1, name="Read", input={...}),
+        │       ToolUseBlock(id=T2, name="Edit", input={...}),
+        │     ]
+        │     ↓ session_storage.write(msg_dict)
+        │
+        ├── 等待 ToolResultEvent(s) 返回
+        │     ToolResultEvent(tool_use_id=T1, result={...})
+        │     ToolResultEvent(tool_use_id=T2, result={...})
+        │
+        └── 组装成 UserMessage:
+              role="user"
+              content = [
+                ToolResultBlock(tool_use_id=T1, content="..."),
+                ToolResultBlock(tool_use_id=T2, content="..."),
+              ]
+              ↓ session_storage.write(msg_dict)
+```
+
+**具体映射表**：
+
+| 事件序列 | Message 类型 | `content` 结构 |
+|----------|-------------|----------------|
+| 首个 turn 的 user prompt | `UserMessage` | `[TextBlock(text=prompt)]` — 在 `run()` 开始处写入 |
+| `TextDelta` × N + `ToolCallEvent` × 0 | `AssistantMessage` | `[TextBlock(text=concat(all deltas))]` |
+| `TextDelta` × N + `ToolCallEvent` × M | `AssistantMessage` | `[TextBlock(text=text_before_tool), ToolUseBlock(id=...), ...]` — 文本和 tool_use **交替排列**，按事件流顺序 |
+| `ToolResultEvent(tool_use_id, result)` × M | `UserMessage` | `[ToolResultBlock(tool_use_id="T1", content=json.dumps(result)), ...]` |
+| 后续 turn 的 continuation prompt | `UserMessage` | `[TextBlock(text=continuation_prompt)]` — 每轮 turn 开始处写入 |
+| `SessionComplete` | 不写 Message | 调用 `session_storage.flush()` 确保缓冲区落盘 |
+
+**关键实现约束**：
+
+1. **ToolResultEvent 可能乱序到达** — 必须按 `tool_use_id` 配对等待，不一定与 ToolCallEvent 顺序一致。使用 `dict[tool_use_id, ToolResultEvent]` 累积，直到所有已发出的 tool_use 都有 result 才组装 UserMessage。
+2. **TurnComplete 触发消息组装** — 不应在收到 ToolCallEvent 时就写 assistant message 的一半，而应在 TurnComplete 时才知道"这一轮 LLM 已输出结束"，此时组装完整的 assistant message 写入。
+3. **ToolResult 可能被 approval policy 拒绝** — 被拒绝的 tool call，其 `ToolResultEvent` 的 `is_error=True`。拒绝结果也要写入 `ToolResultBlock(content={"error": "Permission denied"})`，保证转录的完整性。
+4. **TextDelta 流中断情况** — 如果 LLM 在输出文本后响应突然中止（如连接断开），尚未收到 `TurnComplete`，当前累积的 `TextDelta` 内容不应丢失。应在下一个 turn 开始前或 `SessionComplete` 时强制 flush 一个残缺的 `AssistantMessage`。
+5. **大内容替换** — `SessionStorage.write_message()` 内部有 `_replace_large_content()` 自动将大 tool result 替换为文件引用，无需 AgentRunner 层额外处理。
+
+**与现有审计旁路（F-45 `events.ndjson`）的关系**：
+
+```
+AgentRunner.run() 事件循环
+  │
+  ├── ToolCallEvent: 写入 events.ndjson（F-45，8 字段，扁平审计）
+  │                  └── 不写 Message（等到 TurnComplete 再组）
+  │
+  ├── ToolResultEvent: 写入 events.ndjson（可选扩展）
+  │                    └── 暂存到 tool_result_buf[tool_use_id] ← 新增
+  │
+  ├── TurnComplete:
+  │     ├── 组 AssistantMessage → SessionStorage.write_raw(msg_dict)
+  │     ├── 组 UserMessage → SessionStorage.write_raw(msg_dict)  ← 依赖 tool_result_buf 已就绪
+  │     └── 清空 tool_result_buf
+  │
+  └── SessionComplete:
+        └── SessionStorage.flush()
+```
+| `F-38 git_sync` | Phase 0 无影响 — git_sync 操作 workspace git，不改 session 存储 |
+| `F-39 retry` | Phase 2 扩展 — retry 可携带 `--attach` 参数在新 run 上立即 attach |
+
+**Phase 0.2 — CLI 介入：会话恢复（--resume）+ 实时观察 + 问题追溯**
+
+统一格式后的核心收益：**`clawcodex --resume <run_id>` 可直接恢复 orchestrator headless agent run 的完整对话，进入交互式 REPL**，operator 可继续对话，新内容追加到同一 transcript。
+
+| 场景 | 机制 | 代码来源 |
+|------|------|---------|
+| **完整会话恢复（核心）** | `clawcodex --resume <run_id>` → `Session.resume(run_id)` 读取 transcript + metadata，重建 Conversation，进入交互式 REPL | `src.agent.session.Session.resume()` — 完全复用，0 改动 |
+| **TUI 实时增量观察** | `clawcodex --tui --resume <run_id>` → TailFollower 从 transcript 末尾输出增量 | `src.services.tail_follower.TailFollower` — 完全复用 |
+| **接管 agent run** | operator 在 REPL 中直接输入指令替代 headless agent 的下一 turn；退出可选 detach / finish / re-orchestrate | `Session.resume()` + 前台 REPL |
+| **崩溃恢复** | orchestrator 检测到 agent 进程退出后，用 `Session.resume()` 重建 context，在新的 `AgentRunner` 中继续 | `Session.resume()` → `session_resume.resume_session()` |
+| **只读追溯** | `issue transcript --run <run_id>` 文本输出对话历史，适合管道处理 | 新增 `_run_transcript` 子命令 |
+
+`--resume` 三种模式：
+
+```
+clawcodex --resume <run_id>               → 完整会话恢复，进入交互式 REPL
+clawcodex --tui --resume <run_id>         → TUI 模式，TailFollower 增量显示 + 可输入
+clawcodex --resume <run_id> --readonly    → 只读查看历史，不进入交互模式
+```
+
+并发安全：agent 已结束时正常恢复可写；agent 正在运行时 `--resume` 获得只读历史快照不干扰运行中 agent；需写入需通过 socket 先 pause。
+
+**Phase 0.3 — 大内容文件引用**
+
+复用 `SessionStorage._replace_large_content()` 内置行为，自动将大 tool result 替换为文件引用（存储于 `~/.clawcodex/sessions/<run_id>/content/`），AgentRunner 无需感知。
+
+验收标准：headless agent 的每轮 tool_use / tool_result / text_delta 以 Message dict 格式写入 session JSONL，`TailFollower` 可直接 follow，`session_resume` 可直接重建 LLM context。整个 Phase 0 不修改 `src/services/session_storage.py` 一行代码。
+
 ---
 
 
+---
+
+### 2.8 工具/Skill 调用统计（跨会话）（F-75 ✅）
+**状态**: 🔄 规划中
+**目标**: 通过追加日志（JSON Lines）实现轻量级跨会话工具和 Skill 调用统计，不支持实时查询
+
+#### 2.8.1 背景
+当前项目没有调用统计功能，无法了解工具和 Skill 使用分布情况。本特性解决跨会话数据持久化问题，工具和 Skill 共用同一日志 schema。
+
+#### 2.8.2 日志格式
+```
+~/.clawcodex/tool_stats.jsonl
+{"agent_id": "dev", "kind": "tool", "tool": "Read", "ts": 1748..., "dur_ms": 12.3, "ok": true}
+{"agent_id": "dev", "kind": "skill", "skill": "code_review", "ts": 1748..., "dur_ms": 3200.0, "ok": true}
+{"agent_id": "orchestrator-001", "kind": "tool", "tool": "Bash", "ts": 1748..., "dur_ms": 2300.0, "ok": false, "error": "timeout"}
+```
+
+#### 2.8.3 日志字段（统一 schema）
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `agent_id` | string | Agent 标识符（REPL 会话为 "main"，子 agent 按配置） |
+| `kind` | string | `"tool"` 或 `"skill"` |
+| `tool` | string \| null | 工具名称（kind=tool 时） |
+| `skill` | string \| null | Skill 名称（kind=skill 时） |
+| `ts` | float | Unix 时间戳（秒） |
+| `dur_ms` | float | 执行耗时（毫秒） |
+| `ok` | bool | 是否成功 |
+| `error` | string \| null | 错误信息（失败时） |
+| `params` | dict \| null | Skill 调用参数（kind=skill 时） |
+| `skill_version` | string \| null | Skill 版本（kind=skill 时） |
+
+#### 2.8.4 性能特性
+| 操作 | 性能影响 | 说明 |
+|------|---------|------|
+| 追加写入 | 极小 | 顺序追加是磁盘 I/O 最优模式 |
+| 文件过大后查询 | 较大 | 全量扫描，数据量大时需预聚合 |
+| 多进程并发写 | 中等 | 建议单进程内汇聚后批量写入 |
+
+#### 2.8.5 架构设计
+```
+src/tool_system/
+└── stats.py                    # 统计模块（新）
+    ├── record(name, dur_ms, ok, error, *, kind, params, version)  # 统一记录
+    ├── get_stats()             # 查询汇总（读取日志文件聚合）
+    └── _write_buffered()       # 批量写入
+
+注入点:
+  agent_loop.py                 # 工具执行完成后调用 record(kind="tool")
+  skills/loader.py             # Skill 执行完成后调用 record(kind="skill")
+```
+
+#### 2.8.6 查询示例
+```bash
+
+---
+
+## 八、Multi-Session 可视化分析平台（F-91~F-96 ✅）
+
+**状态**: ✅ 开发完成 | **优先级**: P0 | **代码**: 100% ✅ 全部 110 测试通过
+
+### 8.1 背景
+
+ClawCodex 当前缺少一个可视化的 Session 检视工具。每一次 Agent 执行都产生大量日志（transcript.jsonl、tool events、orchestrator report），但用户只能通过终端文本或逐行 grep 来理解执行过程。
+
+Multi-Session 可视化分析平台是一个独立的 Web 应用，通过甘特图时间轴的形式呈现每个 Session 中不同类型操作的执行时序、层级关系和性能指标，支持单 Session 调试到数十个 Session 批量对比。
+
+**设计文档引用**：
+- BE 集成方案：`多session可视化分析平台集成方案.md`（v3 定稿）
+- FE 产品设计：`多Session可视化分析平台设计文档-前端.md`（v3.1 定稿）
+
+### 8.2 架构总览
+
+```
+extensions/visualizer/
+├── __init__.py                  # v0.1.0
+├── server.py                    # 独立 FastAPI app（端口 8765，15+ API 端点 + 4 前端页面）
+├── ws.py                        # WebSocket live tail
+├── cli.py                       # clawcodex-dev viz 子命令
+├── orchestrator_link.py         # F-38/F-45/F-54 链接生成
+├── import_router.py             # 条件性 session 导入（--allow-import）
+├── models/
+│   └── viz_models.py            # 10 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats / ShareLink / ...）
+├── parsers/
+│   ├── session_parser.py        # SessionMetadata → viz 数据
+│   ├── transcript_parser.py     # 增量流式 JSONL 解析
+│   ├── multi_agent_parser.py    # mailbox cross-ref 推断
+│   └── tool_events_parser.py    # F-45 events.ndjson 解析
+├── builders/
+│   ├── gantt_data_builder.py    # 甘特图数据组装
+│   ├── timeline_builder.py      # 时间轴 bars（聚合各 parser 输出）
+│   ├── comparison_builder.py    # 跨 session 对比
+│   ├── stats_builder.py         # OperationStats 聚合
+│   ├── anomaly_builder.py       # F-51 no-op 阈值
+│   ├── export_builder.py        # PNG/SVG/JSON/PDF
+│   ├── agent_tree_builder.py    # 多 Agent 树（P0 简化版）
+│   ├── agent_tree_layout.py     # 多 Agent 瀑布布局（spawn/join/depth）
+│   ├── operation_categorizer.py # 操作分类（READ/EXECUTE/WRITE/ORCHESTRATE/OTHER）
+│   └── multi_session_view_builder.py  # 多 session 瀑布视图（F-95 前端 payload）
+├── templates/                   # 9 个 Jinja2 模板（零 npm）
+│   ├── base.html
+│   ├── index.html               # 甘特图主页面
+│   ├── session_row.html         # 单 Session 详情页
+│   ├── comparison.html          # 跨 Session 对比页面
+│   ├── multi_session.html       # 多 Session 瀑布视图
+│   ├── stats_bar.html
+│   ├── anomaly_panel.html
+│   ├── export_dialog.html
+│   └── status_bar.html
+├── static/
+│   ├── css/
+│   │   ├── style.css            # 主样式
+│   │   └── multi_session.css    # 瀑布视图专用样式
+│   └── js/
+│       ├── app.js               # 搜索/过滤/交互
+│       ├── gantt.js             # ECharts 甘特图
+│       ├── websocket.js         # 原生 WebSocket
+│       ├── utils.js             # 工具函数
+│       └── multi_session_view.js # 多 Session 瀑布视图（ECharts custom series）
+└── fixtures/                    # 示例数据
+    └── sample_session.json
+```
+
+**关键技术栈**：
+- Python: FastAPI + Jinja2 + ECharts CDN
+- 零 npm 依赖，全进 wheel，pip install 即用
+- 独立 FastAPI app（路径 B），预留 `mount_viz(app)` 供 F-82 未来合并
+
+### 8.3 子特性分解
+
+| 编号 | 子特性 | 状态 | 预计工作量 | 对应 Phase |
+|------|--------|:----:|:----------:|:----------:|
+| **F-91** | Visualizer 核心数据管道 | ✅ 已完成 | 3 周 | Phase 1 |
+| **F-91-A** | 5 个 Pydantic 模型（SessionVizData / TimelineBar / Anomaly / AgentTreeNode / OperationStats） | ✅ 已完成 | — | Phase 1 |
+| **F-91-B** | 4 个解析器（session / transcript / multi_agent / tool_events） | ✅ 已完成 | — | Phase 1 |
+| **F-91-C** | 7 个构建器（gantt / timeline / comparison / stats / anomaly / export / agent_tree） | ✅ 已完成 | — | Phase 1 |
+| **F-92** | Visualizer 后端 API + 实时推送 | ✅ 已完成 | 2 周 | Phase 2 |
+| **F-92-A** | 独立 FastAPI app + /api/viz/ 路由（15 个端点含 import/export/share） | ✅ 已完成 | — | Phase 2 |
+| **F-92-B** | WebSocket live tail（/api/viz/ws/sessions/{sid}） | ✅ 已完成 | — | Phase 2 |
+| **F-92-C** | 条件性导入（--allow-import, SSRF 校验）+ 导出（PNG/SVG/JSON/PDF） | ✅ 已完成 | — | Phase 2 |
+| **F-92-D** | 分享链接管理（POST/GET/DEL /api/viz/share） | ✅ 已完成 | — | Phase 2 |
+| **F-93** | Visualizer 前端（Jinja2 + ECharts CDN） | ✅ 已完成 | 2.5 周 | Phase 3 |
+| **F-93-A** | 甘特图主页面（相对/绝对/窗口时间轴三模式） | ✅ 已完成 | — | Phase 3 |
+| **F-93-B** | 搜索/筛选/异常面板/跨 session 对比页面 | ✅ 已完成 | — | Phase 3 |
+| **F-93-C** | 多 Agent 树（简化版） | ✅ 已完成 | — | Phase 3.5 |
+| **F-94** | CLI 集成 + workspace 扫描 | ✅ 已完成 | 1 周 | Phase 4 |
+| **F-94-A** | clawcodex-dev viz 子命令 | ✅ 已完成 | — | Phase 4 |
+| **F-94-B** | workspace 多租户（workspaces.json + 自动扫描） | ✅ 已完成 | — | Phase 4 |
+| **F-95** | Orchestrator 协同链接 + 分享链接持久化 | ✅ 已完成 | 1 周 | Phase 5 |
+| **F-95-A** | F-38 报告 / F-45 tool events / F-54 debug 链接 | ✅ 已完成 | — | Phase 5 |
+| **F-95-B** | 分享链接 v1.1 后端持久化（TTL 7天，磁盘 JSON 持久化）+ PDF 导出集成 | ✅ 已完成 | — | Phase 5 |
+| | **F-96** | **Orchestrator 实时看板接入（State Journal）** | ✅ **已完成** | 2 周 | Phase 6 |
+| | F-96-A | StateJournalWriter（orchestrator 写入器） | ✅ 已完成 | — | Phase 6 |
+| | F-96-B | StateJournalSink（ProgressSink 桥接） | ✅ 已完成 | — | Phase 6 |
+| | F-96-C | Visualizer 后端（OrchestratorStateParser + API + WS） | ✅ 已完成 | — | Phase 6 |
+| | F-96-D | Visualizer 看板前端页面 | ✅ 已完成 | — | Phase 6 |
+| | F-96-E | 现有 session 详情页增强（issue_id / verification） | ✅ 已完成 | — | Phase 6 |
+| | F-96-F | WebSocket 实时推送（state journal live tail） | ✅ 已完成 | — | Phase 6 |
+
+### 8.4 核心数据模型
+
+5 个 Pydantic 模型（与前端 TypeScript 类型一一对应）：
+
+| 模型 | 字段数 | 作用 |
+|------|:------:|------|
+| `SessionVizData` | 23 | session 主数据，含 stats / timeline / anomalies 聚合 |
+| `TimelineBar` | 13 | 单个操作条形（type, label, start/end time, agent_id, group_id, parent_id, status, duration_ms, depth） |
+| `Anomaly` | 6 | 异常记录（type, severity, session_id, description, timestamp, suggestion） |
+| `AgentTreeNode` | 9 | 多 Agent 树节点（agent_id, name, parent_id, children, session_ref, status, stats） |
+| `OperationStats` | 7 | 统计聚合（total_ops, by_type, avg_duration, max_concurrent, context_tokens） |
+
+### 8.5 API 端点（15 个）
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| GET | `/api/viz/health` | 健康检查 + `allow_import` 状态 |
+| GET | `/api/viz/workspaces` | 列出 workspaces |
+| GET | `/api/viz/workspaces/{id}/sessions?q=` | 搜索/列出 sessions |
+| GET | `/api/viz/sessions/{sid}` | 单个 session 完整 viz 数据 |
+| GET | `/api/viz/sessions/{sid}/stats` | 统计聚合 |
+| GET | `/api/viz/sessions/{sid}/anomalies` | 异常列表 |
+| GET | `/api/viz/sessions/{sid}/tree` | 多 Agent 树 |
+| GET | `/api/viz/sessions/{sid}/report` | F-38/F-45/F-54 链接 |
+| GET | `/api/viz/sessions/{sid}/export?format=` | 导出（png/svg/json） |
+| WS | `/api/viz/ws/sessions/{sid}` | WebSocket live tail |
+| POST | `/api/viz/import` | 导入外部 session（条件性） |
+| GET | `/api/viz/import/status/{task_id}` | 导入进度 |
+| GET | `/api/viz/compare?sessions=...` | 跨 session 对比数据 |
+| POST | `/api/viz/compare/export?format=pdf` | 对比报告导出 |
+| POST/DEL | `/api/viz/share` + `/api/viz/share/{id}` | 分享链接管理 |
+
+### 8.6 关键设计决策
+
+1. **F-82 路径 B**（独立 FastAPI app，不依赖 F-82），预留 `mount_viz(app)` 供未来合并
+2. **前端零 npm**：Jinja2 + ECharts CDN，全进 wheel，pip install 即用
+3. **F-54 正式路径**：`{workspace}/.orchestrator_control/runs/{run_id}/debug.ndjson`
+4. **增量流式解析**：`transcript_parser.py` 用 `file.seek` + `readlines`，不一次性 `read_all`
+5. **ECharts progressive: 5000**：大规模 session 降级策略
+6. **`--allow-import` 标志**：默认关闭，启用才开放导入端点
+7. **序列化约定**：FE ↔ BE 之间 camelCase ↔ snake_case 转换
+
+### 8.7 依赖与协同
+
+| 特性 | 关系 | 说明 |
+|------|------|------|
+| F-38（验证报告） | **被 consumer** | visualizer 显示 F-38 report links |
+| F-40（ProgressSink） | **被 consumer** | visualizer 订阅实时进度事件；**只接新 sink 协议**，不兼容旧 ProgressReporter 单例 |
+| F-45（tool events） | **被 consumer** | visualizer 读取 events.ndjson |
+| F-51（no-op 检测） | **复用** | anomaly_builder 复用 F-51 阈值 |
+| F-54（debug.ndjson） | **被 consumer** | visualizer 显示 debug 时序图 |
+| F-49（会话存储） | **被 consumer** | visualizer 从 SessionStorage 读取 |
+| F-82（Remote Control） | **无阻塞** | 路径 B 独立运行，F-82 上线后通过 `mount_viz()` 合并 |
+| **F-96（State Journal）** | **新增前置** | orchestrator 写入 `.reports/run_*/state_journal.ndjson`，visualizer 读取 |
+| SessionMetadata 字段补齐 | **前置依赖** | 缺 `end_time` / `context_tokens` / `detected_mode` / `config` |
+| MANIFEST.in 修复 | **前置依赖** | sdist 必须包含 extensions/*.py 和 extensions/*.json |
+
+### 8.8 实施建议顺序
+
+```
+Phase 1 (F-91) ──→ Phase 2 (F-92) ──→ Phase 3 (F-93) ──→ Phase 4 (F-94) ──→ Phase 5 (F-95)
+模型先行              API 可用             前端可用              CLI 集成           Orchestrator 协同
+(3 周)               (2 周)               (2.5 周)            (1 周)             (1 周)
+                                        ╰─ Phase 3.5: 多 Agent 树主线化 (1 周)
+```
+
+**预计总工期**：10.5 周（单人 full-time，不含 Phase 0 数据摸底 1 周）
+
+### 8.9 风险评估
+
+| 风险 | 可能性 | 影响 | 缓解措施 |
+|------|--------|------|---------|
+| 大型 Session 内存 OOM | 中 | 高 | 增量流式解析 + progressive 5000 |
+| F-54 路径最终不同 | 低 | 低 | _has_debug_ndjson 中已备 fallback 路径 |
+| 前端 ECharts 性能瓶颈 | 低 | 中 | Canvas 渲染 + dataZoom 降级 |
+| SessionMetadata 字段缺失 | 高 | 中 | 文档已备 transcript 聚合回退 |
+| URL 导入 SSRF 攻击 | 低 | 高 | 禁 localhost/私有 IP；仅 --allow-import 启用
+
+
+---
+
+
+### 8.10 Orchestrator 实时看板接入（F-96 ✅）
+
+**状态**: ✅ 已完成 | **优先级**: P0 | **预计工作量**: 2 周 | **类型**: 新特性
+
+#### 背景与问题
+
+Orchestrator 在处理 issue 时会产生大量运行时状态数据——issue 生命周期（pending → running → verification → success/failed）、Agent 执行进度、verification 结果、PR 状态。但目前这些数据只有 CLI 文本输出和文件日志两种消费方式，缺乏**实时可视化看板**。
+
+而 `extensions/visualizer` 已经具备完善的 Web UI（ECharts 甘特图、timeline、WebSocket 实时推送），但当前仅消费 Session 转录数据，**不能直接连接 orchestrator**。
+
+核心障碍：
+1. 无共享数据通道：orchestrator 写 `.reports/run_*/`，但 visualizer 只读 `sessions/` 和 `transcripts/`
+2. 无状态广播机制：orchestrator 的 `ProgressReporter` 是单例上下文，不向外暴露持久化流
+3. 无看板页面：visualizer 现有 9 个模板中无 orchestrator 运行看板
+
+#### 设计目标
+
+以最小侵入方式打通 orchestrator → visualizer 链路，让用户通过 visualizer Web UI 实时查看 orchestrator 处理 issue 的状态、Agent 进度、verification 结果和会话记录。
+
+设计原则：
+- **零侵入**：不在 orchestrator 主流程中引入 visualizer 依赖
+- **解耦**：orchestrator 仅负责写入，visualizer 仅负责读取
+- **渐进**：先实现基本看板，再逐步增强
+
+#### 数据通道：State Journal (NDJSON)
+
+采用共享文件作为解耦通道——orchestrator 将运行期状态事件写入一个 NDJSON 文件，visualizer 通过 HTTP 端点暴露该文件内容，WebSocket 实时推送增量。
+
+```
+orchestrator 侧                  visualizer 侧
+─────────────                    ─────────────
+AgentRunner._run_iteration()
+  └→ StateJournalWriter          ┌→ GET /api/viz/orchestrator/state
+       .write_event()            │→ WS /api/viz/orchestrator/ws/state
+       ┌→ .reports/run_*/        │→ OrchestratorStateParser
+       │   state_journal.ndjson ─┘      ↓
+       │                          OrchestratorDashboardData
+       │                          ┌→ 看板前端页面
+       │                          └→ session 详情页增强
+```
+
+**文件位置**: `{workspace}/.reports/run_{run_id}/state_journal.ndjson`
+
+**NDJSON Event 格式**:
+```json
+{"type": "phase", "timestamp": "...", "phase": "agent_run", "progress": "0.3", "message": "正在处理 Issue #42"}
+{"type": "issue_status", "timestamp": "...", "issue_id": "42", "status": "running"}
+{"type": "verification", "timestamp": "...", "issue_id": "42", "verification_status": "passed", "result": "✅ 验证通过"}
+{"type": "pr_status", "timestamp": "...", "issue_id": "42", "pr_url": "https://...", "pr_status": "open"}
+{"type": "session_ref", "timestamp": "...", "issue_id": "42", "session_id": "abc123", "session_path": "sessions/abc123/..."}
+{"type": "error", "timestamp": "...", "issue_id": "42", "error": "HookFailedError: pre-commit failed"}
+{"type": "complete", "timestamp": "...", "issue_id": "42", "overall_status": "success"}
+```
+
+#### 子特性分解
+
+| 编号 | 子特性 | 状态 |
+|:----:|--------|:----:|
+| **F-96-A** | **StateJournalWriter** — orchestrator 侧写入器，由 AgentRunner 在关键阶段调用 | ✅ 已完成 |
+| **F-96-A1** | `StateJournalWriter.__init__(run_dir)` — 打开 `state_journal.ndjson` | ✅ 已完成 |
+| **F-96-A2** | `write_event(event_dict)` — 追加一行 NDJSON | ✅ 已完成 |
+| **F-96-A3** | 集成到 `agent_runner.py` 的 `_run_iteration()` 各阶段 | ✅ 已完成 |
+| **F-96-B** | **StateJournalSink** — 实现 `ProgressSink` 协议，桥接 `ProgressReporter` → NDJSON | ✅ 已完成 |
+| **F-96-B1** | `StateJournalSink.on_phase_start/on_phase_update/on_phase_complete` | ✅ 已完成 |
+| **F-96-B2** | 注册到 `ProgressReporter` 的 `sinks` 列表 | ✅ 已完成 |
+| **F-96-C** | **Visualizer 后端** — 解析 + API + WebSocket | ✅ 已完成 |
+| **F-96-C1** | `OrchestratorStateParser` — 解析 `state_journal.ndjson` → `OrchestratorDashboardData` | ✅ 已完成 |
+| **F-96-C2** | `GET /api/viz/orchestrator/state` — 返回当前全量 dashboard | ✅ 已完成 |
+| **F-96-C3** | `WS /api/viz/orchestrator/ws/state` — 实时推送增量事件 | ✅ 已完成 |
+| **F-96-D** | **Visualizer 前端看板** | ✅ 已完成 |
+| **F-96-D1** | `orchestrator_dashboard.html` — 主看板页（issue 列表 + 状态 + 进度条） | ✅ 已完成 |
+| **F-96-D2** | `orchestrator_issue_row.html` — 单个 issue 卡片（含 verification 状态、PR 链接） | ✅ 已完成 |
+| **F-96-D3** | 状态指示器（导航栏 badge 显示 running/failed 计数） | ✅ 已完成 |
+| **F-96-E** | **现有 session 详情页增强** | ✅ 已完成 |
+| **F-96-E1** | `session_row.html` 显示 `issue_id` | ✅ 已完成 |
+| **F-96-E2** | `session_row.html` 显示 verification 摘要 | ✅ 已完成 |
+| **F-96-E3** | session ↔ issue 双向跳转链接 | ✅ 已完成 |
+| **F-96-F** | **小修** | ✅ 已完成 |
+| **F-96-F1** | `session_storage.py` snapshot 路径修复（`os.path.join` / `resolve()` 问题） | ✅ 已完成 |
+| **F-96-F2** | visualizer `session_parser.py` metadata 扩展（支持 `issue_id` / `verification_status`） | ✅ 已完成 |
+
+#### 改造点清单
+
+**Orchestrator 侧**（`src/orchestrator/` 或 `extensions/orchestrator/`）：
+
+1. 新增 `extensions/orchestrator/state_journal.py` — `StateJournalWriter` 类
+2. 新增 `extensions/orchestrator/progress_sink.py` 扩展 — `StateJournalSink` 类（实现 `ProgressSink` 协议）
+3. 修改 `extensions/orchestrator/orchestrator.py` — 在 `Orchestrator.__init__()` 中创建 `StateJournalSink` 并注册到 `ProgressReporter`
+4. 修改 `src/orchestrator/agent_runner.py` — 在 `_run_iteration()` 关键阶段调用 `state_journal.write_event()`
+   - `on_phase_start` → `type: "phase"`
+   - `on_phase_complete` → update progress
+   - issue_status 变化 → `type: "issue_status"`
+   - verification 结果 → `type: "verification"`
+   - PR 创建/更新 → `type: "pr_status"`
+   - 异常/失败 → `type: "error"`
+   - 完成 → `type: "complete"`
+
+**Visualizer 侧**（`extensions/visualizer/`）：
+
+1. 新增 `extensions/visualizer/orchestrator_parser.py` — `OrchestratorStateParser` 类
+2. 新增 `extensions/visualizer/templates/orchestrator_dashboard.html` — 看板主页面
+3. 新增 `extensions/visualizer/templates/orchestrator_issue_row.html` — issue 卡片组件
+4. 修改 `extensions/visualizer/server.py` — 增加 F-96 路由
+   - `GET /api/viz/orchestrator/state`
+   - `WS /api/viz/orchestrator/ws/state`
+   - `GET /viz/orchestrator/` — 看板页面
+   - `GET /api/viz/sessions/{sid}` 增强（返回 issue_id / verification）
+5. 修改 `extensions/visualizer/templates/session_row.html` — 显示 issue_id 和 verification 摘要
+
+#### 验收标准
+
+1. orchestrator 处理 issue 时，`state_journal.ndjson` 正确生成并包含所有阶段事件
+2. `GET /api/viz/orchestrator/state` 返回完整的 dashboard 数据（issue 列表、状态、进度）
+3. WebSocket 实时推送 orchestrator 状态变更
+4. 看板页面显示 issue 列表，每个 issue 显示：状态、进度条、verification 结果、PR 链接
+5. session 详情页显示关联的 `issue_id` 和 verification 摘要
+6. session ↔ issue 可以双向跳转
+7. orchestrator 失败时看板显示错误状态
+
+#### 关键设计决策
+
+1. **共享文件解耦**：选择 NDJSON 文件而非 IPC（UDS/pipe）作为数据通道。理由：orchestrator 和 visualizer 是独立进程，共享文件不需要修改进程间通信协议，故障隔离性好。
+2. **WebSocket 推送**：visualizer 通过 `watchdog` 或 `inotify` 监听 NDJSON 文件变更，通过 WebSocket 推送给前端。当 visualizer 与 orchestrator 在同一节点时效率最高。
+3. **无依赖方向**：orchestrator 不 import visualizer，visualizer 不 import orchestrator。唯一共享约定是 NDJSON 事件格式。
+4. **不修改 SessionMetadata 模型**：issue_id 和 verification 信息在 visualizer 侧通过 state_journal 关联，不污染 SessionMetadata 核心模型。
+5. **向后兼容**：无 state_journal.ndjson 时，看板页面显示 "no active orchestrator run"。
+
+#### 依赖与协同
+
+| 特性 | 关系 | 说明 |
+|------|------|------|
+| F-38（验证报告） | **数据源** | verification 结果写入 state_journal |
+| F-40（ProgressSink） | **复用协议** | StateJournalSink 实现 ProgressSink 接口 |
+| F-45（tool events） | **可复用** | 看板可链接到 tool events 详情页 |
+| F-49（会话存储） | **数据源** | session_ref 类型事件关联 session |
+| F-54（debug.ndjson） | **可复用** | 看板可链接到 debug 时序图 |
+| F-95（协同链接） | **增强** | 看板页集成已有的 F-38/F-45/F-54 链接 |
+
+#### 实施建议顺序
+
+1. **Phase 1**（3-4 天）：`StateJournalWriter` + `StateJournalSink` + orchestrator 集成
+2. **Phase 2**（2-3 天）：`OrchestratorStateParser` + API 端点 + WebSocket
+3. **Phase 3**（2-3 天）：看板前端页面 + session 详情页增强
+4. **Phase 4**（1 天）：测试 + 边界情况处理（无 orchestrator 运行、文件写错误等）
+
+
+---
+
+### 8.10 Orchestrator 实时看板接入（F-96 ✅）
+
+**状态**: ✅ 已完成 | **优先级**: P0 | **预计工作量**: 2 周 | **类型**: 新特性
+
+#### 背景与问题
+
+Orchestrator 在处理 issue 时会产生大量运行时状态数据——issue 生命周期（pending → running → verification → success/failed）、Agent 执行进度、verification 结果、PR 状态。但目前这些数据只有 CLI 文本输出和文件日志两种消费方式，缺乏**实时可视化看板**。
+
+而 `extensions/visualizer` 已经具备完善的 Web UI（ECharts 甘特图、timeline、WebSocket 实时推送），但当前仅消费 Session 转录数据，**不能直接连接 orchestrator**。
+
+核心障碍：
+1. 无共享数据通道：orchestrator 写 `.reports/run_*/`，但 visualizer 只读 `sessions/` 和 `transcripts/`
+2. 无状态广播机制：orchestrator 的 `ProgressReporter` 是单例上下文，不向外暴露持久化流
+3. 无看板页面：visualizer 现有 9 个模板中无 orchestrator 运行看板
+
+#### 设计目标
+
+以最小侵入方式打通 orchestrator → visualizer 链路，让用户通过 visualizer Web UI 实时查看 orchestrator 处理 issue 的状态、Agent 进度、verification 结果和会话记录。
+
+设计原则：
+- **零侵入**：不在 orchestrator 主流程中引入 visualizer 依赖
+- **解耦**：orchestrator 仅负责写入，visualizer 仅负责读取
+- **渐进**：先实现基本看板，再逐步增强
+
+#### 数据通道：State Journal (NDJSON)
+
+采用共享文件作为解耦通道——orchestrator 将运行期状态事件写入一个 NDJSON 文件，visualizer 通过 HTTP 端点暴露该文件内容，WebSocket 实时推送增量。
+
+```
+orchestrator 侧                  visualizer 侧
+─────────────                    ─────────────
+AgentRunner._run_iteration()
+  └→ StateJournalWriter          ┌→ GET /api/viz/orchestrator/state
+       .write_event()            │→ WS /api/viz/orchestrator/ws/state
+       ┌→ .reports/run_*/        │→ OrchestratorStateParser
+       │   state_journal.ndjson ─┘      ↓
+       │                          OrchestratorDashboardData
+       │                          ┌→ 看板前端页面
+       │                          └→ session 详情页增强
+```
+
+**文件位置**: `{workspace}/.reports/run_{run_id}/state_journal.ndjson`
+
+**NDJSON Event 格式**:
+```json
+{"type": "phase", "timestamp": "...", "phase": "agent_run", "progress": "0.3", "message": "正在处理 Issue #42"}
+{"type": "issue_status", "timestamp": "...", "issue_id": "42", "status": "running"}
+{"type": "verification", "timestamp": "...", "issue_id": "42", "verification_status": "passed", "result": "✅ 验证通过"}
+{"type": "pr_status", "timestamp": "...", "issue_id": "42", "pr_url": "https://...", "pr_status": "open"}
+{"type": "session_ref", "timestamp": "...", "issue_id": "42", "session_id": "abc123", "session_path": "sessions/abc123/..."}
+{"type": "error", "timestamp": "...", "issue_id": "42", "error": "HookFailedError: pre-commit failed"}
+{"type": "complete", "timestamp": "...", "issue_id": "42", "overall_status": "success"}
+```
+
+#### 子特性分解
+
+| 编号 | 子特性 | 状态 |
+|:----:|--------|:----:|
+| **F-96-A** | **StateJournalWriter** — orchestrator 侧写入器，由 AgentRunner 在关键阶段调用 | ✅ 已完成 |
+| **F-96-A1** | `StateJournalWriter.__init__(run_dir)` — 打开 `state_journal.ndjson` | ✅ 已完成 |
+| **F-96-A2** | `write_event(event_dict)` — 追加一行 NDJSON | ✅ 已完成 |
+| **F-96-A3** | 集成到 `agent_runner.py` 的 `_run_iteration()` 各阶段 | ✅ 已完成 |
+| **F-96-B** | **StateJournalSink** — 实现 `ProgressSink` 协议，桥接 `ProgressReporter` → NDJSON | ✅ 已完成 |
+| **F-96-B1** | `StateJournalSink.on_phase_start/on_phase_update/on_phase_complete` | ✅ 已完成 |
+| **F-96-B2** | 注册到 `ProgressReporter` 的 `sinks` 列表 | ✅ 已完成 |
+| **F-96-C** | **Visualizer 后端** — 解析 + API + WebSocket | ✅ 已完成 |
+| **F-96-C1** | `OrchestratorStateParser` — 解析 `state_journal.ndjson` → `OrchestratorDashboardData` | ✅ 已完成 |
+| **F-96-C2** | `GET /api/viz/orchestrator/state` — 返回当前全量 dashboard | ✅ 已完成 |
+| **F-96-C3** | `WS /api/viz/orchestrator/ws/state` — 实时推送增量事件 | ✅ 已完成 |
+| **F-96-D** | **Visualizer 前端看板** | ✅ 已完成 |
+| **F-96-D1** | `orchestrator_dashboard.html` — 主看板页（issue 列表 + 状态 + 进度条） | ✅ 已完成 |
+| **F-96-D2** | `orchestrator_issue_row.html` — 单个 issue 卡片（含 verification 状态、PR 链接） | ✅ 已完成 |
+| **F-96-D3** | 状态指示器（导航栏 badge 显示 running/failed 计数） | ✅ 已完成 |
+| **F-96-E** | **现有 session 详情页增强** | ✅ 已完成 |
+| **F-96-E1** | `session_row.html` 显示 `issue_id` | ✅ 已完成 |
+| **F-96-E2** | `session_row.html` 显示 verification 摘要 | ✅ 已完成 |
+| **F-96-E3** | session ↔ issue 双向跳转链接 | ✅ 已完成 |
+| **F-96-F** | **小修** | ✅ 已完成 |
+| **F-96-F1** | `session_storage.py` snapshot 路径修复（`os.path.join` / `resolve()` 问题） | ✅ 已完成 |
+| **F-96-F2** | visualizer `session_parser.py` metadata 扩展（支持 `issue_id` / `verification_status`） | ✅ 已完成 |
+
+#### 改造点清单
+
+**Orchestrator 侧**（`src/orchestrator/` 或 `extensions/orchestrator/`）：
+
+1. 新增 `extensions/orchestrator/state_journal.py` — `StateJournalWriter` 类
+2. 新增 `extensions/orchestrator/progress_sink.py` 扩展 — `StateJournalSink` 类（实现 `ProgressSink` 协议）
+3. 修改 `extensions/orchestrator/orchestrator.py` — 在 `Orchestrator.__init__()` 中创建 `StateJournalSink` 并注册到 `ProgressReporter`
+4. 修改 `src/orchestrator/agent_runner.py` — 在 `_run_iteration()` 关键阶段调用 `state_journal.write_event()`
+   - `on_phase_start` → `type: "phase"`
+   - `on_phase_complete` → update progress
+   - issue_status 变化 → `type: "issue_status"`
+   - verification 结果 → `type: "verification"`
+   - PR 创建/更新 → `type: "pr_status"`
+   - 异常/失败 → `type: "error"`
+   - 完成 → `type: "complete"`
+
+**Visualizer 侧**（`extensions/visualizer/`）：
+
+1. 新增 `extensions/visualizer/orchestrator_parser.py` — `OrchestratorStateParser` 类
+2. 新增 `extensions/visualizer/templates/orchestrator_dashboard.html` — 看板主页面
+3. 新增 `extensions/visualizer/templates/orchestrator_issue_row.html` — issue 卡片组件
+4. 修改 `extensions/visualizer/server.py` — 增加 F-96 路由
+   - `GET /api/viz/orchestrator/state`
+   - `WS /api/viz/orchestrator/ws/state`
+   - `GET /viz/orchestrator/` — 看板页面
+   - `GET /api/viz/sessions/{sid}` 增强（返回 issue_id / verification）
+5. 修改 `extensions/visualizer/templates/session_row.html` — 显示 issue_id 和 verification 摘要
+
+#### 验收标准
+
+1. orchestrator 处理 issue 时，`state_journal.ndjson` 正确生成并包含所有阶段事件
+2. `GET /api/viz/orchestrator/state` 返回完整的 dashboard 数据（issue 列表、状态、进度）
+3. WebSocket 实时推送 orchestrator 状态变更
+4. 看板页面显示 issue 列表，每个 issue 显示：状态、进度条、verification 结果、PR 链接
+5. session 详情页显示关联的 `issue_id` 和 verification 摘要
+6. session ↔ issue 可以双向跳转
+7. orchestrator 失败时看板显示错误状态
+
+#### 关键设计决策
+
+1. **共享文件解耦**：选择 NDJSON 文件而非 IPC（UDS/pipe）作为数据通道。理由：orchestrator 和 visualizer 是独立进程，共享文件不需要修改进程间通信协议，故障隔离性好。
+2. **WebSocket 推送**：visualizer 通过 `watchdog` 或 `inotify` 监听 NDJSON 文件变更，通过 WebSocket 推送给前端。当 visualizer 与 orchestrator 在同一节点时效率最高。
+3. **无依赖方向**：orchestrator 不 import visualizer，visualizer 不 import orchestrator。唯一共享约定是 NDJSON 事件格式。
+4. **不修改 SessionMetadata 模型**：issue_id 和 verification 信息在 visualizer 侧通过 state_journal 关联，不污染 SessionMetadata 核心模型。
+5. **向后兼容**：无 state_journal.ndjson 时，看板页面显示 "no active orchestrator run"。
+
+#### 依赖与协同
+
+| 特性 | 关系 | 说明 |
+|------|------|------|
+| F-38（验证报告） | **数据源** | verification 结果写入 state_journal |
+| F-40（ProgressSink） | **复用协议** | StateJournalSink 实现 ProgressSink 接口 |
+| F-45（tool events） | **可复用** | 看板可链接到 tool events 详情页 |
+| F-49（会话存储） | **数据源** | session_ref 类型事件关联 session |
+| F-54（debug.ndjson） | **可复用** | 看板可链接到 debug 时序图 |
+| F-95（协同链接） | **增强** | 看板页集成已有的 F-38/F-45/F-54 链接 |
+
+#### 实施建议顺序
+
+1. **Phase 1**（3-4 天）：`StateJournalWriter` + `StateJournalSink` + orchestrator 集成
+2. **Phase 2**（2-3 天）：`OrchestratorStateParser` + API 端点 + WebSocket
+3. **Phase 3**（2-3 天）：看板前端页面 + session 详情页增强
+4. **Phase 4**（1 天）：测试 + 边界情况处理（无 orchestrator 运行、文件写错误等）
+
+
+---
+
+## 十一、Agent 执行性能优化（F-105 ✅ / F-106 ✅）
+
+> **状态**: 🟢 P0 两项已落地（F-105 + F-106，2026-06-22） | **优先级**: P0 / P1 | **F-Number**: F-105, F-106
+>
+> **说明**：本章记录 ClawCodex Agent 在执行任务过程中识别的性能阻塞点及对应优化方案。基于 2026-06 代码审计，覆盖 orchestrator agent_runner、query 主循环、git_sync 同步管线及 LLM-provider 调用链。优化目标为：减少轮次间空闲开销、缩短无变更轮次延迟、降低事件分发摩擦。
+
+---
+
+### 11.1 背景与目标
+
+ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **turn**（一轮 LLM 调用 → 工具执行 → 结果回送）。典型业务流程：
+
+```
+启动 → 首轮初始化（~500ms）→ 压缩流水线 → LLM API 往返（2-30s）→ 工具执行（N × 10ms-30s）
+→ 事件分发（N × 0.5ms）→ 调试日志写入（N × 0.3ms）→ _should_continue API 调用（200-1500ms）
+→ git status（200-2000ms）→ 下一轮
+```
+
+对于 **含代码变更的轮次**，LLM API 往返（2-30s）是主导耗时，轮次边界开销（500ms-4s）相对可接受。但对于 **无变更轮次**（agent 认为工作已完成、空转检测触发等情形），轮次边界开销可能接近甚至超过 LLM 调用时间，成为明显的性能瓶颈。
+
+**优化目标**：
+- 无变更轮次：将轮次边界开销从 500ms-4s 降至 <200ms
+- 含变更轮次：将轮次边界开销控制在 <500ms
+- LLM 调用阶段：减少不必要的预热/决策/枚举开销
+
+---
+
+### 11.2 当前性能阻塞点
+
+#### 11.2.1 🔴 P0 — 每轮调用都有的持续性开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 每轮影响 |
+|---|--------|----------|------|---------|
+| 1 | **延迟请求门禁** `enforce_request_delay()` | `query.py:575-580` | 每次 LLM API 调用都执行 `from extensions.api.query_middleware import enforce_request_delay` + 空函数调用。默认 `delay_between_requests_ms=0` 时仍产生调用开销。 | 1-2ms |
+| 2 | **Advisor 模式决策** | `query.py:344-368` | 每次 `_call_model_sync` 都运行完整决策树：import settings → get_settings → `canonical_model_name()` → `decide_advisor_mode()`。即使 advisor 被禁用（`advisor_model=""`）仍执行 import + getattr 链。 | 2-5ms |
+| 3 | **压缩流水线（即使上下文远低于限制）** | `query.py:1414-1437` | 每轮执行完整的 `run_compression_pipeline(messages)`（toolResultBudget → snip → microcompact → collapse → autocompact）。短对话场景纯浪费。**TS 上游在上下文低于阈值时跳过此步骤。** | 20-500ms（含 LLM 调用时更久） |
+| 4 | **三重事件分发路径** | `agent_runner.py:1069-1097, 1142-1170, 1202-1228` | 每个 `TextDelta` / `ToolCallEvent` / `ToolResultEvent` 都依次经过：(1) `status_dashboard.on_event()` (2) `session.event_queue.put_nowait()` (3) `control_socket.send_event()`。每个包在 `try/except Exception: pass` 中。一轮 20+ 事件 = 60 次 try/except 调用。 | N × 0.5ms（N=事件数） |
+| 5 | **调试日志 NDJSON 写入** | `agent_runner.py:1054-1064` | `append_debug_event()` 在事件循环的每个事件中调用 — 同步文件 I/O，需 `Path` 拼接 + `json.dumps`。 | N × 0.3ms（N=事件数） |
+| 6 | **_aggregate_lock 序列化安全工具** | `_dispatch_single_tool:1011` | `process_tool_result_block` + `compute_block_chars` 在 `_aggregate_lock` 临界区内执行，序列化所有并发安全工具（Read/Grep/Glob）。 | N × 0.5ms（临界区争用） |
+| 7 | **工具注册表枚举** | `query.py:436-469` | 每次 LLM 调用枚举所有工具构建 `tool_schemas` 列表：调用 `tool.prompt()` + `dict(tool.input_schema)` + 检查每个 `is_enabled()`。80+ 注册工具时累积明显。 | 5-10ms |
+
+#### 11.2.2 🔄 P1 — 轮次边界的网络/文件系统开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 每轮影响 |
+|---|--------|----------|------|---------|
+| 8 | **_should_continue — Tracker API 调用** | `agent_runner.py:1421-1424` | 每轮成功后调用 `tracker.fetch_issue_states_by_ids()` — 对 GitHub/Gitee/GitCode 进行 HTTP GET。 | 200-1500ms |
+| 9 | **`get_file_status()` — git status** | `agent_runner.py:1669-1670` | 每轮运行 `bool(get_file_status(workspace_path))`，内部执行 `git status`。大仓库（5000+ 文件）无更改时也需 500ms-2s。 | 200-2000ms |
+| 10 | **转录刷新 `_flush_turn_transcript` + `flush()`** | `agent_runner.py:1355-1363` | 每轮结束写入 SessionStorage（NDJSON 文件），同步文件 I/O。 | 10-100ms |
+
+#### 11.2.3 🟠 P2 — 会话/运行初始化的开销
+
+| # | 阻塞点 | 代码位置 | 描述 | 影响 |
+|---|--------|----------|------|------|
+| 11 | **首轮延迟初始化** | `agent_runner.py:948-1011` | 首轮聚合初始化：import `SessionStorage` → `init_metadata()` → import `ControlSocket` → `await cs.start()`（Unix 域套接字绑定）→ import `types.messages` → `create_user_message()`。各包 try/except 中。 | ~500ms |
+| 12 | **`sys.modules` 交换 facade** | `src/query/query.py`, `src/query/engine.py` | 通过 `importlib.import_module()` + `sys.modules[name] = ext_mod` 替换自身。首次导入有 ~10-50ms 开销，多个模块累积。 | 10-50ms（仅首次） |
+| 13 | **`run_verification` 测试命令** | `agent_runner.py:1489-1506, 1767` | agent 放弃时运行 `test_command`（如 `pytest -x`）。慢测试套件（>10s）增加最终轮次延迟。 | 0-30s（仅结束轮次） |
+
+#### 11.2.4 🔵 P3 — 特定情况/异常路径
+
+| # | 阻塞点 | 代码位置 | 描述 | 影响 |
+|---|--------|----------|------|------|
+| 14 | **429 指数退避** | `agent_runner.py:1280-1300` | 被限速时指数级睡眠。预期行为，但频繁限速可累积数分钟。 | 5s-数分钟 |
+| 15 | **`reactive_compact` 额外 LLM 调用** | `query.py:1735-1802` | 提示太长或媒体大小错误触发 `reactive_compact()` — 额外 LLM 调用来总结上下文。 | 5-30s（仅异常路径） |
+| 16 | **`_find_pr_fallback` O(n) PR 扫描** | `git_sync.py:264-269` | PR 创建未立即可见 number/url 时列出所有开 PR 按分支匹配。100+ 开 PR 仓库较慢。 | 1-5s（仅首次 PR） |
+| 17 | **`ensure_pull_request` + 报告双写** | `git_sync.py:248-306` | `ensure_pull_request` 网络调用后，`_write_report()` 被调用两次（PR 创建前和 PR 更新后），每次 markdown + JSON 双写。 | 50-200ms |
+
+---
+
+### 11.3 优化方案与优先级
+
+#### 11.3.1 P0 — 项目优先（预计 1-2 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **A: 轮询跳过缓存** — `_should_continue` 在连续 N 轮 issue 状态不变时跳过 API 调用，直接返回 active。N=3 默认，`AgentConfig` 可配。 | #8 | 小（1 函数） | 节省 200-1500ms/轮 | 低 — issue 状态变化延迟最多 3 轮 |
+| **B: 惰性压缩流水线** — 消息总字符不足上下文窗口 60% 时跳过 `run_compression_pipeline()`。 | #3 | 中（gate + 阈值） | 节省 20-500ms/轮 | 低 — 阈值可配，低于窗口不压缩 |
+| **C: git status 缓存** — 使用 `os.stat` 轮询文件 mtime，仅在本轮有 `Write`/`Edit` 工具执行记录时才运行 `get_file_status()`。无修改工具轮次直接返回 clean。 | #9 | 小（1 条件判断） | 节省 200-2000ms/轮 | 极低 — 仅在脏推测错误时多跑一轮 |
+
+#### 11.3.2 P1 — 快速见效（预计 3-5 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **D: 工具注册表缓存** — 会话期间工具列表不变时缓存 `tool.prompt()` + `input_schema`，每次 `_call_model_sync` 复用缓存的 `tool_schemas`。 | #7 | 小（LRU 缓存） | 节省 5-10ms/轮 | 低 — 运行时工具动态增减时需刷新 |
+| **E: 事件分发去重合并** — `TextDelta` 事件批量推送（每 100ms 合并一次），减少 `control_socket` 写入和 `status_dashboard` 调用。 | #4 | 中（批量合并） | 减少 50% 分发开销 | 中 — `TextDelta` 实时性略降，100ms 延迟可接受 |
+| **F: Debug 日志按需写入** — 仅当 `CLAWCODEX_DEBUG` 环境变量为真时写入 `debug.ndjson`；默认跳过 `append_debug_event` 的同步 I/O。 | #5 | 小（env guard） | 节省 N × 0.3ms/轮 | 低 — 与现有 diag 变量行为正交 |
+| **G: 转录刷新异步化** — `_flush_turn_transcript` 改为 `asyncio.create_task`，不阻塞事件循环。 | #10 | 中（异步化改造） | 节省 10-100ms/轮 | 中 — 异常不可达调用方需额外处理 |
+| **H: Advisor 决策缓存** — 会话开始时决策一次，将 `advisor_mode` / `advisor_model_normalized` 存入 `session_state`，后续轮次复用。 | #2 | 小（1 次缓存） | 节省 2-5ms/轮 | 低 — advisor 不支持运行时切换 |
+
+#### 11.3.3 P2 — 中收益（预计 5-8 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **I: 首轮初始化预加载** — 在 `session.run_id` 构造完成后的 async gap 中提前初始化 `SessionStorage`，避免首轮 `while` 循环中阻塞。 | #11 | 中（异步预加载） | 节省 ~500ms（启动） | 低 — 为首轮创建异步任务即可 |
+| **J: 延迟请求门禁合并** — 将 `enforce_request_delay()` 内联到 `_call_model_sync` 的条件判断中，避免模块导入 + 函数调用。仅当 delay > 0 时才执行时间计算。 | #1 | 小（inline） | 节省 1-2ms/轮 | 极低 |
+| **K: `_aggregate_lock` 无竞争短路** — `tool_result_chars_so_far = 0` 且块远小于 200K 阈值时跳过锁。 | #6 | 小（CAS 风格） | 节省并发工具争用 | 低 — 需保证计数器读一致性 |
+| **L: sys.modules 交换移除** — 将 facade 模块替换为直接 import `clawcodex_ext` 的对应模块，避免 `importlib.import_module` + `sys.modules` 赋值。 | #12 | 大（全量替换 import） | 节省 10-50ms（启动） | 高 — 影响整个 import 图，需全量测试 |
+
+#### 11.3.4 P3 — 低收益 / 长周期（预计 >8 天）
+
+| 方案 | 对应阻塞点 | 改动量 | 预期收益 | 风险 |
+|------|-----------|--------|---------|------|
+| **M: PR 双写去重** — `_write_report()` 在 `update_pull_request` 前只写 `.tmp`；`update_pull_request` 后 rename 为 `.md` + 写 `.json`，避免一次完整双写。 | #17 | 小（rename 改造） | 节省 50-100ms（仅 PR 路径） | 低 |
+| **N: `_find_pr_fallback` 缓存** — 缓存最近一次 `list_open_prs` 结果，短时间内复用。 | #16 | 小（TTL 缓存） | 节省 1-5s（仅首次 PR） | 低 — 短 TTL（30s）足够 |
+| **O: 非 Anthropic Provider 系统提示缓存** — 非 Anthropic 提供商的 `flattened` 系统提示在会话期间不变，可在首轮缓存。 | —（隐含在 provider 调用路径） | 中 | 节省 1-3ms/轮 | 低 — 需监听 provider 切换事件 |
+
+---
+
+### 11.4 验收标准
+
+1. **性能门禁**：新增 `test_stage7_perf_turn.py`，度量空轮次（max_turns=1, test_command=""）的完成时间 < 2s
+2. **回归检测**：原有 `test_stage6_perf.py` 的所有测试仍通过（CLI --help < 3s, Conversation import < 2s）
+3. **无功能退化**：`tests/orchestrator/manual_e2e_f38.py` F-38 E2E 四种测试场景全部通过
+4. **每项优化独立开关**：P0/P1 优化项默认开启，P2/P3 优化项默认关闭；`AgentConfig` 中以 `perf_*` 前缀的可配置选项控制
+5. **稳定性门禁**：`tests/stability_gate/` 全量测试通过
+
+---
+
+### 11.5 依赖与协同
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| F-38 验证门 | 参考 | 性能优化的无退化验证依赖 F-38 E2E 测试 |
+| F-49 会话存储 | 参考 | 转录刷新异步化（G）依赖 F-49 的 SessionStorage 接口稳定 |
+| F-99 中断响应 | 参考 | 事件分发去重（E）需与 F-99 控制套接字协调避免冲突 |
+| `test_stage6_perf.py` | 参考 | 新增性能门禁应与已有 stage6 性能守卫对齐 |
+| `test_stage7_*` 目录 | 新建 | 新增 stage7（性能优化专测）目录 |
+
+---
+
+### 11.6 实施建议顺序
+
+1. **Phase 1**（2-3 天）：P0 三项（A: 轮询跳过缓存, B: 惰性压缩流水线, C: git status 缓存）— 收益最高，改动最小
+2. **Phase 2**（3-5 天）：P1 五项（D: 工具注册表缓存, E: 事件分发去重, F: Debug 日志按需写入, G: 转录刷新异步化, H: Advisor 决策缓存）
+3. **Phase 3**（5-8 天）：P2 四项（I: 首轮初始化预加载, J: 延迟请求门禁合并, K: 无竞争锁短路, L: sys.modules 交换移除 — 可选高收益低风险项）
+4. **Phase 4**（>8 天）：P3 三项（M: PR 双写去重, N: `_find_pr_fallback` 缓存, O: 系统提示缓存）
+5. **Phase 5**（2-3 天）：性能门禁编写 + 回归测试 + `AgentConfig` perf_* 配置项补充
+
+---
+
+
+---
+
+---
+
+## F-2: Team 成员管理
+
+### 2.2 Team 成员管理（Phase-7）（F-2 ✅）
+**状态**: ✅ 已完成
+**目标**: TeamCreate 扩展 `members` 数组，跟踪团队成员 Agent
+
+> SendMessage + resume_agent 恢复已完成（`src/agent/resume_agent.py`），TeamCreate/TeamDelete 待实现
+
+#### 2.2.1 数据模型
+```json
+{
+  "team_name": "backend-team",
+  "lead_agent_id": "a1b2c3d4e5f6",
+  "members": [
+    {
+      "agent_id": "g7h8i9j0k1l2",
+      "name": "auth-dev",
+      "agent_type": "general-purpose",
+      "description": "认证模块开发",
+      "status": "running",
+      "joined_at": "2026-05-17T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### 2.2.2 核心机制
+| 机制 | 说明 |
+|------|------|
+| TeammateInit | `agent(run_in_background=true)` 时自动注册到 `members` |
+| 状态同步 | TaskOutput 显示 completed/failed 时更新成员状态 |
+| 名称注册 | Agent 名称冲突检测 `agent_name_registry` |
+| 递归 Fork 保护 | Fork Agent 无法嵌套调用 Fork |
+
+#### 2.2.3 实现文件
+| 文件 | 状态 |
+|------|------|
+| `tool_system/tools/team.py` | ✅ 已实现基础 TeamCreate/TeamDelete |
+| `tool_system/tools/agent.py` | ⚠️ 待集成 TeammateInit |
+| `services/swarm/agent_name_registry.py` | ✅ 已实现名称注册表 |
+
+#### 2.2.4 测试覆盖
+| 测试文件 | 测试用例 |
+|----------|----------|
+| `test_team_file.py` | `test_team_file_created_with_members_array`, `test_team_file_schema_members_array`, `test_team_file_missing_members_tolerated` |
+| `test_team_membership.py` | `test_is_team_lead_true_*`, `test_is_team_lead_false_*` |
+
+---
