@@ -1,7 +1,7 @@
 diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 --- a/agent/agent_tool_utils.py	2026-06-18 10:10:15.452313 +0000
-+++ b/agent/agent_tool_utils.py	2026-06-22 09:03:22.052525 +0000
-@@ -1,348 +1,17 @@
++++ b/agent/agent_tool_utils.py	2026-06-24 06:34:18.537517 +0000
+@@ -1,348 +1,18 @@
 -"""Agent tool filtering and resolution utilities.
 +"""Facade — agent/agent_tool_utils.py moved to clawcodex_ext.agent.agent_tool_utils (sys.modules swap).
  
@@ -14,15 +14,13 @@ diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 +underlying ext module as the canonical object so attribute access,
 +``inspect.getsource()``, and AST walking keep working unchanged.
  """
- from __future__ import annotations
- 
+-from __future__ import annotations
+-
 -import logging
 -import time
 -from dataclasses import dataclass, field
 -from typing import Any
-+import importlib
-+import sys
- 
+-
 -from ..permissions.types import PermissionMode
 -from ..tool_system.build_tool import Tool, Tools, tool_matches_name
 -from ..types.content_blocks import ToolUseBlock
@@ -157,7 +155,7 @@ diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 -    resolved: list[Tool] = []
 -    resolved_set: set[str] = set()
 -    allowed_agent_types: list[str] | None = None
--
+ 
 -    for tool_spec in agent_tools:
 -        tool_name = _extract_tool_name(tool_spec)
 -        rule_content = _extract_rule_content(tool_spec)
@@ -352,8 +350,11 @@ diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 -    if paren_idx != -1:
 -        return tool_spec[:paren_idx].strip()
 -    return tool_spec.strip()
--
--
++from __future__ import annotations
+ 
++import importlib
++import sys
+ 
 -def _extract_rule_content(tool_spec: str) -> str | None:
 -    """Extract rule content from a spec like 'Tool(arg1, arg2)'."""
 -    paren_idx = tool_spec.find("(")

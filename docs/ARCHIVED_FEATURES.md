@@ -7836,3 +7836,368 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | `test_team_membership.py` | `test_is_team_lead_true_*`, `test_is_team_lead_false_*` |
 
 ---
+
+## 二十八、全场景会话恢复统一闭包（F-49 Phase 0.4 ✅ — Session Resume 统一）
+
+> 归档来源: FEATURE_PLAN.md §1.4.3 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+**状态**: ✅ 已完成
+**优先级**: P1
+**依赖**: F-49 Phase 0 ~ 0.3（统一事件存储），F-21（后台运行 + 恢复同步）
+
+### 问题现状：SessionStorage 回退路径的消息缺失
+
+F-49 Phase 0 统一了事件存储格式（全部使用 `~/.clawcodex/sessions/{run_id}/transcript.jsonl`），但在 `--resume` 恢复链上仍然存在一个关键缺口：
+
+```
+Session.resume(sid)                          # src/agent/session.py:135
+  → Session.load(sid)                        # 尝试 ~/.clawcodex/sessions/{sid}.json
+    ├── 找到 → 返回完整 Session（含 Conversation.messages）✅
+    └── 未找到 → load_from_session_storage()  # 回退到 SessionStorage 目录格式
+         → 仅恢复 metadata（session_id, model, start/end time）
+         → conversation=Conversation()        # ← 空的！
+```
+
+| 消费方 | resume 后的处理 | 行为 |
+|--------|---------------|------|
+| **REPL** `repl/app.py:136` | `_sync_conversation_from_transcript()` 从 JSONL 重新填充 | ✅ 全量恢复 |
+| **TUI** `tui/app.py:229` | 仅 `if self.session.conversation.messages: self._replay_history()` | ❌ 格式 B 恢复后消息为空，不会 replay 历史 |
+| **CLI** `dispatch.py` | 无显式 transcript 同步 | ❌ 格式 B 恢复后 conversation 空 |
+| **Cron bg_runner** | 仅写 JSONL，不写 .json 快照 | ⚠️ 只能走 SessionStorage 回退 |
+| **Orchestrator** | 仅写 JSONL，不写 .json 快照 | ⚠️ 只能走 SessionStorage 回退 |
+
+核心矛盾：**CLI/TUI 的 `--resume` 对于 Cron/Orchestrator 写入的会话只能恢复出一个空壳**，必须依赖每个消费者自行补丁。
+
+### 目标
+
+彻底消除上述差距，使所有场景的 `--resume` 行为一致且可递归恢复：
+
+```
+所有写入方（CLI / REPL / TUI / Cron / Orchestrator）
+       │ 统一写 SessionStorage JSONL
+       ▼
+~/.clawcodex/sessions/<sid>/transcript.jsonl
+       │
+       ▼ --resume 统一消费
+Session.resume(sid) → 返回的 Session.conversation.messages 非空
+       │
+       ▼ 递归 resume
+再次 Session.resume(sid) → 与退出前状态一致
+```
+
+### 设计
+
+**A. `Session.resume()` 自愈修复（核心，一处修复全局生效）**
+
+在 `Session.resume()` 的 SessionStorage 回退路径末尾，增加从 JSONL 加载消息的逻辑：
+
+```python
+# load_from_session_storage 之后，conversation 为空时：
+if not loaded.conversation.messages:
+    try:
+        from src.services.session_storage import SessionStorage
+        storage = SessionStorage(session_id=session_id)
+        entries = storage.read_transcript()
+        from src.types.messages import message_from_dict
+        messages = [message_from_dict(e) for e in entries]
+        loaded.conversation.messages = messages
+    except Exception:
+        pass  # 不阻断 resume
+```
+
+效果：**一处修复，CLI/REPL/TUI/Cron/Orchestrator 全场景受益**。REPL 的 `_sync_conversation_from_transcript()` 将成为冗余（但保留作为防御性 double-check）。
+
+**B. `Session.save()` 双写一致性保障**
+
+当前 `Session.save()` 同时写 `.json` 快照 + JSONL。但对于从 SessionStorage 回退路径恢复的会话（conversation 通过 A 补全后），首次 `save()` 把 `.json` 快照写出来，后续 `--resume` 就走快路径 `Session.load()` 了。
+
+**C. 新增：Cron `background_runner.py` 运行结束写 `.json` 快照**
+
+```python
+# 在 _run_agent_headless() 末尾，调用 session.save() 写 .json 快照
+session.save()  # 让 agent 结束后也能通过快路径 --resume
+```
+
+**D. 新增：Orchestrator `agent_runner.py` 运行结束写 `.json` 快照**
+
+```python
+# 在 AgentRunner.run() 末尾，调用 session.save() 写 .json 快照
+session.save()
+```
+
+### 改造点清单
+
+**Phase 0.4.1 — 核心修复：`Session.resume()` 加载 JSONL 消息**（0.5 天）
+
+| 文件 | 改动 |
+|------|------|
+| `src/agent/session.py` | `Session.resume()` 的 SessionStorage 回退分支末尾，增加从 `SessionStorage.read_transcript()` 加载 messages 到 `conversation.messages` 的逻辑 |
+| `(无)` | 不修改 `load_from_session_storage()` / `session_persist.py` — 保持原有契约 |
+
+**Phase 0.4.2 — 统一 clean-up：移除冗余的 caller 侧 transcript 同步**（0.5 天）
+
+| 文件 | 改动 |
+|------|------|
+| `clawcodex_ext/repl/core.py` | 保留 `_sync_conversation_from_transcript()` 作为防御性 double-check；在方法开头检查若 `session.conversation.messages` 已非空则直接 return |
+| `clawcodex_ext/repl/app.py` | 无改动（仍保留 `_sync_conversation_from_transcript` 调用） |
+
+**Phase 0.4.3 — TUI resume 路径修复**（0.5 天）
+
+| 文件 | 改动 |
+|------|------|
+| `clawcodex_ext/tui/entrypoint.py` | `Session.resume()` 调用后，增加 `resume_session_with_tail()` 调用中的 transcript 消息加载（或依赖 Phase 0.4.1 核心修复已生效） |
+| `clawcodex_ext/tui/app.py` | `on_mount()` 中的 `if self.session.conversation.messages:` 改为无条件调用 `_replay_history()`（若 messages 为空则不渲染）或由核心修复保证非空 |
+
+**Phase 0.4.4 — CLI dispatch resume 路径修复**（0.5 天）
+
+| 文件 | 改动 |
+|------|------|
+| `clawcodex_ext/cli/dispatch.py` | `Session.resume()` 调用后，确保 `conversation.messages` 非空（若 Phase 0.4.1 已修复则自动生效） |
+
+**Phase 0.4.5 — Cron/Orchestrator 运行结束写 .json 快照**（1 天）
+
+| 文件 | 改动 |
+|------|------|
+| `clawcodex_ext/agent/background_runner.py` | `_run_agent_headless()` 末尾（finally 块中）调用 `session.save()` 确保 `.json` 快照写入 |
+| `extensions/orchestrator/agent_runner.py` | `run()` 末尾（SessionComplete / 异常退出时）调用 `session.save()` 确保 `.json` 快照写入 |
+
+**Phase 0.4.6 — 递归 resume 一致性验收**（0.5 天）
+
+| 文件 | 改动 |
+|------|------|
+| `tests/test_session_resume_unified.py` | 新增测试：orchestrator 场景的 JSONL → `Session.resume()` → `Session.save()` → 再次 `Session.resume()` → 消息与第一次一致 |
+
+### 消息流向全图
+
+```
+                    ┌─────────────────────────┐
+                    │  CLI / REPL / TUI 交互    │
+                    │  Session.save()           │
+                    │    → .json (快照)         │
+                    │    → JSONL (追加)         │
+                    └──────────┬──────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │  Cron bg_runner       │
+                    │  storage.write_msg()  │
+                    │    → JSONL (追加)     │
+                    │  结束 → session.save()│
+                    │    → .json (快照)     │
+                    └──────────┬──────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │  Orchestrator        │
+                    │  _flush_transcript() │
+                    │    → JSONL (追加)    │
+                    │  结束 → session.save()│
+                    │    → .json (快照)    │
+                    └──────────┴──────────────┘
+                                        │
+                                        ▼
+~/.clawcodex/sessions/<sid>/
+  ├── <sid>.json            # 全量快照（所有写入方最终都会产生）
+  └── <sid>/
+        ├── transcript.jsonl  # 追加日志（统一格式）
+        └── metadata.json
+
+                                        │
+                                        ▼
+                              Session.resume(<sid>)
+                                ├── Session.load() → .json 快照 ✅
+                                └── fallback → JSONL 加载消息 ✅ (Phase 0.4.1)
+```
+
+### 风险与约束
+
+| 风险 | 缓解措施 |
+|------|---------|
+| `Session.resume()` 的 SessionStorage fallback 路径加载 JSONL 后，`conversation.messages` 可能包含大量消息 | 加载后不截断 — `max_history` 仅在新 `add_message()` 时生效 |
+| JSONL 中的 malformed 行导致部分消息缺失 | 跳过 malformed 行并记录 warning |
+| `_sync_conversation_from_transcript()` 在 REPL 中变为冗余但仍被调用 | 加 early-return 检查，O(1) 开销 |
+| `session.save()` 从 Cron/Orchestrator 调用时可能缺失 provider / model 信息 | 在 `AgentRunner.run()` 中 `session.provider` 和 `session.model` 已设置 |
+
+### 已拟定的设计决定
+
+1. **核心修复在 `Session.resume()` 完成**（一处修复，全局受益），而非在每个消费者处加补丁。
+2. **`.json` 快照在 Cron/Orchestrator 结束时写入**，保证下次 resume 走快路径，同时也作为备份。
+3. **保留 REPL 的 `_sync_conversation_from_transcript()`**，改为防御性 double-check（early return 模式），不破坏现有行为。
+4. **不修改 `SessionStorage`** — 所有改动在消费侧（`Session.resume()`、`background_runner.py`、`agent_runner.py`）。
+5. **POS Converter 不涉及** — 它是编译期代码生成工具，不产生运行时会话日志。
+
+---
+
+## 二十九、会话格式分层参考图（全场景一览）（F-49 ✅）
+
+> 归档来源: FEATURE_PLAN.md §1.4.4 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+```
+Message 类型体系 (src/types/messages.py)
+┌───────────────────────────────────────────┐
+│  Message (role, content, uuid, timestamp) │
+│  ├── UserMessage                          │
+│  ├── AssistantMessage                     │
+│  ├── SystemMessage                        │
+│  └── ProgressMessage                      │
+│                                           │
+│  message_to_dict() / message_from_dict()  │
+│  ← 标准序列化契约                         │
+└───────────────────┬───────────────────────┘
+                    │
+════════════════════╪═══════════════════════════
+         运行时内存   │  持久化层
+                    │
+                    ▼
+┌───────────────────────────────────────────┐
+│  SessionStorage (src/services/             │
+│    session_storage.py)                     │
+│                                           │
+│  ~/.clawcodex/sessions/<sid>/             │
+│    ├── transcript.jsonl   ← JSONL 格式    │
+│    ├── metadata.json      ← SessionMetadata│
+│    └── content/           ← 大内容引用     │
+│                                           │
+│  write_message(Message) → message_to_dict │
+│    → f.write(json.dumps(msg_dict) + '\n') │
+│  read_transcript() → f.readlines()        │
+│    → message_from_dict(entry) → Message[] │
+└───────────────────┬───────────────────────┘
+                    │
+    ┌───────────────┼───────────────┐
+    │               │               │
+    ▼               ▼               ▼
+┌─────────┐  ┌──────────┐  ┌──────────────┐
+│ Session  │  │ .json    │  │ SessionStorage│
+│ .save()  │  │ 快照文件  │  │ JSONL 追加   │
+│ (双写)   │  │(快路径)   │  │(慢路径/增量) │
+└─────┬───┘  └────┬─────┘  └──────┬───────┘
+      │           │               │
+      └───────────┼───────────────┘
+                  │
+                  ▼
+         Session.resume(sid)
+           ├── Session.load()
+           │    (找到 .json → 快 ⚡)
+           └── load_from_session_storage()
+                + JSONL 消息加载 (Phase 0.4.1)
+                (未找到 .json → 但 JSONL 可用)
+                  → conversation.messages 非空 ✅
+```
+
+### 全场景 resume 能力矩阵（Phase 0.4 完成后）
+
+| 写入方 | 写入形式 | resume 快路径 | resume 慢路径 | 递归 resume |
+|--------|---------|:------------:|:------------:|:----------:|
+| CLI 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
+| REPL 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
+| TUI 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
+| Cron bg_runner | JSONL + 结束写 `.json` | ✅ (事后) | ✅ (运行中) | ✅ |
+| Orchestrator | JSONL + 结束写 `.json` | ✅ (事后) | ✅ (运行中) | ✅ |
+| POS Converter | 不适用 | N/A | N/A | N/A |
+
+---
+
+## 三十、session.json + transcript.jsonl 合并（F-49-E ✅）
+
+> 归档来源: FEATURE_PLAN.md §1.4.5 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+**状态**: ✅ 已完成
+**优先级**: P1
+**工作量**: 2-3天
+**依赖**: F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
+**特性标识**: F-49-P5
+
+### 问题现状：三文件的冗余与不一致风险
+
+当前每个会话目录 `~/.clawcodex/sessions/<sid>/` 包含 **3 个持久化文件**：
+
+| 文件 | 生产者 | 写策略 | 内容 |
+|------|--------|--------|------|
+| `session.json` | `Session.save()` | 覆写（会话退出时） | provider + 全量消息 + cost 块 |
+| `metadata.json` | `SessionStorage` | 覆写（每次变更） | model, cwd, title, tags, cost 等 |
+| `transcript.jsonl` | `SessionStorage.flush()` / `TranscriptWriter` | 追加写 | 逐行 Message dict + cost_block 事件 |
+
+核心问题：session.json 存全量消息数组，transcript.jsonl 也存逐行消息（磁盘 2×，且可能不一致）；provider 字段仅存在于 session.json；三条写路径 → 数据不一致风险高；cost 块双写两处。
+
+### 目标：从 3 文件减为 2 文件，消除消息冗余
+
+消除 `session.json` 全量消息转储，所有必要信息（provider + 消息 + cost）由 `transcript.jsonl` 单一文件承载。
+
+### 文件格式规范
+
+**`transcript.jsonl`**（增强格式）：
+- 第 1 行: `{"type":"session_init",...}` — 含 provider, model, created_at
+- 第 2~N 行: `{"type":"message",...}` / `{"type":"cost_block",...}`
+- 最后 1 行: `{"type":"session_snapshot",...}` — cost 快照
+
+**`metadata.json`**（精简摘要）：仅保留 session_id, model, title, start_time, last_updated, message_count, tags。
+
+### 改造点清单
+
+| 编号 | 文件 | 改动说明 | 工作量 |
+|:----:|------|---------|:------:|
+| P5-A | `src/agent/session.py` `save()` | 删除 session.json 写入；改为追加 `type:"session_snapshot"` 行到 transcript.jsonl | 0.5天 |
+| P5-B | `src/agent/session.py` `load()` | 改为读 transcript.jsonl：首行→provider/model/created_at；扫描 message 行→conversation；尾行→cost | 1天 |
+| P5-C | `src/services/cost_restore.py` | 改为读 transcript.jsonl 最后一行（`tail -1`）获取 cost 块 | 0.5天 |
+| P5-D | `src/agent/session.py` `resume()` | 依赖 P5-B 自动生效 | 0.25天 |
+| P5-E | `extensions/agent/session_persist.py` | 写入 transcript.jsonl 第 1 行 `session_init` | 0.5天 |
+| P5-F | `src/services/session_storage.py` | metadata.json 精简 | 0.5天 |
+| P5-G | `src/agent/transcript.py` | 可选：支持写入 `session_init` 类型行 | 0.25天 |
+| P5-H | 旧 session 迁移脚本 | `clawcodex-dev session migrate --from-3-file` | 1天 |
+
+### 验收标准
+
+1. REPL 交互 → exit → `Session.load()` 正确恢复 provider + 全量消息 + cost，无 session.json 依赖
+2. Cron bg_runner 运行结束后 transcript.jsonl 最后一行是 `session_snapshot`
+3. `cost_restore.restore_cost_state_for_session()` 从 transcript.jsonl `tail -1` 恢复 cost
+4. 旧 session.json 仅存在时自动降级读取
+5. 消息一致性：save → load → 再次 save → 再次 load，消息条数/顺序/uuid 完全一致
+
+---
+
+## 三十一、parentUuid 链 + walkChainBeforeParse 读取过滤（F-103 ✅）
+
+> 归档来源: FEATURE_PLAN.md §1.4.6 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+**状态**: ✅ 已完成
+**目标**: 引入 CCB 的 `parentUuid` 链式消息关联 + `walkChainBeforeParse` 字节级链裁剪，彻底消除 `/rewind`/fork/死分支导致的 on-disk 与 in-memory 状态不一致问题。
+
+### 问题现状
+
+| 场景 | ClawCodex 当前行为 | CCB 行为 |
+|------|-------------------|----------|
+| `/rewind` 后磁盘 | 旧消息仍在 transcript.jsonl，下次 --resume 恢复全部（含已回退的内容） | 旧消息是"死分支"，读路径自动跳过 |
+| `/rewind` 后新对话 | 新消息追加到末尾，与旧消息混在一起 | 新消息 `parentUuid` 指向回退目标 |
+| Fork 会话 | 复制/重写整个 transcript | 新会话 `parentUuid` 指向原会话 leaf |
+| `--resume` 恢复 | 全量读 → 全量重建（含死分支） | 字节级裁剪 → 只解析活跃链 |
+
+### 改造点清单
+
+| 子特性 | 文件 | 说明 | 状态 |
+|--------|------|------|:----:|
+| P103-A | `src/services/session_storage.py` | `write_message()`/`write_raw()` 增加 `parentUuid` 参数 | ✅ |
+| P103-B | `clawcodex_ext/agent/chain_filter.py` | 新增 `walk_chain_before_parse()` 字节级链裁剪 | ✅ |
+| P103-C | `clawcodex_ext/agent/chain_filter.py` | 新增 `build_conversation_chain()` 链重建 | ✅ |
+| P103-D | `clawcodex_ext/agent/session.py` | `read_transcript()` 集成链过滤 | ✅ |
+| P103-E | `extensions/agent/session_persist.py` | `save_to_session_storage()` 计算并写入 `parentUuid` | ✅ |
+| P103-F | `extensions/agent/session_persist.py` | `Session.save()` / `save_transcript()` 透传 `parentUuid` | ✅ |
+| P103-G | `clawcodex_ext/agent/session.py` | `Session.load()` / `resume()` 集成新读取路径 | ✅ |
+| P103-H | `clawcodex_ext/repl/core.py` | 适配（复用已有路径） | ✅ |
+| P103-I | `tests/test_session_f103_chain.py` | 22 测试覆盖全链路 | ✅ |
+| P103-J | 旧 session 兼容 | 无 `parentUuid` 时退化为全量读 | ✅ |
+
+### 验收标准
+
+1. 新格式写入 chain → 读取 chain 一致
+2. `/rewind` → 新消息形成分支 → `--resume` 只恢复活跃链，死分支不可见
+3. 死分支 < 50% 时跳过链过滤（小会话性能无退化）
+4. 旧格式 transcript 降级为全量读，消息完整
+5. 22/22 测试通过 + 245/245 stability gate 通过 + 0 src/ 文件修改（完全解耦）
+
+### 已拟定的设计决定
+
+1. `parentUuid` 是写入时计算，非读取时推导
+2. `walkChainBeforeParse` 作为字节级预过滤，不参与 JSON 解析
+3. 兼容旧格式通过检测 `parentUuid` 字段缺失
+4. `chain_filter=False` 保留给 Visualizer/遥测等需要完整数据的场景
+
+---

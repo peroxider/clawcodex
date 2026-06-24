@@ -1,0 +1,27 @@
+diff --git a/services/analytics/__init__.py b/services/analytics/__init__.py
+deleted file mode 100644
+--- a/services/analytics/__init__.py	2026-06-18 10:10:16.571472 +0000
++++ /dev/null
+@@ -1,22 +0,0 @@
+-"""Analytics subsystem.
+-
+-Event logging, session metadata, and event sinks.
+-Mirrors TypeScript analytics/ directory.
+-"""
+-from __future__ import annotations
+-
+-from .events import AnalyticsEvent, EventType, log_event
+-from .metadata import SessionAnalyticsMetadata, collect_session_metadata
+-from .sink import AnalyticsSink, ConsoleSink, FileSink, NullSink
+-
+-__all__ = [
+-    "AnalyticsEvent",
+-    "AnalyticsSink",
+-    "ConsoleSink",
+-    "EventType",
+-    "FileSink",
+-    "NullSink",
+-    "SessionAnalyticsMetadata",
+-    "collect_session_metadata",
+-    "log_event",
+-]

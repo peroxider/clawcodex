@@ -98,7 +98,7 @@
         - [依赖与协同](#依赖与协同)
     - [1.4.4 会话格式分层参考图（全场景一览）（F-49 ✅）](#144-会话格式分层参考图全场景一览f-49-)
         - [全场景 resume 能力矩阵（Phase 0.4 完成后）](#全场景-resume-能力矩阵phase-04-完成后)
-    - [1.4.5 session.json + transcript.jsonl 合并（F-49-P5 ✅）](#145-sessionjson--transcriptjsonl-合并f-49-p5-)
+    - [1.4.5 session.json + transcript.jsonl 合并（F-49-E ✅）](#145-sessionjson--transcriptjsonl-合并f-49-e-)
         - [问题现状：三文件的冗余与不一致风险](#问题现状三文件的冗余与不一致风险)
         - [目标：从 3 文件减为 2 文件，消除消息冗余](#目标从-3-文件减为-2-文件消除消息冗余)
         - [文件格式规范](#文件格式规范)
@@ -117,13 +117,13 @@
         - [风险与约束](#风险与约束-2)
         - [已拟定的设计决定](#已拟定的设计决定-1)
         - [依赖与协同](#依赖与协同-2)
-    - [1.5.1 声明式工作流引擎核心（F-1.10 📋）](#151-声明式工作流引擎核心f-110-)
-    - [1.5.2 StageRunner 适配器（F-1.11 📋）](#152-stagerunner-适配器f-111-)
-    - [1.5.3 GATE 门禁处理器（F-1.12 📋）](#153-gate-门禁处理器f-112-)
-    - [1.5.4 DECISION 决策处理器（F-1.13 📋）](#154-decision-决策处理器f-113-)
-    - [1.5.5 阶段契约验证器（F-1.14 📋）](#155-阶段契约验证器f-114-)
-    - [1.5.6 检查点与恢复（F-1.15 📋）](#156-检查点与恢复f-115-)
-    - [1.5.7 工作流可观测性集成（F-1.16 📋）](#157-工作流可观测性集成f-116-)
+    - [1.5.1 声明式工作流引擎核心（F-110 📋）](#151-声明式工作流引擎核心f-110-)
+    - [1.5.2 StageRunner 适配器（F-111 📋）](#152-stagerunner-适配器f-111-)
+    - [1.5.3 GATE 门禁处理器（F-112 📋）](#153-gate-门禁处理器f-112-)
+    - [1.5.4 DECISION 决策处理器（F-113 📋）](#154-decision-决策处理器f-113-)
+    - [1.5.5 阶段契约验证器（F-114 📋）](#155-阶段契约验证器f-114-)
+    - [1.5.6 检查点与恢复（F-115 📋）](#156-检查点与恢复f-115-)
+    - [1.5.7 工作流可观测性集成（F-116 📋）](#157-工作流可观测性集成f-116-)
     - [1.6.1 动态任务分解引擎（F-118 🔭）](#161-动态任务分解引擎f-118-)
   - [二、Agent 核心能力](#二agent-核心能力)
     - [2.1 Agent 阶段性进度汇报（F-20 ✅）](#21-agent-阶段性进度汇报f-20-)
@@ -212,13 +212,13 @@
   - [四、Architecture \& SDK 下沉](#四architecture--sdk-下沉)
     - [4.2 SOP 转换器源码固化设计（F-50 ✅）](#42-sop-转换器源码固化设计f-50-)
       - [4.2.1 SOP 转换器分组策略增强设计（F-55 ✅）](#421-sop-转换器分组策略增强设计f-55-)
-      - [4.2.2 工作流判别器（F-50.10 📋）](#422-工作流判别器f-5010-)
-      - [4.2.3 工作流结构提取器（F-50.11 📋）](#423-工作流结构提取器f-5011-)
-      - [4.2.4 阶段能力映射器（F-50.12 📋）](#424-阶段能力映射器f-5012-)
-      - [4.2.5 工作流 Schema 生成器（F-50.13 📋）](#425-工作流-schema-生成器f-5013-)
-      - [4.2.6 Agent 定义生成器（工作流模式扩展）（F-50.14 📋）](#426-agent-定义生成器工作流模式扩展f-5014-)
-      - [4.2.7 源码桥接器生成器（F-50.15 📋）](#427-源码桥接器生成器f-5015-)
-      - [4.2.8 提取器适配器库（F-50.16 📋）](#428-提取器适配器库f-5016-)
+      - [4.2.2 工作流判别器（F-50-A 📋）](#422-工作流判别器f-50-a-)
+      - [4.2.3 工作流结构提取器（F-50-B 📋）](#423-工作流结构提取器f-50-b-)
+      - [4.2.4 阶段能力映射器（F-50-C 📋）](#424-阶段能力映射器f-50-c-)
+      - [4.2.5 工作流 Schema 生成器（F-50-D 📋）](#425-工作流-schema-生成器f-50-d-)
+      - [4.2.6 Agent 定义生成器（工作流模式扩展）（F-50-E 📋）](#426-agent-定义生成器工作流模式扩展f-50-e-)
+      - [4.2.7 源码桥接器生成器（F-50-F 📋）](#427-源码桥接器生成器f-50-f-)
+      - [4.2.8 提取器适配器库（F-50-G 📋）](#428-提取器适配器库f-50-g-)
     - [4.3 Python SDK 方法注册为 Tool（F-52 ✅）](#43-python-sdk-方法注册为-toolf-52-)
     - [4.4 Tool 自动暴露为 CLI 斜杠命令（F-53 📋）](#44-tool-自动暴露为-cli-斜杠命令f-53-)
         - [背景](#背景-2)
@@ -253,21 +253,21 @@
     - [5.9 手工验收流程（F-22 🔄）](#59-手工验收流程f-22-)
     - [5.10 实施顺序与完成标准（F-22 🔄）](#510-实施顺序与完成标准f-22-)
     - [5.11 CCB 对比发现的补充缺口（F-22 🔄）](#511-ccb-对比发现的补充缺口f-22-)
-      - [5.11.1 Feature Gate 系统——isKilled 运行时 kill 开关（F-22-G1 ✅）](#5111-feature-gate-系统iskilled-运行时-kill-开关f-22-g1-)
-      - [5.11.2 远程 Jitter 实时配置（F-22-G2 ✅）](#5112-远程-jitter-实时配置f-22-g2-)
-      - [5.11.3 One-shot 反向 Jitter（整点提前）（F-22-G3 ✅）](#5113-one-shot-反向-jitter整点提前f-22-g3-)
-      - [5.11.4 Permanent 免过期任务机制（F-22-G4 ✅）](#5114-permanent-免过期任务机制f-22-g4-)
-      - [5.11.5 锁注册式清理与 PID 存活探测增强（F-22-G5 ✅）](#5115-锁注册式清理与-pid-存活探测增强f-22-g5-)
-      - [5.11.6 工具 Prompt 指引文档增强（F-22-G6 ✅）](#5116-工具-prompt-指引文档增强f-22-g6-)
-      - [5.11.7 Analytics 遥测事件注入（F-22-G7 ✅）](#5117-analytics-遥测事件注入f-22-g7-)
-      - [5.11.8 inFlight 防重复触发机制（F-22-G8 ✅）](#5118-inflight-防重复触发机制f-22-g8-)
-      - [5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-A1 ~ A6 ✅）](#5119-clawcodex-已有但-ccb-缺失的优势特性f-22-a1--a6-)
+      - [5.11.1 Feature Gate 系统——isKilled 运行时 kill 开关（F-22-A ✅）](#5111-feature-gate-系统iskilled-运行时-kill-开关f-22-a-)
+      - [5.11.2 远程 Jitter 实时配置（F-22-B ✅）](#5112-远程-jitter-实时配置f-22-b-)
+      - [5.11.3 One-shot 反向 Jitter（整点提前）（F-22-C ✅）](#5113-one-shot-反向-jitter整点提前f-22-c-)
+      - [5.11.4 Permanent 免过期任务机制（F-22-D ✅）](#5114-permanent-免过期任务机制f-22-d-)
+      - [5.11.5 锁注册式清理与 PID 存活探测增强（F-22-E ✅）](#5115-锁注册式清理与-pid-存活探测增强f-22-e-)
+      - [5.11.6 工具 Prompt 指引文档增强（F-22-F ✅）](#5116-工具-prompt-指引文档增强f-22-f-)
+      - [5.11.7 Analytics 遥测事件注入（F-22-G ✅）](#5117-analytics-遥测事件注入f-22-g-)
+      - [5.11.8 inFlight 防重复触发机制（F-22-H ✅）](#5118-inflight-防重复触发机制f-22-h-)
+      - [5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-I ~ N ✅）](#5119-clawcodex-已有但-ccb-缺失的优势特性f-22-i--n-)
       - [5.11.10 补充缺口实施优先级矩阵（F-22 🔄）](#51110-补充缺口实施优先级矩阵f-22-)
       - [5.11.11 分析缺口与已有 F22-R/G 交叉映射（F-22 🔄）](#51111-分析缺口与已有-f22-rg-交叉映射f-22-)
         - [lastFiredAt 跨进程重启风险（Phase C 增强说明）](#lastfiredat-跨进程重启风险phase-c-增强说明)
-        - [SDK daemon 模式（dir / lockIdentity 独立运行）（F-22-G9 📋）](#sdk-daemon-模式dir--lockidentity-独立运行f-22-g9-)
-        - [cronToHuman(utc) UTC 模式显示（F-22-G10 📋）](#crontohumanutc-utc-模式显示f-22-g10-)
-      - [5.11.12 Cron 任务累计防护——CCB 4 层设计对照审查（F-22-D1~D4 📋）](#51112-cron-任务累计防护ccb-4-层设计对照审查f-22-d1d4-)
+        - [SDK daemon 模式（dir / lockIdentity 独立运行）（F-22-O 📋）](#sdk-daemon-模式dir--lockidentity-独立运行f-22-o-)
+        - [cronToHuman(utc) UTC 模式显示（F-22-P 📋）](#crontohumanutc-utc-模式显示f-22-p-)
+      - [5.11.12 Cron 任务累计防护——CCB 4 层设计对照审查（F-22-Q~T 📋）](#51112-cron-任务累计防护ccb-4-层设计对照审查f-22-qt-)
         - [第 1 层 — sourceId 级 Dedup（核心防护）](#第-1-层--sourceid-级-dedup核心防护)
         - [第 2 层 — 进程所有者活体检测（防死锁）](#第-2-层--进程所有者活体检测防死锁)
         - [第 3 层 — 调度器 inFlight 防重触](#第-3-层--调度器-inflight-防重触)
@@ -764,422 +764,24 @@ class ControlSocket:
 
 #### 1.4.3 全场景会话恢复统一闭包（F-49 Phase 0.4 ✅ — Session Resume 统一）
 
-**状态**: ✅ 已完成
-**优先级**: P1
-**依赖**: F-49 Phase 0 ~ 0.3（统一事件存储），F-21（后台运行 + 恢复同步）
-
-##### 问题现状：SessionStorage 回退路径的消息缺失
-
-F-49 Phase 0 统一了事件存储格式（全部使用 `~/.clawcodex/sessions/{run_id}/transcript.jsonl`），但在 `--resume` 恢复链上仍然存在一个关键缺口：
-
-```
-Session.resume(sid)                          # src/agent/session.py:135
-  → Session.load(sid)                        # 尝试 ~/.clawcodex/sessions/{sid}.json
-    ├── 找到 → 返回完整 Session（含 Conversation.messages）✅
-    └── 未找到 → load_from_session_storage()  # 回退到 SessionStorage 目录格式
-         → 仅恢复 metadata（session_id, model, start/end time）
-         → conversation=Conversation()        # ← 空的！
-```
-
-| 消费方 | resume 后的处理 | 行为 |
-|--------|---------------|------|
-| **REPL** `repl/app.py:136` | `_sync_conversation_from_transcript()` 从 JSONL 重新填充 | ✅ 全量恢复 |
-| **TUI** `tui/app.py:229` | 仅 `if self.session.conversation.messages: self._replay_history()` | ❌ 格式 B 恢复后消息为空，不会 replay 历史 |
-| **CLI** `dispatch.py` | 无显式 transcript 同步 | ❌ 格式 B 恢复后 conversation 空 |
-| **Cron bg_runner** | 仅写 JSONL，不写 .json 快照 | ⚠️ 只能走 SessionStorage 回退 |
-| **Orchestrator** | 仅写 JSONL，不写 .json 快照 | ⚠️ 只能走 SessionStorage 回退 |
-
-核心矛盾：**CLI/TUI 的 `--resume` 对于 Cron/Orchestrator 写入的会话只能恢复出一个空壳**，必须依赖每个消费者自行补丁。
-
-##### 目标
-
-彻底消除上述差距，使所有场景的 `--resume` 行为一致且可递归恢复：
-
-```
-所有写入方（CLI / REPL / TUI / Cron / Orchestrator）
-       │ 统一写 SessionStorage JSONL
-       ▼
-~/.clawcodex/sessions/<sid>/transcript.jsonl
-       │
-       ▼ --resume 统一消费
-Session.resume(sid) → 返回的 Session.conversation.messages 非空
-       │
-       ▼ 递归 resume
-再次 Session.resume(sid) → 与退出前状态一致
-```
-
-##### 设计
-
-**A. `Session.resume()` 自愈修复（核心，一处修复全局生效）**
-
-在 `Session.resume()` 的 SessionStorage 回退路径末尾，增加从 JSONL 加载消息的逻辑：
-
-```python
-# load_from_session_storage 之后，conversation 为空时：
-if not loaded.conversation.messages:
-    try:
-        from src.services.session_storage import SessionStorage
-        storage = SessionStorage(session_id=session_id)
-        entries = storage.read_transcript()
-        from src.types.messages import message_from_dict
-        messages = [message_from_dict(e) for e in entries]
-        loaded.conversation.messages = messages
-    except Exception:
-        pass  # 不阻断 resume
-```
-
-效果：**一处修复，CLI/REPL/TUI/Cron/Orchestrator 全场景受益**。REPL 的 `_sync_conversation_from_transcript()` 将成为冗余（但保留作为防御性 double-check）。
-
-**B. `Session.save()` 双写一致性保障**
-
-当前 `Session.save()` 同时写 `.json` 快照 + JSONL。但对于从 SessionStorage 回退路径恢复的会话（conversation 通过 A 补全后），首次 `save()` 把 `.json` 快照写出来，后续 `--resume` 就走快路径 `Session.load()` 了。
-
-**C. 新增：Cron `background_runner.py` 运行结束写 `.json` 快照**
-
-```python
-# 在 _run_agent_headless() 末尾，调用 session.save() 写 .json 快照
-session.save()  # 让 agent 结束后也能通过快路径 --resume
-```
-
-**D. 新增：Orchestrator `agent_runner.py` 运行结束写 `.json` 快照**
-
-```python
-# 在 AgentRunner.run() 末尾，调用 session.save() 写 .json 快照
-session.save()
-```
-
-##### 改造点清单
-
-**Phase 0.4.1 — 核心修复：`Session.resume()` 加载 JSONL 消息**（0.5 天）
-
-| 文件 | 改动 |
-|------|------|
-| `src/agent/session.py` | `Session.resume()` 的 SessionStorage 回退分支末尾，增加从 `SessionStorage.read_transcript()` 加载 messages 到 `conversation.messages` 的逻辑 |
-| `(无)` | 不修改 `load_from_session_storage()` / `session_persist.py` — 保持原有契约 |
-
-验收：`Session.resume(run_id)` for orchestrator-run 返回的 `session.conversation.messages` 非空。
-
-**Phase 0.4.2 — 统一 clean-up：移除冗余的 caller 侧 transcript 同步**（0.5 天）
-
-| 文件 | 改动 |
-|------|------|
-| `clawcodex_ext/repl/core.py` | 保留 `_sync_conversation_from_transcript()` 作为防御性 double-check；在方法开头检查若 `session.conversation.messages` 已非空则直接 return |
-| `clawcodex_ext/repl/app.py` | 无改动（仍保留 `_sync_conversation_from_transcript` 调用） |
-
-验收：REPL resume 后 conversation 正常，`_sync_conversation` 成为 quick-return no-op。
-
-**Phase 0.4.3 — TUI resume 路径修复**（0.5 天）
-
-| 文件 | 改动 |
-|------|------|
-| `clawcodex_ext/tui/entrypoint.py` | `Session.resume()` 调用后，增加 `resume_session_with_tail()` 调用中的 transcript 消息加载（或依赖 Phase 0.4.1 核心修复已生效） |
-| `clawcodex_ext/tui/app.py` | `on_mount()` 中的 `if self.session.conversation.messages:` 改为无条件调用 `_replay_history()`（若 messages 为空则不渲染）或由核心修复保证非空 |
-
-验收：`clawcodex --tui --resume <run_id>` 显示 orchestrator run 的完整历史。
-
-**Phase 0.4.4 — CLI dispatch resume 路径修复**（0.5 天）
-
-| 文件 | 改动 |
-|------|------|
-| `clawcodex_ext/cli/dispatch.py` | `Session.resume()` 调用后，确保 `conversation.messages` 非空（若 Phase 0.4.1 已修复则自动生效） |
-
-验收：`clawcodex --resume <run_id>` 进入 REPL 后显示历史消息。
-
-**Phase 0.4.5 — Cron/Orchestrator 运行结束写 .json 快照**（1 天）
-
-| 文件 | 改动 |
-|------|------|
-| `clawcodex_ext/agent/background_runner.py` | `_run_agent_headless()` 末尾（finally 块中）调用 `session.save()` 确保 `.json` 快照写入 |
-| `extensions/orchestrator/agent_runner.py` | `run()` 末尾（SessionComplete / 异常退出时）调用 `session.save()` 确保 `.json` 快照写入 |
-
-验收：Cron/Orchestrator 执行后，`~/.clawcodex/sessions/<run_id>.json` 存在，可通过快路径 `Session.load()` 恢复。
-
-**Phase 0.4.6 — 递归 resume 一致性验收**（0.5 天）
-
-| 文件 | 改动 |
-|------|------|
-| `tests/test_session_resume_unified.py` | 新增测试：orchestrator 场景的 JSONL → `Session.resume()` → `Session.save()` → 再次 `Session.resume()` → 消息与第一次一致 |
-
-验收：三轮递归 resume 消息内容不变。
-
-##### 消息流向全图
-
-```
-                    ┌─────────────────────────┐
-                    │  CLI / REPL / TUI 交互    │
-                    │  Session.save()           │
-                    │    → .json (快照)         │
-                    │    → JSONL (追加)         │
-                    └──────────┬──────────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │  Cron bg_runner       │
-                    │  storage.write_msg()  │
-                    │    → JSONL (追加)     │
-                    │  结束 → session.save()│
-                    │    → .json (快照)     │
-                    └──────────┬──────────────┘
-                               │
-                    ┌──────────┴──────────┐
-                    │  Orchestrator        │
-                    │  _flush_transcript() │
-                    │    → JSONL (追加)    │
-                    │  结束 → session.save()│
-                    │    → .json (快照)    │
-                    └──────────┴──────────────┘
-                                        │
-                                        ▼
-~/.clawcodex/sessions/<sid>/
-  ├── <sid>.json            # 全量快照（所有写入方最终都会产生）
-  └── <sid>/
-        ├── transcript.jsonl  # 追加日志（统一格式）
-        └── metadata.json
-
-                                        │
-                                        ▼
-                              Session.resume(<sid>)
-                                ├── Session.load() → .json 快照 ✅
-                                └── fallback → JSONL 加载消息 ✅ (Phase 0.4.1)
-```
-
-##### 验收标准
-
-| # | 验收场景 | 预期行为 |
-|---|---------|---------|
-| 1 | CLI 交互 → exit → --resume | 完整 Conversation，消息不变 |
-| 2 | REPL 交互 → exit → --resume | 完整 Conversation，消息不变 |
-| 3 | TUI 交互 → exit → --resume (TUI 或 REPL) | 完整 Conversation，历史可见 |
-| 4 | Cron bg_runner 运行 → --resume | 完整 Conversation，含所有 tool_use / tool_result |
-| 5 | Orchestrator agent_runner 运行 → --resume | 完整 Conversation，含所有 tool_use / tool_result |
-| 6 | Cron/Orch → --resume → exit → 再次 --resume | 递归一致 |
-| 7 | 跨场景混合写入（eg: Orchestrator 写 → --resume REPL 追加 → exit → --resume TUI） | 所有消息（原始 + 追加）完整 |
-| 8 | `.json` 快照不存在时，`--resume` 也能恢复 | 依赖 SessionStorage JSONL fallback |
-
-##### 风险与约束
-
-| 风险 | 缓解措施 |
-|------|---------|
-| `Session.resume()` 的 SessionStorage fallback 路径加载 JSONL 后，`conversation.messages` 可能包含大量消息，超出 `max_history`（默认 2000） | 加载后不截断 — `max_history` 仅在新 `add_message()` 时生效；或与 `Conversation.from_dict()` 保持行为一致 |
-| JSONL 中的 malformed 行导致部分消息缺失 | 与 `session_resume.resume_session()` 行为一致：跳过 malformed 行并记录 warning |
-| `_sync_conversation_from_transcript()` 在 REPL 中变为冗余但仍被调用 | 加 early-return 检查：`if self.session.conversation.messages: return`，O(1) 开销 |
-| `session.save()` 从 Cron/Orchestrator 调用时可能缺失 provider / model 信息 | 在 `AgentRunner.run()` 中 `session.provider` 和 `session.model` 已设置；`load_from_session_storage` 返回的 model 字段也可用 |
-
-##### 已拟定的设计决定
-
-1. **核心修复在 `Session.resume()` 完成**（一处修复，全局受益），而非在每个消费者处加补丁。
-2. **`.json` 快照在 Cron/Orchestrator 结束时写入**，保证下次 resume 走快路径，同时也作为备份。
-3. **保留 REPL 的 `_sync_conversation_from_transcript()`**，改为防御性 double-check（early return 模式），不破坏现有行为。
-4. **不修改 `SessionStorage`** — 所有改动在消费侧（`Session.resume()`、`background_runner.py`、`agent_runner.py`）。
-5. **POS Converter 不涉及** — 它是编译期代码生成工具，不产生运行时会话日志。
-
-##### 依赖与协同
-
-| 依赖 | 类型 | 说明 |
-|------|------|------|
-| F-49 Phase 0 ~ 0.3 | 硬依赖 | 格式统一是基础 |
-| F-21 bg + `--resume` | 行为参考 | Ctrl+B / TailFollower 的用户体验作为 resume 设计基线 |
-| F-40 ProgressSink | 无依赖 | Phase 0.4 不涉及事件分发变更 |
-| F-48 解耦约束 | 架构约束 | 改动尽量少入侵 `src/`；`Session.resume()` 是上游文件，接受微小修改 |
-| `src/services/session_storage.py` | 硬依赖 | 复用现有 `read_transcript()` 和 `message_from_dict()` |
+> 详细设计已归档至 [ARCHIVED_FEATURES.md §二十八 全场景会话恢复统一闭包](./ARCHIVED_FEATURES.md#二十八全场景会话恢复统一闭包f-49-phase-04----session-resume-统一)
 
 ---
+
+
 
 ### 1.4.4 会话格式分层参考图（全场景一览）（F-49 ✅）
 
-```
-Message 类型体系 (src/types/messages.py)
-┌───────────────────────────────────────────┐
-│  Message (role, content, uuid, timestamp) │
-│  ├── UserMessage                          │
-│  ├── AssistantMessage                     │
-│  ├── SystemMessage                        │
-│  └── ProgressMessage                      │
-│                                           │
-│  message_to_dict() / message_from_dict()  │
-│  ← 标准序列化契约                         │
-└───────────────────┬───────────────────────┘
-                    │
-════════════════════╪═══════════════════════════
-         运行时内存   │  持久化层
-                    │
-                    ▼
-┌───────────────────────────────────────────┐
-│  SessionStorage (src/services/             │
-│    session_storage.py)                     │
-│                                           │
-│  ~/.clawcodex/sessions/<sid>/             │
-│    ├── transcript.jsonl   ← JSONL 格式    │
-│    ├── metadata.json      ← SessionMetadata│
-│    └── content/           ← 大内容引用     │
-│                                           │
-│  write_message(Message) → message_to_dict │
-│    → f.write(json.dumps(msg_dict) + '\n') │
-│  read_transcript() → f.readlines()        │
-│    → message_from_dict(entry) → Message[] │
-└───────────────────┬───────────────────────┘
-                    │
-    ┌───────────────┼───────────────┐
-    │               │               │
-    ▼               ▼               ▼
-┌─────────┐  ┌──────────┐  ┌──────────────┐
-│ Session  │  │ .json    │  │ SessionStorage│
-│ .save()  │  │ 快照文件  │  │ JSONL 追加   │
-│ (双写)   │  │(快路径)   │  │(慢路径/增量) │
-└─────┬───┘  └────┬─────┘  └──────┬───────┘
-      │           │               │
-      └───────────┼───────────────┘
-                  │
-                  ▼
-         Session.resume(sid)
-           ├── Session.load()
-           │    (找到 .json → 快 ⚡)
-           └── load_from_session_storage()
-                + JSONL 消息加载 (Phase 0.4.1)
-                (未找到 .json → 但 JSONL 可用)
-                  → conversation.messages 非空 ✅
-```
-
-##### 全场景 resume 能力矩阵（Phase 0.4 完成后）
-
-| 写入方 | 写入形式 | resume 快路径 | resume 慢路径 | 递归 resume |
-|--------|---------|:------------:|:------------:|:----------:|
-| CLI 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
-| REPL 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
-| TUI 交互 | `.json` + JSONL | ✅ | ✅ | ✅ |
-| Cron bg_runner | JSONL + 结束写 `.json` | ✅ (事后) | ✅ (运行中) | ✅ |
-| Orchestrator | JSONL + 结束写 `.json` | ✅ (事后) | ✅ (运行中) | ✅ |
-| POS Converter | 不适用 | N/A | N/A | N/A |
-
+> 详细设计（会话格式分层参考图、resume 能力矩阵）已归档至 [ARCHIVED_FEATURES.md §二十九 会话格式分层参考图](./ARCHIVED_FEATURES.md#二十九会话格式分层参考图全场景一览f-49-)
 
 ---
-### 1.4.5 session.json + transcript.jsonl 合并（F-49-P5 ✅）
 
-**状态**: ✅ 已完成
-**优先级**: P1
-**工作量**: 2-3天
-**依赖**: F-49 Phase 0 ~ 0.4（统一事件存储 + 全场景会话恢复）
-**特性标识**: F-49-P5
 
-##### 问题现状：三文件的冗余与不一致风险
+### 1.4.5 session.json + transcript.jsonl 合并（F-49-E ✅）
 
-当前每个会话目录 `~/.clawcodex/sessions/<sid>/` 包含 **3 个持久化文件**：
+> 详细设计（问题现状三文件冗余、文件格式规范、改造点清单、向后兼容策略、方案对比验证、验收标准）已归档至 [ARCHIVED_FEATURES.md §三十 session.json + transcript.jsonl 合并](./ARCHIVED_FEATURES.md#三十sessionjson--transcriptjsonl-合并f-49-e-)
 
-| 文件 | 生产者 | 写策略 | 内容 |
-|------|--------|--------|------|
-| `session.json` | `Session.save()` | 覆写（会话退出时） | provider + 全量消息 + cost 块 |
-| `metadata.json` | `SessionStorage` | 覆写（每次变更） | model, cwd, title, tags, cost 等 |
-| `transcript.jsonl` | `SessionStorage.flush()` / `TranscriptWriter` | 追加写 | 逐行 Message dict + cost_block 事件 |
-
-核心问题：
-
-```
-1. 消息双重存储：session.json 存全量消息数组，transcript.jsonl 也存逐行消息（磁盘 2×，且可能不一致）
-2. provider 字段仅存在于 session.json，transcript.jsonl 无此信息
-3. 三条写路径 → 数据不一致风险高（time-of-check-to-time-of-use）
-4. cost 块同时写入 metadata.json 和 transcript.jsonl 两处
-```
-
-##### 目标：从 3 文件减为 2 文件，消除消息冗余
-
-```
-现状:  sessions/xxx/  ├── session.json      (全量消息 + provider + cost)
-                       ├── metadata.json     (摘要字段 + cost)
-                       └── transcript.jsonl  (逐行消息 + cost_block)
-
-目标:  sessions/xxx/  ├── metadata.json      (精简摘要，仅列表用)
-                       └── transcript.jsonl  (增强: 首行 session_init + 消息行 + 末行 session_snapshot)
-```
-
-消除 `session.json` 全量消息转储，所有必要信息（provider + 消息 + cost）由 `transcript.jsonl` 单一文件承载。
-
-##### 文件格式规范
-
-**`transcript.jsonl`**（增强格式）：
-
-```
-第 1 行:  {"type":"session_init","session_id":"...","provider":"openai",
-           "model":"claude-sonnet-4-20250514","created_at":"2026-06-16T09:03:02"}
-
-第 2~N 行: {"type":"message","role":"user","content":[...],"uuid":"...","timestamp":"..."}
-           {"type":"message","role":"assistant","content":[...],"uuid":"...","timestamp":"..."}
-           {"type":"cost_block","cost":{"total_cost_usd":0.01,...}}              (每轮费用快照)
-
-最后 1 行: {"type":"session_snapshot","cost":{...},"updated_at":"2026-06-16T10:00:00"}
-           (每次 Session.save() 追加，可被后续 snapshot 覆盖)
-```
-
-行类型：
-| `type` | 写时机 | 用途 |
-|--------|--------|------|
-| `session_init` | 会话创建时写入第 1 行 | `Session.load()` 读 provider + model + created_at |
-| `message` | 每轮消息写入 | 恢复会话消息列表 |
-| `cost_block` | 每轮结束后写入 | 流式回放费用变化 |
-| `session_snapshot` | `Session.save()` 时追加 | `cost_restore` 读最后一行恢复 cost 计数器 |
-
-**`metadata.json`**（精简为仅列表摘要）：
-
-```json
-{
-  "session_id": "...",
-  "model": "claude-sonnet-4-20250514",
-  "title": "session-xxx",
-  "start_time": 1781571782.727674,
-  "last_updated": 1781571782.735989,
-  "message_count": 42,
-  "tags": ["orchestrator"]
-}
-```
-
-移出字段：`cwd`, `total_cost`, `last_user_input`, `agent_name`, `cost` 全部从 metadata 移除，改从 `transcript.jsonl` 首行/末行读取。
-
-##### 读写流程对比
-
-| 操作 | 现状（3 文件） | Phase 5 后（2 文件） |
-|------|:-------------:|:------------------:|
-| `Session.save()` | 写 session.json（覆写）+ 追加 cost_block 到 transcript.jsonl | 追加 `session_snapshot` 行到 transcript.jsonl + 更新 metadata.json |
-| `Session.load(sid)` | 读 session.json → O(1) 全量反序列化 | 读 transcript.jsonl 第 1 行（provider） + 扫描所有 message 行 + 读最后 1 行（cost） |
-| `SessionStorage.flush()` | 追加消息行到 transcript.jsonl | 不变 |
-| `cost_restore.restore_cost_state_for_session()` | 读 session.json 的 cost 块 | 读 transcript.jsonl 最后一行（`tail -1` → O(1)） |
-| `SessionStorage.list_sessions()` | 读 metadata.json（O(1) per session） | 不变 |
-| `TailFollower` | `tail -f transcript.jsonl` | 不变 |
-
-##### 具体改造点
-
-| 编号 | 文件 | 改动说明 | 工作量 |
-|:----:|------|---------|:------:|
-| P5-A | `src/agent/session.py` `save()` | 删除 session.json 写入；改为追加 `type:"session_snapshot"` 行到 transcript.jsonl | 0.5天 |
-| P5-B | `src/agent/session.py` `load()` | 改为读 transcript.jsonl：首行→provider/model/created_at；扫描 message 行→conversation；尾行→cost | 1天 |
-| P5-C | `src/services/cost_restore.py` | 改为读 transcript.jsonl 最后一行（`tail -1`）获取 cost 块 | 0.5天 |
-| P5-D | `src/agent/session.py` `resume()` | 依赖 P5-B 自动生效；删除 `Session.load()` 回退到 `load_from_session_storage` 的逻辑 | 0.25天 |
-| P5-E | `extensions/agent/session_persist.py` | `save_to_session_storage()` 写入 transcript.jsonl 第 1 行 `session_init`（含 provider + model）；删除多余的 cost_block 双写 | 0.5天 |
-| P5-F | `src/services/session_storage.py` | metadata.json 精简：移除 cwd, total_cost, last_user_input, agent_name, cost 字段 | 0.5天 |
-| P5-G | `src/agent/transcript.py` `TranscriptWriter` | 可选：支持写入 `session_init` 类型行（复用已有序列化逻辑） | 0.25天 |
-| P5-H | 旧 session 迁移脚本 | `clawcodex-dev session migrate --from-3-file` 读取旧 `.json` 转换为新的 transcript.jsonl 格式 | 1天 |
-
-##### 向后兼容策略
-
-- **读取降级**：`Session.load()` 检测到 `session.json` 存在且 `transcript.jsonl` 的第 1 行不是 `session_init` 类型时，自动回退到旧格式（从 session.json 读取 provider 和消息）
-- **只读旧会话**：旧 session.json 不会自动删除，用户可在确认 Phase 5 稳定后手动运行迁移脚本
-- **Phase 5 内部可开关**：通过 Feature Gate `F49_P5_ENABLED=true/false` 控制新写入路径
-- **`metadata.json` 字段兼容**：reader 对 metadata.json 中缺失的 cwd/cost 等字段有默认值处理
-
-##### 方案对比验证
-
-| 维度 | 现状（3 文件） | 方案 A（纯 JSONL） | 方案 B（Hybrid） | **方案 C（JSONL + 精简 meta）** |
-|------|:------------:|:----------------:|:--------------:|:---------------------------:|
-| 文件数 | 3 | 1 | 1 | **2** |
-| 消息冗余 | 2 份（.json + .jsonl） | 无冗余 | 无冗余 | **无冗余** |
-| 列表 O(1) | ✅ | ❌（需 scan 到尾行） | ✅ | **✅** |
-| 恢复 O(1) | ✅（.json） | ❌（scan 消息） | ✅（先读 header） | **❌（需 scan 消息，但 N 通常 < 2000）** |
-| cost_restore O(1) | ✅ | ✅（tail -1） | ✅ | **✅（tail -1）** |
-| 追加写性能 | ✅ | ✅ | ❌（每轮覆写头部） | **✅** |
-| 数据一致风险 | 中（3 文件） | 低（单文件） | 低 | **低** |
-| 迁移难度 | 基线 | 高（全量变更） | 中 | **低（6 个文件改动）** |
-
-##### 验收标准
-
-| # | 场景 | 预期 |
-|---|------|------|
+|
 | 1 | REPL 交互 → exit → `Session.load()` | provider + 全量消息 + cost 正确恢复，无 session.json 依赖 |
 | 2 | Cron bg_runner 运行 → exit | transcript.jsonl 最后一行是 `session_snapshot`，含正确 cost |
 | 3 | `cost_restore.restore_cost_state_for_session()` | 从 transcript.jsonl `tail -1` 恢复 cost 计数器 |
@@ -1204,158 +806,10 @@ Message 类型体系 (src/types/messages.py)
 
 ### 1.4.6 parentUuid 链 + walkChainBeforeParse 读取过滤（F-103 ✅）
 
-**状态**: ✅ 已完成
-**目标**: 引入 CCB 的 `parentUuid` 链式消息关联 + `walkChainBeforeParse` 字节级链裁剪，彻底消除 `/rewind`/fork/死分支导致的 on-disk 与 in-memory 状态不一致问题。
-
-##### 问题现状
-
-| 场景 | ClawCodex 当前行为 | CCB 行为 |
-|------|-------------------|----------|
-| `/rewind` 后磁盘 | 旧消息仍在 transcript.jsonl，**下次 --resume 恢复全部**（含已回退的内容） | 旧消息是"死分支"，**读路径自动跳过** |
-| `/rewind` 后新对话 | 新消息追加到末尾，与旧消息混在一起 | 新消息 `parentUuid` 指向回退目标，形成清晰的分支拓扑 |
-| Fork 会话 | 复制/重写整个 transcript | 新会话 `parentUuid` 指向原会话 leaf，天然 fork |
-| `--resume` 恢复 | 全量读 → 全量重建（含死分支） | `walkChainBeforeParse` → 字节级裁剪 → 只解析活跃链 |
-| `_engine_messages` vs `conversation.messages` | 两套列表需手动同步（已修 `--resume`，但 `/rewind` 仍有 bug） | 单一消息列表，`parentUuid` 显式编码关系 |
-
-##### 核心设计
-
-**A. 消息存储格式升级：增加 `parentUuid` 字段**
-
-当前 `transcript.jsonl` 每条消息的 JSON 格式增加一个可选字段：
-
-```json
-{
-  "uuid": "a1b2c3d4-...",
-  "parentUuid": "e5f6g7h8-...",   // ← 新增：指向父消息的 uuid
-  "role": "user",
-  "content": "...",
-  "timestamp": "..."
-}
-```
-
-- `parentUuid: null` → 根消息（对话首条）
-- `parentUuid: "<uuid>"` → 指向链中的父消息
-- 写入时由 `SessionStorage.write_message()` 或 `save_to_session_storage()` 负责设置
-
-**B. 引入 `walkChainBeforeParse()` 字节级链裁剪**
-
-在 `SessionStorage.read_transcript()` 或 `Session.load()` 中新增过滤步骤：
-
-```
-read_transcript() 流程 (当前):
-  transcript.jsonl → read all lines → JSON.parse each → return all
-
-read_transcript() 流程 (升级后):
-  transcript.jsonl → read raw bytes → walkChainBeforeParse()
-    → 扫描 {"parentUuid": 前缀建索引
-    → 从末行 leaf 走链回根
-    → 只保留活跃链的 byte 区间 + 元数据行
-    → 丢弃死分支（rewind/fork 遗留）
-  → JSON.parse (仅过滤后的 buffer)
-  → return active chain messages
-```
-
-关键优化门禁：只有当死分支占比 > 50% 时才执行 concat，避免小会话的性能浪费（与 CCB 的 `SKIP_PRECOMPACT_THRESHOLD` 对标）。
-
-**C. `buildConversationChain()` 链重建**
-
-在消息解析后，从 leaf message 沿 `parentUuid` 走回根，构建有序的消息列表：
-
-```python
-def build_conversation_chain(messages: dict[str, Message], leaf_uuid: str) -> list[Message]:
-    chain = []
-    current = leaf_uuid
-    while current:
-        msg = messages.get(current)
-        if not msg:
-            break
-        chain.append(msg)
-        current = msg.parent_uuid
-    chain.reverse()
-    return chain
-```
-
-**D. `/rewind` 持久化语义变革**
-
-| 层面 | 当前行为 | 升级后行为 |
-|------|---------|-----------|
-| 内存 | `conversation.messages = msgs[:orig_idx]` | 不变（截断内存列表） |
-| `_engine_messages` | `= []`（清空） | 不变 |
-| 磁盘 | **不变**（append-only，旧消息永远保留） | **不变**（append-only，旧消息成为死分支） |
-| `save_transcript()` 后 | 通过 UUID 去重跳过已写消息，死分支永远存在 | 新消息的 `parentUuid` 指向目标消息，**死分支在读取时被 `walkChainBeforeParse` 裁剪** |
-
-**E. `Session.resume()` / `--resume` 读取路径升级**
-
-```
-Session.resume(sid)
-  → Session.load(sid)
-    → transcript.jsonl 存在？
-      → YES: read_raw_bytes() → walkChainBeforeParse() → parseJSONL() → build_conversation_chain() → return Session(conversation=active_chain)
-      → NO: fallback 旧格式兼容
-```
-
-##### 改造点清单
-
-| 子特性 | 文件 | 说明 | 状态 |
-|--------|------|------|:----:|
-| **P103-A** | `src/services/session_storage.py` | `write_message()`/`write_raw()` 增加 `parentUuid` 参数；`flush()` 写入时附带该字段 | ✅ 已完成 |
-| **P103-B** | `clawcodex_ext/agent/chain_filter.py` | 新增 `walk_chain_before_parse()` 字节级链裁剪函数（移植 CCB 算法）；门禁阈值常量 `DEAD_BRANCH_RATIO=0.5` | ✅ 已完成 |
-| **P103-C** | `clawcodex_ext/agent/chain_filter.py` | 新增 `build_conversation_chain()` 从 leaf 沿 parentUuid 重建有序链 | ✅ 已完成 |
-| **P103-D** | `clawcodex_ext/agent/session.py` | `read_transcript()` 改造：集成 `walkChainBeforeParse` + `buildConversationChain`，默认只返回活跃链；保留 `chain_filter=False` 逃生口供 Visualizer/遥测使用 | ✅ 已完成 |
-| **P103-E** | `extensions/agent/session_persist.py` | `save_to_session_storage()` 计算并写入 `parentUuid`（从 `conversation.messages` 上一条消息的 uuid 获取） | ✅ 已完成 |
-| **P103-F** | `extensions/agent/session_persist.py` | `Session.save()` / `save_transcript()` 透传 `parentUuid` 到 `save_to_session_storage()` | ✅ 已完成 |
-| **P103-G** | `clawcodex_ext/agent/session.py` | `Session.load()` / `resume()` 集成新读取路径（`walkChainBeforeParse` 门禁 + `buildConversationChain`） | ✅ 已完成 |
-| **P103-H** | `clawcodex_ext/repl/core.py` | `_sync_conversation_from_transcript()` 可选适配新格式（读端已走 `Session.load()`，无需单独修改；保留防御性 double-check） | ✅ 已完成（复用） |
-| **P103-I** | `tests/test_session_f103_chain.py` | 验证：① 写入 chain → 读取 chain 一致 ② rewind 后新消息形成分支 ③ `walkChainBeforeParse` 正确裁剪死分支 ④ `--resume` 只恢复活跃链 | ✅ 已完成（22 测试） |
-| **P103-J** | 旧 session 兼容 | 旧格式 transcript 无 `parentUuid` → `walkChainBeforeParse` 退化为全量读（无死分支可裁），`buildConversationChain` 退化为全量返回 | ✅ 已完成 |
-
-##### 验收标准
-
-| # | 场景 | 预期 | 测试 |
-|---|------|------|------|
-| 1 | 新格式写入：user → assistant → user → assistant 四轮 | 每条消息的 `parentUuid` 指向正确的父消息 | `TestInjectParentUuids::test_chain_topology` |
-| 2 | `/rewind` → 新消息 → `save_transcript()` | 新消息的 `parentUuid` 指向回退目标，旧消息仍在磁盘但成为死分支 | `test_rewind_creates_fork_topology` |
-| 3 | 上述场景后 `--resume` | 只恢复活跃链（回退后的消息），死分支消息不可见 | `test_load_returns_active_chain_after_rewind` |
-| 4 | 混合场景：repl 交互 → exit → 再次 `--resume` → 递归一致 | 消息条数、顺序、关系与 exit 前一致 | `test_load_returns_active_chain_after_rewind` |
-| 5 | `walkChainBeforeParse` 门禁：死分支 < 50% 时跳过 | 小会话性能无退化 | `test_low_dead_branch_ratio_skips_filter` |
-| 6 | `walkChainBeforeParse` 门禁：死分支 > 50% 时执行 | 大会话（>100 条消息 + 多次 rewind）恢复速度优于全量 parse | `test_high_dead_branch_ratio_filters` |
-| 7 | 旧格式 transcript 无 `parentUuid` 字段 | 降级为全量读，不报错，消息完整 | `test_load_returns_all_when_legacy_no_parentUuid` |
-| 8 | `/rewind` → exit → 再次 `--resume` | 不会复活已回退的消息（**当前行为的 bug 修复验证**） | `test_load_returns_active_chain_after_rewind` |
-
-##### 风险与约束
-
-| 风险 | 缓解措施 |
-|------|---------|
-| `walkChainBeforeParse` 字节扫描增加读路径延迟（小会话） | 死分支比例门禁（< 50% 跳过） + 绝对大小门禁（< 10KB 跳过） |
-| 旧 transcript 无 `parentUuid` → 全量读 | 降级逻辑：检测 Json 中 `parentUuid` 缺失则跳过过滤 |
-| 新写入消息的 `parentUuid` 计算需要知道最后一条消息的 uuid | `session.conversation.messages[-1].uuid`（现有字段） |
-| Visualizer/遥测/state_journal 需要全量数据 | 保留 `chain_filter=False` 逃生口，跳过链过滤 |
-| `_engine_messages` 和 `conversation.messages` 的同步问题 | 本特性不改变同步方式（`_engine_messages` 仍作为引擎快照保留），但链式结构为未来统一提供了基础 |
-
-##### 已拟定的设计决定
-
-1. **`parentUuid` 是写入时计算，非读取时推导** — 写入时从 `conversation.messages[-1].uuid` 获取，确保准确性（F-103 实现采用"总是 recompute"策略，不信任 pre-existing 值）
-2. **`walkChainBeforeParse` 作为字节级预过滤，不参与 JSON 解析** — 与 CCB 保持一致：只扫描 `{"parentUuid":` 前缀做字节定位，不 parse 整行
-3. **兼容旧格式通过检测 `parentUuid` 字段缺失** — 不引入版本号/feature gate
-4. **`chain_filter=False` 保留给元数据/分析消费者** — Visualizer、遥测、session_browser 等需要完整数据的场景
-5. **不与 F-49 Phase 5 冲突** — Phase 5 改变了文件格式（JSONL + 精简 metadata），F-103 在此基础上增加字段。Phase 5 需先稳定
-6. **最新 leaf 优先** — 多 leaf 场景用 `max(line_indices)` 选最新写入的分支（rewind 后的新分支而非死分支，即使死分支更长）
-
-##### 依赖与协同
-
-| 依赖 | 类型 | 说明 |
-|------|------|------|
-| F-49 Phase 5（`session.json` + `transcript.jsonl` 合并） | 硬依赖 | F-103 的 `parentUuid` 字段需要追加到 `transcript.jsonl` 中；Phase 5 先需稳定 |
-| `src/services/session_storage.py` | 核心改动 | 三个新函数 + `read_transcript()` 改造 |
-| `extensions/agent/session_persist.py` | 写入路径改动 | `save_to_session_storage()` 计算 `parentUuid` |
-| `clawcodex_ext/agent/session.py` | 读取路径改动 | `Session.load()`/`resume()` 集成链过滤 |
-| F-91 ~ F-96 Visualizer | 兼容约束 | 数据管道需适配新格式 / 使用 `chain_filter=False` |
-| F-97 Telemetry | 兼容约束 | 遥测读 `chain_filter=False` 不受影响 |
+> 详细设计（问题现状、核心设计 parentUuid/walkChainBeforeParse/buildConversationChain、改造点清单 P103-A~J、验收标准、风险与约束、设计决定、依赖与协同）已归档至 [ARCHIVED_FEATURES.md §三十一 parentUuid 链](./ARCHIVED_FEATURES.md#三十一parentuuid-链--walkchainbeforeparse-读取过滤f-103-)
 
 
-
-
-### 1.5.1 声明式工作流引擎核心（F-1.10 📋）
+### 1.5.1 声明式工作流引擎核心（F-110 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P0  
@@ -1460,7 +914,7 @@ DeclarativeWorkflowEngine
 
 ---
 
-### 1.5.2 StageRunner 适配器（F-1.11 📋）
+### 1.5.2 StageRunner 适配器（F-111 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P0  
@@ -1503,7 +957,7 @@ class StageRunner:
 
 ---
 
-### 1.5.3 GATE 门禁处理器（F-1.12 📋）
+### 1.5.3 GATE 门禁处理器（F-112 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -1531,7 +985,7 @@ class StageRunner:
 
 ---
 
-### 1.5.4 DECISION 决策处理器（F-1.13 📋）
+### 1.5.4 DECISION 决策处理器（F-113 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -1572,7 +1026,7 @@ class DecisionHandler:
 
 ---
 
-### 1.5.5 阶段契约验证器（F-1.14 📋）
+### 1.5.5 阶段契约验证器（F-114 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -1601,7 +1055,7 @@ class DecisionHandler:
 
 ---
 
-### 1.5.6 检查点与恢复（F-1.15 📋）
+### 1.5.6 检查点与恢复（F-115 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -1642,7 +1096,7 @@ class DecisionHandler:
 
 ---
 
-### 1.5.7 工作流可观测性集成（F-1.16 📋）
+### 1.5.7 工作流可观测性集成（F-116 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -2905,7 +2359,7 @@ Phase 6 (1d): [H] freeze-report CLI
 
 
 
-#### 4.2.2 工作流判别器（F-50.10 📋）
+#### 4.2.2 工作流判别器（F-50-A 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -2952,7 +2406,7 @@ clawcodex-dev pos convert <source_dir> --mode fwa    # 强制工作流模式
 
 ---
 
-#### 4.2.3 工作流结构提取器（F-50.11 📋）
+#### 4.2.3 工作流结构提取器（F-50-B 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P0  
@@ -3017,7 +2471,7 @@ class WorkflowExtractorBase(ABC):
 
 ---
 
-#### 4.2.4 阶段能力映射器（F-50.12 📋）
+#### 4.2.4 阶段能力映射器（F-50-C 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -3061,7 +2515,7 @@ class CapabilityKind(Enum):
 
 ---
 
-#### 4.2.5 工作流 Schema 生成器（F-50.13 📋）
+#### 4.2.5 工作流 Schema 生成器（F-50-D 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P0  
@@ -3141,7 +2595,7 @@ checkpoint:
 
 ---
 
-#### 4.2.6 Agent 定义生成器（工作流模式扩展）（F-50.14 📋）
+#### 4.2.6 Agent 定义生成器（工作流模式扩展）（F-50-E 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P0  
@@ -3177,7 +2631,7 @@ checkpoint:
 
 ---
 
-#### 4.2.7 源码桥接器生成器（F-50.15 📋）
+#### 4.2.7 源码桥接器生成器（F-50-F 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -3216,7 +2670,7 @@ Agent (Wrapper 模式)
 
 ---
 
-#### 4.2.8 提取器适配器库（F-50.16 📋）
+#### 4.2.8 提取器适配器库（F-50-G 📋）
 
 **状态**: 📋 规划中  
 **优先级**: P1  
@@ -3709,7 +3163,7 @@ F-22 不应在只有 `clawcodex_ext/cron_system` 单元测试通过时标记完�
 >
 > **2026-06 实施状态**：G1、G2、G3、G4、G5、G6、G7、G8 全部完成（`clawcodex_ext/cron_system/` 改造 + 46 个新单元测试 + 90/90 cron 测试 + 231/231 orchestrator 测试通过；独立 verification agent 两次给出 PASS 判定）。详见各小节末"实施状态"。
 
-#### 5.11.1 Feature Gate 系统——isKilled 运行时 kill 开关（F-22-G1 ✅）
+#### 5.11.1 Feature Gate 系统——isKilled 运行时 kill 开关（F-22-A ✅）
 **优先级**: P0
 **参考实现**: `claude-code-best/src/utils/cronScheduler.ts` 的 `isKilled` 轮询 + `prompt.ts` 的 `isKairosCronEnabled` / `CLAUDE_CODE_DISABLE_CRON` 环境变量
 
@@ -3739,7 +3193,7 @@ ClawCodex 当前仅支持启动时通过环境变量禁用，无法运行时紧�
 
 ---
 
-#### 5.11.2 远程 Jitter 实时配置（F-22-G2 ✅）
+#### 5.11.2 远程 Jitter 实时配置（F-22-B ✅）
 **优先级**: P0
 **参考实现**: `claude-code-best/src/utils/cronJitterConfig.ts` -> GrowthBook Feature Flag `tengu_kairos_cron_config` -> Zod 校验 + 兜底默认值
 
@@ -3771,7 +3225,7 @@ ClawCodex 当前 jitter 参数为静态常量，无调参能力。
 
 ---
 
-#### 5.11.3 One-shot 反向 Jitter（整点提前）（F-22-G3 ✅）
+#### 5.11.3 One-shot 反向 Jitter（整点提前）（F-22-C ✅）
 **优先级**: P1
 **参考实现**: `claude-code-best/src/utils/cronTasks.ts` 的 `oneShotJitteredNextCronRunMs()`
 
@@ -3803,7 +3257,7 @@ ClawCodex 当前的 `jitter.py` 仅实现了最基本的 `max_jitter_ms` 正向�
 
 ---
 
-#### 5.11.4 Permanent 免过期任务机制（F-22-G4 ✅）
+#### 5.11.4 Permanent 免过期任务机制（F-22-D ✅）
 **优先级**: P1
 **参考实现**: `claude-code-best/src/utils/cronTasks.ts` 的 `permanent` 字段 + `src/assistant/install.ts` 的 `writeIfMissing()`
 
@@ -3835,7 +3289,7 @@ CCB 支持 `permanent: true` 标记，此标记不可通过 `CronCreateTool` 设
 
 ---
 
-#### 5.11.5 锁注册式清理与 PID 存活探测增强（F-22-G5 ✅）
+#### 5.11.5 锁注册式清理与 PID 存活探测增强（F-22-E ✅）
 **优先级**: P1
 **参考实现**: `claude-code-best/src/utils/cronTasksLock.ts` 的 `cleanupRegistry` + `isProcessRunning()`
 
@@ -3868,7 +3322,7 @@ CCB 的锁系统在 `cronTasksLock.ts` 中有三项增强机制未被 `lock.py` 
 
 ---
 
-#### 5.11.6 工具 Prompt 指引文档增强（F-22-G6 ✅）
+#### 5.11.6 工具 Prompt 指引文档增强（F-22-F ✅）
 **优先级**: P2
 **参考实现**: `claude-code-best` 的 `CronCreateTool.ts` / `CronDeleteTool.ts` 中内联的全面 prompt 文档
 
@@ -3902,7 +3356,7 @@ ClawCodex 当前工具的 `prompt` 字段仅为 "Schedule a recurring or one-sho
 
 ---
 
-#### 5.11.7 Analytics 遥测事件注入（F-22-G7 ✅）
+#### 5.11.7 Analytics 遥测事件注入（F-22-G ✅）
 **优先级**: P2
 **参考实现**: `claude-code-best` 的 `tengu_scheduled_task_fire` / `tengu_scheduled_task_missed` / `tengu_scheduled_task_expired`
 
@@ -3935,7 +3389,7 @@ CCB 在每个关键 cron 事件点注入遥测事件：
 
 ---
 
-#### 5.11.8 inFlight 防重复触发机制（F-22-G8 ✅）
+#### 5.11.8 inFlight 防重复触发机制（F-22-H ✅）
 **优先级**: P2
 **参考实现**: `claude-code-best/src/utils/cronScheduler.ts` 的 `inFlight` Set
 
@@ -3964,7 +3418,7 @@ ClawCodex 当前 scheduler 无此保护。
 
 ---
 
-#### 5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-A1 ~ A6 ✅）
+#### 5.11.9 ClawCodex 已有但 CCB 缺失的优势特性（F-22-I ~ N ✅）
 以下为 ClawCodex `clawcodex_ext/cron_system/` 中已实现但 CCB 没有的特性，需在 F-22 迁移中保持：
 
 | 编号 | 特性 | 文件 | 说明 | 迁移风险 |
@@ -4027,7 +3481,7 @@ Phase C 已规划 "recurring task fired 后更新 `last_fired_at`、`next_fire_a
 - **缓解措施**：启动时应当遍历所有 recurring tasks，检查 `last_fired_at` 是否存在。若缺失（首次运行或崩溃后恢复），应重新计算 `next_fire_at = now + jitter`，而非沿用任务创建时的 `next_fire_at`。同时可在锁获取后执行一次 "reconcile" 步骤，清除或标记上次 crash 残留的 queued run。
 - **验收标准**：在 `scheduler.check_once()` 启动 tick 之前，所有 tasks 的 `next_fire_at` 均 >= `now`；不存在因旧快照回退导致的过期 due。
 
-##### SDK daemon 模式（dir / lockIdentity 独立运行）（F-22-G9 📋）
+##### SDK daemon 模式（dir / lockIdentity 独立运行）（F-22-O 📋）
 
 **对标 `claude-code-best` 行为**：`CronScheduler` 构造函数支持可选的 `dir`（项目目录）和 `lockIdentity`（锁所有者 UUID），允许完全脱离 bootstrap session state 运行。headless/daemon 场景下无需 session_id、无需 bootstrap state 即可独立启动调度器。
 
@@ -4040,7 +3494,7 @@ Phase C 已规划 "recurring task fired 后更新 `last_fired_at`、`next_fire_a
 
 **优先级**: P1（daemon 模式预研阶段实现）
 
-##### cronToHuman(utc) UTC 模式显示（F-22-G10 📋）
+##### cronToHuman(utc) UTC 模式显示（F-22-P 📋）
 
 **对标 `claude-code-best` 行为**：`cronToHuman(cron, {utc: true})` 在展示 cron 表达式的可读时间时，将 UTC cron 时间按本地时区转换显示，而非直接展示 UTC 时间戳。对远程 agent/跨境团队场景尤为重要。
 
@@ -4057,7 +3511,7 @@ Phase C 已规划 "recurring task fired 后更新 `last_fired_at`、`next_fire_a
 
 ---
 
-#### 5.11.12 Cron 任务累计防护——CCB 4 层设计对照审查（F-22-D1~D4 📋）
+#### 5.11.12 Cron 任务累计防护——CCB 4 层设计对照审查（F-22-Q~T 📋）
 
 **背景**：CCB 通过 4 层防护机制确保 cron 定时任务在"每分钟触发、1 小时执行"的场景下不会出现消息堆积和 OOM。以下是逐层对照审查结论。
 

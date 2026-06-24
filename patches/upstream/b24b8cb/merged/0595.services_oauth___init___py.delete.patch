@@ -1,0 +1,15 @@
+diff --git a/services/oauth/__init__.py b/services/oauth/__init__.py
+deleted file mode 100644
+--- a/services/oauth/__init__.py	2026-06-18 10:10:16.425590 +0000
++++ /dev/null
+@@ -1,10 +0,0 @@
+-"""OAuth services package.
+-
+-Real OAuth flow lives in ``src/auth/oauth.py``; this package holds the
+-service-layer helpers (``client.get_organization_uuid``, etc.) that
+-mirror ``typescript/src/services/oauth/``.
+-"""
+-
+-from src.services.oauth.client import get_organization_uuid
+-
+-__all__ = ['get_organization_uuid']
