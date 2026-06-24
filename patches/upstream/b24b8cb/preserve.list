@@ -194,3 +194,4 @@ services/voice/stt.py
 utils/git.py
 utils/message_mappers.py
 utils/messages.py
+utils/frontmatter_validators.py
