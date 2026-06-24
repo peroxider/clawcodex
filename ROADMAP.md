@@ -1,13 +1,33 @@
 # ClawCodex ROADMAP
 
-> 文档路径: `ROADMAP.md`
-> 信息来源: `docs/ARCHIVED_FEATURES.md`、`docs/FEATURE_PLAN.md`
-> 版本: v4.1
-> 更新日期: 2026-06-19
+> 文档路径: `ROADMAP.md`（合并自 `docs/ROADMAP.md`）
+> 信息来源: `docs/ARCHIVED_FEATURES.md`、`docs/FEATURE_PLAN.md`、`docs/PROGRESS.md`
+> 版本: v4.2
+> 更新日期: 2026-06-24
 
 ---
 
 ## 0. 路线图定义
+
+### 0.3 总体进度总览
+
+| 类别 | 已完成 | 进行中/部分完成 | 规划中/待开始 | 合计 |
+|------|:-----:|:--------------:|:-------------:|:----:|
+| **Orchestrator 系统** | 12 | 2 | 0 | 14 |
+| **Agent 核心能力** | 14 | 1 | 3 | 18 |
+| **CLI 与配置系统** | 3 | 0 | 0 | 3 |
+| **Architecture & SDK** | 5 | 1 | 2 | 8 |
+| **Cron 系统** | 1 (A~E+G1~G10) | 0 (剩余 R5/R7/R8) | 0 | 1 |
+| **会话恢复增强** | 1 (F-49) | 0 | 0 | 1 |
+| **CCB 对标缺口** | 10 | 2 | 3 | 15 |
+| **Python 生态补缺** | 1 | 3 | 3 | 7 |
+| **Multi-Session 可视化** | 1 (F-91~F-96) | 0 | 0 | 1 |
+| **遥测系统** | 1 (F-97) | 0 | 0 | 1 |
+| **其他** | 2 | 0 | 0 | 2 |
+| **开源替代组件** | 7 | 0 | 3 | 10 |
+| **总计** | **58** | **9** | **14** | **81** |
+
+
 
 ### 0.1 三大特性类别
 
@@ -435,6 +455,19 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | P2 | SR-3.4 A2A 协议雏形 | AR-F-2（A2A 协议化 Agent 互联） |
 | P2 | SR-4.2 Remote Trigger MVP | AR-F-7（RemoteTrigger 远程启动与 WebUI） |
 
+### 6.4 版本发布里程碑
+
+| 里程碑 | 预计时间 | 主要交付物 | 状态 |
+|--------|---------|-----------|:----:|
+| **v0.1 核心引擎** | 已完成 | Orchestrator 基础、Agent 核心、CLI 架构 | ✅ 已完成 |
+| **v0.2 系统增强** | 已完成 | Cron 系统、会话恢复、Bridge 桥接 | ✅ 已完成 |
+| **v0.3 可观测性** | 已完成 | Validator 验证闭环、审计旁路、报告系统 | ✅ 已完成 |
+| **v0.4 平台扩展** | 已完成 | CCB 对标完成 10/15、Cron 完成、Visualizer 完成 | ✅ 已完成 |
+| **v0.5 CI/CD 就绪** | 完成 90% | 本地门禁全部就绪；远端 Pipeline/CodeCheck/Release/PyPI 待仓库能力开通 | 🟡 进行中 |
+| **v0.6 生态补缺** | 规划中 | F-68 Feature Gate / F-69 Budget Mode / F-72 Multi-API / F-70 Plugin 完整 | ⏳ 规划中 |
+| **v0.7 远程控制** | 规划中 | F-82 Remote Control Server / F-66 ACP 协议 / F-81 Native 模块 | ⏳ 规划中 |
+| **v1.0 生产可用** | 规划中 | 所有 P0/P1 特性完成；端到端稳定性门禁；发布流水线生产就绪 | ⏳ 规划中 |
+
 ### 6.3 长期:自升级闭环
 
 | 优先级 | 交付目标 | 涉及 SR/AR |
@@ -509,6 +542,28 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 5. **补齐自动值守观测入口**:把 cron runs、orchestrator issue、team members、verification report 汇总到 SR-4.2 Autonomy Status(AR-F-22)统一输出。
 6. **为未来规划特性做最小闭环试点**:先以"每周生成 Agent 社区新特性 digest(AR-5.1.1~3) + 手动审批 proposal(AR-5.2.5)"为最小可用版本,不直接自动改代码。
 
+### 9.1 近期优先实施建议
+
+```
+第一优先级 (P0):
+  F-48 Phase 7-9 (src/ 解耦剩余) ─── 持续降低上游同步成本
+  F-22 R5/R7/R8 (Cron 剩余缺口) ─── 生产环境端到端完备
+
+第二优先级 (P1):
+  F-68 Feature Gate ─── F-70/F-102 基础依赖
+  F-69 Budget Mode 深度集成 ─── Token 节约，用户体验
+  F-70 Plugin 系统完善 ─── 发现/沙箱/生命周期
+  F-72 Multi-API 适配器 ─── 减少 LiteLLM 单点依赖
+  F-81 Native 模块 ─── 关键能缺失口
+  F-82 Remote Control Server ─── 远程管理能力
+  F-54 可观测性完善 ─── debug.ndjson → CLI 诊断字段
+
+第三优先级 (P2+):
+  F-66 ACP 协议 / F-87 Workflow Scripts / F-74 Sandbox / F-75 工具统计
+  F-64 Voice Mode 运行时集成
+  R-8/R-9/R-10 社区替代组件接入
+```
+
 ---
 
 ## 附录 A:AR 数量统计
@@ -533,4 +588,4 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 ---
 
-*ROADMAP v4.1 — 与 PROGRESS.md 及 FEATURE_PLAN.md 保持同步*
+*ROADMAP v4.2 — 与 PROGRESS.md 及 FEATURE_PLAN.md 保持同步*
