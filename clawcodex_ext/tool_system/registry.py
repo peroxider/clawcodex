@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import tempfile
 import threading
+from pathlib import Path
 from typing import Any, Iterable
 
 from .build_tool import Tool, Tools, tool_matches_name
@@ -15,6 +17,74 @@ from clawcodex_ext.permissions.types import (
     PermissionAskDecision,
     ToolPermissionContext,
 )
+
+# Tools that modify files on disk — blocked in plan mode unless targeting
+# a temporary / scratch path.
+_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
+    {"Bash", "Edit", "Write", "NotebookEdit"}
+)
+
+# Resolved once: system temp directory (e.g. /tmp, %TEMP%).
+_SYSTEM_TEMP_DIR: Path = Path(tempfile.gettempdir()).resolve()
+
+
+def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolContext) -> bool:
+    """Return True if the tool targets a temporary / scratch path.
+
+    Temporaries are defined as:
+    - the system temp directory (``tempfile.gettempdir()``, e.g. ``/tmp``,
+      ``/var/folders/…``, ``%TEMP%``)
+    - any path whose components include ``.clawcodex``
+      (e.g. ``/home/user/project/.clawcodex/plan.md``)
+    - any path whose components include ``.reports``
+      (e.g. ``/home/user/project/.reports/1.md``)
+    - the worktree root, if set (``context.worktree_root``) — worktrees are
+      short-lived scratch copies of a repository
+
+    Bash is assigned ``False`` unconditionally because its file-modification
+    intent cannot be determined statically — the system prompt already
+    instructs the LLM not to execute commands in plan mode.
+    """
+    if tool_name == "Bash":
+        return False
+
+    file_path = tool_input.get("file_path") or tool_input.get("filePath")
+    if not isinstance(file_path, str):
+        return False
+
+    p = Path(file_path).expanduser()
+    if not p.is_absolute():
+        base = context.cwd or context.workspace_root
+        p = (base / p).resolve()
+    else:
+        p = p.resolve()
+
+    # System temp directory (e.g. /tmp, /var/folders/..., %TEMP%).
+    try:
+        p.relative_to(_SYSTEM_TEMP_DIR)
+        return True
+    except ValueError:
+        pass
+
+    # Worktree root — a short-lived scratch copy of a repository.
+    if context.worktree_root is not None:
+        try:
+            p.relative_to(context.worktree_root)
+            return True
+        except ValueError:
+            pass
+
+    # Path contains ".clawcodex" as a path component
+    # (e.g. /home/user/project/.clawcodex/plan.md).
+    if ".clawcodex" in p.parts:
+        return True
+
+    # Path contains ".reports" as a path component
+    # (e.g. /home/user/project/.reports/1.md).
+    if ".reports" in p.parts:
+        return True
+
+    return False
 
 
 class ToolRegistry:
@@ -55,6 +125,22 @@ class ToolRegistry:
 
         context.ensure_tool_allowed(tool.name)
         validate_json_schema(call.input, tool.input_schema, root_name=tool.name)
+
+        # Plan mode runtime gate: block destructive tools unless targeting
+        # a temporary / scratch path.
+        if context.plan_mode and tool.name in _DESTRUCTIVE_TOOLS:
+            if not _is_temp_path(tool.name, call.input, context):
+                return ToolResult(
+                    name=call.name,
+                    output={
+                        "error": (
+                            f"Plan mode: {tool.name} is not allowed on project files. "
+                            "Exit plan mode first via ExitPlanMode to modify files."
+                        )
+                    },
+                    is_error=True,
+                    tool_use_id=call.tool_use_id,
+                )
 
         if tool.validate_input is not None:
             validation = tool.validate_input(call.input, context)
