@@ -89,6 +89,14 @@
     - [1.3.3 Tool-call 审计旁路（F-45 ✅）](#1-3-3-tool-call-审计旁路)
     - [1.3.4 Coordinator 轻量工具集（F-41 ✅）](#1-3-4-coordinator-轻量工具集)
     - [1.4.2 Issue 会话统一存储与实时介入（F-49 ✅ Phase 0.4 + Phase 5）](#1-4-2-issue-会话统一存储与实时介入)
+    - [1.5.1 声明式工作流引擎核心（F-1.10 📋）](#1-5-1-声明式工作流引擎核心f-110)
+    - [1.5.2 StageRunner 适配器（F-1.11 📋）](#1-5-2-stagerunner-适配器f-111)
+    - [1.5.3 GATE 门禁处理器（F-1.12 📋）](#1-5-3-gate-门禁处理器f-112)
+    - [1.5.4 DECISION 决策处理器（F-1.13 📋）](#1-5-4-decision-决策处理器f-113)
+    - [1.5.5 阶段契约验证器（F-1.14 📋）](#1-5-5-阶段契约验证器f-114)
+    - [1.5.6 检查点与恢复（F-1.15 📋）](#1-5-6-检查点与恢复f-115)
+    - [1.5.7 工作流可观测性集成（F-1.16 📋）](#1-5-7-工作流可观测性集成f-116)
+    - [1.6.1 动态任务分解引擎（F-118 🔭）](#1-6-1-动态任务分解引擎f-118)
 - [二、Agent 核心能力](#二、agent-核心能力)
     - [2.1 Agent 阶段性进度汇报（F-20 ✅）](#2-1-agent-阶段性进度汇报)
     - [2.2 Team 成员管理（F-2 🔄）](#2-2-team-成员管理)
@@ -113,6 +121,13 @@
     - [4.1 src/ 核心路径解耦（F-48 📋）](#4-1-f-48-src-核心路径二开修改解耦方案)
     - [4.2 SOP 转换器固化（F-50 ✅）](#4-2-sop-转换器源码固化设计)
     - [4.2.1 分组策略增强（F-55 ✅）](#4-2-1-sop-转换器分组策略增强设计)
+    - [4.2.2 工作流判别器（F-50.10 📋）](#4-2-2-工作流判别器f-5010)
+    - [4.2.3 工作流结构提取器（F-50.11 📋）](#4-2-3-工作流结构提取器f-5011)
+    - [4.2.4 阶段能力映射器（F-50.12 📋）](#4-2-4-阶段能力映射器f-5012)
+    - [4.2.5 工作流 Schema 生成器（F-50.13 📋）](#4-2-5-工作流-schema-生成器f-5013)
+    - [4.2.6 Agent 定义生成器（F-50.14 📋）](#4-2-6-agent-定义生成器f-5014)
+    - [4.2.7 源码桥接器生成器（F-50.15 📋）](#4-2-7-源码桥接器生成器f-5015)
+    - [4.2.8 提取器适配器库（F-50.16 📋）](#4-2-8-提取器适配器库f-5016)
     - [4.3 SDK 方法→Tool（F-52 ✅）](#4-3-python-sdk-方法注册为-tool)
     - [4.4 Tool→CLI 命令映射（F-53 📋）](#4-4-tool-自动暴露为-cli-斜杠命令)
 - [五、Cron 系统执行引擎](#五、cron-系统执行引擎)
@@ -1259,6 +1274,392 @@ Session.resume(sid)
 | F-91 ~ F-96 Visualizer | 兼容约束 | 数据管道需适配新格式 / 使用 `chain_filter=False` |
 | F-97 Telemetry | 兼容约束 | 遥测读 `chain_filter=False` 不受影响 |
 
+
+
+
+#### 1.5.1 声明式工作流引擎核心（F-1.10）
+
+**状态**：📋 设计完成  
+**优先级**：P0  
+**目标**：读取 `workflow.yaml`，按 DAG 顺序调度 Agent，管理 GATE/DECISION/回环，提供工作流级错误恢复和成本追踪。
+
+**引擎核心**：
+
+```python
+class DeclarativeWorkflowEngine:
+    """声明式工作流引擎 — 解释执行 workflow.yaml"""
+
+    def __init__(self, workflow: WorkflowSchema, config: EngineConfig):
+        self.workflow = workflow
+        self.config = config
+        self.state = WorkflowState(workflow)
+        self.stage_runner = StageRunner(config)
+        self.cost_tracker = CostTracker(config.cost_budget)
+
+    async def execute(self, from_stage: int | None = None) -> WorkflowResult:
+        current = self._resolve_start(from_stage)
+        while current is not None:
+            node = self.workflow.get_stage(current)
+            self.state.mark_running(current)
+            self._emit_event("stage_start", current)
+
+            try:
+                result = await self.stage_runner.run(node, self.state)
+                if not self._validate_outputs(node, result):
+                    result = await self._handle_validation_failure(node, result)
+
+                self.cost_tracker.record(current, result.cost_usd)
+                self.state.write_checkpoint(current, result)
+                self._emit_event("stage_complete", current, result)
+
+                if node.gate and node.gate.enabled:
+                    decision = await self._handle_gate(node, result)
+                    if decision == "reject":
+                        current = node.gate.rollback_on_reject
+                        continue
+
+                if node.decision:
+                    outcome = self._parse_decision(result)
+                    current = self._resolve_decision(node, outcome)
+                    continue
+
+                current = self.workflow.next_stage(current)
+
+            except StageTimeoutError:
+                current = self._handle_timeout(node)
+            except StageFailureError:
+                current = self._handle_failure(node)
+            except CostBudgetExceeded:
+                current = self._handle_cost_exceeded(node)
+
+        return self.state.finalize()
+```
+
+**与 Orchestrator 的关系**：
+
+
+```
+DeclarativeWorkflowEngine
+  ├── 复用 → AgentRunner (F-1)
+  │            └── stagnation detection (F-51)
+  │            └── loop detection
+  │            └── rate limit circuit breaker
+  │            └── session transcript persistence
+  ├── 复用 → ProgressSink (F-40)
+  │            └── 工作流级进度报告
+  ├── 复用 → Verification Pipeline (F-38)
+  │            └── 阶段输出的验证
+  ├── 复用 → State Journal Writer (F-91~F-96)
+  │            └── 工作流事件的 NDJSON 日志
+  ├── 复用 → ClarificationQueue (F-39)
+  │            └── GATE 的人类审批通道
+  ├── 复用 → CostTracker (F-1 已有)
+  │            └── 阶段级成本统计
+  └── 新增 → StageRunner 适配器
+               └── 将阶段包装为 AgentRunner 可执行的 Issue
+```
+
+**子特性**：
+
+| 编号 | 名称 | 状态 | 描述 |
+|------|------|------|------|
+| F-1.10.1 | 核心执行循环 | 📋 | DAG 遍历 + 顺序执行 + 事件发射 |
+| F-1.10.2 | 阶段调度 | 📋 | 调用 StageRunner 执行单个阶段 |
+| F-1.10.3 | 输出验证 | 📋 | 调用 ValidatorSpec 执行阶段输出验证 |
+| F-1.10.4 | 错误处理策略 | 📋 | timeout/failure/cost-exceeded 的可配置处理 |
+| F-1.10.5 | 工作流级事件总线 | 📋 | stage_start/stage_complete/gate_request 等事件 |
+| F-1.10.6 | 成本追踪与预算控制 | 📋 | 阶段级预算 + 全局预算 + 预警阈值 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/engine.py` | `DeclarativeWorkflowEngine` 核心 | 📋 |
+| `extensions/orchestrator/workflow_engine/workflow_state.py` | 工作流运行时状态 | 📋 |
+| `extensions/orchestrator/workflow_engine/event_bus.py` | 事件总线 + State Journal 写入 | 📋 |
+| `extensions/orchestrator/workflow_engine/cost.py` | `CostTracker` + `CostBudget` | 📋 |
+| `extensions/orchestrator/workflow_engine/errors.py` | 异常类型定义 | 📋 |
+
+---
+
+#### 1.5.2 StageRunner 适配器（F-1.11）
+
+**状态**：📋 设计完成  
+**优先级**：P0  
+**目标**：桥接 `DeclarativeWorkflowEngine` 与 `AgentRunner`，将阶段执行适配为 `AgentRunner` 可消费的工作单元。
+
+**适配器设计**：
+
+```python
+class StageRunner:
+    async def run(self, stage_node: StageNode,
+                  state: WorkflowState) -> StageRunResult:
+        # 构建合成 Issue
+        synthetic_issue = Issue(
+            identifier=f"stage-{stage_node.id:02d}",
+            title=f"[{stage_node.phase}] {stage_node.name}",
+            body=self._build_stage_prompt(stage_node, state),
+            labels=[f"workflow-stage", f"workflow-{stage_node.phase}"],
+        )
+        # 构建 Workspace（共享目录，非 git）
+        workspace = self._build_workspace(stage_node, state)
+        # 调用 AgentRunner
+        agent_runner = AgentRunner(agent_config=self._build_agent_config(stage_node))
+        session = AgentSession(issue=synthetic_issue, workspace=workspace)
+        return await agent_runner.run(session, self.config.workflow_config)
+```
+
+**设计决策**：
+
+| # | 决策 | 理由 |
+|---|------|------|
+| DD-5 | 方案 A（合成 Issue 适配器）优先 | 保留 AgentRunner 的全部稳健机制 |
+| DD-6 | Workspace 使用共享模式（F-42） | 阶段间共享 `workspace_dir`，不需要 git 隔离 |
+| DD-7 | 备选方案 B（QueryRunner）保留 | 如适配开销过大，可切换 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/stage_runner.py` | `StageRunner` + AgentRunner 适配器 | 📋 |
+
+---
+
+#### 1.5.3 GATE 门禁处理器（F-1.12）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：处理工作流中的 GATE 阶段——人类审批、自动阈值、回滚。
+
+**三种审批模式**：
+
+1. **manual** — 通过 ClarificationQueue（F-39）暂停工作流，等待人类审批/拒绝
+2. **auto** — 基于 ValidatorSpec 自动判定，所有 validator 通过即 approve
+3. **threshold** — LLM-as-judge 评分，达到阈值自动 approve，否则进入 manual
+
+**复用 F-44（Human Review Gate）**：
+
+- `issue review --approve/--reject` 扩展为 `workflow gate --approve/--reject`
+- `PENDING_REVIEW` 状态扩展为 `GATE_PENDING` 工作流级状态
+- workspace 保留策略沿用（GATE 暂停时保留阶段产物供检查）
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/gate_handler.py` | `GateHandler` 核心 | 📋 |
+| `extensions/orchestrator/workflow_engine/gate_modes.py` | manual/auto/threshold 三种模式 | 📋 |
+| `extensions/orchestrator/workflow_engine/gate_rollback.py` | 回滚逻辑 | 📋 |
+
+---
+
+#### 1.5.4 DECISION 决策处理器（F-1.13）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：处理工作流中的决策点——多结果分支、回环、收敛检测。
+
+**核心逻辑**：
+
+```python
+class DecisionHandler:
+    def resolve(self, node: StageNode, result: StageRunResult,
+                history: DecisionHistory) -> int | None:
+        outcome = self._parse_outcome(result)  # proceed / pivot / refine / ...
+        decision_spec = node.decision.outcomes[outcome]
+
+        # 回环次数检查
+        if decision_spec.max_times is not None:
+            times = history.count(outcome, node.id)
+            if times >= decision_spec.max_times:
+                return self._resolve_exhaust(decision_spec)
+
+        # 收敛检查
+        if decision_spec.convergence_check:
+            if history.is_degenerate(outcome, node.id):
+                return self._resolve_convergence(node)
+
+        return decision_spec.next or decision_spec.rollback_to
+```
+
+**收敛检测**：追踪同一 decision outcome 的连续触发次数 + 阶段输出 diff，判定退化循环。
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/decision_handler.py` | `DecisionHandler` | 📋 |
+| `extensions/orchestrator/workflow_engine/decision_history.py` | 决策历史 + 收敛检测 | 📋 |
+| `extensions/orchestrator/workflow_engine/rollback.py` | 阶段目录快照 + 版本化回滚 | 📋 |
+
+---
+
+#### 1.5.5 阶段契约验证器（F-1.14）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：执行阶段输出的机器可验证 DoD 检查。
+
+**内置 Validator 实现**：
+
+| 类型 | 实现 | 优先级 |
+|------|------|--------|
+| `file_exists` | `Path.exists()` | P0 |
+| `file_size` | `Path.stat().st_size` | P0 |
+| `regex` | `re.findall()` + `min_matches` | P0 |
+| `json_schema` | `jsonschema.validate()` | P1 |
+| `line_count` | `len(file.readlines())` | P0 |
+| `llm_judge` | LLM 评估 + 分数阈值 | P1 |
+| `custom` | `subprocess.run()` + exit code | P2 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/validators/__init__.py` | `ContractValidator` + 注册表 | 📋 |
+| `extensions/orchestrator/workflow_engine/validators/builtin.py` | 6 种内置 Validator | 📋 |
+| `extensions/orchestrator/workflow_engine/validators/llm_judge.py` | LLM-as-judge | 📋 |
+| `extensions/orchestrator/workflow_engine/validators/custom.py` | 自定义命令 | 📋 |
+
+---
+
+#### 1.5.6 检查点与恢复（F-1.15）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：工作流级检查点持久化，支持从任意阶段恢复执行。
+
+**检查点格式**：
+
+```json
+{
+  "workflow_name": "arc-research",
+  "workflow_version": "1.0",
+  "current_stage": 12,
+  "completed_stages": [1, 2, ..., 11],
+  "stage_results": {
+    "1": { "status": "success", "outputs": ["goal.md"], "timestamp": "..." }
+  },
+  "decision_history": [
+    { "stage": 15, "outcome": "refine", "timestamp": "..." }
+  ],
+  "cost_accumulated_usd": 12.34,
+  "started_at": "2026-06-18T10:00:00Z",
+  "last_checkpoint": "2026-06-18T14:30:00Z"
+}
+```
+
+**复用策略**：
+- 复用 ARC 已有的原子写入模式（temp file + rename）
+- 复用 Orchestrator 的 `SessionStorage`（F-49）存储每阶段 Agent session transcript
+- 复用 State Journal Writer（F-91~F-96）写入工作流级事件日志
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/checkpoint.py` | 检查点写入/读取/验证 | 📋 |
+| `extensions/orchestrator/workflow_engine/resume.py` | 从检查点恢复执行 | 📋 |
+| `extensions/orchestrator/workflow_engine/artifact_resolver.py` | 跨阶段产物路径解析 | 📋 |
+
+---
+
+#### 1.5.7 工作流可观测性集成（F-1.16）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：将工作流执行事件集成到 ClawCodex 的可视化和审计体系。
+
+**集成点**：
+
+| 来源特性 | 复用内容 | 工作流适配 |
+|---------|---------|-----------|
+| F-91~F-96 Visualizer | State Journal NDJSON | `workflow_stage_start`/`workflow_gate_request`/`workflow_decision`/`workflow_complete` |
+| F-91~F-96 Visualizer | Gantt 图 | 阶段执行时间渲染为 Gantt 条形图 |
+| F-45 Audit Trail | Tool-call NDJSON | 工作流级事件写入 `~/.clawcodex/tool-events/` |
+| F-40 ProgressSink | 进度报告协议 | `WorkflowProgressSink` 报告阶段完成百分比 |
+| F-20 Progress Reporting | 检查点触发的进度报告 | 每阶段完成后触发 `ProgressReportTool` |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/orchestrator/workflow_engine/observability.py` | State Journal 事件写入 | 📋 |
+| `extensions/orchestrator/workflow_engine/progress.py` | `WorkflowProgressSink` | 📋 |
+| `extensions/orchestrator/workflow_engine/audit.py` | 工作流级审计事件 | 📋 |
+
+---
+
+---
+
+
+---
+
+
+
+#### 1.6.1 动态任务分解引擎（F-118）
+
+**状态**：🔭 长期规划（本特性规划文档仅做方向性定义）  
+**优先级**：P2  
+**目标**：单次复杂任务实时分解为多个 subagent 并行/串行执行，动态规划子任务、调度 wave、合并结果。
+
+**能力范围**：
+
+| 能力 | 说明 | 对标 Claude Code |
+|------|------|-----------------|
+| 任务复杂度分析 | 判断任务是否需要分解（单步 vs 多步） | Plan Mode |
+| 子任务分解 | 将复杂任务拆分为原子 phase | EnterPlanMode/ExitPlanMode |
+| 依赖分析 | 判断子任务间是否可并行 | 依赖图分析 |
+| 执行模式选择 | sequential vs parallel | sequential / parallel waves |
+| 子 agent 调度 | 调用 `fork_subagent`/`Agent()` 执行 | Agent(...) |
+| 结果合并 | 去重、筛选、合并子 agent 输出 | 脚本级合并（零 token） |
+| 验证循环 | adversarial verification / loop-until-done | 六种模式组合 |
+
+**触发方式**：
+
+```bash
+# 单次任务触发（类似 ultracode 关键字）
+clawcodex --swarm "create a simple calculator app with NextJS backend"
+# 或
+clawcodex --decompose "refactor this codebase to use async/await"
+
+# Session 设置（自动模式）
+clawcodex --effort swarm
+# 此后每个实质性任务自动分解
+```
+
+**与声明式工作流引擎的区分原则**：
+
+| 决策 | 声明式工作流引擎（F-1.10） | 动态任务分解（F-118） |
+|------|--------------------------|---------------------|
+| 编排脚本 | 人类可审阅的 YAML | 内部生成的子任务列表（不可见） |
+| 持久化 | ✅ workflow.yaml 保存到磁盘 | ❌ 不持久化 |
+| 检查点 | ✅ per-stage | ❌ 无（仅 session 恢复） |
+| 成本预算 | ✅ 阶段级 | ⚠️ 累计消耗 |
+| 命名空间 | `workflow` / `workflow_engine` | `swarm` / `decompose` / `task_decomposition` |
+| CLI 命令 | `clawcodex-dev workflow run` | `clawcodex --swarm` |
+
+**实现位置**：
+
+```
+extensions/orchestrator/
+├── workflow_engine/          # F-1.10~F-1.16（声明式，长期管线）
+│   └── engine.py            # DeclarativeWorkflowEngine
+└── task_decomposition/      # F-118（动态，单次任务）
+    └── engine.py            # TaskDecompositionEngine（未来规划）
+```
+
+**设计约束**：
+1. 动态任务分解**不依赖**声明式工作流引擎的任何代码（避免概念混淆）
+2. 动态任务分解**复用** `fork_subagent`、`Agent()` 工具、现有 `AgentRunner`
+3. 命名上严禁使用 "workflow" 一词，使用 "swarm" / "decompose" / "task_decomposition"
+
+---
+
+---
+
+
+---
 
 ## 二、Agent 核心能力
 
@@ -2727,6 +3128,345 @@ Phase 6 (1d): [H] freeze-report CLI
 **实现位置**: `extensions/pos_converter/skill_grouper.py`
 
 > 完整设计（四种分组策略、CLI 接口、实现架构、Agent 数量量化对比、风险与约束、设计决定）已归档至 [ARCHIVED_FEATURES.md §äºåä¸ F-55 SOP 转换器分组策略增强](./ARCHIVED_FEATURES.md#二十七f-55-sop-转换器分组策略增强)。
+
+---
+
+
+
+#### 4.2.2 工作流判别器（F-50.10）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：自动判断输入源码是否具备固定编排工作流特征，决定使用标准 SDK 模式还是工作流模式。
+
+**判别特征**（启发式评分）：
+
+| 特征 | 检测方式 | 权重 | 匹配模式 |
+|------|---------|------|---------|
+| 阶段枚举 | `IntEnum`/`Enum` 子类，成员大写+下划线 | 0.25 | `class Stage(IntEnum)` |
+| 状态转换 | 字典字面量，键值均为枚举值 | 0.20 | `NEXT_STAGE = {A: B}` |
+| IO 契约 | dataclass 含 `input_files`/`output_files` | 0.20 | `StageContract(...)` |
+| 控制流决策 | 函数含 `pivot`/`refine`/`proceed`/`gate` | 0.15 | `def decide_pivot(...)` |
+| 阶段实现目录 | 目录名 `stage_impls/`/`stages/`/`pipeline/` | 0.10 | 含多个阶段实现文件 |
+| GATE 定义 | `frozenset`/`set` 命名含 `GATE` | 0.10 | `GATE_STAGES = frozenset(...)` |
+
+**判别结果映射**：
+
+```python
+score < 0.3   → 标准 SDK 模式 (F-50)
+score 0.3~0.7 → 混合模式（用户确认，提供两种预览）
+score ≥ 0.7   → 工作流模式 (F-50.10~)
+```
+
+**CLI 集成**：
+
+```bash
+clawcodex-dev pos convert <source_dir>              # 自动判别（默认）
+clawcodex-dev pos convert <source_dir> --mode sdk    # 强制标准模式
+clawcodex-dev pos convert <source_dir> --mode fwa    # 强制工作流模式
+```
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/discriminator.py` | `WorkflowDiscriminator` 核心 | 📋 |
+| `extensions/pos_converter/workflow_mode/heuristics.py` | 6 种启发式检测规则 | 📋 |
+| `extensions/pos_converter/workflow_mode/models.py` | `DiscriminationResult` 数据模型 | 📋 |
+
+**依赖与协同**：
+- **复用 F-50**：`SourceCodeParser` 的 AST 解析基础设施做初步扫描
+- **依赖 F-50.11**：判别结果决定后续是否调用 WorkflowExtractor
+
+---
+
+#### 4.2.3 工作流结构提取器（F-50.11）
+
+**状态**：📋 设计完成  
+**优先级**：P0  
+**目标**：从目标应用的 Python 源码中提取阶段定义、转换规则、GATE 逻辑、DECISION 回环为 `WorkflowGraph`。
+
+**架构：可插拔提取器模式**
+
+```python
+class WorkflowExtractorBase(ABC):
+    @abstractmethod
+    def extract_stages(self, source_dir: Path) -> list[StageNode]: ...
+    @abstractmethod
+    def extract_transitions(self, source_dir: Path) -> list[Transition]: ...
+    @abstractmethod
+    def extract_gates(self, source_dir: Path) -> dict[int, GateSpec]: ...
+    @abstractmethod
+    def extract_decisions(self, source_dir: Path) -> dict[int, DecisionSpec]: ...
+    @abstractmethod
+    def extract_contracts(self, source_dir: Path) -> dict[int, StageContract]: ...
+
+    def extract(self, source_dir: Path) -> WorkflowGraph:
+        return WorkflowGraph(
+            stages=self.extract_stages(source_dir),
+            transitions=self.extract_transitions(source_dir),
+            gates=self.extract_gates(source_dir),
+            decisions=self.extract_decisions(source_dir),
+            contracts=self.extract_contracts(source_dir),
+        )
+```
+
+**通用提取策略**（基类提供，子类可覆盖）：
+1. 阶段枚举发现——扫描 `IntEnum`/`Enum` 子类，匹配大写+下划线模式
+2. 转换规则发现——查找字典字面量，键值为枚举引用（`NEXT_STAGE` 等命名）
+3. GATE 发现——查找 `frozenset`/`set` 字面量（`GATE_*`）+ 返回 `bool` 的函数（`*_gate`）
+4. 决策发现——查找字典含 `pivot`/`refine`/`proceed` 关键词
+5. 契约发现——查找 `input_files`/`output_files` 字段的 dataclass 或字典
+
+**子特性**：
+
+| 编号 | 名称 | 状态 | 描述 |
+|------|------|------|------|
+| F-50.11.1 | 提取器基类 + 通用 AST 策略 | 📋 | 抽象基类 + 5 种通用启发式提取 |
+| F-50.11.2 | 提取器注册表 | 📋 | 按项目名/discovery 自动选择提取器 |
+| F-50.11.3 | 提取结果预览模式 | 📋 | `--preview` 输出人类可读摘要，不写文件 |
+| F-50.11.4 | 交互式补全模式 | 🔭 | 提取失败时生成 `TODO:` 模板 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/extractors/base.py` | `WorkflowExtractorBase` | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/ast_helpers.py` | Python AST 通用分析工具 | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/registry.py` | `ExtractorRegistry` | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/models.py` | `StageNode`/`Transition`/`GateSpec`/`DecisionSpec` | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/adapters/arc.py` | AutoResearchClaw 提取适配器 | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/adapters/generic.py` | 通用 Python 管线适配器 | 📋 |
+
+**依赖与协同**：
+- **复用 F-50**：`SourceCodeParser` AST 解析基础设施
+- **复用 F-55**：分组策略中的路径前缀树切割算法
+- **产出 F-50.13**：提取结果为 `WorkflowGraph`，可序列化为 YAML
+
+---
+
+#### 4.2.4 阶段能力映射器（F-50.12）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：分析每个阶段的实现代码，提取外部依赖和能力特征，推荐执行模式（agent_native / wrapper / hybrid）。
+
+**能力分类体系**：
+
+```python
+class CapabilityKind(Enum):
+    LLM_CALL = "llm"
+    ACADEMIC_API = "academic_api"     # arXiv, Semantic Scholar...
+    WEB_SEARCH = "web_search"         # Tavily, Google...
+    CODE_EXECUTION = "code_exec"      # Docker, sandbox
+    FILE_IO = "file_io"
+    EXTERNAL_CLI = "external_cli"
+    DOMAIN_SPECIFIC = "domain"
+    DATA_PROCESSING = "data_proc"
+    HTTP_API = "http_api"
+```
+
+**执行模式推荐矩阵**：
+
+| | fragility < 0.3 | fragility 0.3~0.6 | fragility > 0.6 |
+|---|---|---|---|
+| **complexity < 0.4** | agent_native | agent_native | wrapper |
+| **complexity 0.4~0.7** | agent_native | hybrid | wrapper |
+| **complexity > 0.7** | hybrid | wrapper | wrapper |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/capability/mapper.py` | `StageCapabilityMapper` | 📋 |
+| `extensions/pos_converter/workflow_mode/capability/analyzer.py` | 复杂度/脆弱度评分 | 📋 |
+| `extensions/pos_converter/workflow_mode/capability/patterns.py` | 已知 API/LLM/CLI 模式库 | 📋 |
+| `extensions/pos_converter/workflow_mode/capability/models.py` | `Capability`/`StageCapabilityProfile` | 📋 |
+
+**依赖与协同**：
+- **依赖 F-50.11**：需要 `WorkflowGraph` 中的阶段文件路径
+- **协同 F-52**：提取出的外部 API 可自动注册为 Tool
+
+---
+
+#### 4.2.5 工作流 Schema 生成器（F-50.13）
+
+**状态**：📋 设计完成  
+**优先级**：P0  
+**目标**：定义并生成声明式工作流 YAML 格式，支持 DAG、GATE、DECISION、回环、契约验证。
+
+**Schema 核心结构**（精简版）：
+
+```yaml
+schema_version: "1.0"
+name: <workflow-name>
+source_project: <source-project-name>
+source_version: <version>
+
+config:
+  workspace_dir: "./workspace"
+  max_total_time_hours: <number>
+  cost_budget_usd: <number>
+  parallel_stages: false
+
+stages:
+  - id: <int>
+    name: <kebab-case>
+    agent: <agent-type>
+    phase: <phase-label>
+    execution_mode: agent_native | wrapper | hybrid
+    inputs: [<filename>, ...]
+    outputs: [<filename>, ...]
+    validators: [<ValidatorSpec>, ...]
+    timeout_minutes: <int>
+    max_retries: <int>
+    gate:
+      enabled: <bool>
+      approval_mode: manual | auto | threshold
+      rollback_on_reject: <stage-id>
+    decision:
+      outcomes:
+        <outcome-name>:
+          next: <stage-id> | proceed
+          rollback_to: <stage-id>
+          max_times: <int>
+          convergence_check: <bool>
+
+transitions:
+  - from: <stage-id>
+    to: <stage-id>
+    kind: sequential | gate_approve | gate_reject | decision | rollback
+
+error_handling:
+  on_stage_timeout: retry | retry_then_skip | halt
+  on_stage_failure: retry | retry_then_halt | skip
+  on_cost_budget_exceeded: halt | degrade
+
+checkpoint:
+  enabled: <bool>
+  strategy: per_stage | per_phase
+  resume: <bool>
+```
+
+**设计决策**：
+
+| # | 决策 | 理由 |
+|---|------|------|
+| DD-1 | 使用 YAML | 与 F-87 一致，人类可读，支持注释 |
+| DD-2 | ValidatorSpec 支持 LLM-as-judge | 阶段输出语义质量需 LLM 评估 |
+| DD-3 | `execution_mode` 三档选择 | 不同复杂度阶段需要不同策略 |
+| DD-4 | 工作流继承为 P3 | MVP 单文件完整定义即可 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/schema/workflow_schema.py` | Schema 数据模型 | 📋 |
+| `extensions/pos_converter/workflow_mode/schema/parser.py` | YAML 解析 + 验证 | 📋 |
+| `extensions/pos_converter/workflow_mode/schema/dag_validator.py` | DAG 完整性检查 | 📋 |
+| `extensions/pos_converter/workflow_mode/schema/validator_spec.py` | ValidatorSpec 类型定义 | 📋 |
+| `extensions/pos_converter/workflow_mode/schema/discovery.py` | 工作流文件发现 | 📋 |
+
+---
+
+#### 4.2.6 Agent 定义生成器（工作流模式扩展）（F-50.14）
+
+**状态**：📋 设计完成  
+**优先级**：P0  
+**目标**：从 `WorkflowGraph` + `CapabilityProfile` 批量生成阶段 Agent 定义文件。
+
+**三种 Agent 模板**：
+
+- **Agent-native**：完整 frontmatter + 任务描述 + 执行步骤 + 质量要求
+- **Wrapper**：精简版，核心为 `wrapper_command` + 输出验证
+- **Hybrid**：混合步骤指导 + Bridge 调用
+
+**Overview Agent 生成**（复用 F-50 的 `AgentMarkdownWriter.write_overview_agent()`）：
+- 工作流总览（阶段列表 + 相位分组）
+- 子 Agent 目录
+- 跨阶段编排指令（GATE 处理、PIVOT/REFINE 指令）
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/generator/agent_def_gen.py` | `AgentDefinitionGenerator` | 📋 |
+| `extensions/pos_converter/workflow_mode/generator/templates/` | Jinja2 Agent 模板目录 | 📋 |
+| `extensions/pos_converter/workflow_mode/generator/skill_gen.py` | Skill 定义生成 | 📋 |
+| `extensions/pos_converter/workflow_mode/generator/tool_gen.py` | 工具注册代码生成 | 📋 |
+| `extensions/pos_converter/workflow_mode/generator/overview_gen.py` | Overview Agent 生成 | 📋 |
+
+**依赖与协同**：
+- **复用 F-50**：`AgentMarkdownWriter`、`AgentDefinition`
+- **复用 F-52**：`build_tool_from_spec()` 用于生成工具注册代码
+- **复用 F-55**：Agent 命名规范（kebab-case 转换）
+- **依赖 F-50.11**：`WorkflowGraph` 提供阶段元数据
+- **依赖 F-50.12**：`CapabilityProfile` 提供工具列表和执行模式
+
+---
+
+#### 4.2.7 源码桥接器生成器（F-50.15）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：生成 Bridge 模块，使 Agent 可以通过 Python API 调用目标应用的单阶段执行。
+
+**Bridge 架构**：
+
+```
+Agent (Wrapper 模式)
+  │
+  ├── 方式 A: CLI Bridge ─── subprocess 调用目标应用 CLI
+  │
+  └── 方式 B: Python Bridge ─── import 目标应用模块，调用 execute_stage()
+          │
+          ├── Bridge 类（生成）
+          │     ├── execute_stage(stage_id, project_dir, overrides)
+          │     ├── validate_outputs(stage_id, project_dir)
+          │     └── get_artifacts(stage_id, project_dir)
+          └── MCP Tool 注册（生成）
+                └── 工具: <project>_execute_stage
+```
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/bridge/generator.py` | `BridgeGenerator` | 📋 |
+| `extensions/pos_converter/workflow_mode/bridge/templates/` | Bridge 代码模板 | 📋 |
+| `extensions/pos_converter/workflow_mode/bridge/mcp_adapter.py` | Bridge → MCP Tool 适配 | 📋 |
+| `extensions/pos_converter/workflow_mode/bridge/health_check.py` | 安装检测与诊断 | 📋 |
+
+**依赖与协同**：
+- **依赖 F-50.11**：提取到的 CLI 入口点、API 函数签名
+- **依赖 F-50.13**：阶段 ID 和契约信息
+- **复用 F-52**：`register_python_function()` 用于 Bridge Tool 注册
+
+---
+
+#### 4.2.8 提取器适配器库（F-50.16）
+
+**状态**：📋 设计完成  
+**优先级**：P1  
+**目标**：提供常见 FWA 项目的提取器适配器。
+
+| 适配器 | 目标项目 | 优先级 |
+|--------|---------|--------|
+| `ArcExtractor` | AutoResearchClaw | P0 |
+| `GenericPipelineExtractor` | 通用 Python 管线 | P0 |
+| `PrefectExtractor` | Prefect Flow | P2 |
+| `AirflowExtractor` | Apache Airflow DAG | P2 |
+
+**实现文件**：
+
+| 文件路径 | 变更描述 | 状态 |
+|---------|---------|------|
+| `extensions/pos_converter/workflow_mode/extractors/adapters/arc.py` | AutoResearchClaw 适配器 | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/adapters/generic.py` | 通用管线适配器 | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/adapters/template.py` | 适配器开发模板 | 📋 |
+| `extensions/pos_converter/workflow_mode/extractors/adapters/ADAPTER_GUIDE.md` | 适配器开发指南 | 📋 |
+
+---
 
 ### 4.3 Python SDK 方法注册为 Tool（F-52）
 
@@ -4951,20 +5691,24 @@ _设计内容（19 行）已归档，此处仅保留状态跟踪。_
 
 #### F-87: Workflow Scripts 工作流脚本
 
-**状态**: ⏳ 待开始 | **优先级**: P2 | **对标**: CCB FEATURE_WORKFLOW_SCRIPTS — YAML/JSON 定义的多步自动化工作流
+**状态**: ⛔ 已被取代 | **优先级**: P2 | **对标**: CCB FEATURE_WORKFLOW_SCRIPTS
+
+> **F-87（Workflow Scripts）** 已被 **声明式工作流引擎（F-1.10）** 和 **SOP 工作流模式（F-50.10~）** 取代。原串行步骤序列能力被 F-1.10 的 DAG 遍历引擎吸收，原 YAML 文件发现机制被 F-50.13 吸收。详见 §1.5.1（声明式工作流引擎）和 §4.2.2（SOP 工作流模式）。
+>
+> 以下原设计内容保留仅作历史参考：
 
 CCB 的 WorkflowScripts 允许用户创建 `.claude/workflows/*.yml` 工作流定义文件，声明多 step 执行序列（每个 step 可指定 tool、agent、prompt），通过 `/workflows` 命令管理和触发。ClawCodex 的 Orchestrator 已有类似功能（issue → agent run 流水线），但面向最终用户的声明式工作流文件系统尚未规划。
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P87-A | 工作流 YAML schema 定义与解析器 | ⏳ 待开始 | 2-3天 |
-| P87-B | 工作流文件发现（`~/.clawcodex/workflows/` + `.clawcodex/workflows/`） | ⏳ 待开始 | 1-2天 |
-| P87-C | 多步执行引擎（串联 agent + tool 调用序列） | ⏳ 待开始 | 3-5天 |
-| P87-D | 内置捆绑工作流（代码审查、依赖更新、发布流程等） | ⏳ 待开始 | 2-3天 |
-| P87-E | CLI 命令（`/workflows list/run/show`）与自动补全 | ⏳ 待开始 | 2-3天 |
-| P87-F | 执行进度实时显示与错误恢复 | ⏳ 待开始 | 2-3天 |
+| P87-A | 工作流 YAML schema 定义与解析器 | ⛔ 已并入 F-50.13 | — |
+| P87-B | 工作流文件发现（`~/.clawcodex/workflows/` + `.clawcodex/workflows/`） | ⛔ 已并入 F-50.13 | — |
+| P87-C | 多步执行引擎（串联 agent + tool 调用序列） | ⛔ 已并入 F-1.10 | — |
+| P87-D | 内置捆绑工作流（代码审查、依赖更新、发布流程等） | ⛔ 已并入 F-50.14 | — |
+| P87-E | CLI 命令（`/workflows list/run/show`）与自动补全 | ⛔ 已统一为 `clawcodex-dev workflow run` | — |
+| P87-F | 执行进度实时显示与错误恢复 | ⛔ 已并入 F-1.16 | — |
 
-**估算总工时**: 2 周
+**估算总工时**: 已吸收，不单独计算
 
 ---
 
@@ -5001,22 +5745,22 @@ _设计内容（17 行）已归档，此处仅保留状态跟踪。_
 | **F-84** | **Context Collapse 上下文折叠** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/context_collapse/` 3366 行 |
 | **F-85** | **Templates 模板系统** | **P1** | 🟡 重要缺口 | ✅ 已完成 | `src/services/templates/` 2076 行 |
 | **F-86** | **Kairos / Brief 调度模式** | **P2** | 🟢 增强体验 | ✅ 已完成 | `src/services/kairos/` + `periodic/` 2022 行 |
-| **F-87** | **Workflow Scripts 工作流脚本** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 2周 |
+| **F-87** | **Workflow Scripts 工作流脚本** | **P2** | 🟢 增强体验 | ⛔ 已被取代 | 已吸收至 F-1.10 / F-50.10~ |
 | **F-88** | **Explore / Plan 内置 Agent** | **P2** | 🟢 增强体验 | ⏳ 待开始 | 1周 |
 
 ### 实施建议顺序（已落地特性说明）
 
 ```
 建议优先实施剩余缺口：
-F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-71 工具补齐 ──→ F-87 (Workflow) ──→ F-88 (Explore/Plan)
-   ↑ 自动化             ↑ 可观测性              ↑ 4 个缺失工具           ↑ 工作流脚本             ↑ 内置 Agent
-   P1                  P1                      P1                       P2                      P2
+F-62 (Chrome) ──→ F-65 (Langfuse) ──→ F-71 工具补齐 ──→ ~~F-87 (Workflow)~~ ──→ F-88 (Explore/Plan)
+   ↑ 自动化             ↑ 可观测性              ↑ 4 个缺失工具           ↑ ~~工作流脚本~~ ⛔已取代             ↑ 内置 Agent
+   P1                  P1                      P1                       P2                              P2
 
 F-64 (Voice Mode) ──→ F-66 (ACP) ──→ F-67 (Buddy/Proactive) ──→ 长期迭代
    P2                  P2                      P2
 ```
 
-> 第一期 7 个特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）已于 2026-06-19 批次全部落地。剩余缺口：F-62（Chrome 自动化）、F-64（Voice Mode）、F-65（Langfuse）、F-66（ACP）、F-67（Buddy）、F-71（4 个工具）、F-87（Workflow Scripts）、F-88（Explore/Plan Agent），建议按低风险/高感知优先原则推进 F-62/F-65。
+> 第一期 7 个特性（F-60/F-61/F-63/F-83/F-84/F-85/F-86）已于 2026-06-19 批次全部落地。F-87（Workflow Scripts）已被 F-1.10（声明式工作流引擎）和 F-50.10~（SOP 工作流模式）取代，不再作为独立缺口。剩余缺口：F-62（Chrome 自动化）、F-64（Voice Mode）、F-65（Langfuse）、F-66（ACP）、F-67（Buddy）、F-71（4 个工具）、F-88（Explore/Plan Agent），建议按低风险/高感知优先原则推进 F-62/F-65。
 
 ---
 
@@ -7334,7 +8078,7 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | F-84 | Context Collapse | §7.5 | ✅ 已完成（2026-06-19） | `src/services/context_collapse/` 3366 行 + 14 测试 |
 | F-85 | Templates 模板 | §7.6 | ✅ 已完成（2026-06-19） | `src/services/templates/` 2076 行 + 11 测试 |
 | F-86 | Kairos/Brief 调度 | §7.5 | ✅ 已完成（2026-06-19） | `src/services/kairos/` + `periodic/` 2022 行 + 13 测试 |
-| F-87 | Workflow Scripts | §7.5 | ⏳ 待开始 |
+| F-87 | Workflow Scripts | §7.5 | ⛔ 已被取代 | 已被 F-1.10（声明式工作流引擎）和 F-50.10~（SOP 工作流模式）取代 |
 | F-88 | Explore/Plan Agent | §7.5 | ✅ 已完成（2026-06-22） | P88-A~D 全部完成：Agent 定义 + 自动路由 + 双格式写盘 |
 | F-89 | @agent-name 多入口统一支持 | §3.4 | 📋 设计完成 |
 | F-90 | Hermes Gateway OpenAI API 参考（remote_api） | §7.1 | ✅ 已完成 |
