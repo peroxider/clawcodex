@@ -1120,36 +1120,7 @@ CronTask due
 
 ### F-103: parentUuid 链 + walkChainBeforeParse 读取过滤（CCB 对标架构升级）
 
-**状态**: ✅ 已完成 | **优先级**: P1 | **设计文档**: `docs/FEATURE_PLAN.md §1.4.6`
-
-**目标**: 引入 CCB 的 `parentUuid` 链式消息关联 + `walkChainBeforeParse` 字节级链裁剪，消除 `/rewind`/fork 导致的 on-disk 与 in-memory 状态不一致问题。
-
-**问题**：
-- `/rewind` 后旧消息仍在 `transcript.jsonl`，`--resume` 会恢复全部（含已回退的内容）
-- transcript 中无显式消息关联，死分支与活跃链无法区分
-- `_engine_messages` 和 `conversation.messages` 两套列表需手动同步
-
-**方案概要**：
-| 子特性 | 说明 | 状态 |
-|--------|------|:----:|
-| P103-A | `SessionStorage.write_message()` 增加 `parentUuid` 参数 | ✅ 已完成 |
-| P103-B | 新增 `walk_chain_before_parse()` 字节级链裁剪 | ✅ 已完成 |
-| P103-C | 新增 `build_conversation_chain()` 链重建 | ✅ 已完成 |
-| P103-D | `read_transcript()` 集成链过滤 | ✅ 已完成 |
-| P103-E | `save_to_session_storage()` 计算并写入 `parentUuid` | ✅ 已完成 |
-| P103-F | `Session.save()` / `save_transcript()` 透传 `parentUuid` | ✅ 已完成 |
-| P103-G | `Session.load()` / `resume()` 集成新读取路径 | ✅ 已完成 |
-| P103-H | `_sync_conversation_from_transcript()` 适配（复用） | ✅ 已完成 |
-| P103-I | 新增 `tests/test_session_f103_chain.py` | ✅ 已完成 |
-| P103-J | 旧格式兼容降级 | ✅ 已完成 |
-
-**实现位置**：
-- 写端: `extensions/agent/session_persist.py::_inject_parent_uuids`（P103-E/F）
-- 读端: `clawcodex_ext/agent/chain_filter.py`（P103-B/C/D）
-- 集成: `clawcodex_ext/agent/session.py::_load_from_enhanced_transcript`（P103-G）
-- 测试: `tests/test_session_f103_chain.py`（P103-I，22 测试全通过）
-
-**验收**: 22/22 测试通过 + 245/245 stability gate 通过 + 0 src/ 文件修改（完全解耦）
+> 完整进度已归档至 [ARCHIVED_PROGRESS.md §十二 F-103](./ARCHIVED_PROGRESS.md#十三f-103-parentuuid-链--walkchainbeforeparse-读取过滤)
 
 ## 八、Multi-Session 可视化分析平台（F-91~F-96）
 

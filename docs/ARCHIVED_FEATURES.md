@@ -7837,7 +7837,7 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 
 ---
 
-## 二十八、全场景会话恢复统一闭包（F-49 Phase 0.4 ✅ — Session Resume 统一）
+## 三十一、全场景会话恢复统一闭包（F-49 Phase 0.4 ✅ — Session Resume 统一）
 
 > 归档来源: FEATURE_PLAN.md §1.4.3 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
 
@@ -8026,7 +8026,7 @@ session.save()
 
 ---
 
-## 二十九、会话格式分层参考图（全场景一览）（F-49 ✅）
+## 三十二、会话格式分层参考图（全场景一览）（F-49 ✅）
 
 > 归档来源: FEATURE_PLAN.md §1.4.4 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
 
@@ -8096,7 +8096,7 @@ Message 类型体系 (src/types/messages.py)
 
 ---
 
-## 三十、session.json + transcript.jsonl 合并（F-49-E ✅）
+## 三十三、session.json + transcript.jsonl 合并（F-49-E ✅）
 
 > 归档来源: FEATURE_PLAN.md §1.4.5 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
 
@@ -8154,7 +8154,7 @@ Message 类型体系 (src/types/messages.py)
 
 ---
 
-## 三十一、parentUuid 链 + walkChainBeforeParse 读取过滤（F-103 ✅）
+## 三十四、parentUuid 链 + walkChainBeforeParse 读取过滤（F-103 ✅）
 
 > 归档来源: FEATURE_PLAN.md §1.4.6 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
 
@@ -8199,5 +8199,746 @@ Message 类型体系 (src/types/messages.py)
 2. `walkChainBeforeParse` 作为字节级预过滤，不参与 JSON 解析
 3. 兼容旧格式通过检测 `parentUuid` 字段缺失
 4. `chain_filter=False` 保留给 Visualizer/遥测等需要完整数据的场景
+
+---
+
+## 三十五、F-75 工具/Skill 调用统计（跨会话）
+
+> 归档来源: FEATURE_PLAN.md §2.8 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+)
+
+#### 统计所有 skill 调用
+grep '"kind":"skill"' ~/.clawcodex/tool_stats.jsonl | jq '.skill' | sort | uniq -c | sort -rn
+
+#### 统计工具 vs skill 调用比例
+grep -E '"kind":"(tool|skill)"' ~/.clawcodex/tool_stats.jsonl | jq -s 'group_by(.kind) | map({kind: .[0].kind, count: length})'
+
+#### 统计某个 agent 的调用
+grep '"agent_id":"orchestrator-001"' ~/.clawcodex/tool_stats.jsonl | jq -s 'group_by(.kind) | map({kind: .[0].kind, count: length, avg_ms: (map(.dur_ms) | add / length)})'
+```
+
+#### 2.8.7 数据清理（F-75 ✅）
+日志文件需定期归档或设置 TTL（建议保留最近 90 天数据）。
+
+#### 2.8.8 实时查询（F-75 ✅）
+**不支持**。如需实时展示（如 TUI 状态栏），需另建汇总表预聚合。
+
+#### 2.8.9 替代方案：基于 Transcript 的轻量级统计（F-75 ✅）
+如果只关心**调用频率和成功率**（不需要耗时），可直接解析现有 Transcript 文件，无需新建日志系统。
+
+**数据来源**:
+
+```
+~/.clawcodex/transcripts/<agent_id>.jsonl
+```
+
+每行是一个 `Message`，其中包含 `ToolUseBlock`：
+
+```json
+{"type": "user", "content": [{"type": "tool_use", "id": "2", "name": "Read", "input": {"path": "foo.py"}}]}
+{"type": "assistant", "content": [{"type": "tool_use", "id": "3", "name": "Edit", ...}]}
+{"type": "user", "content": [{"type": "tool_result", "tool_use_id": "2", "content": "...", "is_error": false}]}
+```
+
+**统计维度**:
+
+| 维度 | 支持 | 说明 |
+|------|------|------|
+| 调用频率 | ✅ | 按 tool/skill 名称统计 |
+| 成功率 | ✅ | ToolResult.is_error 可判断 |
+| 执行耗时 | ❌ | Transcript 不记录执行时长 |
+| Skill 调用 | ⚠️ | 取决于 Skill 是否走 ToolUseBlock |
+
+**查询示例**:
+
+```bash
+# 统计所有工具调用次数
+grep '"type":"tool_use"' ~/.clawcodex/transcripts/*.jsonl | jq '.content[].name' | sort | uniq -c | sort -rn
+
+# 统计某个 agent 的工具调用
+grep '"type":"tool_use"' ~/.clawcodex/transcripts/agent-123.jsonl | jq -s 'group_by(.content[].name) | map({tool: .[0].content[].name, count: length})'
+
+# 统计错误率（需配对 ToolUse → ToolResult）
+# 由于 ToolUse 和 ToolResult 通过 id/tool_use_id 关联，需要更复杂的脚本
+```
+
+**优缺点对比**:
+
+| 方案 | 优势 | 劣势 |
+|------|------|------|
+| **Transcript 方案** | 无需新增日志写入；已有数据 | 无耗时；Skill 覆盖不确定；解析稍复杂 |
+| **JSON Lines 日志方案** | 包含耗时；字段完整；格式统一 | 需新增写入逻辑；数据冗余 |
+
+**决策建议**:
+- 仅需调用频率/成功率 → 用 Transcript 方案
+- 需耗时统计 → 用 JSON Lines 日志方案
+
+#### 2.8.10 基于使用频率的工具/Skill 裁剪（F-75 ✅）
+基于工具和 Skill 的使用频率统计，可自动识别并裁剪低使用率组件，减少 Bundle 大小和上下文开销。
+
+**裁剪策略**:
+
+| 策略 | 说明 |
+|------|------|
+| **自动隐藏** | 低频工具从默认 bundle 移到 `bare` 模式，需显式引用 |
+| **提示建议** | 统计报告提示"X 工具过去 90 天仅使用 N 次，可考虑移除" |
+| **按需加载** | 低频工具默认不加载，使用前需 `ExecuteExtraTool` 引用 |
+
+**配置参数**:
+
+```yaml
+tool_pruning:
+  enabled: true
+  lookback_days: 90          # 统计回溯周期
+  low_usage_threshold: 0.01  # 使用率 < 1% 则标记为低频
+  cooldown_days: 30          # 工具存在 > 30 天才纳入裁剪统计
+  action: "hide"             # "hide" | "suggest" | "remove"
+```
+
+**实现逻辑**:
+
+```python
+def get_rarely_used_tools(lookback_days=90, threshold=0.01, cooldown_days=30) -> list[str]:
+    """返回应裁剪的工具列表"""
+    stats = parse_transcript_stats(lookback_days=lookback_days)
+    total = sum(stats.values())
+    now = time.time()
+    for name, count in stats.items():
+        usage_rate = count / total
+        if usage_rate < threshold:
+            # 冷却期判断（工具创建时间 > cooldown_days）
+            if tool_exists_longer_than(name, days=cooldown_days):
+                yield name
+```
+
+**注意事项**:
+
+| 注意点 | 说明 |
+|--------|------|
+| 学习曲线 | 新工具初期使用率低不代表价值低，需冷却期保护 |
+| 核心工具 | `Read/Edit/Bash` 等高频核心工具不受影响 |
+| 保留 fallback | 低频工具仍可通过 `bare` 模式访问 |
+
+#### 2.8.11 SOP 转化模式（F-75 ✅）
+将标准作业流程（SOP）拆解为 Agent 架构，实现工作流的可复用、可观测、可编排。
+
+**三层映射关系**:
+
+| 工作流组件 | Agent 架构 | 示例 |
+|-----------|-----------|------|
+| SOP (标准作业流程) | Agent | 数据分析 Agent、CI/CD Agent、ML Pipeline Agent |
+| 工作流步骤 | Skill | `deploy_service`、`run_etl`、`train_model` |
+| SDK 接口 | 原子工具 | `s3_upload`、`k8s_apply`、`spark_submit` |
+
+**架构示例**:
+
+```
+CI/CD Agent
+├── Skill: build_image
+│   ├── tool: docker_build()
+│   ├── tool: docker_tag()
+│   └── tool: docker_push()
+├── Skill: deploy_service
+│   ├── tool: k8s_apply()
+│   ├── tool: health_check()
+│   └── tool: rollback_if_failed()
+└── Skill: notify_team
+    ├── tool: slack_send()
+    └── tool: email_send()
+```
+
+**转化过程（Skill + Template + Config）**:
+
+| 层面 | 形式 | 说明 |
+|------|------|------|
+| **转化执行器** | Skill | 需要 LLM 判断如何分组、如何命名 |
+| **产出物规范** | Template | Agent/Skill 定义的结构规范 |
+| **映射规则** | Config | SDK method → tool 的映射表 |
+
+```
+Skill（执行器）+ Template（产出物规范）+ Config（映射规则）
+```
+
+**转化 Skill 示例**:
+
+```python
+class ConvertPOSToAgent:
+    """将 SOP 转换为 Agent 的 Skill"""
+
+    async def execute(self, sdk_spec: str, requirements: str) -> AgentDefinition:
+        # 1. 解析 SDK 接口 → 需要理解 API 语义（LLM）
+        atomic_tools = await self._parse_sdk_methods(sdk_spec)
+
+        # 2. 按业务逻辑分组 → 需要判断相关性（LLM）
+        skills = await self._group_into_skills(atomic_tools, requirements)
+
+        # 3. 填充 Agent 定义模板
+        return self._fill_template(skills)
+```
+
+**优势**:
+
+| 优势 | 说明 |
+|------|------|
+| 可复用性 | 原子工具可在不同 Skill/Agent 间共享 |
+| 可观测性 | 每步工具调用独立记录，便于调试 |
+| 容错粒度 | 可在工具级别重试，而非整个工作流 |
+| 动态编排 | Agent 可根据上下文选择不同的 Skill 执行路径 |
+
+**与 F-18 CreateAgentTool 的关系**:
+
+F-18 解决"工具创建工具"（Meta Tool 能力），此模式解决"工作流转化为 Agent"。两者结合可实现：SDK 接口 → 原子工具 → Skill 组合 → Agent 定义 → 动态注册。
+
+**实现清单**:
+
+| 文件 | 说明 |
+|------|------|
+| `src/pos_converter/__init__.py` | 模块入口 |
+| `src/pos_converter/sdk_parser.py` | SDK 解析（支持 OpenAPI JSON / URL / 简单方法列表） |
+| `src/pos_converter/skill_grouper.py` | Skill 分组（静态 MappingRule + LLM 辅助） |
+| `src/pos_converter/agent_builder.py` | Agent 构建 + 持久化（`~/.clawcodex/agents/<name>.json`） |
+| `src/pos_converter/convert_pos_skill.py` | `/convert-pos-to-agent` Skill 实现 |
+| `src/pos_converter/templates.py` | 模板定义 |
+| `src/skills_ext/bundled/pos_to_agent.py` | bundled skill 注册（解耦上游） |
+
+**三层映射实现**:
+
+```
+SdkParser.parse()           → list[SdkMethod]  (原子工具)
+SkillGrouper.group()       → list[SkillSpec]  (Skill 规范)
+AgentBuilder.build()       → AgentDefinition (Agent 定义)
+persist_converted_agent()   → ~/.clawcodex/agents/<name>.json
+```
+
+**使用方式**:
+
+1. **斜杠命令**（REPL/TUI 中）:
+   ```bash
+   /convert-pos-to-agent docker_build,k8s_apply::CI/CD pipeline
+   ```
+   别名: `/pos-to-agent`
+
+2. **CLI 子命令**（Linux/macOS shell）:
+   ```bash
+   clawcodex-dev pos convert <sdk_spec> [--out <output_dir>] [--requirements "<requirements>"] [--name <agent_name>]
+   ```
+   示例:
+   ```bash
+   clawcodex-dev pos convert docker_build,k8s_apply --out ./.clawcodex --requirements "CI/CD pipeline" --name cicd-agent
+   ```
+   支持从 `workflow.md` 文件解析前端元数据并输出 Agent/Workflow/Skill 定义文件。
+
+3. **Python API**（编程调用）:
+   ```python
+   from extensions.pos_converter import convert_pos_to_agent
+   result = convert_pos_to_agent(sdk_spec="docker_build,k8s_apply", requirements="CI/CD pipeline")
+   ```
+
+#### 2.8.12 业务 Agent 长期使用（新窗口重连）（F-75 ✅）
+将 SOP 转化的 Agent 作为主 Agent 长期使用，并支持在新窗口中重新连接。
+
+**核心能力**:
+
+| 能力 | 说明 | 实现 |
+|------|------|------|
+| **持久化** | Agent 定义保存到文件 | `~/.clawcodex/agents/<name>.json` |
+| **主 Agent 指定** | 启动时指定使用哪个 Agent | `clawcodex --agent <name>` 或配置文件 |
+| **窗口重连** | 新窗口连接到已运行的 Agent | Session ID / Named Pipe |
+
+**Agent 持久化格式**:
+
+```json
+// ~/.clawcodex/agents/cicd-agent.json
+{
+  "name": "cicd-agent",
+  "description": "自动化部署 Agent",
+  "model": "claude-sonnet",
+  "tools": ["k8s_apply", "docker_push", "health_check"],
+  "skills": ["deploy_service", "rollback"],
+  "memory_scope": ["project", "team"],
+  "persistent": true
+}
+```
+
+**启动方式**:
+
+```bash
+# 方式一：启动时指定
+clawcodex --agent cicd-agent
+
+# 方式二：配置为默认
+# ~/.clawcodex/settings.json
+{
+  "default_agent": "cicd-agent"
+}
+
+# 方式三：daemon 模式长期运行
+clawcodex --daemon --agent cicd-agent
+# 新窗口 attach
+clawcodex attach cicd-agent
+```
+
+**Daemon + Attach 架构**:
+
+```
+终端 1: clawcodex --daemon --agent cicd-agent
+        └── cicd-agent 进程运行中，保持状态
+               ↓
+终端 2: clawcodex attach cicd-agent
+        └── 连接到已有 Agent 会话，继续交互
+```
+
+**需要新增的组件**:
+
+| 组件 | 文件 | 说明 |
+|------|------|------|
+| Agent 存储 | `src/agent/agent_persistence.py` | 读写 `~/.clawcodex/agents/` |
+| Agent 加载器 | `src/agent/agent_loader.py` | 启动时加载指定 Agent |
+| Attach 协议 | `src/agent/attach.py` | 连接到已有 Agent 会话 |
+
+**与现有组件的集成**:
+
+| 现有组件 | 集成点 |
+|---------|--------|
+| `agent/agent_definitions.py` | Agent 定义模型 |
+| `agent/session.py` | Session 持久化 |
+| `agent/run_agent.py` | 主 Agent 启动逻辑 |
+| `repl/core.py` | REPL 启动入口 |
+| `src/entrypoints/headless.py` | Daemon 模式支持 |
+
+---
+
+---
+
+## 三十六、F-87 Workflow Scripts 工作流脚本
+
+> 归档来源: FEATURE_PLAN.md §7.6 | 归档日期: 2026-06-24 | 状态: ✅ 已归档（已被 F-1.10 / F-50.10 取代）
+
+S
+
+> **F-87（Workflow Scripts）** 已被 **声明式工作流引擎（F-1.10）** 和 **SOP 工作流模式（F-50.10~）** 取代。原串行步骤序列能力被 F-1.10 的 DAG 遍历引擎吸收，原 YAML 文件发现机制被 F-50.13 吸收。详见 §1.5.1（声明式工作流引擎）和 §4.2.2（SOP 工作流模式）。
+>
+> 以下原设计内容保留仅作历史参考：
+
+CCB 的 WorkflowScripts 允许用户创建 `.claude/workflows/*.yml` 工作流定义文件，声明多 step 执行序列（每个 step 可指定 tool、agent、prompt），通过 `/workflows` 命令管理和触发。ClawCodex 的 Orchestrator 已有类似功能（issue → agent run 流水线），但面向最终用户的声明式工作流文件系统尚未规划。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P87-A | 工作流 YAML schema 定义与解析器 | ✅ 已并入 F-50.13 | — |
+| P87-B | 工作流文件发现（`~/.clawcodex/workflows/` + `.clawcodex/workflows/`） | ✅ 已并入 F-50.13 | — |
+| P87-C | 多步执行引擎（串联 agent + tool 调用序列） | ✅ 已并入 F-1.10 | — |
+| P87-D | 内置捆绑工作流（代码审查、依赖更新、发布流程等） | ✅ 已并入 F-50.14 | — |
+| P87-E | CLI 命令（`/workflows list/run/show`）与自动补全 | ✅ 已统一为 `clawcodex-dev workflow run` | — |
+| P87-F | 执行进度实时显示与错误恢复 | ✅ 已并入 F-1.16 | — |
+
+**估算总工时**: 已吸收，不单独计算
+
+---
+
+---
+
+## 三十六、F-87 Workflow Scripts 工作流脚本
+
+> 归档来源: FEATURE_PLAN.md §7.6 | 归档日期: 2026-06-24 | 状态: ✅ 已归档（已被 F-1.10 / F-50.10 取代）
+
+CCB 的 WorkflowScripts 允许用户创建 `.claude/workflows/*.yml` 工作流定义文件，声明多 step 执行序列（每个 step 可指定 tool、agent、prompt），通过 `/workflows` 命令管理和触发。ClawCodex 的 Orchestrator 已有类似功能（issue → agent run 流水线），但面向最终用户的声明式工作流文件系统尚未规划。
+
+| 编号 | 子特性 | 状态 | 预计工作量 |
+|:----:|--------|:----:|:----------:|
+| P87-A | 工作流 YAML schema 定义与解析器 | ✅ 已并入 F-50.13 | — |
+| P87-B | 工作流文件发现（`~/.clawcodex/workflows/` + `.clawcodex/workflows/`） | ✅ 已并入 F-50.13 | — |
+| P87-C | 多步执行引擎（串联 agent + tool 调用序列） | ✅ 已并入 F-1.10 | — |
+| P87-D | 内置捆绑工作流（代码审查、依赖更新、发布流程等） | ✅ 已并入 F-50.14 | — |
+| P87-E | CLI 命令（`/workflows list/run/show`）与自动补全 | ✅ 已统一为 `clawcodex-dev workflow run` | — |
+| P87-F | 执行进度实时显示与错误恢复 | ✅ 已并入 F-1.16 | — |
+
+**估算总工时**: 已吸收，不单独计算
+
+---
+
+---
+
+## 三十七、F-91 Community Radar 候选特性分析与报告系统
+
+> 归档来源: FEATURE_PLAN.md §10.1.6-10.1.16 | 归档日期: 2026-06-24 | 状态: ✅ 已完成
+
+子节清单：
+  - 10.1.6 AR-5.1.2 候选特性抽取与分类（F-91 ✅）
+  - 10.1.7 AR-5.1.3 评分与报告系统（F-91 ✅）
+  - 10.1.8 AR-5.1.4 Cron 集成（F-91 ✅）
+  - 10.1.9 三方集成组件（F-91 ✅）
+  - 10.1.10 与 ClawCodex 现有能力的协同（F-91 ✅）
+  - 10.1.11 文件结构（F-91 ✅）
+  - 10.1.12 实施阶段（F-91 ✅）
+  - 10.1.13 验收标准（F-91 ✅）
+  - 10.1.14 风险与约束（F-91 ✅）
+  - 10.1.15 已拟定的设计决定（F-91 ✅）
+  - 10.1.16 依赖与协同（F-91 ✅）
+
+详细设计内容：
+
+#### 10.1.6 AR-5.1.2 候选特性抽取与分类（F-91 ✅）
+
+**文件路径**: `clawcodex_ext/community_radar/extractor.py`, `clawcodex_ext/community_radar/classifier.py`
+
+##### Feature Record 数据模型
+
+```python
+@dataclass
+class FeatureRecord:
+    id: str                          # hash(source.name + title + type)
+    source: str                      # 来源项目名
+    title: str                       # 特性标题（简短）
+    description: str                 # 特性描述（1-3 句）
+    category: FeatureCategory        # 分类（见下）
+    feature_type: FeatureType        # 特性类型
+    released_at: str | None          # ISO 8601
+    url: str                         # 原文链接
+    related_projects: list[str]      # 跨项目参考：哪些项目也实现了类似特性
+    tags: list[str]                  # 自由标签
+    raw_body: str | None             # 原始 release note / commit message 片段
+
+class FeatureCategory(Enum):
+    AGENT_LOOP = "agent_loop"            # Agent 循环增强
+    TOOL_SYSTEM = "tool_system"          # 工具系统
+    PROVIDER = "provider"                # Provider/模型
+    PERMISSION = "permission"            # 权限/安全
+    MEMORY = "memory"                    # 记忆/上下文
+    MCP = "mcp"                          # MCP 协议
+    MULTI_AGENT = "multi_agent"          # 多 Agent
+    ORCHESTRATOR = "orchestrator"        # 编排/自动化
+    TUI_REPL = "tui_repl"               # UI 交互
+    CLI = "cli"                          # CLI 体验
+    OBSERVABILITY = "observability"      # 可观测性
+    INFRA = "infra"                      # 基础设施/架构
+
+class FeatureType(Enum):
+    NEW = "new"                          # 全新特性
+    ENHANCEMENT = "enhancement"          # 已有特性增强
+    BREAKING = "breaking"                # 破坏性变更（需迁移）
+    DEPRECATION = "deprecation"          # 弃用警告
+    BUGFIX = "bugfix"                    # 修复（不视为新特性）
+```
+
+##### 抽取流水线
+
+```python
+class FeatureExtractor:
+    """从 Release / CHANGELOG 文本中抽取候选特性"""
+
+    def __init__(self, llm_client: LiteLLM | None = None):
+        self._llm = llm_client  # 可选，LLM 仅用于高置信度分类
+
+    def extract(self, release_body: str) -> list[FeatureRecord]:
+        """从 release note 中提取特性记录（基于规则 + LLM 辅助）"""
+        ...
+
+    def _extract_by_patterns(self, text: str) -> list[str]:
+        """基于 Markdown 标题、- [x] 列表、## Added / ## Changed 等常见模式抽取候选"""
+        ...
+
+    def _classify_with_llm(self, candidates: list[str]) -> list[FeatureRecord]:
+        """LLM 辅助分类（当规则匹配质量不足时触发）"""
+        ...
+```
+
+**抽取策略（由简到繁）**：
+
+1. **规则优先**：基于常见 release note 格式的启发式抽取
+   - `## Added / ## New` 分段下的列表项
+   - `- [x]` 复选框完成项
+   - `## Breaking Changes` 下内容
+   - 版本号 `vX.Y.Z` 后的更新条目
+2. **LLM 辅助**：当规则匹配失败或置信度低时，调用 LLM 从 release body 中抽取
+3. **跨项目去重**：基于 title + description 的语义相似度（TF-IDF + cosine），同一特性在不同项目出现时合并为一个 `FeatureRecord` 并填充 `related_projects`
+
+**Taxonomy 分类树**（FeatureCategory 是顶级节点，实现中可扩展子类）：
+```
+agent_loop
+  ├── prompt_engineering
+  ├── tool_selection
+  ├── planning
+  ├── self_correction
+  └── context_management
+tool_system
+  ├── new_tool
+  ├── tool_improvement
+  └── mcp_extension
+multi_agent
+  ├── a2a_protocol
+  ├── team_management
+  └── task_delegation
+...
+```
+
+---
+
+#### 10.1.7 AR-5.1.3 评分与报告系统（F-91 ✅）
+
+**文件路径**: `clawcodex_ext/community_radar/scorer.py`, `clawcodex_ext/community_radar/reporter.py`
+
+##### 评分模型
+
+```python
+@dataclass
+class FeatureScore:
+    record_id: str
+    overall: float                    # 综合评分（0-100）
+    dimensions: dict[str, float]      # 各维度评分
+
+    # 各维度
+    popularity: float                 # 热度（社区关注度）
+    maturity: float                   # 成熟度（代码质量/文档/测试）
+    adaptation_cost: float            # 适配成本（越低越好）
+    strategic_value: float            # 战略价值（与 ClawCodex 路线图契合度）
+    architecture_fit: float           # 架构适配度（与三层解耦约束兼容性）
+```
+
+**评分维度定义**：
+
+| 维度 | 权重 | 输入因子 | 计算方法 |
+|------|:----:|---------|---------|
+| 热度 | 15% | GitHub stars trend、PR 活跃度、社区讨论量 | Min-Max 归一化到 0-100 |
+| 成熟度 | 20% | 是否已有稳定 release、测试覆盖、文档完整度 | 基于 metadata 的规则评分 |
+| 适配成本 | 25% | 与 ClawCodex 架构差异度、需改动的文件范围 | Architecture Fit Checker（SR-5.2）评估 |
+| 战略价值 | 25% | 是否在 ROADMAP/FEATURE_PLAN 中已有规划 | 关键词匹配 + LLM 语义匹配 |
+| 架构适配 | 15% | 是否可落入 clawcodex_ext/*、是否破坏上游同步 | 基于 F-48 解耦规则的自动化检查 |
+
+##### 报告生成
+
+```python
+class CommunityDigest:
+    """社区动态报告"""
+
+    period: str                       # "weekly" | "monthly"
+    generated_at: str                 # ISO 8601
+    summary: str                      # LLM 生成的摘要
+    new_features: list[FeatureRecord] # 本期新特性
+    trending: list[FeatureRecord]     # 高评分特性
+    breaking_changes: list[FeatureRecord]  # 破坏性变更预警
+    stats: DigestStats                # 统计摘要
+
+@dataclass
+class DigestStats:
+    total_releases: int
+    total_features: int
+    by_category: dict[str, int]
+    top_projects: list[tuple[str, int]]  # (project_name, feature_count)
+```
+
+报告输出为双格式：
+- **Markdown**：可直接阅读的周报格式
+- **JSON**：供程序消费的结构化数据
+
+##### Community Digest 模板示例
+
+```markdown
+# ClawCodex 社区周报 v2026-W26
+
+> 生成时间: 2026-06-29T08:00:00Z
+> 覆盖范围: 7 个项目 · 12 个新 release · 18 条特性记录
+
+
+## 摘要
+
+本周社区新特性集中在 **MCP 工具扩展** 和 **Agent 自纠正** 两个方向。
+Aider 新增了 `--lint` 模式的自动修复能力，SWE-agent 改进了 issue 定位的准确率。
+
+## 高评分候选特性
+
+| 特性 | 来源 | 评分 | 分类 | 简述 |
+|------|------|:----:|------|------|
+| --lint auto-fix | Aider | 85 | tool_system | 自动修复 lint 错误 |
+| Agent self-critique | Claude Code | 78 | agent_loop | 执行前自我审查 |
+| Context compression | OpenHands | 72 | agent_loop | 自动压缩历史上下文 |
+
+## 破坏性变更预警
+
+| 项目 | 版本 | 变更 | 影响评估 |
+|------|:----:|------|---------|
+| langgraph | v0.3.0 | StateGraph API 重构 | 高——需要迁移现有 Agent 定义 |
+
+## 分类分布
+
+- agent_loop: 6
+- tool_system: 5
+- multi_agent: 3
+- mcp: 2
+- cli: 1
+- observability: 1
+```
+
+---
+
+#### 10.1.8 AR-5.1.4 Cron 集成（F-91 ✅）
+
+通过 ClawCodex 已有的 Cron 系统（F-22）进行调度：
+
+```yaml
+# workflow.md 配置扩展
+community_radar:
+  enabled: false                      # 默认关闭
+  cron_schedule: "0 8 * * 1"         # 每周一早上8点（UTC）
+  max_features_per_report: 20
+  output_dir: ".reports/community-radar"
+  notify: false                       # 是否推送到用户通道
+```
+
+Cron 集成点：
+- `CronTask` 配置一个 durable task，fire 时触发 `run_community_scan()`
+- 扫描结果写入 `output_dir/{yyyy-Www}.md` + `.json`
+- 可选通过进度报告通道通知用户
+
+---
+
+#### 10.1.9 三方集成组件（F-91 ✅）
+
+以下开源项目可作为 SR-5.1 的可选集成组件，不需要重新制造轮子：
+
+**释放通知类（可复用其 API 轮询模式）**：
+
+| 项目 | 类型 | 用途 | 集成方式 |
+|------|------|------|---------|
+| [StackPulse](https://github.com/daniel-ctn/stack-pulse) | 🔓 开源 MIT | GitHub release 监控 + AI 摘要（breaking changes/deprecations/migration notes）；有公开 feed | 可复用其 fetcher + AI digest 思路，或直接订阅其 feed |
+| GitHub Release Monitor | 🔓 开源 | Docker 自托管，GitHub releases 监控 + 邮件/Apprise 通知 | 可借鉴其 Docker 部署架构 + 通知流水线设计 |
+| NewReleases.io | 🌐 在线服务 | 多通道 release 通知（Slack/Email/Webhook） | 参考其报警路由设计 |
+| Releases Tracker (GitHub App) | 🔓 开源 | 自动订阅 starred 项目，每小时检查 | 参考其 GitHub App OAuth 流程和自动订阅模式 |
+| GitWatchman | 🌐 在线服务 | 邮件 release 通知 | 参考其通知模板设计 |
+
+**分析/报告类（可复用其输出格式和模板）**：
+
+| 项目 | 类型 | 用途 | 集成方式 |
+|------|------|------|---------|
+| Weekly Digest (GitHub App) | 🔓 开源 | 按周生成仓库活动摘要（PR/Issue/Commit） | 可复用其 Weekly Digest 模板和调度模式 |
+| Conventional Changelog | 🔓 开源 | 从 commit 生成 changelog | 可复用其 commit message 解析规则 |
+| Star History | 🌐 在线服务 | 星标增长趋势对比 | 参考其跨项目对比的展示思路 |
+| Release Watcher | 🌐 在线服务 | 集中列示关注的 GitHub releases | 参考其聚合展示 UI 设计 |
+
+**不推荐集成**的类别：纯 changelog 自动生成工具（`commit-and-tag-version`、`ShipLog`、`CommitCatalog` 等）与 SR-5.1 目标方向不同，SR-5.1 关注的是**跨项目的社区新特性发现**，而非单个项目的 changelog 格式化。
+
+---
+
+#### 10.1.10 与 ClawCodex 现有能力的协同（F-91 ✅）
+
+| 现有组件/能力 | SR-5.1 中的角色 | 说明 |
+|-------------|----------------|------|
+| **F-22 Cron 系统** | AR-5.1.4 调度基础 | Cron durable task 提供定时触发能力 |
+| **LiteLLM Provider** | AR-5.1.2/5.1.3 LLM 接口 | 用于特性分类、评分、报告摘要生成 |
+| **ReportWriter**（extensions/orchestrator） | 报告格式参考 | .md + .json 双写模式可复用 |
+| **WebSearch / WebFetch 内置工具** | 人工触发时辅助 | 开发者手动查询社区动态时可利用内置工具 |
+| **LocalTracker** | 可选集成 | 生成的 feature proposal 可通过 LocalTracker 进 issue 队列 |
+| **ProgressReporter Sink**（F-40） | 可选集成 | 长时间抓取任务进度上报 |
+| **Feature Gate**（F-68 设计） | 架构适配检查 | 评估新特性与 Feature Flag 系统的兼容性 |
+
+#### 10.1.11 文件结构（F-91 ✅）
+
+```
+clawcodex_ext/community_radar/
+├── __init__.py              # 库入口
+├── registry.py              # SourceRegistry — 源注册表
+├── fetcher.py               # Fetcher — 抓取引擎
+├── models.py                # WatchSource, FeatureRecord, FeatureScore 等数据模型
+├── extractor.py             # FeatureExtractor — 特性抽取
+├── classifier.py            # 分类器（Taxonomy + LLM）
+├── deduplicator.py          # 跨项目去重
+├── scorer.py                # 评分引擎
+├── reporter.py              # CommunityDigest 报告生成
+├── config.py                # 配置加载
+├── cli.py                   # clawcodex-dev community-radar 子命令
+├── templates/
+│   ├── weekly_digest.md.j2  # 周报 Markdown 模板
+│   └── monthly_digest.md.j2 # 月报 Markdown 模板
+└── tests/
+    ├── test_registry.py
+    ├── test_fetcher.py
+    ├── test_extractor.py
+    ├── test_classifier.py
+    ├── test_deduplicator.py
+    ├── test_scorer.py
+    └── test_reporter.py
+```
+
+配置目录：`~/.clawcodex/community-radar/`
+```
+~/.clawcodex/community-radar/
+├── sources.yaml              # 源配置
+├── config.yaml               # 运行配置（schedule/权重/通知）
+└── cache/
+    ├── cursors.json           # 增量 cursor / ETag
+    ├── releases/              # release body 缓存
+    ├── commits/               # commit 缓存
+    └── prs/                   # PR 缓存
+```
+
+#### 10.1.12 实施阶段（F-91 ✅）
+
+**Phase 1 — 最小可用（2 周）**：
+1. 实现 `WatchSource` / `SourceRegistry` + YAML 配置加载
+2. 实现 `Fetcher.fetch_releases()` 对 GitHub Release API 的 ETag 增量拉取
+3. 实现 `FeatureExtractor` 的规则优先抽取模式
+4. 实现 JSON 格式的原始结果持久化
+5. 手工触发扫描：`clawcodex-dev community-radar scan` 子命令
+
+**Phase 2 — 智能抽取（2 周）**：
+1. 接入 LLM 辅助分类（FeatureRecord.category + feature_type）
+2. 实现跨项目去重（TF-IDF + cosine similarity）
+3. 实现基础评分模型（4 维度：热度/成熟度/适配成本/战略价值）
+4. 生成 Markdown 格式周报
+
+**Phase 3 — 报告与扩展（1.5 周）**：
+1. 完善评分模型（加入架构适配维度）
+2. 模板化报告生成（Jinja2 模板）
+3. 接入 Cron 系统（F-22），实现定时自动扫描
+
+**Phase 4 — 集成与增强（1.3 周）**：
+1. 扩展关注源到 Phase 2 项目
+2. 可选的通知推送（通过 ReportWriter 通道）
+3. 与 SR-5.2（自我规划）对接的 JSON 输出格式定型
+4. 单元测试 + 集成测试
+
+#### 10.1.13 验收标准（F-91 ✅）
+
+| # | 验收项 | 验收方式 |
+|---|--------|---------|
+| 1 | 可通过 YAML 配置关注源，支持添加/删除/列出 | `clawcodex-dev community-radar source list` 展示当前源 |
+| 2 | 能拉取指定源的最新 release 并缓存 | 运行 scan 后 `cache/releases/` 目录下有 JSON 文件 |
+| 3 | 增量拉取不重复消费 GitHub API 配额 | 第二次运行只产生少量 API 请求（仅新数据） |
+| 4 | Release note 中的新特性可被规则抽取 | 在已知格式（Conventional Changelog / Keep a Changelog）上测试通过 |
+| 5 | 同一特性在不同项目出现时被合并去重 | aider 和 claude-code 同时支持某特性时只记录一次 |
+| 6 | 每周生成 Community Digest（Markdown + JSON）| 报告有摘要、分类分布、高评分候选 |
+| 7 | 可通过 Cron 定时触发 | 配置 `cron_schedule` 后自动按计划运行 |
+| 8 | 非破坏性：不修改 `src/*` 任何文件 | git diff 确认全部落在 `clawcodex_ext/community_radar/` |
+
+#### 10.1.14 风险与约束（F-91 ✅）
+
+| 风险 | 影响 | 缓解措施 |
+|------|------|---------|
+| GitHub API Rate Limit | 数据拉取不完整 | ETag 增量 + 合理调度间隔（至少 1h）+ 可配置 token pool |
+| Release note 格式不统一 | 抽取效果差 | 规则 + LLM 双通道；规则覆盖常见格式，LLM 做兜底 |
+| 评价模型不公平 | 误导路线图方向 | 初期只做信息展示不自动决策；用户审查可纠正权重 |
+| 信息噪声导致报告质量低 | 用户忽略报告 | 评分阈值过滤 + 最高评分限条数；用户可配置关注分类 |
+| 自升级误改核心上游代码 | 破坏 upstream sync | 强制 Architecture Fit Checker；默认写入 `clawcodex_ext/*` |
+
+#### 10.1.15 已拟定的设计决定（F-91 ✅）
+
+1. **不另造数据库**：缓存使用 JSON 文件，复用 ClawCodex 已有的纯文件存储模式
+2. **不强制 LLM**：规则抽取优先，LLM 仅作辅助分类和摘要生成（用户可配置关闭）
+3. **不自动创建 Issue/PR**：Phase 1-3 只做信息收集展示，接入 SR-5.2 后才自动生成 proposal
+4. **并行设计**：AR-5.1.1 和 AR-5.1.2 可并行开发（抓取器与抽取器独立）
+5. **StackPulse 作为参考架构**：其 `fetcher → AI digest → feed` 三阶段架构设计可直接借鉴
+6. **`clawcodex_ext/community_radar/` 作为落地路径**：不修改 `src/*`，符合 F-48 解耦约束
+
+#### 10.1.16 依赖与协同（F-91 ✅）
+
+| 依赖 | 类型 | 说明 |
+|------|------|------|
+| F-22 Cron 系统 | 必需（Phase 3+） | 定时触发扫描和报告生成 |
+| LiteLLM Provider | 可选（Phase 2+） | LLM 辅助分类和摘要生成 |
+| httpx / aiohttp | 必需 | GitHub API 客户端 |
+| scikit-learn | 可选（Phase 2+） | TF-IDF 去重向量化 |
+| Jinja2 | 必需（Phase 3+） | 报告模板渲染 |
+
+---
 
 ---
