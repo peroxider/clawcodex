@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
-from src.utils.export_formats import (
+from clawcodex_ext.utils.export_formats import (
     ExportFormat,
     ensure_export_filename_extension,
     infer_export_format_from_filename,

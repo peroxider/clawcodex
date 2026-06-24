@@ -79,6 +79,10 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
             output=output,
         )
 
+    # POS-converter tools are workflow-specific and numerous;
+    # defer them so they load via ToolSearch on demand.
+    should_defer = spec.source == "pos-converter"
+
     return build_tool(
         name=spec.name,
         input_schema=spec.input_schema,
@@ -87,6 +91,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
         description=spec.description,
         aliases=spec.aliases,
         search_hint=" ".join(spec.tags) if spec.tags else None,
+        should_defer=should_defer,
     )
 
 

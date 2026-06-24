@@ -21,6 +21,7 @@ from clawcodex_ext.tool_system.build_tool import Tool, Tools, find_tool_by_name
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
 from clawcodex_ext.tool_system.registry import ToolRegistry
+from clawcodex_ext.tool_system.tool_search import filter_tools_for_request
 from clawcodex_ext.utils.abort_controller import AbortController, AbortError
 from clawcodex_ext.utils.image_validation import ImageSizeError
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse
@@ -1541,12 +1542,21 @@ async def query(
         tool_use_blocks: list[ToolUseBlock] = []
         needs_follow_up = False
 
+        # Filter tools -- defer MCP and should_defer tools unless
+        # already discovered via ToolSearch tool.  This reduces
+        # context-window usage when many tools are registered.
+        try:
+            model_name = getattr(params.provider, "model", "") or ""
+            filtered_tools = filter_tools_for_request(params.tools, model_name, messages)
+        except Exception:
+            filtered_tools = params.tools
+
         try:
             returned_assistants, returned_tool_blocks = await _call_model_sync(
                 provider=params.provider,
                 messages=messages,
                 system_prompt=current_system_prompt,
-                tools=params.tools,
+                tools=filtered_tools,
                 max_output_tokens_override=max_output_tokens_override,
                 abort_signal=params.abort_controller.signal,
                 on_text_chunk=params.on_text_chunk,

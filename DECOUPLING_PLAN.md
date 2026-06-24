@@ -2,27 +2,27 @@
 
 > **目标**：将 `src/` 中所有 ClawCodex 定制逻辑迁至 `clawcodex_ext/` 与 `extensions/`，使上游（`src/upstreamproxy/...`）与本地 `src/` 的差异仅保留**架构重构**、**bug fix** 和**纯新增子系统**，所有「功能增量」通过扩展层注入。
 >
-> **最近更新**：2026-06-24，Phase 2-J（双位置包收敛）— 7 个双位置包 `{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 收敛为单一 ext 入口，删除 31 个 src 侧 facade 文件（analytics×4, api×7, chrome×8, oauth×2, periodic×1, pipe_ipc×6, voice×3）；跨层 import（`clawcodex_ext/` 3 处、`extensions/` 2 处、`telemetry/` 3 处、`src/utils/` 2 处、`tests/` 100+ 处）从 `src.services.{pkg}` 改为 `clawcodex_ext.services.{pkg}` 直连；保留 `patches/` 中历史补丁不变。Stage 1-5 门禁 321 passed（32s）；受影响 7 包专项测试 363 passed ✅。含本地增量非 facade 文件数 ~7 不变（本次不涉及）。
+> **最近更新**：2026-06-24，Phase 3-C（T2+T3 纯本地文件迁移）— 4 个纯本地文件从 `src/` 迁至 `clawcodex_ext/`：`tui/ui_host.py`（79L→17L facade）、`tui/screens/generic_select.py`（81L→17L）、`tui/screens/generic_input.py`（69L→17L）、`utils/export_formats.py`（217L→3L facade）；同步修复 `clawcodex_ext/command_system/export_command.py` 中 ext→src 反向 import（`from src.utils.export_formats` → `from clawcodex_ext.utils.export_formats`）；更新 `clawcodex_ext/tui/screens/__init__.py` 注册 2 个新屏幕。Stage 1-6 门禁 327 passed。3 个 transports 文件评估为解耦价值有限，保留原地 diff。
 
 ---
 
 ## 1. 当前状态总览
 
-### 1.1 文件规模（截至 2026-06-24，Phase 2-H 完成后）
+### 1.1 文件规模（截至 2026-06-24，Phase 3-C 完成后）
 
-| 维度 | 当前数字 | 上一快照（2026-06-23） | 变化 | 备注 |
+| 维度 | 当前数字 | 上一快照（2026-06-24 Phase 2-J） | 变化 | 备注 |
 |---|---|---|---|---|
 | 上游文件（`src/upstream/`） | **2553** `.py` | 2553 | 0 | 上游 rebased 多次后稳定 |
 | `src/upstreamproxy/` | **6** `.py` | 6 | 0 | 上游兼容代理层 |
-| 本地 `src/`（排除 upstream & upstreamproxy） | **601** `.py` | 631 | **−30** | T4 净增 0（11 移除 + 11 facade 替换，不改 .py 计数）；−30 来自**前一阶段已落地但未及时计入快照的删除**：`src/services/templates/*`（−9）、`src/services/ultraplan/*`（−6）、`src/permissions/bash_parser/*`（−5）、`src/tool_system/utils/{__init__,path_utils,ripgrep}.py` + `tools/bash/__init__.py`（−4），外加 `clawcodex_ext/transcript/nested_path.py`（−1，本属 ext 但在统计边）。注：631 旧数本身未严格按 `--not -path "*/__pycache__/*"` 过滤，可能含脏数据；601 已用精确 `find ... -not -path "*/__pycache__/*"` 重核 |
-| 扩展层 `clawcodex_ext/` | **669** `.py` | 584 | **+85** | Phase 2-H +3: pricing + cost_tracker + session_title 迁入 ext |
-| 第三层扩展 `extensions/` | **142** `.py` | 142 | 0 | 独立扩展层（orchestrator、visualizer、remote_api 等） |
-| **采用 lazy `__getattr__` proxy 化的文件** | **131** | 117 | +14 | 先前阶段增量落地 |
-| **采用 2-3 行 wildcard re-export facade 的文件** | **227** | 149 | +78 | 先前 Phase 3-A 等后计数增量未及时计入快照 |
-| **采用 sys.modules swap facade 的文件** | **44** | ~15-18 | +24-27 | chrome / api / native / tool_execution 等多文件改用 sys.modules swap 保留私有符号 |
-| **含本地增量但未 facade 化的文件** | **~7** | ~13 | **-6** | Phase 2-H 处理 6 个：computer_use/platform/* (3) + pricing + cost_tracker + session_title |
-| **与上游内容级不同的文件数** | **504** | 504 | 0 | T4 移动 src→ext 不会改 src 端 diff 行数（文件整体消失，patch 端 `--allow-deletes` 模式处理）；待 `regenerate_patches.py` 重生成后复核 |
-| **补丁队列总数** | **619** patches | 619 | 0 | 待 `regenerate_patches.py --allow-deletes` 重生成后确认（预计微减，因 src 端 11 文件变 facade + 25 文件已删，ext 端对应文件占位移除） |
+| 本地 `src/`（排除 upstream & upstreamproxy） | **570** `.py` | 601 | **−31** | −31 来自 Phase 2-J（7 包 31 个 src facade 删除）；Phase 3-C 4 文件 facade 化不改 .py 计数 |
+| 扩展层 `clawcodex_ext/` | **673** `.py` | 669 | **+4** | Phase 3-C +4: tui/ui_host + tui/screens/generic_select + tui/screens/generic_input + utils/export_formats |
+| 第三层扩展 `extensions/` | **140** `.py` | 142 | −2 | 无关调整 |
+| **采用 lazy `__getattr__` proxy 化的文件** | **134** | 131 | +3 | Phase 3-C: tui/ui_host + tui/screens/generic_select + tui/screens/generic_input |
+| **采用 wildcard re-export facade 的文件** | **228** | 227 | +1 | Phase 3-C: utils/export_formats |
+| **采用 sys.modules swap facade 的文件** | **44** | 44 | 0 | 无变化 |
+| **含本地增量未 facade 化的文件** | **~6** | ~7 | **−1** | Phase 3-C 迁 4 文件、评估 3 transports 为 won't-fix；净 −1（见 §4） |
+| **与上游内容级不同的文件数** | **504** | 504 | 0 | 自 Phase 2-D 后无变化 |
+| **补丁队列总数** | **619** patches | 619 | 0 | 待 `regenerate_patches.py --allow-deletes` 重核 |
 | **补丁队列体积** | **~3.7 MB** | 3.7 MB | ≈ 0 | 同上 |
 
 ### 1.2 已固化的解耦模式
@@ -361,14 +361,16 @@ clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp
 > 原 §4 的 Top 5 经 Phase 3-A、Phase 2-F/G/H 后已全部解决或降级；Phase 3-B 又闭合了原 Top 1（`src/services/mcp/*`）— 详见 §10g 调用点迁移。
 > **本轮更新（2026-06-24 Phase 2-J）**：7 个双位置包 `{analytics,api,chrome,oauth,periodic,pipe_ipc,voice}` 收敛为单 ext 入口，删除 31 个 src facade。含本地增量非 facade 文件 ~7 不变（本次不涉及）。
 > **本轮更新（2026-06-24 Phase 3-B）**：`src/services/mcp/*` 以「调用点迁移」形式闭合（27 文件 / 177 import 重写），无 `src/` 侧新文件落地；唯一非文件 follow-up 是 `tests/mcp/` 与上游 `mcp` SDK 同名包冲突（与解耦无关，独立跟进）。
+> **本轮更新（2026-06-24 Phase 3-C）**：4 个纯本地文件完成迁移（`tui/ui_host`、`tui/screens/generic_select`、`tui/screens/generic_input`、`utils/export_formats`）；3 个 `src/transports/` 文件经评估决定**保留原地 diff**——依赖链太深（级联依赖整个 `src/transports/` 包 9 文件 + 外部 `src.bridge`/`src.cli_core`/`src.utils`），解耦价值有限。
 
 | 排序 | 建议关注项 | 说明 | 建议方案 |
 |---|---|---|---|
-| 1 | `src/` 中 ~7 个含本地增量非 facade 文件 | config / utils/git / utils/image 等核心内联 diff | 评估是否有足够解耦价值，部分可能只能保留上游原地 diff |
+| 1 |~~`src/` 中 ~7 个含本地增量非 facade 文件~~ | ✅ **Phase 3-C 已闭合** — 4 文件迁 ext（tui/ui_host, tui/screens/generic_select, tui/screens/generic_input, utils/export_formats）；~6 个剩余中 3 个 transports 保留、3 个已 facade（report_store/routing/context_collapse/__init__） | — |
 | 2 | ~~7 个双位置包~~ | ✅ **Phase 2-J 已收敛** — 31 个 src facade 全删除，单 ext 入口 | — |
 | 3 | ~~`src/services/mcp/*` 调用点~~ | ✅ **Phase 3-B 已闭合** — 27 文件 / 177 import 改写为 `clawcodex_ext.services.mcp.*`，详见 §10g | — |
 | 4 | `tests/` 中仍有 20+ 处 `from src.*` 引用 | 合法的 facade 契约测试，不是违规 | 保留，不作清理 |
 | 5 | 补丁队列重生成 | 待 `regenerate_patches.py --allow-deletes` 重核 | 在下一个较大批处理前统一执行 |
+| 6 | ~~`src/transports/{remote_io,worker_state_uploader,transport_utils}.py`~~ | 已评估 **保留原地 diff**: 3 文件依赖链次级联至整个 `src/transports/`（9 文件非 facade 包）+ `src.bridge`/`src.cli_core`/`src.utils`；零外部消费者（仅同包 `__init__.py` 引用）；无测试覆盖。解耦价值有限，won't-fix。 | 保留 |
 
 ---
 
@@ -905,6 +907,7 @@ extensions/*           → 禁止导入 src/*（反向导入导致循环）
 | 2026-06-24 | §3.4 / §4 / §10f | **Phase 2-H 解耦收尾批次 — computer_use/platform/ 3 文件 facade + pricing/cost_tracker/session_title 迁 ext（6 文件，非 facade 文件 ~13→~7）** |
 | 2026-06-24 | §3.4 / §3.5 / §4 / §9 | **Phase 2-J 双位置包收敛 — 7 包 31 个 src facade 全删除，跨层 import 100+ 处重写为 ext 直连，Stage 1-5 门禁 321 passed + 7 包专项 363 passed** ✅ |
 | 2026-06-24 | §3.5 / §4 / §10g | **Phase 3-B `src/services/mcp/*` 调用点迁移 — 27 文件 / 177 import 改写为 `clawcodex_ext.services.mcp.*`，清理 stale `src/services/__init__.py` `__all__`，Stage 1-5 257 + Orchestrator 483 全 PASS；遗留 `tests/mcp/` 同名包冲突作为独立 follow-up** |
+| 2026-06-24 | §1.1 / §4 / §10h | **Phase 3-C T2+T3 纯本地文件迁移 — 4 文件迁 ext（tui/ui_host, tui/screens/generic_select, tui/screens/generic_input, utils/export_formats）；修复 1 处 ext→src 反向 import（export_command）；3 个 transports 文件评估为解耦价值有限，保留原地 diff。Stage 1-6 门禁 327 passed。** |
 
 ---
 
