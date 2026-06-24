@@ -1,0 +1,136 @@
+diff --git a/assistant/session_history.py b/assistant/session_history.py
+--- a/assistant/session_history.py	2026-06-18 10:10:16.666633 +0000
++++ b/assistant/session_history.py	2026-06-22 09:03:22.111584 +0000
+@@ -38,8 +38,8 @@
+ 
+ HISTORY_PAGE_SIZE: Final[int] = 100
+ 
+-_ANTHROPIC_VERSION: Final[str] = '2023-06-01'
+-_ANTHROPIC_BETA_CCR_BYOC: Final[str] = 'ccr-byoc-2025-07-29'
++_ANTHROPIC_VERSION: Final[str] = "2023-06-01"
++_ANTHROPIC_BETA_CCR_BYOC: Final[str] = "ccr-byoc-2025-07-29"
+ _DEFAULT_TIMEOUT_SECONDS: Final[float] = 15.0
+ 
+ 
+@@ -85,11 +85,11 @@
+     POST callers — see gap-analysis §2.1 bullet 7).
+     """
+     return {
+-        'Authorization': f'Bearer {access_token}',
+-        'Content-Type': 'application/json',
+-        'anthropic-version': _ANTHROPIC_VERSION,
+-        'anthropic-beta': _ANTHROPIC_BETA_CCR_BYOC,
+-        'x-organization-uuid': org_uuid,
++        "Authorization": f"Bearer {access_token}",
++        "Content-Type": "application/json",
++        "anthropic-version": _ANTHROPIC_VERSION,
++        "anthropic-beta": _ANTHROPIC_BETA_CCR_BYOC,
++        "x-organization-uuid": org_uuid,
+     }
+ 
+ 
+@@ -98,7 +98,7 @@
+     access_token: str,
+     org_uuid: str,
+     *,
+-    base_url: str = 'https://api.anthropic.com',
++    base_url: str = "https://api.anthropic.com",
+ ) -> HistoryAuthCtx:
+     """Build a reusable auth context bound to a session.
+ 
+@@ -108,7 +108,7 @@
+     the call sites.
+     """
+     return HistoryAuthCtx(
+-        base_url=f'{base_url.rstrip("/")}/v1/sessions/{session_id}/events',
++        base_url=f"{base_url.rstrip('/')}/v1/sessions/{session_id}/events",
+         headers=_oauth_headers(access_token, org_uuid),
+     )
+ 
+@@ -130,7 +130,9 @@
+         if client is None:
+             async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT_SECONDS) as fresh:
+                 resp = await fresh.get(
+-                    ctx.base_url, headers=ctx.headers, params=params,
++                    ctx.base_url,
++                    headers=ctx.headers,
++                    params=params,
+                 )
+         else:
+             resp = await client.get(
+@@ -140,31 +142,31 @@
+                 timeout=_DEFAULT_TIMEOUT_SECONDS,
+             )
+     except (httpx.HTTPError, httpx.TimeoutException):
+-        logger.debug('[%s] HTTP error', label)
++        logger.debug("[%s] HTTP error", label)
+         return None
+ 
+     if resp.status_code != 200:
+-        logger.debug('[%s] HTTP %d', label, resp.status_code)
++        logger.debug("[%s] HTTP %d", label, resp.status_code)
+         return None
+ 
+     try:
+         data = resp.json()
+     except ValueError:
+-        logger.debug('[%s] non-JSON body', label)
++        logger.debug("[%s] non-JSON body", label)
+         return None
+ 
+     if not isinstance(data, dict):
+-        logger.debug('[%s] body is not a dict', label)
++        logger.debug("[%s] body is not a dict", label)
+         return None
+ 
+-    events_raw = data.get('data')
++    events_raw = data.get("data")
+     events: list[dict[str, Any]] = events_raw if isinstance(events_raw, list) else []
+     return HistoryPage(
+         events=events,
+-        first_id=data.get('first_id'),
++        first_id=data.get("first_id"),
+         # ``False`` default mirrors TS JS-coercion of missing ``has_more``
+         # (undefined → falsy). No bool() cast — server is contract source.
+-        has_more=data.get('has_more', False),
++        has_more=data.get("has_more", False),
+     )
+ 
+ 
+@@ -180,8 +182,8 @@
+     """
+     return await _fetch_page(
+         ctx,
+-        {'limit': limit, 'anchor_to_latest': True},
+-        'fetch_latest_events',
++        {"limit": limit, "anchor_to_latest": True},
++        "fetch_latest_events",
+         client=client,
+     )
+ 
+@@ -198,17 +200,17 @@
+     """
+     return await _fetch_page(
+         ctx,
+-        {'limit': limit, 'before_id': before_id},
+-        'fetch_older_events',
++        {"limit": limit, "before_id": before_id},
++        "fetch_older_events",
+         client=client,
+     )
+ 
+ 
+ __all__ = [
+-    'HISTORY_PAGE_SIZE',
+-    'HistoryAuthCtx',
+-    'HistoryPage',
+-    'create_history_auth_ctx',
+-    'fetch_latest_events',
+-    'fetch_older_events',
++    "HISTORY_PAGE_SIZE",
++    "HistoryAuthCtx",
++    "HistoryPage",
++    "create_history_auth_ctx",
++    "fetch_latest_events",
++    "fetch_older_events",
+ ]

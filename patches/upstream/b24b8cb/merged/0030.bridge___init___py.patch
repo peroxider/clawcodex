@@ -1,0 +1,176 @@
+diff --git a/bridge/__init__.py b/bridge/__init__.py
+--- a/bridge/__init__.py	2026-06-18 10:10:15.829827 +0000
++++ b/bridge/__init__.py	2026-06-24 14:29:40.355625 +0000
+@@ -18,12 +18,14 @@
+ import json
+ from pathlib import Path
+ 
+-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'bridge.json'
++SNAPSHOT_PATH = (
++    Path(__file__).resolve().parent.parent / "reference_data" / "subsystems" / "bridge.json"
++)
+ _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
+ 
+-ARCHIVE_NAME = _SNAPSHOT['archive_name']
+-MODULE_COUNT = _SNAPSHOT['module_count']
+-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
++ARCHIVE_NAME = _SNAPSHOT["archive_name"]
++MODULE_COUNT = _SNAPSHOT["module_count"]
++SAMPLE_FILES = tuple(_SNAPSHOT["sample_files"])
+ PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
+ 
+ # -----------------------------------------------------------------------------
+@@ -103,12 +105,13 @@
+ # PEP 562 ``__getattr__`` defers the import until first attribute access,
+ # which by then has ``bridge/__init__.py`` fully loaded.
+ def __getattr__(name: str) -> object:
+-    if name in ('init_env_less_bridge_core', 'EnvLessBridgeParams',
+-                'RemoteBridgeHandle'):
++    if name in ("init_env_less_bridge_core", "EnvLessBridgeParams", "RemoteBridgeHandle"):
+         from src.bridge import remote_bridge_core as _rbc
+ 
+         return getattr(_rbc, name)
+-    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
++    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
++
++
+ from src.bridge.session_id_compat import (
+     set_cse_shim_gate,
+     to_compat_session_id,
+@@ -132,70 +135,71 @@
+ 
+ __all__ = [
+     # Legacy archive metadata (test_porting_workspace.py compat)
+-    'ARCHIVE_NAME',
+-    'MODULE_COUNT',
+-    'PORTING_NOTE',
+-    'SAMPLE_FILES',
++    "ARCHIVE_NAME",
++    "MODULE_COUNT",
++    "PORTING_NOTE",
++    "SAMPLE_FILES",
+     # Phase 1 leaves + Phase 3 HTTP client surface
+-    'ANTHROPIC_VERSION',
+-    'BETA_HEADER',
+-    'BRIDGE_LOGIN_ERROR',
+-    'BRIDGE_LOGIN_INSTRUCTION',
+-    'BoundedUUIDSet',
+-    'BridgeAuthError',
+-    'BridgeConfig',
+-    'BridgeFatalError',
+-    'BridgePermissionResponse',
+-    'BridgeStatusInfo',
+-    'CapacityWake',
+-    'DEFAULT_ENV_LESS_BRIDGE_CONFIG',
+-    'DEFAULT_POLL_CONFIG',
+-    'DEFAULT_SESSION_TIMEOUT_MS',
+-    'EnvLessBridgeConfig',
+-    'EnvLessBridgeParams',
+-    'EpochSupersededError',
+-    'FlushGate',
+-    'PollIntervalConfig',
+-    'REMOTE_CONTROL_DISCONNECTED_MSG',
+-    'RemoteBridgeHandle',
+-    'SessionActivity',
+-    'WS_CLOSE_EPOCH_MISMATCH',
+-    'WS_CLOSE_INIT_FAILURE',
+-    'WS_CLOSE_PERMANENT_UNAUTHORIZED',
+-    'WS_CLOSE_RECONNECT_BUDGET_EXHAUSTED',
+-    'WS_CLOSE_SESSION_NOT_FOUND',
+-    'WorkSecret',
+-    'create_bridge_api_client',
+-    'is_expired_error_type',
+-    'is_suppressible_403',
+-    'validate_bridge_id',
+-    'build_active_footer_text',
+-    'build_bridge_connect_url',
+-    'build_bridge_session_url',
+-    'build_ccr_v2_sdk_url',
+-    'build_idle_footer_text',
+-    'build_sdk_url',
+-    'create_capacity_wake',
+-    'decode_work_secret',
+-    'extract_inbound_message_fields',
+-    'format_duration',
+-    'get_bridge_access_token',
+-    'get_bridge_base_url',
+-    'get_bridge_base_url_override',
+-    'get_bridge_status',
+-    'get_bridge_token_override',
+-    'get_env_less_bridge_config',
+-    'get_poll_interval_config',
+-    'get_repl_bridge_handle',
+-    'get_self_bridge_compat_id',
+-    'init_env_less_bridge_core',
+-    'is_bridge_permission_response',
+-    'normalize_image_blocks',
+-    'same_session_id',
+-    'set_cse_shim_gate',
+-    'set_repl_bridge_handle',
+-    'to_compat_session_id',
+-    'to_infra_session_id',
+-    'truncate_to_width',
+-    'wrap_with_osc8_link',
++    "ANTHROPIC_VERSION",
++    "BETA_HEADER",
++    "BRIDGE_LOGIN_ERROR",
++    "BRIDGE_LOGIN_INSTRUCTION",
++    "BoundedUUIDSet",
++    "BridgeAuthError",
++    "BridgeConfig",
++    "BridgeFatalError",
++    "BridgePermissionResponse",
++    "BridgeState",
++    "BridgeStatusInfo",
++    "CapacityWake",
++    "DEFAULT_ENV_LESS_BRIDGE_CONFIG",
++    "DEFAULT_POLL_CONFIG",
++    "DEFAULT_SESSION_TIMEOUT_MS",
++    "EnvLessBridgeConfig",
++    "EnvLessBridgeParams",
++    "EpochSupersededError",
++    "FlushGate",
++    "PollIntervalConfig",
++    "REMOTE_CONTROL_DISCONNECTED_MSG",
++    "RemoteBridgeHandle",
++    "SessionActivity",
++    "WS_CLOSE_EPOCH_MISMATCH",
++    "WS_CLOSE_INIT_FAILURE",
++    "WS_CLOSE_PERMANENT_UNAUTHORIZED",
++    "WS_CLOSE_RECONNECT_BUDGET_EXHAUSTED",
++    "WS_CLOSE_SESSION_NOT_FOUND",
++    "WorkSecret",
++    "create_bridge_api_client",
++    "is_expired_error_type",
++    "is_suppressible_403",
++    "validate_bridge_id",
++    "build_active_footer_text",
++    "build_bridge_connect_url",
++    "build_bridge_session_url",
++    "build_ccr_v2_sdk_url",
++    "build_idle_footer_text",
++    "build_sdk_url",
++    "create_capacity_wake",
++    "decode_work_secret",
++    "extract_inbound_message_fields",
++    "format_duration",
++    "get_bridge_access_token",
++    "get_bridge_base_url",
++    "get_bridge_base_url_override",
++    "get_bridge_status",
++    "get_bridge_token_override",
++    "get_env_less_bridge_config",
++    "get_poll_interval_config",
++    "get_repl_bridge_handle",
++    "get_self_bridge_compat_id",
++    "init_env_less_bridge_core",
++    "is_bridge_permission_response",
++    "normalize_image_blocks",
++    "same_session_id",
++    "set_cse_shim_gate",
++    "set_repl_bridge_handle",
++    "to_compat_session_id",
++    "to_infra_session_id",
++    "truncate_to_width",
++    "wrap_with_osc8_link",
+ ]

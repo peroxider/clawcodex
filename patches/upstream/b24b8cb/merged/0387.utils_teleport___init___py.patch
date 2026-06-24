@@ -1,0 +1,9 @@
+diff --git a/utils/teleport/__init__.py b/utils/teleport/__init__.py
+--- a/utils/teleport/__init__.py	2026-06-18 10:10:15.690182 +0000
++++ b/utils/teleport/__init__.py	2026-06-22 09:03:28.427719 +0000
+@@ -8,4 +8,4 @@
+ 
+ from src.utils.teleport.api import ANTHROPIC_VERSION, get_oauth_headers
+ 
+-__all__ = ['ANTHROPIC_VERSION', 'get_oauth_headers']
++__all__ = ["ANTHROPIC_VERSION", "get_oauth_headers"]
