@@ -216,28 +216,25 @@ def analyze_powershell_safety(command: str) -> PwshSafetyAnalysis:
             continue
 
         # Common aliases and standalone commands
-        if alias_lower in ("dir", "ls", "type", "cat", "more", "pwd", "sleep", "start-sleep"):
+        if verb.lower() in ("dir", "ls", "type", "cat", "more", "pwd", "sleep", "start-sleep"):
             overall_safety = _max_safety(overall_safety, "safe")
             continue
-        if alias_lower in ("dir", "ls", "type", "cat", "more", "pwd", "sleep", "start-sleep"):
-            overall_safety = _max_safety(overall_safety, "read_only")
-            continue
-        if alias_lower in ("cd", "sl", "set-location", "pushd", "popd", "md", "mkdir"):
+        if verb.lower() in ("cd", "sl", "set-location", "pushd", "popd", "md", "mkdir"):
             overall_safety = _max_safety(overall_safety, "write")
             continue
-        if alias_lower in ("del", "rm", "ri", "remove-item", "rd", "rmdir"):
+        if verb.lower() in ("del", "rm", "ri", "remove-item", "rd", "rmdir"):
             if has_destructive_flag:
                 overall_safety = _max_safety(overall_safety, "destructive")
             else:
                 overall_safety = _max_safety(overall_safety, "write")
             continue
-        if alias_lower in ("cp", "copy", "copy-item", "mv", "move", "move-item", "ren", "rename-item"):
+        if verb.lower() in ("cp", "copy", "copy-item", "mv", "move", "move-item", "ren", "rename-item"):
             overall_safety = _max_safety(overall_safety, "write")
             continue
-        if alias_lower in ("ni", "new-item", "sc", "set-content"):
+        if verb.lower() in ("ni", "new-item", "sc", "set-content"):
             overall_safety = _max_safety(overall_safety, "write")
             continue
-        if alias_lower in ("ac", "add-content", "out-file"):
+        if verb.lower() in ("ac", "add-content", "out-file"):
             overall_safety = _max_safety(overall_safety, "write")
             continue
 
