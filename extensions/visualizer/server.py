@@ -642,7 +642,6 @@ def create_app(
     async def list_orchestrator_runs():
         """List all orchestrator runs with state journals (F-96-C)."""
         from .parsers.orchestrator_state_parser import OrchestratorStateParser
-from .parsers.stats_parser import StatsFileParser
 
         parser = OrchestratorStateParser(
             reports_dir=app.state.viz.reports_dir,
