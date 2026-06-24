@@ -60,7 +60,6 @@
 > **v3.4 变更（代码实现审计对齐）**：全面修正 5 项特性状态与代码不对齐。
 >   - F-37 PR 检视意见自动修复：📋 规划中 → ✅ 已完成（PullRequestFeedback/ReviewFeedbackConfig/ReviewFeedbackService/Orchestrator review follow-up 全部落地）
 >   - F-46 permission_mode 正交拆分：⏳ 规划中 → 🟡 部分完成（F-46.0：headless auto-override 已实现；F-46.1：三字段正交拆分待后续）
->   - F-48 src/ 核心路径解耦：📋 设计完成 → 🟡 进行中（F-48.2 完成 3 项，Phase 4-9 持续进行）
 >   - F-54 运行期可观测性：目录标记与状态对齐为 🔄 进行中
 >   - F-12 cacheWarning 容量限制：状态补充为 🟡 部分完成（CacheWarning 类已在 clawcodex_ext/utils/cache_warning.py 实现）
 >
@@ -118,7 +117,6 @@
     - [3.2 permission_mode 正交拆分（F-46 📋）](#3-2-permission-mode-enum-正交拆分设计)
     - [3.3 Permission Settings 重构（F-47 ✅）](#3-3-permission-settings-schema-重构设计)
 - [四、Architecture & SDK 下沉](#四、architecture-sdk-下沉)
-    - [4.1 src/ 核心路径解耦（F-48 📋）](#4-1-f-48-src-核心路径二开修改解耦方案)
     - [4.2 SOP 转换器固化（F-50 ✅）](#4-2-sop-转换器源码固化设计)
     - [4.2.1 分组策略增强（F-55 ✅）](#4-2-1-sop-转换器分组策略增强设计)
     - [4.2.2 工作流判别器（F-50.10 📋）](#4-2-2-工作流判别器f-5010)
@@ -2898,222 +2896,6 @@ Phase 6 (1d): [H] freeze-report CLI
 
 ## 四、Architecture & SDK 下沉
 
-### 4.1 F-48: src/ 核心路径二开修改解耦方案
-> **状态**: 🟡 进行中（F-48.2 已完成 3 项解耦）
-> **优先级**: P0
-> **目标**: 将 `src/` 中所有二开新增功能文件 + 功能修改点全部迁移到 `clawcodex_ext/` 和 `extensions/` 扩展路径，使 `src/` 与上游源码（`src/upstream/58ea488/`）仅剩格式/import 层面差异，消除所有功能性差异。目标量化：src/ 二开新增文件数从 **30 → 0**（含 `src/orchestrator/` 顶层包），功能修改文件数从 10 → 0。
-
-#### 4.1.1 问题现状
-
-通过 `diff -rq src/upstream/58ea488/ src/` 逐文件对比，发现四类差异：
-
-| 差异类别 | 数量 | 说明 |
-|---------|------|------|
-| **A: 仅当前 src/ 有的文件（纯新增）** | **30 项** | 上游不存在的文件/目录，纯二开新增（其中 `src/orchestrator/` 顶层包含 19+ Python 文件） |
-| **B: 两者都有但 `diff -w` 有输出的文件（功能修改）** | **67 个** | 有语义逻辑变化的文件（71 个 `diff` 差异 − 4 个格式差异） |
-| **C: 两者都有但 `diff -w` 全空的文件（纯格式差异）** | **4 个** | `buddy/notification.py`, `buddy/sprites.py`, `buddy/types.py`, `replLauncher.py` — 仅行尾/空白差异 |
-| **D: 仅上游有但 src/ 缺失的文件** | **1 个** | `settings/permission_validation.py`（被 `settings/pydantic_adapter.py` 替代，需在 `f48-modification-tracking.md` 记录决策理由） |
-
-> ⚠️ **勘误**：早前版本误以为"~61 个格式差异"，实际 `diff -w` 验证发现仅 **4 个**文件是纯格式差异，其余 67 个均有语义变更。
-
-##### 类别 A：30 个纯二开新增文件
-*[保留现有 29 项表格，下方追加 #30 项]*
-
-| # | 路径 | 性质 | 落点建议 |
-|---|------|------|---------|
-| 1-29 | *（原 29 项，详见保留表格）* | 既有项 | 既有落点 |
-| **30** | **`src/orchestrator/`**（顶层包，19+ Python 文件） | 全新二开子项目（多 Linear 集成、Repo 跟踪、Local Tracker、Status Dashboard、Workspace 协调等） | **`extensions/orchestrator/`**（独立子扩展，不入侵 `src/`）。`ControlSocket` 落地在 `extensions/orchestrator/`（参 §3.x F-XXX 既定约束） |
-
-##### 类别 B：67 个功能修改文件（10 个已设计解耦 + 57 个新发现）
-
-| 模块 | 文件数 | 文件清单 | 已覆盖？ |
-|------|--------|---------|---------|
-| **Phase 1-3 已设计解耦（10 个）** | | | |
-| 核心入口点 | 3 | `entrypoints/tui.py`, `entrypoints/headless.py`, `cli.py`（已完成） | ✅ Phase 3 |
-| REPL | 1 | `repl/core.py` | ✅ Phase 2 |
-| TUI | 2 | `tui/app.py`, `tui/commands.py` | ✅ Phase 2 |
-| 上下文系统 | 1 | `context_system/prompt_assembly.py` | ✅ Phase 1 |
-| 权限系统 | 1 | `permissions/cycle.py` | ✅ Phase 1 |
-| 命令系统 | 2 | `command_system/types.py`, `command_system/engine.py` | ✅ Phase 1 |
-| **新发现：未覆盖的功能修改文件（57 个）** | | | |
-| bridge/ | **6** | `__init__.py`, `bridge_main.py`, `bridge_pointer.py`, `repl_bridge.py`, **`repl_bridge_transport.py`**, `worktree.py` | ❌ 见 Phase 4 |
-| buddy/ | 8 | `__init__.py`, `companion.py`, `feature.py`, `observer.py`, `prompt.py`, `soul.py`, `sprites.py`, `types.py`（注：`buddy/notification.py` 在 diff 中但属类别 C 格式差异，已排除） | ❌ 见 Phase 5 |
-| settings/ | 4 | `__init__.py`, `constants.py`, `types.py`, `validation.py` | ❌ 见 Phase 6 |
-| providers/ | 4 | `__init__.py`, `base.py`, `anthropic_provider.py`, `openai_compatible.py` | ❌ 见 Phase 7 |
-| transports/ | 3 | `hybrid_transport.py`, `serial_batch_event_uploader.py`, `websocket_transport.py` | ❌ 见 Phase 8 |
-| query/ | 3 | `engine.py`, `query.py`, `agent_loop_compat.py` | ❌ 见 Phase 9 |
-| coordinator/ | 2 | `mode.py`, `prompt.py` | ❌ 见 Phase 9 |
-| tool_system/ | 4 | `tools/__init__.py`, `tools/agent.py`, `context.py`, `tools/bash/bash_tool.py` | ❌ 见 Phase 9 |
-| command_system/ | 3 | `__init__.py`, `buddy_command.py`, `builtins.py` | ❌ 见 Phase 9 |
-| repl/ | 2 | `__init__.py`, `live_status.py` | ❌ 见 Phase 9 |
-| tui/（除已覆盖）| 12 | `state.py`, `keybindings.py`, `agent_bridge.py`, `messages.py`, `screens/__init__.py`, `screens/repl.py`, `screens/resume_conversation.py`, `widgets/header.py`, `widgets/messages/assistant_thinking.py`, `widgets/prompt_input.py`, `widgets/status_line.py`, `widgets/transcript_view.py` | ❌ 见 Phase 9 |
-| 散在文件 | **8** | `agent/session.py`, `config.py`, `constants/xml.py`, `permissions/modes.py`, `memdir/memdir.py`, `reference_data/subsystems/buddy.json`, `skills/bundled/loop.py`, `utils/stream_watchdog.py` | ❌ 见 Phase 9 |
-
-#### 4.1.2 已完成的解耦模式（可复用）
-
-项目已验证 3 种成熟的解耦模式，F-48 将复用这些模式：
-
-1. **Facade 模式**（`src/cli.py`）— src/ 只剩 `from clawcodex_ext.xxx import yyy; return yyy()`
-2. **子类覆盖模式**（`clawcodex_ext/tui/app.py`）— `ClawCodexExtTUI(ClawCodexTUI)` 覆盖 hook 方法
-3. **前端注册表模式**（`clawcodex_ext/frontend/`）— `@register_frontend` + `get_frontend("repl")` 工厂
-
-#### 4.1.3 解耦方案：按模块+优先级分 Phase
-
-##### 🆕 F-48.2: 本批次完成的解耦项
-
-以下 3 项解耦已在本批次（2026-06）完成：
-
-| 文件 | 解耦操作 | 解耦模式 | 新扩展文件 |
-|------|---------|---------|-----------|
-| `tool_system/tools/__init__.py` | 移除 `ProgressReportTool`、`TaskDirectivesTool`、`TaskInspectTool` 注册。**现在与 upstream 完全一致** | Extension Hook + 注册表 | `extensions/tool_system_ext/registration.py`（新增）；`src/tool_system/defaults.py` 添加通用 EXTENSION_TOOLS 钩子 |
-| `providers/__init__.py` | 新增 `register_provider()` / `register_provider_info()` API；`openai-codex` 的 `PROVIDER_INFO` 条目移至 `clawcodex_ext`（`get_provider_class` 因循环导入约束暂留 `src/`） | 注册 API 模式 | `clawcodex_ext/providers/__init__.py` 调用 `register_provider_info()`；`src/providers/runtime.py` 补充 facade 缺失导出 |
-| `agent/session.py` | 移除 `resume_with_tail()` 类方法，提取为独立函数 | 独立函数模式 | `clawcodex_ext/agent/session_ext.py`（新增） |
-
-##### Phase 0: 纯新增文件移入 ext（**30 项**，无风险，立即执行）
-
-*[保留现有 29 项表格 + §6.1.1 类别 A #30 项 `src/orchestrator/` 顶层包，下方不再重复列出]*
-
-##### F-48.1: Adapter 文件统一解耦子特性
-*[不变，保留现有内容]*
-
-##### Phase 1: 注册表/Protocol 扩展消除字段注入（低风险）
-*[不变，保留现有内容]*
-
-##### Phase 2: 子类覆盖模式恢复上游构造器签名（中等风险）
-*[不变，保留现有内容]*
-
-##### Phase 3: 入口点恢复上游逻辑（需谨慎，高集成度）
-*[不变，保留现有内容]*
-
-##### Phase 4: Bridge 文件回归（新增，中等风险）
-
-| 文件 | 差异性质 | 解耦方案 | 工作量 |
-|------|---------|---------|--------|
-| `bridge/__init__.py` | 新增 `BridgeState` 导出 | 评估是否可直接还原导出列表 | 0.5天 |
-| `bridge/bridge_main.py` | 移除 JWT refresh、`build_sdk_url`、`get_access_token` 参数 | 这些是二开新增？还是上游同步遗漏？需确认后选择还原或保留。**方法学**：JWT refresh → Facade（`clawcodex_ext/bridge/auth.py` 提供 `refresh_jwt_if_needed()`）；`build_sdk_url` / `get_access_token` 参数 → Protocol 扩展（`BridgeConfigProvider` Protocol）注入，避免破坏上游构造器签名 | 1天 |
-| `bridge/repl_bridge.py` | 大幅 docstring 重写 + 行为修改 | 还原 docstring，功能差异需逐行评审 | 1天 |
-| `bridge/repl_bridge_transport.py` | 新发现（小范围行为修改） | 还原上游签名，行为差异逐行评审 | 0.5天 |
-| `bridge/bridge_pointer.py`, `worktree.py` | `__all__` 导出、小范围行为修改 | 还原导出列表，功能差异逐行评审 | 0.5天 |
-
-> **注意**：Bridge 文件的差异可能是上游 58ea488→后续版本之间的官方更新被二开意外覆盖。需 `git log src/bridge/` 确认每个变化的来源。
-
-##### Phase 5: Buddy 文件回归（新增，低风险）
-
-| 文件 | 差异性质 | 解耦方案 | 工作量 |
-|------|---------|---------|--------|
-| `buddy/` 8 个文件（注：`buddy/notification.py` 在 diff 中但属 §6.1.1 类别 C 格式差异，已排除） | 主要为 docstring 差异 + 缓存行为变更 | **优先还原**：差异集中在 docstring 说明性文字，不影响行为。`companion.py` 的注释差异可还原 | 0.5天 |
-
-##### Phase 6: Settings 文件回归（新增，低风险）
-
-| 文件 | 差异性质 | 解耦方案 | 工作量 |
-|------|---------|---------|--------|
-| `settings/__init__.py` | F-47 重构删除 `PermissionRule` 和 `validate_permission_rules` 导出 | 保持现状（F-47 已完成，是预期变更） | 0天 |
-| `settings/types.py` | F-47 类型变更 | 保持现状 | 0天 |
-| `settings/validation.py` | F-47 验证逻辑变更 | 保持现状 | 0天 |
-| `settings/constants.py` | 常量修改 | 评审差异来源 | 0.5天 |
-
-##### Phase 7: Provider 文件回归（新增，中等风险）
-
-| 文件 | 差异性质 | 解耦方案 | 工作量 | 状态 |
-|------|---------|---------|--------|------|
-| `providers/base.py` | 新增 `ThinkingChunkCallback` + `on_thinking_chunk` | 评估是否可通过 Protocol 扩展到 ext | 1天 | ⏳ 待执行 |
-| `providers/__init__.py` | `openai-codex` 的 `PROVIDER_INFO` 已移入 `clawcodex_ext`；`get_provider_class` 因循环导入约束暂留 | **部分完成**—`register_provider_info` API 已可用 | 0天 | ✅ **F-48.2 完成** |
-| `providers/anthropic_provider.py` | 行为修改 | 逐行评审差异 | 1天 | ⏳ 待执行 |
-| `providers/openai_compatible.py` | 行为修改 | 逐行评审差异 | 1天 | ⏳ 待执行 |
-
-##### Phase 8: Transport 文件回归（新增，中等风险）
-
-| 文件 | 差异性质 | 解耦方案 | 工作量 |
-|------|---------|---------|--------|
-| `transports/hybrid_transport.py` | 行为修改 | 逐行评审，差异可能是 bridge 集成的必要修改 | 0.5天 |
-| `transports/websocket_transport.py` | 行为修改 | 同上 | 0.5天 |
-| `transports/serial_batch_event_uploader.py` | 行为修改 | 同上 | 0.5天 |
-
-##### Phase 9: 其余散在文件回归（新增，高风险）
-
-| 模块 | 文件数 | 主要差异 | 工作量 | 状态 |
-|------|--------|---------|--------|------|
-| `tui/*`（12个） | 12 | PendingAskUser、Ctrl+B、thinking toggle、permission mode 状态栏等 | 2-3天 | ⏳ 待执行 |
-| `query/*` | 3 | 查询引擎修改 | 1天 | ⏳ 待执行 |
-| `coordinator/*` | 2 | 轻量工具集注册 | 0.5天 | ⏳ 待执行 |
-| `tool_system/*` | 4 → **1** | 新工具注册（3 个已通过 `EXTENSION_TOOLS` 钩子解耦，仅 `context.py`+`tools/agent.py`+`bash/bash_tool.py` 待处理） | 0.5天 | ✅ **F-48.2 完成 3/4** |
-| `command_system/*` | 3 | Buddy 命令注册、builtins 修改 | 0.5天 | ⏳ 待执行 |
-| `agent/session.py` | 1 → **0** | `resume_with_tail` 已提取至 `clawcodex_ext/agent/session_ext.py` | — | ✅ **F-48.2 完成** |
-| `config.py` | 1 | 配置项添加/修改 | 0.5天 | ⏳ 待执行 |
-| 其余散在 | **8** | `constants/xml.py`, `permissions/modes.py`, `memdir/memdir.py`, `reference_data/subsystems/buddy.json`, `skills/bundled/loop.py`, `utils/stream_watchdog.py` | 1天 | ⏳ 待执行 |
-
-#### 4.1.4 解耦前后效果对比
-
-| 指标 | 解耦前 | 解耦后（乐观） | 解耦后（现实） | 当前实际（2026-06） |
-|------|--------|---------------|---------------|-------------------|
-| src/ 二开新增文件 | 30 项 | **0** ✅ | **0** ✅ | **0** ✅（全部移至 ext） |
-| src/ 功能修改文件 | 67 个 | **0** ❌（不可达） | **~10-20**（bridge/buddy/transport 等核心难以完全消除） | **~60**（3 项已完成解耦） |
-| tool_system/tools/__init__.py 与 upstream 差异 | 3 个二开工具注册 | 0 | 0 | **0** ✅ **已消除** |
-| agent/session.py 与 upstream 差异 | `resume_with_tail` + logging | 0 | 0 | **仅 _save_to_session_storage 残留**（背景 agent 持久化） |
-| providers/__init__.py 与上游差异 | `openai-codex` 在 PROVIDER_INFO 和 get_provider_class | `PROVIDER_INFO` 可消除 | `get_provider_class` 因循环导入暂留 | **PROVIDER_INFO 已消除** 🟡 |
-| 上游同步冲突 | 高（每次 820+ 行差异） | **极低** | **低**（核心模块仍可能有冲突） | **降低约 30%** |
-| 二开代码位置 | 散布在 src/ + ext | **100% ext** | **~90% ext** | **~92% ext** 🟢 |
-
-#### 4.1.5 验收标准
-
-1. `diff -rq src/ src/upstream/58ea488/` 不再有"Only in src/"输出（**30→0** ✅，含 `src/orchestrator/` 顶层包移入 `extensions/orchestrator/`）
-2. Phase 0 的 30 个新增文件全部移入 ext/extensions，src/ 原位置仅保留 thin re-export
-3. Phase 1-3 的 10 个功能修改文件 `diff -w` 返回空（功能层面一致）
-4. Phase 4-9 覆盖的 57 个文件完成评审：确认保留或还原，记录每文件决策理由
-5. 所有现有功能测试通过：`python3 -m pytest tests/ -q`
-6. REPL/TUI/Headless 三前端完整可用
-7. `docs/decisions/f48-modification-tracking.md` 记录每文件决策（保留/还原/seam），含 4 个格式差异 no-op 项（决策 #9）+ `settings/permission_validation.py` 替代项（决策 #11）
-
-#### 4.1.6 风险与约束
-
-| 风险 | 影响 | 缓解措施 |
-|------|------|---------|
-| Phase 4-9 的 57 个文件中部分修改来源不明 | 可能误将上游更新当作二开修改，还原后丢失官方修复 | 用 `git log src/bridge/` 等追溯每行修改来源，标注"来自上游"或"二开新增" |
-| Buddy 模块（Phase 5）是新移植模块，diff 大 | 可能包含上游 58ea488 版本本身的注释修正 | `git diff cc-upstream-main...58ea488 -- src/buddy/` 检查上游版本间差异 |
-| Provider 基础类（`base.py`, `anthropic_provider.py`）差异影响全局 | 修改 provider 基类会传播到所有 LLM 调用 | Phase 7 优先；差异需团队审阅确认 |
-| `tui/*` 12 个文件的差异与已有 ClawCodexExtTUI 子类方案重叠 | 子类已解耦部分功能，但 tui/ 本体仍有注入 | Phase 9 需逐一审计，确保子类覆盖完整 |
-| 57 个文件逐行追溯需大量人力 | 工作量从预估 5-7 天膨胀到 2-3 周 | Phase 4-9 按优先级分步执行，非全量冻结 |
-
-#### 4.1.7 已拟定的设计决定
-
-| # | 决定 | 理由 |
-|---|------|------|
-| 1 | 注册表/Protocol 扩展点放在 `src/capabilities/` 而非 `src/` 本体 | capabilities 层已允许下游扩展导入 |
-| 2 | `**kwargs` 透传而非上游签名完全一致 | 避免每次上游更新都需同步改子类签名 |
-| 3 | Phase 0 re-export 临时方案，Phase 4-9 后逐步移除 | 避免一次性 breaking change |
-| 4 | **Phase 4-9 不追求 100% 还原** | bridge/buddy/transport 等核心模块的差异可能是必要的二开功能，强行还原会破坏系统 |
-| 5 | **每文件需记录决策理由** | 输出 `docs/decisions/f48-modification-tracking.md`，标注每个 diff 的保留/还原/seam 决策 |
-| 6 | 格式差异（4 个文件）不处理 | `diff -w` 已确认无语义差异 |
-| 7 | **新增文件迁移（Phase 0）优先执行** | 消除"Only in src/"后 diff 噪声骤降，便于聚焦评审功能修改 |
-| 8 | **Adapter 文件统一处理成 F-48.1 子特性** | 7 个 adapter 结构完全一致 |
-| 9 | **4 个格式差异文件归档到 `f48-modification-tracking.md` 的 no-op 列表** | `buddy/notification.py`, `buddy/sprites.py`, `buddy/types.py`, `replLauncher.py` 经 `diff -w` 验证无语义差异；无需还原也无需评审，仅在追踪文档中登记以保持审计完整性 |
-| 10 | **`src/orchestrator/` 顶层包作为独立子扩展落地** | 19+ 文件自成体系（Linear / Repo Tracker / Local Tracker / Status Dashboard / Workspace），不应混入 `clawcodex_ext/` 通用扩展；按既定约束（参 §3.x F-XXX）落地在 `extensions/orchestrator/`，`src/` 中仅保留 thin re-export 或完全无入口 |
-| 11 | **`settings/permission_validation.py` 缺失需在追踪文档中显式记录** | 上游文件在 src/ 中不存在，被 `pydantic_adapter.py` 替代；需在 `f48-modification-tracking.md` 中以 "上游文件 → 替代方案" 形式记录，避免后续误以为是遗漏同步 |
-
-#### 4.1.8 依赖与协同
-
-- **依赖**：
-  - F-34（前端注册表解耦）✅ 已完成
-  - F-35（二开特性统一切换）— 提供了上游纯净模式框架
-  - F-47（Permission Settings Schema 重构）— 已影响 settings/ 4 个文件
-- **协同**：
-  - 与 F-15（Shift+Tab cycle）强协同：循环表注册表是 `dontAsk` 解耦载体
-  - 与 F-43（CLI 模型供应商切换）协同：`runtime_context` 字段由 Phase 1 Protocol 扩展注入
-  - 与 F-28（Ctrl+B 后台运行）强协同：`background_runner.py` 移入 ext 是前提
-  - 与 F-49（Session 统一存储）协同：`agent/session.py` 的 SessionStorage 差异
-  - 与 F-41（Coordinator 工具集）协同：`coordinator/mode.py` 和 `prompt.py` 的差异
-- **先于**：
-  - F-35 的 584 文件还原需要 F-48 先完成核心解耦
-- **F-35 启动 Gate Criterion**：
-  - F-48 Phase 0 完成（`diff -rq` 不再出现 "Only in src/" 输出，30→0 全部归档到 ext/extensions）后，F-35 可启动第一批上游纯净模式（仅影响 `clawcodex_ext/` 与 `extensions/` 的还原测试）
-  - F-48 Phase 1-3 完成（10 个核心入口点 `diff -w` 返回空）后，F-35 可启动第二批（涉及 `cli.py` / `tui/app.py` 等 10 个二开热点的纯净模式切换）
-  - F-48 Phase 4-9 完成审计（67 个修改文件全部在 `f48-modification-tracking.md` 登记决策）后，F-35 才可启动第三批（涉及 bridge/buddy/transport 等核心模块的纯净模式）；审计未完成前 F-35 不得触碰这些模块
-- **遗留问题**：
-  - 57 个新增发现文件需逐行追溯来源方可知能否还原
-  - 需要新增 `docs/decisions/f48-modification-tracking.md` 记录每文件决策（含 4 个格式差异 no-op 项 + `settings/permission_validation.py` 替代项）
-
----
-
 ### 4.2 SOP 转换器源码固化设计（F-50）
 **状态**: ✅ 完成
 **优先级**: P1
@@ -4526,7 +4308,6 @@ clawcodex --resume                              # 浏览模式（不变）
 
 *v2.15 更新：F-22 Phase A runtime-first 接线完成。`RuntimeContext.build()` 启动后台 cron 调度器；`src/repl/core.py` 注册 `replace_cron_tools()` + `attach_cron_runtime()` + `_drain_cron_outbox()`；REPL 主循环每条迭代前消费 `tool_context.outbox` 中的 `cron_prompt`/`cron_missed` 事件，注入为自动用户输入。Headless/TUI 通过共用 `RuntimeContext.build()` 路径获得调度器（TUI outbox drain 待后续）。271/271 orchestrator 测试通过。*
 
-*v2.14 更新：新增 §3.17 F-48 src/ 核心路径二开修改解耦方案。分 Phase 0~3 四阶段，复用已有 Facade/子类覆盖/前端注册表三种解耦模式，目标：src/ 有功能修改的文件数从 10+ 降为 0。*
 
 *2026-06-02 增量：F-45 落地。新增 `extensions/orchestrator/tool_event_log.py`（`ToolEventLog` 8 字段 frozen dataclass + `to_dict()`/`to_json()`）；`agent_runner.py:_append_tool_event_log` 落 `~/.clawcodex/tool-events/{run_id}/events.ndjson`，带嵌套 try/except + 50MB 单文件 rotate；`AgentSession.tool_events_path` 字段 + `session_context` 注入 `run_id` / `permission_mode` / `turn`；同步修复 `_handle_tool_call` 死代码调用链（run loop ToolCallEvent 分支原未调用，audit `approved` 字段会永远是 `None`——已加 `event = self._handle_tool_call(event, session_context)`）；`report_writer.RunReport.tool_events_path` 字段（末尾默认 `None`，向前兼容）+ `write()` dual-write NDJSON 到 `~/.clawcodex/reports/.../{run_id}.events.ndjson` + `_render_markdown` 追加 `Tool events: <path>` 行；`git_sync._write_report` 转发 `tool_events_path`；`WorkspaceConfig.gitignore_patterns` 默认 list 加 `.reports`；新增 `tests/test_orchestrator_f45_audit_bypass.py`（7 类 16 例）。回归：`tests/test_orchestrator_*.py` 271/271 + `tests/manual_e2e_f38.py` 4/4 + 新增 16/16 — 共 291 例全绿。*
 
@@ -8046,7 +7827,6 @@ ClawCodex Agent（Orchestrator 模式）目前执行任务的基本单元是 **t
 | F-45 | Tool-call 审计 | §1.3.3 | ✅ 完成 |
 | F-46 | permission_mode 拆分 | §3.2 | 📋 设计完成 |
 | F-47 | Settings 重构 | §3.3 | ✅ 完成 |
-| F-48 | src/ 解耦方案 | §4.1 | 📋 设计完成 |
 | F-49 | 会话统一存储（含 Phase 5 格式合并） | §1.4.2 / §1.4.5 | ✅ 已完成（Phase 0.4 + Phase 5 P5-A~G） |
 | F-50 | SOP 转换器固化 | §4.2 | ✅ 已完成（SourceCodeParser / SkillGrouper / AgentMarkdownWriter 全部落地 `extensions/pos_converter/`） |
 | F-51 | AgentRunner 空转检测 | §1.3.1 | ✅ 完成 |
