@@ -97,9 +97,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    # Default --preserve-file to patches/upstream/{commit}/preserve.list when
+    # not explicitly set AND the conventional path exists. Without this,
+    # omitting --preserve-file causes the regen to silently fail with
+    # RuntimeError("N upstream files absent from src") on any subsystem
+    # that's been migrated (services/mcp, services/api, etc.), leaving the
+    # merged/ directory stale. See DECOUPLING_PLAN.md Phase 4 P1 Step 2a.
+    preserve_file_path = args.preserve_file
+    if preserve_file_path is None and args.commit:
+        candidate = Path("patches/upstream") / args.commit / "preserve.list"
+        if candidate.is_file():
+            preserve_file_path = candidate
+
     preserve = PatchGenerator.collect_preserve(
         preserve_args=args.preserve,
-        preserve_file_path=args.preserve_file,
+        preserve_file_path=preserve_file_path,
     )
 
     # Use a minimal config — the regenerate path doesn't read upstream-sync.yaml;
