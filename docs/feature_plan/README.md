@@ -15,7 +15,7 @@ docs/feature_plan/
 ├── 04-architecture-sdk/               ← Architecture & SDK 下沉
 ├── 05-cron-system/                    ← Cron 系统
 ├── 06-ccb-benchmark/                  ← CCB 对标
-└── 07-other/                          ← 其他散在特性
+└── 07-cli-config/                    ← CLI 与配置系统
 ```
 
 ## F-Number 状态总表
@@ -40,7 +40,7 @@ docs/feature_plan/
 
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
-| F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](07-other/f-10-extratool.md) |
+| F-10 | ExecuteExtraTool 延迟工具系统 | 📋 | [f-10-extratool.md](03-agent-core/f-10-extratool.md) |
 | F-100 | Dreaming 后台记忆整合 | 🔄 | [f-100-dreaming.md](03-agent-core/f-100-dreaming.md) |
 | F-102 | Agent Loop Hook 扩展点 | 🔄 | [f-102-hook-extensions.md](03-agent-core/f-102-hook-extensions.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
@@ -50,9 +50,9 @@ docs/feature_plan/
 
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
-| F-46 | permission_mode 正交拆分 | 🔄 | [f-46-permission-split.md](07-other/f-46-permission-split.md) |
-| F-53 | Tool 自动暴露为 CLI 斜杠命令 | 📋 | [f-53-tool-to-cli.md](07-other/f-53-tool-to-cli.md) |
-| F-89 | @agent-name 多入口统一支持 | 🔄 | [f-89-agent-name.md](07-other/f-89-agent-name.md) |
+| F-46 | permission_mode 正交拆分 | 🔄 | [f-46-permission-split.md](07-cli-config/f-46-permission-split.md) |
+| F-53 | Tool 自动暴露为 CLI 斜杠命令 | 📋 | [f-53-tool-to-cli.md](07-cli-config/f-53-tool-to-cli.md) |
+| F-89 | @agent-name 多入口统一支持 | 🔄 | [f-89-agent-name.md](07-cli-config/f-89-agent-name.md) |
 
 ### Architecture & SDK 下沉
 
