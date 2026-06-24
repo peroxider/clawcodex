@@ -193,3 +193,4 @@ services/voice/stt.py
 # after adding/removing entries; series/b24b8cb_series will skip these files.
 utils/git.py
 utils/message_mappers.py
+utils/messages.py
