@@ -192,3 +192,4 @@ services/voice/stt.py
 # Phase 4 P1 Step 2b — Tier A migration of 5 src/utils/ files. Run regenerate
 # after adding/removing entries; series/b24b8cb_series will skip these files.
 utils/git.py
+utils/message_mappers.py
