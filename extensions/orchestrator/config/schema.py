@@ -186,6 +186,11 @@ class WorkspaceConfig:
     require_clean_start: bool = True
     require_clean_between_issues: bool = True
     preserve_on_terminal: bool = True
+    # Conditional preservation: keep workspace for specific end-states so
+    # users can inspect artifacts, re-run verification, or debug failures.
+    preserve_on_failure: bool = True
+    preserve_on_abandoned: bool = True
+    preserve_on_timeout: bool = True
     sequential_lock: bool = True
     # F-?? python interpreter resolution cascade (level 2):
     # workspace-scoped Python interpreter. When ``python_executable``
@@ -502,6 +507,9 @@ class WorkflowConfig:
                 workspace_raw.get("require_clean_between_issues", True)
             ),
             preserve_on_terminal=bool(workspace_raw.get("preserve_on_terminal", True)),
+            preserve_on_failure=bool(workspace_raw.get("preserve_on_failure", True)),
+            preserve_on_abandoned=bool(workspace_raw.get("preserve_on_abandoned", True)),
+            preserve_on_timeout=bool(workspace_raw.get("preserve_on_timeout", True)),
             sequential_lock=bool(workspace_raw.get("sequential_lock", True)),
         )
 

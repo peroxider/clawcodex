@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from extensions.orchestrator.agent_runner import AgentSession
 from extensions.orchestrator.config.schema import (
@@ -56,7 +57,7 @@ class _HookWorkspaceManager(WorkspaceManager):
         if self.fail_after:
             raise WorkspaceHookError("after failed")
 
-    async def cleanup(self, issue: Issue) -> None:
+    async def cleanup(self, issue: Issue, **kwargs: Any) -> None:
         self.events.append("cleanup")
 
 

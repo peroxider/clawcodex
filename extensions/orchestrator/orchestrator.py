@@ -91,6 +91,7 @@ class Orchestrator:
         self.agent_runner = agent_runner
         self.stage_runners = stage_runners or {}
         self.status_dashboard = status_dashboard or StatusDashboard()
+        self._agent_config = workflow.agent
         self._validate_workspace_strategy()
         self.git_sync = GitSyncService(
             tracker,
@@ -1188,7 +1189,10 @@ class Orchestrator:
 
         # Register as pending so restart won't re-launch this issue
         workspace_strategy = self.workflow.workspace.strategy
-        branch_name = getattr(issue, "branch_name", None) or "main"
+        branch_name = getattr(issue, "branch_name", None)
+        if not branch_name:
+            branch_name = self.git_sync._default_branch_name(issue)
+            issue.branch_name = branch_name
         base_branch = (
             getattr(issue, "base_branch", None) or self.workflow.workspace.base_branch or "main"
         )
@@ -1608,7 +1612,14 @@ class Orchestrator:
                 # worktrees are not left dirty even if the outer
                 # finally block is skipped or interrupted.
                 try:
-                    await self.workspace.cleanup(session.issue)
+                    issue_record = self._registry.get(session.issue.id)
+                    await self.workspace.cleanup(
+                        session.issue,
+                        end_status=session.status,
+                        end_reason=session.session_end_reason,
+                        agent_config=getattr(self, "_agent_config", None),
+                        issue_record=issue_record,
+                    )
                 except Exception as cleanup_exc:
                     logger.warning(
                         "Workspace cleanup on cancellation failed issue_id=%s: %s",
@@ -1757,9 +1768,16 @@ class Orchestrator:
                 if session.issue.id not in self._state.pending_review:
                     await self._update_issue_summary(session)
 
-                # Cleanup workspace
+                # Cleanup workspace based on preservation policy
                 try:
-                    await self.workspace.cleanup(session.issue)
+                    issue_record = self._registry.get(session.issue.id)
+                    await self.workspace.cleanup(
+                        session.issue,
+                        end_status=getattr(session, "status", None),
+                        end_reason=getattr(session, "session_end_reason", None),
+                        agent_config=getattr(self, "_agent_config", None),
+                        issue_record=issue_record,
+                    )
                 except Exception as exc:
                     logger.warning(
                         "Workspace cleanup failed issue_id=%s: %s",

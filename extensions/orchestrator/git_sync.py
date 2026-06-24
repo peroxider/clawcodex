@@ -88,6 +88,7 @@ class GitSyncService:
         self._gitignore_patterns = gitignore_patterns or [
             ".event_streams",
             ".orchestrator_control",
+            ".orchestrator_workspace",
             ".operator_hints.md",
             ".reports",
             ".clawcodex_clarification_queue.json",
@@ -174,26 +175,48 @@ class GitSyncService:
             self._run_git_checked(["add", "-A"], repo_root)
             self._unstage_orchestrator_artifacts(repo_root)
             self._apply_file_whitelist(repo_root)
-            commit_message = self._build_commit_message(
-                issue,
-                followup=followup_pr is not None,
-                feedback_body=getattr(session, "feedback_commit_body", None),
-            )
-            self._run_git_checked(["commit", "-m", commit_message], repo_root)
-            commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
-            committed = True
+
+            # Check if there are staged changes after add/unstage/whitelist
+            # If not, agent may have already committed (e2e workflow)
+            has_staged = self._has_staged_changes(repo_root)
+            agent_committed = False
+            if not has_staged:
+                # No staged changes - check if agent already committed by comparing HEAD
+                current_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+                start_commit_sha = getattr(session, "start_commit_sha", None)
+                has_run_commit = bool(start_commit_sha and current_sha != start_commit_sha)
+
+                if has_run_commit:
+                    # Agent already committed, skip auto-commit
+                    agent_committed = True
+                    commit_sha = current_sha
+                else:
+                    # No staged changes and HEAD unchanged - likely whitelist filtered everything
+                    # Fall through to normal commit flow (which will create empty commit or skip)
+                    commit_sha = None
+            else:
+                commit_message = self._build_commit_message(
+                    issue,
+                    followup=followup_pr is not None,
+                    feedback_body=getattr(session, "feedback_commit_body", None),
+                )
+                self._run_git_checked(["commit", "-m", commit_message], repo_root)
+                commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+                committed = True
             try:
-                if not is_sequential:
+                if not is_sequential and not agent_committed:
                     await self._run_pre_commit_hook(repo_root, session)
                     commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
                 await self._run_pre_push_verification(repo_root, session)
             except (VerificationFailed, HookFailedError) as exc:
                 # Roll back the just-created commit since verification failed
-                try:
-                    self._run_git_checked(["reset", "--mixed", "HEAD~1"], repo_root)
-                except GitSyncError:
-                    pass  # No commit to rollback or reset failed — proceed anyway
-                committed = False
+                # But only if we created the commit (not agent)
+                if not agent_committed:
+                    try:
+                        self._run_git_checked(["reset", "--mixed", "HEAD~1"], repo_root)
+                    except GitSyncError:
+                        pass  # No commit to rollback or reset failed — proceed anyway
+                    committed = False
                 raise self._post_commit_error(
                     exc,
                     branch_name=branch_name,
@@ -620,6 +643,7 @@ class GitSyncService:
 
     _ORCHESTRATOR_ARTIFACTS: tuple[str, ...] = (
         ".orchestrator_control",
+        ".orchestrator_workspace",
         ".reports",
         ".operator_hints.md",
         ".clawcodex_issue_registry.json",
@@ -702,6 +726,9 @@ class GitSyncService:
     ) -> str:
         report_path = getattr(session, "report_path", None)
         verification_status = getattr(session, "verification_status", None) or "skipped"
+        workspace_path = (
+            getattr(session.workspace, "path", None) if hasattr(session, "workspace") else None
+        )
         lines = [
             "## ClawCodex Automated Change",
             "",
@@ -712,13 +739,66 @@ class GitSyncService:
             f"- Verification: `{verification_status}`",
             f"- Report: `{report_path or 'n/a'}`",
         ]
+        # Add workspace path if available (useful for manual verification)
+        if workspace_path:
+            lines.append(f"- Workspace: `{workspace_path}`")
         if issue.url:
             lines.append(f"- Source issue: {issue.url}")
         if pull_request and pull_request.url:
             lines.append(f"- Pull request: {pull_request.url}")
+
+        # Read agent's commit message for e2e verification results
+        if commit_sha:
+            try:
+                workspace_path = getattr(session.workspace, "path", None)
+                if workspace_path:
+                    commit_msg = self._run_git_output(
+                        ["log", "-1", "--format=%B", commit_sha],
+                        str(workspace_path),
+                    )
+                    if commit_msg and commit_msg.strip():
+                        lines.extend(["", "---", ""])
+                        e2e_section = self._extract_section(commit_msg, "E2E Verification")
+                        changes_section = self._extract_section(commit_msg, "Changes")
+
+                        if changes_section:
+                            lines.extend(["## Changes", "", changes_section])
+                        if e2e_section:
+                            lines.extend(["", "## E2E Verification", "", e2e_section])
+
+                        if not e2e_section and not changes_section:
+                            lines.extend(["## Agent Notes", "", commit_msg.strip()])
+            except Exception:
+                pass
+
+        # Include regression test output summary
+        verification_output = getattr(session, "verification_output", None)
+        if verification_output:
+            summary_lines = [
+                l
+                for l in verification_output.strip().splitlines()
+                if "passed" in l or "failed" in l
+            ]
+            if summary_lines:
+                lines.extend(["", "## Regression Tests", "", "```", summary_lines[-1], "```"])
+
         if report_path:
             lines.extend(["", f"<!-- metadata: report_path={report_path} -->"])
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_section(text: str, section_name: str) -> str | None:
+        """Extract a named section from a structured commit message.
+
+        Looks for `## Section Name` followed by content until the next `##` or EOF.
+        """
+        import re
+
+        pattern = rf"## {re.escape(section_name)}\s*\n(.*?)(?=\n## |\Z)"
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
 
     def _write_report(
         self,
@@ -858,6 +938,16 @@ class GitSyncService:
         if rc != 0:
             raise GitSyncError(f"git {' '.join(args)} failed: {stderr or stdout}")
         return stdout.strip()
+
+    def _has_staged_changes(self, repo_root: str) -> bool:
+        """Check if there are staged changes ready to commit.
+
+        Returns True if `git diff --cached --quiet` exits with non-zero
+        (meaning there are staged changes), False otherwise.
+        """
+        _, _, rc = _run_git(["diff", "--cached", "--quiet"], repo_root)
+        # rc=0 means no staged changes, rc=1 means there are staged changes
+        return rc != 0
 
     async def _find_pr_fallback(
         self,
