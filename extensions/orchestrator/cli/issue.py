@@ -933,14 +933,21 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
         counts[s.upper()] = counts.get(s.upper(), 0) + 1
 
     print(f"Issues ({len(records)} total)")
-    print(f"  {'STATUS':<15} {'ISSUE ID':<20} {'TURN/TOOL':<9} {'LAST EVENT':<18} {'BRANCH':<30}")
-    print(f"  {'-' * 15} {'-' * 20} {'-' * 9} {'-' * 18} {'-' * 30}")
+    print(
+        f"  {'STATUS':<15} {'ISSUE ID':<20} {'TURN/TOOL':<9} {'LAST EVENT':<18} "
+        f"{'BRANCH':<25} {'WORKSPACE'}"
+    )
+    print(f"  {'-' * 15} {'-' * 20} {'-' * 9} {'-' * 18} {'-' * 25} {'-' * 20}")
     for r in records:
         s = _get_status_str(r.status)
         branch = r.branch_name or "-"
         turn_tool = f"{getattr(r, 'run_turn_count', 0)}/{getattr(r, 'run_tool_count', 0)}"
         last_event = getattr(r, "run_last_event", None) or "-"
-        print(f"  {s:<15} {r.issue_id:<20} {turn_tool:<9} {last_event:<18} {branch:<30}")
+        ws_path = r.workspace_path or "-"
+        # Shorten path for display
+        if ws_path != "-" and len(ws_path) > 18:
+            ws_path = "..." + ws_path[-15:]
+        print(f"  {s:<15} {r.issue_id:<20} {turn_tool:<9} {last_event:<18} {branch:<25} {ws_path}")
 
     print()
     print(f"  PENDING  : {counts.get('PENDING', 0)}")
@@ -1006,6 +1013,7 @@ def _run_show(registry_path: Path | None, args: argparse.Namespace) -> int:
     workspace_dirty = getattr(record, "run_workspace_dirty", None)
     dirty_text = "-" if workspace_dirty is None else str(workspace_dirty).lower()
     print(f"  Workspace Dirty: {dirty_text}")
+    print(f"  Workspace Path : {record.workspace_path or '-'}")
     print(f"  Debug Log      : {getattr(record, 'debug_log_path', None) or '-'}")
     print(f"  Created        : {created}")
     print(f"  Updated        : {updated}")

@@ -67,7 +67,7 @@ class _WorkspaceManager(WorkspaceManager):
     async def run_after_run_hook(self, workspace: Workspace, issue: Issue) -> None:
         return None
 
-    async def cleanup(self, issue: Issue) -> None:
+    async def cleanup(self, issue: Issue, **kwargs: Any) -> None:
         self.cleaned.append(issue.id)
 
 

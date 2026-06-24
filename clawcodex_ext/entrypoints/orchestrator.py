@@ -35,6 +35,7 @@ def run_orchestrator_subcommand(rest: list[str]) -> int:
         "server",
         "issue",
         "workflow",  # noun-verb
+        "workspace",
     }
     subcommand_idx = -1
     subcommand = None
@@ -66,12 +67,14 @@ Usage (noun-verb):
     from extensions.orchestrator.cli.dashboard import add_dashboard_parser
     from extensions.orchestrator.cli.issue import add_issue_parser
     from extensions.orchestrator.cli.server import add_server_parser
+    from extensions.orchestrator.cli.workspace import add_workspace_parser
     from extensions.orchestrator.cli.workflow import add_workflow_parser
 
     # Register noun-verb subparsers
     add_server_parser(subparsers)  # server status|stop|start
     add_issue_parser(subparsers)  # issue list|show|tail|stop|pause|resume|...
     add_workflow_parser(subparsers)  # workflow init|list-templates
+    add_workspace_parser(subparsers)  # workspace list|show|cd|cleanup|verify
     add_dashboard_parser(subparsers)  # dashboard [--port PORT]
 
     # Parse all arguments
@@ -94,6 +97,10 @@ Usage (noun-verb):
         from extensions.orchestrator.cli.workflow import run as run_workflow
 
         return run_workflow(args)
+    elif args.subcommand == "workspace":
+        from extensions.orchestrator.cli.workspace import run as run_workspace
+
+        return run_workspace(args)
     elif args.subcommand == "dashboard":
         from extensions.orchestrator.cli.dashboard import run as run_dashboard
 

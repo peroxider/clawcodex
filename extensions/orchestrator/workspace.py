@@ -66,6 +66,9 @@ class WorkspaceConfig:
     require_clean_start: bool = True
     require_clean_between_issues: bool = True
     preserve_on_terminal: bool = True
+    preserve_on_failure: bool = True
+    preserve_on_abandoned: bool = True
+    preserve_on_timeout: bool = True
     sequential_lock: bool = True
 
     def __post_init__(self) -> None:
@@ -115,25 +118,146 @@ class WorkspaceManager:
 
         return Workspace(path=workspace_path, issue_identifier=safe_id, issue_id=issue_id)
 
-    async def cleanup(self, issue: Any) -> None:
-        """Remove workspace directory. Runs before_remove hook."""
+    async def cleanup(
+        self,
+        issue: Any,
+        *,
+        end_status: str | None = None,
+        end_reason: str | None = None,
+        agent_config: Any = None,
+        issue_record: Any = None,
+    ) -> None:
+        """Remove workspace directory based on preservation policy.
+
+        Runs before_remove hook regardless of preservation decision.
+
+        Args:
+            issue: The issue object with identifier attribute.
+            end_status: Terminal status (e.g., "completed", "failed", "abandoned").
+            end_reason: End reason (e.g., "task_complete", "budget_exhausted", "stagnation").
+            agent_config: Optional AgentConfig with test/build/lint commands for verify.sh generation.
+            issue_record: Optional IssueRecord with full issue metadata for README generation.
+        """
         identifier = getattr(issue, "identifier", None) or "issue"
         safe_id = _safe_identifier(identifier)
         workspace_path = (
             self._build_path(safe_id) if self.config.strategy == "isolated" else self._root
         )
 
+        # Determine if workspace should be preserved
+        should_preserve = self._should_preserve(end_status, end_reason)
+
         if workspace_path.exists():
+            # Always run before_remove hook (e.g., for cleanup scripts, logging)
             hook = self.config.hooks.get("before_remove")
             if hook:
                 await self._run_hook(hook, workspace_path, issue, "before_remove", ignore_fail=True)
+
             if self.config.strategy == "isolated":
-                try:
-                    shutil.rmtree(workspace_path)
-                except Exception as exc:
-                    logger.warning("Failed to remove workspace %s: %s", workspace_path, exc)
+                if should_preserve:
+                    logger.info(
+                        "Preserving workspace for issue %s at %s (status=%s, reason=%s)",
+                        identifier,
+                        workspace_path,
+                        end_status,
+                        end_reason,
+                    )
+                    # Generate verify.sh if agent_config provided
+                    if agent_config is not None:
+                        try:
+                            from .workspace_verify import generate_verify_script
+
+                            generate_verify_script(
+                                workspace_path,
+                                agent_config,
+                                issue_record or issue,
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to generate verify.sh: %s", e)
+
+                    # Generate README.md
+                    try:
+                        from .workspace_verify import generate_workspace_readme
+
+                        generate_workspace_readme(
+                            workspace_path,
+                            issue_record or issue,
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to generate README.md: %s", e)
+
+                    # Write preservation metadata
+                    await self._write_preservation_manifest(
+                        workspace_path, issue, end_status, end_reason
+                    )
+                else:
+                    try:
+                        shutil.rmtree(workspace_path)
+                        logger.info(
+                            "Removed workspace for issue %s at %s (status=%s, reason=%s)",
+                            identifier,
+                            workspace_path,
+                            end_status,
+                            end_reason,
+                        )
+                    except Exception as exc:
+                        logger.warning("Failed to remove workspace %s: %s", workspace_path, exc)
         if self.config.strategy == "sequential":
             await self._release_sequential_lock()
+
+    def _should_preserve(self, end_status: str | None, end_reason: str | None) -> bool:
+        """Determine if workspace should be preserved based on end state.
+
+        Decision matrix (checked in priority order):
+        - budget_exhausted/timeout (in reason) → preserve_on_timeout
+        - abandoned (in status, possibly with stagnation/loop_detected reason) → preserve_on_abandoned
+        - failed/verification_failed (in status) → preserve_on_failure
+        - others/None → preserve_on_terminal (default)
+        """
+        status_lower = (end_status or "").lower()
+        reason_lower = (end_reason or "").lower()
+
+        # Pure timeout reasons — check FIRST so a "failed" status with
+        # "budget_exhausted" reason correctly routes to preserve_on_timeout.
+        if reason_lower in ("budget_exhausted", "timeout"):
+            return self.config.preserve_on_timeout
+
+        # Abandoned state (stagnation/loop_detected are abandoned-specific reasons)
+        if status_lower == "abandoned":
+            return self.config.preserve_on_abandoned
+
+        # Failure states
+        if status_lower in ("failed", "verification_failed"):
+            return self.config.preserve_on_failure
+
+        # Completed or unknown → use preserve_on_terminal
+        return self.config.preserve_on_terminal
+
+    async def _write_preservation_manifest(
+        self,
+        workspace_path: Path,
+        issue: Any,
+        end_status: str | None,
+        end_reason: str | None,
+    ) -> None:
+        """Write a manifest file indicating workspace was preserved."""
+        import json
+
+        sub_dir = workspace_path / ".orchestrator_workspace"
+        sub_dir.mkdir(exist_ok=True)
+        manifest_path = sub_dir / ".workspace_preserved.json"
+        manifest = {
+            "issue_id": getattr(issue, "id", None),
+            "identifier": getattr(issue, "identifier", None),
+            "preserved_at": time.time(),
+            "end_status": end_status,
+            "end_reason": end_reason,
+        }
+        try:
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=2)
+        except Exception as exc:
+            logger.warning("Failed to write preservation manifest: %s", exc)
 
     async def run_before_run_hook(self, workspace: Workspace, issue: Any) -> None:
         hook = self.config.hooks.get("before_run")
@@ -542,9 +666,11 @@ class WorkspaceManager:
                 raise WorkspaceHookError(f"Hook {hook_name} error: {exc}") from exc
 
     async def run_terminal_workspace_cleanup(self) -> None:
-        """Remove workspaces for issues in terminal states on startup.
+        """Remove orphaned workspaces on startup.
 
         Called once by the orchestrator during initialization.
+        Only removes workspaces that don't have a .workspace_preserved.json manifest.
+        Preserved workspaces (with manifest) are kept for manual verification.
         """
         if self.config.strategy != "isolated":
             return
@@ -552,8 +678,18 @@ class WorkspaceManager:
             return
         for entry in self._root.iterdir():
             if entry.is_dir():
+                # Check if workspace has a preservation manifest
+                manifest_path = entry / ".orchestrator_workspace" / ".workspace_preserved.json"
+                if manifest_path.exists():
+                    logger.info(
+                        "Skipping preserved workspace during startup cleanup: %s",
+                        entry.name,
+                    )
+                    continue
+                # No manifest → orphaned workspace, safe to clean
                 try:
                     shutil.rmtree(entry)
+                    logger.info("Cleaned up orphaned workspace: %s", entry.name)
                 except Exception as exc:
                     logger.warning("Failed to clean up workspace %s: %s", entry, exc)
 
