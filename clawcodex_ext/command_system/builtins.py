@@ -24,13 +24,13 @@ from clawcodex_ext.providers.base import BaseProvider
 from .engine import CommandContext, CommandResult, LocalCommandResult
 from .registry import CommandRegistry, get_command_registry, list_commands
 from .types import Command, CommandType, CompactionResult, LocalCommand, PromptCommand
-from src.command_system.model_command import MODEL_COMMAND
-from src.command_system.effort_command import EFFORT_COMMAND
-from src.command_system.theme_command import THEME_COMMAND
-from src.command_system.export_command import EXPORT_COMMAND
-from src.command_system.output_style_command import OUTPUT_STYLE_COMMAND
-from src.command_system.statusline import STATUSLINE_COMMAND
-from src.command_system.security_review import SECURITY_REVIEW_COMMAND
+from clawcodex_ext.command_system.model_command import MODEL_COMMAND
+from clawcodex_ext.command_system.effort_command import EFFORT_COMMAND
+from clawcodex_ext.command_system.theme_command import THEME_COMMAND
+from clawcodex_ext.command_system.export_command import EXPORT_COMMAND
+from clawcodex_ext.command_system.output_style_command import OUTPUT_STYLE_COMMAND
+from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
+from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.goal.command import GOAL_COMMAND
 
 

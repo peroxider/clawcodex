@@ -2,29 +2,28 @@
 
 > **目标**：将 `src/` 中所有 ClawCodex 定制逻辑迁至 `clawcodex_ext/` 与 `extensions/`，使上游（`src/upstreamproxy/...`）与本地 `src/` 的差异仅保留**架构重构**、**bug fix** 和**纯新增子系统**，所有「功能增量」通过扩展层注入。
 >
-> **最近更新**：2026-06-23，Phase 2-D 子系统整迁批落地。3 个缺失 ext 子系统（`computer_use` / `kairos` / `langfuse`）从 src 迁至 `clawcodex_ext/services/`，`session_migrate` 与 `agent_mention_completer` 同步迁移；累计新增 17 个 src facade 文件；内容级 modified 文件从 578 降至 504；`regenerate_patches.py` 重生成 619 个补丁（byte-identical 幂等）；稳定性门禁 6 阶段 245 passed + orchestrator 523 passed 全绿。前期 Phase 2-A/B/C 与 F-48/F-49/F-83/F-85/F-86/F-84/F-61/F-63/F-60/F-72/F-75、SR-5.1 仍为合并基线。
+> **最近更新**：2026-06-24，Phase 2-E T4 command_system 整迁落地 + verification 子代理 PASS。11 个 src 独有命令实现（aggregator/effort/export/model/output_style/safe_commands/security_review/shell_prompt/statusline/theme/moved_to_plugin）`git mv` 至 `clawcodex_ext/command_system/`，src 留 Pattern B lazy proxy facade；`clawcodex_ext/command_system/builtins.py` 同步改为直连 ext 路径（消除一次间接跳转）；烟囱测试验证 ext 直连 / src facade / 私有符号 / 模块 identity / builtins.py 加载全绿；**verification 子代理 10 项检查 + 4 项对抗探针全 PASS**（详见 §1.5）；稳定性门禁 6 阶段 327 passed（49.32s） + orchestrator 483 passed（21.22s） 全绿。Phase 2-E 高/中/低优先级 11 项任务中，**T1 (ide) / T2 (tool_execution) / T3 (native) 此前阶段已落地 facade，本轮无需操作；T4 (command_system) 本轮完成**。同期另有 681bc9cb commit 把 `bridge/*` + `remote/*`（10 文件）整迁至 `clawcodex_ext.bridge` + `clawcodex_ext.remote`（已反映在 §1.1 / §1.2 数字）。前期 Phase 2-A/B/C/D 与 F-48/F-49/F-83/F-85/F-86/F-84/F-61/F-63/F-60/F-72/F-75、SR-5.1 仍为合并基线。
 
 ---
 
 ## 1. 当前状态总览
 
-### 1.1 文件规模（截至 2026-06-23）
+### 1.1 文件规模（截至 2026-06-24，Phase 2-E T4 完成后）
 
-| 维度 | 当前数字 | 原计划数字 | 变化 |
-|---|---|---|---|
-| 上游文件（`src/upstream/`） | **2553** `.py` | 566 | +1987（上游 rebased 多次，合并入更大版本） |
-| `src/upstreamproxy/` | **6** `.py` | — | 新增：上游兼容代理层 |
-| 本地 `src/`（排除 upstream & upstreamproxy） | **631** `.py` | 594 | +37（新增子系统减去已迁出的 37 个） |
-| 扩展层 `clawcodex_ext/` | **584** `.py` | 232 | +352（Phase 2-A/B/D 批量 facade 化净增长，本轮 +17：3 个子系统 + session_migrate + agent_mention_completer） |
-| 第三层扩展 `extensions/` | **142** `.py` | （未规划） | 新增独立扩展层（orchestrator、visualizer、remote_api 等） |
-| **采用 lazy `__getattr__` proxy 化的文件** | **117** | ~45 | +72（Phase 2-A 新增 `transcript.py` 等） |
-| **采用 2-3 行 wildcard re-export facade 的文件** | **149** | — | +17（Phase 2-D 新增 computer_use/kairos/langfuse/session_migrate/agent_mention_completer） |
-| **采用 sys.modules swap facade 的文件** | **~15** | — | 新增统计项（`agent_tool_utils.py` / `query.py` 等需要保留 `_xxx` 私有符号的场景） |
-| **采用 sys.modules swap / 显式 list re-export facade 的文件** | **~18** | — | Phase 2-D 新增 `session_migrate.py`（需导出 `handle_session_migrate_cli`） |
-| **含本地增量但未 facade 化的文件** | **~13** | ~35 | -22（已 facade 化 ~25 个 + Phase 2-D 17 个新增） |
-| **与上游内容级不同的文件数** | **504** | 578 | -74（Phase 2-D；74 个仅行尾差异已剥离） |
-| **补丁队列总数** | **619** patches | 161 | +458（含 `--allow-deletes` 模式生成的 delete patch） |
-| **补丁队列体积** | **3.7 MB** | ~1 MB | 重生成后 byte-identical 幂等 |
+| 维度 | 当前数字 | 上一快照（2026-06-23） | 变化 | 备注 |
+|---|---|---|---|---|
+| 上游文件（`src/upstream/`） | **2553** `.py` | 2553 | 0 | 上游 rebased 多次后稳定 |
+| `src/upstreamproxy/` | **6** `.py` | 6 | 0 | 上游兼容代理层 |
+| 本地 `src/`（排除 upstream & upstreamproxy） | **601** `.py` | 631 | **−30** | T4 净增 0（11 移除 + 11 facade 替换，不改 .py 计数）；−30 来自**前一阶段已落地但未及时计入快照的删除**：`src/services/templates/*`（−9）、`src/services/ultraplan/*`（−6）、`src/permissions/bash_parser/*`（−5）、`src/tool_system/utils/{__init__,path_utils,ripgrep}.py` + `tools/bash/__init__.py`（−4），外加 `clawcodex_ext/transcript/nested_path.py`（−1，本属 ext 但在统计边）。注：631 旧数本身未严格按 `--not -path "*/__pycache__/*"` 过滤，可能含脏数据；601 已用精确 `find ... -not -path "*/__pycache__/*"` 重核 |
+| 扩展层 `clawcodex_ext/` | **666** `.py` | 584 | **+82** | T4 +11（11 command_system）；681bc9cb **+9**（bridge 6 + remote 3，与 16-文件 commit 中 ext 侧 9 条新增对应）；前一阶段 +60 净额（templates/ultraplan/bash_parser/transcript 整迁入 ext 已反映在 +82 总数中） |
+| 第三层扩展 `extensions/` | **142** `.py` | 142 | 0 | 独立扩展层（orchestrator、visualizer、remote_api 等） |
+| **采用 lazy `__getattr__` proxy 化的文件** | **129** | 117 | +12 | T4 command_system 加 11；其他增量 1 |
+| **采用 2-3 行 wildcard re-export facade 的文件** | **190** | 149 | +41 | 681bc9cb 改 7 src 文件为 facade + Phase 2-D 余项增量；其余 +34 来自先前未计的整迁批 |
+| **采用 sys.modules swap facade 的文件** | **42** | ~15-18 | +24-27 | chrome / api / native / tool_execution 等多文件改用 sys.modules swap 保留私有符号 |
+| **含本地增量但未 facade 化的文件** | **~13** | ~13 | 0 | 核心内联 diff 文件（config / utils/git / utils/image 等）待 Phase 2-F 处理 |
+| **与上游内容级不同的文件数** | **504** | 504 | 0 | T4 移动 src→ext 不会改 src 端 diff 行数（文件整体消失，patch 端 `--allow-deletes` 模式处理）；待 `regenerate_patches.py` 重生成后复核 |
+| **补丁队列总数** | **619** patches | 619 | 0 | 待 `regenerate_patches.py --allow-deletes` 重生成后确认（预计微减，因 src 端 11 文件变 facade + 25 文件已删，ext 端对应文件占位移除） |
+| **补丁队列体积** | **~3.7 MB** | 3.7 MB | ≈ 0 | 同上 |
 
 ### 1.2 已固化的解耦模式
 
@@ -38,7 +37,7 @@ Pattern A — 纯 re-export adapter（7 个）
   src/context_system/_gitpython_adapter.py → clawcodex_ext.context_system._gitpython_adapter
   src/providers/_litellm_adapter.py     → extensions.providers_ext
 
-Pattern B — lazy __getattr__ proxy（117 个，~8,000 行 → 平均 ~70 行）
+Pattern B — lazy __getattr__ proxy（**129** 个，~9,000 行 → 平均 ~70 行）
   src/entrypoints/{headless,tui}.py                 (原 667/230L → 25/26L)
   src/entrypoints/orchestrator.py                   (lazy proxy)
   src/cli.py                                        (compatibility facade, 116L)
@@ -47,21 +46,25 @@ Pattern B — lazy __getattr__ proxy（117 个，~8,000 行 → 平均 ~70 行�
   src/repl/core.py / ui_host.py                     (lazy proxy)
   src/permissions/cycle.py                          (lazy proxy)
   src/command_system/* (10 files)                   (Phase 9 整体迁移)
+  src/command_system/{aggregator,effort_command,export_command,model_command,moved_to_plugin,output_style_command,safe_commands,security_review,shell_prompt,statusline,theme_command} (11 files, 17-21L each) ✅ **Phase 2-E T4 本轮**
   src/context_system/prompt_assembly.py             (lazy proxy)
   src/agent/transcript.py                           (lazy proxy, 37L) ✅ Phase 2-A
   src/tui/* (~40 files)                             (Phase 1-3 整体迁移)
   src/services/cost_tracker.py / pricing.py / tail_follower.py
   src/services/templates/{registry,models,resolver,...}.py
   src/services/ultraplan/{executor,store,...}.py
-  …以及 80+ 其他文件
+  …以及 90+ 其他文件
 
-Pattern C — sys.modules swap facade（~15 个，~15 行）
+Pattern C — sys.modules swap facade（**42** 个，~15 行）
   解决 `_xxx` 私有符号在 wildcard re-export 中被静默丢弃的问题。
   src/agent/agent_tool_utils.py                     (17L) ✅ Phase 2-A
   src/query/query.py                                (17L) ✅ Phase 2-A
-  …以及 10+ 其他需要保留 inspect.getsource 兼容性的文件
+  src/providers/native/__init__.py                  (Pattern C parent + 5 Pattern D children) ✅ Phase 2-E 复核
+  src/services/api/retry.py / chrome/{factory,recording,mcp_impl} / tool_execution/tool_result_persistence.py
+  src/services/{channels,swarm,compact}/* 等多文件
+  …以及 30+ 其他需要保留 inspect.getsource / private symbol 兼容性的文件
 
-Pattern D — wildcard re-export facade（132 个，2-3 行）
+Pattern D — wildcard re-export facade（**190** 个，2-3 行）
   src/services/{channels,swarm,templates,ultraplan,context_collapse,compact}/* (54 文件) ✅ Phase 2-B
   src/agent/agent_definitions.py
   src/hooks/* (9 文件)
@@ -103,6 +106,7 @@ Pattern E — 完整 facade / thin wrapper（含 Pattern C 之外的复杂包装
 | **Phase 2-B 批量 facade 化** ✅ | `1738670e` / `beb9624e` / `5892e5e6` / `746be797` / `43870e45` / `0dacfa8d` / `273ee452` / `5b9b8467` | swarm 拆分至 4 个 refactor commit（mailbox/team_file/membership → helpers/permissions/teammate → leader_permission_bridge facade → session persist 同步）；channels 整体迁 ext；context_collapse 整体迁 ext；query 拆分为 hook_registry/outbox_types/recovery_strategies |
 | **Phase 2-C 路径修正** ✅ | `0dacfa8d` | chore: 23 个 R100 重命名 + templates/compact/ultraplan 整体迁 ext（**3 个包共用一个 commit，按用户决定不再 `git reset` 拆分**） |
 | **Phase 2-D 子系统整迁批** ✅ | 本轮 | 3 个缺失 ext 子系统从 src 迁至 `clawcodex_ext/services/`：`computer_use/`（6 文件 13KB）、`kairos/`（5 文件 25KB）、`langfuse/`（3 文件 30KB）；`session_migrate.py`（17.8KB）迁 `clawcodex_ext/services/`；`agent_mention_completer.py` 迁 `clawcodex_ext/utils/` 并保留 `src/repl/` 转发；`swarm/leader_permission_bridge.py` ext 端 892B 残缺 stub 修复为 9.4KB 完整实现；累计 17 个 src facade 文件新增；内容级 modified 文件 578 → 504（−74）；`regenerate_patches.py --allow-deletes` 幂等生成 619 个补丁（3.7MB，byte-identical）；Stage 1-6 全绿 + orchestrator 523 passed |
+| **Phase 2-E T4 command_system 整迁** ✅ | 本轮 | src/command_system/ 11 个未迁移命令实现（aggregator / effort_command / export_command / model_command / moved_to_plugin / output_style_command / safe_commands / security_review / shell_prompt / statusline / theme_command，总 1697 行）`git mv` 至 `clawcodex_ext/command_system/`；src 留 Pattern B lazy proxy facade（与 engine.py/registry.py 一致形态）；`clawcodex_ext/command_system/builtins.py` 7 处 `from src.command_system.X` 改为直连 `from clawcodex_ext.command_system.X` 减少一次间接跳转；迁移前先 `git stash` 验证唯一的非 builtins.py 失败测试（`test_cron_run_queues_manual_fire_in_outbox`）已**预先存在**，与本次迁移无关；src facade 保留以兼容 `tests/command_system/test_goal_command.py` 等测试用例；累计 11 个 src facade 文件新增；Stage 1-6 327 passed + orchestrator 483 passed |
 
 ### 1.4 新增的纯子系统（无上游对应物，不参与解耦）
 
@@ -130,13 +134,65 @@ clawcodex_ext/services/oauth/            第三方 OAuth (2 文件, src/ 2 个 3
 clawcodex_ext/services/periodic/         F-86 周期任务 (1 文件, src/ 1 个 3 行 facade)
 clawcodex_ext/services/pipe_ipc/         F-60 进程管道 (6 文件, src/ 6 个 3 行 facade)
 clawcodex_ext/services/voice/            语音 I/O (3 文件, src/ 3 个 3 行 facade)
-clawcodex_ext/services/ide/              IDE 适配 (5 文件, src/ 5 个 3 行 facade)
-clawcodex_ext/services/tool_execution/   工具执行 (6 文件, src/ 6 个 3 行 facade)
+clawcodex_ext/services/ide/              IDE 适配 (5 文件, src/ 5 个 3 行 facade) ✅ Phase 2-E 复核
+clawcodex_ext/services/tool_execution/   工具执行 (6 文件, src/ 6 个 3 行 facade) ✅ Phase 2-E 复核
+clawcodex_ext/providers/native/          F-72 原生模型适配 (6 文件, src/ 6 个 facade) ✅ Phase 2-E 复核（Pattern C sys.modules swap + Pattern D 5 子模块）
+clawcodex_ext/command_system/            src 独有 11 命令整迁 (aggregator/effort/export/model/moved_to_plugin/output_style/safe_commands/security_review/shell_prompt/statusline/theme, src/ 11 个 Pattern B lazy proxy facade) ✅ Phase 2-E T4 本轮
 clawcodex_ext/services/mcp/              MCP 协议 (32 文件, src/services/mcp/ 无 live .py 残留)
 
 # ❌ 仍在 src/（待迁 ext）
 # 当前无已确认的 services 子目录残留；后续需继续审计非 services 核心路径。
 ```
+
+---
+
+### 1.5 Phase 2-E T4 验证证据（独立 adversarial verification）
+
+> 2026-06-24 完成的 T4 command_system 整迁由 `verification` 子代理执行独立对抗验证，10 项检查 + 4 项对抗探针全 PASS。本节记录执行命令、可观察输出、预期/实际对比，作为可复核的交付凭证。
+
+**主体验证（10 项 check）**
+
+| # | 命令 | 预期 | 实际 | 结果 |
+|---|---|---|---|---|
+| 1 | `python3 -m pytest tests/stability_gate/ -q --tb=short` | 327 passed | 327 passed in 49.32s | ✅ |
+| 2 | `python3 -m pytest tests/orchestrator/test_orchestrator_*.py -q --tb=short` | 483 passed | 483 passed in 21.22s | ✅ |
+| 3 | `python3 -m pytest tests/command_system/ -q --tb=short` | 62 passed + 1 pre-existing 失败 | 1 failed, 62 passed | ✅（失败为 `CronPromptEvent` vs `dict` 序列化，与 T4 无关；`git stash` 对比已确认 pre-existing） |
+| 4 | `wc -l src/command_system/*.py` | 11 个 facade 各 17-21L | 20 / 18 / 21 / 18 / 18 / 18 / 20 / 17 / 19 / 18 / 18 | ✅（md5 验证 ext 端 = HEAD src 端逐字节一致） |
+| 5 | `grep -nE "from (src\|clawcodex_ext)\.command_system\." clawcodex_ext/command_system/builtins.py` | 7 行仅指向 `clawcodex_ext`，零 `from src.command_system` | 7 行全 `clawcodex_ext.command_system.X`，0 stale | ✅ |
+| 6 | `grep -rnE "from src\.command_system\.(effort\|export\|...)" --include="*.py" clawcodex_ext/` | 空 | 空 | ✅ |
+| 7 | `python3 -c "for m in 11 modules: assert ext_sym is src_sym"` | 11/11 identity preserved | PASS: all 11 import identity checks | ✅ |
+| 8 | `python3 -c "from src.command_system.effort_command import _DESCRIPTIONS; ..."` | 私有符号经 facade 可达 | PASS：3/3 私有符号类型正确（`dict` / `_lru_cache_wrapper` / `str`） | ✅ |
+| 9 | `grep -nE "最近更新\|Phase 2-E\|T4 command_system" DECOUPLING_PLAN.md` | 3 处更新齐全 | 顶部 line 5 / 历史表 line 106 / §1.4 line 140 全到位 | ✅ |
+| 10 | `git log --follow --all --oneline -- clawcodex_ext/command_system/effort_command.py` | `git mv` 历史保留 | 追溯到 `d35fe4f2` / `898a435b` / `eccb6a1e` / `bd85602f` 等早期 commit | ✅ |
+
+**对抗探针（4 项 adversarial probes）**
+
+| # | 探针 | 结果 |
+|---|---|---|
+| A | `src.command_system.effort_command.__getattr__('DEFINITELY_NOT_THERE')` 抛 `AttributeError` | ✅ facade 不静默代理垃圾 |
+| B | `import src.command_system.effort_command` 后 `sys.modules` 中不出现 `clawcodex_ext.command_system.effort_command`（首次属性访问才加载） | ✅ Pattern B 懒加载契约成立 |
+| C | `grep -rn "from src.command_system" --include="*.py" src/` 中无 T4 模块内部交叉 import | ✅ 无循环或陈旧内部 import |
+| D | `tests/command_system/test_goal_command.py:18 from src.command_system.safe_commands import is_bridge_safe_command` 解析正确 | ✅ 文档化的 backward-compat importer 工作正常 |
+
+**核心数据自检（写入 §1.1 前的最后一次重核）**
+
+| 数据点 | 核验命令 | 结果 |
+|---|---|---|
+| 本地 `src/` .py 数（排除 upstream & upstreamproxy） | `find src -name "*.py" -not -path "src/upstream/*" -not -path "src/upstreamproxy/*" -not -path "*/__pycache__/*" \| wc -l` | 601 |
+| `clawcodex_ext/` .py 数 | `find clawcodex_ext -name "*.py" -not -path "*/__pycache__/*" \| wc -l` | 666 |
+| `extensions/` .py 数 | `find extensions -name "*.py" -not -path "*/__pycache__/*" \| wc -l` | 142 |
+| Pattern B (lazy proxy) 数 | `grep -rl "def __getattr__" src/ --include="*.py" \| wc -l` | 129 |
+| Pattern D (wildcard re-export) 数 | `grep -rl "from clawcodex_ext\..* import \*" src/ --include="*.py" \| wc -l` | 190 |
+| Pattern C (sys.modules swap) 数 | `grep -rl "sys.modules\[__name__\]" src/ --include="*.py" \| wc -l` | 42 |
+| 681bc9cb 提交文件数 | `git show --stat 681bc9cb` | 16 文件（9 ext + 7 src 变 facade），§1.1 旧写 "+12" 已订正为 "+9" |
+| 同期 src 端 -30 .py 来源 | `git log --since="7 days ago" --diff-filter=D --name-only` | 25 唯一 .py 删除（templates × 9 + ultraplan × 6 + bash_parser × 5 + tool_system × 4 + transcript 1）；差额归因于旧 Plan 快照未严格按 `__pycache__` 过滤 |
+
+**Verifier 标注的观察（不阻塞交付）**
+
+1. `git log --follow` 不带 `--all` 看不到迁移前历史（`git mv` 重命名检测的常规现象，非回归）。后续 bisect 用 `--all` 即可。
+2. 1 个 pre-existing 失败（`test_cron_run_queues_manual_fire_in_outbox`）是 outbox 模型对象 vs dict 字面量比较，与 T4 模块无任何关联，建议另开 issue 跟踪。
+3. `ext/builtins.py` 仍 import 4 个非 T4 模块（`engine` / `registry` / `skills_integration` / `argument_substitution` / `types` / `input_processing` / `buddy_command`）— 全部已在 `clawcodex_ext.command_system.*` 路径（先前阶段迁移），无 regression。
+4. Pattern B facades 正确转发私有符号（`_DESCRIPTIONS` / `_load_skill_commands_cached` / `_DEFAULT_STATUSLINE_INSTRUCTION`）— 选 Pattern B 而非 Pattern D 的根本原因，已验证生效。
 
 ---
 
