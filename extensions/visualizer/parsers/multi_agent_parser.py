@@ -23,29 +23,19 @@ transcript convention above.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..models.viz_models import AgentTreeNode, BarStatus
+from .transcript_parser import coerce_timestamp, load_transcript_records
 
 logger = logging.getLogger(__name__)
 
 # ``agent-<id>.jsonl`` — the naming convention emitted by
 # ``clawcodex_ext.transcript.nested_path``.
 _SUBAGENT_RE = re.compile(r"^agent-(?P<agent_id>.+)\.jsonl$")
-
-
-def _coerce_iso_ts(value: Any) -> float:
-    if not isinstance(value, str) or not value:
-        return 0.0
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except ValueError:
-        return 0.0
 
 
 class MultiAgentParser:
@@ -76,8 +66,7 @@ class MultiAgentParser:
           session.
 
         Returns a flat list. The root node is *not* included — the
-        caller (MultiSessionViewBuilder) renders the root as a session
-        row, not an agent row.
+        caller renders the root as the main swimlane, not an agent-tree row.
         """
         sessions_root = (
             Path(sessions_dir) if sessions_dir else (Path.home() / ".clawcodex" / "sessions")
@@ -124,9 +113,11 @@ class MultiAgentParser:
                 parent_id = self._peek_parent_session_id(path)
                 if parent_id != session_id:
                     continue
+                match = _SUBAGENT_RE.match(path.name)
+                agent_id = match.group("agent_id") if match else path.stem
                 node = self._node_from_transcript(
                     path,
-                    agent_id=path.stem,
+                    agent_id=agent_id,
                     parent_session_id=session_id,
                     source="flat",
                 )
@@ -151,28 +142,13 @@ class MultiAgentParser:
         transcript content for the discovery step — just the parent
         marker — so a single-line read is enough.
         """
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                for _ in range(50):  # peek up to 50 lines
-                    line = f.readline()
-                    if not line:
-                        break
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(entry, dict):
-                        continue
-                    if entry.get("isMeta") or entry.get("isVirtual"):
-                        continue
-                    parent = entry.get("parent_session_id", "")
-                    if isinstance(parent, str):
-                        return parent
-                    return ""
-        except OSError:
+        records, _, _ = load_transcript_records(path)
+        for entry in records[:50]:
+            if entry.get("isMeta") or entry.get("isVirtual"):
+                continue
+            parent = entry.get("parent_session_id", "")
+            if isinstance(parent, str):
+                return parent
             return ""
         return ""
 
@@ -198,50 +174,32 @@ class MultiAgentParser:
         tool_count = 0
         turn_count = 0
         first_text = ""
-        last_ts: float = 0.0
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if not isinstance(entry, dict):
-                        continue
-                    if entry.get("isMeta") or entry.get("isVirtual"):
-                        continue
-                    if entry.get("isCompactSummary"):
-                        continue
-                    if entry.get("isApiErrorMessage"):
-                        continue
-
-                    ts = _coerce_iso_ts(entry.get("timestamp"))
-                    if ts:
-                        last_ts = ts
-
-                    role = entry.get("role", "")
-                    if role in ("user", "assistant"):
-                        turn_count += 1
-
-                    content = entry.get("content")
-                    if isinstance(content, list):
-                        for block in content:
-                            if not isinstance(block, dict):
-                                continue
-                            btype = block.get("type", "")
-                            if btype == "tool_use":
-                                tool_count += 1
-                            elif btype in ("text", "thinking") and not first_text:
-                                text = block.get("text") or block.get("thinking") or ""
-                                if text:
-                                    first_text = text[:60]
-        except OSError as e:
-            logger.debug("Failed to read sub-agent transcript %s: %s", path, e)
+        timestamps: list[float] = []
+        records, warnings, _ = load_transcript_records(path)
+        if not records and warnings:
+            logger.debug("Failed to read sub-agent transcript %s: %s", path, warnings)
             return None
+        for entry in records:
+            if entry.get("isMeta") or entry.get("isVirtual") or entry.get("isCompactSummary"):
+                continue
+            if entry.get("isApiErrorMessage"):
+                continue
+            ts = coerce_timestamp(entry.get("timestamp"))
+            if ts:
+                timestamps.append(ts)
+            role = entry.get("role", "")
+            if role in ("user", "assistant"):
+                turn_count += 1
+            for block in entry.get("content", []):
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type", "")
+                if btype == "tool_use":
+                    tool_count += 1
+                elif role == "assistant" and btype in ("text", "thinking") and not first_text:
+                    text = block.get("text") or block.get("thinking") or ""
+                    if text:
+                        first_text = text[:60]
 
         # Status inference: "running" if the file's mtime is within 5
         # minutes (same window the SessionMetadataParser uses).
@@ -266,6 +224,8 @@ class MultiAgentParser:
                 "transcript_path": str(path),
                 "tool_count": tool_count,
                 "turn_count": turn_count,
-                "last_ts": last_ts,
+                "start_ts": min(timestamps) if timestamps else 0.0,
+                "last_ts": max(timestamps) if timestamps else 0.0,
+                "warnings": warnings,
             },
         )

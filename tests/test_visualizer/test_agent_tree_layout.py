@@ -121,6 +121,42 @@ class TestAgentTreeLayoutSingleSubagent:
 
 
 class TestAgentTreeLayoutMultipleSubagents:
+    def test_fallback_matching_consumes_existing_child_nodes(self):
+        viz = _session(
+            0,
+            120,
+            _bar("Agent", 10, 12, isAgentInvocation=True),
+            _bar("Agent", 30, 32, isAgentInvocation=True),
+        )
+        viz.agent_tree = [
+            AgentTreeNode(
+                agent_id="primary",
+                name="primary-agent",
+                parent_id=None,
+                session_ref="s",
+            ),
+            AgentTreeNode(
+                agent_id="child-a",
+                name="child-a",
+                parent_id="primary",
+                session_ref="child-a",
+            ),
+            AgentTreeNode(
+                agent_id="child-b",
+                name="child-b",
+                parent_id="primary",
+                session_ref="child-b",
+            ),
+        ]
+
+        AgentTreeLayout().layout(viz)
+
+        by_id = {node.agent_id: node for node in viz.agent_tree}
+        assert by_id["child-a"].spawn_x == 10.0
+        assert by_id["child-b"].spawn_x == 30.0
+        assert by_id["child-a"].depth_y == 1
+        assert by_id["child-b"].depth_y == 2
+
     def test_depth_y_stacked(self):
         viz = _session(
             0,

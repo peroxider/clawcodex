@@ -1,104 +1,49 @@
 {% extends "base.html" %}
-{% block title %}ClawCodex Visualizer — Sessions{% endblock %}
+{% block title %}Sessions - ClawCodex Visualizer{% endblock %}
 
 {% block content %}
+<section class="page-heading">
+    <div>
+        <h1>Sessions</h1>
+        <p>Automatically scans local session records and sorts by most recent activity.</p>
+    </div>
+    <span id="session-count" class="quiet-pill">0 sessions</span>
+</section>
+
 <div class="toolbar">
     <div class="toolbar-left">
         <div class="search-box">
-            <input type="text" id="search-input" placeholder="Search sessions..." oninput="filterSessions()">
+            <input type="search" id="search-input" placeholder="Search ID, title, model, provider, or workspace" autocomplete="off">
         </div>
         <div class="status-filter">
-            <label for="status-filter-select" class="status-filter-label">Status:</label>
-            <select id="status-filter-select" class="status-filter-select" onchange="onStatusFilterChange()">
-                <option value="default" selected>Default (running, completed, success)</option>
-                <option value="all">All</option>
+            <label for="status-filter-select" class="status-filter-label">Status</label>
+            <select id="status-filter-select" class="status-filter-select">
+                <option value="all" selected>All statuses</option>
                 <option value="running">running</option>
-                <option value="unknown">unknown</option>
                 <option value="completed">completed</option>
                 <option value="success">success</option>
                 <option value="failed">failed</option>
                 <option value="error">error</option>
+                <option value="unknown">unknown</option>
                 <option value="aborted">aborted</option>
                 <option value="cancelled">cancelled</option>
             </select>
         </div>
         <div class="layout-toggle" role="group" aria-label="Layout mode">
-            <button type="button" id="layout-toggle-grid" class="layout-toggle-btn active"
-                    title="Card grid view" onclick="setLayoutMode('grid')">▦ Grid</button>
-            <button type="button" id="layout-toggle-list" class="layout-toggle-btn"
-                    title="Detailed list view" onclick="setLayoutMode('list')">☰ List</button>
+            <button type="button" id="layout-toggle-grid" class="layout-toggle-btn active" aria-pressed="true">Grid</button>
+            <button type="button" id="layout-toggle-list" class="layout-toggle-btn" aria-pressed="false">List</button>
         </div>
     </div>
     <div class="toolbar-actions">
-        <span id="live-indicator" class="live-indicator" title="Auto-refresh every 5s">
-            <span class="live-dot"></span>
-            <span class="live-label">Live</span>
-        </span>
-        <button onclick="openMultiSessionDialog()" class="btn">🌐 Multi-Session View</button>
-        <button onclick="openCompareDialog()" class="btn">📊 Compare</button>
-        <button onclick="refreshSessions()" class="btn btn-primary">🔄 Refresh</button>
+        <span id="live-indicator" class="live-indicator live"><span class="live-dot"></span>Auto refresh</span>
+        <button type="button" id="refresh-button" class="btn btn-primary">Refresh</button>
     </div>
 </div>
 
-<div class="workspace-tabs" id="workspace-tabs">
-    <!-- Populated by JS -->
-</div>
-
-{# Stats bar for overview #}
-{% set session_id = None %}
-{% include "stats_bar.html" %}
-
-<div class="sessions-grid" id="sessions-grid">
-    <div class="loading">Loading sessions...</div>
-</div>
-
-<!-- Compare Dialog -->
-<div id="compare-dialog" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3>Compare Sessions</h3>
-        <p>Enter session IDs (comma-separated):</p>
-        <input type="text" id="compare-ids" placeholder="session-id-1,session-id-2" class="input-wide">
-        <div class="modal-actions">
-            <button onclick="doCompare()" class="btn btn-primary">Compare</button>
-            <button onclick="closeCompareDialog()" class="btn">Cancel</button>
-        </div>
-    </div>
-</div>
-
-<!-- Multi-Session View Dialog -->
-<div id="multi-session-dialog" class="modal" style="display:none;">
-    <div class="modal-content">
-        <h3>🌐 Multi-Session Waterfall</h3>
-        <p>Enter 1-5 session IDs (comma-separated):</p>
-        <input type="text" id="multi-session-ids" placeholder="session-id-1,session-id-2" class="input-wide">
-        <div class="modal-actions">
-            <button onclick="openMultiSessionPage()" class="btn btn-primary">Open View</button>
-            <button onclick="closeMultiSessionDialog()" class="btn">Cancel</button>
-        </div>
-    </div>
-</div>
-
-{# Include status bar #}
-{% include "status_bar.html" %}
+<div class="workspace-tabs" id="workspace-tabs" aria-label="Workspaces"></div>
+<div class="sessions-grid" id="sessions-grid"><div class="loading">Loading sessions...</div></div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/app.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', () => {
-        if (typeof _restoreUiState === 'function') _restoreUiState();
-        loadWorkspaces();
-        loadSessions();
-        startLivePolling();
-    });
-    // Stop polling when the tab is hidden — saves a fetch every 5s in
-    // background tabs and avoids races when the user comes back.
-    document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-            stopLivePolling();
-        } else if (typeof startLivePolling === 'function') {
-            startLivePolling();
-        }
-    });
-</script>
+<script src="/static/js/app.js?v=20260623-clean-copy-1"></script>
 {% endblock %}

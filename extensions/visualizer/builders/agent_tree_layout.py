@@ -126,15 +126,14 @@ class AgentTreeLayout:
             session.agent_tree = nodes
 
         # ---- 2. Index existing nodes for lookup
-        node_by_id: dict[str, AgentTreeNode] = {n.agent_id: n for n in nodes}
-        consumed_spawns: set[int] = set()
+        consumed_agent_ids: set[str] = set()
 
         # ---- 3. Walk spawn events and assign spawn_x / depth_y
         for idx, ev in enumerate(spawn_events):
-            node = self._match_node(ev, nodes, consumed_spawns)
+            node = self._match_node(ev, nodes, consumed_agent_ids)
             if node is None:
                 continue
-            consumed_spawns.add(idx)
+            consumed_agent_ids.add(node.agent_id)
             node.spawn_x = _rel(ev["start_time"])
             # depth_y is 1..N based on insertion order
             node.depth_y = 1 + sum(
@@ -144,6 +143,22 @@ class AgentTreeLayout:
                 ev.get("subagent_type"), ev.get("subagent_description")
             )
             node.role_color = _role_color_for(node.role)
+
+        # Real child transcripts remain authoritative when a parent spawn
+        # record was compacted away or did not carry an explicit agent id.
+        for node in nodes:
+            if node.parent_id is None or node.spawn_x is not None:
+                continue
+            transcript_start = node.metadata.get("start_ts") if node.metadata else None
+            if isinstance(transcript_start, (int, float)) and transcript_start:
+                node.spawn_x = _rel(float(transcript_start))
+                node.depth_y = max(
+                    node.depth_y,
+                    1
+                    + sum(
+                        1 for item in nodes if item.depth_y > 0 and item.agent_id != node.agent_id
+                    ),
+                )
 
         # ---- 4. Compute join_x = end of last sub-agent activity after spawn_x
         for node in nodes:
@@ -234,12 +249,10 @@ class AgentTreeLayout:
     def _match_node(
         ev: dict[str, Any],
         nodes: list[AgentTreeNode],
-        consumed: set[int],
+        consumed: set[str],
     ) -> AgentTreeNode | None:
         """Find a non-root node to attach this spawn event to."""
-        candidates = [
-            n for i, n in enumerate(nodes) if n.parent_id is not None and i not in consumed
-        ]
+        candidates = [n for n in nodes if n.parent_id is not None and n.agent_id not in consumed]
         if not candidates:
             return None
         # 1) explicit agent_id
@@ -270,6 +283,9 @@ class AgentTreeLayout:
         if node.spawn_x is None:
             return None
         spawn_t = base_time + node.spawn_x
+        own_bars = [bar.end_time for bar in timeline if bar.agent_id == node.agent_id]
+        if own_bars:
+            return max(0.0, max(own_bars) - base_time)
         sub_type = node.metadata.get("subagent_type") if node.metadata else None
         # Prefer bars tagged with the same subagent_type / name
         best = None

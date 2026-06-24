@@ -60,8 +60,25 @@ class OperationCategorizer:
         # 2. Tool name lookup.
         tool_name = (detail.get("tool_name") or detail.get("tool") or bar.label or "").strip()
         for cat, names in self._TOOL_RULES.items():
-            if tool_name in names:
+            if tool_name.lower() in {name.lower() for name in names}:
                 return cat
+        lowered = tool_name.lower()
+        if any(
+            word in lowered
+            for word in ("read", "search", "grep", "glob", "fetch", "list", "view", "find")
+        ):
+            return OperationCategory.READ
+        if any(
+            word in lowered
+            for word in ("write", "edit", "patch", "create", "update", "delete", "move")
+        ):
+            return OperationCategory.WRITE
+        if any(word in lowered for word in ("bash", "shell", "exec", "run", "command", "terminal")):
+            return OperationCategory.EXECUTE
+        if any(
+            word in lowered for word in ("task", "agent", "workflow", "spawn", "dispatch", "plan")
+        ):
+            return OperationCategory.ORCHESTRATE
 
         # 3. Background flag wins over bar-type fallback.
         if detail.get("isBackground") or detail.get("is_background"):

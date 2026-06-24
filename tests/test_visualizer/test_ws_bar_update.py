@@ -1,12 +1,12 @@
-"""Tests for SessionLiveTail._entry_to_bar_update (F-95 live event channel).
-
-The WebSocket live tail is the main surface for streaming new tool
-activity to the waterfall view. ``_entry_to_bar_update`` converts a
-single JSONL entry into a structured ``bar_update`` event that the
-client can apply incrementally without a server round-trip.
-"""
+"""Tests for the Session WebSocket compatibility and change channels."""
 
 from __future__ import annotations
+
+import asyncio
+import json
+
+import pytest
+from fastapi.testclient import TestClient
 
 from extensions.visualizer.ws import SessionLiveTail
 
@@ -286,3 +286,49 @@ class TestEntryToBarUpdate:
             emit_ts=_ts(1),
         )
         assert "toolu_t" not in tail._pending_tools
+
+
+@pytest.mark.asyncio
+async def test_session_json_change_emits_refetch_notification(tmp_path):
+    path = tmp_path / "session.json"
+    path.write_text(json.dumps({"conversation": {"messages": []}}), encoding="utf-8")
+    tail = SessionLiveTail("single-file", path)
+    events = []
+
+    async def capture(event):
+        events.append(event)
+
+    tail.broadcast = capture
+    task = asyncio.create_task(tail.tail_loop(interval=0.01))
+    await asyncio.sleep(0.03)
+    path.write_text(
+        json.dumps({"conversation": {"messages": [{"role": "user"}]}}), encoding="utf-8"
+    )
+    await asyncio.sleep(0.05)
+    tail.stop()
+    await task
+
+    assert any(
+        event.get("type") == "transcript_event"
+        and event.get("source") == "session.json"
+        and event.get("changed") is True
+        for event in events
+    )
+
+
+def test_websocket_endpoint_accepts_urlencoded_session_id(tmp_path):
+    from extensions.visualizer.server import create_app
+
+    sessions = tmp_path / "sessions"
+    session_dir = sessions / "session with #hash"
+    session_dir.mkdir(parents=True)
+    (session_dir / "transcript.jsonl").write_text(
+        json.dumps({"role": "user", "content": "hello", "timestamp": _ts()}),
+        encoding="utf-8",
+    )
+    app = create_app(sessions_dir=sessions, allow_import=False)
+    client = TestClient(app)
+
+    with client.websocket_connect("/api/viz/ws/sessions/session%20with%20%23hash") as ws:
+        ws.send_text("ping")
+        assert ws.receive_text() == "pong"

@@ -1,315 +1,63 @@
 {% extends "base.html" %}
-{% block title %}Session {{ session_id }} — ClawCodex Visualizer{% endblock %}
+{% block title %}Session {{ session_id }} - ClawCodex Visualizer{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/session_view.css?v=20260624-inline-1">{% endblock %}
 
 {% block content %}
-<div class="session-header">
-    <div class="session-title-row">
-        <h2 id="session-title">Session: {{ session_id }}</h2>
-        <div class="session-actions">
-            <div class="view-toggle" role="tablist">
-                <button class="view-toggle-btn active" data-view="waterfall"
-                        onclick="switchView('waterfall')">🌊 瀑布</button>
-                <button class="view-toggle-btn" data-view="bezier"
-                        onclick="switchView('bezier')">🌊 贝塞尔</button>
-                <button class="view-toggle-btn" data-view="gantt"
-                        onclick="switchView('gantt')">📊 Gantt</button>
+{% set sid_url = session_id | urlencode %}
+<div id="session-app" data-session-id="{{ session_id }}">
+    <a class="back-link" href="/">Back to all sessions</a>
+    <header class="session-page-header">
+        <div>
+            <div class="eyebrow">Agent session timeline</div>
+            <h1 id="session-title">Session {{ session_id }}</h1>
+            <p id="session-subtitle">Loading local session records...</p>
+        </div>
+        <div class="session-export-actions" aria-label="Export session">
+            <a class="btn" href="/api/viz/sessions/{{ sid_url }}/export?format=json">JSON</a>
+            <a class="btn" href="/api/viz/sessions/{{ sid_url }}/export?format=svg">SVG</a>
+            <a class="btn" href="/api/viz/sessions/{{ sid_url }}/export?format=png">PNG</a>
+            <a class="btn" href="/api/viz/sessions/{{ sid_url }}/export?format=pdf">PDF</a>
+            <a class="btn" href="/api/viz/sessions/{{ sid_url }}/report">Report</a>
+        </div>
+    </header>
+
+    <div id="session-warning" class="session-warning" hidden></div>
+    <div id="category-legend" class="category-legend" aria-label="Event category filters"></div>
+
+    <section class="timeline-shell" id="timeline-shell" aria-busy="true">
+        <div class="timeline-toolbar">
+            <div class="zoom-controls" role="group" aria-label="Timeline zoom">
+                <button type="button" id="zoom-out" aria-label="Zoom out">-</button>
+                <output id="zoom-value">100%</output>
+                <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+                <button type="button" id="zoom-reset" aria-label="Reset zoom" hidden>Reset</button>
             </div>
-            <select id="time-mode" onchange="changeTimeMode(this.value)">
-                <option value="relative">Relative Time</option>
-                <option value="absolute">Absolute Time</option>
-                <option value="window">Window Mode</option>
-            </select>
-            <button onclick="openExportDialog('{{ session_id }}')" class="btn">📥 Export</button>
-            <button onclick="exportSession('json')" class="btn">JSON</button>
-            <button onclick="exportSession('svg')" class="btn">SVG</button>
+            <div class="timeline-hint">Mouse wheel zooms; drag pans; Alt + wheel pans horizontally</div>
         </div>
-    </div>
-    {# F-95 reference chrome — mirrors clawcodex_sessions_analysis
-       TopBar (model pill + summary + status) so the single-session
-       view reads the same way as the multi-session analysis shell. #}
-    <div class="ms-reference-topbar" id="ms-reference-topbar" aria-label="session summary">
-        <div class="ms-reference-model" id="ms-reference-model">加载中…</div>
-        <div class="ms-reference-summary" id="ms-reference-summary">
-            <span>—</span>
+        <div id="timeline-state" class="timeline-state"><span class="spinner"></span>Loading session...</div>
+        <div id="timeline-scroll" class="timeline-scroll" hidden>
+            <div id="timeline-canvas" class="timeline-canvas">
+                <div id="time-axis" class="time-axis"></div>
+                <div id="main-lane"></div>
+                <div id="subagent-section"></div>
+                <svg id="agent-connectors" class="agent-connectors" aria-hidden="true"></svg>
+            </div>
         </div>
-        <div class="ms-reference-status" id="ms-reference-status">
-            <span class="ms-reference-dot"></span>
-        </div>
+        <div id="timeline-footer" class="timeline-footer" hidden></div>
+    </section>
+</div>
+
+<div id="event-tooltip" class="event-tooltip" role="tooltip" hidden></div>
+<aside id="event-drawer" class="event-drawer" role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="drawer-title" tabindex="-1">
+    <div class="event-drawer-header">
+        <div><span id="drawer-dot" class="drawer-dot"></span><h2 id="drawer-title">Event details</h2></div>
+        <button type="button" id="drawer-close" aria-label="Close details">x</button>
     </div>
-    <div class="session-meta" id="session-meta" hidden>
-        Loading...
-    </div>
-    {# F-96-E: Orchestrator issue association (hidden until populated by JS) #}
-    <div class="session-orch-info" id="session-orch-info" style="display:none;"></div>
-</div>
-
-{# Session info card (TS-style "本次加载 N 个文件 · 识别为 1 个会话").
-   Hidden until multi_session_view.js populates it from the API response. #}
-<div class="ms-session-card" id="ms-session-card" hidden>
-    <div class="ms-session-card-icon" aria-hidden="true">📄</div>
-    <div class="ms-session-card-body">
-        <div class="ms-session-card-line">
-            本次加载 <strong id="ms-session-card-files">—</strong> 个文件 ·
-            识别为 <strong id="ms-session-card-agents">—</strong>
-        </div>
-        <div class="ms-session-card-id">
-            会话 ID: <code id="ms-session-card-id">{{ session_id }}</code>
-        </div>
-    </div>
-</div>
-
-{# F-95 legend fix: explicit HTML legend bar for the single-session
-   waterfall on session_row.html. multi_session_view.js's renderLegend()
-   populates this with the same 8-pill content (category · count) the
-   multi-page view shows, so both surfaces stay consistent. #}
-<div id="ms-legend-bar" class="ms-legend-bar"></div>
-
-{# Zoom controls row — sits between the legend bar and the chart, mirroring
-   the clawcodex_sessions_analysis TopBar zoom widget (- / 100% / +). #}
-<div class="ms-zoom-row">
-    <div class="ms-zoom-controls" role="group" aria-label="zoom controls">
-        <button type="button" class="ms-zoom-btn" id="ms-zoom-out" aria-label="缩小">−</button>
-        <span class="ms-zoom-label" id="ms-zoom-label">100%</span>
-        <button type="button" class="ms-zoom-btn" id="ms-zoom-in" aria-label="放大">+</button>
-    </div>
-</div>
-
-{# Include stats bar (container-only, rendered by gantt.js). Hidden in the
-   default waterfall because the ms-session-card + ms-reference-topbar
-   already carry the same numbers in a denser layout. The gantt view
-   keeps it visible via a class toggle. #}
-<div id="stats-bar-wrap" hidden>
-{% with include_mode="container" %}
-  {% include "stats_bar.html" %}
-{% endwith %}
-</div>
-
-{# Waterfall view (default) — wraps the new multi_session_view with 1 session.
-   data-visual-mode="reference" enables the rich chrome layout (small gridLeft,
-   top-mounted model pill summary, dark track) so the single-session view
-   reads the same way as clawcodex_sessions_analysis. #}
-<div class="ms-chart-container" id="waterfall-chart" data-visual-mode="reference"
-     style="width:100%; height:560px; margin-bottom:20px;">
-    <div class="empty-state">Loading waterfall view…</div>
-</div>
-
-{# Legacy Gantt view (hidden by default, shown when ?view=gantt) #}
-<div class="gantt-container" id="gantt-chart" style="width:100%; height:500px; display:none;">
-</div>
-
-{# Bezier waterfall view (P2 skeleton — hidden by default, shown when ?view=bezier) #}
-<div class="bezier-waterfall-shell ms-chart-container" id="bezier-chart"
-     style="width:100%; height:560px; display:none; overflow:auto;">
-</div>
-
-<div class="panels-row">
-    {# Include anomaly panel (container-only, rendered by gantt.js) #}
-    {% with include_mode="container" %}
-      {% include "anomaly_panel.html" %}
-    {% endwith %}
-    <div class="panel" id="tree-panel" style="display:none;">
-        <h3>🌳 Agent Tree</h3>
-        <div id="tree-content"></div>
-    </div>
-</div>
-
-{# Stats content target used by gantt.js renderStats() #}
-<div id="stats-content" style="display:none;"></div>
-
-{# Include export dialog #}
-{% include "export_dialog.html" %}
-
-{# Side drawer for turn detail (waterfall click target) #}
-<aside id="turn-drawer" class="turn-drawer" aria-hidden="true" role="dialog"
-       aria-labelledby="turn-drawer-title">
-    <div class="turn-drawer-header">
-        <h3 id="turn-drawer-title">Turn Detail</h3>
-        <button type="button" class="turn-drawer-close"
-                aria-label="Close drawer">×</button>
-    </div>
-    <div class="turn-drawer-body">
-        <section class="turn-drawer-section">
-            <h4>Overview</h4>
-            <dl id="turn-drawer-overview"></dl>
-        </section>
-        <section class="turn-drawer-section turn-drawer-aggregated" id="turn-drawer-aggregated" style="display:none;">
-            <h4>Aggregated Turns <span class="turn-drawer-count" id="turn-drawer-agg-count"></span></h4>
-            <ul id="turn-drawer-agg-list"></ul>
-        </section>
-        <section class="turn-drawer-section">
-            <h4>Session Records</h4>
-            <div id="turn-drawer-records"><div class="turn-drawer-empty">Not loaded yet</div></div>
-        </section>
-        <section class="turn-drawer-section">
-            <h4>LLM I/O</h4>
-            <div id="turn-drawer-llm"><div class="turn-drawer-empty">Not loaded yet</div></div>
-        </section>
-        <section class="turn-drawer-section">
-            <h4>Tool I/O</h4>
-            <div id="turn-drawer-tools"><div class="turn-drawer-empty">Not loaded yet</div></div>
-        </section>
-    </div>
+    <div id="drawer-body" class="event-drawer-body"></div>
 </aside>
-
-{# Side drawer for bezier event detail. Mirrors the waterfall turn-drawer
-   (same .turn-drawer styling, same slide-in transition, same close
-   affordance). The body is populated by bezier_waterfall.js when an
-   event bar is clicked; the header is replaced with a category dot +
-   title + category/error pills, but uses the same .turn-drawer-header
-   structure so the close button stays in the top-right corner. #}
-<aside id="bezier-drawer" class="turn-drawer" aria-hidden="true" role="dialog"
-       aria-labelledby="bezier-drawer-title">
-    <div class="turn-drawer-header">
-        <span class="bezier-drawer-cat-dot" id="bezier-drawer-cat-dot"
-              aria-hidden="true"></span>
-        <h3 id="bezier-drawer-title">Event Detail</h3>
-        <span class="bezier-drawer-pills" id="bezier-drawer-pills"></span>
-        <button type="button" class="turn-drawer-close"
-                aria-label="Close drawer">×</button>
-    </div>
-    <div class="turn-drawer-body" id="bezier-drawer-body">
-        <div class="turn-drawer-empty">Not loaded yet</div>
-    </div>
-</aside>
-
-{# Include status bar #}
-{% include "status_bar.html" %}
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/gantt.js?v=20260611-agent-lanes"></script>
-<script src="/static/js/multi_session_view.js?v=20260611-agent-lanes"></script>
-<script src="/static/js/bezier_waterfall.js?v=20260617-bezier"></script>
-<script>
-    const SESSION_ID = "{{ session_id }}";
-    // Decide default view from URL ?view=gantt | ?view=bezier, fallback to waterfall
-    const urlParams = new URLSearchParams(window.location.search);
-    const _viewParam = urlParams.get('view');
-    const initialView = (_viewParam === 'gantt' || _viewParam === 'bezier') ? _viewParam : 'waterfall';
-    // Track which views have been initialised so re-toggling doesn't
-    // re-fetch / re-render unnecessarily. The bezier skeleton stores
-    // its own instance, but the guard keeps the entry path symmetric.
-    window.__bezierLoaded = false;
-    window.__waterfallLoaded = false;
-
-    // Live-tailing gate. P6 design: bezier view disables live tail
-    // (v1 doesn't render incoming events). The WebSocket is opened on
-    // demand whenever a non-bezier view becomes active and closed
-    // when the user switches to bezier. We track the active state in
-    // window.__liveTailActive so we don't double-connect.
-    window.__liveTailActive = false;
-    function enableLiveTail() {
-        if (window.__liveTailActive) return;
-        connectLiveTail(SESSION_ID);
-        window.__liveTailActive = true;
-    }
-    function disableLiveTail() {
-        if (!window.__liveTailActive) return;
-        if (window.vizWs && typeof window.vizWs.disconnect === 'function') {
-            window.vizWs.disconnect();
-        }
-        window.__liveTailActive = false;
-    }
-
-    // Persist the active view in the URL so a page refresh / shared
-    // link lands on the same view. Drop the param for the default
-    // (waterfall) so the canonical URL stays clean.
-    function persistViewParam(view) {
-        try {
-            const url = new URL(window.location.href);
-            if (view === 'waterfall') url.searchParams.delete('view');
-            else url.searchParams.set('view', view);
-            window.history.replaceState({}, '', url);
-        } catch (_) { /* ignore — non-fatal */ }
-    }
-
-    function switchView(view) {
-        document.querySelectorAll('.view-toggle-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.view === view);
-        });
-        persistViewParam(view);
-        const waterfall = document.getElementById('waterfall-chart');
-        const gantt = document.getElementById('gantt-chart');
-        const bezier = document.getElementById('bezier-chart');
-        const legendBar = document.getElementById('ms-legend-bar');
-        const statsWrap = document.getElementById('stats-bar-wrap');
-        const sessionCard = document.getElementById('ms-session-card');
-        const zoomRow = document.querySelector('.ms-zoom-row');
-        if (view === 'waterfall') {
-            waterfall.style.display = '';
-            gantt.style.display = 'none';
-            if (bezier) bezier.style.display = 'none';
-            // ECharts view owns the legend bar; bezier view clears it.
-            if (legendBar) legendBar.style.display = '';
-            // TS-aligned chrome only shows on waterfall + bezier views.
-            if (sessionCard) sessionCard.hidden = false;
-            if (zoomRow) zoomRow.style.display = '';
-            if (statsWrap) statsWrap.hidden = true;
-            if (!window.__waterfallLoaded) {
-                initMultiSessionView([SESSION_ID], {
-                    chartContainerId: 'waterfall-chart',
-                    legendContainerId: 'ms-legend-bar',
-                });
-                window.__waterfallLoaded = true;
-            }
-            enableLiveTail();
-        } else if (view === 'bezier') {
-            waterfall.style.display = 'none';
-            gantt.style.display = 'none';
-            if (bezier) bezier.style.display = '';
-            // Hide the ECharts legend bar — the bezier view renders
-            // its own 8-category colour cues via the bar fills.
-            if (legendBar) legendBar.style.display = 'none';
-            if (sessionCard) sessionCard.hidden = false;
-            if (zoomRow) zoomRow.style.display = 'none';  // bezier has its own zoom
-            if (statsWrap) statsWrap.hidden = true;
-            if (!window.__bezierLoaded) {
-                window.initBezierWaterfall([SESSION_ID], {
-                    chartContainerId: 'bezier-chart',
-                });
-                window.__bezierLoaded = true;
-            }
-            disableLiveTail();
-        } else {
-            waterfall.style.display = 'none';
-            gantt.style.display = '';
-            if (bezier) bezier.style.display = 'none';
-            if (legendBar) legendBar.style.display = 'none';
-            // Gantt view uses the legacy stats bar; hide TS-aligned chrome.
-            if (sessionCard) sessionCard.hidden = true;
-            if (zoomRow) zoomRow.style.display = 'none';
-            if (statsWrap) statsWrap.hidden = false;
-            window.renderGanttChart?.(SESSION_ID);
-            window.resizeGanttChart?.();
-            enableLiveTail();
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        switchView(initialView);
-        // Fetch stats + anomalies regardless of which view is active.
-        // gantt.js's loadSessionDetail() populates #stats-bar and
-        // #anomaly-content; it doesn't depend on the gantt chart being
-        // visible, so we always call it.
-        if (typeof window.loadSessionDetail === 'function') {
-            window.loadSessionDetail(SESSION_ID);
-        }
-        // Live tail is gated by switchView() above — if the initial
-        // view is bezier, the socket stays closed.
-
-        // Wire the drawer's close button (avoids inline onclick so
-        // closeTurnDrawer can stay inside the IIFE in multi_session_view.js).
-        const closeBtn = document.querySelector('#turn-drawer .turn-drawer-close');
-        if (closeBtn) closeBtn.addEventListener('click', window.closeTurnDrawer);
-        const drawer = document.getElementById('turn-drawer');
-        if (drawer) {
-            drawer.addEventListener('click', (e) => {
-                if (e.target === drawer) window.closeTurnDrawer();
-            });
-        }
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') window.closeTurnDrawer();
-        });
-    });
-</script>
+<script>window.SESSION_ID = {{ session_id | tojson }};</script>
+<script src="/static/js/session_view.js?v=20260624-inline-1"></script>
 {% endblock %}

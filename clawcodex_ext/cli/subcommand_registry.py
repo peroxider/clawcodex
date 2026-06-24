@@ -41,9 +41,15 @@ def load_builtin_subcommands() -> None:
     # F-88: ``clawcodex auth logout|status|zeroize``
     from clawcodex_ext.cli import auth_cmd as _auth_cmd  # noqa: F401
 
-    # F-85 P85-D: ``clawcodex template list|show|create`` subcommand
-    if importlib.util.find_spec("clawcodex_ext.cli.template_cmd") is not None:
-        importlib.import_module("clawcodex_ext.cli.template_cmd")
+    # F-85 P85-D: `clawcodex template list|show|create` subcommand.
+    # Some downstream checkouts do not ship the CLI wrapper yet even though
+    # the template service modules are present. Treat it as optional so a
+    # missing template command cannot break unrelated entry points such as
+    # `clawcodex-dev viz`.
+    try:
+        from clawcodex_ext.cli import template_cmd as _template_cmd  # noqa: F401
+    except ImportError:
+        _template_cmd = None
 
     # F-49 P5-H: ``clawcodex-dev session migrate`` subcommand for
     # converting legacy 3-file sessions to the unified 2-file format.

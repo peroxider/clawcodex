@@ -61,10 +61,10 @@ class TestOrchestratorLink:
         from extensions.visualizer.orchestrator_link import OrchestratorLink
 
         link = OrchestratorLink()
-        payload = link.generate_share_link("test-session", view_type="comparison")
+        payload = link.generate_share_link("test-session")
 
         assert payload["session_id"] == "test-session"
-        assert payload["view_type"] == "comparison"
+        assert "view_type" not in payload
 
     def test_frontend_link(self, session_dir):
         from extensions.visualizer.orchestrator_link import OrchestratorLink
@@ -73,3 +73,20 @@ class TestOrchestratorLink:
         result = link.generate_links("test-orch-001", session_dir)
 
         assert result["frontend"] == "http://localhost:8765/session/test-orch-001"
+
+    def test_links_urlencode_session_id(self, tmp_path):
+        from extensions.visualizer.orchestrator_link import OrchestratorLink
+
+        session_id = "session with #hash"
+        session_dir = tmp_path / session_id
+        session_dir.mkdir()
+        (session_dir / "report.md").write_text("# Report\n", encoding="utf-8")
+
+        link = OrchestratorLink(base_url="http://localhost:8765")
+        result = link.generate_links(session_id, session_dir)
+
+        assert result["frontend"] == "http://localhost:8765/session/session%20with%20%23hash"
+        assert (
+            result["f38_report"]["api_url"]
+            == "http://localhost:8765/api/viz/sessions/session%20with%20%23hash/report"
+        )

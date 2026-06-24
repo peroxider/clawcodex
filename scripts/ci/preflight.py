@@ -211,7 +211,7 @@ def _quote_list(paths: list[str]) -> str:
 
 
 def _python_files(files: list[str]) -> list[str]:
-    return [p for p in files if _is_python(p)]
+    return [p for p in files if _is_python(p) and (ROOT / p).exists()]
 
 
 def _doc_files(files: list[str]) -> list[str]:

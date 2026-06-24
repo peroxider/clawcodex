@@ -288,23 +288,35 @@
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
             tr.onclick = () => loadIssueTimeline(i.issue_id);
+            const status = i.status || 'unknown';
+            const prUrl = safeHttpUrl(i.pr_url);
             tr.innerHTML = `
-                <td><strong>${esc(i.issue_id)}</strong>${i.session_id ? `<a href="/session/${encodeURIComponent(i.session_id)}" class="session-link" title="View session" onclick="event.stopPropagation();">📄</a>` : ''}</td>
-                <td><span class="badge badge-${i.status || 'unknown'}">${esc(i.status || 'unknown')}</span></td>
-                <td>${i.current_phase ? `<span class="phase-tag">${esc(i.current_phase)}</span>` : '—'}</td>
+                <td><strong>${esc(i.issue_id)}</strong>${i.session_id ? `<a href="/session/${encodeURIComponent(i.session_id)}" class="session-link" title="View session" onclick="event.stopPropagation();">Session</a>` : ''}</td>
+                <td><span class="badge badge-${safeClassPart(status)}">${esc(status)}</span></td>
+                <td>${i.current_phase ? `<span class="phase-tag">${esc(i.current_phase)}</span>` : '-'}</td>
                 <td>${progressCell(i.progress)}</td>
-                <td>${esc(i.verification_status || '—')}</td>
-                <td>${i.pr_url ? `<a class="pr-link" href="${esc(i.pr_url)}" target="_blank">#${esc(i.pr_number || 'PR')}</a>` : '—'}</td>
-                <td>${i.error ? `<span class="error-msg" title="${esc(i.error)}">${esc(i.error)}</span>` : '—'}</td>
+                <td>${esc(i.verification_status || '-')}</td>
+                <td>${prUrl ? `<a class="pr-link" href="${attr(prUrl)}" target="_blank" rel="noopener noreferrer">#${esc(i.pr_number || 'PR')}</a>` : '-'}</td>
+                <td>${i.error ? `<span class="error-msg" title="${attr(i.error)}">${esc(i.error)}</span>` : '-'}</td>
                 <td style="font-size:11px;color:var(--text-secondary)">${esc(i.last_updated || '')}</td>
             `;
             tbody.appendChild(tr);
         });
     }
 
+    function clampPercent(value) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return 0;
+        return Math.max(0, Math.min(100, number));
+    }
+
+    function progressPercent(value) {
+        return clampPercent(Math.round(Number(value) * 100));
+    }
+
     function progressCell(val) {
-        if (val == null) return '—';
-        const pct = Math.round(val * 100);
+        if (val == null) return '-';
+        const pct = progressPercent(val);
         const color = pct >= 100 ? 'var(--success)' : pct >= 50 ? 'var(--info)' : 'var(--warning)';
         return `<span class="progress-bar-wrap"><span class="progress-bar-fill" style="width:${pct}%;background:${color}"></span></span><span class="progress-label">${pct}%</span>`;
     }
@@ -341,7 +353,7 @@
             let detail = '';
             if (ev.status) detail += `status=${ev.status} `;
             if (ev.phase) detail += `phase=${ev.phase} `;
-            if (ev.progress != null) detail += `progress=${Math.round(ev.progress*100)}% `;
+            if (ev.progress != null) detail += `progress=${progressPercent(ev.progress)}% `;
             if (ev.verification_status) detail += `verify=${ev.verification_status} `;
             if (ev.pr_url) detail += `pr=${ev.pr_url} `;
             if (ev.error) detail += ev.error;
@@ -371,8 +383,25 @@
     // ----- Utility -----
     function esc(s) {
         const d = document.createElement('div');
-        d.textContent = String(s);
+        d.textContent = String(s ?? '');
         return d.innerHTML;
+    }
+
+    function attr(s) {
+        return esc(s);
+    }
+
+    function safeClassPart(s) {
+        return String(s || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_') || 'unknown';
+    }
+
+    function safeHttpUrl(url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(String(url), window.location.origin);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+        } catch (_) { /* ignore invalid URLs */ }
+        return '';
     }
 
     // ----- Init -----

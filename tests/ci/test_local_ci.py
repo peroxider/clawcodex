@@ -236,9 +236,11 @@ def test_write_preflight_uses_committed_scope_only(tmp_path, monkeypatch, capsys
     preflight_env = state_dir / "ci_preflight.env"
     python_files = state_dir / "ci_python_files.txt"
     doc_files = state_dir / "ci_doc_files.txt"
+    (tmp_path / "committed.py").write_text("print('check me')\n", encoding="utf-8")
     (tmp_path / "untracked.py").write_text("print('ignore me')\n", encoding="utf-8")
 
     monkeypatch.setattr(local_ci, "ROOT", tmp_path)
+    monkeypatch.setattr(local_ci.preflight, "ROOT", tmp_path)
     monkeypatch.setattr(local_ci, "PREFLIGHT_ENV", preflight_env)
     monkeypatch.setattr(local_ci, "PYTHON_FILES", python_files)
     monkeypatch.setattr(local_ci, "DOC_FILES", doc_files)
@@ -253,6 +255,32 @@ def test_write_preflight_uses_committed_scope_only(tmp_path, monkeypatch, capsys
     assert python_files.read_text(encoding="utf-8") == "committed.py\n"
     assert "untracked.py" not in preflight_env.read_text(encoding="utf-8")
     assert "changed files: 1" in capsys.readouterr().out
+
+
+def test_write_preflight_excludes_deleted_python_files(tmp_path, monkeypatch):
+    local_ci = _load_module(monkeypatch)
+    state_dir = tmp_path / ".local-ci"
+    preflight_env = state_dir / "ci_preflight.env"
+    python_files = state_dir / "ci_python_files.txt"
+    doc_files = state_dir / "ci_doc_files.txt"
+    (tmp_path / "kept.py").write_text("print('kept')\n", encoding="utf-8")
+
+    monkeypatch.setattr(local_ci, "ROOT", tmp_path)
+    monkeypatch.setattr(local_ci.preflight, "ROOT", tmp_path)
+    monkeypatch.setattr(local_ci, "PREFLIGHT_ENV", preflight_env)
+    monkeypatch.setattr(local_ci, "PYTHON_FILES", python_files)
+    monkeypatch.setattr(local_ci, "DOC_FILES", doc_files)
+    monkeypatch.setattr(
+        local_ci.preflight,
+        "_changed_files",
+        lambda base, all_files: ["kept.py", "deleted.py"],
+    )
+
+    env = local_ci._write_preflight("HEAD~1", False, scope_label="current commit")
+
+    assert env["CI_RUN_PYTHON"] == "true"
+    assert python_files.read_text(encoding="utf-8") == "kept.py\n"
+    assert "deleted.py" in preflight_env.read_text(encoding="utf-8")
 
 
 def test_package_smoke_cleanup_removes_sdist_staging_dir(tmp_path, monkeypatch):
