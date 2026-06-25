@@ -1261,6 +1261,73 @@ def telemetry_command_call(args: str, context: CommandContext) -> LocalCommandRe
     return LocalCommandResult(type="text", value=output)
 
 
+def resume_command_call(args: str, context: CommandContext) -> LocalCommandResult:
+    """List past sessions and resume one interactively or by ID.
+
+    With a session ID argument, validates it exists and returns instructions.
+    Without arguments, shows the interactive session browser.
+    """
+    from src.services.session_storage import SessionStorage
+
+    session_id = args.strip() if args else ""
+
+    if session_id:
+        # Validate session exists
+        from clawcodex_ext.services.session_storage import SESSIONS_DIR
+
+        session_path = SESSIONS_DIR / session_id
+        if not session_path.is_dir():
+            return LocalCommandResult(
+                type="text",
+                value=f"Session not found: {session_id}\n"
+                f"  Use /resume without arguments to browse available sessions.",
+            )
+        return LocalCommandResult(
+            type="text",
+            value=f"Session found: {session_id}\n"
+            f"  Use ``clawcodex --resume {session_id}`` or\n"
+            f"  use /load {session_id} to restore it in this session.",
+        )
+
+    # No session ID — show interactive browser
+    try:
+        from clawcodex_ext.repl.session_browser import browse_sessions_interactive
+
+        selected_id = browse_sessions_interactive()
+        if selected_id:
+            return LocalCommandResult(
+                type="text",
+                value=f"Session selected: {selected_id}\n"
+                f"  Use ``clawcodex --resume {selected_id}`` or\n"
+                f"  use /load {selected_id} to restore it in this session.",
+            )
+        return LocalCommandResult(type="text", value="Session selection cancelled.")
+    except Exception as exc:
+        # Fallback: list sessions as text
+        try:
+            metas = SessionStorage.list_sessions(limit=50)
+            if not metas:
+                return LocalCommandResult(
+                    type="text", value="No past sessions found."
+                )
+            lines = ["Available sessions (use /resume <session_id> to resume):\n"]
+            for i, m in enumerate(metas, 1):
+                sid = m.session_id
+                preview = getattr(m, "title", "") or getattr(m, "last_user_input", "") or ""
+                if preview:
+                    preview = preview[:60]
+                lines.append(f"  {i:>3}. {sid[:12]}…  {preview}")
+            lines.append(
+                "\n  Use /resume <session_id> or /load <session_id> to restore a session."
+            )
+            return LocalCommandResult(type="text", value="\n".join(lines))
+        except Exception:
+            return LocalCommandResult(
+                type="text",
+                value="No past sessions found. Interactive browser unavailable.",
+            )
+
+
 # Command definitions (sorted alphabetically by variable name)
 # /advisor's is_enabled gate needs module-level import.
 from src.utils.advisor import can_user_configure_advisor as _can_user_configure_advisor
@@ -1375,6 +1442,14 @@ TELEMETRY_COMMAND = LocalCommand(
     supports_non_interactive=True,
 )
 
+RESUME_COMMAND = LocalCommand(
+    name="resume",
+    description="List past sessions and resume one interactively, or /resume <session_id>",
+    argument_hint="[session_id]",
+    supports_non_interactive=True,
+)
+RESUME_COMMAND.set_call(resume_command_call)
+
 
 # Synchronous versions for REPL integration
 def execute_command_sync(
@@ -1457,6 +1532,7 @@ def get_builtin_commands() -> list[Command]:
         STATUSLINE_COMMAND,
         SECURITY_REVIEW_COMMAND,
         GOAL_COMMAND,
+        RESUME_COMMAND,
     ]
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
 
