@@ -219,3 +219,5 @@ types/__init__.py
 types/content_blocks.py
 types/messages.py
 types/stream_events.py
+# Phase 4 P1 Step 2c — src/constants/xml.py migration (1 file).
+constants/xml.py

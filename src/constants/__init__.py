@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-SNAPSHOT_PATH = (
-    Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'constants.json'
-)
+SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'constants.json'
 _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
 
 ARCHIVE_NAME = _SNAPSHOT['archive_name']
