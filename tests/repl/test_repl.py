@@ -771,6 +771,40 @@ class TestREPL(unittest.TestCase):
                         loaded_session.conversation.messages[1],
                     )
 
+    def test_constructor_with_resumed_session_populates_engine_messages(self):
+        """RuntimeContext passes an already-resumed session into the REPL."""
+        from clawcodex_ext.repl.app import ClawCodexExtREPL
+        from clawcodex_ext.types.content_blocks import TextBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        resumed_session = Mock()
+        resumed_session.session_id = "resumed_session"
+        resumed_session.provider = "glm"
+        resumed_session.model = "glm-4.5"
+        resumed_session.conversation = Mock()
+        resumed_session.conversation.messages = [
+            UserMessage(content="讲一个小知识"),
+            AssistantMessage(content=[TextBlock(text="Python __slots__ can save memory.")]),
+        ]
+
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("src.providers.get_provider_class") as mock_provider_class:
+                mock_provider = Mock()
+                mock_provider.model = "glm-4.5"
+                mock_provider_class.return_value = mock_provider
+
+                repl = ClawCodexExtREPL(
+                    provider_name="glm",
+                    resume_session_id="resumed_session",
+                    session=resumed_session,
+                    provider=mock_provider,
+                )
+
+        self.assertEqual(repl.session.session_id, "resumed_session")
+        self.assertEqual(len(repl._engine_messages), 2)
+        self.assertIs(repl._engine_messages[0], resumed_session.conversation.messages[0])
+        self.assertIs(repl._engine_messages[1], resumed_session.conversation.messages[1])
+
     def test_load_nonexistent_session(self):
         """Test loading a session that doesn't exist."""
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):

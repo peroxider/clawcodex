@@ -150,6 +150,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._session_metadata: dict[str, Any] | None = None  # S-R4-M: cached metadata
         if session is not None:
             self.session = session
+            self._engine_messages = list(self.session.conversation.messages or [])
+            if resume_session_id:
+                self._load_session_metadata(resume_session_id)
         elif resume_session_id:
             loaded_session = Session.resume(resume_session_id)
             if loaded_session is not None:
