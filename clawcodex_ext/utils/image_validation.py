@@ -12,9 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-# Anthropic API 5 MB base64 limit. Inlined from src.utils.image_processor
-# (image_processor.py stays in src/ for now — not yet migrated to ext)
-# to avoid pulling image_processor into the ext-layer import graph.
+# Anthropic API 5 MB base64 limit. Inlined to keep validation import-cheap.
 API_IMAGE_MAX_BASE64_SIZE = 5 * 1024 * 1024
 
 
