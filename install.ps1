@@ -109,7 +109,14 @@ $script:LocalBin          = Join-Path $env:USERPROFILE '.local\bin'
 $script:PythonMinVersion  = '3.10'
 $script:EntryPoint        = 'clawcodex-dev'   # the single registered entry in pyproject.toml
 $script:RcMarker          = '# clawcodex installer — managed by install.ps1'
-$script:SponsorScript     = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { 'install.ps1' }
+$script:SponsorScript     = if ($MyInvocation.MyCommand.Path -and
+                                (Test-Path $MyInvocation.MyCommand.Path) -and
+                                $MyInvocation.MyCommand.Path -notlike "$env:TEMP\*" -and
+                                $MyInvocation.MyCommand.Path -notlike "$env:LOCALAPPDATA\Temp\*") {
+    $MyInvocation.MyCommand.Path
+} else {
+    'install.ps1'
+}
 
 # Effective (post-override) paths.  Resolved in Initialize-Config below.
 $script:ClawCodexHome      = $null
@@ -283,7 +290,6 @@ function script:Check-Git {
 #  We try multiple strategies in order of reliability:
 #    1. winget (built into modern Windows, most robust)
 #    2. Direct binary download from GitHub releases (no temp-script issues)
-#    3. Official astral.sh installer via irm | iex (last resort)
 # ============================================================================
 function script:Install-Uv {
     $uv = Get-Command uv -ErrorAction SilentlyContinue
@@ -297,7 +303,7 @@ function script:Install-Uv {
 
     if ($DryRun) {
         ScriptP1
-        Write-Host "[DRY-RUN] would install uv via winget / GitHub binary / astral.sh installer"
+        Write-Host "[DRY-RUN] would install uv via winget / GitHub binary"
         return
     }
 
