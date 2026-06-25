@@ -189,7 +189,7 @@ services/voice/stt.py
 # Distinct from (d): here clawcodex_ext/X.py holds the FORK content
 # (was previously src/X.py), not upstream 1:1. Suppresses the modify patch
 # that would otherwise rewrite src/X.py from upstream full content to facade.
-# Phase 4 P1 Step 2b/2c — Tier A/B/C migration of 12 src/utils/ files. Run
+# Phase 4 P1 Step 2b/2c — Tier A/B/C migration of 13 src/utils/ files. Run
 # regenerate after adding/removing entries; series/b24b8cb_series will skip these files.
 utils/git.py
 utils/message_mappers.py
@@ -203,3 +203,4 @@ utils/format.py
 utils/store.py
 utils/file_state_cache.py
 utils/image_processor.py
+utils/at_file_completer.py
