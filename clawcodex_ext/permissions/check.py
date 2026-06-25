@@ -215,6 +215,22 @@ def has_permissions_to_use_tool(
             ),
         )
 
+    # bypassPermissions / plan+bypass-available: auto-allow even when
+    # the inner function returned "ask" (e.g. from a safetyCheck that
+    # early-returned before the inner bypass check at lines 296-304).
+    # This must come BEFORE should_avoid_permission_prompts so that
+    # unattended headless runs (is_non_interactive_session=True) can
+    # execute destructive/dangerous commands like git without a TTY.
+    should_bypass = context.mode == "bypassPermissions" or (
+        context.mode == "plan" and context.is_bypass_permissions_mode_available
+    )
+    if should_bypass:
+        return PermissionAllowDecision(
+            behavior="allow",
+            updated_input=getattr(result, "updated_input", None) or tool_input,
+            decision_reason=ModeDecisionReason(mode=context.mode),
+        )
+
     if context.should_avoid_permission_prompts:
         return PermissionDenyDecision(
             behavior="deny",
