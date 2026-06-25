@@ -31,6 +31,7 @@ CORE_PYTEST = (
 ORCHESTRATOR_PYTEST = (
     "tests/orchestrator/test_local_tracker_parser.py",
     "tests/orchestrator/test_orchestrator_f39_intent.py",
+    "tests/orchestrator/test_orchestrator_git_sync.py",
     "tests/test_visualizer/test_orchestrator_link.py",
 )
 

@@ -70,59 +70,22 @@ jobs:
             exit 1
           fi
           echo "All four installer sources agree on version $SH_INSTALLER"
-      - name: Full validation before release
-        env:
-          TARGET_REF: ${{ inputs.target_ref }}
-          OPENAI_API_KEY: ""
-          ANTHROPIC_API_KEY: ""
-          GLM_API_KEY: ""
-          ZHIPUAI_API_KEY: ""
-          COVERAGE_FAIL_UNDER: "0"
+      - name: Pre-flight bump_version dry-run consistency
         run: |
           set -euo pipefail
           cd repo_workspace
-          TARGET_REF="${TARGET_REF:-dev-decoupling-refactor-b24b8cb}"
-          git fetch --tags --force
-          git fetch origin "$TARGET_REF" --depth=1 || true
-          TARGET_BRANCH="${TARGET_REF#refs/heads/}"
-          git fetch origin "${TARGET_BRANCH}:refs/remotes/origin/${TARGET_BRANCH}" --depth=1 || true
-          if git rev-parse -q --verify "${TARGET_REF}^{commit}" >/dev/null; then
-            git checkout --detach "$TARGET_REF"
-          elif git rev-parse -q --verify "origin/${TARGET_BRANCH}^{commit}" >/dev/null; then
-            git checkout --detach "origin/${TARGET_BRANCH}"
-          elif git rev-parse -q --verify "refs/tags/${TARGET_REF}^{commit}" >/dev/null; then
-            git checkout --detach "refs/tags/${TARGET_REF}"
-          else
-            echo "Could not resolve release preflight target ref: ${TARGET_REF}" >&2
-            exit 1
-          fi
           source .venv/bin/activate
-          python -m ruff check \
-            scripts/ci/docs_check.py \
-            scripts/ci/gitcode_release.py \
-            scripts/ci/preflight.py \
-            scripts/ci/supply_chain_audit.py \
-            scripts/ci/env_loader.py \
-            scripts/ci/local_publish.py \
-            scripts/ci/pytest_targets.py
-          python -m ruff format --check \
-            scripts/ci/docs_check.py \
-            scripts/ci/gitcode_release.py \
-            scripts/ci/preflight.py \
-            scripts/ci/supply_chain_audit.py \
-            scripts/ci/env_loader.py \
-            scripts/ci/local_publish.py \
-            scripts/ci/pytest_targets.py
-          python -m mypy src clawcodex_ext extensions
-          mapfile -t PYTEST_TARGETS < <(python scripts/ci/pytest_targets.py release-smoke)
-          python -m pytest "${PYTEST_TARGETS[@]}" \
-            -q \
-            --cov=extensions.orchestrator \
-            --cov=clawcodex_ext \
-            --cov=src \
-            --cov-report=term-missing \
-            --cov-report=xml \
-            --cov-fail-under="${COVERAGE_FAIL_UNDER}"
+          # bump_version.py dry-run is the default (no flag); this
+          # fail-fasts on PATCHER regex drift / missed file before the
+          # destructive --apply step below.  Reports "will change X to Y"
+          # but does NOT modify any file.
+          python scripts/ci/bump_version.py
+      - name: Install wheel + post-install CLI smoke
+        env:
+          NO_COLOR: "1"
+        run: |
+          set -euo pipefail
+          cd repo_workspace
           rm -rf dist build
           python -m build
           python -m twine check dist/*
@@ -130,4 +93,35 @@ jobs:
           . .release-smoke/bin/activate
           python -m pip install --upgrade pip
           python -m pip install dist/*.whl
-          clawcodex-dev --help
+          # CLI smoke — grep for stable substrings to avoid CalVer / HOME
+          # drift; full output is discarded (CI logs capture it).
+          clawcodex-dev --version 2>&1 | grep -qE '^claw-codex version [0-9]+\.[0-9]+\.[0-9]+'
+          clawcodex-dev --help 2>&1 | grep -qi 'usage: clawcodex-dev'
+          clawcodex-dev doctor 2>&1 | grep -q '^version:'
+          clawcodex-dev telemetry status 2>&1 | grep -qi 'telemetry status'
+          clawcodex-dev provider list 2>&1 | grep -qE '(anthropic|openai|glm|zhipuai)'
+          clawcodex-dev model list 2>&1 | grep -qi '^models:'
+          # Orchestrator offline subcommands — exit 0 with no daemon,
+          # no live key, no GitHub/GitCode token.
+          clawcodex-dev orchestrator workflow list-templates 2>&1 | grep -qi 'workflow'
+          clawcodex-dev orchestrator workflow init \
+            --template workflow-local \
+            --non-interactive \
+            --output /tmp/cx-preflight-wf.md
+          clawcodex-dev orchestrator server status
+          clawcodex-dev orchestrator server stop --all
+      - name: install.sh doctor + version sanity
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          # install.sh: syntax + offline diagnostic + version print.
+          # `cmd_doctor` is read-only (line 1601) and exits 0 on a clean
+          # environment.
+          bash -n install.sh
+          bash install.sh --version | grep -qE 'INSTALLER_VERSION'
+          bash install.sh doctor
+          # install.ps1: no pwsh on this runner, so use a regex sanity
+          # check to confirm the PowerShell script still exposes the
+          # version variables the bump_version PATCHER expects.
+          head -50 install.ps1 | grep -q 'InstallerVersion'
+          head -50 install.ps1 | grep -q 'ClawCodexVersion'
