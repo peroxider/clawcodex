@@ -12,6 +12,109 @@ from src.providers import PROVIDER_INFO
 
 from clawcodex_ext.providers.factory import register_provider, register_provider_info
 
+
+# ---------------------------------------------------------------------------
+# Extend built-in provider model lists
+#
+# The upstream PROVIDER_INFO dict only has a subset of models. These
+# extensions merge additional model variants (OpenRouter-style paths,
+# newer model versions, etc.) so they show up in UI/CLI listings
+# without modifying ``src/providers/__init__.py``.
+#
+# This code runs at import time as a side-effect of ``import clawcodex_ext``
+# (see ``clawcodex_ext/__init__.py``).
+# ---------------------------------------------------------------------------
+
+
+def _extend_builtin_models() -> None:
+    """Extend built-in provider model lists with downstream additions.
+
+    Idempotent: on second call the ``extend`` would be a no-op because
+    the upstream models are already present (the extended lists are
+    supersets of the upstream baseline).
+    """
+    # Anthropic — add OpenRouter-style paths + newer variants
+    anthropic_models = PROVIDER_INFO.setdefault("anthropic", {}).setdefault(
+        "available_models", []
+    )
+    _anthropic_extras = [
+        "anthropic/claude-3.5-haiku",
+        "anthropic/claude-3.5-sonnet",
+        "anthropic/claude-haiku-4.5",
+        "anthropic/claude-opus-4.1",
+        "anthropic/claude-sonnet-4.5",
+    ]
+    for m in _anthropic_extras:
+        if m not in anthropic_models:
+            anthropic_models.append(m)
+
+    # OpenAI — add OpenRouter-style paths + newer variants
+    openai_models = PROVIDER_INFO.setdefault("openai", {}).setdefault(
+        "available_models", []
+    )
+    _openai_extras = [
+        "openai/gpt-4o",
+        "openai/gpt-4o-mini",
+        "openai/gpt-5",
+        "openai/gpt-5-mini",
+    ]
+    for m in _openai_extras:
+        if m not in openai_models:
+            openai_models.append(m)
+
+    # Zhipu GLM — add OpenRouter-style paths
+    glm_models = PROVIDER_INFO.setdefault("glm", {}).setdefault(
+        "available_models", []
+    )
+    _glm_extras = [
+        "zai/glm-3-turbo",
+        "zai/glm-4",
+        "zai/glm-4-air",
+        "zai/glm-4-flash",
+        "zai/glm-4-plus",
+        "zai/glm-4.5",
+        "zai/glm-4.6",
+        "zai/glm-4.7",
+        "zai/glm-5",
+        "zai/glm-5-turbo",
+    ]
+    for m in _glm_extras:
+        if m not in glm_models:
+            glm_models.append(m)
+
+    # DeepSeek — add OpenRouter-style paths + downstream variants
+    deepseek_models = PROVIDER_INFO.setdefault("deepseek", {}).setdefault(
+        "available_models", []
+    )
+    _deepseek_extras = [
+        "deepseek/deepseek-chat-v3.1",
+        "deepseek/deepseek-r1-0528",
+        "deepseek/deepseek-v3.1-terminus",
+        "deepseek/deepseek-v3.2",
+        "deepseek/deepseek-v3.2-speciale",
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-pro",
+    ]
+    for m in _deepseek_extras:
+        if m not in deepseek_models:
+            deepseek_models.append(m)
+
+    # Gemini — add OpenRouter-style paths
+    gemini_models = PROVIDER_INFO.setdefault("gemini", {}).setdefault(
+        "available_models", []
+    )
+    _gemini_extras = [
+        "google/gemini-2.0-flash",
+        "google/gemini-2.5-flash",
+        "google/gemini-2.5-pro",
+    ]
+    for m in _gemini_extras:
+        if m not in gemini_models:
+            gemini_models.append(m)
+
+
+_extend_builtin_models()
+
 from clawcodex_ext.providers.hooks import _codex_api_discovery
 from clawcodex_ext.cli.model_cmd.registry import register_discovery_hook
 
