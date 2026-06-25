@@ -1365,7 +1365,7 @@ class TestREPLResumeReplay(unittest.TestCase):
         """Tool-only assistant messages must NOT print the Assistant label,
         avoiding the visual bug where multiple lonely 'Assistant' lines
         stack up with no content underneath."""
-        from clawcodex_ext.types.content_blocks import ToolUseBlock
+        from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock
         from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 
         repl = self._make_repl()
@@ -1449,6 +1449,7 @@ class TestREPLResumeReplay(unittest.TestCase):
     def test_replay_text_content_prints_assistant_label(self):
         """Text-bearing assistant messages must still print the Assistant
         label so the user sees the turn boundary."""
+        from clawcodex_ext.types.content_blocks import TextBlock
         from clawcodex_ext.types.messages import AssistantMessage, UserMessage
 
         repl = self._make_repl()
