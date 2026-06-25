@@ -130,6 +130,49 @@ def browse_sessions_interactive(
             continue
 
 
+def _extract_content_block_text(block: Any) -> str:
+    """Extract searchable text from a ContentBlock (dataclass or dict).
+
+    Handles all known ContentBlock types:
+    ``TextBlock`` → .text
+    ``ThinkingBlock`` → .thinking
+    ``RedactedThinkingBlock`` → .data
+    ``ToolUseBlock`` → .name + .input (stringified)
+    ``ToolResultBlock`` → .content (recursively)
+    dict fallback → "text" or "content" key
+    """
+    from clawcodex_ext.types.content_blocks import (
+        RedactedThinkingBlock,
+        TextBlock,
+        ThinkingBlock,
+        ToolResultBlock,
+        ToolUseBlock,
+    )
+
+    if isinstance(block, TextBlock):
+        return block.text
+    if isinstance(block, ThinkingBlock):
+        return block.thinking
+    if isinstance(block, RedactedThinkingBlock):
+        return block.data
+    if isinstance(block, ToolUseBlock):
+        parts = [block.name]
+        if isinstance(block.input, dict):
+            parts.extend(str(v) for v in block.input.values())
+        return " ".join(parts)
+    if isinstance(block, ToolResultBlock):
+        # content can be str or list[ContentBlock]
+        if isinstance(block.content, str):
+            return block.content
+        if isinstance(block.content, list):
+            return " ".join(_extract_content_block_text(cb) for cb in block.content)
+        return str(block.content)
+    if isinstance(block, dict):
+        return str(block.get("text") or block.get("content") or "")
+    # Fallback: any remaining dataclass or object
+    return str(block)
+
+
 def _search_session_content(
     metas: Sequence[SessionMetadata],
     query: str,
@@ -163,14 +206,10 @@ def _search_session_content(
                     break
                 elif isinstance(content, list):
                     for item in content:
-                        if isinstance(item, str) and query_lower in item.lower():
+                        block_text = _extract_content_block_text(item)
+                        if query_lower in block_text.lower():
                             found = True
                             break
-                        elif isinstance(item, dict):
-                            text = item.get("text") or item.get("content") or ""
-                            if isinstance(text, str) and query_lower in text.lower():
-                                found = True
-                                break
                     if found:
                         break
             if found:
