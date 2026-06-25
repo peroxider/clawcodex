@@ -2932,10 +2932,24 @@ class ClawcodexREPL:
                 _agent_label = (
                     getattr(getattr(self, "tool_context", None), "agent_type", None) or "Assistant"
                 )
-                # Print the agent label once per message, matching live-chat
-                # behaviour where chat() prints "[bold]Assistant[/bold]" before
-                # the streaming response even starts (core.py:4072).
-                self.console.print(f"\n[bold]{_agent_label}[/bold]")
+                # Only print the agent label when the message has visible
+                # text content.  Tool-only messages (ToolUseBlock without
+                # any TextBlock) suppress the label — the deferred
+                # ``● ToolName(args)`` header already identifies the call
+                # when its result arrives.  Without this check every
+                # tool-only assistant message would produce a lonely
+                # "Assistant" line with nothing underneath, stacking up
+                # as visually confusing blank labels.
+                _has_text = False
+                if isinstance(content, list):
+                    _has_text = any(
+                        isinstance(b, TextBlock) and b.text and b.text != "[No content]"
+                        for b in content
+                    )
+                elif isinstance(content, str):
+                    _has_text = bool(content.strip())
+                if _has_text:
+                    self.console.print(f"\n[bold]{_agent_label}[/bold]")
                 if isinstance(content, list):
                     for block in content:
                         if isinstance(block, TextBlock) and block.text:
@@ -2979,7 +2993,6 @@ class ClawcodexREPL:
                             # in replay, same as live chat (no visible output).
                             pass
                 elif isinstance(content, str) and content:
-                    self.console.print(f"\n[bold]{_agent_label}[/bold]")
                     self.console.print(Markdown(content))
                 continue
 
