@@ -109,7 +109,7 @@ $script:LocalBin          = Join-Path $env:USERPROFILE '.local\bin'
 $script:PythonMinVersion  = '3.10'
 $script:EntryPoint        = 'clawcodex-dev'   # the single registered entry in pyproject.toml
 $script:RcMarker          = '# clawcodex installer — managed by install.ps1'
-$script:SponsorScript     = $MyInvocation.MyCommand.Path
+$script:SponsorScript     = if ($MyInvocation.MyCommand.Path) { $MyInvocation.MyCommand.Path } else { 'install.ps1' }
 
 # Effective (post-override) paths.  Resolved in Initialize-Config below.
 $script:ClawCodexHome      = $null
@@ -280,8 +280,10 @@ function script:Check-Git {
 
 # ============================================================================
 #  Install / locate uv (Astral's Python package manager)
-#  We use the official PowerShell bootstrapper from astral.sh.  It writes
-#  uv.exe into $env:USERPROFILE\.local\bin and $env:USERPROFILE\.cargo\bin.
+#  We try multiple strategies in order of reliability:
+#    1. winget (built into modern Windows, most robust)
+#    2. Direct binary download from GitHub releases (no temp-script issues)
+#    3. Official astral.sh installer via irm | iex (last resort)
 # ============================================================================
 function script:Install-Uv {
     $uv = Get-Command uv -ErrorAction SilentlyContinue
@@ -291,48 +293,117 @@ function script:Install-Uv {
         return
     }
 
-    Log-Info 'Installing uv via official astral.sh PowerShell installer (user-local, no admin) ...'
+    Log-Info 'Installing uv (user-local, no admin) ...'
 
     if ($DryRun) {
         ScriptP1
-        Write-Host "[DRY-RUN] would run: irm https://astral.sh/uv/install.ps1 | iex"
+        Write-Host "[DRY-RUN] would install uv via winget / GitHub binary / astral.sh installer"
         return
     }
 
+    # Strategy 1: winget (available on Windows 10/11 by default)
+    Log-Info 'Trying winget install ...'
+    $wingetOk = $false
     try {
-        # The official uv PowerShell installer from astral.sh is designed to be
-        # invoked via `irm URL | iex`.  Downloading it to a temp file and running
-        # it with `& $tmpFile` breaks the installer's own path-resolution and
-        # error-recovery logic (it uses $MyInvocation.MyCommand.Path to locate
-        # its own temp directory; when that points to a transient path the
-        # internal retry handler builds invalid command-line arguments such as
-        # "Retry: C:\Users\AppData\Local\Temp\cc.ps1", which PowerShell rejects
-        # as an unbound positional parameter).
-        #
-        # We therefore use the official `irm | iex` pattern.  $env:UV_INSTALL_DIR
-        # is set above so the installer places uv.exe in our user-local bin.
-        $env:UV_INSTALL_DIR = Join-Path $env:USERPROFILE '.local'
-        irm https://astral.sh/uv/install.ps1 | iex
+        $wingetCmd = Get-Command winget -ErrorAction Stop
+        $wingetOk = $true
     } catch {
-        Die-With-Help "Failed to download / run uv installer: $_" `
-            'Check your network connection and proxy settings.' `
-            "Retry:    $SponsorScript" `
-            'Manual:   see https://docs.astral.sh/uv/'
+        Log-Warn 'winget not available — skipping to next method'
     }
 
-    # Make uv visible to this session, then verify.
-    $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
-    $uv = Get-Command uv -ErrorAction SilentlyContinue
-    if (-not $uv -and -not $DryRun) {
-        Die-With-Help 'uv still not on PATH after install.' `
-            "Check:    Get-ChildItem $LocalBin\uv.exe" `
-            "Or:       `$env:Path = '$LocalBin;' + `$env:Path" `
-            "Then:     $SponsorScript"
+    if ($wingetOk) {
+        try {
+            $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
+            $installArgs = @('install', '--id', 'AstralIndustries.uv', '--accept-package-agreements',
+                             '--scope', 'user', '--source', 'winget', '-e')
+            & winget $installArgs 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
+                $uv = Get-Command uv -ErrorAction SilentlyContinue
+                if ($uv) {
+                    $uvVer = (& uv --version) -replace '^uv\s+', ''
+                    Log-Ok "uv $uvVer installed via winget"
+                    return
+                }
+            }
+        } catch {
+            Log-Warn "winget install failed: $_"
+        }
     }
-    if ($uv) {
-        $uvVer = (& uv --version) -replace '^uv\s+', ''
-        Log-Ok "uv $uvVer installed"
+
+    # Strategy 2: Direct binary download from GitHub releases
+    Log-Info 'Downloading uv from GitHub releases ...'
+    $uvInstallDir = Join-Path $env:USERPROFILE '.local'
+    try {
+        # Detect architecture
+        $arch = 'x86_64'
+        if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { $arch = 'aarch64' }
+        elseif ($env:PROCESSOR_ARCHITECTURE -eq 'ARM')   { $arch = 'aarch64' }
+
+        $url = "https://github.com/astral-sh/uv/releases/latest/download/uv-${arch}-pc-windows-msvc.zip"
+        $zipPath = Join-Path $env:TEMP "uv-${arch}.zip"
+        $extractDir = Join-Path $uvInstallDir 'bin'
+
+        # Download the zip
+        Log-Info "  URL: $url"
+        Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -ErrorAction Stop | Out-Null
+
+        # Extract
+        if (-not (Test-Path $extractDir)) {
+            New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+        }
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+        # Cleanup
+        Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+
+        # Verify
+        $uvExe = Join-Path $extractDir 'uv.exe'
+        if (Test-Path $uvExe) {
+            $env:Path = "${extractDir};$env:Path"
+            $uvVer = (& $uvExe --version) -replace '^uv\s+', ''
+            Log-Ok "uv $uvVer installed (GitHub binary)"
+            return
+        }
+    } catch {
+        Log-Warn "GitHub binary download failed: $_"
+        # Cleanup partial files
+        try { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue } catch { }
     }
+
+    # Strategy 3: Official astral.sh installer (last resort)
+    # We download the script to a temp file first, then execute it.  This
+    # avoids the "position parameter" crash that occurs when the astral.sh
+    # installer is invoked via `irm | iex` — in that mode
+    # $MyInvocation.MyCommand.Path resolves to a transient temp path (e.g.
+    # C:\Users\AppData\Local\Temp\cc.ps1), and the installer's internal retry
+    # logic passes it as a positional argument which PowerShell rejects.
+    Log-Info 'Falling back to official astral.sh installer ...'
+    try {
+        $env:UV_INSTALL_DIR = $uvInstallDir
+        $installerPath = Join-Path $env:TEMP 'uv_install.ps1'
+        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -OutFile $installerPath -UseBasicParsing -ErrorAction Stop | Out-Null
+        & $installerPath
+        Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
+        $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
+        $uv = Get-Command uv -ErrorAction SilentlyContinue
+        if ($uv) {
+            $uvVer = (& uv --version) -replace '^uv\s+', ''
+            Log-Ok "uv $uvVer installed"
+            return
+        }
+    } catch {
+        Log-Warn "astral.sh installer failed: $_"
+        # Cleanup partial temp file
+        try { Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue } catch { }
+    }
+
+    # If all strategies fail, give the user a clear error with manual install steps
+    Die-With-Help 'All uv installation methods failed.' `
+        'Manual install:  irm https://astral.sh/uv/install.ps1 | iex' `
+        "Or download:     https://github.com/astral-sh/uv/releases" `
+        "Then add to PATH: $LocalBin" `
+        "Retry:           $SponsorScript"
 }
 
 # ============================================================================
