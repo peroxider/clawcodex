@@ -200,8 +200,8 @@ function script:Run-OrDry {
 # Fatal error with "next steps" hint list, mirroring install.sh:die_with_help.
 function script:Die-With-Help {
     param(
-        [Parameter(Mandatory)][string]$Header,
-        [string[]]$NextSteps
+        [Parameter(Mandatory, Position = 0)][string]$Header,
+        [Parameter(Position = 1)][string[]]$NextSteps
     )
     Log-Err $Header
     if ($NextSteps -and $NextSteps.Count -gt 0) {
