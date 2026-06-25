@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 import tempfile
 import json
+import os
 import threading
 import time
 from rich.markdown import Markdown
@@ -1334,32 +1335,37 @@ class TestREPLResumeReplay(unittest.TestCase):
         config_file = self.config_dir / "config.json"
         with open(config_file, "w") as f:
             json.dump(test_config, f)
+        # Ensure get_provider_config can find the API key even when the
+        # ConfigManager singleton bypasses get_config_path patching.
+        self._old_glm_api_key = os.environ.get("GLM_API_KEY")
+        os.environ["GLM_API_KEY"] = "test_api_key_12345678"
+
+    def tearDown(self):
+        if self._old_glm_api_key is not None:
+            os.environ["GLM_API_KEY"] = self._old_glm_api_key
+        else:
+            os.environ.pop("GLM_API_KEY", None)
 
     def _make_repl(self) -> ClawcodexREPL:
         """Create a minimal ClawcodexREPL instance for testing replay."""
+        # _load_heavy_runtime() must be called first so module-level
+        # globals (Session, get_provider_config, etc.) exist before
+        # patches try to resolve them.
+        from clawcodex_ext.repl.core import _load_heavy_runtime
+
+        _load_heavy_runtime()
+
         with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
-            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+            with patch("src.agent.Session") as mock_session_class:
                 mock_session_instance = Mock()
                 mock_session_instance.session_id = "test-session"
-                mock_session.return_value = mock_session_instance
+                mock_session_class.create.return_value = mock_session_instance
 
                 with patch("src.providers.get_provider_class") as mock_provider_class:
                     mock_provider = Mock()
                     mock_provider.model = "glm-4.5"
                     mock_provider_class.return_value = mock_provider
-
-                    # get_provider_config is loaded into module globals
-                    # by _load_heavy_runtime(); patch it to return test config.
-                    mock_config = {
-                        "api_key": "test_api_key_12345678",
-                        "base_url": "https://open.bigmodel.cn/api/paas/v4",
-                        "default_model": "glm-4.5",
-                    }
-                    with patch(
-                        "clawcodex_ext.repl.core.get_provider_config",
-                        return_value=mock_config,
-                    ):
-                        return ClawcodexREPL(provider_name="glm")
+                    return ClawcodexREPL(provider_name="glm")
 
     def test_replay_tool_only_assistant_suppresses_label(self):
         """Tool-only assistant messages must NOT print the Assistant label,
