@@ -719,6 +719,56 @@ class TestREPL(unittest.TestCase):
                         repl.load_session("loaded_session_123")
 
                         self.assertEqual(repl.session.session_id, "loaded_session_123")
+                        # _engine_messages should be populated (empty list in this trivial case)
+                        self.assertEqual(repl._engine_messages, [])
+
+    def test_load_session_populates_engine_messages(self):
+        """load_session must populate _engine_messages from the restored
+        conversation so the next chat() call's QueryEngine sees the full
+        history rather than starting with an empty mutable-message list."""
+        from clawcodex_ext.types.content_blocks import TextBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        loaded_session = Mock()
+        loaded_session.session_id = "resumed_session"
+        loaded_session.provider = "glm"
+        loaded_session.model = "glm-4.5"
+        loaded_session.conversation = Mock()
+        loaded_session.conversation.messages = [
+            UserMessage(content="Hello"),
+            AssistantMessage(content=[TextBlock(text="Hi there")]),
+        ]
+
+        # Mock Session.resume (the classmethod called by load_session)
+        # by patching the src.agent module where the import resolves.
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("src.agent.Session") as mock_session_class:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = "current_session"
+                mock_session_class.create.return_value = mock_session_instance
+                mock_session_class.resume.return_value = loaded_session
+
+                with patch("src.providers.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    repl = ClawcodexREPL(provider_name="glm")
+                    # Clear default _engine_messages then load
+                    repl._engine_messages = []
+                    repl.load_session("resumed_session")
+
+                    self.assertEqual(repl.session.session_id, "resumed_session")
+                    # _engine_messages must contain the restored messages
+                    self.assertEqual(len(repl._engine_messages), 2)
+                    self.assertIs(
+                        repl._engine_messages[0],
+                        loaded_session.conversation.messages[0],
+                    )
+                    self.assertIs(
+                        repl._engine_messages[1],
+                        loaded_session.conversation.messages[1],
+                    )
 
     def test_load_nonexistent_session(self):
         """Test loading a session that doesn't exist."""
@@ -1255,6 +1305,172 @@ class TestREPLConversationSanitization(unittest.TestCase):
             ),
             "sanitization must be called with the image_unsupported AssistantMessage; "
             f"got call_args_list={call_args_list!r}",
+        )
+
+
+class TestREPLResumeReplay(unittest.TestCase):
+    """Pins the rendering behaviour of ``_replay_resume_history()``.
+
+    Tests that:
+    * Tool-only assistant messages do NOT print a lonely "Assistant" label
+    * String-content assistant messages do NOT produce a duplicate label
+    * Text-bearing assistant messages still print "Assistant" as expected
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.config_dir = Path(self.temp_dir) / ".clawcodex"
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        test_config = {
+            "default_provider": "glm",
+            "providers": {
+                "glm": {
+                    "api_key": "test_api_key_12345678",
+                    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                    "default_model": "glm-4.5",
+                }
+            },
+        }
+        config_file = self.config_dir / "config.json"
+        with open(config_file, "w") as f:
+            json.dump(test_config, f)
+
+    def _make_repl(self) -> ClawcodexREPL:
+        """Create a minimal ClawcodexREPL instance for testing replay."""
+        with patch("src.config.get_config_path", return_value=self.config_dir / "config.json"):
+            with patch("clawcodex_ext.repl.core.Session.create") as mock_session:
+                mock_session_instance = Mock()
+                mock_session_instance.session_id = "test-session"
+                mock_session.return_value = mock_session_instance
+
+                with patch("src.providers.get_provider_class") as mock_provider_class:
+                    mock_provider = Mock()
+                    mock_provider.model = "glm-4.5"
+                    mock_provider_class.return_value = mock_provider
+
+                    # get_provider_config is loaded into module globals
+                    # by _load_heavy_runtime(); patch it to return test config.
+                    mock_config = {
+                        "api_key": "test_api_key_12345678",
+                        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+                        "default_model": "glm-4.5",
+                    }
+                    with patch(
+                        "clawcodex_ext.repl.core.get_provider_config",
+                        return_value=mock_config,
+                    ):
+                        return ClawcodexREPL(provider_name="glm")
+
+    def test_replay_tool_only_assistant_suppresses_label(self):
+        """Tool-only assistant messages must NOT print the Assistant label,
+        avoiding the visual bug where multiple lonely 'Assistant' lines
+        stack up with no content underneath."""
+        from clawcodex_ext.types.content_blocks import ToolUseBlock
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        repl = self._make_repl()
+
+        # Two assistant messages: text-bearing and tool-only.
+        # The tool-only one should NOT produce an "Assistant" print.
+        user_msg = UserMessage(content="do something")
+        text_assistant = AssistantMessage(
+            content=[TextBlock(text="I will help")]
+        )
+        tool_assistant = AssistantMessage(
+            content=[
+                ToolUseBlock(id="call-1", name="Bash", input={"command": "echo hello"}),
+                ToolUseBlock(id="call-2", name="Read", input={"path": "/tmp/x"}),
+            ]
+        )
+        repl.session.conversation.messages = [
+            user_msg,
+            text_assistant,
+            tool_assistant,
+        ]
+
+        repl.console.print = Mock()
+        repl._resume_session_id = "test-session"
+        repl._replay_resume_history()
+
+        # Collect all console.print call arguments (ignore the header/footer lines)
+        printed_lines = []
+        for call_args in repl.console.print.call_args_list:
+            arg = call_args[0][0] if call_args[0] else ""
+            printed_lines.append(str(arg))
+
+        # The text assistant should produce exactly one "Assistant" print
+        assistant_lines = [ln for ln in printed_lines if "Assistant" in ln]
+        self.assertEqual(
+            len(assistant_lines),
+            1,
+            f"Expected exactly 1 'Assistant' print (text message), got {len(assistant_lines)}: "
+            f"{assistant_lines}",
+        )
+
+        # Verify the tool-use header was deferred (printed as part of the
+        # flush at end) — it should contain the tool name.
+        tool_headers = [ln for ln in printed_lines if "●" in ln]
+        self.assertEqual(
+            len(tool_headers),
+            2,
+            f"Expected 2 tool-use headers, got {len(tool_headers)}",
+        )
+
+    def test_replay_string_content_no_duplicate_label(self):
+        """Assistant messages with string content must not produce a
+        duplicate 'Assistant' label (bug: the unconditional print at the
+        top of the assistant branch plus the string-content branch both
+        printed it)."""
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        repl = self._make_repl()
+        repl.session.conversation.messages = [
+            UserMessage(content="hi"),
+            AssistantMessage(content="Hello there"),
+        ]
+
+        repl.console.print = Mock()
+        repl._resume_session_id = "test-session"
+        repl._replay_resume_history()
+
+        printed_lines = []
+        for call_args in repl.console.print.call_args_list:
+            arg = call_args[0][0] if call_args[0] else ""
+            printed_lines.append(str(arg))
+
+        assistant_lines = [ln for ln in printed_lines if "Assistant" in ln]
+        self.assertEqual(
+            len(assistant_lines),
+            1,
+            f"Expected exactly 1 'Assistant' print for string content, "
+            f"got {len(assistant_lines)}: {assistant_lines}",
+        )
+
+    def test_replay_text_content_prints_assistant_label(self):
+        """Text-bearing assistant messages must still print the Assistant
+        label so the user sees the turn boundary."""
+        from clawcodex_ext.types.messages import AssistantMessage, UserMessage
+
+        repl = self._make_repl()
+        repl.session.conversation.messages = [
+            UserMessage(content="hello"),
+            AssistantMessage(content=[TextBlock(text="Hi, how can I help?")]),
+        ]
+
+        repl.console.print = Mock()
+        repl._resume_session_id = "test-session"
+        repl._replay_resume_history()
+
+        printed_lines = []
+        for call_args in repl.console.print.call_args_list:
+            arg = call_args[0][0] if call_args[0] else ""
+            printed_lines.append(str(arg))
+
+        assistant_lines = [ln for ln in printed_lines if "Assistant" in ln]
+        self.assertGreaterEqual(
+            len(assistant_lines),
+            1,
+            "Expected at least 1 'Assistant' print for text-bearing message, got none",
         )
 
 
