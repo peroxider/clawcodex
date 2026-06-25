@@ -21,6 +21,17 @@ jobs:
       - uses: setup-python@0.0.1
         with:
           python-version: "3.11"
+      - name: Derive RELEASE_TAG from event context
+        run: |
+          if [ -n "${RELEASE_TAG}" ]; then
+            echo "RELEASE_TAG already set to ${RELEASE_TAG}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "RELEASE_TAG=${TAG}" >> "${GITHUB_ENV}"
+            echo "Set RELEASE_TAG to ${TAG} from push tag"
+          else
+            echo "No RELEASE_TAG — version will use dynamic CalVer"
+          fi
       - name: Install uv and dependencies
         run: |
           set -euo pipefail
@@ -33,6 +44,40 @@ jobs:
           cd repo_workspace
           source .venv/bin/activate
           python scripts/ci/bump_version.py --apply
+      - name: Verify installer version consistency
+        run: |
+          set -euo pipefail
+          cd repo_workspace
+          # After bump_version.py --apply, all four version sources must
+          # agree.  This catches a missed PATCHER entry, a regex drift, or
+          # a manual edit to one installer that the bump didn't reach.
+          extract() {
+            local file="$1" pattern="$2"
+            if [ ! -f "$file" ]; then
+              echo "MISSING: $file" >&2
+              return 1
+            fi
+            grep -oE "$pattern" "$file" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+          }
+          SH_INSTALLER=$(extract install.sh 'readonly INSTALLER_VERSION="[0-9]+\.[0-9]+\.[0-9]+"')
+          SH_CLAW=$(extract install.sh 'readonly CLAWCODEX_VERSION="[0-9]+\.[0-9]+\.[0-9]+"')
+          PS_INSTALLER=$(extract install.ps1 "InstallerVersion\s+=\s+'[0-9]+\.[0-9]+\.[0-9]+'")
+          PS_CLAW=$(extract install.ps1 "ClawCodexVersion\s+=\s+'[0-9]+\.[0-9]+\.[0-9]+'")
+          PY_VER=$(.venv/bin/python -c "from clawcodex_ext._version import __version__; print(__version__)")
+          echo "install.sh    INSTALLER_VERSION = $SH_INSTALLER"
+          echo "install.sh    CLAWCODEX_VERSION = $SH_CLAW"
+          echo "install.ps1   InstallerVersion  = $PS_INSTALLER"
+          echo "install.ps1   ClawCodexVersion  = $PS_CLAW"
+          echo "clawcodex_ext __version__       = $PY_VER"
+          if [ -z "$SH_INSTALLER" ] || [ -z "$SH_CLAW" ] || [ -z "$PS_INSTALLER" ] || [ -z "$PS_CLAW" ] || [ -z "$PY_VER" ]; then
+            echo "One or more version sources are empty — bump_version.py may have failed to update install.ps1." >&2
+            exit 1
+          fi
+          if [ "$SH_INSTALLER" != "$SH_CLAW" ] || [ "$SH_INSTALLER" != "$PS_INSTALLER" ] || [ "$SH_INSTALLER" != "$PS_CLAW" ] || [ "$SH_INSTALLER" != "$PY_VER" ]; then
+            echo "Version mismatch across installers.  bump_version.py did not sync them." >&2
+            exit 1
+          fi
+          echo "All four installer sources agree on version $SH_INSTALLER"
       - name: Build, verify, and publish package
         env:
           TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}
