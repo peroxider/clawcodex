@@ -1,6 +1,6 @@
 diff --git a/context_system/microcompact.py b/context_system/microcompact.py
 --- a/context_system/microcompact.py	2026-06-18 10:10:17.290025 +0000
-+++ b/context_system/microcompact.py	2026-06-22 09:03:22.742118 +0000
++++ b/context_system/microcompact.py	2026-06-22 17:23:55.000000 +0800
 @@ -1,469 +1,9 @@
 -"""
 -Microcompact: lightweight message pre-processing (Layer 3).

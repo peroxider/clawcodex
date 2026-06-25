@@ -1,6 +1,6 @@
 diff --git a/tool_system/tools/bash/bash_tool.py b/tool_system/tools/bash/bash_tool.py
 --- a/tool_system/tools/bash/bash_tool.py	2026-06-18 10:10:16.922805 +0000
-+++ b/tool_system/tools/bash/bash_tool.py	2026-06-25 06:46:42.788176 +0000
++++ b/tool_system/tools/bash/bash_tool.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,630 +1,18 @@
 -"""Core bash tool definition -- execution, permissions, and result mapping."""
 +"""Facade — tool_system/tools/bash/bash_tool.py moved to clawcodex_ext.tool_system.tools.bash.bash_tool (sys.modules swap).

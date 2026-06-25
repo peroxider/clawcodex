@@ -1,7 +1,7 @@
 diff --git a/utils/agent_mention_completer.py b/utils/agent_mention_completer.py
 new file mode 100644
 --- /dev/null
-+++ b/utils/agent_mention_completer.py	2026-06-25 06:46:43.233786 +0000
++++ b/utils/agent_mention_completer.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,14 @@
 +"""Facade — utils/agent_mention_completer.py has been moved to clawcodex_ext.
 +

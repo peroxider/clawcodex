@@ -1,6 +1,6 @@
 diff --git a/query/query.py b/query/query.py
 --- a/query/query.py	2026-06-18 10:10:15.564113 +0000
-+++ b/query/query.py	2026-06-25 06:46:43.089320 +0000
++++ b/query/query.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,1671 +1,18 @@
 -from __future__ import annotations
 -

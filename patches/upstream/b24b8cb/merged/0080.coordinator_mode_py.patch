@@ -1,6 +1,6 @@
 diff --git a/coordinator/mode.py b/coordinator/mode.py
 --- a/coordinator/mode.py	2026-06-18 10:10:16.789794 +0000
-+++ b/coordinator/mode.py	2026-06-25 06:46:42.531559 +0000
++++ b/coordinator/mode.py	2026-06-25 15:09:03.000000 +0800
 @@ -9,20 +9,22 @@
  * ``INTERNAL_WORKER_TOOLS`` — frozenset of tool names workers cannot
    use (TeamCreate / TeamDelete / SendMessage / StructuredOutput).

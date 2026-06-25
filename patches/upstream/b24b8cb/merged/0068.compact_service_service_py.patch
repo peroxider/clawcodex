@@ -1,6 +1,6 @@
 diff --git a/compact_service/service.py b/compact_service/service.py
 --- a/compact_service/service.py	2026-06-18 10:10:17.441868 +0000
-+++ b/compact_service/service.py	2026-06-25 06:46:42.306535 +0000
++++ b/compact_service/service.py	2026-06-25 15:09:03.000000 +0800
 @@ -13,8 +13,8 @@
  from typing import Any, Optional
  

@@ -1,9 +1,10 @@
 diff --git a/buddy/sprites.py b/buddy/sprites.py
 --- a/buddy/sprites.py	2026-06-18 10:10:15.490419 +0000
-+++ b/buddy/sprites.py	2026-06-24 03:56:09.875184 +0000
++++ b/buddy/sprites.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,530 +1,3 @@
 -"""ASCII sprite library. Port of ``typescript/src/buddy/sprites.ts``.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.buddy.sprites`."""
+ 
 -Each species has 3 frames; each frame is 5 lines of 12 characters with
 -``{E}`` placeholders for the eye glyph. ``render_sprite()`` substitutes
 -the eye and optionally overwrites line 0 with the hat.
@@ -532,6 +533,4 @@ diff --git a/buddy/sprites.py b/buddy/sprites.py
 -    'BODIES', 'HAT_LINES',
 -    'render_face', 'render_sprite', 'sprite_frame_count',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.buddy.sprites`."""
-+
 +from clawcodex_ext.buddy.sprites import *  # noqa: F401,F403

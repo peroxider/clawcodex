@@ -1,9 +1,10 @@
 diff --git a/services/swarm/permissions.py b/services/swarm/permissions.py
 --- a/services/swarm/permissions.py	2026-06-18 10:10:16.452034 +0000
-+++ b/services/swarm/permissions.py	2026-06-22 12:08:58.290277 +0000
++++ b/services/swarm/permissions.py	2026-06-22 20:28:35.000000 +0800
 @@ -1,71 +1,3 @@
 -"""Swarm permission synchronization.
--
++"""Facade — services/swarm/permissions.py moved to clawcodex_ext/services/swarm/."""
+ 
 -Mirrors TypeScript swarm/permissions.ts — synchronizes permission decisions
 -across teammates so one approval applies to all.
 -"""
@@ -73,6 +74,4 @@ diff --git a/services/swarm/permissions.py b/services/swarm/permissions.py
 -    @staticmethod
 -    def _make_key(tool_name: str, rule_content: str | None) -> str:
 -        return f"{tool_name}:{rule_content or '*'}"
-+"""Facade — services/swarm/permissions.py moved to clawcodex_ext/services/swarm/."""
-+
 +from clawcodex_ext.services.swarm.permissions import *  # noqa: F401,F403

@@ -1,6 +1,6 @@
 diff --git a/permissions/bash_parser/commands.py b/permissions/bash_parser/commands.py
 --- a/permissions/bash_parser/commands.py	2026-06-18 10:10:16.871441 +0000
-+++ b/permissions/bash_parser/commands.py	2026-06-25 06:46:43.180040 +0000
++++ b/permissions/bash_parser/commands.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,204 +1,3 @@
 -from __future__ import annotations
 +"""Facade — permissions/bash_parser/commands.py moved to clawcodex_ext/permissions/bash_parser/."""

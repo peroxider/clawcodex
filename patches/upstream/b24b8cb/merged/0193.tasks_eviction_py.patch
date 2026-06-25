@@ -1,6 +1,6 @@
 diff --git a/tasks/eviction.py b/tasks/eviction.py
 --- a/tasks/eviction.py	2026-06-18 10:10:15.623943 +0000
-+++ b/tasks/eviction.py	2026-06-25 06:46:42.512266 +0000
++++ b/tasks/eviction.py	2026-06-25 15:09:03.000000 +0800
 @@ -20,6 +20,7 @@
  3. **Idempotent start.** ``start_eviction_sweeper`` is safe to call
     multiple times; only the first call spawns the thread.

@@ -1,6 +1,6 @@
 diff --git a/tui/vim_operators.py b/tui/vim_operators.py
 --- a/tui/vim_operators.py	2026-06-18 10:10:15.330352 +0000
-+++ b/tui/vim_operators.py	2026-06-25 06:46:42.944895 +0000
++++ b/tui/vim_operators.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,298 +1,20 @@
 -"""Vim operators with motion/text-object composition + count prefixes.
 -

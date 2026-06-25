@@ -1,6 +1,6 @@
 diff --git a/bridge/code_session_api.py b/bridge/code_session_api.py
 --- a/bridge/code_session_api.py	2026-06-18 10:10:15.940490 +0000
-+++ b/bridge/code_session_api.py	2026-06-25 06:46:42.450099 +0000
++++ b/bridge/code_session_api.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,265 +1,11 @@
 -"""HTTP wrappers for the CCR v2 code-session API + worker registration.
 -
@@ -24,9 +24,10 @@ diff --git a/bridge/code_session_api.py b/bridge/code_session_api.py
 -response) — matches TS ``return null`` rather than raising. Callers log
 -and continue.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.code_session_api`."""
+ 
+ from __future__ import annotations
+ 
 -import logging
 -from dataclasses import dataclass
 -from typing import Any
@@ -245,7 +246,8 @@ diff --git a/bridge/code_session_api.py b/bridge/code_session_api.py
 -        data = resp.json()
 -    except ValueError as exc:
 -        raise RuntimeError(f'register_worker: invalid JSON response: {exc}') from exc
--
++import sys
+ 
 -    if not isinstance(data, dict):
 -        raise RuntimeError('register_worker: response is not an object')
 -    raw = data.get('worker_epoch')
@@ -257,8 +259,10 @@ diff --git a/bridge/code_session_api.py b/bridge/code_session_api.py
 -        raise RuntimeError(
 -            f'register_worker: invalid worker_epoch: {exc}'
 -        ) from exc
--
--
++from clawcodex_ext.bridge import code_session_api as _module
+ 
++sys.modules[__name__] = _module
+ 
 -__all__ = [
 -    'ANTHROPIC_VERSION',
 -    'DEFAULT_TIMEOUT_SECONDS',
@@ -267,14 +271,4 @@ diff --git a/bridge/code_session_api.py b/bridge/code_session_api.py
 -    'fetch_remote_credentials',
 -    'register_worker',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.code_session_api`."""
-+
-+from __future__ import annotations
-+
-+import sys
-+
-+from clawcodex_ext.bridge import code_session_api as _module
-+
-+sys.modules[__name__] = _module
-+
 +__all__ = getattr(_module, '__all__', [])

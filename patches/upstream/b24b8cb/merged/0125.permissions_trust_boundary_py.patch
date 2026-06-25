@@ -1,6 +1,6 @@
 diff --git a/permissions/trust_boundary.py b/permissions/trust_boundary.py
 --- a/permissions/trust_boundary.py	2026-06-18 10:10:16.896653 +0000
-+++ b/permissions/trust_boundary.py	2026-06-25 06:46:43.120207 +0000
++++ b/permissions/trust_boundary.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,285 +1,3 @@
 -"""Two-stage env-var trust boundary — chapter 2 §"The Trust Boundary".
 +"""Facade — permissions/trust_boundary.py moved to clawcodex_ext/permissions/."""

@@ -1,6 +1,6 @@
 diff --git a/command_system/skills_integration.py b/command_system/skills_integration.py
 --- a/command_system/skills_integration.py	2026-06-18 10:10:17.255028 +0000
-+++ b/command_system/skills_integration.py	2026-06-25 06:46:42.389296 +0000
++++ b/command_system/skills_integration.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,210 +1,22 @@
 -"""
 -Skills system integration with command system.

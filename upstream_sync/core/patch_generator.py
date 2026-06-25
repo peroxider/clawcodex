@@ -509,16 +509,40 @@ class PatchGenerator:
 
     @staticmethod
     def _timestamp(path: Path | None) -> str:
-        """Format modification timestamp for patch headers."""
+        """Format modification timestamp for patch headers.
+
+        Uses the file's last-commit time (``git log -1 --format=%cI``) so
+        the value is stable across regen runs and does not drift when
+        local files are touched (e.g. by an editor or ``sed -i``).
+        Falls back to filesystem mtime for paths not tracked by git.
+        """
         if path is None:
             return "1970-01-01 00:00:00.000000000 +0000"
+        try:
+            result = subprocess.run(
+                ["git", "log", "-1", "--format=%cI", "--", str(path)],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout:
+                iso = result.stdout.decode("utf-8").strip()
+                dt = datetime.fromisoformat(iso)
+                return dt.strftime("%Y-%m-%d %H:%M:%S.%f %z")
+        except (subprocess.TimeoutExpired, ValueError, OSError):
+            pass
         return datetime.fromtimestamp(os.path.getmtime(path), tz=timezone.utc).strftime(
             "%Y-%m-%d %H:%M:%S.%f %z"
         )
 
     @staticmethod
     def run_diff_raw(upstream_path: Path, src_path: Path) -> str:
-        """Run ``diff -u`` between two files and return the output."""
+        """Run ``diff -u`` between two files and return the output.
+
+        Replaces the filesystem-mtime timestamps that ``diff -u`` injects
+        into ``---``/``+++`` headers with deterministic values from
+        ``_timestamp()`` (git's last-commit time). This keeps the output
+        stable across regen runs even if local file mtimes change.
+        """
         result = subprocess.run(
             ["diff", "-u", str(upstream_path), str(src_path)],
             capture_output=True,
@@ -526,35 +550,42 @@ class PatchGenerator:
         )
         if result.returncode not in (0, 1):
             raise RuntimeError(result.stderr.decode("utf-8", errors="replace"))
-        return result.stdout.decode("utf-8", errors="replace")
+        output = result.stdout.decode("utf-8", errors="replace")
+        upstream_ts = PatchGenerator._timestamp(upstream_path)
+        src_ts = PatchGenerator._timestamp(src_path)
+        output = re.sub(
+            r"^(--- [^\t\n]*)\t[^\n]*$",
+            rf"\g<1>\t{upstream_ts}",
+            output,
+            flags=re.MULTILINE,
+        )
+        output = re.sub(
+            r"^(\+\+\+ [^\t\n]*)\t[^\n]*$",
+            rf"\g<1>\t{src_ts}",
+            output,
+            flags=re.MULTILINE,
+        )
+        return output
 
     @staticmethod
     def _added_lines_from_raw(raw: bytes) -> str | None:
-        """Generate unified-diff body for a new (fork-only) file."""
+        """Generate unified-diff body for a new (fork-only) file.
+
+        Line endings are normalised to LF: ``splitlines()`` transparently
+        handles ``\\r\\n``, ``\\r`` and ``\\n`` and returns LF-normalised
+        content. This prevents CRLF in downstream source files from
+        leaking into generated patches (project convention is LF; b24b8cb
+        commit's committed patches are LF). See CONFLICT_REPORT.md §9.
+        """
         ends_with_newline = raw.endswith(b"\n")
-        has_crlf = b"\r\n" in raw
         content = raw.decode("utf-8")
+        lines = content.splitlines()
 
-        if has_crlf:
-            lines = content.split("\r\n")
-            if content.endswith("\r\n"):
-                lines.pop()
-            newline_marker = "\r"
-        else:
-            lines = content.split("\n")
-            if content.endswith("\n"):
-                lines.pop()
-            newline_marker = ""
-
-        if not lines:
+        if not lines and content:
             return None
 
         diff_lines = [f"@@ -0,0 +1,{len(lines)} @@"]
-        for index, line in enumerate(lines):
-            if has_crlf and (index < len(lines) - 1 or ends_with_newline):
-                diff_lines.append(f"+{line}{newline_marker}")
-            else:
-                diff_lines.append(f"+{line}")
+        diff_lines.extend(f"+{line}" for line in lines)
 
         body = "\n".join(diff_lines) + "\n"
         if not ends_with_newline:

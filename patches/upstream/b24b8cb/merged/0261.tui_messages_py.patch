@@ -1,6 +1,6 @@
 diff --git a/tui/messages.py b/tui/messages.py
 --- a/tui/messages.py	2026-06-18 10:10:15.278061 +0000
-+++ b/tui/messages.py	2026-06-25 06:46:42.820851 +0000
++++ b/tui/messages.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,194 +1,31 @@
 -"""Textual ``Message`` subclasses used to push events from the agent-loop
 -worker thread (and other background tasks) into the UI.

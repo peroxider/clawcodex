@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/assistant_text.py b/tui/widgets/messages/assistant_text.py
 --- a/tui/widgets/messages/assistant_text.py	2026-06-18 10:10:15.109901 +0000
-+++ b/tui/widgets/messages/assistant_text.py	2026-06-25 06:46:43.079695 +0000
++++ b/tui/widgets/messages/assistant_text.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,234 +1,17 @@
 -"""Assistant turn row with live streaming + progressive Markdown rendering.
 -

@@ -1,7 +1,7 @@
 diff --git a/entrypoints/orchestrator.py b/entrypoints/orchestrator.py
 new file mode 100644
 --- /dev/null
-+++ b/entrypoints/orchestrator.py	2026-06-25 06:46:42.800374 +0000
++++ b/entrypoints/orchestrator.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,15 @@
 +"""Facade — entrypoints/orchestrator.py has been moved to clawcodex_ext.
 +

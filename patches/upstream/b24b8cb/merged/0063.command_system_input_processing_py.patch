@@ -1,6 +1,6 @@
 diff --git a/command_system/input_processing.py b/command_system/input_processing.py
 --- a/command_system/input_processing.py	2026-06-18 10:10:17.252386 +0000
-+++ b/command_system/input_processing.py	2026-06-25 09:46:56.066442 +0000
++++ b/command_system/input_processing.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,918 +1,27 @@
 -"""User input processing matching TypeScript utils/input.ts and commands/parseInput.ts.
 -

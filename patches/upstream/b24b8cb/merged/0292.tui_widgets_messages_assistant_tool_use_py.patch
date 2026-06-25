@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/assistant_tool_use.py b/tui/widgets/messages/assistant_tool_use.py
 --- a/tui/widgets/messages/assistant_tool_use.py	2026-06-18 10:10:15.128826 +0000
-+++ b/tui/widgets/messages/assistant_tool_use.py	2026-06-25 06:46:43.130015 +0000
++++ b/tui/widgets/messages/assistant_tool_use.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,132 +1,17 @@
 -"""Assistant tool-use row.
 -

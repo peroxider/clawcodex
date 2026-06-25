@@ -1,9 +1,10 @@
 diff --git a/auth/aws.py b/auth/aws.py
 --- a/auth/aws.py	2026-06-18 10:10:15.360170 +0000
-+++ b/auth/aws.py	2026-06-24 03:56:09.757437 +0000
++++ b/auth/aws.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,67 +1,3 @@
 -"""AWS Bedrock authentication matching TypeScript model/bedrock.ts."""
--
++"""Compatibility facade — see :mod:`clawcodex_ext.auth.aws`."""
+ 
 -from __future__ import annotations
 -
 -import logging
@@ -69,6 +70,4 @@ diff --git a/auth/aws.py b/auth/aws.py
 -        """Get the Bedrock endpoint URL for a region."""
 -        r = region or self.region or "us-east-1"
 -        return f"https://bedrock-runtime.{r}.amazonaws.com"
-+"""Compatibility facade — see :mod:`clawcodex_ext.auth.aws`."""
-+
 +from clawcodex_ext.auth.aws import *  # noqa: F401,F403

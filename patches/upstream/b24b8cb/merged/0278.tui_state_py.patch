@@ -1,6 +1,6 @@
 diff --git a/tui/state.py b/tui/state.py
 --- a/tui/state.py	2026-06-18 10:10:15.256986 +0000
-+++ b/tui/state.py	2026-06-25 06:46:42.911290 +0000
++++ b/tui/state.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,213 +1,21 @@
 -"""In-memory UI state for the Claw Codex TUI.
 -

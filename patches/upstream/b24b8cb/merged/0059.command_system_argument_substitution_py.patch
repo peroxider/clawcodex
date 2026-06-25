@@ -1,6 +1,6 @@
 diff --git a/command_system/argument_substitution.py b/command_system/argument_substitution.py
 --- a/command_system/argument_substitution.py	2026-06-18 10:10:17.269800 +0000
-+++ b/command_system/argument_substitution.py	2026-06-25 06:46:42.507669 +0000
++++ b/command_system/argument_substitution.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,120 +1,18 @@
 -"""
 -Argument substitution for commands and skills.

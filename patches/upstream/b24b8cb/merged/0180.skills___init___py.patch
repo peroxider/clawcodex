@@ -1,6 +1,6 @@
 diff --git a/skills/__init__.py b/skills/__init__.py
 --- a/skills/__init__.py	2026-06-18 10:10:16.143121 +0000
-+++ b/skills/__init__.py	2026-06-25 06:46:42.929078 +0000
++++ b/skills/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,90 +1,75 @@
 -from .argument_substitution import parse_arguments, substitute_arguments
 -from .bundled import init_bundled_skills

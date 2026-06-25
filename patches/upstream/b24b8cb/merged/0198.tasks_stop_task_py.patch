@@ -1,6 +1,6 @@
 diff --git a/tasks/stop_task.py b/tasks/stop_task.py
 --- a/tasks/stop_task.py	2026-06-18 10:10:15.634130 +0000
-+++ b/tasks/stop_task.py	2026-06-25 06:46:42.605828 +0000
++++ b/tasks/stop_task.py	2026-06-25 15:09:03.000000 +0800
 @@ -14,14 +14,15 @@
  plumbing and where Phase 6's in-process-teammate ``kill`` slots in
  without re-touching the tool body.

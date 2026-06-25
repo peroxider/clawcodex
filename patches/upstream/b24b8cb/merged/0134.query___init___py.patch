@@ -1,6 +1,6 @@
 diff --git a/query/__init__.py b/query/__init__.py
 --- a/query/__init__.py	2026-06-18 10:10:15.575481 +0000
-+++ b/query/__init__.py	2026-06-25 06:46:42.970018 +0000
++++ b/query/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,17 +1,41 @@
 -from .config import FrozenQueryConfig, QueryConfig, build_query_config
 -from .engine import QueryEngine, QueryEngineConfig

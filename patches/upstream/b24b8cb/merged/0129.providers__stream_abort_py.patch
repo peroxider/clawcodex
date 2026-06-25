@@ -1,9 +1,10 @@
 diff --git a/providers/_stream_abort.py b/providers/_stream_abort.py
 --- a/providers/_stream_abort.py	2026-06-18 10:10:16.703271 +0000
-+++ b/providers/_stream_abort.py	2026-06-25 06:46:42.613917 +0000
++++ b/providers/_stream_abort.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,245 +1,10 @@
 -"""Shared abort-signal helper for provider streaming paths.
--
++"""Facade — providers/_stream_abort.py has been moved to clawcodex_ext/providers/_stream_abort.py.
+ 
 -Three providers (Anthropic, Minimax, OpenAI-compatible) all need the
 -same pattern to make ESC interrupt a streaming HTTP read mid-flight:
 -
@@ -36,7 +37,10 @@ diff --git a/providers/_stream_abort.py b/providers/_stream_abort.py
 -block. The provider keeps full control over fallbacks (e.g.
 -Anthropic's ``StreamWatchdog`` non-streaming recovery) — the guard
 -just owns the listener lifecycle.
--"""
++Uses ``globals().update()`` so the test suite can still import private
++helpers (e.g. ``from src.providers._stream_abort import
++StreamAbortGuard, _close_response_safely``).
+ """
 -from __future__ import annotations
 -
 -from typing import TYPE_CHECKING, Any
@@ -214,14 +218,15 @@ diff --git a/providers/_stream_abort.py b/providers/_stream_abort.py
 -
 -        def _close() -> None:
 -            _close_response_safely(stream)
--
+ 
 -        # Register, then re-check. See the docstring above for the
 -        # race analysis.
 -        self._listener = self._signal.add_listener(_close, once=True)
 -        if self._signal.aborted:
 -            _close()
 -        return self
--
++import clawcodex_ext.providers._stream_abort as _mod
+ 
 -    def __exit__(self, exc_type, exc, tb) -> bool:
 -        # Close-on-abort guarantee. The listener-firing path closes
 -        # the response synchronously from whichever thread tripped
@@ -247,13 +252,4 @@ diff --git a/providers/_stream_abort.py b/providers/_stream_abort.py
 -        # try/except is where exception translation happens via
 -        # ``StreamAbortGuard.reraise_if_aborted``.
 -        return False
-+"""Facade — providers/_stream_abort.py has been moved to clawcodex_ext/providers/_stream_abort.py.
-+
-+Uses ``globals().update()`` so the test suite can still import private
-+helpers (e.g. ``from src.providers._stream_abort import
-+StreamAbortGuard, _close_response_safely``).
-+"""
-+
-+import clawcodex_ext.providers._stream_abort as _mod
-+
 +globals().update(vars(_mod))

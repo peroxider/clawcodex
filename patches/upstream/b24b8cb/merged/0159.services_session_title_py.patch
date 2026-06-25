@@ -1,6 +1,6 @@
 diff --git a/services/session_title.py b/services/session_title.py
 --- a/services/session_title.py	2026-06-18 10:10:16.620653 +0000
-+++ b/services/session_title.py	2026-06-25 04:21:10.958799 +0000
++++ b/services/session_title.py	2026-06-24 14:40:58.000000 +0800
 @@ -1,95 +1,9 @@
 -"""Session title generation matching TypeScript session/title.ts."""
 +"""Facade — services/session_title.py has been moved to clawcodex_ext.

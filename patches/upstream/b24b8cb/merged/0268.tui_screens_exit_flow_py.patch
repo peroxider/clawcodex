@@ -1,6 +1,6 @@
 diff --git a/tui/screens/exit_flow.py b/tui/screens/exit_flow.py
 --- a/tui/screens/exit_flow.py	2026-06-18 10:10:15.012644 +0000
-+++ b/tui/screens/exit_flow.py	2026-06-25 06:46:42.536120 +0000
++++ b/tui/screens/exit_flow.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,94 +1,17 @@
 -"""Exit confirmation dialog.
 -

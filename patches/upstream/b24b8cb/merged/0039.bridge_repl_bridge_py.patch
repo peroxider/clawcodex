@@ -1,9 +1,10 @@
 diff --git a/bridge/repl_bridge.py b/bridge/repl_bridge.py
 --- a/bridge/repl_bridge.py	2026-06-18 10:10:15.897586 +0000
-+++ b/bridge/repl_bridge.py	2026-06-22 01:12:10.428504 +0000
++++ b/bridge/repl_bridge.py	2026-06-22 09:14:34.000000 +0800
 @@ -1,1394 +1,9 @@
 -"""Env-based bridge orchestrator — Phase 6 MVP slice.
--
++"""Facade — bridge/repl_bridge.py has been moved to extensions/ports/bridge/.
+ 
 -Ports the **public surface + happy path** of
 -``typescript/src/bridge/replBridge.ts`` (~2400 lines in TS).
 -
@@ -54,8 +55,12 @@ diff --git a/bridge/repl_bridge.py b/bridge/repl_bridge.py
 -  in a future phase.
 -* **Dropped-batch telemetry** + **work-id completion dedup** — both
 -  log-only enhancements; deferred.
--"""
--
++The full ReplBridge implementation (Phase 6 MVP slice) now lives in
++:mod:`extensions.ports.bridge.repl_bridge`. This module re-exports
++the public surface so existing ``from src.bridge.repl_bridge import ...``
++callers keep working without modification.
+ """
+ 
 -from __future__ import annotations
 -
 -import asyncio
@@ -1396,12 +1401,4 @@ diff --git a/bridge/repl_bridge.py b/bridge/repl_bridge.py
 -    'ReplBridgeHandle',
 -    'init_bridge_core',
 -]
-+"""Facade — bridge/repl_bridge.py has been moved to extensions/ports/bridge/.
-+
-+The full ReplBridge implementation (Phase 6 MVP slice) now lives in
-+:mod:`extensions.ports.bridge.repl_bridge`. This module re-exports
-+the public surface so existing ``from src.bridge.repl_bridge import ...``
-+callers keep working without modification.
-+"""
-+
 +from extensions.ports.bridge.repl_bridge import *  # noqa: F401,F403

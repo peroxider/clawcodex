@@ -1,6 +1,6 @@
 diff --git a/tui/markdown_cache.py b/tui/markdown_cache.py
 --- a/tui/markdown_cache.py	2026-06-18 10:10:15.334922 +0000
-+++ b/tui/markdown_cache.py	2026-06-25 06:46:42.895823 +0000
++++ b/tui/markdown_cache.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,262 +1,20 @@
 -"""LRU cache for ``rich.markdown.Markdown`` renders + fast-path detection.
 -

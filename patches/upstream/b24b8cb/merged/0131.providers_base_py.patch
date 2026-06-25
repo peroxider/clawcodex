@@ -1,6 +1,6 @@
 diff --git a/providers/base.py b/providers/base.py
 --- a/providers/base.py	2026-06-18 10:10:16.693445 +0000
-+++ b/providers/base.py	2026-06-22 09:03:23.542919 +0000
++++ b/providers/base.py	2026-06-22 17:23:55.000000 +0800
 @@ -1,175 +1,10 @@
 -"""Base provider abstract class for LLM providers."""
 +"""Facade — providers/base.py moved to clawcodex_ext/providers/.

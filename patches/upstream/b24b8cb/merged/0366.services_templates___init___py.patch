@@ -1,7 +1,7 @@
 diff --git a/services/templates/__init__.py b/services/templates/__init__.py
 new file mode 100644
 --- /dev/null
-+++ b/services/templates/__init__.py	2026-06-22 09:03:26.464879 +0000
++++ b/services/templates/__init__.py	2026-06-22 17:23:55.000000 +0800
 @@ -0,0 +1,9 @@
 +"""Facade — services/templates/ moved to clawcodex_ext/services/templates/.
 +

@@ -1,6 +1,6 @@
 diff --git a/tasks/in_process_teammate.py b/tasks/in_process_teammate.py
 --- a/tasks/in_process_teammate.py	2026-06-18 10:10:15.647930 +0000
-+++ b/tasks/in_process_teammate.py	2026-06-25 06:46:42.513784 +0000
++++ b/tasks/in_process_teammate.py	2026-06-25 15:09:03.000000 +0800
 @@ -38,13 +38,14 @@
  loop is a flat await; flagged here so a future TaskGroup refactor
  remembers to update.

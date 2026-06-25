@@ -1,6 +1,6 @@
 diff --git a/tasks/progress.py b/tasks/progress.py
 --- a/tasks/progress.py	2026-06-18 10:10:15.628658 +0000
-+++ b/tasks/progress.py	2026-06-22 09:03:26.792850 +0000
++++ b/tasks/progress.py	2026-06-22 17:23:55.000000 +0800
 @@ -1,218 +1,10 @@
 -"""Progress tracking for running agents — Chunk C / WI-2.4.
 +"""Facade — tasks/progress.py moved to clawcodex_ext/tasks/.

@@ -1,6 +1,6 @@
 diff --git a/tui/vim_buffer.py b/tui/vim_buffer.py
 --- a/tui/vim_buffer.py	2026-06-18 10:10:15.296422 +0000
-+++ b/tui/vim_buffer.py	2026-06-25 06:46:42.900423 +0000
++++ b/tui/vim_buffer.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,227 +1,19 @@
 -"""Multi-line buffer model + cursor coordinate type for vim mode.
 -

@@ -1,7 +1,7 @@
 diff --git a/services/kairos/__init__.py b/services/kairos/__init__.py
 new file mode 100644
 --- /dev/null
-+++ b/services/kairos/__init__.py	2026-06-22 17:10:11.067880 +0000
++++ b/services/kairos/__init__.py	2026-06-23 04:32:45.000000 +0800
 @@ -0,0 +1,9 @@
 +"""Facade — src/services/kairos/__init__.py has been moved to clawcodex_ext.
 +

@@ -1,12 +1,19 @@
 diff --git a/cli_core/structured_io.py b/cli_core/structured_io.py
 --- a/cli_core/structured_io.py	2026-06-18 10:10:16.243028 +0000
-+++ b/cli_core/structured_io.py	2026-06-22 02:25:53.612984 +0000
++++ b/cli_core/structured_io.py	2026-06-22 10:30:26.000000 +0800
 @@ -1,200 +1,17 @@
 -"""Structured NDJSON stdin/stdout for headless CLI mode.
--
++"""Facade — cli_core/structured_io.py has been moved to clawcodex_ext/cli_core/structured_io.
+ 
 -This is a focused port of ``typescript/src/cli/structuredIO.ts``. The goal is
 -to give SDK clients a stable, framing-safe protocol:
--
++The F-88 structured NDJSON I/O (``StreamJsonReader``,
++``StreamJsonWriter``, ``HeadlessEvent`` and subclasses) now lives in
++:mod:`clawcodex_ext.cli_core.structured_io`. This module re-exports
++the public surface so existing
++``from src.cli_core.structured_io import ...`` callers keep working
++without modification.
+ 
 -- ``StreamJsonReader`` parses ``--input-format stream-json`` lines from stdin
 -  into :class:`UserInputMessage` objects.
 -- ``StreamJsonWriter`` emits ``--output-format stream-json`` events, one
@@ -17,8 +24,10 @@ diff --git a/cli_core/structured_io.py b/cli_core/structured_io.py
 -init metadata, ``assistant`` for each completed assistant turn,
 -``partial_text`` for streaming token deltas, ``tool_use`` / ``tool_result`` /
 -``tool_error`` for tool activity, and ``result`` as the terminal event.
--"""
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module has no ``__all__``.
+ """
+ 
 -from __future__ import annotations
 -
 -import json
@@ -198,24 +207,10 @@ diff --git a/cli_core/structured_io.py b/cli_core/structured_io.py
 -            self._stream.flush()
 -        except Exception:
 -            pass
--
++import clawcodex_ext.cli_core.structured_io as _mod
+ 
 -    def write_many(self, events: Iterable[HeadlessEvent | dict[str, Any]]) -> None:
 -        for event in events:
 -            self.write(event)
-+"""Facade — cli_core/structured_io.py has been moved to clawcodex_ext/cli_core/structured_io.
-+
-+The F-88 structured NDJSON I/O (``StreamJsonReader``,
-+``StreamJsonWriter``, ``HeadlessEvent`` and subclasses) now lives in
-+:mod:`clawcodex_ext.cli_core.structured_io`. This module re-exports
-+the public surface so existing
-+``from src.cli_core.structured_io import ...`` callers keep working
-+without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module has no ``__all__``.
-+"""
-+
-+import clawcodex_ext.cli_core.structured_io as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

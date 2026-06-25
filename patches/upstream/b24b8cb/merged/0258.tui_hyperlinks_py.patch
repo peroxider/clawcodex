@@ -1,6 +1,6 @@
 diff --git a/tui/hyperlinks.py b/tui/hyperlinks.py
 --- a/tui/hyperlinks.py	2026-06-18 10:10:15.290724 +0000
-+++ b/tui/hyperlinks.py	2026-06-25 06:46:42.847854 +0000
++++ b/tui/hyperlinks.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,171 +1,20 @@
 -"""Terminal-capability detection + helpers for OSC 8 hyperlinks.
 -

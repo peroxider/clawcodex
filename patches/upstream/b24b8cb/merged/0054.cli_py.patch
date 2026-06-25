@@ -1,6 +1,6 @@
 diff --git a/cli.py b/cli.py
 --- a/cli.py	2026-06-18 10:10:16.002640 +0000
-+++ b/cli.py	2026-06-25 06:46:42.394566 +0000
++++ b/cli.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,14 +1,16 @@
 -"""CLI entry point for Claw Codex."""
 +"""CLI entry point for Claw Codex — compatibility facade.

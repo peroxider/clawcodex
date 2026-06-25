@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/transcript_view.py b/tui/widgets/transcript_view.py
 --- a/tui/widgets/transcript_view.py	2026-06-18 10:10:15.230785 +0000
-+++ b/tui/widgets/transcript_view.py	2026-06-25 06:46:43.150874 +0000
++++ b/tui/widgets/transcript_view.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,446 +1,18 @@
 -"""Scrollable transcript view.
 -

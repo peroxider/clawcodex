@@ -1,6 +1,6 @@
 diff --git a/bridge/bridge_pointer.py b/bridge/bridge_pointer.py
 --- a/bridge/bridge_pointer.py	2026-06-18 10:10:15.921093 +0000
-+++ b/bridge/bridge_pointer.py	2026-06-25 06:46:42.445935 +0000
++++ b/bridge/bridge_pointer.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,259 +1,8 @@
 -"""Crash-recovery pointer for perpetual-mode bridges.
 -
@@ -48,9 +48,12 @@ diff --git a/bridge/bridge_pointer.py b/bridge/bridge_pointer.py
 -Mismatched ``schema_version``, ``machine_name``, or ``dir`` causes
 -:func:`read_pointer` to return ``None`` (treats the pointer as stale).
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.bridge_pointer`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import bridge_pointer as _module
+ 
 -import json
 -import logging
 -import os
@@ -261,11 +264,5 @@ diff --git a/bridge/bridge_pointer.py b/bridge/bridge_pointer.py
 -        logger.warning(
 -            '[bridge:pointer] unlink(%s) failed: %s', path, err,
 -        )
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.bridge_pointer`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import bridge_pointer as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

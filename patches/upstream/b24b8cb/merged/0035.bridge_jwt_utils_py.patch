@@ -1,6 +1,6 @@
 diff --git a/bridge/jwt_utils.py b/bridge/jwt_utils.py
 --- a/bridge/jwt_utils.py	2026-06-18 10:10:15.844470 +0000
-+++ b/bridge/jwt_utils.py	2026-06-25 06:46:42.408413 +0000
++++ b/bridge/jwt_utils.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,348 +1,8 @@
 -"""JWT payload decoder + proactive token refresh scheduler.
 -
@@ -21,9 +21,12 @@ diff --git a/bridge/jwt_utils.py b/bridge/jwt_utils.py
 -   a 30-min follow-up so long-running sessions stay authenticated.
 -   Constants match TS exactly.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.jwt_utils`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import jwt_utils as _module
+ 
 -import asyncio
 -import base64
 -import json
@@ -350,11 +353,5 @@ diff --git a/bridge/jwt_utils.py b/bridge/jwt_utils.py
 -    'decode_jwt_expiry',
 -    'decode_jwt_payload',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.jwt_utils`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import jwt_utils as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

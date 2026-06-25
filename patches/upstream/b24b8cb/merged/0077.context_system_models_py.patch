@@ -1,6 +1,6 @@
 diff --git a/context_system/models.py b/context_system/models.py
 --- a/context_system/models.py	2026-06-18 10:10:17.272629 +0000
-+++ b/context_system/models.py	2026-06-25 06:46:42.648691 +0000
++++ b/context_system/models.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,107 +1,3 @@
 -"""
 -Context system data models — aligned with TypeScript Claude Code architecture.

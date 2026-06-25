@@ -1,6 +1,6 @@
 diff --git a/tui/vim_persistent.py b/tui/vim_persistent.py
 --- a/tui/vim_persistent.py	2026-06-18 10:10:15.339523 +0000
-+++ b/tui/vim_persistent.py	2026-06-25 06:46:42.965831 +0000
++++ b/tui/vim_persistent.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,395 +1,28 @@
 -"""Vim ``PersistentState`` + ``RecordedChange`` + ``replay()``.
 -

@@ -1,9 +1,10 @@
 diff --git a/hooks/hook_executor.py b/hooks/hook_executor.py
 --- a/hooks/hook_executor.py	2026-06-18 10:10:15.530193 +0000
-+++ b/hooks/hook_executor.py	2026-06-22 09:03:22.977149 +0000
++++ b/hooks/hook_executor.py	2026-06-22 17:23:55.000000 +0800
 @@ -1,580 +1,10 @@
 -"""Hook execution engine — mirrors TypeScript utils/hooks.ts.
--
++"""Facade — hooks/hook_executor.py has been moved to clawcodex_ext/hooks/hook_executor.py.
+ 
 -Core hook execution with shell command protocol, JSON stdin/stdout,
 -exit code semantics, timeout handling, and settings-driven configuration.
 -
@@ -14,8 +15,11 @@ diff --git a/hooks/hook_executor.py b/hooks/hook_executor.py
 -
 -Security invariant: hooks cannot lower security level.
 -Hook 'allow' does not bypass settings deny/ask rules.
--"""
--
++Uses ``globals().update()`` so the test suite can still import private
++helpers (e.g. ``from src.hooks.hook_executor import _run_hooks_for_event``,
++``_get_hooks_from_snapshot``, ``_execute_command_hook``, ``_build_hook_env``).
+ """
+ 
 -from __future__ import annotations
 -
 -import asyncio
@@ -572,7 +576,8 @@ diff --git a/hooks/hook_executor.py b/hooks/hook_executor.py
 -        stdin_data["subagent_id"] = subagent_id
 -    if agent_type:
 -        stdin_data["agent_type"] = agent_type
--
++import clawcodex_ext.hooks.hook_executor as _mod
+ 
 -    async for result in _run_hooks_for_event(
 -        event,
 -        None,
@@ -582,13 +587,4 @@ diff --git a/hooks/hook_executor.py b/hooks/hook_executor.py
 -        timeout_ms=timeout_ms,
 -    ):
 -        yield result
-+"""Facade — hooks/hook_executor.py has been moved to clawcodex_ext/hooks/hook_executor.py.
-+
-+Uses ``globals().update()`` so the test suite can still import private
-+helpers (e.g. ``from src.hooks.hook_executor import _run_hooks_for_event``,
-+``_get_hooks_from_snapshot``, ``_execute_command_hook``, ``_build_hook_env``).
-+"""
-+
-+import clawcodex_ext.hooks.hook_executor as _mod
-+
 +globals().update(vars(_mod))

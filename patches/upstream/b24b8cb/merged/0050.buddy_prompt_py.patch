@@ -1,9 +1,10 @@
 diff --git a/buddy/prompt.py b/buddy/prompt.py
 --- a/buddy/prompt.py	2026-06-18 10:10:15.485126 +0000
-+++ b/buddy/prompt.py	2026-06-24 03:56:09.858388 +0000
++++ b/buddy/prompt.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,137 +1,3 @@
 -"""Companion-intro attachment + system-prompt text.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.buddy.prompt`."""
+ 
 -Port of ``typescript/src/buddy/prompt.ts``.
 -
 -Two functions:
@@ -139,6 +140,4 @@ diff --git a/buddy/prompt.py b/buddy/prompt.py
 -    'companion_intro_text',
 -    'format_companion_intro_attachments',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.buddy.prompt`."""
-+
 +from clawcodex_ext.buddy.prompt import *  # noqa: F401,F403

@@ -1,6 +1,6 @@
 diff --git a/compact_service/messages.py b/compact_service/messages.py
 --- a/compact_service/messages.py	2026-06-18 10:10:17.444145 +0000
-+++ b/compact_service/messages.py	2026-06-22 09:03:22.589310 +0000
++++ b/compact_service/messages.py	2026-06-22 17:23:55.000000 +0800
 @@ -1,203 +1,10 @@
 -"""
 -Compact boundary marker messages.

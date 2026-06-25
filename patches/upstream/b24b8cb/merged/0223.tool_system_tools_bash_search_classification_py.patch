@@ -1,6 +1,6 @@
 diff --git a/tool_system/tools/bash/search_classification.py b/tool_system/tools/bash/search_classification.py
 --- a/tool_system/tools/bash/search_classification.py	2026-06-18 10:10:16.952136 +0000
-+++ b/tool_system/tools/bash/search_classification.py	2026-06-25 06:46:42.671268 +0000
++++ b/tool_system/tools/bash/search_classification.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,160 +1,3 @@
 -"""Classify bash commands as search, read, list, or silent.
 +"""Facade — tool_system/tools/bash/search_classification.py moved to clawcodex_ext/tool_system/tools/bash/."""

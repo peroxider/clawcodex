@@ -1,6 +1,6 @@
 diff --git a/tui/app.py b/tui/app.py
 --- a/tui/app.py	2026-06-18 10:10:14.981219 +0000
-+++ b/tui/app.py	2026-06-25 06:46:42.726473 +0000
++++ b/tui/app.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,909 +1,17 @@
 -"""Textual ``App`` subclass that hosts the Claw Codex TUI.
 -

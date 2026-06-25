@@ -1,23 +1,31 @@
 diff --git a/agent/session.py b/agent/session.py
 --- a/agent/session.py	2026-06-18 10:10:15.414659 +0000
-+++ b/agent/session.py	2026-06-22 02:10:13.910798 +0000
++++ b/agent/session.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,174 +1,15 @@
 -"""Session management with persistence.
--
++"""Facade — agent/session.py has been moved to clawcodex_ext/agent/session.
+ 
 -The session ID is authoritative-from-bootstrap: ``Session.create`` reads
 -``get_session_id()`` rather than generating its own. This fixes the
 -strftime-collision bug (sessions started in the same second would have
 -overlapped IDs) and unifies session identity across the codebase — the
 -bootstrap singleton is the single source of truth, exactly per Chapter 3.
--
++The ``Session`` class plus session-persistence and resume helpers now live
++in :mod:`clawcodex_ext.agent.session`. This module re-exports the public
++surface so existing ``from src.agent.session import ...`` callers keep
++working without modification.
+ 
 -``Session.load(sid)`` continues to read from disk by ID; the resume path
 -should call ``switch_session(SessionId(sid))`` first (or via a wrapping
 -helper) to update the bootstrap singleton, then call ``Session.load(sid)``
 -to reconstruct the per-conversation Persistence record.
--"""
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
+ """
+ 
 -from __future__ import annotations
--
++import clawcodex_ext.agent.session as _mod
+ 
 -import json
 -import time
 -from pathlib import Path
@@ -176,18 +184,5 @@ diff --git a/agent/session.py b/agent/session.py
 -            for model, u in get_model_usage().items()
 -        },
 -    }
-+"""Facade — agent/session.py has been moved to clawcodex_ext/agent/session.
-+
-+The ``Session`` class plus session-persistence and resume helpers now live
-+in :mod:`clawcodex_ext.agent.session`. This module re-exports the public
-+surface so existing ``from src.agent.session import ...`` callers keep
-+working without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.session as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

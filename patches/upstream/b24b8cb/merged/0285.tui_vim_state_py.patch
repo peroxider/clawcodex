@@ -1,6 +1,6 @@
 diff --git a/tui/vim_state.py b/tui/vim_state.py
 --- a/tui/vim_state.py	2026-06-18 10:10:15.285532 +0000
-+++ b/tui/vim_state.py	2026-06-25 06:46:43.004688 +0000
++++ b/tui/vim_state.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,965 +1,30 @@
 -"""Discriminated `CommandState` union + pure `transition()` for vim Normal mode.
 -

@@ -1,7 +1,7 @@
 diff --git a/compact_service/__init__.py b/compact_service/__init__.py
 new file mode 100644
 --- /dev/null
-+++ b/compact_service/__init__.py	2026-06-25 06:46:42.474021 +0000
++++ b/compact_service/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,29 @@
 +"""Facade — src/compact_service/__init__.py has been moved to clawcodex_ext.
 +

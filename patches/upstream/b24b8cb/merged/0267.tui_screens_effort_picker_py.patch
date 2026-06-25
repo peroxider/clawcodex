@@ -1,6 +1,6 @@
 diff --git a/tui/screens/effort_picker.py b/tui/screens/effort_picker.py
 --- a/tui/screens/effort_picker.py	2026-06-18 10:10:15.051472 +0000
-+++ b/tui/screens/effort_picker.py	2026-06-25 06:46:43.010396 +0000
++++ b/tui/screens/effort_picker.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,91 +1,17 @@
 -"""Reasoning-effort picker dialog.
 -

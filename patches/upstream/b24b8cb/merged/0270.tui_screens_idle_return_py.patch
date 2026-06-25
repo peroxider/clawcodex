@@ -1,6 +1,6 @@
 diff --git a/tui/screens/idle_return.py b/tui/screens/idle_return.py
 --- a/tui/screens/idle_return.py	2026-06-18 10:10:15.028747 +0000
-+++ b/tui/screens/idle_return.py	2026-06-25 06:46:42.655279 +0000
++++ b/tui/screens/idle_return.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,99 +1,17 @@
 -"""Idle-return confirmation dialog.
 -

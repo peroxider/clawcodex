@@ -1,6 +1,6 @@
 diff --git a/services/swarm/__init__.py b/services/swarm/__init__.py
 --- a/services/swarm/__init__.py	2026-06-18 10:10:16.437013 +0000
-+++ b/services/swarm/__init__.py	2026-06-22 12:42:31.414480 +0000
++++ b/services/swarm/__init__.py	2026-06-22 21:32:18.000000 +0800
 @@ -1,20 +1,8 @@
 -"""Swarm/Teammates subsystem.
 +"""Facade — services/swarm/ re-exports from clawcodex_ext.services.swarm.

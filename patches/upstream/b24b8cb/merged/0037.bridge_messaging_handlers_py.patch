@@ -1,6 +1,6 @@
 diff --git a/bridge/messaging_handlers.py b/bridge/messaging_handlers.py
 --- a/bridge/messaging_handlers.py	2026-06-18 10:10:15.962757 +0000
-+++ b/bridge/messaging_handlers.py	2026-06-25 06:46:42.449054 +0000
++++ b/bridge/messaging_handlers.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,261 +1,8 @@
 -"""Server-initiated control_request handler.
 -
@@ -20,9 +20,12 @@ diff --git a/bridge/messaging_handlers.py b/bridge/messaging_handlers.py
 -              → per-subtype handler (callbacks supplied by ``handlers``)
 -              → transport.write(control_response)
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.messaging_handlers`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import messaging_handlers as _module
+ 
 -import asyncio
 -import inspect
 -import logging
@@ -263,11 +266,5 @@ diff --git a/bridge/messaging_handlers.py b/bridge/messaging_handlers.py
 -    'Verdict',
 -    'handle_server_control_request',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.messaging_handlers`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import messaging_handlers as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

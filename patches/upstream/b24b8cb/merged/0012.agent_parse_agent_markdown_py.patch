@@ -1,11 +1,17 @@
 diff --git a/agent/parse_agent_markdown.py b/agent/parse_agent_markdown.py
 --- a/agent/parse_agent_markdown.py	2026-06-18 10:10:15.472602 +0000
-+++ b/agent/parse_agent_markdown.py	2026-06-22 02:10:13.864924 +0000
++++ b/agent/parse_agent_markdown.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,226 +1,16 @@
 -"""Parse a markdown agent definition into an ``AgentDefinition``.
--
++"""Facade — agent/parse_agent_markdown.py has been moved to clawcodex_ext/agent/parse_agent_markdown.
+ 
 -Mirrors ``parseAgentFromMarkdown`` in typescript/src/tools/AgentTool/loadAgentsDir.ts.
--
++The ``parse_agent_from_markdown`` parser and related markdown-discovery
++helpers now live in :mod:`clawcodex_ext.agent.parse_agent_markdown`. This
++module re-exports the public surface so existing
++``from src.agent.parse_agent_markdown import ...`` callers keep working
++without modification.
+ 
 -Field mapping (frontmatter → AgentDefinition):
 -    name                    → agent_type   (defaults to filename stem)
 -    description             → when_to_use  (required)
@@ -34,7 +40,9 @@ diff --git a/agent/parse_agent_markdown.py b/agent/parse_agent_markdown.py
 -The markdown body becomes the agent's system prompt, returned by
 -``agent.get_system_prompt()``. Missing required fields produce ``None``
 -with a debug log; the loader silently drops the file rather than crash.
--"""
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
+ """
 -from __future__ import annotations
 -
 -import logging
@@ -202,10 +210,11 @@ diff --git a/agent/parse_agent_markdown.py b/agent/parse_agent_markdown.py
 -    effort = parse_effort_value(_first(frontmatter, "effort"))
 -
 -    body_text = body.strip()
--
+ 
 -    def _get_system_prompt(**_kwargs: Any) -> str:
 -        return body_text
--
++import clawcodex_ext.agent.parse_agent_markdown as _mod
+ 
 -    return AgentDefinition(
 -        agent_type=agent_type,
 -        when_to_use=when_to_use,
@@ -228,19 +237,5 @@ diff --git a/agent/parse_agent_markdown.py b/agent/parse_agent_markdown.py
 -        effort=effort,
 -        get_system_prompt=_get_system_prompt,
 -    )
-+"""Facade — agent/parse_agent_markdown.py has been moved to clawcodex_ext/agent/parse_agent_markdown.
-+
-+The ``parse_agent_from_markdown`` parser and related markdown-discovery
-+helpers now live in :mod:`clawcodex_ext.agent.parse_agent_markdown`. This
-+module re-exports the public surface so existing
-+``from src.agent.parse_agent_markdown import ...`` callers keep working
-+without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.parse_agent_markdown as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

@@ -1,9 +1,10 @@
 diff --git a/bridge/remote_bridge_core.py b/bridge/remote_bridge_core.py
 --- a/bridge/remote_bridge_core.py	2026-06-18 10:10:15.969869 +0000
-+++ b/bridge/remote_bridge_core.py	2026-06-22 01:17:04.018121 +0000
++++ b/bridge/remote_bridge_core.py	2026-06-22 09:17:30.000000 +0800
 @@ -1,1176 +1,19 @@
 -"""Env-less Remote Control bridge core — Phase 5 MVP.
--
++"""Facade — bridge/remote_bridge_core.py has been moved to extensions/ports/bridge/.
+ 
 -Ports ``typescript/src/bridge/remoteBridgeCore.ts``.
 -
 -"Env-less" means no Environments API layer — this connects directly to
@@ -48,8 +49,17 @@ diff --git a/bridge/remote_bridge_core.py b/bridge/remote_bridge_core.py
 -  ``teardown``
 -* Idempotent teardown: cancel scheduler → drop gate → reportState idle →
 -  write result → archive (with 401 retry) → close
--"""
--
++The full env-less Remote Control bridge core (Phase 5 MVP) now lives in
++:mod:`extensions.ports.bridge.remote_bridge_core`. This module re-exports
++the public surface so existing ``from src.bridge.remote_bridge_core import ...``
++callers keep working without modification.
++
++Uses ``globals().update()`` rather than ``from X import *`` to preserve
++access to all public names regardless of ``__all__`` — the upstream
++test suite references symbols (e.g. ``TokenRefreshScheduler``) that
++are not in the module's ``__all__`` list.
+ """
+ 
 -from __future__ import annotations
 -
 -import asyncio
@@ -1170,7 +1180,8 @@ diff --git a/bridge/remote_bridge_core.py b/bridge/remote_bridge_core.py
 -    )
 -    return response.status_code
 -
--
++import extensions.ports.bridge.remote_bridge_core as _mod
+ 
 -__all__ = [
 -    'BridgeState',
 -    'DEFAULT_ENV_LESS_BRIDGE_CONFIG',
@@ -1178,21 +1189,6 @@ diff --git a/bridge/remote_bridge_core.py b/bridge/remote_bridge_core.py
 -    'RemoteBridgeHandle',
 -    'init_env_less_bridge_core',
 -]
-+"""Facade — bridge/remote_bridge_core.py has been moved to extensions/ports/bridge/.
-+
-+The full env-less Remote Control bridge core (Phase 5 MVP) now lives in
-+:mod:`extensions.ports.bridge.remote_bridge_core`. This module re-exports
-+the public surface so existing ``from src.bridge.remote_bridge_core import ...``
-+callers keep working without modification.
-+
-+Uses ``globals().update()`` rather than ``from X import *`` to preserve
-+access to all public names regardless of ``__all__`` — the upstream
-+test suite references symbols (e.g. ``TokenRefreshScheduler``) that
-+are not in the module's ``__all__`` list.
-+"""
-+
-+import extensions.ports.bridge.remote_bridge_core as _mod
-+
 +# Re-export all public symbols (bypassing __all__ to match the original
 +# full-module behavior that tests/imports depend on).
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}

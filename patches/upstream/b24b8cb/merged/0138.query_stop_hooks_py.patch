@@ -1,6 +1,6 @@
 diff --git a/query/stop_hooks.py b/query/stop_hooks.py
 --- a/query/stop_hooks.py	2026-06-18 10:10:15.585864 +0000
-+++ b/query/stop_hooks.py	2026-06-25 06:46:43.108836 +0000
++++ b/query/stop_hooks.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,254 +1,3 @@
 -"""Stop hooks — mirrors TypeScript query/stopHooks.ts.
 +"""Facade — query/stop_hooks.py moved to clawcodex_ext/query/."""

@@ -1,9 +1,10 @@
 diff --git a/bridge/session_runner.py b/bridge/session_runner.py
 --- a/bridge/session_runner.py	2026-06-18 10:10:15.926744 +0000
-+++ b/bridge/session_runner.py	2026-06-22 01:15:45.299291 +0000
++++ b/bridge/session_runner.py	2026-06-22 09:16:10.000000 +0800
 @@ -1,934 +1,9 @@
 -"""Child-CLI spawner for the bridge — Phase 4.
--
++"""Facade — bridge/session_runner.py has been moved to extensions/ports/bridge/.
+ 
 -Ports ``typescript/src/bridge/sessionRunner.ts``.
 -
 -Used by env-based orchestrators (Phase 6 ``replBridge`` and Phase 8
@@ -88,8 +89,12 @@ diff --git a/bridge/session_runner.py b/bridge/session_runner.py
 -must not be inherited — the child authenticates exclusively via
 -``CLAUDE_CODE_SESSION_ACCESS_TOKEN``. Mirrors TS allowlist on
 -``sessionRunner.ts:24-43``.
--"""
--
++The full session child-CLI spawner (Phase 4) now lives in
++:mod:`extensions.ports.bridge.session_runner`. This module re-exports
++the public surface so existing ``from src.bridge.session_runner import ...``
++callers keep working without modification.
+ """
+ 
 -
 -@dataclass
 -class BuildChildEnvOpts:
@@ -936,12 +941,4 @@ diff --git a/bridge/session_runner.py b/bridge/session_runner.py
 -    'extract_activities',
 -    'safe_filename_id',
 -]
-+"""Facade — bridge/session_runner.py has been moved to extensions/ports/bridge/.
-+
-+The full session child-CLI spawner (Phase 4) now lives in
-+:mod:`extensions.ports.bridge.session_runner`. This module re-exports
-+the public surface so existing ``from src.bridge.session_runner import ...``
-+callers keep working without modification.
-+"""
-+
 +from extensions.ports.bridge.session_runner import *  # noqa: F401,F403

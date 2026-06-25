@@ -1,6 +1,6 @@
 diff --git a/bridge/types.py b/bridge/types.py
 --- a/bridge/types.py	2026-06-18 10:10:15.825593 +0000
-+++ b/bridge/types.py	2026-06-25 06:46:42.705544 +0000
++++ b/bridge/types.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,500 +1,11 @@
 -"""Bridge subsystem types.
 -
@@ -15,9 +15,10 @@ diff --git a/bridge/types.py b/bridge/types.py
 -``src.bridge.sdk_types`` — those live separately because they cross multiple
 -TS files.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.types`."""
+ 
+ from __future__ import annotations
+ 
 -from dataclasses import dataclass, field
 -from typing import (
 -    Any,
@@ -472,8 +473,10 @@ diff --git a/bridge/types.py b/bridge/types.py
 -Mirrors TS ``onAuth401`` callbacks scattered across ``bridgeApi.ts``,
 -``remoteBridgeCore.ts``, and ``replBridge.ts``.
 -"""
--
--
++import sys
+ 
++from clawcodex_ext.bridge import types as _module
+ 
 -__all__ = [
 -    'BRIDGE_LOGIN_ERROR',
 -    'BRIDGE_LOGIN_INSTRUCTION',
@@ -498,18 +501,9 @@ diff --git a/bridge/types.py b/bridge/types.py
 -    'WorkDataType',
 -    'WorkResponse',
 -]
--
++sys.modules[__name__] = _module
+ 
 -# Re-affirm WorkDataType is exported (Literal alias — appears in WorkData).
 -# Listed above explicitly so downstream consumers can write
 -# ``from src.bridge.types import WorkDataType``.
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.types`."""
-+
-+from __future__ import annotations
-+
-+import sys
-+
-+from clawcodex_ext.bridge import types as _module
-+
-+sys.modules[__name__] = _module
-+
 +__all__ = getattr(_module, '__all__', [])

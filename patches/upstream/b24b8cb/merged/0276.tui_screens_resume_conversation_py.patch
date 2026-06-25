@@ -1,6 +1,6 @@
 diff --git a/tui/screens/resume_conversation.py b/tui/screens/resume_conversation.py
 --- a/tui/screens/resume_conversation.py	2026-06-18 10:10:15.083838 +0000
-+++ b/tui/screens/resume_conversation.py	2026-06-25 06:46:42.856978 +0000
++++ b/tui/screens/resume_conversation.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,136 +1,18 @@
 -"""Resume-conversation modal screen.
 -

@@ -1,18 +1,30 @@
 diff --git a/services/session_resume.py b/services/session_resume.py
 --- a/services/session_resume.py	2026-06-18 10:10:16.623251 +0000
-+++ b/services/session_resume.py	2026-06-25 06:46:42.704029 +0000
++++ b/services/session_resume.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,205 +1,31 @@
 -"""Session resume — read JSONL, reconstruct typed Messages.
--
++"""Facade — services/session_resume.py has been moved to clawcodex_ext (lazy proxy).
+ 
 -Matches TypeScript session/resume.ts. Handles:
 -- Malformed line recovery
 -- Orphaned permissions (tool_use without tool_result)
 -- Cross-project path adjustment
 -- Snip boundary handling
--"""
--
--from __future__ import annotations
--
++Mirrors the ``src/services/session_storage.py`` facade pattern. Public
++importers continue to write ``from src.services.session_resume import
++resume_session, ResumeResult`` and friends; the proxy resolves the
++symbol from ``clawcodex_ext.services.session_resume`` on first access
++and caches it into this module's globals.
++
++Test mocks that previously targeted ``src.services.session_resume.<X>``
++need to be retargeted to ``clawcodex_ext.services.session_resume.<X>``
++where the implementation actually lives — ``mock.patch`` reads
++``__dict__`` directly and would otherwise miss proxy-cached symbols
++that haven't been imported yet.
+ """
+ 
+ from __future__ import annotations
+ 
 -import logging
 -from pathlib import Path
 -from typing import Any
@@ -205,30 +217,12 @@ diff --git a/services/session_resume.py b/services/session_resume.py
 -    if last_boundary_idx >= 0:
 -        # Keep the boundary and everything after
 -        return messages[last_boundary_idx:]
--
--    return messages
-+"""Facade — services/session_resume.py has been moved to clawcodex_ext (lazy proxy).
-+
-+Mirrors the ``src/services/session_storage.py`` facade pattern. Public
-+importers continue to write ``from src.services.session_resume import
-+resume_session, ResumeResult`` and friends; the proxy resolves the
-+symbol from ``clawcodex_ext.services.session_resume`` on first access
-+and caches it into this module's globals.
-+
-+Test mocks that previously targeted ``src.services.session_resume.<X>``
-+need to be retargeted to ``clawcodex_ext.services.session_resume.<X>``
-+where the implementation actually lives — ``mock.patch`` reads
-+``__dict__`` directly and would otherwise miss proxy-cached symbols
-+that haven't been imported yet.
-+"""
-+
-+from __future__ import annotations
-+
 +__all__ = [
 +    'resume_session',
 +    'ResumeResult',
 +]
-+
+ 
+-    return messages
 +
 +def __getattr__(name: str):
 +    import clawcodex_ext.services.session_resume as _mod

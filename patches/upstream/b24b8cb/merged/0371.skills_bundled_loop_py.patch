@@ -1,7 +1,7 @@
 diff --git a/skills/bundled/loop.py b/skills/bundled/loop.py
 new file mode 100644
 --- /dev/null
-+++ b/skills/bundled/loop.py	2026-06-23 01:28:26.883224 +0000
++++ b/skills/bundled/loop.py	2026-06-23 11:14:31.000000 +0800
 @@ -0,0 +1,9 @@
 +"""Facade — src/skills/bundled/loop.py has been moved to clawcodex_ext/skills/bundled/loop.
 +

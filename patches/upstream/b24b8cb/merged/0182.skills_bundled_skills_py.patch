@@ -1,9 +1,10 @@
 diff --git a/skills/bundled_skills.py b/skills/bundled_skills.py
 --- a/skills/bundled_skills.py	2026-06-18 10:10:16.150767 +0000
-+++ b/skills/bundled_skills.py	2026-06-24 03:56:10.030473 +0000
++++ b/skills/bundled_skills.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,225 +1,3 @@
 -from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.skills.bundled_skills`."""
+ 
 -import logging
 -import re
 -from dataclasses import dataclass, field
@@ -227,6 +228,4 @@ diff --git a/skills/bundled_skills.py b/skills/bundled_skills.py
 -        # this module is enough; the bundled-side flag is just a
 -        # belt-and-braces idempotency check.
 -        pass
-+"""Compatibility facade — see :mod:`clawcodex_ext.skills.bundled_skills`."""
-+
 +from clawcodex_ext.skills.bundled_skills import *  # noqa: F401,F403

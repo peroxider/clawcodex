@@ -1,6 +1,6 @@
 diff --git a/bridge/messaging.py b/bridge/messaging.py
 --- a/bridge/messaging.py	2026-06-18 10:10:15.847236 +0000
-+++ b/bridge/messaging.py	2026-06-25 06:46:42.429888 +0000
++++ b/bridge/messaging.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,402 +1,8 @@
 -"""CCR bridge ingress router + message filters/adapters.
 -
@@ -19,9 +19,12 @@ diff --git a/bridge/messaging.py b/bridge/messaging.py
 -``BoundedUUIDSet`` instances passed in must not be shared across tasks
 -without external locking.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.messaging`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import messaging as _module
+ 
 -import asyncio
 -import inspect
 -import json
@@ -404,11 +407,5 @@ diff --git a/bridge/messaging.py b/bridge/messaging.py
 -    'normalize_control_message_keys',
 -    'remote_permission_response_from_dict',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.messaging`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import messaging as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

@@ -1,6 +1,6 @@
 diff --git a/context_system/git_context.py b/context_system/git_context.py
 --- a/context_system/git_context.py	2026-06-18 10:10:17.287342 +0000
-+++ b/context_system/git_context.py	2026-06-25 06:46:42.592778 +0000
++++ b/context_system/git_context.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,222 +1,18 @@
 -"""
 -Git context collection — aligned with typescript/src/context.ts getGitStatus().

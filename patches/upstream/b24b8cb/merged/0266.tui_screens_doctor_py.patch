@@ -1,6 +1,6 @@
 diff --git a/tui/screens/doctor.py b/tui/screens/doctor.py
 --- a/tui/screens/doctor.py	2026-06-18 10:10:15.000126 +0000
-+++ b/tui/screens/doctor.py	2026-06-25 06:46:42.983126 +0000
++++ b/tui/screens/doctor.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,193 +1,17 @@
 -"""Diagnostics screen — environment + capability + storage probes.
 -

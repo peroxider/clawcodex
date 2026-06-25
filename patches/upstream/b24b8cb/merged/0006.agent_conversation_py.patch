@@ -1,14 +1,22 @@
 diff --git a/agent/conversation.py b/agent/conversation.py
 --- a/agent/conversation.py	2026-06-18 10:10:15.435068 +0000
-+++ b/agent/conversation.py	2026-06-22 02:10:13.832682 +0000
++++ b/agent/conversation.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,96 +1,15 @@
 -"""Conversation management for Claw Codex."""
--
++"""Facade — agent/conversation.py has been moved to clawcodex_ext/agent/conversation.
+ 
 -from __future__ import annotations
--
++The ``Conversation`` class and related message-construction helpers now live in
++:mod:`clawcodex_ext.agent.conversation`. This module re-exports the public
++surface so existing ``from src.agent.conversation import ...`` callers keep
++working without modification.
+ 
 -from dataclasses import dataclass, field
 -from typing import Any
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
++"""
+ 
 -from ..types.content_blocks import (
 -    ContentBlock,
 -    TextBlock,
@@ -25,7 +33,8 @@ diff --git a/agent/conversation.py b/agent/conversation.py
 -    message_to_dict,
 -    normalize_messages_for_api,
 -)
--
++import clawcodex_ext.agent.conversation as _mod
+ 
 -
 -@dataclass
 -class Conversation:
@@ -98,18 +107,5 @@ diff --git a/agent/conversation.py b/agent/conversation.py
 -    if isinstance(content, list):
 -        return normalize_content_blocks(content)
 -    return str(content)
-+"""Facade — agent/conversation.py has been moved to clawcodex_ext/agent/conversation.
-+
-+The ``Conversation`` class and related message-construction helpers now live in
-+:mod:`clawcodex_ext.agent.conversation`. This module re-exports the public
-+surface so existing ``from src.agent.conversation import ...`` callers keep
-+working without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.conversation as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

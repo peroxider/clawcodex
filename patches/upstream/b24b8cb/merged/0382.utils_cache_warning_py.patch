@@ -1,7 +1,7 @@
 diff --git a/utils/cache_warning.py b/utils/cache_warning.py
 new file mode 100644
 --- /dev/null
-+++ b/utils/cache_warning.py	2026-06-25 06:46:43.165733 +0000
++++ b/utils/cache_warning.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,19 @@
 +"""Facade — utils/cache_warning.py has been moved to clawcodex_ext.
 +

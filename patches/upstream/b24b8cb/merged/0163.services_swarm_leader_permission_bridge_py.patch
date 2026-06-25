@@ -1,9 +1,10 @@
 diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_permission_bridge.py
 --- a/services/swarm/leader_permission_bridge.py	2026-06-18 10:10:16.471561 +0000
-+++ b/services/swarm/leader_permission_bridge.py	2026-06-23 02:16:46.902496 +0000
++++ b/services/swarm/leader_permission_bridge.py	2026-06-23 11:12:13.000000 +0800
 @@ -1,276 +1,30 @@
 -"""Leader permission bridge — Chunk H / WI-9.1.
--
++"""Facade — services/swarm/leader_permission_bridge.py has been moved to clawcodex_ext.
+ 
 -Mirrors ``typescript/src/utils/swarm/leaderPermissionBridge.ts`` (per
 -gap analysis #15). Workers escalate permission requests to the leader
 -via the team mailbox; the leader's UI surfaces the request, approves
@@ -29,7 +30,12 @@ diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_
 -The two cooperate — the bash classifier consults
 -``SwarmPermissionSync`` first; on miss, the request is forwarded via
 -this bridge.
--"""
++The full implementation now lives in
++:mod:`clawcodex_ext.services.swarm.leader_permission_bridge`. This module
++re-exports the public surface so existing
++``from src.services.swarm.leader_permission_bridge import ...`` callers
++keep working without modification.
+ """
 -from __future__ import annotations
 -
 -import logging
@@ -39,13 +45,22 @@ diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_
 -from dataclasses import dataclass, field
 -from pathlib import Path
 -from typing import Any, Callable, TYPE_CHECKING
--
+ 
 -from src.services.swarm.mailbox import (
 -    TeammateMessage,
 -    make_iso_timestamp,
 -    write_to_mailbox,
--)
--
++from clawcodex_ext.services.swarm.leader_permission_bridge import (  # noqa: F401
++    PermissionRequest,
++    _reset_callbacks,
++    create_permission_request,
++    register_permission_callback,
++    unregister_permission_callback,
++    get_pending_request_ids,
++    deliver_permission_decision,
++    send_permission_request_via_mailbox,
+ )
+ 
 -if TYPE_CHECKING:
 -    pass
 -
@@ -269,7 +284,7 @@ diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_
 -        _callbacks.clear()
 -
 -
--__all__ = [
+ __all__ = [
 -    "PermissionRequest",
 -    "create_permission_request",
 -    "register_permission_callback",
@@ -277,28 +292,6 @@ diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_
 -    "get_pending_request_ids",
 -    "deliver_permission_decision",
 -    "send_permission_request_via_mailbox",
--]
-+"""Facade — services/swarm/leader_permission_bridge.py has been moved to clawcodex_ext.
-+
-+The full implementation now lives in
-+:mod:`clawcodex_ext.services.swarm.leader_permission_bridge`. This module
-+re-exports the public surface so existing
-+``from src.services.swarm.leader_permission_bridge import ...`` callers
-+keep working without modification.
-+"""
-+
-+from clawcodex_ext.services.swarm.leader_permission_bridge import (  # noqa: F401
-+    PermissionRequest,
-+    _reset_callbacks,
-+    create_permission_request,
-+    register_permission_callback,
-+    unregister_permission_callback,
-+    get_pending_request_ids,
-+    deliver_permission_decision,
-+    send_permission_request_via_mailbox,
-+)
-+
-+__all__ = [
 +    'PermissionRequest',
 +    '_reset_callbacks',
 +    'create_permission_request',
@@ -307,4 +300,4 @@ diff --git a/services/swarm/leader_permission_bridge.py b/services/swarm/leader_
 +    'get_pending_request_ids',
 +    'deliver_permission_decision',
 +    'send_permission_request_via_mailbox',
-+]
+ ]

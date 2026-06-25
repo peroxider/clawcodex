@@ -1,9 +1,10 @@
 diff --git a/permissions/modes.py b/permissions/modes.py
 --- a/permissions/modes.py	2026-06-18 10:10:16.837319 +0000
-+++ b/permissions/modes.py	2026-06-24 03:56:09.989181 +0000
++++ b/permissions/modes.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,140 +1,3 @@
 -from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.permissions.modes`."""
+ 
 -import logging
 -
 -from .types import (
@@ -142,6 +143,4 @@ diff --git a/permissions/modes.py b/permissions/modes.py
 -    if isinstance(perms, dict):
 -        return bool(perms.get("allowBypassPermissionsMode"))
 -    return False
-+"""Compatibility facade — see :mod:`clawcodex_ext.permissions.modes`."""
-+
 +from clawcodex_ext.permissions.modes import *  # noqa: F401,F403

@@ -1,6 +1,6 @@
 diff --git a/tui/history_store.py b/tui/history_store.py
 --- a/tui/history_store.py	2026-06-18 10:10:15.327317 +0000
-+++ b/tui/history_store.py	2026-06-25 06:46:42.829882 +0000
++++ b/tui/history_store.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,115 +1,19 @@
 -"""Persistent prompt-history store for the Textual TUI.
 -

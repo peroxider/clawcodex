@@ -1,6 +1,6 @@
 diff --git a/bridge/debug_utils.py b/bridge/debug_utils.py
 --- a/bridge/debug_utils.py	2026-06-18 10:10:15.886344 +0000
-+++ b/bridge/debug_utils.py	2026-06-25 06:46:42.472499 +0000
++++ b/bridge/debug_utils.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,186 +1,8 @@
 -"""Debug logging utilities for the bridge subsystem.
 -
@@ -11,9 +11,12 @@ diff --git a/bridge/debug_utils.py b/bridge/debug_utils.py
 -init. The TS file uses axios-specific error types; Python uses ``httpx`` or
 -plain ``Exception`` — the API is generalized as ``describe_http_error``.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.debug_utils`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import debug_utils as _module
+ 
 -import json
 -import logging
 -import re
@@ -188,11 +191,5 @@ diff --git a/bridge/debug_utils.py b/bridge/debug_utils.py
 -    'log_bridge_skip',
 -    'redact_secrets',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.debug_utils`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import debug_utils as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

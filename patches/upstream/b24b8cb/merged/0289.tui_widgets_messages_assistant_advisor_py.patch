@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/assistant_advisor.py b/tui/widgets/messages/assistant_advisor.py
 --- a/tui/widgets/messages/assistant_advisor.py	2026-06-18 10:10:15.116069 +0000
-+++ b/tui/widgets/messages/assistant_advisor.py	2026-06-25 06:46:43.081209 +0000
++++ b/tui/widgets/messages/assistant_advisor.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,190 +1,17 @@
 -"""Advisor transcript row.
 -

@@ -1,9 +1,10 @@
 diff --git a/auth/auth.py b/auth/auth.py
 --- a/auth/auth.py	2026-06-18 10:10:15.364211 +0000
-+++ b/auth/auth.py	2026-06-24 03:56:09.750343 +0000
++++ b/auth/auth.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,145 +1,3 @@
 -"""API key management matching TypeScript auth.ts.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.auth.auth`."""
+ 
 -Load order: env var → config file → keychain.
 -"""
 -
@@ -147,6 +148,4 @@ diff --git a/auth/auth.py b/auth/auth.py
 -    except Exception:
 -        pass
 -    return None
-+"""Compatibility facade — see :mod:`clawcodex_ext.auth.auth`."""
-+
 +from clawcodex_ext.auth.auth import *  # noqa: F401,F403

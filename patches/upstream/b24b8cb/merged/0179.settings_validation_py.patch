@@ -1,18 +1,33 @@
 diff --git a/settings/validation.py b/settings/validation.py
 --- a/settings/validation.py	2026-06-18 10:10:16.646042 +0000
-+++ b/settings/validation.py	2026-06-25 06:46:42.897354 +0000
++++ b/settings/validation.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,104 +1,28 @@
 -"""Settings validation matching TypeScript settings/validation.ts."""
--
++"""Facade — settings/validation.py has been moved to clawcodex_ext (lazy proxy).
+ 
 -from __future__ import annotations
--
++Mirrors the ``src/services/session_storage.py`` facade pattern. Public
++importers continue to write ``from src.settings.validation import
++validate_settings, ValidationError``; the proxy resolves the symbol
++from ``clawcodex_ext.settings.validation`` on first access and caches
++it into this module's globals.
++
++Test mocks that previously targeted ``src.settings.validation.<X>``
++need to be retargeted to ``clawcodex_ext.settings.validation.<X>``
++where the implementation actually lives — ``mock.patch`` reads
++``__dict__`` directly and would otherwise miss proxy-cached symbols
++that haven't been imported yet.
++"""
+ 
 -from dataclasses import dataclass, field
 -from typing import Any
--
++from __future__ import annotations
+ 
 -from .constants import VALID_EFFORT_VALUES, VALID_OUTPUT_STYLES, VALID_PERMISSION_MODES
 -from .types import SettingsSchema
--
--
++__all__ = ['validate_settings', 'ValidationError']
+ 
+ 
 -@dataclass
 -class ValidationError:
 -    """A single validation error."""
@@ -104,31 +119,10 @@ diff --git a/settings/validation.py b/settings/validation.py
 -                field=f"permissions[{i}].tool",
 -                message="Permission rule must have a 'tool' field",
 -            ))
--
--    return errors
-+"""Facade — settings/validation.py has been moved to clawcodex_ext (lazy proxy).
-+
-+Mirrors the ``src/services/session_storage.py`` facade pattern. Public
-+importers continue to write ``from src.settings.validation import
-+validate_settings, ValidationError``; the proxy resolves the symbol
-+from ``clawcodex_ext.settings.validation`` on first access and caches
-+it into this module's globals.
-+
-+Test mocks that previously targeted ``src.settings.validation.<X>``
-+need to be retargeted to ``clawcodex_ext.settings.validation.<X>``
-+where the implementation actually lives — ``mock.patch`` reads
-+``__dict__`` directly and would otherwise miss proxy-cached symbols
-+that haven't been imported yet.
-+"""
-+
-+from __future__ import annotations
-+
-+__all__ = ['validate_settings', 'ValidationError']
-+
-+
 +def __getattr__(name: str):
 +    import clawcodex_ext.settings.validation as _mod
-+
+ 
+-    return errors
 +    if name in _mod.__dict__:
 +        val = _mod.__dict__[name]
 +        globals()[name] = val

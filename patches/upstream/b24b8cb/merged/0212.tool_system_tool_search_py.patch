@@ -1,6 +1,6 @@
 diff --git a/tool_system/tool_search.py b/tool_system/tool_search.py
 --- a/tool_system/tool_search.py	2026-06-18 10:10:17.130900 +0000
-+++ b/tool_system/tool_search.py	2026-06-25 06:46:42.646072 +0000
++++ b/tool_system/tool_search.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,357 +1,18 @@
 -"""
 -Tool Search utilities — aligned with typescript/src/utils/toolSearch.ts.

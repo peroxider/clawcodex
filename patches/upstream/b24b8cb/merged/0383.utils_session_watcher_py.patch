@@ -1,7 +1,7 @@
 diff --git a/utils/session_watcher.py b/utils/session_watcher.py
 new file mode 100644
 --- /dev/null
-+++ b/utils/session_watcher.py	2026-06-25 06:46:43.248651 +0000
++++ b/utils/session_watcher.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,15 @@
 +"""Facade — utils/session_watcher.py has been moved to clawcodex_ext.
 +

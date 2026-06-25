@@ -1,7 +1,7 @@
 diff --git a/providers/native/grok_adapter.py b/providers/native/grok_adapter.py
 new file mode 100644
 --- /dev/null
-+++ b/providers/native/grok_adapter.py	2026-06-25 06:46:42.947452 +0000
++++ b/providers/native/grok_adapter.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,16 @@
 +"""Facade — providers/native/grok_adapter.py has been moved to clawcodex_ext/providers/native/grok_adapter.py.
 +

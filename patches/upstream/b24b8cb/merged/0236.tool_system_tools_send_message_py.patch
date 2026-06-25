@@ -1,6 +1,6 @@
 diff --git a/tool_system/tools/send_message.py b/tool_system/tools/send_message.py
 --- a/tool_system/tools/send_message.py	2026-06-18 10:10:17.062931 +0000
-+++ b/tool_system/tools/send_message.py	2026-06-25 06:46:42.814643 +0000
++++ b/tool_system/tools/send_message.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,562 +1,14 @@
 -"""SendMessage tool — Chunk F / WI-7.1 + WI-7.2 + WI-7.3.
 +"""Facade — tool_system/tools/send_message.py moved to clawcodex_ext/.

@@ -1,9 +1,10 @@
 diff --git a/services/swarm/team_file.py b/services/swarm/team_file.py
 --- a/services/swarm/team_file.py	2026-06-18 10:10:16.446313 +0000
-+++ b/services/swarm/team_file.py	2026-06-22 11:33:58.897568 +0000
++++ b/services/swarm/team_file.py	2026-06-22 19:49:27.000000 +0800
 @@ -1,168 +1,3 @@
 -"""Team file schema + read/write/mutator helpers — Chunk F / WI-6.4.
--
++"""Facade — services/swarm/team_file.py moved to clawcodex_ext/services/swarm/."""
+ 
 -Mirrors the surface of ``typescript/src/utils/swarm/teamHelpers.ts``.
 -Provides the typed `TeamFile` and `TeamMember` dataclasses plus the
 -JSON read/write helpers that ``TeamCreate``, ``TeamDelete``, the
@@ -170,6 +171,4 @@ diff --git a/services/swarm/team_file.py b/services/swarm/team_file.py
 -    "remove_member",
 -    "find_member_by_name",
 -]
-+"""Facade — services/swarm/team_file.py moved to clawcodex_ext/services/swarm/."""
-+
 +from clawcodex_ext.services.swarm.team_file import *  # noqa: F401,F403

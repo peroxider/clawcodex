@@ -1,9 +1,10 @@
 diff --git a/agent/subagent_context.py b/agent/subagent_context.py
 --- a/agent/subagent_context.py	2026-06-18 10:10:15.455904 +0000
-+++ b/agent/subagent_context.py	2026-06-22 02:10:13.920809 +0000
++++ b/agent/subagent_context.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,202 +1,16 @@
 -"""Subagent context creation and isolation.
--
++"""Facade — agent/subagent_context.py has been moved to clawcodex_ext/agent/subagent_context.
+ 
 -Mirrors createSubagentContext() from typescript/src/utils/forkedAgent.ts.
 -"""
 -from __future__ import annotations
@@ -69,7 +70,12 @@ diff --git a/agent/subagent_context.py b/agent/subagent_context.py
 -    - permission_context: wrapped to set should_avoid_permission_prompts
 -    - Mutation callbacks: no-op
 -    - Fresh collections: todos, tasks, outbox
--
++The ``SubagentContextOverrides`` dataclass and ``create_subagent_context``
++factory now live in :mod:`clawcodex_ext.agent.subagent_context`. This
++module re-exports the public surface so existing
++``from src.agent.subagent_context import ...`` callers keep working
++without modification.
+ 
 -    Callers can:
 -    - Override specific fields via the overrides parameter
 -    - Explicitly opt-in to sharing specific callbacks
@@ -189,8 +195,12 @@ diff --git a/agent/subagent_context.py b/agent/subagent_context.py
 -        agent_type=agent_type,
 -        user_modified=parent_context.user_modified,
 -    )
--
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
++"""
+ 
++import clawcodex_ext.agent.subagent_context as _mod
+ 
 -def _wrap_avoid_prompts(ctx: ToolPermissionContext) -> ToolPermissionContext:
 -    """Return a permission context with should_avoid_permission_prompts set."""
 -    if ctx.should_avoid_permission_prompts:
@@ -204,19 +214,5 @@ diff --git a/agent/subagent_context.py b/agent/subagent_context.py
 -        is_bypass_permissions_mode_available=ctx.is_bypass_permissions_mode_available,
 -        should_avoid_permission_prompts=True,
 -    )
-+"""Facade — agent/subagent_context.py has been moved to clawcodex_ext/agent/subagent_context.
-+
-+The ``SubagentContextOverrides`` dataclass and ``create_subagent_context``
-+factory now live in :mod:`clawcodex_ext.agent.subagent_context`. This
-+module re-exports the public surface so existing
-+``from src.agent.subagent_context import ...`` callers keep working
-+without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.subagent_context as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

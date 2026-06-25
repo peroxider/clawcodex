@@ -1,6 +1,6 @@
 diff --git a/services/tool_execution/tool_result_persistence.py b/services/tool_execution/tool_result_persistence.py
 --- a/services/tool_execution/tool_result_persistence.py	2026-06-18 10:10:16.607881 +0000
-+++ b/services/tool_execution/tool_result_persistence.py	2026-06-25 06:46:42.841670 +0000
++++ b/services/tool_execution/tool_result_persistence.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,498 +1,11 @@
 -"""Per-tool result persistence — Step 11 of the 14-step execution pipeline.
 -
@@ -19,9 +19,10 @@ diff --git a/services/tool_execution/tool_result_persistence.py b/services/tool_
 -decisions across turns) is intentionally not ported here — it ties into
 -compaction/resume which is a separate chapter.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.services.tool_execution.tool_result_persistence`."""
+ 
+ from __future__ import annotations
+ 
 -import hashlib
 -import json
 -import logging
@@ -475,15 +476,18 @@ diff --git a/services/tool_execution/tool_result_persistence.py b/services/tool_
 -# Path resolution
 -# ---------------------------------------------------------------------------
 -
--
++import sys
+ 
 -def resolve_tool_results_dir(context: "ToolContext") -> Path:
 -    """Resolve the per-session tool-results dir.
--
++from clawcodex_ext.services.tool_execution import tool_result_persistence as _module
+ 
 -    Preference order:
 -    1. ``~/.claude/<workspace_basename>/<session_id>/tool-results/`` when the
 -       context has a session id.
 -    2. ``/tmp/claude_tool_results/<pid>/tool-results/`` as a fallback.
--
++sys.modules[__name__] = _module
+ 
 -    The TS reference uses a more elaborate path layout (project-dir hashing
 -    in ``utils/sessionStorage.ts``); we keep it simple and Python-native.
 -    Tests can monkeypatch this function or pass an explicit dir.
@@ -500,14 +504,4 @@ diff --git a/services/tool_execution/tool_result_persistence.py b/services/tool_
 -            / TOOL_RESULTS_SUBDIR
 -        )
 -    return Path("/tmp") / "claude_tool_results" / str(os.getpid()) / TOOL_RESULTS_SUBDIR
-+"""Compatibility facade — see :mod:`clawcodex_ext.services.tool_execution.tool_result_persistence`."""
-+
-+from __future__ import annotations
-+
-+import sys
-+
-+from clawcodex_ext.services.tool_execution import tool_result_persistence as _module
-+
-+sys.modules[__name__] = _module
-+
 +__all__ = getattr(_module, '__all__', [])

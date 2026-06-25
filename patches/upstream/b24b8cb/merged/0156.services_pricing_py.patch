@@ -1,6 +1,6 @@
 diff --git a/services/pricing.py b/services/pricing.py
 --- a/services/pricing.py	2026-06-18 10:10:16.577084 +0000
-+++ b/services/pricing.py	2026-06-25 04:21:10.950144 +0000
++++ b/services/pricing.py	2026-06-24 14:40:58.000000 +0800
 @@ -1,258 +1,9 @@
 -"""Per-model pricing for cost calculation.
 +"""Facade — services/pricing.py has been moved to clawcodex_ext.

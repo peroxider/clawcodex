@@ -1,6 +1,6 @@
 diff --git a/tui/screens/theme_picker.py b/tui/screens/theme_picker.py
 --- a/tui/screens/theme_picker.py	2026-06-18 10:10:15.048145 +0000
-+++ b/tui/screens/theme_picker.py	2026-06-25 06:46:42.882655 +0000
++++ b/tui/screens/theme_picker.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,93 +1,17 @@
 -"""Theme picker dialog.
 -

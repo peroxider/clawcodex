@@ -1,9 +1,10 @@
 diff --git a/auth/oauth.py b/auth/oauth.py
 --- a/auth/oauth.py	2026-06-18 10:10:15.367265 +0000
-+++ b/auth/oauth.py	2026-06-24 03:56:09.803489 +0000
++++ b/auth/oauth.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,178 +1,3 @@
 -"""OAuth authorization code flow matching TypeScript services/oauth/.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.auth.oauth`."""
+ 
 -Supports PKCE, localhost callback server, token exchange, and refresh.
 -"""
 -
@@ -180,6 +181,4 @@ diff --git a/auth/oauth.py b/auth/oauth.py
 -        except Exception as e:
 -            logger.error("OAuth token refresh failed: %s", e)
 -            return None
-+"""Compatibility facade — see :mod:`clawcodex_ext.auth.oauth`."""
-+
 +from clawcodex_ext.auth.oauth import *  # noqa: F401,F403

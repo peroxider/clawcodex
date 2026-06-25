@@ -1,6 +1,6 @@
 diff --git a/coordinator/worker_agent.py b/coordinator/worker_agent.py
 --- a/coordinator/worker_agent.py	2026-06-18 10:10:16.801317 +0000
-+++ b/coordinator/worker_agent.py	2026-06-25 06:46:42.591772 +0000
++++ b/coordinator/worker_agent.py	2026-06-25 15:09:03.000000 +0800
 @@ -18,11 +18,12 @@
  ``get_coordinator_agents()`` returns the canonical agent list for
  coordinator-mode sessions (matches ``workerAgent.ts:16-18``).

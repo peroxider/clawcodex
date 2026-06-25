@@ -1,6 +1,6 @@
 diff --git a/command_system/buddy_command.py b/command_system/buddy_command.py
 --- a/command_system/buddy_command.py	2026-06-18 10:10:17.214173 +0000
-+++ b/command_system/buddy_command.py	2026-06-25 06:46:42.300418 +0000
++++ b/command_system/buddy_command.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,194 +1,18 @@
 -"""``/buddy`` command — hatch / pet / status / mute / unmute / help.
 +"""Facade — command_system/buddy_command.py has been moved to clawcodex_ext (lazy proxy)."""

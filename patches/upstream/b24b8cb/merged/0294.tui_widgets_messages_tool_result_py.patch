@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/tool_result.py b/tui/widgets/messages/tool_result.py
 --- a/tui/widgets/messages/tool_result.py	2026-06-18 10:10:15.105247 +0000
-+++ b/tui/widgets/messages/tool_result.py	2026-06-25 06:46:43.161067 +0000
++++ b/tui/widgets/messages/tool_result.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,141 +1,17 @@
 -"""Standalone tool result row.
 -

@@ -1,6 +1,6 @@
 diff --git a/settings/__init__.py b/settings/__init__.py
 --- a/settings/__init__.py	2026-06-18 10:10:16.637532 +0000
-+++ b/settings/__init__.py	2026-06-25 06:46:42.871242 +0000
++++ b/settings/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,27 +1,29 @@
 -"""Settings system — multi-source loading, validation, caching."""
 +"""Settings system -- multi-source loading, validation, caching."""

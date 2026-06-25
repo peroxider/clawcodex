@@ -1,7 +1,7 @@
 diff --git a/tasks/dream/dream_task.py b/tasks/dream/dream_task.py
 new file mode 100644
 --- /dev/null
-+++ b/tasks/dream/dream_task.py	2026-06-25 06:46:42.488233 +0000
++++ b/tasks/dream/dream_task.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,39 @@
 +"""Facade — src/tasks/dream/dream_task.py has been moved to clawcodex_ext.
 +

@@ -1,6 +1,6 @@
 diff --git a/providers/__init__.py b/providers/__init__.py
 --- a/providers/__init__.py	2026-06-18 10:10:16.696128 +0000
-+++ b/providers/__init__.py	2026-06-25 06:46:43.217928 +0000
++++ b/providers/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -4,8 +4,6 @@
  
  from typing import TypedDict

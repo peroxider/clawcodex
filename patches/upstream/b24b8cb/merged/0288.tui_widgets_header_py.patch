@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/header.py b/tui/widgets/header.py
 --- a/tui/widgets/header.py	2026-06-18 10:10:15.134743 +0000
-+++ b/tui/widgets/header.py	2026-06-25 06:46:43.037674 +0000
++++ b/tui/widgets/header.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,130 +1,17 @@
 -"""Startup header widget — the Claw Codex banner.
 -

@@ -1,6 +1,6 @@
 diff --git a/tui/screens/diff_dialog.py b/tui/screens/diff_dialog.py
 --- a/tui/screens/diff_dialog.py	2026-06-18 10:10:15.024118 +0000
-+++ b/tui/screens/diff_dialog.py	2026-06-25 06:46:42.957686 +0000
++++ b/tui/screens/diff_dialog.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,144 +1,18 @@
 -"""DiffDialog — modal viewer for pending/staged diffs.
 -

@@ -1,6 +1,6 @@
 diff --git a/tasks/local_agent.py b/tasks/local_agent.py
 --- a/tasks/local_agent.py	2026-06-18 10:10:15.640352 +0000
-+++ b/tasks/local_agent.py	2026-06-25 06:46:42.541636 +0000
++++ b/tasks/local_agent.py	2026-06-25 15:09:03.000000 +0800
 @@ -18,6 +18,7 @@
  primitive — the A6/C5 contract (mutator must be sync; never await
  under the registry lock) is honored throughout.

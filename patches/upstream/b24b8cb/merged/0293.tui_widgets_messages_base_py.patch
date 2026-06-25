@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/base.py b/tui/widgets/messages/base.py
 --- a/tui/widgets/messages/base.py	2026-06-18 10:10:15.087883 +0000
-+++ b/tui/widgets/messages/base.py	2026-06-25 06:46:43.146287 +0000
++++ b/tui/widgets/messages/base.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,113 +1,20 @@
 -"""Shared primitives for transcript row widgets.
 -

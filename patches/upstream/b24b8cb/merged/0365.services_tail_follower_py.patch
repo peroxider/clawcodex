@@ -1,7 +1,7 @@
 diff --git a/services/tail_follower.py b/services/tail_follower.py
 new file mode 100644
 --- /dev/null
-+++ b/services/tail_follower.py	2026-06-25 06:46:42.756303 +0000
++++ b/services/tail_follower.py	2026-06-25 15:09:03.000000 +0800
 @@ -0,0 +1,15 @@
 +"""Facade — services/tail_follower.py has been moved to clawcodex_ext.
 +

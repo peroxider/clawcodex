@@ -1,9 +1,10 @@
 diff --git a/tui/screens/__init__.py b/tui/screens/__init__.py
 --- a/tui/screens/__init__.py	2026-06-18 10:10:15.007408 +0000
-+++ b/tui/screens/__init__.py	2026-06-25 06:46:42.863110 +0000
++++ b/tui/screens/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,43 +1,19 @@
 -"""Textual screens for the Claw Codex TUI."""
--
++"""Facade — tui/screens/__init__.py has been moved to clawcodex_ext (lazy proxy)."""
+ 
 -from .cost_threshold import CostThresholdScreen
 -from .dialog_base import DialogScreen
 -from .diff_dialog import DiffDialogScreen, FileDiff
@@ -22,7 +23,8 @@ diff --git a/tui/screens/__init__.py b/tui/screens/__init__.py
 -from .permission_modal import PermissionModal
 -from .repl import REPLScreen
 -from .theme_picker import ThemePickerScreen
--
++from __future__ import annotations
+ 
 -__all__ = [
 -    "CostThresholdScreen",
 -    "DialogScreen",
@@ -45,10 +47,6 @@ diff --git a/tui/screens/__init__.py b/tui/screens/__init__.py
 -    "TranscriptMessage",
 -    "fuzzy_score",
 -]
-+"""Facade — tui/screens/__init__.py has been moved to clawcodex_ext (lazy proxy)."""
-+
-+from __future__ import annotations
-+
 +__all__ = []
 +
 +

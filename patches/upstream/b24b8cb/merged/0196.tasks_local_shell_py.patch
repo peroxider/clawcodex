@@ -1,6 +1,6 @@
 diff --git a/tasks/local_shell.py b/tasks/local_shell.py
 --- a/tasks/local_shell.py	2026-06-18 10:10:15.643811 +0000
-+++ b/tasks/local_shell.py	2026-06-25 06:46:42.572141 +0000
++++ b/tasks/local_shell.py	2026-06-25 15:09:03.000000 +0800
 @@ -12,6 +12,7 @@
  state record). The ``kill`` method here is the polymorphic dispatch target
  for ``stop_task`` (Phase 5).

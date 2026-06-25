@@ -1,6 +1,6 @@
 diff --git a/__init__.py b/__init__.py
 --- a/__init__.py	2026-06-18 10:10:16.785357 +0000
-+++ b/__init__.py	2026-06-25 06:46:42.297387 +0000
++++ b/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,7 +1,10 @@
  """Claw Codex - Claude Code Python Implementation."""
  

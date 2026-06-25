@@ -1,6 +1,6 @@
 diff --git a/tui/screens/permission_modal.py b/tui/screens/permission_modal.py
 --- a/tui/screens/permission_modal.py	2026-06-18 10:10:15.079672 +0000
-+++ b/tui/screens/permission_modal.py	2026-06-25 06:46:42.773533 +0000
++++ b/tui/screens/permission_modal.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,378 +1,18 @@
 -"""Permission request modal screen with per-tool specialized previews.
 -

@@ -1,6 +1,6 @@
 diff --git a/tui/screens/repl.py b/tui/screens/repl.py
 --- a/tui/screens/repl.py	2026-06-18 10:10:14.993935 +0000
-+++ b/tui/screens/repl.py	2026-06-25 06:46:42.829882 +0000
++++ b/tui/screens/repl.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,226 +1,17 @@
 -"""Main REPL screen, rebuilt on top of :class:`FullscreenLayout`.
 -

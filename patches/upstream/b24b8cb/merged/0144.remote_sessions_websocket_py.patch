@@ -1,6 +1,6 @@
 diff --git a/remote/sessions_websocket.py b/remote/sessions_websocket.py
 --- a/remote/sessions_websocket.py	2026-06-18 10:10:16.067168 +0000
-+++ b/remote/sessions_websocket.py	2026-06-25 06:46:43.226082 +0000
++++ b/remote/sessions_websocket.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,481 +1,11 @@
 -"""WebSocket client for ``/v1/sessions/ws/{id}/subscribe`` (claude.ai → CCR).
 -
@@ -30,9 +30,10 @@ diff --git a/remote/sessions_websocket.py b/remote/sessions_websocket.py
 -reconnect timer) from a *permanent* closed state (user called
 -``disconnect()``).
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.remote.sessions_websocket`."""
+ 
+ from __future__ import annotations
+ 
 -import asyncio
 -import json
 -import logging
@@ -463,7 +464,8 @@ diff --git a/remote/sessions_websocket.py b/remote/sessions_websocket.py
 -        self._reconnect_task = loop.create_task(_do_reconnect(), name='sessions-ws-reconnect')
 -
 -    # ─── Internal: callback helper ───────────────────────────────────
--
++import sys
+ 
 -    @staticmethod
 -    async def _invoke(callback: Callable[..., object] | None, /, *args: object) -> None:
 -        if callback is None:
@@ -471,8 +473,10 @@ diff --git a/remote/sessions_websocket.py b/remote/sessions_websocket.py
 -        result = callback(*args)
 -        if asyncio.iscoroutine(result):
 -            await result
--
--
++from clawcodex_ext.remote import sessions_websocket as _module
+ 
++sys.modules[__name__] = _module
+ 
 -__all__ = [
 -    'ConnectionState',
 -    'GetAccessToken',
@@ -483,14 +487,4 @@ diff --git a/remote/sessions_websocket.py b/remote/sessions_websocket.py
 -    'SessionsWebSocket',
 -    'SessionsWebSocketCallbacks',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.remote.sessions_websocket`."""
-+
-+from __future__ import annotations
-+
-+import sys
-+
-+from clawcodex_ext.remote import sessions_websocket as _module
-+
-+sys.modules[__name__] = _module
-+
 +__all__ = getattr(_module, '__all__', [])

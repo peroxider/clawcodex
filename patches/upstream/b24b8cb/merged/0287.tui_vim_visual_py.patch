@@ -1,6 +1,6 @@
 diff --git a/tui/vim_visual.py b/tui/vim_visual.py
 --- a/tui/vim_visual.py	2026-06-18 10:10:15.302612 +0000
-+++ b/tui/vim_visual.py	2026-06-25 06:46:43.045382 +0000
++++ b/tui/vim_visual.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,157 +1,19 @@
 -"""Visual / Visual-Line / Visual-Block selection model.
 -

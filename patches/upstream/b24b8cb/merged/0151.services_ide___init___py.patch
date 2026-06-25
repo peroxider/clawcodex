@@ -1,9 +1,10 @@
 diff --git a/services/ide/__init__.py b/services/ide/__init__.py
 --- a/services/ide/__init__.py	2026-06-18 10:10:16.272123 +0000
-+++ b/services/ide/__init__.py	2026-06-24 02:13:54.727227 +0000
++++ b/services/ide/__init__.py	2026-06-24 07:17:45.000000 +0800
 @@ -1,30 +1,3 @@
 -"""IDE Integration subsystem.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.services.ide`."""
+ 
 -Provides types and connection management for IDE integration (VSCode, JetBrains, etc.)
 -via JSON-RPC. Mirrors TypeScript ide/ directory.
 -"""
@@ -32,6 +33,4 @@ diff --git a/services/ide/__init__.py b/services/ide/__init__.py
 -    "IDEType",
 -    "SelectionTracker",
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.services.ide`."""
-+
 +from clawcodex_ext.services.ide import *  # noqa: F401,F403

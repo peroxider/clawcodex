@@ -1,7 +1,7 @@
 diff --git a/services/langfuse/sink.py b/services/langfuse/sink.py
 new file mode 100644
 --- /dev/null
-+++ b/services/langfuse/sink.py	2026-06-22 17:10:11.052042 +0000
++++ b/services/langfuse/sink.py	2026-06-23 04:32:45.000000 +0800
 @@ -0,0 +1,13 @@
 +"""Facade — src/services/langfuse/sink.py has been moved to clawcodex_ext.
 +

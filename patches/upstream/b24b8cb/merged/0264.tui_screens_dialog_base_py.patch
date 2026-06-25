@@ -1,6 +1,6 @@
 diff --git a/tui/screens/dialog_base.py b/tui/screens/dialog_base.py
 --- a/tui/screens/dialog_base.py	2026-06-18 10:10:15.020051 +0000
-+++ b/tui/screens/dialog_base.py	2026-06-25 06:46:42.923522 +0000
++++ b/tui/screens/dialog_base.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,133 +1,17 @@
 -"""Shared chrome for modal dialogs.
 -

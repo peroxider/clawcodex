@@ -1,9 +1,10 @@
 diff --git a/init.py b/init.py
 --- a/init.py	2026-06-18 10:10:16.190499 +0000
-+++ b/init.py	2026-06-25 06:46:42.598363 +0000
++++ b/init.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,203 +1,22 @@
 -"""Bootstrap init — chapter phase 2 of the bootstrap pipeline.
--
++"""Bootstrap init — facade re-export.
+ 
 -Mirrors ``typescript/src/entrypoints/init.ts``. The memoize property is
 -load-bearing: multiple entry points (REPL, headless, MCP fast-path if
 -it grows to need init) may each call ``init()``, and each call must
@@ -25,8 +26,19 @@ diff --git a/init.py b/init.py
 -This split mirrors TS's separation of ``init()`` (called from
 -Commander's ``preAction`` hook) and the action-handler body that runs
 -per-command.
--"""
--
++The implementation has moved to ``clawcodex_ext/init.py``. We re-export
++the public symbols by direct import so callers continue to write
++``from src.init import init`` (the legacy entry point used by REPL,
++headless, bridge, TUI, SDK, and CLI).
++
++The @cache-wrapped ``init`` travels as a single object — direct
++re-export keeps the cached function identity intact, which is required
++by ``reset_init_for_test_only`` (it calls ``init.cache_clear()``).
++A lazy ``__getattr__`` proxy would also work, but a direct import is
++cheaper (one line, no attribute lookup at call time) and leaves no
++room for identity drift between src/ and clawcodex_ext/.
+ """
+ 
 -from __future__ import annotations
 -
 -import logging
@@ -37,7 +49,11 @@ diff --git a/init.py b/init.py
 -from src.permissions.trust_boundary import (
 -    apply_safe_config_environment_variables,
 -    extract_mdm_safe_env,
--)
++from clawcodex_ext.init import (  # noqa: F401 — public re-export
++    init,
++    run_pre_action,
++    reset_init_for_test_only,
+ )
 -from src.prefetch import (
 -    get_or_start_keychain_prefetch,
 -    get_or_start_mdm_raw_read,
@@ -195,7 +211,7 @@ diff --git a/init.py b/init.py
 -
 -def reset_init_for_test_only() -> None:
 -    """Reset the memoize cache. Test-only.
--
+ 
 -    Gated by ``PYTEST_CURRENT_TEST`` so production callers cannot
 -    accidentally re-run init mid-session. Matches the discipline used
 -    by ``bootstrap.state.reset_state_for_tests``.
@@ -205,25 +221,4 @@ diff --git a/init.py b/init.py
 -            "reset_init_for_test_only can only be called in tests"
 -        )
 -    init.cache_clear()
-+"""Bootstrap init — facade re-export.
-+
-+The implementation has moved to ``clawcodex_ext/init.py``. We re-export
-+the public symbols by direct import so callers continue to write
-+``from src.init import init`` (the legacy entry point used by REPL,
-+headless, bridge, TUI, SDK, and CLI).
-+
-+The @cache-wrapped ``init`` travels as a single object — direct
-+re-export keeps the cached function identity intact, which is required
-+by ``reset_init_for_test_only`` (it calls ``init.cache_clear()``).
-+A lazy ``__getattr__`` proxy would also work, but a direct import is
-+cheaper (one line, no attribute lookup at call time) and leaves no
-+room for identity drift between src/ and clawcodex_ext/.
-+"""
-+
-+from clawcodex_ext.init import (  # noqa: F401 — public re-export
-+    init,
-+    run_pre_action,
-+    reset_init_for_test_only,
-+)
-+
 +__all__ = ['init', 'run_pre_action', 'reset_init_for_test_only']

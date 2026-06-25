@@ -1,6 +1,6 @@
 diff --git a/tui/screens/history_search.py b/tui/screens/history_search.py
 --- a/tui/screens/history_search.py	2026-06-18 10:10:15.066524 +0000
-+++ b/tui/screens/history_search.py	2026-06-25 06:46:42.631875 +0000
++++ b/tui/screens/history_search.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,202 +1,19 @@
 -"""Prompt history fuzzy search dialog.
 -

@@ -1,6 +1,6 @@
 diff --git a/tui/declared_cursor.py b/tui/declared_cursor.py
 --- a/tui/declared_cursor.py	2026-06-18 10:10:15.345085 +0000
-+++ b/tui/declared_cursor.py	2026-06-25 06:46:42.767527 +0000
++++ b/tui/declared_cursor.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,237 +1,22 @@
 -"""Declared cursor — IME preedit positioning helper.
 -

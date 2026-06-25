@@ -1,11 +1,12 @@
 diff --git a/auth/__init__.py b/auth/__init__.py
 --- a/auth/__init__.py	2026-06-18 10:10:15.374539 +0000
-+++ b/auth/__init__.py	2026-06-25 06:46:42.398861 +0000
++++ b/auth/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,26 +1,34 @@
 -"""Authentication system — API key management, OAuth, AWS, Gemini."""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.auth`."""
+ 
+ from __future__ import annotations
+ 
 -from .auth import (
 -    ApiKeyInfo,
 -    load_api_key,
@@ -28,10 +29,6 @@ diff --git a/auth/__init__.py b/auth/__init__.py
 -    "load_api_key",
 -    "validate_api_key",
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.auth`."""
-+
-+from __future__ import annotations
-+
 +import importlib
 +from typing import Any
 +

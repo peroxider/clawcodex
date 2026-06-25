@@ -1,6 +1,6 @@
 diff --git a/command_system/engine.py b/command_system/engine.py
 --- a/command_system/engine.py	2026-06-18 10:10:17.183429 +0000
-+++ b/command_system/engine.py	2026-06-25 06:46:42.364728 +0000
++++ b/command_system/engine.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,329 +1,19 @@
 -"""
 -Command execution engine for Claw Codex.

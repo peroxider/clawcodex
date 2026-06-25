@@ -1,6 +1,6 @@
 diff --git a/tui/commands.py b/tui/commands.py
 --- a/tui/commands.py	2026-06-18 10:10:15.272377 +0000
-+++ b/tui/commands.py	2026-06-25 06:46:42.746087 +0000
++++ b/tui/commands.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,343 +1,22 @@
 -"""Slash-command adapter for the Textual TUI.
 -

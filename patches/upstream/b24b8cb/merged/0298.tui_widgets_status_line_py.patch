@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/status_line.py b/tui/widgets/status_line.py
 --- a/tui/widgets/status_line.py	2026-06-18 10:10:15.210512 +0000
-+++ b/tui/widgets/status_line.py	2026-06-25 06:46:42.713742 +0000
++++ b/tui/widgets/status_line.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,220 +1,17 @@
 -"""Status line widget — parity with ``StatusLine.tsx`` + ``SpinnerWithVerb``.
 -

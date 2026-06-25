@@ -1,6 +1,6 @@
 diff --git a/bridge/init_repl_bridge.py b/bridge/init_repl_bridge.py
 --- a/bridge/init_repl_bridge.py	2026-06-18 10:10:15.949443 +0000
-+++ b/bridge/init_repl_bridge.py	2026-06-25 06:46:42.389296 +0000
++++ b/bridge/init_repl_bridge.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,398 +1,11 @@
 -"""REPL bridge bootstrap — Phase 7 MVP slice.
 -
@@ -43,9 +43,10 @@ diff --git a/bridge/init_repl_bridge.py b/bridge/init_repl_bridge.py
 -
 -The function signature matches TS so a future expansion is non-breaking.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.init_repl_bridge`."""
+ 
+ from __future__ import annotations
+ 
 -import logging
 -import re
 -from collections.abc import Awaitable, Callable
@@ -377,7 +378,8 @@ diff --git a/bridge/init_repl_bridge.py b/bridge/init_repl_bridge.py
 -
 -# ── Helpers ──────────────────────────────────────────────────────────────
 -
--
++import sys
+ 
 -def _fire_state(
 -    cb: OnStateChange | None,
 -    state: str,
@@ -392,22 +394,14 @@ diff --git a/bridge/init_repl_bridge.py b/bridge/init_repl_bridge.py
 -            cb(state, detail)
 -    except Exception as err:  # noqa: BLE001
 -        logger.warning('[bridge:repl] on_state_change raised: %s', err)
--
--
++from clawcodex_ext.bridge import init_repl_bridge as _module
+ 
++sys.modules[__name__] = _module
+ 
 -__all__ = [
 -    'TITLE_MAX_LEN',
 -    'InitBridgeOptions',
 -    'derive_title',
 -    'init_repl_bridge',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.init_repl_bridge`."""
-+
-+from __future__ import annotations
-+
-+import sys
-+
-+from clawcodex_ext.bridge import init_repl_bridge as _module
-+
-+sys.modules[__name__] = _module
-+
 +__all__ = getattr(_module, '__all__', [])

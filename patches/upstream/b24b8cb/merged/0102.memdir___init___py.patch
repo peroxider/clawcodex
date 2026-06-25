@@ -1,6 +1,6 @@
 diff --git a/memdir/__init__.py b/memdir/__init__.py
 --- a/memdir/__init__.py	2026-06-18 10:10:16.012758 +0000
-+++ b/memdir/__init__.py	2026-06-25 06:46:42.655279 +0000
++++ b/memdir/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,138 +1,92 @@
 -"""Auto-memory subsystem (`~/.claude/projects/<slug>/memory/`).
 -
@@ -8,9 +8,10 @@ diff --git a/memdir/__init__.py b/memdir/__init__.py
 -path resolution, type taxonomy, prompt builders. Slices B (recall) and C
 -(safety net + write carve-out) build on top of these primitives.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.memdir`."""
+ 
+ from __future__ import annotations
+ 
 -from .find_relevant_memories import (
 -    MAX_RELEVANT_MEMORIES,
 -    RelevantMemory,
@@ -140,10 +141,6 @@ diff --git a/memdir/__init__.py b/memdir/__init__.py
 -    "validate_team_mem_key",
 -    "validate_team_mem_write_path",
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.memdir`."""
-+
-+from __future__ import annotations
-+
 +import importlib
 +from typing import Any
 +

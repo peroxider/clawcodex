@@ -1,9 +1,10 @@
 diff --git a/agent/foreground_promotion.py b/agent/foreground_promotion.py
 --- a/agent/foreground_promotion.py	2026-06-18 10:10:15.470024 +0000
-+++ b/agent/foreground_promotion.py	2026-06-22 02:10:13.842990 +0000
++++ b/agent/foreground_promotion.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,219 +1,18 @@
 -"""Foreground → background agent promotion — Chunk H / WI-10.1.
--
++"""Facade — agent/foreground_promotion.py has been moved to clawcodex_ext/agent/foreground_promotion.
+ 
 -Mirrors the ``Promise.race`` pattern in
 -``typescript/src/tasks/LocalAgentTask/LocalAgentTask.tsx:519-651``.
 -The TS sync agent loop races "next message from agent" against
@@ -37,7 +38,17 @@ diff --git a/agent/foreground_promotion.py b/agent/foreground_promotion.py
 -``LocalAgentTaskState``) is sync — runs under ``runtime_tasks.update``
 -without ``await``. The actual asyncio races happen *outside* the
 -registry lock.
--"""
++The foreground→background agent promotion machinery
++(``LocalAgentTaskState``, ``promote_to_background``, etc.) now lives in
++:mod:`clawcodex_ext.agent.foreground_promotion`. This module re-exports
++the public surface so existing
++``from src.agent.foreground_promotion import ...`` callers keep working
++without modification.
++
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module's ``__all__`` only covers 4
++of 13 public names.
+ """
 -from __future__ import annotations
 -
 -import asyncio
@@ -213,29 +224,14 @@ diff --git a/agent/foreground_promotion.py b/agent/foreground_promotion.py
 -    """Helper — calls ``__anext__`` directly so the ensure_future
 -    target is one well-defined coroutine."""
 -    return await iterator.__anext__()
--
--
+ 
++import clawcodex_ext.agent.foreground_promotion as _mod
+ 
 -__all__ = [
 -    "register_agent_foreground",
 -    "register_agent_background",
 -    "unregister_agent_foreground",
 -    "run_with_background_escape",
 -]
-+"""Facade — agent/foreground_promotion.py has been moved to clawcodex_ext/agent/foreground_promotion.
-+
-+The foreground→background agent promotion machinery
-+(``LocalAgentTaskState``, ``promote_to_background``, etc.) now lives in
-+:mod:`clawcodex_ext.agent.foreground_promotion`. This module re-exports
-+the public surface so existing
-+``from src.agent.foreground_promotion import ...`` callers keep working
-+without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module's ``__all__`` only covers 4
-+of 13 public names.
-+"""
-+
-+import clawcodex_ext.agent.foreground_promotion as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

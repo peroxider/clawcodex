@@ -1,6 +1,6 @@
 diff --git a/tui/screens/cost_threshold.py b/tui/screens/cost_threshold.py
 --- a/tui/screens/cost_threshold.py	2026-06-18 10:10:15.058540 +0000
-+++ b/tui/screens/cost_threshold.py	2026-06-25 06:46:42.888747 +0000
++++ b/tui/screens/cost_threshold.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,63 +1,17 @@
 -"""Cost-threshold acknowledgement dialog.
 -

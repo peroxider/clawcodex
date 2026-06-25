@@ -1,6 +1,6 @@
 diff --git a/bridge/inbound_messages.py b/bridge/inbound_messages.py
 --- a/bridge/inbound_messages.py	2026-06-18 10:10:15.943076 +0000
-+++ b/bridge/inbound_messages.py	2026-06-25 06:46:42.561409 +0000
++++ b/bridge/inbound_messages.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,143 +1,8 @@
 -"""Process inbound user messages from the bridge.
 -
@@ -21,9 +21,12 @@ diff --git a/bridge/inbound_messages.py b/bridge/inbound_messages.py
 -the Python port inlines a small magic-byte sniffer since the only formats
 -needed are PNG / JPEG / GIF / WebP.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.inbound_messages`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import inbound_messages as _module
+ 
 -import base64
 -from typing import Any
 -
@@ -145,11 +148,5 @@ diff --git a/bridge/inbound_messages.py b/bridge/inbound_messages.py
 -    'extract_inbound_message_fields',
 -    'normalize_image_blocks',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.inbound_messages`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import inbound_messages as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

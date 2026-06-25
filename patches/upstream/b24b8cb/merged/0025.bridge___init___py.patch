@@ -1,6 +1,6 @@
 diff --git a/bridge/__init__.py b/bridge/__init__.py
 --- a/bridge/__init__.py	2026-06-18 10:10:15.829827 +0000
-+++ b/bridge/__init__.py	2026-06-25 06:46:42.298900 +0000
++++ b/bridge/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -18,7 +18,9 @@
  import json
  from pathlib import Path

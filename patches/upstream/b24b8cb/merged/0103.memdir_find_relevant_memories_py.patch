@@ -1,9 +1,10 @@
 diff --git a/memdir/find_relevant_memories.py b/memdir/find_relevant_memories.py
 --- a/memdir/find_relevant_memories.py	2026-06-18 10:10:16.033400 +0000
-+++ b/memdir/find_relevant_memories.py	2026-06-24 03:56:09.905305 +0000
++++ b/memdir/find_relevant_memories.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,205 +1,3 @@
 -"""LLM-driven recall of relevant memories.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.memdir.find_relevant_memories`."""
+ 
 -Ports `typescript/src/memdir/findRelevantMemories.ts`. Replaces the
 -keyword-heuristic in ``src/context_system/memory_prefetch.py`` with the
 -chapter's named pipeline:
@@ -207,6 +208,4 @@ diff --git a/memdir/find_relevant_memories.py b/memdir/find_relevant_memories.py
 -        "memdir recall: scanned=%d selected=%d", len(headers), len(result)
 -    )
 -    return result
-+"""Compatibility facade — see :mod:`clawcodex_ext.memdir.find_relevant_memories`."""
-+
 +from clawcodex_ext.memdir.find_relevant_memories import *  # noqa: F401,F403

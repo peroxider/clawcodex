@@ -1,6 +1,6 @@
 diff --git a/command_system/__init__.py b/command_system/__init__.py
 --- a/command_system/__init__.py	2026-06-18 10:10:17.188220 +0000
-+++ b/command_system/__init__.py	2026-06-25 06:46:42.457634 +0000
++++ b/command_system/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,185 +1,15 @@
 -"""
 -Command system for Claw Codex.

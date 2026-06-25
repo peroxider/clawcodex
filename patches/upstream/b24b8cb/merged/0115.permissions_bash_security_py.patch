@@ -1,6 +1,6 @@
 diff --git a/permissions/bash_security.py b/permissions/bash_security.py
 --- a/permissions/bash_security.py	2026-06-18 10:10:16.892842 +0000
-+++ b/permissions/bash_security.py	2026-06-25 06:46:43.101323 +0000
++++ b/permissions/bash_security.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,244 +1,3 @@
 -from __future__ import annotations
 +"""Facade — permissions/bash_security.py moved to clawcodex_ext/permissions/."""

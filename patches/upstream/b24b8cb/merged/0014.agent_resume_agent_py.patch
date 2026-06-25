@@ -1,9 +1,10 @@
 diff --git a/agent/resume_agent.py b/agent/resume_agent.py
 --- a/agent/resume_agent.py	2026-06-18 10:10:15.439584 +0000
-+++ b/agent/resume_agent.py	2026-06-22 02:10:13.887282 +0000
++++ b/agent/resume_agent.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,246 +1,19 @@
 -"""Auto-resume for terminal local_agent tasks — Chunk F / WI-7.4.
--
++"""Facade — agent/resume_agent.py has been moved to clawcodex_ext/agent/resume_agent.
+ 
 -Mirrors ``typescript/src/tools/AgentTool/resumeAgent.ts``. When
 -SendMessage targets a terminal-state agent (completed / failed /
 -killed), instead of returning an error this module re-spawns the
@@ -38,7 +39,18 @@ diff --git a/agent/resume_agent.py b/agent/resume_agent.py
 -queue their messages onto the new running state via
 -``queue_pending_message`` (which by then sees the running entry the
 -winner just registered).
--"""
++The auto-resume machinery for terminal local-agent tasks
++(``resume_agent_background``, ``is_terminal_task_status``,
++``TranscriptReader``, ``LocalAgentTaskState``, etc.) now lives in
++:mod:`clawcodex_ext.agent.resume_agent`. This module re-exports the
++public surface so existing
++``from src.agent.resume_agent import ...`` callers keep working without
++modification.
++
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module's ``__all__`` only covers 2
++of 13 public names.
+ """
 -from __future__ import annotations
 -
 -import logging
@@ -242,28 +254,12 @@ diff --git a/agent/resume_agent.py b/agent/resume_agent.py
 -        replayed_message_count=len(replayed),
 -        reason="",
 -    )
--
--
+ 
++import clawcodex_ext.agent.resume_agent as _mod
+ 
 -__all__ = [
 -    "ResumeResult",
 -    "resume_agent_background",
 -]
-+"""Facade — agent/resume_agent.py has been moved to clawcodex_ext/agent/resume_agent.
-+
-+The auto-resume machinery for terminal local-agent tasks
-+(``resume_agent_background``, ``is_terminal_task_status``,
-+``TranscriptReader``, ``LocalAgentTaskState``, etc.) now lives in
-+:mod:`clawcodex_ext.agent.resume_agent`. This module re-exports the
-+public surface so existing
-+``from src.agent.resume_agent import ...`` callers keep working without
-+modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module's ``__all__`` only covers 2
-+of 13 public names.
-+"""
-+
-+import clawcodex_ext.agent.resume_agent as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

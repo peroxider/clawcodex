@@ -1,15 +1,21 @@
 diff --git a/providers/openai_compatible.py b/providers/openai_compatible.py
 --- a/providers/openai_compatible.py	2026-06-18 10:10:16.720924 +0000
-+++ b/providers/openai_compatible.py	2026-06-25 06:46:43.031399 +0000
++++ b/providers/openai_compatible.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,750 +1,11 @@
 -"""OpenAI-compatible provider base class.
--
++"""Facade — providers/openai_compatible.py has been moved to clawcodex_ext/providers/openai_compatible.py.
+ 
 -This base class consolidates shared logic for providers that use the
 -OpenAI-style /chat/completions API (OpenAI, GLM, Minimax, etc.).
--"""
--
++Uses ``globals().update()`` so the test suite can still import private
++helpers (e.g. ``from src.providers.openai_compatible import
++_convert_anthropic_messages_to_openai``,
++``_anthropic_image_block_to_openai``, etc.).
+ """
+ 
 -from __future__ import annotations
--
++import clawcodex_ext.providers.openai_compatible as _mod
+ 
 -import json
 -from abc import abstractmethod
 -from typing import Any, Generator, Optional
@@ -752,14 +758,4 @@ diff --git a/providers/openai_compatible.py b/providers/openai_compatible.py
 -            reasoning_content=reasoning_content,
 -            tool_uses=tool_uses or None,
 -        )
-+"""Facade — providers/openai_compatible.py has been moved to clawcodex_ext/providers/openai_compatible.py.
-+
-+Uses ``globals().update()`` so the test suite can still import private
-+helpers (e.g. ``from src.providers.openai_compatible import
-+_convert_anthropic_messages_to_openai``,
-+``_anthropic_image_block_to_openai``, etc.).
-+"""
-+
-+import clawcodex_ext.providers.openai_compatible as _mod
-+
 +globals().update(vars(_mod))

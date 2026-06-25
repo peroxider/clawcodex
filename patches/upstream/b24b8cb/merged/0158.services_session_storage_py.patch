@@ -1,17 +1,29 @@
 diff --git a/services/session_storage.py b/services/session_storage.py
 --- a/services/session_storage.py	2026-06-18 10:10:16.628857 +0000
-+++ b/services/session_storage.py	2026-06-25 06:46:42.722348 +0000
++++ b/services/session_storage.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,344 +1,40 @@
 -"""Session storage — JSONL transcript recording matching TypeScript session/storage.ts.
--
++"""Facade — services/session_storage.py has been moved to clawcodex_ext (lazy proxy).
+ 
 -Provides:
 -- SessionStorage: write/read JSONL transcripts with metadata
 -- Atomic writes, content replacement for large tool results
 -- Flush control, session listing, cleanup
--"""
--
--from __future__ import annotations
--
++Mirrors the ``src/command_system/input_processing.py`` pattern. Public
++importers continue to write ``from src.services.session_storage import
++SessionStorage`` and friends; the proxy resolves the symbol from
++``clawcodex_ext.services.session_storage`` on first access and caches it
++into this module's globals.
++
++Test mocks that previously targeted ``src.services.session_storage.<X>``
++need to be retargeted to ``clawcodex_ext.services.session_storage.<X>``
++where the implementation actually lives — ``mock.patch`` reads
++``__dict__`` directly and would otherwise miss proxy-cached symbols
++that haven't been imported yet.
+ """
+ 
+ from __future__ import annotations
+ 
 -import json
 -import logging
 -import os
@@ -346,23 +358,6 @@ diff --git a/services/session_storage.py b/services/session_storage.py
 -        except OSError:
 -            pass
 -        raise
-+"""Facade — services/session_storage.py has been moved to clawcodex_ext (lazy proxy).
-+
-+Mirrors the ``src/command_system/input_processing.py`` pattern. Public
-+importers continue to write ``from src.services.session_storage import
-+SessionStorage`` and friends; the proxy resolves the symbol from
-+``clawcodex_ext.services.session_storage`` on first access and caches it
-+into this module's globals.
-+
-+Test mocks that previously targeted ``src.services.session_storage.<X>``
-+need to be retargeted to ``clawcodex_ext.services.session_storage.<X>``
-+where the implementation actually lives — ``mock.patch`` reads
-+``__dict__`` directly and would otherwise miss proxy-cached symbols
-+that haven't been imported yet.
-+"""
-+
-+from __future__ import annotations
-+
 +__all__ = [
 +    'SessionStorage',
 +    'SessionMetadata',

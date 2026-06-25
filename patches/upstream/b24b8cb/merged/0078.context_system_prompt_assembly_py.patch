@@ -1,6 +1,6 @@
 diff --git a/context_system/prompt_assembly.py b/context_system/prompt_assembly.py
 --- a/context_system/prompt_assembly.py	2026-06-18 10:10:17.304397 +0000
-+++ b/context_system/prompt_assembly.py	2026-06-25 06:46:42.680435 +0000
++++ b/context_system/prompt_assembly.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,1230 +1,28 @@
 -"""
 -System prompt assembly — aligned with typescript/src/utils/queryContext.ts.

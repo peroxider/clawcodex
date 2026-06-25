@@ -1,6 +1,6 @@
 diff --git a/tool_system/renderers.py b/tool_system/renderers.py
 --- a/tool_system/renderers.py	2026-06-18 10:10:17.120389 +0000
-+++ b/tool_system/renderers.py	2026-06-25 06:46:42.604307 +0000
++++ b/tool_system/renderers.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,257 +1,3 @@
 -"""Renderer/event types extracted from ``agent_loop.py`` (F.4 of the
 -ch05 consolidation, post-cutover).

@@ -1,6 +1,6 @@
 diff --git a/tui/agent_bridge.py b/tui/agent_bridge.py
 --- a/tui/agent_bridge.py	2026-06-18 10:10:15.313327 +0000
-+++ b/tui/agent_bridge.py	2026-06-25 06:46:42.707062 +0000
++++ b/tui/agent_bridge.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,619 +1,17 @@
 -"""Bridge between the agent loop and the Textual UI.
 -

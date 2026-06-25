@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/messages/assistant_thinking.py b/tui/widgets/messages/assistant_thinking.py
 --- a/tui/widgets/messages/assistant_thinking.py	2026-06-18 10:10:15.123461 +0000
-+++ b/tui/widgets/messages/assistant_thinking.py	2026-06-25 06:46:43.101323 +0000
++++ b/tui/widgets/messages/assistant_thinking.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,116 +1,18 @@
 -"""Assistant thinking row — distinct from the regular assistant text turn.
 -

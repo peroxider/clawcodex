@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/select_list.py b/tui/widgets/select_list.py
 --- a/tui/widgets/select_list.py	2026-06-18 10:10:15.205441 +0000
-+++ b/tui/widgets/select_list.py	2026-06-25 06:46:42.660871 +0000
++++ b/tui/widgets/select_list.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,220 +1,18 @@
 -"""Reusable keyboard-first select list.
 -

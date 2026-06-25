@@ -1,18 +1,21 @@
 diff --git a/buddy/__init__.py b/buddy/__init__.py
 --- a/buddy/__init__.py	2026-06-18 10:10:15.494998 +0000
-+++ b/buddy/__init__.py	2026-06-25 06:46:42.327421 +0000
++++ b/buddy/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,114 +1,30 @@
 -"""Python port of ``typescript/src/buddy/``.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.buddy`."""
+ 
 -Headless core ports are present here; the Ink/React widget
 -(``CompanionSprite``, ``useBuddyNotification``) is deferred per
 -``my-docs/get-parity-by-folder/buddy-gap-analysis.md`` §3.3.
 -"""
--from __future__ import annotations
--
+ from __future__ import annotations
+ 
 -import json
 -from pathlib import Path
--
++import importlib
++from typing import Any
+ 
 -from src.buddy.companion import (
 -    Roll,
 -    SALT,
@@ -116,13 +119,6 @@ diff --git a/buddy/__init__.py b/buddy/__init__.py
 -    'NAME_PREFIXES', 'NAME_SUFFIXES', 'PERSONALITIES',
 -    'create_stored_companion',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.buddy`."""
-+
-+from __future__ import annotations
-+
-+import importlib
-+from typing import Any
-+
 +_SYMBOLS_BY_MODULE: dict[str, tuple[str, ...]] = {
 +    'clawcodex_ext.buddy.feature': ('is_buddy_enabled',),
 +    'clawcodex_ext.buddy.prompt': (

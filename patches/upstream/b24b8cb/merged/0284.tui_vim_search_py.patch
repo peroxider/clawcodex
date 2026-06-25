@@ -1,6 +1,6 @@
 diff --git a/tui/vim_search.py b/tui/vim_search.py
 --- a/tui/vim_search.py	2026-06-18 10:10:15.298999 +0000
-+++ b/tui/vim_search.py	2026-06-25 06:46:42.985646 +0000
++++ b/tui/vim_search.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,229 +1,21 @@
 -"""Regex search for vim mode — ``/`` and ``?`` plus ``n`` / ``N`` repeat.
 -

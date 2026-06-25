@@ -1,6 +1,6 @@
 diff --git a/tool_system/__init__.py b/tool_system/__init__.py
 --- a/tool_system/__init__.py	2026-06-18 10:10:17.105866 +0000
-+++ b/tool_system/__init__.py	2026-06-25 06:46:42.668230 +0000
++++ b/tool_system/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,59 +1,3 @@
 -from __future__ import annotations
 +"""Facade — tool_system/ moved to clawcodex_ext/tool_system/."""

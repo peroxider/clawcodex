@@ -1,6 +1,6 @@
 diff --git a/tui/screens/message_selector.py b/tui/screens/message_selector.py
 --- a/tui/screens/message_selector.py	2026-06-18 10:10:15.074182 +0000
-+++ b/tui/screens/message_selector.py	2026-06-25 06:46:42.709666 +0000
++++ b/tui/screens/message_selector.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,123 +1,18 @@
 -"""Transcript message-selector screen.
 -

@@ -1,6 +1,6 @@
 diff --git a/tasks/__init__.py b/tasks/__init__.py
 --- a/tasks/__init__.py	2026-06-18 10:10:15.619521 +0000
-+++ b/tasks/__init__.py	2026-06-25 06:46:42.424758 +0000
++++ b/tasks/__init__.py	2026-06-25 15:09:03.000000 +0800
 @@ -13,6 +13,7 @@
  * ``local_shell`` — Chunk B / WI-1.4 + WI-2.1.
  * ``local_agent`` — Chunk B / WI-1.5 + Chunk C / WI-2.3 (full lifecycle).

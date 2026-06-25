@@ -1,9 +1,10 @@
 diff --git a/agent/prompt.py b/agent/prompt.py
 --- a/agent/prompt.py	2026-06-18 10:10:15.411027 +0000
-+++ b/agent/prompt.py	2026-06-22 02:10:13.876563 +0000
++++ b/agent/prompt.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,214 +1,16 @@
 -"""Agent tool prompt generation.
--
++"""Facade — agent/prompt.py has been moved to clawcodex_ext/agent/prompt.
+ 
 -Mirrors typescript/src/tools/AgentTool/prompt.ts.
 -"""
 -from __future__ import annotations
@@ -59,7 +60,12 @@ diff --git a/agent/prompt.py b/agent/prompt.py
 -    allow_fork: bool = False,
 -) -> str:
 -    """Build the full prompt for the Agent tool.
--
++The agent-tool prompt helpers (``get_agent_prompt``,
++``get_agent_system_prompt``, ``format_agent_line``) now live in
++:mod:`clawcodex_ext.agent.prompt`. This module re-exports the public
++surface so existing ``from src.agent.prompt import ...`` callers keep
++working without modification.
+ 
 -    Mirrors getPrompt() from typescript/src/tools/AgentTool/prompt.ts.
 -    This text is fed to the model as the Agent tool's description, instructing
 -    the parent agent on how and when to spawn sub-agents.
@@ -208,27 +214,17 @@ diff --git a/agent/prompt.py b/agent/prompt.py
 -    # Fork agents inherit parent system prompt
 -    if agent_definition.agent_type == FORK_SUBAGENT_TYPE and parent_system_prompt:
 -        return parent_system_prompt
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
++"""
+ 
 -    # Use agent's own prompt generator
 -    prompt = agent_definition.get_system_prompt()
 -    if prompt:
 -        return prompt
--
++import clawcodex_ext.agent.prompt as _mod
+ 
 -    # Fallback to default
 -    return DEFAULT_AGENT_PROMPT
-+"""Facade — agent/prompt.py has been moved to clawcodex_ext/agent/prompt.
-+
-+The agent-tool prompt helpers (``get_agent_prompt``,
-+``get_agent_system_prompt``, ``format_agent_line``) now live in
-+:mod:`clawcodex_ext.agent.prompt`. This module re-exports the public
-+surface so existing ``from src.agent.prompt import ...`` callers keep
-+working without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.prompt as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

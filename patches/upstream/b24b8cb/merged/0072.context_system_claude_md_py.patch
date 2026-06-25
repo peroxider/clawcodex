@@ -1,6 +1,6 @@
 diff --git a/context_system/claude_md.py b/context_system/claude_md.py
 --- a/context_system/claude_md.py	2026-06-18 10:10:17.283635 +0000
-+++ b/context_system/claude_md.py	2026-06-25 06:46:42.534598 +0000
++++ b/context_system/claude_md.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,505 +1,18 @@
 -"""
 -Multi-level CLAUDE.md loading — aligned with typescript/src/utils/claudemd.ts.

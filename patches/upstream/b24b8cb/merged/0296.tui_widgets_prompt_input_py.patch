@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/prompt_input.py b/tui/widgets/prompt_input.py
 --- a/tui/widgets/prompt_input.py	2026-06-18 10:10:15.216218 +0000
-+++ b/tui/widgets/prompt_input.py	2026-06-25 06:46:42.574228 +0000
++++ b/tui/widgets/prompt_input.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,637 +1,18 @@
 -"""Prompt input widget — bottom ``❯`` line with slash palette + history.
 -

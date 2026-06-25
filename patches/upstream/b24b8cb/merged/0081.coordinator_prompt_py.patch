@@ -1,6 +1,6 @@
 diff --git a/coordinator/prompt.py b/coordinator/prompt.py
 --- a/coordinator/prompt.py	2026-06-18 10:10:16.793899 +0000
-+++ b/coordinator/prompt.py	2026-06-25 06:46:42.558890 +0000
++++ b/coordinator/prompt.py	2026-06-25 15:09:03.000000 +0800
 @@ -58,6 +58,7 @@
  "hard-won lessons" the chapter cites are about prompt shape, not
  language artifacts.

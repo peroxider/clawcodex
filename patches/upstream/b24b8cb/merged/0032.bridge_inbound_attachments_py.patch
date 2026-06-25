@@ -1,6 +1,6 @@
 diff --git a/bridge/inbound_attachments.py b/bridge/inbound_attachments.py
 --- a/bridge/inbound_attachments.py	2026-06-18 10:10:15.979626 +0000
-+++ b/bridge/inbound_attachments.py	2026-06-25 06:46:42.540116 +0000
++++ b/bridge/inbound_attachments.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,272 +1,8 @@
 -"""Resolve ``file_uuid`` attachments on inbound bridge user messages.
 -
@@ -21,9 +21,12 @@ diff --git a/bridge/inbound_attachments.py b/bridge/inbound_attachments.py
 -module degrades to "extract attachments + skip resolution" until then.
 -The shape of the module is correct; only the network fetch is gated.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.inbound_attachments`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import inbound_attachments as _module
+ 
 -import base64
 -import logging
 -import os
@@ -274,11 +277,5 @@ diff --git a/bridge/inbound_attachments.py b/bridge/inbound_attachments.py
 -    'resolve_and_prepend',
 -    'resolve_inbound_attachments',
 -]
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.inbound_attachments`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import inbound_attachments as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

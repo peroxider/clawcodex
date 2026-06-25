@@ -1,9 +1,10 @@
 diff --git a/bridge/bridge_main.py b/bridge/bridge_main.py
 --- a/bridge/bridge_main.py	2026-06-18 10:10:15.874130 +0000
-+++ b/bridge/bridge_main.py	2026-06-22 01:14:44.626992 +0000
++++ b/bridge/bridge_main.py	2026-06-22 09:15:39.000000 +0800
 @@ -1,1243 +1,9 @@
 -"""Multi-session bridge daemon — Phase 8 MVP slice.
--
++"""Facade — bridge/bridge_main.py has been moved to extensions/ports/bridge/.
+ 
 -Ports ``typescript/src/bridge/bridgeMain.ts`` (2991 lines in TS).
 -
 -The TS file is the daemon/orchestrator entry point: parses CLI args,
@@ -58,8 +59,12 @@ diff --git a/bridge/bridge_main.py b/bridge/bridge_main.py
 -* stop_work retry on shutdown
 -* archive + deregister sequence
 -* Graceful shutdown signal handler
--"""
--
++The full multi-session bridge daemon (Phase 8 MVP slice) now lives in
++:mod:`extensions.ports.bridge.bridge_main`. This module re-exports
++the public surface so existing ``from src.bridge.bridge_main import ...``
++callers keep working without modification.
+ """
+ 
 -from __future__ import annotations
 -
 -import asyncio
@@ -1245,12 +1250,4 @@ diff --git a/bridge/bridge_main.py b/bridge/bridge_main.py
 -    'parse_args',
 -    'run_bridge_loop',
 -]
-+"""Facade — bridge/bridge_main.py has been moved to extensions/ports/bridge/.
-+
-+The full multi-session bridge daemon (Phase 8 MVP slice) now lives in
-+:mod:`extensions.ports.bridge.bridge_main`. This module re-exports
-+the public surface so existing ``from src.bridge.bridge_main import ...``
-+callers keep working without modification.
-+"""
-+
 +from extensions.ports.bridge.bridge_main import *  # noqa: F401,F403

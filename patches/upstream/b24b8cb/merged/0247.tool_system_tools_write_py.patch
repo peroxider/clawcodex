@@ -1,6 +1,6 @@
 diff --git a/tool_system/tools/write.py b/tool_system/tools/write.py
 --- a/tool_system/tools/write.py	2026-06-18 10:10:17.011009 +0000
-+++ b/tool_system/tools/write.py	2026-06-25 06:46:42.374987 +0000
++++ b/tool_system/tools/write.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,321 +1,18 @@
 -from __future__ import annotations
 -

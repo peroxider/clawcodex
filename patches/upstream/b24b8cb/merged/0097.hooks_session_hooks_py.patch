@@ -1,9 +1,10 @@
 diff --git a/hooks/session_hooks.py b/hooks/session_hooks.py
 --- a/hooks/session_hooks.py	2026-06-18 10:10:15.537520 +0000
-+++ b/hooks/session_hooks.py	2026-06-25 06:46:42.498440 +0000
++++ b/hooks/session_hooks.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,148 +1,3 @@
 -"""Lifecycle-event routers (Phase-1 / WI-1.1 wiring).
--
++"""Facade — hooks/session_hooks.py has been moved to clawcodex_ext/hooks/session_hooks.py."""
+ 
 -Pre-Phase-1 these helpers filtered on ``Notification + matcher: "onXxx"``.
 -Phase 1 promotes ``SessionStart``, ``SessionEnd``, ``PreCompact`` to first-class
 -``HookEvent`` values; this module now routes via those names.
@@ -150,6 +151,4 @@ diff --git a/hooks/session_hooks.py b/hooks/session_hooks.py
 -        })
 -
 -    return results
-+"""Facade — hooks/session_hooks.py has been moved to clawcodex_ext/hooks/session_hooks.py."""
-+
 +from clawcodex_ext.hooks.session_hooks import *  # noqa: F401,F403

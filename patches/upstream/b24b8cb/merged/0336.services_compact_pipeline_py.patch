@@ -1,7 +1,7 @@
 diff --git a/services/compact/pipeline.py b/services/compact/pipeline.py
 new file mode 100644
 --- /dev/null
-+++ b/services/compact/pipeline.py	2026-06-22 09:03:24.404088 +0000
++++ b/services/compact/pipeline.py	2026-06-22 17:23:55.000000 +0800
 @@ -0,0 +1,11 @@
 +"""Facade — services/compact/* moved to clawcodex_ext/services/compact/.
 +

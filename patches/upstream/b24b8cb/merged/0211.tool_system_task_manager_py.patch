@@ -1,6 +1,6 @@
 diff --git a/tool_system/task_manager.py b/tool_system/task_manager.py
 --- a/tool_system/task_manager.py	2026-06-18 10:10:17.133900 +0000
-+++ b/tool_system/task_manager.py	2026-06-25 06:46:42.629840 +0000
++++ b/tool_system/task_manager.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,63 +1,3 @@
 -from __future__ import annotations
 -

@@ -1,6 +1,6 @@
 diff --git a/command_system/types.py b/command_system/types.py
 --- a/command_system/types.py	2026-06-18 10:10:17.179377 +0000
-+++ b/command_system/types.py	2026-06-25 09:46:56.072107 +0000
++++ b/command_system/types.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,439 +1,35 @@
 -"""
 -Command type system for Claw Codex.

@@ -1,6 +1,6 @@
 diff --git a/utils/image_validation.py b/utils/image_validation.py
 --- a/utils/image_validation.py	2026-06-18 10:10:15.782193 +0000
-+++ b/utils/image_validation.py	2026-06-25 06:46:43.273026 +0000
++++ b/utils/image_validation.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,155 +1,9 @@
 -"""Pre-API image size validation.
 +"""Facade — utils/image_validation.py moved to clawcodex_ext/utils/.

@@ -1,6 +1,6 @@
 diff --git a/bridge/worktree.py b/bridge/worktree.py
 --- a/bridge/worktree.py	2026-06-18 10:10:15.838392 +0000
-+++ b/bridge/worktree.py	2026-06-25 06:46:42.300418 +0000
++++ b/bridge/worktree.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,220 +1,8 @@
 -"""Per-session git worktree helper for ``--spawn worktree`` mode.
 -
@@ -27,9 +27,12 @@ diff --git a/bridge/worktree.py b/bridge/worktree.py
 -``git worktree add`` from e.g. a wedged filesystem lock can't hang
 -the daemon's poll loop.
 -"""
--
--from __future__ import annotations
--
++"""Compatibility facade — see :mod:`clawcodex_ext.bridge.worktree`."""
+ 
+ from __future__ import annotations
++import sys
++from clawcodex_ext.bridge import worktree as _module
+ 
 -import asyncio
 -import logging
 -import os
@@ -222,11 +225,5 @@ diff --git a/bridge/worktree.py b/bridge/worktree.py
 -        )
 -        return
 -    logger.info('[worktree] Removed %s', paths.working_dir)
-+"""Compatibility facade — see :mod:`clawcodex_ext.bridge.worktree`."""
-+
-+from __future__ import annotations
-+import sys
-+from clawcodex_ext.bridge import worktree as _module
-+
 +sys.modules[__name__] = _module
 +__all__ = getattr(_module, '__all__', [])

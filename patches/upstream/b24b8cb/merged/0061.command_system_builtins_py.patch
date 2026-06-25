@@ -1,6 +1,6 @@
 diff --git a/command_system/builtins.py b/command_system/builtins.py
 --- a/command_system/builtins.py	2026-06-18 10:10:17.192341 +0000
-+++ b/command_system/builtins.py	2026-06-25 06:46:42.322782 +0000
++++ b/command_system/builtins.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,1302 +1,77 @@
 -"""
 -Built-in commands for Claw Codex.

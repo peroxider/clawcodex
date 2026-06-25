@@ -1,27 +1,36 @@
 diff --git a/agent/load_plugin_agents.py b/agent/load_plugin_agents.py
 --- a/agent/load_plugin_agents.py	2026-06-18 10:10:15.462582 +0000
-+++ b/agent/load_plugin_agents.py	2026-06-22 02:18:33.645286 +0000
++++ b/agent/load_plugin_agents.py	2026-06-22 10:15:06.000000 +0800
 @@ -1,109 +1,16 @@
 -"""Load agent definitions exposed by enabled plugins.
--
++"""Facade — agent/load_plugin_agents.py has been moved to clawcodex_ext/agent/load_plugin_agents.
+ 
 -Mirrors ``loadPluginAgents`` in
 -typescript/src/utils/plugins/loadPluginAgents.ts. For each enabled
 -plugin with a non-empty ``agents_paths``, walks the directory
 -recursively for ``*.md`` files, parses each via ``parse_agent_from_markdown``,
 -and namespaces the resulting ``agent_type`` as
 -``"<plugin-name>:<sub:dirs>:<base>"`` so nested folders cannot collide.
--
++The plugin-agent loader (``load_plugin_agents``, ``LoadedPlugin``) now
++lives in :mod:`clawcodex_ext.agent.load_plugin_agents`. This module
++re-exports the public surface so existing
++``from src.agent.load_plugin_agents import ...`` callers keep working
++without modification.
+ 
 -Plugin agents intentionally drop ``permission_mode``, ``hooks``, and
 -``mcp_servers`` from the parsed definition — those grant capabilities
 -beyond install-time trust and must come from user-controlled settings,
 -not third-party plugin manifests.
--"""
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
+ """
 -from __future__ import annotations
--
+ 
 -import logging
 -from dataclasses import replace
 -from pathlib import Path
--
++import clawcodex_ext.agent.load_plugin_agents as _mod
+ 
 -from src.agent.agent_definitions import AgentDefinition
 -from src.agent.parse_agent_markdown import parse_agent_from_markdown
 -from src.plugins.types import LoadedPlugin
@@ -111,19 +120,5 @@ diff --git a/agent/load_plugin_agents.py b/agent/load_plugin_agents.py
 -                )
 -                agents.append(namespaced)
 -    return agents
-+"""Facade — agent/load_plugin_agents.py has been moved to clawcodex_ext/agent/load_plugin_agents.
-+
-+The plugin-agent loader (``load_plugin_agents``, ``LoadedPlugin``) now
-+lives in :mod:`clawcodex_ext.agent.load_plugin_agents`. This module
-+re-exports the public surface so existing
-+``from src.agent.load_plugin_agents import ...`` callers keep working
-+without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.load_plugin_agents as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

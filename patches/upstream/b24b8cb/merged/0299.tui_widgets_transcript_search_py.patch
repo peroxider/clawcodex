@@ -1,6 +1,6 @@
 diff --git a/tui/widgets/transcript_search.py b/tui/widgets/transcript_search.py
 --- a/tui/widgets/transcript_search.py	2026-06-18 10:10:15.239152 +0000
-+++ b/tui/widgets/transcript_search.py	2026-06-25 06:46:43.132058 +0000
++++ b/tui/widgets/transcript_search.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,265 +1,19 @@
 -"""Inline transcript search — Ctrl+F overlay over :class:`TranscriptView`.
 -

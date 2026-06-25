@@ -1,6 +1,6 @@
 diff --git a/agent/run_agent.py b/agent/run_agent.py
 --- a/agent/run_agent.py	2026-06-18 10:10:15.428364 +0000
-+++ b/agent/run_agent.py	2026-06-22 02:10:13.898533 +0000
++++ b/agent/run_agent.py	2026-06-22 09:59:59.000000 +0800
 @@ -1,394 +1,18 @@
 -"""Agent lifecycle management.
 -
@@ -163,8 +163,16 @@ diff --git a/agent/run_agent.py b/agent/run_agent.py
 -        should_avoid_permission_prompts=should_avoid,
 -        await_automated_checks_before_dialog=await_automated,
 -    )
--
--
++"""Facade — agent/run_agent.py has been moved to clawcodex_ext/agent/run_agent.
+ 
++The agent-lifecycle machinery (``run_agent`` async generator,
++``RunAgentParams`` / ``RunAgentResult`` dataclasses,
++``resolve_permission_mode``, ``filter_incomplete_tool_calls``,
++``SUBAGENT_DEFAULT_MAX_TURNS``) now lives in
++:mod:`clawcodex_ext.agent.run_agent`. This module re-exports the public
++surface so existing ``from src.agent.run_agent import ...`` callers keep
++working without modification.
+ 
 -def filter_incomplete_tool_calls(messages: list[Message]) -> list[Message]:
 -    """Remove assistant messages that contain incomplete tool_use blocks.
 -
@@ -378,9 +386,13 @@ diff --git a/agent/run_agent.py b/agent/run_agent.py
 -
 -            if params.on_message:
 -                params.on_message(message)
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__`` — the source module does not define ``__all__``.
++"""
+ 
 -            yield message
--
++import clawcodex_ext.agent.run_agent as _mod
+ 
 -    except Exception as exc:
 -        logger.error("Agent %s (%s) failed: %s", agent_id, agent_def.agent_type, exc)
 -        raise
@@ -396,21 +408,5 @@ diff --git a/agent/run_agent.py b/agent/run_agent.py
 -            len(agent_messages),
 -            count_tool_uses(agent_messages),
 -        )
-+"""Facade — agent/run_agent.py has been moved to clawcodex_ext/agent/run_agent.
-+
-+The agent-lifecycle machinery (``run_agent`` async generator,
-+``RunAgentParams`` / ``RunAgentResult`` dataclasses,
-+``resolve_permission_mode``, ``filter_incomplete_tool_calls``,
-+``SUBAGENT_DEFAULT_MAX_TURNS``) now lives in
-+:mod:`clawcodex_ext.agent.run_agent`. This module re-exports the public
-+surface so existing ``from src.agent.run_agent import ...`` callers keep
-+working without modification.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__`` — the source module does not define ``__all__``.
-+"""
-+
-+import clawcodex_ext.agent.run_agent as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

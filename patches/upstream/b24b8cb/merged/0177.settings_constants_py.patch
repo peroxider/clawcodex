@@ -1,6 +1,6 @@
 diff --git a/settings/constants.py b/settings/constants.py
 --- a/settings/constants.py	2026-06-18 10:10:16.642951 +0000
-+++ b/settings/constants.py	2026-06-25 06:46:42.756303 +0000
++++ b/settings/constants.py	2026-06-25 15:09:03.000000 +0800
 @@ -6,18 +6,25 @@
      CompactSettings,
      HookSettings,

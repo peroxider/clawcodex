@@ -1,6 +1,6 @@
 diff --git a/tui/theme.py b/tui/theme.py
 --- a/tui/theme.py	2026-06-18 10:10:15.260695 +0000
-+++ b/tui/theme.py	2026-06-25 06:46:42.953522 +0000
++++ b/tui/theme.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,223 +1,21 @@
 -"""Theme palette for the Claw Codex Textual TUI.
 -

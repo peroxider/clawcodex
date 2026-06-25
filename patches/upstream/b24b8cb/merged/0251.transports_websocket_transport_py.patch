@@ -1,11 +1,17 @@
 diff --git a/transports/websocket_transport.py b/transports/websocket_transport.py
 --- a/transports/websocket_transport.py	2026-06-18 10:10:16.771649 +0000
-+++ b/transports/websocket_transport.py	2026-06-22 01:17:52.062532 +0000
++++ b/transports/websocket_transport.py	2026-06-22 09:18:14.000000 +0800
 @@ -1,961 +1,16 @@
 -"""Reconnecting WebSocket transport for the v1 (Session-Ingress) bridge path.
--
++"""Facade — transports/websocket_transport.py has been moved to extensions/ports/transports/.
+ 
 -Ports ``typescript/src/cli/transports/WebSocketTransport.ts``.
--
++The full reconnecting WebSocket transport for the v1 (Session-Ingress) bridge
++path now lives in :mod:`extensions.ports.transports.websocket_v1` (renamed
++from ``websocket_transport.py`` to disambiguate from the v2 transport).
++This module re-exports the public surface so existing
++``from src.transports.websocket_transport import ...`` callers keep working.
+ 
 -Design overview
 ----------------
 -
@@ -71,8 +77,10 @@ diff --git a/transports/websocket_transport.py b/transports/websocket_transport.
 -``HybridTransport`` will override ``write`` entirely; the buffer +
 -``_last_sent_id`` plumbing in this class is only used by direct
 -``WebSocketTransport`` callers.
--"""
--
++Uses ``globals().update()`` to preserve access to all public names
++regardless of ``__all__``.
+ """
+ 
 -from __future__ import annotations
 -
 -import asyncio
@@ -948,7 +956,8 @@ diff --git a/transports/websocket_transport.py b/transports/websocket_transport.
 -            )
 -        return ''
 -
--
++import extensions.ports.transports.websocket_v1 as _mod
+ 
 -__all__ = [
 -    'DEFAULT_BASE_RECONNECT_DELAY_MS',
 -    'DEFAULT_KEEPALIVE_INTERVAL_S',
@@ -963,19 +972,5 @@ diff --git a/transports/websocket_transport.py b/transports/websocket_transport.
 -    'WebSocketTransportOptions',
 -    'WebSocketTransportState',
 -]
-+"""Facade — transports/websocket_transport.py has been moved to extensions/ports/transports/.
-+
-+The full reconnecting WebSocket transport for the v1 (Session-Ingress) bridge
-+path now lives in :mod:`extensions.ports.transports.websocket_v1` (renamed
-+from ``websocket_transport.py`` to disambiguate from the v2 transport).
-+This module re-exports the public surface so existing
-+``from src.transports.websocket_transport import ...`` callers keep working.
-+
-+Uses ``globals().update()`` to preserve access to all public names
-+regardless of ``__all__``.
-+"""
-+
-+import extensions.ports.transports.websocket_v1 as _mod
-+
 +_globals = {k: v for k, v in vars(_mod).items() if not k.startswith('_')}
 +globals().update(_globals)

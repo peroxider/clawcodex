@@ -1,9 +1,10 @@
 diff --git a/services/swarm/team_membership.py b/services/swarm/team_membership.py
 --- a/services/swarm/team_membership.py	2026-06-18 10:10:16.461651 +0000
-+++ b/services/swarm/team_membership.py	2026-06-22 11:33:58.971585 +0000
++++ b/services/swarm/team_membership.py	2026-06-22 19:49:27.000000 +0800
 @@ -1,46 +1,3 @@
 -"""Team-membership predicates — Chunk F / WI-6.4.
--
++"""Facade — services/swarm/team_membership.py moved to clawcodex_ext/services/swarm/."""
+ 
 -Single source of truth for "is the active agent the team lead?" Used
 -by SendMessage's plan-approval gate (sender side, Chunk F / WI-7.3),
 -the mailbox poller's envelope verification (receiver side, per critic
@@ -48,6 +49,4 @@ diff --git a/services/swarm/team_membership.py b/services/swarm/team_membership.
 -__all__ = [
 -    "is_team_lead",
 -]
-+"""Facade — services/swarm/team_membership.py moved to clawcodex_ext/services/swarm/."""
-+
 +from clawcodex_ext.services.swarm.team_membership import *  # noqa: F401,F403

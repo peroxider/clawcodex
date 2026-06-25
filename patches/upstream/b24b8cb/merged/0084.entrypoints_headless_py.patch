@@ -1,6 +1,6 @@
 diff --git a/entrypoints/headless.py b/entrypoints/headless.py
 --- a/entrypoints/headless.py	2026-06-18 10:10:16.825094 +0000
-+++ b/entrypoints/headless.py	2026-06-25 06:46:42.742756 +0000
++++ b/entrypoints/headless.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,667 +1,25 @@
 -"""Headless (non-interactive) entrypoint.
 +"""Facade — entrypoints/headless.py has been moved to clawcodex_ext (lazy proxy).

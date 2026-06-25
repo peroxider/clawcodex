@@ -1,9 +1,10 @@
 diff --git a/buddy/observer.py b/buddy/observer.py
 --- a/buddy/observer.py	2026-06-18 10:10:15.497663 +0000
-+++ b/buddy/observer.py	2026-06-24 03:56:09.848991 +0000
++++ b/buddy/observer.py	2026-06-24 13:07:42.000000 +0800
 @@ -1,138 +1,3 @@
 -"""Per-turn companion observer.
--
++"""Compatibility facade — see :mod:`clawcodex_ext.buddy.observer`."""
+ 
 -Port of ``typescript/src/buddy/observer.ts``. Headless in Python: the
 -function calls ``on_reaction(quip)`` and has no built-in UI side effect.
 -The REPL caller decides what to do with the quip (today: a no-op until
@@ -140,6 +141,4 @@ diff --git a/buddy/observer.py b/buddy/observer.py
 -
 -
 -__all__ = ['fire_companion_observer']
-+"""Compatibility facade — see :mod:`clawcodex_ext.buddy.observer`."""
-+
 +from clawcodex_ext.buddy.observer import *  # noqa: F401,F403

@@ -1,6 +1,6 @@
 diff --git a/tui/vim.py b/tui/vim.py
 --- a/tui/vim.py	2026-06-18 10:10:14.985362 +0000
-+++ b/tui/vim.py	2026-06-25 06:46:42.988671 +0000
++++ b/tui/vim.py	2026-06-25 15:09:03.000000 +0800
 @@ -1,249 +1,19 @@
 -"""Minimal vim-mode state machine for the Textual prompt.
 -
