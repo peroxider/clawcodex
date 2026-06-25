@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  install.ps1 — One-click installer for clawcodex on Windows / PowerShell
 # ----------------------------------------------------------------------------
 #  PowerShell counterpart of install.sh.  Mirrors its subcommand set, flags,
@@ -79,7 +79,7 @@ param(
 #  Strict mode + error preferences
 # ============================================================================
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $WarningPreference     = 'Continue'
 
 # Ensure console speaks UTF-8 so non-ASCII (e.g. Chinese help) renders correctly.
@@ -98,7 +98,7 @@ try {
 # install.ps1 that ships with that release tag — same rule as the bash installer.
 $script:InstallerVersion  = '2026.6.24'
 $script:ClawCodexVersion  = '2026.6.24'
-$script:RepoRef           = "v$script:ClawCodexVersion"
+${script:RepoRef}           = "dev-decoupling-refactor-b24b8cb"
 $script:RepoUrl           = 'https://gitcode.com/chadwweng/clawcodex'
 
 # Overridable paths.  Resolved from $env:USERPROFILE so we work under both
@@ -306,9 +306,9 @@ function script:Install-Uv {
         # parameter pollution when the outer script is itself piped via iex.
         $env:UV_INSTALL_DIR = Join-Path $env:USERPROFILE '.local'
         $tmpDir = Join-Path $env:TEMP 'clawcodex-installer'
-        if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null }
+        if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force -ErrorAction Stop | Out-Null }
         $tmpFile = Join-Path $tmpDir 'install-uv.ps1'
-        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -UseBasicParsing -OutFile $tmpFile
+        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -UseBasicParsing -OutFile $tmpFile -ErrorAction Stop
         try {
             & $tmpFile
         } finally {
@@ -735,7 +735,7 @@ function script:Write-Wrapper {
         'REM pinned to the install dir baked in at generation time, but the config' + "`r`n" +
         'REM dir can be re-pointed at runtime by the user via this env var.' + "`r`n" +
         'setlocal' + "`r`n" +
-        "if \"%CLAWCODEX_CONFIG_DIR%\"==\"\" set \"CLAWCODEX_CONFIG_DIR=$ConfigDir\"" + "`r`n" +
+        "if `"%CLAWCODEX_CONFIG_DIR%`"==`"`" set `"CLAWCODEX_CONFIG_DIR=$ConfigDir`"" + "`r`n" +
         "`"$Target`" %*" + "`r`n" +
         'endlocal'
     if ($DryRun) {
