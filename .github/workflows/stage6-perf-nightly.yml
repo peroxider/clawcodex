@@ -1,0 +1,58 @@
+# .github/workflows/stage6-perf-nightly.yml
+#
+# Stage 6 perf 严格阈值 nightly job — CI PR job 用 2x 阈值避免假阳性，
+# 本 job 用原始基线（CLI < 3s / subprocess < 5s / Conversation < 2s /
+# agent loop < 3s / tool < 2s / REPL < 5s）守住 perf regression。
+#
+# 触发：每天 UTC 04:00（避开与 upstream-detect 周一 06:00 的重叠）。
+# 失败时不自动开 issue（perf 波动 vs 真回归需要人工区分），只上传日志 artifact。
+name: Stage 6 Performance (Nightly)
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  perf-nightly:
+    name: Stage 6 perf (strict thresholds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 不设 CLAWCODEX_CI_THRESHOLD_MULT — 使用原始基线作为 perf 守门
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Run Stage 6 perf with strict thresholds
+        run: |
+          mkdir -p /tmp/perf
+          python -m pytest tests/stability_gate/test_stage6_perf.py \
+            -v --tb=short 2>&1 | tee /tmp/perf/pytest_output.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload perf baseline on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage6-perf-failure-${{ github.run_id }}
+          path: /tmp/perf/pytest_output.txt
+          retention-days: 14
+
+      - name: Upload perf baseline on success
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage6-perf-baseline-${{ github.run_id }}
+          path: /tmp/perf/pytest_output.txt
+          retention-days: 30

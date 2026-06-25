@@ -2,11 +2,29 @@
 
 验证关键操作的响应时间在可接受范围内。
 防止因意外引入重型 import 或阻塞操作导致的 CLI / Agent / REPL 启动缓慢。
+
+CI 阈值放宽
+-----------
+本文件硬编码的本地基线阈值在 CI runner 上会假阳性（GitHub Actions
+ubuntu-latest 2 核通常比开发者本地慢 2-3 倍）。通过环境变量
+``CLAWCODEX_CI_THRESHOLD_MULT`` 可以在 CI 上按倍率放宽：
+
+* 本地开发：默认 1（使用原始基线）
+* CI PR job：设为 ``2``（保留 ~50% 余量）
+* CI nightly job：不设（严格使用原始阈值，作为 perf 回归把关）
+
+参见 ``.github/workflows/ci.yml`` 和 ``stage6-perf-nightly.yml``。
 """
 
 from __future__ import annotations
 
+import os
 import time
+
+
+# CI 上放宽阈值的倍率。读取环境变量是为了让 PR/nightly 用同一份代码。
+# 本地默认 1.0；CI 在 workflow 里 export 为 2.0。
+_THRESHOLD_MULT = float(os.environ.get("CLAWCODEX_CI_THRESHOLD_MULT", "1"))
 
 
 class TestStage6Perf:
@@ -15,7 +33,7 @@ class TestStage6Perf:
     # ── CLI budgets ──────────────────────────────────────────────
 
     def test_cli_help_import_time(self):
-        """--help 快速路径不应导入重型模块（budget: < 3s）。"""
+        """--help 快速路径不应导入重型模块（budget: < 3s，CI x N）。"""
         import subprocess
         import sys
 
@@ -34,10 +52,14 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 3.0, f"CLI --help import took {elapsed:.2f}s, expected < 3s"
+        budget = 3.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"CLI --help import took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
 
     def test_cli_subprocess_startup_time(self):
-        """python -m src.cli --help 子进程启动时间（budget: < 5s）。"""
+        """python -m src.cli --help 子进程启动时间（budget: < 5s，CI x N）。"""
         import subprocess
         import sys
 
@@ -50,12 +72,16 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0
-        assert elapsed < 5.0, f"CLI --help subprocess took {elapsed:.2f}s, expected < 5s"
+        budget = 5.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"CLI --help subprocess took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
 
     # ── Conversation budget ──────────────────────────────────────
 
     def test_conversation_import_time(self):
-        """Conversation 模块导入不应拉入重型依赖（budget: < 2s）。"""
+        """Conversation 模块导入不应拉入重型依赖（budget: < 2s，CI x N）。"""
         import subprocess
         import sys
 
@@ -68,7 +94,11 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 2.0, f"Conversation import took {elapsed:.2f}s, expected < 2s"
+        budget = 2.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"Conversation import took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
 
     # ── Agent loop budget ────────────────────────────────────────
 
@@ -95,7 +125,11 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 3.0, f"Agent loop warm-start took {elapsed:.2f}s, expected < 3s"
+        budget = 3.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"Agent loop warm-start took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
 
     # ── Tool execution budget ────────────────────────────────────
 
@@ -122,17 +156,21 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 2.0, f"Tool execution path took {elapsed:.2f}s, expected < 2s"
+        budget = 2.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"Tool execution path took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )
 
     # ── REPL / Headless budget ───────────────────────────────────
 
     def test_repl_input_pipeline_cold_start(self):
-        """REPL 类导入（不实例化）不应超过 5s。
+        """REPL 类导入（不实例化）不应超过 5s，CI x N。
 
         测量从零冷启动 ``from src.repl import ClawcodexREPL`` 的时间。
         重型依赖（Session、providers、tools）在首次实例化时通过
         ``_load_heavy_runtime()`` 加载，因此本测试只覆盖类导入成本。
-        budget 设在 prompt_toolkit + rich + completer 基线 ~4.5s 之上
+        本地 budget 设在 prompt_toolkit + rich + completer 基线 ~4.5s 之上
         留 0.5s 余量。
         """
         import subprocess
@@ -147,4 +185,8 @@ class TestStage6Perf:
         )
         elapsed = time.monotonic() - start
         assert proc.returncode == 0, f"stderr={proc.stderr!r}"
-        assert elapsed < 5.0, f"REPL cold start took {elapsed:.2f}s, expected < 5s"
+        budget = 5.0 * _THRESHOLD_MULT
+        assert elapsed < budget, (
+            f"REPL cold start took {elapsed:.2f}s, expected < {budget:.2f}s "
+            f"(threshold multiplier={_THRESHOLD_MULT})"
+        )

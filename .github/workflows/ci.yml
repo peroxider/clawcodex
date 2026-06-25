@@ -1,0 +1,165 @@
+# .github/workflows/ci.yml
+#
+# PR/CI 门禁 — 把 stability_gate（语义正确性）+ orchestrator 单元测试 + ruff
+# lint + pip-audit 漏洞扫描拉到 GitHub Actions。Stage 6 性能阈值在本 workflow
+# 上放宽 2x（CI runner 比本地慢），原始阈值由 stage6-perf-nightly.yml 严守。
+#
+# 设计原则：
+# - PR 失败只警告，不阻断（branch protection 由用户在 repo Settings 配置）
+# - 仅 ubuntu-latest；runner matrix 在 P1 再扩
+# - lint 先跑；test-gate 和 audit 并行
+# - Stage 6 和 manual_e2e_f38 通过 --ignore 排除，不走 marker 路径
+name: CI
+
+on:
+  pull_request:
+    branches: [dev-decoupling, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────
+  # Lint — ruff 快速反馈（与 pyproject.toml [tool.ruff.lint] 一致）
+  # ─────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check src/ clawcodex_ext/ extensions/
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Test gate — stability_gate（排除 stage6）+ orchestrator 单元测试
+  # stage6 perf 由 stage6-perf-nightly.yml 在原始阈值下把关
+  # manual_e2e_f38.py 是 unittest 脚本式 E2E，需要 LocalTracker + bare origin
+  # ─────────────────────────────────────────────────────────────────────
+  test-gate:
+    name: Tests (stability gate + orchestrator)
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 15
+    env:
+      # 放宽 Stage 6 阈值 2x；本地默认 1，nightly 不设（用原始基线）
+      CLAWCODEX_CI_THRESHOLD_MULT: "2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Stability gate (Stage 1-5 + 7-9)
+        run: |
+          python -m pytest tests/stability_gate/ \
+            --ignore=tests/stability_gate/test_stage6_perf.py \
+            -q --tb=short
+
+      - name: Orchestrator unit tests
+        run: |
+          python -m pytest tests/orchestrator/ \
+            --ignore=tests/orchestrator/manual_e2e_f38.py \
+            -q --tb=short
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Audit — 依赖漏洞扫描（仅阻断 HIGH/CRITICAL）
+  # 流程：uv export lockfile → osv-scanner 扫 → 上传 SARIF → 解析阻断
+  # 用 osv-scanner 而非 pip-audit 的原因：pip-audit 内部 pip 不能正确处理
+  # PEP 508 标记（dataclasses==0.8 在 Py3.11 上会假阳性 fail）。
+  # osv-scanner 直接读 requirements.txt 对照 OSV 数据库，零安装、零解析。
+  # 当前 lockfile 发现 2 个 MEDIUM（diskcache 5.6.3 无 fix；pydantic-settings
+  # 2.14.1 → 2.14.2 可修），不阻断，仅 Security tab 可见。
+  # ─────────────────────────────────────────────────────────────────────
+  audit:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install osv-scanner (binary)
+        run: |
+          curl -sSL -o /tmp/osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.4.0/osv-scanner_linux_amd64
+          chmod +x /tmp/osv-scanner
+          /tmp/osv-scanner --version
+
+      - name: Export uv.lock to requirements.txt
+        env:
+          # ast-serialize 上游 wheel 命名异常；跳过一次性 wheel 文件名校验
+          UV_SKIP_WHEEL_FILENAME_CHECK: "1"
+        run: |
+          mkdir -p /tmp/audit
+          uv export --frozen --no-hashes --format requirements-txt -o /tmp/audit/requirements.txt
+          wc -l /tmp/audit/requirements.txt
+
+      - name: Run osv-scanner
+        id: scan
+        run: |
+          /tmp/osv-scanner scan source --no-resolve \
+            -L /tmp/audit/requirements.txt \
+            --format sarif \
+            --output-file /tmp/audit/osv.sarif
+        # osv-scanner 找到任意 vuln 即非零退出；我们只看 HIGH/CRITICAL，
+        # 留到下一步解析 SARIF 决定最终 exit code
+        continue-on-error: true
+
+      - name: Block on HIGH/CRITICAL vulnerabilities (CVSS >= 7.0)
+        if: always() && hashFiles('/tmp/audit/osv.sarif') != ''
+        run: |
+          # SARIF level='error' 对应 CVSS >= 7.0；MEDIUM 是 'warning' 不阻断
+          if grep -qE '"level":\s*"error"' /tmp/audit/osv.sarif; then
+            echo "::error::HIGH/CRITICAL vulnerabilities found in lockfile — see Security tab"
+            grep -B1 -A1 -E '"level":\s*"error"' /tmp/audit/osv.sarif | head -40
+            exit 1
+          fi
+          echo "No HIGH/CRITICAL vulnerabilities. MEDIUM ones (if any) uploaded as SARIF."
+
+      - name: Upload SARIF to Security tab (always)
+        if: always() && hashFiles('/tmp/audit/osv.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: /tmp/audit/osv.sarif
+          category: osv-scanner
+
+      - name: Upload scan logs
+        if: always() && hashFiles('/tmp/audit/osv.sarif') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-scanner-logs
+          path: /tmp/audit/
+          retention-days: 14
