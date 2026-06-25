@@ -45,6 +45,7 @@ docs/feature_plan/
 | F-102 | Agent Loop Hook 扩展点 | 🔄 | [f-102-hook-extensions.md](03-agent-core/f-102-hook-extensions.md) |
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
+| F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 
 ### CLI 与配置系统
 
@@ -88,3 +89,4 @@ docs/feature_plan/
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并（MERGE_GUIDE Step 2） |
+| 2026-06-25 | 新增 F-119（System Prompt 段落拼装与自迭代基础设施） | 架构审计后规划段落级扩展点 + A/B 框架骨架 |

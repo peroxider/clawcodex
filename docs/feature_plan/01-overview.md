@@ -36,9 +36,21 @@ src/
 src/               Layer 0 — 上游源码（Upstream Claude Code）
 clawcodex_ext/     Layer 1 — 下游补丁层（Downstream Patches）
 extensions/        Layer 2 — 三方扩展层（Extensions）
+  ├── orchestrator/       编排器（agent_runner, git_sync, report_writer, tracker…）
+  ├── capabilities/       Protocol 接口定义（层间契约，无实现）
+  ├── remote_api/         远程 API 服务
+  ├── ports/              桥接端口（bridge_main, transports）
+  ├── pos_converter/      POS 编译器
+  ├── providers_ext/      三方 LLM 提供者（LiteLLM）
+  ├── skills_ext/         三方技能扩展
+  ├── tool_system_ext/    三方工具注册
+  ├── visualizer/         可视化仪表盘
+  ├── agent/              代理持久化扩展
+  ├── prompt_lab/         System Prompt 自迭代实验平台（F-119）
+  └── ...                 其他三方子系统
 ```
 
-详见 `docs/decoupling/` 解耦方案文档。
+详见 `docs/decoupling/` 解耦方案文档。F-119 规划详见 `docs/feature_plan/03-agent-core/f-119-prompt-assembly.md`。
 
 ## 核心约束
 
