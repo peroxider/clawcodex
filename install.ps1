@@ -241,19 +241,15 @@ function script:Get-OsInstallHint {
     param([string]$OsType)
     switch ($OsType) {
         'windows' {
-            @'
-    Install Git for Windows:   https://git-scm.com/download/win
-    Or use winget:             winget install Git.Git
-    Or use Chocolatey:         choco install git
-'@
+            '    Install Git for Windows:   https://git-scm.com/download/win'
+            '    Or use winget:             winget install Git.Git'
+            '    Or use Chocolatey:         choco install git'
         }
         'wsl' {
-            @'
-    You are inside WSL — install Git in your Linux distro:
-        Debian/Ubuntu : sudo apt update && sudo apt install -y git
-        Fedora/RHEL   : sudo dnf install -y git
-        Arch          : sudo pacman -S --noconfirm git
-'@
+            '    You are inside WSL — install Git in your Linux distro:'
+            '        Debian/Ubuntu : sudo apt update && sudo apt install -y git'
+            '        Fedora/RHEL   : sudo dnf install -y git'
+            '        Arch          : sudo pacman -S --noconfirm git'
         }
         default { '    install git via your package manager' }
     }
@@ -305,11 +301,19 @@ function script:Install-Uv {
 
     try {
         # The official uv PowerShell installer reads $env:INSTALLER_DOWNLOAD_URL
-        # to redirect to a mirror, and exits 0 on success.  We tee its output
-        # through Out-String so any error is captured in $LASTEXITCODE.
+        # to redirect to a mirror, and exits 0 on success.  We download to a
+        # temp file and execute it with & (not Invoke-Expression) to avoid
+        # parameter pollution when the outer script is itself piped via iex.
         $env:UV_INSTALL_DIR = Join-Path $env:USERPROFILE '.local'
-        $ps = (Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -UseBasicParsing).Content
-        Invoke-Expression $ps
+        $tmpDir = Join-Path $env:TEMP 'clawcodex-installer'
+        if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null }
+        $tmpFile = Join-Path $tmpDir 'install-uv.ps1'
+        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -UseBasicParsing -OutFile $tmpFile
+        try {
+            & $tmpFile
+        } finally {
+            Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
+        }
     } catch {
         Die-With-Help "Failed to download / run uv installer: $_" `
             'Check your network connection and proxy settings.' `
@@ -380,8 +384,12 @@ function script:Clone-OrUpdate-Repo {
         Log-Info "Existing repo found at $ClawCodexHome — pulling latest changes ..."
         Push-Location $ClawCodexHome
         try {
+            $savedEAP = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
             & git pull --ff-only 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
+            $pullExit = $LASTEXITCODE
+            $ErrorActionPreference = $savedEAP
+            if ($pullExit -eq 0) {
                 Log-Ok 'Updated via fast-forward'
             } else {
                 Log-Warn 'git pull --ff-only failed (likely local edits or non-FF history). Continuing with existing code.'
@@ -419,12 +427,20 @@ function script:Clone-OrUpdate-Repo {
 
     Log-Info "Cloning $RepoUrl (ref: $RepoRef) -> $ClawCodexHome"
 
+    # Temporarily relax ErrorActionPreference so stderr from git (e.g. tag not
+    # found on remote) triggers a non-terminating error, allowing the fallback
+    # to default branch below.  Restored immediately after clone.
+    $savedEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+
     # Try the pinned ref first.  This is what makes the install version-stable:
     # the matching uv.lock at REPO_REF pins every transitive dep to a known-good
     # version, so old install.ps1 + old clawcodex + old deps always line up.
     $cloneArgs = @('--depth', '1', '--branch', $RepoRef, $RepoUrl, $ClawCodexHome)
     $cloneOut = & git clone @cloneArgs 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $cloneExit = $LASTEXITCODE
+    if ($cloneExit -eq 0) {
+        $ErrorActionPreference = $savedEAP
         Log-Ok "Cloned ref $RepoRef (clawcodex $ClawCodexVersion)"
         return
     }
@@ -437,7 +453,10 @@ function script:Clone-OrUpdate-Repo {
     Log-Warn "  Push a '$RepoRef' git tag (or update -Ref) to enforce the version."
 
     $cloneOut = & git clone --depth 1 $RepoUrl $ClawCodexHome 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $fallbackExit = $LASTEXITCODE
+    $ErrorActionPreference = $savedEAP
+
+    if ($fallbackExit -ne 0) {
         Die-With-Help 'git clone failed.' `
             'Check your network connection.' `
             "Verify:  Invoke-WebRequest -Method Head $RepoUrl" `
@@ -468,15 +487,15 @@ function script:Ensure-Local-EnvFile {
     if (Test-Path $envExample) {
         Copy-Item -LiteralPath $envExample -Destination $envFile -Force
     } else {
-        $template = @'
-# Local F-73 release credentials. Never commit real token values.
-GITCODE_TOKEN=
-TEST_PYPI_TOKEN=
-# PYPI_TOKEN=
-GITCODE_OWNER=
-GITCODE_REPO=
-GITCODE_API_ROOT=https://api.gitcode.com
-'@
+        $template = @(
+            '# Local F-73 release credentials. Never commit real token values.'
+            'GITCODE_TOKEN='
+            'TEST_PYPI_TOKEN='
+            '# PYPI_TOKEN='
+            'GITCODE_OWNER='
+            'GITCODE_REPO='
+            'GITCODE_API_ROOT=https://api.gitcode.com'
+        )
         Set-Content -LiteralPath $envFile -Value $template -Encoding UTF8
     }
 
@@ -709,18 +728,16 @@ function script:Write-Wrapper {
         Remove-Item -LiteralPath $wrapper -Force
     }
 
-    $body = @"
-@echo off
-REM Auto-generated by clawcodex install.ps1 — do not edit by hand.
-REM Regenerate by re-running install.ps1.
-REM Point the runtime at the configured config dir; the wrapper itself is
-REM pinned to the install dir baked in at generation time, but the config
-REM dir can be re-pointed at runtime by the user via this env var.
-setlocal
-if "%CLAWCODEX_CONFIG_DIR%"=="" set "CLAWCODEX_CONFIG_DIR=$ConfigDir"
-"$Target" %*
-endlocal
-"@
+    $body = '@echo off' + "`r`n" +
+        'REM Auto-generated by clawcodex install.ps1 — do not edit by hand.' + "`r`n" +
+        'REM Regenerate by re-running install.ps1.' + "`r`n" +
+        'REM Point the runtime at the configured config dir; the wrapper itself is' + "`r`n" +
+        'REM pinned to the install dir baked in at generation time, but the config' + "`r`n" +
+        'REM dir can be re-pointed at runtime by the user via this env var.' + "`r`n" +
+        'setlocal' + "`r`n" +
+        "if \"%CLAWCODEX_CONFIG_DIR%\"==\"\" set \"CLAWCODEX_CONFIG_DIR=$ConfigDir\"" + "`r`n" +
+        "`"$Target`" %*" + "`r`n" +
+        'endlocal'
     if ($DryRun) {
         ScriptP1
         Write-Host "[DRY-RUN] would write: $wrapper"
@@ -1200,300 +1217,301 @@ function script:Uninstall-Install {
 #  Help
 # ============================================================================
 function script:Show-Help {
-    Write-Host @"
-clawcodex installer v$InstallerVersion  (installs clawcodex v$ClawCodexVersion)
-
-USAGE
-    $SponsorScript [SUBCOMMAND] [OPTIONS]
-    powershell -ExecutionPolicy Bypass -File $SponsorScript [SUBCOMMAND] [OPTIONS]
-
-SUBCOMMANDS
-    (none) / install    Install clawcodex (default action).
-    status              Show current install state — no side effects.
-    doctor              Diagnose the environment (git, python, network, disk,
-                        permissions) — no side effects.
-    verify              Health-check an existing install (venv, entry point,
-                        PATH, smoke test) — no side effects.
-    update              Pull latest from the configured ref and reinstall deps.
-    uninstall           Remove everything this installer created.
-    help                Show this help.
-
-OPTIONS
-    -Ref <ref>             Override the git ref to install (commit SHA, tag, or
-                           branch).  Default: $RepoRef (derived from ClawCodexVersion).
-                           Useful for pinning to an exact commit during bisection
-                           or for testing unreleased code.
-    -InstallDir <path>     Override the project clone + venv location.
-                           Default: $DefaultInstallDir
-    -ConfigDir <path>      Override the runtime config directory (sessions, auth,
-                           history).  Default: $DefaultConfigDir
-                           Exposed to clawcodex-dev via the CLAWCODEX_CONFIG_DIR
-                           env var injected by the wrapper scripts.
-    -NoVenv                Skip virtual-environment creation.  Dependencies are
-                           installed into the active system Python via
-                           'uv pip install --system'.  Use this in containers or
-                           any environment where the venv would be redundant.
-    -NoSetup               Skip the post-install configuration-wizard hint.
-                           Use for non-interactive / CI / Docker installs.
-                           You can configure later by running clawcodex-dev.
-    -DryRun                Preview every change without applying it.  Prints each
-                           command that would run as '[DRY-RUN] would run: ...'.
-                           Combines well with status / doctor.
-    -Yes / -Force          Assume 'yes' for any interactive prompts.
-    -LogFile <path>        Tee all output (stdout + stderr) to <path>.  The EXIT
-                           summary prints the log file path on success and on
-                           failure.
-    -Uninstall             Alias for the 'uninstall' subcommand.
-    -Help                  Show this help (English).
-    -HelpZh                Show help in Chinese (中文帮助).
-    -Version               Print installer version.
-
-DEFAULTS
-    Repo         : $RepoUrl
-    Git ref      : $RepoRef  (override with -Ref)
-    Install path : $DefaultInstallDir  (override with -InstallDir)
-    Config path  : $DefaultConfigDir  (override with -ConfigDir)
-    Python       : >= $PythonMinVersion  (provisioned by uv if missing)
-    Tooling      : uv (Astral's package manager — installed user-local, no admin)
-
-EXAMPLES
-    # First-time install (most common):
-    $SponsorScript
-
-    # Check if install is healthy (agent / CI / post-deploy check):
-    $SponsorScript verify
-
-    # See what's installed and where:
-    $SponsorScript status
-
-    # Diagnose the environment before installing:
-    $SponsorScript doctor
-
-    # Install a specific tag (e.g. for bisection):
-    $SponsorScript -Ref v0.5.0
-
-    # Custom install + config directories (e.g. system-wide):
-    $SponsorScript -InstallDir C:\Apps\clawcodex -ConfigDir C:\ProgramData\clawcodex
-
-    # Non-interactive install for CI / Docker (no venv, no setup hint):
-    $SponsorScript -NoVenv -NoSetup -Force -LogFile C:\Temp\install.log
-
-    # Preview what an install would do without applying:
-    $SponsorScript -DryRun
-
-    # Re-run after a failed install to capture full output for bug reports:
-    $SponsorScript -LogFile C:\Temp\install.log
-    # ... and read C:\Temp\install.log
-
-    # Remove everything this script installed (preserves config dir):
-    $SponsorScript uninstall
-
-TROUBLESHOOTING
-    "Git is not installed"
-        Install Git: winget install Git.Git, or download from
-        https://git-scm.com/download/win, then reopen PowerShell.
-
-    "uv installer failed to download" / network errors
-        Check your network, proxy, and VPN.  Retry:  $SponsorScript
-        Manual uv install:  iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex
-
-    "git clone failed"
-        Verify network:  Test-NetConnection $RepoUrl -Port 443
-        If behind a firewall, configure a proxy or use a mirror.
-
-    "uv venv failed" / "uv sync failed" / "uv pip install failed"
-        Re-run with -LogFile to capture full output:
-            $SponsorScript -LogFile C:\Temp\out.log
-        Diagnose:  $SponsorScript doctor
-        Clean reinstall:  $SponsorScript uninstall ; $SponsorScript
-
-    "clawcodex-dev: command not found" after install
-        Your shell hasn't picked up the new PATH yet.  Either:
-          - Open a new PowerShell window, or
-          - Run:  `$env:Path = '$LocalBin;' + `$env:Path
-
-    Permission errors when writing to $LocalBin or $DefaultInstallDir
-        Pick a writable location:
-            $SponsorScript -InstallDir C:\Users\<you>\apps\clawcodex
-
-    Stale install (changes don't take effect)
-        Pull latest + reinstall:  $SponsorScript update
-        Hard reset:               $SponsorScript uninstall ; $SponsorScript
-
-EXIT CODES
-    0    Success.
-    1    Installation / verification / doctor found a problem.
-    2    Invalid CLI argument (unknown flag, missing value).
-    3    Doctor / verify found critical issues.
-
-VERSIONING
-    This install.ps1 is paired 1:1 with a clawcodex release.  ClawCodexVersion
-    and RepoRef are the version pin; the matching uv.lock pins every transitive
-    dependency.  To install a different clawcodex version, download the
-    install.ps1 that ships with that release — do NOT just edit these constants
-    in isolation, since the lock file is what actually pins the dependency
-    versions.  The -Ref flag is a deliberate escape hatch for testing specific
-    commits and is NOT a substitute for shipping a properly tagged installer.
-
-NOTES
-    - Re-running this script is safe: existing repos are fast-forwarded,
-      existing venvs are reused, command wrappers are regenerated.
-    - install/update creates a local .env template when missing and attempts
-      to install .git/hooks/pre-commit after deps are available.  Hook
-      installation is best-effort and never blocks CLI setup.
-    - On Windows, run from PowerShell 5.1+ (built-in) or PowerShell 7+ (pwsh).
-      On WSL, prefer the bash install.sh — this script targets the Windows
-      side of things but works in WSL-hosted PowerShell too.
-    - In non-TTY mode (piped / agent / CI), every emitted line is prefixed
-      with '[install.ps1]'.  A 'DONE: SUCCESS|FAILED' line is emitted on exit,
-      so you can grep the tail of any captured log.
-"@
+    @(
+        "clawcodex installer v$InstallerVersion  (installs clawcodex v$ClawCodexVersion)"
+        ""
+        "USAGE"
+        "    $SponsorScript [SUBCOMMAND] [OPTIONS]"
+        "    powershell -ExecutionPolicy Bypass -File $SponsorScript [SUBCOMMAND] [OPTIONS]"
+        ""
+        "SUBCOMMANDS"
+        "    (none) / install    Install clawcodex (default action)."
+        "    status              Show current install state — no side effects."
+        "    doctor              Diagnose the environment (git, python, network, disk,"
+        "                        permissions) — no side effects."
+        "    verify              Health-check an existing install (venv, entry point,"
+        "                        PATH, smoke test) — no side effects."
+        "    update              Pull latest from the configured ref and reinstall deps."
+        "    uninstall           Remove everything this installer created."
+        "    help                Show this help."
+        ""
+        "OPTIONS"
+        "    -Ref <ref>             Override the git ref to install (commit SHA, tag, or"
+        "                           branch).  Default: $RepoRef (derived from ClawCodexVersion)."
+        "                           Useful for pinning to an exact commit during bisection"
+        "                           or for testing unreleased code."
+        "    -InstallDir <path>     Override the project clone + venv location."
+        "                           Default: $DefaultInstallDir"
+        "    -ConfigDir <path>      Override the runtime config directory (sessions, auth,"
+        "                           history).  Default: $DefaultConfigDir"
+        "                           Exposed to clawcodex-dev via the CLAWCODEX_CONFIG_DIR"
+        "                           env var injected by the wrapper scripts."
+        "    -NoVenv                Skip virtual-environment creation.  Dependencies are"
+        "                           installed into the active system Python via"
+        "                           'uv pip install --system'.  Use this in containers or"
+        "                           any environment where the venv would be redundant."
+        "    -NoSetup               Skip the post-install configuration-wizard hint."
+        "                           Use for non-interactive / CI / Docker installs."
+        "                           You can configure later by running clawcodex-dev."
+        "    -DryRun                Preview every change without applying it.  Prints each"
+        "                           command that would run as '[DRY-RUN] would run: ...'."
+        "                           Combines well with status / doctor."
+        "    -Yes / -Force          Assume 'yes' for any interactive prompts."
+        "    -LogFile <path>        Tee all output (stdout + stderr) to <path>.  The EXIT"
+        "                           summary prints the log file path on success and on"
+        "                           failure."
+        "    -Uninstall             Alias for the 'uninstall' subcommand."
+        "    -Help                  Show this help (English)."
+        "    -HelpZh                Show help in Chinese (中文帮助)."
+        "    -Version               Print installer version."
+        ""
+        "DEFAULTS"
+        "    Repo         : $RepoUrl"
+        "    Git ref      : $RepoRef  (override with -Ref)"
+        "    Install path : $DefaultInstallDir  (override with -InstallDir)"
+        "    Config path  : $DefaultConfigDir  (override with -ConfigDir)"
+        "    Python       : >= $PythonMinVersion  (provisioned by uv if missing)"
+        "    Tooling      : uv (Astral's package manager — installed user-local, no admin)"
+        ""
+        "EXAMPLES"
+        "    # First-time install (most common):"
+        "    $SponsorScript"
+        ""
+        "    # Check if install is healthy (agent / CI / post-deploy check):"
+        "    $SponsorScript verify"
+        ""
+        "    # See what's installed and where:"
+        "    $SponsorScript status"
+        ""
+        "    # Diagnose the environment before installing:"
+        "    $SponsorScript doctor"
+        ""
+        "    # Install a specific tag (e.g. for bisection):"
+        "    $SponsorScript -Ref v0.5.0"
+        ""
+        "    # Custom install + config directories (e.g. system-wide):"
+        "    $SponsorScript -InstallDir C:\Apps\clawcodex -ConfigDir C:\ProgramData\clawcodex"
+        ""
+        "    # Non-interactive install for CI / Docker (no venv, no setup hint):"
+        "    $SponsorScript -NoVenv -NoSetup -Force -LogFile C:\Temp\install.log"
+        ""
+        "    # Preview what an install would do without applying:"
+        "    $SponsorScript -DryRun"
+        ""
+        "    # Re-run after a failed install to capture full output for bug reports:"
+        "    $SponsorScript -LogFile C:\Temp\install.log"
+        "    # ... and read C:\Temp\install.log"
+        ""
+        "    # Remove everything this script installed (preserves config dir):"
+        "    $SponsorScript uninstall"
+        ""
+        "TROUBLESHOOTING"
+        '    "Git is not installed"'
+        "        Install Git: winget install Git.Git, or download from"
+        "        https://git-scm.com/download/win, then reopen PowerShell."
+        ""
+        '    "uv installer failed to download" / network errors'
+        "        Check your network, proxy, and VPN.  Retry:  $SponsorScript"
+        "        Manual uv install:  iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex"
+        ""
+        '    "git clone failed"'
+        "        Verify network:  Test-NetConnection $RepoUrl -Port 443"
+        "        If behind a firewall, configure a proxy or use a mirror."
+        ""
+        '    "uv venv failed" / "uv sync failed" / "uv pip install failed"'
+        "        Re-run with -LogFile to capture full output:"
+        "            $SponsorScript -LogFile C:\Temp\out.log"
+        "        Diagnose:  $SponsorScript doctor"
+        "        Clean reinstall:  $SponsorScript uninstall ; $SponsorScript"
+        ""
+        '    "clawcodex-dev: command not found" after install'
+        "        Your shell hasn't picked up the new PATH yet.  Either:"
+        '          - Open a new PowerShell window, or'
+        "          - Run:  `$env:Path = '$LocalBin;' + `$env:Path"
+        ""
+        "    Permission errors when writing to $LocalBin or $DefaultInstallDir"
+        "        Pick a writable location:"
+        "            $SponsorScript -InstallDir C:\Users\<you>\apps\clawcodex"
+        ""
+        "    Stale install (changes don't take effect)"
+        "        Pull latest + reinstall:  $SponsorScript update"
+        "        Hard reset:               $SponsorScript uninstall ; $SponsorScript"
+        ""
+        "EXIT CODES"
+        "    0    Success."
+        "    1    Installation / verification / doctor found a problem."
+        "    2    Invalid CLI argument (unknown flag, missing value)."
+        "    3    Doctor / verify found critical issues."
+        ""
+        "VERSIONING"
+        "    This install.ps1 is paired 1:1 with a clawcodex release.  ClawCodexVersion"
+        "    and RepoRef are the version pin; the matching uv.lock pins every transitive"
+        "    dependency.  To install a different clawcodex version, download the"
+        "    install.ps1 that ships with that release — do NOT just edit these constants"
+        "    in isolation, since the lock file is what actually pins the dependency"
+        "    versions.  The -Ref flag is a deliberate escape hatch for testing specific"
+        "    commits and is NOT a substitute for shipping a properly tagged installer."
+        ""
+        "NOTES"
+        "    - Re-running this script is safe: existing repos are fast-forwarded,"
+        "      existing venvs are reused, command wrappers are regenerated."
+        "    - install/update creates a local .env template when missing and attempts"
+        "      to install .git/hooks/pre-commit after deps are available.  Hook"
+        "      installation is best-effort and never blocks CLI setup."
+        "    - On Windows, run from PowerShell 5.1+ (built-in) or PowerShell 7+ (pwsh)."
+        "      On WSL, prefer the bash install.sh — this script targets the Windows"
+        "      side of things but works in WSL-hosted PowerShell too."
+        "    - In non-TTY mode (piped / agent / CI), every emitted line is prefixed"
+        "      with '[install.ps1]'.  A 'DONE: SUCCESS|FAILED' line is emitted on exit,"
+        "      so you can grep the tail of any captured log."
+    ) -join "`n" | Write-Host
 }
 
 function script:Show-HelpZh {
-    Write-Host @"
-clawcodex 安装脚本 v$InstallerVersion  (安装 clawcodex v$ClawCodexVersion)
-
-用法
-    $SponsorScript [子命令] [选项]
-    powershell -ExecutionPolicy Bypass -File $SponsorScript [子命令] [选项]
-
-子命令
-    （无） / install    安装 clawcodex（默认动作）。
-    status              显示当前安装状态——无副作用。
-    doctor              诊断环境（git、python、网络、磁盘、权限）——无副作用。
-    verify              健康检查已有安装（venv、入口、PATH、烟雾测试）——无副作用。
-    update              拉取最新代码并重装依赖。
-    uninstall           卸载本脚本创建的所有内容。
-    help                显示英文版帮助。
-
-选项
-    -Ref <引用>            覆盖要安装的 git 引用（commit SHA、tag 或分支）。
-                           默认：$RepoRef（由 ClawCodexVersion 推导得出）。
-                           常用于 bisect 时精确锁定 commit，或测试未发布代码。
-    -InstallDir <路径>     覆盖项目克隆和 venv 所在的位置。
-                           默认：$DefaultInstallDir
-    -ConfigDir <路径>      覆盖运行时配置目录（会话、鉴权、历史记录）。
-                           默认：$DefaultConfigDir
-                           通过 wrapper 脚本注入的 CLAWCODEX_CONFIG_DIR
-                           环境变量暴露给 clawcodex-dev。
-    -NoVenv                跳过虚拟环境的创建。依赖直接安装到当前系统
-                           Python（使用 'uv pip install --system'）。适用
-                           于容器或任何 venv 多余的环境。
-    -NoSetup               跳过安装后的配置提示。适用于非交互 / CI /
-                           Docker 场景。之后可随时手动运行 clawcodex-dev
-                           进行配置。
-    -DryRun                预览所有改动但不实际执行。把每条会运行的命令打
-                           印为 '[DRY-RUN] would run: ...'。与 status /
-                           doctor 配合使用效果更佳。
-    -Yes / -Force          对所有交互式提示默认回答 yes。
-    -LogFile <路径>        把所有输出（stdout + stderr）同时写入 <路径>。
-                           退出摘要会在成功 / 失败时都打印日志路径。
-    -Uninstall             'uninstall' 子命令的简写。
-    -Help                  显示英文版帮助。
-    -HelpZh                显示本中文版帮助。
-    -Version               打印安装脚本版本。
-
-默认值
-    仓库地址   ：$RepoUrl
-    Git 引用  ：$RepoRef  （用 -Ref 覆盖）
-    安装路径  ：$DefaultInstallDir  （用 -InstallDir 覆盖）
-    配置路径  ：$DefaultConfigDir  （用 -ConfigDir 覆盖）
-    Python    ：>= $PythonMinVersion  （缺失时由 uv 自动提供）
-    工具链    ：uv（Astral 的包管理器——用户级安装，无需管理员权限）
-
-示例
-    # 首次安装（最常见）：
-    $SponsorScript
-
-    # 检查安装是否健康（agent / CI / 部署后检查）：
-    $SponsorScript verify
-
-    # 查看已安装的内容和位置：
-    $SponsorScript status
-
-    # 安装前诊断环境：
-    $SponsorScript doctor
-
-    # 安装特定 tag（例如 bisect 时）：
-    $SponsorScript -Ref v0.5.0
-
-    # 自定义安装和配置目录：
-    $SponsorScript -InstallDir C:\Apps\clawcodex -ConfigDir C:\ProgramData\clawcodex
-
-    # CI / Docker 环境的非交互式安装（无 venv、无配置提示）：
-    $SponsorScript -NoVenv -NoSetup -Force -LogFile C:\Temp\install.log
-
-    # 预览安装流程而不实际执行：
-    $SponsorScript -DryRun
-
-    # 安装失败后重新运行以捕获完整输出供排查：
-    $SponsorScript -LogFile C:\Temp\install.log
-    # ... 然后查看 C:\Temp\install.log
-
-    # 移除本脚本安装的所有内容（保留配置目录）：
-    $SponsorScript uninstall
-
-故障排查
-    "Git is not installed"
-        安装 Git：winget install Git.Git，或从
-        https://git-scm.com/download/win 下载，然后重开 PowerShell。
-
-    "uv installer failed to download" / 网络错误
-        检查网络、代理、VPN。重试：$SponsorScript
-        手动安装 uv：iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex
-
-    "git clone failed"
-        验证网络：Test-NetConnection $RepoUrl -Port 443
-        如果在防火墙后，配置代理或使用镜像。
-
-    "uv venv failed" / "uv sync failed" / "uv pip install failed"
-        重新运行并用 -LogFile 捕获完整输出：
-            $SponsorScript -LogFile C:\Temp\out.log
-        诊断：$SponsorScript doctor
-        干净重装：$SponsorScript uninstall ; $SponsorScript
-
-    安装后提示 "clawcodex-dev: command not found"
-        当前 shell 还没加载新的 PATH。请：
-          - 新开一个 PowerShell 窗口，或
-          - 执行 `$env:Path = '$LocalBin;' + `$env:Path`
-
-    写入 $LocalBin 或 $DefaultInstallDir 时权限错误
-        选择可写位置：
-            $SponsorScript -InstallDir C:\Users\<你>\apps\clawcodex
-
-    安装版本陈旧（修改不生效）
-        拉取最新 + 重装：$SponsorScript update
-        硬重置：          $SponsorScript uninstall ; $SponsorScript
-
-退出码
-    0    成功。
-    1    安装 / 验证 / 诊断发现问题。
-    2    无效的 CLI 参数（未知选项、缺少值）。
-    3    doctor / verify 发现严重问题。
-
-版本控制
-    本 install.ps1 与 clawcodex 的某个发布版本一一对应。ClawCodexVersion
-    和 RepoRef 是版本钉子；对应的 uv.lock 把所有传递依赖一并锁定。要
-    安装不同版本的 clawcodex，请下载该发布版自带的 install.ps1——不要
-    单独修改这些常量，因为真正钉住依赖版本的是 lock 文件。-Ref 标志
-    是用于测试特定 commit 的有意保留的逃生口，**不能**替代正规打 tag
-    的安装脚本。
-
-注意事项
-    - 重复运行本脚本是安全的：已存在的仓库会 fast-forward，已存在的
-      venv 会复用，命令 wrapper 会重新生成。
-    - install/update 会在缺失时创建本地 .env 模板，并在依赖可用后尝试
-      安装 .git/hooks/pre-commit。hook 安装是 best-effort，不会阻断
-      CLI 安装。
-    - 在 Windows 上请从 PowerShell 5.1+（系统自带）或 PowerShell 7+
-      （pwsh）运行。在 WSL 上请优先使用 bash 版的 install.sh——本脚本
-      面向 Windows 侧，但在 WSL 托管的 PowerShell 中也能工作。
-    - 在非 TTY 模式（管道 / agent / CI）下，每一行输出都会加上
-      '[install.ps1]' 前缀。退出时会单独输出一行
-      'DONE: SUCCESS|FAILED'，所以你可以直接 grep 日志末尾判断结果。
-"@
+    @(
+        "clawcodex 安装脚本 v$InstallerVersion  (安装 clawcodex v$ClawCodexVersion)"
+        ""
+        "用法"
+        "    $SponsorScript [子命令] [选项]"
+        "    powershell -ExecutionPolicy Bypass -File $SponsorScript [子命令] [选项]"
+        ""
+        "子命令"
+        "    （无） / install    安装 clawcodex（默认动作）。"
+        "    status              显示当前安装状态——无副作用。"
+        "    doctor              诊断环境（git、python、网络、磁盘、权限）——无副作用。"
+        "    verify              健康检查已有安装（venv、入口、PATH、烟雾测试）——无副作用。"
+        "    update              拉取最新代码并重装依赖。"
+        "    uninstall           卸载本脚本创建的所有内容。"
+        "    help                显示英文版帮助。"
+        ""
+        "选项"
+        "    -Ref <引用>            覆盖要安装的 git 引用（commit SHA、tag 或分支）。"
+        "                           默认：$RepoRef（由 ClawCodexVersion 推导得出）。"
+        "                           常用于 bisect 时精确锁定 commit，或测试未发布代码。"
+        "    -InstallDir <路径>     覆盖项目克隆和 venv 所在的位置。"
+        "                           默认：$DefaultInstallDir"
+        "    -ConfigDir <路径>      覆盖运行时配置目录（会话、鉴权、历史记录）。"
+        "                           默认：$DefaultConfigDir"
+        "                           通过 wrapper 脚本注入的 CLAWCODEX_CONFIG_DIR"
+        "                           环境变量暴露给 clawcodex-dev。"
+        "    -NoVenv                跳过虚拟环境的创建。依赖直接安装到当前系统"
+        "                           Python（使用 'uv pip install --system'）。适用"
+        "                           于容器或任何 venv 多余的环境。"
+        "    -NoSetup               跳过安装后的配置提示。适用于非交互 / CI /"
+        "                           Docker 场景。之后可随时手动运行 clawcodex-dev"
+        "                           进行配置。"
+        "    -DryRun                预览所有改动但不实际执行。把每条会运行的命令打"
+        "                           印为 '[DRY-RUN] would run: ...'。与 status /"
+        "                           doctor 配合使用效果更佳。"
+        "    -Yes / -Force          对所有交互式提示默认回答 yes。"
+        "    -LogFile <路径>        把所有输出（stdout + stderr）同时写入 <路径>。"
+        "                           退出摘要会在成功 / 失败时都打印日志路径。"
+        "    -Uninstall             'uninstall' 子命令的简写。"
+        "    -Help                  显示英文版帮助。"
+        "    -HelpZh                显示本中文版帮助。"
+        "    -Version               打印安装脚本版本。"
+        ""
+        "默认值"
+        "    仓库地址   ：$RepoUrl"
+        "    Git 引用  ：$RepoRef  （用 -Ref 覆盖）"
+        "    安装路径  ：$DefaultInstallDir  （用 -InstallDir 覆盖）"
+        "    配置路径  ：$DefaultConfigDir  （用 -ConfigDir 覆盖）"
+        "    Python    ：>= $PythonMinVersion  （缺失时由 uv 自动提供）"
+        "    工具链    ：uv（Astral 的包管理器——用户级安装，无需管理员权限）"
+        ""
+        "示例"
+        "    # 首次安装（最常见）："
+        "    $SponsorScript"
+        ""
+        "    # 检查安装是否健康（agent / CI / 部署后检查）："
+        "    $SponsorScript verify"
+        ""
+        "    # 查看已安装的内容和位置："
+        "    $SponsorScript status"
+        ""
+        "    # 安装前诊断环境："
+        "    $SponsorScript doctor"
+        ""
+        "    # 安装特定 tag（例如 bisect 时）："
+        "    $SponsorScript -Ref v0.5.0"
+        ""
+        "    # 自定义安装和配置目录："
+        "    $SponsorScript -InstallDir C:\Apps\clawcodex -ConfigDir C:\ProgramData\clawcodex"
+        ""
+        "    # CI / Docker 环境的非交互式安装（无 venv、无配置提示）："
+        "    $SponsorScript -NoVenv -NoSetup -Force -LogFile C:\Temp\install.log"
+        ""
+        "    # 预览安装流程而不实际执行："
+        "    $SponsorScript -DryRun"
+        ""
+        "    # 安装失败后重新运行以捕获完整输出供排查："
+        "    $SponsorScript -LogFile C:\Temp\install.log"
+        "    # ... 然后查看 C:\Temp\install.log"
+        ""
+        "    # 移除本脚本安装的所有内容（保留配置目录）："
+        "    $SponsorScript uninstall"
+        ""
+        "故障排查"
+        '    "Git is not installed"'
+        "        安装 Git：winget install Git.Git，或从"
+        "        https://git-scm.com/download/win 下载，然后重开 PowerShell。"
+        ""
+        '    "uv installer failed to download" / 网络错误'
+        "        检查网络、代理、VPN。重试：$SponsorScript"
+        "        手动安装 uv：iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex"
+        ""
+        '    "git clone failed"'
+        "        验证网络：Test-NetConnection $RepoUrl -Port 443"
+        "        如果在防火墙后，配置代理或使用镜像。"
+        ""
+        '    "uv venv failed" / "uv sync failed" / "uv pip install failed"'
+        "        重新运行并用 -LogFile 捕获完整输出："
+        "            $SponsorScript -LogFile C:\Temp\out.log"
+        "        诊断：$SponsorScript doctor"
+        "        干净重装：$SponsorScript uninstall ; $SponsorScript"
+        ""
+        '    安装后提示 "clawcodex-dev: command not found"'
+        "        当前 shell 还没加载新的 PATH。请："
+        '          - 新开一个 PowerShell 窗口，或'
+        "          - 执行 `$env:Path = '$LocalBin;' + `$env:Path"
+        ""
+        "    写入 $LocalBin 或 $DefaultInstallDir 时权限错误"
+        "        选择可写位置："
+        "            $SponsorScript -InstallDir C:\Users\<你>\apps\clawcodex"
+        ""
+        "    安装版本陈旧（修改不生效）"
+        "        拉取最新 + 重装：$SponsorScript update"
+        "        硬重置：          $SponsorScript uninstall ; $SponsorScript"
+        ""
+        "退出码"
+        "    0    成功。"
+        "    1    安装 / 验证 / 诊断发现问题。"
+        "    2    无效的 CLI 参数（未知选项、缺少值）。"
+        "    3    doctor / verify 发现严重问题。"
+        ""
+        "版本控制"
+        "    本 install.ps1 与 clawcodex 的某个发布版本一一对应。ClawCodexVersion"
+        "    和 RepoRef 是版本钉子；对应的 uv.lock 把所有传递依赖一并锁定。要"
+        "    安装不同版本的 clawcodex，请下载该发布版自带的 install.ps1——不要"
+        "    单独修改这些常量，因为真正钉住依赖版本的是 lock 文件。-Ref 标志"
+        "    是用于测试特定 commit 的有意保留的逃生口，**不能**替代正规打 tag"
+        "    的安装脚本。"
+        ""
+        "注意事项"
+        "    - 重复运行本脚本是安全的：已存在的仓库会 fast-forward，已存在的"
+        "      venv 会复用，command wrapper 会重新生成。"
+        "    - install/update 会在缺失时创建本地 .env 模板，并在依赖可用后尝试"
+        "      安装 .git/hooks/pre-commit。hook 安装是 best-effort，不会阻断"
+        "      CLI 安装。"
+        "    - 在 Windows 上请从 PowerShell 5.1+（系统自带）或 PowerShell 7+"
+        "      （pwsh）运行。在 WSL 上请优先使用 bash 版的 install.sh——本脚本"
+        "      面向 Windows 侧，但在 WSL 托管的 PowerShell 中也能工作。"
+        "    - 在非 TTY 模式（管道 / agent / CI）下，每一行输出都会加上"
+        "      '[install.ps1]' 前缀。退出时会单独输出一行"
+        "      'DONE: SUCCESS|FAILED'，所以你可以直接 grep 日志末尾判断结果。"
+    ) -join "`n" | Write-Host
 }
+
 
 # ============================================================================
 #  Install pipeline (default subcommand)
