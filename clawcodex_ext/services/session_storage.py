@@ -112,6 +112,7 @@ class SessionMetadata:
             "message_count",
             "last_updated",
             "tags",
+            "last_user_input",
         ),
         init=False,
         repr=False,
@@ -119,13 +120,14 @@ class SessionMetadata:
     )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize only the list-summary fields.
+        """Serialize session metadata for disk persistence.
 
-        F-49 P5-F: excludes ``cwd`` / ``total_cost`` / ``last_user_input`` /
-        ``agent_name`` / ``cost``. Those values are still kept on the
-        in-memory instance (so callers that read ``meta.cwd`` continue
-        to work) but are no longer written to disk — the transcript
-        JSONL is the single source of truth.
+        ``last_user_input`` is included here (despite F-49 P5-F's original
+        intent) because the session browser (``/resume``) relies on it for
+        display — reading it from the transcript JSONL for every session in
+        the listing would be O(n) file reads with unacceptable latency.
+        Other legacy fields (``cwd``, ``total_cost``, ``agent_name``,
+        ``cost``) remain excluded as they are not needed by the UI.
         """
         return {
             "session_id": self.session_id,
@@ -135,6 +137,7 @@ class SessionMetadata:
             "message_count": self.message_count,
             "last_updated": self.last_updated,
             "tags": list(self.tags),
+            "last_user_input": self.last_user_input,
         }
 
     @classmethod
