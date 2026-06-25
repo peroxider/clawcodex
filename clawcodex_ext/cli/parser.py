@@ -191,6 +191,28 @@ Examples:
         help='Initial permission mode (default: default). "auto" uses LLM classifier.',
     )
 
+    # ---- Feature Gates ----
+    # Runtime feature-toggle controls. These are applied before the
+    # agent loop starts and take highest priority (above env vars and
+    # config file).
+    feature_group = parser.add_argument_group("feature gates")
+    feature_group.add_argument(
+        "--enable-feature",
+        dest="enable_feature",
+        type=str,
+        action="append",
+        metavar="NAME",
+        help="Enable a runtime feature flag by name (may be repeated)",
+    )
+    feature_group.add_argument(
+        "--disable-feature",
+        dest="disable_feature",
+        type=str,
+        action="append",
+        metavar="NAME",
+        help="Disable a runtime feature flag by name (may be repeated)",
+    )
+
     # Subcommands are intercepted in ``main`` before argparse runs so that a
     # free-form prompt argument cannot be misinterpreted as a subcommand.
     # Listing them here purely for ``--help`` documentation.
@@ -204,5 +226,6 @@ Examples:
         "  login    Configure API keys or ChatGPT OAuth (interactive)\n"
         "  config   Show current configuration\n"
         "  autonomy Show scheduled-task status and runs\n"
+        "  feature  Manage runtime feature flags (F-68)\n"
     )
     return parser

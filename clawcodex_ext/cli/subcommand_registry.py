@@ -63,6 +63,9 @@ def load_builtin_subcommands() -> None:
     # F-75: ``clawcodex stats`` subcommand for tool/skill usage statistics
     from clawcodex_ext.cli import stats_cmd as _stats_cmd  # noqa: F401
 
+    # F-68: ``clawcodex feature`` subcommand for runtime feature-gate management
+    from clawcodex_ext.feature_gate.cli import run_feature_command  # noqa: F401
+
     from extensions.remote_api.cli import register_api_subcommand
 
     register_api_subcommand()

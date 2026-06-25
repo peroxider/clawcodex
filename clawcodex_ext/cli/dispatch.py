@@ -74,6 +74,23 @@ def _derive_session_id() -> str:
     return uuid.uuid4().hex
 
 
+def _apply_feature_gate_overrides(args: object) -> None:
+    """Apply ``--enable-feature`` / ``--disable-feature`` CLI args."""
+    try:
+        from clawcodex_ext.feature_gate import get_registry
+
+        reg = get_registry()
+        enable_flags = getattr(args, "enable_feature", None) or []
+        disable_flags = getattr(args, "disable_feature", None) or []
+        for name in enable_flags:
+            reg.enable_feature(name)
+        for name in disable_flags:
+            reg.disable_feature(name)
+    except Exception:
+        # Feature-gate failures MUST NEVER block the CLI.
+        pass
+
+
 def _maybe_argcomplete_top_level(argv: list[str]) -> None:
     """If argcomplete is active, expose the fast-path subcommand nouns.
 
@@ -418,6 +435,12 @@ def run_cli(argv: list[str] | None = None) -> int:
         import src.cli as src_cli
 
         return src_cli.show_config()
+
+    # ---- Feature Gate CLI overrides ----------------------------------
+    # Apply ``--enable-feature`` / ``--disable-feature`` before the
+    # agent loop starts.  These programmatic overrides take priority
+    # over env-vars and config-file values.
+    _apply_feature_gate_overrides(args)
 
     # Plan-phase-1 wiring (ch02-bootstrap-refactoring-plan.md P1.5):
     # ``run_pre_action(args)`` is the Python analog of Commander's

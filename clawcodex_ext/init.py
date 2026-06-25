@@ -129,6 +129,71 @@ def init() -> None:
     ensure_nested_transcript_initialized()
     profile_checkpoint("init_after_nested_transcript")
 
+    # F-68: initialize the feature-gate registry so that
+    # ``@feature_gated`` decorators and ``registry.is_enabled()``
+    # calls work from the earliest possible point in the agent loop.
+    _logger.info("init: initializing feature-gate registry")
+    try:
+        from clawcodex_ext.feature_gate import get_registry
+        from clawcodex_ext.feature_gate.types import FeatureFlag
+
+        reg = get_registry()
+        # Register a small set of built-in feature flags that map
+        # closely to the CCB macro-defines.  These serve as examples
+        # and can be extended by downstream modules.
+        _builtin_features: list[FeatureFlag] = [
+            FeatureFlag(
+                name="AGENTIC_MODE",
+                default=False,
+                deps=[],
+                mutex_with=["PLAIN_CHAT"],
+                description="Enable agentic multi-step planning mode",
+            ),
+            FeatureFlag(
+                name="PLAIN_CHAT",
+                default=True,
+                deps=[],
+                mutex_with=["AGENTIC_MODE"],
+                description="Plain chat mode (opposite of agentic planning)",
+            ),
+            FeatureFlag(
+                name="EXPERIMENTAL_TOOLS",
+                default=False,
+                deps=[],
+                mutex_with=[],
+                description="Expose experimental tool integrations",
+            ),
+            FeatureFlag(
+                name="REMOTE_SESSIONS",
+                default=False,
+                deps=["EXPERIMENTAL_TOOLS"],
+                mutex_with=[],
+                description="Allow remote session connections",
+            ),
+            FeatureFlag(
+                name="VOICE_MODE",
+                default=False,
+                deps=["EXPERIMENTAL_TOOLS"],
+                mutex_with=[],
+                description="Enable voice input/output mode",
+            ),
+            FeatureFlag(
+                name="SANDBOX_EXECUTION",
+                default=False,
+                deps=[],
+                mutex_with=[],
+                description="Run tool executions in an isolated sandbox",
+            ),
+        ]
+        for feat in _builtin_features:
+            try:
+                reg.register(feat)
+            except ValueError:
+                pass  # Already registered (idempotent).
+        profile_checkpoint("init_feature_gate_registered")
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("init: feature-gate registry init failed: %s", exc)
+
     # F-97: install global exception hooks. Idempotent and best-effort —
     # a misconfigured telemetry config must never block init. Local
     # import avoids pinning telemetry in ``src.init``'s module surface.
