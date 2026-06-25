@@ -38,15 +38,15 @@ if TYPE_CHECKING:
     from src.task_registry import RuntimeTaskRegistry
 
 
-NotificationStatus = Literal["completed", "failed", "killed"]
+NotificationStatus = Literal['completed', 'failed', 'killed']
 
 
 def _build_summary(description: str, status: NotificationStatus, error: str | None) -> str:
     """Mirror TS LocalAgentTask.tsx:246 summary phrasing exactly."""
-    if status == "completed":
+    if status == 'completed':
         return f'Agent "{description}" completed'
-    if status == "failed":
-        err = error or "Unknown error"
+    if status == 'failed':
+        err = error or 'Unknown error'
         return f'Agent "{description}" failed: {err}'
     return f'Agent "{description}" was stopped'
 
@@ -76,25 +76,25 @@ def build_task_notification_xml(
     closing tags inside summary/result text.
     """
     summary = _build_summary(description, status, error)
-    tool_use_line = f"\n<{TOOL_USE_ID_TAG}>{tool_use_id}</{TOOL_USE_ID_TAG}>" if tool_use_id else ""
-    result_section = f"\n<{RESULT_TAG}>{final_message}</{RESULT_TAG}>" if final_message else ""
+    tool_use_line = f'\n<{TOOL_USE_ID_TAG}>{tool_use_id}</{TOOL_USE_ID_TAG}>' if tool_use_id else ''
+    result_section = f'\n<{RESULT_TAG}>{final_message}</{RESULT_TAG}>' if final_message else ''
     if usage is not None:
         usage_section = (
-            f"\n<{USAGE_TAG}>"
-            f"<{TOTAL_TOKENS_TAG}>{usage.get('total_tokens', 0)}</{TOTAL_TOKENS_TAG}>"
-            f"<{TOOL_USES_TAG}>{usage.get('tool_uses', 0)}</{TOOL_USES_TAG}>"
-            f"<{DURATION_MS_TAG}>{usage.get('duration_ms', 0)}</{DURATION_MS_TAG}>"
-            f"</{USAGE_TAG}>"
+            f'\n<{USAGE_TAG}>'
+            f'<{TOTAL_TOKENS_TAG}>{usage.get("total_tokens", 0)}</{TOTAL_TOKENS_TAG}>'
+            f'<{TOOL_USES_TAG}>{usage.get("tool_uses", 0)}</{TOOL_USES_TAG}>'
+            f'<{DURATION_MS_TAG}>{usage.get("duration_ms", 0)}</{DURATION_MS_TAG}>'
+            f'</{USAGE_TAG}>'
         )
     else:
-        usage_section = ""
+        usage_section = ''
     return (
-        f"<{TASK_NOTIFICATION_TAG}>\n"
-        f"<{TASK_ID_TAG}>{task_id}</{TASK_ID_TAG}>{tool_use_line}\n"
-        f"<{OUTPUT_FILE_TAG}>{output_file}</{OUTPUT_FILE_TAG}>\n"
-        f"<{STATUS_TAG}>{status}</{STATUS_TAG}>\n"
-        f"<{SUMMARY_TAG}>{summary}</{SUMMARY_TAG}>{result_section}{usage_section}\n"
-        f"</{TASK_NOTIFICATION_TAG}>"
+        f'<{TASK_NOTIFICATION_TAG}>\n'
+        f'<{TASK_ID_TAG}>{task_id}</{TASK_ID_TAG}>{tool_use_line}\n'
+        f'<{OUTPUT_FILE_TAG}>{output_file}</{OUTPUT_FILE_TAG}>\n'
+        f'<{STATUS_TAG}>{status}</{STATUS_TAG}>\n'
+        f'<{SUMMARY_TAG}>{summary}</{SUMMARY_TAG}>{result_section}{usage_section}\n'
+        f'</{TASK_NOTIFICATION_TAG}>'
     )
 
 
@@ -104,7 +104,7 @@ def enqueue_agent_notification(
     description: str,
     status: NotificationStatus,
     output_file: str,
-    registry: "RuntimeTaskRegistry",
+    registry: 'RuntimeTaskRegistry',
     error: str | None = None,
     final_message: str | None = None,
     usage: dict[str, int] | None = None,
@@ -153,12 +153,12 @@ def enqueue_agent_notification(
         usage=usage,
         tool_use_id=tool_use_id,
     )
-    enqueue_pending_notification(value=xml, mode="task-notification")
+    enqueue_pending_notification(value=xml, mode='task-notification')
     return True
 
 
 __all__ = [
-    "NotificationStatus",
-    "build_task_notification_xml",
-    "enqueue_agent_notification",
+    'NotificationStatus',
+    'build_task_notification_xml',
+    'enqueue_agent_notification',
 ]

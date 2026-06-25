@@ -21,9 +21,9 @@ from __future__ import annotations
 import os
 
 __all__ = [
-    "stash_keychain_credentials",
-    "read_stashed_keychain",
-    "reset_stashed_keychain_for_test_only",
+    'stash_keychain_credentials',
+    'read_stashed_keychain',
+    'reset_stashed_keychain_for_test_only',
 ]
 
 
@@ -49,7 +49,7 @@ def read_stashed_keychain() -> str | None:
 
 def reset_stashed_keychain_for_test_only() -> None:
     """Reset the stash. Test-only — gated by ``PYTEST_CURRENT_TEST``."""
-    if os.environ.get("PYTEST_CURRENT_TEST") is None:
-        raise RuntimeError("reset_stashed_keychain_for_test_only can only be called in tests")
+    if os.environ.get('PYTEST_CURRENT_TEST') is None:
+        raise RuntimeError('reset_stashed_keychain_for_test_only can only be called in tests')
     global _KEYCHAIN_VALUE
     _KEYCHAIN_VALUE = None

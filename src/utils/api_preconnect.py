@@ -25,13 +25,13 @@ import os
 import threading
 
 __all__ = [
-    "PreconnectHandle",
-    "should_skip_preconnect",
-    "start_api_preconnect",
+    'PreconnectHandle',
+    'should_skip_preconnect',
+    'start_api_preconnect',
 ]
 
 
-_DEFAULT_PRECONNECT_URL = "https://api.anthropic.com"
+_DEFAULT_PRECONNECT_URL = 'https://api.anthropic.com'
 _PRECONNECT_TIMEOUT_S = 10.0
 
 
@@ -43,7 +43,7 @@ class PreconnectHandle:
     the handshake is fire-and-forget.
     """
 
-    __slots__ = ("thread", "skipped")
+    __slots__ = ('thread', 'skipped')
 
     def __init__(self, thread: threading.Thread | None, skipped: bool = False) -> None:
         self.thread = thread
@@ -59,14 +59,14 @@ def should_skip_preconnect() -> bool:
          hit the proxy, not the API.
       3. ``CLAUDE_CODE_DISABLE_API_PRECONNECT`` truthy — escape hatch.
     """
-    if os.environ.get("ANTHROPIC_BASE_URL"):
+    if os.environ.get('ANTHROPIC_BASE_URL'):
         return True
-    if os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY"):
+    if os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY'):
         return True
-    if os.environ.get("CLAUDE_CODE_DISABLE_API_PRECONNECT", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
+    if os.environ.get('CLAUDE_CODE_DISABLE_API_PRECONNECT', '').strip().lower() in {
+        '1',
+        'true',
+        'yes',
     }:
         return True
     return False
@@ -99,7 +99,7 @@ def start_api_preconnect(url: str = _DEFAULT_PRECONNECT_URL) -> PreconnectHandle
 
     thread = threading.Thread(
         target=_do_preconnect,
-        name="api-preconnect",
+        name='api-preconnect',
         daemon=True,
     )
     thread.start()

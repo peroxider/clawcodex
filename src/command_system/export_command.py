@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 __all__ = [
-    "EXPORT_COMMAND",
-    "ExportCommand",
-    "extract_first_prompt",
-    "format_timestamp",
-    "sanitize_filename",
+    'EXPORT_COMMAND',
+    'ExportCommand',
+    'extract_first_prompt',
+    'format_timestamp',
+    'sanitize_filename',
 ]
 
 
@@ -18,4 +18,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

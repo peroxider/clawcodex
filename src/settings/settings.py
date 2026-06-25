@@ -38,9 +38,9 @@ def load_settings(
     base = dataclasses.asdict(DEFAULT_SETTINGS)
 
     # Pull "settings" sub-key from each config level
-    global_settings = config_manager.load_global().get("settings", {})
-    project_settings = config_manager.load_project().get("settings", {})
-    local_settings = config_manager.load_local().get("settings", {})
+    global_settings = config_manager.load_global().get('settings', {})
+    project_settings = config_manager.load_project().get('settings', {})
+    local_settings = config_manager.load_local().get('settings', {})
 
     merged = base
     if global_settings:

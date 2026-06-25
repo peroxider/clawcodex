@@ -19,11 +19,11 @@ from clawcodex_ext.compact_service import (  # noqa: F401
 )
 
 __all__ = [
-    "CompactBoundaryMetadata",
-    "PreservedSegment",
-    "annotate_boundary_with_preserved_segment",
-    "create_compact_boundary_message",
-    "create_compact_summary_message",
-    "get_messages_after_boundary",
-    "is_compact_boundary_message",
+    'CompactBoundaryMetadata',
+    'PreservedSegment',
+    'annotate_boundary_with_preserved_segment',
+    'create_compact_boundary_message',
+    'create_compact_summary_message',
+    'get_messages_after_boundary',
+    'is_compact_boundary_message',
 ]

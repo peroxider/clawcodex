@@ -3,8 +3,8 @@
 try:
     from clawcodex_ext._version import __version__  # type: ignore[assignment]
 except ImportError:
-    __version__ = "0.0.0-dev"
-__author__ = "Claw Codex Team"
+    __version__ = '0.0.0-dev'
+__author__ = 'Claw Codex Team'
 
 from .config import load_config, get_provider_config
 
@@ -14,9 +14,9 @@ except Exception:  # pragma: no cover
     BaseProvider = None  # type: ignore[assignment]
 
 __all__ = [
-    "__version__",
-    "__author__",
-    "load_config",
-    "get_provider_config",
-    "BaseProvider",
+    '__version__',
+    '__author__',
+    'load_config',
+    'get_provider_config',
+    'BaseProvider',
 ]

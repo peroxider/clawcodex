@@ -15,7 +15,7 @@ been imported yet.
 
 from __future__ import annotations
 
-__all__ = ["LiveStatus"]
+__all__ = ['LiveStatus']
 
 
 def __getattr__(name: str):
@@ -25,4 +25,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

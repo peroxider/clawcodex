@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 __all__ = [
-    "THEME_COMMAND",
-    "ThemeCommand",
+    'THEME_COMMAND',
+    'ThemeCommand',
 ]
 
 
@@ -15,4 +15,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

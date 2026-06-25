@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-AddressScheme = Literal["bridge", "uds", "other"]
+AddressScheme = Literal['bridge', 'uds', 'other']
 
 
 @dataclass(frozen=True)
@@ -48,15 +48,15 @@ def parse_address(to: str) -> ParsedAddress:
     SendMessage's input-validation layer rejects empty strings before
     they reach this helper.
     """
-    if to.startswith("bridge:"):
-        return ParsedAddress(scheme="bridge", target=to[len("bridge:") :])
-    if to.startswith("uds:"):
-        return ParsedAddress(scheme="uds", target=to[len("uds:") :])
-    return ParsedAddress(scheme="other", target=to)
+    if to.startswith('bridge:'):
+        return ParsedAddress(scheme='bridge', target=to[len('bridge:') :])
+    if to.startswith('uds:'):
+        return ParsedAddress(scheme='uds', target=to[len('uds:') :])
+    return ParsedAddress(scheme='other', target=to)
 
 
 __all__ = [
-    "AddressScheme",
-    "ParsedAddress",
-    "parse_address",
+    'AddressScheme',
+    'ParsedAddress',
+    'parse_address',
 ]

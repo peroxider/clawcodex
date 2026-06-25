@@ -14,4 +14,10 @@ from clawcodex_ext.services.computer_use.exceptions import (  # noqa: F401
     WindowNotFoundError,
 )
 
-__all__ = ['ComputerUseError', 'BinaryNotFoundError', 'SafetyViolationError', 'CoordinatesOutOfBoundsError', 'WindowNotFoundError']
+__all__ = [
+    'ComputerUseError',
+    'BinaryNotFoundError',
+    'SafetyViolationError',
+    'CoordinatesOutOfBoundsError',
+    'WindowNotFoundError',
+]

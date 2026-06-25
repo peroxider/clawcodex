@@ -14,4 +14,4 @@ import clawcodex_ext.state as _ext_pkg
 
 sys.modules[__name__] = _ext_pkg
 
-__all__ = getattr(_ext_pkg, "__all__", [])
+__all__ = getattr(_ext_pkg, '__all__', [])

@@ -35,7 +35,7 @@ class UserMessage(TypedDict, total=False):
     Source: ``coreTypes.generated.ts`` UserMessage variant.
     """
 
-    type: Literal["user"]
+    type: Literal['user']
     uuid: str
     session_id: str
     parent_tool_use_id: str | None
@@ -45,7 +45,7 @@ class UserMessage(TypedDict, total=False):
 class AssistantMessage(TypedDict, total=False):
     """Assistant turn (text + tool calls) from the model API."""
 
-    type: Literal["assistant"]
+    type: Literal['assistant']
     uuid: str
     session_id: str
     parent_tool_use_id: str | None
@@ -55,7 +55,7 @@ class AssistantMessage(TypedDict, total=False):
 class SystemMessage(TypedDict, total=False):
     """System message: init, post_turn_summary, local_command, etc."""
 
-    type: Literal["system"]
+    type: Literal['system']
     subtype: str
     uuid: str
     session_id: str
@@ -69,8 +69,8 @@ class SDKResultSuccess(TypedDict, total=False):
     session ended cleanly. See ``bridgeMessaging.ts:399-416``.
     """
 
-    type: Literal["result"]
-    subtype: Literal["success"]
+    type: Literal['result']
+    subtype: Literal['success']
     duration_ms: int
     duration_api_ms: int
     is_error: bool
@@ -88,7 +88,7 @@ class SDKResultSuccess(TypedDict, total=False):
 class ToolResultMessage(TypedDict, total=False):
     """Tool execution result, emitted by the local REPL after a tool call."""
 
-    type: Literal["tool_result"]
+    type: Literal['tool_result']
     uuid: str
     session_id: str
     tool_use_id: str
@@ -99,20 +99,20 @@ class ToolResultMessage(TypedDict, total=False):
 class KeepAliveMessage(TypedDict, total=False):
     """Empty heartbeat from the server. Filtered by the ingress router."""
 
-    type: Literal["keep_alive"]
+    type: Literal['keep_alive']
 
 
 class StreamlinedTextMessage(TypedDict, total=False):
     """Streamlined text payload (compact wire form). Filtered by Direct Connect."""
 
-    type: Literal["streamlined_text"]
+    type: Literal['streamlined_text']
     text: str
 
 
 class StreamlinedToolUseSummaryMessage(TypedDict, total=False):
     """Streamlined tool-use summary. Filtered by Direct Connect."""
 
-    type: Literal["streamlined_tool_use_summary"]
+    type: Literal['streamlined_tool_use_summary']
     tool_name: str
     summary: str
 
@@ -124,26 +124,26 @@ class StreamlinedToolUseSummaryMessage(TypedDict, total=False):
 
 
 class InitializeRequest(TypedDict, total=False):
-    subtype: Literal["initialize"]
+    subtype: Literal['initialize']
 
 
 class SetModelRequest(TypedDict, total=False):
-    subtype: Literal["set_model"]
+    subtype: Literal['set_model']
     model: str | None
 
 
 class SetMaxThinkingTokensRequest(TypedDict, total=False):
-    subtype: Literal["set_max_thinking_tokens"]
+    subtype: Literal['set_max_thinking_tokens']
     max_thinking_tokens: int | None
 
 
 class SetPermissionModeRequest(TypedDict, total=False):
-    subtype: Literal["set_permission_mode"]
+    subtype: Literal['set_permission_mode']
     mode: str  # PermissionMode in src/permissions/types.py — kept str on the wire.
 
 
 class InterruptRequest(TypedDict, total=False):
-    subtype: Literal["interrupt"]
+    subtype: Literal['interrupt']
 
 
 class SDKControlPermissionRequest(TypedDict, total=False):
@@ -151,7 +151,7 @@ class SDKControlPermissionRequest(TypedDict, total=False):
     a permission decision from the client.
     """
 
-    subtype: Literal["can_use_tool"]
+    subtype: Literal['can_use_tool']
     tool_name: str
     input: dict[str, Any]
     tool_use_id: str | None
@@ -170,7 +170,7 @@ SDKControlRequestInner = Union[
 class SDKControlRequest(TypedDict, total=False):
     """``{type:'control_request', request_id, request}`` envelope."""
 
-    type: Literal["control_request"]
+    type: Literal['control_request']
     request_id: str
     request: SDKControlRequestInner
 
@@ -179,13 +179,13 @@ class SDKControlRequest(TypedDict, total=False):
 
 
 class ControlResponseSuccess(TypedDict, total=False):
-    subtype: Literal["success"]
+    subtype: Literal['success']
     request_id: str
     response: dict[str, Any] | None
 
 
 class ControlResponseError(TypedDict, total=False):
-    subtype: Literal["error"]
+    subtype: Literal['error']
     request_id: str
     error: str
 
@@ -196,7 +196,7 @@ ControlResponseInner = Union[ControlResponseSuccess, ControlResponseError]
 class SDKControlResponse(TypedDict, total=False):
     """``{type:'control_response', response}`` envelope."""
 
-    type: Literal["control_response"]
+    type: Literal['control_response']
     response: ControlResponseInner
 
 
@@ -206,7 +206,7 @@ class SDKControlResponse(TypedDict, total=False):
 class SDKControlCancelRequest(TypedDict, total=False):
     """Server → client: cancel a pending permission prompt by ``request_id``."""
 
-    type: Literal["control_cancel_request"]
+    type: Literal['control_cancel_request']
     request_id: str
     tool_use_id: str | None
 
@@ -249,27 +249,27 @@ StdoutMessage = Union[
 
 
 __all__ = [
-    "AssistantMessage",
-    "ControlResponseError",
-    "ControlResponseInner",
-    "ControlResponseSuccess",
-    "InitializeRequest",
-    "InterruptRequest",
-    "KeepAliveMessage",
-    "SDKControlCancelRequest",
-    "SDKControlPermissionRequest",
-    "SDKControlRequest",
-    "SDKControlRequestInner",
-    "SDKControlResponse",
-    "SDKMessage",
-    "SDKResultSuccess",
-    "SetMaxThinkingTokensRequest",
-    "SetModelRequest",
-    "SetPermissionModeRequest",
-    "StdoutMessage",
-    "StreamlinedTextMessage",
-    "StreamlinedToolUseSummaryMessage",
-    "SystemMessage",
-    "ToolResultMessage",
-    "UserMessage",
+    'AssistantMessage',
+    'ControlResponseError',
+    'ControlResponseInner',
+    'ControlResponseSuccess',
+    'InitializeRequest',
+    'InterruptRequest',
+    'KeepAliveMessage',
+    'SDKControlCancelRequest',
+    'SDKControlPermissionRequest',
+    'SDKControlRequest',
+    'SDKControlRequestInner',
+    'SDKControlResponse',
+    'SDKMessage',
+    'SDKResultSuccess',
+    'SetMaxThinkingTokensRequest',
+    'SetModelRequest',
+    'SetPermissionModeRequest',
+    'StdoutMessage',
+    'StreamlinedTextMessage',
+    'StreamlinedToolUseSummaryMessage',
+    'SystemMessage',
+    'ToolResultMessage',
+    'UserMessage',
 ]

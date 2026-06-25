@@ -52,8 +52,8 @@ def is_bridge_permission_response(
     """
     if not isinstance(value, dict):
         return False
-    behavior = value.get("behavior")
-    return behavior == "allow" or behavior == "deny"
+    behavior = value.get('behavior')
+    return behavior == 'allow' or behavior == 'deny'
 
 
 class BridgePermissionCallbacks(Protocol):
@@ -93,7 +93,7 @@ class BridgePermissionCallbacks(Protocol):
 
 
 __all__ = [
-    "BridgePermissionCallbacks",
-    "BridgePermissionResponse",
-    "is_bridge_permission_response",
+    'BridgePermissionCallbacks',
+    'BridgePermissionResponse',
+    'is_bridge_permission_response',
 ]

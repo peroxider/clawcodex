@@ -13,7 +13,7 @@ DEFAULT_MAX_OUTPUT_TOKENS = 8_192
 # opt-in (e.g., ``claude-opus-4-7[1m]``) on models that support 1M tokens.
 # At resolution time the suffix is stripped before the id reaches the API.
 ONE_MILLION_CONTEXT_TOKENS = 1_000_000
-ONE_MILLION_SUFFIX = "[1m]"
+ONE_MILLION_SUFFIX = '[1m]'
 
 
 def has_1m_context_suffix(model_id: str) -> bool:

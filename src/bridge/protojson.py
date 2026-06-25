@@ -43,21 +43,21 @@ def coerce_int64(value: object) -> int:
     if isinstance(value, bool):
         # bool is a subclass of int in Python; reject explicitly to avoid
         # accepting True/False as 1/0 from a wire payload.
-        raise ValueError(f"coerce_int64: refusing bool: {value!r}")
+        raise ValueError(f'coerce_int64: refusing bool: {value!r}')
     if isinstance(value, int):
         parsed = value
     elif isinstance(value, str):
         try:
             parsed = int(value, 10)
         except ValueError as exc:
-            raise ValueError(f"coerce_int64: not a base-10 integer string: {value!r}") from exc
+            raise ValueError(f'coerce_int64: not a base-10 integer string: {value!r}') from exc
     else:
-        raise ValueError(f"coerce_int64: unsupported type {type(value).__name__}: {value!r}")
+        raise ValueError(f'coerce_int64: unsupported type {type(value).__name__}: {value!r}')
     if not (SAFE_INTEGER_MIN <= parsed <= SAFE_INTEGER_MAX):
         raise ValueError(
-            f"coerce_int64: out of safe-integer range (TS Number.isSafeInteger): {parsed}"
+            f'coerce_int64: out of safe-integer range (TS Number.isSafeInteger): {parsed}'
         )
     return parsed
 
 
-__all__ = ["INT64_MAX", "INT64_MIN", "SAFE_INTEGER_MAX", "SAFE_INTEGER_MIN", "coerce_int64"]
+__all__ = ['INT64_MAX', 'INT64_MIN', 'SAFE_INTEGER_MAX', 'SAFE_INTEGER_MIN', 'coerce_int64']

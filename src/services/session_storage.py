@@ -16,17 +16,17 @@ that haven't been imported yet.
 from __future__ import annotations
 
 __all__ = [
-    "SessionStorage",
-    "SessionMetadata",
-    "register_session_file",
-    "get_cached_session_dirs",
-    "clear_session_cache",
-    "SESSIONS_DIR",
-    "CONTENT_DIR_NAME",
-    "LARGE_CONTENT_THRESHOLD",
-    "DEFAULT_RETENTION_DAYS",
-    "MAX_FLUSH_BATCH",
-    "MAX_CACHED_SESSION_FILES",
+    'SessionStorage',
+    'SessionMetadata',
+    'register_session_file',
+    'get_cached_session_dirs',
+    'clear_session_cache',
+    'SESSIONS_DIR',
+    'CONTENT_DIR_NAME',
+    'LARGE_CONTENT_THRESHOLD',
+    'DEFAULT_RETENTION_DAYS',
+    'MAX_FLUSH_BATCH',
+    'MAX_CACHED_SESSION_FILES',
 ]
 
 
@@ -37,4 +37,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

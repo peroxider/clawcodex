@@ -58,15 +58,15 @@ async def create_direct_connect_session(
     The ``client`` parameter is for tests; production callers omit it
     and a fresh ``AsyncClient`` is constructed per call.
     """
-    headers: dict[str, str] = {"content-type": "application/json"}
+    headers: dict[str, str] = {'content-type': 'application/json'}
     if auth_token:
-        headers["authorization"] = f"Bearer {auth_token}"
+        headers['authorization'] = f'Bearer {auth_token}'
 
-    body: dict[str, Any] = {"cwd": cwd}
+    body: dict[str, Any] = {'cwd': cwd}
     if dangerously_skip_permissions:
-        body["dangerously_skip_permissions"] = True
+        body['dangerously_skip_permissions'] = True
 
-    url = f"{server_url.rstrip('/')}/sessions"
+    url = f'{server_url.rstrip("/")}/sessions'
 
     async def _do_post(c: httpx.AsyncClient) -> httpx.Response:
         return await c.post(url, json=body, headers=headers, timeout=timeout_seconds)
@@ -78,42 +78,42 @@ async def create_direct_connect_session(
         else:
             resp = await _do_post(client)
     except (httpx.HTTPError, httpx.TimeoutException) as exc:
-        raise DirectConnectError(f"Failed to connect to server at {server_url}: {exc}") from exc
+        raise DirectConnectError(f'Failed to connect to server at {server_url}: {exc}') from exc
 
     if resp.status_code < 200 or resp.status_code >= 300:
         raise DirectConnectError(
-            f"Failed to create session: {resp.status_code} {resp.reason_phrase}"
+            f'Failed to create session: {resp.status_code} {resp.reason_phrase}'
         )
 
     try:
         payload = resp.json()
     except ValueError as exc:
-        raise DirectConnectError(f"Invalid session response: not valid JSON: {exc}") from exc
+        raise DirectConnectError(f'Invalid session response: not valid JSON: {exc}') from exc
 
     try:
         validated = validate_connect_response(payload)
     except ValueError as exc:
-        raise DirectConnectError(f"Invalid session response: {exc}") from exc
+        raise DirectConnectError(f'Invalid session response: {exc}') from exc
 
     # Prefer the server-issued per-session token over the caller-supplied
     # bootstrap token: the server's POST /sessions response includes a
     # short-lived token in ``auth_token`` for the WS upgrade. Falling back
     # to the bootstrap token preserves compatibility with servers that
     # don't issue per-session tokens.
-    issued_token = payload.get("auth_token") if isinstance(payload, dict) else None
+    issued_token = payload.get('auth_token') if isinstance(payload, dict) else None
     effective_token = issued_token if isinstance(issued_token, str) and issued_token else auth_token
     config = DirectConnectConfig(
         server_url=server_url,
-        session_id=validated["session_id"],
-        ws_url=validated["ws_url"],
+        session_id=validated['session_id'],
+        ws_url=validated['ws_url'],
         auth_token=effective_token,
     )
-    work_dir = validated.get("work_dir")
+    work_dir = validated.get('work_dir')
     return config, work_dir
 
 
 __all__ = [
-    "DirectConnectConfig",
-    "DirectConnectError",
-    "create_direct_connect_session",
+    'DirectConnectConfig',
+    'DirectConnectError',
+    'create_direct_connect_session',
 ]

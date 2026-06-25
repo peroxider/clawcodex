@@ -25,7 +25,7 @@ from typing import Iterator, Literal
 # messages) can be filtered. We adopt the same shape so future modes
 # (e.g. permission-request escalations in Phase 9) can join the queue
 # without reworking the contract.
-NotificationMode = Literal["task-notification"]
+NotificationMode = Literal['task-notification']
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class PendingNotification:
     (chapter-shaped XML for the ``"task-notification"`` mode)."""
 
     value: str
-    mode: NotificationMode = "task-notification"
+    mode: NotificationMode = 'task-notification'
 
 
 _lock = threading.RLock()
@@ -43,7 +43,7 @@ _queue: deque[PendingNotification] = deque()
 
 
 def enqueue_pending_notification(
-    *, value: str, mode: NotificationMode = "task-notification"
+    *, value: str, mode: NotificationMode = 'task-notification'
 ) -> None:
     """Push a notification onto the global queue.
 
@@ -108,10 +108,10 @@ def __iter__() -> Iterator[PendingNotification]:  # pragma: no cover (module-lev
 
 
 __all__ = [
-    "PendingNotification",
-    "NotificationMode",
-    "enqueue_pending_notification",
-    "drain_pending_notifications",
-    "peek_pending_notifications",
-    "clear_pending_notifications",
+    'PendingNotification',
+    'NotificationMode',
+    'enqueue_pending_notification',
+    'drain_pending_notifications',
+    'peek_pending_notifications',
+    'clear_pending_notifications',
 ]

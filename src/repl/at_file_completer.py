@@ -25,10 +25,10 @@ from src.utils.at_file_completer import (
 )
 
 __all__ = [
-    "AtFileCompleter",
-    "_build_path_bitmap",
-    "_filter_candidates",
-    "_is_path_like_token",
-    "_path_completions",
-    "_subsequence_score",
+    'AtFileCompleter',
+    '_build_path_bitmap',
+    '_filter_candidates',
+    '_is_path_like_token',
+    '_path_completions',
+    '_subsequence_score',
 ]

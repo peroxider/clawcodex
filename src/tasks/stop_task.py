@@ -36,10 +36,10 @@ if TYPE_CHECKING:
 # guard remain meaningful: a hung kill is structurally different from
 # "task already finished" or "no impl registered."
 StopTaskErrorCode = Literal[
-    "not_found",
-    "not_running",
-    "unsupported_type",
-    "kill_timeout",
+    'not_found',
+    'not_running',
+    'unsupported_type',
+    'kill_timeout',
 ]
 
 
@@ -82,9 +82,9 @@ _KILL_TIMEOUT_SECONDS: float = 5.0
 
 async def stop_task(
     task_id: str,
-    context: "ToolContext",
+    context: 'ToolContext',
     *,
-    reason: str = "",
+    reason: str = '',
 ) -> StopTaskResult:
     """Atomically stop a task by id with typed dispatch.
 
@@ -120,8 +120,8 @@ async def stop_task(
                 task_id=task_id,
                 task_type=runtime.type,
                 error=StopTaskError(
-                    code="not_running",
-                    message=(f"Task {task_id} is not running (status: {runtime.status})"),
+                    code='not_running',
+                    message=(f'Task {task_id} is not running (status: {runtime.status})'),
                 ),
             )
 
@@ -132,8 +132,8 @@ async def stop_task(
                 task_id=task_id,
                 task_type=runtime.type,
                 error=StopTaskError(
-                    code="unsupported_type",
-                    message=f"Unsupported task type: {runtime.type}",
+                    code='unsupported_type',
+                    message=f'Unsupported task type: {runtime.type}',
                 ),
             )
 
@@ -151,8 +151,8 @@ async def stop_task(
                 task_id=task_id,
                 task_type=runtime.type,
                 error=StopTaskError(
-                    code="kill_timeout",
-                    message=(f"kill timed out after {_KILL_TIMEOUT_SECONDS:.0f}s"),
+                    code='kill_timeout',
+                    message=(f'kill timed out after {_KILL_TIMEOUT_SECONDS:.0f}s'),
                 ),
             )
 
@@ -163,7 +163,7 @@ async def stop_task(
         # cooperative-cancellation pattern means the actual exit may
         # land asynchronously).
         stopped = True
-        if runtime.type == "local_bash":
+        if runtime.type == 'local_bash':
             from src.tasks.local_shell import LocalShellTaskState
 
             refreshed = context.runtime_tasks.get(task_id)
@@ -184,13 +184,13 @@ async def stop_task(
         )
 
     # Branch 2 — legacy ``task_manager`` fallback.
-    task_manager = getattr(context, "task_manager", None)
+    task_manager = getattr(context, 'task_manager', None)
     if task_manager is not None and task_manager.get(task_id) is not None:
         stopped = task_manager.stop(task_id)
         return StopTaskResult(
             stopped=stopped,
             task_id=task_id,
-            task_type="managed_thread",
+            task_type='managed_thread',
         )
 
     # Branch 3 — not found.
@@ -198,15 +198,15 @@ async def stop_task(
         stopped=False,
         task_id=task_id,
         error=StopTaskError(
-            code="not_found",
-            message=f"No task found with ID: {task_id}",
+            code='not_found',
+            message=f'No task found with ID: {task_id}',
         ),
     )
 
 
 __all__ = [
-    "StopTaskErrorCode",
-    "StopTaskError",
-    "StopTaskResult",
-    "stop_task",
+    'StopTaskErrorCode',
+    'StopTaskError',
+    'StopTaskResult',
+    'stop_task',
 ]

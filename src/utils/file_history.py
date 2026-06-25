@@ -46,9 +46,9 @@ class FileHistory:
 
         if content is None:
             try:
-                content = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+                content = Path(abs_path).read_text(encoding='utf-8', errors='replace')
             except (OSError, IOError):
-                content = ""
+                content = ''
 
         snapshot = FileSnapshot(
             path=abs_path,
@@ -70,9 +70,9 @@ class FileHistory:
 
         snapshot = snapshots[-1]
         try:
-            Path(abs_path).write_text(snapshot.content, encoding="utf-8")
+            Path(abs_path).write_text(snapshot.content, encoding='utf-8')
         except (OSError, IOError) as e:
-            logger.error("Failed to restore %s: %s", abs_path, e)
+            logger.error('Failed to restore %s: %s', abs_path, e)
             return None
 
         snapshots.pop()
@@ -85,9 +85,9 @@ class FileHistory:
         self._checkpoints[name] = time.time()
         for abs_path in list(self._snapshots.keys()):
             try:
-                current = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+                current = Path(abs_path).read_text(encoding='utf-8', errors='replace')
             except (OSError, IOError):
-                current = ""
+                current = ''
             self.snapshot_file(abs_path, current, checkpoint=name)
         return name
 
@@ -106,10 +106,10 @@ class FileHistory:
 
             if target_snapshot is not None:
                 try:
-                    Path(abs_path).write_text(target_snapshot.content, encoding="utf-8")
+                    Path(abs_path).write_text(target_snapshot.content, encoding='utf-8')
                     restored.append(abs_path)
                 except (OSError, IOError) as e:
-                    logger.error("Failed to restore %s to checkpoint %s: %s", abs_path, name, e)
+                    logger.error('Failed to restore %s to checkpoint %s: %s', abs_path, name, e)
 
                 idx = snapshots.index(target_snapshot)
                 self._snapshots[abs_path] = snapshots[: idx + 1]
@@ -132,7 +132,7 @@ class FileHistory:
 
         original = snapshots[0].content
         try:
-            current = Path(abs_path).read_text(encoding="utf-8", errors="replace")
+            current = Path(abs_path).read_text(encoding='utf-8', errors='replace')
         except (OSError, IOError):
             return LinesChanged()
 
@@ -183,12 +183,12 @@ def _compute_lines_changed(original: str, current: str) -> LinesChanged:
     removed = 0
 
     for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, orig_lines, curr_lines).get_opcodes():
-        if tag == "replace":
+        if tag == 'replace':
             removed += i2 - i1
             added += j2 - j1
-        elif tag == "delete":
+        elif tag == 'delete':
             removed += i2 - i1
-        elif tag == "insert":
+        elif tag == 'insert':
             added += j2 - j1
 
     return LinesChanged(added=added, removed=removed)

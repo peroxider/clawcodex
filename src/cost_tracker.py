@@ -51,7 +51,7 @@ class CostTracker:
     def record(self, label: str, units: int) -> None:
         """Legacy event recorder. Used by ``costHook.apply_cost_hook``."""
         self.total_units += units
-        self.events.append(f"{label}:{units}")
+        self.events.append(f'{label}:{units}')
 
     def record_usage(self, model: str, usage: dict[str, Any]) -> float:
         """Record a real API usage event into the bootstrap singleton.
@@ -63,10 +63,10 @@ class CostTracker:
         """
         cost = compute_cost(model, usage)
         bootstrap_usage = ModelUsage(
-            input_tokens=int(usage.get("input_tokens", 0)),
-            output_tokens=int(usage.get("output_tokens", 0)),
-            cache_creation_input_tokens=int(usage.get("cache_creation_input_tokens", 0)),
-            cache_read_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
+            input_tokens=int(usage.get('input_tokens', 0)),
+            output_tokens=int(usage.get('output_tokens', 0)),
+            cache_creation_input_tokens=int(usage.get('cache_creation_input_tokens', 0)),
+            cache_read_input_tokens=int(usage.get('cache_read_input_tokens', 0)),
             cost_usd=cost,
         )
         # Merge with any existing per-model accumulator

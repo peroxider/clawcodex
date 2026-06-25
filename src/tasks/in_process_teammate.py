@@ -95,7 +95,7 @@ class TeammateIdentity:
     agent_id: str  # e.g. "researcher@my-team"
     agent_name: str  # e.g. "researcher"
     team_name: str
-    parent_session_id: str = ""
+    parent_session_id: str = ''
     color: str | None = None
     plan_mode_required: bool = False
 
@@ -112,7 +112,7 @@ class TeammateIdentity:
 # whale session 9a990de8 reached 36.8GB across 292 agents in 2 minutes.
 TEAMMATE_MESSAGES_UI_CAP: int = 50
 
-T = TypeVar("T")
+T = TypeVar('T')
 
 
 def append_capped_message(prev: list[T] | None, item: T) -> list[T]:
@@ -167,15 +167,15 @@ class InProcessTeammateTaskState(TaskStateBase):
       LocalAgentTaskState's progress fields.
     """
 
-    type: Literal["in_process_teammate"] = "in_process_teammate"  # type: ignore[assignment]
+    type: Literal['in_process_teammate'] = 'in_process_teammate'  # type: ignore[assignment]
     identity: TeammateIdentity = field(
         default_factory=lambda: TeammateIdentity(
-            agent_id="",
-            agent_name="",
-            team_name="",
+            agent_id='',
+            agent_name='',
+            team_name='',
         )
     )
-    prompt: str = ""
+    prompt: str = ''
     model: str | None = None
     selected_agent: Any = None  # AgentDefinition; loose to avoid cycles
     abort_event: asyncio.Event | None = field(default=None, repr=False, compare=False)
@@ -185,7 +185,7 @@ class InProcessTeammateTaskState(TaskStateBase):
     # Literal once the permission-forwarding bridge lands. Loose-typed
     # for now so the chapter-10 task layer doesn't pull in the
     # permissions module's typing — flagged per critic Phase-6 N2.
-    permission_mode: str = "default"
+    permission_mode: str = 'default'
     error: str | None = None
     result: Any = None
     progress: Any = None  # AgentProgress; loose to avoid cycles
@@ -224,10 +224,10 @@ def check_abort_events(state: InProcessTeammateTaskState) -> None:
     """
     abort = state.abort_event
     if abort is not None and abort.is_set():
-        raise TeammateAbortedError(f"teammate {state.identity.agent_id!r} kill event fired")
+        raise TeammateAbortedError(f'teammate {state.identity.agent_id!r} kill event fired')
     current_work = state.current_work_abort_event
     if current_work is not None and current_work.is_set():
-        raise CurrentWorkAbortedError(f"teammate {state.identity.agent_id!r} current-work redirect")
+        raise CurrentWorkAbortedError(f'teammate {state.identity.agent_id!r} current-work redirect')
 
 
 async def run_with_two_level_abort(
@@ -326,10 +326,10 @@ class InProcessTeammateTask:
     unwinds the lifecycle.
     """
 
-    name: str = "InProcessTeammateTask"
-    type: Literal["in_process_teammate"] = "in_process_teammate"
+    name: str = 'InProcessTeammateTask'
+    type: Literal['in_process_teammate'] = 'in_process_teammate'
 
-    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
+    async def kill(self, task_id: str, registry: 'RuntimeTaskRegistry') -> None:
         aborted_event: asyncio.Event | None = None
 
         def _kill(prev: TaskStateBase) -> TaskStateBase:
@@ -339,7 +339,7 @@ class InProcessTeammateTask:
             if is_terminal_task_status(prev.status):
                 return prev
             aborted_event = prev.abort_event
-            return replace(prev, status="killed")
+            return replace(prev, status='killed')
 
         registry.update(task_id, _kill)
         # Set the event OUTSIDE the registry lock — same defense-in-depth
@@ -354,20 +354,20 @@ class InProcessTeammateTask:
                 import logging
 
                 logging.getLogger(__name__).exception(
-                    "failed to set abort event for killed teammate %s", task_id
+                    'failed to set abort event for killed teammate %s', task_id
                 )
 
 
 __all__ = [
-    "TeammateAbortedError",
-    "CurrentWorkAbortedError",
-    "TeammateIdentity",
-    "TEAMMATE_MESSAGES_UI_CAP",
-    "append_capped_message",
-    "InProcessTeammateTaskState",
-    "InProcessTeammateTask",
-    "is_in_process_teammate_task",
-    "check_abort_events",
-    "run_with_two_level_abort",
-    "outer_lifecycle_should_catch",
+    'TeammateAbortedError',
+    'CurrentWorkAbortedError',
+    'TeammateIdentity',
+    'TEAMMATE_MESSAGES_UI_CAP',
+    'append_capped_message',
+    'InProcessTeammateTaskState',
+    'InProcessTeammateTask',
+    'is_in_process_teammate_task',
+    'check_abort_events',
+    'run_with_two_level_abort',
+    'outer_lifecycle_should_catch',
 ]

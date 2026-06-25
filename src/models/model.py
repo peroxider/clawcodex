@@ -21,7 +21,7 @@ def resolve_model(name: str) -> str:
     canonical = resolve_alias(name)
     config = get_model_config(canonical)
     if config and config.is_deprecated:
-        logger.warning("Model %s is deprecated: %s", canonical, config.deprecation_message)
+        logger.warning('Model %s is deprecated: %s', canonical, config.deprecation_message)
     return canonical
 
 
@@ -36,7 +36,7 @@ def display_name(model_id: str) -> str:
     if config:
         return config.display_name
     # Fallback: title-case the model ID
-    return model_id.replace("-", " ").title()
+    return model_id.replace('-', ' ').title()
 
 
 def deprecation_warning(model_id: str) -> str | None:

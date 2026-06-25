@@ -71,11 +71,11 @@ def schedule_eviction(
       makes sense for terminal entries.
     * **State without ``evict_after`` field** → identity (defensive).
     """
-    if not hasattr(state, "evict_after"):
+    if not hasattr(state, 'evict_after'):
         return state
     if not is_terminal_task_status(state.status):
         return state
-    if getattr(state, "retain", False):
+    if getattr(state, 'retain', False):
         # Retain pins the entry; clear any stale deadline.
         if state.evict_after is None:  # type: ignore[attr-defined]
             return state  # already clear
@@ -100,17 +100,17 @@ def is_eligible_for_eviction(state: TaskStateBase, *, now: float | None = None) 
         # surface the notification; only after that does eviction make
         # sense.
         return False
-    deadline = getattr(state, "evict_after", None)
+    deadline = getattr(state, 'evict_after', None)
     if deadline is None:
         return False
-    if getattr(state, "retain", False):
+    if getattr(state, 'retain', False):
         return False
     moment = now if now is not None else time.time()
     return moment >= deadline
 
 
 def sweep_once(
-    registry: "RuntimeTaskRegistry",
+    registry: 'RuntimeTaskRegistry',
     *,
     now: float | None = None,
 ) -> list[str]:
@@ -128,7 +128,7 @@ def sweep_once(
             if registry.remove(state.id):
                 dropped.append(state.id)
                 logger.debug(
-                    "evicted terminal task %s (status=%s, notified=True)",
+                    'evicted terminal task %s (status=%s, notified=True)',
                     state.id,
                     state.status,
                 )
@@ -143,11 +143,11 @@ def sweep_once(
 _sweeper_lock = threading.Lock()
 _sweeper_thread: threading.Thread | None = None
 _sweeper_stop = threading.Event()
-_sweeper_registry: "RuntimeTaskRegistry | None" = None
+_sweeper_registry: 'RuntimeTaskRegistry | None' = None
 
 
 def start_eviction_sweeper(
-    registry: "RuntimeTaskRegistry",
+    registry: 'RuntimeTaskRegistry',
     *,
     tick_seconds: float = _SWEEPER_TICK_SECONDS,
 ) -> None:
@@ -173,7 +173,7 @@ def start_eviction_sweeper(
         thread = threading.Thread(
             target=_sweeper_loop,
             args=(registry, tick_seconds, _sweeper_stop),
-            name="runtime-task-eviction-sweeper",
+            name='runtime-task-eviction-sweeper',
             daemon=True,
         )
         _sweeper_thread = thread
@@ -195,7 +195,7 @@ def stop_eviction_sweeper(*, timeout: float = 2.0) -> None:
 
 
 def _sweeper_loop(
-    registry: "RuntimeTaskRegistry",
+    registry: 'RuntimeTaskRegistry',
     tick_seconds: float,
     stop_event: threading.Event,
 ) -> None:
@@ -210,14 +210,14 @@ def _sweeper_loop(
         except Exception:
             # The sweeper must never die from a transient error;
             # logging + continuing is the right policy.
-            logger.exception("eviction sweeper iteration failed")
+            logger.exception('eviction sweeper iteration failed')
 
 
 __all__ = [
-    "PANEL_GRACE_SECONDS",
-    "schedule_eviction",
-    "is_eligible_for_eviction",
-    "sweep_once",
-    "start_eviction_sweeper",
-    "stop_eviction_sweeper",
+    'PANEL_GRACE_SECONDS',
+    'schedule_eviction',
+    'is_eligible_for_eviction',
+    'sweep_once',
+    'start_eviction_sweeper',
+    'stop_eviction_sweeper',
 ]

@@ -11,5 +11,5 @@ from clawcodex_ext.utils.session_watcher import (  # noqa: F401
 )
 
 __all__ = [
-    "SessionWatcher",
+    'SessionWatcher',
 ]

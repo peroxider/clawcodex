@@ -13,7 +13,7 @@ header set for OAuth-authed requests.
 from __future__ import annotations
 
 
-ANTHROPIC_VERSION = "2023-06-01"
+ANTHROPIC_VERSION = '2023-06-01'
 """Anthropic API version header value.
 
 Mirrors TS hardcoded ``'anthropic-version': '2023-06-01'`` used across
@@ -31,10 +31,10 @@ def get_oauth_headers(access_token: str) -> dict[str, str]:
     mutating shared state.
     """
     return {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-        "anthropic-version": ANTHROPIC_VERSION,
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json',
+        'anthropic-version': ANTHROPIC_VERSION,
     }
 
 
-__all__ = ["ANTHROPIC_VERSION", "get_oauth_headers"]
+__all__ = ['ANTHROPIC_VERSION', 'get_oauth_headers']

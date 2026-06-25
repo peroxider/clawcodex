@@ -61,13 +61,13 @@ def adapt_sdk_to_wire_user_message(
         }
     """
     envelope: dict[str, Any] = {
-        "type": "user",
-        "message": {"role": "user", "content": content},
-        "parent_tool_use_id": parent_tool_use_id,
-        "session_id": session_id,
+        'type': 'user',
+        'message': {'role': 'user', 'content': content},
+        'parent_tool_use_id': parent_tool_use_id,
+        'session_id': session_id,
     }
     if uuid is not None:
-        envelope["uuid"] = uuid
+        envelope['uuid'] = uuid
     return envelope
 
 
@@ -83,30 +83,30 @@ def adapt_permission_response(
     Mirrors ``RemoteSessionManager.respondToPermissionRequest`` payload
     construction.
     """
-    if behavior == "allow":
+    if behavior == 'allow':
         inner_response: dict[str, Any] = {
-            "behavior": "allow",
-            "updatedInput": updated_input or {},
+            'behavior': 'allow',
+            'updatedInput': updated_input or {},
         }
-    elif behavior == "deny":
+    elif behavior == 'deny':
         inner_response = {
-            "behavior": "deny",
-            "message": message or "",
+            'behavior': 'deny',
+            'message': message or '',
         }
     else:
-        raise ValueError(f"unknown permission behavior: {behavior!r}")
+        raise ValueError(f'unknown permission behavior: {behavior!r}')
     return {
-        "type": "control_response",
-        "response": {
-            "subtype": "success",
-            "request_id": request_id,
-            "response": inner_response,
+        'type': 'control_response',
+        'response': {
+            'subtype': 'success',
+            'request_id': request_id,
+            'response': inner_response,
         },
     }
 
 
 __all__ = [
-    "adapt_permission_response",
-    "adapt_sdk_to_wire_user_message",
-    "adapt_wire_to_sdk",
+    'adapt_permission_response',
+    'adapt_sdk_to_wire_user_message',
+    'adapt_wire_to_sdk',
 ]

@@ -119,10 +119,10 @@ class _V2ReplTransport:
 
     def get_state_label(self) -> str:
         if self._sse.is_closed_status():
-            return "closed"
+            return 'closed'
         if self._sse.is_connected_status():
-            return "connected" if self._ccr_initialized else "init"
-        return "connecting"
+            return 'connected' if self._ccr_initialized else 'init'
+        return 'connecting'
 
     def get_last_sequence_num(self) -> int:
         if self._outbound_only:
@@ -154,7 +154,7 @@ class _V2ReplTransport:
     def connect(self) -> None:
         """Open SSE + initialize CCRClient. Returns immediately."""
         loop = asyncio.get_running_loop()
-        loop.create_task(self._do_connect(), name="v2-transport-connect")
+        loop.create_task(self._do_connect(), name='v2-transport-connect')
 
     async def _do_connect(self) -> None:
         if not self._outbound_only:
@@ -165,7 +165,7 @@ class _V2ReplTransport:
             self._fire_close(WS_CLOSE_EPOCH_MISMATCH)
             return
         except Exception as exc:  # noqa: BLE001
-            logger.warning("[v2-transport] CCR init failed: %s", exc)
+            logger.warning('[v2-transport] CCR init failed: %s', exc)
             self._fire_close(WS_CLOSE_INIT_FAILURE)
             return
         self._ccr_initialized = True
@@ -173,7 +173,7 @@ class _V2ReplTransport:
             try:
                 self._on_connect_cb()
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[v2-transport] on_connect_cb raised: %s", exc)
+                logger.warning('[v2-transport] on_connect_cb raised: %s', exc)
 
     def close(self) -> None:
         if self._closed:
@@ -224,7 +224,7 @@ class _V2ReplTransport:
         try:
             cb(code)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("[v2-transport] on_close_cb raised: %s", exc)
+            logger.warning('[v2-transport] on_close_cb raised: %s', exc)
 
 
 # ─── Public factory ───────────────────────────────────────────────────────
@@ -252,10 +252,10 @@ async def create_v2_repl_transport(opts: V2TransportOptions) -> _V2ReplTransport
             token = opts.ingress_token
         if not token:
             return {}
-        return {"Authorization": f"Bearer {token}"}
+        return {'Authorization': f'Bearer {token}'}
 
     # Derive SSE stream URL: append /worker/events/stream to the session URL.
-    sse_url = opts.session_url.rstrip("/") + "/worker/events/stream"
+    sse_url = opts.session_url.rstrip('/') + '/worker/events/stream'
     sse = SSETransport(
         url=sse_url,
         headers={},
@@ -264,29 +264,29 @@ async def create_v2_repl_transport(opts: V2TransportOptions) -> _V2ReplTransport
         initial_sequence_num=opts.initial_sequence_num,
     )
 
-    transport_ref: dict[str, _V2ReplTransport | None] = {"t": None}
+    transport_ref: dict[str, _V2ReplTransport | None] = {'t': None}
 
     def _on_epoch_mismatch() -> None:
         """Called by CCRClient on 409. Closes both, fires onClose(4090),
         raises EpochSupersededError to unwind the caller."""
-        t = transport_ref["t"]
+        t = transport_ref['t']
         if t is not None:
             try:
                 t._sse.close()
                 t._ccr.close()
                 t._fire_close(WS_CLOSE_EPOCH_MISMATCH)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[v2-transport] epoch-mismatch cleanup: %s", exc)
+                logger.warning('[v2-transport] epoch-mismatch cleanup: %s', exc)
 
     # Heartbeat options: pass through if explicitly set.
     ccr_opts_kwargs: dict[str, Any] = {
-        "get_auth_headers": _auth_headers,
-        "on_epoch_mismatch": _on_epoch_mismatch,
+        'get_auth_headers': _auth_headers,
+        'on_epoch_mismatch': _on_epoch_mismatch,
     }
     if opts.heartbeat_interval_seconds is not None:
-        ccr_opts_kwargs["heartbeat_interval_seconds"] = opts.heartbeat_interval_seconds
+        ccr_opts_kwargs['heartbeat_interval_seconds'] = opts.heartbeat_interval_seconds
     if opts.heartbeat_jitter_fraction is not None:
-        ccr_opts_kwargs["heartbeat_jitter_fraction"] = opts.heartbeat_jitter_fraction
+        ccr_opts_kwargs['heartbeat_jitter_fraction'] = opts.heartbeat_jitter_fraction
     ccr = CCRClient(
         base_url=opts.session_url,
         options=CCRClientOptions(**ccr_opts_kwargs),
@@ -299,10 +299,10 @@ async def create_v2_repl_transport(opts: V2TransportOptions) -> _V2ReplTransport
         if not event.event_id:
             return
         try:
-            ccr.report_delivery(event.event_id, "received")
-            ccr.report_delivery(event.event_id, "processed")
+            ccr.report_delivery(event.event_id, 'received')
+            ccr.report_delivery(event.event_id, 'processed')
         except Exception as exc:  # noqa: BLE001
-            logger.debug("[v2-transport] delivery ACK failed: %s", exc)
+            logger.debug('[v2-transport] delivery ACK failed: %s', exc)
 
     sse.set_on_event(_ack)
 
@@ -312,7 +312,7 @@ async def create_v2_repl_transport(opts: V2TransportOptions) -> _V2ReplTransport
         epoch=opts.epoch,
         outbound_only=opts.outbound_only,
     )
-    transport_ref["t"] = transport
+    transport_ref['t'] = transport
     return transport
 
 
@@ -326,7 +326,7 @@ class _V1ReplTransport:
     single type regardless of v1/v2.
     """
 
-    def __init__(self, hybrid: "HybridTransport") -> None:
+    def __init__(self, hybrid: 'HybridTransport') -> None:
         self._hybrid = hybrid
 
     async def write(self, message: dict[str, Any]) -> None:
@@ -357,7 +357,7 @@ class _V1ReplTransport:
         loop = asyncio.get_running_loop()
         loop.create_task(
             self._hybrid.connect(),
-            name="v1-repl-transport-connect",
+            name='v1-repl-transport-connect',
         )
 
     def get_last_sequence_num(self) -> int:
@@ -380,13 +380,13 @@ class _V1ReplTransport:
         await self._hybrid.flush()
 
 
-def create_v1_repl_transport(hybrid: "HybridTransport") -> ReplBridgeTransport:
+def create_v1_repl_transport(hybrid: 'HybridTransport') -> ReplBridgeTransport:
     return _V1ReplTransport(hybrid)
 
 
 __all__ = [
-    "ReplBridgeTransport",
-    "V2TransportOptions",
-    "create_v1_repl_transport",
-    "create_v2_repl_transport",
+    'ReplBridgeTransport',
+    'V2TransportOptions',
+    'create_v1_repl_transport',
+    'create_v2_repl_transport',
 ]

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 __all__ = [
-    "has_markdown_syntax",
-    "MarkdownCache",
-    "get_markdown_cache",
-    "reset_markdown_cache_for_tests",
+    'has_markdown_syntax',
+    'MarkdownCache',
+    'get_markdown_cache',
+    'reset_markdown_cache_for_tests',
 ]
 
 
@@ -17,4 +17,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

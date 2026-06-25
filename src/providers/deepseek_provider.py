@@ -22,7 +22,7 @@ from .openai_compatible import OpenAICompatibleProvider
 class DeepSeekProvider(OpenAICompatibleProvider):
     """DeepSeek provider using the OpenAI SDK against the DeepSeek base URL."""
 
-    DEFAULT_BASE_URL = "https://api.deepseek.com"
+    DEFAULT_BASE_URL = 'https://api.deepseek.com'
 
     def __init__(self, api_key: str, base_url: Optional[str] = None, model: Optional[str] = None):
         """Initialize DeepSeek provider.
@@ -35,25 +35,25 @@ class DeepSeekProvider(OpenAICompatibleProvider):
         super().__init__(
             api_key,
             base_url or self.DEFAULT_BASE_URL,
-            model or "deepseek-v4-pro",
+            model or 'deepseek-v4-pro',
         )
 
     def _create_client(self) -> Any:
         """Create OpenAI SDK client pointed at DeepSeek."""
         if OpenAI is None:  # pragma: no cover
             raise ModuleNotFoundError(
-                "openai package is not installed. Install optional dependencies to use DeepSeekProvider."
+                'openai package is not installed. Install optional dependencies to use DeepSeekProvider.'
             )
         kwargs: dict[str, Any] = {
-            "api_key": self.api_key,
-            "base_url": self.base_url or self.DEFAULT_BASE_URL,
+            'api_key': self.api_key,
+            'base_url': self.base_url or self.DEFAULT_BASE_URL,
         }
         import os
 
-        if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
+        if os.environ.get('CLAWCODEX_SSL_VERIFY', '').lower() in ('0', 'false', 'no'):
             import httpx
 
-            kwargs["http_client"] = httpx.Client(verify=False)
+            kwargs['http_client'] = httpx.Client(verify=False)
         return OpenAI(**kwargs)
 
     def get_available_models(self) -> list[str]:
@@ -64,9 +64,9 @@ class DeepSeekProvider(OpenAICompatibleProvider):
         """
         return [
             # V4 series (current)
-            "deepseek-v4-pro",
-            "deepseek-v4-flash",
+            'deepseek-v4-pro',
+            'deepseek-v4-flash',
             # Legacy aliases (being deprecated; map to v4-flash modes)
-            "deepseek-chat",
-            "deepseek-reasoner",
+            'deepseek-chat',
+            'deepseek-reasoner',
         ]

@@ -11,9 +11,9 @@ from .validator import validate_manifest
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_FILENAME = "plugin.json"
+MANIFEST_FILENAME = 'plugin.json'
 
-TRUST_LEVELS = ("bundled", "managed", "user", "project", "mcp")
+TRUST_LEVELS = ('bundled', 'managed', 'user', 'project', 'mcp')
 
 
 @dataclass
@@ -52,36 +52,36 @@ def discover_plugins(directory: str | Path) -> PluginDiscoveryResult:
 def load_plugin_from_directory(
     plugin_dir: str | Path,
     *,
-    source: str = "user",
+    source: str = 'user',
 ) -> LoadedPlugin:
     plugin_dir = Path(plugin_dir)
     manifest_path = plugin_dir / MANIFEST_FILENAME
     if not manifest_path.exists():
-        raise PluginError(plugin_dir.name, f"No {MANIFEST_FILENAME} found")
+        raise PluginError(plugin_dir.name, f'No {MANIFEST_FILENAME} found')
 
     try:
-        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        raw = json.loads(manifest_path.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError) as e:
-        raise PluginError(plugin_dir.name, f"Failed to read manifest: {e}") from e
+        raise PluginError(plugin_dir.name, f'Failed to read manifest: {e}') from e
 
     errors = validate_manifest(raw)
     if errors:
         raise PluginError(
             plugin_dir.name,
-            f"Invalid manifest: {'; '.join(e.message for e in errors)}",
+            f'Invalid manifest: {"; ".join(e.message for e in errors)}',
         )
 
     manifest = PluginManifest(
-        name=raw["name"],
-        description=raw.get("description", ""),
-        version=raw.get("version", "1.0.0"),
+        name=raw['name'],
+        description=raw.get('description', ''),
+        version=raw.get('version', '1.0.0'),
     )
 
     agents_paths: list[str] = []
-    single = raw.get("agentsPath")
+    single = raw.get('agentsPath')
     if isinstance(single, str) and single.strip():
         agents_paths.append(single.strip())
-    multi = raw.get("agentsPaths")
+    multi = raw.get('agentsPaths')
     if isinstance(multi, list):
         for item in multi:
             if isinstance(item, str) and item.strip():
@@ -99,10 +99,10 @@ def load_plugin_from_directory(
         manifest=manifest,
         path=str(plugin_dir),
         source=source,
-        repository=raw.get("repository", ""),
-        enabled=raw.get("enabled", True),
-        hooks_config=raw.get("hooks"),
-        mcp_servers=raw.get("mcp_servers"),
+        repository=raw.get('repository', ''),
+        enabled=raw.get('enabled', True),
+        hooks_config=raw.get('hooks'),
+        mcp_servers=raw.get('mcp_servers'),
         agents_paths=resolved_agents_paths,
     )
 
@@ -111,7 +111,7 @@ def load_plugin_from_directory(
 
 def register_plugin(plugin: LoadedPlugin) -> None:
     _loaded_plugins[plugin.name] = plugin
-    logger.debug("Registered plugin: %s", plugin.name)
+    logger.debug('Registered plugin: %s', plugin.name)
 
 
 def unregister_plugin(name: str) -> bool:
@@ -136,7 +136,7 @@ def get_enabled_plugins() -> list[LoadedPlugin]:
 def load_plugins_from_directories(
     directories: list[str | Path],
     *,
-    source: str = "user",
+    source: str = 'user',
 ) -> PluginDiscoveryResult:
     combined = PluginDiscoveryResult()
     for directory in directories:

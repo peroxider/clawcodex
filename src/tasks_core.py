@@ -10,5 +10,5 @@ from __future__ import annotations
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.tasks_core")
+_ext_mod = importlib.import_module('clawcodex_ext.tasks_core')
 sys.modules[__name__] = _ext_mod

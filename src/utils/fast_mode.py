@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 
 
-FAST_MODE_MODEL = "claude-3-5-haiku-20241022"
+FAST_MODE_MODEL = 'claude-3-5-haiku-20241022'
 
 
 @dataclass
@@ -84,10 +84,10 @@ def _resolve_fast_mode_enabled(
     if env_override is not None:
         return env_override
 
-    env_val = os.environ.get("CLAUDE_FAST_MODE", "").lower()
-    if env_val in ("1", "true", "yes"):
+    env_val = os.environ.get('CLAUDE_FAST_MODE', '').lower()
+    if env_val in ('1', 'true', 'yes'):
         return True
-    if env_val in ("0", "false", "no"):
+    if env_val in ('0', 'false', 'no'):
         return False
 
     if config_value is not None:
@@ -98,4 +98,4 @@ def _resolve_fast_mode_enabled(
 
 def get_fast_mode_model() -> str:
     """Get the model to use in fast mode."""
-    return os.environ.get("CLAUDE_FAST_MODE_MODEL", FAST_MODE_MODEL)
+    return os.environ.get('CLAUDE_FAST_MODE_MODEL', FAST_MODE_MODEL)

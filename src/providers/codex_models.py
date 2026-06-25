@@ -13,7 +13,7 @@ from clawcodex_ext.providers.codex_models import (  # noqa: F401
 )
 
 __all__ = [
-    "CODEX_FALLBACK_MODELS",
-    "CODEX_MODELS_URL",
-    "get_codex_model_ids",
+    'CODEX_FALLBACK_MODELS',
+    'CODEX_MODELS_URL',
+    'get_codex_model_ids',
 ]

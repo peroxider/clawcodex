@@ -171,6 +171,9 @@ extend-exclude = [
     "demos",
 ]
 
+[tool.ruff.format]
+quote-style = "single"
+
 [tool.ruff.lint]
 # Start with correctness-oriented rules that can be blocking without forcing
 # a repo-wide style cleanup. Formatting is still checked on changed files in CI.

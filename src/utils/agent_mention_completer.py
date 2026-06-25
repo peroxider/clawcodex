@@ -11,4 +11,4 @@ from clawcodex_ext.utils.agent_mention_completer import (  # noqa: F401
     AgentMentionCompleter,
 )
 
-__all__ = ["AgentMentionCompleter"]
+__all__ = ['AgentMentionCompleter']

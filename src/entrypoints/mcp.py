@@ -23,23 +23,23 @@ def run_mcp_subcommand(rest: list[str]) -> int:
 
     Returns the process exit code.
     """
-    if not rest or rest[0] in ("--help", "-h"):
+    if not rest or rest[0] in ('--help', '-h'):
         _print_usage()
         return 0
 
     verb = rest[0]
-    if verb == "list":
+    if verb == 'list':
         return _list_servers()
-    print(f"clawcodex mcp: unknown verb {verb!r}", file=sys.stderr)
+    print(f'clawcodex mcp: unknown verb {verb!r}', file=sys.stderr)
     _print_usage()
     return 2
 
 
 def _print_usage() -> None:
-    print("Usage: clawcodex mcp <verb> [args...]")
-    print("")
-    print("Verbs:")
-    print("  list    List configured MCP servers")
+    print('Usage: clawcodex mcp <verb> [args...]')
+    print('')
+    print('Verbs:')
+    print('  list    List configured MCP servers')
 
 
 def _list_servers() -> int:
@@ -56,16 +56,16 @@ def _list_servers() -> int:
         # ``(dict[str, ScopedMcpServerConfig], list[ValidationError])``.
         from clawcodex_ext.services.mcp.config import get_all_mcp_configs
     except Exception as exc:  # pragma: no cover
-        print(f"clawcodex mcp list: cannot load MCP config: {exc}", file=sys.stderr)
+        print(f'clawcodex mcp list: cannot load MCP config: {exc}', file=sys.stderr)
         return 1
     try:
         configs, _errors = get_all_mcp_configs()
     except Exception as exc:
-        print(f"clawcodex mcp list: error reading config: {exc}", file=sys.stderr)
+        print(f'clawcodex mcp list: error reading config: {exc}', file=sys.stderr)
         return 1
     names = sorted(configs.keys())
     if not names:
-        print("(no MCP servers configured)")
+        print('(no MCP servers configured)')
         return 0
     for name in names:
         print(name)

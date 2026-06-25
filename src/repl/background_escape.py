@@ -11,5 +11,5 @@ from clawcodex_ext.repl.background_escape import (  # noqa: F401
 )
 
 __all__ = [
-    "BackgroundEscape",
+    'BackgroundEscape',
 ]

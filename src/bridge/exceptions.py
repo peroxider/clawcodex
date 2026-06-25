@@ -54,9 +54,9 @@ class BridgeFatalError(Exception):
 
     def __repr__(self) -> str:
         return (
-            f"BridgeFatalError(status={self.status}, "
-            f"error_type={self.error_type!r}, message={str(self)!r})"
+            f'BridgeFatalError(status={self.status}, '
+            f'error_type={self.error_type!r}, message={str(self)!r})'
         )
 
 
-__all__ = ["BridgeAuthError", "BridgeFatalError", "EpochSupersededError"]
+__all__ = ['BridgeAuthError', 'BridgeFatalError', 'EpochSupersededError']

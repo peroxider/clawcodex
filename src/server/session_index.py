@@ -27,7 +27,7 @@ from .types import SessionIndexEntry
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_INDEX_PATH = Path.home() / ".claude" / "server-sessions.json"
+DEFAULT_INDEX_PATH = Path.home() / '.claude' / 'server-sessions.json'
 
 #: ``SessionIndex`` is keyed by ``session_id`` (TS uses ``string`` keys
 #: but the value type matches ``SessionIndexEntry``).
@@ -74,18 +74,18 @@ def _entry_to_dict(entry: SessionIndexEntry) -> dict[str, Any]:
 
 def _dict_to_entry(payload: dict[str, Any]) -> SessionIndexEntry:
     """Strict ``dict → SessionIndexEntry`` parser; raises on unknown keys."""
-    required = {"session_id", "transcript_session_id", "cwd", "created_at", "last_active_at"}
+    required = {'session_id', 'transcript_session_id', 'cwd', 'created_at', 'last_active_at'}
     missing = required - payload.keys()
     if missing:
-        raise ValueError(f"session index entry missing fields: {sorted(missing)}")
+        raise ValueError(f'session index entry missing fields: {sorted(missing)}')
     return SessionIndexEntry(
-        session_id=str(payload["session_id"]),
-        transcript_session_id=str(payload["transcript_session_id"]),
-        cwd=str(payload["cwd"]),
-        created_at=float(payload["created_at"]),
-        last_active_at=float(payload["last_active_at"]),
+        session_id=str(payload['session_id']),
+        transcript_session_id=str(payload['transcript_session_id']),
+        cwd=str(payload['cwd']),
+        created_at=float(payload['created_at']),
+        last_active_at=float(payload['last_active_at']),
         permission_mode=(
-            str(payload["permission_mode"]) if payload.get("permission_mode") is not None else None
+            str(payload['permission_mode']) if payload.get('permission_mode') is not None else None
         ),
     )
 
@@ -98,21 +98,21 @@ def load_index(path: Path = DEFAULT_INDEX_PATH) -> SessionIndex:
     fresh.
     """
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding='utf-8')
     except FileNotFoundError:
         return {}
     except OSError as exc:
-        logger.warning("[session_index] read failed: %s; returning empty index", exc)
+        logger.warning('[session_index] read failed: %s; returning empty index', exc)
         return {}
     if not raw.strip():
         return {}
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        logger.warning("[session_index] invalid JSON: %s; returning empty index", exc)
+        logger.warning('[session_index] invalid JSON: %s; returning empty index', exc)
         return {}
     if not isinstance(parsed, dict):
-        logger.warning("[session_index] root is not an object; returning empty index")
+        logger.warning('[session_index] root is not an object; returning empty index')
         return {}
     out: SessionIndex = {}
     for key, value in parsed.items():
@@ -121,7 +121,7 @@ def load_index(path: Path = DEFAULT_INDEX_PATH) -> SessionIndex:
         try:
             out[str(key)] = _dict_to_entry(value)
         except (ValueError, TypeError) as exc:
-            logger.warning("[session_index] skipping malformed entry %r: %s", key, exc)
+            logger.warning('[session_index] skipping malformed entry %r: %s', key, exc)
             continue
     return out
 
@@ -136,11 +136,11 @@ def save_index(index: SessionIndex, path: Path = DEFAULT_INDEX_PATH) -> None:
     payload: dict[str, dict[str, Any]] = {
         sid: _entry_to_dict(entry) for sid, entry in index.items()
     }
-    serialized = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
+    serialized = json.dumps(payload, sort_keys=True, indent=2).encode('utf-8')
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=".server-sessions.", suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix='.server-sessions.', suffix='.tmp')
     try:
-        with os.fdopen(fd, "wb") as fh:
+        with os.fdopen(fd, 'wb') as fh:
             fh.write(serialized)
             fh.flush()
             os.fsync(fh.fileno())
@@ -207,11 +207,11 @@ def update_last_active(
 
 
 __all__ = [
-    "DEFAULT_INDEX_PATH",
-    "SessionIndex",
-    "add_entry",
-    "load_index",
-    "remove_entry",
-    "save_index",
-    "update_last_active",
+    'DEFAULT_INDEX_PATH',
+    'SessionIndex',
+    'add_entry',
+    'load_index',
+    'remove_entry',
+    'save_index',
+    'update_last_active',
 ]

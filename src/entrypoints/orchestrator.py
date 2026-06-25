@@ -11,5 +11,5 @@ from clawcodex_ext.entrypoints.orchestrator import (  # noqa: F401
 )
 
 __all__ = [
-    "run_orchestrator_subcommand",
+    'run_orchestrator_subcommand',
 ]

@@ -48,12 +48,12 @@ register_task(InProcessTeammateTask())
 register_task(DreamTask())
 
 __all__ = [
-    "DreamTask",
-    "DreamTaskState",
-    "InProcessTeammateTask",
-    "InProcessTeammateTaskState",
-    "LocalAgentTask",
-    "LocalAgentTaskState",
-    "LocalShellTask",
-    "LocalShellTaskState",
+    'DreamTask',
+    'DreamTaskState',
+    'InProcessTeammateTask',
+    'InProcessTeammateTaskState',
+    'LocalAgentTask',
+    'LocalAgentTaskState',
+    'LocalShellTask',
+    'LocalShellTaskState',
 ]

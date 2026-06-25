@@ -9,5 +9,5 @@ other private symbols remain accessible to tests.
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.services.computer_use.platform")
+_ext_mod = importlib.import_module('clawcodex_ext.services.computer_use.platform')
 sys.modules[__name__] = _ext_mod

@@ -72,25 +72,25 @@ from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
 # modules at this layer (would cycle), so we hardcode the literals
 # the registry uses. These are themselves source-of-truth in the
 # tool definitions; if those change, this constant moves with them.
-SEND_MESSAGE_TOOL_NAME = "SendMessage"
-TASK_STOP_TOOL_NAME = "TaskStop"
+SEND_MESSAGE_TOOL_NAME = 'SendMessage'
+TASK_STOP_TOOL_NAME = 'TaskStop'
 
 
 _WORKER_CAPABILITIES_SIMPLE = (
-    "Workers have access to Bash, Read, and Edit tools, plus MCP tools from configured MCP servers."
+    'Workers have access to Bash, Read, and Edit tools, plus MCP tools from configured MCP servers.'
 )
 
 _WORKER_CAPABILITIES_DEFAULT = (
-    "Workers have access to standard tools, MCP tools from configured "
-    "MCP servers, and project skills via the Skill tool. Delegate skill "
-    "invocations (e.g. /commit or project workflow skills) to workers."
+    'Workers have access to standard tools, MCP tools from configured '
+    'MCP servers, and project skills via the Skill tool. Delegate skill '
+    'invocations (e.g. /commit or project workflow skills) to workers.'
 )
 
 
 def _resolve_worker_capabilities() -> str:
     """Match TS ``coordinatorMode.ts:112-114`` — branch on the
     ``CLAUDE_CODE_SIMPLE`` env var."""
-    if is_env_truthy("CLAUDE_CODE_SIMPLE"):
+    if is_env_truthy('CLAUDE_CODE_SIMPLE'):
         return _WORKER_CAPABILITIES_SIMPLE
     return _WORKER_CAPABILITIES_DEFAULT
 
@@ -368,5 +368,5 @@ You:
 
 
 __all__ = [
-    "get_coordinator_system_prompt",
+    'get_coordinator_system_prompt',
 ]

@@ -7,17 +7,17 @@ from typing import Any, Callable
 @dataclass
 class PluginManifest:
     name: str
-    description: str = ""
-    version: str = "1.0.0"
+    description: str = ''
+    version: str = '1.0.0'
 
 
 @dataclass
 class LoadedPlugin:
     name: str
     manifest: PluginManifest
-    path: str = ""
-    source: str = ""
-    repository: str = ""
+    path: str = ''
+    source: str = ''
+    repository: str = ''
     enabled: bool = True
     is_builtin: bool = False
     hooks_config: dict[str, Any] | None = None
@@ -32,7 +32,7 @@ class LoadedPlugin:
 class BuiltinPluginDefinition:
     name: str
     description: str
-    version: str = "1.0.0"
+    version: str = '1.0.0'
     default_enabled: bool = True
     skills: list[Any] = field(default_factory=list)
     hooks: dict[str, Any] | None = None

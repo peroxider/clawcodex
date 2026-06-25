@@ -50,7 +50,7 @@ class SettingsChangeDetector:
 def _diff_dicts(
     old: dict[str, Any],
     new: dict[str, Any],
-    prefix: str = "",
+    prefix: str = '',
 ) -> SettingsDiff:
     """Recursively diff two flat/nested dicts."""
     changed: list[str] = []
@@ -59,7 +59,7 @@ def _diff_dicts(
 
     all_keys = set(old.keys()) | set(new.keys())
     for key in sorted(all_keys):
-        full_key = f"{prefix}.{key}" if prefix else key
+        full_key = f'{prefix}.{key}' if prefix else key
         ov = old.get(key)
         nv = new.get(key)
         if isinstance(ov, dict) and isinstance(nv, dict):

@@ -18,29 +18,29 @@ def run_doctor() -> int:
     MCP-side diagnostics are loaded lazily below only when ``--mcp`` is
     present.
     """
-    print("clawcodex doctor")
-    print("================")
+    print('clawcodex doctor')
+    print('================')
     try:
         from src import __version__
 
-        print(f"version:       {__version__}")
+        print(f'version:       {__version__}')
     except Exception:  # pragma: no cover
-        print("version:       (unknown)")
-    print(f"python:        {sys.version.split()[0]}")
-    print(f"platform:      {sys.platform}")
+        print('version:       (unknown)')
+    print(f'python:        {sys.version.split()[0]}')
+    print(f'platform:      {sys.platform}')
     # If `mcp` subflag is present, run MCP diagnostics; else skip.
-    if "--mcp" in sys.argv:
+    if '--mcp' in sys.argv:
         try:
             import asyncio
             from clawcodex_ext.services.mcp.doctor import run_diagnostics
 
-            print("")
-            print("MCP diagnostics")
-            print("---------------")
+            print('')
+            print('MCP diagnostics')
+            print('---------------')
             result = asyncio.run(run_diagnostics())
             for line in str(result).splitlines():
-                print(f"  {line}")
+                print(f'  {line}')
         except Exception as exc:
-            print(f"MCP diagnostics failed: {exc}", file=sys.stderr)
+            print(f'MCP diagnostics failed: {exc}', file=sys.stderr)
             return 1
     return 0

@@ -24,7 +24,7 @@ class LspDiagnostic:
     column: int
     message: str
     severity: DiagnosticSeverity = DiagnosticSeverity.ERROR
-    source: str = ""
+    source: str = ''
     code: str | None = None
 
 
@@ -34,7 +34,7 @@ class LspServerConfig:
     command: str
     args: list[str] = field(default_factory=list)
     language_ids: list[str] = field(default_factory=list)
-    root_uri: str = ""
+    root_uri: str = ''
     initialization_options: dict[str, Any] = field(default_factory=dict)
 
 
@@ -52,18 +52,18 @@ _lsp_plugins: dict[str, LspPluginWrapper] = {}
 def wrap_lsp_server_as_plugin(
     config: LspServerConfig,
     *,
-    description: str = "",
+    description: str = '',
 ) -> LspPluginWrapper:
     manifest = PluginManifest(
-        name=f"lsp-{config.name}",
-        description=description or f"LSP server: {config.name}",
-        version="1.0.0",
+        name=f'lsp-{config.name}',
+        description=description or f'LSP server: {config.name}',
+        version='1.0.0',
     )
 
     plugin = LoadedPlugin(
         name=manifest.name,
         manifest=manifest,
-        source=f"lsp:{config.name}",
+        source=f'lsp:{config.name}',
         enabled=True,
     )
 

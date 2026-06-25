@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import os
 
-_DEFAULT_PRODUCTION_BASE_URL = "https://api.anthropic.com"
+_DEFAULT_PRODUCTION_BASE_URL = 'https://api.anthropic.com'
 """Fallback when no override AND no Phase 2 OAuth config is available.
 
 Mirrors TS ``getOauthConfig().BASE_API_URL`` for the production build. The
@@ -39,7 +39,7 @@ def get_bridge_token_override() -> str | None:
     Mirrors TS ``getBridgeTokenOverride`` on ``bridgeConfig.ts:18-20``.
     Empty string is treated as unset (matches the TS ``|| undefined``).
     """
-    value = os.environ.get("CLAUDE_BRIDGE_OAUTH_TOKEN")
+    value = os.environ.get('CLAUDE_BRIDGE_OAUTH_TOKEN')
     return value or None
 
 
@@ -48,7 +48,7 @@ def get_bridge_base_url_override() -> str | None:
 
     Mirrors TS ``getBridgeBaseUrlOverride`` on ``bridgeConfig.ts:23-25``.
     """
-    value = os.environ.get("CLAUDE_BRIDGE_BASE_URL")
+    value = os.environ.get('CLAUDE_BRIDGE_BASE_URL')
     return value or None
 
 
@@ -73,8 +73,8 @@ def get_bridge_base_url() -> str:
 
 
 __all__ = [
-    "get_bridge_access_token",
-    "get_bridge_base_url",
-    "get_bridge_base_url_override",
-    "get_bridge_token_override",
+    'get_bridge_access_token',
+    'get_bridge_base_url',
+    'get_bridge_base_url_override',
+    'get_bridge_token_override',
 ]

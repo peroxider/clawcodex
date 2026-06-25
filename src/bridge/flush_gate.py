@@ -24,13 +24,13 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
-T = TypeVar("T")
+T = TypeVar('T')
 
 
 class FlushGate(Generic[T]):
     """Queue-with-lifecycle that gates writes during a one-shot flush."""
 
-    __slots__ = ("_active", "_pending")
+    __slots__ = ('_active', '_pending')
 
     def __init__(self) -> None:
         self._active: bool = False
@@ -89,4 +89,4 @@ class FlushGate(Generic[T]):
         self._active = False
 
 
-__all__ = ["FlushGate"]
+__all__ = ['FlushGate']

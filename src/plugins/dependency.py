@@ -121,21 +121,21 @@ def _find_cycle(plugins: dict[str, DependencyNode]) -> list[str]:
 
 
 def version_satisfies(available: str, required: str) -> bool:
-    if required == "*" or required == "":
+    if required == '*' or required == '':
         return True
 
-    if required.startswith(">="):
+    if required.startswith('>='):
         return _compare_versions(available, required[2:].strip()) >= 0
-    if required.startswith("<="):
+    if required.startswith('<='):
         return _compare_versions(available, required[2:].strip()) <= 0
-    if required.startswith(">"):
+    if required.startswith('>'):
         return _compare_versions(available, required[1:].strip()) > 0
-    if required.startswith("<"):
+    if required.startswith('<'):
         return _compare_versions(available, required[1:].strip()) < 0
-    if required.startswith("^"):
+    if required.startswith('^'):
         target = required[1:].strip()
         return _caret_match(available, target)
-    if required.startswith("~"):
+    if required.startswith('~'):
         target = required[1:].strip()
         return _tilde_match(available, target)
 
@@ -143,8 +143,8 @@ def version_satisfies(available: str, required: str) -> bool:
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    clean = re.sub(r"-.*$", "", v.strip())
-    parts = clean.split(".")
+    clean = re.sub(r'-.*$', '', v.strip())
+    parts = clean.split('.')
     result: list[int] = []
     for p in parts:
         try:

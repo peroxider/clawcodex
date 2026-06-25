@@ -11,5 +11,5 @@ from clawcodex_ext.providers.openai_codex_provider import (  # noqa: F401
 )
 
 __all__ = [
-    "OpenAICodexProvider",
+    'OpenAICodexProvider',
 ]

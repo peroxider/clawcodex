@@ -31,11 +31,11 @@ import uuid
 from pathlib import Path
 
 __all__ = [
-    "is_profiling_enabled",
-    "profile_checkpoint",
-    "profile_report",
-    "get_internal_phase_log",
-    "reset_profiler_for_test_only",
+    'is_profiling_enabled',
+    'profile_checkpoint',
+    'profile_report',
+    'get_internal_phase_log',
+    'reset_profiler_for_test_only',
 ]
 
 
@@ -56,10 +56,10 @@ _SESSION_ID: str = uuid.uuid4().hex[:12]
 # Honors ``CLAUDE_CONFIG_DIR`` (matches the codebase's existing config-dir
 # resolution at ``src/memdir/paths.py:108`` ``get_claude_config_home_dir``).
 def _resolve_output_dir() -> Path:
-    override = os.environ.get("CLAUDE_CONFIG_DIR")
+    override = os.environ.get('CLAUDE_CONFIG_DIR')
     if override:
-        return Path(override).expanduser() / "startup-perf"
-    return Path.home() / ".claude" / "startup-perf"
+        return Path(override).expanduser() / 'startup-perf'
+    return Path.home() / '.claude' / 'startup-perf'
 
 
 _OUTPUT_DIR = _resolve_output_dir()
@@ -67,8 +67,8 @@ _OUTPUT_DIR = _resolve_output_dir()
 
 def _read_env_gate() -> bool:
     """Truthy values: 1, true, yes (case-insensitive). Anything else: false."""
-    raw = os.environ.get("CLAUDE_CODE_PROFILE_STARTUP", "")
-    return raw.strip().lower() in {"1", "true", "yes"}
+    raw = os.environ.get('CLAUDE_CODE_PROFILE_STARTUP', '')
+    return raw.strip().lower() in {'1', 'true', 'yes'}
 
 
 _PROFILING_ENABLED = _read_env_gate()
@@ -104,19 +104,19 @@ def profile_report() -> str:
     ``CLAUDE_CODE_PROFILE_STARTUP`` is unset).
     """
     if not _phase_log:
-        return "# Startup Profile\n\n(no checkpoints recorded)\n"
+        return '# Startup Profile\n\n(no checkpoints recorded)\n'
 
     base = _phase_log[0][1]
-    lines = ["# Startup Profile", ""]
-    lines.append(f"Session: `{_SESSION_ID}`  Phases: {len(_phase_log)}")
-    lines.append("")
-    lines.append("| Phase | Absolute (ms) | Delta (ms) |")
-    lines.append("|---|---:|---:|")
+    lines = ['# Startup Profile', '']
+    lines.append(f'Session: `{_SESSION_ID}`  Phases: {len(_phase_log)}')
+    lines.append('')
+    lines.append('| Phase | Absolute (ms) | Delta (ms) |')
+    lines.append('|---|---:|---:|')
     prev = base
     for name, ts in _phase_log:
         abs_ms = (ts - base) * 1000.0
         delta_ms = (ts - prev) * 1000.0
-        lines.append(f"| {name} | {abs_ms:.2f} | {delta_ms:.2f} |")
+        lines.append(f'| {name} | {abs_ms:.2f} | {delta_ms:.2f} |')
         prev = ts
 
     total_ms = (_phase_log[-1][1] - base) * 1000.0
@@ -129,13 +129,13 @@ def profile_report() -> str:
                 _phase_log[1:],
             )
         ),
-        default=("none", 0.0),
+        default=('none', 0.0),
         key=lambda item: item[1],
     )
-    lines.append("")
-    lines.append(f"Total: {total_ms:.2f}ms; slowest delta: {slowest[0]} ({slowest[1]:.2f}ms)")
-    lines.append("")
-    return "\n".join(lines)
+    lines.append('')
+    lines.append(f'Total: {total_ms:.2f}ms; slowest delta: {slowest[0]} ({slowest[1]:.2f}ms)')
+    lines.append('')
+    return '\n'.join(lines)
 
 
 def get_internal_phase_log() -> list[tuple[str, float]]:
@@ -163,12 +163,12 @@ def _flush_on_exit() -> None:
         return
     try:
         _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        out_path = _OUTPUT_DIR / f"{_SESSION_ID}.txt"
-        out_path.write_text(profile_report(), encoding="utf-8")
+        out_path = _OUTPUT_DIR / f'{_SESSION_ID}.txt'
+        out_path.write_text(profile_report(), encoding='utf-8')
         base = _phase_log[0][1]
         total_ms = (_phase_log[-1][1] - base) * 1000.0
         sys.stderr.write(
-            f"startup: {len(_phase_log)} phases, total {total_ms:.0f}ms; report → {out_path}\n"
+            f'startup: {len(_phase_log)} phases, total {total_ms:.0f}ms; report → {out_path}\n'
         )
     except Exception:
         # Never let profiler I/O block process exit.

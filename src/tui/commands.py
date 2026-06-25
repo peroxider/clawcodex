@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 __all__ = [
-    "CommandDispatchResult",
-    "CommandSuggestion",
-    "build_command_suggestions",
-    "build_command_words",
-    "dispatch_local_command",
-    "dispatch_registry_command",
+    'CommandDispatchResult',
+    'CommandSuggestion',
+    'build_command_suggestions',
+    'build_command_words',
+    'dispatch_local_command',
+    'dispatch_registry_command',
 ]
 
 
@@ -19,4 +19,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

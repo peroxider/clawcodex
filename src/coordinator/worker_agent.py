@@ -35,10 +35,10 @@ from clawcodex_ext.agent.agent_definitions import (
 # ``workerAgent.ts:9-14``.
 WORKER_AGENT: AgentDefinition = replace(
     GENERAL_PURPOSE_AGENT,
-    agent_type="worker",
+    agent_type='worker',
     when_to_use=(
-        "Worker agent for coordinator mode. Executes tasks autonomously "
-        "— research, implementation, or verification."
+        'Worker agent for coordinator mode. Executes tasks autonomously '
+        '— research, implementation, or verification.'
     ),
 )
 
@@ -56,6 +56,6 @@ def get_coordinator_agents() -> list[AgentDefinition]:
 
 
 __all__ = [
-    "WORKER_AGENT",
-    "get_coordinator_agents",
+    'WORKER_AGENT',
+    'get_coordinator_agents',
 ]

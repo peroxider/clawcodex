@@ -21,8 +21,8 @@ def run_daemon_subcommand(rest: list[str]) -> int:
     and the full tool registry — wasteful for a non-interactive command).
     """
     print(
-        "clawcodex daemon: not yet implemented in this Python port. "
-        "See the TypeScript reference at typescript/src/coordinator/.",
+        'clawcodex daemon: not yet implemented in this Python port. '
+        'See the TypeScript reference at typescript/src/coordinator/.',
         file=sys.stderr,
     )
     return 1

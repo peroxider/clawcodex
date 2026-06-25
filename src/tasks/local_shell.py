@@ -48,24 +48,24 @@ class LocalShellTaskState(TaskStateBase):
       ``field(repr=False)`` so they don't leak into snapshots / logs.
     """
 
-    type: Literal["local_bash"] = "local_bash"  # type: ignore[assignment]
-    command: str = ""
-    cwd: str = ""
+    type: Literal['local_bash'] = 'local_bash'  # type: ignore[assignment]
+    command: str = ''
+    cwd: str = ''
     pid: int | None = None
-    output_path: str = ""
+    output_path: str = ''
     exit_code: int | None = None
     finished_at: float | None = None
     proc: subprocess.Popen | None = field(default=None, repr=False, compare=False)
     handle: IO[bytes] | None = field(default=None, repr=False, compare=False)
 
-    def derived_status(self) -> Literal["running", "completed", "failed"]:
+    def derived_status(self) -> Literal['running', 'completed', 'failed']:
         """Compute the legacy three-value status string used by the bash
         background reader. Independent of ``self.status`` (which uses the
         canonical 5-value chapter-10 vocabulary)."""
         rc = self.exit_code
         if rc is None:
-            return "running"
-        return "completed" if rc == 0 else "failed"
+            return 'running'
+        return 'completed' if rc == 0 else 'failed'
 
     def to_legacy_dict(self) -> dict[str, Any]:
         """Project back to the dict-of-dicts shape that the pre-Chunk-B
@@ -74,17 +74,17 @@ class LocalShellTaskState(TaskStateBase):
         the historical key set unchanged.
         """
         return {
-            "task_id": self.id,
-            "command": self.command,
-            "description": self.description,
-            "cwd": self.cwd,
-            "started_at": self.start_time,
-            "output_path": self.output_path,
-            "pid": self.pid,
-            "_proc": self.proc,
-            "_handle": self.handle,
-            "exit_code": self.exit_code,
-            "finished_at": self.finished_at,
+            'task_id': self.id,
+            'command': self.command,
+            'description': self.description,
+            'cwd': self.cwd,
+            'started_at': self.start_time,
+            'output_path': self.output_path,
+            'pid': self.pid,
+            '_proc': self.proc,
+            '_handle': self.handle,
+            'exit_code': self.exit_code,
+            'finished_at': self.finished_at,
         }
 
 
@@ -108,10 +108,10 @@ class LocalShellTask:
     so the bash machinery isn't moved across chunks.
     """
 
-    name: str = "LocalShellTask"
-    type: Literal["local_bash"] = "local_bash"
+    name: str = 'LocalShellTask'
+    type: Literal['local_bash'] = 'local_bash'
 
-    async def kill(self, task_id: str, registry: "RuntimeTaskRegistry") -> None:
+    async def kill(self, task_id: str, registry: 'RuntimeTaskRegistry') -> None:
         state = registry.get(task_id)
         if not is_local_shell_task(state):
             return
@@ -133,7 +133,7 @@ class LocalShellTask:
 # adapter; it no longer mutates the registry on import.
 
 __all__ = [
-    "LocalShellTaskState",
-    "LocalShellTask",
-    "is_local_shell_task",
+    'LocalShellTaskState',
+    'LocalShellTask',
+    'is_local_shell_task',
 ]

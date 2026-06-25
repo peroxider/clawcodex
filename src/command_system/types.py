@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 __all__ = [
-    "CommandType",
-    "CommandAvailability",
-    "CompactionResult",
-    "LocalCommandResult",
-    "CommandContext",
-    "attach_downstream_context",
-    "CommandBase",
-    "PromptCommand",
-    "LocalCommand",
-    "InteractiveCommand",
-    "InteractiveOutcome",
-    "InteractiveUnavailableError",
-    "SkillPromptCommand",
-    "UIHost",
-    "UIOption",
-    "NullUIHost",
-    "get_command_name",
-    "is_command_enabled",
-    "meets_availability_requirement",
+    'CommandType',
+    'CommandAvailability',
+    'CompactionResult',
+    'LocalCommandResult',
+    'CommandContext',
+    'attach_downstream_context',
+    'CommandBase',
+    'PromptCommand',
+    'LocalCommand',
+    'InteractiveCommand',
+    'InteractiveOutcome',
+    'InteractiveUnavailableError',
+    'SkillPromptCommand',
+    'UIHost',
+    'UIOption',
+    'NullUIHost',
+    'get_command_name',
+    'is_command_enabled',
+    'meets_availability_requirement',
 ]
 
 
@@ -32,4 +32,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

@@ -14,8 +14,8 @@ from clawcodex_ext.hooks._pluggy_adapter import (  # noqa: F401
 )
 
 __all__ = [
-    "is_pluggy_available",
-    "ClawCodexHooks",
-    "PluggyHookManager",
-    "HookPluginAdapter",
+    'is_pluggy_available',
+    'ClawCodexHooks',
+    'PluggyHookManager',
+    'HookPluginAdapter',
 ]

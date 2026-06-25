@@ -11,8 +11,8 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
 
-DEEP_LINK_SCHEME = "claude-code"
-DEEP_LINK_HOST = "app"
+DEEP_LINK_SCHEME = 'claude-code'
+DEEP_LINK_HOST = 'app'
 
 
 @dataclass
@@ -24,20 +24,20 @@ class DeepLink:
 
     @property
     def prompt(self) -> str | None:
-        return self.params.get("prompt")
+        return self.params.get('prompt')
 
     @property
     def session_id(self) -> str | None:
-        return self.params.get("session_id")
+        return self.params.get('session_id')
 
     @property
     def model(self) -> str | None:
-        return self.params.get("model")
+        return self.params.get('model')
 
     def to_url(self) -> str:
         """Serialize to a URL string."""
         query = urlencode(self.params)
-        return f"{DEEP_LINK_SCHEME}://{DEEP_LINK_HOST}/{self.action}?{query}"
+        return f'{DEEP_LINK_SCHEME}://{DEEP_LINK_HOST}/{self.action}?{query}'
 
 
 def parse_deep_link(url: str) -> DeepLink | None:
@@ -53,7 +53,7 @@ def parse_deep_link(url: str) -> DeepLink | None:
     if parsed.scheme != DEEP_LINK_SCHEME:
         return None
 
-    action = parsed.path.lstrip("/")
+    action = parsed.path.lstrip('/')
     if not action:
         return None
 
@@ -65,12 +65,12 @@ def parse_deep_link(url: str) -> DeepLink | None:
 
 def create_prompt_link(prompt: str, model: str | None = None) -> str:
     """Create a deep link that opens Claude Code with a prompt."""
-    params: dict[str, str] = {"prompt": prompt}
+    params: dict[str, str] = {'prompt': prompt}
     if model:
-        params["model"] = model
-    return DeepLink(action="prompt", params=params).to_url()
+        params['model'] = model
+    return DeepLink(action='prompt', params=params).to_url()
 
 
 def create_session_link(session_id: str) -> str:
     """Create a deep link that resumes a session."""
-    return DeepLink(action="resume", params={"session_id": session_id}).to_url()
+    return DeepLink(action='resume', params={'session_id': session_id}).to_url()

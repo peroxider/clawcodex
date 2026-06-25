@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 __all__ = [
-    "ParsedInput",
-    "parse_user_input",
-    "expand_at_mentions",
-    "format_at_mention_attachments",
-    "build_image_content_blocks",
-    "expand_agent_mentions",
-    "validate_input",
-    "InputHistory",
-    "is_multiline_trigger",
-    "is_multiline_complete",
-    "suggest_commands",
+    'ParsedInput',
+    'parse_user_input',
+    'expand_at_mentions',
+    'format_at_mention_attachments',
+    'build_image_content_blocks',
+    'expand_agent_mentions',
+    'validate_input',
+    'InputHistory',
+    'is_multiline_trigger',
+    'is_multiline_complete',
+    'suggest_commands',
 ]
 
 
@@ -24,4 +24,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

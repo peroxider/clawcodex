@@ -14,12 +14,12 @@ class OutputStyle:
 
 
 BUILTIN_OUTPUT_STYLES: dict[str, OutputStyle] = {
-    "default": OutputStyle(
-        name="default",
+    'default': OutputStyle(
+        name='default',
         prompt="Respond clearly, concisely, and focus on the user's requested engineering task.",
     ),
-    "explanatory": OutputStyle(
-        name="explanatory",
-        prompt="Respond with concise implementation details plus short educational notes when they improve understanding.",
+    'explanatory': OutputStyle(
+        name='explanatory',
+        prompt='Respond with concise implementation details plus short educational notes when they improve understanding.',
     ),
 }

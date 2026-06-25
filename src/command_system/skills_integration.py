@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 __all__ = [
-    "skill_to_prompt_command",
-    "register_skill_as_command",
-    "load_and_register_skills",
-    "get_skill_command",
-    "load_skill_from_directory",
-    "execute_skill_command",
+    'skill_to_prompt_command',
+    'register_skill_as_command',
+    'load_and_register_skills',
+    'get_skill_command',
+    'load_skill_from_directory',
+    'execute_skill_command',
 ]
 
 
@@ -19,4 +19,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

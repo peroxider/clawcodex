@@ -95,24 +95,24 @@ async def _read_connect_request(
     while True:
         chunk = await reader.read(4096)
         if not chunk:
-            return "HTTP/1.1 400 Bad Request\r\n\r\n"
+            return 'HTTP/1.1 400 Bad Request\r\n\r\n'
         buf.extend(chunk)
-        end = buf.find(b"\r\n\r\n")
+        end = buf.find(b'\r\n\r\n')
         if end != -1:
             break
         if len(buf) > MAX_CONNECT_HEADER_BYTES:
-            return "HTTP/1.1 400 Bad Request\r\n\r\n"
+            return 'HTTP/1.1 400 Bad Request\r\n\r\n'
 
-    head = buf[:end].decode("utf-8", errors="replace")
+    head = buf[:end].decode('utf-8', errors='replace')
     trailing = bytes(buf[end + 4 :])
-    first_line = head.split("\r\n", 1)[0]
+    first_line = head.split('\r\n', 1)[0]
     parts = first_line.split()
     if (
         len(parts) != 3
-        or parts[0].upper() != "CONNECT"
-        or not parts[2].upper().startswith("HTTP/1.")
+        or parts[0].upper() != 'CONNECT'
+        or not parts[2].upper().startswith('HTTP/1.')
     ):
-        return "HTTP/1.1 405 Method Not Allowed\r\n\r\n"
+        return 'HTTP/1.1 405 Method Not Allowed\r\n\r\n'
     target = parts[1]
     return _ConnectRequest(raw_line=first_line, target=target, trailing_bytes=trailing)
 
@@ -201,7 +201,7 @@ async def _keepalive(
     while True:
         await asyncio.sleep(interval)
         try:
-            await ws.send(encode_chunk(b""))
+            await ws.send(encode_chunk(b''))
         except (websockets.exceptions.ConnectionClosed, OSError):
             return
 
@@ -223,7 +223,7 @@ async def _handle_connection(
     parsed = await _read_connect_request(reader)
     if isinstance(parsed, str):
         try:
-            writer.write(parsed.encode("ascii"))
+            writer.write(parsed.encode('ascii'))
             await writer.drain()
         finally:
             writer.close()
@@ -240,8 +240,8 @@ async def _handle_connection(
     # Bytes that arrived after the CONNECT header (TCP coalesces CONNECT
     # + ClientHello into one packet under heavy load) are flushed first.
     headers = {
-        "Authorization": ws_auth_header,
-        "Content-Type": "application/proto",
+        'Authorization': ws_auth_header,
+        'Content-Type': 'application/proto',
     }
     try:
         ws = await ws_connect(
@@ -250,9 +250,9 @@ async def _handle_connection(
             ping_interval=None,  # we do app-level keepalive ourselves
         )
     except (websockets.exceptions.WebSocketException, ConnectionError, OSError) as exc:
-        logger.warning("[upstreamproxy] ws upgrade failed: %s", exc)
+        logger.warning('[upstreamproxy] ws upgrade failed: %s', exc)
         try:
-            writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            writer.write(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
             await writer.drain()
         except (ConnectionError, OSError):
             pass
@@ -269,7 +269,7 @@ async def _handle_connection(
     # can authenticate the tunnel target. The server responds with its
     # own ``HTTP/1.1 200 ...`` over the tunnel; we just pipe it through
     # to the local client.
-    head = (f"{parsed.raw_line}\r\nProxy-Authorization: {auth_header}\r\n\r\n").encode("ascii")
+    head = (f'{parsed.raw_line}\r\nProxy-Authorization: {auth_header}\r\n\r\n').encode('ascii')
 
     established = False
 
@@ -294,13 +294,13 @@ async def _handle_connection(
         loop = asyncio.get_running_loop()
         c2s_task = loop.create_task(
             _pump_client_to_ws(reader, ws, parsed.trailing_bytes),
-            name="upstreamproxy-c2s",
+            name='upstreamproxy-c2s',
         )
         s2c_task = loop.create_task(
             _pump_ws_to_client(ws, writer, _mark_established),
-            name="upstreamproxy-s2c",
+            name='upstreamproxy-s2c',
         )
-        ka_task = loop.create_task(_keepalive(ws), name="upstreamproxy-ka")
+        ka_task = loop.create_task(_keepalive(ws), name='upstreamproxy-ka')
 
         await asyncio.wait(
             [c2s_task, s2c_task],
@@ -312,7 +312,7 @@ async def _handle_connection(
         OSError,
         asyncio.CancelledError,
     ) as exc:
-        logger.debug("[upstreamproxy] connection setup exited: %s", exc)
+        logger.debug('[upstreamproxy] connection setup exited: %s', exc)
     finally:
         # Cancel any pump that's still running so we don't leak tasks.
         for task in (c2s_task, s2c_task, ka_task):
@@ -332,12 +332,12 @@ async def _handle_connection(
             ):
                 pass
             except Exception as exc:  # noqa: BLE001 -- shutdown noise; never propagate
-                logger.debug("[upstreamproxy] pump cleanup exception: %s", exc)
+                logger.debug('[upstreamproxy] pump cleanup exception: %s', exc)
         # If we never received a server payload, the client is still
         # waiting for the CONNECT response — send 502 before closing.
         if not established:
             try:
-                writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+                writer.write(b'HTTP/1.1 502 Bad Gateway\r\n\r\n')
                 await writer.drain()
             except (ConnectionError, OSError):
                 pass
@@ -360,7 +360,7 @@ async def start_upstream_proxy_relay(
     ws_url: str,
     session_id: str,
     token: str,
-    host: str = "127.0.0.1",
+    host: str = '127.0.0.1',
     port: int = 0,
 ) -> UpstreamProxyRelay:
     """Start the CONNECT-over-WS relay listener.
@@ -374,10 +374,10 @@ async def start_upstream_proxy_relay(
     ``Proxy-Authorization: Basic`` for the tunnel target. The two
     headers are different roles even though they share the same token.
     """
-    auth_header = "Basic " + base64.b64encode(f"{session_id}:{token}".encode("utf-8")).decode(
-        "ascii"
+    auth_header = 'Basic ' + base64.b64encode(f'{session_id}:{token}'.encode('utf-8')).decode(
+        'ascii'
     )
-    ws_auth_header = f"Bearer {token}"
+    ws_auth_header = f'Bearer {token}'
 
     server = await asyncio.start_server(
         lambda r, w: _handle_connection(r, w, ws_url, auth_header, ws_auth_header),
@@ -387,16 +387,16 @@ async def start_upstream_proxy_relay(
 
     sockets = server.sockets or ()
     if not sockets:
-        raise RuntimeError("upstreamproxy: server has no listening socket")
+        raise RuntimeError('upstreamproxy: server has no listening socket')
     bound_port = sockets[0].getsockname()[1]
-    logger.debug("[upstreamproxy] relay listening on %s:%d", host, bound_port)
+    logger.debug('[upstreamproxy] relay listening on %s:%d', host, bound_port)
     return UpstreamProxyRelay(port=bound_port, server=server)
 
 
 __all__ = [
-    "MAX_CHUNK_BYTES",
-    "MAX_CONNECT_HEADER_BYTES",
-    "PING_INTERVAL_SECONDS",
-    "UpstreamProxyRelay",
-    "start_upstream_proxy_relay",
+    'MAX_CHUNK_BYTES',
+    'MAX_CONNECT_HEADER_BYTES',
+    'PING_INTERVAL_SECONDS',
+    'UpstreamProxyRelay',
+    'start_upstream_proxy_relay',
 ]

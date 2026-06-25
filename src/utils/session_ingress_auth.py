@@ -38,21 +38,21 @@ from __future__ import annotations
 import os
 
 
-ENV_VAR_TOKEN = "CLAUDE_CODE_SESSION_ACCESS_TOKEN"
+ENV_VAR_TOKEN = 'CLAUDE_CODE_SESSION_ACCESS_TOKEN'
 """Env var holding the current session ingress token.
 
 Mirrors TS ``CLAUDE_CODE_SESSION_ACCESS_TOKEN`` references throughout
 ``sessionIngressAuth.ts``.
 """
 
-ENV_VAR_ORG_UUID = "CLAUDE_CODE_ORGANIZATION_UUID"
+ENV_VAR_ORG_UUID = 'CLAUDE_CODE_ORGANIZATION_UUID'
 """Env var holding the org UUID for session-key auth.
 
 Mirrors TS ``CLAUDE_CODE_ORGANIZATION_UUID`` on
 ``sessionIngressAuth.ts:124``.
 """
 
-_SESSION_KEY_PREFIX = "sk-ant-sid"
+_SESSION_KEY_PREFIX = 'sk-ant-sid'
 
 
 def get_session_ingress_auth_token() -> str | None:
@@ -85,12 +85,12 @@ def get_session_ingress_auth_headers() -> dict[str, str]:
     if not token:
         return {}
     if token.startswith(_SESSION_KEY_PREFIX):
-        headers = {"Cookie": f"sessionKey={token}"}
+        headers = {'Cookie': f'sessionKey={token}'}
         org_uuid = os.environ.get(ENV_VAR_ORG_UUID)
         if org_uuid:
-            headers["X-Organization-Uuid"] = org_uuid
+            headers['X-Organization-Uuid'] = org_uuid
         return headers
-    return {"Authorization": f"Bearer {token}"}
+    return {'Authorization': f'Bearer {token}'}
 
 
 def update_session_ingress_auth_token(token: str) -> None:
@@ -106,9 +106,9 @@ def update_session_ingress_auth_token(token: str) -> None:
 
 
 __all__ = [
-    "ENV_VAR_ORG_UUID",
-    "ENV_VAR_TOKEN",
-    "get_session_ingress_auth_headers",
-    "get_session_ingress_auth_token",
-    "update_session_ingress_auth_token",
+    'ENV_VAR_ORG_UUID',
+    'ENV_VAR_TOKEN',
+    'get_session_ingress_auth_headers',
+    'get_session_ingress_auth_token',
+    'update_session_ingress_auth_token',
 ]

@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 __all__ = [
-    "is_hyperlink_supported",
-    "format_link",
-    "raw_osc8",
-    "format_file_path",
+    'is_hyperlink_supported',
+    'format_link',
+    'raw_osc8',
+    'format_file_path',
 ]
 
 
@@ -17,4 +17,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

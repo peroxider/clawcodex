@@ -15,14 +15,14 @@ files eagerly import submodules during package initialization.
 from __future__ import annotations
 
 __all__ = [
-    "TranscriptWriter",
-    "TranscriptReader",
-    "get_agent_transcript_path",
-    "get_main_transcript_path",
-    "ensure_transcript_dir",
-    "register_transcript_path_resolver",
-    "nested_session_path_resolver",
-    "init",
+    'TranscriptWriter',
+    'TranscriptReader',
+    'get_agent_transcript_path',
+    'get_main_transcript_path',
+    'ensure_transcript_dir',
+    'register_transcript_path_resolver',
+    'nested_session_path_resolver',
+    'init',
 ]
 
 
@@ -34,4 +34,4 @@ def __getattr__(name: str):
         val = _mod.__dict__[name]
         globals()[name] = val  # cache for subsequent access
         return val
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

@@ -8,7 +8,7 @@ from .aliases import MODEL_ALIASES
 from .configs import MODEL_CONFIGS
 
 # Pattern for valid Claude model IDs
-_CLAUDE_PATTERN = re.compile(r"^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$")
+_CLAUDE_PATTERN = re.compile(r'^claude-(?:sonnet|opus|haiku|3|3-5|3-7)(?:-\d+)?(?:-\d{8})?$')
 
 
 def validate_model_name(name: str) -> bool:
@@ -54,9 +54,9 @@ def is_model_allowed(
 
 def _matches_pattern(model_id: str, pattern: str) -> bool:
     """Check if model_id matches a pattern (supports * wildcard)."""
-    if pattern == "*":
+    if pattern == '*':
         return True
-    if "*" in pattern:
-        regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+    if '*' in pattern:
+        regex = '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
         return bool(re.match(regex, model_id))
     return model_id == pattern

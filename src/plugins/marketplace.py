@@ -19,8 +19,8 @@ class MarketplaceEntry:
     name: str
     description: str
     version: str
-    repository: str = ""
-    author: str = ""
+    repository: str = ''
+    author: str = ''
     downloads: int = 0
     tags: list[str] = field(default_factory=list)
 
@@ -28,7 +28,7 @@ class MarketplaceEntry:
 @dataclass
 class MarketplaceIndex:
     entries: list[MarketplaceEntry] = field(default_factory=list)
-    last_updated: str = ""
+    last_updated: str = ''
 
 
 _index: MarketplaceIndex | None = None
@@ -42,28 +42,28 @@ def load_marketplace_index(index_path: str | Path) -> MarketplaceIndex:
         return _index
 
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError):
         _index = MarketplaceIndex()
         return _index
 
     entries: list[MarketplaceEntry] = []
-    for item in raw.get("plugins", []):
+    for item in raw.get('plugins', []):
         entries.append(
             MarketplaceEntry(
-                name=item.get("name", ""),
-                description=item.get("description", ""),
-                version=item.get("version", "1.0.0"),
-                repository=item.get("repository", ""),
-                author=item.get("author", ""),
-                downloads=item.get("downloads", 0),
-                tags=item.get("tags", []),
+                name=item.get('name', ''),
+                description=item.get('description', ''),
+                version=item.get('version', '1.0.0'),
+                repository=item.get('repository', ''),
+                author=item.get('author', ''),
+                downloads=item.get('downloads', 0),
+                tags=item.get('tags', []),
             )
         )
 
     _index = MarketplaceIndex(
         entries=entries,
-        last_updated=raw.get("last_updated", ""),
+        last_updated=raw.get('last_updated', ''),
     )
     return _index
 
@@ -95,16 +95,16 @@ def search_marketplace(
 
 def list_marketplace(
     *,
-    sort_by: str = "name",
+    sort_by: str = 'name',
     limit: int = 50,
 ) -> list[MarketplaceEntry]:
     if _index is None:
         return []
 
     entries = list(_index.entries)
-    if sort_by == "downloads":
+    if sort_by == 'downloads':
         entries.sort(key=lambda e: e.downloads, reverse=True)
-    elif sort_by == "name":
+    elif sort_by == 'name':
         entries.sort(key=lambda e: e.name)
 
     return entries[:limit]
@@ -119,11 +119,11 @@ def install_plugin(
     target = Path(target_dir) / plugin_name
 
     if not source.is_dir():
-        raise PluginError(plugin_name, f"Plugin source directory not found: {source}")
+        raise PluginError(plugin_name, f'Plugin source directory not found: {source}')
 
-    manifest_path = source / "plugin.json"
+    manifest_path = source / 'plugin.json'
     if not manifest_path.exists():
-        raise PluginError(plugin_name, "No plugin.json found in source")
+        raise PluginError(plugin_name, 'No plugin.json found in source')
 
     target.mkdir(parents=True, exist_ok=True)
 
@@ -136,7 +136,7 @@ def install_plugin(
         else:
             shutil.copy2(item, dest)
 
-    plugin = load_plugin_from_directory(target, source="marketplace")
+    plugin = load_plugin_from_directory(target, source='marketplace')
     register_plugin(plugin)
     return plugin
 

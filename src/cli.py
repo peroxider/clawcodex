@@ -98,7 +98,7 @@ def show_config():
 def start_repl(
     stream: bool = False,
     *,
-    permission_mode: str = "default",
+    permission_mode: str = 'default',
     is_bypass_permissions_mode_available: bool = False,
     resume_session_id: str | None = None,
 ):
@@ -112,5 +112,5 @@ def start_repl(
     )
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

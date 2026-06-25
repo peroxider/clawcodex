@@ -34,10 +34,10 @@ import threading
 from typing import Callable
 
 __all__ = [
-    "register_cleanup",
-    "setup_graceful_shutdown",
-    "graceful_shutdown_sync",
-    "reset_for_test_only",
+    'register_cleanup',
+    'setup_graceful_shutdown',
+    'graceful_shutdown_sync',
+    'reset_for_test_only',
 ]
 
 
@@ -109,8 +109,8 @@ def _run_all_cleanups() -> None:
             fn()
         except Exception as exc:  # noqa: BLE001 — best-effort
             try:
-                name = getattr(fn, "__name__", repr(fn))
-                sys.stderr.write(f"cleanup error in {name}: {exc}\n")
+                name = getattr(fn, '__name__', repr(fn))
+                sys.stderr.write(f'cleanup error in {name}: {exc}\n')
             except Exception:
                 pass  # last-resort: never block exit on logging
 
@@ -132,8 +132,8 @@ def reset_for_test_only() -> None:
     accidentally re-arm the signal handlers mid-session. Matches the
     discipline used by ``bootstrap.state.reset_state_for_tests``.
     """
-    if os.environ.get("PYTEST_CURRENT_TEST") is None:
-        raise RuntimeError("reset_for_test_only can only be called in tests")
+    if os.environ.get('PYTEST_CURRENT_TEST') is None:
+        raise RuntimeError('reset_for_test_only can only be called in tests')
     global _shutdown_started, _setup_done
     with _cleanups_lock:
         _cleanups.clear()

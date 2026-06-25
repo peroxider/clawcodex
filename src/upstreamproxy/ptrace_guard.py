@@ -40,9 +40,9 @@ def set_non_dumpable() -> bool:
     NEVER raised — this is a fail-open security guard, and a missing
     libc / hardened kernel must not break the agent loop.
     """
-    if platform.system() != "Linux":
+    if platform.system() != 'Linux':
         logger.debug(
-            "[upstreamproxy] non-Linux platform (%s); skipping prctl(PR_SET_DUMPABLE)",
+            '[upstreamproxy] non-Linux platform (%s); skipping prctl(PR_SET_DUMPABLE)',
             platform.system(),
         )
         return False
@@ -50,18 +50,18 @@ def set_non_dumpable() -> bool:
     try:
         import ctypes
     except ImportError:
-        logger.warning("[upstreamproxy] ctypes unavailable; cannot prctl")
+        logger.warning('[upstreamproxy] ctypes unavailable; cannot prctl')
         return False
 
     try:
         # Standard glibc location. Some distros expose libc under
         # different names; try the most common first.
-        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc = ctypes.CDLL('libc.so.6', use_errno=True)
     except OSError:
         try:
-            libc = ctypes.CDLL("libc.so", use_errno=True)
+            libc = ctypes.CDLL('libc.so', use_errno=True)
         except OSError as exc:
-            logger.warning("[upstreamproxy] could not load libc: %s", exc)
+            logger.warning('[upstreamproxy] could not load libc: %s', exc)
             return False
 
     try:
@@ -75,13 +75,13 @@ def set_non_dumpable() -> bool:
         libc.prctl.restype = ctypes.c_int
         rc = libc.prctl(PR_SET_DUMPABLE, 0, 0, 0, 0)
     except (OSError, AttributeError, ValueError) as exc:
-        logger.warning("[upstreamproxy] prctl call failed: %s", exc)
+        logger.warning('[upstreamproxy] prctl call failed: %s', exc)
         return False
 
     if rc != 0:
         errno = ctypes.get_errno()
         logger.warning(
-            "[upstreamproxy] prctl(PR_SET_DUMPABLE,0) returned nonzero rc=%d errno=%d",
+            '[upstreamproxy] prctl(PR_SET_DUMPABLE,0) returned nonzero rc=%d errno=%d',
             rc,
             errno,
         )
@@ -89,4 +89,4 @@ def set_non_dumpable() -> bool:
     return True
 
 
-__all__ = ["PR_SET_DUMPABLE", "set_non_dumpable"]
+__all__ = ['PR_SET_DUMPABLE', 'set_non_dumpable']

@@ -65,7 +65,7 @@ def decode_chunk(buf: bytes) -> bytes | None:
     """
     if len(buf) == 0:
         # Server keepalive — empty payload, no header.
-        return b""
+        return b''
     if buf[0] != WIRE_TAG_FIELD1_LEN_DELIMITED:
         return None
 
@@ -92,4 +92,4 @@ def decode_chunk(buf: bytes) -> bytes | None:
     return bytes(buf[i : i + length])
 
 
-__all__ = ["WIRE_TAG_FIELD1_LEN_DELIMITED", "decode_chunk", "encode_chunk"]
+__all__ = ['WIRE_TAG_FIELD1_LEN_DELIMITED', 'decode_chunk', 'encode_chunk']

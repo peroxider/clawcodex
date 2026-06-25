@@ -6,7 +6,7 @@ from src.skills.model import Skill
 
 from .types import BuiltinPluginDefinition, LoadedPlugin, PluginManifest
 
-BUILTIN_MARKETPLACE_NAME = "builtin"
+BUILTIN_MARKETPLACE_NAME = 'builtin'
 
 _builtin_plugins: dict[str, BuiltinPluginDefinition] = {}
 
@@ -16,7 +16,7 @@ def register_builtin_plugin(definition: BuiltinPluginDefinition) -> None:
 
 
 def is_builtin_plugin_id(plugin_id: str) -> bool:
-    return plugin_id.endswith(f"@{BUILTIN_MARKETPLACE_NAME}")
+    return plugin_id.endswith(f'@{BUILTIN_MARKETPLACE_NAME}')
 
 
 def get_builtin_plugin_definition(
@@ -33,7 +33,7 @@ def get_builtin_plugins() -> dict[str, list[LoadedPlugin]]:
         if definition.is_available and not definition.is_available():
             continue
 
-        plugin_id = f"{name}@{BUILTIN_MARKETPLACE_NAME}"
+        plugin_id = f'{name}@{BUILTIN_MARKETPLACE_NAME}'
         is_enabled = definition.default_enabled
 
         plugin = LoadedPlugin(
@@ -57,14 +57,14 @@ def get_builtin_plugins() -> dict[str, list[LoadedPlugin]]:
         else:
             disabled.append(plugin)
 
-    return {"enabled": enabled, "disabled": disabled}
+    return {'enabled': enabled, 'disabled': disabled}
 
 
 def get_builtin_plugin_skill_commands() -> list[Skill]:
     result = get_builtin_plugins()
     skills: list[Skill] = []
 
-    for plugin in result["enabled"]:
+    for plugin in result['enabled']:
         definition = _builtin_plugins.get(plugin.name)
         if not definition or not definition.skills:
             continue

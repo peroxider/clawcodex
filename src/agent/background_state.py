@@ -15,9 +15,9 @@ from clawcodex_ext.agent.background_state import (  # noqa: F401
 )
 
 __all__ = [
-    "background_signal",
-    "is_backgrounded",
-    "set_backgrounded",
-    "signal_background",
-    "reset_background",
+    'background_signal',
+    'is_backgrounded',
+    'set_backgrounded',
+    'signal_background',
+    'reset_background',
 ]

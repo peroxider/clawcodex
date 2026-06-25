@@ -23,24 +23,24 @@ class OpenAIProvider(OpenAICompatibleProvider):
             base_url: Base URL (optional, for custom endpoints)
             model: Default model (default: gpt-5.4)
         """
-        super().__init__(api_key, base_url, model or "gpt-5.4")
+        super().__init__(api_key, base_url, model or 'gpt-5.4')
 
     def _create_client(self) -> Any:
         """Create OpenAI SDK client."""
         if OpenAI is None:  # pragma: no cover
             raise ModuleNotFoundError(
-                "openai package is not installed. Install optional dependencies to use OpenAIProvider."
+                'openai package is not installed. Install optional dependencies to use OpenAIProvider.'
             )
-        kwargs: dict[str, Any] = {"api_key": self.api_key}
+        kwargs: dict[str, Any] = {'api_key': self.api_key}
         if self.base_url:
-            kwargs["base_url"] = self.base_url
+            kwargs['base_url'] = self.base_url
         # Support SSL verification bypass for corporate/internal endpoints
         import os
 
-        if os.environ.get("CLAWCODEX_SSL_VERIFY", "").lower() in ("0", "false", "no"):
+        if os.environ.get('CLAWCODEX_SSL_VERIFY', '').lower() in ('0', 'false', 'no'):
             import httpx
 
-            kwargs["http_client"] = httpx.Client(verify=False)
+            kwargs['http_client'] = httpx.Client(verify=False)
         return OpenAI(**kwargs)
 
     def get_available_models(self) -> list[str]:
@@ -51,21 +51,21 @@ class OpenAIProvider(OpenAICompatibleProvider):
         """
         return [
             # GPT-5.4 series (latest flagship)
-            "gpt-5.4",
-            "gpt-5.4-pro",
-            "gpt-5.4-mini",
-            "gpt-5.4-nano",
+            'gpt-5.4',
+            'gpt-5.4-pro',
+            'gpt-5.4-mini',
+            'gpt-5.4-nano',
             # GPT-5.2 series
-            "gpt-5.2",
-            "gpt-5.2-pro",
-            "gpt-5.2-mini",
-            "gpt-5.2-nano",
+            'gpt-5.2',
+            'gpt-5.2-pro',
+            'gpt-5.2-mini',
+            'gpt-5.2-nano',
             # GPT-5.3-Codex (coding-specialized)
-            "gpt-5.3-codex",
+            'gpt-5.3-codex',
             # Legacy GPT-4 series
-            "gpt-4o",
-            "gpt-4o-mini",
-            "gpt-4-turbo",
-            "gpt-4",
-            "gpt-3.5-turbo",
+            'gpt-4o',
+            'gpt-4o-mini',
+            'gpt-4-turbo',
+            'gpt-4',
+            'gpt-3.5-turbo',
         ]

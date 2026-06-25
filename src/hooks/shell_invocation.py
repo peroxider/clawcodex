@@ -19,5 +19,5 @@ from __future__ import annotations
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.hooks.shell_invocation")
+_ext_mod = importlib.import_module('clawcodex_ext.hooks.shell_invocation')
 sys.modules[__name__] = _ext_mod

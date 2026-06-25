@@ -10,31 +10,32 @@ defers the real submodule imports until the first attribute access,
 which is after the importing module has finished its top-level
 definitions.
 """
+
 from __future__ import annotations
 
 import importlib
 
 __all__ = [
-    "QueryConfig",
-    "QueryEngine",
-    "QueryEngineConfig",
-    "QueryParams",
-    "QueryState",
-    "StreamEvent",
-    "Terminal",
-    "Transition",
-    "build_query_config",
-    "query",
+    'QueryConfig',
+    'QueryEngine',
+    'QueryEngineConfig',
+    'QueryParams',
+    'QueryState',
+    'StreamEvent',
+    'Terminal',
+    'Transition',
+    'build_query_config',
+    'query',
 ]
 
 
 def __getattr__(name: str):
-    if name in {"QueryConfig", "build_query_config"}:
-        return getattr(importlib.import_module("src.query.config"), name)
-    if name in {"QueryEngine", "QueryEngineConfig"}:
-        return getattr(importlib.import_module("src.query.engine"), name)
-    if name in {"QueryParams", "StreamEvent", "query"}:
-        return getattr(importlib.import_module("src.query.query"), name)
-    if name in {"QueryState", "Terminal", "Transition"}:
-        return getattr(importlib.import_module("src.query.transitions"), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name in {'QueryConfig', 'build_query_config'}:
+        return getattr(importlib.import_module('src.query.config'), name)
+    if name in {'QueryEngine', 'QueryEngineConfig'}:
+        return getattr(importlib.import_module('src.query.engine'), name)
+    if name in {'QueryParams', 'StreamEvent', 'query'}:
+        return getattr(importlib.import_module('src.query.query'), name)
+    if name in {'QueryState', 'Terminal', 'Transition'}:
+        return getattr(importlib.import_module('src.query.transitions'), name)
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

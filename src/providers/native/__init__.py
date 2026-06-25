@@ -17,7 +17,7 @@ from __future__ import annotations
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.providers.native")
+_ext_mod = importlib.import_module('clawcodex_ext.providers.native')
 sys.modules[__name__] = _ext_mod
 
 # Eagerly register every child module under both names so that subsequent
@@ -27,14 +27,14 @@ sys.modules[__name__] = _ext_mod
 # the gemini adapter) does not block startup — the factory's lazy
 # ``_register_gemini`` still handles the unavailable name.
 for _child_name in (
-    "base",
-    "capabilities",
-    "openai_adapter",
-    "grok_adapter",
-    "gemini_adapter",
+    'base',
+    'capabilities',
+    'openai_adapter',
+    'grok_adapter',
+    'gemini_adapter',
 ):
-    _full_ext_name = f"clawcodex_ext.providers.native.{_child_name}"
-    _full_src_name = f"src.providers.native.{_child_name}"
+    _full_ext_name = f'clawcodex_ext.providers.native.{_child_name}'
+    _full_src_name = f'src.providers.native.{_child_name}'
     try:
         _ext_child = importlib.import_module(_full_ext_name)
     except ImportError:

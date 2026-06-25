@@ -47,7 +47,7 @@ class PdfPageExtractionResult:
 
 
 def _have_pdftoppm() -> bool:
-    return shutil.which("pdftoppm") is not None
+    return shutil.which('pdftoppm') is not None
 
 
 def _log_pdf_event(success: bool, **fields: Any) -> None:
@@ -56,7 +56,7 @@ def _log_pdf_event(success: bool, **fields: Any) -> None:
 
         log_event(
             EventType.IMAGE_PROCESSING,
-            subtype="pdf_page_extraction",
+            subtype='pdf_page_extraction',
             success=success,
             **fields,
         )
@@ -80,33 +80,33 @@ def extract_pdf_pages(
     # happen to be missing poppler.
     pdf_path = Path(pdf_path).resolve()
     if not pdf_path.is_file():
-        raise PdfExtractionFailed(f"PDF does not exist: {pdf_path}")
+        raise PdfExtractionFailed(f'PDF does not exist: {pdf_path}')
 
     file_size = pdf_path.stat().st_size
     if file_size == 0:
-        raise PdfExtractionFailed(f"PDF file is empty: {pdf_path}")
+        raise PdfExtractionFailed(f'PDF file is empty: {pdf_path}')
     if file_size > PDF_MAX_EXTRACT_SIZE:
         raise PdfExtractionFailed(
-            f"PDF size ({file_size:,} bytes) exceeds maximum allowed size "
-            f"({PDF_MAX_EXTRACT_SIZE:,} bytes). Use a smaller PDF or extract "
-            f"a specific page range with the `pages` parameter."
+            f'PDF size ({file_size:,} bytes) exceeds maximum allowed size '
+            f'({PDF_MAX_EXTRACT_SIZE:,} bytes). Use a smaller PDF or extract '
+            f'a specific page range with the `pages` parameter.'
         )
 
     if not _have_pdftoppm():
         raise PdfExtractionUnavailable(
-            "pdftoppm not found on PATH. Install poppler-utils: "
-            "`brew install poppler` on macOS or "
-            "`apt-get install poppler-utils` on Debian/Ubuntu."
+            'pdftoppm not found on PATH. Install poppler-utils: '
+            '`brew install poppler` on macOS or '
+            '`apt-get install poppler-utils` on Debian/Ubuntu.'
         )
 
-    out_dir = Path(tempfile.mkdtemp(prefix="clawcodex-pdf-"))
-    out_prefix = out_dir / "page"
+    out_dir = Path(tempfile.mkdtemp(prefix='clawcodex-pdf-'))
+    out_prefix = out_dir / 'page'
 
-    argv = ["pdftoppm", "-jpeg", "-r", str(_PDF_DPI)]
+    argv = ['pdftoppm', '-jpeg', '-r', str(_PDF_DPI)]
     if first_page is not None:
-        argv += ["-f", str(first_page)]
+        argv += ['-f', str(first_page)]
     if last_page is not None:
-        argv += ["-l", str(last_page)]
+        argv += ['-l', str(last_page)]
     argv += [str(pdf_path), str(out_prefix)]
 
     try:
@@ -117,19 +117,19 @@ def extract_pdf_pages(
             capture_output=True,
         )
     except subprocess.CalledProcessError as e:
-        _log_pdf_event(False, error="exit_code", code=e.returncode, file_size=file_size)
+        _log_pdf_event(False, error='exit_code', code=e.returncode, file_size=file_size)
         # Clean up the tempdir on failure to avoid leaks
         shutil.rmtree(out_dir, ignore_errors=True)
-        stderr = (e.stderr or b"").decode("utf-8", errors="replace").strip()
+        stderr = (e.stderr or b'').decode('utf-8', errors='replace').strip()
         raise PdfExtractionFailed(
-            f"pdftoppm failed (exit {e.returncode}): {stderr or '<no stderr>'}"
+            f'pdftoppm failed (exit {e.returncode}): {stderr or "<no stderr>"}'
         ) from e
     except subprocess.TimeoutExpired as e:
-        _log_pdf_event(False, error="timeout", file_size=file_size)
+        _log_pdf_event(False, error='timeout', file_size=file_size)
         shutil.rmtree(out_dir, ignore_errors=True)
-        raise PdfExtractionFailed(f"pdftoppm timed out after {_PDFTOPPM_TIMEOUT_S}s") from e
+        raise PdfExtractionFailed(f'pdftoppm timed out after {_PDFTOPPM_TIMEOUT_S}s') from e
 
-    image_paths = sorted(out_dir.glob("page-*.jpg"))
+    image_paths = sorted(out_dir.glob('page-*.jpg'))
     _log_pdf_event(
         True,
         page_count=len(image_paths),

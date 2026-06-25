@@ -70,8 +70,8 @@ class PrefetchHandle:
     def detail(self) -> str:
         """Legacy: short human-readable summary of the prefetch state."""
         if self.process is None:
-            return f"skipped ({self.label}: platform/availability)"
-        return f"in-flight subprocess pid={self.process.pid}"
+            return f'skipped ({self.label}: platform/availability)'
+        return f'in-flight subprocess pid={self.process.pid}'
 
 
 # Legacy compatibility — some callers may still construct PrefetchResult
@@ -125,19 +125,19 @@ def start_keychain_prefetch() -> PrefetchHandle:
     (failure logs etc.). The keychain stdout payload is a short single
     line; PIPE is safe.
     """
-    if sys.platform != "darwin":
-        return PrefetchHandle(process=None, label="keychain_prefetch")
+    if sys.platform != 'darwin':
+        return PrefetchHandle(process=None, label='keychain_prefetch')
     try:
         process = subprocess.Popen(
-            ["security", "find-generic-password", "-s", "Anthropic OAuth", "-w"],
+            ['security', 'find-generic-password', '-s', 'Anthropic OAuth', '-w'],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
     except (OSError, FileNotFoundError):
         # ``security`` not on PATH — degrade gracefully; consumer falls
         # back to interactive auth.
-        return PrefetchHandle(process=None, label="keychain_prefetch")
-    handle = PrefetchHandle(process=process, label="keychain_prefetch")
+        return PrefetchHandle(process=None, label='keychain_prefetch')
+    handle = PrefetchHandle(process=process, label='keychain_prefetch')
     _register_atexit_drain(handle)
     return handle
 
@@ -151,11 +151,11 @@ def get_or_start_keychain_prefetch() -> PrefetchHandle:
     spawning a second subprocess.
     """
     with _singleton_lock:
-        cached = _singletons.get("keychain")
+        cached = _singletons.get('keychain')
         if cached is not None:
             return cached
         handle = start_keychain_prefetch()
-        _singletons["keychain"] = handle
+        _singletons['keychain'] = handle
         return handle
 
 
@@ -175,7 +175,7 @@ def wait_and_read_keychain(handle: PrefetchHandle, timeout: float = 5.0) -> str 
         return None
     if handle.process.returncode != 0:
         return None
-    text = stdout.decode("utf-8", errors="replace").strip()
+    text = stdout.decode('utf-8', errors='replace').strip()
     return text or None
 
 
@@ -187,20 +187,20 @@ def start_mdm_raw_read() -> PrefetchHandle:
     sentinel handle. ``stderr`` is discarded — see the keychain note for
     rationale.
     """
-    if sys.platform != "darwin":
-        return PrefetchHandle(process=None, label="mdm_raw_read")
+    if sys.platform != 'darwin':
+        return PrefetchHandle(process=None, label='mdm_raw_read')
     # Read the managed-app plist for clawcodex if it exists; ignore
     # errors (the absence of the file is normal for unmanaged users).
-    plist_path = "/Library/Managed Preferences/com.anthropic.claude-code.plist"
+    plist_path = '/Library/Managed Preferences/com.anthropic.claude-code.plist'
     try:
         process = subprocess.Popen(
-            ["plutil", "-convert", "json", "-o", "-", plist_path],
+            ['plutil', '-convert', 'json', '-o', '-', plist_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
     except (OSError, FileNotFoundError):
-        return PrefetchHandle(process=None, label="mdm_raw_read")
-    handle = PrefetchHandle(process=process, label="mdm_raw_read")
+        return PrefetchHandle(process=None, label='mdm_raw_read')
+    handle = PrefetchHandle(process=process, label='mdm_raw_read')
     _register_atexit_drain(handle)
     return handle
 
@@ -208,11 +208,11 @@ def start_mdm_raw_read() -> PrefetchHandle:
 def get_or_start_mdm_raw_read() -> PrefetchHandle:
     """Process-wide singleton for ``start_mdm_raw_read``. See keychain getter."""
     with _singleton_lock:
-        cached = _singletons.get("mdm")
+        cached = _singletons.get('mdm')
         if cached is not None:
             return cached
         handle = start_mdm_raw_read()
-        _singletons["mdm"] = handle
+        _singletons['mdm'] = handle
         return handle
 
 
@@ -227,7 +227,7 @@ def wait_and_read_mdm(handle: PrefetchHandle, timeout: float = 2.0) -> str | Non
         return None
     if handle.process.returncode != 0:
         return None
-    text = stdout.decode("utf-8", errors="replace").strip()
+    text = stdout.decode('utf-8', errors='replace').strip()
     return text or None
 
 
@@ -237,4 +237,4 @@ def start_project_scan(root: Path) -> PrefetchHandle:
     Returns a sentinel handle so the call site is parity-stable. A future
     WI may wire a real walk if profiler data shows it would help cold-start.
     """
-    return PrefetchHandle(process=None, label="project_scan")
+    return PrefetchHandle(process=None, label='project_scan')

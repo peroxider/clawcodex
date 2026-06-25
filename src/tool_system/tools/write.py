@@ -8,10 +8,11 @@ underscore-prefixed names. A ``sys.modules`` swap preserves the
 underlying ext module as the canonical object so attribute access,
 ``inspect.getsource()``, and AST walking keep working unchanged.
 """
+
 from __future__ import annotations
 
 import importlib
 import sys
 
-_ext_mod = importlib.import_module("clawcodex_ext.tool_system.tools.write")
+_ext_mod = importlib.import_module('clawcodex_ext.tool_system.tools.write')
 sys.modules[__name__] = _ext_mod

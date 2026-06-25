@@ -14,6 +14,6 @@ def __getattr__(name: str):
     try:
         val = getattr(_mod, name)
     except AttributeError:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
     globals()[name] = val
     return val

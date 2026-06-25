@@ -205,3 +205,17 @@ utils/file_state_cache.py
 utils/image_processor.py
 utils/at_file_completer.py
 utils/advisor.py
+
+# (g) Star-import facade migration — src/X.py is a `from clawcodex_ext.X import *`
+# facade (or `globals().update()` for modules with underscore-prefixed names), and
+# src/<pkg>/__init__.py keeps a small fork delta (the upstream archive-placeholder
+# SNAPSHOT_PATH/ARCHIVE_NAME metadata depends on the file location in src/, so it
+# stays in src/ rather than being moved to clawcodex_ext/). Distinct from (d)
+# (clawcodex_ext mirrors upstream 1:1) and (f) (Pattern C sys.modules-swap). Run
+# regenerate after adding/removing entries; series/b24b8cb_series will skip these
+# files.
+# Phase 4 P1 Step 2c — src/types/ package migration (4 files).
+types/__init__.py
+types/content_blocks.py
+types/messages.py
+types/stream_events.py

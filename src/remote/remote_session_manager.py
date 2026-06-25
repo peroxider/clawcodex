@@ -8,4 +8,4 @@ from clawcodex_ext.remote import remote_session_manager as _module
 
 sys.modules[__name__] = _module
 
-__all__ = getattr(_module, "__all__", [])
+__all__ = getattr(_module, '__all__', [])

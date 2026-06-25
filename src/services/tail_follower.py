@@ -11,5 +11,5 @@ from clawcodex_ext.services.tail_follower import (  # noqa: F401
 )
 
 __all__ = [
-    "TailFollower",
+    'TailFollower',
 ]

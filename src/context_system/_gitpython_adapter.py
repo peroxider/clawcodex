@@ -17,11 +17,11 @@ from clawcodex_ext.context_system._gitpython_adapter import (  # noqa: F401
 )
 
 __all__ = [
-    "is_gitpython_available",
-    "GitContextSnapshot",
-    "GitPythonProvider",
-    "get_gitpython_provider",
-    "clear_git_caches",
-    "collect_git_context_with_gitpython",
-    "format_git_status_with_gitpython",
+    'is_gitpython_available',
+    'GitContextSnapshot',
+    'GitPythonProvider',
+    'get_gitpython_provider',
+    'clear_git_caches',
+    'collect_git_context_with_gitpython',
+    'format_git_status_with_gitpython',
 ]

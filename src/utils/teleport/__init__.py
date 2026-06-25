@@ -8,4 +8,4 @@ bridge orchestrator port.
 
 from src.utils.teleport.api import ANTHROPIC_VERSION, get_oauth_headers
 
-__all__ = ["ANTHROPIC_VERSION", "get_oauth_headers"]
+__all__ = ['ANTHROPIC_VERSION', 'get_oauth_headers']

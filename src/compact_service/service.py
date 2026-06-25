@@ -34,7 +34,7 @@ class CompactResult:
     pre_compact_count: int
     post_compact_count: int
     summary_text: str
-    trigger: str = "manual"
+    trigger: str = 'manual'
     user_display_message: Optional[str] = None
 
 
@@ -43,7 +43,7 @@ async def compact_conversation(
     provider: BaseProvider,
     model: str,
     custom_instructions: Optional[str] = None,
-    trigger: str = "manual",
+    trigger: str = 'manual',
     read_file_state: Optional[dict[str, Any]] = None,
     plan_file_path: Optional[str] = None,
     memory_paths: Optional[set[str]] = None,
@@ -106,12 +106,12 @@ async def compact_conversation(
     conversation.messages = new_messages
     post_compact_count = len(conversation.messages)
 
-    summary_text = ""
+    summary_text = ''
     for msg in pipeline_result.summary_messages:
         content = msg.content
         if isinstance(content, list):
             for block in content:
-                if hasattr(block, "text"):
+                if hasattr(block, 'text'):
                     summary_text += block.text
         elif isinstance(content, str):
             summary_text += content
