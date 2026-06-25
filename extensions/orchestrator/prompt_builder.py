@@ -119,6 +119,7 @@ class PromptBuilder:
         options: list[str] | None = None,
         session: Any | None = None,
         python_executable: str | None = None,
+        previous_run_ids: list[str] | None = None,
     ) -> str:
         """Build prompt using workflow's WORKFLOW.md body template + issue data.
 
@@ -128,6 +129,8 @@ class PromptBuilder:
             clarification_context: Pre-rendered clarification guidance block
             pending_question: If issue is in clarification flow, the pending question
             options: If in clarification flow, the available options for the question
+            previous_run_ids: Run IDs from previous failed attempts; injected as a
+                hint so the agent can Read() past transcripts to learn what was tried.
         """
         store = get_workflow_store()
         current = store.current()
@@ -182,6 +185,26 @@ class PromptBuilder:
                 "Skip directly to `git add` + `git commit`.\n"
                 "\n"
                 f"{ws_diff}\n"
+                "---\n"
+                "\n"
+                f"{rendered}"
+            )
+
+        if previous_run_ids:
+            sessions_home = Path.home() / ".clawcodex" / "sessions"
+            prev_lines = "\n".join(
+                f"- `{rid}` — `Read(path=\"{sessions_home / rid / 'transcript.jsonl'}\")`"
+                for rid in previous_run_ids
+            )
+            rendered = (
+                "---\n"
+                "## Previous Attempts\n"
+                "\n"
+                "This issue has been attempted before and failed.  You can inspect\n"
+                "the full conversation transcript of each previous run to understand\n"
+                "what was tried, what went wrong, and what to avoid this time.\n"
+                "\n"
+                f"{prev_lines}\n"
                 "---\n"
                 "\n"
                 f"{rendered}"

@@ -1325,6 +1325,11 @@ class Orchestrator:
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.
         self._prepare_intent_session(session)
+        # F-?? retry context: propagate previous_run_ids from the registry
+        # to the session so the prompt builder can inject them.
+        prev_record = self._registry.get(issue.id or "")
+        if prev_record and prev_record.previous_run_ids:
+            session.previous_run_ids = list(prev_record.previous_run_ids)
         self._state.running[issue.id] = session
 
         # Update persistent registry so `issue list` reflects running state
@@ -1979,6 +1984,18 @@ class Orchestrator:
         issue_id = session.issue.id or ""
         attempt = self._state.retry_attempts.get(issue_id, 0) + 1
         self._state.retry_attempts[issue_id] = attempt
+
+        # F-?? retry context: persist the just-failed run_id so the next
+        # attempt's agent can Read() the previous transcript to understand
+        # what was tried and where it failed.
+        if session.run_id:
+            record = self._registry.get(issue_id)
+            if record is not None:
+                if record.previous_run_ids is None:
+                    record.previous_run_ids = []
+                if session.run_id not in record.previous_run_ids:
+                    record.previous_run_ids.append(session.run_id)
+                    self._registry._save()
 
         max_attempts = self.workflow.agent.max_retry_attempts
         if max_attempts and attempt > max_attempts:

@@ -222,6 +222,11 @@ class AgentSession:
     # silently inheriting ``status="completed"``.
     session_end_reason: str | None = None
     session_end_summary: str = ""
+    # F-?? retry context: list of run_ids from previous failed attempts.
+    # Populated by orchestrator._launch_issue from the registry; consumed
+    # by PromptBuilder.render() to inject a hint into the agent's prompt
+    # so it can Read() past transcripts.
+    previous_run_ids: list[str] = field(default_factory=list)
     _snapshot_provider: str = ""
     _snapshot_model: str = ""
 
@@ -948,6 +953,7 @@ class AgentRunner:
                                 workspace_cfg=self.workspace_cfg,
                                 issue_executable=getattr(issue, "python_executable", "") or "",
                             ),
+                            previous_run_ids=getattr(session, "previous_run_ids", None),
                         )
                     session._issue_context = prompt  # Store for continuation
                 else:

@@ -122,6 +122,13 @@ class IssueRecord:
     run_output_len: int = 0
     run_timeout_deadline_at: float | None = None
     run_workspace_dirty: bool | None = None
+    # F-?? retry context: list of run_ids from previous attempts for this
+    # issue.  The retrying agent can Read() the transcript at
+    # ~/.clawcodex/sessions/<run_id>/transcript.jsonl to learn what was
+    # attempted before.  Populated by _schedule_retry in orchestrator.py.
+    # Absent from registry.json files written before this field — _load()
+    # handles back-compat via the known_fields filter.
+    previous_run_ids: list[str] = field(default_factory=list)
 
     def touch(self) -> None:
         self.updated_at = time.time()
