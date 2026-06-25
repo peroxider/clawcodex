@@ -300,20 +300,19 @@ function script:Install-Uv {
     }
 
     try {
-        # The official uv PowerShell installer reads $env:INSTALLER_DOWNLOAD_URL
-        # to redirect to a mirror, and exits 0 on success.  We download to a
-        # temp file and execute it with & (not Invoke-Expression) to avoid
-        # parameter pollution when the outer script is itself piped via iex.
+        # The official uv PowerShell installer from astral.sh is designed to be
+        # invoked via `irm URL | iex`.  Downloading it to a temp file and running
+        # it with `& $tmpFile` breaks the installer's own path-resolution and
+        # error-recovery logic (it uses $MyInvocation.MyCommand.Path to locate
+        # its own temp directory; when that points to a transient path the
+        # internal retry handler builds invalid command-line arguments such as
+        # "Retry: C:\Users\AppData\Local\Temp\cc.ps1", which PowerShell rejects
+        # as an unbound positional parameter).
+        #
+        # We therefore use the official `irm | iex` pattern.  $env:UV_INSTALL_DIR
+        # is set above so the installer places uv.exe in our user-local bin.
         $env:UV_INSTALL_DIR = Join-Path $env:USERPROFILE '.local'
-        $tmpDir = Join-Path $env:TEMP 'clawcodex-installer'
-        if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force -ErrorAction Stop | Out-Null }
-        $tmpFile = Join-Path $tmpDir 'install-uv.ps1'
-        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -UseBasicParsing -OutFile $tmpFile -ErrorAction Stop
-        try {
-            & $tmpFile
-        } finally {
-            Remove-Item -LiteralPath $tmpFile -Force -ErrorAction SilentlyContinue
-        }
+        irm https://astral.sh/uv/install.ps1 | iex
     } catch {
         Die-With-Help "Failed to download / run uv installer: $_" `
             'Check your network connection and proxy settings.' `
