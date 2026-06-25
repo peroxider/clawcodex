@@ -1,0 +1,69 @@
+diff --git a/coordinator/prompt.py b/coordinator/prompt.py
+--- a/coordinator/prompt.py	2026-06-18 10:10:16.793899 +0000
++++ b/coordinator/prompt.py	2026-06-25 06:46:42.558890 +0000
+@@ -58,6 +58,7 @@
+ "hard-won lessons" the chapter cites are about prompt shape, not
+ language artifacts.
+ """
++
+ from __future__ import annotations
+ 
+ from src.utils.env import is_env_truthy
+@@ -65,32 +66,31 @@
+ # Tool-name constants — match TS source. Pulled from the agent /
+ # send-message / task-stop modules' canonical names so a future
+ # rename ripples through the prompt automatically.
+-from src.agent.constants import AGENT_TOOL_NAME
++from clawcodex_ext.agent.constants import AGENT_TOOL_NAME
+ 
+ # SendMessage and TaskStop are not import-stable from their tool
+ # modules at this layer (would cycle), so we hardcode the literals
+ # the registry uses. These are themselves source-of-truth in the
+ # tool definitions; if those change, this constant moves with them.
+-SEND_MESSAGE_TOOL_NAME = "SendMessage"
+-TASK_STOP_TOOL_NAME = "TaskStop"
++SEND_MESSAGE_TOOL_NAME = 'SendMessage'
++TASK_STOP_TOOL_NAME = 'TaskStop'
+ 
+ 
+ _WORKER_CAPABILITIES_SIMPLE = (
+-    "Workers have access to Bash, Read, and Edit tools, plus MCP tools "
+-    "from configured MCP servers."
++    'Workers have access to Bash, Read, and Edit tools, plus MCP tools from configured MCP servers.'
+ )
+ 
+ _WORKER_CAPABILITIES_DEFAULT = (
+-    "Workers have access to standard tools, MCP tools from configured "
+-    "MCP servers, and project skills via the Skill tool. Delegate skill "
+-    "invocations (e.g. /commit or project workflow skills) to workers."
++    'Workers have access to standard tools, MCP tools from configured '
++    'MCP servers, and project skills via the Skill tool. Delegate skill '
++    'invocations (e.g. /commit or project workflow skills) to workers.'
+ )
+ 
+ 
+ def _resolve_worker_capabilities() -> str:
+     """Match TS ``coordinatorMode.ts:112-114`` — branch on the
+     ``CLAUDE_CODE_SIMPLE`` env var."""
+-    if is_env_truthy("CLAUDE_CODE_SIMPLE"):
++    if is_env_truthy('CLAUDE_CODE_SIMPLE'):
+         return _WORKER_CAPABILITIES_SIMPLE
+     return _WORKER_CAPABILITIES_DEFAULT
+ 
+@@ -126,6 +126,9 @@
+ - **{AGENT_TOOL_NAME}** - Spawn a new worker
+ - **{SEND_MESSAGE_TOOL_NAME}** - Continue an existing worker (send a follow-up to its `to` agent ID)
+ - **{TASK_STOP_TOOL_NAME}** - Stop a running worker
++- **Read** - Read files directly (use this instead of spawning a worker for simple file reads)
++- **WebSearch** - Search the web for information
++- **WebFetch** - Fetch a URL and return its content
+ - **subscribe_pr_activity / unsubscribe_pr_activity** (if available) - Subscribe to GitHub PR events (review comments, CI results). Events arrive as user messages. Merge conflict transitions do NOT arrive — GitHub doesn't webhook `mergeable_state` changes, so poll `gh pr view N --json mergeable` if tracking conflict status. Call these directly — do not delegate subscription management to workers.
+ 
+ When calling {AGENT_TOOL_NAME}:
+@@ -365,5 +368,5 @@
+ 
+ 
+ __all__ = [
+-    "get_coordinator_system_prompt",
++    'get_coordinator_system_prompt',
+ ]

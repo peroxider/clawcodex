@@ -1,6 +1,6 @@
 diff --git a/agent/transcript.py b/agent/transcript.py
 --- a/agent/transcript.py	2026-06-18 10:10:15.430949 +0000
-+++ b/agent/transcript.py	2026-06-22 09:03:22.087973 +0000
++++ b/agent/transcript.py	2026-06-25 06:46:42.297387 +0000
 @@ -1,321 +1,37 @@
 -"""Sidechain JSONL transcript writer + reader — Chunk C / WI-2.2.
 +"""Facade — agent/transcript.py has been moved to clawcodex_ext (lazy proxy).
@@ -330,14 +330,18 @@ diff --git a/agent/transcript.py b/agent/transcript.py
 +from __future__ import annotations
  
  __all__ = [
-     "TranscriptWriter",
-     "TranscriptReader",
-     "get_agent_transcript_path",
-+    "get_main_transcript_path",
-     "ensure_transcript_dir",
-+    "register_transcript_path_resolver",
-+    "nested_session_path_resolver",
-+    "init",
+-    "TranscriptWriter",
+-    "TranscriptReader",
+-    "get_agent_transcript_path",
+-    "ensure_transcript_dir",
++    'TranscriptWriter',
++    'TranscriptReader',
++    'get_agent_transcript_path',
++    'get_main_transcript_path',
++    'ensure_transcript_dir',
++    'register_transcript_path_resolver',
++    'nested_session_path_resolver',
++    'init',
  ]
 +
 +
@@ -349,4 +353,4 @@ diff --git a/agent/transcript.py b/agent/transcript.py
 +        val = _mod.__dict__[name]
 +        globals()[name] = val  # cache for subsequent access
 +        return val
-+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
++    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

@@ -1,0 +1,54 @@
+diff --git a/permissions/handler.py b/permissions/handler.py
+--- a/permissions/handler.py	2026-06-18 10:10:16.853748 +0000
++++ b/permissions/handler.py	2026-06-25 06:46:43.188791 +0000
+@@ -1,48 +1,3 @@
+-from __future__ import annotations
++"""Facade — permissions/handler.py moved to clawcodex_ext/permissions/."""
+ 
+-from typing import Any, Callable
+-
+-from .types import (
+-    PermissionAllowDecision,
+-    PermissionAskDecision,
+-    PermissionDecision,
+-    PermissionDenyDecision,
+-    PermissionUpdate,
+-)
+-
+-
+-PermissionHandlerCallback = Callable[
+-    [str, str, list[PermissionUpdate] | None],
+-    tuple[bool, dict[str, Any] | None],
+-]
+-
+-
+-def handle_permission_ask(
+-    tool_name: str,
+-    decision: PermissionAskDecision,
+-    handler: PermissionHandlerCallback | None = None,
+-) -> PermissionDecision:
+-    if handler is None:
+-        return PermissionDenyDecision(
+-            behavior="deny",
+-            message=decision.message or f"Permission required but no handler available for {tool_name}",
+-            decision_reason=decision.decision_reason,
+-        )
+-
+-    allowed, updated_input = handler(
+-        tool_name,
+-        decision.message or f"Tool '{tool_name}' requires permission",
+-        decision.suggestions,
+-    )
+-
+-    if allowed:
+-        return PermissionAllowDecision(
+-            behavior="allow",
+-            updated_input=updated_input or decision.updated_input,
+-            decision_reason=decision.decision_reason,
+-        )
+-    return PermissionDenyDecision(
+-        behavior="deny",
+-        message="Permission denied by user.",
+-        decision_reason=decision.decision_reason,
+-    )
++from clawcodex_ext.permissions.handler import *  # noqa: F401,F403

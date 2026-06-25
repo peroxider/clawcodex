@@ -1,0 +1,38 @@
+diff --git a/bridge/__init__.py b/bridge/__init__.py
+--- a/bridge/__init__.py	2026-06-18 10:10:15.829827 +0000
++++ b/bridge/__init__.py	2026-06-25 06:46:42.298900 +0000
+@@ -18,7 +18,9 @@
+ import json
+ from pathlib import Path
+ 
+-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'bridge.json'
++SNAPSHOT_PATH = (
++    Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'bridge.json'
++)
+ _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
+ 
+ ARCHIVE_NAME = _SNAPSHOT['archive_name']
+@@ -103,12 +105,13 @@
+ # PEP 562 ``__getattr__`` defers the import until first attribute access,
+ # which by then has ``bridge/__init__.py`` fully loaded.
+ def __getattr__(name: str) -> object:
+-    if name in ('init_env_less_bridge_core', 'EnvLessBridgeParams',
+-                'RemoteBridgeHandle'):
++    if name in ('init_env_less_bridge_core', 'EnvLessBridgeParams', 'RemoteBridgeHandle'):
+         from src.bridge import remote_bridge_core as _rbc
+ 
+         return getattr(_rbc, name)
+     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
++
++
+ from src.bridge.session_id_compat import (
+     set_cse_shim_gate,
+     to_compat_session_id,
+@@ -146,6 +149,7 @@
+     'BridgeConfig',
+     'BridgeFatalError',
+     'BridgePermissionResponse',
++    'BridgeState',
+     'BridgeStatusInfo',
+     'CapacityWake',
+     'DEFAULT_ENV_LESS_BRIDGE_CONFIG',

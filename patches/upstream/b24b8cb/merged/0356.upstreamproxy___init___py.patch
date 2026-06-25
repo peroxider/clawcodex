@@ -1,0 +1,14 @@
+diff --git a/upstreamproxy/__init__.py b/upstreamproxy/__init__.py
+--- a/upstreamproxy/__init__.py	2026-06-18 10:10:17.160135 +0000
++++ b/upstreamproxy/__init__.py	2026-06-25 06:46:43.209398 +0000
+@@ -11,7 +11,9 @@
+ import json
+ from pathlib import Path
+ 
+-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'upstreamproxy.json'
++SNAPSHOT_PATH = (
++    Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'upstreamproxy.json'
++)
+ _SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
+ 
+ ARCHIVE_NAME = _SNAPSHOT['archive_name']

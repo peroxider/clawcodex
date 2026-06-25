@@ -1,6 +1,6 @@
 diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 --- a/agent/agent_tool_utils.py	2026-06-18 10:10:15.452313 +0000
-+++ b/agent/agent_tool_utils.py	2026-06-24 06:34:18.537517 +0000
++++ b/agent/agent_tool_utils.py	2026-06-25 06:46:42.383188 +0000
 @@ -1,348 +1,18 @@
 -"""Agent tool filtering and resolution utilities.
 +"""Facade — agent/agent_tool_utils.py moved to clawcodex_ext.agent.agent_tool_utils (sys.modules swap).
@@ -361,5 +361,5 @@ diff --git a/agent/agent_tool_utils.py b/agent/agent_tool_utils.py
 -    if paren_idx != -1 and tool_spec.endswith(")"):
 -        return tool_spec[paren_idx + 1:-1].strip()
 -    return None
-+_ext_mod = importlib.import_module("clawcodex_ext.agent.agent_tool_utils")
++_ext_mod = importlib.import_module('clawcodex_ext.agent.agent_tool_utils')
 +sys.modules[__name__] = _ext_mod

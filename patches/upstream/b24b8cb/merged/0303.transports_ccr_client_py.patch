@@ -1,0 +1,14 @@
+diff --git a/transports/ccr_client.py b/transports/ccr_client.py
+--- a/transports/ccr_client.py	2026-06-18 10:10:16.754329 +0000
++++ b/transports/ccr_client.py	2026-06-25 06:46:42.512266 +0000
+@@ -269,9 +269,7 @@
+                     raise
+                 except Exception as exc:  # noqa: BLE001
+                     logger.debug('[ccr] on_epoch_mismatch callback raised: %s', exc)
+-            raise EpochSupersededError(
+-                'CCR worker epoch superseded (409)'
+-            )
++            raise EpochSupersededError('CCR worker epoch superseded (409)')
+         if resp.status_code >= 500:
+             logger.debug('[ccr] server error %d', resp.status_code)
+ 

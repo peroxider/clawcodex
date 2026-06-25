@@ -1,0 +1,20 @@
+diff --git a/repl/__init__.py b/repl/__init__.py
+--- a/repl/__init__.py	2026-06-18 10:10:15.398246 +0000
++++ b/repl/__init__.py	2026-06-25 06:46:43.236343 +0000
+@@ -1,5 +1,14 @@
+ """REPL module for Claw Codex."""
+ 
+-from .core import ClawcodexREPL
++from .background_escape import BackgroundEscape
+ 
+-__all__ = ["ClawcodexREPL"]
++__all__ = ['ClawcodexREPL', 'BackgroundEscape']
++
++
++def __getattr__(name: str):
++    if name == 'ClawcodexREPL':
++        from .core import ClawcodexREPL
++
++        globals()[name] = ClawcodexREPL
++        return ClawcodexREPL
++    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')

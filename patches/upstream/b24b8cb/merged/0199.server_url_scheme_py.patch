@@ -1,0 +1,15 @@
+diff --git a/server/url_scheme.py b/server/url_scheme.py
+--- a/server/url_scheme.py	2026-06-18 10:10:16.093627 +0000
++++ b/server/url_scheme.py	2026-06-25 06:46:43.132577 +0000
+@@ -43,9 +43,9 @@
+     consistently across Python versions; we parse by hand.
+     """
+     if raw.startswith('cc+unix://'):
+-        return _parse_cc_unix(raw[len('cc+unix://'):])
++        return _parse_cc_unix(raw[len('cc+unix://') :])
+     if raw.startswith('cc://'):
+-        return _parse_cc_tcp(raw[len('cc://'):])
++        return _parse_cc_tcp(raw[len('cc://') :])
+     raise ValueError(f'unsupported scheme: {raw!r}')
+ 
+ 

@@ -1,0 +1,377 @@
+diff --git a/bootstrap/state.py b/bootstrap/state.py
+--- a/bootstrap/state.py	2026-06-18 10:10:16.670975 +0000
++++ b/bootstrap/state.py	2026-06-25 06:46:42.369294 +0000
+@@ -56,7 +56,7 @@
+ # Python's NewType is purely a static-analysis hint — it does not enforce
+ # the brand at runtime — but it prevents accidental crossover with other
+ # string-typed identifiers in type-checked code.
+-SessionId = NewType("SessionId", str)
++SessionId = NewType('SessionId', str)
+ 
+ 
+ @dataclass
+@@ -110,9 +110,9 @@
+     """
+     raw = os.getcwd()
+     try:
+-        return unicodedata.normalize("NFC", os.path.realpath(raw))
++        return unicodedata.normalize('NFC', os.path.realpath(raw))
+     except OSError:
+-        return unicodedata.normalize("NFC", raw)
++        return unicodedata.normalize('NFC', raw)
+ 
+ 
+ def _new_session_id() -> SessionId:
+@@ -148,7 +148,7 @@
+     # Pre-existing default is "claude-code"; TS source uses "cli"
+     # (``bootstrap/state.ts:305``). Keep "claude-code" until existing
+     # call sites are migrated; tracking as a follow-up.
+-    client_type: str = "claude-code"
++    client_type: str = 'claude-code'
+     session_trust_accepted: bool = False
+     session_persistence_disabled: bool = False
+     is_remote_mode: bool = False
+@@ -184,11 +184,11 @@
+     # enum live in src/settings/, not here.
+     allowed_setting_sources: list[str] = field(
+         default_factory=lambda: [
+-            "userSettings",
+-            "projectSettings",
+-            "localSettings",
+-            "flagSettings",
+-            "policySettings",
++            'userSettings',
++            'projectSettings',
++            'localSettings',
++            'flagSettings',
++            'policySettings',
+         ]
+     )
+ 
+@@ -279,7 +279,7 @@
+ 
+ 
+ _sdk_context: contextvars.ContextVar[SdkContext | None] = contextvars.ContextVar(
+-    "sdk_context", default=None
++    'sdk_context', default=None
+ )
+ 
+ 
+@@ -415,7 +415,7 @@
+ 
+ 
+ def set_original_cwd(path: str) -> None:
+-    normalized = unicodedata.normalize("NFC", path)
++    normalized = unicodedata.normalize('NFC', path)
+     ctx = _get_sdk_context()
+     if ctx is not None:
+         ctx.original_cwd = normalized
+@@ -436,7 +436,7 @@
+ def set_project_root(path: str) -> None:
+     """Only for ``--worktree`` startup flag. Mirrors TS ``setProjectRoot``.
+     Always mutates the global — does NOT respect SDK context."""
+-    _STATE.project_root = unicodedata.normalize("NFC", path)
++    _STATE.project_root = unicodedata.normalize('NFC', path)
+ 
+ 
+ def get_cwd_state() -> str:
+@@ -447,7 +447,7 @@
+ 
+ 
+ def set_cwd_state(path: str) -> None:
+-    normalized = unicodedata.normalize("NFC", path)
++    normalized = unicodedata.normalize('NFC', path)
+     ctx = _get_sdk_context()
+     if ctx is not None:
+         ctx.cwd = normalized
+@@ -519,7 +519,7 @@
+     ``'claude-vscode'`` (the IDE extension is treated as 1P for auth
+     purposes even though it runs non-interactively).
+     """
+-    return get_is_non_interactive_session() and _STATE.client_type != "claude-vscode"
++    return get_is_non_interactive_session() and _STATE.client_type != 'claude-vscode'
+ 
+ 
+ # ===========================================================================
+@@ -625,18 +625,14 @@
+     """Sum of ``cache_read_input_tokens`` across every model in
+     ``model_usage``. Mirrors TS ``getTotalCacheReadInputTokens``
+     (state.ts:744-746)."""
+-    return sum(
+-        usage.cache_read_input_tokens for usage in _STATE.model_usage.values()
+-    )
++    return sum(usage.cache_read_input_tokens for usage in _STATE.model_usage.values())
+ 
+ 
+ def get_total_cache_creation_input_tokens() -> int:
+     """Sum of ``cache_creation_input_tokens`` across every model in
+     ``model_usage``. Mirrors TS ``getTotalCacheCreationInputTokens``
+     (state.ts:748-750)."""
+-    return sum(
+-        usage.cache_creation_input_tokens for usage in _STATE.model_usage.values()
+-    )
++    return sum(usage.cache_creation_input_tokens for usage in _STATE.model_usage.values())
+ 
+ 
+ def get_total_web_search_requests() -> int:
+@@ -970,7 +966,7 @@
+     1439). Same-key add overwrites. Mirrors TS ``addInvokedSkill``
+     (state.ts:1433-1447).
+     """
+-    key = f"{agent_id or ''}:{skill_name}"
++    key = f'{agent_id or ""}:{skill_name}'
+     _STATE.invoked_skills[key] = InvokedSkillInfo(
+         skill_name=skill_name,
+         skill_path=skill_path,
+@@ -1000,9 +996,7 @@
+     Python because we never pass ``undefined``.
+     """
+     return {
+-        key: skill
+-        for key, skill in _STATE.invoked_skills.items()
+-        if skill.agent_id == agent_id
++        key: skill for key, skill in _STATE.invoked_skills.items() if skill.agent_id == agent_id
+     }
+ 
+ 
+@@ -1097,8 +1091,8 @@
+         ``_STATE`` to mirror TS lines 756-775; the dataclass replace does
+         not touch them, so we rebind them here explicitly)
+     """
+-    if os.environ.get("PYTEST_CURRENT_TEST") is None:
+-        raise RuntimeError("reset_state_for_tests can only be called in tests")
++    if os.environ.get('PYTEST_CURRENT_TEST') is None:
++        raise RuntimeError('reset_state_for_tests can only be called in tests')
+     global _STATE
+     global _output_tokens_at_turn_start, _current_turn_token_budget
+     global _budget_continuation_count
+@@ -1111,124 +1105,124 @@
+ 
+ __all__ = [
+     # Types
+-    "SessionId",
+-    "ModelUsage",
+-    "InvokedSkillInfo",
+-    "SdkContext",
++    'SessionId',
++    'ModelUsage',
++    'InvokedSkillInfo',
++    'SdkContext',
+     # Per-query context
+-    "run_with_sdk_context",
++    'run_with_sdk_context',
+     # Signal
+-    "on_session_switch",
++    'on_session_switch',
+     # Identity & paths
+-    "get_session_id",
+-    "regenerate_session_id",
+-    "switch_session",
+-    "get_parent_session_id",
+-    "get_session_project_dir",
+-    "get_original_cwd",
+-    "set_original_cwd",
+-    "get_project_root",
+-    "set_project_root",
+-    "get_cwd_state",
+-    "set_cwd_state",
++    'get_session_id',
++    'regenerate_session_id',
++    'switch_session',
++    'get_parent_session_id',
++    'get_session_project_dir',
++    'get_original_cwd',
++    'set_original_cwd',
++    'get_project_root',
++    'set_project_root',
++    'get_cwd_state',
++    'set_cwd_state',
+     # Session flags
+-    "get_is_interactive",
+-    "set_is_interactive",
+-    "get_is_non_interactive_session",
+-    "get_client_type",
+-    "set_client_type",
+-    "get_session_trust_accepted",
+-    "set_session_trust_accepted",
+-    "is_session_persistence_disabled",
+-    "set_session_persistence_disabled",
+-    "get_is_remote_mode",
+-    "set_is_remote_mode",
+-    "has_exited_plan_mode_in_session",
+-    "set_has_exited_plan_mode",
+-    "prefer_third_party_authentication",
++    'get_is_interactive',
++    'set_is_interactive',
++    'get_is_non_interactive_session',
++    'get_client_type',
++    'set_client_type',
++    'get_session_trust_accepted',
++    'set_session_trust_accepted',
++    'is_session_persistence_disabled',
++    'set_session_persistence_disabled',
++    'get_is_remote_mode',
++    'set_is_remote_mode',
++    'has_exited_plan_mode_in_session',
++    'set_has_exited_plan_mode',
++    'prefer_third_party_authentication',
+     # Cost & timing
+-    "get_total_cost_usd",
+-    "add_to_total_cost_state",
+-    "get_total_api_duration",
+-    "get_total_api_duration_without_retries",
+-    "add_to_total_duration_state",
+-    "get_total_tool_duration",
+-    "add_to_tool_duration",
+-    "get_total_lines_added",
+-    "get_total_lines_removed",
+-    "add_to_total_lines_changed",
+-    "has_unknown_model_cost",
+-    "set_has_unknown_model_cost",
+-    "get_model_usage",
+-    "get_usage_for_model",
+-    "get_total_input_tokens",
+-    "get_total_output_tokens",
+-    "get_total_cache_read_input_tokens",
+-    "get_total_cache_creation_input_tokens",
+-    "get_total_web_search_requests",
+-    "get_start_time",
+-    "get_total_duration",
+-    "get_last_interaction_time",
+-    "update_last_interaction_time",
+-    "reset_cost_state",
+-    "set_cost_state_for_restore",
++    'get_total_cost_usd',
++    'add_to_total_cost_state',
++    'get_total_api_duration',
++    'get_total_api_duration_without_retries',
++    'add_to_total_duration_state',
++    'get_total_tool_duration',
++    'add_to_tool_duration',
++    'get_total_lines_added',
++    'get_total_lines_removed',
++    'add_to_total_lines_changed',
++    'has_unknown_model_cost',
++    'set_has_unknown_model_cost',
++    'get_model_usage',
++    'get_usage_for_model',
++    'get_total_input_tokens',
++    'get_total_output_tokens',
++    'get_total_cache_read_input_tokens',
++    'get_total_cache_creation_input_tokens',
++    'get_total_web_search_requests',
++    'get_start_time',
++    'get_total_duration',
++    'get_last_interaction_time',
++    'update_last_interaction_time',
++    'reset_cost_state',
++    'set_cost_state_for_restore',
+     # Turn-level metrics
+-    "get_turn_hook_duration_ms",
+-    "add_to_turn_hook_duration",
+-    "reset_turn_hook_duration",
+-    "get_turn_hook_count",
+-    "get_turn_tool_duration_ms",
+-    "reset_turn_tool_duration",
+-    "get_turn_tool_count",
+-    "get_turn_classifier_duration_ms",
+-    "add_to_turn_classifier_duration",
+-    "reset_turn_classifier_duration",
+-    "get_turn_classifier_count",
++    'get_turn_hook_duration_ms',
++    'add_to_turn_hook_duration',
++    'reset_turn_hook_duration',
++    'get_turn_hook_count',
++    'get_turn_tool_duration_ms',
++    'reset_turn_tool_duration',
++    'get_turn_tool_count',
++    'get_turn_classifier_duration_ms',
++    'add_to_turn_classifier_duration',
++    'reset_turn_classifier_duration',
++    'get_turn_classifier_count',
+     # Turn-output-token budget
+-    "get_turn_output_tokens",
+-    "get_current_turn_token_budget",
+-    "snapshot_output_tokens_for_turn",
+-    "get_budget_continuation_count",
+-    "increment_budget_continuation_count",
++    'get_turn_output_tokens',
++    'get_current_turn_token_budget',
++    'snapshot_output_tokens_for_turn',
++    'get_budget_continuation_count',
++    'increment_budget_continuation_count',
+     # Allowed settings sources
+-    "get_allowed_setting_sources",
+-    "set_allowed_setting_sources",
++    'get_allowed_setting_sources',
++    'set_allowed_setting_sources',
+     # Invoked skills
+-    "add_invoked_skill",
+-    "get_invoked_skills",
+-    "get_invoked_skills_for_agent",
+-    "clear_invoked_skills",
+-    "clear_invoked_skills_for_agent",
++    'add_invoked_skill',
++    'get_invoked_skills',
++    'get_invoked_skills_for_agent',
++    'clear_invoked_skills',
++    'clear_invoked_skills_for_agent',
+     # Slow operations (permanent no-op stubs)
+-    "add_slow_operation",
+-    "get_slow_operations",
++    'add_slow_operation',
++    'get_slow_operations',
+     # REPL bridge stubs
+-    "is_repl_bridge_active",
+-    "get_repl_bridge_handle",
++    'is_repl_bridge_active',
++    'get_repl_bridge_handle',
+     # Cache optimization
+-    "get_cached_claude_md_content",
+-    "set_cached_claude_md_content",
+-    "get_system_prompt_section_cache",
+-    "set_system_prompt_section_cache_entry",
+-    "clear_system_prompt_section_state",
+-    "mark_post_compaction",
+-    "consume_post_compaction",
+-    "get_additional_directories_for_claude_md",
+-    "set_additional_directories_for_claude_md",
++    'get_cached_claude_md_content',
++    'set_cached_claude_md_content',
++    'get_system_prompt_section_cache',
++    'set_system_prompt_section_cache_entry',
++    'clear_system_prompt_section_state',
++    'mark_post_compaction',
++    'consume_post_compaction',
++    'get_additional_directories_for_claude_md',
++    'set_additional_directories_for_claude_md',
+     # Model
+-    "get_main_loop_model_override",
+-    "set_main_loop_model_override",
+-    "get_initial_main_loop_model",
+-    "set_initial_main_loop_model",
++    'get_main_loop_model_override',
++    'set_main_loop_model_override',
++    'get_initial_main_loop_model',
++    'set_initial_main_loop_model',
+     # API correlation
+-    "get_prompt_id",
+-    "set_prompt_id",
+-    "get_last_main_request_id",
+-    "set_last_main_request_id",
+-    "get_last_api_completion_timestamp",
+-    "set_last_api_completion_timestamp",
+-    "get_last_emitted_date",
+-    "set_last_emitted_date",
++    'get_prompt_id',
++    'set_prompt_id',
++    'get_last_main_request_id',
++    'set_last_main_request_id',
++    'get_last_api_completion_timestamp',
++    'set_last_api_completion_timestamp',
++    'get_last_emitted_date',
++    'set_last_emitted_date',
+     # Test reset
+-    "reset_state_for_tests",
++    'reset_state_for_tests',
+ ]

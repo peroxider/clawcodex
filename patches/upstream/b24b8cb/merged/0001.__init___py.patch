@@ -1,14 +1,31 @@
 diff --git a/__init__.py b/__init__.py
 --- a/__init__.py	2026-06-18 10:10:16.785357 +0000
-+++ b/__init__.py	2026-06-24 15:14:12.252441 +0000
-@@ -1,6 +1,9 @@
++++ b/__init__.py	2026-06-25 06:46:42.297387 +0000
+@@ -1,7 +1,10 @@
  """Claw Codex - Claude Code Python Implementation."""
  
 -__version__ = "0.5.0"
+-__author__ = "Claw Codex Team"
 +try:
 +    from clawcodex_ext._version import __version__  # type: ignore[assignment]
 +except ImportError:
-+    __version__ = "0.0.0-dev"
- __author__ = "Claw Codex Team"
++    __version__ = '0.0.0-dev'
++__author__ = 'Claw Codex Team'
  
  from .config import load_config, get_provider_config
+ 
+@@ -11,9 +14,9 @@
+     BaseProvider = None  # type: ignore[assignment]
+ 
+ __all__ = [
+-    "__version__",
+-    "__author__",
+-    "load_config",
+-    "get_provider_config",
+-    "BaseProvider",
++    '__version__',
++    '__author__',
++    'load_config',
++    'get_provider_config',
++    'BaseProvider',
+ ]

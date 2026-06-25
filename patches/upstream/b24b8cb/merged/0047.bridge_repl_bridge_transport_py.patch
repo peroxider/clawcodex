@@ -1,0 +1,103 @@
+diff --git a/bridge/repl_bridge_transport.py b/bridge/repl_bridge_transport.py
+--- a/bridge/repl_bridge_transport.py	2026-06-18 10:10:15.988213 +0000
++++ b/bridge/repl_bridge_transport.py	2026-06-25 06:46:42.589216 +0000
+@@ -3,16 +3,15 @@
+ Ports the consumer-facing surface of
+ ``typescript/src/bridge/replBridgeTransport.ts:23-369``.
+ 
+-Three pieces:
++Two halves:
+ 
+   * ``ReplBridgeTransport`` Protocol — the 14-method contract that
+     ``replBridge`` writes against. v1 and v2 implementations conform.
+   * ``create_v2_repl_transport`` — the v2 factory: SSE reads +
+     ``CCRClient`` writes, with the epoch-mismatch handler that closes
+     both transports + raises ``EpochSupersededError`` to unwind callers.
+-  * ``create_v1_repl_transport`` — phase 14c v1 factory: thin
+-    pass-through over :class:`HybridTransport` (WS reads + POST
+-    writes via ``SerialBatchEventUploader``).
++
++The v1 factory is **not yet implemented** (out of Phase 6 scope).
+ """
+ 
+ from __future__ import annotations
+@@ -243,6 +242,7 @@
+     sessions don't clobber each other (mirrors the TS multi-session
+     safety fix).
+     """
++
+     # Per-instance auth header closure (multi-session safety).
+     def _auth_headers() -> dict[str, str]:
+         token: str | None
+@@ -324,8 +324,6 @@
+     extends ``WebSocketTransport``); this adapter is a thin
+     pass-through so the consumer's ``transport`` variable has a
+     single type regardless of v1/v2.
+-
+-    Mirrors TS ``replBridgeTransport.ts:78-103``.
+     """
+ 
+     def __init__(self, hybrid: 'HybridTransport') -> None:
+@@ -338,10 +336,6 @@
+         await self._hybrid.write_batch(messages)
+ 
+     def close(self) -> None:
+-        """Sync close. Inherits ``HybridTransport.close``'s drop-on-close
+-        semantics for queued POSTs (grace flush is best-effort within
+-        ``CLOSE_GRACE_S``). Callers wanting guaranteed delivery should
+-        ``await self.flush()`` first."""
+         self._hybrid.close()
+ 
+     def is_connected_status(self) -> bool:
+@@ -360,30 +354,19 @@
+         self._hybrid.set_on_connect(cb)
+ 
+     def connect(self) -> None:
+-        """Schedule the WS connect as a background task.
+-
+-        ``HybridTransport.connect`` (inherited from
+-        ``WebSocketTransport``) is async; the ``ReplBridgeTransport``
+-        Protocol's ``connect`` is sync (fire-and-forget). Schedule the
+-        coroutine and return immediately, matching the v2 factory's
+-        equivalent pattern (``_V2ReplTransport.connect``).
+-        """
+         loop = asyncio.get_running_loop()
+         loop.create_task(
+-            self._hybrid.connect(), name='v1-repl-transport-connect',
++            self._hybrid.connect(),
++            name='v1-repl-transport-connect',
+         )
+ 
+     def get_last_sequence_num(self) -> int:
+-        """v1 always returns 0 — the Session-Ingress WS doesn't use
+-        SSE-style sequence numbers. Mirrors TS line 94 comment."""
+         return 0
+ 
+     @property
+     def dropped_batch_count(self) -> int:
+         return self._hybrid.dropped_batch_count
+ 
+-    # ─── v2-only no-ops (Protocol requires them) ─────────────────────
+-
+     def report_state(self, state: dict[str, Any]) -> None:
+         return None
+ 
+@@ -394,18 +377,10 @@
+         return None
+ 
+     async def flush(self) -> None:
+-        """Drain pending POSTs. Delegates to the hybrid's flush which
+-        runs the uploader's drain to completion."""
+         await self._hybrid.flush()
+ 
+ 
+ def create_v1_repl_transport(hybrid: 'HybridTransport') -> ReplBridgeTransport:
+-    """Build a v1 :class:`ReplBridgeTransport` from a
+-    :class:`HybridTransport`.
+-
+-    Thin no-op adapter so ``replBridge``'s ``transport`` variable
+-    has a single type. Mirrors TS ``replBridgeTransport.ts:78-103``.
+-    """
+     return _V1ReplTransport(hybrid)
+ 
+ 
