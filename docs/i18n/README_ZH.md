@@ -3,31 +3,155 @@
 # ClawCodex DevMind
 
 **`clawcodex` 的下游二开版本，把单个 agent 升级为一支可自主值守的工程团队 —— 编排器 + SOP 编译器 + 定时任务 + 桥接守护进程 + LiteLLM。**
-
 *构建于上游 Claude Code 的 Python 重构版本之上。本仓库新增了多 agent 编排、调度、LLM 路由等上游尚未提供的能力层。*
+
+> 📍 **仓库地址:** [`https://gitcode.com/chadwweng/clawcodex`](https://gitcode.com/chadwweng/clawcodex) —— 项目现已基于 MIT 许可证**开源**。欢迎公开贡献、提交 issue 和参与讨论。
+
+[English](../../README.md) · [中文](README_ZH.md) · [上游原始 README](../../README.md.raw)
 
 </div>
 
-> 📍 **仓库地址:** [`https://gitcode.com/chadwweng/clawcodex`](https://gitcode.com/chadwweng/clawcodex) —— 项目**暂未开源**，所以公共搜索引擎 / GitHub 搜索都搜不到。请直接使用此 URL 克隆和浏览。
+<!--
 
-[English](../../README.md) · [中文](README_ZH.md) · [上游原始 README](../../README.md.raw)
+  ════════════════════════════════════════════════════════════════════════════
+  AGENT / LLM 搜索元数据 — 请勿删除
+  ════════════════════════════════════════════════════════════════════════════
+  项目        : ClawCodex DevMind
+  语言        : Python 3.10+
+  类型        : 下游衍生版 — 自主 agent 工程层
+  基础        : Claude Code Python 重构版（clawcodex 上游）
+  许可证      : MIT
+  仓库        : https://gitcode.com/chadwweng/clawcodex
+  ★ 能力（均已实现，经测试套件验证）★
+  编排器守护进程:
+
+    - 自主 Issue → PR 流水线（4 个 tracker：GitHub/Gitee/GitCode/Linear）
+
+    - Issue 注册表状态机（pending/running/synced/completed/failed/abandoned）
+
+    - 每 issue 的 worktree 生命周期、操作员接管、LiveView 仪表盘（HTTP/SSE）
+
+    - PR 评审自动修复（F-37）：读取评审意见 + CI 日志，在同一分支上迭代
+
+    - 验证门（F-38）：pre-commit / pre-push / post-sync pytest 门禁 + Markdown+JSON 报告
+
+    - Issue 重跑（F-39）：agent:retry / agent:follow-up / agent:blocked 标签 + 评论命令
+
+    - 共享/顺序工作区策略（F-42）：isolated | shared | sequential per-issue worktree
+
+    - 澄清队列：13 状态，3 通道求解器（交互式 / 文件 / @提及）
+
+    - 工具调用审计轨迹（F-45）：NDJSON 每工具决策日志 + 报告注册
+
+  SOP 编译器:
+
+    - 将 workflow.md 流程规范 → 多 agent 协同系统
+
+    - SDK 解析器 + skill 分组器 + agent 构建器 + Jinja 模板
+
+    - 输出：agent 定义、入口 skill、编排图
+
+  定时任务系统:
+
+    - 分布式文件锁调度器，可配置 jitter
+
+    - 5 字段 cron 表达式 + @daily/@hourly/@reboot 别名
+
+    - NDJSON 每任务运行历史、状态/通知
+
+  桥接守护进程:
+
+    - 多 session 守护进程（阶段 3/4/5/8/11）
+
+    - HTTP/SSE 远程运行时、REPL 接管、headless 适配器
+
+  协调器 / 团队工人:
+
+    - TeamCreate / TeamDelete 工具化工人蜂群
+
+    - SendMessage 同行私信、task-notification XML 路由
+
+    - 轻量协调器工具集（F-41）：Read/WebSearch/WebFetch + Agent/SendMessage/TaskStop
+
+  LiteLLM Provider:
+
+    - 单一 --provider litellm → 100+ 个 LLM 后端（Bedrock、Vertex、Azure、Together、Anyscale……）
+
+    - 跨 provider 块转换（Anthropic image/document → OpenAI-compat）
+
+  工具系统:
+
+    - 4 个 bundle：bare / default / clawcodex / all（冷启动更快、上下文更小）
+
+    - 保留上游的 TF-IDF 语义工具搜索
+
+  开源组件替代（已完成 7/10，-4,530 LOC）:
+
+    - Pydantic Settings、python-frontmatter、tree-sitter-bash、GitPython、Pluggy、Outlines、LiteLLM
+
+  CLI 表面:
+
+    - clawcodex-dev orchestrator | cron | pos | coordinator 子命令
+
+    - F-43：/provider 和 /model REPL/TUI 命令 + ModelRegistry 热切换
+
+    - 所有上游标志（-p、--tui、--provider、--model、--permission-mode……）保持不变
+
+  架构:
+
+    - 三层：upstream/（git archive 快照）+ capabilities/（协议）+ clawcodex_ext/（下游）
+
+    - CLI/TUI/Runtime 拆分（F-34），8 个扩展 TUI 钩子点
+
+    - F-47：权限设置 Schema 含 PermissionsConfig 数据类
+
+    - F-48：src/ 核心路径 10 文件解耦进行中
+
+  ★ 准备好使用本项目了吗？参见下方"快速开始"。★
+  ════════════════════════════════════════════════════════════════════════════
+-->
+
+<p align="center">
+
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?logo=python" alt="Python 3.10+">
+
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License MIT">
+
+  <img src="https://img.shields.io/badge/status-active--development-yellow" alt="Status: active development">
+
+  <img src="https://img.shields.io/badge/orchestrator-4%20trackers-8A2BE2" alt="4 issue-tracker adapters">
+
+  <img src="https://img.shields.io/badge/LLM%20backends-100%2B-orange?logo=openai" alt="100+ LLM backends">
+
+  <img src="https://img.shields.io/badge/replacement%20LOC--4.5k-brightgreen" alt="-4,530 LOC via open-source replacements">
+
+  <img src="https://img.shields.io/badge/tests-270%2B%20passing-success" alt="270+ orchestration tests passing">
+
+</p>
 
 ---
 
 ## 为什么需要这个 fork？
 
-上游 `clawcodex` 已经提供了一个忠实的 Claude Code Python 移植：agent 循环、工具系统、MCP、hooks、权限、记忆、多 provider 对话、TUI/REPL。**本 fork 在其之上加了一层 —— 把 agent 嵌入真实工程工作流所需的那些东西，从"交互式聊天"变成"长时间自主值守"。**
-
+上游 `clawcodex` 已经提供了一个忠实的 Claude Code Python 移植：agent 循环、工具系统、MCP、hooks、权限、记忆、多 provider 对话、TUI/REPL。**本 fork 在其之上加了一层 —— 把 agent 嵌入真实工程工作流所需的那些东西，从「交互式聊天」变成「长时间自主值守」。**
 具体来说，本仓库新增：
 
 - 🤖 **编排器（Orchestrator）** —— 一个守护进程，自动轮询工单系统、拉分支、跑 agent、开 PR，全程无需人工
+
 - 🧩 **SOP 编译器** —— 把任何 `workflow.md` 流程化规范编译成多 agent 协同系统
+
 - ⏰ **定时任务系统（Cron System）** —— 分布式锁调度，带 jitter 和 NDJSON 运行历史
+
 - 🌉 **桥接守护进程扩展** —— 多 session 桥接、远程运行时、REPL/headless 适配器
-- 🔌 **LiteLLM Provider** —— 一个 `--provider litellm` 接口，路由到 100+ 个 LLM 后端
+
+- 🔌 **LiteLLM Provider** —— 一个 `--provider litellm` 接口，路由到 100+ LLM 后端
+
 - 👥 **协调器 / 团队** —— `TeamCreate` / `TeamDelete` 工人群，`SendMessage` 同行私信
+
 - 🩹 **PR 检视意见自动修复（F-37）** —— 读取评审意见 + CI 日志，在同一分支上迭代修复
+
 - ✅ **验证门（F-38）** —— pre-commit / pre-push / post-sync 的 `pytest` 门禁，附 Markdown + JSON 报告
+
 - 🔁 **Issue 重跑机制（F-39）** —— `agent:retry` / `agent:follow-up` / `agent:blocked` 三个标签驱动重跑
 
 上游的 REPL、TUI、工具系统、MCP、hooks、记忆、权限、provider 层都原样保留 —— 本 fork 是接在它们之上，不替换它们。
@@ -40,14 +164,12 @@
 $ clawcodex-dev orchestrator server start --workflow ./workflow.md
 ✓ orchestrator daemon started · pid 18432 · tracker=gitcode · repo=chadwweng/AgentSDK
 ✓ max_concurrent_agents=3 · permission_mode=bypassPermissions
-
 $ clawcodex-dev orchestrator issue list
 ID                STATUS      BRANCH                     ATTEMPTS  PR
 gitcode/AGENTSDK-7   done     clawcodex/AGENTSDK-7     1         https://gitcode.com/.../pulls/7
 gitcode/AGENTSDK-12  running  clawcodex/AGENTSDK-12    1         -
 gitcode/AGENTSDK-15  paused   clawcodex/AGENTSDK-15    2         https://gitcode.com/.../pulls/15
 linear/PROJ-128      running  clawcodex/PROJ-128       1         -
-
 $ clawcodex-dev orchestrator issue tail --id gitcode/AGENTSDK-15
 14:02:11  ◐ Read src/services/lock.py · 132 lines
 14:02:13  ◐ Grep "asyncio.Lock" · 3 hits
@@ -57,9 +179,8 @@ $ clawcodex-dev orchestrator issue tail --id gitcode/AGENTSDK-15
 14:02:25  ◐ Git commit -m "fix: per-key lock granularity in flush_batch"
 14:02:26  ◐ Git push origin clawcodex/AGENTSDK-15
 14:02:31  ✓ PR opened · auto-review-loop subscribed
-
 # 4 小时后，PR 评审意见落地
-$ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "处理评审意见"
+$ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "address review comments"
 ✓ agent resumed · re-reading PR comments · pushing fix commits
 ```
 
@@ -71,21 +192,22 @@ $ clawcodex-dev orchestrator issue inject --id gitcode/AGENTSDK-15 "处理评审
 
 | 组件 | 版本 | 说明 |
 |---|---|---|
-| `install.sh` | v0.5.0 | 随本 README 一同发布的安装脚本（与所装 clawcodex tag 同版本号发布） |
-| `clawcodex` | v0.5.0 | 这个 `install.sh` 要安装的版本 |
+| `install.sh` / `install.ps1` | v0.5.0 | 随本 README 一同发布的安装脚本（与所装 clawcodex tag 同版本号发布） |
+| `clawcodex` | v0.5.0 | 这个安装器要安装的版本 |
 | Git ref | `v0.5.0` | 安装器克隆的 git tag / branch |
+
 
 要安装其他版本的 clawcodex，请下载该版本 tag 自带的 `install.sh`。
 
-### 一键安装（推荐）
 
-最省事的安装方式。`install.sh` 会端到端完成全部步骤：操作系统识别、
-Git / uv / Python 前置检查、仓库克隆、虚拟环境创建、依赖锁定安装、
-全局命令注册、shell rc 修补。
+### 一键安装（Linux / macOS / Git Bash / WSL）
+
+bash 可用环境中最快捷的安装方式。`install.sh` 会端到端完成全部步骤：操作系统识别、
+Git / uv / Python 前置检查、仓库克隆、虚拟环境创建、
+依赖锁定安装、全局命令注册、shell rc 修补。
 
 ```bash
-git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex \
-  && bash /tmp/clawcodex/install.sh
+git clone --depth 1 https://gitcode.com/chadwweng/clawcodex /tmp/clawcodex && bash /tmp/clawcodex/install.sh
 ```
 
 脚本结束后（全新机器上通常约 20 秒）：
@@ -95,27 +217,77 @@ source ~/.bashrc                # 或：source ~/.zshrc   （或新开一个终�
 clawcodex-dev --version         # 验证安装
 ```
 
+
+**开发分支（最新代码，未锁定版本）：**
+
+```bash
+# 将 {BRANCH} 替换为实际分支名称（如 dev-decoupling-refactor-b24b8cb）
+curl -fsSL "https://raw.githubusercontent.com/peroxider/clawcodex/{BRANCH}/install.sh" | bash
+```
+
 常用旗标 / 子命令变体：
 
 ```bash
 # 仅诊断环境，不实际安装
 bash /tmp/clawcodex/install.sh doctor
-
 # 预览每一步会做什么，但不实际改动
 bash /tmp/clawcodex/install.sh --dry-run
-
 # 非交互式安装（CI / Docker）
 bash /tmp/clawcodex/install.sh --no-venv --no-setup --yes \
                                   --log-file /tmp/install.log
-
 # 安装指定的 tag / commit
 bash /tmp/clawcodex/install.sh --ref v0.5.0
 ```
 
-清理临时克隆：
+> 💡 **Windows 用户：** 如果你使用原生 PowerShell 5.1+ 或 pwsh，请改用下方的 [PowerShell 一键安装](#one-click-install-powershell)。它原生运行 —— 无需 Git Bash 或 WSL。
+
+清理临时克隆后：
 
 ```bash
 rm -rf /tmp/clawcodex
+```
+
+---
+
+### 一键安装（PowerShell / Windows）
+
+适用于原生 Windows 环境（PowerShell 5.1+ 或 pwsh）。`install.ps1` 镜像了
+`install.sh` 的每一项能力 —— Git 检测、uv 配置、Python 设置、
+venv 创建、依赖锁定安装、全局命令注册 —— 完全
+在 PowerShell 内完成，无需 Git Bash 或 WSL 依赖。
+
+**DEV分支：**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/peroxider/clawcodex/dev-decoupling-refactor-b24b8cb/install.ps1 -UseBasicParsing -OutFile $env:TEMP\cc.ps1; & $env:TEMP\cc.ps1"
+```
+
+**开发分支：**
+
+```powershell
+# 将 {BRANCH} 替换为实际分支名称（如 dev-decoupling-refactor-b24b8cb）
+powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/peroxider/clawcodex/{BRANCH}/install.ps1 -UseBasicParsing -OutFile $env:TEMP\cc.ps1; & $env:TEMP\cc.ps1"
+```
+
+安装完成后：
+
+```powershell
+clawcodex-dev --version         # 验证安装（如有需要先新开一个 shell）
+```
+
+常用标志：
+
+```powershell
+# 仅诊断环境，不实际安装
+.\install.ps1 doctor
+# 预览每一步会做什么，但不实际改动
+.\install.ps1 -DryRun
+# 非交互式安装（CI / Docker）
+.\install.ps1 -NoVenv -NoSetup -Force -LogFile C:\Temp\install.log
+# 安装指定的 tag / commit
+.\install.ps1 -Ref v0.5.0
+# 卸载
+.\install.ps1 uninstall
 ```
 
 ### 手动安装（备选）
@@ -126,24 +298,19 @@ rm -rf /tmp/clawcodex
 ```bash
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
-
 # 安装（推荐 uv；pip 也可以）
 uv venv --python 3.11
 source .venv/bin/activate
 uv pip install -e ".[dev]"
 python scripts/ci/dev_setup.py
-
 # 配置 provider（一次性）
 clawcodex-dev login
-
 # 运行下游 CLI
 clawcodex-dev                      # REPL（与上游一致，外加 orchestrator 子命令）
 clawcodex-dev orchestrator --help  # 查看所有编排器命令
 clawcodex-dev cron --help          # 查看定时任务子命令
 clawcodex-dev pos --help           # 查看 SOP 编译器子命令
 ```
-
-> 上游的 CLI 入口（`python -m src.cli`）依然可用 —— 本 fork 新增了一个并行的 `clawcodex-dev` 入口，挂载下游子命令（`orchestrator`、`cron`、`pos` 等）。
 
 ### Shell Tab 补全
 
@@ -153,42 +320,41 @@ clawcodex-dev pos --help           # 查看 SOP 编译器子命令
 ```bash
 # bash
 eval "$(register-python-argcomplete clawcodex-dev)"
-
 # zsh
 eval "$(register-python-argcomplete clawcodex-dev)"
-
 # fish
 register-python-argcomplete --shell fish clawcodex-dev | source
 ```
 
-Tab 补全覆盖顶层子命令（`login`、`config`、`mcp`、`daemon`、`doctor`、`orchestrator`、`autonomy`、`schedule`、`provider`、`model`、`pos`、`viz`）和顶层 flag。`orchestrator` 子命令也会补全其名词（`server` / `issue` / `dashboard`）。
+Tab 补全覆盖顶层子命令（`login`、`config`、`mcp`、
+`daemon`、`doctor`、`orchestrator`、`autonomy`、`schedule`、`provider`、
+`model`、`pos`、`viz`）和顶层 flag。`orchestrator`
+子命令也会补全其名词（`server` / `issue` / `dashboard`）。
+
+> 上游的 CLI 入口（`python -m src.cli`）依然可用 —— 本 fork 新增了一个并行的 `clawcodex-dev` 入口，挂载下游子命令（`orchestrator`、`cron`、`pos` 等）。
 
 ## 环境要求与适配平台
 
 ### 操作系统
 
-| 操作系统 | 状态 | 说明 |
+| OS | 状态 | 说明 |
 |---|---|---|
-| Linux（Debian、Ubuntu、Fedora、RHEL、Arch、openSUSE …） | ✅ 支持 | 默认测试平台 |
-| macOS 12+（Monterey 及更新） | ✅ 支持 | Apple Silicon 和 Intel |
-| WSL2（Windows 内的 Ubuntu / Debian） | ✅ 支持 | Windows 上的推荐方案 |
-| Windows 上的 Git Bash | ✅ 支持 | 不便启用 WSL 时的备选 |
-| Windows：原生 `cmd.exe` / PowerShell | ❌ 不支持 | 请改用 Git Bash 或 WSL |
-
-> 原生 Windows shell（`cmd.exe`、PowerShell）不被 `install.sh` 支持，
-> 因为它是一个 bash 脚本。请使用 Git Bash（随
-> [Git for Windows](https://git-scm.com/download/win) 一起安装）或
-> WSL2（[安装指南](https://learn.microsoft.com/windows/wsl/install)）。
+| Linux（Debian、Ubuntu、Fedora、RHEL、Arch、openSUSE……） | ✅ 支持 | 默认测试平台；通过 `install.sh` 一键安装 |
+| macOS 12+（Monterey 及更新） | ✅ 支持 | Apple Silicon 和 Intel；通过 `install.sh` 一键安装 |
+| WSL2（Windows 内的 Ubuntu / Debian） | ✅ 支持 | 通过 `install.sh` 一键安装 |
+| Windows：原生 PowerShell 5.1+ / pwsh | ✅ 支持 | 通过 `install.ps1` 一键安装 —— 无需 Git Bash 或 WSL |
+| Windows 上的 Git Bash | ✅ 支持 | 备选路径；也使用 `install.sh` |
+> 💡 **Windows 用户：** 你不再需要 Git Bash 或 WSL。PowerShell 安装器 `install.ps1` 原生处理一切 —— Git 检测、uv 配置、Python 设置、venv 创建、依赖安装和全局命令注册 —— 全部来自一个 `iwr | iex` 一行命令。参见下方的[快速开始](#one-click-install-powershell)。
 
 ### 必需软件
 
 | 工具 | 最低版本 | 是否自动安装？ |
 |---|---|---|
-| **Git** | 任意 2.x | 否 —— 用系统包管理器安装 |
+| **Git** | 任意 2.x | 否 —— 通过系统包管理器安装 |
 | **Python** | 3.10+（推荐 3.11） | ✅ 是 —— `uv` 按需安装 |
 | **uv** | 任意 0.5+ | ✅ 是 —— 首次运行从 `astral.sh` 下载 |
 | **curl** 或 **wget** | 任意 | 否 —— 装 `uv` 和克隆仓库时需要 |
-| **bash** | 4+ | Linux/macOS 自带；macOS 自带 3.2 即可（通过 `bash -s`） |
+| **bash** | 4+ | Linux/macOS 自带；macOS 3.2 可通过 `bash -s` 使用 |
 
 在各平台安装 Git：
 
@@ -204,7 +370,9 @@ xcode-select --install           # macOS
 安装会访问三个 HTTPS 端点。首次安装时三个都需要（后续运行会复用缓存）：
 
 - `https://gitcode.com/chadwweng/clawcodex` —— 克隆仓库
+
 - `https://astral.sh/uv/install.sh` —— 安装 uv（仅首次）
+
 - `https://pypi.org/`（及默认 PyPI 索引）—— Python 依赖
 
 如果你在公司代理 / 防火墙后面，运行 `install.sh` 之前请先设置
@@ -225,8 +393,11 @@ xcode-select --install           # macOS
 所有写入都发生在以下位置：
 
 - `$HOME/.clawcodex/clawcodex/` —— 项目源码 + 虚拟环境
+
 - `$HOME/.clawcodex/` —— 运行时配置
+
 - `$HOME/.local/bin/` —— `clawcodex` 和 `clawcodex-dev` 命令包装
+
 - `~/.bashrc` / `~/.zshrc` / `~/.profile` —— 把 `~/.local/bin` 加入 `PATH`
 
 如果用 `--install-dir` 把安装目录指向系统路径（例如 `/opt/clawcodex`），
@@ -235,17 +406,26 @@ xcode-select --install           # macOS
 ### 需要注意的事
 
 - **使用默认 venv 模式时不会触碰系统 Python** —— 安装器只创建项目
+
   本地的 `.venv` 并只在那里写入。
+
 - **在 `--no-venv` 模式下**，安装器使用 `uv pip install --system`，
+
   并在 PEP 668 系统上自动回退到 `--break-system-packages`。仅在
   Docker 镜像、临时 CI runner 或其他已经隔离的环境中使用此模式。
+
 - **安装完成后需要新开一个 shell**（或 `source ~/.bashrc` /
+
   `~/.zshrc` / `~/.profile`），`clawcodex-dev` 命令才会出现在 `$PATH`
   上。`install.sh` 会修补 rc 文件，但无法重载当前 shell。
+
 - **重复运行 `install.sh` 是安全的** —— 已存在的仓库会 fast-forward，
+
   已存在的 venv 会复用，命令包装会重新生成。要从零开始，先跑
   `./install.sh uninstall`。
+
 - **要安装不同版本的 clawcodex**（比本 README 配的 `install.sh`
+
   所装版本更旧或更新），下载该版本 tag 自带的 `install.sh` 即可
   —— 每个 release 都自带专属的安装器，lockfile 把所有传递依赖都
   锁住了。
@@ -264,10 +444,8 @@ xcode-select --install           # macOS
 # 1. 复制模板
 cp extensions/orchestrator/templates/workflow.template.md ./workflow.md
 $EDITOR workflow.md    # 设置 tracker、repo、branch_prefix、provider、permission_mode
-
 # 2. 启动守护进程
 clawcodex-dev orchestrator server start --workflow ./workflow.md
-
 # 3. 观察
 clawcodex-dev orchestrator issue list
 clawcodex-dev orchestrator issue tail --id <id>
@@ -296,25 +474,20 @@ clawcodex-dev orchestrator dashboard                   # HTTP/SSE on :8080
 ```bash
 # 服务端生命周期
 clawcodex-dev orchestrator server {start,status,stop} --workflow <file>
-
 # Issue 查询
 clawcodex-dev orchestrator issue list [--status <state>] [--workspace <path>]
 clawcodex-dev orchestrator issue show --id <id>
 clawcodex-dev orchestrator issue tail --id <id>             # NDJSON 实时 tail
-
 # Issue 生命周期
 clawcodex-dev orchestrator issue stop    --id <id>          # 强制终止
 clawcodex-dev orchestrator issue pause   --id <id> [--reason <text>]
 clawcodex-dev orchestrator issue resume  --id <id>
 clawcodex-dev orchestrator issue takeover --id <id>         # 停 agent + 在 worktree 启 REPL
-
 # 操作员交互
 clawcodex-dev orchestrator issue clarify --id <id> --answer <text> [--forward-to-author]
 clawcodex-dev orchestrator issue inject  --id <id> [hint]   # 把 hint 注入 .operator_hints.md
-
 # 工作区探查
 clawcodex-dev orchestrator issue workspace --id <id> [--ls|--cat FILE|--edit FILE --with CONTENT]
-
 # 仪表盘
 clawcodex-dev orchestrator dashboard [--port 8080] [--host 127.0.0.1]
 ```
@@ -324,28 +497,35 @@ clawcodex-dev orchestrator dashboard [--port 8080] [--host 127.0.0.1]
 **基础编排器之上的 F-feature 增量：**
 
 - **F-37 — PR 评审意见自动修复** —— PR 打开后，编排器订阅评审意见、inline 评审线程、CI 失败日志。一旦反馈到达，就在**同一分支**上重跑 agent（不新开 PR），持续推修复 commit，直到审阅者满意或达到最大迭代次数。
+
 - **F-38 — 验证门** —— `git_sync` 在三个检查点运行 `test_command`（默认 `pytest -x`）：`pre_commit`、`pre_push`、`post_sync`。失败即阻塞推送。Markdown + JSON 报告自动插入 PR 正文，并作为一条汇总评论发布。
+
 - **F-39 — Issue 重跑机制** —— 三个仓库标签驱动重跑：
+
   - `agent:retry` —— 重置本地状态、关闭旧 PR、从头重跑整个 issue
+
   - `agent:follow-up` —— 保留 PR，对新评论叠加 commit（F-37 路径）
+
   - `agent:blocked` —— 永久跳过该 issue
+
   - 也可以通过 `/agent retry` / `/agent follow-up` 评论命令触发（仅原作者 / maintainer，限频），CLI 兜底为 `clawcodex-dev orchestrator issue retry --id <id> --mode reset`。
 
 ---
 
 ### 🧩 SOP 编译器
 
-很多工程流程仍然以 `workflow.md` 形式记录 —— "X 发生则做 Y，然后通知 Z"。SOP 编译器（`extensions/pos_converter/`）把这类规范转成多 agent 协同运行时。
+很多工程流程仍然以 `workflow.md` 形式记录 —— "如果 X 发生则做 Y，然后通知 Z"。SOP 编译器（`extensions/pos_converter/`）把这类规范转成多 agent 协同运行时。
 
 ```bash
-clawcodex-dev pos convert examples/pos/order_processing.md \
-    --out ./.clawcodex
+clawcodex-dev pos convert examples/pos/order_processing.md --out ./.clawcodex
 ```
 
 产物：
 
 - `.clawcodex/agents/pos-order-processing.yaml` —— agent 定义（每个角色一个）
+
 - `.clawcodex/skills/pos-order-processing/SKILL.md` —— 入口 skill
+
 - `.clawcodex/workflows/pos-order-processing.yaml` —— 编排图
 
 运行时接入了上游的 `Coordinator` / `Team` 子系统，所以生成的 agent 之间可以互发 `SendMessage`，并通过上游的 task-notification 路由在崩溃后恢复。
@@ -353,8 +533,11 @@ clawcodex-dev pos convert examples/pos/order_processing.md \
 **模块：**
 
 - `sdk_parser.py` —— 解析 `workflow.md` 规范（frontmatter + 正文）
+
 - `skill_grouper.py` —— 把步骤按角色聚合成 skill
+
 - `agent_builder.py` —— 把每个角色物化为 `TeamCreate` agent
+
 - `templates.py` —— 输出 YAML 的 Jinja 模板
 
 ---
@@ -400,7 +583,9 @@ clawcodex-dev cron enable <task_id> | disable <task_id> | remove <task_id>
 **典型用例：**
 
 - 从 IDE 插件通过 HTTP/SSE 驱动 headless agent
+
 - 把编排器挂到长时间运行的沙箱 VM
+
 - 编排器 `takeover` —— 杀掉 agent，在同一 worktree 落入 REPL 做手工修补
 
 ---
@@ -418,7 +603,6 @@ clawcodex-dev --provider litellm --model openai/<your-finetune>           -p "hi
 ```
 
 实现：`extensions/providers_ext/litellm_provider.py`（在 `BaseProvider` 之上做了一层轻量适配）。
-
 同时也解决了上游棘手的跨 provider 兼容：把 Anthropic 的 `image` / `document` 块翻译成 OpenAI 的 `image_url` / `file`，以便支持视觉能力的 OpenAI-兼容后端也能消费。
 
 ---
@@ -434,15 +618,18 @@ clawcodex-dev coordinator team delete --name build-team
 ```
 
 - 在 agent 循环里暴露 `TeamCreate` / `TeamDelete` 工具
+
 - 工人之间可以互发 `SendMessage`（同行私信）以及和管理员通信
+
 - Task-notification XML 路由把工人的事件汇报回管理员
+
 - SOP 编译器和编排器都用它做并行 issue 处理
 
 ---
 
 ### 🛠 工具包（Tool Bundles）
 
-上游启动时加载全部 30+ 个工具。本 fork 新增了**bundle 机制**用于冷启动加速和上下文瘦身（`extensions/tool_system_ext/`）：
+上游启动时加载全部 30+ 个工具。本 fork 新增了 **bundle 机制**用于冷启动加速和上下文瘦身（`extensions/tool_system_ext/`）：
 
 | Bundle | 启动时加载 | 适用场景 |
 |---|---|---|
@@ -452,7 +639,6 @@ clawcodex-dev coordinator team delete --name build-team
 | `all` | 注册表里所有 | 最大灵活性 |
 
 切换方式：`clawcodex-dev --tool-bundle clawcodex`（或在 `~/.clawcodex/config.json` 的 `tool_bundles` 字段）。
-
 基于 TF-IDF 的 `ToolSearch` 从上游继承下来 —— bundle 之上的语义工具发现仍然可用。
 
 ---
@@ -481,7 +667,9 @@ clawcodex-dev coordinator team delete --name build-team
 **为什么重要：**
 
 - **更小的攻击面** —— 被替换的组件正是权限绕过（正则 Bash 解析器）和配置注入（手写环境变量粘合代码）最容易出现的地方。
+
 - **更好的正确性** —— `tree-sitter-bash` 是真正的语法分析，不是正则；Pydantic Settings 加载时校验类型；Pluggy 强制 hookspec 契约。
+
 - **更容易回馈上游** —— 替换是 drop-in 的，使用的还是同一套公共接口，所以这层可以合回上游 `clawcodex` 仓库，不破坏消费者。
 
 可以在 `pyproject.toml` 的 `[project.dependencies]` 段下看到这些选择。上游专属子注释块保证了每个替换都能从包元数据中检索到。
@@ -507,7 +695,7 @@ clawcodex-dev coordinator    ...   # 团队 / 工人原语（本 fork）
 
 ```text
               ┌──────────────────────────────────────────────┐
-              │   clawcodex_ext/cli（clawcodex-dev 入口）     │
+              │   clawcodex_ext/cli (clawcodex-dev 入口)     │
               │   parser · dispatch · runners · permissions  │
               └──────────┬──────────────┬─────────────┬──────┘
                          │              │             │
@@ -517,12 +705,12 @@ clawcodex-dev coordinator    ...   # 团队 / 工人原语（本 fork）
               │  + LiveView   │  │   Jitter   │  │ + Agent builder │
               │  + Takeover   │  │ + Status   │  │ + Skill grouper │
               │  + Review FB  │  │ + Notify   │  │                 │
-              └──────┬────────┘  └────────────┘  └─────────────────┘
+              └──────┬────────┘  └─────────────┘  └─────────────────┘
                      │
        ┌─────────────┼─────────────┐
        │             │             │
 ┌──────▼─────┐ ┌─────▼──────┐ ┌────▼──────────┐
-│  Trackers  │ │  Bridge    │ │  Coordinator  │
+│ Trackers   │ │  Bridge    │ │  Coordinator  │
 │ · Linear   │ │  Daemon    │ │  · TeamCreate │
 │ · GitHub   │ │  Phases    │ │  · TeamDelete │
 │ · Gitee    │ │  3,4,5,8,11│ │  · SendMessage│
@@ -575,7 +763,6 @@ extensions/                          # 本 fork 全部新增都在这里
 │   └── agent_config.py
 ├── capabilities/                    #   - 横切协议
 └── api/                             #   - 编排 + query 公开 API
-
 clawcodex_ext/                       # 下游 CLI + 服务
 ├── cli/                             #   - clawcodex-dev 入口（parser、dispatch、runners）
 ├── cron_system/                     #   - 分布式 cron 调度器
@@ -584,7 +771,7 @@ clawcodex_ext/                       # 下游 CLI + 服务
 └── tui/                             #   - 扩展 Textual TUI（8 个钩子点）
 ```
 
-`src/` 全部归上游所有 —— 上游架构图见 [`README.md.raw`](https://gitcode.com/chadwweng/clawcodex/blob/main/README.md.raw) 和 [`docs/ARCHITECTURE.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/docs/ARCHITECTURE.md)。
+`src/` 全部归上游所有 —— 上游架构图见 [`README.md.raw`](../../README.md.raw) 和 [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)。
 
 ---
 
@@ -605,7 +792,7 @@ clawcodex_ext/                       # 下游 CLI + 服务
 | — | 桥接守护进程阶段 3、4、5、8、11 | ✅ |
 | — | 8 个 TUI 扩展钩子 | ✅ |
 
-完整 F-feature 待办清单和当前活跃路线图见 [`docs/FEATURE_PLAN.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/docs/FEATURE_PLAN.md)。
+完整 F-feature 待办清单和当前活跃路线图见 [`docs/FEATURE_PLAN.md`](../../docs/FEATURE_PLAN.md)。
 
 ---
 
@@ -615,45 +802,49 @@ clawcodex_ext/                       # 下游 CLI + 服务
 git clone https://gitcode.com/chadwweng/clawcodex.git
 cd clawcodex
 pip install -e ".[dev]"
-# 创建CI/CD环境
+# 创建 CI/CD 环境
 python scripts/ci/dev_setup.py
-
+python -m pre_commit run --all-files  # 可选的首次运行信心检查
 # 只跑本 fork 自己的测试
 pytest tests/test_orchestrator.py -v
 pytest tests/test_cron_system.py -v
 pytest tests/test_pos_converter.py -v
 pytest tests/test_bridge.py -v
-
 # 或者跑除上游集成测试外的全部
 pytest tests/ -m "not integration" -v
 ```
 
-- GitCode CI/CD 门禁位于 `.gitcode/workflows/`。当前仓库可能暂时没有可用的GitCode Pipeline，因此可以用同一套门禁形状在本地模拟。交互式终端会显示彩色 live dashboard；在 CI/日志中用 `--ui plain` 强制纯文本输出，Agent介入验证自修复时，建议提交前让AI Agent执行下面命令进行代码提交自检。
+Git 钩子不会因为 `.pre-commit-config.yaml` 存在于克隆中而自动激活。
+`scripts/ci/dev_setup.py` 会在缺少时安装本地 pre-commit 钩子
+并创建被忽略的 `.env` 模板；`install.sh install` 和
+`install.sh update` 对于一键安装也做同样的事情。该钩子是一个早期的
+本地卫生检查，不是 GitCode `push` / `pull_request` 门禁的替代品。
+
+- GitCode CI/CD 门禁位于 `.gitcode/workflows/`。由于该仓库可能无法使用 GitCode Pipeline，可以在本地模拟相同的门禁形态。在交互式终端中它会显示彩色动态仪表盘；在 CI/日志中用 `--ui plain` 强制纯文本输出。当 AI agent 参与开发时，建议在提交前让 agent 运行以下命令作为 pre-commit 自检。
 
     ```bash
-    # AI介入的纯文本形式
-    python scripts/ci/local_ci.py --base "fork仓的远程开发分支" --ui plain --failure-lines 120
-    # 开发者介入的图像形式
+    # AI 参与的纯文本形式
+    python scripts/ci/local_ci.py --base "the fork's remote dev branch" --ui plain --failure-lines 120
+    # 开发者参与的图形形式
     python scripts/ci/local_ci.py --base upstream/dev-decoupling-refactor-b24b8cb
     ```
 
-    - **变更文件检查的范围。** 不带 `--all` 时，门禁只 diff `HEAD~1..HEAD`——即分支上**最后一笔**提交。单提交改动没问题，但**开 PR 前若分支上有多笔提交，这样会漏检**：分支上更早的提交不被覆盖，本地结果可能与 GitCode PR 门禁（对整段 PR 相对 merge-base 做 diff）不一致。所有需要用 `--base <ref>` 覆盖整段 PR diff
-        - `--base` 接受任意 ref；`local_ci` 会计算 `merge-base(<ref>, HEAD)` 并检查`merge-base...HEAD`，所以分支增长后依然正确。若要检查整个 tracked 树（最慢；也会暴露历史债务），用 `--all`。
+    - **变更文件检查的范围。** 不带 `--all` 时，门禁只 diff `HEAD~1..HEAD` —— 即分支上 **最后一笔** 提交。单提交改动没问题，但 **开 PR 前若分支上有多笔提交，这样会漏检**：分支上更早的提交不被覆盖，本地结果可能与 GitCode PR 门禁（对整段 PR 相对 merge-base 做 diff）不一致。需要用 `--base <ref>` 覆盖整段 PR diff。
+
+        - `--base` 接受任意 ref；`local_ci` 会计算 `merge-base(<ref>, HEAD)` 并检查 `merge-base...HEAD`，所以分支增长后依然正确。若要检查整个 tracked 树（最慢；也会暴露历史债务），用 `--all`。
+
     - **跑门禁前需要用 `git fetch upstream` 保持 `upstream` 最新。**
-    - pytest 门禁采用固定 smoke 集合 + 当前 PR/push 范围内变更的`tests/**/test_*.py` 或 `tests/**/*_test.py` 文件，新增测试无需逐个手动写入workflow 即可被覆盖。
 
-- 详细门禁说明见 [`docs/cicd/CICD_GATE.md`](../cicd/CICD_GATE.md)，[`CONTRIBUTING.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/CONTRIBUTING.md) 涵盖 PR 规范。
+    - Pytest 门禁使用固定的 smoke 集合加上当前 PR/push 范围内变更的 `tests/**/test_*.py` 或 `tests/**/*_test.py` 文件，因此新增测试无需手动编辑每个 workflow 即可被覆盖。
 
-
-
+- 详细门禁说明见 [`docs/cicd/CICD_GATE.md`](../../docs/cicd/CICD_GATE.md)，[`CONTRIBUTING.md`](../../CONTRIBUTING.md) 涵盖 PR 规范。
 
 ---
 
 ## 发布
 
-> 发布会改动外部服务，所以请只在 tracked 工作树干净、发布 tag 已创建且指向`HEAD` 时运行。
-
-`.env` 会被 Git 忽略。第一次使用时，用开发初始化脚本从 `.env.example` 生成，然后只在本地编辑：
+发布操作会改动外部服务，因此请仅在干净的 tracked 工作树中运行。当提供 `--tag` 时，本地回退会在 `HEAD` 创建缺失的本地 tag；已有的 release tag 必须已经指向 `HEAD`。
+`.env` 会被 Git 忽略。使用开发者设置助手从 `.env.example` 生成一次，然后在本地编辑：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\ci\dev_setup.py
@@ -665,28 +856,27 @@ pytest tests/ -m "not integration" -v
 |---|---|---|
 | TestPyPI 演练 | `TEST_PYPI_TOKEN=...` | 默认 `--release-target testpypi`。 |
 | PyPI 正式发布 | `PYPI_TOKEN=...` | 先确认 TestPyPI 包体可用，再用 `--release-target pypi`。 |
-| GitCode Release 附件 | `GITCODE_TOKEN=...` | 只有不传 `--skip-gitcode-release` 时需要。当前仓库未接入 GitCode Release 上传前，`GITCODE_OWNER=` 和 `GITCODE_REPO=` 保持为空。 |
+| GitCode Release 附件 | `GITCODE_TOKEN=...` | 只有不传 `--skip-gitcode-release` 时需要。在 GitCode Release 上传启用前，保持 `GITCODE_OWNER=` 和 `GITCODE_REPO=` 为空。 |
 
-只检查凭据，不构建、不上传：
+只检查凭据，不构建不上传：
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --check-credentials --skip-gitcode-release
 .\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --check-credentials --skip-gitcode-release
 ```
 
-默认发布流程依次执行：加载 `.env`、检查凭据、要求 tracked 工作树干净、创建或验证发布 tag、清理旧产物、release lint、required mypy、release tests、构建/检查/安装包体到`.release-smoke/`、上传到 TestPyPI 或 PyPI，最后上传 GitCode Release 附件（除非跳过）。
-
+正常发布流程依次执行：加载 `.env`、检查凭据、要求 tracked 工作树干净、创建或验证 release tag、清理旧产物、执行 release lint、运行 required mypy、运行 release tests、构建/检查/安装包到 `.release-smoke/`、上传到 TestPyPI 或 PyPI，然后上传 GitCode Release 附件（除非跳过）。
 常用选项：
 
 | 选项 | 作用 |
 |---|---|
-| `--release-target testpypi` | 上传到 TestPyPI，默认值。 |
-| `--release-target pypi` | 上传到 PyPI。 |
-| `--tag v0.0.0` | tag 缺失时在 `HEAD` 创建本地 tag；如果已存在，则要求它指向 `HEAD`。 |
-| `--dry-run` | 跑验证和 package smoke，只列出将上传的内容，不改动 PyPI 或 GitCode。 |
+| `--release-target testpypi` | 上传包到 TestPyPI；默认值。 |
+| `--release-target pypi` | 上传包到 PyPI。 |
+| `--tag v0.0.0` | 在 `HEAD` 创建缺失的本地 tag；如果已存在，要求它指向 `HEAD`。 |
+| `--dry-run` | 运行验证和 package smoke，列出将上传的内容，但不改动 PyPI 或 GitCode。 |
 | `--check-credentials` | 只创建/加载 `.env` 并检查所需 token 名称。 |
 | `--skip-gitcode-release` | 不创建 GitCode Release 附件；当前仓库建议使用。 |
-| `--skip-tests` | 跳过 release pytest 集合；只在已有可信门禁时使用。 |
+| `--skip-tests` | 跳过 release pytest 集合；仅在已有可信门禁时使用。 |
 
 推荐流程：
 
@@ -695,7 +885,7 @@ pytest tests/ -m "not integration" -v
 .\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --dry-run --skip-gitcode-release
 # 只上传包产物到 TestPyPI。
 .\.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target testpypi --tag v0.5.0 --skip-gitcode-release
-# 将包产物晋升上传到生产 PyPI。
+# 将包产物晋升到生产 PyPI。
 \.venv\Scripts\python.exe scripts\ci\local_publish.py --release-target pypi --tag v0.5.0
 ```
 
@@ -703,7 +893,7 @@ pytest tests/ -m "not integration" -v
 
 ## 与上游同步
 
-本 fork 跟踪上游 `clawcodex` 仓库。同步流水线在 `upstream_sync/`，设计文档在 [`upstream_sync/UPSTREAM_SYNC_DESIGN.md`](https://gitcode.com/chadwweng/clawcodex/blob/main/docs/UPSTREAM_SYNC_DESIGN.md)。上游有更新时跑：
+本 fork 跟踪上游 `clawcodex` 仓库。同步流水线在 `upstream_sync/`，设计文档在 [`upstream_sync/UPSTREAM_SYNC_DESIGN.md`](../../upstream_sync/UPSTREAM_SYNC_DESIGN.md)。上游有更新时运行：
 
 ```bash
 python -m upstream_sync.pull --since 2026-05-20
@@ -715,8 +905,7 @@ pytest tests/ -m "not integration" -v
 
 ## 许可证
 
-[MIT](https://gitcode.com/chadwweng/clawcodex/blob/main/LICENSE) —— 与上游 `clawcodex` 相同。`extensions/` 和 `clawcodex_ext/` 内的下游新增也按相同的 MIT 条款发布。
-
+[MIT](../../LICENSE) —— 与上游 `clawcodex` 相同。`extensions/` 和 `clawcodex_ext/` 内的下游新增也按相同的 MIT 条款发布。
 这是一个独立项目，与 Anthropic 无关。基于公开记录的 Claude Code TypeScript 参考实现构建，由上游团队移植到 Python，再在本 fork 中扩展。
 
 ---
@@ -724,8 +913,11 @@ pytest tests/ -m "not integration" -v
 ## 致谢
 
 - **clawcodex** —— 本 fork 所基于的上游 Claude Code Python 移植
+
 - **Claude Code**（Anthropic）—— 原始 TypeScript 架构
+
 - **Aider** · **Cline** · **Continue** · **OpenHands** —— CLI / TUI 模式参考
+
 - **LiteLLM** —— 兜底 provider 层
 
 ---
@@ -733,7 +925,6 @@ pytest tests/ -m "not integration" -v
 <div align="center">
 
 **如果你觉得自主 issue 流水线有用，欢迎 Star ⭐ 支持本仓库。**
-
 [⬆ 回到顶部](#clawcodex-devmind)
 
 </div>
