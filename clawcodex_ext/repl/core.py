@@ -792,6 +792,7 @@ class ClawcodexREPL:
             "/history",
             "/idle",
             "/theme",
+            "/permission",
         ]
         self._built_in_commands = list(self._original_built_ins)
 
@@ -3395,6 +3396,7 @@ class ClawcodexREPL:
                 "compact",  # These need special handling
                 "permission",  # REPL-native permission mode command
                 "tui",  # handoff to Textual TUI
+                "resume",  # REPL-native session resume with browser
                 # TUI-only commands — keep only the truly TUI-specific ones here
                 "repl",
                 "theme",
@@ -3594,6 +3596,62 @@ class ClawcodexREPL:
             else:
                 session_id = parts[1]
                 self.load_session(session_id)
+
+        elif cmd.startswith("/resume"):
+            parts = command.strip().split(maxsplit=1)
+            if len(parts) >= 2 and parts[1].strip():
+                # Session ID provided — load directly
+                self.load_session(parts[1].strip())
+            else:
+                # No session ID — show interactive browser
+                try:
+                    from clawcodex_ext.repl.session_browser import (
+                        browse_sessions_interactive,
+                    )
+
+                    selected_id = browse_sessions_interactive()
+                    if selected_id:
+                        self.load_session(selected_id)
+                    else:
+                        self.console.print(
+                            "[dim]Session selection cancelled.[/dim]"
+                        )
+                except Exception as exc:
+                    # Fallback: list sessions as text
+                    try:
+                        from src.services.session_storage import SessionStorage
+
+                        metas = SessionStorage.list_sessions(limit=50)
+                        if not metas:
+                            self.console.print(
+                                "[yellow]No past sessions found.[/yellow]"
+                            )
+                        else:
+                            self.console.print(
+                                "\n[bold]Available sessions:[/bold]"
+                            )
+                            for i, m in enumerate(metas, 1):
+                                sid = m.session_id[:12]
+                                preview = (
+                                    getattr(m, "title", "")
+                                    or getattr(m, "last_user_input", "")
+                                    or ""
+                                )
+                                if preview:
+                                    preview = preview[:60]
+                                self.console.print(
+                                    f"  {i:>3}. {sid}…  {preview}"
+                                )
+                            self.console.print(
+                                "\n[dim]Use [bold]/resume <session-id>[/bold] "
+                                "or [bold]/load <session-id>[/bold] "
+                                "to restore a session.[/dim]"
+                            )
+                    except Exception:
+                        self.console.print(
+                            "[yellow]No past sessions found. "
+                            "Interactive browser unavailable.[/yellow]"
+                        )
 
         elif cmd == "/skill":
             self._handle_skill_command()
@@ -5247,6 +5305,11 @@ class ClawcodexREPL:
         # Replace current session (bootstrap id + cost already restored
         # by Session.resume).
         self.session = loaded_session
+        # Populate _engine_messages from the restored conversation so the
+        # next chat() call's QueryEngine sees the full history rather than
+        # starting with an empty mutable-message list (which would cause
+        # the model to lose all prior context on resume).
+        self._engine_messages = list(loaded_session.conversation.messages)
         self.console.print(f"[success]Session loaded: {session_id}[/success]")
         self.console.print(
             f"[dim]Provider: {loaded_session.provider}, Model: {loaded_session.model}[/dim]"
