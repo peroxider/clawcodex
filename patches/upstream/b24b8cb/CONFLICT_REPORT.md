@@ -227,3 +227,43 @@ git am --directory=src/upstream/b24b8cb patches/upstream/b24b8cb/merged/*.patch
 ```
 
 > 注：`b24b8cb_series` 文件是兼容性系列（每行加 `merged/` 前缀），quilt 1.x/2.x 均可消费。`series` 文件不带前缀，quilt 2.x 推荐。
+
+---
+
+## 9. `--ignore-format` 模式（2026-06-25 启用）
+
+**背景**：b24b8cb 上游未 ruff 格式化，src/ 已 ruff 格式化（574/576 文件），导致 ~300 个 modified patch 实质是 quote 漂移（`"` ↔ `'`）、行内折行、空格调整——纯格式变化、零语义差异。
+
+**实施**：在 `upstream_sync/core/patch_generator.py` 新增 `ast_equivalent()` 静态方法（用 `ast.unparse` 比较）和 `--ignore-format` CLI flag。
+
+**效果**：
+
+| 指标 | 不带 flag（之前） | `--ignore-format`（现在） |
+|---|---:|---:|
+| Modified patches | 369 | **301** |
+| Total patches | 451 | **383** (-15.1%) |
+| Total size | 3,473,308 B | **3,288,145 B** (-185,163 B, -5.3%) |
+
+**Regen 命令**（必须带 `--ignore-format`）：
+
+```bash
+python3 scripts/regenerate_patches.py \
+  --commit b24b8cb \
+  --preserve-file patches/upstream/b24b8cb/preserve.list \
+  --allow-deletes \
+  --ignore-format
+```
+
+**风险与注意事项**：
+
+1. **Comment-only diff 会被跳过**：`ast.unparse` 剥离 comments，所以纯 comment 改动也会被判定为格式漂移。当前 86 个 verified 文件均无此情况（已抽查 5 个），但**新提交前需再次验证**。
+2. **新上游 sync 流程**：上游 sync 时应先跑 `--ignore-format` regen，对比 manual diff 列表确认无 comment-only 项，再合并。
+3. **强于 `--ignore-quote-style`**：后者只做文本 quote 字符替换（不可靠），前者做 AST 规范化（保留 docstring 内容、字符串前缀、括号化等语义信息）。
+
+**POC 与验证**：
+
+- POC 初估：86 文件 / ~714 KB（双重计算了 `bootstrap/state.py`）
+- 验证后：86 文件 / ~360 KB
+- 实际 regen 跳过：68 文件 / 185 KB（差额 18 个在 `extensions/orchestrator/`，被 `skip_prefixes` 排除）
+- 验证通过：5 个 spot-check 文件均无隐藏语义变化，3 个 keep 文件均为真实差异
+- 稳定性门禁：Stage 1-5 共 262 tests 全绿

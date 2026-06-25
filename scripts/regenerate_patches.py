@@ -91,6 +91,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "('x' vs \"x\") and CRLF→LF line endings. Useful when upstream tooling "
         "re-quotes strings on save without functional change.",
     )
+    parser.add_argument(
+        "--ignore-format",
+        action="store_true",
+        help="Skip diffs whose ``ast.unparse``d form is identical (format-only "
+        "drift such as ruff-format reformatting). Stronger than "
+        "--ignore-quote-style: also normalises whitespace, line-wrap, string "
+        "prefixes, and underscore separators. Caveat: comments are stripped "
+        "by ast.unparse, so a comment-only delta would also be skipped. "
+        "Reviewers must verify the auto-skipped set contains no "
+        "comment-only deltas.",
+    )
     return parser.parse_args(argv)
 
 
@@ -127,6 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             allow_deletes=args.allow_deletes,
             preserve=preserve,
             ignore_quote_style=args.ignore_quote_style,
+            ignore_format=args.ignore_format,
         )
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)

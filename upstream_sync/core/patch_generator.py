@@ -22,6 +22,7 @@ is stripped from all paths so patches use consistent, subpath-relative paths.
 
 from __future__ import annotations
 
+import ast
 import difflib
 import os
 import re
@@ -433,6 +434,36 @@ class PatchGenerator:
         )
 
     @staticmethod
+    def ast_equivalent(upstream_path: Path, src_path: Path) -> bool:
+        """Compare two Python files for AST equivalence (format-insensitive).
+
+        Both files are parsed with ``ast.parse`` and normalised via
+        ``ast.unparse`` to canonical form. Returns True if the canonical forms
+        match — i.e. the only differences are quote style, whitespace,
+        line-wrap, or other non-semantic format changes.
+
+        Used by the ``--ignore-format`` CLI flag to skip patch emission for
+        files where downstream reformatting (e.g. ``ruff format``) is the
+        sole source of the diff.
+
+        Caveats:
+            - Comments are stripped by ``ast.unparse``, so a comment-only
+              change is treated as equivalent. The CLI is opt-in per regen
+              run; reviewers must ensure the auto-skipped set does not
+              contain comment-only deltas.
+            - Docstring *content* changes are preserved by ``ast.unparse``,
+              so semantic docstring edits remain as real patches.
+            - Only Python files (``.py``) are supported; non-Python files
+              raise ``SyntaxError`` and return False.
+        """
+        try:
+            up_norm = ast.unparse(ast.parse(upstream_path.read_text()))
+            src_norm = ast.unparse(ast.parse(src_path.read_text()))
+        except (SyntaxError, ValueError, UnicodeDecodeError):
+            return False
+        return up_norm == src_norm
+
+    @staticmethod
     def normalize_patch_path(path: str) -> str:
         """Convert a relative file path to a patch filename component."""
         name = path.replace("/", "_")
@@ -708,6 +739,7 @@ class PatchGenerator:
         skip_dirs: set[str] | None = None,
         skip_suffixes: tuple[str, ...] = REGENERATE_SKIP_SUFFIXES,
         ignore_quote_style: bool = False,
+        ignore_format: bool = False,
     ) -> RegenerateResult:
         """Regenerate all overlay patches from an upstream snapshot.
 
@@ -734,6 +766,15 @@ class PatchGenerator:
                 CRLF→LF line endings as identical so they do not produce a
                 modified patch. Use for noisy diffs from upstream tooling that
                 re-quotes strings on save.
+        ignore_format: When True, treat files whose ``ast.unparse``d form is
+                identical as identical, so downstream-only formatting (e.g.
+                ``ruff format`` reformatting) does not produce a modified
+                patch. Stronger than ``ignore_quote_style`` because it
+                normalises whitespace, line-wrap, string prefixes, and
+                underscore separators — not just quote style. Caveat: comments
+                are stripped by ``ast.unparse``, so a comment-only delta
+                would also be skipped. Reviewers must verify the skipped set
+                contains no comment-only deltas.
 
         Returns:
             ``RegenerateResult`` with summary and file paths.
@@ -785,6 +826,13 @@ class PatchGenerator:
                 upstream / relative_path,
                 src / relative_path,
                 loose=ignore_quote_style,
+            )
+            and not (
+                ignore_format
+                and self.ast_equivalent(
+                    upstream / relative_path,
+                    src / relative_path,
+                )
             )
         )
         new_files = sorted(src_files - upstream_files)
