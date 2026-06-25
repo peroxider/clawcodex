@@ -82,6 +82,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 $WarningPreference     = 'Continue'
 
+# Ensure TLS 1.2 is used for all network calls.  On Windows PowerShell 5.1 the
+# default is TLS 1.0 which causes Invoke-WebRequest / Invoke-RestMethod to
+# fail when connecting to GitHub / api.github.com.  PowerShell 7+ already
+# defaults to TLS 1.2, but setting it explicitly does no harm.
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+
 # Ensure console speaks UTF-8 so non-ASCII (e.g. Chinese help) renders correctly.
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -340,6 +346,7 @@ function script:Install-Uv {
     # Strategy 2: Direct binary download from GitHub releases
     Log-Info 'Downloading uv from GitHub releases ...'
     $uvInstallDir = Join-Path $env:USERPROFILE '.local'
+    $zipPath = $null
     try {
         # Detect architecture
         $arch = 'x86_64'
@@ -373,8 +380,10 @@ function script:Install-Uv {
         }
     } catch {
         Log-Warn "GitHub binary download failed: $_"
-        # Cleanup partial files
-        try { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue } catch { }
+        # Cleanup partial files (zipPath may be null if failure occurred early)
+        if ($zipPath -and (Test-Path $zipPath)) {
+            try { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue } catch { }
+        }
     }
 
     # If all strategies fail, give the user a clear error with manual install steps
