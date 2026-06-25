@@ -82,6 +82,45 @@ class _InMemoryKeyringBackend:
             raise PasswordDeleteError(f"No such entry: {service}/{username}")
 
 
+@pytest.fixture
+def isolated_tmp_repo(tmp_path):
+    """Initialize a minimal git repo on ``tmp_path`` with deterministic identity.
+
+    Sets ``user.email=test@test`` and ``user.name=Test`` (local scope only)
+    so commits are reproducible. Runs ``git init`` with ``-b main`` so the
+    default branch is named ``main`` (matching GitHub/GitCode convention).
+    Returns ``tmp_path`` ready to commit into.
+
+    Project-wide so both ``tests/stability_gate/`` (future transcript
+    tests) and ``tests/orchestrator/`` (P0-3 ``_status_snapshot``
+    snapshot tests) can reuse the same minimal-repo boilerplate.
+    """
+    import subprocess
+
+    subprocess.run(
+        ["git", "init", "-b", "main"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@test"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test"],
+        cwd=str(tmp_path),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return tmp_path
+
+
 @pytest.fixture(autouse=True)
 def _isolate_mcp_keyring(request, monkeypatch):
     """Swap ``keyring.get_keyring()`` to a per-test in-memory backend so

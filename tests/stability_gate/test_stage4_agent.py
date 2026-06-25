@@ -64,6 +64,292 @@ class TestStage4Conversation:
             assert msgs[-1]["content"] == "Assistant response 2"
 
 
+class TestStage4ConversationSnapshot:
+    """Byte-level snapshot tests for Conversation.to_dict() / from_dict().
+
+    P0-3: locks the wire format so any field rename, message reorder, or
+    content-block schema change fails the test instead of silently drifting.
+    Volatility sources (uuid4, datetime.now) are pinned via the
+    ``pinned_message_factory`` fixture.
+
+    NOTE: use ``from src.types.messages import ...`` rather than the
+    ``clawcodex_ext.types.messages`` import path so the snapshot is
+    anchored against the public facade — that's the path consumers
+    actually import through.
+    """
+
+    _PINNED_USER_UUID = "00000000-0000-0000-0000-000000000001"
+    _PINNED_ASSISTANT_UUID = "00000000-0000-0000-0000-000000000002"
+    _PINNED_RESULT_UUID = "00000000-0000-0000-0000-000000000003"
+    _PINNED_TS = "2026-01-01T00:00:00"
+    _PINNED_TS_PLUS_1 = "2026-01-01T00:00:01"
+    _PINNED_TS_PLUS_2 = "2026-01-01T00:00:02"
+
+    def test_conversation_empty_snapshot(self):
+        """Empty Conversation.to_dict() byte-stable shape.
+
+        Locks ``{"messages": [], "max_history": 2000}`` so the default cap
+        bump (100 → 2000) and any future reordering of the dict keys
+        fails the test instead of silently passing.
+        """
+        from src.agent.conversation import Conversation
+
+        conv = Conversation()
+        assert conv.to_dict() == {"messages": [], "max_history": 2000}
+
+    def test_conversation_to_dict_byte_level_single_user(self):
+        """Single pinned UserMessage → byte-stable dict shape.
+
+        Locks the full 7-field envelope (role / content / type / uuid /
+        timestamp / isMeta / isVirtual / isCompactSummary). Any new field
+        added by ``message_to_dict`` or any existing field renamed/removed
+        must surface as a test diff — preventing silent drift in
+        transcript-on-disk JSON.
+        """
+        from src.agent.conversation import Conversation
+        from src.types.messages import create_user_message
+
+        conv = Conversation()
+        conv.messages.append(
+            create_user_message(
+                "hello world",
+                uuid=self._PINNED_USER_UUID,
+                timestamp=self._PINNED_TS,
+            )
+        )
+        assert conv.to_dict() == {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "hello world",
+                    "type": "user",
+                    "uuid": self._PINNED_USER_UUID,
+                    "timestamp": self._PINNED_TS,
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                }
+            ],
+            "max_history": 2000,
+        }
+
+    def test_conversation_to_dict_byte_level_multi_turn(self):
+        """Three-turn (user/assistant/user/assistant) byte-stable shape.
+
+        Verifies message ordering is preserved and the assistant side
+        emits a ``content: [...]`` list-of-blocks (vs. the user side's
+        plain string). ``stop_reason`` field on AssistantMessage MUST be
+        omitted when default ``None`` per ``message_to_dict``'s ``is not None``
+        filter — locking that here so a future refactor that emits
+        ``"stop_reason": null`` explicitly is caught.
+        """
+        from src.agent.conversation import Conversation
+        from src.types.messages import (
+            AssistantMessage,
+            UserMessage,
+            create_user_message,
+        )
+        from src.types.content_blocks import TextBlock
+
+        conv = Conversation()
+        conv.messages.append(
+            create_user_message(
+                "turn 1 user",
+                uuid="00000000-0000-0000-0000-000000000001",
+                timestamp="2026-01-01T00:00:00",
+            )
+        )
+        conv.messages.append(
+            AssistantMessage(
+                content=[TextBlock(text="turn 1 assistant")],
+                uuid="00000000-0000-0000-0000-000000000002",
+                timestamp="2026-01-01T00:00:01",
+            )
+        )
+        conv.messages.append(
+            create_user_message(
+                "turn 2 user",
+                uuid="00000000-0000-0000-0000-000000000003",
+                timestamp="2026-01-01T00:00:02",
+            )
+        )
+        assert conv.to_dict() == {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "turn 1 user",
+                    "type": "user",
+                    "uuid": "00000000-0000-0000-0000-000000000001",
+                    "timestamp": "2026-01-01T00:00:00",
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "turn 1 assistant"}],
+                    "type": "assistant",
+                    "uuid": "00000000-0000-0000-0000-000000000002",
+                    "timestamp": "2026-01-01T00:00:01",
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+                {
+                    "role": "user",
+                    "content": "turn 2 user",
+                    "type": "user",
+                    "uuid": "00000000-0000-0000-0000-000000000003",
+                    "timestamp": "2026-01-01T00:00:02",
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+            ],
+            "max_history": 2000,
+        }
+
+    def test_conversation_round_trip_byte_stable(self):
+        """to_dict → from_dict → to_dict must be byte-stable.
+
+        Locks the round-trip invariant: any field dropped or transformed
+        during ``from_dict`` (e.g. lossy coercion, default-value drift)
+        surfaces as a diff on the second ``to_dict`` call.
+        """
+        from src.agent.conversation import Conversation
+        from src.types.messages import (
+            AssistantMessage,
+            UserMessage,
+            create_user_message,
+        )
+        from src.types.content_blocks import TextBlock
+
+        conv = Conversation()
+        conv.messages.append(
+            create_user_message(
+                "ping",
+                uuid="00000000-0000-0000-0000-000000000001",
+                timestamp="2026-01-01T00:00:00",
+            )
+        )
+        conv.messages.append(
+            AssistantMessage(
+                content=[TextBlock(text="pong")],
+                uuid="00000000-0000-0000-0000-000000000002",
+                timestamp="2026-01-01T00:00:01",
+            )
+        )
+        first = conv.to_dict()
+        reloaded = Conversation.from_dict(first)
+        assert reloaded.to_dict() == first, (
+            "round-trip drift detected; from_dict likely dropped a field "
+            "or re-emitted a default that the original to_dict omitted"
+        )
+
+    def test_conversation_with_tool_use_and_result(self):
+        """AssistantMessage(tool_use) + UserMessage(tool_result) snapshot.
+
+        Locks the wire shape of the two most common content blocks
+        outside text: ``tool_use`` (id/name/input) and ``tool_result``
+        (tool_use_id/content/is_error). Any future rename of
+        ``tool_use_id`` → ``id`` on the result block, or addition of a
+        required field to tool_use blocks, must surface here.
+        """
+        from src.agent.conversation import Conversation
+        from src.types.messages import (
+            AssistantMessage,
+            UserMessage,
+            create_user_message,
+        )
+        from src.types.content_blocks import (
+            TextBlock,
+            ToolResultBlock,
+            ToolUseBlock,
+        )
+
+        conv = Conversation()
+        conv.messages.append(
+            create_user_message(
+                "read foo",
+                uuid=self._PINNED_USER_UUID,
+                timestamp=self._PINNED_TS,
+            )
+        )
+        conv.messages.append(
+            AssistantMessage(
+                content=[
+                    TextBlock(text="reading"),
+                    ToolUseBlock(id="tool_call_1", name="Read", input={"file_path": "/foo"}),
+                ],
+                uuid=self._PINNED_ASSISTANT_UUID,
+                timestamp=self._PINNED_TS_PLUS_1,
+            )
+        )
+        conv.messages.append(
+            UserMessage(
+                content=[
+                    ToolResultBlock(
+                        tool_use_id="tool_call_1",
+                        content="OK",
+                        is_error=False,
+                    )
+                ],
+                uuid=self._PINNED_RESULT_UUID,
+                timestamp=self._PINNED_TS_PLUS_2,
+            )
+        )
+        assert conv.to_dict() == {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "read foo",
+                    "type": "user",
+                    "uuid": self._PINNED_USER_UUID,
+                    "timestamp": self._PINNED_TS,
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "reading"},
+                        {
+                            "type": "tool_use",
+                            "id": "tool_call_1",
+                            "name": "Read",
+                            "input": {"file_path": "/foo"},
+                        },
+                    ],
+                    "type": "assistant",
+                    "uuid": self._PINNED_ASSISTANT_UUID,
+                    "timestamp": self._PINNED_TS_PLUS_1,
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "tool_call_1",
+                            "content": "OK",
+                            "is_error": False,
+                        }
+                    ],
+                    "type": "user",
+                    "uuid": self._PINNED_RESULT_UUID,
+                    "timestamp": self._PINNED_TS_PLUS_2,
+                    "isMeta": False,
+                    "isVirtual": False,
+                    "isCompactSummary": False,
+                },
+            ],
+            "max_history": 2000,
+        }
+
+
 class TestStage4MessageTypes:
     """消息类型和 API payload 转换测试。"""
 
