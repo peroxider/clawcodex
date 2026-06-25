@@ -371,36 +371,9 @@ function script:Install-Uv {
         try { Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue } catch { }
     }
 
-    # Strategy 3: Official astral.sh installer (last resort)
-    # We download the script to a temp file first, then execute it.  This
-    # avoids the "position parameter" crash that occurs when the astral.sh
-    # installer is invoked via `irm | iex` — in that mode
-    # $MyInvocation.MyCommand.Path resolves to a transient temp path (e.g.
-    # C:\Users\AppData\Local\Temp\cc.ps1), and the installer's internal retry
-    # logic passes it as a positional argument which PowerShell rejects.
-    Log-Info 'Falling back to official astral.sh installer ...'
-    try {
-        $env:UV_INSTALL_DIR = $uvInstallDir
-        $installerPath = Join-Path $env:TEMP 'uv_install.ps1'
-        Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -OutFile $installerPath -UseBasicParsing -ErrorAction Stop | Out-Null
-        & $installerPath
-        Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue
-        $env:Path = "$LocalBin;$((Join-Path $env:USERPROFILE '.cargo\bin'));$env:Path"
-        $uv = Get-Command uv -ErrorAction SilentlyContinue
-        if ($uv) {
-            $uvVer = (& uv --version) -replace '^uv\s+', ''
-            Log-Ok "uv $uvVer installed"
-            return
-        }
-    } catch {
-        Log-Warn "astral.sh installer failed: $_"
-        # Cleanup partial temp file
-        try { Remove-Item -Path $installerPath -Force -ErrorAction SilentlyContinue } catch { }
-    }
-
     # If all strategies fail, give the user a clear error with manual install steps
     Die-With-Help 'All uv installation methods failed.' `
-        'Manual install:  irm https://astral.sh/uv/install.ps1 | iex' `
+        'Manual install (recommended):  iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex' `
         "Or download:     https://github.com/astral-sh/uv/releases" `
         "Then add to PATH: $LocalBin" `
         "Retry:           $SponsorScript"
