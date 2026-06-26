@@ -28,7 +28,7 @@ from src.coordinator.mode import (
     is_coordinator_mode,
     match_session_mode,
 )
-from src.coordinator.prompt import get_coordinator_system_prompt
+from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
 from src.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
 
 SNAPSHOT_PATH = (
