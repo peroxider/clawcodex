@@ -24,7 +24,8 @@ This directory contains the code changes made by ClawCodex for this issue.
 - 📄 `MANIFEST.in`
 - 📄 `PATH_I_REVERT.md`
 - 📄 `README.md`
-- ... and 22 more
+- 📄 `README.md.raw`
+- ... and 21 more
 
 ## Verification
 
