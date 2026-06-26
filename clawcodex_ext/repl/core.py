@@ -1027,7 +1027,7 @@ class ClawcodexREPL:
             # provider + main model, so a stale config under an
             # unsupported provider shows "(inactive)" rather than lying.
             from src.utils.advisor import format_advisor_status
-            from src.permissions import permission_mode_short_title
+            from clawcodex_ext.permissions import permission_mode_short_title
 
             advisor_seg = format_advisor_status(self.provider, model)
             advisor_part = f" {advisor_seg} ·" if advisor_seg else ""
@@ -3981,7 +3981,7 @@ class ClawcodexREPL:
         Without arguments: show current mode + interactive selection menu.
         With a mode name: directly set the permission mode.
         """
-        from src.permissions import (
+        from clawcodex_ext.permissions import (
             EXTERNAL_PERMISSION_MODES,
             PermissionMode,
             permission_mode_short_title,

@@ -381,7 +381,7 @@ def run_headless(options: HeadlessOptions) -> int:
                         ).prompt
                         effective_system_prompt = (
                             build_effective_system_prompt(
-                                _style_prompt, tool_context, provider=provider,
+                                _style_prompt, tool_context,
                             )
                         )
                         if options.append_system_prompt:
