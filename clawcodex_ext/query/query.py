@@ -28,6 +28,31 @@ from clawcodex_ext.providers.base import BaseProvider, ChatResponse
 
 from .config import QueryConfig, build_query_config
 from .hook_registry import call_hooks, LoopHookPhase
+
+# ---------------------------------------------------------------------------
+# F-68: Feature-gate helper for hook phases.
+# Wraps hook invocation so that HOOK_PRE_LLM / HOOK_POST_LLM flags can
+# disable the entire hook pipeline without changing the call sites.
+# ---------------------------------------------------------------------------
+
+def _call_hooks_if_enabled(phase: LoopHookPhase, *args: Any, **kwargs: Any) -> tuple[Any, ...]:
+    """Call hooks only when the corresponding feature gate is enabled.
+
+    The ``HOOK_PRE_LLM`` flag gates ``pre_llm`` hooks,
+    ``HOOK_POST_LLM`` gates ``post_llm`` hooks.  All other phases
+    remain unconditionally enabled.
+    """
+    from clawcodex_ext.feature_gate import guarded_is_enabled
+
+    gate_map = {
+        "pre_llm": "HOOK_PRE_LLM",
+        "post_llm": "HOOK_POST_LLM",
+    }
+    gate_name = gate_map.get(phase)
+    if gate_name and not guarded_is_enabled(gate_name):
+        # Feature gate is disabled — return args unchanged.
+        return args
+    return call_hooks(phase, *args, **kwargs)
 from .recovery_strategies import RecoveryContext, find_recovery_strategies
 from .transitions import (
     QueryState,
@@ -1446,7 +1471,7 @@ async def query(
         # 允许外部策略（如 F-69 Budget Mode）在 _call_model_sync 之前
         # 修改 messages 或 system_prompt，无需修改 query() 函数体。
         current_system_prompt = params.system_prompt
-        hook_result = call_hooks(
+        hook_result = _call_hooks_if_enabled(
             "pre_llm", messages, current_system_prompt, state=state, params=params
         )
         messages = hook_result[0]
@@ -1567,7 +1592,7 @@ async def query(
             needs_follow_up = len(tool_use_blocks) > 0
 
             # P102-D: post_llm hook — LLM 响应返回后、工具执行前
-            hook_result = call_hooks("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
+            hook_result = _call_hooks_if_enabled("post_llm", assistant_messages, tool_use_blocks, state=state, params=params)
             assistant_messages = hook_result[0]
             tool_use_blocks = hook_result[1]
 
@@ -1725,7 +1750,7 @@ async def query(
         setattr(tool_use_context, "_active_provider", params.provider)
 
         # P102-D: pre_tool hook — 在工具执行之前允许外部策略修改 tool_use_blocks
-        hook_result = call_hooks("pre_tool", tool_use_blocks, state=state, params=params)
+        hook_result = _call_hooks_if_enabled("pre_tool", tool_use_blocks, state=state, params=params)
         tool_use_blocks = hook_result[0]
 
         tool_results = await _run_tools_partitioned(
@@ -1736,7 +1761,7 @@ async def query(
         )
 
         # P102-D: post_tool hook — 在工具执行之后允许外部策略修改 tool_results
-        hook_result = call_hooks("post_tool", tool_results, state=state, params=params)
+        hook_result = _call_hooks_if_enabled("post_tool", tool_results, state=state, params=params)
         tool_results = hook_result[0]
 
         if _diag:

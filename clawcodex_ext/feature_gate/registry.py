@@ -193,3 +193,133 @@ class FeatureRegistry:
     def get_effective_states(self) -> dict[str, bool]:
         """Return a snapshot of all registered feature states."""
         return {name: self.is_enabled(name) for name in self._features}
+
+    # ------------------------------------------------------------------
+    # Circular dependency detection
+    # ------------------------------------------------------------------
+
+    def detect_circular_deps(self) -> list[list[str]]:
+        """Detect circular dependency chains among registered features.
+
+        Returns:
+            A list of cycles, where each cycle is a list of feature names
+            forming a directed loop.  An empty list means no cycles exist.
+        """
+        cycles: list[list[str]] = []
+        visited: set[str] = set()
+        rec_stack: set[str] = set()
+
+        def _dfs(node: str, path: list[str]) -> None:
+            visited.add(node)
+            rec_stack.add(node)
+            path.append(node)
+
+            flag = self._features.get(node)
+            if flag:
+                for dep in flag.deps:
+                    if dep not in self._features:
+                        continue  # external dep, skip
+                    if dep not in visited:
+                        _dfs(dep, path)
+                    elif dep in rec_stack:
+                        # Found a cycle — extract it.
+                        cycle_start = path.index(dep)
+                        cycle = path[cycle_start:] + [dep]
+                        cycles.append(cycle)
+
+            path.pop()
+            rec_stack.discard(node)
+
+        for name in self._features:
+            if name not in visited:
+                _dfs(name, [])
+
+        return cycles
+
+    # ------------------------------------------------------------------
+    # Transitive dependency resolution
+    # ------------------------------------------------------------------
+
+    def get_transitive_deps(self, name: str) -> list[str]:
+        """Return all transitive dependencies of *name* (direct + indirect).
+
+        Only includes features that are actually registered.  The result
+        is topologically ordered so that dependencies appear before the
+        features that depend on them.
+
+        Args:
+            name: The feature flag name.
+
+        Returns:
+            A deduplicated list of transitive dependency names.
+        """
+        flag = self._features.get(name)
+        if not flag:
+            return []
+
+        result: list[str] = []
+        seen: set[str] = set()
+
+        def _collect(n: str) -> None:
+            if n in seen:
+                return
+            seen.add(n)
+            f = self._features.get(n)
+            if not f:
+                return
+            for dep in f.deps:
+                if dep in self._features and dep != n:
+                    _collect(dep)
+            result.append(n)
+
+        _collect(name)
+        # Remove the feature itself; return only its deps.
+        return [r for r in result if r != name]
+
+    def resolve_all_deps(self) -> dict[str, list[str]]:
+        """Compute transitive dependencies for every registered feature.
+
+        Returns:
+            A dict mapping feature name → list of transitive deps.
+        """
+        return {name: self.get_transitive_deps(name) for name in self._features}
+
+    # ------------------------------------------------------------------
+    # Validation helpers
+    # ------------------------------------------------------------------
+
+    def validate_all(self) -> tuple[bool, list[str]]:
+        """Validate all registered features.
+
+        Checks for:
+        - Circular dependencies
+        - Missing dependencies (referenced but not registered)
+        - Self-referential deps
+
+        Returns:
+            ``(ok, errors)`` — ``ok`` is ``True`` when there are no issues.
+        """
+        errors: list[str] = []
+
+        # Circular deps
+        cycles = self.detect_circular_deps()
+        for cycle in cycles:
+            errors.append(f"Circular dependency detected: {' -> '.join(cycle)}")
+
+        # Missing deps
+        for name, flag in self._features.items():
+            for dep in flag.deps:
+                if dep not in self._features:
+                    errors.append(
+                        f"Feature '{name}' depends on unregistered feature '{dep}'"
+                    )
+            for mx in flag.mutex_with:
+                if mx not in self._features:
+                    errors.append(
+                        f"Feature '{name}' mutex-with unregistered feature '{mx}'"
+                    )
+            # Self-reference
+            if name in flag.deps:
+                errors.append(f"Feature '{name}' has a self-referential dependency")
+
+        return (len(errors) == 0, errors)
