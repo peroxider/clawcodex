@@ -383,7 +383,7 @@ class LiveStatus:
             # fires once per ``LiveStatus`` instance, not on every
             # Shift+Tab press, so the log stays quiet at runtime.
             try:
-                from src.permissions import cycle_permission_mode
+                from clawcodex_ext.permissions import cycle_permission_mode
                 from src.permissions.types import ToolPermissionContext
 
                 on_submit = self._on_submit

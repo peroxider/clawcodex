@@ -84,7 +84,7 @@ def build_scope_aware_memory_prompt(
     # Lazy import: ``src.memdir`` may not be importable in all contexts
     # (e.g. CLI subcommands that don't need the full agent loop).
     try:
-        from src.memdir import load_memory_prompts
+        from clawcodex_ext.memdir.memdir import load_memory_prompts
     except ImportError:
         logger.debug("src.memdir not available — skipping scope-aware memory")
         return None

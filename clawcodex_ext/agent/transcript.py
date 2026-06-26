@@ -181,6 +181,19 @@ def get_main_transcript_path(session_id: str) -> str:
     return str(Path.home() / ".clawcodex" / "sessions" / safe_id / "transcript.jsonl")
 
 
+def get_workflow_run_path(run_id: str) -> str:
+    """Absolute path to a workflow run's journal file.
+
+    Layout: ``~/.clawcodex/transcripts/workflows/<run_id>.json``. The
+    Workflow tool persists per-run journals here so that resumed runs
+    can replay completed ``agent()`` calls from disk.
+    """
+    safe_id = _sanitize_agent_id(run_id)
+    root = _transcripts_root() / "workflows"
+    root.mkdir(parents=True, exist_ok=True)
+    return str(root / f"{safe_id}.json")
+
+
 def _sanitize_agent_id(agent_id: str) -> str:
     """Reject path-traversing agent_ids before we touch the filesystem.
 
@@ -590,6 +603,7 @@ __all__ = [
     "TranscriptReader",
     "get_agent_transcript_path",
     "get_main_transcript_path",
+    "get_workflow_run_path",
     "ensure_transcript_dir",
     "register_transcript_path_resolver",
     "nested_session_path_resolver",

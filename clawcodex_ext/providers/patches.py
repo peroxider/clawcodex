@@ -39,7 +39,7 @@ def _patch_discovery_chain() -> None:
     not pay a cold-start penalty.
     """
     try:
-        from src.providers.model_registry import ModelRegistry
+        from clawcodex_ext.cli.model_cmd.registry import ModelRegistry
 
         registry = ModelRegistry()
         # Warm the discovery cache for openai-codex so the first

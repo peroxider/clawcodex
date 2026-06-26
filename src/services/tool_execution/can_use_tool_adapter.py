@@ -45,7 +45,7 @@ def build_can_use_tool(context: Any) -> Callable[..., dict[str, Any]]:
     ) -> dict[str, Any]:
         from src.permissions.check import has_permissions_to_use_tool
         from src.permissions.handler import handle_permission_ask
-        from src.tool_system.registry import _apply_and_persist_updates
+        from clawcodex_ext.tool_system.registry import _apply_and_persist_updates
 
         decision = has_permissions_to_use_tool(
             tool,

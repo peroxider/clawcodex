@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import tempfile
 import threading
 from pathlib import Path
@@ -15,8 +16,12 @@ from clawcodex_ext.permissions.check import has_permissions_to_use_tool
 from clawcodex_ext.permissions.handler import handle_permission_ask
 from clawcodex_ext.permissions.types import (
     PermissionAskDecision,
+    PermissionUpdate,
     ToolPermissionContext,
 )
+
+log = logging.getLogger(__name__)
+
 
 # Tools that modify files on disk — blocked in plan mode unless targeting
 # a temporary / scratch path.
@@ -26,6 +31,53 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
 
 # Resolved once: system temp directory (e.g. /tmp, %TEMP%).
 _SYSTEM_TEMP_DIR: Path = Path(tempfile.gettempdir()).resolve()
+
+
+def _apply_and_persist_updates(
+    context: ToolContext, updates: tuple[PermissionUpdate, ...]
+) -> None:
+    """Apply accepted "don't ask again" updates and persist them.
+
+    In-memory application makes the rule effective for later dispatches
+    through THIS ToolContext. Persistence (for userSettings/projectSettings/
+    localSettings destinations) makes it survive restarts, read back at
+    startup via ``setup_permissions``. Both halves are best-effort: a failed
+    settings write must never fail the already-approved tool call — but it is
+    logged, since the user was just promised "don't ask again".
+    """
+
+    from src.permissions.settings_paths import settings_path_for_destination
+    from clawcodex_ext.permissions.updates import (
+        apply_permission_updates,
+        persist_permission_updates,
+        supports_persistence,
+    )
+
+    try:
+        # apply_permission_updates returns a FRESH context (input unchanged)
+        # — rebind it so every later dispatch sees the new rules.
+        context.permission_context = apply_permission_updates(
+            context.permission_context, list(updates)
+        )
+    except Exception:
+        log.exception("failed to apply accepted permission updates in-memory")
+    try:
+        cwd = str(context.workspace_root) if context.workspace_root else None
+        results = persist_permission_updates(
+            list(updates),
+            settings_path_for_destination=lambda destination: (
+                settings_path_for_destination(destination, cwd)
+            ),
+        )
+        for update, ok in zip(updates, results):
+            if not ok and supports_persistence(update.destination):
+                log.warning(
+                    "permission update not persisted (destination=%s); "
+                    "the rule applies this session only",
+                    update.destination,
+                )
+    except Exception:
+        log.exception("failed to persist accepted permission updates")
 
 
 def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolContext) -> bool:
