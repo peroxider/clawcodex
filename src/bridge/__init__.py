@@ -11,6 +11,12 @@ write ``from src.bridge import BoundedUUIDSet`` rather than the full path.
 Per refactoring plan §4 risk row, every re-export must be importable
 cleanly with no Phase 2 module present — verified by the legacy
 test_porting_workspace test which would otherwise fail at import time.
+
+Batch J rerouted the remaining src-to-src imports in this aggregator to
+``clawcodex_ext.bridge.*`` (the downstream patch layer), leaving
+``src/bridge/__init__.py`` as the canonical re-export surface while
+preserving the ``src/bridge/`` package path for sibling submodules such as
+``src.bridge.repl_bridge`` and ``src.bridge.remote_bridge_core``.
 """
 
 from __future__ import annotations
@@ -33,7 +39,7 @@ PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_CO
 # -----------------------------------------------------------------------------
 
 from clawcodex_ext.bridge.bounded_uuid_set import BoundedUUIDSet
-from src.bridge.bridge_api import (
+from clawcodex_ext.bridge.bridge_api import (
     ANTHROPIC_VERSION,
     BETA_HEADER,
     create_bridge_api_client,
@@ -51,7 +57,7 @@ from clawcodex_ext.bridge.bridge_permission_callbacks import (
     BridgePermissionResponse,
     is_bridge_permission_response,
 )
-from src.bridge.bridge_status_util import (
+from clawcodex_ext.bridge.bridge_status_util import (
     BridgeStatusInfo,
     build_active_footer_text,
     build_bridge_connect_url,
@@ -81,7 +87,7 @@ from clawcodex_ext.bridge.exceptions import (
     EpochSupersededError,
 )
 from clawcodex_ext.bridge.flush_gate import FlushGate
-from src.bridge.inbound_messages import (
+from clawcodex_ext.bridge.inbound_messages import (
     extract_inbound_message_fields,
     normalize_image_blocks,
 )
@@ -99,14 +105,14 @@ from clawcodex_ext.bridge.repl_bridge_handle import (
 
 # Lazy re-export of the Phase 5 orchestrator surface. ``remote_bridge_core``
 # transitively imports ``repl_bridge_transport`` → ``src.transports.ccr_client``
-# → ``src.bridge.exceptions``. Eagerly importing here triggers a circular
-# import the first time any consumer starts at ``src.transports.ccr_client``
-# (the ``exceptions`` import re-enters ``bridge/__init__.py`` mid-load).
+# → ``clawcodex_ext.bridge.exceptions``. Eagerly importing here triggers a
+# circular import the first time any consumer starts at ``src.transports.ccr_client``
+# (the ``exceptions`` import re-enters ``src/bridge/__init__.py`` mid-load).
 # PEP 562 ``__getattr__`` defers the import until first attribute access,
-# which by then has ``bridge/__init__.py`` fully loaded.
+# which by then has ``src/bridge/__init__.py`` fully loaded.
 def __getattr__(name: str) -> object:
     if name in ('init_env_less_bridge_core', 'EnvLessBridgeParams', 'RemoteBridgeHandle'):
-        from src.bridge import remote_bridge_core as _rbc
+        import extensions.ports.bridge.remote_bridge_core as _rbc
 
         return getattr(_rbc, name)
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
@@ -117,7 +123,7 @@ from clawcodex_ext.bridge.session_id_compat import (
     to_compat_session_id,
     to_infra_session_id,
 )
-from src.bridge.types import (
+from clawcodex_ext.bridge.types import (
     BRIDGE_LOGIN_ERROR,
     BRIDGE_LOGIN_INSTRUCTION,
     DEFAULT_SESSION_TIMEOUT_MS,
@@ -125,7 +131,7 @@ from src.bridge.types import (
     BridgeConfig,
     SessionActivity,
 )
-from src.bridge.work_secret import (
+from clawcodex_ext.bridge.work_secret import (
     WorkSecret,
     build_ccr_v2_sdk_url,
     build_sdk_url,
