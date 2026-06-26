@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.coordinator.mode import (
+from clawcodex_ext.coordinator.mode import (
     INTERNAL_WORKER_TOOLS,
     filter_coordinator_tools,
     filter_worker_tools,
@@ -29,7 +29,7 @@ from src.coordinator.mode import (
     match_session_mode,
 )
 from clawcodex_ext.coordinator.prompt import get_coordinator_system_prompt
-from src.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
+from clawcodex_ext.coordinator.worker_agent import WORKER_AGENT, get_coordinator_agents
 
 SNAPSHOT_PATH = (
     Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'coordinator.json'
