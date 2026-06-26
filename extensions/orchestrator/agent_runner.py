@@ -2114,12 +2114,14 @@ class AgentRunner:
                     try:
                         import subprocess
 
+                        _env = self._build_subprocess_env()
                         proc = subprocess.run(
                             ["git", "status", "--porcelain"],
                             cwd=str(ws_path),
                             capture_output=True,
                             text=True,
                             timeout=10,
+                            env=_env,
                         )
                         if proc.returncode != 0:
                             return True, refreshed_issue
@@ -2133,6 +2135,7 @@ class AgentRunner:
                                 capture_output=True,
                                 text=True,
                                 timeout=10,
+                                env=_env,
                             )
                             current_head = head_proc.stdout.strip()
                             head_changed = bool(current_head and current_head != start_commit_sha)
@@ -2187,6 +2190,7 @@ class AgentRunner:
                             capture_output=True,
                             text=True,
                             timeout=10,
+                            env=self._build_subprocess_env(),
                         )
                         if proc.returncode != 0:
                             return True, refreshed_issue
@@ -2206,6 +2210,23 @@ class AgentRunner:
                         pass  # Fail-open
 
         return is_active, refreshed_issue
+
+    def _build_subprocess_env(self) -> dict[str, str] | None:
+        """Build env dict by merging workflow-configured env over daemon env.
+
+        Returns None when no custom env is configured so callers inherit
+        the parent's environment unchanged (avoids unnecessary copies).
+        """
+        custom_env = getattr(self.agent_config, "env", None)
+        if not custom_env:
+            return None
+        base = os.environ.copy()
+        for key, value in custom_env.items():
+            if key == "PATH" and value:
+                base["PATH"] = value.replace("$PATH", base.get("PATH", ""))
+            else:
+                base[key] = value
+        return base
 
     def _inject_operator_hints(self, workspace: Any) -> None:
         """Check for operator hints in workspace and inject into context.
@@ -2261,12 +2282,14 @@ class AgentRunner:
             600_000,
         )
         try:
+            _env = self._build_subprocess_env()
             proc = await asyncio.create_subprocess_shell(
                 test_cmd,
                 cwd=str(ws_path),
                 preexec_fn=_set_pdeathsig,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=_env,
             )
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(),

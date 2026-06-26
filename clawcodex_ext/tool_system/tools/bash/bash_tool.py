@@ -65,6 +65,7 @@ def _run_bash_with_abort(
     cwd: str,
     timeout_s: int,
     abort_signal: Any | None,
+    env: dict[str, str] | None = None,
 ) -> _BashRunResult:
     """Run ``argv`` with abort + timeout supervision.
 
@@ -103,6 +104,16 @@ def _run_bash_with_abort(
     _conda_bin = "/root/Conda/bin"
     if _conda_bin not in _base_env.get("PATH", ""):
         _base_env["PATH"] = f"{_conda_bin}:{_base_env.get('PATH', '')}"
+    # Merge workflow-configured env vars; these override inherited env
+    # so users can extend PATH per workflow.
+    if env:
+        for key, value in env.items():
+            if key == "PATH" and value:
+                # PATH values are typically prefixes/suffixes that reference
+                # the existing PATH via $PATH; expand the placeholder.
+                _base_env["PATH"] = value.replace("$PATH", _base_env.get("PATH", ""))
+            else:
+                _base_env[key] = value
     popen_kwargs["env"] = _base_env
     if _sys_mod.platform == "win32":
         popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -379,6 +390,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
             cwd=str(cwd),
             timeout_s=timeout_s,
             abort_signal=_get_abort_signal(context),
+            env=getattr(context, "env", None),
         )
 
         if run_result.interrupted:

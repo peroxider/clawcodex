@@ -118,6 +118,10 @@ class ToolContext:
     # typical workloads (the common case under-threshold returns the
     # block without I/O).
     tool_result_chars_so_far: int = 0
+    # Environment variables merged into every Bash subprocess env.
+    # Values override inherited daemon env. Populated by the headless
+    # entrypoint from workflow AgentConfig.
+    env: dict[str, str] = field(default_factory=dict)
     _aggregate_lock: threading.Lock = field(default_factory=threading.Lock)
     # Custom agent directory override (set by ``--agent <dir>``).
     # When non-None, ``get_agent_definitions`` will also scan this
