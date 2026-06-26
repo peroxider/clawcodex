@@ -290,10 +290,10 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
-| AR-5.1.1 | 源注册表与抓取器 | 源配置(JSON/YAML)、loader、Release/Commit/PR/Issue fetcher、抓取缓存 | 用户可配置 ClawCodex 关注哪些开源 Agent 项目，系统自动抓取社区动态 | 🔭 长期规划 | 2 周 | JSON/YAML 配置、py loader、fetcher、缓存 |
-| AR-5.1.2 | 候选特性抽取与分类 | Feature Extraction Pipeline、JSON feature records、跨项目去重、Taxonomy 分类 | 用户看到结构化候选特性，可从社区动态中自动抽取候选能力 | 🔭 长期规划 | 2 周 | py extractor、JSON schema、去重、分类器 |
-| AR-5.1.3 | 评分与报告系统 | 趋势评分模型(热度/成熟度/适配成本/战略价值)、周报/月报 Community Digest、权重配置 | 用户可看到哪些新能力值得优先吸收，定期收到社区动态摘要 | 🔭 长期规划 | 2.5 周 | py 评分、权重配置、Markdown 报告 |
-| AR-5.1.4 | cron 集成 | 周期触发抓取与报告生成 | 用户的社区雷达可定时运行 | 🔭 长期规划 → F-22 | 0.3 周 | cron 配置、集成 |
+| AR-5.1.1 | 源注册表与抓取器 | 源配置(JSON/YAML)、loader、Release/Commit/PR/Issue fetcher、抓取缓存 | 用户可配置 ClawCodex 关注哪些开源 Agent 项目，系统自动抓取社区动态 | ✅ 已完成 → SR-5.1 | 已完成 | JSON/YAML 配置、py loader、fetcher、缓存 |
+| AR-5.1.2 | 候选特性抽取与分类 | Feature Extraction Pipeline、JSON feature records、跨项目去重、Taxonomy 分类 | 用户看到结构化候选特性，可从社区动态中自动抽取候选能力 | ✅ 已完成 → SR-5.1 | 已完成 | py extractor、JSON schema、去重、分类器 |
+| AR-5.1.3 | 评分与报告系统 | 趋势评分模型(热度/成熟度/适配成本/战略价值)、周报/月报 Community Digest、权重配置 | 用户可看到哪些新能力值得优先吸收，定期收到社区动态摘要 | ✅ 已完成 → SR-5.1 | 已完成 | py 评分、权重配置、Markdown 报告 |
+| AR-5.1.4 | cron 集成 | 周期触发抓取与报告生成 | 用户的社区雷达可定时运行 | ✅ 已完成 → SR-5.1 / F-22 | 已完成 | cron 配置、集成 |
 
 #### SR-5.2 自我规划与路线图生成（→ FEATURE_PLAN 🔭 待补充设计）
 
