@@ -345,7 +345,7 @@ class ToolContextProgressSink:
 
     def _write_task_update(self, metadata: dict[str, Any]) -> None:
         try:
-            from src.tool_system.tools.tasks_v2 import _task_update_call
+            from clawcodex_ext.tool_system.tools.tasks_v2 import _task_update_call
 
             _task_update_call(
                 {
