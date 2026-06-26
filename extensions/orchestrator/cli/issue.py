@@ -2380,14 +2380,20 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
         assert record is not None  # just registered
     registry_issue_id = record.issue_id
 
-    # F-39 Sub-F: rate-limit guard for --mode reset. The CLI path is
-    # the only one with a --force escape hatch, and any bypass MUST
-    # be recorded as a high-priority audit entry per the design doc:
-    # "限频与人工 bypass:CLI 兜底命令的 --force 参数可绕过
-    # max_retries_per_issue 限频,需写 audit.jsonl 高优条目".
+    # ``--mode reset`` is itself a fresh-start bypass: it clears
+    # ``retry_count`` via ``reset_for_retry(reset_retry_count=True)``,
+    # so the ``max_retries_per_issue`` cap does not apply (you cannot
+    # be locked out of a command whose whole point is to wipe the
+    # lock). ``--force`` is still accepted as an audit-priority
+    # marker (the original F-39 design required high-priority entries
+    # for cap bypasses) but no longer gates the cap check.
+    #
+    # Other retry paths (label-driven ``agent:retry``, comment-driven
+    # ``/agent retry``) DO respect the cap — they live in
+    # ``orchestrator._resolve_intent`` / ``mark_intent`` and call
+    # ``reset_for_retry(increment_retry=True)`` to bump the budget
+    # one tick at a time.
     rate_limited = False
-    if mode == "reset" and record.retry_count >= max_retries and not force:
-        rate_limited = True
 
     if rate_limited:
         action = "rate-limited (--force required)"
@@ -2408,7 +2414,14 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 source="cli",
                 command=f"cli:reset:{reason[:64]}",
             )
-            registry.reset_for_retry(registry_issue_id)
+            # ``mode=reset`` is semantically a fresh start: clear the
+            # previous failure state AND reset the rate-limit budget so a
+            # transient daemon/agent bug that consumed the previous
+            # retries does not permanently lock the issue. Other retry
+            # paths (label-driven ``agent:retry``, comment-driven
+            # ``/agent retry``) keep the historical ``+= 1`` behaviour
+            # via the default ``increment_retry=True``.
+            registry.reset_for_retry(registry_issue_id, reset_retry_count=True)
             if tracker is not None:
                 try:
                     import asyncio

@@ -757,14 +757,27 @@ class IssueRegistry:
         issue_id: str,
         *,
         increment_retry: bool = True,
+        reset_retry_count: bool = False,
     ) -> IssueRecord | None:
         """F-39 Sub-B: clear transient PR / commit state for a retry.
 
         Per the design doc: "对本地 IssueRecord ... 清空 status → pending,
         删 commit_sha / pr_number / pr_url / report_path".
 
-        `retry_count` is incremented (unless caller passes
-        `increment_retry=False` — useful for tests / CLI dry-runs).
+        `retry_count` handling (first match wins):
+
+        * ``reset_retry_count=True`` — set ``retry_count`` to 0. Used by
+          the CLI ``--mode reset`` path, which is semantically a fresh
+          start ("throw away the previous state and begin again")
+          rather than a follow-on retry that should still count against
+          ``max_retries_per_issue``. The downstream rate-limit guard at
+          ``orchestrator.py:_resolve_intent`` then sees a clean budget.
+        * ``increment_retry=False`` (legacy test / dry-run knob) — leave
+          ``retry_count`` unchanged.
+        * Otherwise — ``retry_count += 1`` (the historical default for
+          daemon-driven retries where each attempt IS another tick on
+          the rate-limit budget).
+
         The intent field is preserved so audit trails can still
         answer "why was this re-run?" after the new run completes.
         """
@@ -780,7 +793,9 @@ class IssueRegistry:
         record.verification_status = None
         record.verification_output = None
         record.last_hook_error = None
-        if increment_retry:
+        if reset_retry_count:
+            record.retry_count = 0
+        elif increment_retry:
             record.retry_count += 1
         record.touch()
         self._save()

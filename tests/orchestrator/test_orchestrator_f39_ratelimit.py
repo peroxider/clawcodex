@@ -16,9 +16,11 @@ Covers:
       * at limit + force=True → True
   - Orchestrator._reject_unauthorized_command posts comment + audit
   - CLI `_run_retry`:
-      * rate-limited reset returns 3, no state change, audit entry
-      * --force bypasses rate limit, high-priority audit
-      * --max-retries flag overrides default
+      * ``--mode reset`` at the cap still proceeds (reset is itself
+        the bypass), clears ``retry_count`` to 0, marks intent=RETRY
+      * ``--mode reset`` with ``--force`` adds the high-priority
+        audit marker (does not gate the cap check)
+      * ``--max-retries`` flag overrides default
 """
 
 from __future__ import annotations
@@ -310,7 +312,16 @@ def _make_args(**overrides: Any) -> argparse.Namespace:
 
 
 class TestCliRetryRateLimit(unittest.TestCase):
-    def test_reset_at_limit_returns_3_no_state_change(self) -> None:
+    def test_reset_at_limit_clears_budget_and_marks_intent(self) -> None:
+        """``mode=reset`` at the cap still proceeds — reset is the bypass.
+
+        Before the semantic fix, ``mode=reset`` was rate-limited at the
+        cap and required ``--force`` to proceed (a chicken-and-egg:
+        you need reset to clear the cap, but you can't reset because
+        of the cap). Now ``mode=reset`` always proceeds and clears
+        ``retry_count`` to 0, so a transient bug that consumed the
+        previous budget does not permanently lock the issue.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             reg_path = Path(tmp) / "registry.json"
             seed = IssueRegistry(reg_path)
@@ -325,26 +336,31 @@ class TestCliRetryRateLimit(unittest.TestCase):
                 audit_path,
             ):
                 rc = _run_retry(reg_path, args)
-            self.assertEqual(rc, 3)
+            self.assertEqual(rc, 0)
 
             reloaded = IssueRegistry(reg_path)
             record = reloaded.get("1")
             assert record is not None
-            # retry_count not bumped.
-            self.assertEqual(record.retry_count, 3)
-            # Intent was NOT marked — the rate-limit rejection should
-            # be a clean no-op on the registry.
-            self.assertIs(record.intent, Intent.NONE)
+            # ``mode=reset`` clears retry_count to 0 even when at the cap.
+            self.assertEqual(record.retry_count, 0)
+            # Intent was marked — the reset actually fired.
+            self.assertIs(record.intent, Intent.RETRY)
 
-            # Audit log records the rejection with high priority.
+            # Audit log records the successful reset, not a rejection.
             entry = json.loads(audit_path.read_text(encoding="utf-8").strip())
-            self.assertEqual(entry["event"], "retry_rejected")
-            self.assertEqual(entry["priority"], "high")
-            self.assertEqual(entry["retry_count"], 3)
+            self.assertEqual(entry["event"], "retry")
+            self.assertEqual(entry["priority"], "normal")
+            self.assertEqual(entry["retry_count"], 0)
             self.assertEqual(entry["max_retries_per_issue"], 3)
-            self.assertTrue(entry["rate_limited"])
+            self.assertFalse(entry["rate_limited"])
 
-    def test_reset_force_bypasses_rate_limit(self) -> None:
+    def test_reset_with_force_records_high_priority_audit(self) -> None:
+        """``--force`` on ``mode=reset`` is now an audit marker, not a bypass.
+
+        The cap check no longer applies to ``mode=reset`` (reset is
+        the bypass), so ``--force`` is only used to flag the audit
+        entry as high-priority. The semantic of reset is unchanged.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             reg_path = Path(tmp) / "registry.json"
             seed = IssueRegistry(reg_path)
@@ -364,8 +380,9 @@ class TestCliRetryRateLimit(unittest.TestCase):
             reloaded = IssueRegistry(reg_path)
             record = reloaded.get("1")
             assert record is not None
-            # retry_count was bumped to 4 (force bypass).
-            self.assertEqual(record.retry_count, 4)
+            # ``mode=reset`` is a fresh start: retry_count is cleared
+            # to 0. ``--force`` does not change this.
+            self.assertEqual(record.retry_count, 0)
             self.assertIs(record.intent, Intent.RETRY)
 
             # Audit log entry is high-priority + force=True.
@@ -395,7 +412,9 @@ class TestCliRetryRateLimit(unittest.TestCase):
             reloaded = IssueRegistry(reg_path)
             record = reloaded.get("1")
             assert record is not None
-            self.assertEqual(record.retry_count, 3)
+            # ``mode=reset`` clears retry_count to 0, regardless of
+            # whether the cap would have blocked a regular retry.
+            self.assertEqual(record.retry_count, 0)
             self.assertIs(record.intent, Intent.RETRY)
 
             entry = json.loads(audit_path.read_text(encoding="utf-8").strip())

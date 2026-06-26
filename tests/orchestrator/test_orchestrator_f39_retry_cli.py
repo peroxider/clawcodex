@@ -369,13 +369,25 @@ def _make_args(**overrides: Any) -> argparse.Namespace:
 
 
 class TestRunRetry(unittest.TestCase):
-    def test_reset_marks_intent_and_increments(self) -> None:
+    def test_reset_marks_intent_and_clears_retry_count(self) -> None:
+        """``mode=reset`` is a fresh start: intent=RETRY + retry_count=0.
+
+        Before the semantic fix, ``mode=reset`` incremented retry_count
+        like every other retry path, which meant a transient daemon bug
+        (e.g. ImportError on stale module cache) that consumed the cap
+        left the issue permanently locked. Now reset wipes the
+        rate-limit budget so the operator can re-attempt.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             reg_path = Path(tmp) / "registry.json"
             seed = IssueRegistry(reg_path)
             seed.register(issue_id="1", issue_identifier="ISSUE-1")
             seed.mark_completed("1")
-            before_retry_count = seed.get("1").retry_count
+            # Bump retry_count to a non-zero value so we can prove the
+            # reset clears it instead of leaving it alone.
+            for _ in range(2):
+                seed.increment_retry_count("1")
+            assert seed.get("1").retry_count == 2
 
             audit_path = Path(tmp) / "audit.jsonl"
             args = _make_args(mode="reset")
@@ -393,7 +405,11 @@ class TestRunRetry(unittest.TestCase):
             assert record is not None
             self.assertIs(record.intent, Intent.RETRY)
             self.assertEqual(record.intent_source, "cli")
-            self.assertEqual(record.retry_count, before_retry_count + 1)
+            # Semantic: ``mode=reset`` clears retry_count, does NOT
+            # increment. See extensions/orchestrator/issue_registry.py
+            # ``reset_for_retry(reset_retry_count=True)`` and the
+            # matching CLI call in extensions/orchestrator/cli/issue.py.
+            self.assertEqual(record.retry_count, 0)
 
             # Audit log entry was written.
             entries = [
