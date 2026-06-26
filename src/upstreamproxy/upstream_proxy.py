@@ -35,7 +35,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.bridge.no_proxy import default_no_proxy
+from clawcodex_ext.bridge.no_proxy import default_no_proxy
 
 from .ca_bundle import download_ca_bundle
 from .ptrace_guard import set_non_dumpable

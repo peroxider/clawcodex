@@ -32,7 +32,7 @@ PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_CO
 # Phase 1 re-exports (Phase 2 deps not required for any of these imports)
 # -----------------------------------------------------------------------------
 
-from src.bridge.bounded_uuid_set import BoundedUUIDSet
+from clawcodex_ext.bridge.bounded_uuid_set import BoundedUUIDSet
 from src.bridge.bridge_api import (
     ANTHROPIC_VERSION,
     BETA_HEADER,
@@ -80,7 +80,7 @@ from clawcodex_ext.bridge.exceptions import (
     BridgeFatalError,
     EpochSupersededError,
 )
-from src.bridge.flush_gate import FlushGate
+from clawcodex_ext.bridge.flush_gate import FlushGate
 from src.bridge.inbound_messages import (
     extract_inbound_message_fields,
     normalize_image_blocks,

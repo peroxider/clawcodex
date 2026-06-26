@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from src.bridge.bridge_enabled import is_env_less_bridge_enabled
+from clawcodex_ext.bridge.bridge_enabled import is_env_less_bridge_enabled
 
 
 class EnvLessBridgeConfig(BaseModel):
