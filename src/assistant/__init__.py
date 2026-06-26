@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.assistant.session_chooser import AssistantSessionChooser
+from clawcodex_ext.assistant.session_chooser import AssistantSessionChooser
 from src.assistant.session_history import (
     HISTORY_PAGE_SIZE,
     HistoryAuthCtx,

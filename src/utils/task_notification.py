@@ -32,7 +32,7 @@ from src.constants.xml import (
     TOTAL_TOKENS_TAG,
     USAGE_TAG,
 )
-from src.utils.message_queue_manager import enqueue_pending_notification
+from clawcodex_ext.utils.message_queue_manager import enqueue_pending_notification
 
 if TYPE_CHECKING:
     from clawcodex_ext.task_registry import RuntimeTaskRegistry
