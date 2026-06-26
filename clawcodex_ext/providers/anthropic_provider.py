@@ -284,6 +284,13 @@ class AnthropicProvider(BaseProvider):
 
         system = kwargs.pop("system", None)
 
+        # F-99 fix: the client-wide ``_F99_READ_TIMEOUT`` (5s) bounds the
+        # streaming cancel latency, but this non-streaming ``messages.create``
+        # receives no bytes until the full response is generated — so a 5s
+        # read timeout fires on any response that takes >5s to produce.
+        # Override per-request with a longer timeout unless the caller set one.
+        request_timeout = kwargs.pop("timeout", 60.0)
+
         # Convert messages to Anthropic format
         anthropic_messages = self._prepare_messages(messages)
 
@@ -297,6 +304,7 @@ class AnthropicProvider(BaseProvider):
             model=model,
             max_tokens=max_tokens,
             messages=anthropic_messages,
+            timeout=request_timeout,
             **({"system": system} if system else {}),
             **extra_kwargs,
             **{k: v for k, v in kwargs.items() if k not in ["model", "max_tokens", "tools"]},
