@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from src.transports.ccr_client import CCRClient
 from src.transports.hybrid_transport import HybridTransport
-from src.transports.remote_io import RemoteIO
+from clawcodex_ext.transports.remote_io import RemoteIO
 from src.transports.serial_batch_event_uploader import SerialBatchEventUploader
 from src.transports.sse_transport import SSETransport
 from clawcodex_ext.transports.transport_utils import Transport, get_transport_for_url
