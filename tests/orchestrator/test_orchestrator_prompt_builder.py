@@ -802,5 +802,76 @@ class TestPromptBuilderIntegrationWithIssueOverride(unittest.TestCase):
             self.assertIn("约束提醒", rendered)
 
 
+@dataclass
+class _FakeWorkspace:
+    """Minimal workspace stand-in for operator-hints tests."""
+
+    path: Path
+
+
+@dataclass
+class _FakeSession:
+    """Minimal session stand-in that exposes a workspace."""
+
+    workspace: _FakeWorkspace | None = None
+
+
+class TestOperatorHintsInjection(unittest.TestCase):
+    """.operator_hints.md is injected into render() and continuation prompts."""
+
+    def test_render_injects_hints_when_file_present(self) -> None:
+        issue = _FakeIssue()
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            hints = "Focus on implementation only."
+            (ws / ".operator_hints.md").write_text(hints, encoding="utf-8")
+            rendered = PromptBuilder.render(
+                issue,
+                session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
+            )
+            self.assertIn("## Operator Hints", rendered)
+            self.assertIn(hints, rendered)
+
+    def test_render_skips_hints_when_file_missing(self) -> None:
+        issue = _FakeIssue()
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            rendered = PromptBuilder.render(
+                issue,
+                session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
+            )
+            self.assertNotIn("## Operator Hints", rendered)
+
+    def test_render_skips_hints_when_session_has_no_workspace(self) -> None:
+        issue = _FakeIssue()
+        rendered = PromptBuilder.render(issue, session=_FakeSession(workspace=None))
+        self.assertNotIn("## Operator Hints", rendered)
+
+    def test_continuation_injects_hints_when_file_present(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            hints = "Do not re-read files."
+            (ws / ".operator_hints.md").write_text(hints, encoding="utf-8")
+            rendered = PromptBuilder.build_continuation_prompt(
+                turn_number=2,
+                max_turns=10,
+                issue_context=None,
+                session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
+            )
+            self.assertIn("## Operator Hints", rendered)
+            self.assertIn(hints, rendered)
+
+    def test_continuation_skips_hints_when_file_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            rendered = PromptBuilder.build_continuation_prompt(
+                turn_number=2,
+                max_turns=10,
+                issue_context=None,
+                session=_FakeSession(workspace=_FakeWorkspace(path=ws)),
+            )
+            self.assertNotIn("## Operator Hints", rendered)
+
+
 if __name__ == "__main__":
     unittest.main()

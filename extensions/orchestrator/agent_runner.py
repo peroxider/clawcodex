@@ -369,6 +369,7 @@ class AgentRunner:
         # ``workflow_config.workspace`` in orchestration.py.
         self.workspace_cfg: WorkspaceConfig = workspace_cfg or WorkspaceConfig()
         self.max_turns = agent_config.max_turns
+        self.max_tools_per_turn = getattr(agent_config, "max_tools_per_turn", 50) or 50
         self._approval_policy: ApprovalPolicy = get_approval_policy(
             getattr(sandbox_config, "approval_policy", "never") or "never"
         )
@@ -1069,6 +1070,14 @@ class AgentRunner:
                 # F-?? root-cause fix: per-turn tool-name accumulator feeding
                 # the loop-detection signature history.
                 turn_tool_names: list[str] = []
+                # F-?? root-cause fix: per-turn tool call cap to prevent
+                # infinite read-only exploration spirals in a single turn.
+                turn_tool_count = 0
+                # Track in-flight tool results so we can force a clean turn
+                # boundary only after all capped calls have been answered.
+                pending_tool_results = 0
+                # Set once turn_tool_count reaches max_tools_per_turn.
+                cap_reached = False
 
                 try:
                     stream_iter = runner.stream()
@@ -1134,6 +1143,8 @@ class AgentRunner:
                         elif isinstance(event, ToolCallEvent):
                             turn_has_tool_calls = True
                             tool_count += 1
+                            turn_tool_count += 1
+                            pending_tool_results += 1
                             update_diagnostics()
                             # F-?? root-cause fix: collect tool names for the
                             # turn signature so the loop-detection guard can
@@ -1148,12 +1159,23 @@ class AgentRunner:
                                 session.has_made_progress = True
                                 turn_has_modifying_tool = True
 
+                            # Enforce per-turn tool cap. We still process the
+                            # tool call and its result so the event stream
+                            # stays consistent; ``cap_reached`` forces a break
+                            # once all in-flight results are consumed.
+                            if turn_tool_count >= self.max_tools_per_turn:
+                                cap_reached = True
+                                logger.info(
+                                    "Turn %s reached max_tools_per_turn=%s for issue %s; "
+                                    "will force turn boundary after pending results",
+                                    turn_number,
+                                    self.max_tools_per_turn,
+                                    issue.id,
+                                )
+
                             # Pause support: wait for resume if session is paused
                             if session.paused and session.pause_resume_event is not None:
                                 await session.pause_resume_event.wait()
-
-                            # Operator hint injection: check .operator_hints.md
-                            self._inject_operator_hints(session.workspace)
 
                             # F-45: in headless (orchestrator) mode the api.query
                             # stream yields ToolCallEvent with _approved=None
@@ -1225,6 +1247,7 @@ class AgentRunner:
                                     )
 
                         elif isinstance(event, ToolResultEvent):
+                            pending_tool_results -= 1
                             logger.debug(
                                 "Tool result issue_id=%s tool=%s is_error=%s",
                                 issue.id,
@@ -1304,6 +1327,23 @@ class AgentRunner:
                                     status_dashboard.on_event(event, session)
                                 except Exception:
                                     pass
+
+                            # F-?? root-cause fix: if the per-turn tool cap
+                            # was reached and all in-flight results have been
+                            # consumed, force a turn boundary now. This breaks
+                            # infinite read-only exploration spirals while
+                            # keeping the transcript/event stream consistent.
+                            if cap_reached and pending_tool_results <= 0:
+                                logger.info(
+                                    "Turn %s forced turn boundary after "
+                                    "max_tools_per_turn=%s for issue %s",
+                                    turn_number,
+                                    self.max_tools_per_turn,
+                                    issue.id,
+                                )
+                                # Synthesize a SessionComplete-equivalent break
+                                # so the outer loop re-issues the turn prompt.
+                                break
 
                         elif isinstance(event, SessionComplete):
                             # 429-aware backoff: detect rate limit BEFORE the
@@ -1911,6 +1951,47 @@ class AgentRunner:
                     # Not a 429 — re-raise to preserve existing behavior.
                     raise
 
+                # F-?? root-cause fix: when the per-turn tool cap fires we
+                # break out of the QueryRunner stream above.  Without this
+                # block the outer loop would re-issue the *same* turn (turn
+                # number not incremented), resetting ``turn_tool_count`` and
+                # allowing another 30 tools in an infinite spiral.  Treat the
+                # cap as a forced turn boundary: bump the counter, flush the
+                # transcript, tear down the per-turn control socket, and move
+                # on so the agent receives a continuation prompt.
+                if cap_reached:
+                    turn_number += 1
+                    session.turn_count = turn_number
+                    if session._transcript_storage is not None:
+                        try:
+                            self._flush_turn_transcript(session)
+                            session._transcript_storage.flush()
+                        except Exception:
+                            logger.exception(
+                                "Failed to flush transcript after cap break run_id=%s",
+                                session.run_id,
+                            )
+                    if session.control_socket is not None:
+                        try:
+                            await session.control_socket.stop()
+                        except Exception:
+                            logger.exception(
+                                "Failed to stop control_socket after cap break run_id=%s",
+                                session.run_id,
+                            )
+                        session.control_socket = None
+                    append_debug_event(
+                        session.debug_log_path,
+                        "agent_runner.turn_complete",
+                        issue_id=issue.id,
+                        run_id=session.run_id,
+                        turn=turn_number,
+                        reason="max_tools_per_turn",
+                        tool_count=tool_count,
+                        output_len=len(session.output_text),
+                    )
+                    continue
+
                 # If we consumed all events without SessionComplete (shouldn't
                 # happen with current QueryRunner, but be defensive), count the
                 # turn anyway
@@ -2227,30 +2308,6 @@ class AgentRunner:
             else:
                 base[key] = value
         return base
-
-    def _inject_operator_hints(self, workspace: Any) -> None:
-        """Check for operator hints in workspace and inject into context.
-
-        Reads .operator_hints.md in the workspace directory and returns
-        its contents if present. The caller should prepend this to the
-        tool context for the next LLM call.
-        """
-        hints_file = workspace.path / ".operator_hints.md"
-        if not hints_file.exists():
-            return None
-
-        try:
-            content = hints_file.read_text(encoding="utf-8").strip()
-            if content:
-                logger.debug(
-                    "Operator hints found for workspace %s: %d chars",
-                    workspace.path,
-                    len(content),
-                )
-                return content
-        except Exception as exc:
-            logger.warning("Failed to read operator hints: %s", exc)
-        return None
 
     async def _run_verification(self, session: AgentSession) -> bool:
         """Run ``agent.test_command`` in the workspace to verify the

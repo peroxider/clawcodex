@@ -597,6 +597,9 @@ class WorkflowConfig:
             max_no_op_turns=int(agent_raw.get("max_no_op_turns", 3)),
             loop_detection_window=int(agent_raw.get("loop_detection_window", 5)),
             loop_detection_threshold=int(agent_raw.get("loop_detection_threshold", 3)),
+            # Per-turn tool cap: schema default was 50 but ``from_dict`` did not
+            # forward the YAML value, so workflow.md edits were ignored.
+            max_tools_per_turn=int(agent_raw.get("max_tools_per_turn", 50)),
             # F-40 root-cause fix: model name override.
             model=_resolve_env_value(agent_raw.get("model")) or None,
             # Multi-model stage overrides (parsed above).

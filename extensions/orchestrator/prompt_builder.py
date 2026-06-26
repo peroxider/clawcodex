@@ -168,11 +168,27 @@ class PromptBuilder:
         if session is not None and getattr(session, "workspace_strategy", None) == "sequential":
             rendered = f"{rendered}\n\n{_build_sequential_workspace_context(session)}"
 
+        ws_path = _resolve_workspace_path(session)
+
+        # Operator hints injection: if the workspace has .operator_hints.md,
+        # prepend operator guidance before the issue context so it is the
+        # first thing the agent sees on every turn.
+        operator_hints = _get_operator_hints(ws_path) if ws_path else None
+        if operator_hints:
+            rendered = (
+                "---\n"
+                "## Operator Hints\n"
+                "\n"
+                f"{operator_hints}\n"
+                "---\n"
+                "\n"
+                f"{rendered}"
+            )
+
         # F-40 root-cause fix: inject workspace diff context so the
         # agent sees exactly which files are already modified and can
         # skip re-exploration when code already exists on disk.
         # Only injected when there are uncommitted changes (first turn).
-        ws_path = _resolve_workspace_path(session)
         ws_diff = _get_workspace_diff(ws_path) if ws_path else None
         if ws_diff:
             rendered = (
@@ -314,6 +330,20 @@ class PromptBuilder:
         # what was already done in previous turns.
         git_log_summary = _get_git_log_summary(session)
 
+        # Operator hints injection for continuation turns.
+        ws_path = _resolve_workspace_path(session)
+        operator_hints = _get_operator_hints(ws_path) if ws_path else None
+        hints_block = (
+            "---\n"
+            "## Operator Hints\n"
+            "\n"
+            f"{operator_hints}\n"
+            "---\n"
+            "\n"
+            if operator_hints
+            else ""
+        )
+
         python_constraint = (
             f"⛔ **约束提醒**：始终用 `{python_executable}` 绝对路径，不要调试环境差异。\n"
             if python_executable
@@ -321,6 +351,7 @@ class PromptBuilder:
         )
 
         return (
+            f"{hints_block}"
             f"Continuation guidance:\n\n"
             f"{python_constraint}"
             f"⛔ `pytest` 禁止使用管道 `| tail -40`/`| head -50`，用 `--tb=short -q` 替代。\n"
@@ -455,6 +486,24 @@ def _get_workspace_diff(ws_path: Path) -> str | None:
     if status_short:
         parts.append(f"Uncommitted files:\n```\n{status_short}\n```")
     return "\n".join(parts)
+
+
+def _get_operator_hints(ws_path: Path) -> str | None:
+    """Read ``.operator_hints.md`` from workspace and return its contents.
+
+    Returns ``None`` when the file is missing or empty so callers can
+    skip injecting the operator-hints block entirely.
+    """
+    hints_file = ws_path / ".operator_hints.md"
+    if not hints_file.exists():
+        return None
+    try:
+        content = hints_file.read_text(encoding="utf-8").strip()
+        if content:
+            return content
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Failed to read operator hints from %s: %s", hints_file, exc)
+    return None
 
 
 def _get_git_log_summary(session: Any) -> str:
