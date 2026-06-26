@@ -246,6 +246,63 @@ class LocalTrackerAdapter(TrackerAdapter):
     ) -> Intent:
         return intent_from_label_set(labels, self.intent_labels)
 
+    async def add_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: append ``label`` to the issue's frontmatter list.
+
+        Idempotent: adding a label that is already present returns
+        True without rewriting the file. Missing issues return False
+        (we never auto-create issues from a label mutation).
+        """
+        try:
+            document = self._document_for_issue(issue_id)
+        except FileNotFoundError:
+            logger.warning(
+                "LocalTrackerAdapter.add_label: issue %s not found", issue_id
+            )
+            return False
+        existing = list(document.issue.labels or [])
+        if label in existing:
+            return True
+        existing.append(label)
+        write_markdown_frontmatter(
+            document.path,
+            {"labels": existing, "updated_at": utc_now_iso()},
+        )
+        logger.info(
+            "LocalTrackerAdapter.add_label: added %r to issue %s",
+            label,
+            issue_id,
+        )
+        return True
+
+    async def remove_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: drop ``label`` from the issue's frontmatter list.
+
+        Idempotent: removing a label that is already absent returns
+        True without rewriting the file. Missing issues return False.
+        """
+        try:
+            document = self._document_for_issue(issue_id)
+        except FileNotFoundError:
+            logger.warning(
+                "LocalTrackerAdapter.remove_label: issue %s not found", issue_id
+            )
+            return False
+        existing = list(document.issue.labels or [])
+        if label not in existing:
+            return True
+        existing.remove(label)
+        write_markdown_frontmatter(
+            document.path,
+            {"labels": existing, "updated_at": utc_now_iso()},
+        )
+        logger.info(
+            "LocalTrackerAdapter.remove_label: removed %r from issue %s",
+            label,
+            issue_id,
+        )
+        return True
+
     async def close_pull_request(
         self,
         pull_request: PullRequestRef,

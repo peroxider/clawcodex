@@ -1733,6 +1733,55 @@ def _tracker_from_workflow_arg(args: argparse.Namespace) -> Any | None:
         return None
 
 
+def _mirror_intent_label(
+    tracker: Any | None,
+    issue_id: str,
+    label: str,
+    *,
+    remove: bool,
+) -> bool:
+    """F-39 Sub-E (Part B): best-effort mirror of CLI intent onto issue label.
+
+    Calls ``tracker.add_label(issue_id, label)`` (default) or
+    ``tracker.remove_label(issue_id, label)`` (when ``remove=True``)
+    so the label-based intent path picks up the same intent as the
+    local ``registry.intent``.
+
+    The local ``registry.intent`` is the authoritative source of
+    truth; this is belt-and-suspenders so a future registry reset
+    does not silently drop the operator's intent. The function
+    is intentionally permissive:
+
+      * ``tracker is None`` → returns False (no-op).
+      * Tracker does not implement the label method → returns False.
+      * Async call raises or returns False → logs a warning and
+        returns False. Never raises.
+
+    Used by :func:`_run_retry` for ``--mode reset`` (add
+    ``agent:retry``), ``--mode followup`` (add ``agent:follow-up``),
+    and ``--mode unblock`` (remove ``agent:blocked``).
+    """
+    if tracker is None:
+        return False
+    method = getattr(tracker, "remove_label" if remove else "add_label", None)
+    if method is None:
+        return False
+    try:
+        import asyncio
+
+        async def call() -> bool:
+            return bool(await method(issue_id, label))
+
+        return asyncio.run(call())
+    except Exception as exc:  # noqa: BLE001
+        verb = "remove" if remove else "add"
+        print(
+            f"Warning: could not {verb} {label} label on issue {issue_id}: {exc}",
+            file=sys.stderr,
+        )
+        return False
+
+
 def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
     """Approve or reject a LocalTracker issue's changes."""
     issue_id = getattr(args, "id", None)
@@ -2345,6 +2394,13 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
         audit_priority = "high"
         audit_event = "retry_rejected"
     else:
+        # F-39 Sub-E (Part B): obtain the tracker once so we can
+        # mirror the CLI intent onto the remote issue label AND
+        # reopen the issue. The tracker is optional — operators
+        # who run from a directory without a workflow.md will get
+        # None and the local registry.intent (written just below)
+        # is still the authoritative source of truth.
+        tracker = _tracker_from_workflow_arg(args)
         if mode == "reset":
             registry.mark_intent(
                 registry_issue_id,
@@ -2353,7 +2409,6 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 command=f"cli:reset:{reason[:64]}",
             )
             registry.reset_for_retry(registry_issue_id)
-            tracker = _tracker_from_workflow_arg(args)
             if tracker is not None:
                 try:
                     import asyncio
@@ -2369,6 +2424,16 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                     asyncio.run(reopen_tracker_issue())
                 except Exception as exc:
                     print(f"Warning: could not update tracker: {exc}", file=sys.stderr)
+                # Mirror the retry intent onto the remote issue
+                # label so label-based intent resolution sees the
+                # same intent. Best-effort: the tracker may not
+                # implement add_label (returns False), or the API
+                # call may fail — both are non-fatal because the
+                # local registry.intent is the authoritative
+                # source.
+                _mirror_intent_label(
+                    tracker, issue_id, "agent:retry", remove=False
+                )
             action = "marked for reset"
         elif mode == "followup":
             registry.mark_intent(
@@ -2377,9 +2442,17 @@ def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:
                 source="cli",
                 command=f"cli:followup:{reason[:64]}",
             )
+            if tracker is not None:
+                _mirror_intent_label(
+                    tracker, issue_id, "agent:follow-up", remove=False
+                )
             action = "marked for follow-up"
         else:  # mode == "unblock"
             registry.unblock(registry_issue_id)
+            if tracker is not None:
+                _mirror_intent_label(
+                    tracker, issue_id, "agent:blocked", remove=True
+                )
             action = "unblocked"
         audit_priority = "high" if force else "normal"
         audit_event = "retry" if mode == "reset" else mode

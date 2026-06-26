@@ -36,6 +36,7 @@ from .tracker import (
     TrackerAdapter,
     command_to_intent,
     merge_intents,
+    merge_intents_with_cli,
 )
 from .workspace import WorkspaceManager
 
@@ -449,13 +450,13 @@ class Orchestrator:
                 if issue.id in self._state.claimed:
                     continue
 
-                # F-39 Sub-A + Sub-D: intent pre-check happens BEFORE
-                # the `has_pr` / `is_completed` skip. Operators can
-                # trigger an intent either via labels (Sub-A) or via
-                # comment commands (Sub-D). The merged intent here
-                # already applies the priority rules from
-                # `merge_intents`.
-                intent, command_intent_obj = await self._resolve_intent(issue)
+                # F-39 Sub-A + Sub-D + Sub-E: intent pre-check happens
+                # BEFORE the `has_pr` / `is_completed` skip. Operators
+                # can trigger an intent via labels (Sub-A), comment
+                # commands (Sub-D), or the local CLI fallback (Sub-E).
+                # The merged intent here already applies the priority
+                # rules from `merge_intents_with_cli`.
+                intent, command_intent_obj, intent_source = await self._resolve_intent(issue)
                 # `command_intent_obj` may carry the comment author
                 # for F-39 Sub-F role checks; the bare `Command` value
                 # is in `command_intent_obj.command`.
@@ -533,7 +534,14 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        source=("command" if command is not None else "label"),
+                        # F-39 Sub-E: preserve the source from
+                        # _resolve_intent so CLI / comment / label
+                        # origin is recorded on the record. The
+                        # fallback only fires if intent_source is
+                        # somehow None (defensive — should not be
+                        # reachable when intent is RETRY/FOLLOWUP/
+                        # BLOCKED).
+                        source=(intent_source or ("command" if command is not None else "label")),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
                     self._registry.mark_abandoned(issue.id or "")
@@ -549,7 +557,14 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        source=("command" if command is not None else "label"),
+                        # F-39 Sub-E: preserve the source from
+                        # _resolve_intent so CLI / comment / label
+                        # origin is recorded on the record. The
+                        # fallback only fires if intent_source is
+                        # somehow None (defensive — should not be
+                        # reachable when intent is RETRY/FOLLOWUP/
+                        # BLOCKED).
+                        source=(intent_source or ("command" if command is not None else "label")),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
                     # F-39 Sub-B will perform the actual reset+close.
@@ -561,7 +576,14 @@ class Orchestrator:
                     self._registry.mark_intent(
                         issue.id or "",
                         intent,
-                        source=("command" if command is not None else "label"),
+                        # F-39 Sub-E: preserve the source from
+                        # _resolve_intent so CLI / comment / label
+                        # origin is recorded on the record. The
+                        # fallback only fires if intent_source is
+                        # somehow None (defensive — should not be
+                        # reachable when intent is RETRY/FOLLOWUP/
+                        # BLOCKED).
+                        source=(intent_source or ("command" if command is not None else "label")),
                         command=(f"/agent {command.value}" if command is not None else None),
                     )
                     # F-39 Sub-C will perform the actual follow-up.
@@ -581,6 +603,16 @@ class Orchestrator:
                 await self._launch_issue(issue)
                 if issue.id in self._state.running:
                     launched_this_poll += 1
+                    # F-39 Sub-E: CLI retry is a one-shot. The
+                    # operator's `clawcodex-dev orchestrator issue
+                    # retry --mode reset` already wrote `registry.intent`
+                    # with `intent_source="cli"`; now that the launch
+                    # has started, clear it so the next poll does NOT
+                    # re-trigger. The audit trail (the original
+                    # `last_command` text + the high-priority audit
+                    # log entry written by the CLI) is preserved.
+                    if intent_source == "cli":
+                        self._registry.clear_intent(issue.id or "")
 
         finally:
             self._state.poll_check_in_progress = False
@@ -608,20 +640,32 @@ class Orchestrator:
     async def _resolve_intent(
         self,
         issue: Issue,
-    ) -> tuple[Intent, "CommandIntent | None"]:
+    ) -> tuple[Intent, "CommandIntent | None", str | None]:
         """Resolve the current operator intent for an issue.
 
-        Merges two sources (F-39 Sub-A + Sub-D):
+        Merges three sources (F-39 Sub-A + Sub-D + Sub-E):
           1. Label-based intent (Sub-A: `agent:retry` / `agent:follow-up`
              / `agent:blocked`).
           2. Comment-based command (Sub-D: `/agent retry` / `/agent
              follow-up` / `/agent unblock`).
+          3. Registry-based CLI intent (Sub-E: `clawcodex-dev
+             orchestrator issue retry --mode reset|followup|unblock`
+             writes `registry.intent` with `intent_source="cli"`).
 
-        Returns the merged `Intent` plus the raw `CommandIntent` (with
-        the comment's author login for the F-39 Sub-F role check) if a
-        comment command was honored. Priority: BLOCKED is sticky; the
-        more conservative of {RETRY, FOLLOWUP} wins; command beats
-        label otherwise.
+        Priority (high → low): BLOCKED is sticky; CLI beats comment
+        beats label. CLI is the operator's authoritative local command
+        and must survive even when the remote issue tracker is
+        unreachable / read-only / local-only (LocalTracker).
+
+        Returns ``(intent, command_intent_obj, intent_source)``:
+          * ``intent`` — merged Intent for the launch.
+          * ``command_intent_obj`` — the raw CommandIntent (with the
+            comment's author login for the F-39 Sub-F role check) if a
+            comment command was honored, else None.
+          * ``intent_source`` — the source that won the merge
+            (``"cli"`` | ``"command"`` | ``"label"`` | None) so the
+            caller can preserve the audit trail in `mark_intent` and
+            decide whether to clear the intent after launch.
         """
         labels = list(getattr(issue, "labels", None) or [])
         label_intent = Intent.NONE
@@ -639,8 +683,50 @@ class Orchestrator:
         command_intent_obj = await self._resolve_command_intent(issue)
         command = command_intent_obj.command if command_intent_obj is not None else None
         command_intent = command_to_intent(command) if command is not None else Intent.NONE
-        merged = merge_intents(label_intent, command_intent)
-        return merged, command_intent_obj
+
+        # F-39 Sub-E: CLI fallback intent. The CLI is the operator's
+        # authoritative local command, so we read it directly from
+        # `registry.intent` whenever the record carries
+        # `intent_source="cli"`. The CLI path does NOT require the
+        # remote issue tracker to be reachable, so this is also the
+        # only intent source that works for LocalTracker users and
+        # for operators working offline.
+        cli_intent = Intent.NONE
+        record = self._registry.get(issue.id or "")
+        if record is not None and getattr(record, "intent_source", None) == "cli":
+            raw_intent = getattr(record, "intent", None)
+            if raw_intent:
+                try:
+                    cli_intent = Intent(raw_intent)
+                except ValueError:
+                    logger.warning(
+                        "Issue %s has unknown CLI intent %r, ignoring",
+                        issue.id,
+                        raw_intent,
+                    )
+                    cli_intent = Intent.NONE
+
+        merged = merge_intents_with_cli(label_intent, command_intent, cli_intent)
+
+        # Track which source won so downstream `mark_intent` calls
+        # preserve the audit trail. The order matches the merge
+        # priority (BLOCKED > CLI > command > label).
+        intent_source: str | None = None
+        if merged is Intent.BLOCKED:
+            if label_intent is Intent.BLOCKED:
+                intent_source = "label"
+            elif command_intent is Intent.BLOCKED:
+                intent_source = "command"
+            elif cli_intent is Intent.BLOCKED:
+                intent_source = "cli"
+        elif cli_intent is not Intent.NONE and merged is cli_intent:
+            intent_source = "cli"
+        elif command_intent is not Intent.NONE and merged is command_intent:
+            intent_source = "command"
+        elif label_intent is not Intent.NONE and merged is label_intent:
+            intent_source = "label"
+
+        return merged, command_intent_obj, intent_source
 
     async def _resolve_command_intent(self, issue: Issue) -> "CommandIntent | None":
         """F-39 Sub-D: fetch and parse the most recent /agent command.

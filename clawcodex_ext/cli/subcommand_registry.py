@@ -69,3 +69,8 @@ def load_builtin_subcommands() -> None:
     from extensions.remote_api.cli import register_api_subcommand
 
     register_api_subcommand()
+
+    # SR-5.1: ``clawcodex-dev community-radar scan|status|source|config``
+    from clawcodex_ext.community_radar.cli import register_community_radar_subcommand
+
+    register_community_radar_subcommand()

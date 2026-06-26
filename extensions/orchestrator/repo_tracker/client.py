@@ -308,6 +308,78 @@ class RepositoryIssueClient:
         )
         return result if isinstance(result, dict) else None
 
+    async def _fetch_issue_labels(self, issue_id: str) -> list[str]:
+        """F-39 Sub-E: read the current label list for one issue.
+
+        Returns the list of label names as strings. On HTTP error
+        or unparseable payload, returns an empty list (the caller
+        treats this as "no labels" rather than as a hard failure).
+        """
+        try:
+            payload = await self._request_json(
+                "GET",
+                f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "_fetch_issue_labels: GET failed for issue %s: %s",
+                issue_id,
+                exc,
+            )
+            return []
+        if not isinstance(payload, dict):
+            return []
+        return _extract_labels(payload)
+
+    async def add_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: mirror the CLI retry intent onto the remote issue.
+
+        Read-modify-write: fetch the current labels, append ``label``
+        if not present, then PATCH the new list. Idempotent: adding
+        a label that is already present is a no-op (still returns
+        True). On any HTTP error, returns False so the caller can
+        log and continue — the registry.intent is the authoritative
+        local source of truth, this is just a best-effort mirror.
+        """
+        current = await self._fetch_issue_labels(issue_id)
+        if label in current:
+            return True
+        new_labels = list(current) + [label]
+        try:
+            await self.update_issue(issue_id, labels=new_labels)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "add_label: PATCH failed for issue %s label=%r: %s",
+                issue_id,
+                label,
+                exc,
+            )
+            return False
+        return True
+
+    async def remove_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: drop a label from the remote issue.
+
+        Read-modify-write symmetric to :meth:`add_label`. Idempotent.
+        On HTTP error, returns False — the local registry.intent is
+        the source of truth, the remote label is best-effort.
+        """
+        current = await self._fetch_issue_labels(issue_id)
+        if label not in current:
+            return True
+        new_labels = [item for item in current if item != label]
+        try:
+            await self.update_issue(issue_id, labels=new_labels)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "remove_label: PATCH failed for issue %s label=%r: %s",
+                issue_id,
+                label,
+                exc,
+            )
+            return False
+        return True
+
     async def find_issue_by_title(
         self,
         title: str,

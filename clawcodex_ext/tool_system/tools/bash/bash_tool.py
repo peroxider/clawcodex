@@ -95,11 +95,10 @@ def _run_bash_with_abort(
         "errors": "replace",
     }
     # F-40 root-cause fix: ensure /root/Conda/bin is in PATH for every
-    # bash subprocess.  The daemon's own PATH includes it, but
-    # ``bash -lc`` (login shell) may reset PATH from profile files
-    # that don't have the conda entry, causing ``python3`` bare to
-    # hang or not be found.  Merging it here guarantees the agent's
-    # most-used command interpreter always sees the correct Python.
+    # bash subprocess.  The daemon's own PATH includes it; we re-prepend
+    # it here as a defense-in-depth so the agent's most-used command
+    # interpreter (``python3``) keeps working even if a downstream hook
+    # or wrapper strips PATH between the daemon and the tool call.
     _base_env = _os_mod.environ.copy()
     _conda_bin = "/root/Conda/bin"
     if _conda_bin not in _base_env.get("PATH", ""):
@@ -300,7 +299,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
     # the output via ``TaskOutput``.
     #
     # Default to "bash" — the non-background path (below) hard-codes
-    # ``["bash", "-lc", …]`` at line 374.
+    # ``["bash", "-c", …]``.
     shell_kind = "bash"
     if tool_input.get("run_in_background"):
         shell_kind, _shell_argv = _resolve_shell_from_input(tool_input)
@@ -376,7 +375,7 @@ def _bash_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         # POSIX; on Windows it falls back to a process group via
         # ``CREATE_NEW_PROCESS_GROUP``.
         run_result = _run_bash_with_abort(
-            ["bash", "-lc", wrapped],
+            ["bash", "-c", wrapped],
             cwd=str(cwd),
             timeout_s=timeout_s,
             abort_signal=_get_abort_signal(context),

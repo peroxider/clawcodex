@@ -413,7 +413,7 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         orch.tracker.fetch_issue_command_intent = AsyncMock(return_value=None)
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x", labels=["agent:retry"])
-        intent, command_intent = await orch._resolve_intent(issue)
+        intent, command_intent, intent_source = await orch._resolve_intent(issue)
         self.assertIs(intent, Intent.RETRY)
         self.assertIsNone(command_intent)
 
@@ -431,7 +431,7 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         )
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x")
-        intent, command_intent = await orch._resolve_intent(issue)
+        intent, command_intent, intent_source = await orch._resolve_intent(issue)
         self.assertIs(intent, Intent.FOLLOWUP)
         assert command_intent is not None
         self.assertIs(command_intent.command, Command.FOLLOWUP)
@@ -447,7 +447,7 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         )
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x", labels=["agent:retry"])
-        intent, command_intent = await orch._resolve_intent(issue)
+        intent, command_intent, intent_source = await orch._resolve_intent(issue)
         # FOLLOWUP is more conservative → wins.
         self.assertIs(intent, Intent.FOLLOWUP)
         assert command_intent is not None
@@ -463,7 +463,7 @@ class TestOrchestratorIntentMerge(unittest.IsolatedAsyncioTestCase):
         )
 
         issue = Issue(id="1", identifier="ISSUE-1", title="x", labels=["agent:blocked"])
-        intent, command_intent = await orch._resolve_intent(issue)
+        intent, command_intent, intent_source = await orch._resolve_intent(issue)
         # merge_intents returns BLOCKED; the orchestrator then handles
         # the UNBLOCK side-effect (status reset) separately.
         self.assertIs(intent, Intent.BLOCKED)

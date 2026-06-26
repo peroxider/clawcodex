@@ -168,6 +168,62 @@ def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
     return Intent.NONE
 
 
+def merge_intents_with_cli(
+    label_intent: Intent,
+    command_intent: Intent,
+    cli_intent: Intent,
+) -> Intent:
+    """F-39 Sub-E: merge three intent sources (label / comment / CLI).
+
+    Used by :meth:`Orchestrator._resolve_intent` to combine the three
+    ways an operator can drive a retry:
+
+      1. **Label** — ``agent:retry`` / ``agent:follow-up`` /
+         ``agent:blocked`` on the issue (F-39 Sub-A).
+      2. **Comment** — ``/agent retry`` / ``/agent follow-up`` /
+         ``/agent unblock`` in the issue thread (F-39 Sub-D).
+      3. **CLI** — ``clawcodex-dev orchestrator issue retry --mode
+         reset|followup|unblock`` which writes ``registry.intent``
+         with ``intent_source="cli"`` (F-39 Sub-E). This is the
+         operator's authoritative local command and is the ONLY
+         source that survives even when the remote issue tracker is
+         unreachable / read-only / local-only (LocalTracker).
+
+    Precedence (high → low):
+      1. Intent.BLOCKED — sticky permanent skip (any source).
+      2. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
+      3. CLI intent — operator's local command beats remote signals.
+      4. Comment command beats label-only intent.
+      5. Otherwise: whichever is non-NONE; else NONE.
+
+    Why CLI wins: the CLI is the operator's deliberate, authenticated
+    local action. Remote signals (label, comment) can be stale,
+    spoofed, or lost. When the operator runs ``clawcodex-dev orchestrator
+    issue retry --id 5 --mode reset --force``, they expect the daemon
+    to honor that intent on the next poll regardless of what the
+    remote tracker says.
+    """
+    if (
+        label_intent is Intent.BLOCKED
+        or command_intent is Intent.BLOCKED
+        or cli_intent is Intent.BLOCKED
+    ):
+        return Intent.BLOCKED
+    if (
+        label_intent is Intent.FOLLOWUP
+        or command_intent is Intent.FOLLOWUP
+        or cli_intent is Intent.FOLLOWUP
+    ):
+        return Intent.FOLLOWUP
+    if cli_intent is not Intent.NONE:
+        return cli_intent
+    if command_intent is not Intent.NONE:
+        return command_intent
+    if label_intent is not Intent.NONE:
+        return label_intent
+    return Intent.NONE
+
+
 @dataclass(frozen=True)
 class Comment:
     """Normalized issue comment."""
@@ -356,6 +412,36 @@ class TrackerAdapter(ABC):
         See `intent_from_label_set` for the priority rules.
         """
         return Intent.NONE
+
+    async def add_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: add a single label to a remote issue.
+
+        Default implementation is a no-op (returns False) — adapters
+        that do not support label management can leave this alone.
+        The CLI retry path uses this to mirror the
+        ``clawcodex-dev orchestrator issue retry --mode reset``
+        operator intent onto the remote issue so that label-based
+        intent resolution also sees the change.
+
+        Returns True if the label is now present on the issue
+        (whether the adapter added it or it was already there).
+        Returns False if the adapter cannot modify labels.
+        """
+        return False
+
+    async def remove_label(self, issue_id: str, label: str) -> bool:
+        """F-39 Sub-E: remove a single label from a remote issue.
+
+        Default implementation is a no-op (returns False) — see
+        :meth:`add_label` for the rationale. Used by
+        ``--mode unblock`` to drop ``agent:blocked`` once the
+        operator has decided the issue is unblocked.
+
+        Returns True if the label is now absent from the issue
+        (whether the adapter removed it or it was already gone).
+        Returns False if the adapter cannot modify labels.
+        """
+        return False
 
     async def close_pull_request(
         self,
