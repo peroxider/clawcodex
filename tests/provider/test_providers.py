@@ -7,10 +7,13 @@ from unittest.mock import MagicMock, patch
 
 from src.providers import get_provider_class
 from src.providers.anthropic_provider import AnthropicProvider
+from clawcodex_ext.providers.anthropic_provider import ClawcodexAnthropicProvider
 from src.providers.glm_provider import GLMProvider
 from src.providers.openai_compatible import _convert_anthropic_messages_to_openai
 from src.providers.openai_provider import OpenAIProvider
 from clawcodex_ext.providers.base import ChatMessage, ChatResponse
+from clawcodex_ext.providers.kimi_coding_provider import KimiCodingProvider
+from clawcodex_ext.providers.kimi_provider import KimiProvider
 
 
 class TestChatMessage(unittest.TestCase):
@@ -501,7 +504,7 @@ class TestGetProviderClass(unittest.TestCase):
     def test_get_anthropic_provider(self):
         """Test getting Anthropic provider class."""
         cls = get_provider_class("anthropic")
-        self.assertEqual(cls, AnthropicProvider)
+        self.assertEqual(cls, ClawcodexAnthropicProvider)
 
     def test_get_openai_provider(self):
         """Test getting OpenAI provider class."""
@@ -512,6 +515,16 @@ class TestGetProviderClass(unittest.TestCase):
         """Test getting GLM provider class."""
         cls = get_provider_class("glm")
         self.assertEqual(cls, GLMProvider)
+
+    def test_get_kimi_provider(self):
+        """Test getting Kimi provider class via downstream registration."""
+        cls = get_provider_class("kimi")
+        self.assertEqual(cls, KimiProvider)
+
+    def test_get_kimi_coding_provider(self):
+        """Test getting Kimi Coding provider class via downstream registration."""
+        cls = get_provider_class("kimi-coding")
+        self.assertEqual(cls, KimiCodingProvider)
 
     def test_get_unknown_provider(self):
         """Test getting unknown provider."""

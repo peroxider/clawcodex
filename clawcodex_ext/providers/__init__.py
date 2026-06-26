@@ -152,6 +152,60 @@ register_provider(
 )
 
 
+def _KimiProvider_lazy():
+    """Lazy accessor that defers the import until first use."""
+    from clawcodex_ext.providers.kimi_provider import KimiProvider
+
+    return KimiProvider
+
+
+register_provider(
+    "kimi",
+    {
+        "label": "Kimi (Moonshot AI)",
+        "default_base_url": "https://api.moonshot.ai/v1",
+        "default_model": "kimi-k2.6",
+        "available_models": [
+            # K2.x flagship / multi-modal models
+            "kimi-k2.6",
+            "kimi-k2.5",
+            "kimi-k2.7-code",
+            "kimi-k2.7-code-highspeed",
+            # Moonshot V1 generation models
+            "moonshot-v1-8k",
+            "moonshot-v1-32k",
+            "moonshot-v1-128k",
+            # Vision-capable V1 previews
+            "moonshot-v1-8k-vision-preview",
+            "moonshot-v1-32k-vision-preview",
+            "moonshot-v1-128k-vision-preview",
+        ],
+    },
+    _KimiProvider_lazy,  # type: ignore[arg-type]
+)
+
+
+def _KimiCodingProvider_lazy():
+    """Lazy accessor that defers the import until first use."""
+    from clawcodex_ext.providers.kimi_coding_provider import KimiCodingProvider
+
+    return KimiCodingProvider
+
+
+register_provider(
+    "kimi-coding",
+    {
+        "label": "Kimi Coding (Moonshot AI)",
+        "default_base_url": "https://api.kimi.com/coding",
+        "default_model": "kimi-code",
+        "available_models": [
+            "kimi-code",
+        ],
+    },
+    _KimiCodingProvider_lazy,  # type: ignore[arg-type]
+)
+
+
 # ---------------------------------------------------------------------------
 # Cancel-latency overrides — replace the upstream built-in providers
 # with clawcodex_ext subclasses that bound cancel latency to ~100ms
