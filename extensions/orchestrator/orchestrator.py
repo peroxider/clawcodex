@@ -1588,7 +1588,31 @@ class Orchestrator:
                             ),
                             timeout=run_timeout_seconds,
                         )
-                    if session.status == "completed":
+                    # ClawCodex downstream-deviation (TODO upstream-merge):
+                    # widen the git_sync gate so non-completed agent
+                    # terminations (stagnation / loop_detected /
+                    # read_only_loop / max_turns_exceeded) still get a
+                    # chance to push local commits and open a PR.
+                    # Background: agent_runner.run() may emit
+                    # SessionComplete with these non-success statuses
+                    # AFTER the agent has already made local commits;
+                    # the original upstream gate skipped git_sync
+                    # entirely for those, leaving the work un-pushed
+                    # and the issue marked abandoned at the next
+                    # retry-cap (orchestrator.py:2095). Verification
+                    # / hook failures raised by git_sync are still
+                    # handled by the outer except handlers
+                    # (VerificationFailed / HookFailedError /
+                    # GitSyncPostCommitError below), so salvaged runs
+                    # that fail verification still correctly end up
+                    # as verification_failed rather than synced.
+                    if session.status in (
+                        "completed",
+                        "stagnation",
+                        "read_only_loop",
+                        "loop_detected",
+                        "max_turns_exceeded",
+                    ):
                         # F-39 Sub-C: a followup run passes mode="followup"
                         # to git_sync so it reuses the existing branch + PR
                         # instead of creating a new one.
@@ -1672,6 +1696,44 @@ class Orchestrator:
                                     self._state.pending_review.add(session.issue.id or "")
                                     # Do NOT cleanup workspace — human needs to review it
                                     return
+
+                        # ClawCodex downstream-deviation (TODO upstream-merge):
+                        # salvage override — when the widened gate above let
+                        # us attempt git_sync for a non-completed agent
+                        # termination, but the sync actually produced a real
+                        # commit + PR, treat the run as a successful salvage:
+                        # override session.status to "completed" and record
+                        # the actual termination reason in
+                        # session_end_reason / session_end_summary so the
+                        # audit trail is preserved. Without this, the
+                        # post-`_run_issue` failure handler would still see
+                        # status=stagnation/loop_detected/etc and route the
+                        # run to retry/abandoned even though the work landed.
+                        if (
+                            session.status != "completed"
+                            and sync_result is not None
+                            and sync_result.commit_sha
+                        ):
+                            logger.warning(
+                                "Issue %s session terminated with status=%s "
+                                "but git_sync salvaged commit %s on branch "
+                                "%s — overriding status to completed and "
+                                "recording salvage reason",
+                                session.issue.id,
+                                session.status,
+                                sync_result.commit_sha,
+                                sync_result.branch_name,
+                            )
+                            session.session_end_reason = (
+                                f"salvaged_after_{session.status}"
+                            )
+                            session.session_end_summary = (
+                                f"agent terminated with status="
+                                f"{session.status}; git_sync salvaged "
+                                f"commit {sync_result.commit_sha[:12]} on "
+                                f"branch {sync_result.branch_name}"
+                            )
+                            session.status = "completed"
                 finally:
                     await self.workspace.run_after_run_hook(
                         session.workspace,
