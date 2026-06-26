@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 import httpx
 from httpx_sse import aconnect_sse
 
-from src.bridge.close_codes import WS_CLOSE_RECONNECT_BUDGET_EXHAUSTED
+from clawcodex_ext.bridge.close_codes import WS_CLOSE_RECONNECT_BUDGET_EXHAUSTED
 
 logger = logging.getLogger(__name__)
 

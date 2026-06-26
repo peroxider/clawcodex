@@ -62,9 +62,9 @@ import sys
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
 
-from src.bridge.poll_config import get_poll_interval_config
+from clawcodex_ext.bridge.poll_config import get_poll_interval_config
 from src.cli_core.ndjson import ndjson_safe_dumps
-from src.transports.transport_utils import (
+from clawcodex_ext.transports.transport_utils import (
     Transport,
     get_transport_for_url,
     is_env_truthy,

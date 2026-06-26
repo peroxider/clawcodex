@@ -23,7 +23,7 @@ from typing import IO, Any, Literal, TYPE_CHECKING
 from clawcodex_ext.tasks_core import TaskStateBase
 
 if TYPE_CHECKING:
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 
 @dataclass(kw_only=True)

@@ -40,7 +40,7 @@ from typing import Any
 
 import httpx
 
-from src.bridge.exceptions import EpochSupersededError
+from clawcodex_ext.bridge.exceptions import EpochSupersededError
 
 logger = logging.getLogger(__name__)
 

@@ -48,7 +48,7 @@ from typing import Any, Awaitable, Callable, Literal, TYPE_CHECKING, TypeVar
 from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 # ---------------------------------------------------------------------------
 # Two-level abort exception hierarchy (sub-WI-6.2.a)

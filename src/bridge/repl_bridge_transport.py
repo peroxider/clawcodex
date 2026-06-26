@@ -22,11 +22,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from src.bridge.close_codes import (
+from clawcodex_ext.bridge.close_codes import (
     WS_CLOSE_EPOCH_MISMATCH,
     WS_CLOSE_INIT_FAILURE,
 )
-from src.bridge.exceptions import EpochSupersededError
+from clawcodex_ext.bridge.exceptions import EpochSupersededError
 from src.transports.ccr_client import CCRClient, CCRClientOptions
 from src.transports.hybrid_transport import HybridTransport
 from src.transports.sse_transport import SSEEvent, SSETransport

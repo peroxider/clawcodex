@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 
-from src.bridge.session_id_compat import to_compat_session_id
+from clawcodex_ext.bridge.session_id_compat import to_compat_session_id
 from src.bridge.types import ReplBridgeHandle
 
 logger = logging.getLogger(__name__)

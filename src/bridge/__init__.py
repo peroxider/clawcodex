@@ -63,7 +63,7 @@ from src.bridge.bridge_status_util import (
     wrap_with_osc8_link,
 )
 from src.bridge.capacity_wake import CapacityWake, create_capacity_wake
-from src.bridge.close_codes import (
+from clawcodex_ext.bridge.close_codes import (
     WS_CLOSE_EPOCH_MISMATCH,
     WS_CLOSE_INIT_FAILURE,
     WS_CLOSE_PERMANENT_UNAUTHORIZED,
@@ -75,7 +75,7 @@ from src.bridge.env_less_bridge_config import (
     EnvLessBridgeConfig,
     get_env_less_bridge_config,
 )
-from src.bridge.exceptions import (
+from clawcodex_ext.bridge.exceptions import (
     BridgeAuthError,
     BridgeFatalError,
     EpochSupersededError,
@@ -85,8 +85,8 @@ from src.bridge.inbound_messages import (
     extract_inbound_message_fields,
     normalize_image_blocks,
 )
-from src.bridge.poll_config import get_poll_interval_config
-from src.bridge.poll_config_defaults import (
+from clawcodex_ext.bridge.poll_config import get_poll_interval_config
+from clawcodex_ext.bridge.poll_config_defaults import (
     DEFAULT_POLL_CONFIG,
     PollIntervalConfig,
 )
@@ -112,7 +112,7 @@ def __getattr__(name: str) -> object:
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 
 
-from src.bridge.session_id_compat import (
+from clawcodex_ext.bridge.session_id_compat import (
     set_cse_shim_gate,
     to_compat_session_id,
     to_infra_session_id,

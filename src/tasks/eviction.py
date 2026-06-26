@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
 
 if TYPE_CHECKING:
-    from src.task_registry import RuntimeTaskRegistry
+    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 
 logger = logging.getLogger(__name__)
 

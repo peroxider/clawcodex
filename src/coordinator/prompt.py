@@ -61,7 +61,7 @@ language artifacts.
 
 from __future__ import annotations
 
-from src.utils.env import is_env_truthy
+from clawcodex_ext.utils.env import is_env_truthy
 
 # Tool-name constants — match TS source. Pulled from the agent /
 # send-message / task-stop modules' canonical names so a future

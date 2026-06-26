@@ -25,7 +25,7 @@ import os
 from typing import Final, Iterable, Literal, TYPE_CHECKING
 
 from clawcodex_ext.agent.constants import ASYNC_AGENT_ALLOWED_TOOLS
-from src.utils.env import is_env_truthy
+from clawcodex_ext.utils.env import is_env_truthy
 
 if TYPE_CHECKING:
     from src.tool_system.build_tool import Tool
