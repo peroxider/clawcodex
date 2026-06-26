@@ -32,7 +32,8 @@ from functools import cache
 
 from src.permissions.trust_boundary import (
     apply_safe_config_environment_variables,
-    extract_mdm_safe_env,
+    establish_session_trust,
+    extract_mdm_env,
 )
 from src.prefetch import (
     get_or_start_keychain_prefetch,
@@ -95,11 +96,18 @@ def init() -> None:
         wait_and_read_keychain(get_or_start_keychain_prefetch(), timeout=5.0)
     )
     mdm_payload = wait_and_read_mdm(get_or_start_mdm_raw_read(), timeout=2.0)
-    mdm_safe_env = extract_mdm_safe_env(mdm_payload)
+    mdm_env = extract_mdm_env(mdm_payload)
     profile_checkpoint("init_after_prefetch_consumption")
 
-    _logger.info("init: applying safe env vars")
-    apply_safe_config_environment_variables(extra_env=mdm_safe_env)
+    # ch02 round-3: the pre-trust pass applies the TRUSTED tiers in full
+    # (global config env — including stored API keys like TAVILY_API_KEY —
+    # and user settings env), the SAFE subset of the project-scoped tiers,
+    # and the MDM policy env last. Project/local tiers apply in full only
+    # after trust (run_pre_action seeding or a trust-gate accept). The old
+    # secret_store startup applier is gone — it copied the MERGED env
+    # (committable project tiers included) with no trust gate.
+    _logger.info("init: applying pre-trust env (trusted tiers + safe subset)")
+    apply_safe_config_environment_variables(extra_env=mdm_env)
     profile_checkpoint("init_safe_env_vars_applied")
 
     _logger.info("init: setting up graceful shutdown")
@@ -256,21 +264,27 @@ def run_pre_action(args: object) -> None:
     from src.bootstrap.state import (
         set_client_type,
         set_is_interactive,
-        set_session_trust_accepted,
     )
 
-    set_is_interactive(_determine_is_interactive(args))
+    is_interactive = _determine_is_interactive(args)
+    set_is_interactive(is_interactive)
     set_client_type(_determine_client_type())
 
-    # Plan phase 1 default: trust the current directory until the
-    # trust-dialog ships in plan phase 2/3 (see A4 working assumption).
-    # Propagating the implicit "trusted" decision through the existing
-    # state setter keeps ``hooks/trust_gate.py`` and
-    # ``tool_system/context.py:workspace_trusted`` consumers behaving
-    # correctly.
-    # TODO(plan-phase-2): replace with checkHasTrustDialogAccepted()
-    # analog once the trust dialog ships.
-    set_session_trust_accepted(True)
+    # ch02 round-3 trust seeding (closes the C8 follow-up TODO). TS mapping
+    # (main.tsx:1955-1967, interactiveHelpers.tsx:139-194):
+    #   * non-interactive (-p / non-TTY stdout): trust is implicit — grant
+    #     it and apply the full env immediately so git spawns and tools see
+    #     project PATH/GIT_DIR etc.
+    #   * interactive + previously accepted for this folder (parent-walk in
+    #     check_trust_accepted): same.
+    #   * interactive + not yet accepted: stay untrusted (bootstrap default
+    #     is False); the surface's gate decides — the TUI TrustFolderScreen
+    #     (C8) or the legacy REPL's text prompt (cli.py) — and its accept
+    #     path calls establish_session_trust().
+    from src.services.startup_gates import check_trust_accepted
+
+    if not is_interactive or check_trust_accepted():
+        establish_session_trust()
 
     profile_checkpoint("pre_action_end")
 

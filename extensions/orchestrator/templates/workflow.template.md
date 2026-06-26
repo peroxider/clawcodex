@@ -89,6 +89,12 @@ agent:
   # - bypassPermissions → headless sets permission_handler=None, all tools auto-approved
   # schema.py auto-promotes dontAsk → bypassPermissions when tracker is present.
   permission_mode: bypassPermissions
+  # Environment variables merged into every Bash subprocess and orchestrator
+  # verification/hook subprocess. Values override inherited daemon env; use
+  # $PATH in PATH values to prepend/append without losing the host PATH.
+  # env:
+  #   PATH: "/custom/bin:$PATH"
+  #   MY_VAR: "value"
 
 # ============================================================================
 # Sandbox — execution sandbox and approval policy

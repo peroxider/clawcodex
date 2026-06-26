@@ -242,3 +242,21 @@ def test_run_bash_with_abort_natural_exit_sets_neither_flag(tmp_path: Path) -> N
     assert result.timed_out is False
     assert result.returncode == 0
     assert "hello" in result.stdout
+
+
+def test_run_bash_with_abort_merges_env_and_expands_path(tmp_path: Path) -> None:
+    """Workflow-configured env vars are merged into the subprocess env;
+    PATH values containing ``$PATH`` expand against the inherited PATH.
+    """
+    result = _run_bash_with_abort(
+        ["bash", "-c", "echo $MY_VAR; echo $PATH"],
+        cwd=str(tmp_path),
+        timeout_s=10,
+        abort_signal=None,
+        env={"MY_VAR": "from_workflow", "PATH": "/custom/bin:$PATH"},
+    )
+    assert result.returncode == 0
+    assert "from_workflow" in result.stdout
+    assert "/custom/bin:" in result.stdout
+    # Inherited PATH entries should survive the expansion.
+    assert "/usr/bin" in result.stdout or "/bin" in result.stdout

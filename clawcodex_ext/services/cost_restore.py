@@ -47,9 +47,19 @@ def _sessions_dir() -> Path:
 def _restore_from_cost_block(cost_block: dict[str, Any]) -> None:
     """Dispatch a ``cost_block`` dict into the bootstrap singleton.
 
-    Shared by the ``session.json`` legacy path and the
-    ``transcript.jsonl`` primary path (P5-C). Extracted so the two code
-    paths call the same restore logic.
+    Returns True if the snapshot was found and applied, False otherwise.
+
+    Mirrors TS ``restoreCostStateForSession`` semantics: the gate is the
+    **persisted file's session_id**, not the bootstrap singleton's
+    runtime session_id. This means the function works regardless of
+    whether ``switch_session(sid)`` was called first — the resume path
+    can call restore-then-switch or switch-then-restore.
+
+    The on-disk location is ``~/.clawcodex/sessions/<sid>.json`` —
+    the same place ``Session.save`` writes. ``Session.save`` persists a
+    ``cost`` block since ch03 round-2 R2.1 (``agent/session.py:50-73``);
+    the missing-field tolerance below remains for snapshots written by
+    pre-R2.1 builds.
     """
     model_usage_raw: dict[str, Any] = cost_block.get("model_usage", {}) or {}
     model_usage: dict[str, ModelUsage] = {}

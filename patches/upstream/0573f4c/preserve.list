@@ -1,0 +1,337 @@
+# Preserve list for the 0573f4c patch queue.
+#
+# Semantics: any upstream file listed here is **kept from the base**
+# (src/upstream/0573f4c/) and produces **no patch**. The fork-side
+# version under src/ — if any — is dropped in favour of the 0573f4c
+# content. This applies to two distinct cases:
+#
+#   (a) Files NEW in the upstream base (not in src/): the upstream new
+#       file is preserved by inheritance. No patch is needed because the
+#       file already exists in the base.
+#
+#   (b) Files MODIFIED upstream AND present in src/ but WITHOUT a
+#       fork-side delta: preserving the file keeps the upstream change
+#       intact. Without preserving, the regen script would emit a modify
+#       patch that effectively reverts the upstream change to baseline.
+#
+# Generated 2026-06-26 by carrying the b24b8cb preserve.list forward to
+# the 0573f4c base. All 148 carried-over entries were verified present
+# in src/upstream/0573f4c/. Section (h) adds the 87 files NEW in 0573f4c
+# (upstream-only, absent from src/) so the new feature subsystems
+# (workflow/, services/compact/, slash commands, bundled skills, new
+# providers, query robustness, permission helpers) are inherited as
+# base content with zero patch.
+#
+# CAVEAT: preserving a facade file (sections d/f/g) makes src/ take the
+# 0573f4c base content, but the runtime still routes through the
+# clawcodex_ext/ mirror, which currently sits on the OLD b24b8cb
+# snapshot. The runtime feature gap is closed separately by 3-way
+# merging 0573f4c into the clawcodex_ext mirrors. See
+# CONFLICT_REPORT.md §2 / §3 for the per-file priority.
+
+# (a) New in b24b8cb, no fork counterpart
+command_system/aggregator.py
+command_system/effort_command.py
+command_system/export_command.py
+command_system/model_command.py
+command_system/moved_to_plugin.py
+command_system/output_style_command.py
+command_system/safe_commands.py
+command_system/security_review.py
+command_system/shell_prompt.py
+command_system/statusline.py
+command_system/theme_command.py
+repl/ui_host.py
+transports/remote_io.py
+transports/transport_utils.py
+transports/worker_state_uploader.py
+tui/screens/generic_input.py
+tui/screens/generic_select.py
+tui/ui_host.py
+utils/export_formats.py
+utils/export_renderer.py
+
+# (b) Modified upstream, no fork delta — keep the upstream change
+providers/glm_provider.py
+state/app_state.py
+transports/__init__.py
+utils/markdown_config_loader.py
+# 2026-06-24 Phase 4 P1 Step 2a: Black formatter drift only (line joining,
+# trailing newlines, string concatenation). Verified via `diff
+# src/upstream/b24b8cb/utils/X.py src/utils/X.py` — all 15 files differ
+# only in formatting, no functional fork delta. Adding to section (b)
+# eliminates the corresponding modify patches (266 → 251).
+utils/__init__.py
+utils/api_preconnect.py
+utils/deep_link.py
+utils/effort.py
+utils/env.py
+utils/fast_mode.py
+utils/file_history.py
+utils/graceful_shutdown.py
+utils/keychain_stash.py
+utils/message_queue_manager.py
+utils/pdf_extraction.py
+utils/peer_address.py
+utils/session_ingress_auth.py
+utils/startup_profiler.py
+utils/task_notification.py
+
+# (d) Facade-only fork delta — clawcodex_ext/ mirrors upstream 1:1
+# Phase 4 P0 路径 H：src/<f>.py 仅有 ~150-200B 的 Facade docstring + `from clawcodex_ext.X import *`
+# 而 clawcodex_ext/X.py 与上游快照完全一致（byte-identical）。
+# 保留 src/ = upstream 内容，运行时 `from src.X import Y` 加载 upstream 字节，
+# 因 clawcodex_ext == upstream，运行行为与 Facade 等价。详见 Phase 4 解耦路线图 P0 路径 H。
+context_system/cache_boundary.py
+context_system/workspace_snapshot.py
+permissions/bash_parser/__init__.py
+permissions/bash_parser/ast_nodes.py
+permissions/dangerous_safety.py
+query/config.py
+query/deps.py
+skills/frontmatter.py
+tool_system/protocol.py
+tool_system/tools/advisor.py
+tool_system/tools/bash/sleep_detection.py
+tool_system/tools/lsp.py
+tool_system/tools/misc.py
+tool_system/tools/sleep.py
+tool_system/tools/tool_search.py
+tool_system/utils/__init__.py
+tool_system/utils/path_utils.py
+tui/a11y.py
+tui/focus_router.py
+tui/frame_metrics.py
+tui/paste.py
+tui/terminal_chrome.py
+tui/vim_find.py
+tui/widgets/__init__.py
+tui/widgets/fullscreen_layout.py
+tui/widgets/messages/__init__.py
+tui/widgets/prompt_input_footer.py
+tui/widgets/prompt_input_mode_indicator.py
+tui/widgets/session_preview.py
+tui/widgets/structured_diff.py
+tui/widgets/task_list.py
+tui/widgets/tool_activity/__init__.py
+tui/widgets/tool_activity/base.py
+tui/widgets/tool_activity/bash.py
+tui/widgets/tool_activity/default.py
+tui/widgets/tool_activity/edit.py
+tui/widgets/tool_activity/glob.py
+tui/widgets/tool_activity/grep.py
+tui/widgets/tool_activity/read.py
+tui/widgets/tool_activity/task.py
+tui/widgets/tool_activity/write.py
+utils/abort_controller.py
+
+# (c) Vendored, mirrored 1:1 in clawcodex_ext/services/ — no fork patch needed
+# Phase 4 P0 路径 E：本地通过 clawcodex_ext.services.{mcp,api,analytics,voice,oauth}
+# 访问上游实现，src/ 内零残留引用。保留上游快照中的原文件作为
+# "vendored base"，未来上游 sync 时不再生成 delete patch（patch_generator.py
+# 的 preserved_new 分支）。详见 Phase 4 解耦路线图 P0 路径 E。
+services/analytics/__init__.py
+services/analytics/events.py
+services/analytics/metadata.py
+services/analytics/sink.py
+services/api/__init__.py
+services/api/claude.py
+services/api/errors.py
+services/api/logging.py
+services/api/provider_config.py
+services/api/retry.py
+services/api/tool_normalization.py
+services/mcp/__init__.py
+services/mcp/auth.py
+services/mcp/auth_discovery.py
+services/mcp/auth_provider.py
+services/mcp/channel_permissions.py
+services/mcp/claudeai.py
+services/mcp/client.py
+services/mcp/config.py
+services/mcp/connection_manager.py
+services/mcp/doctor.py
+services/mcp/elicitation.py
+services/mcp/env_expansion.py
+services/mcp/errors.py
+services/mcp/fetch_wrappers.py
+services/mcp/in_process_transport.py
+services/mcp/manager.py
+services/mcp/mcp_string_utils.py
+services/mcp/normalization.py
+services/mcp/oauth_callback_server.py
+services/mcp/oauth_error_normalization.py
+services/mcp/oauth_port.py
+services/mcp/oauth_redaction.py
+services/mcp/official_registry.py
+services/mcp/output_storage.py
+services/mcp/output_validation.py
+services/mcp/telemetry.py
+services/mcp/text_truncation.py
+services/mcp/tool_wrapper.py
+services/mcp/transport.py
+services/mcp/types.py
+services/mcp/xaa.py
+services/mcp/xaa_idp_login.py
+services/oauth/__init__.py
+services/oauth/client.py
+services/voice/__init__.py
+services/voice/detection.py
+services/voice/stt.py
+
+
+
+
+# (e) REMOVED — was based on flawed star-import facade assumption. Inspection on
+# 2026-06-24 showed all 205 src/X.py files in this list are FULL lazy-proxy
+# facades ("""\nFacade ... lazy proxy\n""" + __getattr__ re-export), not
+# simple `from clawcodex_ext.X import *` star-import facades. The src/X.py
+# facade itself routes to clawcodex_ext.X, so the swap mechanism was
+# redundant AND harmful — it pre-populated sys.modules with the ext module,
+# which then caused Python to re-execute clawcodex_ext/X.py during the
+# facade's own `import clawcodex_ext.X as _mod`, creating duplicate module
+# instances with separate `_REGISTRY` (or similar singleton) state. The
+# 205 modify patches that maintain the src/X.py facade content stay.
+# See PATH_I_REVERT.md for the full post-mortem.
+
+# (f) Facade migration — src/X.py is a sys.modules-swap facade pointing at
+# clawcodex_ext/X.py, which holds the migrated fork-side implementation.
+# Distinct from (d): here clawcodex_ext/X.py holds the FORK content
+# (was previously src/X.py), not upstream 1:1. Suppresses the modify patch
+# that would otherwise rewrite src/X.py from upstream full content to facade.
+# Phase 4 P1 Step 2b/2c — Tier A/B/C migration of 14 src/utils/ files. Run
+# regenerate after adding/removing entries; series/0573f4c_series will skip these files.
+utils/git.py
+utils/message_mappers.py
+utils/messages.py
+utils/frontmatter_validators.py
+utils/stream_watchdog.py
+utils/task_flags.py
+utils/combined_abort_signal.py
+utils/signal.py
+utils/format.py
+utils/store.py
+utils/file_state_cache.py
+utils/image_processor.py
+utils/at_file_completer.py
+utils/advisor.py
+
+# (g) Star-import facade migration — src/X.py is a `from clawcodex_ext.X import *`
+# facade (or `globals().update()` for modules with underscore-prefixed names), and
+# src/<pkg>/__init__.py keeps a small fork delta (the upstream archive-placeholder
+# SNAPSHOT_PATH/ARCHIVE_NAME metadata depends on the file location in src/, so it
+# stays in src/ rather than being moved to clawcodex_ext/). Distinct from (d)
+# (clawcodex_ext mirrors upstream 1:1) and (f) (Pattern C sys.modules-swap). Run
+# regenerate after adding/removing entries; series/0573f4c_series will skip these
+# files.
+# Phase 4 P1 Step 2c — src/types/ package migration (4 files).
+types/__init__.py
+types/content_blocks.py
+types/messages.py
+types/stream_events.py
+# Phase 4 P1 Step 2c — src/constants/xml.py migration (1 file).
+constants/xml.py
+
+# (h) New in 0573f4c upstream sync (2026-06-26) — upstream-only files
+# (present in src/upstream/0573f4c/, absent from src/). Preserving them
+# inherits the new file as base content with zero patch. These are the
+# new feature subsystems documented in CONFLICT_REPORT.md §1 (F1-F9).
+# Verified upstream-only on 2026-06-26: none present in src/, so no fork
+# content is dropped.
+#
+# F1 — Workflow engine (deterministic multi-agent orchestration)
+workflow/__init__.py
+workflow/budget.py
+workflow/bundled/__init__.py
+workflow/bundled/deep_research.py
+workflow/callpath.py
+workflow/constants.py
+workflow/errors.py
+workflow/gating.py
+workflow/journal.py
+workflow/launch.py
+workflow/primitives.py
+workflow/progress.py
+workflow/runner.py
+workflow/runtime.py
+workflow/sandbox.py
+workflow/scheduler.py
+workflow/structured.py
+workflow/types.py
+workflow/ultracode.py
+workflow/worktree.py
+tasks/local_workflow.py
+tasks/pill_label.py
+tool_system/tools/workflow.py
+tool_system/tools/bash/__init__.py
+# F2 — 5-layer compaction pipeline
+services/compact/autocompact.py
+services/compact/compact.py
+services/compact/compact_warning.py
+services/compact/context_collapse.py
+services/compact/grouping.py
+services/compact/post_compact_attachments.py
+services/compact/post_compact_cleanup.py
+services/compact/prompt.py
+services/compact/reactive_compact.py
+services/compact/session_memory_compact.py
+services/compact/snip_compact.py
+services/compact/tool_result_budget.py
+# F3 — New slash commands
+command_system/copy_command.py
+command_system/diff_command.py
+command_system/doctor_command.py
+command_system/logo_command.py
+command_system/mcp_command.py
+command_system/memory_command.py
+command_system/permissions_command.py
+command_system/release_notes_command.py
+command_system/rename_command.py
+command_system/resume_command.py
+command_system/stickers_command.py
+command_system/tasks_command.py
+command_system/vim_command.py
+command_system/workflows_command.py
+command_system/workflows_integration.py
+# F4 — Bundled skills
+skills/bundled/debug.py
+skills/bundled/simplify.py
+skills/bundled/stuck.py
+skills/bundled/verify_content.py
+# F5 — UI-neutral service layer components (C2-C9)
+services/bash_mode.py
+services/config_health.py
+services/fuzzy_match.py
+services/mcp_approval.py
+services/memory_append.py
+services/session_listing.py
+services/session_persistence.py
+services/startup_gates.py
+services/status_line_command.py
+services/token_warning.py
+services/tool_execution/can_use_tool_adapter.py
+services/workspace_search.py
+tui/screens/mcp_approval.py
+tui/screens/memory_save.py
+tui/screens/startup_gates.py
+tui/screens/workflow_dialog.py
+tui/screens/workspace_search.py
+tui/widgets/queued_commands.py
+tui/widgets/shortcuts_help.py
+# F6 — New LLM providers (Z.ai/GLM + data-driven OpenAI-compatible registry)
+providers/openai_compatible_specs.py
+providers/zai_provider.py
+# F7 — Query robustness (continuation nudge + tool-failure loop guard)
+query/continuation_nudge.py
+query/tool_failure_loop_guard.py
+# F8 — Permission enhancements (don't-ask-again heuristics + settings paths)
+permissions/bash_suggestions.py
+permissions/settings_paths.py
+settings/permission_validation.py
+# F9 — Misc (secret store, spinner verbs, logo palettes, release notes, task notifications)
+secret_store.py
+constants/spinner_verbs.py
+utils/logo_palettes.py
+utils/release_notes.py
+repl/task_notifications.py
+cli_backup/__init__.py

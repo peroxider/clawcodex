@@ -57,6 +57,9 @@ class QueryConfig:
     max_turns: int = 20
     run_id: str | None = None
     debug_log_path: str | Path | None = None
+    # Environment variables merged into the headless session's Bash
+    # subprocess env. Values override inherited daemon env.
+    env: dict[str, str] | None = None
 
 
 @dataclass
@@ -196,6 +199,7 @@ class QueryRunner:
             stdout=stdout,
             stderr=stdout,
             on_event=on_event,
+            env=self.config.env or {},
         )
 
         loop = asyncio.get_running_loop()

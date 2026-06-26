@@ -104,11 +104,18 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
     except Exception as exc:
         logger.debug('Failed to read config %s: %s', path, exc)
         return {}
+    if not isinstance(data, dict):
+        # A non-object top level previously flowed into _deep_merge and
+        # raised AttributeError at the call site (C6 review M2) — treat
+        # it like any other unreadable config: ignored.
+        logger.debug("Ignoring non-object config %s", path)
+        return {}
+    return data
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
@@ -158,6 +165,35 @@ def get_default_config() -> dict[str, Any]:
     }
 
 
+# Keys a committable project/local config tier may NOT contribute while the
+# session is untrusted. ``providers``/``default_provider`` would redirect API
+# traffic to a config-controlled host while the user's global credentials
+# remain attached; ``env`` is owned by permissions.trust_boundary's gated
+# passes. (TS has no analogue: its project files contribute settings only.)
+_UNTRUSTED_TIER_BLOCKED_KEYS: frozenset[str] = frozenset(
+    {"env", "providers", "default_provider"}
+)
+
+
+def _session_trusted() -> bool:
+    try:
+        from src.bootstrap.state import get_session_trust_accepted
+
+        return get_session_trust_accepted()
+    except Exception:
+        # Bootstrap state unavailable (early import, standalone script):
+        # fail toward the pre-round-3 behavior rather than breaking reads.
+        return True
+
+
+def _strip_untrusted_keys(tier: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in tier.items()
+        if key not in _UNTRUSTED_TIER_BLOCKED_KEYS
+    }
+
+
 # ---------------------------------------------------------------------------
 # ConfigManager — three-level loading + merge
 # ---------------------------------------------------------------------------
@@ -199,10 +235,26 @@ class ConfigManager:
         return dict(self._local_cache)
 
     def get_merged(self) -> dict[str, Any]:
-        """Return fully merged config: global < project < local."""
+        """Return fully merged config: global < project < local.
+
+        While the session is untrusted, the project/local tiers are
+        stripped of trust-sensitive keys before merging (ch02 round-3
+        gap A5): a committable ``.claude/config.json`` must not be able
+        to redirect API traffic (``providers.*.base_url`` riding the
+        user's global ``api_key``) or inject env before the folder-trust
+        gate. Checked at merge time so a mid-session trust grant takes
+        effect on the next read. Env application is separately owned by
+        ``permissions.trust_boundary``; the ``env`` strip here is
+        defense in depth for direct ``get_merged()["env"]`` readers.
+        """
         merged = self.load_global()
-        merged = _deep_merge(merged, self.load_project())
-        merged = _deep_merge(merged, self.load_local())
+        project = self.load_project()
+        local = self.load_local()
+        if not _session_trusted():
+            project = _strip_untrusted_keys(project)
+            local = _strip_untrusted_keys(local)
+        merged = _deep_merge(merged, project)
+        merged = _deep_merge(merged, local)
         return merged
 
     # --- writers ---
@@ -239,6 +291,76 @@ class ConfigManager:
         cfg = self.load_project()
         cfg[key] = value
         self.save_project(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Per-project state in the GLOBAL config (TS config.projects[path])
+# ---------------------------------------------------------------------------
+# TS keeps per-project security state (hasTrustDialogAccepted,
+# hasClaudeMdExternalIncludesApproved, ...) in the USER-owned global
+# config keyed by project path — deliberately NOT in the committable
+# project config, so a checked-out repo can never pre-accept its own
+# trust prompts. Same here: ``~/.clawcodex/config.json`` → "projects".
+
+_PROJECTS_KEY = "projects"
+
+
+def _global_config_file() -> Path:
+    # Resolve through the module attribute at call time so test
+    # isolation that re-points GLOBAL_CONFIG_DIR covers these helpers.
+    return Path(GLOBAL_CONFIG_DIR) / "config.json"
+
+
+def normalize_path_for_config_key(path: str | Path) -> str:
+    """Canonical absolute path used as a ``projects`` map key."""
+
+    return str(Path(path).resolve())
+
+
+def get_project_path_for_config(cwd: str | Path | None = None) -> str:
+    """Where per-project state is keyed: git root if in a repo, else cwd
+    (TS ``getProjectPathForConfig``)."""
+
+    root = _find_git_root(cwd)
+    if root is not None:
+        return normalize_path_for_config_key(root)
+    return normalize_path_for_config_key(cwd or Path.cwd())
+
+
+def get_project_entry(project_path: str | Path) -> dict[str, Any]:
+    """The global-config ``projects[path]`` entry ({} if absent)."""
+
+    config = _read_json(_global_config_file())
+    projects = config.get(_PROJECTS_KEY)
+    if not isinstance(projects, dict):
+        return {}
+    entry = projects.get(normalize_path_for_config_key(project_path))
+    return entry if isinstance(entry, dict) else {}
+
+
+def update_project_entry(
+    project_path: str | Path, updates: dict[str, Any]
+) -> bool:
+    """Merge *updates* into ``projects[path]`` in the global config."""
+
+    path = _global_config_file()
+    config = _read_json(path)
+    projects = config.get(_PROJECTS_KEY)
+    if not isinstance(projects, dict):
+        projects = {}
+    key = normalize_path_for_config_key(project_path)
+    entry = projects.get(key)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry.update(updates)
+    projects[key] = entry
+    config[_PROJECTS_KEY] = projects
+    try:
+        _atomic_write_json(path, config)
+    except OSError:
+        return False
+    _get_default_manager().invalidate()
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -303,12 +425,31 @@ def save_config(config: dict[str, Any]) -> None:
 
 
 def get_provider_config(provider: str) -> dict[str, Any]:
-    """Get configuration for a specific provider, with env-var fallback."""
+    """Get configuration for a specific provider.
+
+    The literal ``provider`` key is tried first, so a pre-rename block such as
+    ``[providers.glm]`` still resolves by its own key. When the literal name is
+    absent, fall back to the canonical id so an alias (``nim`` -> ``nvidia-nim``,
+    ``glm`` -> ``zai``, ``kimi`` -> ``moonshot`` …) passed via ``--provider``
+    resolves to the provider's default config block.
+    """
+    config = load_config()
     config = load_config()
     providers = config.get('providers', {})
-    if provider not in providers:
-        raise ValueError(f'Unknown provider: {provider}')
-    cfg = dict(providers[provider])
+    if provider in providers:
+        resolved = provider
+    else:
+        try:
+            from src.providers import canonical_provider_name
+
+            canonical = canonical_provider_name(provider)
+        except Exception:
+            canonical = provider
+        if canonical != provider and canonical in providers:
+            resolved = canonical
+        else:
+            raise ValueError(f'Unknown provider: {provider}')
+    cfg = dict(providers[resolved])
     # Fall back to environment variables when config file has empty values.
     env_key = os.environ.get(f'{provider.upper()}_API_KEY')
     if not cfg.get('api_key') and env_key:
@@ -373,6 +514,17 @@ def set_theme(name: str) -> None:
     Matches the ``set_api_key`` / ``set_default_provider`` convention above.
     """
     _get_default_manager().set_global('theme', name)
+
+
+def set_logo_color(name: str) -> None:
+    """Persist the startup logo color palette to the global config.
+
+    Mirrors TS ``/logo`` (``saveGlobalConfig(c => ({...c, logoColor: chosen}))``). A
+    top-level config key (like :func:`set_theme`), read via
+    ``load_config().get("logoColor")`` by the startup banners — NOT a nested settings
+    field.
+    """
+    _get_default_manager().set_global("logoColor", name)
 
 
 def set_effort(value: Optional[str]) -> None:

@@ -49,6 +49,9 @@ class SystemMessage(BaseRow):
     SystemMessage.-error > Static {
         color: $error;
     }
+    SystemMessage.-warning > Static {
+        color: $warning;
+    }
     SystemMessage.-muted > Static {
         color: $text-muted;
     }
@@ -72,6 +75,8 @@ class SystemMessage(BaseRow):
             self.add_class("-error")
         elif style == "light":
             self.add_class("-light")
+        elif style == "warning":
+            self.add_class("-warning")
         else:
             self.add_class("-muted")
 

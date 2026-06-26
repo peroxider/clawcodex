@@ -27,7 +27,10 @@ Naming conventions mirror the React side:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.permissions.types import PermissionUpdate
 
 from textual.message import Message
 
@@ -144,7 +147,7 @@ class PermissionRequested(Message):
     request_id: str
     tool_name: str
     message: str
-    suggestion: str | None = None
+    suggestions: tuple["PermissionUpdate", ...] = ()
     tool_input: dict[str, Any] | None = None
 
 
@@ -154,11 +157,14 @@ class PermissionResolved(Message):
 
     Always paired with a call to :meth:`AppState.resolve_permission` so
     the worker thread is unblocked *before* this message is posted.
+    ``always`` means the user accepted the suggested "don't ask again"
+    rules; ``feedback`` is the optional deny-with-feedback note.
     """
 
     request_id: str
     allowed: bool
-    enable_setting: bool = False
+    always: bool = False
+    feedback: str | None = None
 
 
 @dataclass
@@ -248,6 +254,50 @@ class PermissionModeChanged(Message):
     """
 
     mode: str
+
+
+@dataclass
+class ExitRequested(Message):
+    """User pressed Ctrl+D on an empty prompt.
+
+    The stock ``Input`` swallows Ctrl+D (delete-forward), which is a no-op
+    on an empty buffer — so the app's quit binding never fires. The
+    paste-aware input posts this instead, and the app runs the same
+    double-press exit flow as Ctrl+C (``ClawCodexTUI._request_exit``).
+    """
+
+    source: str = "ctrl-d"
+
+
+@dataclass
+class QueuedPromptReady(Message):
+    """A queued prompt may be drained now that the bridge is idle.
+
+    Posted from :meth:`src.tui.agent_bridge.AgentBridge._finish` *after*
+    ``busy`` clears, when ``AppState.queued_prompts`` is non-empty. The
+    REPL screen re-checks on the UI thread and, if still idle + the queue
+    is non-empty, pops the oldest prompt and submits it — FIFO, one per
+    turn (the Python parity of TS ``useCommandQueue`` auto-processing).
+    The worker-side check is only a cheap filter; the UI handler is
+    authoritative, so a spurious post (e.g. a queue cleared by ESC) is a
+    safe no-op.
+    """
+
+    pass
+
+
+@dataclass
+class QueuedPromptsChanged(Message):
+    """The queued-prompts list changed; rebuild the dim preview widget.
+
+    Posted whenever ``AppState.queued_prompts`` is mutated: appended
+    (a prompt submitted while busy), popped (drain), or cleared (ESC).
+    The screen reads the live list from
+    ``src.tui.app.ClawCodexTUI.app_state.queued_prompts`` and refreshes
+    :class:`src.tui.widgets.queued_commands.QueuedCommands`.
+    """
+
+    pass
 
 
 @dataclass

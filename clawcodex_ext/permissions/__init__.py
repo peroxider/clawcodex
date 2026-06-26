@@ -29,7 +29,7 @@ from .filesystem import (
     check_write_permission_for_path,
     normalize_case_for_comparison,
 )
-from .handler import PermissionHandlerCallback, handle_permission_ask
+from .handler import handle_permission_ask
 from .loader import apply_rules_to_context, settings_to_rules
 from .modes import (
     is_default_mode,
@@ -69,6 +69,9 @@ from .types import (
     OtherDecisionReason,
     PermissionAllowDecision,
     PermissionAskDecision,
+    PermissionAskHandler,
+    PermissionAskReply,
+    PermissionAskRequest,
     PermissionBehavior,
     PermissionDecision,
     PermissionDecisionReason,
@@ -167,11 +170,13 @@ __all__ = [
     "OtherDecisionReason",
     "PermissionAllowDecision",
     "PermissionAskDecision",
+    "PermissionAskHandler",
+    "PermissionAskReply",
+    "PermissionAskRequest",
     "PermissionBehavior",
     "PermissionDecision",
     "PermissionDecisionReason",
     "PermissionDenyDecision",
-    "PermissionHandlerCallback",
     "PermissionMode",
     "PermissionPassthroughResult",
     "PermissionPromptToolDecisionReason",

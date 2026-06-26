@@ -110,6 +110,7 @@ async def get_user_context(
     context["currentDate"] = _get_session_start_date_iso()
 
     # CLAUDE.md content (skip in --bare mode unless --add-dir used)
+    claude_md_content = ""
     if not _should_disable_claude_md():
         try:
             memory_files = await get_memory_files(cwd=cwd)
@@ -118,6 +119,18 @@ async def get_user_context(
                 context["claudeMd"] = claude_md_content
         except Exception:
             pass
+
+    # Cache CLAUDE.md into the bootstrap singleton (TS context.ts:173-176):
+    # the DAG-leaf cache exists to break the classifier→filesystem→
+    # permissions→classifier import cycle. The TS consumer (yoloClassifier,
+    # the auto-mode transcript classifier) is unported — this is forward
+    # provisioning so the cache is real when ch06/ch12 land the consumer.
+    try:
+        from src.bootstrap.state import set_cached_claude_md_content
+
+        set_cached_claude_md_content(claude_md_content or None)
+    except Exception:
+        pass
 
     _user_context_cache = context
     return dict(context)
@@ -758,6 +771,12 @@ def build_full_system_prompt_blocks(
     ) -> None:
         for idx, section in enumerate(group):
             block: dict[str, Any] = {"type": "text", "text": section.content}
+            # Inert metadata for the query layer: routes per-request-volatile
+            # (REQUEST-scope) sections to the request tail for DeepSeek
+            # prefix-cache stability. Stripped before the wire for Anthropic;
+            # other OpenAI-compatible providers flatten only ``text`` and
+            # ignore it. See ``query._split_system_prompt_blocks``.
+            block["_cache_scope"] = scope.value
             if idx == len(group) - 1:
                 # Last block in this scope group → mark for caching.
                 cache_control: dict[str, Any] = {

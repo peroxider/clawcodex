@@ -13,11 +13,15 @@ tools verbose. Per the ``mouse=False`` design constraint (gap analysis
 §1 read #2 (c)), all interactive elements are reachable via keyboard
 only; the buttons are decorative — the actual decisions fire from the
 ``y`` / ``n`` / ``Esc`` keybindings registered on the modal.
+
+**Arrow-key navigation**: Up/Down arrows cycle focus between Allow and
+Deny; Enter confirms the focused choice. This mirrors the
+``SelectList`` interaction pattern used elsewhere in the TUI.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from rich.console import Group, RenderableType
 from rich.markup import escape
@@ -40,6 +44,9 @@ class PermissionModal(ModalScreen[bool]):
         Binding("y", "allow", "Allow", show=False),
         Binding("n", "deny", "Deny", show=False),
         Binding("escape", "deny", "Deny", show=False),
+        Binding("up", "move_selection(-1)", "Previous", show=False),
+        Binding("down", "move_selection(1)", "Next", show=False),
+        Binding("enter", "select", "Select", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -74,11 +81,15 @@ class PermissionModal(ModalScreen[bool]):
         background: $error;
         color: $background;
     }
+    PermissionModal Button.-focused {
+        border: double $text;
+    }
     """
 
     def __init__(self, request: PendingPermission) -> None:
         super().__init__()
         self._request = request
+        self._focused_button: Literal["allow", "deny"] = "allow"
 
     # ---- composition ----
     def compose(self) -> ComposeResult:
@@ -116,7 +127,7 @@ class PermissionModal(ModalScreen[bool]):
             )
         buttons = Vertical(id="buttons")
         panel.mount(buttons)
-        buttons.mount(Button("Allow (y)", id="allow", classes="-allow"))
+        buttons.mount(Button("Allow (y)", id="allow", classes="-allow -focused"))
         buttons.mount(Button("Deny  (n)", id="deny", classes="-deny"))
 
     # ---- events ----
@@ -131,6 +142,33 @@ class PermissionModal(ModalScreen[bool]):
 
     def action_deny(self) -> None:
         self._resolve(False)
+
+    def action_move_selection(self, delta: int) -> None:
+        """Cycle focus between Allow and Deny via up/down arrows."""
+        order: list[Literal["allow", "deny"]] = ["allow", "deny"]
+        current = order.index(self._focused_button)
+        new_index = (current + delta) % len(order)
+        self._focused_button = order[new_index]
+        self._refresh_button_focus()
+
+    def action_select(self) -> None:
+        """Confirm the currently focused button (Enter key)."""
+        if self._focused_button == "allow":
+            self.action_allow()
+        else:
+            self.action_deny()
+
+    def _refresh_button_focus(self) -> None:
+        """Apply visual focus state to the active button."""
+        for button_id, class_name in (("allow", "-focused"), ("deny", "-focused")):
+            try:
+                btn = self.query_one(f"#{button_id}", Button)
+                if button_id == self._focused_button:
+                    btn.add_class(class_name)
+                else:
+                    btn.remove_class(class_name)
+            except Exception:
+                pass
 
     # ---- internals ----
     def _resolve(self, allowed: bool) -> None:

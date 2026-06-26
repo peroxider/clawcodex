@@ -8,6 +8,7 @@ import shutil
 import signal as _signal_mod
 import subprocess
 import sys
+import threading as _threading
 import time as _time_mod
 from typing import Any
 
@@ -138,6 +139,28 @@ def _run_rg_with_abort(
         popen_kwargs["start_new_session"] = True
 
     proc = subprocess.Popen(argv, **popen_kwargs)
+
+    # Drain both pipes CONCURRENTLY with the poll loop (C5 fix): the loop
+    # below never read the pipes, so output beyond the OS pipe buffer
+    # (~64KB) blocked ripgrep on write and the call sat until the full
+    # timeout. `rg --files` on a normal repo was the first caller to trip
+    # it; large content searches had the same latent stall.
+    out_chunks: list[str] = []
+    err_chunks: list[str] = []
+
+    def _drain(stream: Any, buf: list[str]) -> None:
+        try:
+            for chunk in iter(lambda: stream.read(8192), ""):
+                buf.append(chunk)
+        except Exception:
+            pass
+
+    drains = []
+    for stream, buf in ((proc.stdout, out_chunks), (proc.stderr, err_chunks)):
+        thread = _threading.Thread(target=_drain, args=(stream, buf), daemon=True)
+        thread.start()
+        drains.append(thread)
+
     deadline = _time_mod.monotonic() + timeout_s
     aborted = False
     timed_out = False
@@ -165,14 +188,16 @@ def _run_rg_with_abort(
                 pass
 
     try:
-        stdout, stderr = proc.communicate(timeout=_KILL_GRACE_S)
+        proc.wait(timeout=_KILL_GRACE_S)
     except subprocess.TimeoutExpired:
-        stdout, stderr = "", ""
+        pass
+    for thread in drains:
+        thread.join(timeout=_KILL_GRACE_S)
 
     return (
         proc.returncode if proc.returncode is not None else -1,
-        stdout or "",
-        stderr or "",
+        "".join(out_chunks),
+        "".join(err_chunks),
         aborted,
         timed_out,
     )

@@ -236,6 +236,41 @@ class TestWorkflowLoad(unittest.TestCase):
         _, prompt = WorkflowLoader.load(self.path)
         self.assertEqual(prompt, "This is the actual prompt.")
 
+    def test_load_agent_env(self) -> None:
+        self.path.write_text(
+            textwrap.dedent(
+                """\
+                ---
+                agent:
+                  env:
+                    PATH: "/custom/bin:$PATH"
+                    MY_VAR: "value"
+                ---
+                prompt
+                """
+            ),
+            encoding="utf-8",
+        )
+        config, _ = WorkflowLoader.load(self.path)
+        self.assertEqual(config.agent.env["PATH"], "/custom/bin:$PATH")
+        self.assertEqual(config.agent.env["MY_VAR"], "value")
+
+    def test_load_agent_env_defaults_to_empty(self) -> None:
+        self.path.write_text(
+            textwrap.dedent(
+                """\
+                ---
+                agent:
+                  max_turns: 100
+                ---
+                prompt
+                """
+            ),
+            encoding="utf-8",
+        )
+        config, _ = WorkflowLoader.load(self.path)
+        self.assertEqual(config.agent.env, {})
+
 
 # ---------------------------------------------------------------------------
 # WorkflowLoader.default_path

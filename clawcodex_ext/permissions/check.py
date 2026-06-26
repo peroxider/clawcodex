@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
 from .bash_security import analyze_bash_command
+from src.permissions.bash_suggestions import contains_unquoted_chaining
 from .rules import (
     get_ask_rule_for_tool,
     get_deny_rule_for_tool,
@@ -97,6 +99,120 @@ def _get_updated_input_or_fallback(
     if hasattr(permission_result, "updated_input") and permission_result.updated_input is not None:
         return permission_result.updated_input
     return fallback
+
+
+# File-editing tools whose "allow all edits during this session" option maps to
+# acceptEdits mode, and which acceptEdits mode auto-allows inside the working
+# roots (parity with typescript/src/utils/permissions/filesystem.ts:1382-1397).
+_FILE_EDIT_TOOLS: tuple[str, ...] = ("Write", "Edit", "MultiEdit", "NotebookEdit")
+
+# Tools that are NOT necessarily gated — they never need a permission prompt.
+# This port centralizes the always-allow set here (one auditable surface)
+# instead of scattering identical ``check_permissions=allow`` across ~20 tool
+# files. The decision is mode-independent, matching how TS resolves these tools.
+#
+# Two membership rationales (kept distinct on purpose):
+#   * TS-DEFAULT-ALLOW — the base ``TOOL_DEFAULTS.checkPermissions`` returns
+#     ``{behavior:'allow'}`` (typescript/src/Tool.ts:777), so every TS tool with
+#     no override auto-allows. The Python base default is ``passthrough → ask``
+#     (build_tool.py), so these need to be named explicitly. Covers TodoWrite,
+#     ToolSearch, Sleep, Agent (AgentTool.tsx:1309), and the Python-only
+#     bookkeeping/coordination tools with no TS analog (Tasks, Team, Cron,
+#     worktree, Status, Brief, advisor, Clipboard*).
+#   * DELIBERATE UX DIVERGENCE — TS gates these but the project guideline
+#     ("allow if it is not necessarily gated; favor UX while keeping safety")
+#     says not to: WebSearch (TS WebSearchTool.ts:645 returns passthrough → ask;
+#     low-risk read-only, no arbitrary URL unlike WebFetch), AskUserQuestion
+#     (TS returns ask+requiresUserInteraction — the questions ARE the gate;
+#     Python's ``call`` collects answers via ``context.ask_user`` so a separate
+#     permission prompt is redundant), SendUserMessage, StructuredOutput.
+#
+# The check (in :func:`has_permissions_to_use_tool_inner`) is gated on a
+# ``passthrough`` tool result and runs AFTER deny/ask RULES, so a user-configured
+# ``deny``/``ask`` rule (and any explicit tool ``ask``) still wins.
+#
+# DELIBERATELY EXCLUDED (kept gated — these ARE necessarily gated):
+#   * file mutation: Write/Edit/MultiEdit/NotebookEdit
+#   * code execution: Bash
+#   * arbitrary network egress: WebFetch
+#   * input/conditional (carry their own check_permissions): Config (write),
+#     Glob, Grep, SendMessage (cross-machine bridge:/uds: recipients), and Skill.
+#     Skill's own check (``tools/skill.py:_skill_check_permissions``) AUTO-ALLOWS
+#     the invocation — in this port a skill grants no ungated capability: its
+#     embedded ``!`` shell is permission-checked in ``_make_shell_executor`` and
+#     the model's own tool calls are gated normally — while still honoring
+#     per-skill ``Skill(<name>)`` deny/ask content rules. (TS instead gates
+#     skills that declare ``allowed-tools``; we diverge because that
+#     pre-authorization is not wired through here, so there's nothing extra to
+#     gate. It lives here rather than in NO_PERMISSION_TOOLS because that
+#     content-rule handling is input-conditional, like Config/Grep.)
+#   * MCP server access: MCP / ListMcpResourcesTool / ReadMcpResourceTool and
+#     dynamic ``mcp__*`` (external/untrusted boundary).
+#   * plan-mode meta tools: EnterPlanMode / ExitPlanMode (ExitPlanMode is the
+#     plan-confirmation gate).
+NO_PERMISSION_TOOLS: frozenset[str] = frozenset({
+    # Interactive / output (the interaction or output IS the action)
+    "AskUserQuestion", "SendUserMessage", "StructuredOutput",
+    # Read-only / introspection
+    "WebSearch", "ToolSearch", "LSP", "advisor", "Brief", "Status",
+    "ClipboardRead",
+    # Bookkeeping / harness state (no external side effects)
+    "TodoWrite", "ClipboardWrite", "Sleep",
+    "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TaskOutput", "TaskStop",
+    # Orchestration / coordination — every sub-action they spawn is itself
+    # permission-checked, so the spawn is not the gate.
+    "Agent", "Workflow", "TeamCreate", "TeamDelete",
+    # Scheduling — the scheduled run is permission-checked when it fires.
+    "CronCreate", "CronList", "CronDelete",
+    # Local, reversible git-worktree management.
+    "EnterWorktree", "ExitWorktree",
+})
+
+
+def _allowed_roots_for_check(
+    context: ToolPermissionContext, tool_use_context: Any | None
+) -> list[str]:
+    """Working-directory roots used for acceptEdits path checks.
+
+    Prefers the live ``ToolContext.allowed_roots()`` (workspace + additional
+    dirs + internal paths); falls back to the cwd, and always folds in the
+    session-granted ``additional_working_directories`` from the permission
+    context so a just-accepted directory grant is honored.
+    """
+    roots: list[str] = []
+    if tool_use_context is not None:
+        try:
+            roots.extend(str(r) for r in tool_use_context.allowed_roots())
+        except Exception:
+            pass
+    if not roots:
+        roots.append(os.getcwd())
+    try:
+        roots.extend(context.additional_working_directories.keys())
+    except Exception:
+        pass
+    return roots
+
+
+def _path_in_working_roots(
+    file_path: str,
+    context: ToolPermissionContext,
+    tool_use_context: Any | None,
+) -> bool:
+    from pathlib import Path
+
+    abs_path = os.path.abspath(os.path.expanduser(file_path))
+    try:
+        target = Path(abs_path).resolve()
+    except OSError:
+        target = Path(abs_path)
+    for root in _allowed_roots_for_check(context, tool_use_context):
+        try:
+            target.relative_to(Path(root).resolve())
+            return True
+        except (ValueError, OSError):
+            continue
+    return False
 
 
 def has_permissions_to_use_tool(
@@ -284,12 +400,34 @@ def has_permissions_to_use_tool_inner(
             decision_reason=getattr(tool_permission_result, "decision_reason", None),
         )
 
+    # Not-necessarily-gated tools auto-allow (see NO_PERMISSION_TOOLS). Gated on
+    # ``passthrough`` so a tool that explicitly returns ``ask``/``deny`` is still
+    # honored, and placed AFTER the deny/ask RULE checks above so configured
+    # rules win. Mode-independent — matching TS, where these tools' own
+    # checkPermissions returns allow regardless of permission mode.
+    if (
+        tool_permission_result.behavior == "passthrough"
+        and tool.name in NO_PERMISSION_TOOLS
+    ):
+        return PermissionAllowDecision(
+            behavior="allow",
+            updated_input=_get_updated_input_or_fallback(tool_permission_result, tool_input),
+            decision_reason=OtherDecisionReason(
+                reason="auto-allow: tool is not necessarily gated (NO_PERMISSION_TOOLS)",
+            ),
+        )
+
     if (
         isinstance(tool, RequiresInteractionTool)
         and tool.requires_user_interaction()
         and tool_permission_result.behavior == "ask"
     ):
-        return _coerce_to_ask_decision(tool_permission_result, tool.name)
+        return _coerce_to_ask_decision(
+            tool_permission_result,
+            tool.name,
+            context=context,
+            tool_use_context=tool_use_context,
+        )
 
     if (
         tool_permission_result.behavior == "ask"
@@ -299,7 +437,12 @@ def has_permissions_to_use_tool_inner(
         and hasattr(tool_permission_result.decision_reason, "rule")
         and tool_permission_result.decision_reason.rule.rule_behavior == "ask"
     ):
-        return _coerce_to_ask_decision(tool_permission_result, tool.name)
+        return _coerce_to_ask_decision(
+            tool_permission_result,
+            tool.name,
+            context=context,
+            tool_use_context=tool_use_context,
+        )
 
     if (
         tool_permission_result.behavior == "ask"
@@ -307,7 +450,12 @@ def has_permissions_to_use_tool_inner(
         and tool_permission_result.decision_reason is not None
         and tool_permission_result.decision_reason.type == "safetyCheck"
     ):
-        return _coerce_to_ask_decision(tool_permission_result, tool.name)
+        return _coerce_to_ask_decision(
+            tool_permission_result,
+            tool.name,
+            context=context,
+            tool_use_context=tool_use_context,
+        )
 
     should_bypass = context.mode == "bypassPermissions" or (
         context.mode == "plan" and context.is_bypass_permissions_mode_available
@@ -318,6 +466,35 @@ def has_permissions_to_use_tool_inner(
             updated_input=_get_updated_input_or_fallback(tool_permission_result, tool_input),
             decision_reason=ModeDecisionReason(mode=context.mode),
         )
+
+    # acceptEdits mode: auto-allow file edits whose target is inside the working
+    # roots and is not a protected/dangerous path (parity with
+    # typescript/src/utils/permissions/filesystem.ts:1382-1397). This is what
+    # makes the file-edit "allow all edits during this session" option
+    # (setMode:acceptEdits) and the shift+tab "Accept edits" mode actually
+    # suppress later edit prompts. Gated on a passthrough tool result so an
+    # explicit tool ask (e.g. the docs gate) is still respected.
+    if (
+        context.mode == "acceptEdits"
+        and tool_permission_result.behavior == "passthrough"
+        and tool.name in _FILE_EDIT_TOOLS
+    ):
+        edit_path = tool_input.get("file_path") or tool_input.get("notebook_path")
+        if (
+            isinstance(edit_path, str)
+            and edit_path
+            and _path_in_working_roots(edit_path, context, tool_use_context)
+        ):
+            from .filesystem import check_path_safety_for_auto_edit
+
+            if check_path_safety_for_auto_edit(edit_path) is None:
+                return PermissionAllowDecision(
+                    behavior="allow",
+                    updated_input=_get_updated_input_or_fallback(
+                        tool_permission_result, tool_input
+                    ),
+                    decision_reason=ModeDecisionReason(mode="acceptEdits"),
+                )
 
     always_allowed = tool_always_allowed_rule(context, tool)
     if always_allowed:
@@ -341,14 +518,21 @@ def has_permissions_to_use_tool_inner(
                     )
 
     if tool_permission_result.behavior == "passthrough":
-        return PermissionAskDecision(
-            behavior="ask",
-            message=create_permission_request_message(
-                tool.name,
-                getattr(tool_permission_result, "decision_reason", None),
+        return _with_default_suggestions(
+            PermissionAskDecision(
+                behavior="ask",
+                message=create_permission_request_message(
+                    tool.name,
+                    getattr(tool_permission_result, "decision_reason", None),
+                ),
+                decision_reason=getattr(tool_permission_result, "decision_reason", None),
+                suggestions=getattr(tool_permission_result, "suggestions", None),
             ),
-            decision_reason=getattr(tool_permission_result, "decision_reason", None),
-            suggestions=getattr(tool_permission_result, "suggestions", None),
+            tool.name,
+            tool_input,
+            context=context,
+            tool_use_context=tool_use_context,
+            from_passthrough=True,
         )
 
     if tool_permission_result.behavior == "allow":
@@ -360,21 +544,100 @@ def has_permissions_to_use_tool_inner(
             decision_reason=getattr(tool_permission_result, "decision_reason", None),
         )
 
-    return _coerce_to_ask_decision(tool_permission_result, tool.name)
+    return _coerce_to_ask_decision(
+        tool_permission_result,
+        tool.name,
+        tool_input,
+        context=context,
+        tool_use_context=tool_use_context,
+    )
 
 
 def _coerce_to_ask_decision(
     result: PermissionResult,
     tool_name: str,
+    tool_input: dict[str, Any] | None = None,
+    *,
+    context: ToolPermissionContext | None = None,
+    tool_use_context: Any | None = None,
 ) -> PermissionAskDecision:
     if isinstance(result, PermissionAskDecision):
-        return result
-    return PermissionAskDecision(
-        behavior="ask",
-        message=getattr(result, "message", create_permission_request_message(tool_name)),
-        decision_reason=getattr(result, "decision_reason", None),
-        suggestions=getattr(result, "suggestions", None),
+        return _with_default_suggestions(
+            result, tool_name, tool_input, context, tool_use_context
+        )
+    return _with_default_suggestions(
+        PermissionAskDecision(
+            behavior="ask",
+            message=getattr(result, "message", create_permission_request_message(tool_name)),
+            decision_reason=getattr(result, "decision_reason", None),
+            suggestions=getattr(result, "suggestions", None),
+        ),
+        tool_name,
+        tool_input,
+        context,
+        tool_use_context,
     )
+
+
+def _with_default_suggestions(
+    ask: PermissionAskDecision,
+    tool_name: str,
+    tool_input: dict[str, Any] | None,
+    context: ToolPermissionContext | None = None,
+    tool_use_context: Any | None = None,
+    *,
+    from_passthrough: bool = False,
+) -> PermissionAskDecision:
+    """Return ``ask`` with the "allow for the whole session" updates filled in.
+
+    These updates drive the middle "Yes, …" option every interactive surface
+    renders. The per-tool shape (Bash command-prefix rule, file-edit
+    ``setMode:acceptEdits``, content-less rule for other tools, plus a
+    directory grant for out-of-roots paths) lives in
+    :func:`src.permissions.updates.default_session_suggestions`, so both the
+    console and TUI prompts stay in sync from one source.
+
+    Three deliberate exclusions are preserved:
+
+    * safety-flagged asks keep an empty list — TS ("Don't suggest saving a
+      potentially dangerous command");
+    * asks that already carry suggestions (a tool supplied its own) are left
+      untouched;
+    * only an ask the matcher manufactured from a ``passthrough`` tool result
+      (``from_passthrough``) gets a session option. An ask a tool raised
+      explicitly — e.g. the docs gate (``write.py``/``edit.py`` block ``.md``
+      edits unless ``allow_docs``) — or a configured ask-rule owns its own
+      gating, which a mode flip / blanket rule would not satisfy: the
+      acceptEdits auto-allow is itself ``passthrough``-gated, so "allow all
+      edits this session" would re-prompt the very file it was offered on
+      while silently widening session scope. So those asks keep Yes/No only.
+
+    Returns a copy (``dataclasses.replace``) rather than mutating — the input
+    can be a tool-owned decision object.
+    """
+
+    if ask.suggestions:
+        return ask
+    if isinstance(ask.decision_reason, SafetyCheckDecisionReason):
+        return ask
+    if not from_passthrough:
+        return ask
+
+    from .updates import default_session_suggestions
+
+    allowed_roots: tuple[str, ...] | None = None
+    if tool_use_context is not None:
+        try:
+            allowed_roots = tuple(str(r) for r in tool_use_context.allowed_roots())
+        except Exception:
+            allowed_roots = None
+
+    suggestions = default_session_suggestions(
+        tool_name, tool_input, context, allowed_roots=allowed_roots
+    )
+    if suggestions:
+        return replace(ask, suggestions=tuple(suggestions))
+    return ask
 
 
 def check_rule_based_permissions(
@@ -428,7 +691,12 @@ def check_rule_based_permissions(
         and hasattr(tool_permission_result.decision_reason, "rule")
         and tool_permission_result.decision_reason.rule.rule_behavior == "ask"
     ):
-        return _coerce_to_ask_decision(tool_permission_result, tool.name)
+        return _coerce_to_ask_decision(
+            tool_permission_result,
+            tool.name,
+            context=context,
+            tool_use_context=tool_use_context,
+        )
 
     if (
         tool_permission_result.behavior == "ask"
@@ -436,12 +704,27 @@ def check_rule_based_permissions(
         and tool_permission_result.decision_reason is not None
         and tool_permission_result.decision_reason.type == "safetyCheck"
     ):
-        return _coerce_to_ask_decision(tool_permission_result, tool.name)
+        return _coerce_to_ask_decision(
+            tool_permission_result,
+            tool.name,
+            context=context,
+            tool_use_context=tool_use_context,
+        )
 
     return None
 
 
 def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
+    # Chaining guard (C1): every non-explicit-wildcard rule refuses to
+    # auto-allow a command that chains further commands (&&, ||, ;, |,
+    # newline outside quotes). Without this, a rule like "git diff:*" (or
+    # the legacy single-word "git:*", or even an exact "ls -la" rule via
+    # the startswith fallback) would blanket-allow "<match> && anything"
+    # whenever the trailing command happens to rate benign in the safety
+    # screen. Deliberately stricter than TS, whose matcher runs
+    # per-AST-sub-command; Python matches whole strings, so chained
+    # commands must simply re-prompt. ("" and "*" rules are explicit
+    # allow-alls and stay unguarded.)
     if not rule_content:
         return lambda _: True
 
@@ -454,16 +737,35 @@ def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
         if suffix == "*":
 
             def _prefix_matcher(command: str) -> bool:
+                # TS semantics (bashPermissions.ts:879-882): exact match or
+                # prefix followed by a space — which makes MULTI-WORD
+                # prefixes ("git diff:*") work. The previous version
+                # compared only the command's first token against the whole
+                # prefix, so multi-word prefix rules could never match
+                # (latent until C1 un-starved the rule engine). The
+                # path-basename normalization of the first token
+                # (`/usr/bin/git` → `git`) is a deliberate Python nicety.
+                if contains_unquoted_chaining(command):
+                    return False
                 parts = command.strip().split(None, 1)
                 if not parts:
                     return False
-                cmd_name = parts[0].rsplit("/", 1)[-1]
-                return cmd_name == prefix
-
+                head = parts[0].rsplit("/", 1)[-1]
+                normalized = (
+                    head if len(parts) == 1 else f"{head} {parts[1]}"
+                )
+                return normalized == prefix or normalized.startswith(prefix + " ")
             return _prefix_matcher
         else:
 
             def _exact_prefix_matcher(command: str) -> bool:
+                # Known limitation: like the pre-C1 code, this branch only
+                # matches single-word rule prefixes (the first token is
+                # compared to the whole prefix), so a user-written
+                # "git diff:--stat*" rule cannot match. No producer mints
+                # such rules today; fix alongside a real consumer.
+                if contains_unquoted_chaining(command):
+                    return False
                 parts = command.strip().split(None, 1)
                 if not parts:
                     return False
@@ -476,9 +778,26 @@ def prepare_permission_matcher(rule_content: str) -> Callable[[str], bool]:
             return _exact_prefix_matcher
 
     if "*" in rule_content or "?" in rule_content:
-        return lambda command: fnmatch.fnmatch(command.strip(), rule_content)
+        return lambda command: (
+            not contains_unquoted_chaining(command)
+            and fnmatch.fnmatch(command.strip(), rule_content)
+        )
 
-    return lambda command: command.strip().startswith(rule_content)
+    def _exact_or_word_prefix_matcher(command: str) -> bool:
+        # Rules without ":*" or wildcards: exact match, or the rule
+        # followed by a SPACE (word boundary). Bare startswith would let
+        # a stored rule match last-token elongations (a rule for one
+        # flag cluster matching a longer one) — meaningful since C1's
+        # suggestion layer started minting exact-command rules into this
+        # branch. The +space prefix form (vs TS pure equality) is kept
+        # for the pre-existing locked behavior of word-prefix rules like
+        # "npm run".
+        if contains_unquoted_chaining(command):
+            return False
+        cmd = command.strip()
+        return cmd == rule_content or cmd.startswith(rule_content + " ")
+
+    return _exact_or_word_prefix_matcher
 
 
 @dataclass(frozen=True)
@@ -522,6 +841,11 @@ def auto_mode_classify(
 
     if tool_name == "Agent":
         return AutoModeDecision(allow=True, reason="agent tool")
+
+    if tool_name == "Workflow":
+        # Workflow orchestration is safe to auto-allow — each subagent it spawns
+        # goes through canUseTool individually.
+        return AutoModeDecision(allow=True, reason="workflow orchestrator")
 
     if tool_name.startswith("mcp__"):
         return AutoModeDecision(allow=False, reason="MCP tools require explicit approval")

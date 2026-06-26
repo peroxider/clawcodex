@@ -120,6 +120,18 @@ class OutputStyleSettings:
 
 
 @dataclass
+class SpinnerVerbsSettings:
+    """Custom spinner-verb configuration.
+
+    Mirrors TS ``settings/types.ts:695`` (``spinnerVerbs``). ``mode``:
+    ``"append"`` adds ``verbs`` to the built-in defaults; ``"replace"``
+    uses only ``verbs``. See :mod:`src.constants.spinner_verbs`.
+    """
+    mode: str = "append"  # "append" | "replace"
+    verbs: list[str] = field(default_factory=list)
+
+
+@dataclass
 class CompactSettings:
     """Compaction settings."""
 
@@ -153,6 +165,17 @@ class SettingsSchema:
 
     # Model
     model: str = ""
+    # Provider key that ``model`` was chosen under (ch03 round-3 G1).
+    # Multi-provider port: a persisted model is meaningful only with the
+    # provider that served it — TS utils/model/model.ts:109-135 documents
+    # the cross-provider staleness failure (a stale settings.model kept
+    # firing at the wrong endpoint and 400ing after a provider switch).
+    # Same pairing rationale as advisor_model/advisor_provider below.
+    # Read-side guard: the persisted model applies ONLY when this matches
+    # the session's active provider. Distinct from ``provider`` (the
+    # active-provider selection) — reusing that key would make the guard
+    # vacuous and let /model mutate provider selection.
+    model_provider: str = ""
     small_fast_model: str = ""
     # Advisor — reviewer tool. Empty string = unset (no /advisor).
     # Persisted analogue of TS appState.advisorModel; the /advisor slash
@@ -174,6 +197,13 @@ class SettingsSchema:
     # ``/advisor <model> --client``. See decide_advisor_mode() in
     # src/utils/advisor.py for the full activation table.
     advisor_client_mode: bool = False
+    # Master on/off switch for the advisor (reviewer tool). Default False —
+    # the advisor is OFF unless the user explicitly opts in, even when
+    # advisor_model/advisor_provider are configured. Enable via
+    # ``"advisor_enabled": true`` in ~/.clawcodex/config.json's "settings"
+    # block, or by running ``/advisor <provider>:<model>`` (which flips it on).
+    # ``decide_advisor_mode`` returns INACTIVE whenever this is False.
+    advisor_enabled: bool = False
 
     # Provider
     provider: str = "anthropic"
@@ -197,6 +227,9 @@ class SettingsSchema:
 
     # Output
     output_style: OutputStyleSettings = field(default_factory=OutputStyleSettings)
+
+    # Spinner verbs (None = built-in defaults)
+    spinner_verbs: SpinnerVerbsSettings | None = None
 
     # Compact
     compact: CompactSettings = field(default_factory=CompactSettings)
@@ -236,6 +269,10 @@ class SettingsSchema:
 
     # Fast mode (use small model)
     fast_mode: bool = False
+
+    # Disable dynamic workflows (also honored via CLAUDE_CODE_DISABLE_WORKFLOWS
+    # and the camelCase ``disableWorkflows`` JSON key). See src/workflow/gating.py.
+    disable_workflows: bool = False
 
     # Session retention days
     session_retention_days: int = 30
@@ -298,6 +335,8 @@ class SettingsSchema:
             known["permissions"] = PermissionsConfig.from_dict(known["permissions"])
         if "output_style" in known and isinstance(known["output_style"], dict):
             known["output_style"] = OutputStyleSettings(**known["output_style"])
+        if "spinner_verbs" in known and isinstance(known["spinner_verbs"], dict):
+            known["spinner_verbs"] = SpinnerVerbsSettings(**known["spinner_verbs"])
         if "compact" in known and isinstance(known["compact"], dict):
             known["compact"] = CompactSettings(**known["compact"])
         if "hooks" in known and isinstance(known["hooks"], dict):

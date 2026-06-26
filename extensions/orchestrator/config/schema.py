@@ -52,11 +52,18 @@ def _expand_path(value: str | None, fallback: str) -> str:
     return os.path.expanduser(resolved)
 
 
-def _normalize_keys(value: Any) -> Any:
+def _normalize_keys(value: Any, *, _inside_env: bool = False) -> Any:
     if isinstance(value, dict):
-        return {str(k).lower(): _normalize_keys(v) for k, v in value.items()}
+        result: dict[str, Any] = {}
+        for k, v in value.items():
+            key = str(k) if _inside_env else str(k).lower()
+            # Env var names are case-sensitive; preserve them under any
+            # ``env`` key while continuing to normalize all other keys.
+            next_inside_env = _inside_env or (not _inside_env and key == "env")
+            result[key] = _normalize_keys(v, _inside_env=next_inside_env)
+        return result
     if isinstance(value, list):
-        return [_normalize_keys(v) for v in value]
+        return [_normalize_keys(v, _inside_env=_inside_env) for v in value]
     return value
 
 
@@ -348,6 +355,11 @@ class AgentConfig:
     # previously-hardcoded `/root/Conda/bin/python3` in
     # ``PromptBuilder.build_continuation_prompt``.
     python_executable: str = ""
+    # Environment variables injected into every Bash subprocess
+    # spawned by the agent and every verification/hook subprocess
+    # spawned by the orchestrator. Values override inherited daemon
+    # env, so ``PATH`` can be extended without breaking the host.
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -589,6 +601,8 @@ class WorkflowConfig:
             model=_resolve_env_value(agent_raw.get("model")) or None,
             # Multi-model stage overrides (parsed above).
             stage_overrides=stage_overrides,
+            # Per-run env vars merged into Bash/hook subprocess env.
+            env={str(k): str(v) for k, v in (agent_raw.get("env") or {}).items() if v is not None},
         )
         if workspace.strategy == "sequential":
             if agent.max_concurrent_agents != 1:

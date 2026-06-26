@@ -47,6 +47,9 @@ class HeadlessSessionOptions:
     stdout: io.StringIO = field(default_factory=io.StringIO)
     stderr: io.StringIO = field(default_factory=io.StringIO)
     on_event: Callable[[Any], None] = field(default=lambda e: None)
+    # Environment variables merged into the headless session's
+    # subprocess env. Values override inherited daemon env.
+    env: dict[str, str] = field(default_factory=dict)
 
 
 def run_headless_session(
@@ -91,6 +94,7 @@ def run_headless_session(
         stdout=options.stdout,
         stderr=options.stderr,
         on_event=options.on_event,
+        env=options.env,
     )
     return run_headless(options_legacy)
 

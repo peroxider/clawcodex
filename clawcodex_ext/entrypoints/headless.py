@@ -30,7 +30,7 @@ import os
 import signal as _signal
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Callable, Iterable, Optional
 
@@ -49,7 +49,11 @@ from src.cli_core import (
     ndjson_safe_dumps,
 )
 from src.config import get_default_provider, get_provider_config
-from src.providers import get_provider_class
+from src.providers import (
+    get_provider_class,
+    provider_requires_api_key,
+    resolve_api_key,
+)
 from src.tool_system.renderers import AgentLoopResult, ToolEvent
 from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
@@ -103,6 +107,10 @@ class HeadlessOptions:
     # Optional system prompt body to append (from resolved default agent).
     append_system_prompt: str = ""
 
+    # Environment variables merged into every Bash subprocess env.
+    # Values override inherited daemon env.
+    env: dict[str, str] = field(default_factory=dict)
+
     # External tool-event callback (orchestrator's QueryRunner wires this).
     # Called alongside the internal NDJSON writer when set.
     on_event: Callable[[Any], None] | None = None
@@ -129,12 +137,29 @@ def run_headless(options: HeadlessOptions) -> int:
     stderr = options.stderr or sys.stderr
     stdin = options.stdin or sys.stdin
 
+    # ch02 round-3 GAP B: warm the user/system context memos now so the
+    # CLAUDE.md walk and git probes overlap with provider + registry
+    # construction below instead of running inside the first turn.
+    # Mirrors TS main.tsx:1973-1990 (non-interactive early kicks; trust
+    # is implicit in -p mode and was granted by run_pre_action).
+    # MUST use the resolved workspace_root, not the process cwd — the
+    # memos are key-less and first-writer pins the content the query
+    # path (which passes workspace_root) will read.
+    workspace_root = options.workspace_root or Path.cwd()
+    from src.deferred_init import start_deferred_prefetches
+
+    start_deferred_prefetches(cwd=str(workspace_root))
+
     provider_name = options.provider_name or get_default_provider()
     try:
         provider_cfg = get_provider_config(provider_name)
     except Exception as exc:
         cli_error(f"error: unable to load provider config: {exc}", 2)
-    if not provider_cfg.get("api_key"):
+    # Config api_key wins; fall back to the provider's known env vars (e.g.
+    # ``DEEPSEEK_API_KEY``) so a freshly-added provider works without ``login``.
+    # Local providers (Ollama / vLLM / SGLang) need no key.
+    api_key = resolve_api_key(provider_name, provider_cfg)
+    if not api_key and provider_requires_api_key(provider_name):
         cli_error(
             f"error: API key for provider '{provider_name}' is not configured. "
             "Run `clawcodex login` to set it up.",
@@ -144,7 +169,7 @@ def run_headless(options: HeadlessOptions) -> int:
     provider_cls = get_provider_class(provider_name)
     model = options.model or provider_cfg.get("default_model")
     provider = provider_cls(
-        api_key=provider_cfg["api_key"],
+        api_key=api_key,
         base_url=provider_cfg.get("base_url"),
         model=model,
     )
@@ -174,7 +199,7 @@ def run_headless(options: HeadlessOptions) -> int:
         deny = {name.lower() for name in options.disallowed_tools}
         _filter_registry(tool_registry, keep=lambda n: n.lower() not in deny)
 
-    workspace_root = options.workspace_root or Path.cwd()
+    # (workspace_root already resolved above, before the prefetch kick.)
 
     # Compute the effective permission context. ``skip_permissions=True`` is
     # the legacy alias and means "user passed --dangerously-skip-permissions";
@@ -182,8 +207,6 @@ def run_headless(options: HeadlessOptions) -> int:
     # round-5 fields. When skip_permissions wins, force bypass mode + bypass
     # availability so the registry's ``has_permissions_to_use_tool`` check
     # short-circuits to ``allow``.
-    from src.permissions.types import ToolPermissionContext
-
     if options.skip_permissions:
         effective_mode: str = "bypassPermissions"
         bypass_available = True
@@ -198,13 +221,23 @@ def run_headless(options: HeadlessOptions) -> int:
     # the next safe boundary — which can be several minutes for a
     # subprocess.wait() or an in-flight subagent.
     abort_controller = AbortController()
+    # C1: load persisted permission rules (settings files) at startup so
+    # "always allow" rules saved in interactive sessions auto-allow here
+    # too. Setup warnings intentionally unsurfaced until phase C6.
+    from src.permissions.settings_paths import default_setup_paths
+    from src.permissions.setup import setup_permissions
+
+    _perm_setup = setup_permissions(
+        cwd=str(workspace_root),
+        mode=effective_mode,  # type: ignore[arg-type]
+        is_bypass_available=bypass_available,
+        **default_setup_paths(str(workspace_root)),
+    )
     tool_context = ToolContext(
         workspace_root=workspace_root,
-        permission_context=ToolPermissionContext(
-            mode=effective_mode,  # type: ignore[arg-type]
-            is_bypass_permissions_mode_available=bypass_available,
-        ),
+        permission_context=_perm_setup.context,
         abort_controller=abort_controller,
+        env=options.env,
     )
     tool_context.options.is_non_interactive_session = True
     if options.skip_permissions or effective_mode == "bypassPermissions":
@@ -347,7 +380,9 @@ def run_headless(options: HeadlessOptions) -> int:
                             getattr(tool_context, "output_style_dir", None),
                         ).prompt
                         effective_system_prompt = (
-                            build_effective_system_prompt(_style_prompt, tool_context)
+                            build_effective_system_prompt(
+                                _style_prompt, tool_context, provider=provider,
+                            )
                         )
                         if options.append_system_prompt:
                             effective_system_prompt = (
@@ -703,16 +738,19 @@ def _filter_registry(registry, *, keep) -> None:
 
 
 def _auto_deny_permission_handler(stderr: IO[str]):
-    def handler(tool_name: str, message: str, suggestion: Optional[str]):
+    from src.permissions.types import PermissionAskReply, PermissionAskRequest
+
+    def handler(request: PermissionAskRequest) -> PermissionAskReply:
         stderr.write(
-            f"[headless] denying permission for {tool_name}: {message}"
+            f"[headless] denying permission for {request.tool_name}: "
+            f"{request.message}"
             " (pass --dangerously-skip-permissions to bypass)\n"
         )
         try:
             stderr.flush()
         except Exception:
             pass
-        return False, False
+        return PermissionAskReply(behavior="deny")
 
     return handler
 

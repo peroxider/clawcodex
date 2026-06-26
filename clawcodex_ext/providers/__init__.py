@@ -62,8 +62,11 @@ def _extend_builtin_models() -> None:
         if m not in openai_models:
             openai_models.append(m)
 
-    # Zhipu GLM — add OpenRouter-style paths
-    glm_models = PROVIDER_INFO.setdefault("glm", {}).setdefault(
+    # Z.ai / GLM — add OpenRouter-style paths. Upstream renamed the ``glm``
+    # provider to ``zai`` (``glm`` is now only a ``PROVIDER_ALIASES`` spelling),
+    # so extend the canonical ``zai`` entry. Guard on existence so we never
+    # fabricate a label-less stub entry that would break ``AVAILABLE_PROVIDERS``.
+    glm_models = PROVIDER_INFO.get("zai", PROVIDER_INFO.get("glm", {})).setdefault(
         "available_models", []
     )
     _glm_extras = [

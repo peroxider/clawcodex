@@ -8,6 +8,7 @@ from __future__ import annotations
 # --- Tool name constants ---
 AGENT_TOOL_NAME = "Agent"
 LEGACY_AGENT_TOOL_NAME = "Task"
+WORKFLOW_TOOL_NAME = "Workflow"
 
 # --- Built-in agent type identifiers ---
 VERIFICATION_AGENT_TYPE = "verification"
@@ -26,17 +27,17 @@ ONE_SHOT_BUILTIN_AGENT_TYPES: frozenset[str] = frozenset(
 
 # Tools always blocked for ALL agents (built-in and custom).
 # Mirrors ALL_AGENT_DISALLOWED_TOOLS from typescript/src/constants/tools.ts.
-ALL_AGENT_DISALLOWED_TOOLS: frozenset[str] = frozenset(
-    [
-        "TaskOutput",
-        "ExitPlanMode",
-        "EnterPlanMode",
-        AGENT_TOOL_NAME,
-        "AskUserQuestion",
-        "TaskStop",
-        "Brief",
-    ]
-)
+ALL_AGENT_DISALLOWED_TOOLS: frozenset[str] = frozenset([
+    "TaskOutput",
+    "ExitPlanMode",
+    "EnterPlanMode",
+    AGENT_TOOL_NAME,
+    # Prevent recursive workflow execution inside subagents.
+    WORKFLOW_TOOL_NAME,
+    "AskUserQuestion",
+    "TaskStop",
+    "Brief",
+])
 
 # Additional tools blocked for custom (non-built-in) agents.
 # Mirrors CUSTOM_AGENT_DISALLOWED_TOOLS.

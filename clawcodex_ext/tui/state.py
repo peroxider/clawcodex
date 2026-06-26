@@ -18,7 +18,12 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+from src.constants.spinner_verbs import pick_spinner_verb
+
+if TYPE_CHECKING:
+    from src.permissions.types import PermissionAskReply, PermissionUpdate
 
 
 class FocusedDialog(str, Enum):
@@ -64,16 +69,19 @@ def priority_of(dialog: FocusedDialog) -> int:
 class PendingPermission:
     """A tool-permission request awaiting user decision.
 
-    ``decide`` is called from the permission modal with the user's choice;
-    it is safe to invoke from either thread.
+    ``decide`` is called from the permission modal with the user's
+    :class:`src.permissions.types.PermissionAskReply`; it is safe to
+    invoke from either thread. ``suggestions`` carries the derived
+    "don't ask again" :class:`~src.permissions.types.PermissionUpdate`
+    rules behind the modal's always-allow option (C1).
     """
 
     request_id: str
     tool_name: str
     message: str
-    suggestion: str | None
+    suggestions: tuple["PermissionUpdate", ...]
     tool_input: dict[str, Any] | None
-    decide: Callable[[bool, bool], None]
+    decide: Callable[["PermissionAskReply"], None]
     created_at: float = field(default_factory=time.time)
 
 
@@ -110,6 +118,11 @@ class AppState:
     pending_ask_users: list[PendingAskUser] = field(default_factory=list)
     focused_dialog: FocusedDialog = FocusedDialog.PROMPT
     usage: dict[str, int] = field(default_factory=lambda: {"input_tokens": 0, "output_tokens": 0})
+    # Last API response's input-token count (incl. cache reads/creation):
+    # the canonical live-context measure for the context-% segment and the
+    # token warning — cumulative `usage` double-counts as context grows
+    # (TS utils/tokens.ts:407-420).
+    last_turn_input_tokens: int = 0
     last_error: str | None = None
     # F-9 / `/goal`: mirror of ``GoalController.get_pill_state()``.
     # ``None`` ⇒ no goal active (segment hidden). When set, the
@@ -154,16 +167,16 @@ class AppState:
         self,
         tool_name: str,
         message: str,
-        suggestion: str | None,
+        suggestions: tuple["PermissionUpdate", ...],
         tool_input: dict[str, Any] | None,
-        decide: Callable[[bool, bool], None],
+        decide: Callable[["PermissionAskReply"], None],
     ) -> PendingPermission:
         with self._lock:
             request = PendingPermission(
                 request_id=f"perm-{next(self._ids)}",
                 tool_name=tool_name,
                 message=message,
-                suggestion=suggestion,
+                suggestions=suggestions,
                 tool_input=tool_input,
                 decide=decide,
             )
@@ -244,7 +257,10 @@ class AppState:
         with self._lock:
             self.is_thinking = thinking
             if thinking:
-                self.verb = verb or "Synthesizing"
+                # TS picks a fresh random verb per spinner mount
+                # (Spinner.tsx:166). When no explicit verb is given, sample
+                # from the SPINNER_VERBS pool instead of a fixed string.
+                self.verb = verb or pick_spinner_verb()
                 self.verb_started_at = time.time()
             else:
                 self.verb = "Ready"

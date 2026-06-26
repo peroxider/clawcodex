@@ -26,15 +26,20 @@ class OpenAIProvider(OpenAICompatibleProvider):
         super().__init__(api_key, base_url, model or 'gpt-5.4')
 
     def _create_client(self) -> Any:
-        """Create OpenAI SDK client."""
+        """Create OpenAI SDK client.
+
+        The read timeout that prevents a stalled stream from freezing the event
+        loop is applied centrally by ``OpenAICompatibleProvider.client`` (via
+        ``_apply_client_timeout``) for every provider, so it isn't set here.
+        """
         if OpenAI is None:  # pragma: no cover
             raise ModuleNotFoundError(
                 'openai package is not installed. Install optional dependencies to use OpenAIProvider.'
             )
         kwargs: dict[str, Any] = {'api_key': self.api_key}
         if self.base_url:
-            kwargs['base_url'] = self.base_url
-        # Support SSL verification bypass for corporate/internal endpoints
+            kwargs["base_url"] = self.base_url
+        # Support SSL verification bypass for corporate/internal endpoints.
         import os
 
         if os.environ.get('CLAWCODEX_SSL_VERIFY', '').lower() in ('0', 'false', 'no'):

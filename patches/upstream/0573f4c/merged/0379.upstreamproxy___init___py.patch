@@ -1,0 +1,50 @@
+diff --git a/upstreamproxy/__init__.py b/upstreamproxy/__init__.py
+--- a/upstreamproxy/__init__.py	2026-06-26 00:59:44.000000 +0000
++++ b/upstreamproxy/__init__.py	2026-06-25 15:09:03.000000 +0800
+@@ -1,22 +1,24 @@
+-"""CCR upstream proxy subsystem (CONNECT-over-WS relay, container egress).
+-
+-Real implementations land here per ``my-docs/ch16-remote-refactoring-plan.md``.
+-The ``ARCHIVE_NAME``/``MODULE_COUNT``/``SAMPLE_FILES``/``PORTING_NOTE``
+-re-exports are preserved for backwards-compat with the parity audit and
+-existing test surface; new code uses full module paths.
+-"""
+-
+-from __future__ import annotations
+-
+-import json
+-from pathlib import Path
+-
+-SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'upstreamproxy.json'
+-_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
+-
+-ARCHIVE_NAME = _SNAPSHOT['archive_name']
+-MODULE_COUNT = _SNAPSHOT['module_count']
+-SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
+-PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
+-
+-__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']
++"""CCR upstream proxy subsystem (CONNECT-over-WS relay, container egress).
++
++Real implementations land here per ``my-docs/ch16-remote-refactoring-plan.md``.
++The ``ARCHIVE_NAME``/``MODULE_COUNT``/``SAMPLE_FILES``/``PORTING_NOTE``
++re-exports are preserved for backwards-compat with the parity audit and
++existing test surface; new code uses full module paths.
++"""
++
++from __future__ import annotations
++
++import json
++from pathlib import Path
++
++SNAPSHOT_PATH = (
++    Path(__file__).resolve().parent.parent / 'reference_data' / 'subsystems' / 'upstreamproxy.json'
++)
++_SNAPSHOT = json.loads(SNAPSHOT_PATH.read_text())
++
++ARCHIVE_NAME = _SNAPSHOT['archive_name']
++MODULE_COUNT = _SNAPSHOT['module_count']
++SAMPLE_FILES = tuple(_SNAPSHOT['sample_files'])
++PORTING_NOTE = f"Python placeholder package for '{ARCHIVE_NAME}' with {MODULE_COUNT} archived module references."
++
++__all__ = ['ARCHIVE_NAME', 'MODULE_COUNT', 'PORTING_NOTE', 'SAMPLE_FILES']

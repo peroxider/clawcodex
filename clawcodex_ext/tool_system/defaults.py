@@ -47,4 +47,13 @@ def build_default_registry(
         except ImportError:
             pass
 
+
+    # Dynamic workflows. Registered unconditionally (like the Agent tool, which
+    # also needs the registry + provider); the tool's ``is_enabled`` is the
+    # single runtime gate (``get_tools`` filters by it fresh), so a ``/config``
+    # toggle of ``disable_workflows`` takes effect without rebuilding the registry.
+    from src.tool_system.tools.workflow import make_workflow_tool
+
+    registry.register(make_workflow_tool(registry, provider=provider))
+
     return registry
