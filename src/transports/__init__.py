@@ -29,14 +29,14 @@ Public surface:
 
 from __future__ import annotations
 
-from src.transports.ccr_client import CCRClient
+from clawcodex_ext.transports.ccr_client import CCRClient
 from src.transports.hybrid_transport import HybridTransport
 from clawcodex_ext.transports.remote_io import RemoteIO
 from src.transports.serial_batch_event_uploader import SerialBatchEventUploader
-from src.transports.sse_transport import SSETransport
+from clawcodex_ext.transports.sse_transport import SSETransport
 from clawcodex_ext.transports.transport_utils import Transport, get_transport_for_url
 from src.transports.websocket_transport import WebSocketTransport
-from src.transports.worker_state_uploader import (
+from clawcodex_ext.transports.worker_state_uploader import (
     WorkerStateUploader,
     WorkerStateUploaderConfig,
 )
