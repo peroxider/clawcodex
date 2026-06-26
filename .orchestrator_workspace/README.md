@@ -4,10 +4,10 @@ This workspace was preserved by ClawCodex after automated issue processing.
 
 ## Issue Information
 
-- **Issue ID**: 6
+- **Issue ID**: 7
 - **Identifier**: unknown
 - **Status**: IssueStatus.FAILED
-- **Branch**: `clawcodex/6-f-68-feature-gate`
+- **Branch**: `clawcodex/7-f-70-plugin`
 - **Commit**: `None`
 
 ## Workspace Contents
@@ -47,7 +47,7 @@ pytest
 To remove this preserved workspace:
 
 ```bash
-clawcodex-dev orchestrator workspace cleanup --id 6 --force
+clawcodex-dev orchestrator workspace cleanup --id 7 --force
 ```
 
 ---
