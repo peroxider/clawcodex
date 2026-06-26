@@ -36,10 +36,12 @@ from clawcodex_ext.models import (  # noqa: F401 — registers extra model confi
     register_model_config,
 )
 from clawcodex_ext.agent.transcript import init as _init_nested_transcript  # noqa: F401
+from clawcodex_ext.orchestrator import install_stale_registry_patch  # noqa: F401
 
 install_permission_extensions()
 install_memory_extension()
 _install_provider_patches()
+install_stale_registry_patch()
 
 # Flag-guarded lazy initializer. Idempotent: a second call is a no-op
 # so callers (CLI main, REPL launcher, tests) can invoke it freely
