@@ -1,0 +1,133 @@
+# ── ClawCodex Declarative Workflow ──────────────────────────────────
+# 声明式工作流定义文件，由 DeclarativeWorkflowEngine 解释执行。
+#
+# 用法:
+#   clawcodex orchestrator server run-workflow --workflow-yaml workflow.yaml
+#
+# 阶段类型:
+#   agent    - LLM agent 执行阶段，执行 prompt 中的任务
+#   gate     - 质量门禁，验证前一阶段的输出
+#   decision - 条件分支，根据结果跳转到不同阶段
+# ────────────────────────────────────────────────────────────────────
+
+name: code-review-workflow
+version: "1.0"
+description: |
+  代码审查工作流示例：
+  1. 分析代码结构
+  2. 代码质量检查（GATE）
+  3. 根据检查结果决定是否修复
+  4. 生成审查报告
+
+# ── 阶段定义 ────────────────────────────────────────────────────────
+
+stages:
+  # Stage 1: 代码结构分析
+  - id: 1
+    name: 分析代码结构
+    kind: agent
+    phase: analyze
+    prompt: |
+      分析当前项目的代码结构和模块依赖关系。
+      请输出：
+      1. 项目的主要模块划分
+      2. 模块间的依赖关系
+      3. 关键路径和入口点
+    depends_on: []
+    timeout_seconds: 300
+    on_error: fail
+
+  # Stage 2: 代码质量检查
+  - id: 2
+    name: 代码质量检查
+    kind: agent
+    phase: check
+    prompt: |
+      对项目代码进行质量检查，包括：
+      1. 代码风格一致性
+      2. 潜在的性能问题
+      3. 安全漏洞检查
+      4. 错误处理完整性
+      请以结构化列表形式输出检查结果。
+    depends_on: [1]
+    timeout_seconds: 600
+    on_error: fail
+    validators:
+      - type: line_count
+        path: "."
+        min_lines: 1
+
+  # Stage 3: 质量门禁
+  - id: 3
+    name: 质量门禁
+    kind: gate
+    phase: gate
+    prompt: |
+      评估 Stage 2 的代码质量检查结果。
+      请判断是否通过质量门禁：
+      - 如果发现严重问题，应拒绝
+      - 如果只有轻微问题，可以通过
+    depends_on: [2]
+    gate_mode: auto
+    gate_threshold: 0.7
+    gate_rollback_to: 2
+    timeout_seconds: 300
+    on_error: rollback
+
+  # Stage 4: 决策分支
+  - id: 4
+    name: 决策：是否需要修复
+    kind: decision
+    phase: decide
+    prompt: |
+      根据 Stage 2 的检查结果和 Stage 3 的门禁判断，
+      决定下一步操作：
+      - 如果代码质量良好，直接生成报告
+      - 如果有问题需要修复，进入修复阶段
+    depends_on: [3]
+    timeout_seconds: 300
+    on_error: fail
+    decision_outcomes:
+      generate_report:
+        next: 6
+      fix_issues:
+        next: 5
+
+  # Stage 5: 修复问题（条件执行）
+  - id: 5
+    name: 修复代码问题
+    kind: agent
+    phase: fix
+    prompt: |
+      根据 Stage 2 发现的问题，修复代码中的缺陷。
+      请确保：
+      1. 不引入新的问题
+      2. 保持代码风格一致
+      3. 添加必要的测试
+    depends_on: [4]
+    timeout_seconds: 1200
+    on_error: skip
+    max_retries: 1
+
+  # Stage 6: 生成审查报告
+  - id: 6
+    name: 生成审查报告
+    kind: agent
+    phase: report
+    prompt: |
+      生成最终的代码审查报告，包含：
+      1. 项目概览
+      2. 发现的问题及严重程度
+      3. 修复建议（如有）
+      4. 总体评分
+    depends_on: [5]
+    timeout_seconds: 600
+    on_error: fail
+
+# ── 运行时配置 ──────────────────────────────────────────────────────
+
+config:
+  workspace: "."
+  agent:
+    provider: anthropic
+    model: claude-sonnet-4-20250514

@@ -121,6 +121,13 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Path to WORKFLOW.md file",
     )
     start_parser.add_argument(
+        "--workflow-yaml",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to workflow.yaml for declarative workflow engine (F-110)",
+    )
+    start_parser.add_argument(
         "--dashboard",
         action="store_true",
         help="Show embedded status dashboard",
@@ -494,6 +501,7 @@ def _run_start(args: argparse.Namespace) -> int:
         workflow_path=args.workflow,
         dashboard=getattr(args, "dashboard", False),
         port=getattr(args, "port", None),
+        workflow_yaml_path=getattr(args, "workflow_yaml", None),
     )
 
 
@@ -506,6 +514,7 @@ def _run_orchestrator(
     workflow_path: str | None,
     dashboard: bool = False,
     port: int | None = None,
+    workflow_yaml_path: str | None = None,
 ) -> int:
     """Launch the orchestrator with a workflow file.
 
@@ -550,7 +559,7 @@ def _run_orchestrator(
 
     from extensions.api.orchestration import OrchestrationSubsystem
 
-    subsystem = OrchestrationSubsystem(config)
+    subsystem = OrchestrationSubsystem(config, workflow_yaml_path=workflow_yaml_path)
 
     # F-?? Fix 2: write the real daemon PID to <workspace>/daemon.pid
     # so external tools (cron monitor, stop scripts) can locate the
