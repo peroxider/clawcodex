@@ -288,6 +288,7 @@ class IssueRegistry:
         previous_issue_id: str | None = None,
         sequence_index: int | None = None,
         status: IssueStatus | None = None,
+        author_login: str | None = None,
     ) -> IssueRecord:
         """Create a pending record for a newly claimed issue.
 
@@ -315,6 +316,7 @@ class IssueRegistry:
             previous_issue_id=previous_issue_id,
             sequence_index=sequence_index,
             status=status or IssueStatus.PENDING,
+            author_login=author_login,
         )
         if existing is not None:
             record.commit_sha = existing.commit_sha
@@ -325,6 +327,9 @@ class IssueRegistry:
             record.verification_output = existing.verification_output
             record.last_hook_error = existing.last_hook_error
             record.summary_comment_id = existing.summary_comment_id
+            # Preserve author_login from existing record if not explicitly provided
+            if author_login is None and existing.author_login:
+                record.author_login = existing.author_login
             record.last_followup_commit_sha = existing.last_followup_commit_sha
             # Re-register overwrites branch_name with the issue's default
             # (usually "main").  Preserve the actual feature branch name

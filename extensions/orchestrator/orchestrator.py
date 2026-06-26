@@ -456,6 +456,7 @@ class Orchestrator:
                         branch_name=issue.branch_name,
                         base_branch=base_branch,
                         status=IssueStatus.QUEUED,
+                        author_login=issue.author_login,
                     )
 
             if self.workflow.workspace.strategy == "sequential" and self._state.running:

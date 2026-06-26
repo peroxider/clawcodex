@@ -840,6 +840,7 @@ def _normalize_issue(
         branch_name=_extract_branch_name(payload),
         url=payload.get("html_url") or payload.get("url"),
         assignee_id=_assignee_value(assignee),
+        author_login=_extract_issue_author(payload),
         labels=labels,
         created_at=_parse_datetime(payload.get("created_at") or payload.get("createdAt")),
         updated_at=_parse_datetime(payload.get("updated_at") or payload.get("updatedAt")),
@@ -1208,6 +1209,16 @@ class RepositoryTrackerError(Exception):
 def _extract_comment_author(comment: dict[str, Any]) -> str | None:
     """Extract author login from a comment payload."""
     user = comment.get("user") or comment.get("author")
+    if isinstance(user, dict):
+        return user.get("login") or user.get("username") or user.get("name")
+    if isinstance(user, str) and user.strip():
+        return user
+    return None
+
+
+def _extract_issue_author(issue: dict[str, Any]) -> str | None:
+    """Extract author login from an issue payload."""
+    user = issue.get("user") or issue.get("author")
     if isinstance(user, dict):
         return user.get("login") or user.get("username") or user.get("name")
     if isinstance(user, str) and user.strip():

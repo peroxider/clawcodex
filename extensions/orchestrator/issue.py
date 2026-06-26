@@ -20,6 +20,7 @@ class Issue:
     branch_name: str | None = None
     url: str | None = None
     assignee_id: str | None = None
+    author_login: str | None = None
     blocked_by: list[dict[str, Any]] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
