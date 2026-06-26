@@ -1,0 +1,14 @@
+diff --git a/replLauncher.py b/replLauncher.py
+--- a/replLauncher.py	2026-06-18 10:10:17.449959 +0000
++++ b/replLauncher.py	2026-06-25 15:09:03.000000 +0800
+@@ -45,8 +45,8 @@
+     """One-line banner used by tests to confirm the module loads."""
+ 
+     return (
+-        "ClawCodex REPL (legacy prompt_toolkit + rich is default; "
+-        "Textual TUI opt-in via --tui or /tui)."
++        'ClawCodex REPL (legacy prompt_toolkit + rich is default; '
++        'Textual TUI opt-in via --tui or /tui).'
+     )
+ 
+ 

@@ -1,6 +1,6 @@
 diff --git a/tasks/local_agent.py b/tasks/local_agent.py
 --- a/tasks/local_agent.py	2026-06-18 10:10:15.640352 +0000
-+++ b/tasks/local_agent.py	2026-06-25 15:09:03.000000 +0800
++++ b/tasks/local_agent.py	2026-06-26 11:29:01.000000 +0800
 @@ -18,6 +18,7 @@
  primitive — the A6/C5 contract (mutator must be sync; never await
  under the registry lock) is honored throughout.
@@ -17,8 +17,9 @@ diff --git a/tasks/local_agent.py b/tasks/local_agent.py
 +from clawcodex_ext.tasks_core import TaskStateBase, is_terminal_task_status
  
  if TYPE_CHECKING:
-     from src.task_registry import RuntimeTaskRegistry
+-    from src.task_registry import RuntimeTaskRegistry
 -    from src.tasks.progress import AgentProgress
++    from clawcodex_ext.task_registry import RuntimeTaskRegistry
 +    from clawcodex_ext.tasks.progress import AgentProgress
  
  

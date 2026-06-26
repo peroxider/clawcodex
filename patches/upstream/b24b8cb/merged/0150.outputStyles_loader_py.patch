@@ -1,0 +1,69 @@
+diff --git a/outputStyles/loader.py b/outputStyles/loader.py
+--- a/outputStyles/loader.py	2026-06-18 10:10:17.142663 +0000
++++ b/outputStyles/loader.py	2026-06-25 15:09:03.000000 +0800
+@@ -36,7 +36,7 @@
+     the override. Mirrors the keybindings-loader pattern.
+     """
+ 
+-    return Path("~/.claude/outputStyles").expanduser()
++    return Path('~/.claude/outputStyles').expanduser()
+ 
+ 
+ def load_output_styles_dir(path: str | Path) -> dict[str, OutputStyle]:
+@@ -53,11 +53,11 @@
+     if not root.exists() or not root.is_dir():
+         return styles
+ 
+-    for file in sorted(root.glob("*.md")):
++    for file in sorted(root.glob('*.md')):
+         try:
+-            raw = file.read_text(encoding="utf-8")
++            raw = file.read_text(encoding='utf-8')
+         except (OSError, UnicodeDecodeError) as exc:
+-            _logger.warning("could not read output style at %s: %s", file, exc)
++            _logger.warning('could not read output style at %s: %s', file, exc)
+             continue
+         if not raw.strip():
+             continue
+@@ -67,8 +67,8 @@
+         body = result.body.strip()
+ 
+         # ``name`` precedence: explicit frontmatter > file stem.
+-        name = _coerce_str(meta.get("name")) or file.stem
+-        prompt_field = _coerce_str(meta.get("prompt"))
++        name = _coerce_str(meta.get('name')) or file.stem
++        prompt_field = _coerce_str(meta.get('prompt'))
+         # ``prompt`` precedence: explicit frontmatter > body content.
+         # Frontmatter ``prompt`` lets a user keep documentation in the
+         # body without shipping it to the model.
+@@ -80,8 +80,8 @@
+             name=name,
+             prompt=prompt,
+             source_path=file,
+-            description=_coerce_str(meta.get("description")),
+-            model=_coerce_str(meta.get("model")),
++            description=_coerce_str(meta.get('description')),
++            model=_coerce_str(meta.get('model')),
+         )
+     return styles
+ 
+@@ -111,8 +111,8 @@
+         else:
+             styles = dict(BUILTIN_OUTPUT_STYLES)
+ 
+-    key = (name or "default").strip() or "default"
+-    return styles.get(key, styles["default"])
++    key = (name or 'default').strip() or 'default'
++    return styles.get(key, styles['default'])
+ 
+ 
+ def _coerce_str(value: object) -> str | None:
+@@ -125,6 +125,6 @@
+ 
+ 
+ __all__ = [
+-    "load_output_styles_dir",
+-    "resolve_output_style",
++    'load_output_styles_dir',
++    'resolve_output_style',
+ ]

@@ -1,0 +1,11 @@
+diff --git a/models/capabilities.py b/models/capabilities.py
+--- a/models/capabilities.py	2026-06-18 10:10:16.057521 +0000
++++ b/models/capabilities.py	2026-06-22 17:23:55.000000 +0800
+@@ -10,6 +10,7 @@
+ @dataclass(frozen=True)
+ class ModelCapabilities:
+     """Capabilities of a model."""
++
+     thinking: bool = False
+     tools: bool = True
+     vision: bool = True
