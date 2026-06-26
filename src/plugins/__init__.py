@@ -1,3 +1,4 @@
+from .base import BasePlugin, PluginContext
 from .builtin_plugins import (
     BUILTIN_MARKETPLACE_NAME,
     clear_builtin_plugins,
@@ -16,15 +17,22 @@ from .dependency import (
     version_satisfies,
 )
 from .loader import (
+    MANIFEST_FILES,
     PluginDiscoveryResult,
     clear_loaded_plugins,
+    discover_all_plugins,
+    discover_entry_point_plugins,
     discover_plugins,
+    fire_lifecycle_event,
+    get_default_plugin_dirs,
     get_enabled_plugins,
     get_loaded_plugin,
     get_loaded_plugins,
     load_plugin_from_directory,
     load_plugins_from_directories,
+    on_lifecycle,
     register_plugin,
+    toggle_plugin_enabled,
     unregister_plugin,
 )
 from .lsp_integration import (
@@ -38,6 +46,7 @@ from .lsp_integration import (
     remove_lsp_plugin,
     wrap_lsp_server_as_plugin,
 )
+from .manager import PluginManager, create_manager
 from .marketplace import (
     MarketplaceEntry,
     MarketplaceIndex,
@@ -58,6 +67,23 @@ from .mcp_integration import (
     remove_mcp_plugin,
     wrap_mcp_server_as_plugin,
 )
+from .sandbox import (
+    ResourceLimit,
+    SandboxedPlugin,
+    SandboxConfig,
+    SandboxMode,
+    SandboxResult,
+    clear_sandboxes,
+    execute_in_sandbox,
+    execute_rpc,
+    get_all_sandboxes,
+    get_sandbox,
+    register_sandbox,
+    remove_sandbox,
+    start_sandbox,
+    stop_sandbox,
+)
+from .schema import PYDANTIC_AVAILABLE, PluginManifestSchema
 from .types import (
     BuiltinPluginDefinition,
     LoadedPlugin,
@@ -71,20 +97,26 @@ from .validator import (
 )
 
 __all__ = [
+    # Types
     'BuiltinPluginDefinition',
     'LoadedPlugin',
     'PluginManifest',
     'PluginError',
-    'BUILTIN_MARKETPLACE_NAME',
-    'register_builtin_plugin',
-    'get_builtin_plugins',
-    'get_builtin_plugin_definition',
-    'get_builtin_plugin_skill_commands',
-    'is_builtin_plugin_id',
-    'clear_builtin_plugins',
     'ManifestValidationError',
-    'validate_manifest',
-    'is_valid_manifest',
+    'SandboxedPlugin',
+    'SandboxConfig',
+    'SandboxMode',
+    'ResourceLimit',
+    'SandboxResult',
+    # Base protocol
+    'BasePlugin',
+    'PluginContext',
+    # Schema
+    'PluginManifestSchema',
+    'PYDANTIC_AVAILABLE',
+    # Manifest
+    'MANIFEST_FILES',
+    # Loader
     'PluginDiscoveryResult',
     'discover_plugins',
     'load_plugin_from_directory',
@@ -95,12 +127,34 @@ __all__ = [
     'get_enabled_plugins',
     'load_plugins_from_directories',
     'clear_loaded_plugins',
+    'discover_entry_point_plugins',
+    'discover_all_plugins',
+    'get_default_plugin_dirs',
+    'toggle_plugin_enabled',
+    'on_lifecycle',
+    'fire_lifecycle_event',
+    # Manager
+    'PluginManager',
+    'create_manager',
+    # Builtin
+    'BUILTIN_MARKETPLACE_NAME',
+    'register_builtin_plugin',
+    'get_builtin_plugins',
+    'get_builtin_plugin_definition',
+    'get_builtin_plugin_skill_commands',
+    'is_builtin_plugin_id',
+    'clear_builtin_plugins',
+    # Validator
+    'validate_manifest',
+    'is_valid_manifest',
+    # Dependency
     'DependencyNode',
     'DependencyConflict',
     'DependencyResolutionResult',
     'resolve_dependencies',
     'topological_sort',
     'version_satisfies',
+    # Marketplace
     'MarketplaceEntry',
     'MarketplaceIndex',
     'load_marketplace_index',
@@ -109,6 +163,7 @@ __all__ = [
     'install_plugin',
     'uninstall_plugin',
     'clear_marketplace_index',
+    # MCP
     'McpPluginTool',
     'McpPluginWrapper',
     'wrap_mcp_server_as_plugin',
@@ -117,6 +172,7 @@ __all__ = [
     'get_mcp_plugin_tools',
     'remove_mcp_plugin',
     'clear_mcp_plugins',
+    # LSP
     'DiagnosticSeverity',
     'LspDiagnostic',
     'LspServerConfig',
@@ -126,4 +182,14 @@ __all__ = [
     'get_all_lsp_plugins',
     'remove_lsp_plugin',
     'clear_lsp_plugins',
+    # Sandbox
+    'get_sandbox',
+    'get_all_sandboxes',
+    'register_sandbox',
+    'remove_sandbox',
+    'clear_sandboxes',
+    'start_sandbox',
+    'stop_sandbox',
+    'execute_in_sandbox',
+    'execute_rpc',
 ]

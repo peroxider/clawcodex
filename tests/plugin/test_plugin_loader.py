@@ -66,14 +66,14 @@ class TestLoadPluginFromDirectory:
     def test_missing_manifest(self, tmp_path):
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
-        with pytest.raises(PluginError, match="No plugin.json"):
+        with pytest.raises(PluginError, match="No manifest found"):
             load_plugin_from_directory(empty_dir)
 
     def test_invalid_json(self, tmp_path):
         plugin_dir = tmp_path / "bad-json"
         plugin_dir.mkdir()
         (plugin_dir / "plugin.json").write_text("not json")
-        with pytest.raises(PluginError, match="Failed to read"):
+        with pytest.raises(PluginError, match="Invalid"):
             load_plugin_from_directory(plugin_dir)
 
     def test_invalid_manifest(self, tmp_path):
