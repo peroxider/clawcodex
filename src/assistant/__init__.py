@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from clawcodex_ext.assistant.session_chooser import AssistantSessionChooser
-from src.assistant.session_history import (
+from clawcodex_ext.assistant.session_history import (
     HISTORY_PAGE_SIZE,
     HistoryAuthCtx,
     HistoryPage,
