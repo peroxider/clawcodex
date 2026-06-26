@@ -85,12 +85,32 @@ class Orchestrator:
         status_dashboard: StatusDashboard | None = None,
         *,
         stage_runners: dict[str, "AgentRunner"] | None = None,
+        workflow_yaml_path: str | None = None,
     ) -> None:
         self.workflow = workflow
         self.tracker = tracker
         self.workspace = workspace
         self.agent_runner = agent_runner
         self.stage_runners = stage_runners or {}
+        self._workflow_yaml_path = workflow_yaml_path
+        self._workflow_orchestrator = None
+
+        # F-110: 初始化声明式工作流引擎
+        if workflow_yaml_path:
+            from .workflow_orchestrator import WorkflowOrchestrator
+
+            self._workflow_orchestrator = WorkflowOrchestrator(
+                workflow_config=workflow,
+                workflow_yaml_path=workflow_yaml_path,
+                agent_runner=agent_runner,
+            )
+            logger.info(
+                "Workflow engine enabled: %s (%s, %d stages)",
+                workflow_yaml_path,
+                self._workflow_orchestrator.schema.name,
+                len(self._workflow_orchestrator.schema.stages),
+            )
+
         self.status_dashboard = status_dashboard or StatusDashboard()
         self._agent_config = workflow.agent
         self._validate_workspace_strategy()
@@ -1472,6 +1492,57 @@ class Orchestrator:
                 getattr(session, "status", None),
             )
 
+    async def _run_issue_with_workflow(
+        self, session: AgentSession, progress_sink: Any,
+    ) -> None:
+        """F-110: 使用声明式工作流引擎处理 issue。
+
+        通过 WorkflowOrchestrator 按 workflow.yaml 定义的 DAG 阶段
+        执行 issue，每个阶段由 AgentRunner 驱动的合成 Issue 执行。
+        """
+        workflow_orch = self._workflow_orchestrator
+        if workflow_orch is None:
+            logger.error("_run_issue_with_workflow called but no workflow orchestrator")
+            session.status = "failed"
+            return
+
+        logger.info(
+            "Running workflow for issue %s: %s",
+            session.issue.identifier, session.issue.title,
+        )
+
+        # F-116: 将编排器的 ProgressSink 注入工作流引擎，
+        # 使阶段进度实时反映到 StatusDashboard
+        workflow_orch.set_progress_sink(progress_sink)
+
+        try:
+            result = await workflow_orch.run_for_issue(
+                issue=session.issue,
+                workspace_path=str(session.workspace.path),
+            )
+        except Exception as exc:
+            logger.exception("Workflow execution failed for issue %s", session.issue.id)
+            session.status = "failed"
+            session.output_text = str(exc)
+            return
+
+        if result.success:
+            session.status = "completed"
+            session.output_text = (
+                f"Workflow '{result.workflow_name}' completed: "
+                f"{result.completed_stages}/{result.total_stages} stages, "
+                f"cost=${result.total_cost_usd:.4f}, "
+                f"duration={result.total_duration_seconds:.1f}s"
+            )
+        else:
+            session.status = "failed"
+            session.output_text = (
+                f"Workflow '{result.workflow_name}' failed at stage "
+                f"{result.completed_stages}/{result.total_stages}: {result.error}"
+            )
+
+        self._update_run_diagnostics(session)
+
     async def _run_issue(self, session: AgentSession) -> None:
         """Run agent for one issue with concurrency control."""
         async with self._semaphore:
@@ -1493,24 +1564,29 @@ class Orchestrator:
                     # ``on_turn_complete`` / ``on_session_complete``
                     # methods works.
                     progress_sink = self._build_session_sink(session.issue.id or "")
-                    # Per-stage runner lookup by session run_kind.
-                    # Falls back to main runner when no override is configured.
-                    runner = self.stage_runners.get(session.run_kind, self.agent_runner)
-                    run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
-                    session.timeout_deadline_at = time.time() + run_timeout_seconds
-                    await asyncio.wait_for(
-                        runner.run(
-                            session,
-                            self.workflow,
-                            status_dashboard=self.status_dashboard,
-                            tracker=self.tracker,
-                            comment_tracker=self.tracker,
-                            clarification_resolver=self._clarification_resolver,
-                            progress_reporter=progress_sink,
-                            diagnostics_callback=self._update_run_diagnostics,
-                        ),
-                        timeout=run_timeout_seconds,
-                    )
+
+                    # F-110: 如果配置了 workflow.yaml，使用声明式工作流引擎
+                    if self._workflow_orchestrator is not None:
+                        await self._run_issue_with_workflow(session, progress_sink)
+                    else:
+                        # Per-stage runner lookup by session run_kind.
+                        # Falls back to main runner when no override is configured.
+                        runner = self.stage_runners.get(session.run_kind, self.agent_runner)
+                        run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
+                        session.timeout_deadline_at = time.time() + run_timeout_seconds
+                        await asyncio.wait_for(
+                            runner.run(
+                                session,
+                                self.workflow,
+                                status_dashboard=self.status_dashboard,
+                                tracker=self.tracker,
+                                comment_tracker=self.tracker,
+                                clarification_resolver=self._clarification_resolver,
+                                progress_reporter=progress_sink,
+                                diagnostics_callback=self._update_run_diagnostics,
+                            ),
+                            timeout=run_timeout_seconds,
+                        )
                     if session.status == "completed":
                         # F-39 Sub-C: a followup run passes mode="followup"
                         # to git_sync so it reuses the existing branch + PR

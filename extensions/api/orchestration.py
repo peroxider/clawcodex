@@ -41,11 +41,12 @@ class OrchestrationSubsystem:
     status_dashboard: StatusDashboard
     _orchestrator: "Orchestrator | None" = None
 
-    def __init__(self, workflow_config: WorkflowConfig) -> None:
+    def __init__(self, workflow_config: WorkflowConfig, *, workflow_yaml_path: str | None = None) -> None:
         from ..orchestrator.agent_runner import AgentRunner
         from ..orchestrator.orchestrator import Orchestrator
 
         self.workflow = workflow_config
+        self._workflow_yaml_path = workflow_yaml_path
         self.workspace_manager = WorkspaceManager(
             WorkspaceConfig(
                 root=Path(workflow_config.workspace.root),
@@ -111,6 +112,7 @@ class OrchestrationSubsystem:
             agent_runner=self.agent_runner,
             status_dashboard=self.status_dashboard,
             stage_runners=self.stage_runners,
+            workflow_yaml_path=self._workflow_yaml_path,
         )
         await self._orchestrator.run()
 
