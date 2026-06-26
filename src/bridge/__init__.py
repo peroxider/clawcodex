@@ -41,13 +41,13 @@ from src.bridge.bridge_api import (
     is_suppressible_403,
     validate_bridge_id,
 )
-from src.bridge.bridge_config import (
+from clawcodex_ext.bridge.bridge_config import (
     get_bridge_access_token,
     get_bridge_base_url,
     get_bridge_base_url_override,
     get_bridge_token_override,
 )
-from src.bridge.bridge_permission_callbacks import (
+from clawcodex_ext.bridge.bridge_permission_callbacks import (
     BridgePermissionResponse,
     is_bridge_permission_response,
 )
@@ -62,7 +62,7 @@ from src.bridge.bridge_status_util import (
     truncate_to_width,
     wrap_with_osc8_link,
 )
-from src.bridge.capacity_wake import CapacityWake, create_capacity_wake
+from clawcodex_ext.bridge.capacity_wake import CapacityWake, create_capacity_wake
 from clawcodex_ext.bridge.close_codes import (
     WS_CLOSE_EPOCH_MISMATCH,
     WS_CLOSE_INIT_FAILURE,
@@ -70,7 +70,7 @@ from clawcodex_ext.bridge.close_codes import (
     WS_CLOSE_RECONNECT_BUDGET_EXHAUSTED,
     WS_CLOSE_SESSION_NOT_FOUND,
 )
-from src.bridge.env_less_bridge_config import (
+from clawcodex_ext.bridge.env_less_bridge_config import (
     DEFAULT_ENV_LESS_BRIDGE_CONFIG,
     EnvLessBridgeConfig,
     get_env_less_bridge_config,
@@ -90,7 +90,7 @@ from clawcodex_ext.bridge.poll_config_defaults import (
     DEFAULT_POLL_CONFIG,
     PollIntervalConfig,
 )
-from src.bridge.repl_bridge_handle import (
+from clawcodex_ext.bridge.repl_bridge_handle import (
     get_repl_bridge_handle,
     get_self_bridge_compat_id,
     set_repl_bridge_handle,
