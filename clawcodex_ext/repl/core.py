@@ -365,6 +365,8 @@ def _load_heavy_runtime() -> None:
     global CostTracker, HistoryLog, AgentMentionCompleter, AtFileCompleter
     global LiveStatus, _HAS_CRON, attach_cron_runtime, replace_cron_tools
     global claim_cron_run, finalize_cron_run
+    global format_advisor_status, permission_mode_short_title
+    global compute_session_cost, format_cost_usd
 
     if _heavy_runtime_loaded:
         return
@@ -405,6 +407,13 @@ def _load_heavy_runtime() -> None:
     from src.repl.agent_mention_completer import AgentMentionCompleter
     from src.repl.at_file_completer import AtFileCompleter
     from clawcodex_ext.repl.live_status import LiveStatus
+
+    # Hot-path footer helpers — ``_bottom_toolbar`` runs on every prompt
+    # redraw (per keystroke), so these are resolved once here instead of
+    # being re-imported on each call.
+    from src.utils.advisor import format_advisor_status
+    from clawcodex_ext.permissions import permission_mode_short_title
+    from clawcodex_ext.services.pricing import compute_session_cost, format_cost_usd
 
     _load_cron_runtime()
 
@@ -1027,9 +1036,6 @@ class ClawcodexREPL:
             # reflects what the NEXT request will do given the current
             # provider + main model, so a stale config under an
             # unsupported provider shows "(inactive)" rather than lying.
-            from src.utils.advisor import format_advisor_status
-            from clawcodex_ext.permissions import permission_mode_short_title
-
             advisor_seg = format_advisor_status(self.provider, model)
             advisor_part = f" {advisor_seg} ·" if advisor_seg else ""
             # Advisor token counts — accumulated on the ToolContext
@@ -1068,11 +1074,6 @@ class ClawcodexREPL:
             # displayed number is the upstream-list cost, not the
             # exact invoice. Hidden when zero (no API turns yet this
             # session).
-            from clawcodex_ext.services.pricing import (
-                compute_session_cost,
-                format_cost_usd,
-            )
-
             try:
                 from src.settings.settings import get_settings as _gs
 
