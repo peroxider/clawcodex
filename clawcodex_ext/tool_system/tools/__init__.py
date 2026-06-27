@@ -46,6 +46,11 @@ from .web_search import WebSearchTool
 from .worktree import EnterWorktreeTool, ExitWorktreeTool
 from .write import WriteTool
 
+# F-71: 内置工具补齐
+from .execute import execute_tool
+from .remote_trigger import remote_trigger_tool
+from .web_browser import web_browser_tool
+
 ALL_STATIC_TOOLS: list[Tool] = [
     AdvisorTool,
     AskUserQuestionTool,
@@ -89,6 +94,10 @@ ALL_STATIC_TOOLS: list[Tool] = [
     WebFetchTool,
     WebSearchTool,
     WriteTool,
+    # F-71
+    execute_tool,
+    remote_trigger_tool,
+    web_browser_tool,
 ]
 
 __all__ = [
@@ -135,6 +144,10 @@ __all__ = [
     "WebFetchTool",
     "WebSearchTool",
     "WriteTool",
+    # F-71
+    "execute_tool",
+    "remote_trigger_tool",
+    "web_browser_tool",
     "make_agent_tool",
     "make_tool_search_tool",
 ]
