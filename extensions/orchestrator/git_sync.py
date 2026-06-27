@@ -137,7 +137,7 @@ class GitSyncService:
         workspace: Workspace = session.workspace
         issue: Issue = session.issue
 
-        repo_root = get_repo_root(str(workspace.path))
+        repo_root = await asyncio.to_thread(get_repo_root, str(workspace.path))
         if not repo_root:
             return None
 
@@ -151,16 +151,20 @@ class GitSyncService:
         no_push = is_local_tracker or is_sequential
 
         followup_pr = getattr(session, "pull_request", None)
-        base_branch = getattr(session, "base_branch", None) or get_default_branch(repo_root)
+        base_branch = getattr(session, "base_branch", None)
+        if not base_branch:
+            base_branch = await asyncio.to_thread(get_default_branch, repo_root)
         if is_sequential:
-            branch_name = (
-                getattr(session, "integration_branch", None)
-                or get_current_branch(repo_root)
-                or base_branch
-            )
+            branch_name = getattr(session, "integration_branch", None)
+            if not branch_name:
+                branch_name = (
+                    await asyncio.to_thread(get_current_branch, repo_root) or base_branch
+                )
         else:
-            branch_name = self._ensure_work_branch(repo_root, issue, base_branch)
-        changed = bool(get_file_status(repo_root))
+            branch_name = await asyncio.to_thread(
+                self._ensure_work_branch, repo_root, issue, base_branch
+            )
+        changed = bool(await asyncio.to_thread(get_file_status, repo_root))
 
         commit_sha: str | None = None
         committed = False
@@ -169,20 +173,22 @@ class GitSyncService:
         has_conflict = False
         conflict_files: tuple[str, ...] = ()
         if changed:
-            self._ensure_commit_identity(repo_root)
+            await asyncio.to_thread(self._ensure_commit_identity, repo_root)
             if is_sequential:
                 await self._run_pre_commit_hook(repo_root, session)
-            self._run_git_checked(["add", "-A"], repo_root)
-            self._unstage_orchestrator_artifacts(repo_root)
-            self._apply_file_whitelist(repo_root)
+            await asyncio.to_thread(self._run_git_checked, ["add", "-A"], repo_root)
+            await asyncio.to_thread(self._unstage_orchestrator_artifacts, repo_root)
+            await asyncio.to_thread(self._apply_file_whitelist, repo_root)
 
             # Check if there are staged changes after add/unstage/whitelist
             # If not, agent may have already committed (e2e workflow)
-            has_staged = self._has_staged_changes(repo_root)
+            has_staged = await asyncio.to_thread(self._has_staged_changes, repo_root)
             agent_committed = False
             if not has_staged:
                 # No staged changes - check if agent already committed by comparing HEAD
-                current_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+                current_sha = await asyncio.to_thread(
+                    self._run_git_output, ["rev-parse", "HEAD"], repo_root
+                )
                 start_commit_sha = getattr(session, "start_commit_sha", None)
                 has_run_commit = bool(start_commit_sha and current_sha != start_commit_sha)
 
@@ -200,20 +206,28 @@ class GitSyncService:
                     followup=followup_pr is not None,
                     feedback_body=getattr(session, "feedback_commit_body", None),
                 )
-                self._run_git_checked(["commit", "-m", commit_message], repo_root)
-                commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+                await asyncio.to_thread(
+                    self._run_git_checked, ["commit", "-m", commit_message], repo_root
+                )
+                commit_sha = await asyncio.to_thread(
+                    self._run_git_output, ["rev-parse", "HEAD"], repo_root
+                )
                 committed = True
             try:
                 if not is_sequential and not agent_committed:
                     await self._run_pre_commit_hook(repo_root, session)
-                    commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+                    commit_sha = await asyncio.to_thread(
+                        self._run_git_output, ["rev-parse", "HEAD"], repo_root
+                    )
                 await self._run_pre_push_verification(repo_root, session)
             except (VerificationFailed, HookFailedError) as exc:
                 # Roll back the just-created commit since verification failed
                 # But only if we created the commit (not agent)
                 if not agent_committed:
                     try:
-                        self._run_git_checked(["reset", "--mixed", "HEAD~1"], repo_root)
+                        await asyncio.to_thread(
+                            self._run_git_checked, ["reset", "--mixed", "HEAD~1"], repo_root
+                        )
                     except GitSyncError:
                         pass  # No commit to rollback or reset failed — proceed anyway
                     committed = False
@@ -233,12 +247,15 @@ class GitSyncService:
                 # LocalTracker: no remote, skip push but record branch info
                 pass
             else:
-                pushed, has_conflict, conflict_files = self._push_with_recovery(
+                pushed, has_conflict, conflict_files = await asyncio.to_thread(
+                    self._push_with_recovery,
                     repo_root,
                     branch_name,
                 )
         else:
-            commit_sha = self._run_git_output(["rev-parse", "HEAD"], repo_root)
+            commit_sha = await asyncio.to_thread(
+                self._run_git_output, ["rev-parse", "HEAD"], repo_root
+            )
             start_commit_sha = getattr(session, "start_commit_sha", None)
             has_run_commit = bool(start_commit_sha and commit_sha != start_commit_sha)
             try:
@@ -260,7 +277,8 @@ class GitSyncService:
                 commit_sha = None
             # No staged changes but branch may have diverged from origin — still push
             if branch_name and not no_push:
-                pushed, has_conflict, conflict_files = self._push_with_recovery(
+                pushed, has_conflict, conflict_files = await asyncio.to_thread(
+                    self._push_with_recovery,
                     repo_root,
                     branch_name,
                 )
@@ -410,11 +428,13 @@ class GitSyncService:
             return
         output = await self._run_shell(command, repo_root, self._hooks_config.timeout_ms)
         if (
-            get_file_status(repo_root)
+            await asyncio.to_thread(get_file_status, repo_root)
             and getattr(session, "workspace_strategy", "isolated") != "sequential"
         ):
-            self._run_git_checked(["add", "-A"], repo_root)
-            self._run_git_checked(["commit", "--amend", "--no-edit"], repo_root)
+            await asyncio.to_thread(self._run_git_checked, ["add", "-A"], repo_root)
+            await asyncio.to_thread(
+                self._run_git_checked, ["commit", "--amend", "--no-edit"], repo_root
+            )
         setattr(session, "pre_commit_output", output)
 
     async def _run_pre_push_verification(self, repo_root: str, session: Any) -> None:
@@ -437,7 +457,7 @@ class GitSyncService:
             outputs.append(f"## {label}\n{output}".strip())
         hook_command = self._hooks_config.pre_push
         if hook_command:
-            before = self._status_snapshot(repo_root)
+            before = await asyncio.to_thread(self._status_snapshot, repo_root)
             try:
                 output = await self._run_shell(
                     hook_command,
@@ -446,7 +466,7 @@ class GitSyncService:
                 )
             except VerificationFailed as exc:
                 raise HookFailedError("pre_push", "pre_push hook failed", exc.output) from exc
-            if self._status_snapshot(repo_root) != before:
+            if await asyncio.to_thread(self._status_snapshot, repo_root) != before:
                 raise HookFailedError(
                     "pre_push",
                     "pre_push hook modified the workspace",
@@ -460,12 +480,12 @@ class GitSyncService:
         command = self._hooks_config.post_sync
         if not command:
             return
-        before = self._status_snapshot(repo_root)
+        before = await asyncio.to_thread(self._status_snapshot, repo_root)
         try:
             output = await self._run_shell(command, repo_root, self._hooks_config.timeout_ms)
         except VerificationFailed as exc:
             raise HookFailedError("post_sync", "post_sync hook failed", exc.output) from exc
-        if self._status_snapshot(repo_root) != before:
+        if await asyncio.to_thread(self._status_snapshot, repo_root) != before:
             raise HookFailedError(
                 "post_sync",
                 "post_sync hook modified the workspace",
@@ -546,6 +566,10 @@ class GitSyncService:
 
         # Attempt fetch + rebase
         self._run_git_checked(["fetch", "origin"], repo_root)
+        # F-120: defensively clear any leftover REBASE_HEAD before
+        # starting a fresh rebase — if a previous run aborted mid-
+        # rebase, this prevents compounding conflict markers.
+        _git_rebase_abort(repo_root)
         stdout, stderr, rc = _run_git(
             ["rebase", f"origin/{branch_name}"],
             repo_root,
@@ -558,7 +582,15 @@ class GitSyncService:
                 return True, False, ()
             conflict_files = self._detect_conflicts(repo_root)
             if conflict_files:
+                # F-120: leave the half-finished rebase in place so
+                # the follow-up agent run can resume with
+                # ``git rebase --continue`` after resolving the
+                # conflict markers.
                 return False, True, conflict_files
+            # F-120: non-conflict rebase failure (auth / network) —
+            # abort the half-finished rebase so the workspace
+            # doesn't stay stuck in REBASE_HEAD.
+            _git_rebase_abort(repo_root)
             raise GitSyncError(f"git rebase failed: {stderr or stdout}")
 
         # Retry push after successful rebase
@@ -1007,3 +1039,286 @@ def _slugify(value: str) -> str:
     text = re.sub(r"[^a-z0-9._/-]+", "-", text)
     text = re.sub(r"-{2,}", "-", text).strip("-")
     return text or "issue-update"
+
+
+# ---------------------------------------------------------------------------
+# F-120: PR conflict auto-resolution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PRRebaseResult:
+    """Result of `rebase_for_pr`.
+
+    Attributes:
+      * ``rebased`` — ``True`` if the local branch is now based on
+        the latest base. ``False`` if the rebase did not happen (no
+        work to do, push failed, or pre-flight check rejected).
+      * ``has_conflict`` — ``True`` if the rebase left content
+        conflicts in the workspace. The orchestrator's daemon
+        scan path uses this to schedule a follow-up agent run
+        (``run_kind="agent_rebase"``).
+      * ``conflict_files`` — list of files containing conflict
+        markers (from ``git diff --name-only --diff-filter=U``).
+        Empty tuple when ``has_conflict`` is False.
+      * ``new_head_sha`` — the local commit SHA after a successful
+        rebase+push. ``None`` when no push happened.
+      * ``pushed`` — ``True`` if the rebased branch was pushed to
+        the remote. ``False`` when no rebase was needed (already
+        up-to-date) or the push failed.
+      * ``push_method`` — one of ``"force_with_lease"`` /
+        ``"force"`` / ``"none"``. Lets the audit log distinguish
+        operator-explicit ``--force`` runs from the default
+        safe-with-lease path.
+      * ``workspace_clean`` — ``True`` when no
+        ``.git/REBASE_HEAD`` is left behind. ``False`` indicates
+        the operator should run ``git rebase --abort`` manually
+        (defensive cleanup paths in ``rebase_for_pr`` are
+        best-effort).
+    """
+
+    rebased: bool
+    has_conflict: bool = False
+    conflict_files: tuple[str, ...] = field(default_factory=tuple)
+    new_head_sha: str | None = None
+    pushed: bool = False
+    push_method: str = "none"  # "force_with_lease" | "force" | "none"
+    workspace_clean: bool = True
+
+
+def _git_rebase_abort(repo_root: str) -> None:
+    """F-120: best-effort ``git rebase --abort``.
+
+    Used by ``rebase_for_pr`` to clear a stuck rebase state when
+    pre-flight checks fail (e.g. fetch returned 0 commits, or the
+    rebase exited with a non-conflict error like auth failure). The
+    command is allowed to fail silently — when no rebase is in
+    progress ``git rebase --abort`` returns a non-zero exit code
+    with a "No rebase in progress?" message; we don't want that to
+    raise and mask the real error.
+    """
+    stdout, stderr, _rc = _run_git(["rebase", "--abort"], repo_root)
+    # ``_run_git`` does not raise on non-zero rc; we explicitly
+    # ignore the result.
+    del stdout, stderr
+
+
+def _ahead_behind(repo_root: str, branch: str, base: str) -> tuple[int, int]:
+    """Return ``(ahead, behind)`` commit counts of ``branch`` vs ``base``.
+
+    Wraps ``git rev-list --left-right --count branch...base`` and
+    parses the two integers from stdout. On parse failure returns
+    ``(0, 0)`` so the caller can short-circuit ("nothing to do")
+    rather than crash.
+    """
+    stdout, _stderr, rc = _run_git(
+        ["rev-list", "--left-right", "--count", f"{branch}...{base}"],
+        repo_root,
+    )
+    if rc != 0:
+        return (0, 0)
+    parts = stdout.strip().split()
+    if len(parts) != 2:
+        return (0, 0)
+    try:
+        return (int(parts[0]), int(parts[1]))
+    except ValueError:
+        return (0, 0)
+
+
+def rebase_for_pr(
+    *,
+    workspace_path: str,
+    branch_name: str,
+    base_branch: str,
+    force: bool = False,
+) -> PRRebaseResult:
+    """F-120: resolve a stale-base PR by rebasing the feature branch.
+
+    Flow:
+      1. **Pre-flight** — ``git checkout <branch>`` (if not already
+         there). Abort any leftover ``.git/REBASE_HEAD`` so the
+         fresh rebase doesn't compound a half-finished one.
+      2. **Fetch** — ``git fetch --prune origin <base>:<base>`` so
+         ``origin/<base>`` reflects the current remote tip.
+      3. **Ahead/behind check** — if ``behind_by == 0`` the branch
+         is already up-to-date; return immediately (no-op success).
+      4. **Rebase** — ``git rebase origin/<base>``. If the command
+         exits 0 we're on a fast-forward-friendly history; on
+         non-zero exit, ``_detect_conflicts`` reports which files
+         have conflict markers. If the failure is non-conflict
+         (auth / network), abort the rebase and return
+         ``rebased=False, has_conflict=False``.
+      5. **Push** — ``git push --force-with-lease=origin/<branch>:
+         <remote_sha>`` by default. When ``force=True``, fall
+         back to plain ``--force`` (operator-explicit override).
+         Push failure rolls back via
+         ``git reset --hard origin/<branch>`` so the next
+         retry starts from a known good state.
+      6. **Return** — a ``PRRebaseResult`` summarizing the
+         outcome. The CLI / daemon converts this to audit-log
+         lines and ``IssueRecord.mark_conflict`` /
+         ``clear_conflict`` calls.
+
+    This function is sync (no ``await``) because it is a thin
+    wrapper around ``subprocess.run``-based ``_run_git`` calls.
+    Callers in async code paths can ``await asyncio.to_thread(
+    rebase_for_pr, ...)`` if they need to yield the event loop
+    during long fetches.
+    """
+    repo_root = workspace_path
+    # 0. checkout + defensive rebase --abort (best-effort)
+    current_branch = get_current_branch(repo_root)
+    if current_branch != branch_name:
+        co_stdout, co_stderr, co_rc = _run_git(["checkout", branch_name], repo_root)
+        if co_rc != 0:
+            raise GitSyncError(
+                f"git checkout {branch_name} failed: {co_stderr or co_stdout}"
+            )
+    _git_rebase_abort(repo_root)
+
+    # 1. fetch base
+    fetch_stdout, fetch_stderr, fetch_rc = _run_git(
+        ["fetch", "--prune", "origin", f"{base_branch}:{base_branch}"],
+        repo_root,
+    )
+    if fetch_rc != 0:
+        # Stale workspace: leave REBASE_HEAD absent and report
+        # no-op (the operator can re-run with a corrected base
+        # branch or refresh the workspace manually).
+        return PRRebaseResult(
+            rebased=False,
+            push_method="none",
+            workspace_clean=True,
+        )
+
+    # 2. ahead/behind short-circuit
+    ahead, behind = _ahead_behind(repo_root, branch_name, f"origin/{base_branch}")
+    if behind == 0:
+        # Already up-to-date — no rebase needed.
+        head_stdout, _, head_rc = _run_git(["rev-parse", "HEAD"], repo_root)
+        head = head_stdout.strip() if head_rc == 0 else None
+        return PRRebaseResult(
+            rebased=True,
+            has_conflict=False,
+            conflict_files=(),
+            new_head_sha=head,
+            pushed=False,
+            push_method="none",
+            workspace_clean=True,
+        )
+
+    # 3. rebase
+    rebase_stdout, rebase_stderr, rebase_rc = _run_git(
+        ["rebase", f"origin/{base_branch}"],
+        repo_root,
+    )
+    if rebase_rc != 0:
+        # Inline the conflict check (the upstream helper is a
+        # method on GitSyncService and we are a free function).
+        diff_stdout, _, _ = _run_git(
+            ["diff", "--name-only", "--diff-filter=U"],
+            repo_root,
+        )
+        conflict_files = tuple(
+            f.strip() for f in diff_stdout.strip().splitlines() if f.strip()
+        )
+        if conflict_files:
+            # Leave the rebase in progress — the follow-up agent
+            # run will read the conflict markers and resolve
+            # them, then ``git rebase --continue`` +
+            # ``git push --force-with-lease``.
+            return PRRebaseResult(
+                rebased=False,
+                has_conflict=True,
+                conflict_files=conflict_files,
+                push_method="none",
+                workspace_clean=False,
+            )
+        # Rare: rebase failed but no conflicts. Could be auth,
+        # missing remote, or filesystem permission. Abort the
+        # half-finished rebase and report no-op.
+        _git_rebase_abort(repo_root)
+        return PRRebaseResult(
+            rebased=False,
+            has_conflict=False,
+            push_method="none",
+            workspace_clean=True,
+        )
+
+    # 4. push (force-with-lease by default; --force on operator request)
+    # Capture the remote SHA BEFORE pushing so --force-with-lease
+    # refuses if the remote moved between fetch and push.
+    remote_sha_stdout, _, remote_sha_rc = _run_git(
+        ["rev-parse", f"origin/{branch_name}"], repo_root
+    )
+    remote_sha = remote_sha_stdout.strip() if remote_sha_rc == 0 else ""
+    if force:
+        push_stdout, push_stderr, push_rc = _run_git(
+            ["push", "--force", "origin", branch_name],
+            repo_root,
+        )
+        push_method = "force"
+    elif remote_sha:
+        # NOTE: --force-with-lease uses the SHORT ref name (no
+        # `origin/` prefix). `git push --force-with-lease=origin/foo:X`
+        # is parsed as an extra refspec and silently downgrades to a
+        # non-fast-forward rejection. The correct form is
+        # `--force-with-lease=foo:<expected-sha>`.
+        push_stdout, push_stderr, push_rc = _run_git(
+            [
+                "push",
+                f"--force-with-lease={branch_name}:{remote_sha}",
+                "origin",
+                branch_name,
+            ],
+            repo_root,
+        )
+        push_method = "force_with_lease"
+    else:
+        # Remote branch doesn't exist yet — fall back to plain
+        # ``push -u`` (this is a fresh branch, no history to clobber).
+        push_stdout, push_stderr, push_rc = _run_git(
+            ["push", "-u", "origin", branch_name],
+            repo_root,
+        )
+        push_method = "none"
+
+    if push_rc != 0:
+        # Roll back to the pre-rebase remote tip. The local
+        # working tree will be left at the rebased commits; the
+        # ``git reset --hard origin/<branch>`` rewinds to the
+        # remote so the next attempt starts from a known state.
+        rb_stdout, rb_stderr, rb_rc = _run_git(
+            ["reset", "--hard", f"origin/{branch_name}"],
+            repo_root,
+        )
+        if rb_rc != 0:
+            # Reset failed — surface as a no-op with
+            # workspace_clean=False so the operator knows the
+            # local tree is in an unknown state.
+            return PRRebaseResult(
+                rebased=False,
+                has_conflict=False,
+                push_method="none",
+                workspace_clean=False,
+            )
+        return PRRebaseResult(
+            rebased=False,
+            has_conflict=False,
+            push_method="none",
+            workspace_clean=True,
+        )
+
+    new_head_stdout, _, new_head_rc = _run_git(["rev-parse", "HEAD"], repo_root)
+    new_head = new_head_stdout.strip() if new_head_rc == 0 else None
+    return PRRebaseResult(
+        rebased=True,
+        has_conflict=False,
+        conflict_files=(),
+        new_head_sha=new_head,
+        pushed=True,
+        push_method=push_method,
+        workspace_clean=True,
+    )
+
