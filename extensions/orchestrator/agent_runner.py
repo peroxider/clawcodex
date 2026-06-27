@@ -1061,6 +1061,7 @@ class AgentRunner:
                     permission_mode=self.agent_config.permission_mode,
                     run_id=session.run_id,
                     debug_log_path=session.debug_log_path,
+                    env=getattr(self.agent_config, "env", None) or {},
                 )
                 runner = QueryRunner(query_config)
 
