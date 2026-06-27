@@ -12,9 +12,14 @@ from uuid import uuid4
 
 from clawcodex_ext.types.messages import (
     AssistantMessage,
+    AttachmentMessage,
+    INTERRUPT_MESSAGE,
+    INTERRUPT_MESSAGE_FOR_TOOL_USE,
     Message,
+    REJECT_MESSAGE,
     SystemMessage,
     UserMessage,
+    normalize_messages_for_api,
 )
 from clawcodex_ext.types.content_blocks import TextBlock, ToolResultBlock, ToolUseBlock
 from clawcodex_ext.tool_system.build_tool import Tool, Tools, find_tool_by_name
@@ -25,6 +30,22 @@ from clawcodex_ext.tool_system.tool_search import filter_tools_for_request
 from clawcodex_ext.utils.abort_controller import AbortController, AbortError
 from clawcodex_ext.utils.image_validation import ImageSizeError
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse
+from clawcodex_ext.providers.anthropic_provider import AnthropicProvider
+from clawcodex_ext.providers.minimax_provider import MinimaxProvider
+from clawcodex_ext.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
+from src.models.model import canonical_model_name
+from src.settings.settings import get_settings
+from src.utils.advisor import (
+    ADVISOR_BETA_HEADER,
+    ADVISOR_MODE_CLIENT_SIDE,
+    ADVISOR_MODE_INACTIVE,
+    ADVISOR_MODE_SERVER_SIDE,
+    ADVISOR_TOOL_INSTRUCTIONS,
+    build_advisor_tool_schema,
+    build_client_advisor_tool_schema,
+    decide_advisor_mode,
+    strip_advisor_blocks,
+)
 
 from .config import QueryConfig, build_query_config
 from .hook_registry import call_hooks, LoopHookPhase
@@ -152,7 +173,6 @@ def _create_assistant_api_error_message(
 
 
 def _create_user_interruption_message(*, tool_use: bool = False) -> UserMessage:
-    from clawcodex_ext.types.messages import INTERRUPT_MESSAGE, INTERRUPT_MESSAGE_FOR_TOOL_USE
 
     content = INTERRUPT_MESSAGE_FOR_TOOL_USE if tool_use else INTERRUPT_MESSAGE
     return UserMessage(content=content, isMeta=True)
@@ -314,8 +334,6 @@ def _is_hook_stopped_continuation(msg: Message | None) -> bool:
     """
     if msg is None:
         return False
-    from clawcodex_ext.types.messages import AttachmentMessage
-
     if not isinstance(msg, AttachmentMessage):
         return False
     attachments = getattr(msg, "attachments", None) or []
@@ -336,18 +354,6 @@ async def _call_model_sync(
     on_text_chunk: Callable[[str], None] | None = None,
     on_thinking_chunk: Callable[[str], None] | None = None,
 ) -> tuple[list[AssistantMessage], list[ToolUseBlock]]:
-    from clawcodex_ext.types.messages import normalize_messages_for_api
-    from src.utils.advisor import (
-        ADVISOR_BETA_HEADER,
-        ADVISOR_MODE_CLIENT_SIDE,
-        ADVISOR_MODE_INACTIVE,
-        ADVISOR_MODE_SERVER_SIDE,
-        ADVISOR_TOOL_INSTRUCTIONS,
-        build_advisor_tool_schema,
-        build_client_advisor_tool_schema,
-        decide_advisor_mode,
-        strip_advisor_blocks,
-    )
 
     # Advisor activation decision. Three outcomes:
     #
@@ -372,15 +378,11 @@ async def _call_model_sync(
     advisor_mode = ADVISOR_MODE_INACTIVE
     advisor_model_normalized: str | None = None
     try:
-        from src.settings.settings import get_settings
-
         settings = get_settings()
         configured = (getattr(settings, "advisor_model", "") or "").strip()
         configured_provider = (getattr(settings, "advisor_provider", "") or "").strip()
         force_client = bool(getattr(settings, "advisor_client_mode", False))
         if configured:
-            from clawcodex_ext.models.model import canonical_model_name
-
             candidate = canonical_model_name(configured)
             advisor_mode = decide_advisor_mode(
                 provider,
@@ -510,9 +512,6 @@ async def _call_model_sync(
         # reject the advisor beta, and 1P-with-force-client doesn't
         # need it because the advisor schema is a regular tool here.
 
-    from clawcodex_ext.providers.anthropic_provider import AnthropicProvider
-    from clawcodex_ext.providers.minimax_provider import MinimaxProvider
-
     is_anthropic = isinstance(provider, (AnthropicProvider, MinimaxProvider))
     advisor_instructions_active = advisor_mode != ADVISOR_MODE_INACTIVE
     if is_anthropic:
@@ -563,8 +562,6 @@ async def _call_model_sync(
         # a non-Anthropic system prompt embeds an unintelligible token in
         # the prose that may confuse those models.
         if isinstance(system_prompt, list):
-            from clawcodex_ext.context_system.cache_boundary import SYSTEM_PROMPT_DYNAMIC_BOUNDARY
-
             flattened = "\n\n".join(
                 str(blk.get("text", ""))
                 for blk in system_prompt
@@ -929,8 +926,6 @@ def _build_user_cancelled_result(tool_use_id: str) -> UserMessage:
     ``typescript/src/services/tools/StreamingToolExecutor.ts:153-205``
     (``createSyntheticErrorMessage`` for ``user_interrupted``).
     """
-    from clawcodex_ext.types.messages import REJECT_MESSAGE
-
     return UserMessage(
         content=[
             ToolResultBlock(
