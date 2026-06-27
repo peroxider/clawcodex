@@ -9,6 +9,10 @@ the async command path runs on. ``display`` prints to the console.
 The adapter takes the ``_safe_input`` bound method and the console as plain
 callables rather than the whole REPL, so it stays decoupled and trivially
 testable (the tests pass a scripted ``safe_input``).
+
+When ``arrow_select`` is provided and the user has configured arrow-key
+mode (``get_selection_mode() == "arrow"``), ``select`` delegates to the
+arrow menu instead of the numbered prompt.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import asyncio
 from typing import Callable, Optional, Sequence
 
 from clawcodex_ext.command_system.types import UIOption
+from src.config import get_selection_mode
 
 
 class ReplUIHost:
@@ -26,9 +31,11 @@ class ReplUIHost:
         self,
         safe_input: Callable[[str], str],
         console: object = None,
+        arrow_select: Callable[..., object] | None = None,
     ) -> None:
         self._safe_input = safe_input
         self._console = console
+        self._arrow_select = arrow_select
 
     def _print(self, text: str = "") -> None:
         printer = getattr(self._console, "print", None)
@@ -47,6 +54,36 @@ class ReplUIHost:
         opts = list(options)
         if not opts:
             return None
+
+        # Arrow-key mode: delegate to the prompt_toolkit arrow menu (blocking
+        # call wrapped in run_in_executor so the async event loop stays alive).
+        if get_selection_mode() == "arrow" and self._arrow_select is not None:
+            opt_pairs: list[tuple[str, str]] = []
+            for opt in opts:
+                marker = " (current)" if current is not None and opt.value == current else ""
+                desc = opt.description or ""
+                opt_pairs.append((f"{opt.label}{marker}", desc))
+            loop = asyncio.get_running_loop()
+            try:
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self._arrow_select(
+                        opt_pairs,
+                        title=title,
+                        allow_other=False,
+                        multi_select=False,
+                    ),
+                )
+            except (EOFError, KeyboardInterrupt):
+                return None
+            if result is None:
+                return None
+            idx = result if isinstance(result, int) else (result[0] if result else 0)
+            if 0 <= idx < len(opts):
+                return opts[idx].value
+            return None
+
+        # Number-key mode (original behaviour)
         self._print(f"\n{title}")
         for idx, opt in enumerate(opts, start=1):
             marker = " (current)" if current is not None and opt.value == current else ""

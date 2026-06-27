@@ -553,3 +553,18 @@ def set_effort(value: Optional[str]) -> None:
     cfg['settings'] = section
     mgr.save_global(cfg)
     invalidate_settings_cache()
+
+
+def set_selection_mode(mode: str) -> None:
+    """Persist the selection mode (``"number"`` or ``"arrow"``) to global config.
+
+    Controls whether ``AskUserQuestion`` prompts accept number-key input
+    or arrow-key navigation in the TUI. Follows the ``set_theme`` convention:
+    writes to the global config file only (not merged).
+    """
+    _get_default_manager().set_global('selection_mode', mode)
+
+
+def get_selection_mode() -> str:
+    """Read the persisted selection mode. Defaults to ``"arrow"`` (supports both ↑↓ arrow keys and 1-9 digit keys)."""
+    return load_config().get('selection_mode') or 'arrow'

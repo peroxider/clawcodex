@@ -9,6 +9,7 @@ from clawcodex_ext.utils.completers import (
 )
 from clawcodex_ext.permissions.types import PermissionMode
 from clawcodex_ext.repl.color_scheme import REPLPalette
+from src.config import get_selection_mode
 
 try:
     from prompt_toolkit import PromptSession
@@ -1151,6 +1152,178 @@ class ClawcodexREPL:
             return marker[:width]
         return marker.rjust(width)
 
+    def _run_arrow_menu(
+        self,
+        options: list[tuple[str, str]],
+        *,
+        title: str = "",
+        allow_other: bool = False,
+        multi_select: bool = False,
+    ) -> int | list[int] | None:
+        """Show an arrow-key navigable menu using prompt_toolkit key bindings.
+
+        Args:
+            options: List of (label, description) pairs for each option.
+            title: Optional title shown above the menu.
+            allow_other: If True, add an "Other" option at the end.
+            multi_select: If True, allow multiple selections with Space toggle.
+
+        Returns:
+            Single-select: int (0-based index) or None for cancel.
+            Multi-select: list[int] of 0-based indices, or None for cancel.
+        """
+        if not _HAS_PROMPT_TOOLKIT:
+            return None
+
+        total = len(options) + (1 if allow_other else 0)
+        if total == 0:
+            return None
+
+        # Mutable state captured by closures
+        cursor = [0]  # list for mutation in closure
+        selected: set[int] | None = set() if multi_select else None
+
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit.layout.containers import Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+
+        # Build the display text
+        def get_menu_fragments():
+            fragments: list[tuple[str, str]] = []
+            if title:
+                fragments.append(("[bold]", f"\n{title}\n\n"))
+            for i, (label, desc) in enumerate(options):
+                is_cursor = i == cursor[0]
+                is_sel = multi_select and i in (selected or set())
+                prefix = "▸" if is_cursor else " "
+                check = "✓" if is_sel else " "
+                item_style = "class:arrow-cursor" if is_cursor else ""
+                fragments.append((item_style, f"  {prefix} {check} {i + 1}. {label}"))
+                if desc:
+                    fragments.append(("class:dim", f"    {desc}"))
+                fragments.append(("", "\n"))
+            if allow_other:
+                i = len(options)
+                is_cursor = i == cursor[0]
+                prefix = "▸" if is_cursor else " "
+                item_style = "class:arrow-cursor" if is_cursor else ""
+                fragments.append((item_style, f"  {prefix}   {i + 1}. Other"))
+                fragments.append(("class:dim", "  (provide custom text)"))
+                fragments.append(("", "\n"))
+            if multi_select:
+                hint = "  ↑↓ navigate · Space toggle · Enter confirm · 1-9 quick select · Esc cancel"
+            else:
+                hint = "  ↑↓ navigate · Enter select · 1-9 quick select · Esc cancel"
+            fragments.append(("class:dim", f"\n{hint}"))
+            return fragments
+
+        kb = KeyBindings()
+
+        @kb.add("up")
+        def _move_up(event):
+            cursor[0] = max(0, cursor[0] - 1)
+            event.app.invalidate()
+
+        @kb.add("down")
+        def _move_down(event):
+            cursor[0] = min(total - 1, cursor[0] + 1)
+            event.app.invalidate()
+
+        @kb.add("enter")
+        def _handle_enter(event):
+            if multi_select:
+                sel_list = sorted(selected) if selected else [0]
+                event.app.exit(result=sel_list)
+            else:
+                event.app.exit(result=cursor[0])
+
+        @kb.add("space")
+        def _handle_space(event):
+            if multi_select:
+                if cursor[0] < len(options):
+                    s = selected
+                    if s is not None:
+                        if cursor[0] in s:
+                            s.discard(cursor[0])
+                        else:
+                            s.add(cursor[0])
+                        event.app.invalidate()
+            else:
+                event.app.exit(result=cursor[0])
+
+        @kb.add("escape")
+        def _handle_escape(event):
+            event.app.exit(result=None)
+
+        @kb.add("c-c")
+        def _handle_ctrl_c(event):
+            event.app.exit(result=None)
+
+        # Number keys as fallback quick-select (1-9)
+        for digit in range(1, min(10, total + 1)):
+            @kb.add(str(digit))
+            def _handle_digit(event, idx=digit):
+                actual = idx - 1
+                if multi_select:
+                    if actual < len(options):
+                        s = selected
+                        if s is not None:
+                            if actual in s:
+                                s.discard(actual)
+                            else:
+                                s.add(actual)
+                            event.app.invalidate()
+                else:
+                    event.app.exit(result=actual)
+
+        from prompt_toolkit.application import Application
+
+        pt_style = Style.from_dict({
+            "arrow-cursor": "bold",
+            "dim": "fg:gray",
+        })
+
+        app = Application(
+            layout=Layout(
+                Window(FormattedTextControl(
+                    get_menu_fragments,
+                ))
+            ),
+            key_bindings=kb,
+            style=pt_style,
+            full_screen=False,
+            mouse_support=False,
+        )
+
+        live = self._active_live_status
+        if live is not None:
+            with live.paused():
+                result = app.run()
+        else:
+            result = app.run()
+
+        if result is None:
+            return None
+        if multi_select and selected:
+            sel_list = sorted(selected)
+            return sel_list if sel_list else [0]
+        if multi_select and not selected:
+            return [0]
+        return result
+
+    def _arrow_select(self, options, title="", allow_other=False, multi_select=False):
+        """Public wrapper for :meth:`_run_arrow_menu` callable from outside the class.
+
+        This exists so :class:`ReplUIHost` can receive a simple callable
+        without coupling to the method signature of ``_run_arrow_menu``.
+        """
+        return self._run_arrow_menu(
+            options,
+            title=title,
+            allow_other=allow_other,
+            multi_select=multi_select,
+        )
+
     def _ask_user_questions(self, questions: list[dict]) -> dict[str, str]:
         # Stop the Rich status spinner if running, so we can get clean input
         if self._current_status is not None:
@@ -1160,6 +1333,7 @@ class ClawcodexREPL:
                 pass
 
         answers: dict[str, str] = {}
+        use_arrow = get_selection_mode() == "arrow"
         for q in questions:
             if isinstance(q, str):
                 q = {"question": q}
@@ -1171,9 +1345,10 @@ class ClawcodexREPL:
             if not question_text or not isinstance(options, list) or len(options) < 2:
                 continue
 
-            self.console.print(f"\n[bold]{question_text}[/bold]")
+            # Build labels and option pairs from the question options
             labels: list[str] = []
-            for i, opt in enumerate(options, start=1):
+            opt_pairs: list[tuple[str, str]] = []
+            for opt in options:
                 if isinstance(opt, str):
                     opt = {"label": opt, "description": ""}
                 if not isinstance(opt, dict):
@@ -1181,41 +1356,73 @@ class ClawcodexREPL:
                 label = str(opt.get("label", "")).strip()
                 desc = str(opt.get("description", "")).strip()
                 labels.append(label)
-                self.console.print(f"  {i}. {label}  [dim]{desc}[/dim]")
-            other_idx = len(labels) + 1
-            self.console.print(f"  {other_idx}. Other  [dim]Provide custom text[/dim]")
+                opt_pairs.append((label, desc))
 
-            prompt = "Select (comma-separated) > " if multi else "Select > "
-            raw = self._safe_input(prompt).strip()
-            if not raw:
-                choice_str = "1"
+            if use_arrow:
+                result = self._run_arrow_menu(
+                    opt_pairs,
+                    title=question_text,
+                    allow_other=True,
+                    multi_select=multi,
+                )
+                other_idx = len(labels)
+
+                if result is None:
+                    selected_labels = [labels[0]]
+                elif isinstance(result, list):
+                    selected_labels = []
+                    for idx in result:
+                        if idx == other_idx:
+                            free = self._safe_input("Other > ").strip()
+                            if free:
+                                selected_labels.append(free)
+                        elif 0 <= idx < len(labels):
+                            selected_labels.append(labels[idx])
+                    if not selected_labels:
+                        selected_labels = [labels[0]]
+                else:
+                    if result == other_idx:
+                        free = self._safe_input("Other > ").strip()
+                        selected_labels = [free] if free else [labels[0]]
+                    elif 0 <= result < len(labels):
+                        selected_labels = [labels[result]]
+                    else:
+                        selected_labels = [labels[0]]
+
+                answers[question_text] = ", ".join(selected_labels) if multi else selected_labels[0]
             else:
-                choice_str = raw
+                self.console.print(f"\n[bold]{question_text}[/bold]")
+                for i, (label, desc) in enumerate(opt_pairs, start=1):
+                    self.console.print(f"  {i}. {label}  [dim]{desc}[/dim]")
+                other_idx = len(labels) + 1
+                self.console.print(f"  {other_idx}. Other  [dim]Provide custom text[/dim]")
 
-            selected: list[str] = []
-            parts = [p.strip() for p in choice_str.split(",") if p.strip()]
-            if not parts:
-                parts = ["1"]
-            for part in parts:
-                try:
-                    idx = int(part)
-                except ValueError:
-                    idx = -1
-                if idx == other_idx:
-                    # Use _safe_input so the active LiveStatus spinner is
-                    # paused around the read. A bare input() races with the
-                    # spinner's prompt_toolkit Application on the same TTY,
-                    # which made the "Other >" follow-up hang and the session
-                    # become unresponsive to Ctrl+C / Ctrl+D.
-                    free = self._safe_input("Other > ").strip()
-                    if free:
-                        selected.append(free)
-                    continue
-                if 1 <= idx <= len(labels):
-                    selected.append(labels[idx - 1])
-            if not selected:
-                selected = [labels[0]]
-            answers[question_text] = ", ".join(selected) if multi else selected[0]
+                prompt = "Select (comma-separated) > " if multi else "Select > "
+                raw = self._safe_input(prompt).strip()
+                if not raw:
+                    choice_str = "1"
+                else:
+                    choice_str = raw
+
+                selected: list[str] = []
+                parts = [p.strip() for p in choice_str.split(",") if p.strip()]
+                if not parts:
+                    parts = ["1"]
+                for part in parts:
+                    try:
+                        idx = int(part)
+                    except ValueError:
+                        idx = -1
+                    if idx == other_idx:
+                        free = self._safe_input("Other > ").strip()
+                        if free:
+                            selected.append(free)
+                        continue
+                    if 1 <= idx <= len(labels):
+                        selected.append(labels[idx - 1])
+                if not selected:
+                    selected = [labels[0]]
+                answers[question_text] = ", ".join(selected) if multi else selected[0]
 
         # Restart spinner after getting answers
         if self._current_status is not None:
@@ -1279,40 +1486,67 @@ class ClawcodexREPL:
             if can_enable_setting:
                 options.insert(0, ("e", f"Enable {setting_to_enable} and allow"))
 
-            self.console.print("[bold]Options:[/bold]")
-            for i, (key, desc) in enumerate(options, start=1):
-                self.console.print(f"  {i}. [{key}] {desc}")
-            self.console.print("")
-
-            # Get input via prompt_toolkit so it cooperates with patch_stdout()
-            # and the LiveStatus bottom region.
-            choice = self._safe_input("Select option> ").strip().lower()
-
-            # Parse choice based on the actual displayed options
-            if can_enable_setting:
-                # Menu: 1=Enable, 2=Yes, 3=No
-                if choice in ("1", "e", "enable"):
-                    self._enable_permission_setting(setting_to_enable)
-                    self._permission_decision_cache[cache_key] = True
-                    return True, False
-                elif choice in ("2", "y", "yes", ""):
-                    self._permission_decision_cache[cache_key] = True
-                    return True, False
-                elif choice in ("3", "n", "no"):
+            if get_selection_mode() == "arrow":
+                opt_pairs: list[tuple[str, str]] = []
+                for key, desc in options:
+                    opt_pairs.append((f"[{key}] {desc}", ""))
+                result = self._run_arrow_menu(
+                    opt_pairs,
+                    title="Permission Required",
+                    allow_other=False,
+                    multi_select=False,
+                )
+                if result is None:
                     self._permission_decision_cache[cache_key] = False
                     return False, False
+                idx = result if isinstance(result, int) else (result[0] if result else 0)
+                if can_enable_setting:
+                    if idx == 0:
+                        self._enable_permission_setting(setting_to_enable)
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    elif idx == 1:
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    else:
+                        self._permission_decision_cache[cache_key] = False
+                        return False, False
+                else:
+                    if idx == 0:
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    else:
+                        self._permission_decision_cache[cache_key] = False
+                        return False, False
             else:
-                # Menu: 1=Yes, 2=No
-                if choice in ("1", "y", "yes", ""):
-                    self._permission_decision_cache[cache_key] = True
-                    return True, False
-                elif choice in ("2", "n", "no"):
-                    self._permission_decision_cache[cache_key] = False
-                    return False, False
+                self.console.print("[bold]Options:[/bold]")
+                for i, (key, desc) in enumerate(options, start=1):
+                    self.console.print(f"  {i}. [{key}] {desc}")
+                self.console.print("")
 
-            # Default to deny for invalid input
-            self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
-            return False, False
+                choice = self._safe_input("Select option> ").strip().lower()
+
+                if can_enable_setting:
+                    if choice in ("1", "e", "enable"):
+                        self._enable_permission_setting(setting_to_enable)
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    elif choice in ("2", "y", "yes", ""):
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    elif choice in ("3", "n", "no"):
+                        self._permission_decision_cache[cache_key] = False
+                        return False, False
+                else:
+                    if choice in ("1", "y", "yes", ""):
+                        self._permission_decision_cache[cache_key] = True
+                        return True, False
+                    elif choice in ("2", "n", "no"):
+                        self._permission_decision_cache[cache_key] = False
+                        return False, False
+
+                self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
+                return False, False
 
     def _enable_permission_setting(self, setting_name: str | None) -> None:
         """Enable a permission setting in the tool context."""
@@ -1363,7 +1597,7 @@ class ClawcodexREPL:
             cost_tracker=self.cost_tracker,
             history=self.history_log,
             provider=self.provider,
-            ui=ReplUIHost(self._safe_input, self.console),
+            ui=ReplUIHost(self._safe_input, self.console, arrow_select=self._arrow_select),
             tool_context=self.tool_context,
         )
 
@@ -3480,8 +3714,7 @@ class ClawcodexREPL:
                             self.console.print("\n" + result_text)
                         self.console.print()
                         return
-                except Exception as e:
-                    # Fall through to async path
+                except Exception:
                     pass
 
                 # Use async path for PromptCommand
@@ -4563,7 +4796,7 @@ class ClawcodexREPL:
                 user_input = f"{intro_text}\n\n{user_input}" if user_input else intro_text
             from clawcodex_ext.types.messages import AttachmentMessage
 
-            self.session.conversation._messages.append(  # type: ignore[attr-defined]
+            self.session.conversation.messages.append(
                 AttachmentMessage(attachments=intro_attachments)
             )
 
