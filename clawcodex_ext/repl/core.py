@@ -305,6 +305,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from pathlib import Path
 import asyncio
+import logging
 import sys
 import json
 import threading
@@ -312,6 +313,8 @@ import time
 from collections import deque
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Heavy runtime deps are loaded lazily via ``_load_heavy_runtime()`` so
 # ``from src.repl import ClawcodexREPL`` stays within the Stage-6 perf
@@ -1104,7 +1107,10 @@ class ClawcodexREPL:
                 f" "
             )
         except Exception:
-            # Never let the toolbar break the input prompt.
+            # Never let the toolbar break the input prompt. Runs on every
+            # redraw (per-keystroke), so log at debug level to surface the
+            # cause when troubleshooting without flooding normal sessions.
+            logger.debug("bottom toolbar render failed", exc_info=True)
             return ""
 
     def _echo_user_input(self, text: str) -> None:

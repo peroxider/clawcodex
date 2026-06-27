@@ -7,6 +7,7 @@ Implements core commands like /help, /clear, /exit, /skills, etc.
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -55,6 +56,8 @@ from src.command_system.stickers_command import STICKERS_COMMAND
 from src.command_system.rename_command import RENAME_COMMAND
 from src.command_system.logo_command import LOGO_COMMAND
 from src.command_system.mcp_command import MCP_COMMAND
+
+logger = logging.getLogger(__name__)
 
 
 # Official Claude Code /init prompts (Simplified)
@@ -567,9 +570,7 @@ def context_command_call(args: str, context: CommandContext) -> LocalCommandResu
         markdown = format_context_as_markdown(data)
         return LocalCommandResult(type="text", value=markdown)
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("context analysis failed")
         return LocalCommandResult(type="text", value=f"Context analysis failed: {e}")
 
 
@@ -628,9 +629,7 @@ async def _compact_async(args: str, context: CommandContext) -> LocalCommandResu
     except ValueError as e:
         return LocalCommandResult(type="text", value=str(e))
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("compact failed")
         return LocalCommandResult(
             type="text",
             value=f"Compact failed: {e}",
@@ -1115,10 +1114,8 @@ def compact_command_call(args: str, context: CommandContext) -> LocalCommandResu
         # No running event loop — safe to use asyncio.run
         try:
             return asyncio.run(_compact_async(args, context))
-        except Exception as e:
-            import traceback
-
-            traceback.print_exc()
+        except Exception:
+            logger.exception("compact (asyncio.run fallback) failed")
             return _sync_compact_fallback(context)
 
 
