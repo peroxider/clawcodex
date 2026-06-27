@@ -36,6 +36,26 @@ from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.goal.command import GOAL_COMMAND
 
+# Upstream 0573f4c new slash commands. The implementations live in
+# src/command_system/ (real upstream modules, not facades); their Command
+# types are runtime-identical to the downstream ones because
+# src.command_system.types delegates every attribute to
+# clawcodex_ext.command_system.types via __getattr__, so the objects drop
+# straight into BUILTIN_COMMANDS. ``resume`` is intentionally excluded —
+# the downstream RESUME_COMMAND below already owns that name.
+from src.command_system.doctor_command import DOCTOR_COMMAND
+from src.command_system.diff_command import DIFF_COMMAND
+from src.command_system.tasks_command import TASKS_COMMAND
+from src.command_system.permissions_command import PERMISSIONS_COMMAND
+from src.command_system.release_notes_command import RELEASE_NOTES_COMMAND
+from src.command_system.copy_command import COPY_COMMAND
+from src.command_system.vim_command import VIM_COMMAND
+from src.command_system.memory_command import MEMORY_COMMAND
+from src.command_system.stickers_command import STICKERS_COMMAND
+from src.command_system.rename_command import RENAME_COMMAND
+from src.command_system.logo_command import LOGO_COMMAND
+from src.command_system.mcp_command import MCP_COMMAND
+
 
 # Official Claude Code /init prompts (Simplified)
 NEW_INIT_PROMPT = """Set up a CLAUDE.md file for this repo. CLAUDE.md is loaded into every Claude Code session, so it must be concise — only include what Claude would get wrong without it.
@@ -1533,11 +1553,42 @@ def get_builtin_commands() -> list[Command]:
         SECURITY_REVIEW_COMMAND,
         GOAL_COMMAND,
         RESUME_COMMAND,
+        # Upstream 0573f4c new slash commands
+        DOCTOR_COMMAND,
+        DIFF_COMMAND,
+        TASKS_COMMAND,
+        PERMISSIONS_COMMAND,
+        RELEASE_NOTES_COMMAND,
+        COPY_COMMAND,
+        VIM_COMMAND,
+        MEMORY_COMMAND,
+        STICKERS_COMMAND,
+        RENAME_COMMAND,
+        LOGO_COMMAND,
+        MCP_COMMAND,
     ]
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
 
     if is_buddy_command_enabled():
         cmds.append(BUDDY_COMMAND)
+
+    # Bundled dynamic-workflow slash commands (/workflows list + /deep-research).
+    # Gated by is_workflows_enabled() (env CLAUDE_CODE_DISABLE_WORKFLOWS or
+    # settings.disable_workflows can turn it off). The Workflow tool is already
+    # registered in clawcodex_ext/tool_system/defaults.py, so the model can
+    # invoke it once prompted.
+    try:
+        from src.workflow.gating import is_workflows_enabled
+
+        if is_workflows_enabled():
+            from src.command_system.workflows_integration import (
+                bundled_workflow_commands,
+            )
+
+            cmds.extend(bundled_workflow_commands())
+    except Exception:  # noqa: BLE001 — never let a bad file break the command list
+        pass
+
     return cmds
 
 
