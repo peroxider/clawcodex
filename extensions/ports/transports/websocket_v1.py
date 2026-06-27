@@ -242,6 +242,12 @@ class WebSocketTransport:
         self._ping_tick_task: asyncio.Task[None] | None = None
         self._keepalive_task: asyncio.Task[None] | None = None
 
+        # Strong refs to fire-and-forget ``ws.send`` / ``ws.close`` tasks.
+        # Without this the event loop only weakly references them and they
+        # can be GC'd mid-flight ("Task was destroyed but it is pending").
+        # The done-callback discards each entry as it settles.
+        self._send_tasks: set[asyncio.Task[None]] = set()
+
     # ─── State queries ────────────────────────────────────────────────
 
     def is_connected_status(self) -> bool:
@@ -431,6 +437,8 @@ class WebSocketTransport:
         # below will fire reconnect anyway.
         self._last_activity_ms = _monotonic_ms()
         send_task.add_done_callback(self._on_send_done)
+        self._send_tasks.add(send_task)
+        send_task.add_done_callback(self._send_tasks.discard)
         return True
 
     def _on_send_done(self, task: asyncio.Task[None]) -> None:
@@ -481,16 +489,26 @@ class WebSocketTransport:
         self._stop_keepalive()
         if self._reader_task is not None and not self._reader_task.done():
             self._reader_task.cancel()
+        # Cancel any in-flight ``ws.send`` tasks before scheduling the
+        # close below — the socket is going away, so their writes can't
+        # land. Snapshot first; the done-callback mutates the set as each
+        # cancellation settles. (The ws-close task scheduled afterwards is
+        # added to the set *after* this loop, so it survives.)
+        for task in list(self._send_tasks):
+            if not task.done():
+                task.cancel()
         ws, self._ws = self._ws, None
         if ws is not None:
             # ``ws.close()`` is async on ``websockets`` library. Fire
             # without awaiting to keep ``close()`` sync. The reader task
             # cancellation above will tear down the read side.
             try:
-                asyncio.get_running_loop().create_task(
+                close_task = asyncio.get_running_loop().create_task(
                     ws.close(),
                     name="ws-close",
                 )
+                self._send_tasks.add(close_task)
+                close_task.add_done_callback(self._send_tasks.discard)
             except RuntimeError:
                 # No running loop (e.g. close from outside async context).
                 # The WS will be GC'd; not great, but acceptable for a

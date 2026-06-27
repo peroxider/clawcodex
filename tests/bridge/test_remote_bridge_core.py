@@ -1167,3 +1167,92 @@ async def test_state_changes_fire_in_order() -> None:
     ready_idx = state_log.index(("ready",))
     connected_idx = state_log.index(("connected",))
     assert ready_idx < connected_idx
+
+
+# ── Fire-and-forget task lifecycle (P1-B) ────────────────────────────────
+
+
+def _bridge_state(handle: RemoteBridgeHandle) -> Any:
+    """Reach the internal ``_BridgeState`` via a bound handle method.
+
+    The handle exposes only callables; ``teardown`` is a bound method so
+    ``__self__`` is the state instance whose ``_pending_tasks`` we assert.
+    """
+    return handle.teardown.__self__  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_write_tracks_pending_task_then_discards() -> None:
+    """A fire-and-forget write is held strongly until it settles.
+
+    Without the strong reference the task could be GC'd mid-flight. We
+    assert the task is registered in ``_pending_tasks`` and removed by the
+    done-callback once it completes.
+    """
+    transport = FakeTransport()
+    handler, _ = _make_http_handler()
+    params, ctx, _ = _make_params(transport)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        handle = await init_env_less_bridge_core(
+            params,
+            http_client=client,
+            config=_short_config(),
+            transport_factory=ctx["transport_factory"],
+        )
+        assert handle is not None
+        state = _bridge_state(handle)
+
+        # Make the batch write block so we can observe the in-flight task.
+        gate = asyncio.Event()
+
+        async def _hang_batch(_messages: list[dict[str, Any]]) -> None:
+            await gate.wait()
+
+        transport.write_batch = _hang_batch  # type: ignore[assignment]
+        handle.write_messages([UserMessage(content="hi", uuid="u-track")])
+        # Task scheduled and tracked while blocked.
+        assert len(state._pending_tasks) == 1
+
+        # Release it; the done-callback discards the reference.
+        gate.set()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert len(state._pending_tasks) == 0
+        await handle.teardown()
+
+
+@pytest.mark.asyncio
+async def test_teardown_cancels_in_flight_tasks() -> None:
+    """Teardown cancels fire-and-forget tasks that never completed.
+
+    A hung transport write would otherwise leak (the task is never
+    cancelled, the socket coroutine never returns). After teardown the
+    set is empty and the task reports cancelled.
+    """
+    transport = FakeTransport()
+    handler, _ = _make_http_handler()
+    params, ctx, _ = _make_params(transport)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        handle = await init_env_less_bridge_core(
+            params,
+            http_client=client,
+            config=_short_config(),
+            transport_factory=ctx["transport_factory"],
+        )
+        assert handle is not None
+        state = _bridge_state(handle)
+
+        async def _never(_messages: list[dict[str, Any]]) -> None:
+            await asyncio.Event().wait()
+
+        transport.write_batch = _never  # type: ignore[assignment]
+        handle.write_messages([UserMessage(content="hi", uuid="u-leak")])
+        assert len(state._pending_tasks) == 1
+        leaked = next(iter(state._pending_tasks))
+
+        await handle.teardown()
+        # Cancelled and de-registered.
+        assert leaked.cancelled()
+        assert len(state._pending_tasks) == 0

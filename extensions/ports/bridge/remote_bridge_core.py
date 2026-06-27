@@ -376,6 +376,12 @@ class _BridgeState:
     user_message_callback_done: bool = False
     connect_cause: str = "initial"
 
+    # Strong references to fire-and-forget background tasks. Without this,
+    # ``asyncio.create_task`` results are only weakly held by the loop and
+    # may be GC'd mid-flight; on teardown they also leak (the socket write
+    # never gets cancelled). We track them and cancel on teardown.
+    _pending_tasks: set[asyncio.Task[Any]] = field(default_factory=set, init=False)
+
     def __post_init__(self) -> None:
         # UUID dedup ring buffers, sized per env-less config.
         self.recent_posted_uuids = BoundedUUIDSet(self.cfg.uuid_dedup_buffer_size)
@@ -423,7 +429,7 @@ class _BridgeState:
             and len(self.params.initial_messages) > 0
         ):
             self.initial_flush_done = True
-            asyncio.create_task(self._flush_history_then_drain(flush_transport))
+            self._spawn(self._flush_history_then_drain(flush_transport))
             return
         # No initial flush — drain any pre-connect queued writes
         # (``write_messages`` calls that landed during the handshake) and
@@ -508,7 +514,7 @@ class _BridgeState:
             return
         logger.debug("[remote-bridge] v2 transport closed (code=%s)", code)
         if code == 401 and not self.auth_recovery_in_flight:
-            asyncio.create_task(self._recover_from_auth_failure())
+            self._spawn(self._recover_from_auth_failure())
             return
         _fire_state(
             self.params.on_state_change,
@@ -693,7 +699,7 @@ class _BridgeState:
             finally:
                 self.auth_recovery_in_flight = False
 
-        asyncio.create_task(_do())
+        self._spawn(_do())
 
     # ── History flush + drain ──────────────────────────────────────────
 
@@ -741,7 +747,7 @@ class _BridgeState:
             "[remote-bridge] Drained %s queued message(s) after flush",
             len(msgs),
         )
-        asyncio.create_task(self.transport.write_batch(events))
+        self._spawn(self.transport.write_batch(events))
 
     # ── Public handle methods ──────────────────────────────────────────
 
@@ -780,7 +786,7 @@ class _BridgeState:
         if any(_msg_dict(m).get("type") == "user" for m in filtered):
             self.transport.report_state({"state": "running"})
         logger.debug("[remote-bridge] Sending %s message(s)", len(filtered))
-        asyncio.create_task(self.transport.write_batch(events))
+        self._spawn(self.transport.write_batch(events))
 
     def write_sdk_messages(self, messages: list[dict[str, Any]]) -> None:
         """Write pre-shaped SDK messages (used by the daemon path)."""
@@ -794,7 +800,7 @@ class _BridgeState:
             if uid:
                 self.recent_posted_uuids.add(uid)
         events = [{**m, "session_id": self.session_id} for m in filtered]
-        asyncio.create_task(self.transport.write_batch(events))
+        self._spawn(self.transport.write_batch(events))
 
     def send_control_request(self, request: dict[str, Any]) -> None:
         if self.auth_recovery_in_flight:
@@ -807,7 +813,7 @@ class _BridgeState:
         inner = request.get("request") or {}
         if inner.get("subtype") == "can_use_tool":
             self.transport.report_state({"state": "requires_action"})
-        asyncio.create_task(self.transport.write(event))
+        self._spawn(self.transport.write(event))
         logger.debug(
             "[remote-bridge] Sent control_request request_id=%s",
             request.get("request_id"),
@@ -819,7 +825,7 @@ class _BridgeState:
             return
         event = {**response, "session_id": self.session_id}
         self.transport.report_state({"state": "running"})
-        asyncio.create_task(self.transport.write(event))
+        self._spawn(self.transport.write(event))
         logger.debug("[remote-bridge] Sent control_response")
 
     def send_cancel_request(self, request_id: str) -> None:
@@ -839,7 +845,7 @@ class _BridgeState:
         # on those paths, so without this the server stays on
         # requires_action.
         self.transport.report_state({"state": "running"})
-        asyncio.create_task(self.transport.write(event))
+        self._spawn(self.transport.write(event))
         logger.debug(
             "[remote-bridge] Sent control_cancel_request request_id=%s",
             request_id,
@@ -850,10 +856,37 @@ class _BridgeState:
             logger.debug("[remote-bridge] Dropping result during 401 recovery")
             return
         self.transport.report_state({"state": "idle"})
-        asyncio.create_task(self.transport.write(make_result_message(self.session_id)))
+        self._spawn(self.transport.write(make_result_message(self.session_id)))
         logger.debug("[remote-bridge] Sent result")
 
     # ── Teardown ───────────────────────────────────────────────────────
+
+    def _spawn(self, coro: Awaitable[Any]) -> asyncio.Task[Any]:
+        """Schedule a fire-and-forget coroutine with lifecycle tracking.
+
+        Keeps a strong reference until completion (prevents premature GC of
+        the task) and registers it for cancellation on ``teardown``. The
+        done-callback discards the reference so the set doesn't grow.
+        """
+        task = asyncio.ensure_future(coro)
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+        return task
+
+    async def _cancel_pending_tasks(self) -> None:
+        """Cancel and await all in-flight fire-and-forget tasks.
+
+        Snapshot the set first — the done-callback mutates it as tasks
+        settle. Cancellation is best-effort; we swallow each task's outcome
+        (including ``CancelledError``) so one stuck write can't block the
+        teardown cap.
+        """
+        pending = list(self._pending_tasks)
+        if not pending:
+            return
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     async def teardown(self) -> None:
         """Idempotent shutdown.
@@ -873,6 +906,7 @@ class _BridgeState:
         if self.refresh is not None:
             self.refresh.cancel_all()
         self.flush_gate.drop()
+        await self._cancel_pending_tasks()
 
         # Fire the result message before archive. ``transport.write()``
         # in Python awaits enqueue into ``CCRClient.SerialBatchEventUploader``
