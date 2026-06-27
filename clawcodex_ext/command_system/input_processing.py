@@ -744,45 +744,24 @@ def expand_agent_mentions(
 ) -> list[dict[str, str]]:
     """Find ``@agent-<type>`` mentions and build ``agent_mention`` attachments.
 
+    .. deprecated:: F-89
+        Thin shim around :func:`clawcodex_ext.agent_mention.expand_mentions`.
+        Existing callers keep working unchanged; new entry points should
+        import from :mod:`clawcodex_ext.agent_mention` directly so all
+        four surfaces (CLI / REPL / TUI / headless / orchestrator) share
+        one parser.
+
     Mirrors ``processAgentMentions`` in
     ``typescript/src/utils/attachments.ts``: each mention that resolves to a
     known agent type produces a single attachment; unknown agents are
     silently dropped so stray ``@agent-foo`` text in prompts doesn't pollute
     the model's context with misleading reminders.
     """
-    if not text or not agents:
-        return []
+    # F-89: delegate to the unified parser. Keep this function as a stable
+    # public entry point so the 5 existing callers don't need to change.
+    from clawcodex_ext.agent_mention import expand_mentions as _expand
 
-    known_types: set[str] = set()
-    for agent in agents:
-        agent_type = getattr(agent, "agent_type", None) or (
-            agent.get("agent_type") if isinstance(agent, dict) else None
-        )
-        if isinstance(agent_type, str) and agent_type:
-            known_types.add(agent_type)
-
-    if not known_types:
-        return []
-
-    seen: set[str] = set()
-    attachments: list[dict[str, str]] = []
-
-    for match in _AGENT_MENTION_UNQUOTED_RE.finditer(text):
-        raw = match.group(1)
-        agent_type = raw[len("agent-") :] if raw.startswith("agent-") else raw
-        if agent_type in seen or agent_type not in known_types:
-            continue
-        seen.add(agent_type)
-        attachments.append({"kind": "agent_mention", "agent_type": agent_type})
-
-    for match in _AGENT_MENTION_QUOTED_RE.finditer(text):
-        agent_type = match.group(1)
-        if agent_type in seen or agent_type not in known_types:
-            continue
-        seen.add(agent_type)
-        attachments.append({"kind": "agent_mention", "agent_type": agent_type})
-
-    return attachments
+    return _expand(text, agents)
 
 
 def _extract_image_paths(text: str, cwd: str | None = None) -> list[str]:
