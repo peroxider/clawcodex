@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BASE_BRANCH = "dev-decoupling-refactor-b24b8cb"
+DEFAULT_BASE_BRANCH = "dev-decoupling-refactor-0573f4c"
 DEFAULT_REMOTE = "origin"
 
 PYTHON_SUFFIXES = {".py", ".pyi"}

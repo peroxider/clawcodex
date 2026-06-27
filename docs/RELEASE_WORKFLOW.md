@@ -65,7 +65,7 @@ Tag v2026.6.24  →  CI 设置 RELEASE_TAG=v2026.6.24
 
 ```bash
 # 1. 确保在正确的分支上
-git checkout dev-decoupling-refactor-b24b8cb
+git checkout dev
 
 # 2. 创建 tag（日期 = 发布日期，不一定是今天）
 RELEASE_DATE="2026.6.24"

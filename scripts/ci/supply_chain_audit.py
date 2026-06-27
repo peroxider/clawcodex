@@ -333,7 +333,7 @@ def scan_added_lines(path: str, entries: list[tuple[int, str]]) -> list[Finding]
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base", default="origin/dev-decoupling-refactor-b24b8cb")
+    parser.add_argument("--base", default="origin/dev-decoupling-refactor-0573f4c")
     parser.add_argument("--all", action="store_true")
     args = parser.parse_args()
 

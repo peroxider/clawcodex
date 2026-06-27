@@ -104,7 +104,7 @@ try {
 # install.ps1 that ships with that release tag — same rule as the bash installer.
 $script:InstallerVersion  = '2026.6.24'
 $script:ClawCodexVersion  = '2026.6.24'
-${script:RepoRef}           = "dev-decoupling-refactor-b24b8cb"
+${script:RepoRef}           = "dev"
 $script:RepoUrl           = 'https://gitcode.com/chadwweng/clawcodex'
 
 # Overridable paths.  Resolved from $env:USERPROFILE so we work under both

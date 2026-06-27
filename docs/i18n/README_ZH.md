@@ -431,7 +431,7 @@ Git 钩子不会因为 `.pre-commit-config.yaml` 存在于克隆中而自动激�
 - GitCode CI/CD 门禁可在本地模拟：
   ```bash
   python scripts/ci/local_ci.py --base "the fork's remote dev branch" --ui plain --failure-lines 120
-  python scripts/ci/local_ci.py --base upstream/dev-decoupling-refactor-b24b8cb
+  python scripts/ci/local_ci.py --base upstream/dev
   ```
 - 不带 `--all` 时只 diff `HEAD~1..HEAD`。使用 `--base <ref>` 覆盖整段 PR diff。
 - Pytest 门禁使用固定的 smoke 集合加上当前范围内变更的 `tests/**/test_*.py` 文件。

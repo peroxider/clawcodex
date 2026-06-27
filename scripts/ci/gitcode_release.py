@@ -192,7 +192,7 @@ def main() -> int:
     parser.add_argument("--repo", default=os.environ.get("GITCODE_REPO", ""))
     parser.add_argument("--tag", required=True)
     parser.add_argument(
-        "--target", default=os.environ.get("GITCODE_TARGET", "dev-decoupling-refactor-b24b8cb")
+        "--target", default=os.environ.get("GITCODE_TARGET", "dev-decoupling-refactor-0573f4c")
     )
     parser.add_argument("--dist", default="dist")
     parser.add_argument("--body", default="Automated ClawCodex release")

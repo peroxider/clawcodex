@@ -429,7 +429,7 @@ Git hooks do not auto-activate just because `.pre-commit-config.yaml` is present
 - GitCode CI/CD gates can be simulated locally:
   ```bash
   python scripts/ci/local_ci.py --base "the fork's remote dev branch" --ui plain --failure-lines 120
-  python scripts/ci/local_ci.py --base upstream/dev-decoupling-refactor-b24b8cb
+  python scripts/ci/local_ci.py --base upstream/dev
   ```
 - Without `--all`, the gate diffs only `HEAD~1..HEAD`. Use `--base <ref>` to cover the full PR diff against the merge base.
 - Pytest gates use a fixed smoke suite plus any changed `tests/**/test_*.py` files from the current scope.
