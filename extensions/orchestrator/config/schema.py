@@ -264,6 +264,24 @@ class AgentConfig:
     build_command: str = ""
     lint_command: str = ""
     verification: VerificationConfig = field(default_factory=VerificationConfig)
+    # F-46.0: orthogonal decomposition of `permission_mode`. The legacy
+    # ``permission_mode`` enum (`default` / `plan` / `bypassPermissions` /
+    # `acceptEdits` / `dontAsk`) collapses three orthogonal concerns into
+    # a single string. These three fields are the explicit, forward-going
+    # replacement; ``permission_mode`` remains as a backward-compat shim
+    # that :func:`extensions.orchestrator.permission_translate.translate_legacy_permission_mode`
+    # collapses into the three below when a user upgrades.
+    #
+    # * ``interactive`` — does the runtime need a TTY prompt?
+    # * ``default_decision`` — what to do when no policy matches?
+    # * ``audit_log`` — how verbose should per-tool decision logging be?
+    #
+    # All three default to ``None`` so the legacy ``permission_mode`` keeps
+    # its full authority when present. When the new fields are populated
+    # explicitly they take precedence over the legacy string.
+    interactive: bool | None = None
+    default_decision: str | None = None  # one of "allow" / "deny" / "ask"
+    audit_log: str | None = None  # one of "none" / "minimal" / "full"
     # F-39 Sub-F: rate limit on operator-driven retries. When an
     # issue's `IssueRecord.retry_count` reaches this value, the
     # orchestrator refuses to honor further `agent:retry` labels /
