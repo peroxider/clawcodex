@@ -213,6 +213,10 @@ coverage/
 
 # Telemetry config (contains local secrets — do not commit)
 telemetry.toml
+/.orchestrator_control/
+/.orchestrator_workspace/
+/patches/upstream/0573f4c/backup/
+/.reports/
 /.reports/
 /.orchestrator_workspace/
 /.orchestrator_control/
