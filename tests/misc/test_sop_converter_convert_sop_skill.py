@@ -1,8 +1,8 @@
-"""Unit tests for :mod:`extensions.pos_converter.convert_pos_skill`.
+"""Unit tests for :mod:`extensions.sop_converter.convert_sop_skill`.
 
 Covers the SOP→Agent conversion Skill:
 
-* :func:`convert_pos_to_agent` — full pipeline from SDK spec to a
+* :func:`convert_sop_to_agent` — full pipeline from SDK spec to a
   serialised result dict (agent_type, skills, tools, persist_status,
   warnings). Error paths (no parsed methods, no grouped skills).
 * :func:`_generate_agent_name` — slug generation from requirements,
@@ -18,15 +18,15 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from extensions.pos_converter.convert_pos_skill import (
+from extensions.sop_converter.convert_sop_skill import (
     _DEFAULT_RULES,
     _SKILL_PROMPT,
     _format_result,
     _generate_agent_name,
-    convert_pos_to_agent,
+    convert_sop_to_agent,
     get_prompt_for_command,
 )
-from extensions.pos_converter.templates import MappingRule
+from extensions.sop_converter.templates import MappingRule
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ class TestGenerateAgentName(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# convert_pos_to_agent — happy path
+# convert_sop_to_agent — happy path
 # ---------------------------------------------------------------------------
 
 
@@ -93,9 +93,9 @@ class TestConvertPosToAgent(unittest.TestCase):
     def test_simple_list_spec_succeeds(self) -> None:
         # A spec with methods that match the default rules.
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_tag, docker_push, "
                 "k8s_apply, health_check",
                 requirements="CI/CD pipeline",
@@ -115,9 +115,9 @@ class TestConvertPosToAgent(unittest.TestCase):
     def test_auto_generated_agent_name(self) -> None:
         # No agent_name → derive from requirements.
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="My Pipeline",
             )
@@ -127,9 +127,9 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_custom_agent_description_used(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="x",
                 agent_name="my-agent",
@@ -139,9 +139,9 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_default_description_from_requirements(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="data processing",
                 agent_name="dp-agent",
@@ -151,9 +151,9 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_no_requirements_description(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="",
                 agent_name="a",
@@ -163,14 +163,14 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_persist_failure_captured(self) -> None:
         # Force the persist call to fail — the conversion still succeeds.
-        from extensions.pos_converter import agent_builder
+        from extensions.sop_converter import agent_builder
 
         with patch.object(
             agent_builder,
             "persist_converted_agent",
             side_effect=OSError("disk full"),
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="x",
                 agent_name="a",
@@ -180,9 +180,9 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_model_passthrough(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="x",
                 agent_name="a",
@@ -192,9 +192,9 @@ class TestConvertPosToAgent(unittest.TestCase):
 
     def test_no_model_returns_default(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="x",
                 agent_name="a",
@@ -205,9 +205,9 @@ class TestConvertPosToAgent(unittest.TestCase):
     def test_warnings_propagate(self) -> None:
         # The result dict always has a "warnings" key, possibly empty.
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="docker_build, docker_push",
                 requirements="x",
                 agent_name="a",
@@ -217,14 +217,14 @@ class TestConvertPosToAgent(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# convert_pos_to_agent — error paths
+# convert_sop_to_agent — error paths
 # ---------------------------------------------------------------------------
 
 
 class TestConvertPosToAgentErrors(unittest.TestCase):
     def test_no_methods_parsed_returns_error(self) -> None:
         # Empty / comment-only spec → no methods → error.
-        result = convert_pos_to_agent(
+        result = convert_sop_to_agent(
             sdk_spec="# only comment lines\n# more comments",
             requirements="x",
             agent_name="a",
@@ -240,9 +240,9 @@ class TestConvertPosToAgentErrors(unittest.TestCase):
             MappingRule("specific_method", "specific", "group", "Specific"),
         ]
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
-            result = convert_pos_to_agent(
+            result = convert_sop_to_agent(
                 sdk_spec="unrelated_method_one, unrelated_method_two",
                 requirements="x",
                 agent_name="a",
@@ -274,7 +274,7 @@ class TestGetPromptForCommand(unittest.TestCase):
     def test_simple_args_invokes_conversion(self) -> None:
         # With just a spec, the conversion runs end-to-end.
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
             result = get_prompt_for_command("docker_build, docker_push")
         # Result is the formatted conversion output.
@@ -282,7 +282,7 @@ class TestGetPromptForCommand(unittest.TestCase):
 
     def test_args_with_requirements(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
             result = get_prompt_for_command(
                 "docker_build :: CI/CD pipeline",
@@ -293,7 +293,7 @@ class TestGetPromptForCommand(unittest.TestCase):
 
     def test_args_with_all_three_fields(self) -> None:
         with patch(
-            "extensions.pos_converter.agent_builder.persist_converted_agent",
+            "extensions.sop_converter.agent_builder.persist_converted_agent",
         ):
             result = get_prompt_for_command(
                 "docker_build :: x :: my-agent",

@@ -43,7 +43,7 @@ SKILL_BUNDLES: dict[str, list[str]] = {
         "debug",
         "stuck",
         "ask",
-        "convert-pos-to-agent",
+        "convert-sop-to-agent",
     ],
 }
 

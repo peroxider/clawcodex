@@ -91,7 +91,7 @@
 
   CLI Surface:
 
-    - clawcodex-dev orchestrator | cron | pos | coordinator subcommands
+    - clawcodex-dev orchestrator | cron | sop | coordinator subcommands
 
     - F-43: /provider and /model REPL/TUI commands + ModelRegistry hot-swap
 
@@ -303,7 +303,7 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 Convert `workflow.md` procedural specs into a coordinated multi-agent system.
 
 ```bash
-clawcodex-dev pos convert examples/pos/order_processing.md --out ./.clawcodex
+clawcodex-dev sop convert examples/sop/order_processing.md --out ./.clawcodex
 ```
 
 Emits: agent definitions (one per role), entry-point skill, orchestration graph. Generated agents can `SendMessage` to each other and survive crashes via the upstream's task-notification routing.
@@ -385,7 +385,7 @@ extensions/                          # all downstream additions live here
 │   ├── workflow.py + workflow_store.py
 │   ├── templates/workflow.template.md
 │   └── cli/                         #   - server, issue, dashboard subcommands
-├── pos_converter/                   #   - SOP compiler
+├── sop_converter/                   #   - SOP compiler
 │   ├── sdk_parser.py
 │   ├── skill_grouper.py
 │   ├── agent_builder.py
@@ -418,7 +418,7 @@ python scripts/ci/dev_setup.py
 # Run only the fork's own tests
 pytest tests/test_orchestrator.py -v
 pytest tests/test_cron_system.py -v
-pytest tests/test_pos_converter.py -v
+pytest tests/test_sop_converter.py -v
 pytest tests/test_bridge.py -v
 # Or everything except upstream integration tests
 pytest tests/ -m "not integration" -v

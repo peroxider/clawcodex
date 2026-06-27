@@ -176,8 +176,8 @@ _WORKFLOW_TEMPLATE_SRC = """\
 # This IS an orchestrator config file (consumed by extensions/orchestrator,
 # which hardcodes the filename WORKFLOW.md). Schema = orchestrator's:
 # name/tracker/workspace/hooks/agent/stages/agents. Do NOT confuse with the
-# `pos-<name>.yaml` node graph emitted by `clawcodex pos convert` — that is a
-# pos-only execution DAG (nodes:), not loadable by the orchestrator.
+# `sop-<name>.yaml` node graph emitted by `clawcodex sop convert` — that is a
+# sop-only execution DAG (nodes:), not loadable by the orchestrator.
 # Edit this file to customize orchestrator behavior.
 
 name: {{ name }}

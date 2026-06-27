@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from extensions.pos_converter.source_parser import (
+from extensions.sop_converter.source_parser import (
     SourceCodeParser,
     SourceComponent,
     SourceOperation,
     ParamSpec,
 )
-from extensions.pos_converter.skill_grouper import (
+from extensions.sop_converter.skill_grouper import (
     GroupStrategy,
     SkillGrouper,
     group_source_components,
@@ -23,18 +23,18 @@ from extensions.pos_converter.skill_grouper import (
     MatchType,
     MatchTarget,
 )
-from extensions.pos_converter.agent_md_writer import (
+from extensions.sop_converter.agent_md_writer import (
     AgentMarkdownWriter,
     AgentComponentInfo,
     WorkflowStage,
 )
-from extensions.pos_converter.default_agent import (
+from extensions.sop_converter.default_agent import (
     resolve_default_agent,
     resolve_agent_by_type,
     _parse_frontmatter,
 )
-from extensions.pos_converter.agent_builder import AgentBuilder, AgentBuildResult
-from extensions.pos_converter.templates import (
+from extensions.sop_converter.agent_builder import AgentBuilder, AgentBuildResult
+from extensions.sop_converter.templates import (
     AGENT_MD_TEMPLATE,
     SKILL_MD_TEMPLATE_JINJA,
     OVERVIEW_AGENT_TEMPLATE,
@@ -406,7 +406,7 @@ class TestGroupStrategy:
 
     def test_strategy_dispatch_keyword(self) -> None:
         """KEYWORD_MATCH strategy uses _keyword_match_group()."""
-        from extensions.pos_converter.sdk_parser import SdkMethod
+        from extensions.sop_converter.sdk_parser import SdkMethod
 
         grouper = SkillGrouper(
             [SdkMethod(name="docker_build", description="Build image")],
@@ -945,7 +945,7 @@ class TestKeywordMatch:
 
     def test_keyword_match_with_sdk_methods(self) -> None:
         """KEYWORD_MATCH also works with SdkMethod data (backward compat)."""
-        from extensions.pos_converter.sdk_parser import SdkMethod
+        from extensions.sop_converter.sdk_parser import SdkMethod
 
         methods = [
             SdkMethod(name="docker_build", description="Build image"),
@@ -989,7 +989,7 @@ class TestKeywordMatch:
 
     def test_keyword_match_list_strategy_dispatch(self) -> None:
         """KEYWORD_MATCH in a strategy list is correctly dispatched."""
-        from extensions.pos_converter.sdk_parser import SdkMethod
+        from extensions.sop_converter.sdk_parser import SdkMethod
 
         methods = [SdkMethod(name="docker_build", description="Build")]
         grouper = SkillGrouper(
@@ -1345,7 +1345,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_merged_group_named_by_common_ancestor(self) -> None:
         """Merged group skill_name uses common ancestor, not one leaf's unique tag."""
-        from extensions.pos_converter.skill_grouper import SkillGrouper, MappingRule
+        from extensions.sop_converter.skill_grouper import SkillGrouper, MappingRule
 
         comps = self._make_components(
             [
@@ -1369,7 +1369,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_merged_group_no_common_ancestor_fallback(self) -> None:
         """When sub_keys share no common segment, fallback to distinguishing pattern."""
-        from extensions.pos_converter.skill_grouper import SkillGrouper, MappingRule
+        from extensions.sop_converter.skill_grouper import SkillGrouper, MappingRule
 
         comps = self._make_components(
             [
@@ -1391,7 +1391,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_common_ancestor_segment_basic(self) -> None:
         """_common_ancestor_segment finds the deepest shared segment."""
-        from extensions.pos_converter.skill_grouper import _common_ancestor_segment
+        from extensions.sop_converter.skill_grouper import _common_ancestor_segment
 
         sub_keys = ["proj/examples/permissions", "proj/examples/rl_calc", "proj/examples/session"]
         other = {"core", "memory", "runner", "harness", "proj"}
@@ -1400,7 +1400,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_common_ancestor_segment_unique_to_group(self) -> None:
         """_common_ancestor_segment prefers segments not shared with other groups."""
-        from extensions.pos_converter.skill_grouper import _common_ancestor_segment
+        from extensions.sop_converter.skill_grouper import _common_ancestor_segment
 
         sub_keys = ["proj/examples/permissions", "proj/examples/rl_calc"]
         # "examples" is NOT in other → should be picked even though it's shallow
@@ -1410,7 +1410,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_common_ancestor_segment_all_shared_with_others(self) -> None:
         """When all common segments are in other_segments, fallback to deepest common."""
-        from extensions.pos_converter.skill_grouper import _common_ancestor_segment
+        from extensions.sop_converter.skill_grouper import _common_ancestor_segment
 
         sub_keys = ["proj/examples/perm", "proj/examples/rl"]
         # "proj" and "examples" are both in other_segments
@@ -1421,7 +1421,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_common_ancestor_no_common_segments(self) -> None:
         """When sub_keys share no segments, returns None."""
-        from extensions.pos_converter.skill_grouper import _common_ancestor_segment
+        from extensions.sop_converter.skill_grouper import _common_ancestor_segment
 
         sub_keys = ["alpha/ops", "beta/ops"]
         other = set()
@@ -1431,7 +1431,7 @@ class TestAutoGenerateRulesNaming:
 
     def test_single_path_group_not_affected(self) -> None:
         """Single-path groups still use _best_distinguishing_pattern (unchanged)."""
-        from extensions.pos_converter.skill_grouper import SkillGrouper
+        from extensions.sop_converter.skill_grouper import SkillGrouper
 
         comps = self._make_components(
             [
@@ -2271,7 +2271,7 @@ class AudioMixer:
     def test_convert_writes_agent_and_skill_files(self) -> None:
         """pos convert writes loadable agent .md and skill files to --out and --skills."""
         import tempfile
-        from clawcodex_ext.cli.pos_cmd.commands import run_pos_command
+        from clawcodex_ext.cli.sop_cmd.commands import run_sop_command
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
@@ -2281,7 +2281,7 @@ class AudioMixer:
             skills_dir = tmp / "skills"
 
             # Run pos convert with --all (include all methods)
-            exit_code = run_pos_command(
+            exit_code = run_sop_command(
                 [
                     "convert",
                     str(proj),
@@ -2330,7 +2330,7 @@ class AudioMixer:
     def test_convert_extern_only_default(self) -> None:
         """Default behavior (no --all): only documented external interfaces pass."""
         import tempfile
-        from clawcodex_ext.cli.pos_cmd.commands import run_pos_command
+        from clawcodex_ext.cli.sop_cmd.commands import run_sop_command
 
         # Create source with both documented and undocumented methods
         source = {
@@ -2372,7 +2372,7 @@ class HiddenUtil:
                 full.write_text(content, encoding="utf-8")
 
             out_dir = tmp / "out"
-            exit_code = run_pos_command(
+            exit_code = run_sop_command(
                 [
                     "convert",
                     str(lib),

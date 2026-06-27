@@ -91,7 +91,7 @@
 
   CLI 表面:
 
-    - clawcodex-dev orchestrator | cron | pos | coordinator 子命令
+    - clawcodex-dev orchestrator | cron | sop | coordinator 子命令
 
     - F-43：/provider 和 /model REPL/TUI 命令 + ModelRegistry 热切换
 
@@ -303,7 +303,7 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 把 `workflow.md` 流程化规范编译成多 agent 协同运行时。
 
 ```bash
-clawcodex-dev pos convert examples/pos/order_processing.md --out ./.clawcodex
+clawcodex-dev sop convert examples/sop/order_processing.md --out ./.clawcodex
 ```
 
 产物：agent 定义（每个角色一个）、入口 skill、编排图。生成的 agent 之间可互发 `SendMessage`，通过上游 task-notification 路由在崩溃后恢复。
@@ -385,7 +385,7 @@ extensions/                          # 本 fork 全部新增都在这里
 │   ├── workflow.py + workflow_store.py
 │   ├── templates/workflow.template.md
 │   └── cli/                         #   - server、issue、dashboard 子命令
-├── pos_converter/                   #   - SOP 编译器
+├── sop_converter/                   #   - SOP 编译器
 │   ├── sdk_parser.py
 │   ├── skill_grouper.py
 │   ├── agent_builder.py
@@ -420,7 +420,7 @@ python scripts/ci/dev_setup.py
 # 只跑本 fork 自己的测试
 pytest tests/test_orchestrator.py -v
 pytest tests/test_cron_system.py -v
-pytest tests/test_pos_converter.py -v
+pytest tests/test_sop_converter.py -v
 pytest tests/test_bridge.py -v
 # 或者跑除上游集成测试外的全部
 pytest tests/ -m "not integration" -v

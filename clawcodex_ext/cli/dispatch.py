@@ -96,7 +96,7 @@ def _maybe_argcomplete_top_level(argv: list[str]) -> None:
 
     The flat top-level parser at ``build_parser()`` does not know about
     the subcommand sieve in ``run_cli`` (login/config/mcp/.../provider/
-    model/pos/viz). When ``_ARGCOMPLETE`` is set, argcomplete's
+    model/sop/viz). When ``_ARGCOMPLETE`` is set, argcomplete's
     ``autocomplete()`` will only complete the flat parser's tokens. This
     hook attaches the sieve's noun set as the first-positional choice
     list so the shell can offer the full subcommand set. No-op when
@@ -613,7 +613,7 @@ def _resolve_startup_agent(args, ctx) -> None:
     """
     from pathlib import Path
 
-    from extensions.pos_converter.default_agent import (
+    from extensions.sop_converter.default_agent import (
         parse_agent_file,
         resolve_agent_by_type,
         resolve_default_agent,
@@ -694,7 +694,7 @@ def _resolve_first_agent_in_dir(cwd: Path) -> dict[str, Any] | None:
     This reliably distinguishes the overview (dozens of skills, >>1k body)
     from sub-agents (1 skill, <200 body).
     """
-    from extensions.pos_converter.default_agent import parse_agent_file
+    from extensions.sop_converter.default_agent import parse_agent_file
 
     agents_dir = cwd / ".claude" / "agents"
     if not agents_dir.is_dir():

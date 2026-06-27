@@ -57,8 +57,8 @@ def execute_bash(command_template: str, params: dict[str, Any]) -> str:
     return result.stdout
 
 
-def parse_pos_wrapper_stdout(raw: str) -> Any:
-    """Extract the JSON payload printed by a pos-converter wrapper script.
+def parse_sop_wrapper_stdout(raw: str) -> Any:
+    """Extract the JSON payload printed by a sop-converter wrapper script.
 
     Wrapper subprocesses may emit SDK init logs on stdout before the final
     ``json.dumps(...)`` line.  Walk lines bottom-up and return the last line

@@ -33,10 +33,10 @@ def init_skills_ext() -> None:
     Each skill is registered independently — one failure does not
     block others.
     """
-    from .bundled import register_convert_pos_skill, register_dream_skill
+    from .bundled import register_convert_sop_skill, register_dream_skill
 
     try:
-        register_convert_pos_skill()
+        register_convert_sop_skill()
     except Exception:
         pass
 

@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`extensions.pos_converter.sdk_parser`.
+"""Unit tests for :mod:`extensions.sop_converter.sdk_parser`.
 
 Covers the SdkParser that converts SDK/API specifications into atomic
 tool definitions:
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import unittest
 
-from extensions.pos_converter.sdk_parser import (
+from extensions.sop_converter.sdk_parser import (
     SdkMethod,
     SdkParser,
     SdkParseResult,
@@ -390,7 +390,7 @@ class TestParseSdkSpec(unittest.TestCase):
         parser = SdkParser("alpha")
         with patch.object(parser, "parse", side_effect=RuntimeError("boom")):
             with patch(
-                "extensions.pos_converter.sdk_parser.SdkParser",
+                "extensions.sop_converter.sdk_parser.SdkParser",
                 return_value=parser,
             ):
                 result = parse_sdk_spec("alpha")

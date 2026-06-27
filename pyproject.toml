@@ -246,7 +246,7 @@ module = [
     "clawcodex_ext.utils.*",
     "extensions.capabilities.*",
     "extensions.orchestrator.*",
-    "extensions.pos_converter.*",
+    "extensions.sop_converter.*",
     "extensions.remote_api.*",
     "extensions.visualizer.*",
     "src",

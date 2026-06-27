@@ -21,7 +21,7 @@ Claw Codex 是 Claude Code 的 Python 移植版，并在其之上构建了自主
 ```
 ┌───────────────────────────────────────────────────────────────┐
 │                    extensions/                                 │
-│  功能子系统（Orchestrator、Visualizer、POS Converter、Remote   │
+│  功能子系统（Orchestrator、Visualizer、SOP Converter、Remote   │
 │  API、Ports、Agents）独立部署，通过协议接口与核心层交互          │
 ├───────────────────────────────────────────────────────────────┤
 │                   clawcodex_ext/                                │
@@ -287,9 +287,9 @@ extensions/orchestrator/
 `static/` 中的静态资源（CSS + JS），`templates/` 中的 Jinja2 模板。
 还包含 `cli.py`（CLI 入口）、`import_router.py`（导入路由）和 `orchestrator_link.py`（Orchestrator 集成）。
 
-### POS Converter（`extensions/pos_converter/`）
+### SOP Converter（`extensions/sop_converter/`）
 
-将 POS（过程化编排规范）`workflow.md` 转换为协调的多代理系统。
+将 SOP（过程化编排规范）`workflow.md` 转换为协调的多代理系统。
 `sdk_parser.py`、`agent_builder.py`、`agent_md_writer.py`、`convert_pos_skill.py`、
 `skill_grouper.py`、`source_parser.py`、`templates.py`、`default_agent.py`。
 

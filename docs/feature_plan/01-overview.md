@@ -40,7 +40,7 @@ extensions/        Layer 2 — 三方扩展层（Extensions）
   ├── capabilities/       Protocol 接口定义（层间契约，无实现）
   ├── remote_api/         远程 API 服务
   ├── ports/              桥接端口（bridge_main, transports）
-  ├── pos_converter/      POS 编译器
+  ├── sop_converter/      SOP 编译器
   ├── providers_ext/      三方 LLM 提供者（LiteLLM）
   ├── skills_ext/         三方技能扩展
   ├── tool_system_ext/    三方工具注册

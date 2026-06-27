@@ -28,7 +28,7 @@ _ALL_SIEVE_SUBCOMMANDS = {
 }
 
 _ALL_REGISTERED_SUBCOMMANDS = {
-    "auth", "model", "pos", "provider", "session", "stats", "telemetry",
+    "auth", "model", "sop", "provider", "session", "stats", "telemetry",
     "api", "viz",
 }
 

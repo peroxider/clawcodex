@@ -19,7 +19,7 @@ Key design decisions
 
 Usage::
 
-    from extensions.pos_converter.tool_registry_bridge import register_component_tools
+    from extensions.sop_converter.tool_registry_bridge import register_component_tools
 
     name_map = register_component_tools(components, str(source_dir), persist=True)
     # name_map: {"LLM.invoke": "llm-invoke", ...}
@@ -585,7 +585,7 @@ def operation_to_spec(
         call_type="bash",
         call_impl=call_impl,
         aliases=aliases,
-        source="pos-converter",
+        source="sop-converter",
     )
 
 
@@ -613,7 +613,7 @@ def register_component_tools(
         persist: If True, persist each ``AgentToolSpec`` to
             ``~/.clawcodex/agent-tools/<name>.json``.
         overwrite: If True, overwrite existing specs and scripts with the
-            same name (idempotent on repeated ``pos convert`` runs).
+            same name (idempotent on repeated ``sop convert`` runs).
 
     Returns:
         A mapping from original tool names (``"LLM.invoke"``) to kebab-case

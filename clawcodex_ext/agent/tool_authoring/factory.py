@@ -15,7 +15,7 @@ from clawcodex_ext.agent.tool_authoring.validators import validate_spec, Validat
 from clawcodex_ext.agent.tool_authoring.call_handlers import (
     BashCallError,
     execute_bash,
-    parse_pos_wrapper_stdout,
+    parse_sop_wrapper_stdout,
     HttpCallError,
     execute_http,
     PythonCallError,
@@ -46,7 +46,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
     def _call_impl(input: dict[str, Any], _context: ToolContext) -> ToolResult:
         try:
             if spec.call_type == "bash":
-                # Auto-inject {json_args} for pos-converter bridge tools
+                # Auto-inject {json_args} for sop-converter bridge tools
                 # (and any other tool whose template uses this placeholder).
                 # Harmless no-op when the template doesn't contain {json_args}.
                 enriched = input
@@ -60,7 +60,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
                     call_impl = f"{sys.executable} {call_impl.split(' ', 1)[1]}"
                 output = execute_bash(call_impl, enriched)
                 if "{json_args}" in spec.call_impl:
-                    output = parse_pos_wrapper_stdout(output)
+                    output = parse_sop_wrapper_stdout(output)
             elif spec.call_type == "http":
                 output = execute_http(spec.call_impl, input)
             elif spec.call_type == "python":
@@ -79,9 +79,9 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
             output=output,
         )
 
-    # POS-converter tools are workflow-specific and numerous;
+    # SOP-converter tools are workflow-specific and numerous;
     # defer them so they load via ToolSearch on demand.
-    should_defer = spec.source == "pos-converter"
+    should_defer = spec.source == "sop-converter"
 
     return build_tool(
         name=spec.name,

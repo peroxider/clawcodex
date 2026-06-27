@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`extensions.pos_converter.tool_registry_bridge`.
+"""Unit tests for :mod:`extensions.sop_converter.tool_registry_bridge`.
 
 Covers the bridge that converts parsed source operations into
 executable agent tools with bash-callable wrapper scripts.
@@ -24,13 +24,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from extensions.pos_converter import tool_registry_bridge as trb
-from extensions.pos_converter.source_parser import (
+from extensions.sop_converter import tool_registry_bridge as trb
+from extensions.sop_converter.source_parser import (
     ParamSpec,
     SourceComponent,
     SourceOperation,
 )
-from extensions.pos_converter.tool_registry_bridge import (
+from extensions.sop_converter.tool_registry_bridge import (
     _enrich_bridge_params,
     _generate_wrapper_script,
     _resolve_module_path,
@@ -654,12 +654,12 @@ class TestOperationToSpec(unittest.TestCase):
         # Short alias present.
         self.assertIn("core.C.x", spec.aliases)
 
-    def test_source_is_pos_converter(self) -> None:
+    def test_source_is_sop_converter(self) -> None:
         op = _make_op(name="x")
         spec = operation_to_spec(
             op, source_dir="/tmp", script_path=self.script_path,
         )
-        self.assertEqual(spec.source, "pos-converter")
+        self.assertEqual(spec.source, "sop-converter")
 
     def test_skips_star_args_in_schema(self) -> None:
         op = _make_op(

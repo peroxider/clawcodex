@@ -250,7 +250,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR 编号 | AR 名称 | 提供的组件能力 | 用户视角感知的功能 | 开发状态 | 开发工时 | 交付件 |
 |---------|---------|----------------|--------------------|----------|----------|--------|
 | AR-F-18 | CreateAgentTool 动态工具创建 | AgentToolSpec dataclass、bash/http/python 3 种 call_type、命令/HTTP/函数/防注入 4 种 validator、Factory 构造注册工具、call handlers、工具持久化与自动加载、CreateAgentTool 对外工具 | 用户可让 Agent 根据 CLI/API 规范动态创建和调用新工具，重启后工具仍可用 | ✅ 已完成 → F-18 | 已完成 | py dataclass、call_type handler、validator、factory、loader、tool 入口 |
-| AR-F-50 | SOP 转换器固化 | OpenAPI JSON/URL 解析、方法列表解析、Skill Grouper 原子接口分组、Agent Builder 生成 Agent 定义、`/convert-pos-to-agent` Skill、Agent 持久化、`--agent` CLI 参数指定、default_agent 配置、daemon 模式、attach 重连 | 用户可把 CI/CD/数据分析等专业系统一键转为可运行的业务 Agent，支持长期值守和重连 | ✅ 已完成 → F-50 | 已完成 | py parser、grouper、builder、skill、Agent JSON、CLI、daemon、attach 协议 |
+| AR-F-50 | SOP 转换器固化 | OpenAPI JSON/URL 解析、方法列表解析、Skill Grouper 原子接口分组、Agent Builder 生成 Agent 定义、`/convert-sop-to-agent` Skill、Agent 持久化、`--agent` CLI 参数指定、default_agent 配置、daemon 模式、attach 重连 | 用户可把 CI/CD/数据分析等专业系统一键转为可运行的业务 Agent，支持长期值守和重连 | ✅ 已完成 → F-50 | 已完成 | py parser、grouper、builder、skill、Agent JSON、CLI、daemon、attach 协议 |
 | AR-F-52 | SDK→Tool 注册 | Python SDK 方法注册为 Tool | 用户可让 Agent 调用 Python SDK 接口扩展能力 | ✅ 已完成 → F-52 | 已完成 | py SDK 工具、schema、测试 |
 | AR-F-53 | Tool→CLI 命令映射 | Tool 自动暴露为 CLI 斜杠命令 | 用户可通过 CLI 斜杠命令调用注册的工具 | 📋 规划中 → F-53 | — | py CLI 命令映射、schema、测试 |
 

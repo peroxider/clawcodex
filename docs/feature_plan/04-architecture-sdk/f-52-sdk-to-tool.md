@@ -14,10 +14,10 @@
 
 | 组件 | 文件 | 说明 |
 |------|------|------|
-| `ToolWrapper` | `extensions/pos_converter/tool_registry.py` | 将 SourceOperation 包装为 Tool 对象 |
-| `register_source_operations` | `extensions/pos_converter/tool_registry.py` | 批量注册某 agent 的所有 operations |
-| `AgentBuilder` 增量 | `extensions/pos_converter/agent_builder.py` | build() 自动注册 tool |
-| `agent_loader_hook.py` | `extensions/pos_converter/agent_loader_hook.py` | 加载 agent markdown 时自动注册 |
+| `ToolWrapper` | `extensions/sop_converter/tool_registry.py` | 将 SourceOperation 包装为 Tool 对象 |
+| `register_source_operations` | `extensions/sop_converter/tool_registry.py` | 批量注册某 agent 的所有 operations |
+| `AgentBuilder` 增量 | `extensions/sop_converter/agent_builder.py` | build() 自动注册 tool |
+| `agent_loader_hook.py` | `extensions/sop_converter/agent_loader_hook.py` | 加载 agent markdown 时自动注册 |
 
 ### 1.3 验收标准
 

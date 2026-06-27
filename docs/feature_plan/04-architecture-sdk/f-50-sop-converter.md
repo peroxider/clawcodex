@@ -41,17 +41,17 @@ SOP 转换器主体（`SourceCodeParser` + 增强 `SkillGrouper` + `AgentMarkdow
 
 **CLI 集成**:
 ```bash
-clawcodex-dev pos convert <source_dir>              # 自动判别（默认）
-clawcodex-dev pos convert <source_dir> --mode sdk    # 强制标准模式
-clawcodex-dev pos convert <source_dir> --mode fwa    # 强制工作流模式
+clawcodex-dev sop convert <source_dir>              # 自动判别（默认）
+clawcodex-dev sop convert <source_dir> --mode sdk    # 强制标准模式
+clawcodex-dev sop convert <source_dir> --mode fwa    # 强制工作流模式
 ```
 
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/discriminator.py` | `WorkflowDiscriminator` 核心 | 📋 |
-| `extensions/pos_converter/workflow_mode/heuristics.py` | 6 种启发式检测规则 | 📋 |
-| `extensions/pos_converter/workflow_mode/models.py` | `DiscriminationResult` 数据模型 | 📋 |
+| `extensions/sop_converter/workflow_mode/discriminator.py` | `WorkflowDiscriminator` 核心 | 📋 |
+| `extensions/sop_converter/workflow_mode/heuristics.py` | 6 种启发式检测规则 | 📋 |
+| `extensions/sop_converter/workflow_mode/models.py` | `DiscriminationResult` 数据模型 | 📋 |
 
 ### 1.4 F-50-B: 工作流结构提取器
 
@@ -86,12 +86,12 @@ class WorkflowExtractorBase(ABC):
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/extractors/base.py` | `WorkflowExtractorBase` | 📋 |
-| `extensions/pos_converter/workflow_mode/extractors/ast_helpers.py` | Python AST 通用分析工具 | 📋 |
-| `extensions/pos_converter/workflow_mode/extractors/registry.py` | `ExtractorRegistry` | 📋 |
-| `extensions/pos_converter/workflow_mode/extractors/models.py` | 数据模型 | 📋 |
-| `extensions/pos_converter/workflow_mode/extractors/adapters/arc.py` | AutoResearchClaw 适配器 | 📋 |
-| `extensions/pos_converter/workflow_mode/extractors/adapters/generic.py` | 通用 Python 管线适配器 | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/base.py` | `WorkflowExtractorBase` | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/ast_helpers.py` | Python AST 通用分析工具 | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/registry.py` | `ExtractorRegistry` | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/models.py` | 数据模型 | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/adapters/arc.py` | AutoResearchClaw 适配器 | 📋 |
+| `extensions/sop_converter/workflow_mode/extractors/adapters/generic.py` | 通用 Python 管线适配器 | 📋 |
 
 ### 1.5 F-50-C: 阶段能力映射器
 
@@ -109,10 +109,10 @@ class WorkflowExtractorBase(ABC):
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/capability/mapper.py` | `StageCapabilityMapper` | 📋 |
-| `extensions/pos_converter/workflow_mode/capability/analyzer.py` | 复杂度/脆弱度评分 | 📋 |
-| `extensions/pos_converter/workflow_mode/capability/patterns.py` | 已知 API/LLM/CLI 模式库 | 📋 |
-| `extensions/pos_converter/workflow_mode/capability/models.py` | 数据模型 | 📋 |
+| `extensions/sop_converter/workflow_mode/capability/mapper.py` | `StageCapabilityMapper` | 📋 |
+| `extensions/sop_converter/workflow_mode/capability/analyzer.py` | 复杂度/脆弱度评分 | 📋 |
+| `extensions/sop_converter/workflow_mode/capability/patterns.py` | 已知 API/LLM/CLI 模式库 | 📋 |
+| `extensions/sop_converter/workflow_mode/capability/models.py` | 数据模型 | 📋 |
 
 ### 1.6 F-50-D: 工作流 Schema 生成器
 
@@ -150,11 +150,11 @@ checkpoint:
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/schema/workflow_schema.py` | Schema 数据模型 | 📋 |
-| `extensions/pos_converter/workflow_mode/schema/parser.py` | YAML 解析 + 验证 | 📋 |
-| `extensions/pos_converter/workflow_mode/schema/dag_validator.py` | DAG 完整性检查 | 📋 |
-| `extensions/pos_converter/workflow_mode/schema/validator_spec.py` | ValidatorSpec 类型定义 | 📋 |
-| `extensions/pos_converter/workflow_mode/schema/discovery.py` | 工作流文件发现 | 📋 |
+| `extensions/sop_converter/workflow_mode/schema/workflow_schema.py` | Schema 数据模型 | 📋 |
+| `extensions/sop_converter/workflow_mode/schema/parser.py` | YAML 解析 + 验证 | 📋 |
+| `extensions/sop_converter/workflow_mode/schema/dag_validator.py` | DAG 完整性检查 | 📋 |
+| `extensions/sop_converter/workflow_mode/schema/validator_spec.py` | ValidatorSpec 类型定义 | 📋 |
+| `extensions/sop_converter/workflow_mode/schema/discovery.py` | 工作流文件发现 | 📋 |
 
 ### 1.7 F-50-E: Agent 定义生成器
 
@@ -168,11 +168,11 @@ checkpoint:
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/generator/agent_def_gen.py` | `AgentDefinitionGenerator` | 📋 |
-| `extensions/pos_converter/workflow_mode/generator/templates/` | Jinja2 Agent 模板目录 | 📋 |
-| `extensions/pos_converter/workflow_mode/generator/skill_gen.py` | Skill 定义生成 | 📋 |
-| `extensions/pos_converter/workflow_mode/generator/tool_gen.py` | 工具注册代码生成 | 📋 |
-| `extensions/pos_converter/workflow_mode/generator/overview_gen.py` | Overview Agent 生成 | 📋 |
+| `extensions/sop_converter/workflow_mode/generator/agent_def_gen.py` | `AgentDefinitionGenerator` | 📋 |
+| `extensions/sop_converter/workflow_mode/generator/templates/` | Jinja2 Agent 模板目录 | 📋 |
+| `extensions/sop_converter/workflow_mode/generator/skill_gen.py` | Skill 定义生成 | 📋 |
+| `extensions/sop_converter/workflow_mode/generator/tool_gen.py` | 工具注册代码生成 | 📋 |
+| `extensions/sop_converter/workflow_mode/generator/overview_gen.py` | Overview Agent 生成 | 📋 |
 
 ### 1.8 F-50-F: 源码桥接器生成器
 
@@ -193,10 +193,10 @@ Agent (Wrapper 模式)
 **实现文件**:
 | 文件路径 | 变更描述 | 状态 |
 |---------|---------|:----:|
-| `extensions/pos_converter/workflow_mode/bridge/generator.py` | `BridgeGenerator` | 📋 |
-| `extensions/pos_converter/workflow_mode/bridge/templates/` | Bridge 代码模板 | 📋 |
-| `extensions/pos_converter/workflow_mode/bridge/mcp_adapter.py` | Bridge → MCP Tool 适配 | 📋 |
-| `extensions/pos_converter/workflow_mode/bridge/health_check.py` | 安装检测与诊断 | 📋 |
+| `extensions/sop_converter/workflow_mode/bridge/generator.py` | `BridgeGenerator` | 📋 |
+| `extensions/sop_converter/workflow_mode/bridge/templates/` | Bridge 代码模板 | 📋 |
+| `extensions/sop_converter/workflow_mode/bridge/mcp_adapter.py` | Bridge → MCP Tool 适配 | 📋 |
+| `extensions/sop_converter/workflow_mode/bridge/health_check.py` | 安装检测与诊断 | 📋 |
 
 ### 1.9 F-50-G: 提取器适配器库
 
@@ -211,9 +211,9 @@ Agent (Wrapper 模式)
 
 | 组件 | 状态 | 位置 |
 |------|:----:|------|
-| SOP 转换器核心 | ✅ | `extensions/pos_converter/` |
+| SOP 转换器核心 | ✅ | `extensions/sop_converter/` |
 | 分组策略增强（F-55） | ✅ | `skill_grouper.py` |
-| SourceCodeParser | ✅ | POS 解析基础设施 |
+| SourceCodeParser | ✅ | SOP 解析基础设施 |
 | AgentMarkdownWriter | ✅ | Agent 定义 markdown 生成 |
 
 ## §2 进度跟踪
@@ -222,7 +222,7 @@ Agent (Wrapper 模式)
 
 | 日期 | 里程碑 | 涉及文件 |
 |------|--------|---------|
-| 2026-06 | SOP 转换器核心固化 | `extensions/pos_converter/` |
+| 2026-06 | SOP 转换器核心固化 | `extensions/sop_converter/` |
 | 2026-06 | F-55 分组策略增强 | `skill_grouper.py` |
 
 ### 2.2 当前瓶颈

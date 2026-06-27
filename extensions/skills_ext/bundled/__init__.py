@@ -15,13 +15,13 @@ from src.skills.bundled_skills import BundledSkillDefinition, register_bundled_s
 from .dream import register_dream_skill
 
 
-def register_convert_pos_skill() -> None:
-    """Register the convert-pos-to-agent bundled skill."""
-    from extensions.pos_converter.convert_pos_skill import get_prompt_for_command
+def register_convert_sop_skill() -> None:
+    """Register the convert-sop-to-agent bundled skill."""
+    from extensions.sop_converter.convert_sop_skill import get_prompt_for_command
 
     register_bundled_skill(
         BundledSkillDefinition(
-            name="convert-pos-to-agent",
+            name="convert-sop-to-agent",
             description=(
                 "Convert a Standard Operating Procedure (SOP) into a reusable Agent. "
                 "Takes SDK specifications and business requirements, then produces "
@@ -29,7 +29,7 @@ def register_convert_pos_skill() -> None:
                 "agent persistence file for long-term use."
             ),
             get_prompt_for_command=get_prompt_for_command,
-            aliases=["pos-to-agent"],
+            aliases=["sop-to-agent"],
             when_to_use=(
                 "When you need to convert a SOP workflow into an agent. "
                 "Input: SDK spec (OpenAPI URL/JSON or method list) + requirements."
@@ -43,6 +43,6 @@ def register_convert_pos_skill() -> None:
 
 
 __all__ = [
-    "register_convert_pos_skill",
+    "register_convert_sop_skill",
     "register_dream_skill",
 ]

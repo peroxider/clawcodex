@@ -1,19 +1,19 @@
-"""Fast-path ``clawcodex-dev pos`` CLI commands.
+"""Fast-path ``clawcodex-dev sop`` CLI commands.
 
 Usage::
 
-    clawcodex-dev pos convert <sdk_spec> [--out <output_dir>]
+    clawcodex-dev sop convert <sdk_spec> [--out <output_dir>]
         [--requirements "<requirements>"] [--name <agent_name>]
         [--strategy <strategy>] [--skills <skills_dir>]
         [--max-groups <N>] [--mapping-rules <file>]
         [--llm-provider <provider>] [--llm-model <model>]
         [--preview] [--all] [--register-tools]
 
-    clawcodex-dev pos convert docker_build,k8s_apply \\
+    clawcodex-dev sop convert docker_build,k8s_apply \\
         --out ./.clawcodex --requirements "CI/CD pipeline" --name cicd-agent
 
     # Source directory auto-detection (默认筛选外部接口，加 --all 包含全部方法):
-    clawcodex-dev pos convert ./src \\
+    clawcodex-dev sop convert ./src \\
         --out ./.clawcodex --strategy component --skills ./skills
 
 Options:
@@ -38,14 +38,14 @@ from typing import TYPE_CHECKING
 from clawcodex_ext.cli.subcommand_registry import register
 
 if TYPE_CHECKING:
-    from extensions.pos_converter.skill_grouper import MappingRule
+    from extensions.sop_converter.skill_grouper import MappingRule
 
 
-@register("pos")
-def run_pos_command(args: list[str]) -> int:
-    """Dispatch ``pos`` sub-subcommands (currently only ``convert``)."""
+@register("sop")
+def run_sop_command(args: list[str]) -> int:
+    """Dispatch ``sop`` sub-subcommands (currently only ``convert``)."""
     if not args:
-        print("usage: clawcodex pos convert <sdk_spec> [options]", file=sys.stderr)
+        print("usage: clawcodex sop convert <sdk_spec> [options]", file=sys.stderr)
         return 2
 
     command = args[0]
@@ -54,22 +54,22 @@ def run_pos_command(args: list[str]) -> int:
     if command == "convert":
         return _handle_convert(rest)
 
-    print(f"Unknown pos command: {command}", file=sys.stderr)
-    print("usage: clawcodex pos convert <sdk_spec> [options]", file=sys.stderr)
+    print(f"Unknown sop command: {command}", file=sys.stderr)
+    print("usage: clawcodex sop convert <sdk_spec> [options]", file=sys.stderr)
     return 2
 
 
 def _parse_convert_args(
     args: list[str],
 ) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool, bool]:
-    """Parse ``pos convert`` arguments.
+    """Parse ``sop convert`` arguments.
 
     Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods, register_tools).
     """
     if not args:
         print("error: missing <sdk_spec> argument", file=sys.stderr)
         print(
-            "usage: clawcodex pos convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>] [--preview] [--all]",
+            "usage: clawcodex sop convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>] [--preview] [--all]",
             file=sys.stderr,
         )
         raise SystemExit(2)
@@ -155,7 +155,7 @@ def _parse_convert_args(
 
 
 def _handle_convert(args: list[str]) -> int:
-    """Handle ``pos convert`` — convert an SOP spec into an Agent."""
+    """Handle ``sop convert`` — convert an SOP spec into an Agent."""
     try:
         (
             sdk_spec,
@@ -196,9 +196,9 @@ def _handle_convert(args: list[str]) -> int:
         )
 
     # Legacy path: sdk_spec is a comma-separated spec string
-    from extensions.pos_converter.convert_pos_skill import convert_pos_to_agent
+    from extensions.sop_converter.convert_sop_skill import convert_sop_to_agent
 
-    result = convert_pos_to_agent(
+    result = convert_sop_to_agent(
         sdk_spec=sdk_spec,
         requirements=requirements,
         agent_name=agent_name,
@@ -259,15 +259,15 @@ def _handle_convert_from_source(
     --all includes all public methods; by default only documented external
     interfaces (docstring-required) are kept.
     """
-    from extensions.pos_converter.source_parser import SourceCodeParser
-    from extensions.pos_converter.skill_grouper import (
+    from extensions.sop_converter.source_parser import SourceCodeParser
+    from extensions.sop_converter.skill_grouper import (
         GroupStrategy,
         group_source_components,
         SkillSpec,
         MappingRule,
         MatchType,
     )
-    from extensions.pos_converter.agent_md_writer import (
+    from extensions.sop_converter.agent_md_writer import (
         AgentMarkdownWriter,
         AgentComponentInfo,
         WorkflowStage,
@@ -321,7 +321,7 @@ def _handle_convert_from_source(
     # can find them in the ToolRegistry at runtime.
     if register_tools and not preview:
         try:
-            from extensions.pos_converter.tool_registry_bridge import (
+            from extensions.sop_converter.tool_registry_bridge import (
                 register_component_tools,
                 _to_kebab_case,
             )
@@ -502,7 +502,7 @@ def _load_mapping_rules(file_path: str) -> list[MappingRule]:
           ]
         }
     """
-    from extensions.pos_converter.skill_grouper import MappingRule, MatchType, MatchTarget
+    from extensions.sop_converter.skill_grouper import MappingRule, MatchType, MatchTarget
     import json
 
     path = Path(file_path)
@@ -597,10 +597,10 @@ def _write_output_files(
     Output layout:
       ``.claude/agents/<name>.md``         — agent definition (loadable by ``@agent-<name>``)
       ``.atomcode/skills/<name>/SKILL.md``   — skill files (loadable by skill system)
-      ``workflows/pos-<name>.yaml``          — orchestrator workflow (unchanged)
-      ``skills/pos-<name>-<skill>/SKILL.md`` — legacy compat (deprecated)
+      ``workflows/sop-<name>.yaml``          — orchestrator workflow (unchanged)
+      ``skills/sop-<name>-<skill>/SKILL.md`` — legacy compat (deprecated)
     """
-    from extensions.pos_converter.agent_md_writer import AgentMarkdownWriter
+    from extensions.sop_converter.agent_md_writer import AgentMarkdownWriter
 
     base = Path(out_dir).resolve()
     workflows_dir = base / "workflows"
@@ -639,7 +639,7 @@ def _write_output_files(
         for sp in skill_paths:
             print(f"   Skill: {sp}")
 
-    # --- Legacy compat: skills/pos-<name>-<skill>/SKILL.md (deprecated) ---
+    # --- Legacy compat: skills/sop-<name>-<skill>/SKILL.md (deprecated) ---
     # TODO: remove in next major version; users should migrate to .atomcode/skills/
     import warnings
 
@@ -652,7 +652,7 @@ def _write_output_files(
     skills_dir = base / "skills"
     for skill in result["skills"]:
         skill_name = skill["name"]
-        skill_dir = skills_dir / f"pos-{name}-{skill_name}"
+        skill_dir = skills_dir / f"sop-{name}-{skill_name}"
         skill_dir.mkdir(parents=True, exist_ok=True)
         skill_path = skill_dir / "SKILL.md"
         lines = [
@@ -677,12 +677,12 @@ def _write_output_files(
         print(f"   Skill (legacy): {skill_path}")
 
     # --- Workflow orchestration graph (unchanged) ---
-    workflow_path = workflows_dir / f"pos-{name}.yaml"
+    workflow_path = workflows_dir / f"sop-{name}.yaml"
     workflow_lines = [
         f"# Workflow: {name}",
-        "# Auto-generated by clawcodex pos convert",
-        "# This is a POS execution graph (nodes: id/agent/skill/tools), NOT an",
-        "# orchestrator WORKFLOW.md. The `pos-` prefix + `nodes:` schema keep it",
+        "# Auto-generated by clawcodex sop convert",
+        "# This is a SOP execution graph (nodes: id/agent/skill/tools), NOT an",
+        "# orchestrator WORKFLOW.md. The `sop-` prefix + `nodes:` schema keep it",
         "# distinct from orchestrator configs (name/tracker/workspace/stages).",
         "",
         "nodes:",

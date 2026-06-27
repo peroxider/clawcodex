@@ -1,7 +1,7 @@
 # 二开扩展层优化分析与实施计划
 
 > 范围：`extensions/`（Layer 2 扩展子系统）与 `clawcodex_ext/`（Layer 1 补丁层），约 20 万行扩展代码。
-> 方法：四路并行代码审计（orchestrator / clawcodex_ext 核心 / ports·remote·pos_converter / 解耦与跨层）。
+> 方法：四路并行代码审计（orchestrator / clawcodex_ext 核心 / ports·remote·sop_converter / 解耦与跨层）。
 > 生成日期：2026-06-26
 > 性质：现状评估 + 优先级排序的改进建议，**非强制清单**——落地需结合 CLAUDE.md 解耦原则逐项评估。
 
@@ -30,7 +30,7 @@
 | `extensions/orchestrator/orchestrator.py:76` `Orchestrator` | 2344 | 轮询、派发、意图解析、重试、review 反馈、控制命令、遥测全揽；`_run_issue` 单方法 ~200 行嵌套 try/except | 抽出 `IntentResolver` / `RetryQueueProcessor` / `ReviewFeedbackProcessor` / `ControlCommandProcessor` |
 | `extensions/orchestrator/agent_runner.py:741` `run()` | 2322 | `run()` 约 1200 行巨方法：事件循环 + 停滞/循环/只读螺旋检测 + 限流 + transcript 缓冲 + 控制 socket 交织 | 状态机式 `TurnExecutor` / `GuardEvaluator` / `TranscriptManager` / `ControlSocketManager` |
 | `extensions/ports/bridge/remote_bridge_core.py` | 1134 | `TokenRefreshScheduler` / `FlushGate` / `RemoteBridgeCore` / `AuthFailureRecovery` 同居一文件 | `token_refresh.py` / `flush_gate.py` / `auth_recovery.py` |
-| `extensions/pos_converter/skill_grouper.py` | 1315 | `SkillGrouper` + 5 种分组算法 + 多个 model 类 | `strategies/{keyword_match,io_relation,component_group,llm_semantic}.py` + `models.py` |
+| `extensions/sop_converter/skill_grouper.py` | 1315 | `SkillGrouper` + 5 种分组算法 + 多个 model 类 | `strategies/{keyword_match,io_relation,component_group,llm_semantic}.py` + `models.py` |
 | `extensions/orchestrator/cli/issue.py` | 2581 | 15+ 子命令 handler + parser + 业务逻辑单文件 | `cli/issue/{commands,parsers,shared}.py` 包化 |
 
 ---
@@ -54,7 +54,7 @@
 ### 2.3 缺缓存 / 全量重算
 - `extensions/orchestrator/issue_registry.py:184` 每次变更全量重写 JSON → 改脏标记批量 flush。
 - `extensions/orchestrator/cli/dashboard.py:1247` 每 2s SSE 心跳全量重读 registry → 改 inotify/watchdog 监听文件变更。
-- `extensions/pos_converter/skill_grouper.py:444,682` O(n²) 分组合并循环 → 堆 + 预计算 Jaccard。
+- `extensions/sop_converter/skill_grouper.py:444,682` O(n²) 分组合并循环 → 堆 + 预计算 Jaccard。
 - `clawcodex_ext/context_system/prompt_assembly.py:586` 系统提示词每轮重建 → `lru_cache` 按 `(cwd, git_head_mtime, tool_registry_version)` 键缓存。
 - `extensions/orchestrator/repo_tracker/client.py:200` 每次轮询拉全部 comment 再过滤 → 用 API `since` 参数或缓存 comment ID。
 
@@ -70,7 +70,7 @@
 | `extensions/ports/bridge/bridge_main.py:71-96` | `src.bridge.bridge_api` / `session_runner` / `work_secret` |
 | `extensions/ports/transports/hybrid_v1.py:50-58` | `src.transports.*` / `src.utils.session_ingress_auth` |
 | `extensions/remote_api/runner.py:189-294` | `src.bootstrap.state` / `src.config` / `src.providers` / `src.tool_system.defaults` |
-| `extensions/pos_converter/skill_grouper.py:27,1017` | `src.providers.base` |
+| `extensions/sop_converter/skill_grouper.py:27,1017` | `src.providers.base` |
 | `extensions/tool_system_ext/registry_ext.py:23-24` | `src.tool_system.build_tool` / `registry` |
 
 **修复**：在 `extensions/capabilities/` 补 bridge/transport/orchestrator 的 Protocol，扩展依赖 Protocol，具体实现以适配器/注册表运行时绑定。
@@ -79,7 +79,7 @@
 | 文件 | 违规 import |
 |------|------------|
 | `clawcodex_ext/entrypoints/orchestrator.py:67-105` | `extensions.orchestrator.cli.*` |
-| `clawcodex_ext/cli/pos_cmd/commands.py:41-603` | `extensions.pos_converter.*` |
+| `clawcodex_ext/cli/sop_cmd/commands.py:41-603` | `extensions.sop_converter.*` |
 | `clawcodex_ext/query/query.py:579,674` | `extensions.api.query_middleware` |
 | `clawcodex_ext/tool_system/defaults.py:22` | `extensions.tool_system_ext.registration` |
 | `clawcodex_ext/agent/session.py:88,146` | `extensions.agent.session_persist` |
@@ -118,7 +118,7 @@
 
 - **重复逻辑**：`agent_runner.py` 事件广播块重复 4 次(1100,1174,1234)→ 抽 `_broadcast_event`；bridge `_safe_ack`/kill 信号跨文件重复(`repl_bridge.py:862` / `bridge_main.py:790` / `session_runner.py:487`)→ 抽 `bridge_utils.py`；`repl/core.py` 新旧命令路由双轨(3343-3748)→ 统一走新命令系统。
 - **Monkey-patch 散落**：10+ 个 `install_*` 在 import 时各改全局（`__init__.py:41-44` 等）→ 收敛成声明式 `ExtensionRegistry`（`PatchSpec(phase, target, patch_fn)`）。
-- **测试缺口**：bridge（remote_bridge_core/repl_bridge/bridge_main）、orchestrator 核心、pos_converter 几乎零单测 → 用 Protocol mock 补单测。
+- **测试缺口**：bridge（remote_bridge_core/repl_bridge/bridge_main）、orchestrator 核心、sop_converter 几乎零单测 → 用 Protocol mock 补单测。
 - **死代码**：`extensions/orchestrator/progress_reporter.py` 为 F-40 后的向后兼容 shim，疑仅测试引用，待审计后删除。
 
 ---

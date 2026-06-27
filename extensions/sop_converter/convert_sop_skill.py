@@ -7,11 +7,11 @@ It takes SDK specifications and business requirements, then produces:
   3. Optional agent persistence file for long-term use
 
 Usage:
-    /convert-pos-to-agent <sdk_spec> [--requirements "<requirements>"]
+    /convert-sop-to-agent <sdk_spec> [--requirements "<requirements>"]
 
 Examples:
-    /convert-pos-to-agent https://openapi.example.com/spec.json
-    /convert-pos-to-agent docker,kubectl,k8s_apply --requirements "CI/CD pipeline"
+    /convert-sop-to-agent https://openapi.example.com/spec.json
+    /convert-sop-to-agent docker,kubectl,k8s_apply --requirements "CI/CD pipeline"
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from extensions.pos_converter import (
+from extensions.sop_converter import (
     SdkParser,
     SkillGrouper,
     AgentBuilder,
@@ -51,7 +51,7 @@ _DEFAULT_RULES: list[MappingRule] = [
 ]
 
 
-def convert_pos_to_agent(
+def convert_sop_to_agent(
     sdk_spec: str | dict[str, Any],
     requirements: str = "",
     agent_name: str = "",
@@ -114,7 +114,7 @@ def convert_pos_to_agent(
 
     # Step 4: Persist agent for long-term use
     try:
-        from extensions.pos_converter.agent_builder import persist_converted_agent
+        from extensions.sop_converter.agent_builder import persist_converted_agent
 
         persist_converted_agent(result.agent, skills)
         persist_status = "saved"
@@ -174,7 +174,7 @@ def get_prompt_for_command(args: str) -> str:
     if len(parts) >= 3:
         agent_name = parts[2].strip()
 
-    result = convert_pos_to_agent(
+    result = convert_sop_to_agent(
         sdk_spec=sdk_spec,
         requirements=requirements,
         agent_name=agent_name,
@@ -220,7 +220,7 @@ Convert a Standard Operating Procedure (SOP) into a reusable Agent.
 
 ## Input Format
 ```
-/convert-pos-to-agent <sdk_spec> [--requirements "<requirements>"]
+/convert-sop-to-agent <sdk_spec> [--requirements "<requirements>"]
 ```
 
 ## Arguments
@@ -234,7 +234,7 @@ Convert a Standard Operating Procedure (SOP) into a reusable Agent.
 
 ## Example
 ```
-/convert-pos-to-agent docker_build,docker_tag,docker_push,k8s_apply,health_check --requirements "CI/CD pipeline"
+/convert-sop-to-agent docker_build,docker_tag,docker_push,k8s_apply,health_check --requirements "CI/CD pipeline"
 ```
 
 ## Output

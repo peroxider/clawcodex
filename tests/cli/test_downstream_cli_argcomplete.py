@@ -78,7 +78,7 @@ def test_argcomplete_helper_invokes_autocomplete(monkeypatch):
         # Registry-loaded subcommands (load_builtin_subcommands runs lazily).
         "provider",
         "model",
-        "pos",
+        "sop",
         "viz",
     }
     assert expected.issubset(nouns), f"Missing nouns: {expected - nouns}"
