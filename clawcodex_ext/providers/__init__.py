@@ -115,6 +115,20 @@ def _extend_builtin_models() -> None:
         if m not in gemini_models:
             gemini_models.append(m)
 
+    # Minimax — add M3 series (current default in ~/.clawcodex/config.json).
+    # The upstream PROVIDER_INFO entry only lists the M2.x line; M3 ships as a
+    # downstream-only variant served by the same Anthropic-compatible endpoint.
+    minimax_models = PROVIDER_INFO.setdefault("minimax", {}).setdefault(
+        "available_models", []
+    )
+    _minimax_extras = [
+        "MiniMax-M3",
+        "MiniMax-M3-highspeed",
+    ]
+    for m in _minimax_extras:
+        if m not in minimax_models:
+            minimax_models.append(m)
+
 
 _extend_builtin_models()
 
