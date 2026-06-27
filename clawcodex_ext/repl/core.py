@@ -3496,6 +3496,14 @@ class ClawcodexREPL:
                     if result.success:
                         if self._handle_command_result(result):
                             return
+                    elif self.command_registry.get(cmd_name) is not None:
+                        # The command IS registered but its execution returned an
+                        # error (e.g. an interactive command whose surface could
+                        # not be opened). Surface that real error and stop —
+                        # otherwise the request slides into the fallback chain
+                        # below and is misreported as "Unknown command".
+                        self._handle_command_result(result)
+                        return
                 except Exception:
                     pass
 
