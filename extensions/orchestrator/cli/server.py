@@ -605,7 +605,12 @@ def _run_orchestrator(
     # SIGKILL (-9) cannot be caught and will still cause abrupt death;
     # the pdeath_sig PR_SET_PDEATHSIG in subprocesses mitigates orphan
     # children for that case.
-    loop = asyncio.get_event_loop()
+    #
+    # IMPORTANT: signal handlers MUST be registered on the loop that
+    # actually runs subsystem.run(). Using asyncio.get_event_loop() before
+    # asyncio.run() grabs a stale/ghost loop (asyncio.run creates a new
+    # one internally), so the handler would never fire. We register inside
+    # the coroutine via get_running_loop() to bind to the real running loop.
 
     def _schedule_shutdown(sig_name: str) -> None:
         """Callback registered via loop.add_signal_handler."""
@@ -614,16 +619,19 @@ def _run_orchestrator(
         # only accepts synchronous callables.
         asyncio.create_task(subsystem.shutdown())
 
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(
-            sig,
-            lambda sig_name=signal.Signals(sig).name: _schedule_shutdown(sig_name),
-        )
-
     async def _run() -> None:
+        # Bind signal handlers to the loop that is actually running this
+        # coroutine. asyncio.run() creates a fresh loop, so registration
+        # must happen here, not outside asyncio.run().
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(
+                sig,
+                lambda sig_name=signal.Signals(sig).name: _schedule_shutdown(sig_name),
+            )
         try:
             await subsystem.run()
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, KeyboardInterrupt):
             await subsystem.shutdown()
             raise
 
