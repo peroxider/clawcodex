@@ -340,7 +340,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
             suggestions_provider=self._get_slash_command_suggestions,
         )
         self._at_completer = AtFileCompleter(cwd=str(self.tool_context.workspace_root))
-        self._agent_completer = AgentMentionCompleter(self._available_agents)
+        self._agent_completer = AgentMentionCompleter(lambda: self._available_agents())
         self._message_history_completer = _MessageHistoryCompleter(self._get_user_message_history)
         self.completer = merge_completers(
             [
@@ -497,12 +497,15 @@ class ClawCodexExtREPL(ClawcodexREPL):
         except Exception:
             pass
 
+        from clawcodex_ext.repl.ui_host import ReplUIHost
+
         self.command_context = create_command_context(
             workspace_root=self.workspace_root,
             conversation=self.session.conversation,
             cost_tracker=self.cost_tracker,
             history=self.history_log,
             provider=self.provider,
+            ui=ReplUIHost(self._safe_input, self.console, arrow_select=self._arrow_select),
             tool_registry=self.tool_registry,
             tool_context=self.tool_context,
             runtime_context=self.runtime_context,
@@ -607,6 +610,7 @@ class ClawCodexExtREPL(ClawcodexREPL):
 
     def chat(self, user_input: str, max_turns: int | None = None):
         """Override chat() to track the last user input in metadata."""
+
         self._update_metadata_last_input(user_input)
         controller = getattr(self, "_away_summary_controller", None)
         if controller is not None:
