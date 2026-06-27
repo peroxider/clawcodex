@@ -51,6 +51,83 @@ def get_default_plugin_dirs() -> list[Path]:
     return dirs
 
 
+def ensure_plugin_dirs() -> list[Path]:
+    """Ensure default plugin directories exist, creating them if necessary.
+
+    Returns the list of directories that were created or already existed.
+    This is useful for CLI commands that need to write to plugin directories
+    (e.g. ``plugin install``).
+    """
+    dirs: list[Path] = []
+    user_dir = _get_user_plugin_dir()
+    user_dir.mkdir(parents=True, exist_ok=True)
+    dirs.append(user_dir)
+    proj_dir = _get_project_plugin_dir()
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    dirs.append(proj_dir)
+    return dirs
+
+
+def scan_plugin_directory(
+    directory: str | Path,
+    *,
+    recursive: bool = False,
+    max_depth: int = 3,
+) -> PluginDiscoveryResult:
+    """Scan a directory for plugins, optionally recursively.
+
+    When *recursive* is ``True``, subdirectories up to *max_depth* are
+    also scanned.  This is useful for monorepo-style plugin layouts where
+    multiple plugins live under a single root.
+
+    Args:
+        directory: Base directory to scan.
+        recursive: Whether to scan subdirectories recursively.
+        max_depth: Maximum recursion depth (default 3).
+
+    Returns:
+        A ``PluginDiscoveryResult`` with discovered plugins and errors.
+    """
+    result = PluginDiscoveryResult()
+    base = Path(directory)
+    if not base.is_dir():
+        return result
+
+    # Non-recursive: just scan immediate children (same as discover_plugins)
+    if not recursive:
+        return discover_plugins(base)
+
+    # Recursive BFS with depth tracking
+    from collections import deque
+
+    queue: deque[tuple[Path, int]] = deque([(base, 0)])
+    seen: set[Path] = {base.resolve()}
+
+    while queue:
+        current, depth = queue.popleft()
+        for entry in sorted(current.iterdir()):
+            if not entry.is_dir():
+                continue
+            resolved = entry.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+
+            manifest_path = _find_manifest_path(entry)
+            if manifest_path is not None:
+                try:
+                    plugin = load_plugin_from_directory(entry)
+                    result.plugins.append(plugin)
+                except PluginError as e:
+                    result.errors.append(e)
+                except Exception as e:
+                    result.errors.append(PluginError(entry.name, str(e)))
+            elif depth < max_depth:
+                queue.append((entry, depth + 1))
+
+    return result
+
+
 # ── Internal registry ─────────────────────────────────────────────────
 
 _loaded_plugins: dict[str, LoadedPlugin] = {}
@@ -234,10 +311,14 @@ def load_plugins_from_directories(
     directories: list[str | Path],
     *,
     source: str = 'user',
+    recursive: bool = False,
 ) -> PluginDiscoveryResult:
     combined = PluginDiscoveryResult()
     for directory in directories:
-        result = discover_plugins(directory)
+        if recursive:
+            result = scan_plugin_directory(directory, recursive=True)
+        else:
+            result = discover_plugins(directory)
         for plugin in result.plugins:
             plugin.source = source
             register_plugin(plugin)
@@ -330,6 +411,8 @@ def discover_entry_point_plugins() -> list[LoadedPlugin]:
 
 def discover_all_plugins(
     extra_dirs: list[str | Path] | None = None,
+    *,
+    recursive: bool = False,
 ) -> PluginDiscoveryResult:
     """Run all discovery strategies and return combined results.
 
@@ -338,6 +421,10 @@ def discover_all_plugins(
     2. Project directory  (.clawcodex/plugins)
     3. Explicit extra directories
     4. Python entry_points
+
+    Args:
+        extra_dirs: Additional directories to scan beyond defaults.
+        recursive: Whether to scan directories recursively.
     """
     combined = PluginDiscoveryResult()
 
@@ -345,9 +432,17 @@ def discover_all_plugins(
     dirs = list(get_default_plugin_dirs())
     if extra_dirs:
         dirs.extend(extra_dirs)
-    dir_result = load_plugins_from_directories(dirs, source='user')
-    combined.plugins.extend(dir_result.plugins)
-    combined.errors.extend(dir_result.errors)
+
+    for d in dirs:
+        if recursive:
+            dir_result = scan_plugin_directory(d, recursive=True)
+        else:
+            dir_result = discover_plugins(d)
+        for plugin in dir_result.plugins:
+            plugin.source = 'user'
+            register_plugin(plugin)
+            combined.plugins.append(plugin)
+        combined.errors.extend(dir_result.errors)
 
     # 4: Entry points
     ep_plugins = discover_entry_point_plugins()

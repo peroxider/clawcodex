@@ -133,22 +133,14 @@ def clear_sandboxes() -> None:
 def _infer_sandbox_config(plugin: LoadedPlugin) -> SandboxConfig:
     """Infer a sandbox config from the plugin manifest permissions."""
     allowed: set[str] = set()
-    manifest_perms: list[str] | None = None
-
-    # Check plugin manifest for permissions
-    if plugin.manifest:
-        # Permissions are stored in the raw manifest; we approximate by
-        # checking the plugin's source metadata.
-        pass
 
     # Source-based heuristics
     if plugin.source == 'marketplace':
-        allowed.add('read')
-        allowed.add('execute')
+        allowed = {'read', 'execute'}
     elif plugin.source == 'entry_point':
-        allowed.add('read')
-        allowed.add('write')
-        allowed.add('execute')
+        allowed = {'read', 'write', 'execute', 'network', 'mcp'}
+    elif plugin.source == 'user':
+        allowed = {'read', 'execute'}
     else:
         # Bundled / builtin — trust by default
         allowed = {'read', 'write', 'execute', 'network', 'mcp'}
@@ -195,6 +187,63 @@ def start_sandbox(sb: SandboxedPlugin) -> bool:
         sb.config.mode, sb.plugin.name,
     )
     return False
+
+
+def ping_sandbox(sb: SandboxedPlugin) -> bool:
+    """Check if a sandboxed process is still alive.
+
+    Sends a lightweight ping RPC and returns ``True`` if the process
+    responds within the configured timeout.
+    """
+    if sb.config.mode == SandboxMode.NONE:
+        return True
+    if sb.process is None:
+        return False
+    if sb.stopped:
+        return False
+
+    # Check if process is still running
+    if sb.process.poll() is not None:
+        return False
+
+    # Try a lightweight RPC ping
+    try:
+        result = execute_rpc(sb, 'ping', timeout=sb.config.timeout_seconds)
+        return result is not None
+    except Exception:
+        return False
+
+
+def health_check_sandbox(sb: SandboxedPlugin) -> dict[str, Any]:
+    """Return health status for a sandbox.
+
+    Returns a dict with keys:
+    - ``alive``: bool — process is running
+    - ``pid``: int | None — process ID
+    - ``uptime``: float | None — seconds since start
+    - ``timed_out``: bool — whether the sandbox timed out
+    """
+    alive = False
+    pid = sb.pid
+    uptime = None
+    timed_out = False
+
+    if sb.config.mode == SandboxMode.NONE:
+        alive = True
+    elif sb.process is not None and not sb.stopped:
+        poll = sb.process.poll()
+        alive = poll is None
+        if sb.started_at is not None:
+            uptime = time.time() - sb.started_at
+        if sb.config.timeout_seconds > 0 and uptime is not None:
+            timed_out = uptime > sb.config.timeout_seconds
+
+    return {
+        'alive': alive,
+        'pid': pid,
+        'uptime': uptime,
+        'timed_out': timed_out,
+    }
 
 
 def _start_process_sandbox(sb: SandboxedPlugin) -> bool:
@@ -289,6 +338,14 @@ def execute_in_sandbox(
     cfg = sb.config
     timeout = timeout or cfg.timeout_seconds
 
+    # Empty command guard
+    if not command:
+        return SandboxResult(
+            plugin_name=plugin.name,
+            exit_code=1,
+            error='Permission denied: empty command',
+        )
+
     # Permission check
     cmd_basename = Path(command[0]).name if command else ''
     if cfg.mode == SandboxMode.NONE:
@@ -306,19 +363,19 @@ def execute_in_sandbox(
     else:
         op_category = 'execute'
 
+    # Enforce network restriction before general permission check
+    if op_category == 'network' and not cfg.network_allowed:
+        return SandboxResult(
+            plugin_name=plugin.name,
+            exit_code=1,
+            error='Network access is disabled for this plugin',
+        )
+
     if op_category not in allowed_ops:
         return SandboxResult(
             plugin_name=plugin.name,
             exit_code=1,
             error=f'Permission denied: plugin {plugin.name} cannot perform {op_category} operations',
-        )
-
-    # Enforce network restriction
-    if not cfg.network_allowed and op_category == 'network':
-        return SandboxResult(
-            plugin_name=plugin.name,
-            exit_code=1,
-            error='Network access is disabled for this plugin',
         )
 
     try:

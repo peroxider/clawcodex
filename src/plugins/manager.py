@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,15 +24,19 @@ from .loader import (
     discover_all_plugins,
     discover_entry_point_plugins,
     discover_plugins,
+    ensure_plugin_dirs,
     get_enabled_plugins,
     get_loaded_plugin,
     get_loaded_plugins,
     load_plugin_from_directory,
     load_plugins_from_directories,
     register_plugin,
+    scan_plugin_directory,
     toggle_plugin_enabled,
     unregister_plugin,
 )
+from .marketplace import install_plugin as _marketplace_install
+from .marketplace import uninstall_plugin as _marketplace_uninstall
 from .sandbox import (
     SandboxedPlugin,
     SandboxConfig,
@@ -40,6 +45,8 @@ from .sandbox import (
     get_sandbox,
     register_sandbox,
     remove_sandbox,
+    start_sandbox,
+    stop_sandbox,
 )
 from .types import LoadedPlugin, PluginError, PluginManifest
 
@@ -70,6 +77,8 @@ class PluginManager:
     sandbox_enabled: bool = False
     #: Per-plugin sandbox overrides (plugin name → SandboxConfig).
     sandbox_configs: dict[str, SandboxConfig] = field(default_factory=dict)
+    #: Active BasePlugin instances (name → instance).
+    _instances: dict[str, BasePlugin] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if self.auto_discover:
@@ -77,22 +86,33 @@ class PluginManager:
 
     # ── Discovery ──────────────────────────────────────────────────────
 
-    def discover(self) -> PluginDiscoveryResult:
+    def discover(self, *, recursive: bool = False) -> PluginDiscoveryResult:
         """Run all discovery strategies and register found plugins.
+
+        Args:
+            recursive: Whether to scan directories recursively.
 
         Returns a ``PluginDiscoveryResult`` with all discovered plugins
         and any errors encountered.
         """
-        result = discover_all_plugins(extra_dirs=self.extra_dirs)
+        result = discover_all_plugins(extra_dirs=self.extra_dirs, recursive=recursive)
         logger.info(
             'Discovered %d plugins (%d errors)',
             len(result.plugins), len(result.errors),
         )
         return result
 
-    def discover_directory(self, directory: str | Path) -> PluginDiscoveryResult:
-        """Scan a single directory for plugins."""
-        result = discover_plugins(directory)
+    def discover_directory(self, directory: str | Path, *, recursive: bool = False) -> PluginDiscoveryResult:
+        """Scan a single directory for plugins.
+
+        Args:
+            directory: Path to scan.
+            recursive: Whether to scan subdirectories recursively.
+        """
+        if recursive:
+            result = scan_plugin_directory(directory, recursive=True)
+        else:
+            result = discover_plugins(directory)
         for plugin in result.plugins:
             register_plugin(plugin)
         return result
@@ -187,13 +207,20 @@ class PluginManager:
 
             # Run async on_load.
             try:
-                asyncio.get_event_loop().run_until_complete(
-                    base_plugin.on_load(ctx)
-                )
+                loop = asyncio.get_running_loop()
             except RuntimeError:
-                # No running loop — create one.
+                loop = None
+            if loop is not None and loop.is_running():
+                # Already in an async context — schedule the coroutine
+                import asyncio as _asyncio
+                task = _asyncio.create_task(base_plugin.on_load(ctx))
+                # We can't await here in sync context; just store the task
+                # on the instance so tests can inspect it if needed.
+                base_plugin._on_load_task = task  # type: ignore[attr-defined]
+            else:
                 asyncio.run(base_plugin.on_load(ctx))
 
+            self._instances[base_plugin.name] = base_plugin
             logger.info("Loaded plugin: %s", base_plugin.name)
             return base_plugin
 
@@ -221,6 +248,45 @@ class PluginManager:
                 loaded[instance.name] = instance
         return loaded
 
+    def unload_plugin(self, name: str) -> bool:
+        """Unload a single plugin by name.
+
+        Calls ``on_unload`` on the active instance, removes it from the
+        instance cache, and cleans up its sandbox if one exists.
+
+        Returns ``True`` if the plugin was loaded and is now unloaded.
+        """
+        instance = self._instances.pop(name, None)
+        if instance is None:
+            return False
+
+        # Call on_unload if available
+        try:
+            if asyncio.iscoroutinefunction(instance.on_unload):
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+                if loop is not None and loop.is_running():
+                    import asyncio as _asyncio
+                    _asyncio.create_task(instance.on_unload())
+                else:
+                    asyncio.run(instance.on_unload())
+            else:
+                # sync on_unload not expected per BasePlugin, but handle gracefully
+                pass
+        except Exception as exc:
+            logger.error("Error unloading plugin %s: %s", name, exc)
+
+        # Clean up sandbox
+        sandbox = get_sandbox(name)
+        if sandbox is not None:
+            stop_sandbox(sandbox)
+            remove_sandbox(name)
+
+        logger.info("Unloaded plugin: %s", name)
+        return True
+
     # ── Lifecycle ──────────────────────────────────────────────────────
 
     def enable_plugin(self, name: str) -> bool:
@@ -233,26 +299,85 @@ class PluginManager:
         return result
 
     def disable_plugin(self, name: str) -> bool:
-        """Disable a registered plugin."""
+        """Disable a registered plugin.
+
+        If the plugin is currently loaded, it will be unloaded first.
+        """
+        self.unload_plugin(name)
         return toggle_plugin_enabled(name, False)
 
-    def uninstall_plugin(self, name: str) -> bool:
-        """Unregister and remove a plugin."""
-        sandbox = get_sandbox(name)
-        if sandbox is not None:
-            sandbox.process.terminate() if sandbox.process else None
-            remove_sandbox(name)
-        return unregister_plugin(name)
+    def install_plugin(
+        self,
+        source_dir: str | Path,
+        plugin_name: str,
+        *,
+        target_dir: str | Path | None = None,
+        tool_registry: Any = None,
+        command_system: Any = None,
+    ) -> LoadedPlugin:
+        """Install a plugin from a source directory into the plugin directory.
+
+        Args:
+            source_dir: Directory containing the plugin source.
+            plugin_name: Name of the plugin to install.
+            target_dir: Target directory (defaults to first default plugin dir).
+            tool_registry: Optional tool registry for loading the plugin.
+            command_system: Optional command system for loading the plugin.
+
+        Returns:
+            The installed ``LoadedPlugin``.
+
+        Raises:
+            PluginError: If the plugin cannot be installed.
+        """
+        if target_dir is None:
+            dirs = ensure_plugin_dirs()
+            target_dir = dirs[0]  # user dir
+
+        plugin = _marketplace_install(source_dir, target_dir, plugin_name)
+        register_plugin(plugin)
+
+        # Auto-load if enabled
+        if plugin.enabled:
+            self.load_plugin(
+                plugin,
+                tool_registry=tool_registry,
+                command_system=command_system,
+            )
+
+        logger.info("Installed plugin: %s → %s", plugin_name, target_dir)
+        return plugin
+
+    def uninstall_plugin(self, name: str, *, plugin_dir: str | Path | None = None) -> bool:
+        """Uninstall and remove a plugin.
+
+        Args:
+            name: Plugin name to uninstall.
+            plugin_dir: Directory containing installed plugins (defaults
+                to first default plugin dir).
+
+        Returns ``True`` if the plugin was found and removed.
+        """
+        # Unload first
+        self.unload_plugin(name)
+
+        # Remove from filesystem
+        if plugin_dir is None:
+            dirs = ensure_plugin_dirs()
+            plugin_dir = dirs[0]
+
+        removed = _marketplace_uninstall(plugin_dir, name)
+        if removed:
+            logger.info("Uninstalled plugin: %s from %s", name, plugin_dir)
+
+        # Unregister from internal registry
+        return unregister_plugin(name) or removed
 
     def unload_all(self) -> None:
         """Unload all registered plugins and clean up sandboxes."""
-        for name in list(get_loaded_plugins()):
-            plugin = get_loaded_plugin(name.name)
-            if plugin:
-                try:
-                    asyncio.run(plugin.on_unload())
-                except Exception as exc:
-                    logger.error("Error unloading plugin %s: %s", name.name, exc)
+        for name in list(self._instances.keys()):
+            self.unload_plugin(name)
+        self._instances.clear()
         clear_loaded_plugins()
         clear_sandboxes()
         logger.info("All plugins unloaded")
@@ -266,7 +391,8 @@ class PluginManager:
         cfg = self.sandbox_configs.get(plugin.name)
         if cfg is None:
             cfg = SandboxConfig(mode=SandboxMode.PROCESS)
-        register_sandbox(plugin, cfg)
+        sb = register_sandbox(plugin, cfg)
+        start_sandbox(sb)
 
     def get_sandbox(self, plugin_name: str) -> Any | None:
         """Get the sandbox for a plugin."""
@@ -285,12 +411,14 @@ class PluginManager:
         plugin = get_loaded_plugin(name)
         if plugin is None:
             return None
+        instance = self._instances.get(name)
         return {
             "name": plugin.name,
             "version": plugin.manifest.version,
             "enabled": plugin.enabled,
             "source": plugin.source,
             "path": plugin.path,
+            "loaded": instance is not None,
             "has_sandbox": get_sandbox(name) is not None,
         }
 
