@@ -227,6 +227,10 @@ class AgentSession:
     # by PromptBuilder.render() to inject a hint into the agent's prompt
     # so it can Read() past transcripts.
     previous_run_ids: list[str] = field(default_factory=list)
+    # F-120: file paths with conflict markers carried from
+    # ``IssueRecord.conflict_files`` so the rebase-resolution prompt
+    # can hand them to the agent. ``None`` for non-rebase sessions.
+    conflict_files: tuple[str, ...] | None = None
     _snapshot_provider: str = ""
     _snapshot_model: str = ""
 
@@ -2194,16 +2198,12 @@ class AgentRunner:
                 ws_path = getattr(ws, "path", None)
                 if ws_path is not None:
                     try:
-                        import subprocess
-
                         _env = self._build_subprocess_env()
-                        proc = subprocess.run(
+                        proc = await asyncio.to_thread(
+                            self._git_capture,
                             ["git", "status", "--porcelain"],
-                            cwd=str(ws_path),
-                            capture_output=True,
-                            text=True,
-                            timeout=10,
-                            env=_env,
+                            str(ws_path),
+                            _env,
                         )
                         if proc.returncode != 0:
                             return True, refreshed_issue
@@ -2211,13 +2211,11 @@ class AgentRunner:
                         head_changed = False
                         start_commit_sha = getattr(session, "start_commit_sha", None)
                         if start_commit_sha:
-                            head_proc = subprocess.run(
+                            head_proc = await asyncio.to_thread(
+                                self._git_capture,
                                 ["git", "rev-parse", "HEAD"],
-                                cwd=str(ws_path),
-                                capture_output=True,
-                                text=True,
-                                timeout=10,
-                                env=_env,
+                                str(ws_path),
+                                _env,
                             )
                             current_head = head_proc.stdout.strip()
                             head_changed = bool(current_head and current_head != start_commit_sha)
@@ -2259,20 +2257,16 @@ class AgentRunner:
                 ws_path = getattr(ws, "path", None)
                 if ws_path is not None:
                     try:
-                        import subprocess
-
                         # Check if recent commits have actual file
                         # changes.  If the agent made 3+ commits but
                         # ``git diff --stat`` shows nothing changed,
                         # all commits were ``--allow-empty`` — the
                         # agent is faking progress.
-                        proc = subprocess.run(
+                        proc = await asyncio.to_thread(
+                            self._git_capture,
                             ["git", "diff", "--stat", "HEAD~3..HEAD"],
-                            cwd=str(ws_path),
-                            capture_output=True,
-                            text=True,
-                            timeout=10,
-                            env=self._build_subprocess_env(),
+                            str(ws_path),
+                            self._build_subprocess_env(),
                         )
                         if proc.returncode != 0:
                             return True, refreshed_issue
@@ -2309,6 +2303,28 @@ class AgentRunner:
             else:
                 base[key] = value
         return base
+
+    @staticmethod
+    def _git_capture(
+        args: list[str],
+        cwd: str,
+        env: dict[str, str] | None,
+    ) -> "subprocess.CompletedProcess[str]":
+        """Run a git command capturing output (synchronous, off event loop).
+
+        Invoked via ``asyncio.to_thread`` from async callers so the
+        up-to-10s subprocess never blocks the orchestrator event loop.
+        """
+        import subprocess
+
+        return subprocess.run(
+            args,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
 
     async def _run_verification(self, session: AgentSession) -> bool:
         """Run ``agent.test_command`` in the workspace to verify the
