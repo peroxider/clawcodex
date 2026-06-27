@@ -721,9 +721,98 @@ If a concurrent force-push causes a conflict at step 12:
      → if conflicts: workspace left in rebasing state
      → if clean rebase: retry git push
 12c. Conflict files recorded in GitSyncResult.conflict_files
-12d. Next agent run detects has_conflict=True → resolves
+12d. IssueRecord.has_conflict=True; daemon's
+     `_process_pending_rebase_conflicts` launches an
+     `agent_rebase` run that resolves markers
+     (`git rebase --continue`) and pushes with
+     `--force-with-lease`. See F-120 below.
 12e. Loop returns to step 6
 ```
+
+---
+
+## F-120 — PR Conflict Auto-Resolution
+
+When the orchestrator's PR becomes non-mergeable because the base
+branch has moved forward, the orchestrator **itself** rebases the
+feature branch and force-pushes (default: `--force-with-lease`). No
+external agent is invoked when the rebase is clean — the orchestrator
+treats this as a built-in maintenance action.
+
+### Triggers
+
+The rebase path can be activated from four entry points:
+
+| Trigger | How | Audit event |
+|---------|-----|-------------|
+| CLI | `clawcodex-dev orchestrator issue rebase --id <ID>` | `rebase_requested` |
+| Label | Add `agent:rebase` to the issue | (daemon) `rebase_completed` / `rebase_conflict` |
+| Comment | `/agent rebase` from author / maintainer | (daemon) `rebase_completed` / `rebase_conflict` |
+| Daemon PR scan | `workflow.pr_conflict_scan.enabled = true` (default off) | (daemon) `rebase_completed` / `rebase_conflict` |
+
+The CLI writes a control file (`.orchestrator_control/rebase_<id>.control`)
+and the daemon picks it up on its next poll cycle — same async
+pattern as `issue retry`. The label / comment paths are evaluated in
+`_resolve_intent`; intent priority is `BLOCKED > REBASE > FOLLOWUP >
+RETRY > NONE`.
+
+### Built-in rebase (`git_sync.rebase_for_pr`)
+
+The orchestrator fetches the base, rebases the feature branch, and
+pushes the result:
+
+1. `git fetch --prune origin <base_branch>`.
+2. `git rebase origin/<base_branch>`.
+3. **Clean rebase** → `git push --force-with-lease=origin/<branch>:<remote_sha> origin <branch>`
+   (the long-form `<branch>:<remote_sha>` ensures we detect concurrent
+   pushes).
+4. **Content conflict** → `_git_rebase_abort` to clean up REBASE_HEAD,
+   mark `IssueRecord.has_conflict=True` with the conflicting files.
+
+The push method is configurable per CLI invocation: `--force` uses
+plain `--force` (DANGEROUS — may overwrite concurrent pushes) and
+also bypasses the rate-limit gate. Default is the safer
+`--force-with-lease`.
+
+### Agent reentry (content conflicts only)
+
+When the rebase produces real content conflicts, the orchestrator
+records them on the issue record and `_process_pending_rebase_conflicts`
+launches an `agent_rebase` run on the next daemon poll cycle. The
+agent prompt (built by `PromptBuilder.render_rebase`) instructs the
+agent to:
+
+1. Read the conflict markers in `conflict_files`.
+2. Resolve them according to issue intent.
+3. `git add` + `git rebase --continue`.
+4. `git push --force-with-lease=origin/<branch>:<remote_sha>`.
+
+The agent reentry is rate-limited at
+`max_rebase_attempts_per_issue=3` (configurable). When the cap is
+reached, the operator must use `clawcodex-dev orchestrator issue
+rebase --force` to bypass, or manually clean up.
+
+### Configuration (`workflow.pr_conflict_scan`)
+
+```yaml
+workflow:
+  pr_conflict_scan:
+    enabled: false           # Default off — scan is opt-in
+    poll_interval_ms: 300000 # 5 min throttle
+    max_rebase_attempts_per_issue: 3
+    max_prs_per_scan: 25
+    use_force_push: false    # Default —force-with-lease
+    bot_login: null          # Optional filter
+    scan_states: ["open"]
+```
+
+### GitCode mergeable API caveat
+
+`fetch_pull_request_mergeable` falls back to
+`MergeableStatus(mergeable=None, has_conflicts=False)` when the
+platform does not return a `mergeable` field (e.g. GitCode's
+JS-rendered API). On GitCode the daemon PR scan is a no-op; the
+operator must trigger rebase via CLI / label / comment.
 
 ---
 
@@ -735,11 +824,13 @@ origin, the `git_sync` service runs a built-in recovery loop:
 1. `git push` fails with non-fast-forward.
 2. `git fetch origin` updates the remote-tracking refs.
 3. `git rebase origin/<branch>` is attempted.
-4. **If the rebase is clean**, the push is retried.
+4. **If the rebase is clean**, the push is retried with
+   `--force-with-lease`.
 5. **If the rebase has conflicts**, the workspace is left in a
    rebasing state, the conflicting files are recorded in
-   `GitSyncResult.conflict_files`, and the next agent run is given a
-   prompt that includes the conflict markers to resolve.
+   `GitSyncResult.conflict_files` AND `IssueRecord.conflict_files`,
+   and the next agent run is given a rebase prompt
+   (`PromptBuilder.render_rebase`) to resolve.
 
 The `GitSyncResult` carries:
 

@@ -18,10 +18,13 @@
 #                     - completed / closed / cancelled / failed / abandoned  终态，跳过
 #                   详见 tracker.py: default_active_states_for_kind / terminal_states_for_kind
 #   priority        数字越小越靠前（0/1 = P0/P1）。可选，留空则按 id 字典序
-#   labels          标签列表。F-39 重用意图（写在 labels 里）：
+#   labels          标签列表。F-39 / F-120 重用意图（写在 labels 里）：
 #                     - agent:retry       重置 + 清旧 PR 字段、重跑
 #                     - agent:follow-up   保留分支，追加 commit
 #                     - agent:blocked     永久跳过（最高优先级，unblock 才会放开）
+#                     - agent:rebase     F-120: orchestrator 自行 rebase PR
+#                                       （fetch + rebase + push --force-with-lease），
+#                                       内容冲突时回退到 agent 介入
 #                   也可放普通分类标签：feature / bug / refactor / docs ...
 #   branch_name     期望的工作分支名。orchestrator 优先用这个；留空则按
 #                   <branch_prefix>/<id>-<slug> 自动生成

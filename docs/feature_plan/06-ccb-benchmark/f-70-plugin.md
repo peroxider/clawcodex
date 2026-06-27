@@ -1,8 +1,8 @@
 # F-70: Plugin 插件系统基础框架
 
-> 状态: 🔄 进行中（注册表/加载器/依赖/校验已存在）
+> 状态: ✅ 已完成（生命周期管理 + 沙箱隔离，PR #35 已合入 dev-decoupling-refactor-0573f4c）
 > 章节: docs/feature_plan/06-ccb-benchmark/f-70-plugin.md
-> 最后更新: 2026-06-24
+> 最后更新: 2026-06-28
 
 ## §1 设计规划
 
@@ -20,8 +20,8 @@ CCB 具备完整的 Plugin Marketplace 体系（安装/卸载/启用/禁用/浏�
 |:----:|--------|:----:|:--------:|
 | P70-A | BasePlugin 协议接口定义 | ✅ 已完成（`src/plugins/` 8 文件 1,070 行） | 3-5d |
 | P70-B | Plugin 发现（entry_points + 目录扫描） | 🔄 部分完成 | 2-3d |
-| P70-C | Plugin 生命周期管理（install/uninstall/enable/disable） | 📋 | 5-7d |
-| P70-D | 子进程沙箱隔离 | 📋 | 5-7d |
+| P70-C | Plugin 生命周期管理（install/uninstall/enable/disable） | ✅ 已完成 | 5-7d |
+| P70-D | 子进程沙箱隔离 | ✅ 已完成 | 5-7d |
 | P70-E | Plugin 清单格式（plugin.yaml / pyproject.toml 扩展） | 🔄 部分完成 | 2-3d |
 
 **已落地**: `src/plugins/` 8 文件 1,070 行：注册表/加载器/依赖/校验/市场/LSP 集成/MCP 集成等基础框架已存在。
@@ -110,12 +110,22 @@ plugins = entry_points(group="clawcodex.plugins")
 | 日期 | 里程碑 | 涉及文件 |
 |------|--------|---------|
 | 2026-06 | 注册表/加载器/依赖/校验基础 | `src/plugins/` 8 文件 1,070 行 |
+| 2026-06-27 | P70-C 生命周期管理 + P70-D 子进程沙箱隔离实现 | `src/plugins/{loader,manager,sandbox}.py` (+103/+178/+91/-34) |
+| 2026-06-27 | Plugin 生命周期 + Manager 单元测试（792 行） | `tests/plugin/test_plugin_lifecycle_extended.py` (435) + `test_plugin_manager.py` (357) |
+| 2026-06-27 | 修复 sandbox 权限检查顺序 + lifecycle 测试 None 守卫（3 个失败用例） | `src/plugins/sandbox.py` + `tests/plugin/test_plugin_lifecycle_extended.py` |
+| 2026-06-28 | PR #35 `!35 merge clawcodex/f-70-plugin into dev-decoupling-refactor-0573f4c` 合并入 base | merge commit `282da02b` |
 
-### 2.2 下一步计划
+### 2.2 关键能力
 
-1. Plugin 发现（目录扫描）
-2. 生命周期管理（install/uninstall/enable/disable）
-3. 子进程沙箱隔离
+- **生命周期钩子**：`on_load` / `on_unload` / `on_enable` / `on_disable` 全部实现并经单元测试覆盖
+- **沙箱隔离**：`PluginSandbox.execute_in_sandbox()` 支持网络限制、操作类别白名单、subprocess 隔离；权限检查顺序修正后错误信息更精准（"Network access is disabled" 优先于 "Permission denied"）
+- **PluginManager**：统一 CLI 命令绑定 + 生命周期协调（`src/plugins/manager.py` 450 行）
+- **PluginLoader**：importlib + entry_points 双通道发现（`src/plugins/loader.py` 536 行）
+
+### 2.3 下一步计划
+
+1. P70-B Plugin 发现（目录扫描）补全
+2. P70-E Plugin 清单格式（plugin.yaml / pyproject.toml 扩展）补全
 
 ## §4 变更记录
 
@@ -123,3 +133,7 @@ plugins = entry_points(group="clawcodex.plugins")
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并 |
 | 2026-06-24 | 补全详细设计（协议+架构+发现路径） | 对齐 FEATURE_PLAN.legacy.md |
+| 2026-06-27 | 落地 P70-C 生命周期 + P70-D 沙箱隔离（PR #35 工作） | `2b3c1258 feat(plugins): P70-C lifecycle management + P70-D sandbox isolation` |
+| 2026-06-27 | 修复 3 个 sandbox 权限检查 + lifecycle 测试失败用例 | `d3bdde5d fix(plugins): sandbox permission check ordering + lifecycle test compatibility` |
+| 2026-06-28 | PR #35 merge commit `282da02b` 合入 base，标记 P70-C/D 完成 | `!35 merge clawcodex/f-70-plugin into dev-decoupling-refactor-0573f4c` |
+| 2026-06-28 | 更新文档状态为已完成 + 补全进度跟踪表 | 同步实现状态 |

@@ -208,7 +208,7 @@ ClawCodex 的目标不是只做一个交互式编码 CLI,而是逐步形成"本�
 | AR-F-36 | LocalTracker 本地 Issue 文档源 | md/json 本地 issue 文件源、frontmatter 状态写回 | 用户可不用远程平台，在本地文件夹中排队任务，状态自动写回文件 | ✅ 已完成 → F-36 | 已完成 | py LocalTracker、md/json issue 文件、写回逻辑 |
 | AR-F-42 | WorkspaceManager 隔离与并发 | 每 issue 隔离工作区、清理策略、并发 issue 数/队列控制 | 用户可同时处理多个 issue，互不污染；可配置 daemon 并发度 | ✅ 已完成 → F-42 | 已完成 | py workspace、目录产物、配置 |
 | AR-F-44 | 人工检视闸门 | pending_review、approve/reject CLI、diff 输出 | 用户可先审查 diff，再决定是否接受本地 Agent 修改 | ✅ 已完成 → F-44 | 已完成 | py CLI、状态字段、diff 输出 |
-| AR-F-68 | Feature Gate 运行时特性开关系统 | 运行时特性开关系统、特性门控 | 用户可通过特性开关控制功能启用/禁用 | ⏳ 待开始 → F-68 | — | py feature gate、配置、测试 |
+| AR-F-68 | Feature Gate 运行时特性开关系统 | 运行时特性开关系统、特性门控 | 用户可通过特性开关控制功能启用/禁用 | ✅ 已完成 → F-68 | 已完成 | py feature gate、配置、测试 |
 
 #### SR-3.2 澄清、重跑与人机协同（→ FEATURE_PLAN §1.1.4 F-39 Issue 重跑、§1.4.2 F-49 会话统一存储、§2.12 Issue 语义澄清流程（F-78））
 
@@ -372,11 +372,11 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | AR-F-86 | Kairos/Brief 调度 | Kairos/Brief 调度模式 | 用户可精细控制 Agent 调度节奏 | ⏳ 待开始 → F-86 | — | py 调度模式 |
 | AR-F-87 | Workflow Scripts 工作流脚本 | 工作流脚本定义与执行 | 用户可定义和运行复杂工作流 | ⏳ 待开始 → F-87 | — | py 工作流引擎 |
 | AR-F-88 | Explore/Plan 内置 Agent | 探索/规划内置 Agent | 用户可让 Agent 自主探索和规划 | ⏳ 待开始 → F-88 | — | py 内置 Agent |
-| AR-F-68 | Feature Gate 运行时特性开关 | 运行时特性开关系统 | 用户可通过特性开关控制功能启用/禁用 | ⏳ 待开始 → F-68 | — | py feature gate |
+| AR-F-68 | Feature Gate 运行时特性开关 | 运行时特性开关系统 | 用户可通过特性开关控制功能启用/禁用 | ✅ 已完成 → F-68 | 已完成 | py feature gate |
 | AR-F-71 | 内置工具补齐 | 缺失工具批量实现 | 用户可使用更多内置工具 | ⏳ 待开始 → F-71 | — | py 工具实现 |
 | AR-F-73 | CI/CD 质量门禁 | CI/CD 流水线与 PyPI 发布 | 用户可自动化质量门禁和发布流程 | ⏳ 待开始 → F-73 | — | py CI/CD、发布 |
 | AR-F-85 | Templates 模板系统 | 模板定义与实例化 | 用户可基于模板快速创建 Agent 配置 | ⏳ 待开始 → F-85 | — | py 模板系统 |
-| AR-F-70 | Plugin 插件系统 | 插件系统基础框架 | 用户可安装和管理插件扩展能力 | ⏳ 待开始 → F-70 | — | py 插件框架 |
+| AR-F-70 | Plugin 插件系统 | 插件系统基础框架 | 用户可安装和管理插件扩展能力 | ✅ 已完成 → F-70 | 已完成 | py 插件框架 |
 | AR-F-81 | Native 原生模块系统 | 原生模块系统（Python 可实现部分） | 用户可使用高性能原生模块 | ⏳ 待开始 → F-81 | — | py 原生模块 |
 
 ## 5. 分层依赖图
@@ -464,7 +464,7 @@ ClawCodex 应能持续观察 Agent 开源社区、识别可迁移能力、自主
 | **v0.3 可观测性** | 已完成 | Validator 验证闭环、审计旁路、报告系统 | ✅ 已完成 |
 | **v0.4 平台扩展** | 已完成 | CCB 对标完成 10/15、Cron 完成、Visualizer 完成 | ✅ 已完成 |
 | **v0.5 CI/CD 就绪** | 完成 90% | 本地门禁全部就绪；远端 Pipeline/CodeCheck/Release/PyPI 待仓库能力开通 | 🟡 进行中 |
-| **v0.6 生态补缺** | 规划中 | F-68 Feature Gate / F-69 Budget Mode / F-72 Multi-API / F-70 Plugin 完整 | ⏳ 规划中 |
+| **v0.6 生态补缺** | 进行中 | F-68 Feature Gate ✅ / F-70 Plugin ✅ 已合入 base；F-69 Budget Mode / F-72 Multi-API 待落地 | 🟡 进行中 |
 | **v0.7 远程控制** | 规划中 | F-82 Remote Control Server / F-66 ACP 协议 / F-81 Native 模块 | ⏳ 规划中 |
 | **v1.0 生产可用** | 规划中 | 所有 P0/P1 特性完成；端到端稳定性门禁；发布流水线生产就绪 | ⏳ 规划中 |
 
