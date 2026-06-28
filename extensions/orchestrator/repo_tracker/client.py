@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from ..issue import Issue
-from ..tracker import PullRequestFeedback, PullRequestRef
+from ..tracker import MergeableStatus, PullRequestFeedback, PullRequestRef
 
 logger = logging.getLogger(__name__)
 
@@ -739,6 +739,43 @@ class RepositoryIssueClient:
             f"/repos/{self.owner}/{self.repo}/check-runs/{check_run_id}/annotations"
         )
 
+    async def fetch_pull_request_mergeable(
+        self,
+        *,
+        pull_request: PullRequestRef,
+    ) -> MergeableStatus | None:
+        """F-120: fetch normalized mergeability report for a PR.
+
+        Implementation: ``GET /repos/{owner}/{repo}/pulls/{n}``,
+        then delegate to ``_normalize_mergeable_status``. Returns
+        ``None`` on transport / 4xx errors so the daemon treats
+        GitCode's missing-mergeable case as a silent no-op.
+        """
+        pr_number = pull_request.number
+        if pr_number is None:
+            return None
+        try:
+            payload = await self._request_json(
+                "GET",
+                f"/repos/{self.owner}/{self.repo}/pulls/{pr_number}",
+            )
+        except RepositoryTrackerError as exc:
+            logger.warning(
+                "fetch_pull_request_mergeable: PR %s fetch failed: %s",
+                pr_number,
+                exc,
+            )
+            return None
+        if not isinstance(payload, dict):
+            return _normalize_mergeable_status(
+                {},
+                platform=self.platform.name,
+            )
+        return _normalize_mergeable_status(
+            payload,
+            platform=self.platform.name,
+        )
+
     async def _fetch_paginated(self, path: str) -> list[dict[str, Any]]:
         page = 1
         items: list[dict[str, Any]] = []
@@ -990,6 +1027,137 @@ def _normalize_feedback_status(payload: dict[str, Any]) -> str:
     if payload.get("outdated") is True:
         return "outdated"
     return "open"
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    """F-120: tolerant string-to-bool coercion.
+
+    Some platforms (GitCode nested ``conflict_passed``) emit
+    ``true`` / ``false`` as strings rather than JSON booleans.
+    Returns ``None`` for unknown values so the caller can fall
+    back to other signals.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _extract_gitcode_conflict_state(payload: dict[str, Any]) -> tuple[bool | None, str | None]:
+    """F-120: GitCode exposes merge status as a nested object.
+
+    The field path varies; we look at:
+      - ``mergeable_state`` as object → ``conflict_passed`` (bool),
+        ``message`` (str).
+      - top-level ``mergeable_state`` as string.
+    Returns ``(conflict_passed, state_string)``.
+    """
+    state_obj = payload.get("mergeable_state")
+    if isinstance(state_obj, dict):
+        passed = _coerce_bool(state_obj.get("conflict_passed"))
+        message = state_obj.get("message")
+        state_str = str(message).strip() if isinstance(message, str) and message.strip() else None
+        return passed, state_str
+    if isinstance(state_obj, str):
+        return None, state_obj.strip() or None
+    return None, None
+
+
+def _normalize_mergeable_status(
+    payload: Any,
+    *,
+    platform: str,
+    raw: dict[str, Any] | None = None,
+) -> MergeableStatus:
+    """F-120: normalize a PR payload into MergeableStatus.
+
+    Behavior per platform:
+
+    - **github** / **gitee** — direct read of ``mergeable`` (bool |
+      None) and ``mergeable_state`` (string). ``has_conflicts`` is
+      set when ``mergeable is False`` or ``mergeable_state == "dirty"``.
+    - **gitcode** — fields are often missing or nested. When
+      ``mergeable`` is missing and ``mergeable_state`` is missing
+      too, returns ``MergeableStatus(mergeable=None, has_conflicts=False)``
+      so the daemon treats it as a silent no-op. When the nested
+      ``mergeable_state.conflict_passed`` is available, it
+      directly drives ``has_conflicts``.
+
+    ``ahead_by`` / ``behind_by`` are populated when the payload
+    exposes them (GitHub: ``commits`` count + base ref compare).
+
+    The returned ``raw`` is always a ``{"platform": <name>, "payload": <dict>}``
+    structure so callers can introspect both the platform routing and
+    the original payload (e.g. for audit logging).
+    """
+    if not isinstance(payload, dict):
+        return MergeableStatus(raw={"platform": platform, "payload": {}})
+    payload_dict: dict[str, Any] = payload
+
+    mergeable_raw = payload_dict.get("mergeable")
+    mergeable = _coerce_bool(mergeable_raw)
+    state_raw = payload_dict.get("mergeable_state")
+    if isinstance(state_raw, dict):
+        # GitCode sometimes nests even at top level after a merge;
+        # collapse to the inner message.
+        inner_passed, inner_state = _extract_gitcode_conflict_state(payload_dict)
+        mergeable_state = inner_state
+        if mergeable is None:
+            # Inner conflict_passed overrides top-level null mergeable.
+            if inner_passed is True:
+                mergeable = True
+            elif inner_passed is False:
+                mergeable = False
+    elif isinstance(state_raw, str):
+        mergeable_state = state_raw.strip() or None
+    else:
+        mergeable_state = None
+
+    has_conflicts = False
+    if platform == "gitcode":
+        # GitCode: when fields are missing, leave has_conflicts False
+        # so daemon treats it as no-op.
+        if mergeable is False or mergeable_state == "dirty":
+            has_conflicts = True
+    else:
+        if mergeable is False or mergeable_state == "dirty":
+            has_conflicts = True
+
+    ahead_by = _coerce_int(payload_dict.get("ahead_by"))
+    behind_by = _coerce_int(payload_dict.get("behind_by"))
+
+    return MergeableStatus(
+        mergeable=mergeable,
+        mergeable_state=mergeable_state,
+        ahead_by=ahead_by,
+        behind_by=behind_by,
+        has_conflicts=has_conflicts,
+        raw={"platform": platform, "payload": payload_dict},
+    )
 
 
 def _string_value(value: Any) -> str | None:

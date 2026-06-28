@@ -762,6 +762,59 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Skip prompts; use defaults for missing values",
     )
 
+    # --- issue rebase (F-120: CLI 兜底命令) ---
+    rebase_parser = issue_sub.add_parser(
+        "rebase",
+        help="Rebase the PR's feature branch onto the latest base (CLI fallback)",
+        description="Operator-driven fallback for F-120 PR conflict resolution. "
+        "Writes a control file that the daemon picks up on its next "
+        "poll cycle. The orchestrator itself performs the rebase "
+        "(no external agent for clean rebases); the agent is only "
+        "invoked if the rebase leaves actual content conflicts.",
+    )
+    rebase_parser.add_argument(
+        "--id",
+        type=str,
+        required=True,
+        metavar="ISSUE_ID",
+        help="Issue identifier whose PR should be rebased",
+    )
+    rebase_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Use plain `git push --force` (default: --force-with-lease). "
+        "Bypasses the max_rebase_attempts_per_issue rate limit. "
+        "Logged as a high-priority audit entry.",
+    )
+    rebase_parser.add_argument(
+        "--reason",
+        type=str,
+        default="",
+        metavar="TEXT",
+        help="Free-form reason recorded in audit.jsonl",
+    )
+    rebase_parser.add_argument(
+        "--operator",
+        type=str,
+        default=None,
+        metavar="LOGIN",
+        help="Operator login recorded in audit.jsonl",
+    )
+    rebase_parser.add_argument(
+        "--workspace",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Explicit workspace root path (auto-detection override)",
+    )
+    rebase_parser.add_argument(
+        "--workflow",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to WORKFLOW.md (resolution hint when metadata is missing)",
+    )
+
 
 # ---------------------------------------------------------------------------
 # Run dispatch
@@ -819,6 +872,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_diff(registry_path, args)
     elif cmd == "retry":
         return _run_retry(registry_path, args)
+    elif cmd == "rebase":
+        return _run_rebase(registry_path, args)
     elif cmd == "feedback":
         return _run_feedback(registry_path, args)
     elif cmd == "init":
@@ -2322,6 +2377,142 @@ def _append_audit_log(
             file=sys.stderr,
         )
         return None
+
+
+def _run_rebase(registry_path: Path | None, args: argparse.Namespace) -> int:
+    """F-120: CLI 兜底命令 — request a PR rebase via the built-in path.
+
+    Unlike ``issue retry``, this command DOES NOT mutate the local
+    registry intent directly. Instead it writes a control file that
+    the daemon picks up on its next poll cycle and dispatches to
+    ``_process_rebase_intent`` (which calls ``git_sync.rebase_for_pr``
+    directly, with no external agent involvement when the rebase is
+    clean). This avoids racing the daemon when it is mid-run.
+
+    ``--force`` (default False) overrides two safe defaults:
+
+      1. Uses plain ``git push --force`` instead of
+         ``--force-with-lease``. May overwrite concurrent pushes.
+      2. Bypasses the ``max_rebase_attempts_per_issue`` rate-limit
+         gate. The audit entry is flagged high-priority in either
+         case so the operator action is traceable.
+    """
+    issue_id = getattr(args, "id", None)
+    if not issue_id:
+        print("error: --id is required for rebase", file=sys.stderr)
+        return 2
+    force = bool(getattr(args, "force", False))
+    reason = getattr(args, "reason", "") or ""
+    operator = _resolve_operator(getattr(args, "operator", None))
+
+    if registry_path is None or not registry_path.exists():
+        print(
+            "error: no issue registry found for this workspace.\n"
+            "hint: run from a project root or pass --workspace / --workflow.",
+            file=sys.stderr,
+        )
+        return 1
+
+    from extensions.orchestrator.issue_registry import IssueRegistry
+
+    registry = IssueRegistry(registry_path)
+    record = registry.get_by_issue_ref(issue_id)
+    if record is None:
+        # Auto-register so the daemon can find the record on its next
+        # poll. CLI rebase is a legitimate way to bootstrap an issue
+        # record when the local daemon hasn't seen the issue yet.
+        registry.register(
+            issue_id=issue_id,
+            issue_identifier=issue_id,
+        )
+        record = registry.get(issue_id)
+        assert record is not None
+    registry_issue_id = record.issue_id
+
+    # Guard 1: the issue must have a known PR + workspace + branch.
+    # Without these the rebase cannot be performed (no PR to push to,
+    # no local workspace to operate on).
+    if not record.pr_number or not record.workspace_path or not record.branch_name:
+        print(
+            f"error: issue {issue_id} ({record.issue_identifier}) has "
+            f"no PR / workspace / branch registered. The rebase path "
+            f"requires a previously-opened PR. Run a normal agent "
+            f"cycle first to open a PR, then re-issue this command.",
+            file=sys.stderr,
+        )
+        return 4
+
+    # Mirror the intent onto the local registry so the daemon's
+    # _resolve_intent sees REBASE even when the control file path is
+    # unavailable (e.g. daemon already started its poll cycle).
+    from extensions.orchestrator.tracker import Intent
+
+    registry.mark_intent(
+        registry_issue_id,
+        Intent.REBASE,
+        source="cli",
+        command=f"cli:rebase:{reason[:64]}",
+    )
+
+    # Guard 2: best-effort rate-limit preview (the daemon enforces
+    # the authoritative gate via _check_rebase_rate_limit). When the
+    # current count already equals the configured cap and the
+    # operator did NOT pass --force, warn but still write the control
+    # file — the daemon's gate will surface a structured
+    # ``rebase_rejected`` audit event instead of silently swallowing
+    # the request.
+    max_attempts = 3
+    if record.rebase_attempt_count >= max_attempts and not force:
+        print(
+            f"warning: issue {issue_id} has reached "
+            f"rebase_attempt_count={record.rebase_attempt_count} >= "
+            f"max_rebase_attempts_per_issue={max_attempts}. Pass "
+            f"--force to bypass (logged as high-priority audit).",
+            file=sys.stderr,
+        )
+
+    # Mirror the intent label onto the tracker (best-effort).
+    tracker = _tracker_from_workflow_arg(args)
+    if tracker is not None:
+        _mirror_intent_label(tracker, issue_id, "agent:rebase", remove=False)
+
+    # Append a JSONL entry to the local audit log so the operator
+    # action is traceable.
+    _append_audit_log(
+        issue_id=issue_id,
+        mode="rebase",
+        reason=reason,
+        operator=operator,
+        force=force,
+        extra={
+            "issue_identifier": record.issue_identifier,
+            "event": "rebase_requested",
+            "priority": "high" if force else "normal",
+            "push_method": "force" if force else "force-with-lease",
+            "rebase_attempt_count": record.rebase_attempt_count,
+            "max_rebase_attempts_per_issue": max_attempts,
+            "pr_number": record.pr_number,
+            "branch_name": record.branch_name,
+            "base_branch": record.base_branch,
+        },
+    )
+
+    # Write the control file that the daemon polls. Format:
+    #   rebase\n<id>\nforce=0|1\n<reason>\n
+    extra = f"force={'1' if force else '0'}\n{reason}"
+    rc = _write_control("rebase", registry_issue_id, extra)
+    if rc != 0:
+        return rc
+
+    print(f"Issue {issue_id} ({record.issue_identifier}): rebase requested.")
+    print(f"  push method: {'--force' if force else '--force-with-lease'}")
+    if reason:
+        print(f"  reason: {reason}")
+    print(
+        "  The orchestrator will run `rebase_for_pr` on its next "
+        "poll cycle (default 30s)."
+    )
+    return 0
 
 
 def _run_retry(registry_path: Path | None, args: argparse.Namespace) -> int:

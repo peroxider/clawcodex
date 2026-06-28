@@ -120,6 +120,7 @@ class PromptBuilder:
         session: Any | None = None,
         python_executable: str | None = None,
         previous_run_ids: list[str] | None = None,
+        conflict_files: tuple[str, ...] | list[str] | None = None,
     ) -> str:
         """Build prompt using workflow's WORKFLOW.md body template + issue data.
 
@@ -131,6 +132,10 @@ class PromptBuilder:
             options: If in clarification flow, the available options for the question
             previous_run_ids: Run IDs from previous failed attempts; injected as a
                 hint so the agent can Read() past transcripts to learn what was tried.
+            conflict_files: F-120 — when the agent is in a rebase-resolution
+                reentry run, this lists the files that git left in conflict
+                state. Injected into the prompt so the agent can read each
+                file's conflict markers and resolve them.
         """
         store = get_workflow_store()
         current = store.current()
@@ -232,7 +237,130 @@ class PromptBuilder:
                 f"不要调试环境差异。\n\n{rendered}"
             )
 
+        # F-120: inject the list of files git left in conflict state so the
+        # agent can read each file's conflict markers and resolve them in
+        # place. Only emitted when conflict_files is non-empty.
+        if conflict_files:
+            file_lines = "\n".join(f"- `{name}`" for name in conflict_files)
+            rendered = (
+                "---\n"
+                "## Conflicting Files (F-120 rebase reentry)\n"
+                "\n"
+                "The orchestrator's automated rebase left the following files in a\n"
+                "conflict state (REBASE_HEAD is set in the workspace). Read each\n"
+                "file, resolve the conflict markers (`<<<<<<<`, `=======`,\n"
+                "`>>>>>>>`), then continue the rebase and push:\n"
+                "\n"
+                f"{file_lines}\n"
+                "\n"
+                "Suggested commands (run from the workspace root):\n"
+                "\n"
+                "```bash\n"
+                "git status              # confirm REBASE_HEAD state\n"
+                "# Edit each file above to remove conflict markers.\n"
+                "git add <resolved files>\n"
+                "git rebase --continue\n"
+                "git push --force-with-lease=origin/<branch>:<remote_sha> \\\n"
+                "    origin <branch>\n"
+                "```\n"
+                "---"
+                "\n\n"
+                f"{rendered}"
+            )
+
         return rendered
+
+    @staticmethod
+    def render_rebase(
+        *,
+        issue: Any,
+        branch_name: str,
+        base_branch: str,
+        conflict_files: tuple[str, ...] | list[str] = (),
+        reason: str | None = None,
+    ) -> str:
+        """F-120: build a prompt for an agent run that resolves a rebase conflict.
+
+        This is used when ``_process_rebase_intent`` left content conflicts
+        (has_conflict=True) and the daemon launches a fresh ``agent_rebase``
+        run to resolve them. The prompt is intentionally minimal — the agent
+        is told exactly which files git marked as conflicting and the
+        suggested git commands to finish the rebase + push.
+        """
+        issue_dict = issue.to_dict() if hasattr(issue, "to_dict") else issue
+        title = (
+            issue_dict.get("title")
+            if isinstance(issue_dict, dict)
+            else getattr(issue, "title", "")
+        ) or ""
+        identifier = (
+            issue_dict.get("identifier")
+            if isinstance(issue_dict, dict)
+            else getattr(issue, "identifier", "")
+        ) or ""
+
+        files_block = (
+            "\n".join(f"- `{name}`" for name in conflict_files)
+            if conflict_files
+            else "- (no specific files reported — run `git diff --name-only --diff-filter=U` to list them)"
+        )
+
+        reason_block = (
+            f"\n## Reason\n\n{reason}\n" if reason else ""
+        )
+
+        template = (
+            "---\n"
+            f"# F-120 PR Conflict Resolution — {identifier}\n"
+            f"\n**Title:** {title}\n"
+            f"**Branch:** `{branch_name}` (base `{base_branch}`)\n"
+            f"{reason_block}"
+            "\n"
+            "## Task\n"
+            "\n"
+            "The orchestrator's automated `git rebase origin/<base>` left this\n"
+            "branch with content conflicts. Your job is to resolve each conflict,\n"
+            "continue the rebase, and push the rebased branch with\n"
+            "`--force-with-lease` (the default) so the PR becomes mergeable\n"
+            "again. **Do NOT close the PR or open a new one.**\n"
+            "\n"
+            "## Conflicting Files\n"
+            "\n"
+            f"{files_block}\n"
+            "\n"
+            "## Procedure\n"
+            "\n"
+            "1. `git status` — confirm REBASE_HEAD is set.\n"
+            "2. For each file above: read the file, remove the\n"
+            "   `<<<<<<<`/`=======`/`>>>>>>>` markers, write the merged\n"
+            "   content you want kept.\n"
+            "3. `git add <file>` for each resolved file.\n"
+            "4. `git rebase --continue` (or `--skip` if the upstream commit is\n"
+            "   the one to drop — but only when clearly safe).\n"
+            "5. `git log --oneline -5` to verify the rebased history.\n"
+            "6. Capture the new `HEAD` SHA, then push:\n"
+            "\n"
+            "   ```bash\n"
+            "   REMOTE_SHA=$(git rev-parse origin/<branch>)\n"
+            "   git push --force-with-lease=<branch>:$REMOTE_SHA origin <branch>\n"
+            "   ```\n"
+            "\n"
+            "7. Print the final head SHA in your response so the orchestrator\n"
+            "   can record it.\n"
+            "\n"
+            "## Constraints\n"
+            "\n"
+            "- **Do not** run `git rebase --abort` unless explicitly asked; we\n"
+            "  want the rebased history, not the pre-rebase one.\n"
+            "- **Do not** use plain `git push --force`; the orchestrator\n"
+            "  defaults to `--force-with-lease` to avoid clobbering concurrent\n"
+            "  pushes. Only use `--force` if the operator explicitly passed\n"
+            "  `--force` to the rebase CLI.\n"
+            "- **Do not** open a new PR; the existing PR will pick up the\n"
+            "  rebased head automatically once the push lands.\n"
+            "---"
+        )
+        return template
 
     @staticmethod
     def render_review_feedback(

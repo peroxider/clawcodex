@@ -167,6 +167,13 @@ class AgentSession:
     # ``agent_config.perf_should_continue_skip_turns``. When ``None`` the
     # runner falls back to the pre-F-105 behaviour of always polling.
     state_cache: "IssueStateCache | None" = None
+    # F-120: list of files git left in conflict state. Populated by
+    # ``Orchestrator._prepare_rebase_session`` from
+    # ``IssueRecord.conflict_files`` when ``run_kind == "agent_rebase"``.
+    # The prompt builder injects these into the conflict-resolution
+    # prompt so the agent knows exactly which files need ``git add``
+    # before ``git rebase --continue``.
+    conflict_files: tuple[str, ...] | None = None
     # F-45: canonical path to ~/.clawcodex/tool-events/{run_id}/events.ndjson.
     # Set in AgentRunner.run() at session start; consumed by
     # report_writer.write() to dual-write the NDJSON to the persistent layer.

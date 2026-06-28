@@ -148,6 +148,8 @@ class TestIntentFromLabelSet(unittest.TestCase):
                 "retry": "agent:retry",
                 "followup": "agent:follow-up",
                 "blocked": "agent:blocked",
+                # F-120: rebase label convention.
+                "rebase": "agent:rebase",
             },
         )
 

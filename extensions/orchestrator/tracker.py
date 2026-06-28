@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -24,12 +24,16 @@ class Intent(str, Enum):
       - RETRY: reset local registry entry + close remote PR + new run
       - FOLLOWUP: keep PR, append commit on same branch
       - BLOCKED: permanently skip the issue
+      - REBASE: F-120 — orchestrator rebases the existing PR's
+        feature branch onto the latest base and force-pushes.
+        Agent reentry only triggered if rebase leaves content conflicts.
     """
 
     NONE = "none"
     RETRY = "retry"
     FOLLOWUP = "followup"
     BLOCKED = "blocked"
+    REBASE = "rebase"
 
 
 # Default label conventions for the three retry intents. Adapters accept an
@@ -38,6 +42,7 @@ DEFAULT_INTENT_LABELS: dict[str, str] = {
     "retry": "agent:retry",
     "followup": "agent:follow-up",
     "blocked": "agent:blocked",
+    "rebase": "agent:rebase",
 }
 
 
@@ -51,8 +56,11 @@ def intent_from_label_set(
 ) -> Intent:
     """Resolve an Intent from a list of issue labels.
 
-    Priority rules (per F-39 design):
+    Priority rules (per F-39 design + F-120):
       - `agent:blocked` wins over any other intent (permanent skip).
+      - `agent:rebase` wins over RETRY/FOLLOWUP (F-120: rebase
+        touches the remote history directly; treat as higher
+        priority than follow-up commit appending).
       - `agent:retry` + `agent:follow-up` together → FOLLOWUP is more
         conservative (keeps PR evidence), so it wins.
       - Otherwise return whichever single intent label is present, or NONE.
@@ -63,14 +71,21 @@ def intent_from_label_set(
     retry_label = _normalize_label(mapping.get("retry", ""))
     followup_label = _normalize_label(mapping.get("followup", ""))
     blocked_label = _normalize_label(mapping.get("blocked", ""))
+    rebase_label = _normalize_label(mapping.get("rebase", ""))
     normalized = {_normalize_label(label) for label in labels if label}
     if blocked_label and blocked_label in normalized:
         return Intent.BLOCKED
+    if rebase_label and rebase_label in normalized:
+        return Intent.REBASE
     if followup_label and followup_label in normalized:
         return Intent.FOLLOWUP
     if retry_label and retry_label in normalized:
         return Intent.RETRY
     return Intent.NONE
+
+
+def _normalize_label(value: str) -> str:
+    return value.strip().lower()
 
 
 # ---------------------------------------------------------------------------
@@ -84,17 +99,22 @@ class Command(str, Enum):
     Distinct from `Intent` because commands may carry side effects
     (e.g. UNBLOCK clears an abandoned status) and because not every
     command maps to a run-mode intent.
+
+    F-120 adds ``REBASE``: a comment-issued rebase request that maps
+    to ``Intent.REBASE``.
     """
 
     RETRY = "retry"
     FOLLOWUP = "followup"
     UNBLOCK = "unblock"
+    REBASE = "rebase"
 
 
 # Regex for `/agent <subcommand> [args]` at the start of a line / body.
 # Permissive trailing text: any args / reason after the subcommand.
+# F-120: include ``rebase`` in the recognized subcommand set.
 _AGENT_COMMAND_RE = re.compile(
-    r"^/agent\s+(retry|follow-up|unblock)\b[^\n]*",
+    r"^/agent\s+(retry|follow-up|unblock|rebase)\b[^\n]*",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -106,6 +126,7 @@ def parse_agent_command(body: str | None) -> Command | None:
       - `/agent retry [reason...]`
       - `/agent follow-up [note...]`
       - `/agent unblock`
+      - `/agent rebase [reason...]`  (F-120)
 
     Returns the matched `Command` or `None` if no recognized command
     is present. Only the first match is returned — operators that
@@ -123,6 +144,8 @@ def parse_agent_command(body: str | None) -> Command | None:
         return Command.FOLLOWUP
     if raw == "unblock":
         return Command.UNBLOCK
+    if raw == "rebase":
+        return Command.REBASE
     return None
 
 
@@ -133,11 +156,15 @@ def command_to_intent(command: Command) -> Intent:
     run-mode intent; it returns Intent.NONE so the next poll re-
     applies the label-based intent (or stays NONE if the operator
     removed the agent:blocked label too).
+
+    F-120: ``Command.REBASE`` → ``Intent.REBASE``.
     """
     if command is Command.RETRY:
         return Intent.RETRY
     if command is Command.FOLLOWUP:
         return Intent.FOLLOWUP
+    if command is Command.REBASE:
+        return Intent.REBASE
     return Intent.NONE
 
 
@@ -153,12 +180,17 @@ def merge_intents(label_intent: Intent, command_intent: Intent) -> Intent:
 
     Precedence (high → low):
       1. Intent.BLOCKED — sticky permanent skip.
-      2. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
-      3. Otherwise: command_intent wins over label_intent.
-      4. Otherwise: whichever is non-NONE; else NONE.
+      2. Intent.REBASE — F-120: orchestrator-side rebase is a
+         remote-history-touching operation that beats the more
+         conservative RETRY/FOLLOWUP branches.
+      3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
+      4. Otherwise: command_intent wins over label_intent.
+      5. Otherwise: whichever is non-NONE; else NONE.
     """
     if label_intent is Intent.BLOCKED or command_intent is Intent.BLOCKED:
         return Intent.BLOCKED
+    if label_intent is Intent.REBASE or command_intent is Intent.REBASE:
+        return Intent.REBASE
     if label_intent is Intent.FOLLOWUP or command_intent is Intent.FOLLOWUP:
         return Intent.FOLLOWUP
     if command_intent is not Intent.NONE:
@@ -173,28 +205,32 @@ def merge_intents_with_cli(
     command_intent: Intent,
     cli_intent: Intent,
 ) -> Intent:
-    """F-39 Sub-E: merge three intent sources (label / comment / CLI).
+    """F-39 Sub-E + F-120: merge three intent sources (label / comment / CLI).
 
     Used by :meth:`Orchestrator._resolve_intent` to combine the three
     ways an operator can drive a retry:
 
       1. **Label** — ``agent:retry`` / ``agent:follow-up`` /
-         ``agent:blocked`` on the issue (F-39 Sub-A).
+         ``agent:blocked`` / ``agent:rebase`` on the issue
+         (F-39 Sub-A + F-120).
       2. **Comment** — ``/agent retry`` / ``/agent follow-up`` /
-         ``/agent unblock`` in the issue thread (F-39 Sub-D).
+         ``/agent unblock`` / ``/agent rebase`` in the issue thread
+         (F-39 Sub-D + F-120).
       3. **CLI** — ``clawcodex-dev orchestrator issue retry --mode
-         reset|followup|unblock`` which writes ``registry.intent``
-         with ``intent_source="cli"`` (F-39 Sub-E). This is the
+         reset|followup|unblock|rebase`` which writes ``registry.intent``
+         with ``intent_source="cli"`` (F-39 Sub-E + F-120). This is the
          operator's authoritative local command and is the ONLY
          source that survives even when the remote issue tracker is
          unreachable / read-only / local-only (LocalTracker).
 
     Precedence (high → low):
       1. Intent.BLOCKED — sticky permanent skip (any source).
-      2. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
-      3. CLI intent — operator's local command beats remote signals.
-      4. Comment command beats label-only intent.
-      5. Otherwise: whichever is non-NONE; else NONE.
+      2. Intent.REBASE — F-120: remote-history rebase beats
+         retry/followup which only affect local state.
+      3. The more conservative of {RETRY, FOLLOWUP} = FOLLOWUP.
+      4. CLI intent — operator's local command beats remote signals.
+      5. Comment command beats label-only intent.
+      6. Otherwise: whichever is non-NONE; else NONE.
 
     Why CLI wins: the CLI is the operator's deliberate, authenticated
     local action. Remote signals (label, comment) can be stale,
@@ -209,6 +245,12 @@ def merge_intents_with_cli(
         or cli_intent is Intent.BLOCKED
     ):
         return Intent.BLOCKED
+    if (
+        label_intent is Intent.REBASE
+        or command_intent is Intent.REBASE
+        or cli_intent is Intent.REBASE
+    ):
+        return Intent.REBASE
     if (
         label_intent is Intent.FOLLOWUP
         or command_intent is Intent.FOLLOWUP
@@ -274,6 +316,36 @@ class PullRequestFeedback:
 SUPPORTED_TRACKERS = frozenset({"linear", "github", "gitee", "gitcode", "local"})
 
 
+@dataclass(frozen=True)
+class MergeableStatus:
+    """F-120: normalized PR mergeability report.
+
+    The three platforms we target expose this differently:
+
+    - **GitHub** — ``pull.mergeable`` (bool | None) and
+      ``pull.mergeable_state`` (clean/dirty/blocked/unstable/dirty).
+    - **Gitee** — same shape as GitHub.
+    - **GitCode** — ``mergeable`` is often ``None`` because the
+      page is JS-rendered. ``mergeable_state`` may be a nested object
+      with a ``conflict_passed`` boolean.
+
+    ``has_conflicts`` is a derived convenience flag set explicitly by
+    the adapter (it is NOT auto-computed from ``mergeable`` /
+    ``mergeable_state`` here because the meaning of "conflict"
+    differs slightly per platform). On GitCode, when the relevant
+    fields are missing, the adapter returns
+    ``MergeableStatus(mergeable=None, has_conflicts=False)`` to
+    signal "unknown, treat as no-op".
+    """
+
+    mergeable: bool | None = None
+    mergeable_state: str | None = None
+    behind_by: int | None = None
+    ahead_by: int | None = None
+    has_conflicts: bool = False
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
 class TrackerAdapter(ABC):
     """Adapter boundary for issue tracker reads and writes."""
 
@@ -329,6 +401,21 @@ class TrackerAdapter(ABC):
         body: str,
     ) -> "Comment | None":
         """Update an existing issue comment when supported."""
+        return None
+
+    async def fetch_pull_request_mergeable(
+        self,
+        pull_request: "PullRequestRef",
+    ) -> "MergeableStatus | None":
+        """F-120: fetch a normalized PR mergeability report.
+
+        Returns ``None`` if the platform does not expose the
+        required fields (e.g. GitCode with JS-rendered merge
+        status). The default implementation returns ``None`` so
+        existing adapters (Linear, LocalTracker) opt out by
+        inheritance. ``RepositoryTrackerAdapter`` overrides this
+        to delegate to the underlying client.
+        """
         return None
 
     async def find_pull_request(

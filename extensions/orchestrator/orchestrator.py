@@ -19,7 +19,9 @@ from .git_sync import (
     GitSyncPostCommitError,
     GitSyncService,
     HookFailedError,
+    PRRebaseResult,
     VerificationFailed,
+    rebase_for_pr,
 )
 from .issue import Issue
 from .issue_registry import IssueRegistry, IssueStatus
@@ -63,6 +65,10 @@ class OrchestratorState:
     claimed: set[str] = field(default_factory=set)
     retry_queue: list[RetryItem] = field(default_factory=list)
     retry_attempts: dict[str, int] = field(default_factory=dict)
+    # F-120: throttle marker for the optional PR conflict scan. Wall-clock
+    # seconds (not ms) of the last scan — compared against
+    # ``time.monotonic()`` so a backwards clock jump is benign.
+    pr_conflict_scan_last_run: float = 0.0
     codex_totals: dict[str, int] = field(
         default_factory=lambda: {
             "input_tokens": 0,
@@ -609,6 +615,31 @@ class Orchestrator:
                     )
                     # F-39 Sub-C will perform the actual follow-up.
 
+                if intent is Intent.REBASE:
+                    # F-120: REBASE intent — the orchestrator itself
+                    # performs the rebase (no agent for clean rebases).
+                    # On content conflict, has_conflict is set and the
+                    # next ``_process_pending_rebase_conflicts`` cycle
+                    # launches an agent_rebase run.
+                    logger.info(
+                        "Issue %s rebase intent detected, running built-in rebase",
+                        issue.id,
+                    )
+                    self._registry.mark_intent(
+                        issue.id or "",
+                        intent,
+                        source=(intent_source or ("command" if command is not None else "label")),
+                        command=(f"/agent {command.value}" if command is not None else None),
+                    )
+                    if not self._check_rebase_rate_limit(issue, force=False):
+                        continue
+                    await self._process_rebase_intent(issue)
+                    # CLI is one-shot; clear so the next poll doesn't
+                    # re-trigger. Audit + last_command are preserved.
+                    if intent_source == "cli":
+                        self._registry.clear_intent(issue.id or "")
+                    continue
+
                 # Skip terminal registry records even if the tracker still
                 # exposes the issue in an active state. Explicit retry/follow-up
                 # intents are the only daemon path that may reopen handled work.
@@ -1097,6 +1128,379 @@ class Orchestrator:
             issue_id,
             (self._registry.get(issue_id) or record).retry_count,
         )
+
+    # ------------------------------------------------------------------
+    # F-120 PR Conflict Auto-Resolution
+    # ------------------------------------------------------------------
+
+    def _check_rebase_rate_limit(
+        self,
+        issue: Issue,
+        *,
+        force: bool = False,
+    ) -> bool:
+        """F-120: refuse a rebase when rebase_attempt_count exceeds the cap.
+
+        Returns True if the rebase is allowed (and bumps the
+        counter on the registry record), or False if the rate
+        limit was hit. ``force=True`` is reserved for the CLI path;
+        the daemon path passes ``force=False`` so a hit produces a
+        ``rebase_rejected`` audit entry instead of silently
+        swallowing the request.
+        """
+        issue_id = issue.id or ""
+        limit = self.workflow.pr_conflict_scan.max_rebase_attempts_per_issue
+        record = self._registry.get(issue_id)
+        current = record.rebase_attempt_count if record else 0
+        if current < limit:
+            if record is not None:
+                self._registry.increment_rebase_attempt(issue_id)
+            return True
+        if force:
+            return True
+        logger.warning(
+            "Issue %s rebase rate limit hit: %d >= %d",
+            issue_id,
+            current,
+            limit,
+        )
+        self._log_audit_event(
+            issue_id=issue_id,
+            event="rebase_rejected",
+            mode="rebase",
+            reason=(
+                f"rebase_attempt_count={current} >= "
+                f"max_rebase_attempts_per_issue={limit}"
+            ),
+            author="daemon",
+        )
+        return False
+
+    async def _process_rebase_intent(
+        self,
+        issue: Issue,
+        *,
+        force: bool | None = None,
+    ) -> PRRebaseResult | None:
+        """F-120: the built-in non-agent rebase path.
+
+        Direct ``asyncio.to_thread(rebase_for_pr, ...)`` — no
+        agent / session / provider involved. On a clean rebase
+        the registry is cleared and ``rebase_completed`` is
+        audited; on a content conflict ``has_conflict`` is set
+        and ``rebase_conflict`` is audited (the daemon will pick
+        it up in the next ``_process_pending_rebase_conflicts``
+        cycle and launch an ``agent_rebase`` run).
+        """
+        issue_id = issue.id or ""
+        record = self._registry.get(issue_id)
+        if record is None:
+            logger.warning(
+                "Issue %s rebase skipped: registry record missing",
+                issue_id,
+            )
+            return None
+        if not record.workspace_path or not record.branch_name:
+            logger.warning(
+                "Issue %s rebase skipped: workspace_path=%r branch_name=%r",
+                issue_id,
+                record.workspace_path,
+                record.branch_name,
+            )
+            return None
+        base_branch = (
+            record.base_branch
+            or self.workflow.workspace.base_branch
+            or "main"
+        )
+        use_force = (
+            self.workflow.pr_conflict_scan.use_force_push
+            if force is None
+            else force
+        )
+        result = await asyncio.to_thread(
+            rebase_for_pr,
+            workspace_path=record.workspace_path,
+            branch_name=record.branch_name,
+            base_branch=base_branch,
+            force=use_force,
+        )
+        if result.has_conflict:
+            self._registry.mark_conflict(issue_id, result.conflict_files)
+            logger.warning(
+                "Issue %s rebase left conflicts: %s",
+                issue_id,
+                ", ".join(result.conflict_files),
+            )
+            self._log_audit_event(
+                issue_id=issue_id,
+                event="rebase_conflict",
+                mode="force" if use_force else "force-with-lease",
+                reason=",".join(result.conflict_files),
+                author="daemon",
+            )
+            return result
+        if result.rebased:
+            self._registry.clear_conflict(issue_id)
+            if result.new_head_sha:
+                record.commit_sha = result.new_head_sha
+                record.touch()
+                self._registry._save()
+            logger.info(
+                "Issue %s rebase completed pushed=%s method=%s head=%s",
+                issue_id,
+                result.pushed,
+                result.push_method,
+                result.new_head_sha,
+            )
+            self._log_audit_event(
+                issue_id=issue_id,
+                event="rebase_completed",
+                mode=result.push_method,
+                reason="pushed" if result.pushed else "already_up_to_date",
+                author="daemon",
+            )
+        else:
+            logger.warning("Issue %s rebase did not complete", issue_id)
+            self._log_audit_event(
+                issue_id=issue_id,
+                event="rebase_failed",
+                mode="force" if use_force else "force-with-lease",
+                reason="git_rebase_or_push_failed",
+                author="daemon",
+            )
+        return result
+
+    async def _process_pending_rebase_conflicts(self) -> None:
+        """F-120: launch ``agent_rebase`` for records with content conflicts.
+
+        Iterates the registry, picks records with ``has_conflict=True``
+        that are not already running/claimed and not rate-limited, and
+        invokes ``_launch_rebase_resolution``. Each resolution opens a
+        fresh ``AgentSession`` whose prompt is built by
+        ``PromptBuilder.render_rebase``.
+        """
+        available_slots = (
+            self._state.max_concurrent_agents - len(self._state.running)
+        )
+        if available_slots <= 0:
+            logger.debug("No concurrency slots for rebase-resolution")
+            return
+
+        records_snapshot = list(self._registry._records.values())
+        for record in records_snapshot:
+            issue_id = record.issue_id or ""
+            if not issue_id:
+                continue
+            if issue_id in self._state.running or issue_id in self._state.claimed:
+                continue
+            if not record.has_conflict:
+                continue
+            if not self._check_rebase_rate_limit(
+                Issue(id=issue_id, identifier=record.issue_identifier)
+            ):
+                continue
+            issue = await self.tracker.fetch_issue_states_by_ids([issue_id])
+            issue_obj = issue.get(issue_id) if issue else None
+            if issue_obj is None:
+                issue_obj = Issue(
+                    id=issue_id,
+                    identifier=record.issue_identifier,
+                    title="(unknown)",
+                    branch_name=record.branch_name,
+                )
+            try:
+                ws = await self.workspace.create_for_issue(issue_obj)
+                ws_path = getattr(ws, "path", None) or record.workspace_path
+                if ws_path and not record.workspace_path:
+                    record.workspace_path = str(ws_path)
+                    self._registry._save()
+            except Exception as exc:
+                logger.warning(
+                    "Issue %s rebase-resolution: workspace create failed %s; using record.workspace_path",
+                    issue_id,
+                    exc,
+                )
+            await self._launch_rebase_resolution(issue_obj)
+
+    async def _process_pr_conflict_scan(self) -> None:
+        """F-120: optional daemon scan of PR mergeable state.
+
+        Default-disabled (opt-in via ``workflow.pr_conflict_scan.enabled``).
+        When enabled, polls each open PR in the registry, asks the
+        tracker for mergeability, and triggers ``_process_rebase_intent``
+        if conflicts are reported.
+
+        GitCode fallback: ``MergeableStatus(mergeable=None, has_conflicts=False)``
+        is silently skipped — operators on GitCode must use CLI / label /
+        comment triggers.
+        """
+        cfg = self.workflow.pr_conflict_scan
+        if not cfg.enabled:
+            return
+        now = time.monotonic()
+        interval_s = cfg.poll_interval_ms / 1000.0
+        if now - self._state.pr_conflict_scan_last_run < interval_s:
+            return
+        self._state.pr_conflict_scan_last_run = now
+
+        for record in list(self._registry._records.values()):
+            issue_id = record.issue_id or ""
+            if not issue_id or not record.pr_number or not record.branch_name:
+                continue
+            pr_state = getattr(record, "pr_state", None)
+            if pr_state and pr_state not in cfg.scan_states:
+                continue
+            if not self._check_rebase_rate_limit(
+                Issue(id=issue_id, identifier=record.issue_identifier)
+            ):
+                continue
+            pr_ref = PullRequestRef(
+                number=record.pr_number,
+                url=record.pr_url,
+            )
+            try:
+                status = await self.tracker.fetch_pull_request_mergeable(pr_ref)
+            except Exception as exc:
+                logger.warning(
+                    "PR conflict scan: tracker fetch failed for %s: %s",
+                    issue_id,
+                    exc,
+                )
+                continue
+            if status is None or not status.has_conflicts:
+                continue
+            issue = await self.tracker.fetch_issue_states_by_ids([issue_id])
+            issue_obj = issue.get(issue_id) if issue else None
+            if issue_obj is None:
+                issue_obj = Issue(
+                    id=issue_id,
+                    identifier=record.issue_identifier,
+                    title="(unknown)",
+                    branch_name=record.branch_name,
+                )
+            await self._process_rebase_intent(issue_obj)
+
+    async def _launch_rebase_resolution(self, issue: Issue) -> None:
+        """F-120: launch an ``agent_rebase`` session to resolve a content conflict.
+
+        Mirrors ``_launch_issue`` for the conflict-resolution path.
+        The session is tagged with ``run_kind="agent_rebase"`` so the
+        agent runner can route the run through a rebase-tailored
+        prompt and dispatch policy.
+        """
+        record = self._registry.get(issue.id or "")
+        workspace_path = record.workspace_path if record else None
+        # Synthesize a minimal Workspace stub when no real workspace
+        # is available; the agent runner only needs ``workspace.path``
+        # to be present for prompt injection.
+        if workspace_path:
+            from pathlib import Path as _Path
+
+            from .workspace import Workspace as _Ws
+
+            workspace = _Ws(path=_Path(workspace_path))
+        else:
+            from pathlib import Path as _Path
+
+            from .workspace import Workspace as _Ws
+
+            workspace = _Ws(path=_Path("/tmp"))
+        session = AgentSession(
+            issue=issue,
+            workspace=workspace,
+            pause_resume_event=asyncio.Event(),
+            event_queue=asyncio.Queue(),
+        )
+        session.run_kind = "agent_rebase"
+        self._prepare_rebase_session(session)
+        self._state.running[issue.id or ""] = session
+        try:
+            await self.agent_runner.run_session(session)
+        except Exception as exc:
+            logger.error(
+                "Issue %s rebase-resolution: run_session raised %s",
+                issue.id,
+                exc,
+            )
+        finally:
+            self._state.running.pop(issue.id or "", None)
+
+    def _prepare_rebase_session(self, session: AgentSession) -> None:
+        """F-120: copy registry conflict metadata onto the session.
+
+        Sets ``session.conflict_files`` from the registry so the
+        agent runner / prompt builder can read which files git
+        left in conflict state and inject them into the prompt.
+        """
+        record = self._registry.get(session.issue_id)
+        if record is None:
+            session.conflict_files = ()
+            return
+        session.conflict_files = tuple(record.conflict_files)
+
+    async def _handle_rebase_control(self, issue_id: str, extra: str) -> None:
+        """Handle a CLI-written rebase control file.
+
+        Format::
+
+            rebase
+            <issue_id>
+            force=0|1
+            <reason>
+
+        Routes through ``_process_rebase_intent`` so the orchestrator
+        itself performs the rebase (no agent for clean rebases).
+        Conflict results flow back into the registry and are picked
+        up by ``_process_pending_rebase_conflicts`` on the next
+        poll.
+        """
+        if not issue_id:
+            return
+        record = self._registry.get(issue_id)
+        if record is None:
+            logger.warning("rebase control: issue %s not in registry", issue_id)
+            return
+        if issue_id in self._state.running:
+            logger.info(
+                "rebase control: issue %s already running, skipping",
+                issue_id,
+            )
+            return
+        if not record.pr_number or not record.workspace_path or not record.branch_name:
+            logger.warning(
+                "rebase control: issue %s missing pr_number/workspace/branch",
+                issue_id,
+            )
+            return
+
+        force = False
+        reason = ""
+        if extra:
+            for line in extra.split("\n"):
+                token = line.strip()
+                if token.startswith("force="):
+                    force = token.split("=", 1)[1].strip() in ("1", "true", "yes")
+                elif token:
+                    reason = token
+        logger.info(
+            "rebase control: dispatching issue_id=%s force=%s reason=%r",
+            issue_id,
+            force,
+            reason,
+        )
+        issue = await self.tracker.fetch_issue_states_by_ids([issue_id])
+        issue_obj = issue.get(issue_id) if issue else None
+        if issue_obj is None:
+            issue_obj = Issue(
+                id=issue_id,
+                identifier=record.issue_identifier,
+                title="(unknown)",
+                branch_name=record.branch_name,
+            )
+        # The CLI already enforced the rate-limit preview; honor the
+        # operator's explicit --force when set.
+        await self._process_rebase_intent(issue_obj, force=force)
 
     def _prepare_intent_session(self, session: AgentSession) -> None:
         """F-39 Sub-C: wire the session for an intent-driven run.
@@ -2405,6 +2809,11 @@ class Orchestrator:
                 try:
                     if cmd == "review_followup":
                         await self._handle_review_followup_control(issue_id, extra)
+                    elif cmd == "rebase":
+                        # F-120: route CLI-written rebase control files to
+                        # the built-in rebase path. Format::
+                        #   rebase\n<id>\nforce=0|1\n<reason>
+                        await self._handle_rebase_control(issue_id, extra)
                     else:
                         self._apply_control_command(cmd, issue_id, extra)
                 finally:

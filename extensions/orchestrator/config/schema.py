@@ -427,6 +427,32 @@ class ServerConfig:
 
 
 @dataclass
+class PrConflictScanConfig:
+    """F-120: configuration for the optional PR conflict scan daemon job.
+
+    When ``enabled=False`` (the default) the daemon does not poll the
+    remote PR mergeable state at all — operators must trigger rebase
+    via CLI / label / comment. Setting ``enabled=True`` turns on a
+    background scan that, for each open PR with a workspace + branch,
+    asks the tracker for the mergeable state and invokes
+    ``rebase_for_pr`` when ``has_conflicts`` is True.
+
+    Why this is opt-in: GitCode does not reliably expose ``mergeable``
+    (JS-rendered page), so the scan is a no-op there. Operators on
+    GitHub / Gitee can opt-in for proactive conflict detection; on
+    GitCode the other three triggers remain the canonical path.
+    """
+
+    enabled: bool = False
+    poll_interval_ms: int = 300_000  # 5 minutes
+    max_rebase_attempts_per_issue: int = 3
+    max_prs_per_scan: int = 25
+    use_force_push: bool = False  # corresponds to CLI --force
+    bot_login: str | None = None
+    scan_states: tuple[str, ...] = ("open",)
+
+
+@dataclass
 class WorkflowConfig:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     polling: PollingConfig = field(default_factory=PollingConfig)
@@ -438,6 +464,9 @@ class WorkflowConfig:
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    pr_conflict_scan: "PrConflictScanConfig" = field(
+        default_factory=lambda: PrConflictScanConfig()
+    )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "WorkflowConfig":
@@ -454,6 +483,7 @@ class WorkflowConfig:
         review_feedback_raw = raw.get("review_feedback", {})
         observability_raw = raw.get("observability", {})
         server_raw = raw.get("server", {})
+        pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
 
         tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
         tracker_info = tracker_kind_info(tracker_kind)
@@ -682,6 +712,19 @@ class WorkflowConfig:
             server=ServerConfig(
                 port=server_raw.get("port"),
                 host=server_raw.get("host", "127.0.0.1"),
+            ),
+            pr_conflict_scan=PrConflictScanConfig(
+                enabled=bool(pr_conflict_scan_raw.get("enabled", False)),
+                poll_interval_ms=pr_conflict_scan_raw.get("poll_interval_ms", 300_000),
+                max_rebase_attempts_per_issue=pr_conflict_scan_raw.get(
+                    "max_rebase_attempts_per_issue", 3
+                ),
+                max_prs_per_scan=pr_conflict_scan_raw.get("max_prs_per_scan", 25),
+                use_force_push=bool(pr_conflict_scan_raw.get("use_force_push", False)),
+                bot_login=_resolve_env_value(pr_conflict_scan_raw.get("bot_login")),
+                scan_states=tuple(
+                    _normalize_string_list(pr_conflict_scan_raw.get("scan_states"), ["open"])
+                ),
             ),
         )
 

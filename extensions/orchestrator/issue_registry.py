@@ -129,6 +129,13 @@ class IssueRecord:
     # Absent from registry.json files written before this field — _load()
     # handles back-compat via the known_fields filter.
     previous_run_ids: list[str] = field(default_factory=list)
+    # F-120: PR conflict persistence. Fields default to safe no-op
+    # values so registry.json files written before F-120 load cleanly
+    # via the known_fields back-compat filter.
+    has_conflict: bool = False
+    conflict_files: list[str] = field(default_factory=list)
+    rebase_attempt_count: int = 0
+    last_rebase_attempt_at: float | None = None
 
     def touch(self) -> None:
         self.updated_at = time.time()
@@ -351,6 +358,14 @@ class IssueRegistry:
             record.feedback_cursor = existing.feedback_cursor
             record.followup_attempt_count = existing.followup_attempt_count
             record.last_feedback_checked_at = existing.last_feedback_checked_at
+            # F-120: preserve rebase-conflict state across re-launches.
+            # A retry / followup must not silently wipe has_conflict
+            # because the daemon's PR conflict scan needs the flag
+            # set until the next rebase succeeds.
+            record.has_conflict = existing.has_conflict
+            record.conflict_files = list(existing.conflict_files)
+            record.rebase_attempt_count = existing.rebase_attempt_count
+            record.last_rebase_attempt_at = existing.last_rebase_attempt_at
         self._records[issue_id] = record
         self._save()
         return record
@@ -748,6 +763,67 @@ class IssueRegistry:
         if record is None:
             return None
         record.retry_count += 1
+        record.touch()
+        self._save()
+        return record
+
+    # ------------------------------------------------------------------
+    # F-120 PR conflict persistence
+    # ------------------------------------------------------------------
+
+    def mark_conflict(
+        self,
+        issue_id: str,
+        conflict_files: tuple[str, ...] | list[str] = (),
+    ) -> IssueRecord | None:
+        """Mark an issue record as having a rebase conflict.
+
+        ``conflict_files`` is the list of files that git reports as
+        unresolved. Passing an empty tuple/list means "the rebase
+        left the workspace in a dirty state but no specific files
+        are attributed" — typically after a non-conflict rebase
+        failure that left REBASE_HEAD. The has_conflict flag is
+        always set so the daemon can pick it up via
+        ``_process_pending_rebase_conflicts``.
+        """
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.has_conflict = True
+        record.conflict_files = list(conflict_files) if conflict_files else []
+        record.last_rebase_attempt_at = time.time()
+        record.touch()
+        self._save()
+        return record
+
+    def clear_conflict(self, issue_id: str) -> IssueRecord | None:
+        """Clear the rebase conflict flag for an issue record.
+
+        Called when ``rebase_for_pr`` succeeds (rebased=True,
+        has_conflict=False). Idempotent — safe to call on records
+        that have no conflict flag set.
+        """
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.has_conflict = False
+        record.conflict_files = []
+        record.touch()
+        self._save()
+        return record
+
+    def increment_rebase_attempt(self, issue_id: str) -> IssueRecord | None:
+        """Bump ``rebase_attempt_count`` by one (F-120 rate limiting).
+
+        Used by ``_check_rebase_rate_limit`` before launching a new
+        rebase resolution so the count reflects attempts started,
+        not attempts succeeded.
+        """
+        record = self._records.get(issue_id)
+        if record is None:
+            return None
+        record.rebase_attempt_count += 1
+        record.last_rebase_attempt_at = time.time()
         record.touch()
         self._save()
         return record

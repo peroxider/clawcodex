@@ -17,6 +17,7 @@ from ..tracker import (
     Comment,
     DEFAULT_INTENT_LABELS,
     Intent,
+    MergeableStatus,
     PullRequestFeedback,
     PullRequestRef,
     TrackerAdapter,
@@ -226,6 +227,22 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             pull_request=pull_request,
             title=title,
             body=body,
+        )
+
+    async def fetch_pull_request_mergeable(
+        self,
+        pull_request: PullRequestRef,
+    ) -> "MergeableStatus | None":
+        """F-120: delegate to ``RepositoryIssueClient`` and translate
+        to the platform-normalized ``MergeableStatus``.
+
+        The PullRequestRef's ``number`` is the PR number on the
+        remote side; the local short-id form is not used here.
+        """
+        if pull_request.number is None:
+            return None
+        return await self.client.fetch_pull_request_mergeable(
+            pull_request=pull_request,
         )
 
     async def fetch_pull_request_feedback(
