@@ -2026,6 +2026,36 @@ class Orchestrator:
                             else "default"
                         )
                         sync_result = await self.git_sync.sync(session, mode=sync_mode)
+                        # F-40 / F-38 补遗：daemon 触发了 read-only loop /
+                        # stagnation 等终止场景时，git_sync 不会创建 PR，
+                        # 并在 session_end_reason 中标记 empty_branch_no_commits。
+                        # 这时不能走 mark_synced（会标 SYNCED + 无 PR），
+                        # 必须走 mark_failed_with_reason，让 issue 进入 FAILED。
+                        if (
+                            sync_result is not None
+                            and sync_result.session_end_reason == "empty_branch_no_commits"
+                        ):
+                            logger.warning(
+                                "Issue %s ended with no reviewable commit "
+                                "(session_end_reason=%s) — marking FAILED "
+                                "without creating a PR",
+                                session.issue.id,
+                                sync_result.session_end_reason,
+                            )
+                            self._registry.mark_failed_with_reason(
+                                session.issue.id or "",
+                                "empty_branch_no_commits: agent did not produce "
+                                "any file modifications; no PR created.",
+                            )
+                            await self._sync_tracker_issue_state(
+                                session.issue.id or "", "failed"
+                            )
+                            self.status_dashboard.on_session_complete(
+                                session.issue.id or ""
+                            )
+                            self._state.completed.add(session.issue.id or "")
+                            self._state.failed.add(session.issue.id or "")
+                            return
                         if sync_result is not None:
                             self._registry.update_report(
                                 session.issue.id or "",

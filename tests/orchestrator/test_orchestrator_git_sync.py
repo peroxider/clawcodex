@@ -650,3 +650,45 @@ class TestGitSyncService(unittest.IsolatedAsyncioTestCase):
                 ["feat: ISSUE-2 Second", "feat: ISSUE-1 First"],
             )
             await manager.cleanup(issue_two)
+
+    async def test_empty_branch_no_commits_skips_pr_creation(self) -> None:
+        """F-40 补遗：当 daemon 触发 read-only loop 终止时，分支无 reviewable
+        commit。git_sync.sync() 必须拒绝创建 PR 并在 session_end_reason 中
+        标记 empty_branch_no_commits（orchestrator 据此走 mark_failed）。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            origin = _build_origin_repo(base)
+            manager = WorkspaceManager(
+                WorkspaceConfig(
+                    root=base / "workspaces",
+                    repo_clone_url=str(origin),
+                    checkout_issue_branch=True,
+                )
+            )
+            issue = Issue(
+                id="99",
+                identifier="ISSUE-99",
+                title="Read-only spiral",
+                url="https://example.test/issues/99",
+            )
+            # 模拟 daemon 跑完一轮 read-only 调用后结束：workspace 中无任何文件改动
+            workspace = await manager.create_for_issue(issue)
+            # 不写入任何文件 — 触发 "no changed files" 分支
+
+            tracker = _Tracker()
+            service = GitSyncService(tracker)
+            result = await service.sync(_Session(issue, workspace))
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            # 无 reviewable commit
+            self.assertFalse(result.committed)
+            self.assertIsNone(result.commit_sha)
+            self.assertIsNone(result.pull_request)
+            # 关键断言：session_end_reason 必须设为 empty_branch_no_commits
+            self.assertEqual(result.session_end_reason, "empty_branch_no_commits")
+            # 关键断言：tracker 没有收到 PR 创建请求
+            self.assertEqual(tracker.pr_requests, [])
+            # 关键断言：tracker 没有收到 PR 更新请求
+            self.assertEqual(tracker.pr_updates, [])
+            await manager.cleanup(issue)

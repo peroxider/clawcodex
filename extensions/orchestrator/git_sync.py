@@ -36,6 +36,10 @@ class GitSyncResult:
     has_conflict: bool = False
     conflict_files: tuple[str, ...] = field(default_factory=tuple)
     pending_review: bool = False  # True for LocalTracker after successful commit
+    # F-40 / F-38 补遗: 当分支没有可评审 commit 时（如 daemon 触发了 read-only
+    # loop 终止），标记终结原因。orchestrator 据此走 mark_failed_with_reason
+    # 而非 mark_synced，避免给空 PR 标 SYNCED。
+    session_end_reason: str | None = None
 
 
 class GitSyncError(RuntimeError):
@@ -285,7 +289,16 @@ class GitSyncService:
 
         pr_ref: PullRequestRef | None = followup_pr
         pr_title = self._build_pr_title(issue)
-        if pr_ref is None and branch_name != base_branch and not no_push:
+        # F-40 / F-38 补遗：阻止空 PR 创建。当分支无 reviewable commit（daemon
+        # 触发 read_only_loop / loop_detected / stagnation 终止场景），
+        # 即便分支被 push 也不能创建 PR — 否则会留下 0 commit 的空 PR。
+        has_reviewable_commit = committed or has_run_commit
+        if (
+            pr_ref is None
+            and branch_name != base_branch
+            and not no_push
+            and has_reviewable_commit
+        ):
             pr_ref = await self.tracker.ensure_pull_request(
                 issue=issue,
                 head_branch=branch_name,
@@ -365,7 +378,10 @@ class GitSyncService:
                 ) from exc
             raise
 
-        if has_reviewable_commit or (pushed and not no_push) or pr_ref is not None:
+        # F-40 补遗：仅当有 reviewable commit **或**已存在 PR（follow-up 场景）
+        # 时才发 summary comment。空分支 + 推送到远端但无 commit 的场景不再发
+        # 总结评论（避免给一个"什么也没改"的 PR 写总结）。
+        if has_reviewable_commit or pr_ref is not None:
             await self._update_summary_comment(
                 session=session,
                 branch_name=branch_name,
@@ -379,6 +395,12 @@ class GitSyncService:
                 ),
             )
 
+        # F-40 / F-38 补遗：标记 session_end_reason，便于 orchestrator
+        # 决定走 mark_synced 还是 mark_failed_with_reason。
+        session_end_reason: str | None = None
+        if not has_reviewable_commit and pr_ref is None:
+            session_end_reason = "empty_branch_no_commits"
+
         return GitSyncResult(
             branch_name=branch_name,
             base_branch=base_branch,
@@ -391,6 +413,7 @@ class GitSyncService:
             pending_review=bool(
                 (is_local_tracker or self._agent_config.review_required) and has_reviewable_commit
             ),
+            session_end_reason=session_end_reason,
         )
 
     def _post_commit_error(
