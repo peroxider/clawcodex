@@ -452,16 +452,23 @@ class AgentRunner:
         """Persist a per-tool decision row to events.ndjson (F-45).
 
         Writes one NDJSON line to
-        ``~/.clawcodex/tool-events/{run_id}/events.ndjson``.  Decoupled
-        from ``permission_mode`` — all 7 modes (default / plan /
-        bypassPermissions / acceptEdits / dontAsk / auto / bubble) write
-        the same row shape; only the ``permission_mode`` column value
-        varies.  Failures are logged and swallowed: the audit log must
-        never block the agent run.
+        ``{workspace}/.reports/{run_id}.events.ndjson``, co-located with the
+        RunReport.  Decoupled from ``permission_mode`` — all 7 modes (default
+        / plan / bypassPermissions / acceptEdits / dontAsk / auto / bubble)
+        write the same row shape; only the ``permission_mode`` column value
+        varies.  Failures are logged and swallowed: the audit log must never
+        block the agent run.
         """
         try:
             run_id = session_context.get("run_id") or "unknown"
-            base_dir = Path.home() / ".clawcodex" / "tool-events" / run_id
+            workspace_path = session_context.get("workspace_path")
+            if workspace_path:
+                base_dir = Path(workspace_path) / ".reports"
+            else:
+                # Fallback: use the legacy user-level path (non-orchestrator
+                # or test contexts where workspace_path is not set).
+                base_dir = Path.home() / ".clawcodex" / "tool-events" / run_id
+            log_path = base_dir / f"{run_id}.events.ndjson"
             try:
                 base_dir.mkdir(parents=True, exist_ok=True)
             except Exception:
@@ -474,13 +481,11 @@ class AgentRunner:
                 )
                 return
 
-            log_path = base_dir / "events.ndjson"
-
             # Single-generation rotate (F-45 Sub-E decision: 50MB
             # threshold, single backup). v2.14 will add 7-day cleanup.
             try:
                 if log_path.exists() and log_path.stat().st_size >= _TOOL_EVENT_LOG_ROTATE_BYTES:
-                    rotated = log_path.with_suffix(log_path.suffix + ".1")
+                    rotated = log_path.with_name(log_path.name + ".1")
                     try:
                         rotated.unlink(missing_ok=True)
                     except Exception:
@@ -824,20 +829,19 @@ class AgentRunner:
             "workflow": workflow,
             # F-45: run_id + permission_mode are consumed by
             # _append_tool_event_log to write per-tool rows to
-            # ~/.clawcodex/tool-events/{run_id}/events.ndjson.
+            # {workspace}/.reports/{run_id}.events.ndjson.
             "run_id": session.run_id,
             "permission_mode": self.agent_config.permission_mode,
         }
-        # F-45: stash the canonical NDJSON path on the session so
-        # report_writer.write() can dual-write it to the persistent
-        # layer (Sub-C).  Resolved here (not in the property) so the
-        # path is concrete before the first event is appended.
+        # F-45: stash the NDJSON path co-located with the RunReport
+        # under ``{workspace}/.reports/<run_id>.events.ndjson`` so that
+        # report_writer.write() can dual-write it to the persistent layer
+        # (Sub-C).  Resolved here (not in the property) so the path is
+        # concrete before the first event is appended.
         session.tool_events_path = str(
-            Path.home()
-            / ".clawcodex"
-            / "tool-events"
-            / (session.run_id or "unknown")
-            / "events.ndjson"
+            workspace.path
+            / ".reports"
+            / f"{session.run_id or 'unknown'}.events.ndjson"
         )
         session.debug_log_path = str(
             workspace.path

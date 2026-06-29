@@ -123,7 +123,7 @@ def write(
 
     # F-45 Sub-C: dual-write the per-tool NDJSON into the persistent
     # layer so the audit log survives workspace cleanup. We copy the
-    # source file (under ~/.clawcodex/tool-events/) into the persistent
+    # source file (under {workspace}/.reports/) into the persistent
     # reports dir using _copy_with_fallback for atomic semantics.
     if tool_events_path:
         tool_events = Path(tool_events_path)

@@ -149,24 +149,19 @@ class TestAppendToolEventLog(unittest.TestCase):
 
     def test_writes_ndjson_under_tool_events_dir(self) -> None:
         with TemporaryDirectory() as tmp:
-            workspace = Path(tmp)
-            # Bind HOME and the tool-events base to a controlled dir so
-            # the test never pollutes the real user home.
-            base = workspace / "home"
-            base.mkdir()
-            os.environ["HOME"] = str(base)
-
-            # Run with a controlled run_id so we can locate the file.
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
             runner = AgentRunner(AgentConfig(), SandboxConfig())
             runner._append_tool_event_log(
                 _tc_event(approved=True),
                 {
                     "run_id": "run-test-1",
+                    "workspace_path": str(workspace),
                     "permission_mode": "bypassPermissions",
                     "turn": 0,
                 },
             )
-            log_path = base / ".clawcodex" / "tool-events" / "run-test-1" / "events.ndjson"
+            log_path = workspace / ".reports" / "run-test-1.events.ndjson"
             self.assertTrue(log_path.exists(), f"missing: {log_path}")
             lines = log_path.read_text(encoding="utf-8").strip().splitlines()
             self.assertEqual(len(lines), 1)
@@ -180,24 +175,26 @@ class TestAppendToolEventLog(unittest.TestCase):
             self.assertIn("ts", row)
 
     def test_writes_multiple_rows_in_order(self) -> None:
-        runner = AgentRunner(AgentConfig(), SandboxConfig())
-        ctx = {
-            "run_id": "run-multi",
-            "permission_mode": "dontAsk",
-            "turn": 2,
-        }
-        for name, params in [
-            ("Bash", {"command": "ls"}),
-            ("Read", {"file_path": "/etc/hostname"}),
-            ("Edit", {"file_path": "x.py", "old_string": "a", "new_string": "b"}),
-        ]:
-            runner._append_tool_event_log(
-                _tc_event(tool_name=name, params=params, approved=True),
-                ctx,
-            )
-        log_path = (
-            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-multi" / "events.ndjson"
-        )
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
+            ctx = {
+                "run_id": "run-multi",
+                "workspace_path": str(workspace),
+                "permission_mode": "dontAsk",
+                "turn": 2,
+            }
+            for name, params in [
+                ("Bash", {"command": "ls"}),
+                ("Read", {"file_path": "/etc/hostname"}),
+                ("Edit", {"file_path": "x.py", "old_string": "a", "new_string": "b"}),
+            ]:
+                runner._append_tool_event_log(
+                    _tc_event(tool_name=name, params=params, approved=True),
+                    ctx,
+                )
+            log_path = workspace / ".reports" / "run-multi.events.ndjson"
         rows = [
             json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
         ]
@@ -205,21 +202,23 @@ class TestAppendToolEventLog(unittest.TestCase):
         self.assertEqual(rows[0]["params"], {"command": "ls"})
 
     def test_deny_decision_records_reason(self) -> None:
-        runner = AgentRunner(AgentConfig(), SandboxConfig())
-        runner._append_tool_event_log(
-            _tc_event(approved=False, deny_reason="not in safe-list"),
-            {
-                "run_id": "run-deny",
-                "permission_mode": "default",
-                "turn": 4,
-            },
-        )
-        log_path = (
-            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-deny" / "events.ndjson"
-        )
-        row = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[0])
-        self.assertFalse(row["approved"])
-        self.assertEqual(row["deny_reason"], "not in safe-list")
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
+            runner._append_tool_event_log(
+                _tc_event(approved=False, deny_reason="not in safe-list"),
+                {
+                    "run_id": "run-deny",
+                    "workspace_path": str(workspace),
+                    "permission_mode": "default",
+                    "turn": 4,
+                },
+            )
+            log_path = workspace / ".reports" / "run-deny.events.ndjson"
+            row = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[0])
+            self.assertFalse(row["approved"])
+            self.assertEqual(row["deny_reason"], "not in safe-list")
 
     def test_falls_back_to_unknown_when_run_id_missing(self) -> None:
         runner = AgentRunner(AgentConfig(), SandboxConfig())
@@ -237,15 +236,16 @@ class TestAppendToolEventLog(unittest.TestCase):
         self.assertTrue(log_path.exists())
 
     def test_appends_multiple_lines(self) -> None:
-        runner = AgentRunner(AgentConfig(), SandboxConfig())
-        ctx = {"run_id": "run-x", "permission_mode": "default", "turn": 0}
-        for _ in range(5):
-            runner._append_tool_event_log(_tc_event(approved=True), ctx)
-        log_path = (
-            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-x" / "events.ndjson"
-        )
-        lines = log_path.read_text(encoding="utf-8").strip().splitlines()
-        self.assertEqual(len(lines), 5)
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
+            ctx = {"run_id": "run-x", "workspace_path": str(workspace), "permission_mode": "default", "turn": 0}
+            for _ in range(5):
+                runner._append_tool_event_log(_tc_event(approved=True), ctx)
+            log_path = workspace / ".reports" / "run-x.events.ndjson"
+            lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+            self.assertEqual(len(lines), 5)
 
     def test_write_failures_are_swallowed(self) -> None:
         """Defensive: even if the file write itself raises, the agent
@@ -397,12 +397,11 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "ws"
             workspace.mkdir()
-            # Pre-create a fake tool-events NDJSON to simulate the
-            # agent_runner having written it.
-            tool_events = (
-                Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-x" / "events.ndjson"
-            )
-            tool_events.parent.mkdir(parents=True, exist_ok=True)
+            # Pre-create a fake tool-events NDJSON at workspace/.reports/
+            # to simulate the agent_runner having written it.
+            reports_dir = workspace / ".reports"
+            reports_dir.mkdir(parents=True)
+            tool_events = reports_dir / "run-x.events.ndjson"
             tool_events.write_text(
                 json.dumps(
                     {
@@ -448,10 +447,9 @@ class TestReportWriterToolEventsPath(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "ws"
             workspace.mkdir()
-            tool_events = (
-                Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-m" / "events.ndjson"
-            )
-            tool_events.parent.mkdir(parents=True, exist_ok=True)
+            reports_dir = workspace / ".reports"
+            reports_dir.mkdir(parents=True)
+            tool_events = reports_dir / "run-m.events.ndjson"
             tool_events.write_text("{}\n", encoding="utf-8")
 
             result = report_writer_write(
@@ -510,30 +508,35 @@ class TestToolEventLogRotation(unittest.TestCase):
             _TOOL_EVENT_LOG_ROTATE_BYTES,
         )
 
-        runner = AgentRunner(AgentConfig(), SandboxConfig())
-        ctx = {
-            "run_id": "run-rotate",
-            "permission_mode": "default",
-            "turn": 0,
-        }
-        # Pre-create a saturated events.ndjson at the rotation threshold.
-        log_dir = Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "run-rotate"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_path = log_dir / "events.ndjson"
-        log_path.write_bytes(b"x" * _TOOL_EVENT_LOG_ROTATE_BYTES)
+        with TemporaryDirectory() as tmp:
+            workspace = Path(tmp) / "ws"
+            workspace.mkdir()
+            runner = AgentRunner(AgentConfig(), SandboxConfig())
+            ctx = {
+                "run_id": "run-rotate",
+                "workspace_path": str(workspace),
+                "permission_mode": "default",
+                "turn": 0,
+            }
+            # Pre-create a saturated events.ndjson at the rotation threshold.
+            reports_dir = workspace / ".reports"
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            log_path = reports_dir / "run-rotate.events.ndjson"
+            log_path.write_bytes(b"x" * _TOOL_EVENT_LOG_ROTATE_BYTES)
 
-        runner._append_tool_event_log(_tc_event(approved=True), ctx)
+            runner._append_tool_event_log(_tc_event(approved=True), ctx)
 
-        # The old file should have been rotated to events.ndjson.1 and
-        # the new file should now contain one valid row.
-        rotated = log_dir / "events.ndjson.1"
-        self.assertTrue(rotated.exists())
-        self.assertEqual(rotated.stat().st_size, _TOOL_EVENT_LOG_ROTATE_BYTES)
-        rows = [
-            json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
-        ]
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["tool"], "Bash")
+            # The old file should have been rotated to
+            # run-rotate.events.ndjson.1 and the new file should now
+            # contain one valid row.
+            rotated = log_path.with_name(log_path.name + ".1")
+            self.assertTrue(rotated.exists())
+            self.assertEqual(rotated.stat().st_size, _TOOL_EVENT_LOG_ROTATE_BYTES)
+            rows = [
+                json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+            ]
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["tool"], "Bash")
 
 
 # ---------------------------------------------------------------------------
