@@ -1344,4 +1344,3 @@ def rebase_for_pr(
         push_method=push_method,
         workspace_clean=True,
     )
-

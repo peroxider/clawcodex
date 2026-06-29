@@ -93,14 +93,12 @@ def _patch_issue_registry(_Registry: Any) -> None:
     _orig_load = _Registry._load
     _orig_save = _Registry._save
 
-    def __init__(self: Any, storage_path: Path) -> None:
-        # We deliberately do NOT call _orig_init because the original body
-        # is just ``self._path = storage_path; self._records = {}; _load()``
-        # and we want to insert ``self._mtime_ns = 0`` before _load().
-        self._path = Path(storage_path)
-        self._records: dict[str, Any] = {}
+    def __init__(self: Any, storage_path: Path, **kwargs: Any) -> None:
+        # Keep the upstream IssueRegistry initializer as the source of truth.
+        # This patch only needs _mtime_ns to exist before _orig_init calls
+        # self._load(), which is replaced below and updates the mtime cache.
         self._mtime_ns: int = 0
-        _orig_load(self)
+        _orig_init(self, Path(storage_path), **kwargs)
 
     def _load(self: Any) -> None:
         _orig_load(self)
@@ -132,10 +130,11 @@ def _patch_issue_registry(_Registry: Any) -> None:
             return False
         if current_mtime_ns <= self._mtime_ns:
             return False
+        previous_mtime_ns = self._mtime_ns
         self._load()
         logger.info(
             "IssueRegistry: external write detected (mtime_ns %d → %d); reloaded",
-            self._mtime_ns,
+            previous_mtime_ns,
             current_mtime_ns,
         )
         return True

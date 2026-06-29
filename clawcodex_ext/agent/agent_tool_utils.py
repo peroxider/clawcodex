@@ -89,7 +89,7 @@ def filter_tools_for_startup_agent(
 ) -> Tools:
     """Apply a bundle overview agent's tool allowlist to the main-loop tool pool."""
     if startup_agent is None:
-        return _apply_bundle_tool_filter(tools)
+        return list(tools)
 
     resolved = resolve_agent_tools(startup_agent, tools)
     if resolved.invalid_tools:

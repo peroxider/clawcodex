@@ -145,10 +145,12 @@ def format_sdk_source_dir_block(sdk_source_dir: str | Path | None) -> str:
     if not sdk_source_dir:
         return ""
     path = str(Path(sdk_source_dir).expanduser().resolve())
+    path_label = f"{Path(path).name}/openjiuwen"
     return f"""\
 ## SDK 源码根（pos convert bundle manifest）
 
 - **SDK 源码根目录**：``{path}``
+- ``{path_label}`` 是 Skill description 中可能出现的路径标签；不要把它拼到当前 workspace 下当作真实 SDK 路径
 - **勿**将 Skill ``description`` 中的路径标签拼到当前 workspace 下当作路径（该字段仅为分组标签）
 - 需要 Grep/Read SDK 源码时：优先使用上述绝对路径；若无此块，须先 Read wrapper 脚本中的 ``_SOURCE_DIR``"""
 

@@ -258,6 +258,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
         self._queued_prompts_lock = threading.Lock()
         self._permission_prompt_lock = threading.Lock()
         self._permission_decision_cache: dict[str, bool] = {}
+        # Mirrors ClawcodexREPL.__init__; this subclass does not call super().__init__().
+        self._im_permission_lock = threading.Lock()
+        self._im_permission_wait: dict | None = None
         self._active_live_status: Any = None
         # Wire is_loading on the pre-existing cron scheduler (created by
         # RuntimeContext.build before this REPL was constructed).
@@ -635,5 +638,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 try:
                     goal_controller.on_run_finish()
                     goal_controller.on_assistant_turn_complete()
+                except Exception:
+                    pass
+            im_reply = getattr(self, "_im_reply_controller", None)
+            if im_reply is not None:
+                try:
+                    im_reply.on_assistant_turn_complete()
                 except Exception:
                     pass

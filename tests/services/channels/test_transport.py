@@ -71,9 +71,7 @@ def test_validate_webhook_url_rejects_loopback_hostname_by_default() -> None:
 
 def test_validate_webhook_url_accepts_loopback_with_allow_loopback() -> None:
     url = "https://localhost/x"
-    assert (
-        validate_webhook_url(url, allow_loopback=True, resolve_host=False) == url
-    )
+    assert validate_webhook_url(url, allow_loopback=True, resolve_host=False) == url
 
 
 def test_validate_webhook_url_rejects_link_local_literal() -> None:
@@ -115,9 +113,7 @@ def test_validate_webhook_url_rejects_unresolvable_host(monkeypatch) -> None:
     # A DNS name that does not resolve must raise InvalidWebhookURLError
     # (not socket.gaierror leaking through).
     with pytest.raises(InvalidWebhookURLError):
-        validate_webhook_url(
-            "https://this-host-should-not-exist-clawcodex-12345.example/x"
-        )
+        validate_webhook_url("https://this-host-should-not-exist-clawcodex-12345.example/x")
 
 
 def test_redact_webhook_url_strips_query_string() -> None:
@@ -129,17 +125,13 @@ def test_redact_webhook_url_strips_query_string() -> None:
 
 
 def test_redact_webhook_url_masks_token_path_segment() -> None:
-    redacted = redact_webhook_url(
-        "https://hooks.example.com/services/T0/B0/abcdef0123456789"
-    )
+    redacted = redact_webhook_url("https://hooks.example.com/services/T0/B0/abcdef0123456789")
     assert redacted.endswith("/***")
     assert "abcdef0123456789" not in redacted
 
 
 def test_redact_webhook_url_preserves_scheme_and_host() -> None:
-    redacted = redact_webhook_url(
-        "https://hooks.example.com/api/webhooks/1/abcdef0123456789"
-    )
+    redacted = redact_webhook_url("https://hooks.example.com/api/webhooks/1/abcdef0123456789")
     assert redacted.startswith("https://hooks.example.com/api/webhooks/1/")
 
 

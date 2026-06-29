@@ -87,9 +87,7 @@ def test_format_text_payload_without_title() -> None:
 def test_format_interactive_payload_with_title_and_markdown() -> None:
     transport = _FakeTransport()
     channel = FeishuChannel(_config("f1", secret="s3cret"), transport=transport)  # type: ignore[arg-type]
-    body, _ = channel.format_message(
-        ChannelMessage(text="body", title="Headline", markdown=True)
-    )
+    body, _ = channel.format_message(ChannelMessage(text="body", title="Headline", markdown=True))
     payload = json.loads(body.decode("utf-8"))
     assert payload["msg_type"] == "interactive"
     card = payload["card"]

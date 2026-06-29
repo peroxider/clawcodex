@@ -61,9 +61,7 @@ def validate_webhook_url(
     elif scheme == "http" and allow_http:
         pass
     else:
-        raise InvalidWebhookURLError(
-            f"webhook url must use https (got scheme {scheme!r})"
-        )
+        raise InvalidWebhookURLError(f"webhook url must use https (got scheme {scheme!r})")
     if not parsed.hostname:
         raise InvalidWebhookURLError("webhook url must include a hostname")
 
@@ -83,25 +81,13 @@ def validate_webhook_url(
         literal_ip = None
     if literal_ip is not None:
         if literal_ip.is_loopback and not allow_loopback:
-            raise InvalidWebhookURLError(
-                f"webhook url host {host!r} is a loopback address"
-            )
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a loopback address")
         if literal_ip.is_private and not allow_loopback:
-            raise InvalidWebhookURLError(
-                f"webhook url host {host!r} is a private address"
-            )
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a private address")
         if literal_ip.is_link_local:
-            raise InvalidWebhookURLError(
-                f"webhook url host {host!r} is a link-local address"
-            )
-        if (
-            literal_ip.is_multicast
-            or literal_ip.is_reserved
-            or literal_ip.is_unspecified
-        ):
-            raise InvalidWebhookURLError(
-                f"webhook url host {host!r} is a reserved address"
-            )
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a link-local address")
+        if literal_ip.is_multicast or literal_ip.is_reserved or literal_ip.is_unspecified:
+            raise InvalidWebhookURLError(f"webhook url host {host!r} is a reserved address")
 
     if resolve_host:
         try:
@@ -118,21 +104,13 @@ def validate_webhook_url(
             except ValueError:
                 continue
             if ip.is_loopback and not allow_loopback:
-                raise InvalidWebhookURLError(
-                    f"webhook url resolves to loopback {ip_str}"
-                )
+                raise InvalidWebhookURLError(f"webhook url resolves to loopback {ip_str}")
             if ip.is_private and not allow_loopback:
-                raise InvalidWebhookURLError(
-                    f"webhook url resolves to private address {ip_str}"
-                )
+                raise InvalidWebhookURLError(f"webhook url resolves to private address {ip_str}")
             if ip.is_link_local:
-                raise InvalidWebhookURLError(
-                    f"webhook url resolves to link-local address {ip_str}"
-                )
+                raise InvalidWebhookURLError(f"webhook url resolves to link-local address {ip_str}")
             if ip.is_multicast or ip.is_reserved or ip.is_unspecified:
-                raise InvalidWebhookURLError(
-                    f"webhook url resolves to reserved address {ip_str}"
-                )
+                raise InvalidWebhookURLError(f"webhook url resolves to reserved address {ip_str}")
     return url
 
 
@@ -176,6 +154,15 @@ class TransportResponse:
 class ChannelTransport(ABC):
     """Async HTTP transport used by channel implementations."""
 
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    ) -> TransportResponse:
+        raise TransportError("transport GET is not implemented")
+
     @abstractmethod
     async def post(
         self,
@@ -192,6 +179,44 @@ class UrllibChannelTransport(ChannelTransport):
 
     def __init__(self, *, default_timeout: float = DEFAULT_TIMEOUT_SECONDS) -> None:
         self._default_timeout = default_timeout
+
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> TransportResponse:
+        if timeout is None:
+            timeout = self._default_timeout
+
+        def _send() -> TransportResponse:
+            request = urllib.request.Request(
+                url=url,
+                method="GET",
+                headers=dict(headers or {}),
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as resp:
+                    return TransportResponse(
+                        status=resp.status,
+                        body=resp.read(),
+                        headers=dict(resp.headers.items()),
+                    )
+            except urllib.error.HTTPError as exc:
+                return TransportResponse(
+                    status=exc.code,
+                    body=exc.read() if hasattr(exc, "read") else b"",
+                    headers=dict(exc.headers.items()) if exc.headers else {},
+                )
+            except urllib.error.URLError as exc:
+                raise TransportError(f"transport error: {exc.reason}") from exc
+            except (TimeoutError, socket.timeout) as exc:
+                raise TransportError(f"transport timeout: {exc}") from exc
+            except OSError as exc:
+                raise TransportError(f"transport os error: {exc}") from exc
+
+        return await asyncio.to_thread(_send)
 
     async def post(
         self,

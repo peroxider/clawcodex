@@ -81,7 +81,7 @@ def build_tool_from_spec(spec: AgentToolSpec) -> Tool:
 
     # SOP-converter tools are workflow-specific and numerous;
     # defer them so they load via ToolSearch on demand.
-    should_defer = spec.source == "sop-converter"
+    should_defer = spec.source in {"sop-converter", "pos-converter"}
 
     return build_tool(
         name=spec.name,

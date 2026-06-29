@@ -70,9 +70,7 @@ def test_format_blocks_payload_when_markdown_and_title() -> None:
 def test_format_text_payload_when_markdown_false() -> None:
     transport = _FakeTransport()
     channel = SlackChannel(_config(), transport=transport)
-    body, _ = channel.format_message(
-        ChannelMessage(text="hi", title="T", markdown=False)
-    )
+    body, _ = channel.format_message(ChannelMessage(text="hi", title="T", markdown=False))
     payload = json.loads(body.decode("utf-8"))
     # Markdown disabled falls back to plain text.
     assert payload == {"text": "hi"}

@@ -191,6 +191,7 @@ class TestRegistryDispatch(unittest.TestCase):
 
         t = _make_tool("NeedApproval", check_permissions=_ask)
         reg = ToolRegistry([t])
+        self.ctx.permission_context = ToolPermissionContext(mode="default")
         self.ctx.permission_handler = legacy_handler
         result = reg.dispatch(ToolCall(name="NeedApproval", input={}), self.ctx)
         self.assertFalse(result.is_error)
@@ -209,6 +210,7 @@ class TestRegistryDispatch(unittest.TestCase):
 
         t = _make_tool("NeedApproval", check_permissions=_ask)
         reg = ToolRegistry([t])
+        self.ctx.permission_context = ToolPermissionContext(mode="default")
         self.ctx.permission_handler = new_handler
         result = reg.dispatch(ToolCall(name="NeedApproval", input={}), self.ctx)
         self.assertFalse(result.is_error)

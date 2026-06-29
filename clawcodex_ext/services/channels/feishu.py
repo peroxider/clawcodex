@@ -67,7 +67,10 @@ class FeishuChannel(BaseChannel):
                 },
             }
         else:
-            payload = {"msg_type": "text", "content": json.dumps({"text": message.text}, ensure_ascii=False)}
+            payload = {
+                "msg_type": "text",
+                "content": json.dumps({"text": message.text}, ensure_ascii=False),
+            }
 
         secret = self._config.extra.get("secret") if self._config.extra else None
         if secret:

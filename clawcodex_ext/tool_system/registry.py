@@ -28,9 +28,7 @@ log = logging.getLogger(__name__)
 
 # Tools that modify files on disk — blocked in plan mode unless targeting
 # a temporary / scratch path.
-_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
-    {"Bash", "Edit", "Write", "NotebookEdit"}
-)
+_DESTRUCTIVE_TOOLS: frozenset[str] = frozenset({'Bash', 'Edit', 'Write', 'NotebookEdit'})
 
 # Resolved once: system temp directory (e.g. /tmp, %TEMP%).
 _SYSTEM_TEMP_DIR: Path = Path(tempfile.gettempdir()).resolve()
@@ -54,24 +52,20 @@ def _adapt_permission_handler(raw_handler: Any) -> PermissionAskHandler:
             if isinstance(result, tuple) and result:
                 allowed = bool(result[0])
                 return PermissionAskReply(
-                    behavior="allow" if allowed else "deny",
+                    behavior='allow' if allowed else 'deny',
                 )
-            raise TypeError(
-                f"permission_handler returned unexpected type: {type(result).__name__}"
-            )
+            raise TypeError(f'permission_handler returned unexpected type: {type(result).__name__}')
 
         return _passthrough
 
     def _legacy(request: PermissionAskRequest) -> PermissionAskReply:
         allowed, _enable = raw_handler(request.tool_name, request.message, None)
-        return PermissionAskReply(behavior="allow" if allowed else "deny")
+        return PermissionAskReply(behavior='allow' if allowed else 'deny')
 
     return _legacy
 
 
-def _apply_and_persist_updates(
-    context: ToolContext, updates: tuple[PermissionUpdate, ...]
-) -> None:
+def _apply_and_persist_updates(context: ToolContext, updates: tuple[PermissionUpdate, ...]) -> None:
     """Apply accepted "don't ask again" updates and persist them.
 
     In-memory application makes the rule effective for later dispatches
@@ -96,24 +90,24 @@ def _apply_and_persist_updates(
             context.permission_context, list(updates)
         )
     except Exception:
-        log.exception("failed to apply accepted permission updates in-memory")
+        log.exception('failed to apply accepted permission updates in-memory')
     try:
         cwd = str(context.workspace_root) if context.workspace_root else None
         results = persist_permission_updates(
             list(updates),
-            settings_path_for_destination=lambda destination: (
-                settings_path_for_destination(destination, cwd)
+            settings_path_for_destination=lambda destination: settings_path_for_destination(
+                destination, cwd
             ),
         )
         for update, ok in zip(updates, results):
             if not ok and supports_persistence(update.destination):
                 log.warning(
-                    "permission update not persisted (destination=%s); "
-                    "the rule applies this session only",
+                    'permission update not persisted (destination=%s); '
+                    'the rule applies this session only',
                     update.destination,
                 )
     except Exception:
-        log.exception("failed to persist accepted permission updates")
+        log.exception('failed to persist accepted permission updates')
 
 
 def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolContext) -> bool:
@@ -133,10 +127,10 @@ def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolConte
     intent cannot be determined statically — the system prompt already
     instructs the LLM not to execute commands in plan mode.
     """
-    if tool_name == "Bash":
+    if tool_name == 'Bash':
         return False
 
-    file_path = tool_input.get("file_path") or tool_input.get("filePath")
+    file_path = tool_input.get('file_path') or tool_input.get('filePath')
     if not isinstance(file_path, str):
         return False
 
@@ -164,12 +158,12 @@ def _is_temp_path(tool_name: str, tool_input: dict[str, Any], context: ToolConte
 
     # Path contains ".clawcodex" as a path component
     # (e.g. /home/user/project/.clawcodex/plan.md).
-    if ".clawcodex" in p.parts:
+    if '.clawcodex' in p.parts:
         return True
 
     # Path contains ".reports" as a path component
     # (e.g. /home/user/project/.reports/1.md).
-    if ".reports" in p.parts:
+    if '.reports' in p.parts:
         return True
 
     return False
@@ -186,7 +180,7 @@ class ToolRegistry:
     def register(self, tool: Tool) -> None:
         key = tool.name.lower()
         if key in self._by_name:
-            raise ValueError(f"duplicate tool name: {tool.name}")
+            raise ValueError(f'duplicate tool name: {tool.name}')
         self._tools.append(tool)
         self._by_name[key] = tool
         added_alias_keys: list[str] = []
@@ -194,7 +188,7 @@ class ToolRegistry:
             for alias in tool.aliases:
                 alias_key = alias.lower()
                 if alias_key in self._by_name:
-                    raise ValueError(f"duplicate tool alias: {alias}")
+                    raise ValueError(f'duplicate tool alias: {alias}')
                 self._by_name[alias_key] = tool
                 added_alias_keys.append(alias_key)
         except ValueError:
@@ -226,7 +220,7 @@ class ToolRegistry:
         if tool is None:
             return ToolResult(
                 name=call.name,
-                output={"error": f"unknown tool: {call.name}"},
+                output={'error': f'unknown tool: {call.name}'},
                 is_error=True,
                 tool_use_id=call.tool_use_id,
             )
@@ -252,9 +246,9 @@ class ToolRegistry:
                 return ToolResult(
                     name=call.name,
                     output={
-                        "error": (
-                            f"Plan mode: {tool.name} is not allowed on project files. "
-                            "Exit plan mode first via ExitPlanMode to modify files."
+                        'error': (
+                            f'Plan mode: {tool.name} is not allowed on project files. '
+                            'Exit plan mode first via ExitPlanMode to modify files.'
                         )
                     },
                     is_error=True,
@@ -266,7 +260,7 @@ class ToolRegistry:
             if not validation.result:
                 return ToolResult(
                     name=tool.name,
-                    output={"error": validation.message},
+                    output={'error': validation.message},
                     is_error=True,
                     tool_use_id=call.tool_use_id,
                 )
@@ -278,15 +272,15 @@ class ToolRegistry:
             tool_use_context=context,
         )
 
-        if decision.behavior == "deny":
+        if decision.behavior == 'deny':
             return ToolResult(
                 name=tool.name,
-                output={"error": getattr(decision, "message", None) or "permission denied"},
+                output={'error': getattr(decision, 'message', None) or 'permission denied'},
                 is_error=True,
                 tool_use_id=call.tool_use_id,
             )
 
-        if decision.behavior == "ask":
+        if decision.behavior == 'ask':
             assert isinstance(decision, PermissionAskDecision)
             handler_cb: PermissionAskHandler | None = None
             if context.permission_handler is not None:
@@ -298,28 +292,29 @@ class ToolRegistry:
                 handler_cb,
                 tool_input=call.input,
             )
-            if chosen_updates:
-                _apply_and_persist_updates(context, chosen_updates)
 
-            if final.behavior == "deny":
+            if final.behavior == 'deny':
                 return ToolResult(
                     name=tool.name,
                     output={
-                        "error": getattr(final, "message", None) or "permission denied by user"
+                        'error': getattr(final, 'message', None) or 'permission denied by user'
                     },
                     is_error=True,
                     tool_use_id=call.tool_use_id,
                 )
 
-            if hasattr(final, "updated_input") and final.updated_input:
+            if chosen_updates:
+                _apply_and_persist_updates(context, chosen_updates)
+
+            if hasattr(final, 'updated_input') and final.updated_input:
                 call = ToolCall(
                     name=call.name,
                     input=final.updated_input,
                     tool_use_id=call.tool_use_id,
                 )
 
-        elif decision.behavior == "allow":
-            if hasattr(decision, "updated_input") and decision.updated_input:
+        elif decision.behavior == 'allow':
+            if hasattr(decision, 'updated_input') and decision.updated_input:
                 call = ToolCall(
                     name=call.name,
                     input=decision.updated_input,
@@ -374,16 +369,16 @@ def _invoke_tool_call(tool: Any, input: dict, context: ToolContext) -> ToolResul
 
     def _runner() -> None:
         try:
-            holder["result"] = asyncio.run(fn(input, context))
+            holder['result'] = asyncio.run(fn(input, context))
         except BaseException as exc:  # noqa: BLE001 — re-raise
-            holder["error"] = exc
+            holder['error'] = exc
         finally:
             done.set()
 
     threading.Thread(
         target=_runner,
         daemon=True,
-        name=f"tool-async-bridge:{getattr(tool, 'name', '?')}",
+        name=f'tool-async-bridge:{getattr(tool, "name", "?")}',
     ).start()
     # No timeout on this wait — async tools are expected to self-bound
     # (TaskOutput uses its own ``timeout`` knob; TaskStop uses
@@ -392,9 +387,9 @@ def _invoke_tool_call(tool: Any, input: dict, context: ToolContext) -> ToolResul
     # tries to paper over with a global cap. If a future tool grows a
     # naturally-unbounded await, give it an internal deadline first.
     done.wait()
-    if "error" in holder:
-        raise holder["error"]  # type: ignore[misc]
-    return holder["result"]  # type: ignore[no-any-return]
+    if 'error' in holder:
+        raise holder['error']  # type: ignore[misc]
+    return holder['result']  # type: ignore[no-any-return]
 
 
 def get_all_base_tools(registry: ToolRegistry) -> Tools:

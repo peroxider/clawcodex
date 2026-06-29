@@ -298,6 +298,47 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 
 ---
 
+### IM 消息网关
+
+统一 IM 入口：把个人微信（Weixin iLink）双向消息与现有 Feishu/Slack/Discord 单向推送经同一个能力门控网关分发。
+
+- 以独立守护进程运行（`extensions/im_gateway/`），REPL/orchestrator 经 POSIX UDS opt-in 接入。
+- **v1 仅限 POSIX/WSL/Git Bash**（Unix domain socket）。
+
+**快速开始：**
+
+```bash
+clawcodex-dev gateway server start|stop|status|restart # IM 消息网关生命周期控制
+clawcodex-dev channels # IM 消息网关快速配置
+clawcodex-dev channels restart wechat # 重启 WeChat IM 渠道
+clawcodex-dev channels status wechat # 查看 WeChat 登录健康状态和 REPL/orchestrator 连接状态
+```
+
+gateway 守护进程运行且 WeChat 登录后，可把一个 REPL 或 orchestrator 会话接入唯一的 WeChat 渠道。任何人给 bot 发 direct/private 私信都可以驱动 agent，回复会回流到实际发送者。
+
+**连接网关：**
+
+```bash
+# REPL：恢复已有会话；没有历史会话时省略 --resume 即新建。
+clawcodex-dev --resume <session-id> --im-gateway
+# orchestrator：接入后可通过 WeChat 下发 /pause AGENTSDK-15 等控制命令。
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --im-gateway
+```
+
+`--im-gateway` 会绑定唯一 `wechat` 渠道下的所有 WeChat direct/private 发送者。同一时间只有一个运行域能拥有 WeChat 渠道：启动 REPL 绑定会断开 orchestrator 绑定，启动 orchestrator 绑定也会断开 REPL 绑定。`CLAWCODEX_IM_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
+
+网关支持向 REPL/orchestrator 下发控制命令，例如 `/stop` 可停止当前任务。
+
+排查现场链路时，用 INFO 日志重启 daemon 并跟踪 gateway 日志：
+
+```bash
+clawcodex-dev gateway server restart --verbose
+clawcodex-dev gateway server status
+tail -f ~/.clawcodex/im-gateway/gateway.log
+```
+
+---
+
 ### SOP 编译器
 
 把 `workflow.md` 流程化规范编译成多 agent 协同运行时。
@@ -340,7 +381,18 @@ clawcodex-dev coordinator team delete --name build-team
               │  + LiveView   │  │   Jitter   │  │ + Agent builder │
               │  + Takeover   │  │ + Status   │  │ + Skill grouper │
               │  + Review FB  │  │ + Notify   │  │                 │
-              └──────┬────────┘  └─────────────┘  └─────────────────┘
+              └──────┬────┬───┘  └─────────────┘  └─────────────────┘
+                     │    │ 事件 + 命令
+                     │    ▼
+                     │  ┌─────────────────────────────────────┐
+                     │  │ IM Gateway / MessageGateway         │ ◄── CLI / REPL 显式接入
+                     │  │ 双向 IM 通信 · 权限审批提示          │
+                     │  │ 命令下达（/stop、/pause）            │
+                     │  └──────────────────┬──────────────────┘
+                     │                     ▼
+                     │  ┌─────────────────────────────────────┐
+                     │  │ 上游 IM 服务商：WeChat              │
+                     │  └─────────────────────────────────────┘
                      │
        ┌─────────────┼─────────────┐
        │             │             │
@@ -360,6 +412,9 @@ clawcodex-dev coordinator team delete --name build-team
        │  （完整架构见 README.md.raw）        │
        └─────────────────────────────────────┘
 ```
+
+`MessageGateway` 是本 fork 共享的 IM 边界：CLI/REPL 和编排器通过 gateway
+IPC 显式接入；平台相关投递细节收敛在 WeChat adapter 后面。
 
 ---
 

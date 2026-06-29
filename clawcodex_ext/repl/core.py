@@ -312,7 +312,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -732,6 +732,15 @@ class ClawcodexREPL:
         self._stats_input_tokens: int = 0
         self._stats_output_tokens: int = 0
         self._direct_abort_controller: AbortController | None = None
+        self._im_active_cancel: Callable[[], None] | None = None
+        # IM-driven permission wait state. Populated only while
+        # ``_handle_permission_request`` is blocked in
+        # ``_wait_im_permission_choice`` waiting for a WeChat reply. The
+        # ``permission_probe`` on ReplGatewayClient.deliver() resolves it.
+        # Guarded by ``_im_permission_lock`` (probe runs on the IPC reader
+        # thread, the wait runs on the main thread).
+        self._im_permission_lock = threading.Lock()
+        self._im_permission_wait: dict | None = None
 
         # Messages the user typed into LiveStatus while the agent was
         # working. The main run() loop drains this before falling back to
@@ -1493,39 +1502,75 @@ class ClawcodexREPL:
             if can_enable_setting:
                 options.insert(0, ("e", f"Enable {setting_to_enable} and allow"))
 
-            if get_selection_mode() == "arrow":
-                opt_pairs: list[tuple[str, str]] = []
-                for key, desc in options:
-                    opt_pairs.append((f"[{key}] {desc}", ""))
-                result = self._run_arrow_menu(
-                    opt_pairs,
-                    title="Permission Required",
-                    allow_other=False,
-                    multi_select=False,
+            im_reply = getattr(self, "_im_reply_controller", None)
+            send_permission_prompt = getattr(im_reply, "send_permission_prompt", None)
+            # IM-driven turns may have the permission decision come from
+            # WeChat (a menu number/letter reply). Keyboard-driven turns
+            # keep using the terminal as before. ``peek_reply_origin`` is
+            # non-None only while an IM message is driving this turn.
+            im_origin = None
+            im_client = getattr(im_reply, "_client", None) if im_reply is not None else None
+            peek_origin = getattr(im_client, "peek_reply_origin", None)
+            if callable(peek_origin):
+                try:
+                    im_origin = peek_origin()
+                except Exception:
+                    im_origin = None
+
+            if im_origin and callable(send_permission_prompt):
+                choice = (
+                    self._wait_im_permission_choice(
+                        message=message,
+                        suggestion=suggestion,
+                        options=options,
+                    )
+                    .strip()
+                    .lower()
                 )
-                if result is None:
-                    self._permission_decision_cache[cache_key] = False
-                    return False, False
-                idx = result if isinstance(result, int) else (result[0] if result else 0)
-                if can_enable_setting:
-                    if idx == 0:
-                        self._enable_permission_setting(setting_to_enable)
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    elif idx == 1:
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    else:
-                        self._permission_decision_cache[cache_key] = False
-                        return False, False
-                else:
-                    if idx == 0:
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    else:
-                        self._permission_decision_cache[cache_key] = False
-                        return False, False
             else:
+                if callable(send_permission_prompt):
+                    try:
+                        send_permission_prompt(
+                            message=message,
+                            suggestion=suggestion,
+                            options=options,
+                        )
+                    except Exception:
+                        pass
+
+                if get_selection_mode() == "arrow":
+                    opt_pairs: list[tuple[str, str]] = []
+                    for key, desc in options:
+                        opt_pairs.append((f"[{key}] {desc}", ""))
+                    result = self._run_arrow_menu(
+                        opt_pairs,
+                        title="Permission Required",
+                        allow_other=False,
+                        multi_select=False,
+                    )
+                    if result is None:
+                        self._permission_decision_cache[cache_key] = False
+                        return False, False
+                    idx = result if isinstance(result, int) else (result[0] if result else 0)
+                    if can_enable_setting:
+                        if idx == 0:
+                            self._enable_permission_setting(setting_to_enable)
+                            self._permission_decision_cache[cache_key] = True
+                            return True, False
+                        elif idx == 1:
+                            self._permission_decision_cache[cache_key] = True
+                            return True, False
+                        else:
+                            self._permission_decision_cache[cache_key] = False
+                            return False, False
+                    else:
+                        if idx == 0:
+                            self._permission_decision_cache[cache_key] = True
+                            return True, False
+                        else:
+                            self._permission_decision_cache[cache_key] = False
+                            return False, False
+
                 self.console.print("[bold]Options:[/bold]")
                 for i, (key, desc) in enumerate(options, start=1):
                     self.console.print(f"  {i}. [{key}] {desc}")
@@ -1533,27 +1578,103 @@ class ClawcodexREPL:
 
                 choice = self._safe_input("Select option> ").strip().lower()
 
-                if can_enable_setting:
-                    if choice in ("1", "e", "enable"):
-                        self._enable_permission_setting(setting_to_enable)
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    elif choice in ("2", "y", "yes", ""):
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    elif choice in ("3", "n", "no"):
-                        self._permission_decision_cache[cache_key] = False
-                        return False, False
-                else:
-                    if choice in ("1", "y", "yes", ""):
-                        self._permission_decision_cache[cache_key] = True
-                        return True, False
-                    elif choice in ("2", "n", "no"):
-                        self._permission_decision_cache[cache_key] = False
-                        return False, False
+            if can_enable_setting:
+                if choice in ("1", "e", "enable"):
+                    self._enable_permission_setting(setting_to_enable)
+                    self._permission_decision_cache[cache_key] = True
+                    return True, False
+                elif choice in ("2", "y", "yes", ""):
+                    self._permission_decision_cache[cache_key] = True
+                    return True, False
+                elif choice in ("3", "n", "no"):
+                    self._permission_decision_cache[cache_key] = False
+                    return False, False
+            else:
+                if choice in ("1", "y", "yes", ""):
+                    self._permission_decision_cache[cache_key] = True
+                    return True, False
+                elif choice in ("2", "n", "no"):
+                    self._permission_decision_cache[cache_key] = False
+                    return False, False
 
-                self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
-                return False, False
+            self.console.print("[dim]Invalid choice, defaulting to deny.[/dim]")
+            return False, False
+
+    def _wait_im_permission_choice(
+        self,
+        *,
+        message: str,
+        options: list[tuple[str, str]],
+        suggestion: str | None = None,
+    ) -> str:
+        """Wait for a WeChat reply to resolve an IM-driven permission prompt.
+
+        Mirrors the menu to WeChat immediately (via the one-shot thread path
+        in ``_ImReplyController._send_outbound_text``) then blocks the main
+        thread on an event that is set by ``_handle_im_permission_reply``
+        (the ``permission_probe`` on ``ReplGatewayClient.deliver``) when a
+        matching reply arrives. ``Ctrl-C`` and a 300s timeout default to
+        deny so the REPL never hangs indefinitely waiting for WeChat.
+
+        Returns the chosen menu key/number (lowercased) for the existing
+        parser in ``_handle_permission_request`` to interpret.
+        """
+        import os
+        import time
+
+        valid: set[str] = set()
+        for idx, (key, _desc) in enumerate(options, start=1):
+            valid.add(str(idx))
+            valid.add(key.lower())
+        valid.update({"yes", "no"})
+
+        state: dict = {"event": threading.Event(), "choice": None, "valid": valid}
+        # Lazy-init the lock: the running REPL is ClawCodexExtREPL, whose
+        # __init__ overrides without super().__init__(), so the attr set in
+        # ClawcodexREPL.__init__ may be absent. _handle_permission_request is
+        # serialized by _permission_prompt_lock, so only one wait runs at a
+        # time — the lazy create is race-free in practice, and the probe
+        # (_handle_im_permission_reply) reads the same attr after we publish
+        # _im_permission_wait below.
+        lock = getattr(self, "_im_permission_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._im_permission_lock = lock
+        with lock:
+            self._im_permission_wait = state
+
+        im_reply = getattr(self, "_im_reply_controller", None)
+        send_permission_prompt = getattr(im_reply, "send_permission_prompt", None)
+        if callable(send_permission_prompt):
+            try:
+                send_permission_prompt(
+                    message=message,
+                    suggestion=suggestion,
+                    options=options,
+                    interactive=True,
+                )
+            except Exception:
+                pass
+
+        try:
+            timeout = float(os.environ.get("CLAWCODEX_IM_PERMISSION_TIMEOUT", "300"))
+        except (TypeError, ValueError):
+            timeout = 300.0
+        deadline = time.monotonic() + timeout
+        try:
+            while not state["event"].wait(timeout=0.5):
+                if time.monotonic() >= deadline:
+                    self.console.print(
+                        "[dim]IM permission reply timed out, defaulting to deny.[/dim]"
+                    )
+                    state["choice"] = "n"
+                    break
+        except KeyboardInterrupt:
+            state["choice"] = "n"
+        finally:
+            with lock:
+                self._im_permission_wait = None
+        return state["choice"] or "n"
 
     def _enable_permission_setting(self, setting_name: str | None) -> None:
         """Enable a permission setting in the tool context."""
@@ -2457,6 +2578,79 @@ class ClawcodexREPL:
             return
         with self._queued_prompts_lock:
             self._queued_prompts.append(text)
+
+    def _wake_prompt_for_im(self) -> None:
+        """Wake the REPL prompt loop so an IM-enqueued prompt is drained.
+
+        The IM gateway opt-in enqueues inbound WeChat messages via
+        ``_enqueue_prompt`` from the gateway IPC read loop (on
+        ``_cron_loop``). But the main loop blocks on
+        ``prompt_async('❯ ')`` waiting for keyboard input, and the only
+        other wake (``_watch_outbox``) fires solely on cron outbox events
+        — so without an explicit wake the enqueued prompt would sit in
+        ``_queued_prompts`` indefinitely: never displayed, processed, or
+        replied to.
+
+        This schedules ``app.exit(_CRON_WAKE)`` on ``_cron_loop`` when a
+        prompt is actually pending, mirroring ``_watch_outbox``. After the
+        wake, the loop iterates and ``_pop_queued_prompt`` drains the
+        queued IM prompt on the next cycle. Safe to call from any thread
+        (uses ``call_soon_threadsafe``); a no-op when no prompt is active
+        (the next loop iteration drains the queue naturally).
+        """
+        loop = getattr(self, "_cron_loop", None)
+        if loop is None or not loop.is_running():
+            return
+        loop.call_soon_threadsafe(self._exit_pending_prompt_for_im)
+
+    def _exit_pending_prompt_for_im(self) -> None:
+        """Exit the pending prompt_async so the loop drains queued prompts.
+
+        Runs on ``_cron_loop``. Only pokes ``app.exit`` when a prompt is
+        actually pending (``app.future`` set) — calling it with no active
+        prompt crashes prompt_toolkit. Same guard ``_watch_outbox`` uses.
+        """
+        ps = getattr(self, "prompt_session", None)
+        if ps is None:
+            return
+        app = getattr(ps, "app", None)
+        if app is None:
+            return
+        if getattr(app, "future", None) is not None:
+            app.exit(result=_CRON_WAKE)
+
+    def _get_chat_loop(self):
+        """Return the event loop ``chat()`` should pump for the turn.
+
+        Prefers the long-lived ``_cron_loop`` (where the IM gateway IPC
+        reader + heartbeat live) so the loop is pumped during the turn —
+        otherwise WeChat ``/stop`` and permission replies arriving mid-turn
+        are never processed until the turn ends (the IPC reader is starved).
+        ``_cron_loop`` is created in ``run()`` via ``new_event_loop()`` but
+        never set as the thread's current loop, so ``asyncio.get_event_loop()``
+        returns a DIFFERENT loop — hence the explicit preference. Falls back
+        to ``get_event_loop()`` when ``_cron_loop`` is absent (headless/test
+        paths without ``run()``).
+        """
+        loop = getattr(self, "_cron_loop", None)
+        if loop is not None:
+            return loop
+        return asyncio.get_event_loop()
+
+    def _interrupt_active_chat_from_im(self) -> bool:
+        """Cancel the currently running REPL turn from an IM control command."""
+        cancel = self._im_active_cancel
+        if cancel is not None:
+            try:
+                cancel()
+                return True
+            except Exception:
+                return False
+        abort_controller = getattr(self, "_direct_abort_controller", None)
+        if abort_controller is not None and not abort_controller.signal.aborted:
+            abort_controller.abort("user_interrupt")
+            return True
+        return False
 
     def _enqueue_cron_prompt(self, text: str) -> None:
         """Append a cron-generated prompt to the cron queue from any thread.
@@ -3440,9 +3634,24 @@ class ClawcodexREPL:
         # main thread so the in-loop cron watcher can call app.exit()
         # from within the event loop. The loop is closed on exit.
         self._cron_loop = asyncio.new_event_loop()
+        # IM gateway opt-in: connect + register now that the loop is up
+        # (installed by install_repl_extensions via _im_gateway_init).
+        im_init = getattr(self, "_im_gateway_init", None)
+        if im_init is not None:
+            try:
+                self._cron_loop.run_until_complete(im_init(self._cron_loop))
+            except Exception:
+                pass
         try:
             self._run_main_loop()
         finally:
+            # tear down the IM gateway client if it was connected
+            im_client = getattr(self, "_im_gateway_client", None)
+            if im_client is not None:
+                try:
+                    self._cron_loop.run_until_complete(im_client.close())
+                except Exception:
+                    pass
             try:
                 self._cron_loop.close()
             except Exception:
@@ -4889,25 +5098,30 @@ class ClawcodexREPL:
                     if self._direct_abort_controller is not None:
                         self._direct_abort_controller.abort("background")
 
-                with _pt_patch_stdout(raw=True):
-                    with LiveStatus(
-                        self._status_message(),
-                        on_cancel=_cancel_direct_stream,
-                        on_submit=_on_submit_direct,
-                        on_expand=self._do_expand_last,
-                        on_background=_on_background_direct,
-                        on_permission_cycle=self._apply_permission_mode_cycle,
-                        completer=self.completer,
-                        history=self._file_history,
-                    ) as status:
-                        _direct_status_ref.append(status)
-                        self._active_live_status = status
-                        try:
-                            direct_response = self._stream_direct_response(
-                                on_text_chunk=on_text_chunk_direct,
-                            )
-                        finally:
-                            self._active_live_status = None
+                self._im_active_cancel = _cancel_direct_stream
+                try:
+                    with _pt_patch_stdout(raw=True):
+                        with LiveStatus(
+                            self._status_message(),
+                            on_cancel=_cancel_direct_stream,
+                            on_submit=_on_submit_direct,
+                            on_expand=self._do_expand_last,
+                            on_background=_on_background_direct,
+                            on_permission_cycle=self._apply_permission_mode_cycle,
+                            completer=self.completer,
+                            history=self._file_history,
+                        ) as status:
+                            _direct_status_ref.append(status)
+                            self._active_live_status = status
+                            try:
+                                direct_response = self._stream_direct_response(
+                                    on_text_chunk=on_text_chunk_direct,
+                                )
+                            finally:
+                                self._active_live_status = None
+                finally:
+                    if self._im_active_cancel is _cancel_direct_stream:
+                        self._im_active_cancel = None
                 # Capture unsubmitted buffer text before returning so the
                 # user doesn't lose what they were typing when the agent
                 # finishes mid-keystroke.
@@ -5283,36 +5497,41 @@ class ClawcodexREPL:
                 except Exception:
                     pass
 
-            with _pt_patch_stdout(raw=True):
-                with LiveStatus(
-                    self._status_message(),
-                    on_cancel=_cancel_engine,
-                    on_submit=_on_submit_engine,
-                    on_expand=self._do_expand_last,
-                    on_background=_on_background_engine,
-                    on_permission_cycle=self._apply_permission_mode_cycle,
-                    completer=self.completer,
-                    history=self._file_history,
-                ) as status:
-                    _engine_status_ref.append(status)
-                    self._active_live_status = status
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            import concurrent.futures
+            self._im_active_cancel = _cancel_engine
+            try:
+                with _pt_patch_stdout(raw=True):
+                    with LiveStatus(
+                        self._status_message(),
+                        on_cancel=_cancel_engine,
+                        on_submit=_on_submit_engine,
+                        on_expand=self._do_expand_last,
+                        on_background=_on_background_engine,
+                        on_permission_cycle=self._apply_permission_mode_cycle,
+                        completer=self.completer,
+                        history=self._file_history,
+                    ) as status:
+                        _engine_status_ref.append(status)
+                        self._active_live_status = status
+                        try:
+                            loop = self._get_chat_loop()
+                            if loop.is_running():
+                                import concurrent.futures
 
-                            with concurrent.futures.ThreadPoolExecutor() as pool:
-                                response_text, last_text_was_printed = pool.submit(
-                                    lambda: asyncio.run(_run_query())
-                                ).result()
-                        else:
-                            response_text, last_text_was_printed = loop.run_until_complete(
-                                _run_query()
-                            )
-                    except RuntimeError:
-                        response_text, last_text_was_printed = asyncio.run(_run_query())
-                    finally:
-                        self._active_live_status = None
+                                with concurrent.futures.ThreadPoolExecutor() as pool:
+                                    response_text, last_text_was_printed = pool.submit(
+                                        lambda: asyncio.run(_run_query())
+                                    ).result()
+                            else:
+                                response_text, last_text_was_printed = loop.run_until_complete(
+                                    _run_query()
+                                )
+                        except RuntimeError:
+                            response_text, last_text_was_printed = asyncio.run(_run_query())
+                        finally:
+                            self._active_live_status = None
+            finally:
+                if self._im_active_cancel is _cancel_engine:
+                    self._im_active_cancel = None
 
             # Capture unsubmitted buffer text before proceeding so the user
             # doesn't lose what they were typing when the agent finishes

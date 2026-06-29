@@ -145,6 +145,33 @@ Examples:
         help="Emit verbose diagnostics to stderr",
     )
 
+    im_group = parser.add_argument_group("IM gateway opt-in")
+    im_group.add_argument(
+        "--im-gateway",
+        action="store_true",
+        help="Bind this REPL session to all WeChat direct/private messages.",
+    )
+    im_group.add_argument(
+        "--im-gateway-origin",
+        type=str,
+        default=None,
+        metavar="ORIGIN",
+        help=(
+            "Advanced: bind this REPL session to a specific IM gateway origin, "
+            "e.g. wechat:direct:default:user_id"
+        ),
+    )
+    im_group.add_argument(
+        "--im-gateway-sock",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Gateway daemon Unix socket for --im-gateway-origin "
+            "(default: ~/.clawcodex/im-gateway/gateway.sock)"
+        ),
+    )
+
     # ---- Permissions ----
     # ``--dangerously-skip-permissions`` and ``--allow-dangerously-skip-permissions``
     # apply to all UI modes (REPL, TUI, headless), so they live in a top-level

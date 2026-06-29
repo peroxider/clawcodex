@@ -24,7 +24,7 @@ def _telemetry_record_session(
         record_session_start(
             session_id=session_id,
             entrypoint=entrypoint,
-            client_type=os.environ.get("CLAUDE_CODE_ENTRYPOINT", "cli"),
+            client_type=os.environ.get('CLAUDE_CODE_ENTRYPOINT', 'cli'),
             is_non_interactive=is_non_interactive,
         )
     except Exception:
@@ -80,8 +80,8 @@ def _apply_feature_gate_overrides(args: object) -> None:
         from clawcodex_ext.feature_gate import get_registry
 
         reg = get_registry()
-        enable_flags = getattr(args, "enable_feature", None) or []
-        disable_flags = getattr(args, "disable_feature", None) or []
+        enable_flags = getattr(args, 'enable_feature', None) or []
+        disable_flags = getattr(args, 'disable_feature', None) or []
         for name in enable_flags:
             reg.enable_feature(name)
         for name in disable_flags:
@@ -104,7 +104,7 @@ def _maybe_argcomplete_top_level(argv: list[str]) -> None:
     the 5-second budget enforced by the stability gate.
     """
 
-    if os.environ.get("_ARGCOMPLETE") != "1":
+    if os.environ.get('_ARGCOMPLETE') != '1':
         return
     import argcomplete  # noqa: F401
 
@@ -117,20 +117,20 @@ def _maybe_argcomplete_top_level(argv: list[str]) -> None:
     parser = build_parser()
     load_builtin_subcommands()
     top_level = (
-        "login",
-        "config",
-        "mcp",
-        "daemon",
-        "doctor",
-        "orchestrator",
-        "autonomy",
-        "schedule",
+        'login',
+        'config',
+        'mcp',
+        'daemon',
+        'doctor',
+        'orchestrator',
+        'autonomy',
+        'schedule',
     ) + tuple(_SUBCOMMANDS.keys())
     # Override the first-positional ``prompt`` argument's choice list
     # so argcomplete offers the subcommand nouns. argcomplete reads the
     # parser's own argument table for flag completion automatically.
     for action in parser._actions:  # type: ignore[attr-defined]
-        if action.dest == "prompt":
+        if action.dest == 'prompt':
             action.choices = top_level  # type: ignore[attr-defined]
             break
     argcomplete.autocomplete(parser, always_complete_options=False)
@@ -144,16 +144,16 @@ def run_cli(argv: list[str] | None = None) -> int:
     # report to ``$CLAUDE_CONFIG_DIR/startup-perf/{session_id}.txt``.
     from src.utils.startup_profiler import profile_checkpoint
 
-    profile_checkpoint("cli_main_entry")
+    profile_checkpoint('cli_main_entry')
 
     import os
 
-    if os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes"):
+    if os.environ.get('CLAWCODEX_DEBUG', '').lower() in ('1', 'true', 'yes'):
         import logging
 
         logging.basicConfig(
             level=logging.WARNING,
-            format="%(asctime)s %(name)s %(message)s",
+            format='%(asctime)s %(name)s %(message)s',
             stream=sys.stderr,
         )
 
@@ -167,19 +167,19 @@ def run_cli(argv: list[str] | None = None) -> int:
     _telemetry_start = time.monotonic()
     _telemetry_record_session(
         session_id=_telemetry_session_id,
-        entrypoint="cli",
+        entrypoint='cli',
         is_non_interactive=False,
     )
 
     # --version short-circuit (mirrors TS main.tsx pre-argparse fast-path)
-    if len(argv) == 2 and argv[1] in ("--version", "-v", "-V"):
+    if len(argv) == 2 and argv[1] in ('--version', '-v', '-V'):
         from src import __version__
 
-        print(f"claw-codex version {__version__} (Python)")
+        print(f'claw-codex version {__version__} (Python)')
         _telemetry_record_end(
             session_id=_telemetry_session_id,
-            command_name="version",
-            mode="non_interactive",
+            command_name='version',
+            mode='non_interactive',
             success=True,
             duration_s=time.monotonic() - _telemetry_start,
             exit_status=0,
@@ -205,7 +205,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     # ``_ARGCOMPLETE`` is unset; lazy import keeps ``--help`` under 5s.
     _maybe_argcomplete_top_level(argv)
     rest = argv[1:]
-    if rest and not rest[0].startswith("-"):
+    if rest and not rest[0].startswith('-'):
         token = rest[0]
         rest_args = rest[1:]
 
@@ -214,23 +214,23 @@ def run_cli(argv: list[str] | None = None) -> int:
 
         # F-97: each fast-path return is wrapped to record command_run
         # + session_end. The helper swallows any telemetry failure.
-        if token == "login":
+        if token == 'login':
             rc = src_cli.handle_login()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="login",
-                mode="non_interactive",
+                command_name='login',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "config":
+        if token == 'config':
             rc = src_cli.show_config()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="config",
-                mode="non_interactive",
+                command_name='config',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
@@ -245,91 +245,91 @@ def run_cli(argv: list[str] | None = None) -> int:
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
                 command_name=token,
-                mode="non_interactive",
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
 
-        if token == "mcp":
+        if token == 'mcp':
             from src.entrypoints.mcp import run_mcp_subcommand
 
             rc = run_mcp_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="mcp",
-                mode="non_interactive",
+                command_name='mcp',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "daemon":
+        if token == 'daemon':
             from src.entrypoints.daemon import run_daemon_subcommand
 
             rc = run_daemon_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="daemon",
-                mode="daemon",
+                command_name='daemon',
+                mode='daemon',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "doctor":
+        if token == 'doctor':
             from src.entrypoints.doctor import run_doctor
 
             rc = run_doctor()
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="doctor",
-                mode="non_interactive",
+                command_name='doctor',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "orchestrator":
+        if token == 'orchestrator':
             from src.entrypoints.orchestrator import run_orchestrator_subcommand
 
             rc = run_orchestrator_subcommand(rest_args)
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="orchestrator",
-                mode="daemon",
+                command_name='orchestrator',
+                mode='daemon',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "autonomy":
+        if token == 'autonomy':
             from clawcodex_ext.cron_system.status import build_autonomy_runs, build_autonomy_status
 
-            deep = "--deep" in rest_args
-            filtered_args = [arg for arg in rest_args if arg != "--deep"]
-            command = filtered_args[0] if filtered_args else "status"
+            deep = '--deep' in rest_args
+            filtered_args = [arg for arg in rest_args if arg != '--deep']
+            command = filtered_args[0] if filtered_args else 'status'
             rc = 0
-            if command == "status":
+            if command == 'status':
                 print(build_autonomy_status(Path.cwd(), deep=deep))
                 rc = 0
-            elif command == "runs":
+            elif command == 'runs':
                 print(build_autonomy_runs(Path.cwd(), deep=deep))
                 rc = 0
             else:
-                print("usage: clawcodex autonomy [status|runs] [--deep]", file=sys.stderr)
+                print('usage: clawcodex autonomy [status|runs] [--deep]', file=sys.stderr)
                 rc = 2
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="autonomy",
-                mode="non_interactive",
+                command_name='autonomy',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
             )
             return rc
-        if token == "schedule":
+        if token == 'schedule':
             from clawcodex_ext.cron_system.schedule import (
                 format_cron_task_detail,
                 format_manual_fire_result,
@@ -338,12 +338,12 @@ def run_cli(argv: list[str] | None = None) -> int:
             )
             from clawcodex_ext.cron_system.status import build_schedule_list
 
-            command = rest_args[0] if rest_args else "list"
+            command = rest_args[0] if rest_args else 'list'
             rc = 0
-            if command == "list":
+            if command == 'list':
                 print(build_schedule_list(Path.cwd()))
                 rc = 0
-            elif command == "get" and len(rest_args) >= 2:
+            elif command == 'get' and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 detail = get_cron_task_detail(cwd, rest_args[1])
                 if detail is None:
@@ -352,7 +352,7 @@ def run_cli(argv: list[str] | None = None) -> int:
                 else:
                     print(format_cron_task_detail(detail))
                     rc = 0
-            elif command == "run" and len(rest_args) >= 2:
+            elif command == 'run' and len(rest_args) >= 2:
                 cwd = Path.cwd()
                 run = manual_fire_cron_task(cwd, rest_args[1], current_dir=cwd)
                 if run is None and get_cron_task_detail(cwd, rest_args[1]) is None:
@@ -362,12 +362,12 @@ def run_cli(argv: list[str] | None = None) -> int:
                     print(format_manual_fire_result(rest_args[1], run))
                     rc = 0
             else:
-                print("usage: clawcodex schedule [list|get ID|run ID]", file=sys.stderr)
+                print('usage: clawcodex schedule [list|get ID|run ID]', file=sys.stderr)
                 rc = 2
             _telemetry_record_end(
                 session_id=_telemetry_session_id,
-                command_name="schedule",
-                mode="non_interactive",
+                command_name='schedule',
+                mode='non_interactive',
                 success=(rc == 0),
                 duration_s=time.monotonic() - _telemetry_start,
                 exit_status=rc,
@@ -378,13 +378,13 @@ def run_cli(argv: list[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv[1:])
-    profile_checkpoint("argparse_done")
+    profile_checkpoint('argparse_done')
 
-    if getattr(args, "prompt", None) and not getattr(args, "print", False):
-        parser.error(f"unknown command: {args.prompt} (use -p/--print to send a prompt)")
+    if getattr(args, 'prompt', None) and not getattr(args, 'print', False):
+        parser.error(f'unknown command: {args.prompt} (use -p/--print to send a prompt)')
 
     # Resolve --continue: auto-detect the most recent session (S-R3).
-    if getattr(args, "continue", None) and not getattr(args, "resume", None):
+    if getattr(args, 'continue', None) and not getattr(args, 'resume', None):
         from src.services.session_storage import SessionStorage
 
         try:
@@ -392,14 +392,14 @@ def run_cli(argv: list[str] | None = None) -> int:
             if metas:
                 args.resume = metas[0].session_id
             else:
-                print("No previous sessions found to continue.", file=sys.stderr)
+                print('No previous sessions found to continue.', file=sys.stderr)
         except Exception:
-            print("Unable to list sessions for --continue.", file=sys.stderr)
+            print('Unable to list sessions for --continue.', file=sys.stderr)
 
     # Resolve --resume: if the value is not a known session ID, try it
     # as a tag prefix so `--resume cron:task:build` works directly.
-    resume_val = getattr(args, "resume", None)
-    if resume_val and resume_val != "browse":
+    resume_val = getattr(args, 'resume', None)
+    if resume_val and resume_val != 'browse':
         from src.services.session_storage import SESSIONS_DIR, SessionStorage
 
         session_dir = SESSIONS_DIR / resume_val
@@ -408,7 +408,7 @@ def run_cli(argv: list[str] | None = None) -> int:
             metas = SessionStorage.list_sessions(tag_filter=str(resume_val), limit=1)
             if metas:
                 print(
-                    f"Resuming session {metas[0].session_id[:8]}... "
+                    f'Resuming session {metas[0].session_id[:8]}... '
                     f"(matched by tag '{resume_val}')",
                     file=sys.stderr,
                 )
@@ -423,7 +423,7 @@ def run_cli(argv: list[str] | None = None) -> int:
     if args.version:
         from src import __version__
 
-        print(f"claw-codex version {__version__} (Python)")
+        print(f'claw-codex version {__version__} (Python)')
         return 0
 
     if args.config:
@@ -451,11 +451,11 @@ def run_cli(argv: list[str] | None = None) -> int:
     # The API-preconnect call previously lived here at module level;
     # it now runs inside ``init()`` so it overlaps with any callers
     # of ``init()`` (REPL, headless, etc.), not just the cli.py path.
-    profile_checkpoint("phase0_end_phase2_start")
+    profile_checkpoint('phase0_end_phase2_start')
     from src.init import run_pre_action
 
     run_pre_action(args)
-    profile_checkpoint("phase2_end_phase3_start")
+    profile_checkpoint('phase2_end_phase3_start')
 
     # Resolve permission state ONCE here so all modes (print/TUI/REPL) honor
     # ``--dangerously-skip-permissions`` consistently. Mirrors
@@ -466,49 +466,52 @@ def run_cli(argv: list[str] | None = None) -> int:
     from clawcodex_ext.runtime.context import RuntimeContext, RuntimeOptions
 
     resolve_permission_state(args)
-    profile_checkpoint("permissions_resolved")
-    profile_checkpoint("phase3_end_phase4_start")
+    profile_checkpoint('permissions_resolved')
+    profile_checkpoint('phase3_end_phase4_start')
 
     # Interactive path: decide between the Textual TUI (new default) and the
     # legacy Rich REPL. Explicit flags win; otherwise auto-detect a compatible TTY.
     explicit_tui: bool | None = None
     if args.tui:
         explicit_tui = True
-    elif getattr(args, "legacy_repl", False) or args.no_tui:
+    elif getattr(args, 'legacy_repl', False) or args.no_tui:
         explicit_tui = False
 
     # ``--resume`` without a SESSION_ID means "browse" mode.
     # REPL mode now has its own session browser, so no need to force TUI.
-    resume_val = getattr(args, "resume", None)
-    resume_browse = resume_val == "browse"
+    resume_val = getattr(args, 'resume', None)
+    resume_browse = resume_val == 'browse'
 
     bundle_path: Path | None = None
-    agent_type_raw = getattr(args, "agent", None)
-    if agent_type_raw is not None and agent_type_raw != "auto":
+    agent_type_raw = getattr(args, 'agent', None)
+    if agent_type_raw is not None and agent_type_raw != 'auto':
         candidate = Path(str(agent_type_raw)).resolve()
         if candidate.is_dir():
             bundle_path = candidate
 
     # Build RuntimeContext once from resolved args — shared by all frontends.
     runtime_opts = RuntimeOptions(
-        provider_name=getattr(args, "provider", None),
-        model=getattr(args, "model", None),
-        prompt=getattr(args, "prompt", None),
-        output_format=getattr(args, "output_format", "text"),
-        input_format=getattr(args, "input_format", "text"),
-        include_partial_messages=getattr(args, "include_partial_messages", False),
-        max_turns=getattr(args, "max_turns", 20),
-        allowed_tools=tuple(_split_csv(getattr(args, "allowed_tools", None))),
-        disallowed_tools=tuple(_split_csv(getattr(args, "disallowed_tools", None))),
-        stream=getattr(args, "stream", False),
-        permission_mode=getattr(args, "_resolved_permission_mode", "default"),
-        is_bypass_permissions_mode_available=getattr(args, "_resolved_is_bypass_available", False),
-        skip_permissions=getattr(args, "dangerously_skip_permissions", False),
-        resume_session_id=resume_val if resume_val and resume_val != "browse" else None,
-        resume_browse=(resume_val == "browse"),
-        fork_session_id=getattr(args, "fork_session", None),
-        resume_session_at=_parse_resume_at(getattr(args, "resume_session_at", None)),
-        verbose=getattr(args, "verbose", False),
+        provider_name=getattr(args, 'provider', None),
+        model=getattr(args, 'model', None),
+        prompt=getattr(args, 'prompt', None),
+        output_format=getattr(args, 'output_format', 'text'),
+        input_format=getattr(args, 'input_format', 'text'),
+        include_partial_messages=getattr(args, 'include_partial_messages', False),
+        max_turns=getattr(args, 'max_turns', 20),
+        allowed_tools=tuple(_split_csv(getattr(args, 'allowed_tools', None))),
+        disallowed_tools=tuple(_split_csv(getattr(args, 'disallowed_tools', None))),
+        stream=getattr(args, 'stream', False),
+        permission_mode=getattr(args, '_resolved_permission_mode', 'default'),
+        is_bypass_permissions_mode_available=getattr(args, '_resolved_is_bypass_available', False),
+        skip_permissions=getattr(args, 'dangerously_skip_permissions', False),
+        resume_session_id=resume_val if resume_val and resume_val != 'browse' else None,
+        resume_browse=(resume_val == 'browse'),
+        fork_session_id=getattr(args, 'fork_session', None),
+        resume_session_at=_parse_resume_at(getattr(args, 'resume_session_at', None)),
+        verbose=getattr(args, 'verbose', False),
+        im_gateway=getattr(args, 'im_gateway', False),
+        im_gateway_origin=getattr(args, 'im_gateway_origin', None),
+        im_gateway_sock=getattr(args, 'im_gateway_sock', None),
         bundle_path=bundle_path,
     )
     try:
@@ -517,11 +520,11 @@ def run_cli(argv: list[str] | None = None) -> int:
         # Configuration errors (missing API key, no provider selected, etc.)
         # are not programmer errors — surface a clean warning instead of a
         # traceback so the user knows exactly how to recover.
-        message = str(exc).strip() or "Provider configuration is missing."
-        print(f"warning: {message}", file=sys.stderr)
+        message = str(exc).strip() or 'Provider configuration is missing.'
+        print(f'warning: {message}', file=sys.stderr)
         if sys.stdin.isatty() and sys.stdout.isatty():
             print(
-                "hint: run `clawcodex login` to configure credentials interactively.",
+                'hint: run `clawcodex login` to configure credentials interactively.',
                 file=sys.stderr,
             )
         return 1
@@ -539,23 +542,23 @@ def run_cli(argv: list[str] | None = None) -> int:
             _tc = _load_telemetry_cfg()
             if _tc.enabled and _tc.reporting.reporting_enabled:
                 print(
-                    "Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure",
+                    'Telemetry: stats ✓ · error reporting ✓  — /telemetry to configure',
                     file=sys.stderr,
                 )
                 print(
-                    "Collects usage data & error reports; may be uploaded periodically.",
+                    'Collects usage data & error reports; may be uploaded periodically.',
                     file=sys.stderr,
                 )
         except Exception:
             pass
-        profile_checkpoint("mode_dispatch_print")
-        profile_checkpoint("phase4_dispatch")
-        frontend = get_frontend("headless")
+        profile_checkpoint('mode_dispatch_print')
+        profile_checkpoint('phase4_dispatch')
+        frontend = get_frontend('headless')
         rc = frontend.run(ctx, argv[1:])
         _telemetry_record_end(
             session_id=_telemetry_session_id,
-            command_name="print",
-            mode="non_interactive",
+            command_name='print',
+            mode='non_interactive',
             success=(rc == 0),
             duration_s=time.monotonic() - _telemetry_start,
             exit_status=rc,
@@ -565,29 +568,29 @@ def run_cli(argv: list[str] | None = None) -> int:
     from src.entrypoints.tui import should_use_tui
 
     if should_use_tui(explicit_tui):
-        profile_checkpoint("mode_dispatch_tui")
-        profile_checkpoint("phase4_dispatch")
-        frontend = get_frontend("tui")
+        profile_checkpoint('mode_dispatch_tui')
+        profile_checkpoint('phase4_dispatch')
+        frontend = get_frontend('tui')
         rc = frontend.run(ctx, argv[1:])
         _telemetry_record_end(
             session_id=_telemetry_session_id,
-            command_name="tui",
-            mode="interactive",
+            command_name='tui',
+            mode='interactive',
             success=(rc == 0),
             duration_s=time.monotonic() - _telemetry_start,
             exit_status=rc,
         )
         return rc
 
-    profile_checkpoint("mode_dispatch_repl")
-    profile_checkpoint("phase4_dispatch")
+    profile_checkpoint('mode_dispatch_repl')
+    profile_checkpoint('phase4_dispatch')
 
-    frontend = get_frontend("repl")
+    frontend = get_frontend('repl')
     rc = frontend.run(ctx, argv[1:])
     _telemetry_record_end(
         session_id=_telemetry_session_id,
-        command_name="repl",
-        mode="interactive",
+        command_name='repl',
+        mode='interactive',
         success=(rc == 0),
         duration_s=time.monotonic() - _telemetry_start,
         exit_status=rc,
@@ -615,7 +618,10 @@ def _apply_sop_startup(
     )
     from extensions.sop_converter.bundle_discovery import overview_has_sop_skills
     from extensions.sop_converter.bundle_skills import register_bundle_skills
-    from extensions.sop_converter.sop_prompts import append_sop_overview_routing, format_sdk_source_dir_block
+    from extensions.sop_converter.sop_prompts import (
+        append_sop_overview_routing,
+        format_sdk_source_dir_block,
+    )
     from extensions.sop_converter.startup_agent import build_bundle_overview_agent_definition
 
     is_sop = overview_has_sop_skills(agent) or force_bundle
@@ -626,7 +632,7 @@ def _apply_sop_startup(
         registered = load_result.skill_names
         if registered:
             print(
-                f"📦 Loaded {len(registered)} SOP skills from bundle",
+                f'📦 Loaded {len(registered)} SOP skills from bundle',
                 file=sys.stderr,
             )
             try:
@@ -657,26 +663,28 @@ def _apply_sop_startup(
         if bundle_ctx is not None:
             ctx.tool_context.bundle_context = bundle_ctx
 
-    body = (agent.get("system_prompt_body") or "").strip()
+    body = (agent.get('system_prompt_body') or '').strip()
     sdk_source_dir = bundle_ctx.sdk_source_dir if bundle_ctx is not None else None
     if body:
         if is_sop:
             body = append_sop_overview_routing(body, sdk_source_dir=sdk_source_dir)
-        existing = getattr(ctx.options, "append_system_prompt", "")
-        ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
+        existing = getattr(ctx.options, 'append_system_prompt', '')
+        ctx.options.append_system_prompt = f'{existing}\n\n{body}' if existing else body
     elif is_sop and sdk_source_dir is not None:
         sdk_block = format_sdk_source_dir_block(sdk_source_dir)
         if sdk_block:
-            existing = getattr(ctx.options, "append_system_prompt", "")
-            ctx.options.append_system_prompt = f"{existing}\n\n{sdk_block}" if existing else sdk_block
+            existing = getattr(ctx.options, 'append_system_prompt', '')
+            ctx.options.append_system_prompt = (
+                f'{existing}\n\n{sdk_block}' if existing else sdk_block
+            )
 
-    agent_name = agent.get("name", "unknown")
-    skills = agent.get("skills", [])
-    sub_count = len([s for s in skills if isinstance(s, str) and s.endswith("-skill")])
+    agent_name = agent.get('name', 'unknown')
+    skills = agent.get('skills', [])
+    sub_count = len([s for s in skills if isinstance(s, str) and s.endswith('-skill')])
     if sub_count:
-        print(f"⚡ Using agent: {agent_name} ({sub_count} sub-agents)", file=sys.stderr)
+        print(f'⚡ Using agent: {agent_name} ({sub_count} sub-agents)', file=sys.stderr)
     else:
-        print(f"⚡ Using agent: {agent_name}", file=sys.stderr)
+        print(f'⚡ Using agent: {agent_name}', file=sys.stderr)
 
 
 def _resolve_startup_agent(args, ctx) -> None:
@@ -707,11 +715,11 @@ def _resolve_startup_agent(args, ctx) -> None:
     )
 
     cwd = ctx.workspace_root or Path.cwd()
-    agent_type = getattr(args, "agent", None)
+    agent_type = getattr(args, 'agent', None)
 
     # Check if agent_type is a directory path
     agent_dir_override: Path | None = None
-    if agent_type is not None and agent_type != "auto":
+    if agent_type is not None and agent_type != 'auto':
         agent_type_path = Path(str(agent_type)).resolve()
         if agent_type_path.is_dir():
             agent_dir_override = agent_type_path
@@ -731,10 +739,10 @@ def _resolve_startup_agent(args, ctx) -> None:
 
                 load_result = register_bundle_skills(bundle_path, workspace)
                 agent = {
-                    "name": "clawcodex-overview",
-                    "description": "SOP bundle session",
-                    "skills": load_result.skill_names,
-                    "system_prompt_body": "",
+                    'name': 'clawcodex-overview',
+                    'description': 'SOP bundle session',
+                    'skills': load_result.skill_names,
+                    'system_prompt_body': '',
                 }
             _apply_sop_startup(
                 ctx,
@@ -745,7 +753,7 @@ def _resolve_startup_agent(args, ctx) -> None:
             )
             return
 
-    if agent_type is not None and agent_type != "auto":
+    if agent_type is not None and agent_type != 'auto':
         # Explicit ``--agent <name>``
         agent = resolve_agent_by_type(cwd, agent_type, agent_dir_override=agent_dir_override)
     else:
@@ -758,11 +766,11 @@ def _resolve_startup_agent(args, ctx) -> None:
         if overview_has_sop_skills(agent):
             bundle_path = discover_workspace_bundle(
                 workspace,
-                agent_skills=agent.get("skills"),
+                agent_skills=agent.get('skills'),
             )
             if bundle_path is not None:
                 print(
-                    f"📦 Auto-activated SOP bundle: {bundle_path.name}",
+                    f'📦 Auto-activated SOP bundle: {bundle_path.name}',
                     file=sys.stderr,
                 )
         _apply_sop_startup(
@@ -787,21 +795,21 @@ def _resolve_first_agent_in_dir(cwd: Path) -> dict[str, Any] | None:
     """
     from extensions.sop_converter.default_agent import parse_agent_file
 
-    agents_dir = cwd / ".claude" / "agents"
+    agents_dir = cwd / '.claude' / 'agents'
     if not agents_dir.is_dir():
         return None
 
     best: dict[str, Any] | None = None
     best_score = -1
 
-    for md_file in sorted(agents_dir.glob("*.md")):
+    for md_file in sorted(agents_dir.glob('*.md')):
         try:
             agent = parse_agent_file(md_file)
             if not agent:
                 continue
-            skills = agent.get("skills", [])
-            sub_skills = len([s for s in skills if isinstance(s, str) and s.endswith("-skill")])
-            body_len = len(agent.get("system_prompt_body", "") or "")
+            skills = agent.get('skills', [])
+            sub_skills = len([s for s in skills if isinstance(s, str) and s.endswith('-skill')])
+            body_len = len(agent.get('system_prompt_body', '') or '')
             score = sub_skills * 1000 + body_len
             if score > best_score:
                 best_score = score

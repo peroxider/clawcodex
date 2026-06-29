@@ -22,6 +22,7 @@ calls :func:`install_repl_extensions` immediately after
 from __future__ import annotations
 
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 from clawcodex_ext.away_summary.controller import AwaySummaryController
@@ -33,6 +34,195 @@ if TYPE_CHECKING:  # pragma: no cover
     from src.repl.core import ClawcodexREPL
 
 _log = logging.getLogger(__name__)
+
+# Chinese rendering of the (English) option descriptions built in
+# ``_handle_permission_request``. Keys are the exact desc strings; the
+# ``Enable {setting} and allow`` form is matched by prefix/suffix so any
+# setting name is covered. Unknown descs pass through unchanged.
+_DESC_ZH = {
+    "Yes, allow this action": "是，允许此操作",
+    "No, deny this action": "否，拒绝此操作",
+}
+
+
+def _zh_option_desc(desc: str) -> str:
+    if desc in _DESC_ZH:
+        return _DESC_ZH[desc]
+    if desc.startswith("Enable ") and desc.endswith(" and allow"):
+        setting = desc[len("Enable ") : -len(" and allow")]
+        return f"启用 {setting} 并允许"
+    return desc
+
+
+class _ImReplyController:
+    """Sends the REPL's final assistant reply back to the IM origin.
+
+    Mirrors the ``AwaySummaryController``/``GoalController`` lifecycle hooks
+    that ``ClawCodexExtREPL.chat()`` invokes in its ``finally`` block. On
+    ``on_assistant_turn_complete`` it pulls the last assistant text from the
+    conversation and ships it to the gateway via an OUTBOUND IPC frame; the
+    gateway's OutboundDispatcher then delivers it to WeChat.
+    """
+
+    def __init__(self, repl, client, origin: str) -> None:
+        self._repl = repl
+        self._client = client
+        self._origin = origin
+        self._last_sent: str | None = None
+
+    def on_run_start(self) -> None:
+        # reset per-turn so a repeated identical reply across turns still sends
+        self._last_sent = None
+
+    def on_run_finish(self) -> None:
+        pass
+
+    def on_assistant_turn_complete(self) -> None:
+        import asyncio
+
+        text_fn = getattr(self._repl, "_get_last_assistant_text", None)
+        if not callable(text_fn):
+            return
+        try:
+            text = text_fn()
+        except Exception:  # noqa: BLE001
+            return
+        if not text or text == self._last_sent:
+            return  # nothing new, or already sent this turn
+        self._last_sent = text
+        # Only reply to WeChat when this turn was driven by an IM message.
+        # ReplGatewayClient records each inbound IM origin; pop_reply_origin
+        # returns None for keyboard-initiated turns so we don't spam the
+        # WeChat user with every assistant reply typed at the REPL prompt.
+        pop_origin = getattr(self._client, "pop_reply_origin", None)
+        if not callable(pop_origin):
+            return
+        im_origin = pop_origin()
+        if not im_origin:
+            return  # keyboard-driven turn — no IM reply to send
+        loop = getattr(self._repl, "_cron_loop", None)
+        if loop is None:
+            return
+        client = self._client._client  # GatewayIpcClient
+        try:
+            # run_coroutine_threadsafe works even when the target loop is
+            # not running (the normal state after chat() returns). The
+            # coroutine executes on the next run_until_complete call.
+            asyncio.run_coroutine_threadsafe(
+                client.send_outbound(origin=im_origin, text=text), loop
+            )
+            _log.info("repl IM reply sent: origin=%s len=%d", im_origin[:24], len(text))
+        except Exception:  # noqa: BLE001
+            _log.warning("repl IM reply send failed", exc_info=True)
+
+    def send_permission_prompt(
+        self,
+        *,
+        message: str,
+        options: list[tuple[str, str]],
+        suggestion: str | None = None,
+        interactive: bool = False,
+    ) -> bool:
+        """Forward an in-REPL permission menu to the active IM origin.
+
+        ``interactive=True`` is used when the WeChat user is expected to
+        reply with a choice (IM-driven permission wait): the footer invites
+        a reply instead of directing the user back to the REPL.
+        """
+        peek_origin = getattr(self._client, "peek_reply_origin", None)
+        if not callable(peek_origin):
+            return False
+        im_origin = peek_origin()
+        if not im_origin:
+            return False
+        text = self._format_permission_prompt(
+            message, options, suggestion=suggestion, interactive=interactive
+        )
+        return self._send_outbound_text(im_origin, text)
+
+    @staticmethod
+    def _format_permission_prompt(
+        message: str,
+        options: list[tuple[str, str]],
+        *,
+        suggestion: str | None = None,
+        interactive: bool = False,
+    ) -> str:
+        # WeChat-facing prompt is Chinese; the upstream ``message`` and
+        # option descriptions are English (and the message may say "Claude"),
+        # so translate the wrapper + option descriptions and rebrand Claude
+        # → ClawCodex here only (the REPL console keeps its own rendering).
+        msg = str(message).strip().replace("Claude", "ClawCodex")
+        if msg.startswith("ClawCodex wants to use ") and msg.endswith(". Allow?"):
+            tool = msg[len("ClawCodex wants to use ") : -len(". Allow?")]
+            msg = f"ClawCodex 想使用 {tool}，是否允许？"
+        lines = ["需要权限", "", msg]
+        if suggestion:
+            lines.extend(["", f"建议：{suggestion}"])
+        lines.extend(["", "选项："])
+        for idx, (key, desc) in enumerate(options, start=1):
+            lines.append(f"{idx}. [{key}] {_zh_option_desc(desc)}")
+        if interactive:
+            lines.extend(["", "请回复选项编号或字母（如 1 或 y）进行选择。"])
+        else:
+            lines.extend(["", "请在 REPL 中选择对应的选项以继续。"])
+        return "\n".join(lines)
+
+    def _send_outbound_text(self, im_origin: str, text: str) -> bool:
+        import asyncio
+
+        loop = getattr(self._repl, "_cron_loop", None)
+        if loop is None:
+            return False
+        client = self._client._client
+        try:
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if running is loop:
+                # Inside _cron_loop and it is turning — schedule cooperatively.
+                asyncio.run_coroutine_threadsafe(
+                    client.send_outbound(origin=im_origin, text=text), loop
+                )
+                return True
+            # Not inside _cron_loop: the caller is sync code that is about to
+            # block the main thread (e.g. the permission handler blocking on
+            # ``_safe_input``). ``run_coroutine_threadsafe`` would queue on
+            # ``_cron_loop`` which won't drain until ``chat()`` returns — far
+            # too late (the user would already have approved in the REPL).
+            # Send from a one-shot thread so the message leaves immediately.
+            return self._send_outbound_text_from_thread(im_origin, text)
+        except Exception:  # noqa: BLE001
+            _log.warning("repl IM outbound send failed", exc_info=True)
+            return False
+
+    def _send_outbound_text_from_thread(self, im_origin: str, text: str) -> bool:
+        """Send while the REPL event loop is about to block on terminal input."""
+        socket_path = getattr(self._client, "_socket_path", None)
+        if not socket_path:
+            return False
+
+        def _runner() -> None:
+            import asyncio
+
+            async def _send_once() -> None:
+                from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
+
+                client = GatewayIpcClient(str(socket_path), instance_id="repl-im-permission")
+                await client.connect()
+                try:
+                    await client.send_outbound(origin=im_origin, text=text)
+                finally:
+                    await client.close()
+
+            try:
+                asyncio.run(_send_once())
+            except Exception:  # noqa: BLE001
+                _log.warning("repl IM one-shot outbound failed", exc_info=True)
+
+        threading.Thread(target=_runner, name="repl-im-outbound", daemon=True).start()
+        return True
 
 
 class _ReplRuntimeObserver:
@@ -86,6 +276,7 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
 
     _install_away_summary_controller(repl)
     _install_goal_controller(repl)
+    _install_im_gateway_client(repl, ctx)
 
     runtime = getattr(repl, "runtime_context", None)
     if runtime is None:
@@ -97,6 +288,113 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
 
     # ---- SIGTERM / SIGINT: save session + print resume hint (S-R1) ----
     _register_signal_session_save(repl)
+
+
+def _install_im_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
+    """Opt-in: connect the REPL to the IM gateway so WeChat messages drive it.
+
+    Enabled when ``--im-gateway`` is passed or when a specific origin is
+    provided via ``--im-gateway-origin`` / ``CLAWCODEX_IM_ORIGIN``. Without a
+    specific origin, the REPL binds all direct/private WeChat messages for the
+    single configured WeChat channel.
+
+    Connection is deferred: ``install_repl_extensions`` runs before
+    ``repl.run()`` creates the persistent asyncio loop, so we stash an init
+    callable on the repl for ``run()`` to invoke once the loop is up.
+    """
+    import os
+
+    options = getattr(ctx, "options", None)
+    sock = getattr(options, "im_gateway_sock", None) or os.environ.get("CLAWCODEX_IM_GATEWAY_SOCK")
+    origin = getattr(options, "im_gateway_origin", None) or os.environ.get("CLAWCODEX_IM_ORIGIN")
+    enabled = bool(getattr(options, "im_gateway", False))
+    if not origin and enabled:
+        from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
+
+        origin = WECHAT_DIRECT_ALL_ORIGIN
+    if not origin:
+        return  # opt-in not requested
+    if not sock:
+        sock = str(os.path.expanduser("~/.clawcodex/im-gateway/gateway.sock"))
+
+    from clawcodex_ext.frontend.repl_gateway import ReplGatewayClient
+
+    session_id = f"repl-{os.getpid()}"
+    client = ReplGatewayClient(
+        sock,
+        session_id=session_id,
+        origin=origin,
+        enqueue=repl._enqueue_prompt,
+        queue_size=lambda: len(getattr(repl, "_queued_prompts", [])),
+        wake=repl._wake_prompt_for_im,
+        control_handler=lambda text, inbound_origin=None: _handle_im_control(
+            repl, text, inbound_origin
+        ),
+        permission_probe=lambda text: _handle_im_permission_reply(repl, text),
+    )
+    repl._im_gateway_client = client
+
+    # IM reply controller: after each assistant turn, send the final reply
+    # text back to the WeChat origin via the OUTBOUND IPC frame.
+    repl._im_reply_controller = _ImReplyController(repl, client, origin)
+    _log.info("repl IM gateway opt-in staged: origin=%s sock=%s", origin[:32], sock)
+
+    async def _im_init(loop):
+        """Connect + register + start heartbeat on the REPL's loop."""
+        import asyncio
+
+        try:
+            await client.connect()
+            client._heartbeat_task = asyncio.create_task(client._heartbeat_loop(30.0))
+            _log.info("repl IM gateway opt-in connected: origin=%s sock=%s", origin[:32], sock)
+        except Exception:  # noqa: BLE001
+            _log.warning("repl IM gateway opt-in connect failed", exc_info=True)
+
+    repl._im_gateway_init = _im_init
+
+
+def _handle_im_control(repl: "ClawcodexREPL", text: str, origin: str | None = None) -> bool:
+    command = (text or "").strip().split(maxsplit=1)[0].lower()
+    if command.startswith("/") and command != "/stop":
+        return False
+    interrupt = getattr(repl, "_interrupt_active_chat_from_im", None)
+    if not callable(interrupt):
+        return False
+    return bool(interrupt())
+
+
+def _handle_im_permission_reply(repl: "ClawcodexREPL", text: str) -> bool:
+    """Consume a WeChat reply as a pending permission decision.
+
+    Active only while the REPL is blocked in ``_wait_im_permission_choice``
+    (i.e. an IM-driven turn is waiting for the user to approve a tool). A
+    reply matching one of the menu's valid choices resolves the wait;
+    ``/stop`` resolves it as deny so the user can abort from WeChat instead
+    of hanging. Anything else returns False and falls through to the normal
+    control/enqueue path.
+
+    Runs on the IPC reader thread; ``_wait_im_permission_choice`` waits on
+    the main thread — ``repl._im_permission_lock`` serializes them.
+    """
+    lock = getattr(repl, "_im_permission_lock", None)
+    if lock is None:
+        return False
+    with lock:
+        state = getattr(repl, "_im_permission_wait", None)
+        if not state:
+            return False
+        norm = (text or "").strip().lower()
+        if not norm:
+            return False
+        if norm == "/stop":
+            choice = "n"
+        elif norm in state["valid"]:
+            choice = norm
+        else:
+            return False
+        state["choice"] = choice
+        state["event"].set()
+    return True
 
 
 def _install_away_summary_controller(repl: "ClawcodexREPL") -> None:
