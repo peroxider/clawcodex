@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 # The runner spawns ``run_headless_session`` on the default executor and
 # awaits the resulting future; without a bound that future can hang
 # forever (see F-108 §十八 risk #5). ``asyncio.wait_for`` below cuts the
-# wait at ``_QUERY_TIMEOUT_S`` seconds, yielding
+# wait at ``QueryConfig.timeout_s`` seconds (default 1800, configured
+# via workflow.md ``agent.run_timeout_ms``), yielding
 # ``SessionComplete(reason="exit_code=124")`` so callers can detect the
 # timeout via the conventional GNU exit code.
 #

@@ -1384,6 +1384,12 @@ class Orchestrator:
         )
         if result.has_conflict:
             self._registry.mark_conflict(issue_id, result.conflict_files)
+            # When the operator used --force, reset the rebase attempt
+            # counter so _process_pending_rebase_conflicts can launch
+            # the conflict-resolution agent on the next poll cycle.
+            if use_force and record is not None:
+                record.rebase_attempt_count = 0
+                self._registry._save()
             logger.warning(
                 'Issue %s rebase left conflicts: %s',
                 issue_id,
@@ -1571,7 +1577,22 @@ class Orchestrator:
         self._prepare_rebase_session(session)
         self._state.running[issue.id or ''] = session
         try:
-            await self.agent_runner.run_session(session)
+            progress_sink = self._build_session_sink(issue.id or '')
+            run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
+            session.timeout_deadline_at = time.time() + run_timeout_seconds
+            await asyncio.wait_for(
+                self.agent_runner.run(
+                    session,
+                    self.workflow,
+                    status_dashboard=self.status_dashboard,
+                    tracker=self.tracker,
+                    comment_tracker=self.tracker,
+                    clarification_resolver=self._clarification_resolver,
+                    progress_reporter=progress_sink,
+                    diagnostics_callback=self._update_run_diagnostics,
+                ),
+                timeout=run_timeout_seconds,
+            )
         except Exception as exc:
             logger.error(
                 'Issue %s rebase-resolution: run_session raised %s',

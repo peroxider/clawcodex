@@ -1190,7 +1190,10 @@ def rebase_for_pr(
     during long fetches.
     """
     repo_root = workspace_path
-    # 0. checkout + defensive rebase --abort (best-effort)
+    # 0. Defensively abort any leftover .git/REBASE_HEAD BEFORE
+    #    checkout, because git refuses to checkout when the index
+    #    has unresolved conflicts from a previous aborted rebase.
+    _git_rebase_abort(repo_root)
     current_branch = get_current_branch(repo_root)
     if current_branch != branch_name:
         co_stdout, co_stderr, co_rc = _run_git(["checkout", branch_name], repo_root)
@@ -1198,6 +1201,8 @@ def rebase_for_pr(
             raise GitSyncError(
                 f"git checkout {branch_name} failed: {co_stderr or co_stdout}"
             )
+    # Best-effort: clear any REBASE_HEAD that the checkout may have
+    # resurrected (e.g. via git worktree or orphaned sequencer state).
     _git_rebase_abort(repo_root)
 
     # 1. fetch base
