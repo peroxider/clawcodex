@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -61,15 +62,22 @@ def permission_mode_to_three_fields(
     Returns ``(interactive, default_decision, audit_log)``.
 
     Unknown / unmapped values degrade to the ``default`` row.
+
+    .. deprecated::
+        This function is kept for backward compatibility.  New code should
+        prefer :func:`extensions.orchestrator.permission_translate.resolve_orthogonal_fields`
+        which honours the explicit ``interactive`` / ``default_decision`` /
+        ``audit_log`` fields on ``AgentConfig``.
     """
+    # Keys are lowercased for case-insensitive lookup.
     canonical: dict[str, tuple[bool, str, str]] = {
-        "default": (True, "ask", "none"),
-        "plan": (True, "ask", "none"),
-        "acceptEdits": (True, "allow", "none"),
-        "bypassPermissions": (False, "allow", "full"),
-        "dontAsk": (False, "deny", "minimal"),
+        "default": (True, "ask", "minimal"),
+        "plan": (True, "deny", "minimal"),
+        "acceptedits": (False, "ask", "minimal"),
+        "bypasspermissions": (False, "allow", "full"),
+        "dontask": (False, "allow", "minimal"),
     }
-    entry = canonical.get(permission_mode.lower())
+    entry = canonical.get(permission_mode.strip().lower())
     if entry is None:
         entry = canonical["default"]
     return entry  # type: ignore[return-value]
