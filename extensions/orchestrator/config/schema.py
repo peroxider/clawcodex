@@ -20,6 +20,62 @@ from ..tracker import (
 
 
 # ---------------------------------------------------------------------------
+# F-46: permission_mode → three-fields translation & validation helpers
+# ---------------------------------------------------------------------------
+
+_VALID_AUDIT_LOG_VALUES: frozenset[str] = frozenset({"none", "minimal", "full"})
+_VALID_DEFAULT_DECISION_VALUES: frozenset[str] = frozenset({"allow", "deny", "ask"})
+
+
+def _normalize_audit_log(value: Any) -> Literal["none", "minimal", "full"]:
+    """Validate and normalize the audit_log field."""
+    if value is None:
+        return "minimal"
+    raw = str(value).strip().lower()
+    if raw not in _VALID_AUDIT_LOG_VALUES:
+        raise ValueError(
+            f"agent.audit_log must be one of {sorted(_VALID_AUDIT_LOG_VALUES)}, "
+            f"got {value!r}"
+        )
+    return raw  # type: ignore[return-value]
+
+
+def _normalize_default_decision(value: Any) -> Literal["allow", "deny", "ask"]:
+    """Validate and normalize the default_decision field."""
+    if value is None:
+        return "deny"
+    raw = str(value).strip().lower()
+    if raw not in _VALID_DEFAULT_DECISION_VALUES:
+        raise ValueError(
+            f"agent.default_decision must be one of {sorted(_VALID_DEFAULT_DECISION_VALUES)}, "
+            f"got {value!r}"
+        )
+    return raw  # type: ignore[return-value]
+
+
+def permission_mode_to_three_fields(
+    permission_mode: str,
+) -> tuple[bool, str, str]:
+    """Translate a legacy *permission_mode* string into three orthogonal fields.
+
+    Returns ``(interactive, default_decision, audit_log)``.
+
+    Unknown / unmapped values degrade to the ``default`` row.
+    """
+    canonical: dict[str, tuple[bool, str, str]] = {
+        "default": (True, "ask", "none"),
+        "plan": (True, "ask", "none"),
+        "acceptEdits": (True, "allow", "none"),
+        "bypassPermissions": (False, "allow", "full"),
+        "dontAsk": (False, "deny", "minimal"),
+    }
+    entry = canonical.get(permission_mode.lower())
+    if entry is None:
+        entry = canonical["default"]
+    return entry  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -170,18 +226,6 @@ class TrackerConfig:
             "Done",
         ]
     )
-    # Issues carrying any of these labels (case-insensitive) are
-    # excluded from the candidate queue at fetch time. Use for
-    # web-only workflow labels (e.g. "completed", "wontfix") that the
-    # tracker's `state` field does not reflect as terminal. Empty
-    # list = no exclusion.
-    skip_labels: list[str] = field(default_factory=list)
-    # Issues must carry at least ONE of these labels (OR semantics,
-    # case-insensitive) to enter the candidate queue. Use to scope
-    # the orchestrator to a particular class of work (e.g. only
-    # `priority/high` or `priority/urgent`). Empty list = no
-    # requirement. Evaluated before `skip_labels`.
-    require_any_labels: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -268,20 +312,19 @@ class AgentConfig:
     # ``permission_mode`` enum (`default` / `plan` / `bypassPermissions` /
     # `acceptEdits` / `dontAsk`) collapses three orthogonal concerns into
     # a single string. These three fields are the explicit, forward-going
-    # replacement; ``permission_mode`` remains as a backward-compat shim
-    # that :func:`extensions.orchestrator.permission_translate.translate_legacy_permission_mode`
-    # collapses into the three below when a user upgrades.
+    # replacement; ``permission_mode`` remains as a backward-compat shim.
     #
     # * ``interactive`` — does the runtime need a TTY prompt?
     # * ``default_decision`` — what to do when no policy matches?
     # * ``audit_log`` — how verbose should per-tool decision logging be?
     #
-    # All three default to ``None`` so the legacy ``permission_mode`` keeps
-    # its full authority when present. When the new fields are populated
-    # explicitly they take precedence over the legacy string.
-    interactive: bool | None = None
-    default_decision: str | None = None  # one of "allow" / "deny" / "ask"
-    audit_log: str | None = None  # one of "none" / "minimal" / "full"
+    # Default values are chosen for safety: interactive=True means the
+    # runner will always try to prompt a human; default_decision="deny"
+    # is the safest headless fallback; audit_log="minimal" records only
+    # denied events to save disk space.
+    audit_log: Literal["none", "minimal", "full"] = "minimal"
+    interactive: bool = True
+    default_decision: Literal["allow", "deny", "ask"] = "deny"
     # F-39 Sub-F: rate limit on operator-driven retries. When an
     # issue's `IssueRecord.retry_count` reaches this value, the
     # orchestrator refuses to honor further `agent:retry` labels /
@@ -457,32 +500,6 @@ class ServerConfig:
 
 
 @dataclass
-class PrConflictScanConfig:
-    """F-120: configuration for the optional PR conflict scan daemon job.
-
-    When ``enabled=False`` (the default) the daemon does not poll the
-    remote PR mergeable state at all — operators must trigger rebase
-    via CLI / label / comment. Setting ``enabled=True`` turns on a
-    background scan that, for each open PR with a workspace + branch,
-    asks the tracker for the mergeable state and invokes
-    ``rebase_for_pr`` when ``has_conflicts`` is True.
-
-    Why this is opt-in: GitCode does not reliably expose ``mergeable``
-    (JS-rendered page), so the scan is a no-op there. Operators on
-    GitHub / Gitee can opt-in for proactive conflict detection; on
-    GitCode the other three triggers remain the canonical path.
-    """
-
-    enabled: bool = False
-    poll_interval_ms: int = 300_000  # 5 minutes
-    max_rebase_attempts_per_issue: int = 3
-    max_prs_per_scan: int = 25
-    use_force_push: bool = False  # corresponds to CLI --force
-    bot_login: str | None = None
-    scan_states: tuple[str, ...] = ("open",)
-
-
-@dataclass
 class WorkflowConfig:
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
     polling: PollingConfig = field(default_factory=PollingConfig)
@@ -494,9 +511,6 @@ class WorkflowConfig:
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
-    pr_conflict_scan: "PrConflictScanConfig" = field(
-        default_factory=lambda: PrConflictScanConfig()
-    )
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "WorkflowConfig":
@@ -513,7 +527,6 @@ class WorkflowConfig:
         review_feedback_raw = raw.get("review_feedback", {})
         observability_raw = raw.get("observability", {})
         server_raw = raw.get("server", {})
-        pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
 
         tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
         tracker_info = tracker_kind_info(tracker_kind)
@@ -524,14 +537,6 @@ class WorkflowConfig:
         tracker_terminal_states = _normalize_string_list(
             tracker_raw.get("terminal_states"),
             default_terminal_states_for_kind(tracker_kind),
-        )
-        tracker_skip_labels = _normalize_string_list(
-            tracker_raw.get("skip_labels"),
-            [],
-        )
-        tracker_require_any_labels = _normalize_string_list(
-            tracker_raw.get("require_any_labels"),
-            [],
         )
 
         tracker = TrackerConfig(
@@ -552,8 +557,6 @@ class WorkflowConfig:
             issues_path=_normalize_secret_value(_expand_path(tracker_raw.get("issues_path"), "")),
             active_states=tracker_active_states,
             terminal_states=tracker_terminal_states,
-            skip_labels=tracker_skip_labels,
-            require_any_labels=tracker_require_any_labels,
         )
 
         workspace_root = _expand_path(workspace_raw.get("root"), _default_tmp_workspace())
@@ -676,6 +679,16 @@ class WorkflowConfig:
             stage_overrides=stage_overrides,
             # Per-run env vars merged into Bash/hook subprocess env.
             env={str(k): str(v) for k, v in (agent_raw.get("env") or {}).items() if v is not None},
+            # F-46.0: orthogonal permission fields (validated from YAML).
+            interactive=(
+                bool(agent_raw["interactive"])
+                if "interactive" in agent_raw
+                else True
+            ),
+            default_decision=_normalize_default_decision(
+                agent_raw.get("default_decision")
+            ),
+            audit_log=_normalize_audit_log(agent_raw.get("audit_log")),
         )
         if workspace.strategy == "sequential":
             if agent.max_concurrent_agents != 1:
@@ -752,19 +765,6 @@ class WorkflowConfig:
             server=ServerConfig(
                 port=server_raw.get("port"),
                 host=server_raw.get("host", "127.0.0.1"),
-            ),
-            pr_conflict_scan=PrConflictScanConfig(
-                enabled=bool(pr_conflict_scan_raw.get("enabled", False)),
-                poll_interval_ms=pr_conflict_scan_raw.get("poll_interval_ms", 300_000),
-                max_rebase_attempts_per_issue=pr_conflict_scan_raw.get(
-                    "max_rebase_attempts_per_issue", 3
-                ),
-                max_prs_per_scan=pr_conflict_scan_raw.get("max_prs_per_scan", 25),
-                use_force_push=bool(pr_conflict_scan_raw.get("use_force_push", False)),
-                bot_login=_resolve_env_value(pr_conflict_scan_raw.get("bot_login")),
-                scan_states=tuple(
-                    _normalize_string_list(pr_conflict_scan_raw.get("scan_states"), ["open"])
-                ),
             ),
         )
 

@@ -9,7 +9,6 @@ import asyncio
 import logging
 import os
 import random
-import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -23,7 +22,7 @@ from .approval_policy import (
     get_approval_policy,
     ToolCallEvent as PolicyToolCallEvent,
 )
-from clawcodex_ext.utils.git import get_file_status
+from src.utils.git import get_file_status
 from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
@@ -168,13 +167,6 @@ class AgentSession:
     # ``agent_config.perf_should_continue_skip_turns``. When ``None`` the
     # runner falls back to the pre-F-105 behaviour of always polling.
     state_cache: "IssueStateCache | None" = None
-    # F-120: list of files git left in conflict state. Populated by
-    # ``Orchestrator._prepare_rebase_session`` from
-    # ``IssueRecord.conflict_files`` when ``run_kind == "agent_rebase"``.
-    # The prompt builder injects these into the conflict-resolution
-    # prompt so the agent knows exactly which files need ``git add``
-    # before ``git rebase --continue``.
-    conflict_files: tuple[str, ...] | None = None
     # F-45: canonical path to ~/.clawcodex/tool-events/{run_id}/events.ndjson.
     # Set in AgentRunner.run() at session start; consumed by
     # report_writer.write() to dual-write the NDJSON to the persistent layer.
@@ -262,8 +254,8 @@ class AgentSession:
             return
         try:
             import json as _json
-            from clawcodex_ext.agent.conversation import Conversation
-            from clawcodex_ext.services.session_storage import SessionStorage
+            from src.agent.conversation import Conversation
+            from src.services.session_storage import SessionStorage
             from clawcodex_ext.types.messages import message_from_dict
 
             storage: SessionStorage | None = getattr(self, "_transcript_storage", None)
@@ -286,7 +278,7 @@ class AgentSession:
             cost_block: dict = {}
             try:
                 import time as _time
-                from clawcodex_ext.bootstrap.state import (
+                from src.bootstrap.state import (
                     get_total_cost_usd,
                     get_total_api_duration,
                     get_total_api_duration_without_retries,
@@ -390,6 +382,24 @@ class AgentRunner:
         # real ``asyncio.sleep`` so cancellation still works.
         self._sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
+    def _resolve_audit_log(self) -> str:
+        """Resolve the effective audit_log granularity for this runner.
+
+        Prefers the explicit ``AgentConfig.audit_log`` field (F-46). When
+        the field is unset (legacy callers), falls back to translating the
+        legacy ``permission_mode`` enum via :func:`permission_mode_to_three_fields`.
+        """
+        explicit = getattr(self.agent_config, "audit_log", None)
+        if explicit is not None:
+            return explicit
+        # Legacy fallback: translate permission_mode → audit_log
+        from .config.schema import permission_mode_to_three_fields
+
+        _, _, audit_log = permission_mode_to_three_fields(
+            self.agent_config.permission_mode
+        )
+        return audit_log
+
     def _handle_tool_call(
         self,
         event: ToolCallEvent,
@@ -444,6 +454,26 @@ class AgentRunner:
             }
         return {}
 
+    def _resolve_audit_log(self) -> str:
+        """Resolve the effective audit_log level for this agent run.
+
+        F-46: When the user explicitly sets ``audit_log`` on
+        ``AgentConfig`` that value wins.  Otherwise we fall back to the
+        legacy ``permission_mode`` enum's implied granularity via
+        :func:`resolve_orthogonal_fields`.
+        """
+        from extensions.orchestrator.permission_translate import (
+            resolve_orthogonal_fields,
+        )
+
+        resolved = resolve_orthogonal_fields(
+            permission_mode=self.agent_config.permission_mode,
+            interactive=self.agent_config.interactive,
+            default_decision=self.agent_config.default_decision,
+            audit_log=self.agent_config.audit_log,
+        )
+        return resolved.audit_log  # type: ignore[return-value]
+
     def _append_tool_event_log(
         self,
         event: ToolCallEvent,
@@ -452,23 +482,30 @@ class AgentRunner:
         """Persist a per-tool decision row to events.ndjson (F-45).
 
         Writes one NDJSON line to
-        ``{workspace}/.reports/{run_id}.events.ndjson``, co-located with the
-        RunReport.  Decoupled from ``permission_mode`` — all 7 modes (default
-        / plan / bypassPermissions / acceptEdits / dontAsk / auto / bubble)
-        write the same row shape; only the ``permission_mode`` column value
-        varies.  Failures are logged and swallowed: the audit log must never
-        block the agent run.
+        ``~/.clawcodex/tool-events/{run_id}/events.ndjson``.  Decoupled
+        from ``permission_mode`` — all 7 modes (default / plan /
+        bypassPermissions / acceptEdits / dontAsk / auto / bubble) write
+        the same row shape; only the ``permission_mode`` column value
+        varies.  Failures are logged and swallowed: the audit log must
+        never block the agent run.
+
+        F-46: ``audit_log`` granularity from *session_context* controls
+        filtering: ``none`` skips all writes, ``minimal`` logs only
+        denied events, ``full`` logs everything.
         """
         try:
+            # F-46: audit_log granularity gate — decide early whether to
+            # skip the entire write path.  Defaults to "minimal" so that
+            # existing runs (which don't pass audit_log in the context)
+            # still log deny-only events instead of nothing.
+            audit_log_level = session_context.get("audit_log", "minimal")
+            if audit_log_level == "none":
+                return  # Skip entirely.
+            if audit_log_level == "minimal" and event._approved:
+                return  # Only log denies.
+
             run_id = session_context.get("run_id") or "unknown"
-            workspace_path = session_context.get("workspace_path")
-            if workspace_path:
-                base_dir = Path(workspace_path) / ".reports"
-            else:
-                # Fallback: use the user-level path (non-orchestrator
-                # or test contexts where workspace_path is not set).
-                base_dir = Path.home() / ".clawcodex" / "tool-events"
-            log_path = base_dir / f"{run_id}.events.ndjson"
+            base_dir = Path.home() / ".clawcodex" / "tool-events" / run_id
             try:
                 base_dir.mkdir(parents=True, exist_ok=True)
             except Exception:
@@ -481,11 +518,13 @@ class AgentRunner:
                 )
                 return
 
+            log_path = base_dir / "events.ndjson"
+
             # Single-generation rotate (F-45 Sub-E decision: 50MB
             # threshold, single backup). v2.14 will add 7-day cleanup.
             try:
                 if log_path.exists() and log_path.stat().st_size >= _TOOL_EVENT_LOG_ROTATE_BYTES:
-                    rotated = log_path.with_name(log_path.name + ".1")
+                    rotated = log_path.with_suffix(log_path.suffix + ".1")
                     try:
                         rotated.unlink(missing_ok=True)
                     except Exception:
@@ -829,19 +868,25 @@ class AgentRunner:
             "workflow": workflow,
             # F-45: run_id + permission_mode are consumed by
             # _append_tool_event_log to write per-tool rows to
-            # {workspace}/.reports/{run_id}.events.ndjson.
+            # ~/.clawcodex/tool-events/{run_id}/events.ndjson.
             "run_id": session.run_id,
             "permission_mode": self.agent_config.permission_mode,
+            # F-46: orthogonal permission fields exposed to the audit-log
+            # filter and any downstream consumers.
+            "interactive": self.agent_config.interactive,
+            "default_decision": self.agent_config.default_decision,
+            "audit_log": self._resolve_audit_log(),
         }
-        # F-45: stash the NDJSON path co-located with the RunReport
-        # under ``{workspace}/.reports/<run_id>.events.ndjson`` so that
-        # report_writer.write() can dual-write it to the persistent layer
-        # (Sub-C).  Resolved here (not in the property) so the path is
-        # concrete before the first event is appended.
+        # F-45: stash the canonical NDJSON path on the session so
+        # report_writer.write() can dual-write it to the persistent
+        # layer (Sub-C).  Resolved here (not in the property) so the
+        # path is concrete before the first event is appended.
         session.tool_events_path = str(
-            workspace.path
-            / ".reports"
-            / f"{session.run_id or 'unknown'}.events.ndjson"
+            Path.home()
+            / ".clawcodex"
+            / "tool-events"
+            / (session.run_id or "unknown")
+            / "events.ndjson"
         )
         session.debug_log_path = str(
             workspace.path
@@ -958,7 +1003,7 @@ class AgentRunner:
                                         )
                                     )
 
-                        system_prompt_append, user_prompt = PromptBuilder.render_parts(
+                        prompt = PromptBuilder.render(
                             issue,
                             clarification_context=clarification_context,
                             pending_question=pending_question,
@@ -972,12 +1017,7 @@ class AgentRunner:
                             ),
                             previous_run_ids=getattr(session, "previous_run_ids", None),
                         )
-                    # F-?? prompt split: keep the constant workflow background
-                    # in the system prompt across every turn; only the
-                    # per-issue data lands in the user message.
-                    session._system_prompt_append = system_prompt_append
-                    session._issue_context = user_prompt  # Store for continuation
-                    prompt = user_prompt
+                    session._issue_context = prompt  # Store for continuation
                 else:
                     prompt = PromptBuilder.build_continuation_prompt(
                         turn_number=turn_number,
@@ -1002,7 +1042,7 @@ class AgentRunner:
                 if session.run_id:
                     if session._transcript_storage is None:
                         try:
-                            from clawcodex_ext.services.session_storage import SessionStorage
+                            from src.services.session_storage import SessionStorage
 
                             session._transcript_storage = SessionStorage(
                                 session_id=session.run_id,
@@ -1083,16 +1123,6 @@ class AgentRunner:
                     run_id=session.run_id,
                     debug_log_path=session.debug_log_path,
                     env=getattr(self.agent_config, "env", None) or {},
-                    timeout_s=self.agent_config.run_timeout_ms / 1000.0,
-                    # F-?? prompt split: keep the constant workflow background
-                    # in the system prompt across every turn (turn 0 sets it
-                    # via render_parts; turn > 0 reads it from the session).
-                    # This mirrors CCB's "rich system + short user" structure
-                    # and stops the daemon from re-sending 5KB of background
-                    # in every user message.
-                    append_system_prompt=getattr(
-                        session, "_system_prompt_append", None
-                    ),
                 )
                 runner = QueryRunner(query_config)
 
@@ -1124,7 +1154,6 @@ class AgentRunner:
                         event_tool_name = getattr(event, "tool_name", None)
                         if event_tool_name:
                             session.last_tool_name = event_tool_name
-                        event_reason = getattr(event, "reason", None)
                         append_debug_event(
                             session.debug_log_path,
                             "agent_runner.event",
@@ -1135,7 +1164,6 @@ class AgentRunner:
                             turn=turn_number,
                             tool_count=tool_count,
                             output_len=len(session.output_text),
-                            reason=event_reason,
                         )
                         if isinstance(event, TextDelta):
                             session.output_text += event.content
@@ -2344,6 +2372,8 @@ class AgentRunner:
         Invoked via ``asyncio.to_thread`` from async callers so the
         up-to-10s subprocess never blocks the orchestrator event loop.
         """
+        import subprocess
+
         return subprocess.run(
             args,
             cwd=cwd,
