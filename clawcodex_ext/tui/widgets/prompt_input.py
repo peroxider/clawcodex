@@ -125,7 +125,14 @@ class _PasteAwareInput(Input):
 
 
 _NAME_COLUMN_WIDTH = 22  # left column reserved for "/name (alias)"
-_MAX_VISIBLE_SUGGESTIONS = 10
+_MAX_VISIBLE_SUGGESTIONS = 6
+
+# Paste placeholder thresholds — when a paste exceeds these, the input
+# shows a compact ``[Pasted text #N +K lines]`` placeholder instead of
+# dumping raw content into the single-line buffer.
+_PASTE_CHARS_THRESHOLD = 800
+_PASTE_NEWLINES_THRESHOLD = 2
+_PASTE_PLACEHOLDER_RE = re.compile(r"\[Pasted text #(\d+)(?: \+(\d+) lines)?\]")
 
 
 class _SlashSuggestions(OptionList):
@@ -325,6 +332,10 @@ class PromptInput(Vertical):
         # Round 2 / WI-R2.5: most-recent bracketed paste classification.
         # Test seam — the host reads :class:`PromptPasted` instead.
         self._last_paste: PasteInfo | None = None
+        # Paste placeholder state: blobs store original text indexed by
+        # auto-increment ID; the input displays a compact placeholder.
+        self._paste_blobs: dict[int, str] = {}
+        self._paste_counter: int = 0
         # Round 2 / WI-R2.4: passive status surfaces around the input.
         # The mode indicator subscribes to ``VimState`` directly; the
         # footer reads ``VimState.enabled`` lazily. Both mounted as
@@ -379,6 +390,12 @@ class PromptInput(Vertical):
         port honours it by funnelling every bracketed paste through
         this single entry point.
 
+        Large pastes (over 800 chars or 3+ lines) are stored in
+        ``_paste_blobs`` and shown as a ``[Pasted text #N +K lines]``
+        placeholder instead of dumping raw content into the single-line
+        input buffer. The placeholder is expanded back to the original
+        text in :meth:`expand_pastes` before submission.
+
         Returns the :class:`PasteInfo` so callers (typically tests) can
         assert on classification without having to listen for the
         :class:`PromptPasted` message.
@@ -390,9 +407,20 @@ class PromptInput(Vertical):
             inp = self._input
             value = inp.value or ""
             pos = max(0, min(inp.cursor_position, len(value)))
-            new_value = value[:pos] + info.text + value[pos:]
-            inp.value = new_value
-            inp.cursor_position = pos + info.length
+            if info.length > _PASTE_CHARS_THRESHOLD or info.line_count > _PASTE_NEWLINES_THRESHOLD:
+                # Large paste: store blob, show placeholder
+                self._paste_counter += 1
+                blob_id = self._paste_counter
+                self._paste_blobs[blob_id] = info.text
+                extra = f" +{info.line_count} lines" if info.line_count > 1 else ""
+                placeholder = f"[Pasted text #{blob_id}{extra}]"
+                new_value = value[:pos] + placeholder + value[pos:]
+                inp.value = new_value
+                inp.cursor_position = pos + len(placeholder)
+            else:
+                new_value = value[:pos] + info.text + value[pos:]
+                inp.value = new_value
+                inp.cursor_position = pos + info.length
         # Pasted content must never reopen the slash palette; the user
         # paste-bombed the prompt and likely wants to keep typing or
         # submit. Same rationale as the TS ``usePasteHandler`` reset.
@@ -407,6 +435,47 @@ class PromptInput(Vertical):
         """Most recent classified paste (test seam)."""
 
         return self._last_paste
+
+    def expand_pastes(self, text: str) -> str:
+        """Replace all paste placeholders with their original content.
+
+        Called from :meth:`on_input_submitted` so the model sees
+        the full pasted text, not the ``[Pasted text #N]`` placeholder.
+        Unknown / expired blob IDs are left as-is (defensive).
+        """
+        def _replace(m: re.Match) -> str:
+            blob_id = int(m.group(1))
+            orig = self._paste_blobs.get(blob_id)
+            if orig is not None:
+                return orig
+            return m.group(0)  # unknown blob — leave placeholder intact
+        return _PASTE_PLACEHOLDER_RE.sub(_replace, text)
+
+    def _splice_at_mention(self, selected_id: str) -> None:
+        """Replace the ``@<token>`` under the cursor with the chosen ID.
+
+        Called when the user presses Enter/Tab on a highlighted @file
+        or @agent suggestion.  Finds the ``@`` token at the cursor
+        position and replaces the entire token (including the ``@``
+        prefix) with the selected completion text, leaving the cursor
+        at the end of the replacement so the user can keep typing.
+        """
+        inp = self._input
+        value = inp.value or ""
+        pos = inp.cursor_position
+        # Walk backward from cursor to find the start of the @token
+        start = pos
+        while start > 0 and not value[start - 1].isspace():
+            start -= 1
+        # Walk forward from cursor to find the end of the @token
+        end = pos
+        while end < len(value) and not value[end].isspace():
+            end += 1
+        # Replace the entire @token with the selected completion
+        prefix = value[:start]
+        suffix = value[end:]
+        inp.value = prefix + selected_id + suffix
+        inp.cursor_position = len(prefix) + len(selected_id)
 
     def action_clear_draft(self) -> None:
         self.clear()
@@ -485,11 +554,16 @@ class PromptInput(Vertical):
             self._hide_ghost_suggestion()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
-        text = (event.value or "").strip()
+        raw = (event.value or "").strip()
+        text = self.expand_pastes(raw)
         if not text:
             return
-        # If the palette is open and a row is highlighted, accept the
-        # selection instead of submitting the partial prompt.
+
+        # If the slash palette is open and a row is highlighted, accept
+        # the selection (fill the input) but do NOT submit — the user
+        # must press Enter again to actually send.  Mirrors the upstream
+        # behaviour where Enter on a highlighted row is "select + keep
+        # typing", not "select + submit".
         if not self._suggestions.has_class("-hidden"):
             idx = self._suggestions.highlighted
             if idx is not None:
@@ -499,21 +573,47 @@ class PromptInput(Vertical):
                     self._input.cursor_position = len(option.id)
                     self._hide_suggestions()
                     return
-        # If @ file suggestions are open and a row is highlighted, accept
-        # the selection instead of submitting.
+
+        # If @ file suggestions are open and a row is highlighted,
+        # splice the selection into the input buffer, replacing the
+        # current ``@<token>`` with the chosen file path.  The user
+        # can then continue typing or press Enter again to submit.
         if not self._at_file_suggestions.has_class("-hidden"):
             idx = self._at_file_suggestions.highlighted
             if idx is not None:
                 option = self._at_file_suggestions.get_option_at_index(idx)
                 if option is not None and option.id and option.id != text:
-                    self._input.value = option.id
-                    self._input.cursor_position = len(option.id)
+                    self._splice_at_mention(option.id)
                     self._hide_at_file_suggestions()
                     return
+
+        # If agent suggestions are open, splice similarly.
+        if not self._agent_suggestions.has_class("-hidden"):
+            idx = self._agent_suggestions.highlighted
+            if idx is not None:
+                option = self._agent_suggestions.get_option_at_index(idx)
+                if option is not None and option.id and option.id != text:
+                    self._splice_at_mention(option.id)
+                    self._hide_agent_suggestions()
+                    return
+
+        # If message-history suggestions are open, accept by filling.
+        if not self._message_suggestions.has_class("-hidden"):
+            idx = self._message_suggestions.highlighted
+            if idx is not None:
+                option = self._message_suggestions.get_option_at_index(idx)
+                if option is not None and option.id and option.id != text:
+                    self._input.value = option.id
+                    self._input.cursor_position = len(option.id)
+                    self._hide_message_suggestions()
+                    return
+
         self._history.append(text)
         self._history_pos = None
         self._hide_suggestions()
         self._hide_at_file_suggestions()
+        self._hide_agent_suggestions()
+        self._hide_message_suggestions()
         self._hide_ghost_suggestion()
         self._input.value = ""
         ## _log(f'[prompt_input] posting PromptSubmitted: {text}')
@@ -836,8 +936,7 @@ class PromptInput(Vertical):
             return
 
         # Rank via shared helper. The TUI surfaces up to
-        # ``_MAX_VISIBLE_SUGGESTIONS`` (10) entries, more than the REPL's
-        # 5 to compensate for Textual popup height.
+        # ``_MAX_VISIBLE_SUGGESTIONS`` (6) entries to keep the popup compact.
         ranked = rank_message_history(history, token_lower, limit=_MAX_VISIBLE_SUGGESTIONS)
 
         if not ranked:
