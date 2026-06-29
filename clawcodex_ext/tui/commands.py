@@ -89,6 +89,9 @@ class CommandSuggestion:
     two-column ``/name  description`` layout. ``tag`` is an optional
     short label (e.g. ``"workflow"``) and ``aliases`` is the list of
     alternative names — both surface in the display row.
+    ``takes_args`` is true when the command accepts argument context
+    (e.g. ``/model gpt-4`` or ``/theme dark``), in which case selecting
+    the command appends a trailing space instead of submitting.
     """
 
     name: str  # without the leading slash
@@ -96,6 +99,7 @@ class CommandSuggestion:
     aliases: tuple[str, ...] = ()
     tag: str | None = None
     source: str = "builtin"
+    takes_args: bool = False
 
     @property
     def slash(self) -> str:

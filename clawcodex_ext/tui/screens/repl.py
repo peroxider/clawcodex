@@ -178,6 +178,9 @@ class REPLScreen(Screen):
         app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
         if hasattr(app, "app_state"):
             self.status_bar.bind_state(app.app_state)
+        # Drive the footer's "esc to interrupt" hint off the same busy
+        # signal as the spinner (single source of truth — F-38).
+        self.status_bar.bind_footer(self.prompt_input._footer)
         # Set the initial permission mode on the status bar.
         try:
             from src.permissions.modes import to_external_permission_mode
@@ -249,6 +252,23 @@ class REPLScreen(Screen):
             # spinner (the echo row mounts synchronously; the worker
             # fills in the output when the command finishes).
             app.run_bash_mode(text[1:], self.transcript)
+            return
+        if text.startswith("#"):
+            # C9 memory-note append: persist the note to ~/.claude/CLAUDE.md
+            # and show an acknowledgement in the transcript, no agent turn.
+            from src.services.memory_append import append_memory_note, pick_saving_message
+
+            note = text[1:]
+            ok = append_memory_note(
+                str(Path.home() / ".claude" / "CLAUDE.md"), note
+            )
+            if ok:
+                msg = pick_saving_message()
+                self.transcript.append_system(msg, style="success")
+            else:
+                self.transcript.append_system(
+                    "Failed to save memory note", style="error"
+                )
             return
         # F-89: expand @agent-name mentions in TUI.
         try:

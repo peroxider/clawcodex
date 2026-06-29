@@ -299,6 +299,7 @@ class PromptInput(Vertical):
         suggestions_provider: Callable[[], list[CommandSuggestion]] | None = None,
         message_history_provider: Callable[[], list[str]] | None = None,
         agents_provider: Callable[[], list[Any]] | None = None,
+        files_provider: Callable[[], list[str]] | None = None,
         cwd: str | os.PathLike[str] | None = None,
         vim_mode: bool = False,
         accept_suggestion_key: str = "c-e",
@@ -309,6 +310,7 @@ class PromptInput(Vertical):
         self._suggestions_provider = suggestions_provider
         self._message_history_provider = message_history_provider
         self._agents_provider = agents_provider
+        self._files_provider = files_provider
         self._message_completions: list[str] = []
         self._message_completion_pos: int | None = None
         self._history: list[str] = []
@@ -347,6 +349,9 @@ class PromptInput(Vertical):
         self._file_cache: list[str] = []
         self._file_cache_bitmaps: list[int] = []
         self._file_cache_built_at: float = 0.0
+        # ---- suggest mode: tracks which popup type is active for
+        #      unified key handling (F-38 Enter/Tab separation) ----
+        self._suggest_mode: str = ""  # "slash" | "at_file" | "at_agent" | "message" | ""
 
     def compose(self) -> ComposeResult:
         yield self._mode_indicator
@@ -559,54 +564,14 @@ class PromptInput(Vertical):
         if not text:
             return
 
-        # If the slash palette is open and a row is highlighted, accept
-        # the selection (fill the input) but do NOT submit — the user
-        # must press Enter again to actually send.  Mirrors the upstream
-        # behaviour where Enter on a highlighted row is "select + keep
-        # typing", not "select + submit".
-        if not self._suggestions.has_class("-hidden"):
-            idx = self._suggestions.highlighted
-            if idx is not None:
-                option = self._suggestions.get_option_at_index(idx)
-                if option is not None and option.id and option.id != text:
-                    self._input.value = option.id
-                    self._input.cursor_position = len(option.id)
-                    self._hide_suggestions()
-                    return
-
-        # If @ file suggestions are open and a row is highlighted,
-        # splice the selection into the input buffer, replacing the
-        # current ``@<token>`` with the chosen file path.  The user
-        # can then continue typing or press Enter again to submit.
-        if not self._at_file_suggestions.has_class("-hidden"):
-            idx = self._at_file_suggestions.highlighted
-            if idx is not None:
-                option = self._at_file_suggestions.get_option_at_index(idx)
-                if option is not None and option.id and option.id != text:
-                    self._splice_at_mention(option.id)
-                    self._hide_at_file_suggestions()
-                    return
-
-        # If agent suggestions are open, splice similarly.
-        if not self._agent_suggestions.has_class("-hidden"):
-            idx = self._agent_suggestions.highlighted
-            if idx is not None:
-                option = self._agent_suggestions.get_option_at_index(idx)
-                if option is not None and option.id and option.id != text:
-                    self._splice_at_mention(option.id)
-                    self._hide_agent_suggestions()
-                    return
-
-        # If message-history suggestions are open, accept by filling.
-        if not self._message_suggestions.has_class("-hidden"):
-            idx = self._message_suggestions.highlighted
-            if idx is not None:
-                option = self._message_suggestions.get_option_at_index(idx)
-                if option is not None and option.id and option.id != text:
-                    self._input.value = option.id
-                    self._input.cursor_position = len(option.id)
-                    self._hide_message_suggestions()
-                    return
+        # If any suggestion popup is open and a row is highlighted,
+        # accept the selection (fill / splice) but do NOT submit —
+        # the user must press Enter again to actually send.  Mirrors the
+        # upstream behaviour where Enter on a highlighted row is "select
+        # + keep typing", not "select + submit" (F-38 unified path).
+        if self._suggest_mode:
+            if self._accept_suggestion():
+                return
 
         self._history.append(text)
         self._history_pos = None
@@ -622,8 +587,20 @@ class PromptInput(Vertical):
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Handle Enter/Space on a suggestion row — insert the command."""
         if event.option.id:
-            self._input.value = event.option.id
-            self._input.cursor_position = len(event.option.id)
+            selected_text = event.option.id
+            # Check takes_args for slash commands (F-38 _arg_lookup)
+            if event.option_list is self._suggestions and self._suggestions_provider is not None:
+                try:
+                    suggestions = self._suggestions_provider() or []
+                    for s in suggestions:
+                        if isinstance(s, CommandSuggestion) and s.slash == selected_text:
+                            if s.takes_args and not selected_text.endswith(" "):
+                                selected_text += " "
+                            break
+                except Exception:
+                    pass
+            self._input.value = selected_text
+            self._input.cursor_position = len(selected_text)
             # ``OptionList.OptionSelected`` exposes its source list via
             # ``option_list`` (``Message.sender`` is not an attribute on
             # the base ``Message`` in this Textual version, so the old
@@ -688,15 +665,18 @@ class PromptInput(Vertical):
                 event.stop()
                 return
 
-        # Context-aware Tab: accept the ghost-text suggestion when one
-        # is visible, otherwise let the event bubble up to the App's
-        # default ``focus_next`` binding. Mirrors the upstream
-        # ``useTypeahead`` Autocomplete-context behaviour where ``tab``
-        # is only bound to ``autocomplete:accept`` while a suggestion
-        # is shown. Crucially, we do NOT call ``event.stop()`` when
-        # the ghost is hidden — that would break the standard
-        # widget-to-widget focus navigation.
+        # Context-aware Tab: if any suggestion popup is open, accept the
+        # highlighted item (F-38 Enter/Tab separation). Otherwise accept
+        # the ghost-text suggestion when one is visible. If neither,
+        # let the event bubble up to the App's default ``focus_next``
+        # binding — crucially we do NOT call ``event.stop()`` in that
+        # case so widget-to-widget focus navigation still works.
         if key == "tab" and self._accept_tab_alias:
+            if self._suggest_mode:
+                accepted = self._accept_suggestion()
+                if accepted:
+                    event.stop()
+                    return
             if not self._ghost_suggestion.has_class("-hidden"):
                 self._accept_ghost_suggestion()
                 event.stop()
@@ -840,11 +820,13 @@ class PromptInput(Vertical):
             options = self._build_suggestion_options(partial)
             if not options:
                 self._hide_suggestions()
+                self._suggest_mode = ""
                 return
             self._suggestions.clear_options()
             self._suggestions.add_options(options)
             self._suggestions.highlighted = 0
             self._suggestions.remove_class("-hidden")
+            self._suggest_mode = "slash"
             return
 
         # Check for ``@agent-<type>`` mention token (takes priority over
@@ -896,6 +878,8 @@ class PromptInput(Vertical):
         if not self._suggestions.has_class("-hidden"):
             self._suggestions.add_class("-hidden")
             self._suggestions.clear_options()
+        if self._suggest_mode == "slash":
+            self._suggest_mode = ""
 
     def _refresh_message_suggestions(self, text: str, cursor: int) -> None:
         """Refresh message-history completions when not in slash mode.
@@ -952,10 +936,87 @@ class PromptInput(Vertical):
             self._message_suggestions.add_option(Option(display, id=full_msg))
         self._message_suggestions.highlighted = 0
         self._message_suggestions.remove_class("-hidden")
+        self._suggest_mode = "message"
 
     def _hide_message_suggestions(self) -> None:
         if not self._message_suggestions.has_class("-hidden"):
             self._message_suggestions.add_class("-hidden")
+            self._message_suggestions.clear_options()
+        if self._suggest_mode == "message":
+            self._suggest_mode = ""
+
+    # ---- unified suggestion accept ----
+
+    def _accept_suggestion(self) -> bool:
+        """Accept the currently highlighted suggestion from whichever popup
+        is open. Returns True if a suggestion was accepted, False if no
+        popup is visible or nothing was highlighted.
+
+        This is the single entry point for both Enter (when a popup is open)
+        and Tab (F-38) — the caller decides whether to stop the key event.
+        """
+        # Slash command popup
+        if not self._suggestions.has_class("-hidden"):
+            idx = self._suggestions.highlighted
+            if idx is not None:
+                option = self._suggestions.get_option_at_index(idx)
+                if option is not None and option.id:
+                    # Check if the selected command takes arguments:
+                    # if so, append a trailing space so the user can type
+                    # args immediately (F-38 _arg_lookup).
+                    selected_text = option.id
+                    # Check suggestions_provider for takes_args info
+                    if self._suggestions_provider is not None:
+                        try:
+                            suggestions = self._suggestions_provider() or []
+                            for s in suggestions:
+                                if isinstance(s, CommandSuggestion) and s.slash == selected_text:
+                                    if s.takes_args and not selected_text.endswith(" "):
+                                        selected_text += " "
+                                    break
+                        except Exception:
+                            pass
+                    self._input.value = selected_text
+                    self._input.cursor_position = len(selected_text)
+                    self._hide_suggestions()
+                    return True
+            return False
+
+        # @ file suggestions → splice
+        if not self._at_file_suggestions.has_class("-hidden"):
+            idx = self._at_file_suggestions.highlighted
+            if idx is not None:
+                option = self._at_file_suggestions.get_option_at_index(idx)
+                if option is not None and option.id:
+                    self._splice_at_mention(option.id)
+                    self._hide_at_file_suggestions()
+                    return True
+            return False
+
+        # @ agent suggestions → splice
+        if not self._agent_suggestions.has_class("-hidden"):
+            idx = self._agent_suggestions.highlighted
+            if idx is not None:
+                option = self._agent_suggestions.get_option_at_index(idx)
+                if option is not None and option.id:
+                    self._splice_at_mention(option.id)
+                    self._hide_agent_suggestions()
+                    return True
+            return False
+
+        # Message-history suggestions → fill input
+        if not self._message_suggestions.has_class("-hidden"):
+            idx = self._message_suggestions.highlighted
+            if idx is not None:
+                option = self._message_suggestions.get_option_at_index(idx)
+                if option is not None and option.id:
+                    self._input.value = option.id
+                    self._input.cursor_position = len(option.id)
+                    self._hide_message_suggestions()
+                    return True
+            return False
+
+        return False
 
     # ---- ``@`` file suggestion plumbing ----
 
@@ -983,11 +1044,34 @@ class PromptInput(Vertical):
         """Refresh the ``@`` file-suggestion popup based on the typed query.
 
         Two code paths:
+        * If a custom ``files_provider`` is set, use it exclusively.
         * Path-like tokens (``@/...``, ``@~/...``, ``@./...``, ``@../...``)
           walk the filesystem directly via ``_path_completions``.
         * Plain queries (``@src/uti``) are matched against the cached
           project-file index via ``_filter_candidates``.
         """
+        # Custom files_provider takes priority when set (F-38).
+        if self._files_provider is not None:
+            try:
+                entries = self._files_provider()
+            except Exception:
+                entries = None
+            if not entries:
+                self._hide_at_file_suggestions()
+                return
+            matches = [p for p in entries if query.lower() in p.lower()]
+            matches = matches[:_AT_FILE_MAX_SUGGESTIONS]
+            if not matches:
+                self._hide_at_file_suggestions()
+                return
+            self._at_file_suggestions.clear_options()
+            for path in matches:
+                self._at_file_suggestions.add_option(Option(path, id="@" + path))
+            self._at_file_suggestions.highlighted = 0
+            self._at_file_suggestions.remove_class("-hidden")
+            self._suggest_mode = "at_file"
+            return
+
         if _is_path_like_token(query):
             entries = _path_completions(query, _AT_FILE_MAX_SUGGESTIONS)
             if not entries:
@@ -1002,6 +1086,7 @@ class PromptInput(Vertical):
                 )
             self._at_file_suggestions.highlighted = 0
             self._at_file_suggestions.remove_class("-hidden")
+            self._suggest_mode = "at_file"
             return
 
         candidates, bitmaps = self._get_cached_file_list()
@@ -1026,11 +1111,14 @@ class PromptInput(Vertical):
             self._at_file_suggestions.add_option(Option(path, id="@" + path))
         self._at_file_suggestions.highlighted = 0
         self._at_file_suggestions.remove_class("-hidden")
+        self._suggest_mode = "at_file"
 
     def _hide_at_file_suggestions(self) -> None:
         if not self._at_file_suggestions.has_class("-hidden"):
             self._at_file_suggestions.add_class("-hidden")
             self._at_file_suggestions.clear_options()
+        if self._suggest_mode == "at_file":
+            self._suggest_mode = ""
 
     def _refresh_agent_suggestions(self, query: str) -> None:
         """Refresh the ``@agent-<type>`` suggestion popup.
@@ -1079,11 +1167,14 @@ class PromptInput(Vertical):
             )
         self._agent_suggestions.highlighted = 0
         self._agent_suggestions.remove_class("-hidden")
+        self._suggest_mode = "at_agent"
 
     def _hide_agent_suggestions(self) -> None:
         if not self._agent_suggestions.has_class("-hidden"):
             self._agent_suggestions.add_class("-hidden")
             self._agent_suggestions.clear_options()
+        if self._suggest_mode == "at_agent":
+            self._suggest_mode = ""
 
     def _navigate_history(self, direction: int) -> None:
         """``direction`` = +1 means older (Up); -1 means newer (Down)."""

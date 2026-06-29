@@ -3771,6 +3771,30 @@ class ClawcodexREPL:
                         )
                     continue
 
+                if user_input.startswith("#"):
+                    # C9 memory-note append: persist the note to
+                    # ~/.claude/CLAUDE.md and show an acknowledgement,
+                    # no agent turn.
+                    from src.services.memory_append import (
+                        append_memory_note,
+                        pick_saving_message,
+                    )
+                    from pathlib import Path
+
+                    note = user_input[1:]
+                    ok = append_memory_note(
+                        str(Path.home() / ".claude" / "CLAUDE.md"), note
+                    )
+                    if ok:
+                        self.console.print(
+                            f"[success]{pick_saving_message()}[/success]"
+                        )
+                    else:
+                        self.console.print(
+                            "[error]Failed to save memory note[/error]"
+                        )
+                    continue
+
                 _cron_task_id = self._extract_cron_task_id(user_input)
                 if _cron_task_id:
                     self._claim_cron_task(_cron_task_id)
