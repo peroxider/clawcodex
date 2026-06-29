@@ -85,7 +85,7 @@ import websockets
 from websockets.asyncio.client import ClientConnection
 from websockets.asyncio.client import connect as ws_connect
 
-from src.utils.env import is_env_truthy
+from clawcodex_ext.utils.env import is_env_truthy
 
 logger = logging.getLogger(__name__)
 

@@ -43,13 +43,13 @@ class SkillRegistryExt:
 
         Args:
             loader_module: Module containing upstream get_all_skills function.
-                         Defaults to src.skills.loader.
+                         Defaults to clawcodex_ext.skills.loader.
             project_root: Project root path for skill resolution.
         """
         if loader_module is None:
             import importlib
 
-            loader_module = importlib.import_module("src.skills.loader")
+            loader_module = importlib.import_module("clawcodex_ext.skills.loader")
         self._loader = loader_module
         self._callbacks: list[SkillRegistrationCallback] = []
         self._project_root = project_root

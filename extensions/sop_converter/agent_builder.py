@@ -13,7 +13,7 @@ from typing import Any
 
 from clawcodex_ext.agent.agent_definitions import AgentDefinition, AgentSource
 from clawcodex_ext.agent.constants import MAX_INLINE_TOOL_DISPLAY, POS_PROXY_BASE_TOOLS
-from src.skills.model import Skill
+from clawcodex_ext.skills.model import Skill
 from .source_parser import SourceComponent
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .skill_grouper import SkillSpec, MappingRule

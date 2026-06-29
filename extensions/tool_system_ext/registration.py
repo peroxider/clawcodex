@@ -6,7 +6,7 @@ Called by ``src/tool_system/defaults.py:build_default_registry``.
 
 from __future__ import annotations
 
-from src.tool_system.build_tool import Tool
+from clawcodex_ext.tool_system.build_tool import Tool
 
 from clawcodex_ext.tool_system.tools.progress_report import ProgressReportTool
 from clawcodex_ext.tool_system.tools.task_directives import TaskDirectivesTool

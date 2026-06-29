@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from src.skills.bundled_skills import BundledSkillDefinition, register_bundled_skill
+from clawcodex_ext.skills.bundled_skills import BundledSkillDefinition, register_bundled_skill
 
 from .dream import register_dream_skill
 

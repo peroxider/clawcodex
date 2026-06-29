@@ -61,7 +61,7 @@ def save_to_session_storage(session: Any) -> None:
     keys on the LAST line of the transcript).
     """
     try:
-        from src.services.session_storage import SessionStorage
+        from clawcodex_ext.services.session_storage import SessionStorage
 
         storage = SessionStorage(session_id=session.session_id)
         storage.init_metadata(
