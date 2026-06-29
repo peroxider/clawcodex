@@ -244,6 +244,12 @@ class REPLScreen(Screen):
         if text.startswith("/"):
             if app.handle_local_slash_command(text, self.transcript):
                 return
+        if text.startswith("!"):
+            # C4 bash-mode: direct execution, no agent turn, no busy
+            # spinner (the echo row mounts synchronously; the worker
+            # fills in the output when the command finishes).
+            app.run_bash_mode(text[1:], self.transcript)
+            return
         # F-89: expand @agent-name mentions in TUI.
         try:
             from clawcodex_ext.agent.load_agents_dir import (

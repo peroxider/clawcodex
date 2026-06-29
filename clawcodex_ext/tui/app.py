@@ -1128,6 +1128,43 @@ class ClawCodexTUI(App):
         if self._agent_bridge.cancel():
             self.announcer.announce("Cancelling…", level="assertive", notify=False)
 
+    # ---- bash mode ----
+    def run_bash_mode(self, command: str, transcript: Any) -> None:
+        """Execute a user-typed ``!command`` directly (no agent turn).
+
+        Feeds the bash input + output into the conversation (so the model
+        sees what happened on its next turn) and displays the result in
+        the transcript. Commands are refused if an agent run is in flight.
+
+        Divergences from TS: sequential only (refused while busy); no
+        live progress streaming or ESC cancel yet.
+        """
+        if self._agent_bridge.busy:
+            return  # agent run in flight — refuse silently
+
+        from src.services.bash_mode import run_bash_mode_command
+
+        outcome = run_bash_mode_command(command, self.tool_context)
+
+        # Append conversation texts so the model sees them on next turn.
+        for conv_text in outcome.conversation_texts:
+            self.session.conversation.add_user_message(conv_text)
+
+        # Display in transcript.
+        text = outcome.command
+        if outcome.ok:
+            if outcome.stdout:
+                text += f"\n{outcome.stdout}"
+            if outcome.stderr:
+                text += f"\n[stderr]\n{outcome.stderr}"
+        else:
+            text += f"\n[error]\n{outcome.error or outcome.stderr}"
+        transcript.append_user(f"! {outcome.command}")
+        transcript.append_system(
+            text,
+            style="success" if outcome.ok else "error",
+        )
+
     # ---- helpers ----
     def _update_metadata_last_input(self, text: str) -> None:
         """Update the ``last_user_input`` field in SessionStorage metadata."""
