@@ -270,6 +270,56 @@ class PromptBuilder:
 
         return rendered
 
+    # F-?? prompt split: marker that separates the constant workflow
+    # background (system prompt candidate) from the per-issue data
+    # (user message candidate) in workflow.md. Lives in workflow.md
+    # between the system section and the issue section. The marker is
+    # an HTML comment so it is invisible in Markdown rendering.
+    USER_MESSAGE_MARKER = "<!-- === USER MESSAGE === -->"
+
+    @staticmethod
+    def render_parts(
+        issue: Any,
+        attempt: int | None = None,
+        clarification_context: str | None = None,
+        pending_question: str | None = None,
+        options: list[str] | None = None,
+        session: Any | None = None,
+        python_executable: str | None = None,
+        previous_run_ids: list[str] | None = None,
+        conflict_files: tuple[str, ...] | list[str] | None = None,
+    ) -> tuple[str, str]:
+        """Render prompt split into (system, user) by USER_MESSAGE_MARKER.
+
+        The marker lives in workflow.md between the constant background
+        / constraint block (system) and the per-issue data block (user).
+        The system part is appended to the headless session's effective
+        system prompt (alongside CLAUDE.md + git status + style) so the
+        daemon sees the same "rich system + short user" structure as
+        CCB's interactive session. The user part becomes the per-turn
+        user message.
+
+        Falls back to (full, "") when the marker is missing so callers
+        that pass an old / un-migrated workflow.md still work — the full
+        prompt lands in user and the system append is empty.
+        """
+        full = PromptBuilder.render(
+            issue,
+            attempt=attempt,
+            clarification_context=clarification_context,
+            pending_question=pending_question,
+            options=options,
+            session=session,
+            python_executable=python_executable,
+            previous_run_ids=previous_run_ids,
+            conflict_files=conflict_files,
+        )
+        marker = PromptBuilder.USER_MESSAGE_MARKER
+        if marker in full:
+            system_part, user_part = full.split(marker, 1)
+            return system_part.strip(), user_part.strip()
+        return full, ""
+
     @staticmethod
     def render_rebase(
         *,

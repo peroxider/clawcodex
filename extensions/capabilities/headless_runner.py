@@ -50,6 +50,11 @@ class HeadlessSessionOptions:
     # Environment variables merged into the headless session's
     # subprocess env. Values override inherited daemon env.
     env: dict[str, str] = field(default_factory=dict)
+    # F-?? prompt split: text appended to the effective system prompt
+    # built by ``run_headless``. Carries the constant workflow background
+    # (project, conventions, decoupling principles) so the per-turn user
+    # message can be just the issue content / continuation.
+    append_system_prompt: str | None = None
 
 
 def run_headless_session(
@@ -97,6 +102,7 @@ def run_headless_session(
         stderr=options.stderr,
         on_event=options.on_event,
         env=options.env,
+        append_system_prompt=options.append_system_prompt or "",
     )
     return run_headless(options_legacy)
 

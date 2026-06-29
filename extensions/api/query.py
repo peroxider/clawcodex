@@ -41,7 +41,8 @@ if TYPE_CHECKING:
 #
 # TODO(F-108 P108-E): plumb this through ``AgentConfig.freeze.agent_loop_timeout_s``
 # so the value is configurable per-run instead of being hard-coded.
-_QUERY_TIMEOUT_S = 300.0
+# Now plumbed via QueryConfig.timeout_s (agent_runner passes run_timeout_ms / 1000).
+
 
 
 @dataclass
@@ -60,6 +61,19 @@ class QueryConfig:
     # Environment variables merged into the headless session's Bash
     # subprocess env. Values override inherited daemon env.
     env: dict[str, str] | None = None
+    # F-?? prompt split: when set, this text is appended to the
+    # ``effective_system_prompt`` built by ``run_headless``. The daemon's
+    # ``agent_runner`` uses this to keep the constant workflow background
+    # (project, conventions, decoupling principles) in the system prompt
+    # across every turn, while the per-issue data (identifier, description,
+    # labels) lives in ``prompt`` as the user message.
+    append_system_prompt: str | None = None
+    # Per-run wall-clock timeout in seconds. When > 0, the event-drain
+    # loop in ``stream_events`` enforces this budget and yields
+    # ``SessionComplete(reason="exit_code=124")`` on expiry.  Default
+    # 1800s (30 min) matches the orchestrator's ``run_timeout_ms``.
+    # Set to 0 to disable (F-108 §十八 design decision #5).
+    timeout_s: float = 1800.0
 
 
 @dataclass
@@ -200,6 +214,7 @@ class QueryRunner:
             stderr=stdout,
             on_event=on_event,
             env=self.config.env or {},
+            append_system_prompt=self.config.append_system_prompt,
         )
 
         loop = asyncio.get_running_loop()
@@ -242,13 +257,13 @@ class QueryRunner:
         # Drain the event queue while the headless session runs in the background.
         # A short timeout lets us poll for completion without busy-waiting.
         #
-        # F-108 P108-B: the polling loop also enforces ``_QUERY_TIMEOUT_S``
-        # (default 300 s). ``asyncio.wait_for`` cannot cancel an executor
+        # F-108 P108-B: the polling loop also enforces ``timeout_s`` from
+        # ``QueryConfig`` (default 1800 s). ``asyncio.wait_for`` cannot cancel an executor
         # future — ``future.done()`` would stay False even after
         # ``wait_for`` raised — so the budget check lives INSIDE the
         # loop instead of wrapping the final ``await future``. On
         # timeout we break out and surface ``exit_code=124``.
-        timeout_s = _QUERY_TIMEOUT_S
+        timeout_s = self.config.timeout_s
         loop_started_at = time.monotonic()
         timed_out = False
         while True:

@@ -136,6 +136,101 @@ class TestRenderPythonExecutable(unittest.TestCase):
         self.assertNotIn(_LEGACY_HARDCODED_PATH, rendered)
 
 
+class TestRenderParts(unittest.TestCase):
+    """F-?? prompt split: ``render_parts()`` returns (system, user) tuples
+    when the workflow template contains the USER_MESSAGE_MARKER."""
+
+    def setUp(self) -> None:
+        from extensions.orchestrator.prompt_builder import (
+            PromptBuilder,
+            get_workflow_store,
+        )
+        from pathlib import Path
+
+        # Load the project's workflow.md so the marker is present in the
+        # active template; otherwise the fallback _DEFAULT_PROMPT (which
+        # has no marker) would short-circuit render_parts to (full, "").
+        repo_root = Path(__file__).resolve().parents[2]
+        store = get_workflow_store()
+        store.load(str(repo_root / "workflow.md"))
+        self._prompt_builder = PromptBuilder
+
+    def tearDown(self) -> None:
+        from extensions.orchestrator.prompt_builder import get_workflow_store
+
+        # Reset the singleton so other tests aren't pinned to workflow.md
+        get_workflow_store().reset()
+
+    def test_marker_present_splits_into_two_nonempty_parts(self) -> None:
+        issue = _FakeIssue(
+            identifier="SPLIT-1",
+            title="Split test",
+            description="Body for split test.",
+            labels=["bug"],
+        )
+        system, user = self._prompt_builder.render_parts(issue)
+        self.assertTrue(system.strip(), "system part must be non-empty")
+        self.assertTrue(user.strip(), "user part must be non-empty")
+        # Marker itself must be stripped from both halves.
+        marker = self._prompt_builder.USER_MESSAGE_MARKER
+        self.assertNotIn(marker, system)
+        self.assertNotIn(marker, user)
+
+    def test_system_part_carries_workflow_background(self) -> None:
+        """The system half must include project background / constraints,
+        NOT the per-issue data."""
+        issue = _FakeIssue(
+            identifier="SPLIT-2",
+            title="Background check",
+            description="Body.",
+            labels=[],
+        )
+        system, _user = self._prompt_builder.render_parts(issue)
+        # Workflow.md system content includes "Decoupling principles" and
+        # "Your task:" — both must be in the system half.
+        self.assertIn("Decoupling principles", system)
+        self.assertIn("Your task:", system)
+        # Per-issue identifier must NOT be in the system half.
+        self.assertNotIn("SPLIT-2", system)
+
+    def test_user_part_carries_issue_data_only(self) -> None:
+        """The user half must contain the issue identifier / description /
+        labels and the closing instruction; NOT the workflow background."""
+        issue = _FakeIssue(
+            identifier="SPLIT-3",
+            title="User check",
+            description="Body for user check.",
+            labels=["bug", "priority:high"],
+        )
+        _system, user = self._prompt_builder.render_parts(issue)
+        self.assertIn("SPLIT-3", user)
+        self.assertIn("User check", user)
+        self.assertIn("Body for user check.", user)
+        self.assertIn("bug", user)
+        # Workflow background must NOT leak into user half.
+        self.assertNotIn("Decoupling principles", user)
+        self.assertNotIn("Your task:", user)
+
+    def test_fallback_when_marker_missing(self) -> None:
+        """If workflow.md lacks the marker, render_parts returns the
+        full prompt as system and an empty user string. This is the
+        backward-compat path for projects that haven't migrated yet."""
+        from unittest.mock import patch
+
+        issue = _FakeIssue(
+            identifier="FALLBACK-1",
+            title="Fallback",
+            description="Body.",
+            labels=[],
+        )
+        # Force render() to return a string WITHOUT the marker.
+        sentinel = "MARKERLESS_PROMPT_42"
+        with patch.object(self._prompt_builder, "render", return_value=sentinel):
+            system, user = self._prompt_builder.render_parts(issue)
+        self.assertEqual(system, sentinel)
+        self.assertEqual(user, "")
+
+
 class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):
     """Turn-N prompt (``build_continuation_prompt()``) honors ``python_executable``."""
 

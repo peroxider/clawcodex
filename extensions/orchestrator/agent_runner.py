@@ -9,6 +9,7 @@ import asyncio
 import logging
 import os
 import random
+import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -22,7 +23,7 @@ from .approval_policy import (
     get_approval_policy,
     ToolCallEvent as PolicyToolCallEvent,
 )
-from src.utils.git import get_file_status
+from clawcodex_ext.utils.git import get_file_status
 from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
@@ -953,7 +954,7 @@ class AgentRunner:
                                         )
                                     )
 
-                        prompt = PromptBuilder.render(
+                        system_prompt_append, user_prompt = PromptBuilder.render_parts(
                             issue,
                             clarification_context=clarification_context,
                             pending_question=pending_question,
@@ -967,7 +968,12 @@ class AgentRunner:
                             ),
                             previous_run_ids=getattr(session, "previous_run_ids", None),
                         )
-                    session._issue_context = prompt  # Store for continuation
+                    # F-?? prompt split: keep the constant workflow background
+                    # in the system prompt across every turn; only the
+                    # per-issue data lands in the user message.
+                    session._system_prompt_append = system_prompt_append
+                    session._issue_context = user_prompt  # Store for continuation
+                    prompt = user_prompt
                 else:
                     prompt = PromptBuilder.build_continuation_prompt(
                         turn_number=turn_number,
@@ -1073,6 +1079,16 @@ class AgentRunner:
                     run_id=session.run_id,
                     debug_log_path=session.debug_log_path,
                     env=getattr(self.agent_config, "env", None) or {},
+                    timeout_s=self.agent_config.run_timeout_ms / 1000.0,
+                    # F-?? prompt split: keep the constant workflow background
+                    # in the system prompt across every turn (turn 0 sets it
+                    # via render_parts; turn > 0 reads it from the session).
+                    # This mirrors CCB's "rich system + short user" structure
+                    # and stops the daemon from re-sending 5KB of background
+                    # in every user message.
+                    append_system_prompt=getattr(
+                        session, "_system_prompt_append", None
+                    ),
                 )
                 runner = QueryRunner(query_config)
 
@@ -1104,6 +1120,7 @@ class AgentRunner:
                         event_tool_name = getattr(event, "tool_name", None)
                         if event_tool_name:
                             session.last_tool_name = event_tool_name
+                        event_reason = getattr(event, "reason", None)
                         append_debug_event(
                             session.debug_log_path,
                             "agent_runner.event",
@@ -1114,6 +1131,7 @@ class AgentRunner:
                             turn=turn_number,
                             tool_count=tool_count,
                             output_len=len(session.output_text),
+                            reason=event_reason,
                         )
                         if isinstance(event, TextDelta):
                             session.output_text += event.content
@@ -2322,8 +2340,6 @@ class AgentRunner:
         Invoked via ``asyncio.to_thread`` from async callers so the
         up-to-10s subprocess never blocks the orchestrator event loop.
         """
-        import subprocess
-
         return subprocess.run(
             args,
             cwd=cwd,
