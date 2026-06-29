@@ -68,20 +68,20 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.bridge.bridge_api import (
+from clawcodex_ext.bridge.bridge_api import (
     BridgeFatalError,
     create_bridge_api_client,
     is_expired_error_type,
 )
-from src.bridge.poll_config_defaults import (
+from clawcodex_ext.bridge.poll_config_defaults import (
     DEFAULT_POLL_CONFIG,
     PollIntervalConfig,
 )
-from src.bridge.session_runner import (
+from extensions.ports.bridge.session_runner import (
     SessionSpawnerDeps,
     create_session_spawner,
 )
-from src.bridge.types import (
+from clawcodex_ext.bridge.types import (
     BridgeApiClient,
     BridgeConfig,
     SessionHandle,
@@ -89,11 +89,11 @@ from src.bridge.types import (
     SessionSpawner,
     SpawnMode,
 )
-from src.bridge.work_secret import (
+from clawcodex_ext.bridge.work_secret import (
     build_ccr_v2_sdk_url,
     decode_work_secret,
 )
-from src.bridge.worktree import (
+from clawcodex_ext.bridge.worktree import (
     WorktreePaths,
     create_agent_worktree,
     remove_agent_worktree,
@@ -632,7 +632,7 @@ class _BridgeDaemon:
         self.session_work_ids[session_id] = work_id
         # session_compat_ids cached for future title/archive ops that
         # the MVP doesn't yet exercise — populated for forward compat.
-        from src.bridge.session_id_compat import to_compat_session_id
+        from clawcodex_ext.bridge.session_id_compat import to_compat_session_id
 
         self.session_compat_ids[session_id] = to_compat_session_id(session_id)
         # Per-session timeout watchdog. ``--session-timeout SECONDS``

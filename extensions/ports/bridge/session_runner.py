@@ -41,8 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.bridge.debug_utils import debug_truncate
-from src.bridge.types import (
+from clawcodex_ext.bridge.debug_utils import debug_truncate
+from clawcodex_ext.bridge.types import (
     SessionActivity,
     SessionDoneStatus,
     SessionHandle,

@@ -64,32 +64,32 @@ from typing import Any
 
 import httpx
 
-from src.bridge.bridge_api import (
+from clawcodex_ext.bridge.bridge_api import (
     BridgeFatalError,
     create_bridge_api_client,
     is_expired_error_type,
 )
-from src.bridge.bridge_pointer import (
+from clawcodex_ext.bridge.bridge_pointer import (
     BridgePointer,
     clear_pointer,
     read_pointer,
     write_pointer,
 )
-from src.bridge.jwt_utils import TokenRefreshScheduler
-from src.bridge.poll_config_defaults import (
+from clawcodex_ext.bridge.jwt_utils import TokenRefreshScheduler
+from clawcodex_ext.bridge.poll_config_defaults import (
     DEFAULT_POLL_CONFIG,
     PollIntervalConfig,
 )
-from src.bridge.session_id_compat import (
+from clawcodex_ext.bridge.session_id_compat import (
     to_compat_session_id,
     to_infra_session_id,
 )
-from src.bridge.session_runner import (
+from extensions.ports.bridge.session_runner import (
     PermissionRequest,
     SessionSpawnerDeps,
     create_session_spawner,
 )
-from src.bridge.types import (
+from clawcodex_ext.bridge.types import (
     BridgeApiClient,
     BridgeConfig,
     SessionActivity,
@@ -97,7 +97,7 @@ from src.bridge.types import (
     SessionSpawnOpts,
     SessionSpawner,
 )
-from src.bridge.work_secret import (
+from clawcodex_ext.bridge.work_secret import (
     build_ccr_v2_sdk_url,
     build_sdk_url,
     decode_work_secret,

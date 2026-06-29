@@ -56,38 +56,38 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
-from src.bridge.bounded_uuid_set import BoundedUUIDSet
-from src.bridge.code_session_api import (
+from clawcodex_ext.bridge.bounded_uuid_set import BoundedUUIDSet
+from clawcodex_ext.bridge.code_session_api import (
     RemoteCredentials,
     create_code_session,
     fetch_remote_credentials,
 )
-from src.bridge.env_less_bridge_config import (
+from clawcodex_ext.bridge.env_less_bridge_config import (
     DEFAULT_ENV_LESS_BRIDGE_CONFIG,
     EnvLessBridgeConfig,
     get_env_less_bridge_config,
 )
-from src.bridge.flush_gate import FlushGate
-from src.bridge.jwt_utils import TokenRefreshScheduler
-from src.bridge.messaging import (
+from clawcodex_ext.bridge.flush_gate import FlushGate
+from clawcodex_ext.bridge.jwt_utils import TokenRefreshScheduler
+from clawcodex_ext.bridge.messaging import (
     extract_title_text,
     handle_ingress_message,
     is_eligible_bridge_message,
     make_result_message,
 )
-from src.bridge.messaging_handlers import (
+from clawcodex_ext.bridge.messaging_handlers import (
     ServerControlRequestHandlers,
     handle_server_control_request,
 )
-from src.bridge.repl_bridge_transport import (
+from clawcodex_ext.bridge.repl_bridge_transport import (
     ReplBridgeTransport,
     V2TransportOptions,
     create_v2_repl_transport,
 )
-from src.bridge.session_id_compat import to_compat_session_id
-from src.bridge.work_secret import build_ccr_v2_sdk_url
+from clawcodex_ext.bridge.session_id_compat import to_compat_session_id
+from clawcodex_ext.bridge.work_secret import build_ccr_v2_sdk_url
 from clawcodex_ext.types.messages import Message
-from src.utils.message_mappers import to_sdk_messages
+from clawcodex_ext.utils.message_mappers import to_sdk_messages
 
 logger = logging.getLogger(__name__)
 
