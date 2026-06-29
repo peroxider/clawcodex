@@ -44,6 +44,14 @@ class RunReport:
     # existing reader code that constructs ``RunReport(**legacy_dict)``
     # keeps working (the field defaults to None).
     tool_events_path: str | None = None
+    # F-46: orthogonal permission fields — captured once at session start
+    # so the report reflects the *effective* permission posture regardless
+    # of whether the user authored a legacy ``permission_mode`` string or
+    # the new three-field tuple.
+    permission_mode: str | None = None
+    audit_log: str | None = None
+    interactive: bool | None = None
+    default_decision: str | None = None
 
 
 def write(
@@ -66,6 +74,11 @@ def write(
     verification_output: str | None = None,
     output_text: str = "",
     tool_events_path: str | None = None,
+    # F-46: orthogonal permission fields forwarded from AgentRunner.
+    permission_mode: str | None = None,
+    audit_log: str | None = None,
+    interactive: bool | None = None,
+    default_decision: str | None = None,
 ) -> ReportResult:
     issue_id = str(getattr(issue, "id", None) or "unknown")
     safe_tracker = _safe_segment(tracker or "unknown")
@@ -93,6 +106,11 @@ def write(
         verification_output=verification_output,
         output_excerpt=_excerpt(output_text),
         tool_events_path=tool_events_path,
+        # F-46: orthogonal permission fields
+        permission_mode=permission_mode,
+        audit_log=audit_log,
+        interactive=interactive,
+        default_decision=default_decision,
     )
 
     workspace_dir = workspace_path / ".reports"
@@ -123,7 +141,7 @@ def write(
 
     # F-45 Sub-C: dual-write the per-tool NDJSON into the persistent
     # layer so the audit log survives workspace cleanup. We copy the
-    # source file (under {workspace}/.reports/) into the persistent
+    # source file (under ~/.clawcodex/tool-events/) into the persistent
     # reports dir using _copy_with_fallback for atomic semantics.
     if tool_events_path:
         tool_events = Path(tool_events_path)
@@ -156,6 +174,15 @@ def _render_markdown(report: RunReport) -> str:
         f"- Tool calls: {report.tool_count}",
         f"- Verification: `{report.verification_status or 'skipped'}`",
     ]
+    # F-46: render orthogonal permission fields when present.
+    if report.permission_mode is not None:
+        lines.append(f"- Permission mode: `{report.permission_mode}`")
+    if report.audit_log is not None:
+        lines.append(f"- Audit log: `{report.audit_log}`")
+    if report.interactive is not None:
+        lines.append(f"- Interactive: `{report.interactive}`")
+    if report.default_decision is not None:
+        lines.append(f"- Default decision: `{report.default_decision}`")
     # F-45: register the per-tool audit log path so the report reader
     # can `cat` it without grepping ~/.clawcodex/ first.
     if report.tool_events_path:

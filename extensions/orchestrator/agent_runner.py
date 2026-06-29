@@ -877,6 +877,12 @@ class AgentRunner:
             / (session.run_id or "unknown")
             / "debug.ndjson"
         )
+        # F-46: stash orthogonal permission fields on the session so
+        # report_writer.write() can forward them into the JSON payload.
+        session.permission_mode = self.agent_config.permission_mode
+        session.audit_log = self._resolve_audit_log()
+        session.interactive = self.agent_config.interactive
+        session.default_decision = self.agent_config.default_decision
         append_debug_event(
             session.debug_log_path,
             "agent_runner.start",

@@ -31,6 +31,8 @@ from extensions.orchestrator.permission_translate import (
     OrthogonalPermission,
     resolve_orthogonal_fields,
     translate_legacy_permission_mode,
+    warn_deprecated_permission_mode,
+    is_legacy_permission_mode,
 )
 
 
@@ -161,6 +163,41 @@ class TestWorkflowConfigOrthogonalFields(unittest.TestCase):
         self.assertEqual(wf.agent.audit_log, "full")
         self.assertFalse(wf.agent.interactive)
         self.assertEqual(wf.agent.default_decision, "allow")
+
+    def test_deprecated_permission_mode_warns(self) -> None:
+        """When permission_mode is set without any new fields, a
+        DeprecationWarning should be emitted."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            WorkflowConfig.from_dict({
+                "agent": {"permission_mode": "bypassPermissions"}
+            })
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            self.assertEqual(len(deprecation_warnings), 1)
+            self.assertIn("permission_mode is deprecated", str(deprecation_warnings[0].message))
+
+    def test_no_warning_when_new_fields_present(self) -> None:
+        """When the user provides at least one new orthogonal field, no
+        deprecation warning should be emitted even if permission_mode
+        is also set."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            WorkflowConfig.from_dict({
+                "agent": {
+                    "permission_mode": "bypassPermissions",
+                    "audit_log": "full",
+                }
+            })
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            self.assertEqual(len(deprecation_warnings), 0)
 
 
 class TestResolveOrthogonalFields(unittest.TestCase):
@@ -375,6 +412,50 @@ class TestPermissionModeAndAuditLogCombination(unittest.TestCase):
         rows = [json.loads(l) for l in log_path.read_text(encoding="utf-8").strip().splitlines()]
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["approved"])
+
+
+class TestF46DeprecationHelpers(unittest.TestCase):
+    """F-46.2: warn_deprecated_permission_mode and is_legacy_permission_mode."""
+
+    def test_is_legacy_permission_mode_true(self) -> None:
+        self.assertTrue(is_legacy_permission_mode("default"))
+        self.assertTrue(is_legacy_permission_mode("bypassPermissions"))
+        self.assertTrue(is_legacy_permission_mode("dontAsk"))
+        self.assertTrue(is_legacy_permission_mode("PLAN"))
+        self.assertTrue(is_legacy_permission_mode("accept_edits"))
+
+    def test_is_legacy_permission_mode_false(self) -> None:
+        self.assertFalse(is_legacy_permission_mode(None))
+        self.assertFalse(is_legacy_permission_mode(123))
+        self.assertFalse(is_legacy_permission_mode(""))
+        self.assertFalse(is_legacy_permission_mode("unknown_mode"))
+        self.assertFalse(is_legacy_permission_mode("full"))
+
+    def test_warn_deprecated_permission_mode_emits_once(self) -> None:
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warn_deprecated_permission_mode("bypassPermissions")
+            warn_deprecated_permission_mode("bypassPermissions")  # duplicate
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            self.assertEqual(len(deprecation_warnings), 1)
+
+    def test_warn_deprecated_permission_mode_none_is_safe(self) -> None:
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warn_deprecated_permission_mode(None)
+            self.assertEqual(len(w), 0)
+
+    def test_warn_deprecated_permission_mode_unknown_is_safe(self) -> None:
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warn_deprecated_permission_mode("some_random_value")
+            self.assertEqual(len(w), 0)
 
 
 if __name__ == "__main__":
