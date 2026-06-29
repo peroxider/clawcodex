@@ -175,6 +175,15 @@ class ClawCodexTUI(App):
         # the /history slash-command dialog. The store is append-only
         # per turn and auto-rotates past ``max_entries``.
         self.history_store = HistoryStore()
+        # Seed the in-session history with the most recent entries from
+        # the persistent store, so ↑/↓ and ghost-text suggestions carry
+        # over across TUI restarts (limited to 20 to avoid context drift).
+        try:
+            self._initial_history: list[str] = [
+                r.prompt for r in self.history_store.recent(limit=20)
+            ]
+        except Exception:
+            self._initial_history = []
         self._theme_name = theme_name or self._resolve_theme_name()
         # Index into ``self.stylesheet._sources`` for the theme CSS
         # overrides.  Tracked so ``apply_theme`` can *replace* the
@@ -270,6 +279,7 @@ class ClawCodexTUI(App):
             # segment can call ``decide_advisor_mode(provider, ...)``
             # and show the correct mode label (server/client/inactive).
             provider_instance=self.provider,
+            initial_history=self._initial_history,
         )
         self.push_screen(self._repl_screen)
 

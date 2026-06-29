@@ -120,6 +120,7 @@ class REPLScreen(Screen):
         message_history_provider: Callable[[], list[str]] | None = None,
         agents_provider: Callable[[], list[Any]] | None = None,
         provider_instance: object | None = None,
+        initial_history: list[str] | None = None,
     ) -> None:
         super().__init__()
         self._version = version
@@ -131,6 +132,7 @@ class REPLScreen(Screen):
         self._message_history_provider = message_history_provider
         self._agents_provider = agents_provider
         self._provider_instance = provider_instance
+        self._initial_history = initial_history
 
         self.header_widget = StartupHeader(
             version=version,
@@ -153,6 +155,7 @@ class REPLScreen(Screen):
             cwd=self._workspace_root,
             accept_suggestion_key=_configured_accept_suggestion_key(),
             accept_suggestion_tab_alias=_configured_accept_suggestion_tab_alias(),
+            initial_history=initial_history,
         )
         # ARIA live region — stays height: 1 and only announces the
         # most recent status change. Mounted just above the status

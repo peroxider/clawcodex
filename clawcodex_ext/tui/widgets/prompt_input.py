@@ -304,6 +304,7 @@ class PromptInput(Vertical):
         vim_mode: bool = False,
         accept_suggestion_key: str = "c-e",
         accept_suggestion_tab_alias: bool = True,
+        initial_history: list[str] | None = None,
     ) -> None:
         super().__init__()
         self._words_provider = words_provider
@@ -313,7 +314,9 @@ class PromptInput(Vertical):
         self._files_provider = files_provider
         self._message_completions: list[str] = []
         self._message_completion_pos: int | None = None
-        self._history: list[str] = []
+        # Seed with cross-session history from HistoryStore (most recent
+        # entries first, so ↑/↓ order matches submit order).
+        self._history: list[str] = list(initial_history or [])
         self._history_pos: int | None = None
         self._input = _PasteAwareInput(placeholder="Type a prompt, or / for commands")
         self._suggestions = _SlashSuggestions(classes="-hidden")
