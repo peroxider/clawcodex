@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.utils.git import (
+from clawcodex_ext.utils.git import (
     get_current_branch,
     get_default_branch,
     get_file_status,

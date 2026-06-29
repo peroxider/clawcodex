@@ -29,7 +29,7 @@ from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .status_dashboard import SessionStatus, StatusDashboard
 from src.tool_system.context import ToolContext
-from src.utils.git import get_file_status
+from clawcodex_ext.utils.git import get_file_status
 from .tracker import (
     Command,
     Intent,
