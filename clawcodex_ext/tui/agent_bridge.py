@@ -553,6 +553,14 @@ class AgentBridge:
             # reading the context field, so replacing here doesn't
             # orphan them either.
             self._tool_context.abort_controller = AbortController()
+        # Signal the UI to drain any queued prompts.  The check is a
+        # best-effort filter — the UI handler re-verifies on the UI
+        # thread, so a spurious post (e.g. the queue was cleared by
+        # ESC between the check and the handler) is a safe no-op.
+        if self._state.queued_prompts:
+            from .messages import QueuedPromptReady
+
+            self._post(QueuedPromptReady())
 
     # ---- advisor rendering ----
     def _emit_advisor_events(self) -> None:

@@ -83,6 +83,7 @@ from ..widgets.header import StartupHeader
 from ..widgets.prompt_input import PromptInput, PromptSubmitted
 from ..widgets.status_line import StatusLine
 from ..widgets.transcript_view import Transcript
+from ..messages import QueuedPromptReady
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..app import ClawCodexTUI
@@ -296,6 +297,28 @@ class REPLScreen(Screen):
         self.status_bar.set_busy()
         self.status_bar.bump_turn()
         ## _log(f'[repl.py] calling submit_to_agent: {text}')
+        app.submit_to_agent(text)
+
+    # ---- queued-prompt drain ----
+    def on_queued_prompt_ready(self, _: QueuedPromptReady) -> None:
+        """Drain one queued prompt when the bridge becomes idle.
+
+        FIFO, one per turn: after the UI handler verifies the bridge is
+        idle and the queue is non-empty, it pops the oldest prompt and
+        submits it.  The bridge's ``_finish`` filter is best-effort; the
+        UI handler is authoritative, so a spurious post (queue cleared
+        by ESC between the worker-side check and this handler) is a
+        safe no-op.
+        """
+        app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
+        if app._agent_bridge.busy:
+            return
+        if not app.app_state.queued_prompts:
+            return
+        text = app.app_state.queued_prompts.pop(0)
+        self.transcript.append_user(text)
+        self.status_bar.set_busy()
+        self.status_bar.bump_turn()
         app.submit_to_agent(text)
 
     # ---- agent message handlers ----
