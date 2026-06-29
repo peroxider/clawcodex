@@ -15,8 +15,14 @@ Actual implementation is Phase 2/3 work.
 See: docs/UPSTREAM_SYNC_DESIGN-decoupling.md Section 4.2
 """
 
-from .agent_protocol import AgentLoopProtocol
-from .tool_protocol import ToolSystemProtocol
+from .agent_protocol import AgentLoopProtocol, AgentLoopResultProtocol
+from .tool_protocol import (
+    ToolContextProtocol,
+    ToolPermissionContextProtocol,
+    ToolProtocol,
+    ToolRegistryProtocol,
+    ToolSystemProtocol,
+)
 from .context_protocol import ContextBuilderProtocol
 from .provider_protocol import LLMProviderProtocol
 from .event_protocol import ToolEventProtocol
@@ -36,12 +42,17 @@ __all__ = [
     "AdapterProtocol",
     "AdapterRegistry",
     "AgentLoopProtocol",
+    "AgentLoopResultProtocol",
     "ContextBuilderProtocol",
     "HeadlessOptionsProtocol",
     "HeadlessRunnerProtocol",
     "HeadlessSessionOptions",
     "LLMProviderProtocol",
+    "ToolContextProtocol",
     "ToolEventProtocol",
+    "ToolPermissionContextProtocol",
+    "ToolProtocol",
+    "ToolRegistryProtocol",
     "ToolSystemProtocol",
     "dependency_available",
     "env_switch",

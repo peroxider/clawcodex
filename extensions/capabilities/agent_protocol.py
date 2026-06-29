@@ -8,13 +8,23 @@ See: docs/UPSTREAM_SYNC_DESIGN-decoupling.md Section 6 (Agent 集成)
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Any, Protocol
 
-if TYPE_CHECKING:
-    from src.providers.base import BaseProvider
-    from src.tool_system.renderers import AgentLoopResult
+from .provider_protocol import LLMProviderProtocol
+from .tool_protocol import ToolContextProtocol, ToolRegistryProtocol
 
-__all__ = ["AgentLoopProtocol"]
+__all__ = ["AgentLoopProtocol", "AgentLoopResultProtocol"]
+
+
+class AgentLoopResultProtocol(Protocol):
+    """Protocol for the result returned by an agent loop.
+
+    Concrete implementation: clawcodex_ext.tool_system.renderers.AgentLoopResult
+    """
+
+    response_text: str
+    usage: dict[str, Any] | None
+    num_turns: int
 
 
 class AgentLoopProtocol(Protocol):
@@ -30,16 +40,16 @@ class AgentLoopProtocol(Protocol):
     def run_agent_loop(
         self,
         conversation: "Conversation",  # noqa: F821
-        provider: "BaseProvider",  # noqa: F821
-        tool_registry: "ToolRegistry",  # noqa: F821
-        tool_context: "ToolContext",  # noqa: F821
+        provider: LLMProviderProtocol,
+        tool_registry: ToolRegistryProtocol,
+        tool_context: ToolContextProtocol,
         max_turns: int = 20,
         stream: bool = False,
         verbose: bool = False,
         on_event: "ToolEventHandler | None" = None,  # noqa: F821
         on_text_chunk: "TextChunkHandler | None" = None,  # noqa: F821
         cancel_signal: "AbortSignal | None" = None,  # noqa: F821
-    ) -> "AgentLoopResult": ...  # pragma: no cover
+    ) -> AgentLoopResultProtocol: ...  # pragma: no cover
 
     def summarize_tool_result(self, name: str, output: object) -> str: ...  # pragma: no cover
 
@@ -47,4 +57,4 @@ class AgentLoopProtocol(Protocol):
         self, name: str, tool_input: dict[str, object]
     ) -> str: ...  # pragma: no cover
 
-    def is_anthropic_provider(self, provider: "BaseProvider") -> bool: ...  # pragma: no cover
+    def is_anthropic_provider(self, provider: LLMProviderProtocol) -> bool: ...  # pragma: no cover

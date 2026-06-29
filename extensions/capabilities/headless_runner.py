@@ -81,7 +81,9 @@ def run_headless_session(
     # Default: lazy import of the real upstream headless runner.
     # Forward the on_event callback so tool events from the headless
     # session reach the orchestrator's event stream (e.g. for tool_count).
-    from src.entrypoints.headless import HeadlessOptions, run_headless
+    # Import from the downstream implementation facade rather than src/
+    # so this capabilities module does not depend on upstream internals.
+    from clawcodex_ext.entrypoints.headless import HeadlessOptions, run_headless
 
     options_legacy = HeadlessOptions(
         prompt=options.prompt,

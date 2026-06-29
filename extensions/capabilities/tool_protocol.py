@@ -8,16 +8,62 @@ See: src/tool_system/agent_loop.py imports from tool_system.registry
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from pathlib import Path
+from typing import Any, Callable, Protocol
 
-if TYPE_CHECKING:
-    from src.permissions.types import ToolPermissionContext
-    from src.tool_system.build_tool import Tool
-    from src.tool_system.context import ToolContext
-    from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
-    from src.tool_system.registry import ToolRegistry
+from clawcodex_ext.tool_system.protocol import ToolCall, ToolResult
 
-__all__ = ["ToolSystemProtocol"]
+__all__ = [
+    "ToolContextProtocol",
+    "ToolPermissionContextProtocol",
+    "ToolProtocol",
+    "ToolRegistryProtocol",
+    "ToolSystemProtocol",
+]
+
+
+class ToolPermissionContextProtocol(Protocol):
+    """Protocol for permission context passed to tool assembly/dispatch."""
+
+    mode: str
+    is_bypass_permissions_mode_available: bool
+    should_avoid_permission_prompts: bool
+
+    def blocks(self, tool_name: str) -> bool: ...  # pragma: no cover
+
+
+class ToolProtocol(Protocol):
+    """Protocol for a single tool definition."""
+
+    name: str
+    aliases: tuple[str, ...]
+
+    def matches_name(self, name: str) -> bool: ...  # pragma: no cover
+
+
+class ToolContextProtocol(Protocol):
+    """Protocol for the execution context passed to tool dispatch."""
+
+    workspace_root: Path | None
+    cwd: Path | None
+    plan_mode: bool
+    permission_context: ToolPermissionContextProtocol | None
+
+
+class ToolRegistryProtocol(Protocol):
+    """Protocol for a registry of available tools."""
+
+    def register(self, tool: ToolProtocol) -> None: ...  # pragma: no cover
+
+    def unregister(self, name: str) -> bool: ...  # pragma: no cover
+
+    def get(self, name: str) -> ToolProtocol | None: ...  # pragma: no cover
+
+    def list_tools(self) -> list[ToolProtocol]: ...  # pragma: no cover
+
+    def dispatch(
+        self, call: ToolCall, context: ToolContextProtocol
+    ) -> ToolResult: ...  # pragma: no cover
 
 
 class ToolSystemProtocol(Protocol):
@@ -31,19 +77,19 @@ class ToolSystemProtocol(Protocol):
       - dispatch(call, context) -> ToolResult
     """
 
-    def get_tools(self) -> "list[Tool]": ...  # pragma: no cover
+    def get_tools(self) -> list[ToolProtocol]: ...  # pragma: no cover
 
-    def find_tool_by_name(self, name: str) -> "Tool | None": ...  # pragma: no cover
+    def find_tool_by_name(self, name: str) -> ToolProtocol | None: ...  # pragma: no cover
 
-    def build_tool(self, tool_def: dict[str, object]) -> "Tool": ...  # pragma: no cover
+    def build_tool(self, tool_def: dict[str, object]) -> ToolProtocol: ...  # pragma: no cover
 
     def assemble_tool_pool(
         self,
-        registry: "ToolRegistry",
-        permission_context: "ToolPermissionContext",
-        mcp_tools: "list[Tool] | None" = None,
-    ) -> "list[Tool]": ...  # pragma: no cover
+        registry: ToolRegistryProtocol,
+        permission_context: ToolPermissionContextProtocol,
+        mcp_tools: list[ToolProtocol] | None = None,
+    ) -> list[ToolProtocol]: ...  # pragma: no cover
 
     def dispatch(
-        self, call: "ToolCall", context: "ToolContext"
-    ) -> "ToolResult": ...  # pragma: no cover
+        self, call: ToolCall, context: ToolContextProtocol
+    ) -> ToolResult: ...  # pragma: no cover

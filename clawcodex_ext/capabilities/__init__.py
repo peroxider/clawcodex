@@ -16,6 +16,7 @@ from extensions.capabilities.adapter_protocol import (  # noqa: F401
 )
 from extensions.capabilities.agent_protocol import (  # noqa: F401
     AgentLoopProtocol,
+    AgentLoopResultProtocol,
 )
 from extensions.capabilities.context_protocol import (  # noqa: F401
     ContextBuilderProtocol,
@@ -35,6 +36,10 @@ from extensions.capabilities.provider_protocol import (  # noqa: F401
     LLMProviderProtocol,
 )
 from extensions.capabilities.tool_protocol import (  # noqa: F401
+    ToolContextProtocol,
+    ToolPermissionContextProtocol,
+    ToolProtocol,
+    ToolRegistryProtocol,
     ToolSystemProtocol,
 )
 
@@ -43,12 +48,17 @@ __all__ = [
     "AdapterProtocol",
     "AdapterRegistry",
     "AgentLoopProtocol",
+    "AgentLoopResultProtocol",
     "ContextBuilderProtocol",
     "HeadlessOptionsProtocol",
     "HeadlessRunnerProtocol",
     "HeadlessSessionOptions",
     "LLMProviderProtocol",
+    "ToolContextProtocol",
     "ToolEventProtocol",
+    "ToolPermissionContextProtocol",
+    "ToolProtocol",
+    "ToolRegistryProtocol",
     "ToolSystemProtocol",
     "dependency_available",
     "env_switch",
