@@ -14,6 +14,7 @@ screen then materialises as a modal.
 
 from __future__ import annotations
 
+import time
 import threading
 from pathlib import Path
 from typing import Any
@@ -120,7 +121,7 @@ class ClawCodexTUI(App):
 
     BINDINGS = [
         ("ctrl+c", "cancel_or_quit", "Cancel / Quit"),
-        ("ctrl+d", "quit", "Quit"),
+        ("ctrl+d", "request_quit", "Quit"),
         ("ctrl+b", "agent_background", "Background agent"),
         ("ctrl+t", "toggle_thinking", "Toggle thinking"),
         ("shift+tab", "cycle_permission_mode", "Cycle permission mode"),
@@ -226,6 +227,9 @@ class ClawCodexTUI(App):
             self.tool_context.default_permission_handler = self._agent_bridge._permission_handler
         self._install_away_summary_controller()
         self._resume_browse = resume_browse
+        # Double-press exit guard: Ctrl+C first press clears draft /
+        # arms exit; second press within 0.8s actually quits.
+        self._last_ctrl_c: float = 0.0
 
     # The base CSS for the REPL; Phase 1 uses Textual's default theme
     # variables ($primary, $surface, …) — palette overrides sit in
@@ -399,12 +403,35 @@ class ClawCodexTUI(App):
 
     # ---- bindings ----
     def action_cancel_or_quit(self) -> None:
-        # Try to cancel the in-flight agent run first. Only exit if
-        # there is no active run or the cancel fails.
+        # First press: try to cancel an in-flight agent run.
         if self._agent_bridge.cancel():
             self.announcer.announce("Cancelling…", level="assertive", notify=False)
+            self._last_ctrl_c = 0.0  # reset double-press timer on cancel
             return
-        self.exit()
+        # Double-press guard: first Ctrl+C while idle arms exit;
+        # second press within 0.8s actually quits.
+        now = time.monotonic()
+        if now - self._last_ctrl_c < 0.8:
+            self.exit()
+        else:
+            self._last_ctrl_c = now
+            self.announcer.announce(
+                "Press Ctrl+C again to exit", level="assertive", notify=False
+            )
+
+    def action_request_quit(self) -> None:
+        """Ctrl+D: arm the double-press exit flow.
+
+        The stock ``Input`` swallows Ctrl+D (delete-forward), which is
+        a no-op on an empty buffer — so the app's ``quit`` binding
+        never fires. This action is bound instead, reusing the same
+        double-press guard as ``action_cancel_or_quit`` so the user
+        experience is consistent across both keys.
+        """
+        self._last_ctrl_c = time.monotonic()  # reuse same timer
+        self.announcer.announce(
+            "Press Ctrl+D again to exit", level="assertive", notify=False
+        )
 
     def action_agent_background(self) -> None:
         """Handle Ctrl+B — signal agent to continue in background, save
