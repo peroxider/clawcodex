@@ -186,7 +186,12 @@ class RemoteAgentRunner:
 
         async def run_loop() -> None:
             try:
-                from src.bootstrap.state import SdkContext, SessionId, run_with_sdk_context
+                from clawcodex_ext.bootstrap.state import SdkContext, SessionId, run_with_sdk_context
+                # `src.outputStyles` + `src.query.agent_loop_compat` are public
+                # upstream APIs exercised by tests/remote_api/test_remote_api.py
+                # via ``unittest.mock.patch("src.…")`` (see :1006, :1013).
+                # Layer 2 may import public ``src.*`` APIs directly per CLAUDE.md
+                # (the prohibition is on ``src._internals``).
                 from src.outputStyles import resolve_output_style
                 from src.query.agent_loop_compat import (
                     build_effective_system_prompt,
@@ -286,12 +291,12 @@ class RemoteAgentRunner:
 
 
 def _build_runtime(config: RemoteRunConfig) -> dict[str, Any]:
-    from src.config import get_default_provider, get_provider_config
-    from src.permissions.types import ToolPermissionContext
-    from src.providers import get_provider_class
-    from src.tool_system.context import ToolContext
-    from src.tool_system.defaults import build_default_registry
-    from src.utils.abort_controller import AbortController
+    from clawcodex_ext.config import get_default_provider, get_provider_config
+    from clawcodex_ext.permissions.types import ToolPermissionContext
+    from clawcodex_ext.providers import get_provider_class
+    from clawcodex_ext.tool_system.context import ToolContext
+    from clawcodex_ext.tool_system.defaults import build_default_registry
+    from clawcodex_ext.utils.abort_controller import AbortController
 
     provider_name = config.provider or get_default_provider()
     try:

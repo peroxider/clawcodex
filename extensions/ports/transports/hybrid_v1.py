@@ -47,15 +47,15 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 
-from src.transports.serial_batch_event_uploader import (
+from clawcodex_ext.transports.serial_batch_event_uploader import (
     SerialBatchEventUploader,
     SerialBatchEventUploaderConfig,
 )
-from src.transports.websocket_transport import (
+from clawcodex_ext.transports.websocket_transport import (
     WebSocketTransport,
     WebSocketTransportOptions,
 )
-from src.utils.session_ingress_auth import get_session_ingress_auth_token
+from clawcodex_ext.utils.session_ingress_auth import get_session_ingress_auth_token
 
 logger = logging.getLogger(__name__)
 
