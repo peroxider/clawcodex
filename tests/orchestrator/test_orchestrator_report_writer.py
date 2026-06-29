@@ -8,6 +8,9 @@ Covers the structured per-run report writer:
   Markdown and JSON artefacts.
 * F-45 tool-event dual-write (per-tool ``events.ndjson`` mirrored into
   the persistent layer).
+* F-46 orthogonal permission fields in both Markdown rendering and JSON
+  payloads (``permission_mode``, ``audit_log``, ``interactive``,
+  ``default_decision``).
 * :func:`_safe_segment` path-segment sanitisation.
 * :func:`_excerpt` truncation behaviour.
 * :func:`_copy_with_fallback` primary vs fallback copy path.
@@ -376,6 +379,47 @@ class TestWriteHappyPath(unittest.TestCase):
         self.assertEqual(payload["pr_number"], 99)
         self.assertEqual(payload["pr_url"], "https://x/y/pull/99")
         self.assertEqual(payload["issue_identifier"], "octo/hello#42")
+
+    def test_json_payload_includes_orthogonal_fields(self) -> None:
+        """F-46: orthogonal permission fields should appear in the JSON payload."""
+        write(
+            run_id="r1",
+            workspace_path=self.workspace,
+            tracker="github",
+            owner="octo",
+            repo="hello",
+            issue=_make_issue(identifier="octo/hello#42"),
+            status="completed",
+            commit_sha="abc",
+            permission_mode="bypassPermissions",
+            audit_log="full",
+            interactive=False,
+            default_decision="allow",
+        )
+        workspace_json = (self.workspace / ".reports" / "r1.json").read_text()
+        payload = json.loads(workspace_json)
+        self.assertEqual(payload["permission_mode"], "bypassPermissions")
+        self.assertEqual(payload["audit_log"], "full")
+        self.assertEqual(payload["interactive"], False)
+        self.assertEqual(payload["default_decision"], "allow")
+
+    def test_json_payload_has_none_for_missing_orthogonal_fields(self) -> None:
+        """F-46: orthogonal fields should be None when not forwarded."""
+        write(
+            run_id="r1",
+            workspace_path=self.workspace,
+            tracker="github",
+            owner="octo",
+            repo="hello",
+            issue=_make_issue(identifier="octo/hello#42"),
+            status="completed",
+        )
+        workspace_json = (self.workspace / ".reports" / "r1.json").read_text()
+        payload = json.loads(workspace_json)
+        self.assertIsNone(payload.get("permission_mode"))
+        self.assertIsNone(payload.get("audit_log"))
+        self.assertIsNone(payload.get("interactive"))
+        self.assertIsNone(payload.get("default_decision"))
 
     def test_report_result_paths(self) -> None:
         result = write(
