@@ -100,6 +100,12 @@ class TestRuntimeCommandsWithoutRuntimeContext:
     def _ensure_registered(self):
         from clawcodex_ext.command_system import get_command_registry
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+        from clawcodex_ext import ensure_eager_extensions_installed
+
+        # Downstream provider registrations (e.g. kimi-coding) are deferred
+        # from package import time to a lazy init function.  Ensure they
+        # are in place before exercising /model or /provider commands.
+        ensure_eager_extensions_installed()
 
         get_command_registry().clear()
         register_runtime_commands(None)
@@ -385,6 +391,7 @@ class TestRuntimeCommandsRaceCondition:
 
     def test_model_executable_after_build_command_suggestions(self):
         """build_command_suggestions 后 model 仍可通过 execute_command_sync 执行。"""
+        from clawcodex_ext import ensure_eager_extensions_installed
         from clawcodex_ext.command_system import get_command_registry
         from clawcodex_ext.command_system.builtins import (
             register_builtin_commands,
@@ -393,6 +400,8 @@ class TestRuntimeCommandsRaceCondition:
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
         from clawcodex_ext.tui.commands import build_command_suggestions
         from types import SimpleNamespace
+
+        ensure_eager_extensions_installed()
 
         reg = get_command_registry()
         reg.clear()

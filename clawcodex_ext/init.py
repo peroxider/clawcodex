@@ -137,6 +137,16 @@ def init() -> None:
     ensure_nested_transcript_initialized()
     profile_checkpoint("init_after_nested_transcript")
 
+    # Substep 7: install the four downstream extensions (permission cycle,
+    # memory section builder, provider patches, stale-registry reload).
+    # Deferred from package-import time to here so that the circular-import
+    # constraint documented in ``clawcodex_ext/__init__.py`` is side-stepped.
+    _logger.info("init: installing downstream extensions")
+    from clawcodex_ext import ensure_eager_extensions_installed
+
+    ensure_eager_extensions_installed()
+    profile_checkpoint("init_after_eager_extensions")
+
     # F-68: initialize the feature-gate registry so that
     # ``@feature_gated`` decorators and ``registry.is_enabled()``
     # calls work from the earliest possible point in the agent loop.

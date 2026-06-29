@@ -20,11 +20,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.providers import PROVIDER_INFO, _EXTRA_PROVIDER_CLASSES, get_provider_class
 from clawcodex_ext.providers.base import BaseProvider
 
 if TYPE_CHECKING:
     from src.providers import ProviderInfo
+
+
+# __getattr__ / __dir__ 模式见下。
+# ``_EXTRA_PROVIDER_CLASSES``、``PROVIDER_INFO``、``get_provider_class``
+# 由各函数在调用时惰性导入，避免
+# ``src.providers``（通过 openai_compatible facade）→
+# ``clawcodex_ext.providers`` → ``factory`` →
+# ``from src.providers import _EXTRA_PROVIDER_CLASSES`` 循环导入。
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +53,8 @@ def should_use_litellm() -> bool:
 
 def create_provider(provider_name: str, *args, **kwargs) -> BaseProvider:
     """Create a provider instance for runtime use."""
+    from src.providers import get_provider_class
+
     if should_use_litellm():
         from clawcodex_ext.providers._litellm_adapter import create_litellm_provider
 
@@ -82,6 +91,8 @@ def register_provider(name: str, info: "ProviderInfo", cls: type | callable) -> 
     Idempotent: calling twice with the same *name* is a no-op
     (first registration wins).
     """
+    from src.providers import _EXTRA_PROVIDER_CLASSES
+
     register_provider_info(name, info)
     if name not in _EXTRA_PROVIDER_CLASSES:
         _EXTRA_PROVIDER_CLASSES[name] = cls
@@ -96,6 +107,8 @@ def register_provider_info(name: str, info: "ProviderInfo") -> None:
     Also refreshes ``AVAILABLE_PROVIDERS`` so the new provider shows up
     in UI/CLI listings.
     """
+    from src.providers import PROVIDER_INFO
+
     if name not in PROVIDER_INFO:
         PROVIDER_INFO[name] = info
         # Refresh the display dict so it reflects the new provider.
