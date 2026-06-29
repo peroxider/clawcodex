@@ -27,7 +27,12 @@ from textual.widgets import Static
 from ..state import AppState
 
 
+# Braille spinner frames (standard) + sparkle characters for visual variety.
+# Every third tick, the spinner shows a sparkle instead of the next braille
+# frame to give a "✨ processing" feel that matches the ink reference's
+# sparkle-based busy indicator.
 _SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+_SPARKLE_CHARS = "✨✦✧❋⚡"
 
 
 class StatusLine(Static):
@@ -75,6 +80,7 @@ class StatusLine(Static):
         # first-party).
         self._provider_instance = provider_instance
         self._frame = 0
+        self._sparkle_frame = 0
         self._timer = None
         initial = Text(f"{provider} · {model}    ready    turn 0")
         super().__init__(initial, markup=False)
@@ -90,6 +96,9 @@ class StatusLine(Static):
             self.queued = len(self._app_state.queued_prompts)
         if self.is_thinking:
             self._frame = (self._frame + 1) % len(_SPINNER_FRAMES)
+            # Cycle through sparkle chars on every 3rd tick for variety
+            if self._frame % 3 == 0:
+                self._sparkle_frame = (self._sparkle_frame + 1) % len(_SPARKLE_CHARS)
         self._redraw()
 
     # ---- public API ----
@@ -126,7 +135,23 @@ class StatusLine(Static):
         self.permission_mode = mode or ""
 
     # ---- render ----
-    def watch_is_thinking(self, _: bool) -> None:
+    def bind_footer(self, footer: Any) -> None:
+        """Wire this StatusLine's thinking state to a PromptInputFooter.
+
+        When ``is_thinking`` flips, push the new value to the footer's
+        ``set_loading`` method so the context-aware hint row under the
+        prompt input switches to "esc to interrupt" while the agent is
+        busy.  The ``Any`` type avoids a circular import with
+        ``prompt_input_footer``.
+        """
+        self._footer_ref = footer
+        # Push the current state immediately so the footer is in sync
+        # even if ``is_thinking`` hasn't changed yet.
+        footer.set_loading(self.is_thinking)
+
+    def watch_is_thinking(self, value: bool) -> None:
+        if hasattr(self, "_footer_ref"):
+            self._footer_ref.set_loading(value)
         self._redraw()
 
     def watch_turns(self, _: int) -> None:
@@ -142,7 +167,14 @@ class StatusLine(Static):
         self._redraw()
 
     def _redraw(self) -> None:
-        spinner = _SPINNER_FRAMES[self._frame] if self.is_thinking else " "
+        if self.is_thinking:
+            # Show sparkle on every 4th tick for visual variety
+            if self._frame % 4 == 0:
+                spinner = _SPARKLE_CHARS[self._sparkle_frame]
+            else:
+                spinner = _SPINNER_FRAMES[self._frame]
+        else:
+            spinner = " "
         self.update(self._compose_text(spinner=spinner))
 
     def _compose_text(self, *, spinner: str) -> Text:
@@ -185,12 +217,16 @@ class StatusLine(Static):
         right_bits: list[str] = [f"turn {self.turns}"]
         if self.queued:
             right_bits.append(f"queued {self.queued}")
+        # Real-time token display — shown both during and after a run
+        # so the user sees live metrics while the agent is busy.
+        in_t = 0
+        out_t = 0
         if state and state.usage:
             in_t = state.usage.get("input_tokens", 0)
             out_t = state.usage.get("output_tokens", 0)
-            total = in_t + out_t
-            if total:
-                right_bits.append(f"tokens {in_t} in / {out_t} out")
+        total = in_t + out_t
+        if total:
+            right_bits.append(f"tokens {in_t} in / {out_t} out")
             # Advisor token segment — appears next to worker tokens
             # whenever the advisor has been consulted this session.
             # ``state.usage["advisor_*"]`` is mirrored from
