@@ -262,8 +262,8 @@ class AgentSession:
             return
         try:
             import json as _json
-            from src.agent.conversation import Conversation
-            from src.services.session_storage import SessionStorage
+            from clawcodex_ext.agent.conversation import Conversation
+            from clawcodex_ext.services.session_storage import SessionStorage
             from clawcodex_ext.types.messages import message_from_dict
 
             storage: SessionStorage | None = getattr(self, "_transcript_storage", None)
@@ -286,7 +286,7 @@ class AgentSession:
             cost_block: dict = {}
             try:
                 import time as _time
-                from src.bootstrap.state import (
+                from clawcodex_ext.bootstrap.state import (
                     get_total_cost_usd,
                     get_total_api_duration,
                     get_total_api_duration_without_retries,
@@ -998,7 +998,7 @@ class AgentRunner:
                 if session.run_id:
                     if session._transcript_storage is None:
                         try:
-                            from src.services.session_storage import SessionStorage
+                            from clawcodex_ext.services.session_storage import SessionStorage
 
                             session._transcript_storage = SessionStorage(
                                 session_id=session.run_id,

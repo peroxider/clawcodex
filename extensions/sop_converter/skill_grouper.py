@@ -24,7 +24,7 @@ from enum import Enum
 from .source_parser import SourceComponent, SourceOperation
 
 if TYPE_CHECKING:
-    from src.providers.base import BaseProvider
+    from clawcodex_ext.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
@@ -1014,7 +1014,7 @@ class SkillGrouper:
             user_content += f"\n\n业务需求：{requirements}"
 
         try:
-            from src.providers.base import ChatMessage
+            from clawcodex_ext.providers.base import ChatMessage
 
             messages: list[ChatMessage] = [
                 ChatMessage(role="system", content=system_prompt),

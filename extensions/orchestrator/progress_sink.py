@@ -32,7 +32,7 @@ from ..api.query import PhaseComplete, SessionComplete, TurnComplete
 
 if TYPE_CHECKING:
     from .agent_runner import AgentSession
-    from src.tool_system.context import ToolContext
+    from clawcodex_ext.tool_system.context import ToolContext
 
 logger = logging.getLogger(__name__)
 

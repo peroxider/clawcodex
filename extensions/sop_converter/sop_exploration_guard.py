@@ -581,7 +581,7 @@ def check_bundle_source_exploration(
 
 def _load_agent_definitions(context: Any) -> list[Any]:
     try:
-        from src.agent.load_agents_dir import get_agent_definitions_with_overrides
+        from clawcodex_ext.agent.load_agents_dir import get_agent_definitions_with_overrides
 
         cwd = str(getattr(context, "cwd", None) or getattr(context, "workspace_root", ".") or ".")
         agents = list(get_agent_definitions_with_overrides(cwd))

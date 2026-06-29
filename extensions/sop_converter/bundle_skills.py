@@ -71,7 +71,7 @@ def _parse_allowed_tools_from_frontmatter_text(content: str) -> list[str]:
 
 def _load_flat_skill_markdown(path: Path) -> None:
     """Register a single flat ``*-skill.md`` (frontmatter name + body)."""
-    from src.skills.frontmatter import parse_frontmatter
+    from clawcodex_ext.skills.frontmatter import parse_frontmatter
     from clawcodex_ext.skills.loader import (
         create_skill_command,
         parse_skill_frontmatter_fields,
