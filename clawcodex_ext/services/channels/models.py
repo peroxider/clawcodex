@@ -93,8 +93,7 @@ class ChannelConfig:
             raise ValueError("ChannelConfig.webhook_url must be a non-empty string")
         if not _NAME_RE.match(self.name or ""):
             raise ValueError(
-                "ChannelConfig.name must match [A-Za-z0-9._-]{1,64}; "
-                "got: " + repr(self.name)
+                "ChannelConfig.name must match [A-Za-z0-9._-]{1,64}; got: " + repr(self.name)
             )
         if self.extra is not None and not isinstance(self.extra, dict):
             raise TypeError("ChannelConfig.extra must be a dict or None")

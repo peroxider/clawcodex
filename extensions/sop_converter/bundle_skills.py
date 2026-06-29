@@ -128,6 +128,15 @@ def register_bundle_skills(bundle_path: Path, workspace_root: Path) -> BundleSki
     """
     from clawcodex_ext.skills.loader import load_skills_from_skills_dir, _dynamic_skills  # noqa: SLF001
 
+    try:
+        from extensions.sop_converter.bundle_context import get_active_bundle, set_active_bundle
+
+        active = get_active_bundle()
+        if active is not None and active.bundle_path != bundle_path.resolve():
+            set_active_bundle(None)
+    except ImportError:
+        pass
+
     search_dirs = _bundle_skill_search_dirs(bundle_path, workspace_root)
 
     # Drop prior bundle flat skills; standard SKILL.md trees are reloaded below.

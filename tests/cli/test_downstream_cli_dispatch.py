@@ -214,6 +214,33 @@ def test_build_parser_handles_allow_dangerously_skip(monkeypatch):
     assert args.allow_dangerously_skip_permissions is True
 
 
+def test_build_parser_accepts_im_gateway_repl_options():
+    """REPL startup can opt into a gateway binding without env-only setup."""
+    from clawcodex_ext.cli.parser import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--im-gateway-origin",
+            "wechat:direct:default:user1",
+            "--im-gateway-sock",
+            "/tmp/clawcodex-gateway.sock",
+        ]
+    )
+    assert args.im_gateway_origin == "wechat:direct:default:user1"
+    assert args.im_gateway_sock == "/tmp/clawcodex-gateway.sock"
+
+
+def test_build_parser_accepts_im_gateway_all_private_switch():
+    """REPL startup can opt into all WeChat private messages without origin details."""
+    from clawcodex_ext.cli.parser import build_parser
+
+    parser = build_parser()
+    args = parser.parse_args(["--im-gateway"])
+    assert args.im_gateway is True
+    assert args.im_gateway_origin is None
+
+
 def test_resolve_permission_state_sets_args_attributes(monkeypatch):
     """resolve_permission_state stashes _resolved_permission_mode on args."""
     from argparse import Namespace

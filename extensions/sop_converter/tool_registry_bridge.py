@@ -552,6 +552,7 @@ def _generate_wrapper_script(
         header_label = f"{file_stem} functions ({module_name})"
 
     script_path = (scripts_dir or SCRIPTS_DIR) / script_name
+    script_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Build body: helper(s) + method stubs
     body_parts: list[str] = []

@@ -298,6 +298,47 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 
 ---
 
+### IM Message Gateway
+
+A unified IM entry point that funnels WeChat (personal / Weixin iLink) bidirectional messaging and existing Feishu/Slack/Discord push through one capability-gated gateway.
+
+- Runs as a standalone daemon (`extensions/im_gateway/`); REPL/orchestrator opt in over POSIX UDS.
+- **v1 is POSIX/WSL/Git Bash only** (Unix domain socket).
+
+**Quick start:**
+
+```bash
+clawcodex-dev gateway server start|stop|status|restart # IM gateway lifecycle control
+clawcodex-dev channels # IM gateway quick setup
+clawcodex-dev channels restart wechat # restart WeChat IM channel
+clawcodex-dev channels status wechat # show WeChat login health and REPL/orchestrator connection status
+```
+
+With the gateway daemon running and WeChat logged in, you can opt a REPL or orchestrator session into the single WeChat channel. Any direct/private message sent to the bot can drive the agent, and replies flow back to the actual sender.
+
+**Connect to the gateway:**
+
+```bash
+# REPL: resume an existing session or omit --resume to start a new one.
+clawcodex-dev --resume <session-id> --im-gateway
+# orchestrator: once connected, WeChat can send /pause AGENTSDK-15 and other control commands.
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --im-gateway
+```
+
+`--im-gateway` binds all WeChat direct/private senders for the single configured `wechat` channel. Only one runtime can own the WeChat channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. `CLAWCODEX_IM_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+
+The gateway supports sending control commands to REPL/orchestrator, such as `/stop` to stop the current task.
+
+For live diagnosis, restart the daemon with INFO logging and tail the gateway log:
+
+```bash
+clawcodex-dev gateway server restart --verbose
+clawcodex-dev gateway server status
+tail -f ~/.clawcodex/im-gateway/gateway.log
+```
+
+---
+
 ### SOP Compiler
 
 Convert `workflow.md` procedural specs into a coordinated multi-agent system.
@@ -340,7 +381,18 @@ clawcodex-dev coordinator team delete --name build-team
               │  + LiveView   │  │   Jitter    │  │ + Agent builder │
               │  + Takeover   │  │ + Status    │  │ + Skill grouper │
               │  + Review FB  │  │ + Notify    │  │                 │
-              └──────┬────────┘  └─────────────┘  └─────────────────┘
+              └──────┬────┬───┘  └─────────────┘  └─────────────────┘
+                     │    │ events + commands
+                     │    ▼
+                     │  ┌─────────────────────────────────────┐
+                     │  │ IM Gateway / MessageGateway         │ ◄── CLI / REPL opt-in
+                     │  │ bidirectional IM · approval prompts │
+                     │  │ command dispatch (/stop, /pause)    │
+                     │  └──────────────────┬──────────────────┘
+                     │                     ▼
+                     │  ┌─────────────────────────────────────┐
+                     │  │ Upstream IM provider: WeChat        │
+                     │  └─────────────────────────────────────┘
                      │
        ┌─────────────┼─────────────┐
        │             │             │
@@ -360,6 +412,10 @@ clawcodex-dev coordinator team delete --name build-team
        │  (see README.md.raw for full map)   │
        └─────────────────────────────────────┘
 ```
+
+`MessageGateway` is the shared IM boundary for this fork: CLI/REPL and
+Orchestrator opt in through gateway IPC, while provider delivery stays behind
+the WeChat adapter.
 
 ---
 

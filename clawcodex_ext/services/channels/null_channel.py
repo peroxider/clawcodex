@@ -81,7 +81,9 @@ class _NullTransport(ChannelTransport):
         headers: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> TransportResponse:
-        self.calls.append({"url": url, "body": body, "headers": dict(headers or {}), "timeout": timeout})
+        self.calls.append(
+            {"url": url, "body": body, "headers": dict(headers or {}), "timeout": timeout}
+        )
         return TransportResponse(status=self.status, body=b"", headers={})
 
 

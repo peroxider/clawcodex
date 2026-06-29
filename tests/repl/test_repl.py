@@ -599,6 +599,22 @@ class TestREPL(unittest.TestCase):
                     mock_provider.chat_stream.assert_called_once()
                     mock_provider.chat.assert_called()
 
+    def test_chat_pumps_cron_loop_during_engine_turn(self):
+        """chat() must pump the IM gateway loop during engine turns."""
+        import asyncio
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._cron_loop = None
+        fallback = repl._get_chat_loop()
+        self.assertIsInstance(fallback, asyncio.AbstractEventLoop)
+
+        cron_loop = asyncio.new_event_loop()
+        repl._cron_loop = cron_loop
+        try:
+            self.assertIs(repl._get_chat_loop(), cron_loop)
+        finally:
+            cron_loop.close()
+
     def test_handle_command_slash_shows_commands_and_skills(self):
         skills_dir = Path(self.temp_dir) / "skills"
         (skills_dir / "hello").mkdir(parents=True, exist_ok=True)
@@ -880,6 +896,151 @@ class TestREPL(unittest.TestCase):
                     t2.join()
 
                     self.assertEqual(max_in_prompt, 1)
+
+    def test_permission_prompt_forwards_options_to_im_controller(self):
+        """IM-driven turns should mirror permission options to the gateway."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=False)
+        repl._safe_input = Mock(return_value="1")
+
+        calls = []
+
+        class _FakeImReply:
+            def send_permission_prompt(self, **kwargs):
+                calls.append(kwargs)
+                return True
+
+        repl._im_reply_controller = _FakeImReply()
+
+        with patch("clawcodex_ext.repl.core.get_selection_mode", return_value="number"):
+            allowed, cached = repl._handle_permission_request(
+                "Bash", "Claude wants to delete files. Allow?", None
+            )
+
+        self.assertTrue(allowed)
+        self.assertFalse(cached)
+        self.assertEqual(calls[0]["message"], "Claude wants to delete files. Allow?")
+        self.assertEqual(
+            calls[0]["options"],
+            [("y", "Yes, allow this action"), ("n", "No, deny this action")],
+        )
+
+    def test_permission_prompt_im_branch_uses_wechat_reply_choice(self):
+        """1b: when the turn is IM-driven (peek_reply_origin non-None), the
+        permission decision comes from the WeChat reply via
+        ``_wait_im_permission_choice`` and feeds the SAME parser as the
+        keyboard path — ``1``/``y`` allow, ``2``/``n`` deny."""
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl._permission_prompt_lock = threading.Lock()
+        repl._permission_decision_cache = {}
+        repl._current_status = None
+        repl.console = Mock()
+        repl.tool_context = Mock(allow_docs=False)
+
+        class _FakeClient:
+            def peek_reply_origin(self):
+                return "wechat:direct:a:u1"
+
+        class _FakeImReply:
+            _client = _FakeClient()
+
+            def send_permission_prompt(self, **kwargs):
+                return True
+
+        repl._im_reply_controller = _FakeImReply()
+
+        # allow via WeChat reply "1"
+        repl._wait_im_permission_choice = Mock(return_value="1")
+        allowed, cached = repl._handle_permission_request(
+            "Bash", "Claude wants to delete files. Allow?", None
+        )
+        self.assertTrue(allowed)
+        self.assertFalse(cached)
+
+        # deny via WeChat reply "2"
+        repl._permission_decision_cache.clear()
+        repl._wait_im_permission_choice = Mock(return_value="2")
+        allowed, cached = repl._handle_permission_request(
+            "Bash", "Claude wants to delete files. Allow?", None
+        )
+        self.assertFalse(allowed)
+        self.assertFalse(cached)
+
+    def test_wait_im_permission_choice_lazy_inits_lock_and_resolves_via_probe(self):
+        """_wait_im_permission_choice must work even when subclass init skipped the lock."""
+        import os
+        import threading
+        import time as _time
+
+        from clawcodex_ext.frontend.repl_extensions import _handle_im_permission_reply
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+
+        class _FakeImReply:
+            def send_permission_prompt(self, **kwargs):
+                return True
+
+        repl._im_reply_controller = _FakeImReply()
+
+        os.environ["CLAWCODEX_IM_PERMISSION_TIMEOUT"] = "3"
+        try:
+            result: dict = {}
+
+            def _waiter():
+                try:
+                    result["choice"] = repl._wait_im_permission_choice(
+                        message="Bash wants to delete files. Allow?",
+                        options=[("y", "Yes, allow"), ("n", "No, deny")],
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    result["error"] = exc
+
+            t = threading.Thread(target=_waiter, daemon=True)
+            t.start()
+            _time.sleep(0.3)
+            _handle_im_permission_reply(repl, "1")
+            t.join(timeout=3.0)
+        finally:
+            os.environ.pop("CLAWCODEX_IM_PERMISSION_TIMEOUT", None)
+
+        self.assertNotIn(
+            "error", result, f"_wait_im_permission_choice raised: {result.get('error')}"
+        )
+        self.assertEqual(result.get("choice"), "1")
+        self.assertIsNotNone(getattr(repl, "_im_permission_lock", None))
+
+    def test_interrupt_active_chat_from_im_invokes_engine_cancel(self):
+        """IM /stop should use the active cancel hook or abort-controller fallback."""
+        from clawcodex_ext.utils.abort_controller import AbortController
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        engine_interrupts: list[str] = []
+
+        def _cancel_engine():
+            engine_interrupts.append("interrupt")
+
+        repl._im_active_cancel = _cancel_engine
+        repl._direct_abort_controller = None
+        self.assertTrue(repl._interrupt_active_chat_from_im())
+        self.assertEqual(engine_interrupts, ["interrupt"])
+
+        repl2 = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl2._im_active_cancel = None
+        controller = AbortController()
+        repl2._direct_abort_controller = controller
+        self.assertFalse(controller.signal.aborted)
+        self.assertTrue(repl2._interrupt_active_chat_from_im())
+        self.assertTrue(controller.signal.aborted)
+
+        repl3 = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl3._im_active_cancel = None
+        repl3._direct_abort_controller = None
+        self.assertFalse(repl3._interrupt_active_chat_from_im())
 
     def test_permission_prompt_cached_per_tool(self):
         """After first decision, same tool should not prompt again."""

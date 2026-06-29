@@ -54,9 +54,7 @@ def test_format_content_without_title() -> None:
 def test_format_content_with_title() -> None:
     transport = _FakeTransport()
     channel = DiscordChannel(_config(), transport=transport)
-    body, _ = channel.format_message(
-        ChannelMessage(text="body", title="Headline", markdown=True)
-    )
+    body, _ = channel.format_message(ChannelMessage(text="body", title="Headline", markdown=True))
     payload = json.loads(body.decode("utf-8"))
     assert payload["content"] == "**Headline**\nbody"
 

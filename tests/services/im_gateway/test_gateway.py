@@ -1,0 +1,308 @@
+"""Tests for the MessageGateway facade."""
+
+from __future__ import annotations
+
+import pytest
+
+from clawcodex_ext.services.channels.capabilities import (
+    CapabilityDescriptor,
+    ChannelAdapter,
+    ChannelCapability,
+    ChannelCapabilitySet,
+)
+from clawcodex_ext.services.channels.models import ChannelConfig, ChannelMessage, ChannelType
+from clawcodex_ext.services.channels.registry import ChannelAdapterRegistry
+from clawcodex_ext.services.channels.results import (
+    ChannelHealth,
+    ChannelSendResult,
+    ValidationResult,
+)
+from clawcodex_ext.services.im_gateway.config import GatewayConfig
+from clawcodex_ext.services.im_gateway.gateway import MessageGateway
+from clawcodex_ext.services.im_gateway.models import (
+    InboundMessage,
+    MessageSemantics,
+    OutboundMessage,
+)
+
+
+class _FakeAdapter(ChannelAdapter):
+    def __init__(self, name: str = 'fake') -> None:
+        self._name = name
+        self._caps = ChannelCapabilitySet.of(
+            ChannelCapability.OUTBOUND_TEXT,
+            descriptors={
+                ChannelCapability.OUTBOUND_TEXT: CapabilityDescriptor(
+                    ChannelCapability.OUTBOUND_TEXT, supports_markdown=False
+                )
+            },
+        )
+        self.sends: list[ChannelMessage] = []
+
+    @property
+    def channel_id(self) -> str:
+        return self._name
+
+    @property
+    def capabilities(self) -> ChannelCapabilitySet:
+        return self._caps
+
+    def validate_config(self) -> ValidationResult:
+        return ValidationResult.ok_result()
+
+    async def health_check(self) -> ChannelHealth:
+        return ChannelHealth(healthy=True, channel_id=self._name)
+
+    async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
+        self.sends.append(message)
+        return ChannelSendResult.success(self._name, provider_receipt='r')
+
+
+def _gateway(tmp_path, *, adapter: _FakeAdapter | None = None) -> MessageGateway:
+    reg = ChannelAdapterRegistry()
+    if adapter is not None:
+        reg.register(adapter)
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    return MessageGateway(cfg, registry=reg)
+
+
+@pytest.mark.asyncio
+async def test_gateway_send_uses_outbound_dispatcher(tmp_path) -> None:
+    adapter = _FakeAdapter('wechat-main')
+    gw = _gateway(tmp_path, adapter=adapter)
+    result = await gw.send(OutboundMessage(text='hello', channel='wechat-main'))
+    assert result.ok is True
+    assert len(adapter.sends) == 1
+
+
+@pytest.mark.asyncio
+async def test_gateway_broadcast(tmp_path) -> None:
+    a1 = _FakeAdapter('a')
+    a2 = _FakeAdapter('b')
+    reg = ChannelAdapterRegistry()
+    reg.register(a1)
+    reg.register(a2)
+    gw = MessageGateway(GatewayConfig(state_dir=str(tmp_path)), registry=reg)
+    results = await gw.broadcast(OutboundMessage(text='hi', channel='a'))
+    assert results['a'].ok and results['b'].ok
+
+
+@pytest.mark.asyncio
+async def test_gateway_inbound_dedupe_and_classify(tmp_path) -> None:
+    gw = _gateway(tmp_path)
+    msg = InboundMessage(
+        origin='wechat:direct:default:u', text='hello', message_id='m1', channel='c'
+    )
+    r1 = await gw.receive(msg)
+    assert r1.message != 'duplicate; skipped'
+    r2 = await gw.receive(msg)
+    assert r2.message == 'duplicate; skipped'
+    assert msg.semantic is MessageSemantics.NEW_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_gateway_inbound_pushes_to_opt_in_bound_origin(tmp_path) -> None:
+    """When an origin is bound to an opt-in peer, dispatch pushes via IPC,
+    NOT the default stub handler."""
+    from clawcodex_ext.services.im_gateway.models import SessionTarget
+
+    gw = _gateway(tmp_path)
+    pushed: list[InboundMessage] = []
+
+    async def _push(msg):
+        pushed.append(msg)
+        return True
+
+    gw.set_push_handler(_push)
+    # bind the origin to a REPL opt-in target
+    gw.binding.bind(
+        'wechat:direct:default:u',
+        SessionTarget(session_id='repl_main', host_type='repl'),
+    )
+    handler_calls: list[InboundMessage] = []
+    gw.set_handler(lambda m: handler_calls.append(m) or _ack())
+
+    async def _ack():
+        from clawcodex_ext.services.im_gateway.models import AckLayer, AckReceipt
+
+        return AckReceipt('d', AckLayer.PROCESSED, 'stub')
+
+    msg = InboundMessage(
+        origin='wechat:direct:default:u', text='hi', message_id='m1', channel='wechat-main'
+    )
+    ack = await gw.receive(msg)
+    assert len(pushed) == 1  # pushed to the opt-in peer
+    assert pushed[0].text == 'hi'
+    assert handler_calls == []  # default handler NOT called (opt-in overrides)
+
+
+@pytest.mark.asyncio
+async def test_gateway_inbound_default_origin_still_uses_handler(tmp_path) -> None:
+    """Unbound (default) origins still go to the stub/handler, not push."""
+    gw = _gateway(tmp_path)
+    pushed: list[InboundMessage] = []
+
+    async def _push(msg):
+        pushed.append(msg)
+        return True
+
+    gw.set_push_handler(_push)
+    handler_calls: list[InboundMessage] = []
+    gw.set_handler(lambda m: handler_calls.append(m) or _ack())
+
+    async def _ack():
+        from clawcodex_ext.services.im_gateway.models import AckLayer, AckReceipt
+
+        return AckReceipt('d', AckLayer.PROCESSED, 'stub')
+
+    msg = InboundMessage(
+        origin='wechat:direct:default:u', text='hi', message_id='m1', channel='wechat-main'
+    )
+    await gw.receive(msg)
+    assert pushed == []  # no opt-in binding → no push
+    assert len(handler_calls) == 1  # default handler called
+
+
+@pytest.mark.asyncio
+async def test_gateway_inbound_classifies_slash_as_command(tmp_path) -> None:
+    gw = _gateway(tmp_path)
+    msg = InboundMessage(origin='o', text='/agent retry AGENTSDK-15', message_id='m1', channel='c')
+    await gw.receive(msg)
+    assert msg.semantic is MessageSemantics.COMMAND
+
+
+@pytest.mark.asyncio
+async def test_gateway_reload_channel_rebuilds(tmp_path) -> None:
+    # registry with a fake factory for "slack" type
+    reg = ChannelAdapterRegistry()
+
+    def _factory(cfg: ChannelConfig) -> _FakeAdapter:
+        return _FakeAdapter(cfg.name)
+
+    reg.register_type(ChannelType.SLACK, _factory)
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels.append(
+        ChannelConfig(
+            type=ChannelType.SLACK,
+            webhook_url='https://hooks.example.com/x',
+            name='slack-ops',
+        )
+    )
+    gw = MessageGateway(cfg, registry=reg)
+    assert gw.reload_channel('slack-ops') is True
+    assert gw.registry.get('slack-ops') is not None
+    assert gw.reload_channel('nope') is False
+
+
+def test_gateway_normalizes_duplicate_channel_types_before_runtime_load(tmp_path) -> None:
+    reg = ChannelAdapterRegistry()
+
+    def _factory(cfg: ChannelConfig) -> _FakeAdapter:
+        return _FakeAdapter(cfg.name)
+
+    reg.register_type(ChannelType.SLACK, _factory)
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels = [
+        ChannelConfig(
+            type=ChannelType.SLACK,
+            webhook_url='https://hooks.example.com/old',
+            name='slack-old',
+        ),
+        ChannelConfig(
+            type=ChannelType.SLACK,
+            webhook_url='https://hooks.example.com/new',
+            name='slack-new',
+        ),
+    ]
+
+    gw = MessageGateway(cfg, registry=reg)
+
+    assert gw.registry.names() == ['slack-new']
+    assert [c.name for c in gw.config.channels] == ['slack-new']
+
+
+@pytest.mark.asyncio
+async def test_gateway_health(tmp_path) -> None:
+    gw = _gateway(tmp_path, adapter=_FakeAdapter('wechat-main'))
+    health = await gw.health()
+    assert health['running'] is False
+    assert 'wechat-main' in health['channels']
+    assert health['outbox_pending'] == 0
+
+
+def test_gateway_loads_wechat_channel_from_config(tmp_path) -> None:
+    from clawcodex_ext.services.channels.capabilities import ChannelCapability
+    from clawcodex_ext.services.channels.models import ChannelType
+
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels.append(
+        ChannelConfig(
+            type=ChannelType.WECHAT,
+            webhook_url='https://ilinkai.weixin.qq.com/dummy',
+            name='wechat',
+            enabled=True,
+            extra={
+                'base_url': 'https://ilinkai.weixin.qq.com',
+                'account_id': 'default',
+                'allowed_users': [],
+            },
+        )
+    )
+    gw = MessageGateway(cfg)
+    adapter = gw.registry.get('wechat')
+    assert adapter is not None
+    assert adapter.capabilities.has(ChannelCapability.INBOUND_POLLING)
+    # WeChat adapter is registered as an inbound adapter
+    assert any(a.channel_id == 'wechat' for a in gw._inbound_adapters)
+    # not logged in (no saved auth) but registered
+    assert adapter._account_status == 'unconfigured'
+
+
+def test_gateway_normalizes_legacy_wechat_name_and_reuses_legacy_auth(tmp_path) -> None:
+    from clawcodex_ext.services.channels.models import ChannelType
+    from clawcodex_ext.services.channels.wechat_ilink import WeChatAuthRecord, WeChatIlinkAuthStore
+
+    wechat_dir = tmp_path / 'wechat'
+    old_auth = wechat_dir / 'wechat-main_auth.json'
+    WeChatIlinkAuthStore(old_auth).save(
+        WeChatAuthRecord(
+            bot_token='bot_tok_123',
+            account_id='acct',
+            base_url='https://ilinkai.weixin.qq.com',
+            user_id='bot_user',
+        )
+    )
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels.append(
+        ChannelConfig(
+            type=ChannelType.WECHAT,
+            webhook_url='https://ilinkai.weixin.qq.com/dummy',
+            name='wechat-main',
+            enabled=True,
+            extra={'base_url': 'https://ilinkai.weixin.qq.com', 'account_id': 'default'},
+        )
+    )
+
+    gw = MessageGateway(cfg)
+
+    assert gw.registry.get('wechat-main') is None
+    adapter = gw.registry.get('wechat')
+    assert adapter is not None
+    assert adapter._account_status == 'logged_in'
+    assert adapter._account_id == 'acct'
+
+
+def test_gateway_skips_disabled_channels(tmp_path) -> None:
+    from clawcodex_ext.services.channels.models import ChannelType
+
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.channels.append(
+        ChannelConfig(
+            type=ChannelType.WECHAT,
+            webhook_url='https://ilinkai.weixin.qq.com/dummy',
+            name='wechat-off',
+            enabled=False,
+        )
+    )
+    gw = MessageGateway(cfg)
+    assert gw.registry.get('wechat-off') is None

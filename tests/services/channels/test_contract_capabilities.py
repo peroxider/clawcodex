@@ -1,0 +1,103 @@
+"""Tests for the capability model and ChannelAdapter contract."""
+
+from __future__ import annotations
+
+import pytest
+
+from clawcodex_ext.services.channels.capabilities import (
+    CapabilityDescriptor,
+    CapabilityNotDeclaredError,
+    ChannelAdapter,
+    ChannelCapability,
+    ChannelCapabilitySet,
+    OutboundCapability,
+)
+from clawcodex_ext.services.channels.results import ChannelHealth, ValidationResult
+
+
+def test_capability_enum_values() -> None:
+    assert ChannelCapability.OUTBOUND_TEXT.value == "outbound_text"
+    assert ChannelCapability.INBOUND_POLLING.value == "inbound_polling"
+    assert ChannelCapability.INBOUND_WEBHOOK.value == "inbound_webhook"
+    assert ChannelCapability.CONTEXT_REPLY.value == "context_reply"
+    assert ChannelCapability.LOGIN_MANAGED.value == "login_managed"
+
+
+def test_capability_set_of_and_has() -> None:
+    caps = ChannelCapabilitySet.of(
+        ChannelCapability.OUTBOUND_TEXT,
+        ChannelCapability.CONTEXT_REPLY,
+    )
+    assert caps.has(ChannelCapability.OUTBOUND_TEXT)
+    assert caps.has(ChannelCapability.CONTEXT_REPLY)
+    assert not caps.has(ChannelCapability.INBOUND_POLLING)
+
+
+def test_capability_set_descriptor_lookup() -> None:
+    desc = CapabilityDescriptor(
+        ChannelCapability.OUTBOUND_TEXT,
+        supports_markdown=False,
+        max_text_length=4000,
+    )
+    caps = ChannelCapabilitySet.of(
+        ChannelCapability.OUTBOUND_TEXT,
+        descriptors={ChannelCapability.OUTBOUND_TEXT: desc},
+    )
+    got = caps.descriptor(ChannelCapability.OUTBOUND_TEXT)
+    assert got is not None
+    assert got.supports_markdown is False
+    assert got.max_text_length == 4000
+    assert caps.descriptor(ChannelCapability.INBOUND_POLLING) is None
+
+
+def test_capability_set_rejects_orphan_descriptor() -> None:
+    desc = CapabilityDescriptor(ChannelCapability.INBOUND_POLLING)
+    with pytest.raises(ValueError):
+        ChannelCapabilitySet.of(
+            ChannelCapability.OUTBOUND_TEXT,
+            descriptors={ChannelCapability.INBOUND_POLLING: desc},
+        )
+
+
+class _FakeAdapter(ChannelAdapter):
+    def __init__(self, caps: ChannelCapabilitySet) -> None:
+        self._caps = caps
+
+    @property
+    def channel_id(self) -> str:
+        return "fake"
+
+    @property
+    def capabilities(self) -> ChannelCapabilitySet:
+        return self._caps
+
+    def validate_config(self) -> ValidationResult:
+        return ValidationResult.ok_result()
+
+    async def health_check(self) -> ChannelHealth:
+        return ChannelHealth(healthy=True, channel_id="fake")
+
+
+def test_channel_adapter_require_capability_passes_when_declared() -> None:
+    adapter = _FakeAdapter(ChannelCapabilitySet.of(ChannelCapability.OUTBOUND_TEXT))
+    adapter.require_capability(ChannelCapability.OUTBOUND_TEXT)  # no raise
+
+
+def test_channel_adapter_require_capability_fail_closed() -> None:
+    adapter = _FakeAdapter(ChannelCapabilitySet.of(ChannelCapability.OUTBOUND_TEXT))
+    with pytest.raises(CapabilityNotDeclaredError):
+        adapter.require_capability(ChannelCapability.MEDIA_IMAGE)
+
+
+def test_outbound_capability_is_structural_protocol() -> None:
+    class _Out:
+        channel_id = "x"
+
+        async def send(self, message, *, target=None, context_token=None): ...
+
+    assert isinstance(_Out(), OutboundCapability)
+
+
+def test_channel_adapter_default_retry_policy() -> None:
+    adapter = _FakeAdapter(ChannelCapabilitySet.of(ChannelCapability.OUTBOUND_TEXT))
+    assert adapter.retry_policy.max_attempts >= 1
