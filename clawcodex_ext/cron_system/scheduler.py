@@ -45,7 +45,8 @@ class CronScheduler:
     is_killed: Callable[[], bool] | None = None
     # F-22-G2: per-tick config loader. When None, falls back to
     # ``load_jitter_config(workspace_root)`` so live edits to
-    # ``.claude/cron_jitter_config.json`` and ``CLAWCODEX_CRON_*`` env
+    # ``.clawcodex/cron/jitter_config.json`` (or legacy ``.claude/cron_jitter_config.json``)
+    # and ``CLAWCODEX_CRON_*`` env
     # vars take effect on the next ``check_once`` without restarting the
     # CLI. Pass an explicit callable to inject a GrowthBook-style
     # remote-config source.

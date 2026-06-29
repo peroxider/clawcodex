@@ -32,7 +32,7 @@ def test_extension_tools_store_session_tasks_by_default(tmp_path) -> None:
     assert created["durable"] is False
     listed = registry_tool("CronList").call({}, ctx).output
     assert [job["id"] for job in listed["jobs"]] == [created["id"]]
-    assert not (tmp_path / ".claude" / "scheduled_tasks.json").exists()
+    assert not (tmp_path / ".clawcodex" / "cron" / "scheduled_tasks.json").exists()
     deleted = registry_tool("CronDelete").call({"id": created["id"]}, ctx).output
     assert deleted["success"] is True
 
@@ -43,7 +43,7 @@ def test_extension_tools_persist_durable_tasks(tmp_path) -> None:
         {"cron": "*/5 * * * *", "prompt": "ping", "durable": True}, ctx
     ).output
     assert created["durable"] is True
-    assert (tmp_path / ".claude" / "scheduled_tasks.json").exists()
+    assert (tmp_path / ".clawcodex" / "cron" / "scheduled_tasks.json").exists()
     listed = registry_tool("CronList").call({}, ctx).output
     assert [job["id"] for job in listed["jobs"]] == [created["id"]]
 
@@ -152,7 +152,7 @@ def test_durable_false_path_not_written_to_disk(tmp_path) -> None:
     ctx = ToolContext(workspace_root=tmp_path)
     CronCreateTool.call({"cron": "*/5 * * * *", "prompt": "session"}, ctx)
     # durable=False tasks must NOT touch the persisted file
-    assert not (tmp_path / ".claude" / "scheduled_tasks.json").exists()
+    assert not (tmp_path / ".clawcodex" / "cron" / "scheduled_tasks.json").exists()
     # but they must be visible in the session store
     assert "crons" in dir(ctx) or hasattr(ctx, "crons")
     assert any(t.prompt == "session" for t in ctx.crons.values())

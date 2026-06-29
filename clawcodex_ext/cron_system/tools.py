@@ -58,7 +58,7 @@ expression when possible.
 
 # Durable vs session
 
-  - `durable: true` (default) — persisted to `.claude/scheduled_tasks.json`
+  - `durable: true` (default) — persisted to `.clawcodex/cron/scheduled_tasks.json`
     and survives process restarts.
   - `durable: false` — kept in the active session only; never written to disk.
     Use for ephemeral follow-ups.

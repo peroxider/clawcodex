@@ -10,11 +10,11 @@ from typing import Any
 
 _log = logging.getLogger(__name__)
 
-SCHEDULED_TASKS_RELATIVE_PATH = Path(".claude/scheduled_tasks.json")
-SCHEDULED_TASKS_LOCK_RELATIVE_PATH = Path(".claude/scheduled_tasks.lock")
-SCHEDULED_TASKS_STORAGE_LOCK_RELATIVE_PATH = Path(".claude/scheduled_tasks.storage.lock")
-RUNS_STORAGE_LOCK_RELATIVE_PATH = Path(".claude/cron_runs.storage.lock")
-SCHEDULED_TASKS_CONFIG_RELATIVE_PATH = Path(".claude/cron_jitter_config.json")
+SCHEDULED_TASKS_RELATIVE_PATH = Path(".clawcodex/cron/scheduled_tasks.json")
+SCHEDULED_TASKS_LOCK_RELATIVE_PATH = Path(".clawcodex/cron/scheduled_tasks.lock")
+SCHEDULED_TASKS_STORAGE_LOCK_RELATIVE_PATH = Path(".clawcodex/cron/scheduled_tasks.storage.lock")
+RUNS_STORAGE_LOCK_RELATIVE_PATH = Path(".clawcodex/cron/cron_runs.storage.lock")
+SCHEDULED_TASKS_CONFIG_RELATIVE_PATH = Path(".clawcodex/cron/jitter_config.json")
 
 DEFAULT_RECURRING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 DEFAULT_RECURRING_FRAC = 0.1
@@ -56,7 +56,7 @@ class CronJitterConfig:
     """Tuning knobs for cron scheduling jitter (mirrors CCB tengu_kairos_cron_config).
 
     All values are mutable at runtime via :func:`load_jitter_config` which
-    reads from ``.claude/cron_jitter_config.json`` and ``CLAWCODEX_CRON_*``
+    reads from ``.clawcodex/cron/jitter_config.json`` (or legacy ``.claude/cron_jitter_config.json``) and ``CLAWCODEX_CRON_*``
     env vars, falling back to safe defaults on parse error or out-of-range.
     """
 
@@ -153,7 +153,7 @@ def load_jitter_config(
 
     Resolution order (later wins):
       1. Built-in defaults
-      2. ``<workspace_root>/.claude/cron_jitter_config.json`` (if present)
+      2. ``<workspace_root>/.clawcodex/cron/jitter_config.json`` (if present; fallback to legacy ``.claude/cron_jitter_config.json``)
       3. ``CLAWCODEX_CRON_*`` environment variables
 
     Used by :class:`CronScheduler` on every ``check_once()`` tick so config
@@ -164,6 +164,11 @@ def load_jitter_config(
     base = _default_jitter_config()
     if workspace_root is not None:
         config_path = workspace_root / SCHEDULED_TASKS_CONFIG_RELATIVE_PATH
+        if not config_path.exists():
+            # Backward compat: check legacy .claude/cron_jitter_config.json
+            legacy = workspace_root / ".claude" / "cron_jitter_config.json"
+            if legacy.exists():
+                config_path = legacy
         if config_path.exists():
             try:
                 import json as _json

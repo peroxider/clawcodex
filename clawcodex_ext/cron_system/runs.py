@@ -14,7 +14,7 @@ from typing import Any, Iterable, Literal
 from .lock import acquire_cron_storage_lock
 from .models import CronTask
 
-RUNS_RELATIVE_PATH = Path(".claude/scheduled_task_runs.json")
+RUNS_RELATIVE_PATH = Path(".clawcodex/cron/scheduled_task_runs.json")
 ACTIVE_RUN_STATUSES = frozenset({"queued", "running"})
 TERMINAL_RUN_STATUSES = frozenset({"completed", "failed", "cancelled"})
 STALE_ACTIVE_RUN_ERROR_PREFIX = "Recovered stale active scheduled-task run"
@@ -176,7 +176,11 @@ def now_ms() -> int:
 def read_cron_runs(workspace_root: Path) -> list[CronRun]:
     path = runs_file_path(workspace_root)
     if not path.exists():
-        return []
+        # Backward compat: check legacy .claude/scheduled_task_runs.json
+        legacy = workspace_root / ".claude" / "scheduled_task_runs.json"
+        if not legacy.exists():
+            return []
+        path = legacy
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

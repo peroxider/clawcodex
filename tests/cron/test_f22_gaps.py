@@ -59,7 +59,7 @@ class TestG2JitterConfig:
         assert cfg.recurring_max_age_ms == DEFAULT_RECURRING_MAX_AGE_MS
 
     def test_load_reads_config_file(self, tmp_path: Path) -> None:
-        config_path = tmp_path / ".claude" / "cron_jitter_config.json"
+        config_path = tmp_path / ".clawcodex" / "cron" / "jitter_config.json"
         config_path.parent.mkdir(parents=True)
         config_path.write_text(
             json.dumps(
@@ -77,7 +77,7 @@ class TestG2JitterConfig:
         assert cfg.one_shot_minute_mod == 15
 
     def test_load_accepts_camel_case_keys(self, tmp_path: Path) -> None:
-        config_path = tmp_path / ".claude" / "cron_jitter_config.json"
+        config_path = tmp_path / ".clawcodex" / "cron" / "jitter_config.json"
         config_path.parent.mkdir(parents=True)
         config_path.write_text(
             json.dumps(
@@ -97,7 +97,7 @@ class TestG2JitterConfig:
         assert cfg.one_shot_floor_ms == 5_000
 
     def test_env_vars_override_file(self, tmp_path: Path) -> None:
-        config_path = tmp_path / ".claude" / "cron_jitter_config.json"
+        config_path = tmp_path / ".clawcodex" / "cron" / "jitter_config.json"
         config_path.parent.mkdir(parents=True)
         config_path.write_text(json.dumps({"recurringCapMs": 100_000}), encoding="utf-8")
         env = {"CLAWCODEX_CRON_RECURRING_CAP_MS": "500000"}
@@ -126,7 +126,7 @@ class TestG2JitterConfig:
     def test_scheduler_hot_reloads_jitter_per_tick(self, tmp_path: Path) -> None:
         # F-22-G2 hot-reload: scheduler reloads the jitter config every
         # _THROTTLE_INTERVAL ticks (default 60) so live edits to
-        # .claude/cron_jitter_config.json or CLAWCODEX_CRON_* env vars
+        # .clawcodex/cron/jitter_config.json or CLAWCODEX_CRON_* env vars
         # take effect within ~60 s without restart.
         call_count = {"n": 0}
         base = CronJitterConfig()
@@ -427,7 +427,7 @@ class TestG5LockImprovements:
 
     def test_pid_validator_override_blocks(self, tmp_path: Path) -> None:
         # Write a live-looking lock
-        lock_path = tmp_path / ".claude" / "scheduled_tasks.lock"
+        lock_path = tmp_path / ".clawcodex" / "cron" / "scheduled_tasks.lock"
         lock_path.parent.mkdir(parents=True)
         lock_path.write_text(
             json.dumps(
@@ -473,7 +473,7 @@ class TestG5LockImprovements:
         # re-invoke the unregistered callback.
 
     def test_stale_age_recovery(self, tmp_path: Path) -> None:
-        lock_path = tmp_path / ".claude" / "scheduled_tasks.lock"
+        lock_path = tmp_path / ".clawcodex" / "cron" / "scheduled_tasks.lock"
         lock_path.parent.mkdir(parents=True)
         # Old lock file
         lock_path.write_text(

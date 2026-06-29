@@ -34,7 +34,11 @@ def now_ms() -> int:
 def read_cron_tasks(workspace_root: Path) -> list[CronTask]:
     path = tasks_file_path(workspace_root)
     if not path.exists():
-        return []
+        # Backward compat: check legacy .claude/scheduled_tasks.json
+        legacy = workspace_root / ".claude" / "scheduled_tasks.json"
+        if not legacy.exists():
+            return []
+        path = legacy
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
