@@ -3736,6 +3736,41 @@ class ClawcodexREPL:
                     self.handle_command(user_input)
                     continue
 
+                if user_input.startswith("!"):
+                    # Bash mode: direct execution, no agent turn.
+                    # Feeds the bash input + output into the conversation
+                    # (so the model sees what happened on its next turn).
+                    from src.services.bash_mode import run_bash_mode_command
+
+                    command = user_input[1:]
+                    self._echo_user_input(f"! {command}")
+                    outcome = run_bash_mode_command(command, self.tool_context)
+
+                    # Append conversation texts so the model sees them
+                    # on the next agent turn.
+                    for conv_text in outcome.conversation_texts:
+                        self.session.conversation.add_user_message(conv_text)
+
+                    # Display result in the console.
+                    if outcome.ok:
+                        if outcome.stdout:
+                            self.console.print(
+                                outcome.stdout, markup=False, highlight=False
+                            )
+                        if outcome.stderr:
+                            self.console.print(
+                                f"[dim]{outcome.stderr}[/dim]",
+                                markup=False,
+                                highlight=False,
+                            )
+                    else:
+                        self.console.print(
+                            f"[error]! {command}: {outcome.error or outcome.stderr or 'Unknown error'}[/error]",
+                            markup=False,
+                            highlight=False,
+                        )
+                    continue
+
                 _cron_task_id = self._extract_cron_task_id(user_input)
                 if _cron_task_id:
                     self._claim_cron_task(_cron_task_id)
