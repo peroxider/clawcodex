@@ -144,9 +144,27 @@ class IssueRecord:
 class IssueRegistry:
     """Persistent issue→commit→PR mapping, stored as JSON."""
 
-    def __init__(self, storage_path: Path) -> None:
+    # High-frequency diagnostics writes (turn/tool counts, last event)
+    # coalesce to at most one disk write per this interval. Status / PR
+    # mutations are never throttled — they always persist immediately.
+    _DIAGNOSTICS_MIN_SAVE_INTERVAL_S = 2.0
+
+    def __init__(
+        self,
+        storage_path: Path,
+        *,
+        diagnostics_min_save_interval_s: float | None = None,
+    ) -> None:
         self._path = storage_path
         self._records: dict[str, IssueRecord] = {}
+        self._diagnostics_min_save_interval_s = (
+            diagnostics_min_save_interval_s
+            if diagnostics_min_save_interval_s is not None
+            else self._DIAGNOSTICS_MIN_SAVE_INTERVAL_S
+        )
+        # Throttle bookkeeping for ``_save_diagnostics``.
+        self._last_diagnostics_save_monotonic = 0.0
+        self._pending_diagnostics_save = False
         self._load()
 
     # ------------------------------------------------------------------
@@ -213,6 +231,41 @@ class IssueRegistry:
                 with suppress(OSError):
                     tmp_path.unlink()
             logger.warning("Failed to save issue registry: %s", exc)
+            return
+        # A durable write persists the latest in-memory state — including
+        # any diagnostics that were only marked pending — so reset the
+        # throttle window. Done only on success so a failed write doesn't
+        # silently swallow a pending diagnostics flush.
+        self._pending_diagnostics_save = False
+        self._last_diagnostics_save_monotonic = time.monotonic()
+
+    def _save_diagnostics(self) -> None:
+        """Throttled save for high-frequency observational updates.
+
+        ``update_run_diagnostics`` fires on every agent event (turn/tool
+        counts, last event/tool). Rewriting the whole registry on each
+        one thrashes the disk on a busy run. Coalesce to at most one
+        write per ``_diagnostics_min_save_interval_s``; the latest state
+        is always in memory, and any durable mutation (status / PR
+        change) or an explicit :meth:`flush` persists pending data. On a
+        crash we lose at most one interval's worth of *observational*
+        data — never status/PR state, which still saves immediately.
+        """
+        now = time.monotonic()
+        if now - self._last_diagnostics_save_monotonic >= self._diagnostics_min_save_interval_s:
+            self._save()  # resets pending flag + timestamp on success
+        else:
+            self._pending_diagnostics_save = True
+
+    def flush(self) -> None:
+        """Persist any pending throttled diagnostics write.
+
+        Call at the end of a run (including paths that don't end in a
+        durable status mutation, e.g. ``pending_review``) so the final
+        diagnostics snapshot reaches disk.
+        """
+        if self._pending_diagnostics_save:
+            self._save()
 
     # ------------------------------------------------------------------
     # Queries
@@ -451,7 +504,7 @@ class IssueRegistry:
         if workspace_dirty is not None:
             record.run_workspace_dirty = workspace_dirty
         record.touch()
-        self._save()
+        self._save_diagnostics()
         return record
 
     def mark_pending_review(self, issue_id: str) -> IssueRecord | None:

@@ -2271,6 +2271,10 @@ class Orchestrator:
                 if workspace_dirty is not None:
                     session.run_workspace_dirty = workspace_dirty
                 self._update_run_diagnostics(session)
+                # Diagnostics saves are throttled; force the final
+                # snapshot to disk in case this path (e.g. pending_review)
+                # ends without a durable status mutation.
+                self._registry.flush()
 
                 if session.issue.id in self._state.running:
                     del self._state.running[session.issue.id]

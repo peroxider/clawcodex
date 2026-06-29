@@ -443,6 +443,101 @@ class TestUpdateRunDiagnostics(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# IssueRegistry — throttled diagnostics save (P2.3-a)
+# ---------------------------------------------------------------------------
+
+
+class TestThrottledDiagnosticsSave(unittest.TestCase):
+    """``update_run_diagnostics`` coalesces disk writes; ``flush`` drains.
+
+    Status / PR mutations must still persist immediately and clear the
+    pending throttle flag. Setting ``diagnostics_min_save_interval_s=0``
+    disables throttling entirely (every call writes).
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "registry.json"
+
+    def _registry(self, interval: float) -> IssueRegistry:
+        reg = IssueRegistry(
+            storage_path=self.path,
+            diagnostics_min_save_interval_s=interval,
+        )
+        reg.register("i1", "owner/repo#1")
+        # register() just performed a durable save and primed the throttle
+        # window to "now". Rewind it past the interval so the *first*
+        # diagnostics call is deterministically allowed regardless of how
+        # long register() took.
+        reg._last_diagnostics_save_monotonic = time.monotonic() - (interval + 1.0)
+        return reg
+
+    def _on_disk(self) -> dict[str, Any]:
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def test_second_call_within_interval_is_throttled(self) -> None:
+        # A large interval guarantees the second call falls inside the
+        # window. The register() above already performed a durable save
+        # and primed the throttle timestamp.
+        reg = self._registry(interval=3600.0)
+        reg.update_run_diagnostics("i1", turn_count=1)
+        # In-memory record is current after the (first, allowed) write.
+        self.assertEqual(reg.get("i1").run_turn_count, 1)
+        reg.update_run_diagnostics("i1", turn_count=2)
+        # Second update is throttled: memory current, disk stale.
+        self.assertEqual(reg.get("i1").run_turn_count, 2)
+        self.assertTrue(reg._pending_diagnostics_save)
+        self.assertEqual(self._on_disk()["i1"].get("run_turn_count"), 1)
+
+    def test_flush_persists_pending_diagnostics(self) -> None:
+        reg = self._registry(interval=3600.0)
+        reg.update_run_diagnostics("i1", turn_count=1)
+        reg.update_run_diagnostics("i1", turn_count=5)
+        self.assertTrue(reg._pending_diagnostics_save)
+        reg.flush()
+        self.assertFalse(reg._pending_diagnostics_save)
+        self.assertEqual(self._on_disk()["i1"].get("run_turn_count"), 5)
+
+    def test_flush_without_pending_is_noop(self) -> None:
+        reg = self._registry(interval=3600.0)
+        reg.update_run_diagnostics("i1", turn_count=1)  # allowed first write
+        self.assertFalse(reg._pending_diagnostics_save)
+        # No pending write — flush must not error and disk stays as-is.
+        reg.flush()
+        self.assertEqual(self._on_disk()["i1"].get("run_turn_count"), 1)
+
+    def test_status_mutation_persists_immediately_and_clears_pending(self) -> None:
+        reg = self._registry(interval=3600.0)
+        reg.update_run_diagnostics("i1", turn_count=1)
+        reg.update_run_diagnostics("i1", turn_count=9)  # throttled
+        self.assertTrue(reg._pending_diagnostics_save)
+        # A durable status mutation goes straight to disk and, because it
+        # serialises the whole in-memory record, carries the pending
+        # diagnostics with it and resets the throttle flag.
+        reg.mark_completed("i1")
+        self.assertFalse(reg._pending_diagnostics_save)
+        on_disk = self._on_disk()["i1"]
+        self.assertEqual(on_disk.get("status"), IssueStatus.COMPLETED.value)
+        self.assertEqual(on_disk.get("run_turn_count"), 9)
+
+    def test_zero_interval_disables_throttling(self) -> None:
+        reg = self._registry(interval=0.0)
+        reg.update_run_diagnostics("i1", turn_count=1)
+        reg.update_run_diagnostics("i1", turn_count=2)
+        # Every call writes immediately; nothing is ever left pending.
+        self.assertFalse(reg._pending_diagnostics_save)
+        self.assertEqual(self._on_disk()["i1"].get("run_turn_count"), 2)
+
+    def test_default_interval_used_when_unset(self) -> None:
+        reg = IssueRegistry(storage_path=self.path)
+        self.assertEqual(
+            reg._diagnostics_min_save_interval_s,
+            IssueRegistry._DIAGNOSTICS_MIN_SAVE_INTERVAL_S,
+        )
+
+
+# ---------------------------------------------------------------------------
 # IssueRegistry — feedback mutations
 # ---------------------------------------------------------------------------
 
