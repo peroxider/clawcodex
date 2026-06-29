@@ -1687,6 +1687,12 @@ class Orchestrator:
         # does not try to push a follow-up commit to a closed PR.
         await self._prepare_intent_reset(issue)
 
+        workspace_strategy = self.workflow.workspace.strategy
+        branch_name = getattr(issue, "branch_name", None)
+        if not branch_name:
+            branch_name = self.git_sync._default_branch_name(issue)
+            issue.branch_name = branch_name
+
         try:
             workspace = await self.workspace.create_for_issue(issue)
         except Exception as exc:
@@ -1699,11 +1705,6 @@ class Orchestrator:
             return
 
         # Register as pending so restart won't re-launch this issue
-        workspace_strategy = self.workflow.workspace.strategy
-        branch_name = getattr(issue, "branch_name", None)
-        if not branch_name:
-            branch_name = self.git_sync._default_branch_name(issue)
-            issue.branch_name = branch_name
         base_branch = (
             getattr(issue, "base_branch", None) or self.workflow.workspace.base_branch or "main"
         )
