@@ -44,6 +44,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         assignee: str | None = None,
         intent_labels: dict[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
+        skip_labels: list[str] | None = None,
+        require_any_labels: list[str] | None = None,
     ) -> None:
         self.platform = platform
         self.owner = owner
@@ -51,6 +53,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
         self.assignee = assignee
         self.active_states = active_states or default_active_states_for_kind(platform)
         self.terminal_states = terminal_states or default_terminal_states_for_kind(platform)
+        self.skip_labels: list[str] = list(skip_labels or [])
+        self.require_any_labels: list[str] = list(require_any_labels or [])
         # F-39: intent label conventions (operator-driven retry/followup/blocked).
         # If caller passes None, fall back to the standard "agent:*" set.
         self.intent_labels: dict[str, str] = (
@@ -63,6 +67,8 @@ class RepositoryTrackerAdapter(TrackerAdapter):
             api_key=api_key,
             endpoint=endpoint,
             http_client=http_client,
+            skip_labels=skip_labels,
+            require_any_labels=require_any_labels,
         )
 
     async def extract_intent_from_labels(

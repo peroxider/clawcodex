@@ -170,6 +170,18 @@ class TrackerConfig:
             "Done",
         ]
     )
+    # Issues carrying any of these labels (case-insensitive) are
+    # excluded from the candidate queue at fetch time. Use for
+    # web-only workflow labels (e.g. "completed", "wontfix") that the
+    # tracker's `state` field does not reflect as terminal. Empty
+    # list = no exclusion.
+    skip_labels: list[str] = field(default_factory=list)
+    # Issues must carry at least ONE of these labels (OR semantics,
+    # case-insensitive) to enter the candidate queue. Use to scope
+    # the orchestrator to a particular class of work (e.g. only
+    # `priority/high` or `priority/urgent`). Empty list = no
+    # requirement. Evaluated before `skip_labels`.
+    require_any_labels: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -495,6 +507,14 @@ class WorkflowConfig:
             tracker_raw.get("terminal_states"),
             default_terminal_states_for_kind(tracker_kind),
         )
+        tracker_skip_labels = _normalize_string_list(
+            tracker_raw.get("skip_labels"),
+            [],
+        )
+        tracker_require_any_labels = _normalize_string_list(
+            tracker_raw.get("require_any_labels"),
+            [],
+        )
 
         tracker = TrackerConfig(
             kind=tracker_kind,
@@ -514,6 +534,8 @@ class WorkflowConfig:
             issues_path=_normalize_secret_value(_expand_path(tracker_raw.get("issues_path"), "")),
             active_states=tracker_active_states,
             terminal_states=tracker_terminal_states,
+            skip_labels=tracker_skip_labels,
+            require_any_labels=tracker_require_any_labels,
         )
 
         workspace_root = _expand_path(workspace_raw.get("root"), _default_tmp_workspace())

@@ -84,6 +84,8 @@ class RepositoryIssueClient:
         api_key: str | None,
         endpoint: str | None = None,
         http_client: httpx.AsyncClient | None = None,
+        skip_labels: list[str] | None = None,
+        require_any_labels: list[str] | None = None,
     ) -> None:
         try:
             self.platform = _PLATFORMS[platform]
@@ -94,6 +96,32 @@ class RepositoryIssueClient:
         self.api_key = api_key or ""
         self.endpoint = (endpoint or self.platform.default_endpoint).rstrip("/")
         self._http_client = http_client
+        # Labels for denylist / allowlist filtering (case-insensitive).
+        self._skip_labels: frozenset[str] = frozenset(
+            label.strip().lower()
+            for label in (skip_labels or [])
+            if label and label.strip()
+        )
+        self._require_any_labels: frozenset[str] = frozenset(
+            label.strip().lower()
+            for label in (require_any_labels or [])
+            if label and label.strip()
+        )
+
+    def _matched_skip_label(self, issue: Issue) -> str | None:
+        """Return the first skip_label hit on this issue, or None."""
+        if not self._skip_labels:
+            return None
+        issue_labels = {label.lower() for label in issue.labels}
+        matched = issue_labels & self._skip_labels
+        return next(iter(matched), None) if matched else None
+
+    def _matches_any_required_label(self, issue: Issue) -> bool:
+        """True if at least one required label is on the issue (OR)."""
+        if not self._require_any_labels:
+            return True
+        issue_labels = {label.lower() for label in issue.labels}
+        return bool(issue_labels & self._require_any_labels)
 
     async def fetch_candidate_issues(
         self,
@@ -122,15 +150,28 @@ class RepositoryIssueClient:
             if not isinstance(payload, list):
                 raise RepositoryTrackerError("invalid_issue_list_response")
 
-            batch = [
-                issue
-                for issue in (
-                    _normalize_issue(item, active_states=active_states) for item in payload
-                )
-                if issue is not None and _matches_assignee(issue, assignee)
-            ]
-            issues.extend(batch)
-
+            for issue in (
+                _normalize_issue(item, active_states=active_states) for item in payload
+            ):
+                if issue is None or not _matches_assignee(issue, assignee):
+                    continue
+                if not self._matches_any_required_label(issue):
+                    logger.info(
+                        "skip_issue_require_any issue_id=%s have=%s",
+                        issue.id, sorted(
+                            {label.lower() for label in issue.labels}
+                            & self._require_any_labels
+                        ) or "<none>",
+                    )
+                    continue
+                skipped = self._matched_skip_label(issue)
+                if skipped is not None:
+                    logger.info(
+                        "skip_issue_label issue_id=%s label=%s",
+                        issue.id, skipped,
+                    )
+                    continue
+                issues.append(issue)
             if len(payload) < _PAGE_SIZE:
                 break
             page += 1
@@ -151,8 +192,25 @@ class RepositoryIssueClient:
                 f"/repos/{self.owner}/{self.repo}/issues/{issue_id}",
             )
             issue = _normalize_issue(payload, active_states=active_states)
-            if issue is not None and _matches_assignee(issue, assignee):
-                issues.append(issue)
+            if issue is None or not _matches_assignee(issue, assignee):
+                continue
+            if not self._matches_any_required_label(issue):
+                logger.info(
+                    "skip_issue_require_any issue_id=%s have=%s",
+                    issue.id, sorted(
+                        {label.lower() for label in issue.labels}
+                        & self._require_any_labels
+                    ) or "<none>",
+                )
+                continue
+            skipped = self._matched_skip_label(issue)
+            if skipped is not None:
+                logger.info(
+                    "skip_issue_label issue_id=%s label=%s",
+                    issue.id, skipped,
+                )
+                continue
+            issues.append(issue)
         return issues
 
     async def create_comment(self, issue_id: str, body: str) -> dict[str, Any] | None:

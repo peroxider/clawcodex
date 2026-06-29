@@ -740,6 +740,8 @@ def create_tracker_adapter(
         terminal_states=list(getattr(config, "terminal_states", []) or []),
         assignee=getattr(config, "assignee", None),
         http_client=http_client,
+        skip_labels=list(getattr(config, "skip_labels", []) or []),
+        require_any_labels=list(getattr(config, "require_any_labels", []) or []),
     )
 
 
