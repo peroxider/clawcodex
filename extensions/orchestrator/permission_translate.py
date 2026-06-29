@@ -29,6 +29,7 @@ three return values directly.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -246,3 +247,34 @@ def is_legacy_permission_mode(value: object) -> bool:
     if value is None or not isinstance(value, str):
         return False
     return _normalise_legacy_mode(value) in LEGACY_MODE_TABLE
+
+
+# ---------------------------------------------------------------------------
+# F-46.2: deprecation warning for legacy permission_mode
+# ---------------------------------------------------------------------------
+
+_DEPRECATION_WARNING_SHOWN: set[str] = set()
+
+
+def warn_deprecated_permission_mode(permission_mode: str | None) -> None:
+    """Emit a single ``DeprecationWarning`` when a legacy ``permission_mode``
+    value is encountered.
+
+    The warning is deduplicated per-value so that repeated workflow parses
+    (e.g. during CI) only produce one line per distinct mode.  Safe to call
+    with ``None`` or unknown values — they produce no warning.
+    """
+    if permission_mode is None:
+        return
+    if is_legacy_permission_mode(permission_mode):
+        key = permission_mode
+        if key not in _DEPRECATION_WARNING_SHOWN:
+            _DEPRECATION_WARNING_SHOWN.add(key)
+            warnings.warn(
+                f"permission_mode={permission_mode!r} is deprecated since F-46.2. "
+                f"Use the orthogonal fields ``interactive``, ``default_decision``, "
+                f"and ``audit_log`` on ``agent`` instead. "
+                f"This warning is emitted once per distinct legacy value.",
+                DeprecationWarning,
+                stacklevel=3,
+            )

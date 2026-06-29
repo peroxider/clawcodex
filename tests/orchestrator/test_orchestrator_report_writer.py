@@ -262,6 +262,31 @@ class TestRenderMarkdown(unittest.TestCase):
         md = _render_markdown(self._report(branch_name=None, base_branch=None))
         self.assertIn("`n/a`", md)
 
+    def test_permission_mode_rendered_when_set(self) -> None:
+        md = _render_markdown(
+            self._report(
+                permission_mode="bypassPermissions",
+                audit_log="full",
+                interactive=False,
+                default_decision="allow",
+            )
+        )
+        self.assertIn("Permission mode:", md)
+        self.assertIn("bypassPermissions", md)
+        self.assertIn("Audit log:", md)
+        self.assertIn("full", md)
+        self.assertIn("Interactive:", md)
+        self.assertIn("False", md)
+        self.assertIn("Default decision:", md)
+        self.assertIn("allow", md)
+
+    def test_permission_mode_absent_when_none(self) -> None:
+        md = _render_markdown(self._report())
+        self.assertNotIn("Permission mode:", md)
+        self.assertNotIn("Audit log:", md)
+        self.assertNotIn("Interactive:", md)
+        self.assertNotIn("Default decision:", md)
+
 
 # ---------------------------------------------------------------------------
 # write() — happy path

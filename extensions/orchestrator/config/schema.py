@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -697,6 +698,23 @@ class WorkflowConfig:
             ),
             audit_log=_normalize_audit_log(agent_raw.get("audit_log")),
         )
+        # F-46.2: warn when the user still relies on the legacy
+        # ``permission_mode`` string without providing any of the new
+        # orthogonal fields.  This gives operators a heads-up that the
+        # enum will be removed in a future release.
+        if agent_raw.get("permission_mode") is not None and (
+            "interactive" not in agent_raw
+            and "default_decision" not in agent_raw
+            and "audit_log" not in agent_raw
+        ):
+            warnings.warn(
+                "agent.permission_mode is deprecated and will be removed in a future release. "
+                "Use the orthogonal fields agent.interactive, agent.default_decision, "
+                "and agent.audit_log instead. "
+                f"(Currently set to {agent_raw['permission_mode']!r})",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if workspace.strategy == "sequential":
             if agent.max_concurrent_agents != 1:
                 raise ValueError(
