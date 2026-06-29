@@ -70,3 +70,4 @@ class AgentToolSpec:
     tags: tuple[str, ...] = field(default_factory=tuple)
     aliases: tuple[str, ...] = field(default_factory=tuple)
     source: str = "agent-created"
+    bundle_id: str | None = None

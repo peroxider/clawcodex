@@ -21,6 +21,23 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_ASYNC_ITER_RETURN_RE = re.compile(r"\bAsync(?:Iterator|Generator)\b")
+
+
+def is_async_generator_operation(
+    node: ast.AST,
+    return_type: str | None,
+) -> bool:
+    """True when *node* is an async function that yields or annotates AsyncIterator."""
+    if not isinstance(node, ast.AsyncFunctionDef):
+        return False
+    if return_type and _ASYNC_ITER_RETURN_RE.search(return_type):
+        return True
+    for child in ast.walk(node):
+        if isinstance(child, (ast.Yield, ast.YieldFrom)):
+            return True
+    return False
+
 # ---------------------------------------------------------------------------
 # Data containers
 # ---------------------------------------------------------------------------
@@ -50,6 +67,7 @@ class SourceOperation:
     file_stem: str = ""  # 源文件名（不含 .py，用于顶层函数去歧义）
     has_docstring: bool = False  # 原始 docstring 是否非空
     is_async: bool = False  # 是否为 async def
+    is_async_generator: bool = False  # async def 且返回/产出 async iterator
 
 
 @dataclass
@@ -63,6 +81,8 @@ class SourceComponent:
     dependencies: list[str] = field(default_factory=list)  # import 列表（去重本地文件）
     input_schema: dict = field(default_factory=dict)  # {name: type_hint}
     output_schema: dict = field(default_factory=dict)  # {name: type_hint}
+    # ``ClassName`` → ``__init__`` parameters (for pos-converter wrapper injection).
+    class_init_params: dict[str, list[ParamSpec]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +221,7 @@ class SourceCodeParser:
 
         # Gather all operations from .py files in this directory
         all_ops: list[SourceOperation] = []
+        all_class_inits: dict[str, list[ParamSpec]] = {}
         all_deps: set[str] = set()
 
         py_files = sorted(dir_path.glob("*.py"))
@@ -223,7 +244,9 @@ class SourceCodeParser:
             file_ops: list[SourceOperation] = []
             for node in ast.iter_child_nodes(tree):
                 if isinstance(node, ast.ClassDef):
-                    ops = self._extract_class(py_file, node, lines)
+                    ops, init_params = self._extract_class(py_file, node, lines)
+                    if init_params:
+                        all_class_inits[node.name] = init_params
                     file_ops.extend(ops)
 
             # Extract top-level functions
@@ -298,6 +321,7 @@ class SourceCodeParser:
                     dependencies=sorted(all_deps),
                     input_schema=input_schema,
                     output_schema=output_schema,
+                    class_init_params=all_class_inits,
                 )
             )
 
@@ -324,15 +348,18 @@ class SourceCodeParser:
         file_path: Path,
         cls_node: ast.ClassDef,
         lines: list[str],
-    ) -> list[SourceOperation]:
-        """从 AST 类定义中提取所有公开方法的 SourceOperation。"""
+    ) -> tuple[list[SourceOperation], list[ParamSpec]]:
+        """从 AST 类定义中提取公开方法与 ``__init__`` 参数。"""
         operations: list[SourceOperation] = []
+        init_params: list[ParamSpec] = []
 
         for node in ast.iter_child_nodes(cls_node):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name == "__init__":
+                    init_params = self._infer_params(node.args)
+                    continue
                 # Skip private / dunder methods
                 if node.name.startswith("_") and node.name not in (
-                    "__init__",
                     "__call__",
                     "__enter__",
                     "__exit__",
@@ -343,7 +370,7 @@ class SourceCodeParser:
                     op.class_name = cls_node.name
                     operations.append(op)
 
-        return operations
+        return operations, init_params
 
     def _extract_top_functions(
         self,
@@ -411,6 +438,7 @@ class SourceCodeParser:
             file_stem=file_path.stem if file_path else "",
             has_docstring=has_doc,
             is_async=isinstance(node, ast.AsyncFunctionDef),
+            is_async_generator=is_async_generator_operation(node, return_type),
         )
 
     # ---- docstring parsing ------------------------------------------------

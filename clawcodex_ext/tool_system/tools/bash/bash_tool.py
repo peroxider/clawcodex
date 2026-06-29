@@ -247,6 +247,15 @@ def _bash_check_permissions(
     tool_input: dict[str, Any],
     context: ToolContext,
 ) -> PermissionResult:
+    try:
+        from extensions.sop_converter.sop_exploration_guard import sop_exploration_permission_check
+
+        guard = sop_exploration_permission_check("Bash", tool_input, context)
+        if getattr(guard, "behavior", None) == "deny":
+            return guard
+    except ImportError:
+        pass
+
     command = (tool_input or {}).get("command", "")
     if not command:
         return PermissionPassthroughResult()

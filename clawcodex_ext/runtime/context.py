@@ -41,6 +41,8 @@ class RuntimeOptions:
     verbose: bool = False
     append_system_prompt: str = ""
     agent_dir_override: Path | None = None
+    startup_agent: Any | None = None
+    bundle_path: Path | None = None
 
 
 @dataclass
@@ -93,7 +95,10 @@ class RuntimeContext:
         options.model = resolution.model
 
         # Build tool registry
-        tool_registry = build_default_registry(provider=provider)
+        tool_registry = build_default_registry(
+            provider=provider,
+            load_agent_tools=options.bundle_path is None,
+        )
         from clawcodex_ext.cron_system.runtime import replace_cron_tools
 
         replace_cron_tools(tool_registry)
@@ -210,7 +215,10 @@ class RuntimeContext:
                 pass  # Unknown model on unknown provider is fine
 
         provider = build_provider_from_config(provider_name, model)
-        tool_registry = build_default_registry(provider=provider)
+        tool_registry = build_default_registry(
+            provider=provider,
+            load_agent_tools=self.options.bundle_path is None,
+        )
         replace_cron_tools(tool_registry)
         _filter_registry(
             tool_registry,

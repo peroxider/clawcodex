@@ -29,6 +29,7 @@ from src.skills.runtime_substitution import (
     format_shell_error,
     format_shell_output,
     has_shell_blocks,
+    omit_large_skill_tool_catalog,
     prepend_base_dir_header,
     render_skill_prompt,
     substitute_session_id,
@@ -84,6 +85,55 @@ class TestSubstituteSessionId(unittest.TestCase):
         # Matches TS' getSessionId() -> '' fallback.
         out = substitute_session_id("session=${CLAUDE_SESSION_ID}!", None)
         self.assertEqual(out, "session=!")
+
+
+class TestOmitLargeSkillToolCatalog(unittest.TestCase):
+    def test_keeps_small_skill_tool_list(self) -> None:
+        body = "# Skill\n\n## Included Tools\n- `tool-a`\n"
+        out = omit_large_skill_tool_catalog(body, allowed_tool_count=5)
+        self.assertEqual(out, body)
+
+    def test_strips_included_tools_when_over_threshold(self) -> None:
+        body = (
+            "# Skill: core\n\n"
+            "Domain description here.\n\n"
+            "## Included Tools\n"
+            "- `tool-a`\n"
+            "- `tool-b`\n"
+        )
+        out = omit_large_skill_tool_catalog(body, allowed_tool_count=100)
+        self.assertIn("Domain description here.", out)
+        self.assertNotIn("## Included Tools", out)
+        self.assertNotIn("`tool-a`", out)
+        self.assertIn("## Tool Catalog", out)
+        self.assertIn("100", out)
+        self.assertIn("ToolSearch", out)
+
+    def test_preserves_section_after_included_tools(self) -> None:
+        body = (
+            "## Included Tools\n"
+            "- `tool-a`\n"
+            "## Usage\n"
+            "Do the thing.\n"
+        )
+        out = omit_large_skill_tool_catalog(body, allowed_tool_count=50)
+        self.assertIn("## Usage", out)
+        self.assertIn("Do the thing.", out)
+
+    def test_render_skill_prompt_applies_omission(self) -> None:
+        body = (
+            "# Skill\n\n"
+            "## Included Tools\n"
+            "- `tool-a`\n"
+        )
+        out = render_skill_prompt(
+            body=body,
+            args="",
+            base_dir=None,
+            allowed_tool_count=50,
+        )
+        self.assertNotIn("`tool-a`", out)
+        self.assertIn("Tool Catalog", out)
 
 
 class TestFindShellBlocks(unittest.TestCase):

@@ -183,6 +183,9 @@ def create_subagent_context(
         content_replacement_state=content_replacement_state,
         agent_id=agent_id,
         agent_type=agent_type,
+        startup_agent=parent_context.startup_agent,
+        bundle_context=parent_context.bundle_context,
+        tool_registry=parent_context.tool_registry,
         user_modified=parent_context.user_modified,
     )
 

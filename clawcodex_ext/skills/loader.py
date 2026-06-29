@@ -1109,6 +1109,23 @@ def get_all_skills(
     """
     clear_skill_registry()
 
+    try:
+        from extensions.sop_converter.bundle_context import get_active_bundle
+
+        bundle = get_active_bundle()
+    except ImportError:
+        bundle = None
+
+    if bundle is not None:
+        dynamic_skills = [
+            skill
+            for skill in get_dynamic_skills()
+            if skill.name in bundle.skill_names
+        ]
+        deduped = {skill.name: skill for skill in dynamic_skills}
+        _skill_registry.update(deduped)
+        return list(deduped.values())
+
     cwd = (
         str(Path(project_root).expanduser().resolve()) if project_root is not None else os.getcwd()
     )
@@ -1205,6 +1222,15 @@ def get_registered_skill(name: str) -> Skill | None:
     bundled-skill aliases keep working even before ``get_all_skills`` is
     populated for the current cwd.
     """
+    try:
+        from extensions.sop_converter.bundle_context import get_active_bundle
+
+        bundle = get_active_bundle()
+        if bundle is not None and name not in bundle.skill_names:
+            return None
+    except ImportError:
+        pass
+
     found = _skill_registry.get(name)
     if found is not None:
         return found

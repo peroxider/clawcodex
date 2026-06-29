@@ -44,7 +44,14 @@ SKILL_TEMPLATE = """\
 {description}
 
 ## Included Tools
-{tools}
+
+This skill provides access to **{tool_count} domain tools**. They are not loaded
+into the conversation upfront. To use them:
+
+1. Invoke this skill with the Skill tool: `skill: "{skill_name}"`
+2. Read the **任务指南** section above (if present) for user-intent → tool routing
+3. Use `ToolSearch` with the user's task description or the guide's search hints
+4. Domain tool schemas load on demand after Skill invocation or ToolSearch
 
 ## Usage
 
@@ -120,6 +127,8 @@ user-invocable: true
 # Skill: {{ name }}
 
 {{ description }}
+
+{% if task_guide %}{{ task_guide }}{% endif %}
 
 ## 参数说明
 {% if parameters %}

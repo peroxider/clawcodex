@@ -342,6 +342,9 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
         overrides,
     )
 
+    if not subagent_context.options.tools:
+        subagent_context.options.tools = list(agent_tools)
+
     # Build initial messages.
     # When ``params.prompt`` is empty (e.g. fork path, where the directive is
     # already embedded inside ``context_messages`` via build_forked_messages),

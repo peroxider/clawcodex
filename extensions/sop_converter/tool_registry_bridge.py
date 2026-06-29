@@ -33,10 +33,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from clawcodex_ext.agent.tool_authoring.persistence import TOOL_DIR, save_spec
+from clawcodex_ext.agent.tool_authoring.persistence import (
+    TOOL_DIR,
+    bundle_tool_dir,
+    save_spec,
+    scripts_dir_for,
+)
 from clawcodex_ext.agent.tool_authoring.spec import AgentToolSpec
 from clawcodex_ext.agent.tool_authoring.validators import validate_spec
 
+from .search_tags import generate_search_tags
 from .source_parser import SourceComponent, SourceOperation, ParamSpec
 
 logger = logging.getLogger(__name__)
@@ -44,6 +50,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
+
+# Legacy global script dir (used when no bundle_dir is supplied).
+from clawcodex_ext.agent.tool_authoring.persistence import TOOL_DIR
 
 SCRIPTS_DIR = TOOL_DIR / "scripts"
 SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -234,6 +243,127 @@ def _script_name_for_functions(module_path: str, file_stem: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Class constructor parameter handling
+# ---------------------------------------------------------------------------
+
+
+def _skip_variadic_params(params: list[ParamSpec]) -> list[ParamSpec]:
+    return [p for p in params if not p.name.startswith("*")]
+
+
+def _has_signature_default(param: ParamSpec) -> bool:
+    """True when the generated stub should use ``name=...`` syntax."""
+    return param.default is not None or not param.required
+
+
+def _sort_params_for_python_signature(params: list[ParamSpec]) -> list[ParamSpec]:
+    """Required positional params first, then params with defaults (Python syntax rule)."""
+    positional = [p for p in params if not _has_signature_default(p)]
+    defaulted = [p for p in params if _has_signature_default(p)]
+    return positional + defaulted
+
+
+def _merge_init_and_method_params(
+    init_params: list[ParamSpec],
+    method_params: list[ParamSpec],
+) -> list[ParamSpec]:
+    """Merge ``__init__`` params with method params; method wins on name clash."""
+    method_skip = _skip_variadic_params(method_params)
+    init_skip = _skip_variadic_params(init_params)
+    method_names = {p.name for p in method_skip}
+
+    by_name: dict[str, ParamSpec] = {}
+    order: list[str] = []
+
+    for param in init_skip:
+        if param.name in method_names:
+            continue
+        by_name[param.name] = param
+        order.append(param.name)
+
+    for param in method_skip:
+        if param.name not in by_name:
+            order.append(param.name)
+        by_name[param.name] = param
+
+    merged = [by_name[name] for name in order]
+    return _sort_params_for_python_signature(merged)
+
+
+def _param_signature_parts(params: list[ParamSpec]) -> list[str]:
+    parts: list[str] = []
+    for param in params:
+        if param.name.startswith("*"):
+            continue
+        if param.default is not None:
+            parts.append(f"{param.name}={param.default}")
+        elif not param.required:
+            parts.append(f"{param.name}=None")
+        else:
+            parts.append(param.name)
+    return parts
+
+
+def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
+    """Generate ``_get_instance`` (and optional ``_resolve_init_kwargs``) helper."""
+    callable_init = _skip_variadic_params(init_params or [])
+    if not callable_init:
+        return (
+            "def _get_instance(class_name, module_name):\n"
+            '    """Lazily create and cache a class instance."""\n'
+            "    if class_name not in _instances:\n"
+            "        module = importlib.import_module(module_name)\n"
+            "        cls = getattr(module, class_name)\n"
+            "        _instances[class_name] = cls()\n"
+            "    return _instances[class_name]\n"
+        )
+
+    resolver_lines: list[str] = ["    kwargs = dict(provided)"]
+    for param in callable_init:
+        if param.default is not None:
+            resolver_lines.append(f'    kwargs.setdefault("{param.name}", {param.default})')
+        else:
+            resolver_lines.append(f'    if "{param.name}" not in kwargs:')
+            resolver_lines.append(f'        _fn = getattr(module, "{param.name}", None)')
+            resolver_lines.append("        if callable(_fn):")
+            resolver_lines.append("            try:")
+            resolver_lines.append(f'                kwargs["{param.name}"] = _fn()')
+            resolver_lines.append("            except TypeError:")
+            resolver_lines.append(
+                '                _team = os.environ.get("OPENJIUWEN_TEAM_NAME", "team")'
+            )
+            resolver_lines.append("                try:")
+            resolver_lines.append(f'                    kwargs["{param.name}"] = _fn(team_name=_team)')
+            resolver_lines.append("                except TypeError:")
+            resolver_lines.append("                    pass")
+
+    required = [p.name for p in callable_init if p.required and p.default is None]
+    if required:
+        missing_check = " or ".join(f'"{name}" not in kwargs' for name in required)
+        resolver_lines.append(f"    if {missing_check}:")
+        resolver_lines.append(f"        _missing = [n for n in {required!r} if n not in kwargs]")
+        resolver_lines.append(
+            '        raise TypeError("Missing constructor argument(s): " + ", ".join(_missing))'
+        )
+    resolver_lines.append("    return kwargs")
+
+    resolver_body = "\n".join(resolver_lines)
+    return (
+        "def _resolve_init_kwargs(module, **provided):\n"
+        f"{resolver_body}\n\n"
+        "def _get_instance(class_name, module_name, **init_kwargs):\n"
+        '    """Lazily create and cache a class instance keyed by constructor args."""\n'
+        "    cache_key = (class_name, tuple(sorted(init_kwargs.items())))\n"
+        "    if cache_key not in _instances:\n"
+        "        module = importlib.import_module(module_name)\n"
+        "        cls = getattr(module, class_name)\n"
+        "        resolved = _resolve_init_kwargs(module, **init_kwargs)\n"
+        "        _instances[cache_key] = cls(**resolved)\n"
+        "    return _instances[cache_key]\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Wrapper script generation
 # ---------------------------------------------------------------------------
 
@@ -273,6 +403,18 @@ def _suppress_sdk_logging() -> None:
     except Exception:
         pass
 
+
+def _run_async_iter(make_gen):
+    """Drain an async iterator/generator into a JSON-serializable list."""
+
+    async def _collect():
+        result = []
+        async for item in make_gen():
+            result.append(item)
+        return result
+
+    return asyncio.run(_collect())
+
 {body}
 
 if __name__ == "__main__":
@@ -304,6 +446,7 @@ def _generate_method_stub(
     *,
     is_class_method: bool,
     module_name: str,
+    init_params: list[ParamSpec] | None = None,
 ) -> str:
     """Generate a method stub for a single SourceOperation.
 
@@ -311,51 +454,66 @@ def _generate_method_stub(
         op: The source operation.
         is_class_method: True if this is a class method (needs _get_instance).
         module_name: Dotted Python module path.
+        init_params: Required ``__init__`` parameters for the owning class.
     """
-    # Build parameter signature
-    param_parts: list[str] = []
-    for p in op.parameters:
-        # Skip *args and **kwargs in stub — they can't be passed via JSON
-        if p.name.startswith("*"):
-            continue
-        if p.default is not None:
-            default_repr = repr(p.default)
-            param_parts.append(f"{p.name}={default_repr}")
-        elif not p.required:
-            param_parts.append(f"{p.name}=None")
-        else:
-            param_parts.append(p.name)
-
-    return_type = f" -> {op.return_type}" if op.return_type else ""
+    effective_params = (
+        _merge_init_and_method_params(init_params or [], op.parameters)
+        if is_class_method
+        else op.parameters
+    )
+    param_parts = _param_signature_parts(effective_params)
     params_str = ", ".join(param_parts)
 
+    return_type = f" -> {op.return_type}" if op.return_type else ""
+
     docstring = op.description.replace('"', '\\"') if op.description else op.name
+
+    call_kwargs = "".join(
+        f"        {p.name}={p.name},\n" for p in op.parameters if not p.name.startswith("*")
+    )
+
+    if is_class_method:
+        init_kw_names = [p.name for p in _skip_variadic_params(init_params or [])]
+        get_instance_call = f'_get_instance("{op.class_name}", "{module_name}"'
+        init_pass = ", ".join(f"{name}={name}" for name in init_kw_names)
+        if init_pass:
+            get_instance_call += f", {init_pass}"
+        get_instance_call += ")"
+        inner_call = f"{get_instance_call}.{op.name}(\n{call_kwargs}    )"
+    else:
+        inner_call = f'module.{op.name}(\n{call_kwargs}    )'
+
+    if op.is_async_generator:
+        if is_class_method:
+            body_lines = (
+                f"def {op.name}({params_str}){return_type}:\n"
+                f'    """{docstring}"""\n'
+                f"    return _run_async_iter(lambda: {inner_call})"
+            )
+        else:
+            body_lines = (
+                f"def {op.name}({params_str}){return_type}:\n"
+                f'    """{docstring}"""\n'
+                f'    module = importlib.import_module("{module_name}")\n'
+                f"    return _run_async_iter(lambda: {inner_call})"
+            )
+        return body_lines
 
     async_prefix = "asyncio.run(" if op.is_async else ""
     async_suffix = ")" if op.is_async else ""
 
     if is_class_method:
-        # Class method: instantiate via _get_instance and call
         return (
             f"def {op.name}({params_str}){return_type}:\n"
             f'    """{docstring}"""\n'
-            f'    return {async_prefix}_get_instance("{op.class_name}", "{module_name}").{op.name}(\n'
-            + "".join(
-                f"        {p.name}={p.name},\n" for p in op.parameters if not p.name.startswith("*")
-            )
-            + f"    ){async_suffix}"
+            f"    return {async_prefix}{inner_call}{async_suffix}"
         )
     else:
-        # Standalone function: import module and call function directly
         return (
             f"def {op.name}({params_str}){return_type}:\n"
             f'    """{docstring}"""\n'
             f'    module = importlib.import_module("{module_name}")\n'
-            f"    return {async_prefix}module.{op.name}(\n"
-            + "".join(
-                f"        {p.name}={p.name},\n" for p in op.parameters if not p.name.startswith("*")
-            )
-            + f"    ){async_suffix}"
+            f"    return {async_prefix}{inner_call}{async_suffix}"
         )
 
 
@@ -366,6 +524,8 @@ def _generate_wrapper_script(
     module_name: str,
     file_stem: str,
     source_dir: str,
+    scripts_dir: Path | None = None,
+    init_params: list[ParamSpec] | None = None,
 ) -> Path:
     """Generate a wrapper script for a group of related operations.
 
@@ -391,22 +551,13 @@ def _generate_wrapper_script(
         script_name = _script_name_for_functions(module_name, file_stem)
         header_label = f"{file_stem} functions ({module_name})"
 
-    script_path = SCRIPTS_DIR / script_name
+    script_path = (scripts_dir or SCRIPTS_DIR) / script_name
 
     # Build body: helper(s) + method stubs
     body_parts: list[str] = []
 
     if class_name:
-        # Generate the _get_instance helper for class methods
-        body_parts.append(
-            "def _get_instance(class_name, module_name):\n"
-            '    """Lazily create and cache a class instance."""\n'
-            "    if class_name not in _instances:\n"
-            "        module = importlib.import_module(module_name)\n"
-            "        cls = getattr(module, class_name)\n"
-            "        _instances[class_name] = cls()\n"
-            "    return _instances[class_name]\n"
-        )
+        body_parts.append(_generate_get_instance_helper(init_params))
 
     # Sort operations by name for deterministic output
     for op in sorted(ops, key=lambda o: o.name):
@@ -416,6 +567,7 @@ def _generate_wrapper_script(
                 op,
                 is_class_method=class_name is not None,
                 module_name=module_name,
+                init_params=init_params if class_name is not None else None,
             )
         )
 
@@ -461,6 +613,8 @@ def operation_to_spec(
     source_dir: str,
     script_path: str,
     comp_name: str = "",
+    bundle_id: str | None = None,
+    init_params: list[ParamSpec] | None = None,
 ) -> AgentToolSpec:
     """Convert a single SourceOperation into an AgentToolSpec.
 
@@ -496,11 +650,16 @@ def operation_to_spec(
 
     tool_name = _to_kebab_case(raw_name)
 
-    # Build JSON Schema properties
+    # Build JSON Schema properties (merge class ``__init__`` params for class methods).
+    schema_params = (
+        _merge_init_and_method_params(init_params or [], op.parameters)
+        if op.class_name
+        else op.parameters
+    )
     properties: dict[str, dict[str, Any]] = {}
     required: list[str] = []
 
-    for param in op.parameters:
+    for param in schema_params:
         # Skip *args and **kwargs
         if param.name.startswith("*"):
             continue
@@ -515,7 +674,7 @@ def operation_to_spec(
 
         properties[param.name] = prop
 
-        if param.required:
+        if param.required and param.default is None:
             required.append(param.name)
 
     input_schema: dict[str, Any] = {
@@ -577,6 +736,7 @@ def operation_to_spec(
             alias_list.append(f"{_short_comp}.{op.name}")
 
     aliases = tuple(alias_list)
+    tags = generate_search_tags(op, comp_name=comp_name)
 
     return AgentToolSpec(
         name=tool_name,
@@ -584,8 +744,10 @@ def operation_to_spec(
         input_schema=input_schema,
         call_type="bash",
         call_impl=call_impl,
+        tags=tags,
         aliases=aliases,
         source="sop-converter",
+        bundle_id=bundle_id
     )
 
 
@@ -600,6 +762,8 @@ def register_component_tools(
     *,
     persist: bool = True,
     overwrite: bool = True,
+    bundle_dir: str | Path | None = None,
+    bundle_id: str | None = None,
 ) -> dict[str, str]:
     """Bulk-register all operations from a list of SourceComponents as Tools.
 
@@ -621,6 +785,10 @@ def register_component_tools(
         ``SkillSpec.allowed_tools`` before writing agent markdown.
     """
     source_dir_abs = str(Path(source_dir).resolve())
+    bundle_path = Path(bundle_dir).resolve() if bundle_dir is not None else None
+    effective_bundle_id = bundle_id or (bundle_path.name if bundle_path else None)
+    tool_dir = bundle_tool_dir(bundle_path) if bundle_path is not None else None
+    scripts_dir = scripts_dir_for(tool_dir) if tool_dir is not None else SCRIPTS_DIR
 
     # ── Phase 1: group operations by (class_name, module_path) ──
     # Each group → one wrapper script.
@@ -635,12 +803,17 @@ def register_component_tools(
     # Per-operation module path cache
     op_module_map: dict[int, str] = {}
 
+    # Maps (class_name, module_path) → init params for wrapper generation
+    group_init_params: dict[tuple[str | None, str], list[ParamSpec]] = {}
+
     for comp in components:
         for op in comp.operations:
             module_path = _resolve_module_path(comp, source_dir_abs, op.file_stem or "unknown")
             key = (op.class_name, module_path)
             groups[key].append(op)
             op_module_map[id(op)] = module_path
+            if op.class_name and op.class_name in comp.class_init_params:
+                group_init_params.setdefault(key, comp.class_init_params[op.class_name])
 
     # ── Phase 2: generate wrapper scripts ──
 
@@ -657,6 +830,8 @@ def register_component_tools(
             module_name=module_path,
             file_stem=file_stem,
             source_dir=source_dir_abs,
+            scripts_dir=scripts_dir,
+            init_params=group_init_params.get((class_name, module_path)),
         )
         script_paths[(class_name, module_path)] = str(script_path.resolve())
 
@@ -671,11 +846,18 @@ def register_component_tools(
             key = (op.class_name, module_path)
             script_path = script_paths[key]
 
+            init_params = (
+                comp.class_init_params.get(op.class_name, [])
+                if op.class_name
+                else None
+            )
             spec = operation_to_spec(
                 op,
                 source_dir=source_dir_abs,
                 script_path=script_path,
                 comp_name=comp.name,
+                bundle_id=effective_bundle_id,
+                init_params=init_params,
             )
 
             # Validate the spec
@@ -710,13 +892,16 @@ def register_component_tools(
     # ── Phase 4: persist specs (JSON files) ──
 
     if persist:
+        if tool_dir is not None:
+            tool_dir.mkdir(parents=True, exist_ok=True)
         for spec in specs:
-            spec_path = TOOL_DIR / f"{spec.name}.json"
+            target_dir = tool_dir or TOOL_DIR
+            spec_path = target_dir / f"{spec.name}.json"
             if not overwrite and spec_path.exists():
                 logger.debug("Tool spec already exists, skipping: %s", spec.name)
                 continue
-            save_spec(spec)
-            logger.info("Persisted tool spec: %s", spec.name)
+            save_spec(spec, tool_dir=tool_dir)
+            logger.info("Persisted tool spec: %s -> %s", spec.name, spec_path.parent)
 
     logger.info(
         "Registered %d tools from %d components (%d wrapper scripts)",

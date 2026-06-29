@@ -4939,8 +4939,15 @@ class ClawcodexREPL:
             style_prompt = resolve_output_style(style_name, style_dir).prompt
 
             from clawcodex_ext.tool_system import get_team_aware_tool_list
+            from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
 
             tools = get_team_aware_tool_list(self.tool_registry, self.tool_context.team)
+            startup_agent = getattr(self.tool_context, "startup_agent", None)
+            if startup_agent is None:
+                rc = getattr(self, "runtime_context", None)
+                if rc is not None:
+                    startup_agent = getattr(rc.options, "startup_agent", None)
+            tools = filter_tools_for_startup_agent(tools, startup_agent)
 
             # Coordinator Mode — when ``CLAUDE_CODE_COORDINATOR_MODE=true``,
             # restrict the tool list to read-only + delegation tools

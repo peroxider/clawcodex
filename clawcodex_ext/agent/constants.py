@@ -81,3 +81,54 @@ DEFAULT_AGENT_PROMPT = (
 FORK_SUBAGENT_TYPE = "fork"
 FORK_BOILERPLATE_TAG = "fork-boilerplate"
 FORK_DIRECTIVE_PREFIX = "Your directive: "
+
+# When an agent's allowlist exceeds this count, inline tool names in Agent-tool
+# prompts are replaced with a count summary to avoid token blow-up.
+MAX_INLINE_TOOL_DISPLAY: int = 20
+
+# Minimal tool set for SOP-converted proxy agents. Domain tools load on demand
+# via Skill (allowed_tools filter) or ToolSearch (deferred schemas).
+POS_PROXY_BASE_TOOLS: frozenset[str] = frozenset(
+    [
+        "Skill",
+        "ToolSearch",
+        "Agent",
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "TodoWrite",
+        "StructuredOutput",
+    ]
+)
+
+# Domain sub-agents: no codebase exploration — SDK via Skill + ToolSearch only.
+POS_SOP_DOMAIN_AGENT_TOOLS: frozenset[str] = frozenset(
+    [
+        "Skill",
+        "ToolSearch",
+        "Bash",
+        "TodoWrite",
+        "StructuredOutput",
+    ]
+)
+
+# Base tools always kept visible when a skill's allowed_tools filter runs.
+SKILL_CONTEXT_BASE_TOOLS: frozenset[str] = frozenset(
+    [
+        "agent",
+        "skill",
+        "toolsearch",
+        "bash",
+        "read",
+        "write",
+        "edit",
+        "glob",
+        "grep",
+        "listdir",
+        "webfetch",
+        "task",
+        "todos",
+        "advisor",
+    ]
+)

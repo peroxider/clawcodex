@@ -32,7 +32,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Callable, Iterable, Optional
+from typing import IO, Any, Callable, Iterable, Optional
 
 from src.agent import Session
 from src.cli_core import (
@@ -106,6 +106,8 @@ class HeadlessOptions:
 
     # Optional system prompt body to append (from resolved default agent).
     append_system_prompt: str = ""
+    startup_agent: Any | None = None
+    bundle_context: Any | None = None
 
     # Environment variables merged into every Bash subprocess env.
     # Values override inherited daemon env.
@@ -238,6 +240,9 @@ def run_headless(options: HeadlessOptions) -> int:
         permission_context=_perm_setup.context,
         abort_controller=abort_controller,
         env=options.env,
+        startup_agent=options.startup_agent,
+        agent_type=getattr(options.startup_agent, "agent_type", None),
+        bundle_context=getattr(options, "bundle_context", None),
     )
     tool_context.options.is_non_interactive_session = True
     if options.skip_permissions or effective_mode == "bypassPermissions":

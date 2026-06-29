@@ -8,6 +8,7 @@ loaded upfront.  This reduces initial context window usage.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from enum import Enum
@@ -262,6 +263,38 @@ def _check_auto_threshold(tools: Tools, model: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _matches_from_tool_search_content(content: Any) -> list[str]:
+    """Parse ToolSearch JSON payloads (string or text blocks) for match names."""
+    candidates: list[str] = []
+
+    if isinstance(content, str):
+        candidates.append(content)
+    elif isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text = item.get("text")
+                if isinstance(text, str):
+                    candidates.append(text)
+
+    discovered: list[str] = []
+    for raw in candidates:
+        raw = raw.strip()
+        if not raw.startswith("{"):
+            continue
+        try:
+            payload = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        matches = payload.get("matches")
+        if isinstance(matches, list):
+            for name in matches:
+                if isinstance(name, str) and name:
+                    discovered.append(name)
+    return discovered
+
+
 def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
     """
     Extract tool names from tool_reference blocks in message history.
@@ -320,8 +353,14 @@ def extract_discovered_tool_names(messages: list[Any]) -> set[str]:
             if block.get("type") != "tool_result":
                 continue
             inner_content = block.get("content")
+            if isinstance(inner_content, str):
+                for name in _matches_from_tool_search_content(inner_content):
+                    discovered.add(name)
+                continue
             if not isinstance(inner_content, list):
                 continue
+            for name in _matches_from_tool_search_content(inner_content):
+                discovered.add(name)
             for item in inner_content:
                 if isinstance(item, dict) and item.get("type") == "tool_reference":
                     tool_name = item.get("tool_name")

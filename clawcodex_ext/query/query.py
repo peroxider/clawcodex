@@ -1372,6 +1372,25 @@ def _run_tools_sync(
     return [*primaries, *extras]
 
 
+def _resolve_effective_tools(
+    params: QueryParams,
+    tool_use_context: ToolContext,
+    messages: list[Message],
+) -> Tools:
+    """Resolve the tool list sent to the LLM for this turn."""
+    if not tool_use_context.options.tools:
+        tool_use_context.options.tools = list(params.tools)
+
+    base_tools = tool_use_context.options.tools or params.tools
+    model = (
+        tool_use_context.options.main_loop_model
+        or getattr(params.provider, "model", "")
+        or ""
+    )
+
+    return filter_tools_for_request(base_tools, model, messages)
+
+
 async def query(
     params: QueryParams,
     *,
@@ -1562,21 +1581,14 @@ async def query(
         tool_use_blocks: list[ToolUseBlock] = []
         needs_follow_up = False
 
-        # Filter tools -- defer MCP and should_defer tools unless
-        # already discovered via ToolSearch tool.  This reduces
-        # context-window usage when many tools are registered.
-        try:
-            model_name = getattr(params.provider, "model", "") or ""
-            filtered_tools = filter_tools_for_request(params.tools, model_name, messages)
-        except Exception:
-            filtered_tools = params.tools
+        effective_tools = _resolve_effective_tools(params, tool_use_context, messages)
 
         try:
             returned_assistants, returned_tool_blocks = await _call_model_sync(
                 provider=params.provider,
                 messages=messages,
                 system_prompt=current_system_prompt,
-                tools=filtered_tools,
+                tools=effective_tools,
                 max_output_tokens_override=max_output_tokens_override,
                 abort_signal=params.abort_controller.signal,
                 on_text_chunk=params.on_text_chunk,
@@ -1715,7 +1727,7 @@ async def query(
 
         if _diag:
             _tools_t0 = time.monotonic()
-            _batches = _partition_tool_calls(tool_use_blocks, params.tools)
+            _batches = _partition_tool_calls(tool_use_blocks, effective_tools)
             _batch_desc = ", ".join(
                 f"[{'parallel' if b.is_concurrent_safe else 'exclusive'}: {[bl.name for bl in b.blocks]}]"
                 for b in _batches
@@ -1752,7 +1764,7 @@ async def query(
             tool_use_blocks,
             params.tool_registry,
             tool_use_context,
-            params.tools,
+            effective_tools,
         )
 
         # P102-D: post_tool hook — 在工具执行之后允许外部策略修改 tool_results

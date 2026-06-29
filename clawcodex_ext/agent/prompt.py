@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .constants import MAX_INLINE_TOOL_DISPLAY
+
 if TYPE_CHECKING:
     from .agent_definitions import AgentDefinition
 
@@ -32,8 +34,14 @@ def _get_tools_description(agent: AgentDefinition) -> str:
     if has_allowlist and has_denylist:
         deny_set = set(disallowed)  # type: ignore[arg-type]
         effective = [t for t in tools if t not in deny_set]  # type: ignore[union-attr]
-        return ", ".join(effective) if effective else "None"
+        if not effective:
+            return "None"
+        if len(effective) > MAX_INLINE_TOOL_DISPLAY:
+            return f"{len(effective)} tools (use Skill or ToolSearch to load domain tools)"
+        return ", ".join(effective)
     elif has_allowlist:
+        if len(tools) > MAX_INLINE_TOOL_DISPLAY:  # type: ignore[arg-type]
+            return f"{len(tools)} tools (use Skill or ToolSearch to load domain tools)"  # type: ignore[arg-type]
         return ", ".join(tools)  # type: ignore[arg-type]
     elif has_denylist:
         return f"All tools except {', '.join(disallowed)}"  # type: ignore[arg-type]

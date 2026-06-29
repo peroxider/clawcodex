@@ -7,6 +7,9 @@
 
 总览 Agent 的 system prompt 以 ``append_system_prompt`` 形式注入，
 保留 ``build_full_system_prompt()`` 的所有标准节。
+
+当 ``--agent <bundle_dir>`` 指向 POS bundle 目录时，主循环还会切换为
+overview 的 ``AgentDefinition``，工具集限制为 ``POS_PROXY_BASE_TOOLS``。
 """
 
 from __future__ import annotations
