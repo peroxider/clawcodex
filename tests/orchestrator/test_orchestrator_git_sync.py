@@ -132,6 +132,59 @@ class _Session:
         self.verification_status = None
         self.verification_output = None
         self.output_text = "done"
+        # F-46: orthogonal permission fields forwarded from AgentRunner
+        self.permission_mode: str | None = None
+        self.audit_log: str | None = None
+        self.interactive: bool | None = None
+        self.default_decision: str | None = None
+
+
+class TestWriteReportF46Forwarding(unittest.IsolatedAsyncioTestCase):
+    """F-46: verify that _write_report forwards orthogonal permission fields."""
+
+    async def test_report_json_includes_orthogonal_fields(self) -> None:
+        """When session has F-46 fields set, the report JSON must contain them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            origin = _build_origin_repo(base)
+            manager = WorkspaceManager(
+                WorkspaceConfig(
+                    root=base / "workspaces",
+                    repo_clone_url=str(origin),
+                    checkout_issue_branch=True,
+                )
+            )
+            issue = Issue(
+                id="42",
+                identifier="ISSUE-42",
+                title="F-46 orthogonal fields",
+                url="https://example.test/issues/42",
+            )
+            workspace = await manager.create_for_issue(issue)
+
+            session = _Session(issue, workspace)
+            session.permission_mode = "bypassPermissions"
+            session.audit_log = "full"
+            session.interactive = False
+            session.default_decision = "allow"
+
+            tracker = _Tracker()
+            service = GitSyncService(tracker)
+            await service.sync(session)
+
+            # Read the report JSON written to workspace .reports/
+            reports_dir = workspace.path / ".reports"
+            json_files = sorted(reports_dir.glob("*.json"))
+            self.assertTrue(json_files, "Expected at least one report JSON file")
+
+            import json as _json
+            payload = _json.loads(json_files[0].read_text(encoding="utf-8"))
+            self.assertEqual(payload.get("permission_mode"), "bypassPermissions")
+            self.assertEqual(payload.get("audit_log"), "full")
+            self.assertEqual(payload.get("interactive"), False)
+            self.assertEqual(payload.get("default_decision"), "allow")
+
+            await manager.cleanup(issue)
 
 
 def _build_origin_repo(base: Path) -> Path:

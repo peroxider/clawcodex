@@ -892,6 +892,13 @@ class GitSyncService:
             # F-45: forward the per-tool audit log path so report_writer
             # can dual-write the NDJSON into the persistent layer.
             tool_events_path=getattr(session, "tool_events_path", None),
+            # F-46: forward orthogonal permission fields captured at
+            # session start so the report reflects the effective
+            # permission posture.
+            permission_mode=getattr(session, "permission_mode", None),
+            audit_log=getattr(session, "audit_log", None),
+            interactive=getattr(session, "interactive", None),
+            default_decision=getattr(session, "default_decision", None),
         )
         setattr(session, "report_path", result.persistent_markdown_path)
         return result
