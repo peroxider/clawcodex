@@ -305,8 +305,6 @@ def run_cli(argv: list[str] | None = None) -> int:
             )
             return rc
         if token == "autonomy":
-            from pathlib import Path
-
             from clawcodex_ext.cron_system.status import build_autonomy_runs, build_autonomy_status
 
             deep = "--deep" in rest_args
@@ -332,8 +330,6 @@ def run_cli(argv: list[str] | None = None) -> int:
             )
             return rc
         if token == "schedule":
-            from pathlib import Path
-
             from clawcodex_ext.cron_system.schedule import (
                 format_cron_task_detail,
                 format_manual_fire_result,
@@ -404,7 +400,6 @@ def run_cli(argv: list[str] | None = None) -> int:
     # as a tag prefix so `--resume cron:task:build` works directly.
     resume_val = getattr(args, "resume", None)
     if resume_val and resume_val != "browse":
-        from pathlib import Path
         from src.services.session_storage import SESSIONS_DIR, SessionStorage
 
         session_dir = SESSIONS_DIR / resume_val
@@ -487,6 +482,13 @@ def run_cli(argv: list[str] | None = None) -> int:
     resume_val = getattr(args, "resume", None)
     resume_browse = resume_val == "browse"
 
+    bundle_path: Path | None = None
+    agent_type_raw = getattr(args, "agent", None)
+    if agent_type_raw is not None and agent_type_raw != "auto":
+        candidate = Path(str(agent_type_raw)).resolve()
+        if candidate.is_dir():
+            bundle_path = candidate
+
     # Build RuntimeContext once from resolved args — shared by all frontends.
     runtime_opts = RuntimeOptions(
         provider_name=getattr(args, "provider", None),
@@ -507,6 +509,7 @@ def run_cli(argv: list[str] | None = None) -> int:
         fork_session_id=getattr(args, "fork_session", None),
         resume_session_at=_parse_resume_at(getattr(args, "resume_session_at", None)),
         verbose=getattr(args, "verbose", False),
+        bundle_path=bundle_path,
     )
     try:
         ctx = RuntimeContext.build(runtime_opts)
@@ -597,6 +600,85 @@ def run_cli(argv: list[str] | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _apply_sop_startup(
+    ctx,
+    agent: dict,
+    *,
+    bundle_path: Path | None,
+    workspace: Path,
+    force_bundle: bool = False,
+) -> None:
+    """Inject SOP routing, optional bundle isolation, and proxy tool allowlist."""
+    from extensions.sop_converter.bundle_context import (
+        activate_bundle_isolation,
+        build_bundle_context,
+    )
+    from extensions.sop_converter.bundle_discovery import overview_has_sop_skills
+    from extensions.sop_converter.bundle_skills import register_bundle_skills
+    from extensions.sop_converter.sop_prompts import append_sop_overview_routing, format_sdk_source_dir_block
+    from extensions.sop_converter.startup_agent import build_bundle_overview_agent_definition
+
+    is_sop = overview_has_sop_skills(agent) or force_bundle
+    bundle_ctx = None
+
+    if bundle_path is not None and bundle_path.is_dir() and is_sop:
+        load_result = register_bundle_skills(bundle_path, workspace)
+        registered = load_result.skill_names
+        if registered:
+            print(
+                f"📦 Loaded {len(registered)} SOP skills from bundle",
+                file=sys.stderr,
+            )
+            try:
+                from src.skills.loader import get_all_skills
+
+                get_all_skills(project_root=workspace)
+            except Exception:
+                pass
+        bundle_ctx = build_bundle_context(
+            bundle_path=bundle_path,
+            skill_names=load_result.skill_names,
+            skill_dirs=load_result.skill_dirs,
+            tool_names=load_result.tool_names,
+            workspace_root=workspace,
+        )
+        activate_bundle_isolation(ctx.tool_registry, bundle_ctx)
+        ctx.options.bundle_path = bundle_path
+        ctx.tool_context.bundle_context = bundle_ctx
+
+    if is_sop:
+        startup_def = build_bundle_overview_agent_definition(
+            agent,
+            bundle_dir=bundle_path if bundle_path is not None else workspace,
+        )
+        ctx.options.startup_agent = startup_def
+        ctx.tool_context.startup_agent = startup_def
+        ctx.tool_context.agent_type = startup_def.agent_type
+        if bundle_ctx is not None:
+            ctx.tool_context.bundle_context = bundle_ctx
+
+    body = (agent.get("system_prompt_body") or "").strip()
+    sdk_source_dir = bundle_ctx.sdk_source_dir if bundle_ctx is not None else None
+    if body:
+        if is_sop:
+            body = append_sop_overview_routing(body, sdk_source_dir=sdk_source_dir)
+        existing = getattr(ctx.options, "append_system_prompt", "")
+        ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
+    elif is_sop and sdk_source_dir is not None:
+        sdk_block = format_sdk_source_dir_block(sdk_source_dir)
+        if sdk_block:
+            existing = getattr(ctx.options, "append_system_prompt", "")
+            ctx.options.append_system_prompt = f"{existing}\n\n{sdk_block}" if existing else sdk_block
+
+    agent_name = agent.get("name", "unknown")
+    skills = agent.get("skills", [])
+    sub_count = len([s for s in skills if isinstance(s, str) and s.endswith("-skill")])
+    if sub_count:
+        print(f"⚡ Using agent: {agent_name} ({sub_count} sub-agents)", file=sys.stderr)
+    else:
+        print(f"⚡ Using agent: {agent_name}", file=sys.stderr)
+
+
 def _resolve_startup_agent(args, ctx) -> None:
     """Resolve agent type from ``--agent`` flag or auto-detect.
 
@@ -619,6 +701,11 @@ def _resolve_startup_agent(args, ctx) -> None:
         resolve_default_agent,
     )
 
+    from extensions.sop_converter.bundle_discovery import (
+        discover_workspace_bundle,
+        overview_has_sop_skills,
+    )
+
     cwd = ctx.workspace_root or Path.cwd()
     agent_type = getattr(args, "agent", None)
 
@@ -630,33 +717,32 @@ def _resolve_startup_agent(args, ctx) -> None:
             agent_dir_override = agent_type_path
             ctx.options.agent_dir_override = agent_dir_override
             ctx.tool_context._agent_dir_override = agent_dir_override
-            # Use directory as cwd for agent resolution; pass the
-            # agent_type as the directory path so resolve_agent_by_type
-            # finds the overview agent inside it.
-            cwd = agent_type_path
-            # Try default overview name first, then scan for any agent
-            agent = resolve_default_agent(cwd)
+            workspace = ctx.workspace_root or Path.cwd()
+            bundle_path = agent_type_path
+            agent = resolve_default_agent(bundle_path)
             if agent is None:
-                # Fallback: scan .claude/agents/ for the best candidate
-                agent = _resolve_first_agent_in_dir(cwd)
-            # Inject and return early — agent is already resolved
-            if agent and agent.get("system_prompt_body"):
-                body = agent["system_prompt_body"].strip()
-                if body:
-                    existing = getattr(ctx.options, "append_system_prompt", "")
-                    ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
-                agent_name = agent.get("name", "unknown")
-                sub_count = len(
-                    [
-                        s
-                        for s in agent.get("skills", [])
-                        if isinstance(s, str) and s.startswith("skill-")
-                    ]
-                )
-                if sub_count:
-                    print(f"⚡ Using agent: {agent_name} ({sub_count} sub-agents)", file=sys.stderr)
-                else:
-                    print(f"⚡ Using agent: {agent_name}", file=sys.stderr)
+                agent = _resolve_first_agent_in_dir(bundle_path)
+            if agent is None:
+                agent = resolve_default_agent(workspace)
+            if agent is None:
+                agent = _resolve_first_agent_in_dir(workspace)
+            if agent is None:
+                from extensions.sop_converter.bundle_skills import register_bundle_skills
+
+                load_result = register_bundle_skills(bundle_path, workspace)
+                agent = {
+                    "name": "clawcodex-overview",
+                    "description": "SOP bundle session",
+                    "skills": load_result.skill_names,
+                    "system_prompt_body": "",
+                }
+            _apply_sop_startup(
+                ctx,
+                agent,
+                bundle_path=bundle_path,
+                workspace=workspace,
+                force_bundle=True,
+            )
             return
 
     if agent_type is not None and agent_type != "auto":
@@ -666,20 +752,25 @@ def _resolve_startup_agent(args, ctx) -> None:
         # Auto-detect (always check, even with ``--agent`` bare)
         agent = resolve_default_agent(cwd)
 
-    if agent and agent.get("system_prompt_body"):
-        body = agent["system_prompt_body"].strip()
-        if body:
-            existing = getattr(ctx.options, "append_system_prompt", "")
-            ctx.options.append_system_prompt = f"{existing}\n\n{body}" if existing else body
-
-        # Startup banner — show agent name and sub-agent count on stderr
-        agent_name = agent.get("name", "unknown")
-        skills = agent.get("skills", [])
-        sub_count = len([s for s in skills if isinstance(s, str) and s.startswith("skill-")])
-        if sub_count:
-            print(f"⚡ Using agent: {agent_name} ({sub_count} sub-agents)", file=sys.stderr)
-        else:
-            print(f"⚡ Using agent: {agent_name}", file=sys.stderr)
+    if agent:
+        workspace = ctx.workspace_root or Path.cwd()
+        bundle_path: Path | None = None
+        if overview_has_sop_skills(agent):
+            bundle_path = discover_workspace_bundle(
+                workspace,
+                agent_skills=agent.get("skills"),
+            )
+            if bundle_path is not None:
+                print(
+                    f"📦 Auto-activated SOP bundle: {bundle_path.name}",
+                    file=sys.stderr,
+                )
+        _apply_sop_startup(
+            ctx,
+            agent,
+            bundle_path=bundle_path,
+            workspace=workspace,
+        )
 
 
 def _resolve_first_agent_in_dir(cwd: Path) -> dict[str, Any] | None:
@@ -709,7 +800,7 @@ def _resolve_first_agent_in_dir(cwd: Path) -> dict[str, Any] | None:
             if not agent:
                 continue
             skills = agent.get("skills", [])
-            sub_skills = len([s for s in skills if isinstance(s, str) and s.startswith("skill-")])
+            sub_skills = len([s for s in skills if isinstance(s, str) and s.endswith("-skill")])
             body_len = len(agent.get("system_prompt_body", "") or "")
             score = sub_skills * 1000 + body_len
             if score > best_score:

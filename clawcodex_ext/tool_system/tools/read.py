@@ -813,6 +813,15 @@ def _read_check_permissions(tool_input: dict[str, Any], context: ToolContext):
     the workspace return ``passthrough`` (→ the read ``ask``). Tool-level
     ``Read`` deny/ask rules are still honored upstream, before this runs.
     """
+    try:
+        from extensions.sop_converter.sop_exploration_guard import sop_exploration_permission_check
+
+        guard = sop_exploration_permission_check("Read", tool_input, context)
+        if getattr(guard, "behavior", None) == "deny":
+            return guard
+    except ImportError:
+        pass
+
     from src.permissions.filesystem import check_read_permission_for_tool
 
     file_path = (tool_input or {}).get("file_path", "")

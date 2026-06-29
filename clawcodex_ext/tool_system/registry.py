@@ -16,6 +16,9 @@ from clawcodex_ext.permissions.check import has_permissions_to_use_tool
 from clawcodex_ext.permissions.handler import handle_permission_ask
 from clawcodex_ext.permissions.types import (
     PermissionAskDecision,
+    PermissionAskHandler,
+    PermissionAskReply,
+    PermissionAskRequest,
     PermissionUpdate,
     ToolPermissionContext,
 )
@@ -31,6 +34,39 @@ _DESTRUCTIVE_TOOLS: frozenset[str] = frozenset(
 
 # Resolved once: system temp directory (e.g. /tmp, %TEMP%).
 _SYSTEM_TEMP_DIR: Path = Path(tempfile.gettempdir()).resolve()
+
+
+def _adapt_permission_handler(raw_handler: Any) -> PermissionAskHandler:
+    """Bridge legacy ``(tool_name, message, suggestion) -> (allowed, enable)`` handlers
+    to the :class:`PermissionAskRequest` / :class:`PermissionAskReply` API expected by
+    :func:`handle_permission_ask`.
+    """
+
+    sig = inspect.signature(raw_handler)
+    param_count = len(sig.parameters)
+
+    if param_count == 1:
+
+        def _passthrough(request: PermissionAskRequest) -> PermissionAskReply:
+            result = raw_handler(request)
+            if isinstance(result, PermissionAskReply):
+                return result
+            if isinstance(result, tuple) and result:
+                allowed = bool(result[0])
+                return PermissionAskReply(
+                    behavior="allow" if allowed else "deny",
+                )
+            raise TypeError(
+                f"permission_handler returned unexpected type: {type(result).__name__}"
+            )
+
+        return _passthrough
+
+    def _legacy(request: PermissionAskRequest) -> PermissionAskReply:
+        allowed, _enable = raw_handler(request.tool_name, request.message, None)
+        return PermissionAskReply(behavior="allow" if allowed else "deny")
+
+    return _legacy
 
 
 def _apply_and_persist_updates(
@@ -153,11 +189,31 @@ class ToolRegistry:
             raise ValueError(f"duplicate tool name: {tool.name}")
         self._tools.append(tool)
         self._by_name[key] = tool
+        added_alias_keys: list[str] = []
+        try:
+            for alias in tool.aliases:
+                alias_key = alias.lower()
+                if alias_key in self._by_name:
+                    raise ValueError(f"duplicate tool alias: {alias}")
+                self._by_name[alias_key] = tool
+                added_alias_keys.append(alias_key)
+        except ValueError:
+            self._tools = [t for t in self._tools if t.name != tool.name]
+            self._by_name.pop(key, None)
+            for alias_key in added_alias_keys:
+                self._by_name.pop(alias_key, None)
+            raise
+
+    def unregister(self, name: str) -> bool:
+        """Remove a tool by name (and its aliases). Returns True if it existed."""
+        tool = self._by_name.get(name.lower())
+        if tool is None:
+            return False
+        self._tools = [t for t in self._tools if t.name != tool.name]
+        self._by_name.pop(tool.name.lower(), None)
         for alias in tool.aliases:
-            alias_key = alias.lower()
-            if alias_key in self._by_name:
-                raise ValueError(f"duplicate tool alias: {alias}")
-            self._by_name[alias_key] = tool
+            self._by_name.pop(alias.lower(), None)
+        return True
 
     def get(self, name: str) -> Tool | None:
         return self._by_name.get(name.lower())
@@ -232,21 +288,18 @@ class ToolRegistry:
 
         if decision.behavior == "ask":
             assert isinstance(decision, PermissionAskDecision)
-            handler_cb = None
+            handler_cb: PermissionAskHandler | None = None
             if context.permission_handler is not None:
-                raw_handler = context.permission_handler
+                handler_cb = _adapt_permission_handler(context.permission_handler)
 
-                def _adapted_handler(
-                    tn: str,
-                    msg: str,
-                    suggestions: Any,
-                ) -> tuple[bool, dict[str, Any] | None]:
-                    allowed, _ = raw_handler(tn, msg, None)
-                    return allowed, None
-
-                handler_cb = _adapted_handler
-
-            final = handle_permission_ask(tool.name, decision, handler_cb)
+            final, chosen_updates = handle_permission_ask(
+                tool.name,
+                decision,
+                handler_cb,
+                tool_input=call.input,
+            )
+            if chosen_updates:
+                _apply_and_persist_updates(context, chosen_updates)
 
             if final.behavior == "deny":
                 return ToolResult(

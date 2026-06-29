@@ -30,5 +30,7 @@ class HeadlessFrontend(FrontendPlugin):
             verbose=ctx.options.verbose,
             workspace_root=ctx.workspace_root,
             append_system_prompt=ctx.options.append_system_prompt,
+            startup_agent=ctx.options.startup_agent,
+            bundle_context=getattr(ctx.tool_context, "bundle_context", None),
         )
         return run_headless(options)

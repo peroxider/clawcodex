@@ -27,6 +27,7 @@ from typing import Any, Callable
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.tool_system.registry import ToolRegistry
 from clawcodex_ext.tool_system import get_team_aware_tool_list
+from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
 from clawcodex_ext.providers.base import BaseProvider
 from clawcodex_ext.types.content_blocks import TextBlock, ToolUseBlock, ToolResultBlock
 from clawcodex_ext.types.messages import (
@@ -165,7 +166,10 @@ async def run_query_as_agent_loop(
     params = QueryParams(
         messages=list(initial_messages),
         system_prompt=system_prompt,
-        tools=get_team_aware_tool_list(tool_registry, tool_context.team),
+        tools=filter_tools_for_startup_agent(
+            get_team_aware_tool_list(tool_registry, tool_context.team),
+            getattr(tool_context, "startup_agent", None),
+        ),
         tool_registry=tool_registry,
         tool_use_context=tool_context,
         provider=provider,

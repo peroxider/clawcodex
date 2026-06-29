@@ -59,6 +59,12 @@ def run_sop_command(args: list[str]) -> int:
     return 2
 
 
+@register("pos")
+def run_pos_command(args: list[str]) -> int:
+    """Backward-compatible alias for ``sop``."""
+    return run_sop_command(args)
+
+
 def _parse_convert_args(
     args: list[str],
 ) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool, bool]:
@@ -330,6 +336,8 @@ def _handle_convert_from_source(
                 components,
                 str(sdk_path),
                 persist=True,
+                bundle_dir=Path(output_dir) if output_dir else None,
+                bundle_id=Path(output_dir).name if output_dir else None,
             )
             # Rewrite tool names in skills to match what was actually
             # registered in the ToolRegistry.  The name_map returned by
@@ -407,11 +415,12 @@ def _handle_convert_from_source(
     if output_dir:
         out_path = Path(output_dir)
         for skill in grouped_skills:
+            skill_name = f"{skill.name}-skill"
             agent_def = {
                 "name": f"{skill.name}-agent",
                 "description": skill.description,
                 "tools": skill.allowed_tools,
-                "skills": [],
+                "skills": [skill_name],
             }
             writer.write_agent(agent_def, out_path)
 
@@ -427,29 +436,16 @@ def _handle_convert_from_source(
 
     # Write skills if --skills was specified
     if skills_dir:
+        from extensions.sop_converter.task_guide import format_flat_skill_markdown
+
         skills_path = Path(skills_dir)
         skills_path.mkdir(parents=True, exist_ok=True)
         for skill in grouped_skills:
             skill_file = skills_path / f"{skill.name}-skill.md"
-            skill_lines = [
-                "---",
-                f"name: {skill.name}-skill",
-                f"description: {skill.description}",
-                "user-invocable: true",
-                "allowed-tools:",
-            ]
-            for tool in skill.allowed_tools:
-                skill_lines.append(f"  - {tool}")
-            skill_lines.append("---")
-            skill_lines.append("")
-            skill_lines.append(f"# Skill: {skill.name}-skill")
-            skill_lines.append("")
-            skill_lines.append(skill.description)
-            skill_lines.append("")
-            skill_lines.append("## Included Tools")
-            for tool in skill.allowed_tools:
-                skill_lines.append(f"- `{tool}`")
-            skill_file.write_text("\n".join(skill_lines), encoding="utf-8")
+            skill_file.write_text(
+                format_flat_skill_markdown(skill, components=components),
+                encoding="utf-8",
+            )
             print(f"   Skill file: {skill_file}")
 
     # Print summary — show actual agent count after grouping
@@ -469,6 +465,16 @@ def _handle_convert_from_source(
     if group_result.unmatched_tools:
         for w in group_result.unmatched_tools:
             print(f"   Warning: unmatched tool: {w}", file=sys.stderr)
+
+    if output_dir:
+        from extensions.sop_converter.bundle_manifest import write_bundle_manifest
+
+        manifest_path = write_bundle_manifest(
+            Path(output_dir),
+            sdk_source_dir=sdk_path,
+            bundle_id=Path(output_dir).name,
+        )
+        print(f"   Bundle manifest: {manifest_path}")
 
     return 0
 

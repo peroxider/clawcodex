@@ -294,15 +294,26 @@ def make_agent_tool(
         cwd = str(context.cwd or context.workspace_root)
         agents = get_agent_definitions_with_overrides(cwd)
         # Also load agents from the custom agent directory override
-        # (set by ``--agent <dir>``).
+        # (set by ``--agent <dir>``).  The override directory has
+        # higher priority: its agents *replace* project-root agents
+        # with the same ``agent_type`` rather than being skipped.
         ad_override = getattr(context, "_agent_dir_override", None)
         if ad_override is not None:
             extra = get_agent_definitions_with_overrides(str(ad_override))
-            for agent in extra:
-                if agent.agent_type not in {a.agent_type for a in agents}:
-                    agents.append(agent)
+            extra_types = {a.agent_type for a in extra}
+            # Remove project-root agents that are shadowed by the
+            # bundle directory, then append the bundle's versions.
+            agents = [a for a in agents if a.agent_type not in extra_types]
+            agents.extend(extra)
         available_mcp = list(context.mcp_clients.keys()) if context.mcp_clients else []
-        return filter_agents_by_mcp_requirements(agents, available_mcp)
+        agents = filter_agents_by_mcp_requirements(agents, available_mcp)
+        try:
+            from extensions.sop_converter.sop_routing import refresh_domain_agent_sop_prompts
+
+            agents = refresh_domain_agent_sop_prompts(agents)
+        except ImportError:
+            pass
+        return agents
 
     def _agent_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         prompt = tool_input.get("prompt", "")
@@ -353,6 +364,20 @@ def make_agent_tool(
                 logger.exception("agent prompt routing failed; falling through to default dispatch")
 
         agent_definitions = _get_agent_definitions(context)
+
+        try:
+            from extensions.sop_converter.sop_routing import check_bundle_agent_delegation
+
+            delegation_error = check_bundle_agent_delegation(
+                subagent_type=subagent_type,
+                prompt=prompt,
+                agent_definitions=agent_definitions,
+            )
+            if delegation_error:
+                raise ToolInputError(delegation_error)
+        except ImportError:
+            pass
+
         is_fork_path = subagent_type is None and is_fork_subagent_enabled(context)
 
         if is_fork_path:

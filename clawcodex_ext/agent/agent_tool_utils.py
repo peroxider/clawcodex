@@ -83,6 +83,42 @@ def filter_tools_for_agent(
     return result
 
 
+def filter_tools_for_startup_agent(
+    tools: Tools,
+    startup_agent: Any | None,
+) -> Tools:
+    """Apply a bundle overview agent's tool allowlist to the main-loop tool pool."""
+    if startup_agent is None:
+        return _apply_bundle_tool_filter(tools)
+
+    resolved = resolve_agent_tools(startup_agent, tools)
+    if resolved.invalid_tools:
+        logger.warning(
+            "Startup agent %r has invalid tools: %s",
+            getattr(startup_agent, "agent_type", startup_agent),
+            resolved.invalid_tools,
+        )
+
+    filtered = list(resolved.resolved_tools)
+    present = {tool.name for tool in filtered}
+    requested = getattr(startup_agent, "tools", None) or []
+    if AGENT_TOOL_NAME in requested and AGENT_TOOL_NAME not in present:
+        for tool in tools:
+            if tool.name == AGENT_TOOL_NAME:
+                filtered.append(tool)
+                break
+    return _apply_bundle_tool_filter(filtered)
+
+
+def _apply_bundle_tool_filter(tools: Tools) -> Tools:
+    try:
+        from extensions.sop_converter.bundle_context import filter_tools_for_bundle
+
+        return filter_tools_for_bundle(tools)
+    except ImportError:
+        return tools
+
+
 def resolve_agent_tools(
     agent_definition: Any,
     available_tools: Tools,

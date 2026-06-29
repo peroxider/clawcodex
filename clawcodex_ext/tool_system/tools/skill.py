@@ -193,8 +193,22 @@ def _skill_map_result_to_api(output: Any, tool_use_id: str) -> dict[str, Any]:
     text.
     """
     if isinstance(output, dict):
+        error = output.get("error")
+        if error:
+            return {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": f"Skill error: {error}",
+            }
+
         status = output.get("status")
-        command_name = output.get("commandName", "unknown")
+        command_name = output.get("commandName")
+        if not command_name:
+            return {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": "Skill error: invalid skill response (missing commandName)",
+            }
 
         if status == "forked":
             result_text = output.get("result", "")
@@ -284,6 +298,7 @@ def _run_markdown_skill(skill_name: str, args: str, context: ToolContext) -> Too
             loaded_from=skill.loaded_from,
             slash_command_name=f"/{skill_name}",
             shell_executor=executor,
+            allowed_tool_count=len(skill.allowed_tools or []),
         )
 
     # Build context modifier if skill specifies allowed_tools, model, or effort
@@ -428,8 +443,8 @@ def _make_shell_executor(
 def _build_context_modifier(skill: Any) -> Any:
     """Build a context modifier closure from skill frontmatter fields.
 
-    Returns None if no context modifications are needed. Ported from
-    TS SkillTool/SkillTool.ts contextModifier (lines 785-849).
+    When ``allowed_tools`` is set, filters ``ctx.options.tools`` so the LLM
+    only sees base tools plus the skill's domain tools on subsequent turns.
     """
     allowed_tools = getattr(skill, "allowed_tools", None) or []
     model = getattr(skill, "model", None)
@@ -439,10 +454,35 @@ def _build_context_modifier(skill: Any) -> Any:
         return None
 
     def _modifier(ctx: ToolContext) -> ToolContext:
-        # ToolContext is a dataclass; we return a modified copy.
-        # Since ToolContext may not be frozen, we work with it directly.
-        # Context modification is a best-effort operation; the agent loop
-        # must support context_modifier for this to take effect.
+        from src.tool_system.build_tool import tool_matches_name
+
+        from clawcodex_ext.agent.constants import SKILL_CONTEXT_BASE_TOOLS
+
+        if allowed_tools:
+            current_tools = ctx.options.tools
+            if not current_tools:
+                current_tools = (
+                    list(ctx.tool_registry.list_tools()) if ctx.tool_registry else []
+                )
+            filtered = []
+            for tool in current_tools:
+                if getattr(tool, "is_mcp", False) or tool.name.startswith("mcp__"):
+                    filtered.append(tool)
+                    continue
+                if tool.name.lower() in SKILL_CONTEXT_BASE_TOOLS:
+                    filtered.append(tool)
+                    continue
+                if any(tool_matches_name(tool, name) for name in allowed_tools):
+                    filtered.append(tool)
+                    continue
+            ctx.options.tools = filtered
+
+        if model:
+            ctx.options.main_loop_model = model
+
+        if effort:
+            ctx.options.thinking_config = {"effort": effort}
+
         return ctx
 
     return _modifier

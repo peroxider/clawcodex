@@ -167,6 +167,59 @@ def format_shell_error(
 # the renderer needing to know about the underlying tool.
 ShellExecutor = Callable[[str, bool], str]
 
+_INCLUDED_TOOLS_HEADER_RE = re.compile(r"^##\s+Included\s+Tools\s*$", re.IGNORECASE)
+_MARKDOWN_H2_RE = re.compile(r"^##\s+")
+
+
+def omit_large_skill_tool_catalog(
+    body: str,
+    *,
+    allowed_tool_count: int,
+    threshold: int | None = None,
+) -> str:
+    """Strip ``## Included Tools`` from prompt-bound skill bodies when huge.
+
+    SOP-converted skills keep the full tool list on disk for human reference,
+    but injecting thousands of kebab-case names into the Skill prompt wastes
+    context and nudges the model to pick tools by scrolling instead of
+    ``ToolSearch``. The section is removed only at render time.
+    """
+    if allowed_tool_count <= 0:
+        return body
+
+    if threshold is None:
+        from clawcodex_ext.agent.constants import MAX_INLINE_TOOL_DISPLAY
+
+        threshold = MAX_INLINE_TOOL_DISPLAY
+
+    if allowed_tool_count <= threshold:
+        return body
+
+    lines = body.splitlines(keepends=True)
+    start: int | None = None
+    for index, line in enumerate(lines):
+        if _INCLUDED_TOOLS_HEADER_RE.match(line.rstrip("\r\n")):
+            start = index
+            break
+    if start is None:
+        return body
+
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if _MARKDOWN_H2_RE.match(lines[index]):
+            end = index
+            break
+
+    replacement = (
+        "## Tool Catalog\n\n"
+        f"This skill provides **{allowed_tool_count}** domain tools. "
+        "The full ``## Included Tools`` list is kept in the skill file for "
+        "reference but omitted here to save context. Use ``ToolSearch`` with "
+        "task keywords (or ``select:<tool-name>``) to discover and load tools "
+        "on demand.\n\n"
+    )
+    return "".join(lines[:start]) + replacement + "".join(lines[end:])
+
 
 def render_skill_prompt(
     *,
@@ -178,6 +231,7 @@ def render_skill_prompt(
     loaded_from: Optional[str] = None,
     slash_command_name: str = "",
     shell_executor: ShellExecutor | None = None,
+    allowed_tool_count: int = 0,
 ) -> str:
     """Apply every per-invocation transform in TS order.
 
@@ -193,7 +247,10 @@ def render_skill_prompt(
     shell blocks survive verbatim in the output. The SkillTool wires a
     BashTool-backed executor; tests can inject fakes.
     """
-    content = body or ""
+    content = omit_large_skill_tool_catalog(
+        body or "",
+        allowed_tool_count=allowed_tool_count,
+    )
 
     # 1. Base-dir header
     content = prepend_base_dir_header(content, base_dir)

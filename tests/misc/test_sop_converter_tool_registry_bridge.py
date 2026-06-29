@@ -32,7 +32,10 @@ from extensions.sop_converter.source_parser import (
 )
 from extensions.sop_converter.tool_registry_bridge import (
     _enrich_bridge_params,
+    _generate_method_stub,
     _generate_wrapper_script,
+    _merge_init_and_method_params,
+    _param_signature_parts,
     _resolve_module_path,
     _script_name_for_class,
     _script_name_for_functions,
@@ -70,6 +73,7 @@ def _make_op(
     class_name: str | None = None,
     file_stem: str = "things",
     is_async: bool = False,
+    is_async_generator: bool = False,
 ) -> SourceOperation:
     return SourceOperation(
         name=name,
@@ -79,6 +83,7 @@ def _make_op(
         class_name=class_name,
         file_stem=file_stem,
         is_async=is_async,
+        is_async_generator=is_async_generator,
     )
 
 
@@ -415,6 +420,32 @@ class TestGenerateWrapperScript(unittest.TestCase):
         # We can sanity-check the count of `(` and `)`.
         self.assertEqual(content.count("("), content.count(")"))
 
+    def test_async_generator_uses_run_async_iter(self) -> None:
+        op = _make_op(
+            name="stream_go",
+            class_name="X",
+            is_async=True,
+            is_async_generator=True,
+            return_type="AsyncIterator[Any]",
+            parameters=[_make_param("agent_team", "str"), _make_param("inputs", "Any")],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            source_dir = Path(tmp) / "proj"
+            source_dir.mkdir()
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="X",
+                module_name="proj.x",
+                file_stem="x",
+                source_dir=str(source_dir),
+            )
+        content = script_path.read_text()
+        self.assertIn("def _run_async_iter(make_gen):", content)
+        self.assertIn("async for item in make_gen():", content)
+        self.assertIn("return _run_async_iter(lambda: _get_instance", content)
+        self.assertIn(".stream_go(", content)
+        self.assertNotIn("asyncio.run(_get_instance", content.split("def stream_go")[1])
+
     def test_skips_star_args_in_stub(self) -> None:
         # *args / **kwargs should be dropped from the stub signature
         # since they can't be passed via JSON.
@@ -661,6 +692,23 @@ class TestOperationToSpec(unittest.TestCase):
         )
         self.assertEqual(spec.source, "sop-converter")
 
+    def test_generates_search_tags(self) -> None:
+        op = _make_op(
+            name="run_team_cli",
+            description="Bring up the Team CLI.",
+            class_name=None,
+        )
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp",
+            script_path=self.script_path,
+            comp_name="openjiuwen.agent_teams.cli",
+        )
+        self.assertTrue(spec.tags)
+        self.assertIn("run team cli", spec.tags)
+        self.assertIn("run_team_cli", spec.tags)
+        self.assertIn("cli", spec.tags)
+
     def test_skips_star_args_in_schema(self) -> None:
         op = _make_op(
             name="x",
@@ -843,6 +891,162 @@ class TestRegisterComponentTools(unittest.TestCase):
                 [], str(source_dir), persist=False,
             )
         self.assertEqual(name_map, {})
+
+
+class TestClassInitParamsWrapper(unittest.TestCase):
+    def test_wrapper_passes_init_kwargs_to_constructor(self) -> None:
+        source = '''
+def team_memory_dir(team_name: str = "team") -> str:
+    """Resolve team memory directory path."""
+    return f"/tmp/{team_name}/team-memory"
+
+class SharedMemoryManager:
+    """Team shared memory."""
+
+    def __init__(self, team_memory_dir: str) -> None:
+        self.team_memory_dir = team_memory_dir
+
+    def ensure_dir(self) -> str:
+        """Ensure team-memory directory exists."""
+        import os
+        os.makedirs(self.team_memory_dir, exist_ok=True)
+        return self.team_memory_dir
+'''
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("")
+            py_file = pkg / "memory.py"
+            py_file.write_text(source)
+
+            init_params = [ParamSpec(name="team_memory_dir", type_hint="str", required=True)]
+            op = SourceOperation(
+                name="ensure_dir",
+                description="Ensure team-memory directory exists.",
+                class_name="SharedMemoryManager",
+                file_stem="memory",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="SharedMemoryManager",
+                module_name="demo_pkg.memory",
+                file_stem="memory",
+                source_dir=str(tmp),
+                init_params=init_params,
+            )
+
+            args = json.dumps({"team_memory_dir": "/tmp/my-team/team-memory"})
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "ensure_dir", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                json.loads(result.stdout.strip()),
+                "/tmp/my-team/team-memory",
+            )
+            self.assertTrue(Path("/tmp/my-team/team-memory").is_dir())
+
+    def test_operation_to_spec_merges_init_params(self) -> None:
+        op = SourceOperation(
+            name="ensure_dir",
+            description="Ensure dir.",
+            class_name="SharedMemoryManager",
+        )
+        init_params = [ParamSpec(name="team_memory_dir", type_hint="str", required=True)]
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp",
+            script_path="/tmp/wrapper.py",
+            comp_name="memory",
+            init_params=init_params,
+        )
+        self.assertIn("team_memory_dir", spec.input_schema["properties"])
+        self.assertIn("team_memory_dir", spec.input_schema.get("required", []))
+
+    def test_merge_puts_required_init_params_before_optional(self) -> None:
+        init_params = [
+            ParamSpec(name="team_memory_dir", type_hint="str", required=True),
+            ParamSpec(name="sys_operation", type_hint="str", required=False, default="None"),
+        ]
+        merged = _merge_init_and_method_params(init_params, [])
+        self.assertEqual([p.name for p in merged], ["team_memory_dir", "sys_operation"])
+        signature = ", ".join(_param_signature_parts(merged))
+        self.assertEqual(signature, "team_memory_dir, sys_operation=None")
+
+    def test_generated_stub_is_valid_python(self) -> None:
+        import ast
+
+        init_params = [
+            ParamSpec(name="team_memory_dir", type_hint="str", required=True),
+            ParamSpec(name="sys_operation", type_hint="str", required=False, default="None"),
+        ]
+        op = SourceOperation(
+            name="ensure_dir",
+            description="Ensure team-memory directory exists.",
+            class_name="SharedMemoryManager",
+        )
+        stub = _generate_method_stub(
+            op,
+            is_class_method=True,
+            module_name="openjiuwen.agent_teams.memory.shared_memory",
+            init_params=init_params,
+        )
+        ast.parse(stub)
+        self.assertIn("def ensure_dir(team_memory_dir, sys_operation=None)", stub)
+
+    def test_wrapper_with_optional_init_param_is_runnable(self) -> None:
+        source = '''
+class SharedMemoryManager:
+    def __init__(self, team_memory_dir: str, sys_operation=None) -> None:
+        self.team_memory_dir = team_memory_dir
+
+    def ensure_dir(self) -> str:
+        import os
+        os.makedirs(self.team_memory_dir, exist_ok=True)
+        return self.team_memory_dir
+'''
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("")
+            (pkg / "memory.py").write_text(source)
+
+            init_params = [
+                ParamSpec(name="team_memory_dir", type_hint="str", required=True),
+                ParamSpec(name="sys_operation", type_hint="str", required=False, default="None"),
+            ]
+            op = SourceOperation(
+                name="ensure_dir",
+                description="Ensure.",
+                class_name="SharedMemoryManager",
+                file_stem="memory",
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="SharedMemoryManager",
+                module_name="demo_pkg.memory",
+                file_stem="memory",
+                source_dir=str(tmp),
+                init_params=init_params,
+            )
+            import ast
+
+            ast.parse(script_path.read_text(encoding="utf-8"))
+
+            args = json.dumps({"team_memory_dir": "/tmp/p0-fix-team-memory"})
+            result = __import__("subprocess").run(
+                [__import__("sys").executable, str(script_path), "ensure_dir", args],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(Path("/tmp/p0-fix-team-memory").is_dir())
 
 
 if __name__ == "__main__":

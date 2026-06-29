@@ -265,6 +265,7 @@ class SkillPromptCommand(PromptCommand):
             loaded_from=self.loaded_from,
             slash_command_name=f"/{self.name}",
             shell_executor=None,
+            allowed_tool_count=len(self.allowed_tools or []),
         )
         return [{"type": "text", "text": text}]
 

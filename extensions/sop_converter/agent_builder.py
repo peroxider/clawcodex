@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from clawcodex_ext.agent.agent_definitions import AgentDefinition, AgentSource
+from clawcodex_ext.agent.constants import MAX_INLINE_TOOL_DISPLAY, POS_PROXY_BASE_TOOLS
 from src.skills.model import Skill
 from .source_parser import SourceComponent
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .skill_grouper import SkillSpec, MappingRule
 from .templates import AGENT_TEMPLATE, SKILL_TEMPLATE
+from .task_guide import append_task_guide_to_skill_body, generate_task_guide_markdown
 
 
 @dataclass
@@ -81,8 +83,12 @@ class AgentBuilder:
             raise ValueError(f"Invalid format {format!r}. Must be one of {valid_formats}")
 
         skill_names = [s.name for s in self._skills]
-        allowed_tools = self._tools or self._collect_tools()
-        allowed_tools.sort()
+        domain_tools = self._tools or self._collect_tools()
+        domain_tools.sort()
+        if len(domain_tools) > MAX_INLINE_TOOL_DISPLAY:
+            allowed_tools = sorted(POS_PROXY_BASE_TOOLS)
+        else:
+            allowed_tools = domain_tools
 
         agent = AgentDefinition(
             agent_type=self._agent_name,
@@ -98,7 +104,11 @@ class AgentBuilder:
         warnings = []
         for spec in self._skills:
             try:
-                path = _write_skill_file(spec, mapping_rules=self._mapping_rules)
+                path = _write_skill_file(
+                    spec,
+                    mapping_rules=self._mapping_rules,
+                    source_components=self._source_components,
+                )
                 skill_files.append(path)
             except Exception as exc:
                 warnings.append(f"Failed to write skill file for {spec.name}: {exc}")
@@ -106,7 +116,7 @@ class AgentBuilder:
         md_files: list[Path] = []
         if format in ("markdown", "both"):
             try:
-                md_files = self._write_agent_markdown()
+                md_files = self._write_agent_markdown(domain_tools)
             except Exception as exc:
                 warnings.append(f"Failed to write agent markdown: {exc}")
 
@@ -126,7 +136,7 @@ class AgentBuilder:
                 tools[tool] = True
         return list(tools.keys())
 
-    def _write_agent_markdown(self) -> list[Path]:
+    def _write_agent_markdown(self, domain_tools: list[str]) -> list[Path]:
         """Generate agent markdown files using AgentMarkdownWriter.
 
         Returns list of generated file paths.
@@ -134,12 +144,11 @@ class AgentBuilder:
         writer = AgentMarkdownWriter()
         md_files: list[Path] = []
 
-        # Write agent definition
         agent_def = {
             "name": self._agent_name,
             "description": self._agent_description,
             "model": self._model,
-            "tools": self._tools or self._collect_tools(),
+            "tools": domain_tools,
             "skills": [s.name for s in self._skills],
         }
         agent_path = writer.write_agent(agent_def, self._output_dir)
@@ -148,6 +157,9 @@ class AgentBuilder:
         # Write skills
         skill_dicts = []
         for spec in self._skills:
+            guide = ""
+            if self._source_components:
+                guide = generate_task_guide_markdown(spec, self._source_components)
             skill_dicts.append(
                 {
                     "name": spec.name,
@@ -155,6 +167,7 @@ class AgentBuilder:
                     "allowed_tools": spec.allowed_tools,
                     "parameters": [],
                     "source_code": "",
+                    "task_guide": guide,
                 }
             )
         skill_paths = writer.write_skills(skill_dicts, self._output_dir)
@@ -187,7 +200,12 @@ class AgentBuilder:
         return md_files
 
 
-def _write_skill_file(spec: SkillSpec, *, mapping_rules: list[MappingRule] | None = None) -> Path:
+def _write_skill_file(
+    spec: SkillSpec,
+    *,
+    mapping_rules: list[MappingRule] | None = None,
+    source_components: list[SourceComponent] | None = None,
+) -> Path:
     """Write a SKILL.md file from a SkillSpec."""
     rules = mapping_rules or []
     rule = next((r for r in rules if r.skill_name == spec.name), None)
@@ -216,16 +234,16 @@ def _write_skill_file(spec: SkillSpec, *, mapping_rules: list[MappingRule] | Non
         frontmatter_lines.append(f"when_to_use: {rule.description}")
     frontmatter_lines.append("---")
 
-    content = (
-        "\n".join(frontmatter_lines)
-        + "\n\n"
-        + SKILL_TEMPLATE.format(
-            skill_name=spec.name,
-            description=spec.description,
-            description_lower=spec.description.lower(),
-            tools=", ".join(spec.allowed_tools),
-        )
+    body = SKILL_TEMPLATE.format(
+        skill_name=spec.name,
+        description=spec.description,
+        description_lower=spec.description.lower(),
+        tool_count=len(spec.allowed_tools),
     )
+    if source_components:
+        body = append_task_guide_to_skill_body(body, spec, source_components)
+
+    content = "\n".join(frontmatter_lines) + "\n\n" + body
     skill_file.write_text(content, encoding="utf-8")
     return skill_file
 

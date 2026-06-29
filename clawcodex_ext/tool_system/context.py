@@ -240,6 +240,9 @@ class ToolContext:
     content_replacement_state: Any | None = None
     agent_id: str | None = None
     agent_type: str | None = None
+    # Main-loop agent definition for ``--agent <bundle_dir>`` (overview allowlist).
+    startup_agent: Any | None = None
+    bundle_context: Any | None = None
     tool_use_id: str | None = None
     user_modified: bool = False
     # Identifier of the active query/session. Surfaced to skills (SKILL.md

@@ -150,6 +150,15 @@ def _glob_check_permissions(tool_input: dict, context):
 
     A relative ``path`` is resolved against ``context.cwd`` (the same base the
     executor uses), not the process cwd, so the check and the run agree."""
+    try:
+        from extensions.sop_converter.sop_exploration_guard import sop_exploration_permission_check
+
+        guard = sop_exploration_permission_check("Glob", tool_input, context)
+        if getattr(guard, "behavior", None) == "deny":
+            return guard
+    except ImportError:
+        pass
+
     import os
     from pathlib import Path
 
