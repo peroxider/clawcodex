@@ -107,7 +107,7 @@ def _default_map_result_to_api(name: str) -> Callable[[Any, str], dict[str, Any]
         if isinstance(output, str):
             content: str | list[dict[str, Any]] = output
         elif isinstance(output, dict):
-            content = json.dumps(output)
+            content = json.dumps(output, ensure_ascii=False)
         else:
             content = str(output)
         return {
