@@ -195,11 +195,11 @@ class TestAppendToolEventLog(unittest.TestCase):
                     ctx,
                 )
             log_path = workspace / ".reports" / "run-multi.events.ndjson"
-        rows = [
-            json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
-        ]
-        self.assertEqual([r["tool"] for r in rows], ["Bash", "Read", "Edit"])
-        self.assertEqual(rows[0]["params"], {"command": "ls"})
+            rows = [
+                json.loads(line) for line in log_path.read_text(encoding="utf-8").strip().splitlines()
+            ]
+            self.assertEqual([r["tool"] for r in rows], ["Bash", "Read", "Edit"])
+            self.assertEqual(rows[0]["params"], {"command": "ls"})
 
     def test_deny_decision_records_reason(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -231,7 +231,7 @@ class TestAppendToolEventLog(unittest.TestCase):
             },
         )
         log_path = (
-            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "unknown" / "events.ndjson"
+            Path(os.environ["HOME"]) / ".clawcodex" / "tool-events" / "unknown.events.ndjson"
         )
         self.assertTrue(log_path.exists())
 
@@ -578,8 +578,7 @@ class TestFourPermissionModes(unittest.TestCase):
                 Path(os.environ["HOME"])
                 / ".clawcodex"
                 / "tool-events"
-                / f"run-{mode}"
-                / "events.ndjson"
+                / f"run-{mode}.events.ndjson"
             )
             self.assertTrue(
                 log_path.exists(),

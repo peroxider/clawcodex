@@ -465,9 +465,9 @@ class AgentRunner:
             if workspace_path:
                 base_dir = Path(workspace_path) / ".reports"
             else:
-                # Fallback: use the legacy user-level path (non-orchestrator
+                # Fallback: use the user-level path (non-orchestrator
                 # or test contexts where workspace_path is not set).
-                base_dir = Path.home() / ".clawcodex" / "tool-events" / run_id
+                base_dir = Path.home() / ".clawcodex" / "tool-events"
             log_path = base_dir / f"{run_id}.events.ndjson"
             try:
                 base_dir.mkdir(parents=True, exist_ok=True)
