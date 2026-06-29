@@ -15,7 +15,8 @@ docs/feature_plan/
 ├── 04-architecture-sdk/               ← Architecture & SDK 下沉
 ├── 05-cron-system/                    ← Cron 系统
 ├── 06-ccb-benchmark/                  ← CCB 对标
-└── 07-cli-config/                    ← CLI 与配置系统
+├── 07-cli-config/                    ← CLI 与配置系统
+└── ../decoupling/                     ← 三层解耦方案与 P3 整改记录（独立规划）
 ```
 
 ## F-Number 状态总表
@@ -84,9 +85,18 @@ docs/feature_plan/
 | F-81 | Native 原生模块系统 | 🔭 | [f-81-native-modules.md](06-ccb-benchmark/f-81-native-modules.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 
+### 解耦方案（独立规划）
+
+> 解耦方案不归入 F-Number 体系，作为独立目录存在。详见 [../decoupling/README.md](../decoupling/README.md)。
+
+| 名称 | 状态 | 章节路径 |
+|------|:----:|---------|
+| 三层解耦方案 + P3 整改 | ✅ | [../decoupling/README.md](../decoupling/README.md) |
+
 ## 变更历史
 
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并（MERGE_GUIDE Step 2） |
 | 2026-06-25 | 新增 F-119（System Prompt 段落拼装与自迭代基础设施） | 架构审计后规划段落级扩展点 + A/B 框架骨架 |
+| 2026-06-29 | 新增 `../decoupling/` 解耦方案目录（P3 整改全量文档化） | P3 整改 6 步累计 67+ 迁移 imports / 8 新 facade 完工；解耦方案从 F-Number 体系中独立为目录 |
