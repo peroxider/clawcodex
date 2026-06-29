@@ -382,24 +382,6 @@ class AgentRunner:
         # real ``asyncio.sleep`` so cancellation still works.
         self._sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
-    def _resolve_audit_log(self) -> str:
-        """Resolve the effective audit_log granularity for this runner.
-
-        Prefers the explicit ``AgentConfig.audit_log`` field (F-46). When
-        the field is unset (legacy callers), falls back to translating the
-        legacy ``permission_mode`` enum via :func:`permission_mode_to_three_fields`.
-        """
-        explicit = getattr(self.agent_config, "audit_log", None)
-        if explicit is not None:
-            return explicit
-        # Legacy fallback: translate permission_mode → audit_log
-        from .config.schema import permission_mode_to_three_fields
-
-        _, _, audit_log = permission_mode_to_three_fields(
-            self.agent_config.permission_mode
-        )
-        return audit_log
-
     def _handle_tool_call(
         self,
         event: ToolCallEvent,
