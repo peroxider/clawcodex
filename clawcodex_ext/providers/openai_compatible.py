@@ -7,11 +7,14 @@ OpenAI-style /chat/completions API (OpenAI, GLM, Minimax, etc.).
 from __future__ import annotations
 
 import json
+import logging
 from abc import abstractmethod
 from typing import Any, Callable, Generator, Optional
 
 from clawcodex_ext.providers._stream_abort import StreamAbortGuard
 from clawcodex_ext.providers.base import BaseProvider, ChatResponse, MessageInput, TextChunkCallback
+
+logger = logging.getLogger(__name__)
 
 
 def _anthropic_image_block_to_openai(block: dict[str, Any]) -> dict[str, Any] | None:
@@ -135,6 +138,21 @@ def _convert_anthropic_messages_to_openai(
        passing through as an unrecognised Anthropic block.
     """
     result: list[dict[str, Any]] = []
+
+    # Pre-scan all assistant messages for tool_use IDs so we can
+    # drop orphan tool_results that reference stale IDs after
+    # session compression / recovery (#394).
+    known_tool_call_ids: set[str] = set()
+    for scan_msg in messages:
+        if scan_msg.get("role") != "assistant":
+            continue
+        scan_content = scan_msg.get("content")
+        if not isinstance(scan_content, list):
+            continue
+        for scan_block in scan_content:
+            if isinstance(scan_block, dict) and scan_block.get("type") == "tool_use":
+                known_tool_call_ids.add(scan_block.get("id", ""))
+
     for msg in messages:
         role = msg.get("role", "user")
         content = msg.get("content", "")
@@ -212,12 +230,23 @@ def _convert_anthropic_messages_to_openai(
                     translated = _translate_anthropic_multimodal_block(block)
                     non_tool_blocks.append(translated if translated is not None else block)
 
-            # Emit non-tool content first as user message
-            if non_tool_blocks:
-                result.append({"role": "user", "content": non_tool_blocks})
+            # Defer non-tool content until after all tool messages
+            # (OpenAI requires role=tool immediately after tool_calls;
+            # #393 — tool message continuity fix).
+            deferred_multimodal_user_messages: list[dict[str, Any]] = []
 
             # Emit each tool_result as a separate role=tool message
             for tr in tool_results:
+                tool_use_id = tr.get("tool_use_id", "")
+                # Drop orphan tool_results whose ID doesn't match any
+                # known tool_use in the conversation — stale IDs can
+                # appear after session compression / recovery, and
+                # OpenAI rejects role=tool with an unrecognised
+                # tool_call_id (#394).
+                if tool_use_id not in known_tool_call_ids:
+                    logger.debug("Dropping orphan tool_result id=%s", tool_use_id)
+                    continue
+
                 raw_content = tr.get("content", "")
                 # Collect any image blocks separately. OpenAI's ``role=tool``
                 # message only accepts a text ``content`` string -- it
@@ -280,7 +309,6 @@ def _convert_anthropic_messages_to_openai(
                 # On Anthropic the equivalent stays a single
                 # multimodal tool_result with no split; there is no
                 # equivalent Anthropic-side limitation.
-                tool_use_id = tr.get("tool_use_id", "")
                 if multimodal_blocks_from_tool:
                     correlation = (
                         f"[multimodal content for tool_use_id={tool_use_id} "
@@ -324,12 +352,19 @@ def _convert_anthropic_messages_to_openai(
                         "type": "text",
                         "text": (f"[content for tool_use_id={tool_use_id}]"),
                     }
-                    result.append(
+                    deferred_multimodal_user_messages.append(
                         {
                             "role": "user",
                             "content": [correlation_text, *multimodal_blocks_from_tool],
                         }
                     )
+
+            # Emit non-tool user content AFTER all tool messages
+            # (#393 — tool message continuity fix)
+            if non_tool_blocks:
+                result.append({"role": "user", "content": non_tool_blocks})
+            # Emit deferred multimodal user messages last
+            result.extend(deferred_multimodal_user_messages)
             continue
 
         # Fallback
