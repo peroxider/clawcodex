@@ -2,6 +2,14 @@
 
 Re-exports the migrated :mod:`src.tool_system` symbols alongside the
 downstream :func:`get_team_aware_tool_list` helper.
+
+P3-out-1: the ``build_tool`` function is intentionally **not** re-exported
+here. Re-exporting it (``from .build_tool import build_tool``) would shadow
+the :mod:`clawcodex_ext.tool_system.build_tool` submodule name under the
+``import clawcodex_ext.tool_system.build_tool as M`` form, returning the
+function instead of the module object. Callers that need the
+:func:`build_tool` function should import it from the submodule directly:
+``from clawcodex_ext.tool_system.build_tool import build_tool``.
 """
 
 from __future__ import annotations
@@ -12,7 +20,6 @@ from .build_tool import (
     Tool,
     Tools,
     ValidationResult,
-    build_tool,
     find_tool_by_name,
     tool_matches_name,
 )
@@ -50,7 +57,6 @@ __all__ = [
     "Tools",
     "ValidationResult",
     "assemble_tool_pool",
-    "build_tool",
     "filter_tools_by_deny_rules",
     "find_tool_by_name",
     "get_all_base_tools",

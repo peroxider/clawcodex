@@ -42,21 +42,26 @@ from src.query.agent_loop_compat import (
 
 ### 2.1 P3-out-1: 修复 submodule shadowing 风险
 
+**状态**: ✅ 已完成（2026-06-29）
+
 **问题**: `clawcodex_ext/tool_system/__init__.py` 用 `from .build_tool import build_tool` 重新导出**函数 `build_tool`**，覆盖了子模块 `clawcodex_ext.tool_system.build_tool` 名。当调用方用 `import clawcodex_ext.tool_system.build_tool as M` 形式时，`M` 实际是函数而非子模块对象。
 
-**影响范围**:
-- ✅ `from clawcodex_ext.tool_system.build_tool import Tool, Tools` 模式不受影响 — P3 全部 step 用此模式
-- ❌ `import clawcodex_ext.tool_system.build_tool as M` 模式受影响 — 暂无 P3 范围内调用方
-- ❌ `from clawcodex_ext.tool_system import build_tool` 直接取符号也受影响（拿到函数）
+**修复方案**: 选项 A — 从 `__init__.py` 的 `from .build_tool import (...)` 块移除 `build_tool,` 项，并从 `__all__` 中移除 `"build_tool"`。docstring 说明 P3-out-1 修复理由 + 推荐路径 `from clawcodex_ext.tool_system.build_tool import build_tool`。
 
-**P3-step3 verifier 报告**: P3-step3 提交时 verifier 报告此风险，确认所有 8 个 facade 符号 `src.X is clawcodex_ext.X` 为 True，但 `clawcodex_ext.tool_system.build_tool` 解析为 function 而非 module。
+**完成工作**:
+1. ✅ `clawcodex_ext/tool_system/__init__.py` 移除 `build_tool` 重新导出 + 更新 docstring
+2. ✅ 验证 `import clawcodex_ext.tool_system.build_tool as bt_mod` 解析为 module object（`bt_mod.build_tool` 是函数）
+3. ✅ 验证 `from clawcodex_ext.tool_system.build_tool import Tool, Tools, build_tool` 仍工作
+4. ✅ 验证 `from clawcodex_ext.tool_system import Tool, ...` 仍工作（其他 19 个符号未受影响）
 
-**修复方案**:
-- 选项 A: 把 `clawcodex_ext/tool_system/__init__.py` 的 `from .build_tool import build_tool` 改名（如 `from .build_tool import build_tool as _build_tool_fn`），避免覆盖子模块名
-- 选项 B: 用 `from . import build_tool` 重新导出子模块（替代重新导出函数），调用方需要 `from clawcodex_ext.tool_system import build_tool; build_tool.build_tool(...)` 链式调用
-- 选项 C: 不修复，依赖"统一用 `from X.Y.Z import W` 模式"的项目约定
+**验证基线**:
+- py_compile + ruff 全通过
+- 等价性探针：移除 `build_tool` re-export 不影响其他 19 个公开符号
+- 18 个 pre-existing test failures 跨 HEAD/P3-out-1 两端**完全一致**（5 provider registration + 13 tool_system_tools + 1 parse_wrapper_stdout collection error），与本次改动**无关**
+- 全量稳定性门禁：332/332 通过
+- orchestrator 单元测试：1078 passed, 2 skipped
 
-**预计工作量**: 半天（含回归测试）。优先级 P3（low — latent 风险，无 P3 范围调用方受影响）。
+**调用方影响**: 暂无 P3 范围调用方需要 `from clawcodex_ext.tool_system import build_tool` 形式 — 全部走 `from clawcodex_ext.tool_system.build_tool import build_tool`。
 
 ### 2.2 P3-out-2: 完整迁移遗留 facade
 
