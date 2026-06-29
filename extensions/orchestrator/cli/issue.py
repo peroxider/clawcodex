@@ -270,6 +270,13 @@ def add_issue_parser(subparsers: argparse._SubParsersAction) -> None:
         metavar="ISSUE_ID",
         help="Issue identifier to stop",
     )
+    stop_parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        default=False,
+        help="Skip confirmation prompt",
+    )
 
     # --- issue pause ---
     pause_parser = issue_sub.add_parser(
@@ -851,11 +858,11 @@ def run(args: argparse.Namespace) -> int:
     elif cmd == "attach":
         return _run_attach(registry_path, ws, args)
     elif cmd == "stop":
-        return _run_stop(args)
+        return _run_stop(args, registry_path=registry_path, workspace_root=ws)
     elif cmd == "pause":
-        return _run_pause(args)
+        return _run_pause(args, workspace_root=ws)
     elif cmd == "resume":
-        return _run_resume(args)
+        return _run_resume(args, workspace_root=ws)
     elif cmd == "resume-session":
         return _run_resume_session(registry_path, args)
     elif cmd == "takeover":
@@ -867,15 +874,15 @@ def run(args: argparse.Namespace) -> int:
     elif cmd == "workspace":
         return _run_workspace(args)
     elif cmd == "review":
-        return _run_review(registry_path, args)
+        return _run_review(registry_path, args, workspace_root=ws)
     elif cmd == "diff":
         return _run_diff(registry_path, args)
     elif cmd == "retry":
         return _run_retry(registry_path, args)
     elif cmd == "rebase":
-        return _run_rebase(registry_path, args)
+        return _run_rebase(registry_path, args, workspace_root=ws)
     elif cmd == "feedback":
-        return _run_feedback(registry_path, args)
+        return _run_feedback(registry_path, args, workspace_root=ws)
     elif cmd == "init":
         return _run_init(args)
 
@@ -888,20 +895,23 @@ def run(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _control_path() -> Path:
-    """Path to the orchestrator control directory."""
-    from pathlib import Path
-    import os
+def _control_path(workspace_root: str | Path | None = None) -> Path:
+    """Path to the orchestrator control directory.
 
+    Uses the workspace root when provided (preferred), otherwise falls
+    back to the CLAWCODEX_WORKSPACE_ROOT env var or ~/.clawcodex.
+    """
+    if workspace_root is not None:
+        return Path(workspace_root) / ".orchestrator_control"
     base = Path(os.environ.get("CLAWCODEX_WORKSPACE_ROOT", Path.home() / ".clawcodex"))
     return base / ".orchestrator_control"
 
 
-def _write_control(cmd: str, issue_id: str, extra: str = "") -> int:
+def _write_control(cmd: str, issue_id: str, extra: str = "", workspace_root: str | Path | None = None) -> int:
     """Write a control command to be picked up by the orchestrator on next poll."""
     from pathlib import Path
 
-    control_dir = _control_path()
+    control_dir = _control_path(workspace_root=workspace_root)
     control_dir.mkdir(parents=True, exist_ok=True)
 
     control_file = control_dir / f"{cmd}_{issue_id}.control"
@@ -1455,14 +1465,86 @@ def _run_transcript(registry_path: Path | None, args: argparse.Namespace) -> int
 # ---------------------------------------------------------------------------
 
 
-def _run_stop(args: argparse.Namespace) -> int:
+def _run_stop(
+    args: argparse.Namespace,
+    registry_path: Path | None = None,
+    workspace_root: str | Path | None = None,
+) -> int:
     """Stop a running issue agent. Idempotent — already-stopped → success."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
         print("error: --id is required", file=sys.stderr)
         return 2
+
+    skip_confirm = getattr(args, "yes", False)
+
+    # Check registry for current status (best-effort)
+    current_status = None
+    if registry_path and registry_path.exists():
+        try:
+            from extensions.orchestrator.issue_registry import IssueRegistry, IssueStatus
+
+            registry = IssueRegistry(registry_path)
+            record = registry.get(issue_id) or registry.get_by_identifier(issue_id)
+            if record is not None:
+                current_status = record.status.value
+        except Exception as exc:
+            print(f"Warning: could not read registry: {exc}", file=sys.stderr)
+
+    if current_status is not None:
+        # RUNNING is the only status where the stop command will be effective.
+        # For all other statuses the orchestrator cannot find the issue in
+        # _state.running and the control file will be silently ignored.
+        if current_status != "running":
+            print(
+                f"Warning: issue {issue_id} is not currently running "
+                f"(status: {current_status}).",
+                file=sys.stderr,
+            )
+            print(
+                "  The stop command will not take effect — no agent session to stop.",
+                file=sys.stderr,
+            )
+            if not skip_confirm:
+                try:
+                    raw = input("  Write control file anyway? [y/N]: ")
+                    if raw.strip().lower() not in ("y", "yes"):
+                        print("Stop cancelled.")
+                        return 0
+                except (EOFError, KeyboardInterrupt):
+                    print("\nStop cancelled.")
+                    return 0
+            else:
+                print("  (use --id to target a running issue)")
+    else:
+        print(
+            f"Warning: issue {issue_id} not found in registry — "
+            "cannot verify current status.",
+            file=sys.stderr,
+        )
+        if not skip_confirm:
+            try:
+                raw = input("  Write stop control file anyway? [y/N]: ")
+                if raw.strip().lower() not in ("y", "yes"):
+                    print("Stop cancelled.")
+                    return 0
+            except (EOFError, KeyboardInterrupt):
+                print("\nStop cancelled.")
+                return 0
+
+    # Confirmation prompt (unless --yes is set)
+    if not skip_confirm:
+        try:
+            raw = input(f"Stop agent for issue {issue_id}? [y/N]: ")
+            if raw.strip().lower() not in ("y", "yes"):
+                print("Stop cancelled.")
+                return 0
+        except (EOFError, KeyboardInterrupt):
+            print("\nStop cancelled.")
+            return 0
+
     print(f"Issue stop: sending stop command for {issue_id}")
-    return _write_control("stop", issue_id)
+    return _write_control("stop", issue_id, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1470,7 +1552,7 @@ def _run_stop(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _run_pause(args: argparse.Namespace) -> int:
+def _run_pause(args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
     """Pause a running issue agent. Idempotent — already-paused → success."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
@@ -1478,7 +1560,7 @@ def _run_pause(args: argparse.Namespace) -> int:
         return 2
     reason = getattr(args, "reason", "") or "operator requested pause"
     print(f"Issue pause: sending pause command for {issue_id}")
-    return _write_control("pause", issue_id, reason)
+    return _write_control("pause", issue_id, reason, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1486,14 +1568,14 @@ def _run_pause(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _run_resume(args: argparse.Namespace) -> int:
+def _run_resume(args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
     """Resume a paused issue agent. Idempotent — running → success."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
         print("error: --id is required", file=sys.stderr)
         return 2
     print(f"Issue resume: sending resume command for {issue_id}")
-    return _write_control("resume", issue_id)
+    return _write_control("resume", issue_id, workspace_root=workspace_root)
 
 
 # ---------------------------------------------------------------------------
@@ -1837,7 +1919,7 @@ def _mirror_intent_label(
         return False
 
 
-def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
+def _run_review(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
     """Approve or reject a LocalTracker issue's changes."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
@@ -1892,7 +1974,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
         registry._save()
 
         # Write control command to retry the issue
-        _write_control("retry", issue_id, feedback)
+        _write_control("retry", issue_id, feedback, workspace_root=workspace_root)
 
         print(f"Issue {issue_id} rejected with feedback:")
         print(f'  "{feedback}"')
@@ -1948,7 +2030,7 @@ def _run_review(registry_path: Path | None, args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
+def _run_feedback(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
     """List, approve, or dismiss pending PR review feedback."""
     issue_id = getattr(args, "id", None)
     if not issue_id:
@@ -1996,7 +2078,7 @@ def _run_feedback(registry_path: Path | None, args: argparse.Namespace) -> int:
         return 0
 
     if approve:
-        _write_control("review_followup", issue_id, ",".join(target_ids))
+        _write_control("review_followup", issue_id, ",".join(target_ids), workspace_root=workspace_root)
         print(f"Approved {len(target_ids)} feedback item(s) for issue {issue_id}.")
         print("Follow-up will be triggered on next orchestrator poll cycle.")
         return 0
@@ -2379,7 +2461,7 @@ def _append_audit_log(
         return None
 
 
-def _run_rebase(registry_path: Path | None, args: argparse.Namespace) -> int:
+def _run_rebase(registry_path: Path | None, args: argparse.Namespace, workspace_root: str | Path | None = None) -> int:
     """F-120: CLI 兜底命令 — request a PR rebase via the built-in path.
 
     Unlike ``issue retry``, this command DOES NOT mutate the local
@@ -2500,7 +2582,7 @@ def _run_rebase(registry_path: Path | None, args: argparse.Namespace) -> int:
     # Write the control file that the daemon polls. Format:
     #   rebase\n<id>\nforce=0|1\n<reason>\n
     extra = f"force={'1' if force else '0'}\n{reason}"
-    rc = _write_control("rebase", registry_issue_id, extra)
+    rc = _write_control("rebase", registry_issue_id, extra, workspace_root=workspace_root)
     if rc != 0:
         return rc
 

@@ -182,7 +182,20 @@ class LinearAdapter(TrackerAdapter):
         return _comment_from_node(result.get("comment"))
 
     async def update_issue_state(self, issue_id: str, state: str) -> None:
-        state_id = await self._resolve_state_id(issue_id, state)
+        # Map orchestrator-internal terminal states to Linear-compatible
+        # workflow state names. Linear teams commonly name their final
+        # state "Cancelled" (or a variant); falling back to the raw
+        # state name preserves backward compatibility for users who
+        # define matching custom states.
+        _LINEAR_STATE_FALLBACKS: dict[str, str] = {
+            "failed": "Cancelled",
+            "abandoned": "Cancelled",
+            "verification_failed": "Cancelled",
+            "cancelled": "Cancelled",
+            "canceled": "Cancelled",
+        }
+        resolved = _LINEAR_STATE_FALLBACKS.get(state.strip().lower(), state)
+        state_id = await self._resolve_state_id(issue_id, resolved)
         body = await self.client.graphql(
             _UPDATE_STATE_MUTATION,
             {"issueId": issue_id, "stateId": state_id},

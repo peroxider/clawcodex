@@ -590,6 +590,11 @@ class Orchestrator:
 
             await self._process_review_feedback()
 
+            # F-120: launch agent_rebase for PRs with content conflicts
+            await self._process_pending_rebase_conflicts()
+            # F-120: optional PR mergeable-state scan (opt-in via workflow.md)
+            await self._process_pr_conflict_scan()
+
             # Fetch new candidate issues
             try:
                 issues = await self.tracker.fetch_candidate_issues()
@@ -1549,13 +1554,13 @@ class Orchestrator:
 
             from .workspace import Workspace as _Ws
 
-            workspace = _Ws(path=_Path(workspace_path))
+            workspace = _Ws(path=_Path(workspace_path), issue_identifier=issue.identifier or '')
         else:
             from pathlib import Path as _Path
 
             from .workspace import Workspace as _Ws
 
-            workspace = _Ws(path=_Path('/tmp'))
+            workspace = _Ws(path=_Path('/tmp'), issue_identifier=issue.identifier or '')
         session = AgentSession(
             issue=issue,
             workspace=workspace,
@@ -1583,7 +1588,7 @@ class Orchestrator:
         agent runner / prompt builder can read which files git
         left in conflict state and inject them into the prompt.
         """
-        record = self._registry.get(session.issue_id)
+        record = self._registry.get(session.issue.id or '')
         if record is None:
             session.conflict_files = ()
             return
@@ -2012,6 +2017,15 @@ class Orchestrator:
         task = asyncio.create_task(self._run_issue(session))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        # Register issue_id → task mapping so the stop command
+        # can cancel a specific running issue via task.cancel().
+        issue_id_task = issue.id or ''
+        self._issue_tasks[issue_id_task] = task
+
+        def _unregister_issue_task(t: asyncio.Task) -> None:
+            self._issue_tasks.pop(issue_id_task, None)
+
+        task.add_done_callback(_unregister_issue_task)
 
     async def _sync_tracker_issue_state(self, issue_id: str, state: str) -> None:
         if not issue_id:
@@ -2571,6 +2585,9 @@ class Orchestrator:
                         output=getattr(session, 'verification_output', None),
                         hook_error=getattr(session, 'last_hook_error', None),
                     )
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'verification_failed'
+                    )
                     await self._schedule_retry(session)
                 elif session.status == 'agent_timeout':
                     self.status_dashboard.on_session_failed(
@@ -2586,6 +2603,9 @@ class Orchestrator:
                         or getattr(session, 'verification_output', None)
                         or 'Agent run timed out',
                     )
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     await self._schedule_retry(session)
                 elif session.status == 'max_turns_exceeded':
                     self.status_dashboard.on_session_failed(
@@ -2599,6 +2619,9 @@ class Orchestrator:
                         'max turns exceeded',
                     )
                     self._registry.mark_failed(session.issue.id or '')
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     await self._schedule_retry(
                         session,
                         delay_base_ms=self.workflow.agent.max_turns_retry_delay_ms,
@@ -2631,6 +2654,9 @@ class Orchestrator:
                         'rate limit circuit open',
                     )
                     self._registry.mark_failed(session.issue.id or '')
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     await self._schedule_retry(
                         session,
                         delay_base_ms=backoff_s,
@@ -2663,6 +2689,9 @@ class Orchestrator:
                         getattr(session, 'session_end_summary', '') or str(session.status),
                     )
                     self._registry.mark_failed(session.issue.id or '')
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     # No retry — same agent will likely repeat the
                     # same loop on retry without human intervention.
                     # The cron tick will mark the issue abandoned on
@@ -2684,6 +2713,9 @@ class Orchestrator:
                         'cancelled by operator',
                     )
                     self._registry.mark_failed(session.issue.id or '')
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     # Do NOT schedule retry — operator explicitly cancelled.
                 else:
                     self.status_dashboard.on_session_failed(
@@ -2708,6 +2740,9 @@ class Orchestrator:
                         ),
                     )
                     self._registry.mark_failed(session.issue.id or '')
+                    await self._sync_tracker_issue_state(
+                        session.issue.id or '', 'failed'
+                    )
                     # Schedule retry
                     await self._schedule_retry(session)
 

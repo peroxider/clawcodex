@@ -69,6 +69,9 @@ _TERMINAL_STATE_ALIASES = {
     "cancelled",
     "canceled",
     "duplicate",
+    "failed",
+    "abandoned",
+    "verification_failed",
 }
 
 
