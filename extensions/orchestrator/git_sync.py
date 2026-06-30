@@ -708,12 +708,24 @@ class GitSyncService:
         "daemon.pid",
     )
 
+    _WORKFLOW_ARTIFACT_PATTERNS: tuple[str, ...] = (
+        "ANALYSE_REPORT",
+        "ANALYSIS_REPORT",
+        "CHANGE_SUMMARY",
+        "WORKFLOW_REPORT",
+        "STAGE_REPORT",
+    )
+
     def _unstage_orchestrator_artifacts(self, repo_root: str) -> None:
         """Remove orchestrator-internal files from the staging area.
 
         Safety net: even if ``.git/info/exclude`` patterns are bypassed
         (e.g. the agent overwrites the exclude file), these files will
         never enter a commit.
+
+        Also removes workflow-generated report files (e.g. ANALYSE_REPORT.md)
+        that the agent may have created during stage execution. These are
+        analysis artifacts, not code changes.
         """
         stdout, _, rc = _run_git(["diff", "--cached", "--name-only"], repo_root)
         if rc != 0 or not stdout.strip():
@@ -725,6 +737,12 @@ class GitSyncService:
                 if path == artifact or path.startswith(f"{artifact}/"):
                     to_unstage.append(path)
                     break
+            else:
+                basename = Path(path).stem.upper()
+                for pattern in self._WORKFLOW_ARTIFACT_PATTERNS:
+                    if pattern in basename:
+                        to_unstage.append(path)
+                        break
         if to_unstage:
             self._run_git_checked(["reset", "--", *to_unstage], repo_root)
 
@@ -836,6 +854,23 @@ class GitSyncService:
             ]
             if summary_lines:
                 lines.extend(["", "## Regression Tests", "", "```", summary_lines[-1], "```"])
+
+        # Include workflow stage outputs (analysis, implementation notes, etc.)
+        workflow_outputs = getattr(session, "workflow_stage_outputs", None)
+        if workflow_outputs:
+            for stage_id in sorted(workflow_outputs.keys()):
+                info = workflow_outputs[stage_id]
+                phase = info.get("phase", "")
+                name = info.get("name", f"Stage {stage_id}")
+                output = info.get("output", "").strip()
+                if output:
+                    lines.extend(["", f"## {name}", ""])
+                    # Truncate very long outputs to keep PR readable
+                    if len(output) > 2000:
+                        lines.append(output[:2000])
+                        lines.append(f"\n... (truncated, {len(output)} chars total)")
+                    else:
+                        lines.append(output)
 
         if report_path:
             lines.extend(["", f"<!-- metadata: report_path={report_path} -->"])

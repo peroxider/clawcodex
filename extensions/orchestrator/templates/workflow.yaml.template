@@ -1,0 +1,108 @@
+# ── ClawCodex Declarative Workflow ──────────────────────────────────
+# 声明式工作流定义文件，由 DeclarativeWorkflowEngine 解释执行。
+#
+# 生成方式:
+#   clawcodex orchestrator workflow init --workflow-yaml
+#
+# 阶段类型:
+#   agent    - LLM agent 执行阶段，执行 prompt 中的任务
+#   gate     - 质量门禁，验证前一阶段的输出
+#   decision - 条件分支，根据结果跳转到不同阶段
+#
+# 提示: 每个阶段会自动注入 Issue 上下文（标题、描述）和前序阶段输出，
+#       无需在 prompt 中引用 {{PROJECT_NAME}} 等占位符。
+# ────────────────────────────────────────────────────────────────────
+
+name: {{WORKFLOW_NAME}}
+version: "1.0"
+description: |
+  标准 Issue 修复工作流：
+  1. 分析需求，定位相关代码
+  2. 实施代码修改
+  3. 验证修改正确性
+  4. 生成变更摘要
+
+# ── 阶段定义 ────────────────────────────────────────────────────────
+#
+# ⚠️ Git 约束（所有阶段通用）：
+# - 可以在当前 issue 分支上执行 git add / git commit
+# - 禁止执行 git push — 编排器负责推送并创建 PR
+# - 禁止切换分支或创建新分支 — 编排器已管理分支
+# - 使用 Write / Edit 工具修改源文件
+
+stages:
+  # Stage 1: 分析需求与代码
+  - id: 1
+    name: 分析需求与代码
+    kind: agent
+    phase: analyze
+    prompt: |
+      根据 Issue Context 中的需求描述，分析项目代码，找到需要修改的文件和代码位置。
+
+      请执行以下步骤：
+      1. 阅读项目结构和相关源代码文件
+      2. 理解现有实现逻辑和需要修改的部分
+      3. 确定具体的修改方案（涉及哪些文件、如何修改）
+
+      将分析结果直接作为文本回复输出，不要创建或写入任何文件（如 ANALYSE_REPORT.md）。
+    depends_on: []
+    on_error: fail
+
+  # Stage 2: 实施代码修改
+  - id: 2
+    name: 实施代码修改
+    kind: agent
+    phase: implement
+    prompt: |
+      根据 Stage 1 的分析结果，直接修改源代码文件来解决问题。
+
+      要求：
+      1. 修改所有需要改动的文件，不要遗漏
+      2. 确保代码风格与项目现有风格一致
+      3. 不引入新的问题或破坏现有功能
+      4. 直接使用 Write / Edit 工具修改文件，不要只输出计划
+
+      修改完成后可以 git add + git commit 到当前分支。
+      不要执行 git push，编排器会统一推送并创建 PR。
+    depends_on: [1]
+    on_error: fail
+    max_retries: 2
+
+  # Stage 3: 验证修改
+  - id: 3
+    name: 验证修改
+    kind: agent
+    phase: verify
+    prompt: |
+      验证 Stage 2 的代码修改是否正确：
+
+      1. 检查修改是否解决了 Issue Context 中描述的问题
+      2. 检查是否有遗漏的边界情况
+      3. 检查是否引入了新的错误或破坏了现有逻辑
+      4. 如有问题，直接使用 Write / Edit 工具修复
+
+      将验证结果直接作为文本回复输出，不要创建或写入任何文件。
+    depends_on: [2]
+    on_error: fail
+
+  # Stage 4: 生成变更摘要
+  - id: 4
+    name: 生成变更摘要
+    kind: agent
+    phase: summary
+    prompt: |
+      总结本次所有代码修改，生成变更摘要。
+
+      格式要求：
+      1. 修改的文件列表
+      2. 每个文件的主要变更内容和行数
+      3. 修改原因（对应 Issue 需求）
+
+      将摘要直接作为文本回复输出，不要创建或写入任何文件。
+    depends_on: [3]
+    on_error: skip
+
+# ── 运行时配置 ──────────────────────────────────────────────────────
+
+config:
+  workspace: "."

@@ -121,7 +121,7 @@ class GateHandler:
         from .validators import ContractValidator
 
         validator = ContractValidator()
-        results = validator.validate_all(stage_node.validators)
+        results = await validator.validate_all(stage_node.validators)
         all_passed = all(r.passed for r in results)
         failures = [r.message for r in results if not r.passed]
 

@@ -1,7 +1,9 @@
 # ClawCodex Workflow Configuration Guide
 
-This guide shows how to configure `workflow.md` (or `WORKFLOW.md`) to fully
-wire up the autonomous issue→PR pipeline that runs in `extensions/orchestrator`.
+This guide covers the full orchestrator configuration stack:
+
+- **`workflow.md`** — the autonomous issue→PR pipeline (tracker, agent, hooks, verification).
+- **`workflow.yaml`** — the declarative multi-stage workflow engine (DAG stages, quality gates, decision branches).
 
 > **Naming note.** The historical filename `WORKFLOW.md` still works. The
 > orchestrator now uses `workflow.md` as the canonical name. See
@@ -27,7 +29,8 @@ wire up the autonomous issue→PR pipeline that runs in `extensions/orchestrator
 13. [End-to-End Flow Example](#end-to-end-flow-example)
 14. [Conflict Recovery](#conflict-recovery)
 15. [Reports & Persistence](#reports--persistence)
-16. [Complete Key Reference](#complete-key-reference)
+16. [Declarative Workflow Engine (workflow.yaml)](#declarative-workflow-engine-workflowyaml)
+17. [Complete Key Reference](#complete-key-reference)
 
 ---
 
@@ -619,11 +622,31 @@ dashboard --port 8765`).
 
 ## CLI Reference
 
+### Workflow (template scaffolding)
+
+```bash
+# Generate workflow.md from template
+clawcodex orchestrator workflow init --kind gitcode --owner my-org --repo my-project
+
+# Generate both workflow.md and workflow.yaml
+clawcodex orchestrator workflow init \
+    --kind gitcode \
+    --owner my-org \
+    --repo my-project \
+    --workflow-yaml \
+    --workflow-name "my-project-review" \
+    --non-interactive
+
+# List available template variants
+clawcodex orchestrator workflow list-templates
+```
+
 ### Server (daemon lifecycle)
 
 ```bash
 clawcodex orchestrator server start \
     --workflow ./workflow.md \
+    [--workflow-yaml ./workflow.yaml] \
     [--dashboard] \
     [--port 8765]
 
@@ -892,6 +915,246 @@ QUEUED → PENDING → RUNNING → SYNCED
 
 ---
 
+## Declarative Workflow Engine (workflow.yaml)
+
+The declarative workflow engine (`workflow.yaml`) is an optional add-on that
+enables **multi-stage DAG execution** on top of the standard orchestrator
+pipeline. When both `workflow.md` and `workflow.yaml` are provided, the
+orchestrator runs each issue through the stages defined in the YAML rather
+than the single-agent pipeline.
+
+### What it does
+
+- **DAG-ordered stages** — each stage declares `depends_on` to form a
+  dependency graph; stages execute in topological order.
+- **Quality gates** — `gate` stages validate previous stage output with a
+  configurable threshold; can auto-rollback on failure.
+- **Decision branches** — `decision` stages branch to different downstream
+  stages based on LLM output.
+- **Stage-level error recovery** — per-stage `on_error` policy: `fail`,
+  `skip`, or `rollback`.
+- **Cost tracking** — per-stage and global cost budget with warning thresholds.
+- **Observability** — stage-level events (`stage_start`, `stage_complete`,
+  `gate_request`, `cost_warning`) emitted to the event bus and dashboard.
+
+### Relationship to workflow.md
+
+```
+workflow.md          →  orchestrator pipeline config (tracker, agent, hooks, ...)
+workflow.yaml        →  stage DAG and execution rules (agent/gate/decision, ...)
+```
+
+- `workflow.md` is **required** — it defines the tracker, workspace, and agent
+  infrastructure.
+- `workflow.yaml` is **optional** — when present, it replaces the
+  single-agent pipeline with multi-stage execution.
+- Both files are generated from templates via the same `workflow init` command.
+
+### Generating workflow.yaml
+
+Use the `workflow init` command with `--workflow-yaml`:
+
+```bash
+# Interactive (prompts for each value)
+clawcodex orchestrator workflow init --kind gitcode --workflow-yaml
+
+# Non-interactive (all values via CLI flags)
+clawcodex orchestrator workflow init \
+    --kind gitcode \
+    --owner my-org \
+    --repo my-project \
+    --workflow-yaml \
+    --workflow-name "my-project-code-review" \
+    --workflow-yaml-output ./workflow.yaml \
+    --output ./workflow.md \
+    --non-interactive
+
+# List available templates
+clawcodex orchestrator workflow list-templates
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--kind` / `-k` | `github` | Tracker kind: `github`, `gitcode`, `gitee`, `linear`, `local` |
+| `--owner` / `-o` | (prompt) | Repository owner |
+| `--repo` / `-r` | (prompt) | Repository name |
+| `--template` / `-t` | `workflow` | Template variant: `workflow` (remote), `workflow-local` (local) |
+| `--output` / `--out` | `./workflow.md` | Output path for workflow.md |
+| `--workflow-yaml` | (flag) | Also generate a declarative workflow.yaml |
+| `--workflow-name` | `{repo}-code-review` | Workflow name in the YAML |
+| `--workflow-yaml-output` | `./workflow.yaml` | Output path for workflow.yaml |
+| `--non-interactive` | (flag) | Skip prompts; use defaults or CLI values |
+
+### Stage types
+
+| Kind | Purpose | Key fields |
+|------|---------|------------|
+| `agent` | LLM agent executes the prompt | `prompt`, `depends_on`, `timeout_seconds`, `on_error`, `max_retries`, `validators` |
+| `gate` | Quality gate that validates previous stage output | `gate_mode` (`auto`/`manual`), `gate_threshold` (0.0–1.0), `gate_rollback_to` |
+| `decision` | Conditional branch based on LLM analysis | `decision_outcomes` — maps outcome names to `next` stage IDs |
+
+### Stage configuration reference
+
+```yaml
+stages:
+  - id: 1                          # unique integer stage ID
+    name: 分析代码结构               # human-readable name
+    kind: agent                     # agent | gate | decision
+    phase: analyze                  # logical phase label (for observability)
+    prompt: |                       # the LLM prompt for this stage
+      分析 {{PROJECT_NAME}} 项目的代码结构。
+    depends_on: []                  # list of stage IDs this stage depends on
+    timeout_seconds: 300            # max execution time (default: 300)
+    on_error: fail                  # fail | skip | rollback
+    max_retries: 1                  # retry count before applying on_error (agent only)
+    validators:                     # output validation (agent only)
+      - type: file_exists
+        path: "README.md"
+        error_message: "README.md must exist"
+      - type: line_count
+        path: "output.txt"
+        min_lines: 10
+```
+
+#### Gate-specific fields
+
+```yaml
+    kind: gate
+    gate_mode: auto                 # auto (LLM evaluation) | manual
+    gate_threshold: 0.7             # 0.0–1.0, auto-reject below this score
+    gate_rollback_to: 2             # stage ID to rollback to on failure
+```
+
+#### Decision-specific fields
+
+```yaml
+    kind: decision
+    decision_outcomes:
+      generate_report:              # outcome name → next stage
+        next: 6
+      fix_issues:
+        next: 5
+```
+
+### Runtime config
+
+```yaml
+config:
+  workspace: "."                    # workspace root (relative to workflow.md workspace)
+  agent:
+    provider: anthropic             # LLM provider
+    model: claude-sonnet-4-20250514 # model name
+```
+
+### Error handling strategies
+
+| `on_error` | Behavior |
+|------------|----------|
+| `fail` | Stop the entire workflow immediately |
+| `skip` | Skip this stage, continue with downstream stages |
+| `rollback` | Restore workspace snapshot from before this stage, then stop |
+
+### Starting with the workflow engine
+
+```bash
+# Both workflow.md and workflow.yaml required
+clawcodex orchestrator server start \
+    --workflow ./workflow.md \
+    --workflow-yaml ./workflow.yaml \
+    --dashboard
+```
+
+The orchestrator logs confirmation when the workflow engine is enabled:
+
+```
+INFO Workflow engine enabled: workflow.yaml (my-project-code-review, 6 stages)
+```
+
+### Complete workflow.yaml example
+
+```yaml
+name: my-project-code-review
+version: "1.0"
+description: |
+  代码审查工作流：
+  1. 分析代码结构 → 2. 质量检查 → 3. 门禁判断 → 4. 决策分支 → 5. 修复/报告
+
+stages:
+  - id: 1
+    name: 分析代码结构
+    kind: agent
+    phase: analyze
+    prompt: 分析项目代码结构和模块依赖关系。
+    depends_on: []
+    timeout_seconds: 300
+    on_error: fail
+
+  - id: 2
+    name: 代码质量检查
+    kind: agent
+    phase: check
+    prompt: 对代码进行质量检查（风格、性能、安全、错误处理）。
+    depends_on: [1]
+    timeout_seconds: 600
+    on_error: fail
+    validators:
+      - type: file_exists
+        path: "README.md"
+
+  - id: 3
+    name: 质量门禁
+    kind: gate
+    phase: gate
+    prompt: 评估 Stage 2 的检查结果，判断是否通过。
+    depends_on: [2]
+    gate_mode: auto
+    gate_threshold: 0.7
+    gate_rollback_to: 2
+    timeout_seconds: 300
+    on_error: rollback
+
+  - id: 4
+    name: 决策分支
+    kind: decision
+    phase: decide
+    prompt: 根据检查结果决定下一步：通过→生成报告，不通过→修复问题。
+    depends_on: [3]
+    timeout_seconds: 300
+    on_error: fail
+    decision_outcomes:
+      generate_report:
+        next: 6
+      fix_issues:
+        next: 5
+
+  - id: 5
+    name: 修复代码问题
+    kind: agent
+    phase: fix
+    prompt: 修复 Stage 2 发现的问题，确保不引入新问题。
+    depends_on: [4]
+    timeout_seconds: 1200
+    on_error: skip
+    max_retries: 1
+
+  - id: 6
+    name: 生成审查报告
+    kind: agent
+    phase: report
+    prompt: 生成最终代码审查报告（概览、问题、建议、评分）。
+    depends_on: [5]
+    timeout_seconds: 600
+    on_error: fail
+
+config:
+  workspace: "."
+  agent:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+```
+
+---
+
 ## Complete Key Reference
 
 Every key with its default, type, and behavior. All paths are resolved
@@ -1032,8 +1295,14 @@ relative to the workspace unless noted.
 # Foreground with the in-process TUI dashboard
 clawcodex orchestrator --workflow ./workflow.md
 
-# Daemonized
+# Daemonized (standard pipeline)
 clawcodex orchestrator server start --workflow ./workflow.md
+
+# Daemonized with declarative workflow engine
+clawcodex orchestrator server start \
+    --workflow ./workflow.md \
+    --workflow-yaml ./workflow.yaml
+
 clawcodex orchestrator server status
 clawcodex orchestrator server stop
 
@@ -1052,6 +1321,9 @@ from the last 3 path segments of the workspace root.
 - `extensions/orchestrator/templates/workflow.template.md` — the
   authoritative placeholder template with per-field comments (generic,
   covers all tracker kinds).
+- `extensions/orchestrator/templates/workflow.yaml.template` — the
+  declarative workflow engine template with DAG stages, gates, and
+  decision branches.
 - `extensions/orchestrator/templates/workflow-local.template.md` — the
   local-tracker workflow template with the F-38 verification trio and
   F-39 retry knobs (Chinese-l10n agent prompt).
@@ -1060,5 +1332,9 @@ from the last 3 path segments of the workspace root.
 - Use `clawcodex orchestrator workflow init` to generate a workflow.md
   from the appropriate template, and `clawcodex orchestrator issue init`
   to scaffold an issue card.
+- Use `clawcodex orchestrator workflow init --workflow-yaml` to generate
+  a workflow.yaml for the declarative workflow engine.
+- `docs/feature_plan/02-orchestrator/f-110-workflow-engine.md` — design doc
+  for the declarative workflow engine.
 - `docs/FEATURE_PLAN.md` (F-37, F-38, F-39) — design docs.
 - `docs/PROGRESS.md` — per-feature status and acceptance criteria.

@@ -1,9 +1,11 @@
 """orchestrator server — manage the orchestrator daemon process.
 
 Usage (noun-verb):
-  clawcodex orchestrator server status          Show orchestrator daemon status
-  clawcodex orchestrator server stop            Stop the orchestrator daemon gracefully
-  clawcodex orchestrator server start [--workflow PATH]  Start the orchestrator daemon
+  clawcodex orchestrator server status                                   Show orchestrator daemon status
+  clawcodex orchestrator server stop                                     Stop the orchestrator daemon gracefully
+  clawcodex orchestrator server start [--workflow PATH]                  Start the orchestrator daemon
+  clawcodex orchestrator server start [--workflow PATH]                  Start with declarative workflow engine
+                                       [--workflow-yaml PATH]
 
 All commands are idempotent:
   - status: pure read, always safe
@@ -108,10 +110,16 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
 
     # --- server start ---
     start_parser = server_sub.add_parser(
-        'start',
-        help='Start the orchestrator daemon',
-        description='Launch the orchestrator with a workflow file. '
-        'Idempotent: if the daemon is already running, shows status instead.',
+        "start",
+        help="Start the orchestrator daemon",
+        description="Launch the orchestrator with a workflow file. "
+        "Optionally enable the declarative workflow engine via --workflow-yaml "
+        "for multi-stage DAG execution with quality gates and decision branches.",
+        epilog="Examples:\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml\n"
+        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml --dashboard",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     start_parser.add_argument(
         '--workflow',

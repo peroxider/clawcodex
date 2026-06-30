@@ -16,15 +16,20 @@ from typing import Any
 import yaml
 
 from .cost import CostBudget, CostTracker
+from .decision_handler import DecisionHandler
 from .errors import (
+    ConvergenceError,
     CostExceededError,
+    DecisionExhaustedError,
     RollbackError,
     StageFailureError,
     StageTimeoutError,
     WorkflowEngineError,
     WorkflowSchemaError,
 )
+from .checkpoint import CheckpointManager
 from .event_bus import EventBus
+from .gate_handler import GateHandler
 from .rollback import RollbackManager
 from .gate_rollback import GateRollbackHandler
 from .workflow_state import (
@@ -76,6 +81,12 @@ class WorkflowSchema:
             raise WorkflowSchemaError("workflow.yaml: 'stages' must be a list")
 
         stages = [_parse_stage_node(i, s) for i, s in enumerate(stages_raw)]
+        # 检查重复 stage_id
+        seen_ids: set[int] = set()
+        for s in stages:
+            if s.id in seen_ids:
+                raise WorkflowSchemaError(f"workflow.yaml: duplicate stage id '{s.id}'")
+            seen_ids.add(s.id)
         config = data.get("config", {})
         if not isinstance(config, dict):
             config = {}
@@ -159,7 +170,7 @@ def _parse_stage_node(index: int, raw: dict[str, Any]) -> StageNode:
         gate_threshold=float(raw.get("gate_threshold", 0.8)),
         gate_rollback_to=raw.get("gate_rollback_to"),
         decision_outcomes=raw.get("decision_outcomes", {}),
-        timeout_seconds=int(raw.get("timeout_seconds", 600)),
+        timeout_seconds=int(raw.get("timeout_seconds", 0)),
         max_retries=int(raw.get("max_retries", 0)),
         on_error=raw.get("on_error", "fail"),
     )
@@ -212,6 +223,14 @@ class DeclarativeWorkflowEngine:
         self._gate_rollback_handler: GateRollbackHandler | None = None
         self._init_rollback()
 
+        # 检查点系统 (F-115)
+        self._checkpoint_manager: CheckpointManager | None = None
+        self._decision_count: dict[int, int] = {}  # 决策循环检测
+
+        # GATE/DECISION 处理器 (F-112, F-113)
+        self._gate_handler = GateHandler()
+        self._decision_handler = DecisionHandler()
+
     def set_stage_runner(self, runner: Any) -> None:
         """注入 StageRunner 适配器 (F-111)。"""
         self._stage_runner = runner
@@ -226,6 +245,29 @@ class DeclarativeWorkflowEngine:
                 rollback_manager=self._rollback_manager,
                 workspace_dir=self.config.workspace_dir,
             )
+
+    def set_checkpoint_manager(self, checkpoint_manager: CheckpointManager) -> None:
+        """注入检查点管理器（F-115）。"""
+        self._checkpoint_manager = checkpoint_manager
+
+    def _effective_timeout(self, stage: StageNode) -> int:
+        """解析阶段有效超时时间。
+
+        stage.timeout_seconds == 0 表示未显式配置，使用引擎默认值。
+        """
+        return stage.timeout_seconds or self.config.default_timeout_seconds
+
+    def _save_checkpoint(self, current_stage_id: int) -> None:
+        """保存检查点（F-115）。"""
+        if self._checkpoint_manager is None:
+            return
+        self.state.current_stage = current_stage_id
+        try:
+            self._checkpoint_manager.save(
+                self.state, decision_history=list(self._decision_count.items()),
+            )
+        except Exception:
+            logger.debug("Failed to save checkpoint at stage %s", current_stage_id, exc_info=True)
 
     async def execute(self, from_stage: int | None = None) -> WorkflowResult:
         """执行工作流。
@@ -298,6 +340,9 @@ class DeclarativeWorkflowEngine:
             try:
                 result = await self._execute_stage(stage)
                 self.state.mark_stage_completed(stage.id, result)
+
+                # 每个阶段完成后保存检查点 (F-115)
+                self._save_checkpoint(stage.id)
 
                 self.event_bus.emit_stage_complete(
                     stage_id=stage.id,
@@ -424,14 +469,15 @@ class DeclarativeWorkflowEngine:
                 stage_id=stage.id,
             )
 
+        effective_timeout = self._effective_timeout(stage)
         try:
             run_result = await asyncio.wait_for(
                 self._stage_runner.run(stage, self.state),
-                timeout=stage.timeout_seconds,
+                timeout=effective_timeout,
             )
         except asyncio.TimeoutError:
             raise StageTimeoutError(
-                f"Stage {stage.id} ({stage.name}) timed out after {stage.timeout_seconds}s",
+                f"Stage {stage.id} ({stage.name}) timed out after {effective_timeout}s",
                 stage_id=stage.id,
             )
 
@@ -442,6 +488,14 @@ class DeclarativeWorkflowEngine:
         warnings = self.cost_tracker.check_budget()
         for w in warnings:
             self.event_bus.emit_cost_warning(message=w)
+
+        # 检查 StageRunner 执行结果
+        if not getattr(run_result, "success", False):
+            error_msg = getattr(run_result, "error", "Stage execution failed")
+            raise StageFailureError(
+                f"Stage {stage.id} ({stage.name}) failed: {error_msg}",
+                stage_id=stage.id,
+            )
 
         # 输出验证 (F-110-C)
         if stage.validators:
@@ -471,10 +525,11 @@ class DeclarativeWorkflowEngine:
             mode=stage.gate_mode,
         )
 
+        effective_timeout = self._effective_timeout(stage)
         try:
             gate_result = await asyncio.wait_for(
                 self._stage_runner.run_gate(stage, self.state),
-                timeout=stage.timeout_seconds,
+                timeout=effective_timeout,
             )
         except asyncio.TimeoutError:
             raise StageTimeoutError(
@@ -505,14 +560,18 @@ class DeclarativeWorkflowEngine:
             )
 
     async def _run_decision_stage(self, stage: StageNode) -> StageResult:
-        """执行 DECISION 阶段 (F-113)。"""
+        """执行 DECISION 阶段 (F-113)。
+
+        通过 DecisionHandler 进行回环次数检查和收敛检测。
+        """
         if self._stage_runner is None:
             raise WorkflowEngineError("StageRunner not injected", stage_id=stage.id)
 
+        effective_timeout = self._effective_timeout(stage)
         try:
             decision_result = await asyncio.wait_for(
                 self._stage_runner.run_decision(stage, self.state),
-                timeout=stage.timeout_seconds,
+                timeout=effective_timeout,
             )
         except asyncio.TimeoutError:
             raise StageTimeoutError(
@@ -523,59 +582,55 @@ class DeclarativeWorkflowEngine:
         outcome = getattr(decision_result, "outcome", "proceed")
         next_stage = getattr(decision_result, "next_stage", None)
 
-        self.event_bus.emit_decision(
-            stage_id=stage.id,
-            outcome=outcome,
-            next_stage=next_stage,
-        )
-
-        return StageResult(
+        stage_result = StageResult(
             stage_id=stage.id,
             status=StageStatus.COMPLETED,
             decision_outcome=outcome,
             decision_next_stage=next_stage,
         )
 
+        decision = self._decision_handler.resolve(stage, stage_result)
+
+        if decision.exhausted:
+            self.event_bus.emit_decision(
+                stage_id=stage.id, outcome=outcome, next_stage=None,
+            )
+            raise DecisionExhaustedError(
+                decision.reason, stage_id=stage.id,
+            )
+
+        if decision.converged:
+            self.event_bus.emit_decision(
+                stage_id=stage.id, outcome=outcome, next_stage=None,
+            )
+            raise ConvergenceError(
+                decision.reason, stage_id=stage.id,
+            )
+
+        resolved_next = decision.next_stage or next_stage
+        self.event_bus.emit_decision(
+            stage_id=stage.id,
+            outcome=decision.outcome,
+            next_stage=resolved_next,
+        )
+
+        return StageResult(
+            stage_id=stage.id,
+            status=StageStatus.COMPLETED,
+            decision_outcome=decision.outcome,
+            decision_next_stage=resolved_next,
+        )
+
     async def _validate_stage_output(self, stage: StageNode, run_result: Any) -> list[str]:
-        """执行阶段输出验证 (F-110-C, F-114)。"""
-        errors: list[str] = []
-        for validator_spec in stage.validators:
-            validator_type = validator_spec.get("type", "")
-            if validator_type == "file_exists":
-                path = validator_spec.get("path", "")
-                if not Path(path).exists():
-                    errors.append(f"file_exists: {path} not found")
-            elif validator_type == "file_size":
-                path = validator_spec.get("path", "")
-                min_bytes = validator_spec.get("min_bytes", 0)
-                try:
-                    size = Path(path).stat().st_size
-                    if size < min_bytes:
-                        errors.append(f"file_size: {path} is {size} bytes, min {min_bytes}")
-                except FileNotFoundError:
-                    errors.append(f"file_size: {path} not found")
-            elif validator_type == "regex":
-                import re
-                path = validator_spec.get("path", "")
-                pattern = validator_spec.get("pattern", "")
-                min_matches = validator_spec.get("min_matches", 1)
-                try:
-                    content = Path(path).read_text(encoding="utf-8")
-                    matches = re.findall(pattern, content)
-                    if len(matches) < min_matches:
-                        errors.append(f"regex: found {len(matches)} matches, min {min_matches}")
-                except FileNotFoundError:
-                    errors.append(f"regex: {path} not found")
-            elif validator_type == "line_count":
-                path = validator_spec.get("path", "")
-                min_lines = validator_spec.get("min_lines", 1)
-                try:
-                    count = len(Path(path).read_text(encoding="utf-8").splitlines())
-                    if count < min_lines:
-                        errors.append(f"line_count: {path} has {count} lines, min {min_lines}")
-                except FileNotFoundError:
-                    errors.append(f"line_count: {path} not found")
-        return errors
+        """执行阶段输出验证 (F-110-C, F-114)。
+
+        委托给 validators 包的 ContractValidator，支持全部 7 种验证器类型。
+        """
+        from .validators import ContractValidator
+
+        validator = ContractValidator()
+        results = await validator.validate_all(stage.validators)
+        return [r.message for r in results if not r.passed]
 
     # ── 错误处理 ──────────────────────────────────────────────────
 

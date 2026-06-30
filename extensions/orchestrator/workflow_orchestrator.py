@@ -48,6 +48,9 @@ class WorkflowOrchestrator:
         workflow_yaml_path: str,
         agent_runner: "AgentRunner | None" = None,
         checkpoint_dir: str | None = None,
+        tracker: Any = None,
+        status_dashboard: Any = None,
+        clarification_resolver: Any = None,
     ) -> None:
         self._workflow_config = workflow_config
         self._yaml_path = Path(workflow_yaml_path)
@@ -58,10 +61,12 @@ class WorkflowOrchestrator:
 
         # 构建引擎配置
         workspace_root = workflow_config.workspace.root
+        agent_timeout_s = int(getattr(workflow_config.agent, "run_timeout_ms", 1_800_000) / 1000)
         engine_config = EngineConfig(
             cost_budget=CostBudget(
-                max_total_usd=getattr(workflow_config.agent, "cost_budget_usd", 0.0) or 0.0,
+                max_total_usd=getattr(workflow_config.agent, "cost_budget_usd", 50.0) or 50.0,
             ),
+            default_timeout_seconds=agent_timeout_s,
             workspace_dir=str(workspace_root),
             enable_snapshots=True,
         )
@@ -78,6 +83,9 @@ class WorkflowOrchestrator:
             agent_config=workflow_config.agent,
             sandbox_config=workflow_config.sandbox,
             workspace_dir=str(workspace_root),
+            tracker=tracker,
+            status_dashboard=status_dashboard,
+            clarification_resolver=clarification_resolver,
         )
         self._engine.set_stage_runner(self._stage_runner)
 
@@ -112,6 +120,8 @@ class WorkflowOrchestrator:
         self._engine.event_bus.on("workflow_complete", self._on_workflow_complete)
         self._engine.event_bus.on("workflow_error", self._on_workflow_error)
         self._engine.event_bus.on("gate_request", self._on_gate_request)
+        self._engine.event_bus.on("gate_approved", self._on_gate_approved)
+        self._engine.event_bus.on("gate_rejected", self._on_gate_rejected)
         self._engine.event_bus.on("cost_warning", self._on_cost_warning)
 
     # ── 公开接口 ──────────────────────────────────────────────────
@@ -140,9 +150,12 @@ class WorkflowOrchestrator:
 
         result = await self._engine.execute(from_stage=from_stage)
 
-        # 保存检查点
+        # 检查点管理：成功则清理，失败则保存
         if self._checkpoint_mgr is not None:
-            self._checkpoint_mgr.save(self._engine.state)
+            if result.success:
+                self._checkpoint_mgr.delete()
+            else:
+                self._checkpoint_mgr.save(self._engine.state)
 
         elapsed = time.time() - start_time
         logger.info(
@@ -179,13 +192,32 @@ class WorkflowOrchestrator:
         if workspace_path:
             self._stage_runner._workspace_dir = workspace_path
 
+        # 设置 per-issue 检查点目录（F-115: 重试时从检查点恢复）
+        issue_checkpoint_dir = None
+        if workspace_path:
+            issue_checkpoint_dir = str(
+                Path(workspace_path) / ".orchestrator_workspace" / "checkpoints"
+            )
+        self._checkpoint_dir = issue_checkpoint_dir
+        if issue_checkpoint_dir:
+            self._checkpoint_mgr = CheckpointManager(run_dir=issue_checkpoint_dir)
+            self._engine.set_checkpoint_manager(self._checkpoint_mgr)
+        else:
+            self._checkpoint_mgr = None
+
+        # 重置引擎状态（防止单例跨 issue 状态污染）
+        # 如果存在检查点，run() 会自动从检查点恢复
+        self._reset_engine_state()
+
         # 将 issue 上下文注入到工作流状态中
+        # _issue 保留原始对象引用，供 StageRunner 调用 PromptBuilder.render()
         self._engine.state.issue_context = {
             "id": issue.id,
             "identifier": issue.identifier,
             "title": issue.title,
             "description": issue.description,
             "labels": issue.labels,
+            "_issue": issue,
         }
 
         logger.info(
@@ -195,6 +227,21 @@ class WorkflowOrchestrator:
 
         return await self.run(from_stage=from_stage)
 
+    def _reset_engine_state(self) -> None:
+        """重置引擎运行时状态，防止单例跨 issue 状态污染。"""
+        from .workflow_engine.workflow_state import WorkflowState
+
+        self._engine.state = WorkflowState(
+            workflow_name=self._schema.name,
+            workflow_version=self._schema.version,
+        )
+        self._engine._dag_order = []
+        self._engine._decision_count = {}
+        self._engine.cost_tracker._total_usd = 0.0
+        self._engine.cost_tracker._stage_usd = 0.0
+        self._engine.cost_tracker._warned_total = False
+        self._engine.cost_tracker._warned_stage = False
+
     async def shutdown(self) -> None:
         """优雅关闭。"""
         if self._checkpoint_mgr is not None:
@@ -203,13 +250,13 @@ class WorkflowOrchestrator:
 
     # ── 事件处理 ──────────────────────────────────────────────────
 
-    def _on_workflow_start(self, event: dict[str, Any]) -> None:
+    def _on_workflow_start(self, event_type: str, event: dict[str, Any]) -> None:
         logger.info(
             "Workflow started: %s (%d stages)",
             event.get("workflow_name"), event.get("total_stages"),
         )
 
-    def _on_stage_start(self, event: dict[str, Any]) -> None:
+    def _on_stage_start(self, event_type: str, event: dict[str, Any]) -> None:
         stage_id = event.get("stage_id")
         stage_name = event.get("stage_name", "")
         phase = event.get("phase", "")
@@ -217,7 +264,7 @@ class WorkflowOrchestrator:
         self._progress_sink.on_stage_start(stage_id, stage_name, phase)
         self._audit.write_stage_start(stage_id, stage_name, phase)
 
-    def _on_stage_complete(self, event: dict[str, Any]) -> None:
+    def _on_stage_complete(self, event_type: str, event: dict[str, Any]) -> None:
         stage_id = event.get("stage_id")
         stage_name = event.get("stage_name", "")
         cost = event.get("cost", 0.0)
@@ -226,21 +273,19 @@ class WorkflowOrchestrator:
         self._progress_sink.on_stage_complete(stage_id, stage_name, cost, duration)
         self._audit.write_stage_complete(stage_id, stage_name, cost, duration)
 
-    def _on_stage_failed(self, event: dict[str, Any]) -> None:
+    def _on_stage_failed(self, event_type: str, event: dict[str, Any]) -> None:
         stage_id = event.get("stage_id")
         stage_name = event.get("stage_name", "")
         error = event.get("error", "")
-        cost = event.get("cost", 0.0)
-        duration = event.get("duration", 0.0)
         logger.error("Stage %s failed: %s", stage_id, error)
         self._progress_sink.on_stage_failed(stage_id, error)
-        self._audit.write_stage_failed(stage_id, stage_name, error, cost, duration)
+        self._audit.write_stage_failed(stage_id, stage_name, error)
 
-    def _on_workflow_complete(self, event: dict[str, Any]) -> None:
+    def _on_workflow_complete(self, event_type: str, event: dict[str, Any]) -> None:
         total_cost = event.get("total_cost", 0.0)
         total_duration = event.get("total_duration", 0.0)
-        completed = event.get("completed_stages", 0)
-        total = event.get("total_stages", 0)
+        completed = self._engine.state.completed_count
+        total = self._engine.state.total_stages
         logger.info(
             "Workflow completed: cost=%.4f, duration=%.1fs",
             total_cost, total_duration,
@@ -248,28 +293,37 @@ class WorkflowOrchestrator:
         self._progress_sink.on_workflow_complete(total_cost, total_duration)
         self._audit.write_workflow_complete(total_cost, total_duration, completed, total)
 
-    def _on_workflow_error(self, event: dict[str, Any]) -> None:
+    def _on_workflow_error(self, event_type: str, event: dict[str, Any]) -> None:
         error = event.get("error", "")
         stage_id = event.get("stage_id")
         logger.error("Workflow error: %s", error)
         self._audit.write_workflow_error(error, stage_id)
 
-    def _on_gate_request(self, event: dict[str, Any]) -> None:
+    def _on_gate_request(self, event_type: str, event: dict[str, Any]) -> None:
         stage_id = event.get("stage_id")
         stage_name = event.get("stage_name", "")
         mode = event.get("mode", "")
         logger.info("GATE request: stage=%s mode=%s", stage_id, mode)
-        self._audit.write_gate_result(
-            stage_id, stage_name,
-            approved=event.get("approved", False),
-            reason=event.get("reason", ""),
-        )
 
-    def _on_cost_warning(self, event: dict[str, Any]) -> None:
+    def _on_gate_approved(self, event_type: str, event: dict[str, Any]) -> None:
+        stage_id = event.get("stage_id")
+        stage_name = event.get("stage_name", "")
+        reason = event.get("reason", "")
+        logger.info("GATE approved: stage=%s reason=%s", stage_id, reason)
+        self._audit.write_gate_result(stage_id, stage_name, approved=True, reason=reason)
+
+    def _on_gate_rejected(self, event_type: str, event: dict[str, Any]) -> None:
+        stage_id = event.get("stage_id")
+        stage_name = event.get("stage_name", "")
+        reason = event.get("reason", "")
+        logger.info("GATE rejected: stage=%s reason=%s", stage_id, reason)
+        self._audit.write_gate_result(stage_id, stage_name, approved=False, reason=reason)
+
+    def _on_cost_warning(self, event_type: str, event: dict[str, Any]) -> None:
         message = event.get("message", "")
-        total_usd = event.get("total_usd", 0.0)
-        stage_usd = event.get("stage_usd", 0.0)
-        budget_max = event.get("budget_max", 0.0)
+        total_usd = self._engine.cost_tracker.total_usd
+        stage_usd = self._engine.cost_tracker.stage_usd
+        budget_max = self._engine.cost_tracker.budget.max_total_usd
         logger.warning("Cost warning: %s", message)
         self._audit.write_cost_event(total_usd, stage_usd, budget_max, message=message)
 

@@ -1525,9 +1525,16 @@ class AgentRunner:
                                 # workspace's git state and stop the
                                 # continuation loop when work is done.
                                 if tracker is not None and issue.id:
-                                    is_active, refreshed_issue = await self._should_continue(
-                                        issue, tracker, session
-                                    )
+                                    try:
+                                        is_active, refreshed_issue = await self._should_continue(
+                                            issue, tracker, session
+                                        )
+                                    except Exception as tracker_exc:
+                                        logger.warning(
+                                            "Tracker poll failed for issue %s, assuming still active: %s",
+                                            issue.id, tracker_exc,
+                                        )
+                                        is_active, refreshed_issue = True, issue
                                     if is_active and turn_number < self.max_turns:
                                         # F-?? Fix 4: include the running noop
                                         # streak in the continuation log so
@@ -1808,6 +1815,74 @@ class AgentRunner:
                                                 return
                                         continue  # Go to next turn
                                     session.issue = refreshed_issue or session.issue
+                                elif tracker is None and turn_number < self.max_turns and session.status == "running":
+                                    if not turn_has_tool_calls and not turn_output.strip():
+                                        no_work_streak += 1
+                                    else:
+                                        no_work_streak = 0
+
+                                    if getattr(session, "has_made_progress", False):
+                                        logger.info(
+                                            "Workflow stage completed: agent signaled done "
+                                            "with code changes issue_id=%s turn=%d/%d tools=%s",
+                                            issue.id, turn_number, self.max_turns, tool_count,
+                                        )
+                                        session.status = "completed"
+                                        if session.session_end_reason is None:
+                                            session.session_end_reason = "task_complete"
+                                            session.session_end_summary = (
+                                                f"workflow stage completed after "
+                                                f"{turn_number} turns, {tool_count} tools"
+                                            )
+                                    elif tool_count > 0:
+                                        # Agent did work (read/analyze) and signaled done.
+                                        # Normal for analysis stages that don't write code.
+                                        logger.info(
+                                            "Workflow stage completed: agent signaled done "
+                                            "after analysis issue_id=%s turn=%d/%d tools=%s",
+                                            issue.id, turn_number, self.max_turns, tool_count,
+                                        )
+                                        session.status = "completed"
+                                        if session.session_end_reason is None:
+                                            session.session_end_reason = "task_complete"
+                                            session.session_end_summary = (
+                                                f"workflow stage completed (analysis) after "
+                                                f"{turn_number} turns, {tool_count} tools"
+                                            )
+                                    elif no_work_streak >= max_no_op_turns:
+                                        if tool_count == 0:
+                                            # Agent never got to work (rate-limited or stuck).
+                                            # This is a failure, not a completion.
+                                            logger.warning(
+                                                "Agent produced 0 tool calls after %d turns "
+                                                "(likely rate-limited), marking failed "
+                                                "issue_id=%s",
+                                                no_work_streak, issue.id,
+                                            )
+                                            session.status = "failed"
+                                            session.session_end_reason = "rate_limited"
+                                            session.session_end_summary = (
+                                                f"agent never started: {no_work_streak} "
+                                                f"consecutive empty turns, 0 tools"
+                                            )
+                                        else:
+                                            logger.warning(
+                                                "No-work streak reached (%d/%d) without tracker, "
+                                                "force-completing issue_id=%s",
+                                                no_work_streak, max_no_op_turns, issue.id,
+                                            )
+                                            session.status = "completed"
+                                            session.session_end_reason = "noop_completed"
+                                            session.session_end_summary = (
+                                                f"{no_work_streak} consecutive no-work turns"
+                                            )
+                                    else:
+                                        logger.info(
+                                            "Continuing without tracker (workflow stage) "
+                                            "issue_id=%s turn=%d/%d",
+                                            issue.id, turn_number, self.max_turns,
+                                        )
+                                        continue
 
                                 # F-?? root-cause fix: pre-existing bug
                                 # that conflated "issue is no longer
@@ -1819,9 +1894,7 @@ class AgentRunner:
                                 # ``session_end_reason`` is
                                 # ``budget_exhausted`` — the F-09 budget
                                 # test depends on this distinction.
-                                if turn_number >= self.max_turns and (
-                                    tracker is not None or progress_reporter is not None
-                                ):
+                                if turn_number >= self.max_turns and session.status == "running" and tracker is not None:
                                     if (
                                         session.total_429_backoff_seconds > 0
                                         and not turn_has_tool_calls
@@ -1848,7 +1921,7 @@ class AgentRunner:
                                             self.max_turns,
                                             tool_count,
                                         )
-                                else:
+                                elif session.status == "running":
                                     # F-54 root-cause fix: distinguish real
                                     # completions from "LLM gave up without
                                     # doing work".  When the session ends
@@ -1857,11 +1930,56 @@ class AgentRunner:
                                     # as failed with reason "llm_gave_up"
                                     # so the orchestrator can retry rather
                                     # than treating it as a clean completion.
+                                    # Guard: only enter if status is still "running"
+                                    # to avoid overriding "failed"/"completed" set
+                                    # by the tracker-is-None or no-work-streak paths.
                                     if getattr(session, "has_made_progress", False):
-                                        session.status = "completed"
-                                        if session.session_end_reason is None:
-                                            session.session_end_reason = "task_complete"
-                                            session.session_end_summary = "issue no longer active"
+                                        # Verify actual workspace changes before marking completed.
+                                        # has_made_progress=True only means Write/Edit was called,
+                                        # not that files actually changed (e.g. Write same content,
+                                        # Edit no-op, or changes were reverted).
+                                        _ws_dirty = False
+                                        _ws = getattr(session, "workspace", None)
+                                        if _ws is not None:
+                                            _ws_path = getattr(_ws, "path", None)
+                                            if _ws_path is not None:
+                                                try:
+                                                    import subprocess as _subprocess
+                                                    _proc = _subprocess.run(
+                                                        ["git", "status", "--porcelain"],
+                                                        cwd=str(_ws_path),
+                                                        capture_output=True, text=True, timeout=10,
+                                                    )
+                                                    _ws_dirty = bool(_proc.stdout.strip())
+                                                    if not _ws_dirty:
+                                                        _start_sha = getattr(session, "start_commit_sha", None)
+                                                        if _start_sha:
+                                                            _head_proc = _subprocess.run(
+                                                                ["git", "rev-parse", "HEAD"],
+                                                                cwd=str(_ws_path),
+                                                                capture_output=True, text=True, timeout=10,
+                                                            )
+                                                            _head = _head_proc.stdout.strip()
+                                                            _ws_dirty = bool(_head and _head != _start_sha)
+                                                except Exception:
+                                                    _ws_dirty = True  # fail-open
+                                        if _ws_dirty:
+                                            session.status = "completed"
+                                            if session.session_end_reason is None:
+                                                session.session_end_reason = "task_complete"
+                                                session.session_end_summary = "issue no longer active"
+                                        else:
+                                            session.status = "failed"
+                                            session.session_end_reason = "no_changes_produced"
+                                            session.session_end_summary = (
+                                                f"Agent called Write/Edit ({tool_count} tools) "
+                                                f"but workspace has no file changes"
+                                            )
+                                            logger.warning(
+                                                "Agent reported progress but produced no file changes "
+                                                "issue_id=%s turns=%s tools=%s",
+                                                issue.id, turn_number, tool_count,
+                                            )
                                     else:
                                         # F-54 root-cause fix: before
                                         # declaring ``llm_gave_up``, run
@@ -2214,9 +2332,13 @@ class AgentRunner:
             return False, refreshed_issue
 
         # F-54 root-cause fix: if the tracker still says active but
-        # the workspace already has uncommitted changes AND the
-        # session already completed production work (turn > 0 with
-        # modifying tools used), consider the work done and stop.
+        # the agent has made progress (Write/Edit called) AND the LLM
+        # signaled SessionComplete(success), trust the agent's completion
+        # signal and stop the continuation loop. The workspace changes
+        # will be committed by git_sync after the session ends.
+        #
+        # Without this check, the agent enters an infinite loop:
+        # LLM says "done" → tracker says "open" → another turn → repeat.
         if (
             session is not None
             and getattr(session, "turn_count", 0) > 0
@@ -2248,22 +2370,35 @@ class AgentRunner:
                             )
                             current_head = head_proc.stdout.strip()
                             head_changed = bool(current_head and current_head != start_commit_sha)
-                        # If there are uncommitted changes or the agent
-                        # already finished its work, stop the loop.
+
+                        # Check uncommitted changes (agent wrote files,
+                        # git_sync will commit after session ends)
+                        has_uncommitted = False
+                        status_proc = subprocess.run(
+                            ["git", "status", "--porcelain"],
+                            cwd=str(ws_path),
+                            capture_output=True,
+                            text=True,
+                            timeout=10,
+                            env=_env,
+                        )
+                        if status_proc.returncode == 0:
+                            has_uncommitted = bool(status_proc.stdout.strip())
+
                         if (
-                            has_uncommitted
-                            or head_changed
+                            head_changed
+                            or has_uncommitted
                             or session.status in ("completed", "task_complete")
                         ):
                             logger.info(
                                 "Issue %s work appears done in workspace "
-                                "(turn_count=%d, has_uncommitted=%s, "
-                                "head_changed=%s) — "
+                                "(turn_count=%d, head_changed=%s, "
+                                "has_uncommitted=%s) — "
                                 "stopping continuation loop",
                                 issue.id,
                                 session.turn_count,
-                                has_uncommitted,
                                 head_changed,
+                                has_uncommitted,
                             )
                             return False, refreshed_issue
                     except Exception:
