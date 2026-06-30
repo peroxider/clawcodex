@@ -1676,5 +1676,167 @@ class TestREPLResumeReplay(unittest.TestCase):
         )
 
 
+class TestEchoUserInput(unittest.TestCase):
+    """_echo_user_input must render text without background and without
+    leaking Rich markup tags like ``[bold ...]`` to the screen."""
+
+    def setUp(self):
+        from clawcodex_ext.repl.core import ClawcodexREPL
+
+        repl = ClawcodexREPL.__new__(ClawcodexREPL)
+        repl.console = Mock()
+        # The palette is needed by _echo_user_input for the primary colour.
+        from clawcodex_ext.repl.color_scheme import DARK
+
+        repl._repl_palette = DARK
+        self.repl = repl
+
+    def _call(self, text: str) -> list:
+        """Invoke ``_echo_user_input`` and return the ``Text`` args from
+        each ``console.print`` call."""
+        self.repl.console.print.reset_mock()
+        self.repl._echo_user_input(text)
+        return [
+            call.args[0]  # first positional arg (the Text renderable)
+            for call in self.repl.console.print.call_args_list
+            if call.args
+        ]
+
+    def assert_no_markup_leak(self, text_objects: list) -> None:
+        """Fail if any Text object's plain text contains Rich markup tags."""
+        for t in text_objects:
+            plain = t.plain if hasattr(t, "plain") else str(t)
+            self.assertNotIn(
+                "[bold",
+                plain,
+                f"Rich markup leaked to screen: {plain!r}",
+            )
+            self.assertNotIn(
+                "[/bold",
+                plain,
+                f"Rich markup close-tag leaked to screen: {plain!r}",
+            )
+
+    def assert_no_background_style(self, text_objects: list) -> None:
+        """Fail if any Text object carries a background colour."""
+        from rich.style import Style
+
+        for t in text_objects:
+            styled_spans = getattr(t, "spans", [])
+            for span in styled_spans:
+                style: Style = span.style
+                self.assertIsNone(
+                    style.bgcolor,
+                    f"Text span has non-transparent background: {style.bgcolor}",
+                )
+
+    # ── tests ─────────────────────────────────────────────────────────
+
+    def test_single_line_no_markup_leak(self):
+        """Single-line input must not leak Rich markup tags."""
+        texts = self._call("/btw 123")
+        self.assert_no_markup_leak(texts)
+
+    def test_no_background(self):
+        """Output must be fully transparent (no bgcolor on any span)."""
+        texts = self._call("/btw 123")
+        self.assert_no_background_style(texts)
+
+    def test_multi_line_no_markup_leak(self):
+        """Multi-line input must not leak Rich markup tags."""
+        texts = self._call("line1\nline2\nline3")
+        self.assert_no_markup_leak(texts)
+
+    def test_multi_line_no_background(self):
+        """Multi-line output must also have transparent background."""
+        texts = self._call("line1\nline2\nline3")
+        self.assert_no_background_style(texts)
+
+    def test_text_with_square_brackets_is_safe(self):
+        """User input containing ``[bold]`` literals must render literally
+        (``markup=False`` prevents Rich from interpreting them as markup
+        tags). No unintended Rich styles should be injected."""
+        texts = self._call("[bold]raw[/bold]")
+        # The literal brackets appear in plain text because markup=False.
+        self.assertIn("[bold]", texts[0].plain)
+        self.assertIn("[/bold]", texts[0].plain)
+        # But no unintended background or markup-leak styles.
+        self.assert_no_background_style(texts)
+
+    def test_text_with_square_brackets_no_extra_styles(self):
+        """Literal square brackets in user input must not introduce
+        unintended Rich styles."""
+        texts = self._call("[red]alert[/red]")
+        self.assert_no_markup_leak(texts)
+        # The plain text should contain exactly the brackets as-is.
+        self.assertIn("[red]", texts[0].plain)
+        self.assertIn("[/red]", texts[0].plain)
+
+    def test_prefix_is_bold_with_primary_color(self):
+        """The ``❯ `` prefix must be styled with bold + primary colour."""
+        from rich.text import Text
+
+        texts = self._call("hello")
+        self.assertGreater(len(texts), 0)
+        t: Text = texts[0]
+        # The first span should be the "❯ " prefix.
+        self.assertTrue(
+            t.plain.startswith("❯ "),
+            f"Expected ❯ prefix, got: {t.plain!r}",
+        )
+
+    def test_returns_single_rich_text(self):
+        """_echo_user_input should produce a single Text object for a given
+        input line."""
+        texts = self._call("hello")
+        self.assertEqual(len(texts), 1)
+        from rich.text import Text
+
+        self.assertIsInstance(texts[0], Text)
+
+    def test_empty_string(self):
+        """Empty input produces a ``❯ `` with no trailing text."""
+        texts = self._call("")
+        # The method always echoes the prefix even for empty text.
+        # The caller decides what is meaningful input.
+        self.assertGreaterEqual(len(texts), 1)
+        plain = texts[0].plain.rstrip("\n")
+        self.assertIn("❯", plain)
+        self.assert_no_markup_leak(texts)
+        self.assert_no_background_style(texts)
+
+    def test_blank_string(self):
+        """Whitespace-only input should produce output (preserves the
+        existing behaviour — the caller decides what is meaningful)."""
+        texts = self._call("   ")
+        self.assert_no_markup_leak(texts)
+        self.assert_no_background_style(texts)
+
+    def test_console_markup_flag_is_false(self):
+        """console.print must always be called with ``markup=False`` so
+        user input like ``[bold]`` renders literally."""
+        self.repl.console.print.reset_mock()
+        self.repl._echo_user_input("hello")
+        for call in self.repl.console.print.call_args_list:
+            kwargs = call.kwargs or {}
+            self.assertIs(
+                kwargs.get("markup", True),
+                False,
+                f"console.print called without markup=False: {kwargs}",
+            )
+
+    def test_short_text_no_trailing_padding(self):
+        """Output must NOT be padded to terminal width (the old behaviour
+        did this to force a full-row background highlight). Since we no
+        longer apply a background, the extra padding is unnecessary and
+        would waste horizontal space."""
+        # With background removal, we no longer ljust the text — short
+        # input should remain short.
+        texts = self._call("hi")
+        plain = texts[0].plain.rstrip("\n")
+        # The plain text should not be padded to 80+ chars.
+        self.assertLess(len(plain), 10)
+
+
 if __name__ == "__main__":
     unittest.main()

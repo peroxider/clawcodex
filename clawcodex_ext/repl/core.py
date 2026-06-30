@@ -1134,10 +1134,12 @@ class ClawcodexREPL:
             color = self._repl_palette.primary
         except Exception:
             color = "#8ab4f8"
-        prefix = f"❯ "
-        body = text.replace("\n", f"\n  ")
+        from rich.text import Text
+
+        body = text.replace("\n", "\n  ")
+        prefix = Text("❯ ", style=f"bold {color}")
         self.console.print(
-            f"[bold {color}]{prefix}[/bold {color}]{body}",
+            prefix + Text(body),
             markup=False,
             soft_wrap=True,
         )
