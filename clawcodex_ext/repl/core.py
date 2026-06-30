@@ -1123,35 +1123,24 @@ class ClawcodexREPL:
             return ""
 
     def _echo_user_input(self, text: str) -> None:
-        """Print a user message to the transcript with a dim background.
+        """Print a user message to the transcript (transparent background).
 
         Used for queued submissions (typed during agent work via
         :class:`LiveStatus`) and any other path that needs to surface a
-        user-authored message into scrollback. Each line is padded to
-        the terminal width so the highlight reaches the right edge,
-        matching the boxed input row Claude Code renders for user
-        messages.
+        user-authored message into scrollback.
         """
 
         try:
-            import shutil
-
-            width = shutil.get_terminal_size((100, 24)).columns
+            color = self._repl_palette.primary
         except Exception:
-            width = 80
-
-        from rich.text import Text
-
-        bg_style = f"on {self._repl_palette.user_bg}"
-        prefix = "❯ "
-        for idx, line in enumerate(text.split("\n")):
-            body = (prefix if idx == 0 else "  ") + line
-            padded = body.ljust(max(width, len(body)))
-            self.console.print(
-                Text(padded, style=bg_style),
-                highlight=False,
-                soft_wrap=True,
-            )
+            color = "#8ab4f8"
+        prefix = f"❯ "
+        body = text.replace("\n", f"\n  ")
+        self.console.print(
+            f"[bold {color}]{prefix}[/bold {color}]{body}",
+            markup=False,
+            soft_wrap=True,
+        )
 
     def _prompt_continuation(self, width, line_number, is_soft_wrap):
         """Continuation prompt for wrapped / multi-line input.
@@ -1813,6 +1802,7 @@ class ClawcodexREPL:
                             on_expand=self._do_expand_last,
                             on_permission_cycle=self._apply_permission_mode_cycle,
                             completer=self.completer,
+                            history=self._file_history,
                         ) as status:
                             status_ref.append(status)
                             self._active_live_status = status
