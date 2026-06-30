@@ -187,13 +187,12 @@ class RemoteAgentRunner:
         async def run_loop() -> None:
             try:
                 from clawcodex_ext.bootstrap.state import SdkContext, SessionId, run_with_sdk_context
-                # `src.outputStyles` + `src.query.agent_loop_compat` are public
-                # upstream APIs exercised by tests/remote_api/test_remote_api.py
-                # via ``unittest.mock.patch("src.…")`` (see :1006, :1013).
-                # Layer 2 may import public ``src.*`` APIs directly per CLAUDE.md
-                # (the prohibition is on ``src._internals``).
-                from src.outputStyles import resolve_output_style
-                from src.query.agent_loop_compat import (
+                # `clawcodex_ext.outputStyles` + `clawcodex_ext.query.agent_loop_compat` are
+                # downstream facades for the upstream APIs exercised by
+                # tests/remote_api/test_remote_api.py via ``unittest.mock.patch("src.…")``
+                # (see :1006, :1013).  Layer 2 prefers clawcodex_ext/ per decoupling.
+                from clawcodex_ext.outputStyles import resolve_output_style
+                from clawcodex_ext.query.agent_loop_compat import (
                     build_effective_system_prompt,
                     run_query_as_agent_loop,
                 )
