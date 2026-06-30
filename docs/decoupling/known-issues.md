@@ -142,7 +142,50 @@ P3 整改中**未**触发的测试失败案例（前 2 步中遇到、已确认�
 
 | 测试 | 状态 | 根因 |
 |------|------|------|
-| `tests/bridge/test_debug_utils.py::test_log_bridge_skip_emits_info_log` | pre-existing fail | 与 P3-step4 改动无关，HEAD 上重测仍 fail |
-| `tests/bridge/test_messaging_router.py::TestNormalizeControlControlMessageKeys::test_unknown_camel_case_passes_through_with_debug_log` | pre-existing fail | 与 P3-step4 改动无关，HEAD 上重测仍 fail |
+| `tests/bridge/test_debug_utils.py::test_log_bridge_skip_emits_info_log` | ✅ 已修（2026-06-30） | logger name `src.bridge.debug_utils` 不匹配实际 `clawcodex_ext.bridge.debug_utils`（src facade 用 `sys.modules[__name__] = _module` 模式） |
+| `tests/bridge/test_messaging_router.py::TestNormalizeControlControlMessageKeys::test_unknown_camel_case_passes_through_with_debug_log` | ✅ 已修（2026-06-30） | 同上，logger name 改为 `clawcodex_ext.bridge.messaging` |
 
-P3 全量 6 步累计验证：所有 6 个 step 提交前都跑相关测试套件，**无任何 step 引入新测试失败**。P3 累计测试回归数：0。
+### 4.1 2026-06-30 P3 遗留问题批量修复（commit `a20ffc7c`）
+
+P3 整改完成后识别出 21 个 pre-existing test failures（与 P3 改动无关，但 F-decouple 上游迁移未配套更新测试）。本次按根因分组修复：
+
+| 测试文件 | 修复数 | 根因 |
+|----------|-------|------|
+| `tests/tool/test_tool_system_tools.py` | 13 | F-decouple 把 `src/tool_system/tools/tasks_v2.py` 改为 3 行 facade 不再导出 `_format_task_*`（私有 helper）；5 个 web_search 测试 mock 已被 Tavily 替换的 `_ddg_package_search` |
+| `tests/clawcodex_ext/providers/test_f99_provider_registration.py` | 5 | F-99 fix 假设 `import clawcodex_ext.providers` 触发 register side-effect，但 P3-cold-start 优化改为 deferred init |
+| `tests/clawcodex_ext/agent/tool_authoring/test_parse_wrapper_stdout.py` | 2 | 测试 typo: `parse_pos_wrapper_stdout` → `parse_sop_wrapper_stdout` |
+| `tests/bridge/test_debug_utils.py` + `test_messaging_router.py` | 1 + 1 | caplog `logger=` 参数不匹配实际 logger name |
+
+**修复方案**：
+- tasks_v2 测试改用 `clawcodex_ext.tool_system.tools.tasks_v2` 直接 import
+- web_search 测试改用 `_tavily_search` mock 路径（DDG→Tavily 迁移在 commit `a1e1faf4`）
+- provider 测试改用 `_init_provider_extensions()` 显式调用（模拟 `ensure_eager_extensions_installed()` 生产路径）
+- 测试 typo 修正
+- logger name 同步到 `clawcodex_ext.bridge.*`
+
+**验证基线**：
+- 21 个修复点全部 PASS
+- stability_gate 332/332 通过
+- orchestrator 单元测试 1078 passed, 2 skipped
+
+### 4.2 P3-skip（永久保留）
+
+`extensions/remote_api/runner.py:195-196` 仍保留 `from src.outputStyles` / `from src.query.agent_loop_compat`（函数局部 from-imports）。
+
+**根因（最终验证）**：runner 用**函数局部** `from src.X import Y`（非模块顶层 import），函数在 `with patch("src.X.Y")` 上下文中被调用 — Python 此时捕获的本地绑定是 mock 而非原函数。实验验证：
+
+- 用 `clawcodex_ext.*` 路径的 from-import 在 patch `src.*` 上下文中：本地绑定**保持原函数**（mock 不命中）→ 会破坏现有 4 个测试的 mock 契约
+- 用 `src.*` 路径的 from-import 在 patch `src.*` 上下文中：本地绑定**变成 mock**（命中）→ 测试按设计工作
+
+**解决方案候选**：
+- 选项 A：把 runner 的 from-import 改为 `import src.X` + `src.X.Y(...)` qualified access — 改动 + 测试已锁定 src.* 路径
+- 选项 B：把测试 mock 路径改为 `clawcodex_ext.X.Y`（**不可行**：见实验，claude_ext.* 路径下 from-import 不命中）
+- 选项 C：保持现状 + 文档化
+
+**结论**：选项 C。修改 P3-skip 会破坏现有测试，且无生产代码改进（CLAUDE.md 允许公开 `src.*` API 在 Layer 2 直接 import）。
+
+### 4.3 累计回归统计
+
+- P3 6 步累计测试回归数：0（提交前每次都跑相关测试套件）
+- 2026-06-30 批量修复：21 个 pre-existing failures → 0 个剩余
+- P3-skip：1 处保留（永久有效）
