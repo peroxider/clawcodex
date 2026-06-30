@@ -86,7 +86,7 @@ docs/feature_plan/
 | F-81 | Native 原生模块系统 | 🔭 | [f-81-native-modules.md](06-ccb-benchmark/f-81-native-modules.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 | F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote) |
-| F-84 | Daemon 后台守护 | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-84-daemon-后台守护) |
+| F-84 | Daemon 后台守护 | 📋 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
 | F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-85-pipe-ipc-多实例协作uds--lan) |
 | F-86 | Computer Use 跨平台 Executor | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor) |
 | F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现) |
