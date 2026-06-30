@@ -14,6 +14,16 @@ class HeadlessFrontend(FrontendPlugin):
     def run(self, ctx, argv: list[str]) -> int:
         from src.entrypoints.headless import HeadlessOptions, run_headless
 
+        # F-125: forward resume / fork / resume-session-at from the
+        # RuntimeContext that ``dispatch.py`` already built. The pre-
+        # resolved session on ``ctx.session`` is passed as
+        # ``external_session`` so ``run_headless`` skips its own
+        # ``Session.create()`` (C1 — eliminates the double code path).
+        # When the user passes neither ``--resume`` nor
+        # ``--fork-session``, ``ctx.session`` is ``None`` and the
+        # legacy ``Session.create()`` branch in ``run_headless``
+        # kicks in — preserving single-shot behaviour for callers
+        # that never set up RuntimeContext.
         options = HeadlessOptions(
             prompt=getattr(ctx.options, "prompt", None),
             output_format=getattr(ctx.options, "output_format", "text"),
@@ -32,5 +42,9 @@ class HeadlessFrontend(FrontendPlugin):
             append_system_prompt=ctx.options.append_system_prompt,
             startup_agent=ctx.options.startup_agent,
             bundle_context=getattr(ctx.tool_context, "bundle_context", None),
+            resume_session_id=getattr(ctx.options, "resume_session_id", None),
+            fork_session_id=getattr(ctx.options, "fork_session_id", None),
+            resume_session_at=getattr(ctx.options, "resume_session_at", None),
+            external_session=getattr(ctx, "session", None),
         )
         return run_headless(options)

@@ -125,6 +125,30 @@ class HeadlessOptions:
     # Called alongside the internal NDJSON writer when set.
     on_event: Callable[[Any], None] | None = None
 
+    # F-125: resume / fork support. Three pieces:
+    # * ``resume_session_id`` — load history from this session and
+    #   reuse its session_id (the next ``--resume <sid>`` invocation
+    #   sees the new messages too).
+    # * ``fork_session_id`` — load history but mint a fresh session_id
+    #   so the new conversation branches off.
+    # * ``resume_session_at`` — truncate the loaded conversation to
+    #   the given message index before resuming (0-based, inclusive).
+    # * ``external_session`` — when ``RuntimeContext.build()`` has
+    #   already produced a session (the canonical headless path),
+    #   pass it in here so we skip the ``Session.create()`` /
+    #   ``Session.resume()`` branch. Mutually exclusive with the
+    #   three IDs above; the frontend layer wires it for us.
+    resume_session_id: str | None = None
+    fork_session_id: str | None = None
+    resume_session_at: int | None = None
+    external_session: Any | None = None
+    # ``persist_on_exit`` defaults to True so headless writes the
+    # accumulated transcript back to disk at the end of the run — the
+    # minimum bar for ``--resume`` to actually accumulate history
+    # across runs (F-125 Phase 2 / C6). Set to False in tests that
+    # want to exercise the in-memory path only.
+    persist_on_exit: bool = True
+
 
 def run_headless(options: HeadlessOptions) -> int:
     """Run one or more prompts in headless mode. Returns the exit code."""
@@ -184,7 +208,79 @@ def run_headless(options: HeadlessOptions) -> int:
         model=model,
     )
 
-    session = Session.create(provider_name, getattr(provider, "model", model or ""))
+    # F-125 Phase 1+2: session assembly. Three input sources, in priority
+    # order:
+    #   1. ``options.external_session`` — the canonical headless path
+    #      via ``RuntimeContext.build()`` already produced a session
+    #      (resume / fork / create handled upstream). Reuse it so the
+    #      session_id stays consistent with telemetry and downstream
+    #      ``--resume`` calls.
+    #   2. ``options.resume_session_id`` — direct ``Session.resume()``
+    #      for legacy callers (e.g. ``run_print_mode`` in
+    #      ``clawcodex_ext/cli/runners.py``) that bypass RuntimeContext.
+    #      The session_id is reused so subsequent ``--resume`` sees
+    #      the new messages (closes C2 + C6 from f-125 §4.1).
+    #   3. Fresh ``Session.create()`` — unchanged behaviour.
+    if options.external_session is not None:
+        session = options.external_session
+    elif options.resume_session_id:
+        try:
+            session = Session.resume(options.resume_session_id)
+        except Exception as exc:
+            cli_error(
+                f"error: failed to resume session '{options.resume_session_id}': {exc}",
+                2,
+            )
+        if session is None:
+            cli_error(
+                f"error: no session found with ID '{options.resume_session_id}'",
+                2,
+            )
+    else:
+        session = Session.create(provider_name, getattr(provider, "model", model or ""))
+
+    # F-125 Phase 1: ``resume_session_at`` truncation. Run after session
+    # assembly so it applies uniformly to both ``external_session`` and
+    # direct ``Session.resume()`` paths. ``fork_session_id`` always
+    # mints a fresh ID (RuntimeContext handles that — this branch only
+    # fires when external_session is None and resume_session_id is None
+    # but fork_session_id is set, which is the rare standalone fork
+    # path).
+    if (
+        options.fork_session_id
+        and options.external_session is None
+        and options.resume_session_id is None
+    ):
+        old = Session.resume(options.fork_session_id)
+        if old is None:
+            cli_error(
+                f"error: no session found with ID '{options.fork_session_id}'",
+                2,
+            )
+        new_session = Session.create(
+            provider_name, getattr(provider, "model", model or "")
+        )
+        if old.conversation and old.conversation.messages:
+            new_session.conversation.messages = list(old.conversation.messages)
+        session = new_session
+
+    if options.resume_session_at is not None and session is not None:
+        idx = options.resume_session_at
+        if session.conversation and session.conversation.messages:
+            total = len(session.conversation.messages)
+            if 0 <= idx < total:
+                session.conversation.messages = session.conversation.messages[: idx + 1]
+            elif idx < 0:
+                cli_error(
+                    f"error: --resume-session-at index {idx} is negative",
+                    2,
+                )
+            else:
+                cli_error(
+                    f"error: --resume-session-at index {idx} out of range "
+                    f"(session has {total} messages)",
+                    2,
+                )
 
     # F-97: best-effort session_start. The session id is the same one
     # the conversation persists under so the per-day aggregator can
@@ -629,6 +725,24 @@ def run_headless(options: HeadlessOptions) -> int:
                 )
     finally:
         restore_sigint()
+        # F-125 Phase 2: persist accumulated transcript at end-of-run so
+        # the next ``--resume <sid>`` sees the messages we just generated.
+        # Without this, headless resume is "load history, run once,
+        # discard" — which is exactly the C6 认知陷阱 described in
+        # f-125 §4.2. ``Session.save()`` writes both the transcript
+        # (via ``save_to_session_storage``) AND the trailing
+        # ``session_snapshot`` line (cost block for next resume).
+        # Best-effort: a save failure must not mask the user's exit code.
+        if options.persist_on_exit and session is not None:
+            try:
+                session.save()
+            except Exception:
+                import logging
+
+                logging.getLogger(__name__).debug(
+                    "F-125: failed to persist headless session transcript",
+                    exc_info=True,
+                )
 
     duration_ms = int((time.monotonic() - start) * 1000)
     final_text = "\n\n".join(t for t in aggregate_text if t).strip()

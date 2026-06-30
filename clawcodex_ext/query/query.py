@@ -1756,6 +1756,24 @@ async def query(
         # to avoid touching ToolContext's public surface.
         setattr(tool_use_context, "_active_provider", params.provider)
 
+        # ── F-122-C: 保存 CacheSafeParams（供 /btw side_question 使用）──
+        try:
+            from clawcodex_ext.agent.forked_agent import (
+                CacheSafeParams,
+                save_cache_safe_params,
+            )
+
+            save_cache_safe_params(
+                CacheSafeParams(
+                    system_prompt=params.system_prompt,
+                    tool_use_context=tool_use_context,
+                    user_context=params.user_context,
+                    system_context=params.system_context,
+                )
+            )
+        except Exception:
+            logger.warning("Failed to save CacheSafeParams", exc_info=True)
+
         # P102-D: pre_tool hook — 在工具执行之前允许外部策略修改 tool_use_blocks
         hook_result = _call_hooks_if_enabled("pre_tool", tool_use_blocks, state=state, params=params)
         tool_use_blocks = hook_result[0]

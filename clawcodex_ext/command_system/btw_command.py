@@ -125,6 +125,21 @@ async def _build_cache_safe_params(
     except Exception:
         logger.exception("btw: failed to rebuild context")
 
+    # 确保 _active_provider 已设置（回退路径时可能尚未通过 query 循环设置）
+    active_provider = getattr(tool_context, "_active_provider", None)
+    if active_provider is None:
+        provider = getattr(context, "provider", None)
+        if provider is not None:
+            try:
+                setattr(tool_context, "_active_provider", provider)
+            except Exception:
+                logger.exception("btw: failed to set _active_provider on tool_context")
+        else:
+            logger.warning(
+                "btw: no provider available on context or tool_context — "
+                "forked agent may fail"
+            )
+
     # Fork context messages: use conversation messages if available
     fork_context_messages: list[Any] = []
     conversation = getattr(context, "conversation", None)
