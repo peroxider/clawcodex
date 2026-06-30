@@ -48,6 +48,7 @@ docs/feature_plan/
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
+| F-122 | `/btw` 侧边询问 — 上下文零污染的并行问答 | 📋 | [f-122-btw-side-question.md](03-agent-core/f-122-btw-side-question.md) |
 
 ### CLI 与配置系统
 
@@ -87,10 +88,10 @@ docs/feature_plan/
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 | F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote) |
 | F-84 | Daemon 后台守护 | 📋 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
-| F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-85-pipe-ipc-多实例协作uds--lan) |
+| F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [f-85-pipe-ipc.md](06-ccb-benchmark/f-85-pipe-ipc.md) |
 | F-86 | Computer Use 跨平台 Executor | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor) |
 | F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现) |
-| F-88 | Monitor 后台监控 + MonitorTool | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-88-monitor-后台监控--monitortool) |
+| F-88 | Monitor 后台监控 + MonitorTool | 📋 | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
 | F-89 | Proactive 自主模式 + KAIROS Tick 集成 | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-89-proactive-自主模式--kairos-tick-集成) |
 | F-91 | MCP Skills 自动发现 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
 | F-92 | experimental_skill_search TF-IDF | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
