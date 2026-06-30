@@ -1950,16 +1950,28 @@ class Orchestrator:
                     base_branch=base_branch,
                 )
                 if existing_pr is not None:
-                    logger.info(
-                        'Issue %s already has PR %s (%s), skipping',
-                        issue.id,
-                        existing_pr.number,
-                        existing_pr.url,
-                    )
-                    self._state.claimed.discard(issue.id)
-                    # Also add to completed so we don't re-process after restart
-                    self._state.completed.add(issue.id)
-                    return
+                    # F-39 Sub-C: follow-up intents deliberately reuse
+                    # the existing PR — do NOT skip the launch.
+                    record = self._registry.get(issue.id or '')
+                    if record and record.intent == 'followup':
+                        logger.info(
+                            'Issue %s follow-up intent on existing PR %s (%s), '
+                            'proceeding with follow-up',
+                            issue.id,
+                            existing_pr.number,
+                            existing_pr.url,
+                        )
+                    else:
+                        logger.info(
+                            'Issue %s already has PR %s (%s), skipping',
+                            issue.id,
+                            existing_pr.number,
+                            existing_pr.url,
+                        )
+                        self._state.claimed.discard(issue.id)
+                        # Also add to completed so we don't re-process after restart
+                        self._state.completed.add(issue.id)
+                        return
 
             # Registry-based guard: skip if the local registry already records
             # a PR or a terminal state for this issue.  The tracker-based check
@@ -1972,16 +1984,28 @@ class Orchestrator:
             # intents (``_prepare_intent_reset`` → ``reset_for_retry``) clear it
             # beforehand so a deliberate re-run still passes through.
             if self._registry.has_pr(issue.id or '') or self._registry.is_terminal(issue.id or ''):
-                logger.info(
-                    'Issue %s already handled (registry: has_pr=%s, '
-                    'is_terminal=%s), skipping via _launch_issue guard',
-                    issue.id,
-                    self._registry.has_pr(issue.id or ''),
-                    self._registry.is_terminal(issue.id or ''),
-                )
-                self._state.claimed.discard(issue.id)
-                self._state.completed.add(issue.id)
-                return
+                # F-39 Sub-C: follow-up intents reuse the existing PR,
+                # so has_pr should not block the launch.
+                record = self._registry.get(issue.id or '')
+                if record and record.intent == 'followup':
+                    logger.info(
+                        'Issue %s follow-up intent bypasses registry guard '
+                        '(has_pr=%s, is_terminal=%s), proceeding',
+                        issue.id,
+                        self._registry.has_pr(issue.id or ''),
+                        self._registry.is_terminal(issue.id or ''),
+                    )
+                else:
+                    logger.info(
+                        'Issue %s already handled (registry: has_pr=%s, '
+                        'is_terminal=%s), skipping via _launch_issue guard',
+                        issue.id,
+                        self._registry.has_pr(issue.id or ''),
+                        self._registry.is_terminal(issue.id or ''),
+                    )
+                    self._state.claimed.discard(issue.id)
+                    self._state.completed.add(issue.id)
+                    return
 
             # Update issue with latest state
             issue.state = refreshed_issue.state
