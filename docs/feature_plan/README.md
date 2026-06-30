@@ -36,6 +36,7 @@ docs/feature_plan/
 | F-115 | 检查点与恢复 | 📋 | [f-115-checkpoint-recovery.md](02-orchestrator/f-115-checkpoint-recovery.md) |
 | F-116 | 工作流可观测性集成 | 📋 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
 | F-118 | 动态任务分解引擎 | 🔭 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
+| F-121 | PR 代码检视意见规则回灌 | 📋 | [f-121-rules-feedback.md](02-orchestrator/f-121-rules-feedback.md) |
 
 ### Agent 核心能力
 
@@ -75,15 +76,32 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-64 | Voice Mode 语音输入 | 🔄 | [f-64-voice-mode.md](06-ccb-benchmark/f-64-voice-mode.md) |
 | F-66 | ACP 协议支持 | 📋 | [f-66-acp-protocol.md](06-ccb-benchmark/f-66-acp-protocol.md) |
-| F-68 | Feature Gate 开关系统 | 📋 | [f-68-feature-gate.md](06-ccb-benchmark/f-68-feature-gate.md) |
+| F-68 | Feature Gate 开关系统 | ✅ | [f-68-feature-gate.md](06-ccb-benchmark/f-68-feature-gate.md) |
 | F-69 | Budget/Poor Mode | 🔄 | [f-69-budget-mode.md](06-ccb-benchmark/f-69-budget-mode.md) |
-| F-70 | Plugin 系统基础框架 | 🔄 | [f-70-plugin.md](06-ccb-benchmark/f-70-plugin.md) |
+| F-70 | Plugin 系统基础框架 | ✅ | [f-70-plugin.md](06-ccb-benchmark/f-70-plugin.md) |
 | F-71 | 内置工具补齐 | 🔄 | [f-71-tool-gap.md](06-ccb-benchmark/f-71-tool-gap.md) |
 | F-72 | Multi-API 原生适配器 | 📋 | [f-72-multi-api.md](06-ccb-benchmark/f-72-multi-api.md) |
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
 | F-81 | Native 原生模块系统 | 🔭 | [f-81-native-modules.md](06-ccb-benchmark/f-81-native-modules.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
+| F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote) |
+| F-84 | Daemon 后台守护 | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-84-daemon-后台守护) |
+| F-85 | Pipe IPC 命令族（UDS + LAN_PIPES） | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-85-pipe-ipc-多实例协作uds--lan) |
+| F-86 | Computer Use 跨平台 Executor | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor) |
+| F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现) |
+| F-88 | Monitor 后台监控 + MonitorTool | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-88-monitor-后台监控--monitortool) |
+| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-89-proactive-自主模式--kairos-tick-集成) |
+| F-91 | MCP Skills 自动发现 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-92 | experimental_skill_search TF-IDF | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-93 | TeamMem 共享记忆 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-94 | BG_SESSIONS 后台会话 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-95 | TEMPLATES 模板系统 | 🔄 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-96 | PROMPT_CACHE_BREAK_DETECTION | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-97 | LODESTONE 深度链接 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-98 | SSH_REMOTE 远程模式 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| F-99 | DIRECT_CONNECT 直连模式 | 🔄 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
+| — | **CCB ↔ ClawCodex 缺口分析** | ✅ | [gap-analysis-2026q2.md](06-ccb-benchmark/gap-analysis-2026q2.md) |
 
 ### 解耦方案（独立规划）
 
