@@ -30,7 +30,7 @@ from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
-from clawcodex_ext.utils.git import get_file_status
+from clawcodex_ext.utils.git import get_default_branch, get_file_status, get_repo_root
 from .tracker import (
     Command,
     Intent,
@@ -110,6 +110,8 @@ class Orchestrator:
                 workflow_config=workflow,
                 workflow_yaml_path=workflow_yaml_path,
                 agent_runner=agent_runner,
+                tracker=tracker,
+                status_dashboard=status_dashboard,
             )
             logger.info(
                 'Workflow engine enabled: %s (%s, %d stages)',
@@ -632,6 +634,11 @@ class Orchestrator:
                         '新增 ISSUE',
                         self._issue_payload(issue, url=issue.url),
                     )
+                elif issue.author_login:
+                    record = self._registry.get(issue.id or "")
+                    if record is not None and not record.author_login:
+                        record.author_login = issue.author_login
+                        self._registry._save()
 
             if self.workflow.workspace.strategy == 'sequential' and self._state.running:
                 return
@@ -1915,6 +1922,7 @@ class Orchestrator:
             start_commit_sha=start_commit_sha,
             previous_issue_id=previous_issue_id,
             sequence_index=sequence_index,
+            author_login=issue.author_login,
         )
 
         # Pre-check: verify issue is still in an active state and has no
@@ -2129,9 +2137,29 @@ class Orchestrator:
             session.issue.title,
         )
 
+        # 确保 workspace 在 issue 分支上（非主分支）。
+        # 保留的工作区可能还在 main 或上一次运行的分支上，
+        # 必须在 workflow 执行前切换到正确的 issue 分支。
+        try:
+            work_branch = self.git_sync._ensure_work_branch(
+                str(session.workspace.path),
+                session.issue,
+                session.base_branch or get_default_branch(str(session.workspace.path)),
+            )
+            logger.info(
+                "Workflow workspace on branch: %s (issue=%s)",
+                work_branch, session.issue.identifier,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Failed to ensure work branch for workflow issue %s: %s",
+                session.issue.id, exc,
+            )
+
         # F-116: 将编排器的 ProgressSink 注入工作流引擎，
         # 使阶段进度实时反映到 StatusDashboard
         workflow_orch.set_progress_sink(progress_sink)
+        workflow_orch._stage_runner._progress_reporter = progress_sink
 
         try:
             result = await workflow_orch.run_for_issue(
@@ -2143,6 +2171,20 @@ class Orchestrator:
             session.status = 'failed'
             session.output_text = str(exc)
             return
+
+        # 将阶段输出存储到 session，供 git_sync 写入 PR body
+        session.workflow_stage_outputs = {}
+        for stage_id, stage_result in result.stage_results.items():
+            if stage_result.outputs:
+                session.workflow_stage_outputs[stage_id] = {
+                    "phase": getattr(
+                        workflow_orch.schema.get_stage(stage_id), "phase", ""
+                    ),
+                    "name": getattr(
+                        workflow_orch.schema.get_stage(stage_id), "name", f"Stage {stage_id}"
+                    ),
+                    "output": stage_result.outputs[0] if stage_result.outputs else "",
+                }
 
         if result.success:
             session.status = 'completed'
@@ -2205,24 +2247,6 @@ class Orchestrator:
                             ),
                             timeout=run_timeout_seconds,
                         )
-                    # ClawCodex downstream-deviation (TODO upstream-merge):
-                    # widen the git_sync gate so non-completed agent
-                    # terminations (stagnation / loop_detected /
-                    # read_only_loop / max_turns_exceeded) still get a
-                    # chance to push local commits and open a PR.
-                    # Background: agent_runner.run() may emit
-                    # SessionComplete with these non-success statuses
-                    # AFTER the agent has already made local commits;
-                    # the original upstream gate skipped git_sync
-                    # entirely for those, leaving the work un-pushed
-                    # and the issue marked abandoned at the next
-                    # retry-cap (orchestrator.py:2095). Verification
-                    # / hook failures raised by git_sync are still
-                    # handled by the outer except handlers
-                    # (VerificationFailed / HookFailedError /
-                    # GitSyncPostCommitError below), so salvaged runs
-                    # that fail verification still correctly end up
-                    # as verification_failed rather than synced.
                     if session.status in (
                         'completed',
                         'stagnation',
@@ -2230,6 +2254,37 @@ class Orchestrator:
                         'loop_detected',
                         'max_turns_exceeded',
                     ):
+                        # Safety net: verify workspace has actual changes before git_sync.
+                        # If agent reported "completed" but workspace is clean (no uncommitted
+                        # changes, no HEAD change), mark as failed to avoid empty PRs.
+                        if session.status == "completed" and session.session_end_reason not in (
+                            "noop_completed", "already_completed", "task_complete",
+                        ):
+                            _has_changes = False
+                            try:
+                                _repo_root = get_repo_root(str(session.workspace.path))
+                                if _repo_root:
+                                    _file_status = get_file_status(_repo_root)
+                                    _has_changes = bool(_file_status)
+                                    if not _has_changes:
+                                        _start_sha = getattr(session, "start_commit_sha", None)
+                                        if _start_sha:
+                                            from src.utils.git import _run_git as _git
+                                            _head_out, _, _rc = _git(["rev-parse", "HEAD"], _repo_root)
+                                            _has_changes = bool(_rc == 0 and _head_out.strip() and _head_out.strip() != _start_sha)
+                            except Exception:
+                                _has_changes = True  # fail-open
+                            if not _has_changes:
+                                logger.warning(
+                                    "Session completed but workspace has no changes "
+                                    "issue_id=%s — marking as failed",
+                                    session.issue.id,
+                                )
+                                session.status = "failed"
+                                session.session_end_reason = "no_changes_produced"
+                                session.session_end_summary = (
+                                    "Agent reported completed but workspace has no file changes"
+                                )
                         # F-39 Sub-C: a followup run passes mode="followup"
                         # to git_sync so it reuses the existing branch + PR
                         # instead of creating a new one.

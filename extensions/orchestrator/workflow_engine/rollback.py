@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import stat
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -97,12 +98,26 @@ class RollbackManager:
                 if item.is_dir():
                     if dest.exists():
                         shutil.rmtree(dest, ignore_errors=True)
-                    shutil.copytree(item, dest, symlinks=True, dirs_exist_ok=True)
-                else:
+                    try:
+                        shutil.copytree(
+                            item, dest, symlinks=True, dirs_exist_ok=True,
+                            ignore=_snapshot_ignore,
+                        )
+                    except shutil.Error as copy_err:
+                        # Some files (sockets, FIFOs) can't be copied;
+                        # log and continue with whatever was copied
+                        logger.debug("Partial copy for %s: %s", item.name, copy_err)
+                    files_copied.append(item.name)
+                elif item.is_file():
+                    # Skip non-regular files (sockets, FIFOs, device files)
+                    if not _is_regular_file(item):
+                        logger.debug("Skipping non-regular file: %s", item)
+                        continue
                     shutil.copy2(item, dest)
                     total_size += item.stat().st_size
-
-                files_copied.append(item.name)
+                    files_copied.append(item.name)
+                else:
+                    logger.debug("Skipping special file: %s", item)
         except Exception as exc:
             logger.warning("Failed to save snapshot for stage %s: %s", stage.id, exc)
             return None
@@ -293,3 +308,26 @@ class RollbackManager:
                 shutil.rmtree(snap_dir, ignore_errors=True)
             del self._snapshots[sid]
             logger.debug("Pruned old snapshot for stage %s", sid)
+
+
+# ── 模块级工具函数 ──────────────────────────────────────────────────
+
+
+def _snapshot_ignore(directory: str, files: list[str]) -> set[str]:
+    """shutil.copytree ignore 回调：跳过不需要复制的文件/目录。"""
+    ignored: set[str] = set()
+    for f in files:
+        full = Path(directory) / f
+        if full.name.startswith("."):
+            ignored.add(f)
+        elif not _is_regular_file(full):
+            ignored.add(f)
+    return ignored
+
+
+def _is_regular_file(path: Path) -> bool:
+    """检查路径是否为普通文件（排除 socket、FIFO 等特殊文件）。"""
+    try:
+        return stat.S_ISREG(path.stat().st_mode)
+    except (OSError, FileNotFoundError):
+        return False

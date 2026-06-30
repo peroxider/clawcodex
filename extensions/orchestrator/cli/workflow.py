@@ -32,8 +32,14 @@ def _template_path(variant: str = "workflow") -> Path:
     """
     import extensions.orchestrator.templates as tpl_mod
 
-    # Try named variant first, fall back to "workflow" generic name
-    candidates = [f"{variant}.template.md", "workflow.template.md"]
+    # Try named variant first, fall back to "workflow" generic name.
+    # Supports both {variant}.template.md and {variant}.template (e.g. workflow.yaml.template)
+    candidates: list[str] = []
+    if "." in variant:
+        # e.g. "workflow.yaml" → "workflow.yaml.template"
+        candidates.append(f"{variant}.template")
+    candidates.append(f"{variant}.template.md")
+    candidates.append("workflow.template.md")
 
     for p in tpl_mod.__path__:  # type: ignore[attr-defined]
         for name in candidates:
@@ -80,6 +86,9 @@ def _available_templates() -> dict[str, str]:
     for p in tpl_mod.__path__:  # type: ignore[attr-defined]
         for f in Path(p).glob("*.template.md"):
             name = f.stem  # e.g. "workflow" or "workflow-local"
+            templates[name] = str(f)
+        for f in Path(p).glob("*.yaml.template"):
+            name = f.stem  # e.g. "workflow.yaml"
             templates[name] = str(f)
     return templates
 
@@ -140,7 +149,9 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         "init",
         help="Generate workflow.md from template",
         description="Copy the packaged workflow template to the current directory "
-        "and replace placeholders with your values.",
+        "and replace placeholders with your values. "
+        "Use --workflow-yaml to also generate a declarative workflow.yaml "
+        "for multi-stage DAG execution with quality gates and decision branches.",
     )
     init_parser.add_argument(
         "--template",
@@ -202,6 +213,23 @@ def add_workflow_parser(subparsers: argparse._SubParsersAction) -> None:
         default="workflow.md",
         metavar="FILE",
         help="Output file path (default: ./workflow.md)",
+    )
+    init_parser.add_argument(
+        "--workflow-yaml",
+        action="store_true",
+        help="Also generate a declarative workflow.yaml for DeclarativeWorkflowEngine",
+    )
+    init_parser.add_argument(
+        "--workflow-name",
+        default="",
+        metavar="NAME",
+        help="Workflow name for workflow.yaml (default: {repo}-code-review)",
+    )
+    init_parser.add_argument(
+        "--workflow-yaml-output",
+        default="workflow.yaml",
+        metavar="FILE",
+        help="Output path for workflow.yaml (default: ./workflow.yaml)",
     )
     init_parser.add_argument(
         "--non-interactive",
@@ -351,11 +379,43 @@ def _run_init(args: argparse.Namespace) -> int:
     out.write_text(filled, encoding="utf-8")
 
     print(f"✓ Generated {out}")
+
+    # ── workflow.yaml generation ───────────────────────────────────
+    yaml_out = None
+    if args.workflow_yaml:
+        yaml_out = Path(args.workflow_yaml_output).expanduser().resolve()
+        if yaml_out.exists():
+            print(f"✗ {yaml_out} already exists — remove it first or use --workflow-yaml-output", file=sys.stderr)
+            return 1
+
+        yaml_tpl_path = _template_path("workflow.yaml")
+        yaml_raw = yaml_tpl_path.read_text(encoding="utf-8")
+
+        # Add workflow YAML specific values
+        yaml_values = values.copy()
+        yaml_values["WORKFLOW_NAME"] = val(
+            args.workflow_name if hasattr(args, "workflow_name") else "",
+            "Workflow name", f"{repo or 'project'}-code-review",
+        )
+        yaml_values["PROJECT_NAME"] = repo or owner or "project"
+        yaml_values["PROVIDER"] = "anthropic"
+        yaml_values["MODEL"] = "claude-sonnet-4-20250514"
+
+        yaml_filled = _fill_placeholders(yaml_raw, yaml_values)
+        yaml_out.parent.mkdir(parents=True, exist_ok=True)
+        yaml_out.write_text(yaml_filled, encoding="utf-8")
+        print(f"✓ Generated {yaml_out}")
+
     print()
     print("  Next steps:")
     print(f"    1. Edit {out.name} — check every placeholder was replaced")
-    print(f"    2. Set the required env var: export {token_env}=<your-token>")
-    print(f"    3. Start: clawcodex orchestrator server start --workflow {out.name}")
+    if yaml_out:
+        print(f"    2. Edit {yaml_out.name} — customize workflow stages for your project")
+        print(f"    3. Set the required env var: export {token_env}=<your-token>")
+        print(f"    4. Start: clawcodex orchestrator server start --workflow {out.name} --workflow-yaml {yaml_out.name}")
+    else:
+        print(f"    2. Set the required env var: export {token_env}=<your-token>")
+        print(f"    3. Start: clawcodex orchestrator server start --workflow {out.name}")
     print()
     if interactive:
         print("  Hint: re-run with --non-interactive and CLI flags to skip prompts.")
