@@ -36,6 +36,7 @@ from clawcodex_ext.command_system.output_style_command import OUTPUT_STYLE_COMMA
 from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.goal.command import GOAL_COMMAND
+from clawcodex_ext.command_system.btw_command import BTW_COMMAND
 
 # Upstream 0573f4c new slash commands. The implementations live in
 # src/command_system/ (real upstream modules, not facades); their Command
@@ -1550,6 +1551,7 @@ def get_builtin_commands() -> list[Command]:
         SECURITY_REVIEW_COMMAND,
         GOAL_COMMAND,
         RESUME_COMMAND,
+        BTW_COMMAND,
         # Upstream 0573f4c new slash commands
         DOCTOR_COMMAND,
         DIFF_COMMAND,
