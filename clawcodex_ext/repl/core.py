@@ -1799,7 +1799,11 @@ class ClawcodexREPL:
                 def _on_submit(text: str) -> None:
                     self._enqueue_prompt(text)
                     if status_ref:
-                        status_ref[0].update(status_message)
+                        n = self._queued_count()
+                        if n == 0:
+                            status_ref[0].update(status_message)
+                        else:
+                            status_ref[0].update(f"{status_message} ({n} queued)")
 
                 try:
                     with _pt_patch_stdout(raw=True):
@@ -3992,13 +3996,15 @@ class ClawcodexREPL:
                 except Exception:
                     pass
 
-                # Use async path for PromptCommand
+                # Use async path for PromptCommand / InteractiveCommand
                 # Run in a new event loop since we're in a sync context
                 try:
                     result = self._run_command_async_with_status(
                         cmd_name,
                         args,
-                        status_message="Recapping..." if cmd_name == "recap" else None,
+                        status_message="Recapping..." if cmd_name == "recap"
+                        else "Answering..." if cmd_name == "btw"
+                        else None,
                     )
 
                     if result.success:
