@@ -55,6 +55,14 @@ from src.providers import (
     resolve_api_key,
 )
 from src.tool_system.renderers import AgentLoopResult, ToolEvent
+from clawcodex_ext.command_system.builtins import (
+    execute_command_sync,
+    get_builtin_commands,
+)
+from clawcodex_ext.command_system.engine import create_command_context
+from clawcodex_ext.command_system.input_processing import parse_user_input
+from clawcodex_ext.command_system.registry import get_command_registry
+from clawcodex_ext.command_system.types import LocalCommand
 from clawcodex_ext.query.agent_loop_compat import (
     build_effective_system_prompt,
     run_query_as_agent_loop,
@@ -341,6 +349,93 @@ def run_headless(options: HeadlessOptions) -> int:
                             text = f"{extra}\n{text}"
                 except Exception:
                     pass  # best-effort: agent expansion failure is non-fatal
+
+                # Detect and handle slash commands in headless mode.
+                # Only commands with ``supports_non_interactive=True`` are
+                # allowed; others are rejected with a clear error.
+                _skip_agent_loop = False
+                try:
+                    parsed = parse_user_input(text)
+                    if parsed.input_type == "command":
+                        cmd = get_command_registry().get(parsed.command_name)
+                        if cmd is None:
+                            for builtin_cmd in get_builtin_commands():
+                                if (
+                                    builtin_cmd.name.lower()
+                                    == parsed.command_name.lower()
+                                    or parsed.command_name.lower()
+                                    in [a.lower() for a in builtin_cmd.aliases]
+                                ):
+                                    cmd = builtin_cmd
+                                    break
+
+                        if (
+                            cmd is not None
+                            and isinstance(cmd, LocalCommand)
+                            and not cmd.supports_non_interactive
+                        ):
+                            err = (
+                                f"Command /{parsed.command_name} is not "
+                                f"available in non-interactive mode"
+                            )
+                            if writer is not None:
+                                writer.write(
+                                    ResultEvent(
+                                        subtype="error",
+                                        session_id=session.session_id,
+                                        num_turns=0,
+                                        result="",
+                                        duration_ms=0,
+                                        is_error=True,
+                                        error=err,
+                                    )
+                                )
+                            else:
+                                print(f"error: {err}", file=stderr)
+                            exit_code = 1
+                            break
+
+                        cmd_ctx = create_command_context(
+                            workspace_root=workspace_root,
+                            conversation=session.conversation,
+                            tool_registry=tool_registry,
+                            tool_context=tool_context,
+                        )
+                        success, result_text, error = execute_command_sync(
+                            parsed.command_name, parsed.command_args, cmd_ctx
+                        )
+                        if success:
+                            if writer is not None:
+                                writer.write(
+                                    AssistantEvent(text=result_text or "")
+                                )
+                            else:
+                                aggregate_text.append(result_text or "")
+                            _skip_agent_loop = True
+                        else:
+                            err = error or f"Command /{parsed.command_name} failed"
+                            if writer is not None:
+                                writer.write(
+                                    ResultEvent(
+                                        subtype="error",
+                                        session_id=session.session_id,
+                                        num_turns=0,
+                                        result="",
+                                        duration_ms=0,
+                                        is_error=True,
+                                        error=err,
+                                    )
+                                )
+                            else:
+                                print(f"error: {err}", file=stderr)
+                            exit_code = 1
+                            break
+                except Exception:
+                    # best-effort: slash command detection failure is non-fatal
+                    pass
+
+                if _skip_agent_loop:
+                    continue
 
                 session.conversation.add_user_message(text)
 
