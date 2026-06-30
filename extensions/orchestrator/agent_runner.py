@@ -1894,7 +1894,7 @@ class AgentRunner:
                                 # ``session_end_reason`` is
                                 # ``budget_exhausted`` — the F-09 budget
                                 # test depends on this distinction.
-                                if turn_number >= self.max_turns and session.status == "running" and tracker is not None:
+                                if turn_number >= self.max_turns and session.status == "running" and (tracker is not None or sink is not None):
                                     if (
                                         session.total_429_backoff_seconds > 0
                                         and not turn_has_tool_calls

@@ -383,6 +383,30 @@ def _install_recording_sleep(runner: AgentRunner) -> _RecordingSleep:
     return rec
 
 
+class _AlwaysActiveTracker:
+    """Tracker stub that always reports the issue as active."""
+
+    active_states = ["open", "ready"]
+
+    async def fetch_issue_states_by_ids(self, ids):
+        return {ids[0]: Issue(id=ids[0], state="open")}
+
+
+class _ClosedTracker:
+    """Tracker that reports the issue as closed / not active.
+
+    After a successful SessionComplete, ``_should_continue`` returns
+    ``False`` and the runner falls through to the final-status path
+    (``_run_verification`` → True when no ``test_command`` is set),
+    setting ``status="completed"``.
+    """
+
+    active_states = ["open", "ready"]
+
+    async def fetch_issue_states_by_ids(self, ids):
+        return {ids[0]: Issue(id=ids[0], state="closed")}
+
+
 class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
     """Tests for the 429-aware in-turn backoff in ``AgentRunner.run``."""
 
@@ -405,7 +429,11 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                 "extensions.orchestrator.agent_runner.QueryRunner",
                 lambda cfg: stub,
             ):
-                await runner.run(session, WorkflowConfig.from_dict({}))
+                await runner.run(
+                    session,
+                    WorkflowConfig.from_dict({}),
+                    tracker=_ClosedTracker(),
+                )
 
             self.assertEqual(session.status, "completed")
             self.assertEqual(len(rec.calls), 1)
@@ -438,7 +466,11 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                 "extensions.orchestrator.agent_runner.QueryRunner",
                 lambda cfg: stub,
             ):
-                await runner.run(session, WorkflowConfig.from_dict({}))
+                await runner.run(
+                    session,
+                    WorkflowConfig.from_dict({}),
+                    tracker=_ClosedTracker(),
+                )
 
             self.assertEqual(len(rec.calls), 4)
             # Allow ±15% jitter on each call to be robust.
@@ -597,7 +629,11 @@ class TestAgentRunnerRateLimitBackoff(unittest.IsolatedAsyncioTestCase):
                 "extensions.orchestrator.agent_runner.QueryRunner",
                 lambda cfg: stub,
             ):
-                await runner.run(session, WorkflowConfig.from_dict({}))
+                await runner.run(
+                    session,
+                    WorkflowConfig.from_dict({}),
+                    tracker=_ClosedTracker(),
+                )
 
             self.assertEqual(len(rec.calls), 1)
             # 10s ± 15% jitter

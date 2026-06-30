@@ -72,6 +72,7 @@ class _Runner:
         if self._should_fail:
             raise RuntimeError("agent failed")
         session.status = "completed"
+        session.session_end_reason = "task_complete"
 
 
 class _PostCommitFailingSync:
