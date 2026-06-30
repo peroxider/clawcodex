@@ -164,6 +164,25 @@ class TestWorkflowConfigOrthogonalFields(unittest.TestCase):
         self.assertFalse(wf.agent.interactive)
         self.assertEqual(wf.agent.default_decision, "allow")
 
+    def test_effective_audit_log_via_runner_when_unset(self) -> None:
+        """When audit_log is not set in YAML, the effective value via
+        _resolve_audit_log should be 'minimal' (from legacy permission_mode
+        default fallback)."""
+        wf = WorkflowConfig.from_dict({"agent": {"permission_mode": "default"}})
+        self.assertIsNone(wf.agent.audit_log)
+        runner = AgentRunner(wf.agent, SandboxConfig())
+        self.assertEqual(runner._resolve_audit_log(), "minimal")
+
+    def test_effective_audit_log_respects_explicit_value(self) -> None:
+        """When audit_log is explicitly set in YAML, _resolve_audit_log
+        should honour it over the legacy permission_mode implied value."""
+        wf = WorkflowConfig.from_dict({
+            "agent": {"permission_mode": "dontAsk", "audit_log": "full"},
+        })
+        self.assertEqual(wf.agent.audit_log, "full")
+        runner = AgentRunner(wf.agent, SandboxConfig())
+        self.assertEqual(runner._resolve_audit_log(), "full")
+
     def test_deprecated_permission_mode_warns(self) -> None:
         """When permission_mode is set without any new fields, a
         DeprecationWarning should be emitted."""

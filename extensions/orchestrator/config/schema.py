@@ -28,10 +28,15 @@ _VALID_AUDIT_LOG_VALUES: frozenset[str] = frozenset({"none", "minimal", "full"})
 _VALID_DEFAULT_DECISION_VALUES: frozenset[str] = frozenset({"allow", "deny", "ask"})
 
 
-def _normalize_audit_log(value: Any) -> Literal["none", "minimal", "full"]:
-    """Validate and normalize the audit_log field."""
+def _normalize_audit_log(value: Any) -> str | None:
+    """Validate and normalize the audit_log field.
+
+    Returns ``None`` when the caller did not provide the field (preserving
+    the legacy ``permission_mode`` fallback at runtime).  When a value IS
+    provided it is validated and normalised to one of the allowed literals.
+    """
     if value is None:
-        return "minimal"
+        return None
     raw = str(value).strip().lower()
     if raw not in _VALID_AUDIT_LOG_VALUES:
         raise ValueError(
@@ -696,7 +701,16 @@ class WorkflowConfig:
             default_decision=_normalize_default_decision(
                 agent_raw.get("default_decision")
             ),
-            audit_log=_normalize_audit_log(agent_raw.get("audit_log")),
+            # When audit_log is not in the YAML, check whether a legacy
+            # permission_mode was set.  If so, pass None so the runner's
+            # _resolve_audit_log() falls back to the legacy enum.  If not,
+            # omit the argument entirely so the dataclass default ("minimal")
+            # applies.
+            audit_log=(
+                _normalize_audit_log(agent_raw["audit_log"])
+                if "audit_log" in agent_raw
+                else (None if agent_raw.get("permission_mode") is not None else "minimal")
+            ),
         )
         # F-46.2: warn when the user still relies on the legacy
         # ``permission_mode`` string without providing any of the new
