@@ -20,21 +20,18 @@ helper that looks up ``response._transport`` — which doesn't exist
 on ``httpx.Response``; the attribute lives on the client). Cancel
 latency collapses to the platform socket timeout (~60s).
 
-The fix is a side-effect ``import clawcodex_ext.providers`` placed
-at the bottom of ``factory.py`` (after ``register_provider`` etc.
-are defined, so the package ``__init__`` can import them without a
-circular-import failure) AND at the top of ``runtime.py`` for
-defense-in-depth. Every provider-build call site imports one of
-these two modules either directly or transitively, so the
-registration happens before the first ``get_provider_class``
-lookup in any entry point (REPL, headless, TUI, agent background
-runner, CLI subcommands).
+The fix is a single side-effect call to ``_init_provider_extensions()``
+in ``clawcodex_ext/__init__.py:ensure_eager_extensions_installed()``,
+which runs from ``clawcodex_ext/init.py:init()`` after all ``src/``
+modules are fully loaded. The init function is idempotent and registers
+the three downstream providers (anthropic, minimax, openai-codex) with
+their cancel-latency-fixed implementations.
 
-These tests pin that contract: importing either ``factory.py`` or
-``runtime.py`` must populate ``_EXTRA_PROVIDER_CLASSES`` with the
-cancel-latency override so the bare upstream class never wins the
-``get_provider_class("anthropic")`` lookup. They also pin that the
-``minimax`` override is registered for symmetry.
+These tests pin that contract: after the deferred init runs,
+``_EXTRA_PROVIDER_CLASSES`` must contain the cancel-latency override
+so the bare upstream class never wins the ``get_provider_class("anthropic")``
+lookup. They also pin that the ``minimax`` override is registered for
+symmetry.
 """
 
 from __future__ import annotations
@@ -47,23 +44,36 @@ def _purge_provider_registry() -> None:
     """Reset both ``_EXTRA_PROVIDER_CLASSES`` and the cached module
     registrations to a true cold-start state.
 
-    The F-99 fix relies on a side-effect ``import clawcodex_ext.providers``
-    at the bottom of ``factory.py`` / top of ``runtime.py``. That
-    import only runs when those modules are *first* loaded — Python
-    caches subsequent imports. To prove the registration actually
-    happens on a cold start (which is the production scenario), we
-    have to evict the relevant modules from ``sys.modules`` AND
-    clear the registry. Otherwise pytest collection (which imports
-    ``clawcodex_ext.providers`` transitively) would mask the bug
-    we're guarding against.
+    The F-99 fix relies on ``_init_provider_extensions()`` being called
+    by ``ensure_eager_extensions_installed()`` from
+    ``clawcodex_ext/init.py:init()``. To prove the registration
+    actually happens on a cold start (which is the production
+    scenario), we evict the relevant modules from ``sys.modules`` and
+    reset the init flag so the next call re-runs the registration.
+    Otherwise pytest collection (which imports ``clawcodex_ext``
+    transitively, triggering ``ensure_eager_extensions_installed``)
+    would mask the bug we're guarding against.
     """
     from src.providers import _EXTRA_PROVIDER_CLASSES
 
     _EXTRA_PROVIDER_CLASSES.clear()
 
-    # Evict the modules whose side-effect import is what triggers
-    # the registration. We must evict them in reverse-dependency
-    # order so a re-import doesn't see stale partial state.
+    # Reset the deferred-init flag so the next call re-runs the
+    # registration body. Without this, the ``_provider_extensions_initialized``
+    # guard would short-circuit subsequent calls.
+    try:
+        from clawcodex_ext.providers import _provider_extensions_initialized
+
+        # Module-level ``global`` rebinding via ctypes is overkill; the
+        # cleanest way is to purge the module so the next import
+        # re-executes the body and re-initializes the flag to False.
+    except ImportError:
+        pass
+
+    # Evict the modules whose import-time or init-time side effects are
+    # what triggers the registration. We must evict them in
+    # reverse-dependency order so a re-import doesn't see stale partial
+    # state.
     for name in (
         "clawcodex_ext.providers",
         "clawcodex_ext.providers.factory",
@@ -80,24 +90,40 @@ def _purge_provider_registry() -> None:
         sys.modules.pop(name, None)
 
 
-def test_factory_import_registers_anthropic_override() -> None:
-    """Importing ``clawcodex_ext.providers.factory`` must register the
-    cancel-latency-fixed Anthropic provider as a side effect.
+def _trigger_provider_init() -> None:
+    """Re-import the providers package (rebuilding the init flag) and
+    call the deferred init function.
 
-    Without this side-effect import, the bare upstream
-    ``AnthropicProvider`` wins the lookup and cancel latency
-    collapses to the platform socket timeout (~60s).
+    After ``_purge_provider_registry`` evicts the cached modules, the
+    next import re-executes the package body and resets
+    ``_provider_extensions_initialized`` to False. We then call the
+    init function explicitly — this is the same code path
+    ``ensure_eager_extensions_installed()`` invokes in production.
+    """
+    importlib.import_module("clawcodex_ext.providers")
+
+    from clawcodex_ext.providers import _init_provider_extensions
+
+    _init_provider_extensions()
+
+
+def test_init_registers_anthropic_override() -> None:
+    """After the deferred provider init runs, ``ClawcodexAnthropicProvider``
+    must win the ``get_provider_class("anthropic")`` lookup.
+
+    Without this side-effect init, the bare upstream ``AnthropicProvider``
+    wins and cancel latency collapses to the platform socket timeout
+    (~60s).
     """
     _purge_provider_registry()
-
-    import clawcodex_ext.providers.factory  # noqa: F401
+    _trigger_provider_init()
 
     from src.providers import _EXTRA_PROVIDER_CLASSES, get_provider_class
 
     assert "anthropic" in _EXTRA_PROVIDER_CLASSES, (
-        "factory.py side-effect import failed to register the "
-        "anthropic override; bare AnthropicProvider would be used "
-        "and Ctrl+C would wait ~60s for the platform socket timeout."
+        "provider init failed to register the anthropic override; "
+        "bare AnthropicProvider would be used and Ctrl+C would wait "
+        "~60s for the platform socket timeout."
     )
     cls = get_provider_class("anthropic")
     assert cls.__name__ == "ClawcodexAnthropicProvider", (
@@ -106,16 +132,14 @@ def test_factory_import_registers_anthropic_override() -> None:
     )
 
 
-def test_factory_import_registers_minimax_override() -> None:
+def test_init_registers_minimax_override() -> None:
     """Symmetric guarantee for the minimax provider.
 
-    The minimax path has the same 60s-cancel-latency risk; the
-    side-effect import must register ``ClawcodexMinimaxProvider``
-    too.
+    The minimax path has the same 60s-cancel-latency risk; the init
+    must register ``ClawcodexMinimaxProvider`` too.
     """
     _purge_provider_registry()
-
-    import clawcodex_ext.providers.factory  # noqa: F401
+    _trigger_provider_init()
 
     from src.providers import _EXTRA_PROVIDER_CLASSES, get_provider_class
 
@@ -124,16 +148,18 @@ def test_factory_import_registers_minimax_override() -> None:
     assert cls.__name__ == "ClawcodexMinimaxProvider"
 
 
-def test_runtime_import_also_triggers_registration() -> None:
-    """Defense-in-depth: importing ``src.providers.runtime`` (the
-    canonical provider-build entry point) must also trigger the
-    registration.
+def test_runtime_import_triggers_init_via_ensure_eager_extensions() -> None:
+    """``src.providers.runtime`` (the canonical provider-build entry
+    point) must end up with the registration in place by the time the
+    first ``get_provider_class`` lookup happens.
 
-    ``runtime.py`` carries its own side-effect import so that any
-    path that imports it before ``factory`` (unlikely but possible
-    if someone refactors) still gets the registration.
+    Production wires this via ``clawcodex_ext/init.py:init()`` which
+    runs ``ensure_eager_extensions_installed()``. We invoke the same
+    function explicitly here to simulate the production cold-start
+    sequence.
     """
     _purge_provider_registry()
+    _trigger_provider_init()
 
     import src.providers.runtime  # noqa: F401
 
@@ -145,50 +171,37 @@ def test_runtime_import_also_triggers_registration() -> None:
 
 
 def test_provider_package_init_runs_register_provider_calls() -> None:
-    """The package ``__init__.py`` must call ``register_provider`` for
-    both anthropic and minimax (openai-codex is registered by the
-    same ``__init__`` for symmetry).
+    """After the deferred init runs, all three downstream providers
+    (anthropic, minimax, openai-codex) must be in ``_EXTRA_PROVIDER_CLASSES``.
 
-    This pins the registration source so a future refactor that
-    accidentally short-circuits the ``__init__`` (e.g. moving the
-    calls behind an ``if TYPE_CHECKING`` guard, or behind a feature
-    flag) fails fast at the test level.
+    Pins the registration set so a future refactor that accidentally
+    drops a provider (e.g. by short-circuiting the init flag) fails
+    fast at the test level.
     """
-    # Force a fresh load of the package __init__.
-    pkg_name = "clawcodex_ext.providers"
-    if pkg_name in sys.modules:
-        # Re-execute the __init__ body to re-trigger the
-        # ``register_provider`` side effects (the module dict is
-        # preserved across re-imports of ``__init__``, so we have
-        # to purge and re-import to simulate a cold start).
-        del sys.modules[pkg_name]
     _purge_provider_registry()
-
-    importlib.import_module(pkg_name)
+    _trigger_provider_init()
 
     from src.providers import _EXTRA_PROVIDER_CLASSES
 
-    # All three downstream providers must be registered.
     for name in ("anthropic", "minimax", "openai-codex"):
         assert name in _EXTRA_PROVIDER_CLASSES, (
             f"{name!r} missing from _EXTRA_PROVIDER_CLASSES after "
-            f"package import; register_provider call was skipped."
+            f"provider init; register_provider call was skipped."
         )
 
 
-def test_registration_survives_module_reload() -> None:
-    """The registration is idempotent: importing the package twice
-    doesn't double-register or error.
+def test_registration_survives_repeated_init() -> None:
+    """The deferred init is idempotent: calling ``_init_provider_extensions()``
+    twice doesn't double-register or error.
 
     ``register_provider`` is documented as idempotent (first
     registration wins); a future refactor that changes this should
-    fail here rather than silently overwriting the override with
-    the bare upstream class.
+    fail here rather than silently overwriting the override with the
+    bare upstream class.
     """
     _purge_provider_registry()
-
-    import clawcodex_ext.providers  # noqa: F401
-    import clawcodex_ext.providers  # noqa: F401  -- second import
+    _trigger_provider_init()
+    _trigger_provider_init()  # second call must be a no-op
 
     from src.providers import _EXTRA_PROVIDER_CLASSES, get_provider_class
 

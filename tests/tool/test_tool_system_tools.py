@@ -309,137 +309,79 @@ class TestWebFetchTool(ToolSystemTests):
 
 
 class TestWebSearchTool(ToolSystemTests):
-    """Tests for the refactored WebSearchTool.
+    """Tests for the Tavily-backed WebSearchTool.
 
-    All tests that exercise DuckDuckGo search patch both the package-based
-    search (``_ddg_package_search``) and ``urllib.request.urlopen`` to ensure
-    the HTML-scraping fallback path is taken with controlled data, regardless
-    of whether ``duckduckgo-search`` is installed in the test environment.
+    The original DuckDuckGo search backend was replaced by Tavily in commit
+    ``a1e1faf4`` (web: replace dead DuckDuckGo search with Tavily + config-backed
+    secrets). These tests patch ``_tavily_search`` directly so they don't
+    require a real ``TAVILY_API_KEY`` or network access.
     """
 
-    _DDG_PKG_PATCH = "src.tool_system.tools.web_search._ddg_package_search"
+    _TAVILY_PATCH = "clawcodex_ext.tool_system.tools.web_search._tavily_search"
+
+    def _mock_tavily(self, hits: list[dict[str, str]]) -> Any:
+        """Patch ``_tavily_search`` to return ``hits`` directly."""
+        return patch(self._TAVILY_PATCH, return_value=hits)
 
     def test_web_search_parses_results(self) -> None:
-        html_doc = """
-        <a class="result__a" href="https://example.com/">Example</a>
-        <a class="result__snippet">Snippet</a>
-        """
-
-        class _Resp(io.BytesIO):
-            headers = {"Content-Type": "text/html"}
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        with (
-            patch(self._DDG_PKG_PATCH, return_value=None),
-            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
-        ):
+        """Tavily hits surface in the tool output with structured links."""
+        hits = [
+            {"title": "Example", "url": "https://example.com/", "snippet": "Snippet"},
+        ]
+        with self._mock_tavily(hits):
             out = WebSearchTool.call({"query": "example"}, self.ctx).output
-            self.assertEqual(out["query"], "example")
-            self.assertIn("duration_seconds", out)
-            # Structured output: snippet text + links object
-            self.assertEqual(len(out["results"]), 2)
-            # First result is text snippet
-            self.assertIsInstance(out["results"][0], str)
-            self.assertIn("Example", out["results"][0])
-            self.assertIn("https://example.com/", out["results"][0])
-            # Second result is structured links
-            links = out["results"][1]
-            self.assertEqual(links["content"][0]["url"], "https://example.com/")
-            self.assertEqual(links["content"][0]["title"], "Example")
+        self.assertEqual(out["query"], "example")
+        self.assertIn("duration_seconds", out)
+        self.assertEqual(len(out["results"]), 2)
+        self.assertIsInstance(out["results"][0], str)
+        self.assertIn("Example", out["results"][0])
+        self.assertIn("https://example.com/", out["results"][0])
+        links = out["results"][1]
+        self.assertEqual(links["content"][0]["url"], "https://example.com/")
+        self.assertEqual(links["content"][0]["title"], "Example")
 
     def test_web_search_domain_filtering_blocked(self) -> None:
         """blocked_domains filters out matching results."""
-        html_doc = """
-        <a class="result__a" href="https://example.com/">Example</a>
-        <a class="result__snippet">Snippet one</a>
-        <a class="result__a" href="https://other.org/">Other</a>
-        <a class="result__snippet">Snippet two</a>
-        """
-
-        class _Resp(io.BytesIO):
-            headers = {"Content-Type": "text/html"}
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        with (
-            patch(self._DDG_PKG_PATCH, return_value=None),
-            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
-        ):
+        hits = [
+            {"title": "Example", "url": "https://example.com/", "snippet": "Snippet one"},
+            {"title": "Other", "url": "https://other.org/", "snippet": "Snippet two"},
+        ]
+        with self._mock_tavily(hits):
             out = WebSearchTool.call(
                 {"query": "test", "blocked_domains": ["example.com"]}, self.ctx
             ).output
-            links = out["results"][-1]
-            # Only the non-blocked result should remain
-            self.assertEqual(len(links["content"]), 1)
-            self.assertEqual(links["content"][0]["url"], "https://other.org/")
+        links = out["results"][-1]
+        self.assertEqual(len(links["content"]), 1)
+        self.assertEqual(links["content"][0]["url"], "https://other.org/")
 
     def test_web_search_domain_filtering_allowed(self) -> None:
         """allowed_domains keeps only matching results."""
-        html_doc = """
-        <a class="result__a" href="https://example.com/">Example</a>
-        <a class="result__snippet">Snippet one</a>
-        <a class="result__a" href="https://other.org/">Other</a>
-        <a class="result__snippet">Snippet two</a>
-        """
-
-        class _Resp(io.BytesIO):
-            headers = {"Content-Type": "text/html"}
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        with (
-            patch(self._DDG_PKG_PATCH, return_value=None),
-            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
-        ):
+        hits = [
+            {"title": "Example", "url": "https://example.com/", "snippet": "Snippet one"},
+            {"title": "Other", "url": "https://other.org/", "snippet": "Snippet two"},
+        ]
+        with self._mock_tavily(hits):
             out = WebSearchTool.call(
                 {"query": "test", "allowed_domains": ["example.com"]}, self.ctx
             ).output
-            links = out["results"][-1]
-            self.assertEqual(len(links["content"]), 1)
-            self.assertEqual(links["content"][0]["url"], "https://example.com/")
+        links = out["results"][-1]
+        self.assertEqual(len(links["content"]), 1)
+        self.assertEqual(links["content"][0]["url"], "https://example.com/")
 
     def test_web_search_subdomain_matching(self) -> None:
         """Subdomain matching: sub.example.com matches example.com."""
-        html_doc = """
-        <a class="result__a" href="https://sub.example.com/page">Sub Example</a>
-        <a class="result__snippet">Sub snippet</a>
-        <a class="result__a" href="https://badexample.com/">Bad Example</a>
-        <a class="result__snippet">Bad snippet</a>
-        """
-
-        class _Resp(io.BytesIO):
-            headers = {"Content-Type": "text/html"}
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        with (
-            patch(self._DDG_PKG_PATCH, return_value=None),
-            patch.object(urllib.request, "urlopen", return_value=_Resp(html_doc.encode("utf-8"))),
-        ):
+        hits = [
+            {"title": "Sub Example", "url": "https://sub.example.com/page", "snippet": "Sub snippet"},
+            {"title": "Bad Example", "url": "https://badexample.com/", "snippet": "Bad snippet"},
+        ]
+        with self._mock_tavily(hits):
             out = WebSearchTool.call(
                 {"query": "test", "allowed_domains": ["example.com"]}, self.ctx
             ).output
-            links = out["results"][-1]
-            # sub.example.com matches, badexample.com does NOT
-            self.assertEqual(len(links["content"]), 1)
-            self.assertEqual(links["content"][0]["url"], "https://sub.example.com/page")
+        links = out["results"][-1]
+        # sub.example.com matches, badexample.com does NOT
+        self.assertEqual(len(links["content"]), 1)
+        self.assertEqual(links["content"][0]["url"], "https://sub.example.com/page")
 
     def test_web_search_validate_mutual_exclusion(self) -> None:
         """Cannot specify both allowed_domains and blocked_domains."""
@@ -476,16 +418,16 @@ class TestWebSearchTool(ToolSystemTests):
         self.assertIn("REMINDER", api_result["content"])
         self.assertIn("sources", api_result["content"].lower())
 
-    def test_web_search_ddg_package_path(self) -> None:
-        """When duckduckgo-search package is available, use it instead of HTML scraping."""
-        mock_results = [
-            {"title": "Pkg Result", "url": "https://pkg.example.com/", "snippet": "From package"},
+    def test_web_search_tavily_search_path(self) -> None:
+        """Mocking ``_tavily_search`` controls the search result set end-to-end."""
+        hits = [
+            {"title": "Tavily Result", "url": "https://pkg.example.com/", "snippet": "From tavily"},
         ]
-        with patch(self._DDG_PKG_PATCH, return_value=mock_results):
+        with self._mock_tavily(hits):
             out = WebSearchTool.call({"query": "package test"}, self.ctx).output
-            self.assertEqual(out["query"], "package test")
-            links = out["results"][-1]
-            self.assertEqual(links["content"][0]["url"], "https://pkg.example.com/")
+        self.assertEqual(out["query"], "package test")
+        links = out["results"][-1]
+        self.assertEqual(links["content"][0]["url"], "https://pkg.example.com/")
 
 
 class TestSleepTool(ToolSystemTests):
@@ -703,13 +645,13 @@ class TestTaskFormatting(ToolSystemTests):
     """Tests for human-readable result formatting helpers."""
 
     def test_format_task_created(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_created
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_created
 
         result = _format_task_created("abc123", "Fix auth bug")
         self.assertEqual(result, "Task #abc123 created successfully: Fix auth bug")
 
     def test_format_task_detail_with_deps(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_detail
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_detail
 
         task = {
             "id": "1",
@@ -727,12 +669,12 @@ class TestTaskFormatting(ToolSystemTests):
         self.assertIn("Blocks: #4", result)
 
     def test_format_task_detail_none(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_detail
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_detail
 
         self.assertEqual(_format_task_detail(None), "Task not found")
 
     def test_format_task_detail_no_deps(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_detail
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_detail
 
         task = {
             "id": "1",
@@ -747,12 +689,12 @@ class TestTaskFormatting(ToolSystemTests):
         self.assertNotIn("Blocks", result)
 
     def test_format_task_list_empty(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_list
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_list
 
         self.assertEqual(_format_task_list([]), "No tasks found")
 
     def test_format_task_list_with_tasks(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_list
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_list
 
         tasks = [
             {"id": "1", "subject": "T1", "status": "pending", "blockedBy": []},
@@ -769,13 +711,13 @@ class TestTaskFormatting(ToolSystemTests):
         self.assertIn("#2 [in_progress] T2 (agent-1) [blocked by #1]", result)
 
     def test_format_task_updated_success(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_updated
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_updated
 
         result = _format_task_updated(True, "1", ["status", "subject"])
         self.assertEqual(result, "Updated task #1 status, subject")
 
     def test_format_task_updated_failure(self) -> None:
-        from src.tool_system.tools.tasks_v2 import _format_task_updated
+        from clawcodex_ext.tool_system.tools.tasks_v2 import _format_task_updated
 
         result = _format_task_updated(False, "1", [], error="Task not found")
         self.assertEqual(result, "Task not found")

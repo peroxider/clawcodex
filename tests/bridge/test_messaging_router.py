@@ -77,7 +77,7 @@ class TestNormalizeControlMessageKeys:
         """Per gap analysis #24 + critic #20: unknown camelCase keys must
         NOT be silently dropped or guessed; pass through with debug log.
         """
-        with caplog.at_level("DEBUG", logger="src.bridge.messaging"):
+        with caplog.at_level("DEBUG", logger="clawcodex_ext.bridge.messaging"):
             out = normalize_control_message_keys({"futureField": "val"})
         assert out == {"futureField": "val"}
         assert any("Unknown camelCase key" in rec.message for rec in caplog.records)

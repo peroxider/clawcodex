@@ -125,6 +125,6 @@ def test_describe_http_error_no_response_returns_str() -> None:
 
 
 def test_log_bridge_skip_emits_info_log(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.INFO, logger="src.bridge.debug_utils"):
+    with caplog.at_level(logging.INFO, logger="clawcodex_ext.bridge.debug_utils"):
         log_bridge_skip("no_token", debug_msg="cache miss", v2=True)
     assert any("no_token" in rec.message for rec in caplog.records)
