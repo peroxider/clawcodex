@@ -22,7 +22,7 @@ from .approval_policy import (
     get_approval_policy,
     ToolCallEvent as PolicyToolCallEvent,
 )
-from src.utils.git import get_file_status
+from clawcodex_ext.utils.git import get_file_status
 from .config.schema import AgentConfig, SandboxConfig, WorkflowConfig, WorkspaceConfig
 from .debug_log import append_debug_event
 from .issue import Issue
