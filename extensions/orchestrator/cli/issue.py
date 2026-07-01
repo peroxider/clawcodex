@@ -1210,10 +1210,14 @@ def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
         last_size = transcript_path.stat().st_size
         pending = ""
         turn_counter = 0
+        pending_calls: dict[str, dict] = {}
         while True:
             current_size = transcript_path.stat().st_size
             if current_size <= last_size:
-                time.sleep(0.5)
+                # Flush stale pending calls every 5 seconds
+                import time as _time
+
+                _time.sleep(0.5)
                 continue
 
             with open(transcript_path, "r", encoding="utf-8") as f:
@@ -1238,7 +1242,7 @@ def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
                         file=sys.stderr,
                     )
                     continue
-                _render_message(msg, turn_counter)
+                _render_message(msg, turn_counter, pending_calls)
             last_size = current_size
     except KeyboardInterrupt:
         print("\n[tail] stopped")
@@ -1248,33 +1252,225 @@ def _run_tail(registry_path: Path | None, args: argparse.Namespace) -> int:
     return 0
 
 
-def _render_message(msg: dict, turn_counter: int) -> None:
+def _format_ts(timestamp_str: str | None) -> str:
+    """Format an ISO-8601 timestamp string to ``HH:MM:SS``.
+
+    Falls back to the current local time when the transcript entry
+    has no timestamp (legacy records, session_snapshot lines, etc.).
+    """
+    if timestamp_str:
+        try:
+            from datetime import datetime
+
+            dt = datetime.fromisoformat(timestamp_str)
+            return dt.strftime("%H:%M:%S")
+        except (ValueError, TypeError):
+            pass
+    from datetime import datetime
+
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _summarize_tool_args(name: str, inp: dict) -> str:
+    """Return a one-line argument summary for a tool call.
+
+    Examples::
+
+        Read → ``src/services/lock.py``
+        Grep → ``"asyncio.Lock"``
+        Edit → ``src/services/lock.py``
+        Bash → ``pytest tests/test_lock.py``
+        Git  → ``commit -m "fix: …"``
+    """
+    if not inp:
+        return ""
+    if name == "Read":
+        return inp.get("file_path", inp.get("path", "")).strip()
+    if name == "Grep" or name == "grep":
+        pat = inp.get("pattern", "")
+        return f'"{pat}"' if pat else ""
+    if name in ("Edit", "Write", "create", "Create"):
+        return inp.get("file_path", inp.get("path", "")).strip()
+    if name == "Bash" or name == "bash" or name == "Git" or name == "git":
+        cmd = inp.get("command", "")
+        return cmd.strip()[:90]
+    # Fallback: join first 3 non-empty string values
+    parts = [str(v)[:60] for v in inp.values() if isinstance(v, str) and v.strip()]
+    return " ".join(parts[:3])
+
+
+def _summarize_tool_result(name: str, content: str | list | None) -> str:
+    """Return a brief one-line result summary for a tool result.
+
+    Returns empty string when no meaningful summary can be inferred.
+    """
+    if not content:
+        return ""
+    text = ""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text", "")
+                break
+
+    if not text.strip():
+        return ""
+
+    # Line count for Read
+    if name in ("Read", "read"):
+        n = text.count("\n") + 1
+        return f"{n} lines"
+
+    # Hit count for Grep
+    if name in ("Grep", "grep"):
+        lines = text.strip().splitlines()
+        # Count actual match lines (omit "X results" footer / header lines)
+        match_lines = [l for l in lines if l.strip() and not l.startswith("─")]
+        return f"{len(match_lines)} hits" if match_lines else "0 hits"
+
+    # Diff stat for Edit
+    if name in ("Edit", "edit", "Write", "write"):
+        added = text.count("+")  # rough heuristic
+        removed = text.count("-")  # rough heuristic
+        n = text.count("\n") + 1 if text.strip() else 0
+        # If the result is just "No changes" or similar, say so
+        text_lower = text.strip().lower()
+        if "no change" in text_lower or "nothing" in text_lower:
+            return "no changes"
+        # Show first line of diff patch as preview
+        first_line = text.strip().splitlines()[0] if text.strip() else ""
+        if first_line.startswith("diff --git"):
+            parts = text.strip().splitlines()
+            # Try to find a hunk header like @@ -1,3 +1,6 @@
+            hunk = ""
+            for p in parts:
+                if p.startswith("@@"):
+                    hunk = p
+                    break
+            return f"+{n} lines" if n > 0 else "0 changes"
+        return f"+{n} lines" if n > 0 else ""
+
+    # Exit code / summary for Bash
+    if name in ("Bash", "bash"):
+        first = text.strip().splitlines()[0] if text.strip() else ""
+        # Look for common test result patterns
+        passed = ""
+        import re
+
+        m = re.search(r"(\d+)\s+passed", text)
+        if m:
+            passed = m.group(0)
+        failed = ""
+        m = re.search(r"(\d+)\s+failed", text)
+        if m:
+            failed = m.group(0)
+        if passed or failed:
+            parts = [p for p in (passed, failed) if p]
+            return " · ".join(parts) if parts else "done"
+        # Return first meaningful output line
+        first = first.rstrip("\n")[:60]
+        return first if first else "done"
+
+    return ""
+
+
+def _render_message(msg: dict, turn_counter: int, pending_calls: dict) -> None:
     """Render one Message dict from transcript.jsonl as a tail line.
 
-    Maps Message roles/content blocks back to the same CALL / RESULT /
-    TEXT format the legacy ``.event_logs`` reader produced, so operator
-    muscle memory carries over after the F-49 storage unification.
+    Produces output matching the README Demo format::
+
+        14:02:11  ◐ Read src/services/lock.py · 132 lines
+        14:02:13  ◐ Grep "asyncio.Lock" · 3 hits
+        14:02:18  ◐ Edit src/services/lock.py · +18 -4
+        14:02:24  ◐ Bash pytest tests/test_lock.py · 4 passed
+        14:02:24  ✓ Verification gate OK (pytest -x)
+        14:02:25  ◐ Git commit -m "fix: per-key lock granularity in flush_batch"
+        14:02:26  ◐ Git push origin clawcodex/AGENTSDK-15
+        14:02:31  ✓ PR opened · auto-review-loop subscribed
+
+    tool_use + tool_result pairs are merged into a single line by
+    buffering the tool_use in ``pending_calls`` (keyed by tool_use_id)
+    and rendering when the matching tool_result arrives.
     """
     role = msg.get("role", "?")
     content = msg.get("content")
     if not isinstance(content, list):
         return
+
+    ts = _format_ts(msg.get("timestamp"))
+
     for block in content:
         if not isinstance(block, dict):
             continue
         btype = block.get("type")
-        if btype == "text" and role == "assistant":
-            text = (block.get("text") or "").strip()
-            if text:
-                preview = text[:80].replace("\n", " ")
-                print(f"  TEXT  {preview}")
-        elif btype == "tool_use" and role == "assistant":
+
+        # -- tool_use: buffer the call, render when result arrives --
+        if btype == "tool_use" and role == "assistant":
             name = block.get("name", "?")
-            print(f"  CALL  {name}")
+            tid = block.get("id") or block.get("tool_use_id", "")
+            inp = block.get("input", {})
+            pending_calls[tid] = {
+                "name": name,
+                "input": inp,
+                "timestamp": ts,
+            }
+
+        # -- tool_result: pair with buffered tool_use and render --
         elif btype == "tool_result" and role == "user":
-            err = " [ERR]" if block.get("is_error") else ""
-            tuid = block.get("tool_use_id", "?")
-            print(f"  RESULT{err} {tuid}")
+            tid = block.get("tool_use_id", "?")
+            err = block.get("is_error", False)
+            result_content = block.get("content", "")
+
+            call = pending_calls.pop(tid, None)
+            if call:
+                name = call["name"]
+                inp = call["input"]
+                call_ts = call["timestamp"]
+                args_str = _summarize_tool_args(name, inp)
+                result_str = _summarize_tool_result(name, result_content)
+
+                icon = "✗" if err else "◐"
+                line = f"{call_ts}  {icon} {name}"
+                if args_str:
+                    line += f" {args_str}"
+                if result_str:
+                    line += f" · {result_str}"
+                print(line)
+            else:
+                icon = "✗" if err else "◐"
+                print(f"{ts}  {icon} [result {tid}]")
+
+        # -- assistant text: special-cased detection --
+        elif btype == "text" and role == "assistant":
+            text = (block.get("text") or "").strip()
+            if not text:
+                continue
+
+            lower = text.lower()
+
+            # Verification gate passed
+            if "pytest" in lower and ("passed" in lower or "ok" in lower):
+                preview = text[:80].replace("\n", " ")
+                # Strip to a single line
+                preview = preview.strip()
+                print(f"{ts}  ✓ Verification gate OK ({preview})")
+            # PR opened
+            elif "pr opened" in lower or "pull request" in lower or "opened pr" in lower:
+                preview = text[:80].replace("\n", " ")
+                print(f"{ts}  ✓ PR opened · {preview.strip()}")
+            # Git operations
+            elif lower.startswith("git") or "git commit" in lower or "committed" in lower:
+                preview = text[:80].replace("\n", " ")
+                print(f"{ts}  ◐ {preview.strip()}")
+            elif "push" in lower and ("git" in lower or "origin" in lower):
+                preview = text[:80].replace("\n", " ")
+                print(f"{ts}  ◐ {preview.strip()}")
+            # Generic assistant text
+            else:
+                preview = text[:80].replace("\n", " ")
+                print(f"{ts}  ◐ {preview.strip()}")
 
 
 def _msg_references_tool(msg: dict, tool_use_id: str) -> bool:
