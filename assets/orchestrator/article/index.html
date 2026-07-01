@@ -112,12 +112,31 @@
     font-weight: 800;
     font-family: 'JetBrains Mono', monospace;
   }
-  .topnav-links { display: flex; gap: 18px; font-size: 13px; }
+  .topnav-links { display: flex; gap: 18px; font-size: 13px; align-items: center; }
   .topnav-links a {
     color: var(--text-secondary);
     border-bottom: none;
   }
   .topnav-links a:hover { color: var(--accent); }
+  .topnav-back {
+    color: var(--accent) !important;
+    font-weight: 500;
+    padding: 4px 10px;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px;
+    background: var(--surface-2);
+    transition: background 150ms, border-color 150ms;
+  }
+  .topnav-back:hover {
+    background: var(--surface-3);
+    border-color: var(--accent) !important;
+  }
+  .topnav-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 2px;
+  }
 
   .hero {
     padding: 120px 0 80px;
@@ -405,7 +424,9 @@
     .hero-subtitle { font-size: 16px; }
     .container { padding: 0 16px; }
     section { margin-bottom: 60px; }
-    .topnav-links { display: none; }
+    .topnav-links { gap: 10px; }
+    .topnav-links a:not(.topnav-back) { display: none; }
+    .topnav-divider { display: none; }
   }
 </style>
 </head>
@@ -419,6 +440,8 @@
       Orchestrator · 自主工程层
     </div>
     <div class="topnav-links">
+      <a href="../../showcase/landing.html" class="topnav-back">← 返回主页</a>
+      <span class="topnav-divider" aria-hidden="true"></span>
       <a href="#what">概览</a>
       <a href="#trackers">适配器</a>
       <a href="#pipeline">13 阶段</a>

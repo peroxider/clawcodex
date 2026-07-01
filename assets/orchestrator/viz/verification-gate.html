@@ -265,9 +265,43 @@
     body { padding: 16px 12px; }
     .header h1 { font-size: 20px; }
   }
+
+  /* === Return-to-homepage floating button === */
+  .topbar-back {
+    position: fixed;
+    top: 18px;
+    right: 24px;
+    z-index: 9999;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--accent);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    text-decoration: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: background 150ms, border-color 150ms, transform 150ms;
+  }
+  .topbar-back:hover {
+    background: var(--bg-card);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  @media (max-width: 768px) {
+    .topbar-back { top: 12px; right: 12px; padding: 6px 10px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
+  <a href="../../showcase/landing.html" class="topbar-back">← 返回主页</a>
+
 <div class="header">
   <h1>Pre-Push 验证门控 · 多语言支持</h1>
   <p class="sub">三道关卡顺序执行 · 任一失败抛 <code style="font-family:'JetBrains Mono',monospace;">VerificationFailed</code> · 阻断 push 但保留 commit</p>
