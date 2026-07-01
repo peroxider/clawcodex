@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+  ClawCodex DevMind · 营销单页 v0
+  ─────────────────────────────────────────────────────────────────────────
+  Design system: Linear 风格（暖黑 + 蓝紫点缀 + JetBrains Mono + 极简留白）
+  Author:        web-design-engineer skill (Direction Advisor → Linear)
+  Build stage:   v0（核心结构 + token + 关键模块占位 + 设计假设列表）
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ★ 设计假设（请在 v0 验收时反馈） ★
+  1. Hero 标题候选（请在 checkpoint 选一个 / 提供你的版本）：
+     [A] "把单个 agent 升级为一支可值守的工程团队"
+     [B] "你的 AI 工程师，7×24 自驱"
+     [C] "把工程流程编译成多 agent 团队"
+  2. Hero 双卖点（已锁定）：① Orchestrator 自主 issue→PR 流水线 ② SOP 编译器
+  3. 4 个次要卖点：自动化工程闭环（PR 评审自动修复 + 验证门禁）、LiteLLM 100+ 后端、分布式 Cron + IM Gateway、三层解耦架构
+  4. 一键安装命令：3 平台并列（macOS/Linux/WSL bash、PowerShell、Source build）
+  5. 真实产品截图：assets/clawcodex-screenshot-1.png（已用，swebench 验证图保留备用）
+  6. 架构图：内联 SVG 占位（[architecture diagram - 待替换为 Mermaid 或静态图]）
+  7. 全文已按要求去掉 F-N 特性编号（用户不知道编号）
+  8. 主体语言：中文（按 CLAUDE.md 强制要求）
+
+  ★ 已知占位 ★
+  - [icon] 卡片图标用线性 SVG 占位（6 个）
+  - [architecture diagram] 架构图区域为内联 SVG 简化版
+  - Hero 真实截图仅 1 张，待补 1 张 LiveView 仪表盘截图
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClawCodex DevMind — 把单个 agent 升级为一支可值守的工程团队</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #08090A;
+    --surface-1: #16171C;
+    --surface-2: #1E1F25;
+    --surface-3: #26272E;
+    --border: rgba(255, 255, 255, 0.06);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --ink: #F7F8F8;
+    --ink-2: #9CA3AF;
+    --ink-3: #6B7280;
+    --accent: #5E6AD2;
+    --accent-hover: #6E7AE0;
+    --accent-soft: rgba(94, 106, 210, 0.12);
+    --success: #4CB782;
+    --warning: #F76E63;
+
+    --font-display: 'Inter Tight', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+    --space-4: 16px; --space-5: 24px; --space-6: 32px;
+    --space-7: 48px; --space-8: 64px; --space-9: 96px;
+
+    --radius-sm: 6px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: var(--accent); color: white; }
+
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; border: 0; background: none; }
+
+  /* ====================== LAYOUT ====================== */
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ====================== NAV ====================== */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(8, 9, 10, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-display);
+    font-weight: 600; font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+  .brand-mark {
+    width: 24px; height: 24px;
+    background: linear-gradient(135deg, #5E6AD2, #8E8EE0);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: white; font-weight: 700; font-size: 13px;
+  }
+  .nav-links {
+    display: flex; gap: 28px;
+    font-size: 13.5px; color: var(--ink-2);
+  }
+  .nav-links a { transition: color 150ms var(--ease); }
+  .nav-links a:hover { color: var(--ink); }
+  .nav-cta {
+    background: var(--ink); color: var(--bg);
+    padding: 7px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    transition: background 150ms var(--ease);
+  }
+  .nav-cta:hover { background: #E5E7EB; }
+
+  /* ====================== HERO ====================== */
+  .hero {
+    position: relative; overflow: hidden;
+    padding: 96px 0 64px;
+  }
+  .hero::before {
+    content: ''; position: absolute;
+    top: -30%; left: 50%; transform: translateX(-50%);
+    width: 1200px; height: 800px;
+    background: radial-gradient(ellipse at center, rgba(94, 106, 210, 0.10) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .hero-inner { position: relative; z-index: 1; }
+
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px; border-radius: 999px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(94, 106, 210, 0.25);
+    color: var(--accent);
+    font-size: 12.5px; font-weight: 500;
+    margin-bottom: 28px;
+  }
+  .hero-eyebrow::before {
+    content: ''; width: 6px; height: 6px;
+    background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .hero h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2.5rem, 5.5vw, 4rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    max-width: 880px;
+    margin-bottom: 20px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #5E6AD2, #8E8EE0 50%, #5E6AD2);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero-sub {
+    font-size: 1.125rem; color: var(--ink-2);
+    max-width: 640px; line-height: 1.6;
+    margin-bottom: 36px;
+  }
+
+  /* ====================== ONE-CLICK INSTALL ====================== */
+  .install-block {
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 20px 22px;
+    margin-bottom: 24px;
+    max-width: 720px;
+  }
+  .install-tabs {
+    display: flex; gap: 4px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .install-tab {
+    padding: 7px 12px;
+    font-size: 12.5px; color: var(--ink-3);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 150ms var(--ease);
+  }
+  .install-tab[aria-selected="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  .install-tab:not([aria-selected="true"]):hover { color: var(--ink-2); }
+
+  .install-cmd {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+  .install-cmd code {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    color: #A78BFA;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .copy-btn {
+    flex-shrink: 0;
+    padding: 5px 10px; border-radius: 5px;
+    background: var(--surface-3);
+    color: var(--ink-2);
+    font-size: 12px; font-weight: 500;
+    transition: all 150ms var(--ease);
+  }
+  .copy-btn:hover {
+    background: var(--accent);
+    color: white;
+  }
+
+  .install-sub {
+    margin-top: 12px;
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .install-sub code {
+    font-family: var(--font-mono);
+    background: var(--surface-2);
+    padding: 1px 6px; border-radius: 4px;
+    color: var(--ink-2);
+  }
+
+  /* ====================== HERO SCREENSHOT ====================== */
+  .hero-shot {
+    margin-top: 56px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--surface-1);
+    box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.5);
+  }
+  .hero-shot-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-shot-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--surface-3);
+  }
+  .hero-shot-url {
+    flex: 1; margin-left: 12px;
+    font-family: var(--font-mono);
+    font-size: 11.5px; color: var(--ink-3);
+  }
+  .hero-shot img {
+    display: block; width: 100%; height: auto;
+  }
+  .hero-shot-placeholder {
+    /* fallback when no screenshot */
+    aspect-ratio: 16 / 9;
+    display: grid; place-items: center;
+    color: var(--ink-3); font-size: 13px;
+    background:
+      linear-gradient(135deg, var(--surface-1) 0%, var(--surface-2) 100%);
+  }
+
+  /* ====================== HERO METRICS ====================== */
+  .hero-metrics {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    margin-top: 64px;
+    padding: 28px 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .metric-val {
+    font-family: var(--font-display);
+    font-size: 1.75rem; font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .metric-label {
+    font-size: 12.5px; color: var(--ink-3);
+    margin-top: 4px;
+  }
+
+  /* ====================== SECTION ====================== */
+  section { padding: 96px 0; }
+  .section-head { max-width: 720px; margin-bottom: 56px; }
+  .section-eyebrow {
+    font-size: 12px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent); margin-bottom: 12px;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    font-weight: 600; line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+  .section-sub {
+    color: var(--ink-2);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  /* ====================== HERO 2-CARDS (Pillar) ====================== */
+  .pillar-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 768px) { .pillar-grid { grid-template-columns: 1fr; } }
+  .pillar {
+    position: relative;
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 36px 32px;
+    overflow: hidden;
+    transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
+  }
+  .pillar:hover {
+    border-color: rgba(94, 106, 210, 0.4);
+    box-shadow: 0 8px 32px -8px rgba(94, 106, 210, 0.15);
+  }
+  .pillar::after {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.5;
+  }
+  .pillar-num {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--ink-3);
+    margin-bottom: 12px;
+  }
+  .pillar h3 {
+    font-family: var(--font-display);
+    font-size: 1.4rem; font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 12px;
+  }
+  .pillar p {
+    color: var(--ink-2);
+    font-size: 14.5px; line-height: 1.6;
+    margin-bottom: 20px;
+  }
+  .pillar-bullets {
+    list-style: none; display: flex; flex-direction: column; gap: 8px;
+  }
+  .pillar-bullets li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13.5px; color: var(--ink-2);
+  }
+  .pillar-bullets li::before {
+    content: '✓'; color: var(--success); flex-shrink: 0;
+    font-weight: 600;
+  }
+
+  /* ====================== 6-CARD GRID (次要卖点) ====================== */
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .feature-grid { grid-template-columns: 1fr; } }
+
+  .feature {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    transition: border-color 200ms var(--ease);
+  }
+  .feature:hover { border-color: var(--border-strong); }
+  .feature-icon {
+    width: 32px; height: 32px;
+    background: var(--accent-soft);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .feature h4 {
+    font-family: var(--font-display);
+    font-size: 1rem; font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .feature p {
+    color: var(--ink-2);
+    font-size: 13.5px; line-height: 1.55;
+  }
+
+  /* ====================== ARCHITECTURE ====================== */
+  .arch-block {
+    background: var(--surface-1);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    padding: 36px;
+    margin-top: 48px;
+  }
+  .arch-diagram {
+    width: 100%; height: auto;
+    margin: 16px 0;
+  }
+  .arch-caption {
+    font-size: 12.5px; color: var(--ink-3);
+    text-align: center; margin-top: 12px;
+  }
+
+  /* ====================== FOOTER ====================== */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 48px 0;
+  }
+  .footer-inner {
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 20px;
+  }
+  .footer-meta {
+    color: var(--ink-3);
+    font-size: 13px;
+  }
+  .footer-links {
+    display: flex; gap: 24px;
+    font-size: 13px; color: var(--ink-2);
+  }
+  .footer-links a:hover { color: var(--ink); }
+
+  /* ====================== UTILITIES ====================== */
+  .text-accent { color: var(--accent); }
+  .mono { font-family: var(--font-mono); }
+
+  /* ====================== SCROLL-IN REVEAL ====================== */
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 600ms var(--ease), transform 600ms var(--ease);
+    will-change: opacity, transform;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- =========================== NAV =========================== -->
+<nav class="nav">
+  <div class="container nav-inner">
+    <a href="#" class="brand">
+      <span class="brand-mark">C</span>
+      <span>ClawCodex DevMind</span>
+    </a>
+    <div class="nav-links">
+      <a href="#orchestrator">Orchestrator</a>
+      <a href="#sop">SOP 编译器</a>
+      <a href="#install">安装</a>
+      <a href="#architecture">架构</a>
+    </div>
+    <a href="https://gitcode.com/chadwweng/clawcodex" class="nav-cta">GitHub →</a>
+  </div>
+</nav>
+
+<!-- =========================== HERO =========================== -->
+<section class="hero">
+  <div class="container hero-inner">
+    <div class="hero-eyebrow">v1.0 · 自主工程层 · MIT 开源</div>
+
+    <h1>把单个 agent <em>升级为一支</em><br>可值守的工程团队</h1>
+
+    <p class="hero-sub">
+      在 Claude Code 的 Python 重构版之上，新增 <strong class="text-accent">编排器 · SOP 编译器</strong> 等上游未提供的能力层。
+      让你的 AI 工程师 7×24 自驱：自己接 issue、自己写代码、自己跑测试、自己开 PR、自己改 review 意见。
+    </p>
+
+    <!-- One-Click Install -->
+    <div class="install-block" id="install">
+      <div class="install-tabs">
+        <button class="install-tab" aria-selected="true" data-platform="unix">macOS · Linux · WSL</button>
+        <button class="install-tab" aria-selected="false" data-platform="win">PowerShell</button>
+        <button class="install-tab" aria-selected="false" data-platform="src">从源码</button>
+      </div>
+      <div class="install-cmd" data-platform="unix">
+        <code>curl -fsSL https://raw.githubusercontent.com/peroxider/clawcodex/main/install.sh | bash</code>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent); this.textContent='已复制 ✓'; setTimeout(()=>this.textContent='复制', 1200)">复制</button>
+      </div>
+      <div class="install-cmd" data-platform="win" hidden>
+        <code>powershell -NoProfile -ExecutionPolicy Bypass -Command "iwr https://raw.githubusercontent.com/peroxider/clawcodex/main/install.ps1 -UseBasicParsing -OutFile $env:TEMP\cc.ps1; & $env:TEMP\cc.ps1"</code>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent); this.textContent='已复制 ✓'; setTimeout(()=>this.textContent='复制', 1200)">复制</button>
+      </div>
+      <div class="install-cmd" data-platform="src" hidden>
+        <code>git clone https://gitcode.com/chadwweng/clawcodex.git && cd clawcodex && uv venv && uv pip install -e ".[all]"</code>
+        <button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent); this.textContent='已复制 ✓'; setTimeout(()=>this.textContent='复制', 1200)">复制</button>
+      </div>
+      <div class="install-sub">
+        试试 <code>bash install.sh doctor</code> 预检环境 · <code>bash install.sh --dry-run</code> 模拟安装 · <code>clawcodex-dev --version</code> 验证 · 镜像源 <a href="https://gitcode.com/chadwweng/clawcodex" style="color:var(--accent)">gitcode.com</a>
+      </div>
+    </div>
+
+    <!-- Hero Screenshot -->
+    <div class="hero-shot">
+      <div class="hero-shot-bar">
+        <span class="hero-shot-dot"></span>
+        <span class="hero-shot-dot"></span>
+        <span class="hero-shot-dot"></span>
+        <span class="hero-shot-url">$ clawcodex-dev orchestrator issue tail --id AGENTSDK-15</span>
+      </div>
+      <img src="../clawcodex-screenshot-1.png" alt="clawcodex orchestrator issue tail" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
+      <div class="hero-shot-placeholder" style="display:none;">[产品截图 — assets/clawcodex-screenshot-1.png]</div>
+    </div>
+
+    <!-- Hero Metrics -->
+    <div class="hero-metrics">
+      <div>
+        <div class="metric-val">4</div>
+        <div class="metric-label">支持的 issue 跟踪器<br>GitHub · Gitee · GitCode · Linear</div>
+      </div>
+      <div>
+        <div class="metric-val">100+</div>
+        <div class="metric-label">LLM 后端（LiteLLM 路由）<br>Bedrock · Vertex · Azure · OpenAI · ...</div>
+      </div>
+      <div>
+        <div class="metric-val">3 层</div>
+        <div class="metric-label">解耦架构<br>upstream · capabilities · downstream</div>
+      </div>
+      <div>
+        <div class="metric-val">3 行</div>
+        <div class="metric-label">启动一个自主工程流水线<br>start · list · tail</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== HERO 2 PILLARS =========================== -->
+<section id="orchestrator" class="reveal" style="padding-top: 64px;">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">两个不可替代的核心能力</div>
+      <h2 class="section-title">让 agent 不再只是聊天框</h2>
+      <p class="section-sub">大多数 code agent 的边界是"交互式 IDE 助手"——你提需求，它给代码。下述两个能力是 clawcodex 真正的护城河。</p>
+    </div>
+
+    <div class="pillar-grid">
+      <!-- Pillar 1: Orchestrator -->
+      <article class="pillar">
+        <div class="pillar-num">01 / 编排器</div>
+        <h3>自主 issue → PR 流水线</h3>
+        <p>长跑守护进程轮询 issue 跟踪器，复制 workspace，让 agent 接手写代码，跑测试，提交，推送，开 PR——全流程无人值守。每一步可暂停、可接管、可注入提示。</p>
+        <ul class="pillar-bullets">
+          <li>4 个跟踪器适配器（GitHub / Gitee / GitCode / Linear）</li>
+          <li>状态机：pending / running / synced / completed / failed / abandoned</li>
+          <li>LiveView HTTP/SSE 仪表盘，浏览器直接看 agent 在干啥</li>
+          <li>Takeover：暂停 agent 启动 REPL 人工接管，完事再切回</li>
+          <li>PR 评审自动修复：review 评论 + CI 失败自动迭代同分支</li>
+          <li>提交前测试门禁：pre-commit / pre-push 跑 pytest 不过不发 PR</li>
+          <li>重跑标签机制：issue 加 <code class="mono">agent:retry</code> 标签自动重跑</li>
+        </ul>
+      </article>
+
+      <!-- Pillar 2: SOP Compiler -->
+      <article class="pillar" id="sop">
+        <div class="pillar-num">02 / SOP 编译器</div>
+        <h3>把工程流程编译成多 agent 团队</h3>
+        <p>把你写的 <code class="mono">workflow.md</code> 流程规范，编译成一组可协同的 agent：每个角色一个 agent 定义 + 一个入口 skill + 一张编排图。agent 之间 SendMessage 通信，崩溃后能恢复。</p>
+        <ul class="pillar-bullets">
+          <li>SDK 解析器 + skill 分组器 + agent 构建器 + Jinja 模板</li>
+          <li>输出：agent 定义 · 入口 skill · 编排图（可读、可执行、可观测）</li>
+          <li>Worker 间通过 task-notification XML 路由互相通信</li>
+          <li>轻量级协调器工具集：Read / WebSearch / WebFetch + Agent / SendMessage / TaskStop</li>
+          <li>示例：<code class="mono">clawcodex-dev sop convert examples/sop/order_processing.md --out ./.clawcodex</code></li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== 6 FEATURE CARDS =========================== -->
+<section class="reveal">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">四个同样独特的能力</div>
+      <h2 class="section-title">再补四块拼图，工程团队就齐了</h2>
+      <p class="section-sub">在编排器 + SOP 编译器之外，还有四个让 clawcodex 真正能"7×24 跑起来"的能力。</p>
+    </div>
+
+    <div class="feature-grid">
+      <!-- 1. PR Review Auto-Fix + Verification Gate -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 4l3 3 5-5M2 10l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h4>自动化工程闭环</h4>
+        <p>PR 评审自动修复 + 提交前测试门禁。Reviewer 提评论、CI 报错，agent 自动读反馈、迭代修复、加测试、重跑门禁，反复直到过线。</p>
+      </article>
+
+      <!-- 2. LiteLLM 100+ LLM -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" stroke="currentColor" stroke-width="1.2"/>
+          </svg>
+        </div>
+        <h4>LiteLLM · 100+ LLM 后端</h4>
+        <p><code class="mono">--provider litellm</code> 一行切到任何模型：Bedrock · Vertex · Azure · OpenAI · Together · Anyscale……统一接口、跨 provider 块转换。</p>
+      </article>
+
+      <!-- 3. Cron + IM Gateway -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 4v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h4>分布式 Cron + IM 网关</h4>
+        <p>文件锁 + 抖动调度的 Cron 防重跑；统一 IM 网关接 WeChat / 飞书 / Slack / Discord，REPL 和 Orchestrator 都能挂上去。</p>
+      </article>
+
+      <!-- 4. Decoupled Architecture -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="3" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="2" y="10" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 6v4" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <h4>三层解耦架构</h4>
+        <p>upstream 源码快照 + capabilities 协议 + clawcodex_ext 下游补丁层。跟上游同步零摩擦，扩展不污染上游。</p>
+      </article>
+
+      <!-- 5. /provider /model runtime -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 8h12M10 5l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h4>运行时切换模型</h4>
+        <p>REPL / TUI 内 <code class="mono">/provider litellm</code> · <code class="mono">/model gpt-4o</code> 即时切。ModelRegistry 热替换，不停会话。</p>
+      </article>
+
+      <!-- 6. 13-state Clarification Queue -->
+      <article class="feature">
+        <div class="feature-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 4h10v6H7l-3 2v-2H3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h4>13 态澄清队列</h4>
+        <p>agent 卡住不会干等。3 通道（交互 / 文件 / @提及）求解，13 种状态机走完整，issue 不堵塞也不丢失。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== ARCHITECTURE =========================== -->
+<section id="architecture" class="reveal">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">架构总览</div>
+      <h2 class="section-title">三层解耦，扩展不污染上游</h2>
+      <p class="section-sub">src/ 是 upstream 的源码快照（不修改），extensions/capabilities/ 定义层间协议，clawcodex_ext/ + extensions/ 都是下游扩展。同步上游只动 src/，你写的扩展全在扩展层。</p>
+    </div>
+
+    <div class="arch-block">
+      <svg class="arch-diagram" viewBox="0 0 1080 430" xmlns="http://www.w3.org/2000/svg">
+        <!-- Layer 0: Upstream -->
+        <rect x="40" y="30" width="1000" height="70" rx="8" fill="#16171C" stroke="rgba(255,255,255,0.06)"/>
+        <text x="60" y="58" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">LAYER 0 · UPSTREAM</text>
+        <text x="60" y="82" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">src/  —  Claude Code Python 重构版</text>
+        <text x="380" y="82" fill="#6B7280" font-family="JetBrains Mono" font-size="11">query() · tool_system · providers · TUI · REPL · MCP · hooks · memory</text>
+
+        <!-- Layer 1: Capabilities -->
+        <rect x="40" y="120" width="1000" height="70" rx="8" fill="#1E1F25" stroke="rgba(94,106,210,0.3)"/>
+        <text x="60" y="148" fill="#5E6AD2" font-family="JetBrains Mono" font-size="11">LAYER 1 · CAPABILITIES（协议层）</text>
+        <text x="60" y="172" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">extensions/capabilities/  —  Protocol 接口定义（无实现）</text>
+        <text x="540" y="172" fill="#6B7280" font-family="JetBrains Mono" font-size="11">Tool · Tracker · Workspace · ProgressSink</text>
+
+        <!-- Layer 2A: Downstream patches -->
+        <rect x="40" y="210" width="490" height="70" rx="8" fill="#1E1F25" stroke="rgba(255,255,255,0.12)"/>
+        <text x="60" y="238" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">LAYER 2A · DOWNSTREAM PATCHES</text>
+        <text x="60" y="262" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">clawcodex_ext/  —  猴补丁 + 注册中心</text>
+
+        <!-- Layer 2B: Extensions -->
+        <rect x="550" y="210" width="490" height="70" rx="8" fill="#1E1F25" stroke="rgba(94,106,210,0.4)"/>
+        <text x="570" y="238" fill="#5E6AD2" font-family="JetBrains Mono" font-size="11">LAYER 2B · EXTENSIONS（独立子系统）</text>
+        <text x="570" y="262" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">extensions/  —  5 个独立子系统</text>
+
+        <!-- Product chips (under extensions/ layer) -->
+        <g font-family="JetBrains Mono" font-size="10.5">
+          <rect x="550" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
+          <text x="596" y="310" fill="#F7F8F8" text-anchor="middle">orchestrator</text>
+          <rect x="650" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
+          <text x="696" y="310" fill="#F7F8F8" text-anchor="middle">sop_converter</text>
+          <rect x="750" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
+          <text x="796" y="310" fill="#F7F8F8" text-anchor="middle">im_gateway</text>
+          <rect x="850" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
+          <text x="896" y="310" fill="#F7F8F8" text-anchor="middle">visualizer</text>
+          <rect x="950" y="295" width="90" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
+          <text x="995" y="310" fill="#F7F8F8" text-anchor="middle">remote_api</text>
+        </g>
+
+        <!-- Arrows -->
+        <line x1="540" y1="190" x2="540" y2="210" stroke="rgba(94,106,210,0.4)" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="285" y1="280" x2="285" y2="350" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <line x1="795" y1="317" x2="795" y2="350" stroke="rgba(94,106,210,0.4)" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Consumers -->
+        <rect x="40" y="350" width="1000" height="50" rx="8" fill="#26272E" stroke="rgba(255,255,255,0.06)"/>
+        <text x="60" y="372" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">用户面</text>
+        <text x="60" y="390" fill="#F7F8F8" font-family="Inter" font-size="13">CLI（clawcodex-dev） · REPL · TUI · Headless · MCP · Bridge · Remote API</text>
+
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="rgba(94,106,210,0.6)"/>
+          </marker>
+        </defs>
+      </svg>
+      <div class="arch-caption">extensions/ 下装的具体子系统：orchestrator · sop_converter · im_gateway · visualizer · remote_api</div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================== FOOTER =========================== -->
+<footer>
+  <div class="container footer-inner">
+    <div class="footer-meta">
+      © 2026 ClawCodex · MIT 开源 · 基于 Claude Code Python 重构版
+    </div>
+    <div class="footer-links">
+      <a href="https://gitcode.com/chadwweng/clawcodex">GitCode →</a>
+      <a href="#install">安装</a>
+      <a href="#orchestrator">编排器</a>
+      <a href="#sop">SOP 编译器</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // install tabs
+  document.querySelectorAll('.install-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const platform = tab.dataset.platform;
+      document.querySelectorAll('.install-tab').forEach(t => t.setAttribute('aria-selected', t === tab ? 'true' : 'false'));
+      document.querySelectorAll('.install-cmd').forEach(c => c.hidden = c.dataset.platform !== platform);
+    });
+  });
+
+  // scroll-in reveal
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        revealObserver.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
+
+  document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+</script>
+
+</body>
+</html>

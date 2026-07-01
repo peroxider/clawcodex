@@ -735,6 +735,12 @@ class ClawcodexREPL:
         # in the status bar. Accumulated from text chunks during streaming;
         # reset when actual usage data arrives from the API.
         self._streaming_output_chars: int = 0
+        # Smoothly-animated display value chasing _streaming_output_chars,
+        # updated on each toolbar frame (80ms). Mirrors the upstream TS
+        # SpinnerAnimationRow token counter: increments by 3/15%/50 per
+        # frame depending on gap size, so the user sees smooth growth
+        # rather than jumpy steps.
+        self._displayed_streaming_chars: int = 0
         self._direct_abort_controller: AbortController | None = None
         self._im_active_cancel: Callable[[], None] | None = None
         # IM-driven permission wait state. Populated only while
@@ -1108,13 +1114,25 @@ class ClawcodexREPL:
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
             cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
-            # Real-time output token estimate during streaming: when the
-            # engine is actively generating text, tack on a live estimate
-            # based on character count (~4 chars per token) so the user
-            # sees the output growing in near-real-time rather than only
-            # after each full API round-trip. Hidden when not streaming
-            # (zero chars) to keep the toolbar clean.
-            live_out = self._streaming_output_chars
+            # Smooth animation: chase _streaming_output_chars with a
+            # per-frame increment proportional to the gap (mirrors upstream
+            # SpinnerAnimationRow.tsx:148-166). This prevents the token
+            # count from jumping on every text_delta while still catching
+            # up quickly when streaming accelerates.
+            target = getattr(self, "_streaming_output_chars", 0)
+            displayed = getattr(self, "_displayed_streaming_chars", 0)
+            gap = target - displayed
+            if gap > 0:
+                if gap < 70:
+                    increment = 3
+                elif gap < 200:
+                    increment = max(8, int(gap * 0.15))
+                else:
+                    increment = 50
+                self._displayed_streaming_chars = min(displayed + increment, target)
+            else:
+                self._displayed_streaming_chars = target  # snap to zero instantly
+            live_out = getattr(self, "_displayed_streaming_chars", 0)
             if live_out > 0:
                 live_estimate = max(live_out // 4, 1)
                 out_display = f"{self._stats_output_tokens} + ~{live_estimate}"
@@ -1144,12 +1162,16 @@ class ClawcodexREPL:
         Used for queued submissions (typed during agent work via
         :class:`LiveStatus`) and any other path that needs to surface a
         user-authored message into scrollback.
+
+        Uses ``prompt_fg`` (terminal default foreground) for the ``❯``
+        prefix so queued messages match the visual style of normal input
+        typed directly in the prompt buffer.
         """
 
         try:
-            color = self._repl_palette.primary
+            color = self._repl_palette.prompt_fg
         except Exception:
-            color = "#8ab4f8"
+            color = ""
         from rich.text import Text
 
         body = text.replace("\n", "\n  ")
@@ -2907,6 +2929,7 @@ class ClawcodexREPL:
         """
         self._thinking_chunks.clear()
         self._streaming_output_chars = 0
+        self._displayed_streaming_chars = 0
 
     @property
     def _p(self) -> "REPLPalette":
