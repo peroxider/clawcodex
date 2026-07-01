@@ -827,6 +827,14 @@ class Orchestrator:
                 if not await self._dependencies_satisfied(issue):
                     continue
                 self._state.claimed.add(issue.id)
+                # Thread-local MDC for the orchestrator launch path —
+                # the agent_runner will refill with run_id once available.
+                from ..logging_setup import set_log_context
+
+                set_log_context(
+                    issue_id=str(issue.id or ""),
+                    issue_identifier=str(getattr(issue, "identifier", "")),
+                )
                 await self._launch_issue(issue)
                 if issue.id in self._state.running:
                     launched_this_poll += 1

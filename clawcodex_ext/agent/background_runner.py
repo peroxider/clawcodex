@@ -404,10 +404,9 @@ if __name__ == "__main__":
     parser.add_argument("--max-turns", type=int, default=20, help="Max agent turns")
     args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [bg-runner] %(levelname)s %(message)s",
-    )
+    from extensions.orchestrator.logging_setup import configure_orchestrator_logging
+
+    configure_orchestrator_logging(level=logging.INFO)
 
     # Reconstruct session + provider + tool context from saved state
     from clawcodex_ext.agent.session import Session as AgentSession

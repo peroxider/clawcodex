@@ -815,6 +815,15 @@ class AgentRunner:
                 delay_env,
             )
 
+        # Thread-local MDC: inject context so every subsequent log
+        # record from this thread carries issue_id / run_id automatically.
+        from ..logging_setup import set_log_context
+
+        set_log_context(
+            issue_id=str(issue.id),
+            run_id=str(session.run_id or ""),
+            issue_identifier=str(issue.identifier),
+        )
         logger.info(
             "Starting agent run issue_id=%s identifier=%s workspace=%s",
             issue.id,
@@ -2226,6 +2235,11 @@ class AgentRunner:
                 last_tool=session.last_tool_name,
             )
         finally:
+            # Clear MDC context so stale issue_id/run_id don't leak
+            # into subsequent runs on the same thread.
+            from ..logging_setup import clear_log_context
+
+            clear_log_context()
             # F-49 Phase 0.4.5: write .json snapshot on every exit path
             # (normal, early return, exception).  Best-effort; errors
             # are logged inside _save_json_snapshot().

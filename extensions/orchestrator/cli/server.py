@@ -954,19 +954,17 @@ def _run_orchestrator(
 
     # The orchestrator daemon is a long-running process whose INFO logs
     # (poll ticks, issue lifecycle, retries) are its primary diagnostic
-    # surface. dispatch.run_cli configures the root logger at ERROR by
-    # default (and installs a handler), so basicConfig here is a no-op
-    # and INFO would stay suppressed. Force the root level to INFO
-    # explicitly — but never raise it above DEBUG: CLAWCODEX_DEBUG=1
-    # (set in run_cli) is more verbose and takes precedence.
-    logging.basicConfig(
+    # surface. Use the centralized logging setup for consistent format,
+    # timezone-aware timestamps, MDC context injection, and optional
+    # JSON output for log aggregators.
+    _ws_root = getattr(config.workspace, 'root', '') or ''
+    _json_log = str(Path(_ws_root) / '.reports' / 'orchestrator.ndjson') if _ws_root else None
+    from ..logging_setup import configure_orchestrator_logging
+
+    configure_orchestrator_logging(
         level=logging.INFO,
-        format='%(asctime)s %(levelname)s %(name)s %(message)s',
-        stream=sys.stderr,
+        json_path=_json_log,
     )
-    _root = logging.getLogger()
-    if _root.level > logging.DEBUG:
-        _root.setLevel(logging.INFO)
 
     # Build repo slug for the startup banner
     _tracker_kind = getattr(config.tracker, 'kind', '?')
