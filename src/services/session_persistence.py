@@ -83,6 +83,17 @@ class SessionPersister:
                 if self._storage is None:
                     return
                 self._storage.flush()
+                try:
+                    from clawcodex_ext.session_intelligence.queue import enqueue_summary_job
+
+                    transcript = self._storage.session_dir / "transcript.jsonl"
+                    enqueue_summary_job(
+                        str(self._storage.session_id),
+                        cwd=str(Path.cwd()),
+                        transcript_mtime=transcript.stat().st_mtime if transcript.exists() else 0.0,
+                    )
+                except Exception:
+                    pass
         except Exception as exc:
             self._warn(exc)
 

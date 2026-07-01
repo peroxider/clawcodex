@@ -37,7 +37,12 @@ from textual.widgets import Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ..commands import CommandSuggestion
-from ..messages import CancelRequested, PermissionModeCycleRequested, PromptPasted
+from ..messages import (
+    CancelRequested,
+    PermissionModeCycleRequested,
+    PromptDraftChanged,
+    PromptPasted,
+)
 from ..paste import PasteInfo, classify_paste
 from ..vim import VimState
 from .prompt_input_footer import PromptInputFooter
@@ -520,6 +525,7 @@ class PromptInput(Vertical):
 
     # ---- input events ----
     def on_input_changed(self, event: Input.Changed) -> None:
+        self.post_message(PromptDraftChanged(text=event.value or ""))
         # When the user is navigating the in-session history with
         # Up/Down, :meth:`_navigate_history` programmatically sets the
         # input value to a previous prompt. Because Textual fires

@@ -23,11 +23,14 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING
-
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.registration import register_away_summary_commands
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+from clawcodex_ext.intent_forecast.controller import IntentForecastController
+from clawcodex_ext.intent_forecast.messages import format_forecast_for_display
+from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
 from clawcodex_ext.runtime.observer import RuntimeObserver, attach_observer
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -266,6 +269,8 @@ def install_repl_extensions(repl: 'ClawcodexREPL', ctx) -> None:
     if getattr(repl, 'command_registry', None) is not None:
         register_runtime_commands(repl.command_registry)
         register_away_summary_commands(repl.command_registry)
+        register_intent_forecast_commands(repl.command_registry)
+        register_intent_forecast_commands(None)
         update_commands = getattr(
             repl,
             '_update_built_in_commands_with_command_system',
@@ -275,6 +280,7 @@ def install_repl_extensions(repl: 'ClawcodexREPL', ctx) -> None:
             update_commands()
 
     _install_away_summary_controller(repl)
+    _install_intent_forecast_controller(repl)
     _install_goal_controller(repl)
     _install_gateway_client(repl, ctx)
 
@@ -430,6 +436,56 @@ def _install_away_summary_controller(repl: 'ClawcodexREPL') -> None:
         session_getter=lambda: getattr(repl, 'session', None),
         display=_display,
     )
+
+
+def _install_intent_forecast_controller(repl: 'ClawcodexREPL') -> None:
+    old = getattr(repl, '_intent_forecast_controller', None)
+    if old is not None:
+        try:
+            old.close()
+        except Exception:
+            pass
+
+    session = getattr(repl, 'session', None)
+    conversation = getattr(session, 'conversation', None)
+    if conversation is None:
+        return
+
+    workspace_root = getattr(repl, 'workspace_root', None)
+    if workspace_root is None:
+        tool_context = getattr(repl, 'tool_context', None)
+        workspace_root = (
+            getattr(tool_context, 'workspace_root', None)
+            or getattr(tool_context, 'cwd', None)
+            or '.'
+        )
+
+    def _display(result) -> None:
+        text = format_forecast_for_display(result)
+        print_text = getattr(repl, '_print_local_command_text', None)
+        if callable(print_text):
+            print_text(text, command='forecast')
+            return
+        console = getattr(repl, 'console', None)
+        if console is not None:
+            console.print(text)
+
+    def _submit(prompt: str) -> None:
+        chat = getattr(repl, 'chat', None)
+        if callable(chat):
+            chat(prompt)
+
+    repl._intent_forecast_controller = IntentForecastController(
+        provider_getter=lambda: getattr(repl, 'provider', None),
+        model_getter=lambda: getattr(getattr(repl, 'provider', None), 'model', None),
+        session_getter=lambda: getattr(repl, 'session', None),
+        workspace_root=Path(workspace_root),
+        display=_display,
+        submit=_submit,
+        conversation_getter=lambda: getattr(getattr(repl, 'session', None), 'conversation', None),
+    )
+    if getattr(repl, 'command_context', None) is not None:
+        repl.command_context.intent_forecast_controller = repl._intent_forecast_controller
 
 
 def _install_goal_controller(repl: 'ClawcodexREPL') -> None:

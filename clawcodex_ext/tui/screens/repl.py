@@ -73,6 +73,7 @@ from ..messages import (
     PermissionModeCycleRequested,
     PermissionRequested,
     PermissionResolved,
+    PromptDraftChanged,
     StateChanged,
     ThinkingChunk,
     ToolEventMessage,
@@ -302,6 +303,12 @@ class REPLScreen(Screen):
         ## _log(f'[repl.py] calling submit_to_agent: {text}')
         app.submit_to_agent(text)
 
+    def on_prompt_draft_changed(self, message: PromptDraftChanged) -> None:
+        app: "ClawCodexTUI" = self.app  # type: ignore[assignment]
+        forecast = getattr(app, "_intent_forecast_controller", None)
+        if forecast is not None:
+            forecast.on_prompt_draft_changed(message.text)
+
     # ---- queued-prompt drain ----
     def on_queued_prompt_ready(self, _: QueuedPromptReady) -> None:
         """Drain one queued prompt when the bridge becomes idle.
@@ -331,6 +338,9 @@ class REPLScreen(Screen):
         controller = getattr(app, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
+        forecast = getattr(app, "_intent_forecast_controller", None)
+        if forecast is not None:
+            forecast.on_run_start()
 
     def on_assistant_chunk(self, message: AssistantChunk) -> None:
         ## _log(f'[repl.py] on_assistant_chunk: {message.text[:50] if message.text else "empty"}...')
@@ -370,6 +380,9 @@ class REPLScreen(Screen):
         controller = getattr(app, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_finish()
+        forecast = getattr(app, "_intent_forecast_controller", None)
+        if forecast is not None:
+            forecast.on_run_finish()
         if message.error:
             self.transcript.append_system(f"error: {message.error}", style="error")
             if hasattr(app, "announcer"):

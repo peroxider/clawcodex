@@ -1,0 +1,1 @@
+"""Session intelligence sidecar helpers."""

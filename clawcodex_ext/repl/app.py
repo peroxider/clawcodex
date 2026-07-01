@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     pass
 
 from rich.console import Console as RichConsole
+from rich.markdown import Markdown
 
 
 class ClawCodexExtREPL(ClawcodexREPL):
@@ -316,6 +317,13 @@ class ClawCodexExtREPL(ClawcodexREPL):
         # via the _init_command_system override below; we call it here
         # to match upstream ordering.
         self._init_command_system()
+        self._install_intent_forecast_controller()
+        try:
+            from clawcodex_ext.session_intelligence.queue import start_summary_queue_worker
+
+            start_summary_queue_worker()
+        except Exception:
+            pass
 
         # ---- Prompt toolkit (from upstream __init__ lines 529-713) ----
         from pathlib import Path as _Path
@@ -489,9 +497,12 @@ class ClawCodexExtREPL(ClawcodexREPL):
         register_runtime_commands(self.command_registry)  # instance registry (autocomplete)
         register_runtime_commands(None)  # global registry (execute_command_sync lookup)
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
+        from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
 
         register_away_summary_commands(self.command_registry)
         register_away_summary_commands(None)
+        register_intent_forecast_commands(self.command_registry)
+        register_intent_forecast_commands(None)
 
         try:
             from extensions.skills_ext import init_skills_ext
@@ -512,6 +523,12 @@ class ClawCodexExtREPL(ClawcodexREPL):
             tool_registry=self.tool_registry,
             tool_context=self.tool_context,
             runtime_context=self.runtime_context,
+        )
+        self.command_context.session = self.session
+        self.command_context.intent_forecast_controller = getattr(
+            self,
+            "_intent_forecast_controller",
+            None,
         )
 
         self._update_built_in_commands_with_command_system()
@@ -618,6 +635,9 @@ class ClawCodexExtREPL(ClawcodexREPL):
         controller = getattr(self, "_away_summary_controller", None)
         if controller is not None:
             controller.on_run_start()
+        forecast = getattr(self, "_intent_forecast_controller", None)
+        if forecast is not None:
+            forecast.on_run_start()
         # F-9: also start the ``/goal`` controller so it knows a new
         # assistant turn is about to begin. Auto-continuation is
         # driven from ``on_assistant_turn_complete`` in the
@@ -634,6 +654,11 @@ class ClawCodexExtREPL(ClawcodexREPL):
             if controller is not None:
                 controller.on_run_finish()
                 controller.on_assistant_turn_complete()
+            if forecast is not None:
+                try:
+                    forecast.on_run_finish()
+                except Exception:
+                    pass
             if goal_controller is not None:
                 try:
                     goal_controller.on_run_finish()
@@ -646,3 +671,43 @@ class ClawCodexExtREPL(ClawcodexREPL):
                     im_reply.on_assistant_turn_complete()
                 except Exception:
                     pass
+
+    def _install_intent_forecast_controller(self) -> None:
+        try:
+            from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
+            from clawcodex_ext.intent_forecast.controller import IntentForecastController
+            from clawcodex_ext.intent_forecast.messages import format_forecast_for_display
+        except Exception:
+            self._intent_forecast_controller = None
+            return
+
+        old = getattr(self, "_intent_forecast_controller", None)
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
+
+        def _display(result) -> None:
+            try:
+                self.console.print()
+                self.console.print(Markdown(format_forecast_for_display(result)))
+            except Exception:
+                pass
+
+        self._intent_forecast_controller = IntentForecastController(
+            provider_getter=lambda: self.provider,
+            model_getter=lambda: getattr(self.provider, "model", None),
+            session_getter=lambda: self.session,
+            workspace_root=Path(self.workspace_root),
+            display=_display,
+            submit=lambda prompt: self.chat(prompt),
+            config_loader=lambda: load_intent_forecast_config(cwd=self.workspace_root),
+            conversation_getter=lambda: self.session.conversation,
+        )
+        try:
+            self._intent_forecast_controller.on_mount()
+            if getattr(self, "command_context", None) is not None:
+                self.command_context.intent_forecast_controller = self._intent_forecast_controller
+        except Exception:
+            pass

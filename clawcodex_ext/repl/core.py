@@ -1722,9 +1722,14 @@ class ClawcodexREPL:
             from clawcodex_ext.away_summary.registration import (
                 register_away_summary_commands,
             )
+            from clawcodex_ext.intent_forecast.registration import (
+                register_intent_forecast_commands,
+            )
 
             register_away_summary_commands(None)
             register_away_summary_commands(self.command_registry)
+            register_intent_forecast_commands(None)
+            register_intent_forecast_commands(self.command_registry)
         except Exception:
             pass
 
@@ -2748,9 +2753,32 @@ class ClawcodexREPL:
                     return
 
         watch_task = asyncio.ensure_future(_watch_outbox())
+        buffer_changed_handler = None
+        default_buffer = None
         try:
+            controller = getattr(self, "_intent_forecast_controller", None)
+            default_buffer = getattr(getattr(self.prompt_session, "app", None), "default_buffer", None)
+            if controller is not None and default_buffer is not None:
+                def _on_text_changed(_sender) -> None:
+                    try:
+                        controller.on_prompt_draft_changed(
+                            str(getattr(default_buffer, "text", "") or "")
+                        )
+                    except Exception:
+                        pass
+
+                buffer_changed_handler = _on_text_changed
+                try:
+                    default_buffer.on_text_changed += buffer_changed_handler
+                except Exception:
+                    buffer_changed_handler = None
             return await self.prompt_session.prompt_async('❯ ')
         finally:
+            if buffer_changed_handler is not None and default_buffer is not None:
+                try:
+                    default_buffer.on_text_changed -= buffer_changed_handler
+                except Exception:
+                    pass
             watch_task.cancel()
             try:
                 await watch_task
@@ -3759,10 +3787,16 @@ class ClawcodexREPL:
                     continue
 
                 if user_input.startswith('/'):
+                    controller = getattr(self, "_intent_forecast_controller", None)
+                    if controller is not None:
+                        controller.on_user_interaction("slash")
                     self.handle_command(user_input)
                     continue
 
                 if user_input.startswith('!'):
+                    controller = getattr(self, "_intent_forecast_controller", None)
+                    if controller is not None:
+                        controller.on_user_interaction("bash")
                     # Bash mode: direct execution, no agent turn.
                     # Feeds the bash input + output into the conversation
                     # (so the model sees what happened on its next turn).

@@ -39,6 +39,13 @@ from src.tool_system.registry import ToolRegistry
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.config import load_away_summary_config
 from clawcodex_ext.away_summary.messages import format_away_summary_for_display
+from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
+from clawcodex_ext.intent_forecast.controller import IntentForecastController
+from clawcodex_ext.intent_forecast.messages import (
+    ForecastResult,
+    format_forecast_for_display,
+)
+from clawcodex_ext.intent_forecast.service import IntentForecastService
 from clawcodex_ext.permissions.runtime import RuntimePermissionController
 
 from .a11y import Announcer, describe_status
@@ -62,6 +69,7 @@ from .screens.cost_threshold import CostThresholdScreen
 from .screens.diff_dialog import DiffDialogScreen, FileDiff
 from .screens.effort_picker import EffortPickerScreen
 from .screens.exit_flow import ExitFlowScreen
+from .screens.forecast_picker import ForecastPickerScreen
 from .screens.history_search import HistoryEntry, HistorySearchScreen
 from .screens.idle_return import IdleReturnScreen
 from .screens.mcp_dialogs import McpListScreen, McpServer
@@ -166,6 +174,7 @@ class ClawCodexTUI(App):
         self._repl_screen: REPLScreen | None = None
         self._command_context: Any | None = None
         self._away_summary_controller: AwaySummaryController | None = None
+        self._intent_forecast_controller: IntentForecastController | None = None
         # Transcript renderables captured at exit time so entry points
         # can dump them back to the main terminal scrollback after the
         # alt-screen tears down. Mirrors the TS ink behaviour where the
@@ -235,6 +244,7 @@ class ClawCodexTUI(App):
         if self.tool_context is not None:
             self.tool_context.default_permission_handler = self._agent_bridge._permission_handler
         self._install_away_summary_controller()
+        self._install_intent_forecast_controller()
         self._resume_browse = resume_browse
         # Double-press exit guard: Ctrl+C first press clears draft /
         # arms exit; second press within 0.8s actually quits.
@@ -282,12 +292,20 @@ class ClawCodexTUI(App):
             initial_history=self._initial_history,
         )
         self.push_screen(self._repl_screen)
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.on_mount()
 
         # Replay conversation history from a resumed session so the
         # transcript widget shows the prior context immediately. Defer
         # until after the first refresh so REPLScreen has mounted its
         # TranscriptView before rows are appended.
         self._schedule_replay_history_MARKER()
+        try:
+            from clawcodex_ext.session_intelligence.queue import start_summary_queue_worker
+
+            start_summary_queue_worker()
+        except Exception:
+            pass
 
         # Terminal chrome: set a descriptive title, enable DEC 1004
         # focus reporting, and mark the tab idle. The app-state
@@ -310,6 +328,8 @@ class ClawCodexTUI(App):
     def on_unmount(self) -> None:
         if self._away_summary_controller is not None:
             self._away_summary_controller.close()
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.close()
         # Best-effort cleanup so we don't leave stale chrome on the host.
         try:
             self._state_unsub()  # type: ignore[attr-defined]
@@ -332,6 +352,7 @@ class ClawCodexTUI(App):
             self.session.save()
         except Exception:
             pass
+        self._enqueue_summary_sidecar_job()
 
     # ---- exit / snapshot ----------------------------------------------
     def _capture_exit_snapshot(self) -> None:
@@ -365,11 +386,14 @@ class ClawCodexTUI(App):
         self._capture_exit_snapshot()
         if self._away_summary_controller is not None:
             self._away_summary_controller.close()
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.close()
         # Save session state so it can be resumed later.
         try:
             self.session.save()
         except Exception:
             pass
+        self._enqueue_summary_sidecar_job()
         return super().exit(result, return_code=return_code, message=message)
 
     def _on_state_change(self) -> None:
@@ -705,6 +729,8 @@ class ClawCodexTUI(App):
             self._show_resume_browser()
         elif name == "permission":
             self._open_permission_mode_picker(transcript)
+        elif name == "forecast":
+            self._open_forecast_picker(transcript)
         else:
             transcript.append_system(f"Dialog '{name}' not available.", style="muted")
 
@@ -882,6 +908,46 @@ class ClawCodexTUI(App):
                 on_select=_on_selected,
             ),
         )
+
+    def _open_forecast_picker(self, transcript: Transcript) -> None:
+        controller = self._intent_forecast_controller
+        result = controller.last_result if controller is not None else None
+        if result is None or not result.generated or not result.suggestions:
+            try:
+                service = IntentForecastService(
+                    conversation=self.session.conversation,
+                    provider=self.provider,
+                    model=self.model,
+                    workspace_root=self.workspace_root,
+                    config=load_intent_forecast_config(cwd=self.workspace_root),
+                )
+                result = service.generate(trigger="manual", force=True)
+            except Exception as exc:
+                transcript.append_system(f"Forecast failed: {exc}", style="error")
+                return
+        if result is None or not result.generated or not result.suggestions:
+            transcript.append_system(
+                result.reason if result is not None else "Forecast has no suggestions right now.",
+                style="muted",
+            )
+            return
+        if controller is not None:
+            controller.remember(result)
+
+        def _on_selected(selection: str | None) -> None:
+            self._restore_prompt_focus()
+            if selection is None:
+                if controller is not None:
+                    controller.dismiss()
+                transcript.append_system("Forecast dismissed.", style="muted")
+                return
+            if controller is not None and controller.accept(selection):
+                transcript.append_system("Forecast accepted.", style="muted")
+                return
+            transcript.append_system("Forecast selection is no longer available.", style="muted")
+
+        self.announcer.announce("Forecast suggestions open.", notify=False)
+        self.push_screen(ForecastPickerScreen(result), callback=_on_selected)
 
     # ---- Phase 3 dialogs ----
     def _open_diff_dialog(self, transcript: Transcript) -> None:
@@ -1133,6 +1199,7 @@ class ClawCodexTUI(App):
                 runtime_context=self.runtime_context,
             )
             self._command_context.session = self.session
+            self._command_context.intent_forecast_controller = self._intent_forecast_controller
         except Exception:
             self._command_context = None
         return self._command_context
@@ -1142,6 +1209,8 @@ class ClawCodexTUI(App):
         ## _log(f'[app.py] submit_to_agent called: {prompt}')
         if self._away_summary_controller is not None:
             self._away_summary_controller.on_user_interaction("submit")
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.on_user_interaction("submit")
         # Track last user input in session metadata for the session browser.
         self._update_metadata_last_input(prompt)
         try:
@@ -1162,6 +1231,8 @@ class ClawCodexTUI(App):
 
         if self._away_summary_controller is not None:
             self._away_summary_controller.on_user_interaction("cancel")
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.on_user_interaction("cancel")
         if self._agent_bridge.cancel():
             self.announcer.announce("Cancelling…", level="assertive", notify=False)
 
@@ -1215,6 +1286,23 @@ class ClawCodexTUI(App):
         except Exception:
             pass
 
+    def _enqueue_summary_sidecar_job(self) -> None:
+        try:
+            from src.services.session_storage import SESSIONS_DIR
+            from clawcodex_ext.session_intelligence.queue import enqueue_summary_job
+
+            sid = str(getattr(self.session, "session_id", "") or "")
+            if not sid:
+                return
+            transcript = SESSIONS_DIR / sid / "transcript.jsonl"
+            enqueue_summary_job(
+                sid,
+                cwd=self.workspace_root,
+                transcript_mtime=transcript.stat().st_mtime if transcript.exists() else 0.0,
+            )
+        except Exception:
+            pass
+
     def _show_resume_browser(self) -> None:
         """Push the ResumeConversation modal so the user can pick a session."""
         screen = ResumeConversation()
@@ -1233,6 +1321,7 @@ class ClawCodexTUI(App):
             self.session = resumed
             self._agent_bridge._session = resumed
             self._install_away_summary_controller()
+            self._install_intent_forecast_controller()
             if tail is not None:
                 self._agent_bridge._tail_follower = tail
                 self._agent_bridge._start_tail_follower()
@@ -1283,6 +1372,37 @@ class ClawCodexTUI(App):
             display=_display,
             config_loader=lambda: load_away_summary_config(cwd=self.workspace_root),
         )
+
+    def _install_intent_forecast_controller(self) -> None:
+        if self._intent_forecast_controller is not None:
+            self._intent_forecast_controller.close()
+
+        def _display(result: ForecastResult) -> None:
+            def _append() -> None:
+                if self._repl_screen is not None:
+                    self._repl_screen.transcript.append_system(
+                        format_forecast_for_display(result),
+                        style="light",
+                        render="markdown",
+                    )
+
+            try:
+                self.call_from_thread(_append)
+            except RuntimeError:
+                _append()
+
+        self._intent_forecast_controller = IntentForecastController(
+            provider_getter=lambda: self.provider,
+            model_getter=lambda: self.model,
+            session_getter=lambda: self.session,
+            workspace_root=self.workspace_root,
+            display=_display,
+            submit=self.submit_to_agent,
+            config_loader=lambda: load_intent_forecast_config(cwd=self.workspace_root),
+            conversation_getter=lambda: self.session.conversation,
+        )
+        if self._command_context is not None:
+            self._command_context.intent_forecast_controller = self._intent_forecast_controller
 
     def _schedule_replay_history_MARKER(self) -> None:
         if self._repl_screen is None:

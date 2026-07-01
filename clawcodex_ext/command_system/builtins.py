@@ -1603,8 +1603,10 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         reg.register(cmd)
     try:
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
+        from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
 
         register_away_summary_commands(reg)
+        register_intent_forecast_commands(reg)
     except Exception:
         pass
 

@@ -167,6 +167,7 @@ def build_command_suggestions(
         from src.command_system.registry import CommandRegistry, get_command_registry
 
         from clawcodex_ext.away_summary.registration import register_away_summary_commands
+        from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
         from clawcodex_ext.cli.runtime_commands import register_runtime_commands
 
         # Use a fresh private registry so we don't clobber the global
@@ -178,11 +179,12 @@ def build_command_suggestions(
         for cmd in get_builtin_commands():
             private_reg.register(cmd)
         register_away_summary_commands(private_reg)
+        register_intent_forecast_commands(private_reg)
         register_runtime_commands(private_reg)
         for cmd in private_reg.list_commands(include_disabled=True):
             if getattr(cmd, "is_hidden", False):
                 continue
-            if cmd.name != "recap" and not cmd.is_enabled():
+            if cmd.name not in {"recap", "forecast"} and not cmd.is_enabled():
                 continue
             aliases = tuple(getattr(cmd, "aliases", []) or [])
             tag = "workflow" if getattr(cmd, "kind", None) == "workflow" else None
@@ -328,6 +330,11 @@ def dispatch_local_command(
         return CommandDispatchResult(handled=True, open_dialog="resume")
     if name == "/permission":
         return CommandDispatchResult(handled=True, open_dialog="permission")
+    if name == "/forecast":
+        parts = raw.split(maxsplit=1)
+        action = parts[1].strip().lower() if len(parts) > 1 else ""
+        if action in ("", "run"):
+            return CommandDispatchResult(handled=True, open_dialog="forecast")
 
     return CommandDispatchResult(handled=False)
 
@@ -366,7 +373,7 @@ async def dispatch_registry_command(
         return CommandDispatchResult(
             handled=True,
             system_text=result.text or "",
-            system_render="markdown" if name == "recap" else "plain",
+            system_render="markdown" if name in {"recap", "forecast"} else "plain",
         )
 
     if result.result_type == "prompt":

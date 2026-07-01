@@ -177,6 +177,12 @@ class CommandEngine:
 
             if local_result.type == "skip":
                 return CommandResult.skip(command.name)
+            if local_result.type == "prompt":
+                return CommandResult.success_prompt(
+                    command.name,
+                    [{"type": "text", "text": local_result.value}],
+                    should_query=True,
+                )
 
             display_text = local_result.display_text or local_result.value
             if local_result.type == "compact":

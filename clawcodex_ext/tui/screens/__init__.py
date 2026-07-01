@@ -16,6 +16,7 @@ _NAME_TO_MODULE = {
     "DiffDialogScreen": "diff_dialog",
     "FileDiff": "diff_dialog",
     "EffortPickerScreen": "effort_picker",
+    "ForecastPickerScreen": "forecast_picker",
     "GenericInputScreen": "generic_input",
     "GenericSelectScreen": "generic_select",
     "ExitFlowScreen": "exit_flow",

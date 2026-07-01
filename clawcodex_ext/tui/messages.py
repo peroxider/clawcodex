@@ -319,3 +319,14 @@ class PromptPasted(Message):
     """
 
     info: PasteInfo
+
+
+@dataclass
+class PromptDraftChanged(Message):
+    """The prompt draft changed.
+
+    Used by Intent Forecast to cancel stale idle predictions as soon as the
+    user starts typing, while allowing an empty draft to re-arm the idle timer.
+    """
+
+    text: str

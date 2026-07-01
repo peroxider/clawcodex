@@ -108,6 +108,16 @@ class AwaySummaryService:
                         getattr(self.session, "session_id", ""),
                         trigger,
                     )
+                try:
+                    from clawcodex_ext.session_intelligence.summarizer import (
+                        update_summary_from_away_summary,
+                    )
+
+                    sid = str(getattr(self.session, "session_id", "") or "")
+                    if sid:
+                        update_summary_from_away_summary(session_id=sid, recap=summary)
+                except Exception:
+                    logger.debug("Away Summary sidecar update failed", exc_info=True)
 
         return AwaySummaryResult(
             generated=True,
