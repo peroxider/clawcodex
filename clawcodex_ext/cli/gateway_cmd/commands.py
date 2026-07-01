@@ -1,10 +1,20 @@
-"""``clawcodex-dev gateway`` subcommand — manage the Gateway daemon.
+"""``clawcodex-dev gateway`` subcommand — manage the Gateway daemon and IM channels.
+
+Flattened single-level verbs. Disambiguation: a verb followed by a
+positional channel name is a channel operation; a verb alone (with only
+optional flags) is a daemon operation.
 
 Usage:
-  clawcodex-dev gateway server status          Show daemon status
-  clawcodex-dev gateway server start           Start the daemon
-  clawcodex-dev gateway server stop            Stop the daemon
-  clawcodex-dev gateway server restart         Restart the daemon
+  clawcodex-dev gateway start [--state-dir X] [-v|--verbose]
+  clawcodex-dev gateway stop [--state-dir X]
+  clawcodex-dev gateway restart [--state-dir X] [-v|--verbose]
+  clawcodex-dev gateway status [--state-dir X]
+      Bare status: daemon health + all-channels overview (unified view).
+  clawcodex-dev gateway status <name>         Channel health/status
+  clawcodex-dev gateway restart <name>        Rebuild a channel adapter
+  clawcodex-dev gateway disconnect <name>     Remove REPL/orchestrator connection
+  clawcodex-dev gateway login <name>          WeChat iLink QR login
+  clawcodex-dev gateway setup                 Guided channel configuration wizard
 
 All commands are idempotent. v1 runs POSIX UDS only; acceptance is
 limited to POSIX/WSL/Git Bash.
@@ -17,68 +27,121 @@ import sys
 from clawcodex_ext.cli.subcommand_registry import register
 
 _USAGE = (
-    "usage: clawcodex-dev gateway server {start|stop|status|restart} [-v|--verbose]\n\n"
-    "Manage the IM Message Gateway daemon.\n"
-    "  server status    Show whether the daemon is running.\n"
-    "  server start     Start the daemon (idempotent).\n"
-    "  server stop      Stop the daemon (idempotent).\n"
-    "  server restart   Stop then start.\n"
-    "  -v, --verbose    Enable INFO-level IM logging (default: ERROR/quiet).\n"
-    "                   Also set via CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG.\n"
+    'usage: clawcodex-dev gateway {start|stop|status|restart|setup|disconnect|login} [options]\n'
+    '       clawcodex-dev gateway {status|restart|disconnect|login} <name>\n\n'
+    'Manage the IM Message Gateway daemon and channel configuration.\n'
+    '  start            Start the daemon (idempotent; --state-dir, -v/--verbose).\n'
+    '  stop             Stop the daemon (idempotent; --state-dir).\n'
+    '  restart          Restart the daemon (no positional).\n'
+    '  restart <name>   Rebuild a channel adapter and reload its config.\n'
+    '  status           Daemon health + all-channels overview (unified view).\n'
+    '  status <name>    Show channel health/status.\n'
+    '  setup            Guided channel configuration wizard.\n'
+    '  disconnect <name> Remove the active REPL/orchestrator connection.\n'
+    '  login <name>     WeChat iLink QR login.\n'
+    '  --state-dir PATH  Override gateway state directory.\n'
+    '  -v, --verbose     Enable DEBUG-level IM logging (default: only WARNING and above).\n'
+    '                    Also set via CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG.\n'
 )
 
 
-@register("gateway")
+@register('gateway')
 def run_gateway_command(args: list[str]) -> int:
     from extensions.im_gateway.server import DaemonPaths, GatewayDaemon
 
-    if not args or args[0] in ("help", "--help", "-h"):
+    if not args or args[0] in ('help', '--help', '-h'):
         print(_USAGE)
         return 0
 
-    if args[0] != "server":
-        print(f"error: unknown gateway subcommand {args[0]!r}", file=sys.stderr)
-        print(_USAGE, file=sys.stderr)
-        return 2
-
-    rest = args[1:]
-    if not rest:
-        print(_USAGE)
-        return 0
-
-    # Optional --state-dir / --verbose flags.
-    state_dir = None
+    # Parse global flags: --state-dir <path> and -v/--verbose.
+    state_dir: str | None = None
     verbose = False
-    verb_args: list[str] = []
+    positional: list[str] = []
     i = 0
-    while i < len(rest):
-        if rest[i] == "--state-dir" and i + 1 < len(rest):
-            state_dir = rest[i + 1]
+    while i < len(args):
+        if args[i] == '--state-dir' and i + 1 < len(args):
+            state_dir = args[i + 1]
             i += 2
             continue
-        if rest[i] in ("-v", "--verbose"):
+        if args[i] in ('-v', '--verbose'):
             verbose = True
             i += 1
             continue
-        verb_args.append(rest[i])
+        positional.append(args[i])
         i += 1
 
-    if not verb_args:
+    if not positional:
         print(_USAGE)
         return 0
-    verb = verb_args[0]
+
+    verb = positional[0]
+    rest = positional[1:]
+
+    # -- channel operations (verb + positional name) ------------------------
+
+    if verb == 'status' and rest:
+        from clawcodex_ext.cli.channels_cmd.commands import format_status
+
+        print(format_status(None, rest[0], state_dir=state_dir))
+        return 0
+
+    if verb == 'restart' and rest:
+        from clawcodex_ext.cli.channels_cmd.commands import restart_channel
+
+        return restart_channel(rest[0], state_dir=state_dir)
+
+    if verb in ('disconnect', 'unbind'):
+        if not rest:
+            print(f'error: gateway {verb} <name>', file=sys.stderr)
+            return 2
+        from clawcodex_ext.cli.channels_cmd.commands import _disconnect_gateway_connection
+
+        return _disconnect_gateway_connection(rest[0], state_dir=state_dir)
+
+    if verb == 'login':
+        if not rest:
+            print('error: gateway login <wechat-name>', file=sys.stderr)
+            return 2
+        from clawcodex_ext.cli.channels_cmd.commands import wechat_login
+
+        return wechat_login(rest[0], state_dir=state_dir)
+
+    # -- daemon / setup operations (verb alone) -----------------------------
+
     paths = DaemonPaths.for_state_dir(state_dir)
     daemon = GatewayDaemon(paths)
-    if verb == "status":
-        return daemon.status()
-    if verb == "start":
+
+    if verb == 'status':
+        # Unified view: daemon status line + all channels.
+        daemon.status()
+        from clawcodex_ext.cli.channels_cmd.commands import format_status
+
+        print(format_status(None, None, state_dir=state_dir))
+        return 0
+
+    if verb == 'start':
+        if rest:
+            print('error: start takes no channel name', file=sys.stderr)
+            return 2
         return daemon.start(verbose=verbose)
-    if verb == "stop":
+
+    if verb == 'stop':
+        if rest:
+            print('error: stop takes no channel name', file=sys.stderr)
+            return 2
         return daemon.stop()
-    if verb == "restart":
+
+    if verb == 'restart':
         return daemon.restart(verbose=verbose)
-    print(f"error: unknown server verb {verb!r}", file=sys.stderr)
+
+    if verb == 'setup':
+        from clawcodex_ext.cli.channels_cmd.commands import run_wizard
+
+        return run_wizard(None)
+
+    print(f'error: unknown gateway subcommand {verb!r}', file=sys.stderr)
+    print(_USAGE, file=sys.stderr)
     return 2
 
 
-__all__ = ["run_gateway_command"]
+__all__ = ['run_gateway_command']

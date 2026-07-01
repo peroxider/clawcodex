@@ -308,10 +308,10 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 **快速开始：**
 
 ```bash
-clawcodex-dev gateway server start|stop|status|restart # IM 消息网关生命周期控制
-clawcodex-dev channels # IM 消息网关快速配置
-clawcodex-dev channels restart wechat # 重启 WeChat IM 渠道
-clawcodex-dev channels status wechat # 查看 WeChat 登录健康状态和 REPL/orchestrator 连接状态
+clawcodex-dev gateway start|stop|status|restart # IM 消息网关生命周期控制
+clawcodex-dev gateway setup # IM 消息网关快速配置
+clawcodex-dev gateway restart wechat # 重启 WeChat IM 渠道
+clawcodex-dev gateway status wechat # 查看 WeChat 登录健康状态和 REPL/orchestrator 连接状态
 ```
 
 gateway 守护进程运行且 WeChat 登录后，可把一个 REPL 或 orchestrator 会话接入唯一的 WeChat 渠道。任何人给 bot 发 direct/private 私信都可以驱动 agent，回复会回流到实际发送者。
@@ -320,21 +320,21 @@ gateway 守护进程运行且 WeChat 登录后，可把一个 REPL 或 orchestra
 
 ```bash
 # REPL：恢复已有会话；没有历史会话时省略 --resume 即新建。
-clawcodex-dev --resume <session-id> --im-gateway
+clawcodex-dev --resume <session-id> --gateway
 # orchestrator：接入后可通过 WeChat 下发 /pause AGENTSDK-15 等控制命令。
-clawcodex-dev orchestrator server start --workflow path/to/workflow.md --im-gateway
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
 ```
 
-`--im-gateway` 会绑定唯一 `wechat` 渠道下的所有 WeChat direct/private 发送者。同一时间只有一个运行域能拥有 WeChat 渠道：启动 REPL 绑定会断开 orchestrator 绑定，启动 orchestrator 绑定也会断开 REPL 绑定。`CLAWCODEX_IM_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
+`--gateway` 会绑定唯一 `wechat` 渠道下的所有 WeChat direct/private 发送者。同一时间只有一个运行域能拥有 WeChat 渠道：启动 REPL 绑定会断开 orchestrator 绑定，启动 orchestrator 绑定也会断开 REPL 绑定。`CLAWCODEX_GATEWAY_SOCK` 可覆盖 daemon socket；特定 origin 绑定仅保留给定向调试或未来多 origin 自动化。
 
 网关支持向 REPL/orchestrator 下发控制命令，例如 `/stop` 可停止当前任务。
 
 排查现场链路时，用 INFO 日志重启 daemon 并跟踪 gateway 日志：
 
 ```bash
-clawcodex-dev gateway server restart --verbose
-clawcodex-dev gateway server status
-tail -f ~/.clawcodex/im-gateway/gateway.log
+clawcodex-dev gateway restart --verbose
+clawcodex-dev gateway status
+tail -f ~/.clawcodex/gateway/gateway.log
 ```
 
 ---

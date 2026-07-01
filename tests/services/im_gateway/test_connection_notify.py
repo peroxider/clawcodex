@@ -297,6 +297,32 @@ async def test_notify_failed_send_result_is_not_logged_as_sent(tmp_path, caplog)
 
 
 @pytest.mark.asyncio
+async def test_notify_enqueued_send_result_is_not_logged_as_sent(tmp_path, caplog) -> None:
+    """A deferred notification is accepted for later delivery, not delivered."""
+    gw, adapter = _gateway_with_wechat(tmp_path)
+
+    async def _enqueued_send(message, *, target=None, context_token=None):
+        adapter.sends.append((message, target))
+        return ChannelSendResult.enqueued(
+            'wechat',
+            message='deferred due to rate limit',
+            raw={'retry_after_seconds': 10},
+        )
+
+    adapter.send = _enqueued_send
+    caplog.set_level(logging.INFO, logger='clawcodex_ext.services.im_gateway.gateway')
+
+    gw.binding.bind(
+        'wechat:direct:*:*',
+        SessionTarget(session_id='orch-1', host_type='orchestrator'),
+    )
+    await asyncio.sleep(0.05)
+
+    assert 'connection notify: enqueued' in caplog.text
+    assert "connection notify: sent 'clawcodex-orchestrator宸茶繛鎺?" not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_notify_concrete_origin(tmp_path) -> None:
     """Concrete origin wechat:direct:{account}:{user} resolves and sends."""
     gw, adapter = _gateway_with_wechat(tmp_path)

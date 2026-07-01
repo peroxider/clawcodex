@@ -28,6 +28,13 @@ from .origin_utils import (
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_TIMEOUT_SECONDS = 60.0
+# The IPC client waits this long for an ACK to each OUTBOUND frame before
+# declaring "OUTBOUND timed out" (see ipc_client._send). A gateway.send that
+# takes longer than this still completes server-side and logs success, but the
+# client has already given up — so any send slower than this threshold is
+# logged at WARNING (not INFO) to keep gateway.log reconcilable with the
+# client-side timeout. Mirrors the hardcoded 5.0s in ipc_client._send.
+IPC_CLIENT_ACK_TIMEOUT_SECONDS = 5.0
 
 
 class GatewayIpcServer:
@@ -56,6 +63,7 @@ class GatewayIpcServer:
         self._server = await asyncio.start_unix_server(
             self._handle_client, path=str(self.socket_path)
         )
+        logger.info('gateway ipc server listening: %s', self.socket_path)
 
     async def close(self) -> None:
         if self._server is not None:
@@ -72,6 +80,7 @@ class GatewayIpcServer:
         self._writer_locks.clear()
         with __import__('contextlib').suppress(FileNotFoundError):
             self.socket_path.unlink()
+        logger.info('gateway ipc server closed')
 
     @property
     def connected_count(self) -> int:
@@ -230,8 +239,8 @@ class GatewayIpcServer:
             async with lock:
                 writer.write(frame.encode())
                 await writer.drain()
-        except (ConnectionError, RuntimeError):
-            pass
+        except (ConnectionError, RuntimeError) as exc:
+            logger.debug('gateway ipc: writer send failed: %s', exc)
 
     async def _dispatch(
         self, frame: GatewayFrame, peer_session: str | None, writer: asyncio.StreamWriter
@@ -260,6 +269,7 @@ class GatewayIpcServer:
             return GatewayFrame.ack(
                 delivery_id=frame.message_id, layer='accepted', message='unregistered'
             )
+        logger.debug('gateway ipc: ignored frame type=%s', frame.type)
         return None
 
     async def _disconnect_conflicting_peers(self, origin: str, session_id: str) -> None:
@@ -319,6 +329,10 @@ class GatewayIpcServer:
         try:
             ack = await self.gateway.receive(inbound)
         except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                'gateway ipc: deliver handler error delivery_id=%s',
+                (frame.delivery_id or frame.message_id)[:16],
+            )
             return GatewayFrame.nack(
                 delivery_id=frame.delivery_id or frame.message_id, reason=f'deliver error: {exc}'
             )
@@ -350,34 +364,73 @@ class GatewayIpcServer:
         try:
             from .models import OutboundMessage
 
+            send_started = time.monotonic()
             result = await self.gateway.send(
                 OutboundMessage(text=text, channel=channel, target=target, markdown=False)
             )
+            send_elapsed = time.monotonic() - send_started
         except Exception as exc:  # noqa: BLE001
             logger.exception('gateway ipc: OUTBOUND send failed origin=%s', origin[:24])
             return GatewayFrame.nack(delivery_id=frame.message_id, reason=f'send error: {exc}')
+        # A send slower than the client's ACK timeout means the client has
+        # already logged "OUTBOUND timed out" and moved on — the ACK we are
+        # about to return will be dropped. Surface this at WARNING so the
+        # gateway log reconciles with the client-side timeout instead of
+        # silently showing an INFO success line.
+        client_timed_out = send_elapsed > IPC_CLIENT_ACK_TIMEOUT_SECONDS
         if result is not None and getattr(result, 'ok', True) is False:
             error_category = getattr(result, 'error_category', '')
             category_value = getattr(error_category, 'value', '') or str(error_category or '')
             message = getattr(result, 'message', None) or category_value or 'send failed'
             logger.warning(
-                'gateway ipc: OUTBOUND send rejected origin=%s channel=%s category=%s attempts=%s message=%s',
+                'gateway ipc: OUTBOUND send rejected origin=%s channel=%s category=%s attempts=%s '
+                'elapsed=%.1fs message=%s',
                 origin[:24],
                 channel,
                 category_value,
                 getattr(result, 'attempts', None),
+                send_elapsed,
                 message,
             )
             return GatewayFrame.nack(
                 delivery_id=frame.message_id,
                 reason=f'send failed: {message}',
             )
-        logger.info(
-            'gateway ipc: OUTBOUND → send origin=%s channel=%s len=%d',
-            origin[:24],
-            channel,
-            len(text),
-        )
+        status = getattr(result, 'status', None)
+        status_value = getattr(status, 'value', '') or str(status or '')
+        if status_value == 'enqueued':
+            message = getattr(result, 'message', None) or 'enqueued'
+            logger.info(
+                'gateway ipc: OUTBOUND enqueued origin=%s channel=%s len=%d elapsed=%.1fs message=%s',
+                origin[:24],
+                channel,
+                len(text),
+                send_elapsed,
+                message,
+            )
+            return GatewayFrame.ack(
+                delivery_id=frame.message_id,
+                layer='enqueued',
+                message=message,
+            )
+        if client_timed_out:
+            logger.warning(
+                'gateway ipc: OUTBOUND send slow origin=%s channel=%s len=%d elapsed=%.1fs '
+                '(client ACK timeout %.0fs likely exceeded; client may have logged timed out)',
+                origin[:24],
+                channel,
+                len(text),
+                send_elapsed,
+                IPC_CLIENT_ACK_TIMEOUT_SECONDS,
+            )
+        else:
+            logger.info(
+                'gateway ipc: OUTBOUND → send origin=%s channel=%s len=%d elapsed=%.1fs',
+                origin[:24],
+                channel,
+                len(text),
+                send_elapsed,
+            )
         return GatewayFrame.ack(delivery_id=frame.message_id, layer='processed', message='sent')
 
     async def _handle_event(self, frame: GatewayFrame) -> GatewayFrame | None:

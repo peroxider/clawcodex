@@ -279,38 +279,43 @@ def test_emitter_explicit_emit_reaches_sink():
     assert received[0].event_type == 'clarification.notify_emitted'
 
 
-def test_emitter_storm_suppression_dedupes_warn():
+def test_emitter_does_not_suppress_repeated_warn_events():
     received = []
-    clock = [1000.0]
-    em = OrchestratorEventEmitter(
-        'I1', sinks=[received.append], storm_window_seconds=60, clock=lambda: clock[0]
-    )
+    em = OrchestratorEventEmitter('I1', sinks=[received.append])
     ev = OrchestratorEvent('agent.stagnation', 'I1', EventLevel.WARN, 'stuck')
     em.emit(ev)
-    clock[0] = 1010.0  # within window
     em.emit(ev)
-    assert len(received) == 1  # suppressed
-    clock[0] = 1070.0  # beyond window
-    em.emit(ev)
-    assert len(received) == 2
+
+    assert [event.event_type for event in received] == ['agent.stagnation', 'agent.stagnation']
 
 
-def test_emitter_info_buffered_and_flushed():
+def test_emitter_info_events_are_dispatched_immediately():
     received = []
-    em = OrchestratorEventEmitter('I1', sinks=[received.append], storm_window_seconds=60)
+    em = OrchestratorEventEmitter('I1', sinks=[received.append])
     ev = OrchestratorEvent('intent.followup', 'I1', EventLevel.INFO, 'q')
     em.emit(ev)
     em.emit(ev)
-    assert received == []  # buffered, not dispatched yet
+
+    assert [event.event_type for event in received] == ['intent.followup', 'intent.followup']
     em.flush('I1')
-    assert len(received) == 1  # one aggregated summary
-    assert received[0].event_type == 'info.summary'
-    assert received[0].payload['count'] == 2
+    assert [event.event_type for event in received] == ['intent.followup', 'intent.followup']
+
+
+@pytest.mark.asyncio
+async def test_emitter_info_events_do_not_auto_aggregate():
+    received = []
+    em = OrchestratorEventEmitter('I1', sinks=[received.append])
+
+    em.emit(OrchestratorEvent('intent.followup', 'I1', EventLevel.INFO, 'q'))
+    em.emit(OrchestratorEvent('intent.hint', 'I1', EventLevel.INFO, 'h'))
+    await asyncio.sleep(0.03)
+
+    assert [event.event_type for event in received] == ['intent.followup', 'intent.hint']
 
 
 def test_emitter_immediate_info_events_are_not_buffered():
     received = []
-    em = OrchestratorEventEmitter('I1', sinks=[received.append], storm_window_seconds=60)
+    em = OrchestratorEventEmitter('I1', sinks=[received.append])
 
     em.emit(OrchestratorEvent('issue.started', 'I1', EventLevel.INFO, 'started'))
 
@@ -456,7 +461,7 @@ def test_run_orchestrator_starts_im_heartbeat_inside_runtime_loop(monkeypatch, t
     )
     monkeypatch.setattr(
         server_mod,
-        '_mount_im_gateway_opt_in',
+        '_mount_gateway_opt_in',
         lambda _subsystem, _config, **_kwargs: _FakeImWrapper(),
     )
 
@@ -475,9 +480,9 @@ def test_orchestrator_connect_gateway_reports_not_started(monkeypatch, capsys) -
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        im_gateway=False,
-        im_gateway_origin='wechat:direct:default:user',
-        im_gateway_sock=None,
+        gateway=False,
+        gateway_origin='wechat:direct:default:user',
+        gateway_sock=None,
     )
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, None))
 
@@ -489,15 +494,15 @@ def test_orchestrator_connect_gateway_reports_not_started(monkeypatch, capsys) -
 
 
 def test_orchestrator_connect_gateway_all_private_reports_not_started(monkeypatch, capsys) -> None:
-    """--im-gateway checks the daemon without asking for account/user origin details."""
+    """--gateway checks the daemon without asking for account/user origin details."""
     from extensions.orchestrator.cli import server as server_mod
 
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        im_gateway=True,
-        im_gateway_origin=None,
-        im_gateway_sock=None,
+        gateway=True,
+        gateway_origin=None,
+        gateway_sock=None,
     )
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, None))
 
@@ -515,9 +520,9 @@ def test_orchestrator_connect_gateway_does_not_fake_hot_attach(monkeypatch, caps
     args = SimpleNamespace(
         workspace=None,
         workflow=None,
-        im_gateway=False,
-        im_gateway_origin='wechat:direct:default:user',
-        im_gateway_sock='/tmp/gateway.sock',
+        gateway=False,
+        gateway_origin='wechat:direct:default:user',
+        gateway_sock='/tmp/gateway.sock',
     )
     meta = {'pid': 12345, 'workspace_root': '/repo'}
     monkeypatch.setattr(server_mod, '_find_metadata', lambda _args: (None, meta))
@@ -530,7 +535,7 @@ def test_orchestrator_connect_gateway_does_not_fake_hot_attach(monkeypatch, caps
     assert '不支持对已运行 orchestrator 动态注入 IM gateway' in captured.err
 
 
-def test_mount_im_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
+def test_mount_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
     """Startup opt-in can bind all WeChat private messages without origin details."""
     from extensions.orchestrator.cli import server as server_mod
 
@@ -570,7 +575,7 @@ def test_mount_im_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,
@@ -582,7 +587,7 @@ def test_mount_im_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
     assert created['origin'] == 'wechat:direct:*:*'
 
 
-def test_mount_im_gateway_uses_reconnect_register(monkeypatch) -> None:
+def test_mount_gateway_uses_reconnect_register(monkeypatch) -> None:
     """Startup opt-in must use the reconnect/register path, not a one-shot connect."""
     from extensions.orchestrator.cli import server as server_mod
 
@@ -623,7 +628,7 @@ def test_mount_im_gateway_uses_reconnect_register(monkeypatch) -> None:
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,
@@ -644,7 +649,7 @@ def test_mount_im_gateway_uses_reconnect_register(monkeypatch) -> None:
     assert calls[0][1] == 'wechat:direct:*:*'
 
 
-def test_mount_im_gateway_retries_initial_register_failure(monkeypatch) -> None:
+def test_mount_gateway_retries_initial_register_failure(monkeypatch) -> None:
     """Initial gateway unavailability should not permanently disable IM."""
     from extensions.orchestrator.cli import server as server_mod
 
@@ -693,7 +698,7 @@ def test_mount_im_gateway_retries_initial_register_failure(monkeypatch) -> None:
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,
@@ -707,7 +712,7 @@ def test_mount_im_gateway_retries_initial_register_failure(monkeypatch) -> None:
     assert calls == ['wechat:direct:*:*', 'wechat:direct:*:*']
 
 
-def test_mount_im_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) -> None:
+def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) -> None:
     """Heartbeat timeouts/NACKs should rebuild the gateway registration."""
     from extensions.orchestrator.cli import server as server_mod
 
@@ -759,7 +764,7 @@ def test_mount_im_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch)
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,
@@ -773,7 +778,7 @@ def test_mount_im_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch)
     assert reconnect_calls == ['wechat:direct:*:*', 'wechat:direct:*:*']
 
 
-def test_mount_im_gateway_flushes_pending_outbound_after_register(monkeypatch) -> None:
+def test_mount_gateway_flushes_pending_outbound_after_register(monkeypatch) -> None:
     """A successful register should flush queued events (e.g. the startup
     notification emitted before the socket was open). No reply-origin
     backfill is involved — the orchestrator reuses the wildcard OUTBOUND
@@ -819,7 +824,7 @@ def test_mount_im_gateway_flushes_pending_outbound_after_register(monkeypatch) -
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,
@@ -833,7 +838,7 @@ def test_mount_im_gateway_flushes_pending_outbound_after_register(monkeypatch) -
     assert calls == ['flush']
 
 
-def test_mount_im_gateway_flushes_pending_outbound_after_accepted_heartbeat(monkeypatch) -> None:
+def test_mount_gateway_flushes_pending_outbound_after_accepted_heartbeat(monkeypatch) -> None:
     """Accepted heartbeats should retry queued outbound events without inbound traffic."""
     from extensions.orchestrator.cli import server as server_mod
 
@@ -880,7 +885,7 @@ def test_mount_im_gateway_flushes_pending_outbound_after_accepted_heartbeat(monk
 
     subsystem = SimpleNamespace(_orchestrator=None, run=_run)
     config = SimpleNamespace(workspace=SimpleNamespace(root='/repo'))
-    wrapper = server_mod._mount_im_gateway_opt_in(
+    wrapper = server_mod._mount_gateway_opt_in(
         subsystem,
         config,
         enabled=True,

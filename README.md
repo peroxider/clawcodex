@@ -308,10 +308,10 @@ A unified IM entry point that funnels WeChat (personal / Weixin iLink) bidirecti
 **Quick start:**
 
 ```bash
-clawcodex-dev gateway server start|stop|status|restart # IM gateway lifecycle control
-clawcodex-dev channels # IM gateway quick setup
-clawcodex-dev channels restart wechat # restart WeChat IM channel
-clawcodex-dev channels status wechat # show WeChat login health and REPL/orchestrator connection status
+clawcodex-dev gateway start|stop|status|restart # IM gateway lifecycle control
+clawcodex-dev gateway setup # IM gateway quick setup
+clawcodex-dev gateway restart wechat # restart WeChat IM channel
+clawcodex-dev gateway status wechat # show WeChat login health and REPL/orchestrator connection status
 ```
 
 With the gateway daemon running and WeChat logged in, you can opt a REPL or orchestrator session into the single WeChat channel. Any direct/private message sent to the bot can drive the agent, and replies flow back to the actual sender.
@@ -320,21 +320,21 @@ With the gateway daemon running and WeChat logged in, you can opt a REPL or orch
 
 ```bash
 # REPL: resume an existing session or omit --resume to start a new one.
-clawcodex-dev --resume <session-id> --im-gateway
+clawcodex-dev --resume <session-id> --gateway
 # orchestrator: once connected, WeChat can send /pause AGENTSDK-15 and other control commands.
-clawcodex-dev orchestrator server start --workflow path/to/workflow.md --im-gateway
+clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
 ```
 
-`--im-gateway` binds all WeChat direct/private senders for the single configured `wechat` channel. Only one runtime can own the WeChat channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. `CLAWCODEX_IM_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+`--gateway` binds all WeChat direct/private senders for the single configured `wechat` channel. Only one runtime can own the WeChat channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
 
 The gateway supports sending control commands to REPL/orchestrator, such as `/stop` to stop the current task.
 
 For live diagnosis, restart the daemon with INFO logging and tail the gateway log:
 
 ```bash
-clawcodex-dev gateway server restart --verbose
-clawcodex-dev gateway server status
-tail -f ~/.clawcodex/im-gateway/gateway.log
+clawcodex-dev gateway restart --verbose
+clawcodex-dev gateway status
+tail -f ~/.clawcodex/gateway/gateway.log
 ```
 
 ---

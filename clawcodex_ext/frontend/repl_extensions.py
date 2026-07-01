@@ -40,17 +40,17 @@ _log = logging.getLogger(__name__)
 # ``Enable {setting} and allow`` form is matched by prefix/suffix so any
 # setting name is covered. Unknown descs pass through unchanged.
 _DESC_ZH = {
-    "Yes, allow this action": "是，允许此操作",
-    "No, deny this action": "否，拒绝此操作",
+    'Yes, allow this action': '是，允许此操作',
+    'No, deny this action': '否，拒绝此操作',
 }
 
 
 def _zh_option_desc(desc: str) -> str:
     if desc in _DESC_ZH:
         return _DESC_ZH[desc]
-    if desc.startswith("Enable ") and desc.endswith(" and allow"):
-        setting = desc[len("Enable ") : -len(" and allow")]
-        return f"启用 {setting} 并允许"
+    if desc.startswith('Enable ') and desc.endswith(' and allow'):
+        setting = desc[len('Enable ') : -len(' and allow')]
+        return f'启用 {setting} 并允许'
     return desc
 
 
@@ -80,7 +80,7 @@ class _ImReplyController:
     def on_assistant_turn_complete(self) -> None:
         import asyncio
 
-        text_fn = getattr(self._repl, "_get_last_assistant_text", None)
+        text_fn = getattr(self._repl, '_get_last_assistant_text', None)
         if not callable(text_fn):
             return
         try:
@@ -94,13 +94,13 @@ class _ImReplyController:
         # ReplGatewayClient records each inbound IM origin; pop_reply_origin
         # returns None for keyboard-initiated turns so we don't spam the
         # WeChat user with every assistant reply typed at the REPL prompt.
-        pop_origin = getattr(self._client, "pop_reply_origin", None)
+        pop_origin = getattr(self._client, 'pop_reply_origin', None)
         if not callable(pop_origin):
             return
         im_origin = pop_origin()
         if not im_origin:
             return  # keyboard-driven turn — no IM reply to send
-        loop = getattr(self._repl, "_cron_loop", None)
+        loop = getattr(self._repl, '_cron_loop', None)
         if loop is None:
             return
         client = self._client._client  # GatewayIpcClient
@@ -111,9 +111,9 @@ class _ImReplyController:
             asyncio.run_coroutine_threadsafe(
                 client.send_outbound(origin=im_origin, text=text), loop
             )
-            _log.info("repl IM reply sent: origin=%s len=%d", im_origin[:24], len(text))
+            _log.info('repl IM reply sent: origin=%s len=%d', im_origin[:24], len(text))
         except Exception:  # noqa: BLE001
-            _log.warning("repl IM reply send failed", exc_info=True)
+            _log.warning('repl IM reply send failed', exc_info=True)
 
     def send_permission_prompt(
         self,
@@ -129,7 +129,7 @@ class _ImReplyController:
         reply with a choice (IM-driven permission wait): the footer invites
         a reply instead of directing the user back to the REPL.
         """
-        peek_origin = getattr(self._client, "peek_reply_origin", None)
+        peek_origin = getattr(self._client, 'peek_reply_origin', None)
         if not callable(peek_origin):
             return False
         im_origin = peek_origin()
@@ -152,26 +152,26 @@ class _ImReplyController:
         # option descriptions are English (and the message may say "Claude"),
         # so translate the wrapper + option descriptions and rebrand Claude
         # → ClawCodex here only (the REPL console keeps its own rendering).
-        msg = str(message).strip().replace("Claude", "ClawCodex")
-        if msg.startswith("ClawCodex wants to use ") and msg.endswith(". Allow?"):
-            tool = msg[len("ClawCodex wants to use ") : -len(". Allow?")]
-            msg = f"ClawCodex 想使用 {tool}，是否允许？"
-        lines = ["需要权限", "", msg]
+        msg = str(message).strip().replace('Claude', 'ClawCodex')
+        if msg.startswith('ClawCodex wants to use ') and msg.endswith('. Allow?'):
+            tool = msg[len('ClawCodex wants to use ') : -len('. Allow?')]
+            msg = f'ClawCodex 想使用 {tool}，是否允许？'
+        lines = ['需要权限', '', msg]
         if suggestion:
-            lines.extend(["", f"建议：{suggestion}"])
-        lines.extend(["", "选项："])
+            lines.extend(['', f'建议：{suggestion}'])
+        lines.extend(['', '选项：'])
         for idx, (key, desc) in enumerate(options, start=1):
-            lines.append(f"{idx}. [{key}] {_zh_option_desc(desc)}")
+            lines.append(f'{idx}. [{key}] {_zh_option_desc(desc)}')
         if interactive:
-            lines.extend(["", "请回复选项编号或字母（如 1 或 y）进行选择。"])
+            lines.extend(['', '请回复选项编号或字母（如 1 或 y）进行选择。'])
         else:
-            lines.extend(["", "请在 REPL 中选择对应的选项以继续。"])
-        return "\n".join(lines)
+            lines.extend(['', '请在 REPL 中选择对应的选项以继续。'])
+        return '\n'.join(lines)
 
     def _send_outbound_text(self, im_origin: str, text: str) -> bool:
         import asyncio
 
-        loop = getattr(self._repl, "_cron_loop", None)
+        loop = getattr(self._repl, '_cron_loop', None)
         if loop is None:
             return False
         client = self._client._client
@@ -194,12 +194,12 @@ class _ImReplyController:
             # Send from a one-shot thread so the message leaves immediately.
             return self._send_outbound_text_from_thread(im_origin, text)
         except Exception:  # noqa: BLE001
-            _log.warning("repl IM outbound send failed", exc_info=True)
+            _log.warning('repl IM outbound send failed', exc_info=True)
             return False
 
     def _send_outbound_text_from_thread(self, im_origin: str, text: str) -> bool:
         """Send while the REPL event loop is about to block on terminal input."""
-        socket_path = getattr(self._client, "_socket_path", None)
+        socket_path = getattr(self._client, '_socket_path', None)
         if not socket_path:
             return False
 
@@ -209,7 +209,7 @@ class _ImReplyController:
             async def _send_once() -> None:
                 from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
 
-                client = GatewayIpcClient(str(socket_path), instance_id="repl-im-permission")
+                client = GatewayIpcClient(str(socket_path), instance_id='repl-im-permission')
                 await client.connect()
                 try:
                     await client.send_outbound(origin=im_origin, text=text)
@@ -219,9 +219,9 @@ class _ImReplyController:
             try:
                 asyncio.run(_send_once())
             except Exception:  # noqa: BLE001
-                _log.warning("repl IM one-shot outbound failed", exc_info=True)
+                _log.warning('repl IM one-shot outbound failed', exc_info=True)
 
-        threading.Thread(target=_runner, name="repl-im-outbound", daemon=True).start()
+        threading.Thread(target=_runner, name='repl-im-outbound', daemon=True).start()
         return True
 
 
@@ -234,7 +234,7 @@ class _ReplRuntimeObserver:
     after a provider swap so the next prompt uses the new model.
     """
 
-    def __init__(self, repl: "ClawcodexREPL") -> None:
+    def __init__(self, repl: 'ClawcodexREPL') -> None:
         self._repl = repl
 
     def on_runtime_swap(self, runtime) -> None:
@@ -243,13 +243,13 @@ class _ReplRuntimeObserver:
         repl.provider_name = runtime.provider_name
         repl.tool_registry = runtime.tool_registry
         repl.tool_context = runtime.tool_context
-        if hasattr(repl, "command_context") and repl.command_context is not None:
+        if hasattr(repl, 'command_context') and repl.command_context is not None:
             repl.command_context.provider = runtime.provider
             repl.command_context.tool_registry = runtime.tool_registry
             repl.command_context.tool_context = runtime.tool_context
 
 
-def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
+def install_repl_extensions(repl: 'ClawcodexREPL', ctx) -> None:
     """Wire F-43 slash commands + observer into the REPL.
 
     Args:
@@ -263,12 +263,12 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     """
     # Register /provider and /model into the REPL's local command
     # registry so the slash-command dispatcher can find them.
-    if getattr(repl, "command_registry", None) is not None:
+    if getattr(repl, 'command_registry', None) is not None:
         register_runtime_commands(repl.command_registry)
         register_away_summary_commands(repl.command_registry)
         update_commands = getattr(
             repl,
-            "_update_built_in_commands_with_command_system",
+            '_update_built_in_commands_with_command_system',
             None,
         )
         if callable(update_commands):
@@ -276,9 +276,9 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
 
     _install_away_summary_controller(repl)
     _install_goal_controller(repl)
-    _install_im_gateway_client(repl, ctx)
+    _install_gateway_client(repl, ctx)
 
-    runtime = getattr(repl, "runtime_context", None)
+    runtime = getattr(repl, 'runtime_context', None)
     if runtime is None:
         runtime = ctx
     if runtime is None:
@@ -290,11 +290,11 @@ def install_repl_extensions(repl: "ClawcodexREPL", ctx) -> None:
     _register_signal_session_save(repl)
 
 
-def _install_im_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
+def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
     """Opt-in: connect the REPL to the IM gateway so WeChat messages drive it.
 
-    Enabled when ``--im-gateway`` is passed or when a specific origin is
-    provided via ``--im-gateway-origin`` / ``CLAWCODEX_IM_ORIGIN``. Without a
+    Enabled when ``--gateway`` is passed or when a specific origin is
+    provided via ``--gateway-origin`` / ``CLAWCODEX_GATEWAY_ORIGIN``. Without a
     specific origin, the REPL binds all direct/private WeChat messages for the
     single configured WeChat channel.
 
@@ -304,10 +304,18 @@ def _install_im_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
     """
     import os
 
-    options = getattr(ctx, "options", None)
-    sock = getattr(options, "im_gateway_sock", None) or os.environ.get("CLAWCODEX_IM_GATEWAY_SOCK")
-    origin = getattr(options, "im_gateway_origin", None) or os.environ.get("CLAWCODEX_IM_ORIGIN")
-    enabled = bool(getattr(options, "im_gateway", False))
+    options = getattr(ctx, 'options', None)
+    sock = (
+        getattr(options, 'gateway_sock', None)
+        or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
+        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+    )
+    origin = (
+        getattr(options, 'gateway_origin', None)
+        or os.environ.get('CLAWCODEX_GATEWAY_ORIGIN')
+        or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    )
+    enabled = bool(getattr(options, 'gateway', False))
     if not origin and enabled:
         from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
 
@@ -315,29 +323,29 @@ def _install_im_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
     if not origin:
         return  # opt-in not requested
     if not sock:
-        sock = str(os.path.expanduser("~/.clawcodex/im-gateway/gateway.sock"))
+        sock = str(os.path.expanduser('~/.clawcodex/gateway/gateway.sock'))
 
     from clawcodex_ext.frontend.repl_gateway import ReplGatewayClient
 
-    session_id = f"repl-{os.getpid()}"
+    session_id = f'repl-{os.getpid()}'
     client = ReplGatewayClient(
         sock,
         session_id=session_id,
         origin=origin,
         enqueue=repl._enqueue_prompt,
-        queue_size=lambda: len(getattr(repl, "_queued_prompts", [])),
+        queue_size=lambda: len(getattr(repl, '_queued_prompts', [])),
         wake=repl._wake_prompt_for_im,
         control_handler=lambda text, inbound_origin=None: _handle_im_control(
             repl, text, inbound_origin
         ),
         permission_probe=lambda text: _handle_im_permission_reply(repl, text),
     )
-    repl._im_gateway_client = client
+    repl._gateway_client = client
 
     # IM reply controller: after each assistant turn, send the final reply
     # text back to the WeChat origin via the OUTBOUND IPC frame.
     repl._im_reply_controller = _ImReplyController(repl, client, origin)
-    _log.info("repl IM gateway opt-in staged: origin=%s sock=%s", origin[:32], sock)
+    _log.info('repl IM gateway opt-in staged: origin=%s sock=%s', origin[:32], sock)
 
     async def _im_init(loop):
         """Connect + register + start heartbeat on the REPL's loop."""
@@ -346,24 +354,24 @@ def _install_im_gateway_client(repl: "ClawcodexREPL", ctx=None) -> None:
         try:
             await client.connect()
             client._heartbeat_task = asyncio.create_task(client._heartbeat_loop(30.0))
-            _log.info("repl IM gateway opt-in connected: origin=%s sock=%s", origin[:32], sock)
+            _log.info('repl IM gateway opt-in connected: origin=%s sock=%s', origin[:32], sock)
         except Exception:  # noqa: BLE001
-            _log.warning("repl IM gateway opt-in connect failed", exc_info=True)
+            _log.warning('repl IM gateway opt-in connect failed', exc_info=True)
 
-    repl._im_gateway_init = _im_init
+    repl._gateway_init = _im_init
 
 
-def _handle_im_control(repl: "ClawcodexREPL", text: str, origin: str | None = None) -> bool:
-    command = (text or "").strip().split(maxsplit=1)[0].lower()
-    if command.startswith("/") and command != "/stop":
+def _handle_im_control(repl: 'ClawcodexREPL', text: str, origin: str | None = None) -> bool:
+    command = (text or '').strip().split(maxsplit=1)[0].lower()
+    if command.startswith('/') and command != '/stop':
         return False
-    interrupt = getattr(repl, "_interrupt_active_chat_from_im", None)
+    interrupt = getattr(repl, '_interrupt_active_chat_from_im', None)
     if not callable(interrupt):
         return False
     return bool(interrupt())
 
 
-def _handle_im_permission_reply(repl: "ClawcodexREPL", text: str) -> bool:
+def _handle_im_permission_reply(repl: 'ClawcodexREPL', text: str) -> bool:
     """Consume a WeChat reply as a pending permission decision.
 
     Active only while the REPL is blocked in ``_wait_im_permission_choice``
@@ -376,55 +384,55 @@ def _handle_im_permission_reply(repl: "ClawcodexREPL", text: str) -> bool:
     Runs on the IPC reader thread; ``_wait_im_permission_choice`` waits on
     the main thread — ``repl._im_permission_lock`` serializes them.
     """
-    lock = getattr(repl, "_im_permission_lock", None)
+    lock = getattr(repl, '_im_permission_lock', None)
     if lock is None:
         return False
     with lock:
-        state = getattr(repl, "_im_permission_wait", None)
+        state = getattr(repl, '_im_permission_wait', None)
         if not state:
             return False
-        norm = (text or "").strip().lower()
+        norm = (text or '').strip().lower()
         if not norm:
             return False
-        if norm == "/stop":
-            choice = "n"
-        elif norm in state["valid"]:
+        if norm == '/stop':
+            choice = 'n'
+        elif norm in state['valid']:
             choice = norm
         else:
             return False
-        state["choice"] = choice
-        state["event"].set()
+        state['choice'] = choice
+        state['event'].set()
     return True
 
 
-def _install_away_summary_controller(repl: "ClawcodexREPL") -> None:
-    if getattr(repl, "_away_summary_controller", None) is not None:
+def _install_away_summary_controller(repl: 'ClawcodexREPL') -> None:
+    if getattr(repl, '_away_summary_controller', None) is not None:
         return
 
-    session = getattr(repl, "session", None)
-    conversation = getattr(session, "conversation", None)
+    session = getattr(repl, 'session', None)
+    conversation = getattr(session, 'conversation', None)
     if conversation is None:
         return
 
     def _display(text: str) -> None:
-        print_recap = getattr(repl, "_print_local_command_text", None)
+        print_recap = getattr(repl, '_print_local_command_text', None)
         if callable(print_recap):
-            print_recap(text, command="recap")
+            print_recap(text, command='recap')
             return
-        console = getattr(repl, "console", None)
+        console = getattr(repl, 'console', None)
         if console is not None:
             console.print(text)
 
     repl._away_summary_controller = AwaySummaryController(
         conversation=conversation,
-        provider_getter=lambda: getattr(repl, "provider", None),
-        model_getter=lambda: getattr(getattr(repl, "provider", None), "model", None),
-        session_getter=lambda: getattr(repl, "session", None),
+        provider_getter=lambda: getattr(repl, 'provider', None),
+        model_getter=lambda: getattr(getattr(repl, 'provider', None), 'model', None),
+        session_getter=lambda: getattr(repl, 'session', None),
         display=_display,
     )
 
 
-def _install_goal_controller(repl: "ClawcodexREPL") -> None:
+def _install_goal_controller(repl: 'ClawcodexREPL') -> None:
     """F-9: wire the ``/goal`` auto-continuation controller onto the REPL.
 
     The controller is a thin shim over the process-level
@@ -440,24 +448,24 @@ def _install_goal_controller(repl: "ClawcodexREPL") -> None:
     at install time, so a session swap (``/provider``,
     ``/resume``) does not strand the controller on a stale id.
     """
-    if getattr(repl, "_goal_controller", None) is not None:
+    if getattr(repl, '_goal_controller', None) is not None:
         return
 
     def _session_id() -> str | None:
-        return getattr(getattr(repl, "session", None), "session_id", None)
+        return getattr(getattr(repl, 'session', None), 'session_id', None)
 
     def _display(text: str) -> None:
-        console = getattr(repl, "console", None)
+        console = getattr(repl, 'console', None)
         if console is not None:
             try:
                 console.print(text)
                 return
             except Exception:
                 pass
-        print_recap = getattr(repl, "_print_local_command_text", None)
+        print_recap = getattr(repl, '_print_local_command_text', None)
         if callable(print_recap):
             try:
-                print_recap(text, command="goal")
+                print_recap(text, command='goal')
             except Exception:
                 pass
 
@@ -469,7 +477,7 @@ def _install_goal_controller(repl: "ClawcodexREPL") -> None:
     )
 
 
-def _register_signal_session_save(repl: "ClawcodexREPL") -> None:
+def _register_signal_session_save(repl: 'ClawcodexREPL') -> None:
     """Register a graceful-shutdown cleanup that saves the session and
     prints a resume hint when the process receives SIGTERM/SIGINT.
 
@@ -490,16 +498,16 @@ def _register_signal_session_save(repl: "ClawcodexREPL") -> None:
 
     # Capture session reference once at registration time and again
     # just before the cleanup runs (the REPL may swap sessions mid-run).
-    sid_ref = {"session": None}
+    sid_ref = {'session': None}
 
     def _capture_ref() -> None:
-        sid_ref["session"] = getattr(repl, "session", None)
+        sid_ref['session'] = getattr(repl, 'session', None)
 
     _capture_ref()
 
     def _cleanup() -> None:
         _capture_ref()
-        session = sid_ref["session"]
+        session = sid_ref['session']
         if session is None:
             return
         # Always persist — independent of whether the hint gets printed.
@@ -512,7 +520,7 @@ def _register_signal_session_save(repl: "ClawcodexREPL") -> None:
         try:
             from clawcodex_ext.utils.resume_hint import print_resume_hint
 
-            print_resume_hint(getattr(session, "session_id", None))
+            print_resume_hint(getattr(session, 'session_id', None))
         except Exception:
             pass
 

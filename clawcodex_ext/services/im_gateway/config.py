@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import logging
 import os
+import shutil
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -25,8 +27,43 @@ import yaml
 
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 
-DEFAULT_STATE_DIR = '~/.clawcodex/im-gateway'
-DEFAULT_CHANNELS_YAML = '~/.clawcodex/im-gateway/channels.yaml'
+logger = logging.getLogger(__name__)
+
+DEFAULT_STATE_DIR = '~/.clawcodex/gateway'
+DEFAULT_CHANNELS_YAML = '~/.clawcodex/gateway/channels.yaml'
+# Pre-rename state dir (<= 2026-06). Kept so :func:`migrate_legacy_state_dir`
+# can move an existing install forward the first time the new path is used.
+LEGACY_STATE_DIR = '~/.clawcodex/im-gateway'
+
+
+def migrate_legacy_state_dir(target: str | Path | None = None) -> Path:
+    """One-way migration ``~/.clawcodex/im-gateway`` → ``~/.clawcodex/gateway``.
+
+    Idempotent and safe to call from any entry point that resolves the state
+    directory. If ``target`` already exists, it is returned unchanged. If the
+    legacy directory exists, it is moved to ``target`` (``Path.rename``, with a
+    ``shutil.copytree`` + ``rmtree`` fallback for cross-filesystem renames or
+    platforms where ``rename`` refuses). If neither exists, ``target`` is
+    returned without being created — the caller owns ``mkdir``.
+
+    Only the *default* location is migrated; an explicit ``target`` override is
+    honored as-is. Returns the resolved target :class:`~pathlib.Path`.
+    """
+    new = Path(target or DEFAULT_STATE_DIR).expanduser()
+    if new.exists():
+        return new
+    legacy = Path(LEGACY_STATE_DIR).expanduser()
+    if not legacy.exists():
+        return new
+    new.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        legacy.rename(new)
+    except OSError:
+        # Cross-device link or permission quirk — fall back to a copy.
+        shutil.copytree(legacy, new)
+        shutil.rmtree(legacy, ignore_errors=True)
+    logger.info('migrated gateway state dir %s -> %s', legacy, new)
+    return new
 
 
 @dataclass
@@ -39,6 +76,7 @@ class ReliabilityConfig:
     secret_encryption_env: str = 'CLAWCODEX_IM_SECRET'
     markdown_fallback: bool = True
     long_message_threshold_chunks: int = 4
+    deferred_outbox_limit: int = 500
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +88,7 @@ class ReliabilityConfig:
             'secret_encryption_env': self.secret_encryption_env,
             'markdown_fallback': self.markdown_fallback,
             'long_message_threshold_chunks': self.long_message_threshold_chunks,
+            'deferred_outbox_limit': self.deferred_outbox_limit,
         }
 
     @classmethod
@@ -69,6 +108,7 @@ class ReliabilityConfig:
                 'secret_encryption_env',
                 'markdown_fallback',
                 'long_message_threshold_chunks',
+                'deferred_outbox_limit',
             }
         }
         return cls(**known)
@@ -195,18 +235,28 @@ def _file_lock(lock_path: Path):
 
 def load_config(path: str | Path | None = None) -> GatewayConfig:
     """Load :class:`GatewayConfig` from ``path`` (default ``channels.yaml``)."""
+    if path is None:
+        # Move a pre-rename ~/.clawcodex/im-gateway install forward the first
+        # time the default path is resolved, so existing channels.yaml survives.
+        migrate_legacy_state_dir()
     p = Path(path or DEFAULT_CHANNELS_YAML).expanduser()
     if not p.exists():
+        logger.warning('gateway config not found at %s; using defaults', p)
         return GatewayConfig()
     with _file_lock(_lock_path(p)):
         data = yaml.safe_load(p.read_text(encoding='utf-8')) or {}
     if not isinstance(data, dict):
+        logger.error('%s: top-level YAML is not a mapping', p)
         raise ValueError(f'{p}: expected a YAML mapping at the top level')
-    return GatewayConfig.from_dict(data)
+    cfg = GatewayConfig.from_dict(data)
+    logger.info('gateway config loaded: %s (%d channel(s))', p, len(cfg.channels))
+    return cfg
 
 
 def save_config(config: GatewayConfig, path: str | Path | None = None) -> Path:
     """Atomically save ``config`` to ``path`` under a single-writer lock."""
+    if path is None:
+        migrate_legacy_state_dir()
     p = Path(path or DEFAULT_CHANNELS_YAML).expanduser()
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = yaml.safe_dump(config.to_dict(), allow_unicode=True, sort_keys=False)
@@ -214,6 +264,7 @@ def save_config(config: GatewayConfig, path: str | Path | None = None) -> Path:
         tmp = p.with_suffix(p.suffix + '.tmp')
         tmp.write_text(payload, encoding='utf-8')
         os.replace(tmp, p)
+    logger.info('gateway config saved: %s', p)
     return p
 
 
@@ -224,8 +275,10 @@ def _lock_path(yaml_path: Path) -> Path:
 __all__ = [
     'DEFAULT_CHANNELS_YAML',
     'DEFAULT_STATE_DIR',
+    'LEGACY_STATE_DIR',
     'GatewayConfig',
     'ReliabilityConfig',
     'load_config',
+    'migrate_legacy_state_dir',
     'save_config',
 ]

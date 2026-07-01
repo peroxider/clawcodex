@@ -21,6 +21,7 @@ import contextlib
 import fcntl
 import json
 import logging
+import logging.handlers
 import os
 import signal
 import subprocess
@@ -29,12 +30,19 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from clawcodex_ext.services.im_gateway.config import load_config
+from clawcodex_ext.services.im_gateway.config import (
+    DEFAULT_STATE_DIR,
+    load_config,
+    migrate_legacy_state_dir,
+)
 from clawcodex_ext.services.im_gateway.gateway import MessageGateway
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_STATE_DIR = "~/.clawcodex/im-gateway"
+# ``DEFAULT_STATE_DIR`` is re-exported from
+# :mod:`clawcodex_ext.services.im_gateway.config` (imported above) so the
+# historical ``from extensions.im_gateway.server import DEFAULT_STATE_DIR``
+# import keeps working.
 
 
 @dataclass
@@ -48,15 +56,20 @@ class DaemonPaths:
 
     @classmethod
     def for_state_dir(cls, state_dir: str | Path | None = None) -> DaemonPaths:
-        base = Path(state_dir or DEFAULT_STATE_DIR).expanduser()
+        if state_dir is None:
+            # Move a pre-rename ~/.clawcodex/im-gateway install forward the
+            # first time the default path is resolved.
+            base = migrate_legacy_state_dir()
+        else:
+            base = Path(state_dir).expanduser()
         base.mkdir(parents=True, exist_ok=True)
         return cls(
             state_dir=base,
-            pid_file=base / "gateway.pid",
-            lock_file=base / "gateway.lock",
-            sock_file=base / "gateway.sock",
-            health_file=base / "health.json",
-            log_file=base / "gateway.log",
+            pid_file=base / 'gateway.pid',
+            lock_file=base / 'gateway.lock',
+            sock_file=base / 'gateway.sock',
+            health_file=base / 'health.json',
+            log_file=base / 'gateway.log',
         )
 
 
@@ -77,13 +90,13 @@ def read_pid(paths: DaemonPaths) -> int | None:
     if not paths.pid_file.exists():
         return None
     try:
-        return int(paths.pid_file.read_text(encoding="utf-8").strip())
+        return int(paths.pid_file.read_text(encoding='utf-8').strip())
     except (ValueError, OSError):
         return None
 
 
 def write_pid(paths: DaemonPaths, pid: int) -> None:
-    paths.pid_file.write_text(f"{pid}\n", encoding="utf-8")
+    paths.pid_file.write_text(f'{pid}\n', encoding='utf-8')
 
 
 def cleanup_stale(paths: DaemonPaths) -> bool:
@@ -121,21 +134,21 @@ def acquire_lock(paths: DaemonPaths) -> int | None:
 
 def write_health(paths: DaemonPaths, **fields) -> None:
     data = {
-        "running": True,
-        "pid": os.getpid(),
-        "started_at": fields.get("started_at", time.time()),
-        "channels": fields.get("channels", []),
-        "state_dir": str(paths.state_dir),
-        "socket": str(paths.sock_file),
+        'running': True,
+        'pid': os.getpid(),
+        'started_at': fields.get('started_at', time.time()),
+        'channels': fields.get('channels', []),
+        'state_dir': str(paths.state_dir),
+        'socket': str(paths.sock_file),
     }
-    paths.health_file.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    paths.health_file.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
 
 
 def read_health(paths: DaemonPaths) -> dict | None:
     if not paths.health_file.exists():
         return None
     try:
-        return json.loads(paths.health_file.read_text(encoding="utf-8"))
+        return json.loads(paths.health_file.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -147,58 +160,61 @@ def _resolve_log_level(verbose: bool, env: str | None) -> int:
     """Pick the daemon log level.
 
     Priority: ``CLAWCODEX_GATEWAY_LOG_LEVEL`` env > ``CLAWCODEX_DEBUG=1``
-    (DEBUG) > ``--verbose`` flag (INFO) > default (ERROR). The default is
-    deliberately quiet (ERROR) so gateway.log stays clean during normal
-    operation; pass ``--verbose``, set ``CLAWCODEX_DEBUG=1``, or set
-    ``CLAWCODEX_GATEWAY_LOG_LEVEL`` when diagnosing.
+    (DEBUG) > ``--verbose`` flag (DEBUG) > default (WARNING). Pass
+    ``--verbose`` or set ``CLAWCODEX_DEBUG=1`` during diagnosis; set
+    ``CLAWCODEX_GATEWAY_LOG_LEVEL`` to pin a specific level.
     """
     if env:
         env = env.strip().upper()
         levels = {
-            "DEBUG": logging.DEBUG,
-            "INFO": logging.INFO,
-            "WARNING": logging.WARNING,
-            "ERROR": logging.ERROR,
+            'DEBUG': logging.DEBUG,
+            'INFO': logging.INFO,
+            'WARNING': logging.WARNING,
+            'ERROR': logging.ERROR,
         }
         if env in levels:
             return levels[env]
-    if os.environ.get("CLAWCODEX_DEBUG", "").lower() in ("1", "true", "yes"):
+    if os.environ.get('CLAWCODEX_DEBUG', '').lower() in ('1', 'true', 'yes'):
         return logging.DEBUG
     if verbose:
-        return logging.INFO
-    return logging.ERROR
+        return logging.DEBUG
+    return logging.WARNING
 
 
 async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     """Run the gateway daemon (called from the spawned subprocess)."""
-    # Configure logging FIRST. The subprocess is spawned with stdout+stderr
-    # redirected to gateway.log (see GatewayDaemon.start), so a handler on
-    # sys.stderr lands in the log file. Without this, every logger.info /
-    # logger.exception in the gateway and channel adapters is silently
-    # dropped (Python's root logger defaults to WARNING with no handler) —
-    # which made poll-loop / getupdates failures completely invisible and
-    # gateway.log stayed 0 bytes.
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stderr,
-        force=True,  # override any handler attached during import; the daemon
-        # subprocess must own its logging or gateway.log stays empty.
+    # Configure logging FIRST with a RotatingFileHandler (10 MiB per file,
+    # keep up to 3 backups so the log never exceeds ~40 MiB). The subprocess
+    # stderr is still redirected to the same log file by GatewayDaemon.start,
+    # capturing any unhandled crash dumps that bypass the logging framework.
+    os.makedirs(paths.log_file.parent, exist_ok=True)
+    root = logging.getLogger()
+    root.setLevel(log_level)
+    handler = logging.handlers.RotatingFileHandler(
+        str(paths.log_file),
+        maxBytes=10 * 1024 * 1024,  # 10 MiB
+        backupCount=3,
+        encoding='utf-8',
     )
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+    handler.setLevel(log_level)
+    # Replace any existing handlers so the daemon subprocess owns its logging.
+    root.handlers.clear()
+    root.addHandler(handler)
     # Channel + gateway internals follow the resolved level; keep noisy libs
     # at WARNING so urllib/asyncio don't flood the log.
-    logging.getLogger("clawcodex_ext.services.channels").setLevel(log_level)
-    logging.getLogger("clawcodex_ext.services.im_gateway").setLevel(log_level)
+    logging.getLogger('clawcodex_ext.services.channels').setLevel(log_level)
+    logging.getLogger('clawcodex_ext.services.im_gateway').setLevel(log_level)
 
     fd = acquire_lock(paths)
     if fd is None:
-        print("error: another gateway daemon holds the lock", file=sys.stderr)
+        print('error: another gateway daemon holds the lock', file=sys.stderr)
         return 1
     cleanup_stale(paths)
 
-    config = load_config(paths.state_dir / "channels.yaml")
+    config = load_config(paths.state_dir / 'channels.yaml')
     # Force the gateway's reliability store to live under the daemon's
-    # state_dir (the YAML default points at ~/.clawcodex/im-gateway).
+    # state_dir (the YAML default points at ~/.clawcodex/gateway).
     config.state_dir = str(paths.state_dir)
     gateway = MessageGateway(config)
     await gateway.start()
@@ -207,7 +223,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     from clawcodex_ext.services.im_gateway.stub_agent import make_stub_handler
 
     gateway.set_handler(make_stub_handler(gateway.outbound))
-    logger.info("gateway inbound handler registered: unbound guidance handler")
+    logger.info('gateway inbound handler registered: unbound guidance handler')
 
     # Open the GatewayIpcProtocol UDS listener (register/heartbeat/deliver/ack
     # + control reload/status). P2/P3 frames are handled by GatewayIpcServer.
@@ -228,7 +244,7 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         )
 
     gateway.set_push_handler(_push_to_opt_in)
-    logger.info("gateway opt-in push handler registered")
+    logger.info('gateway opt-in push handler registered')
 
     started_at = time.time()
     write_pid(paths, os.getpid())
@@ -276,41 +292,42 @@ class GatewayDaemon:
     def status(self) -> int:
         pid = read_pid(self.paths)
         if pid is None or not is_pid_alive(pid):
-            print("Gateway daemon: NOT RUNNING")
+            print('Gateway daemon: NOT RUNNING')
             if pid is not None:
-                print(f"  (stale PID {pid}; cleaned up)")
+                print(f'  (stale PID {pid}; cleaned up)')
                 cleanup_stale(self.paths)
             return 0
         health = read_health(self.paths) or {}
-        uptime_s = int(time.time() - health.get("started_at", time.time()))
-        print("Gateway daemon: RUNNING")
-        print(f"  PID            : {pid}")
-        print(f"  Uptime         : {uptime_s}s")
-        print(f"  Socket         : {self.paths.sock_file}")
-        print(f"  Log            : {self.paths.log_file}")
-        print(f"  Channels       : {', '.join(health.get('channels') or []) or '(none)'}")
-        print(f"  State dir      : {self.paths.state_dir}")
+        uptime_s = int(time.time() - health.get('started_at', time.time()))
+        print('Gateway daemon: RUNNING')
+        print(f'  PID            : {pid}')
+        print(f'  Uptime         : {uptime_s}s')
+        print(f'  Socket         : {self.paths.sock_file}')
+        print(f'  Log            : {self.paths.log_file}')
+        print(f'  Channels       : {", ".join(health.get("channels") or []) or "(none)"}')
+        print(f'  State dir      : {self.paths.state_dir}')
         return 0
 
     def start(self, *, verbose: bool = False) -> int:
         pid = read_pid(self.paths)
         if pid is not None and is_pid_alive(pid):
-            print(f"Gateway daemon already running (PID {pid}).")
+            print(f'Gateway daemon already running (PID {pid}).')
             return self.status()
         cleanup_stale(self.paths)
-        # Truncate the log on each fresh start so it doesn't grow unbounded
-        # across restarts (the daemon appends within a run).
-        log_fh = self.paths.log_file.open("a", encoding="utf-8")
+        # Attach the log file as the subprocess's stdout+stderr so any
+        # unhandled crash dumps that bypass the logging framework are captured.
+        # RotatingFileHandler inside serve() handles normal log rotation.
+        log_fh = self.paths.log_file.open('a', encoding='utf-8')
         serve_args = [
             sys.executable,
-            "-m",
-            "extensions.im_gateway.server",
-            "serve",
-            "--state-dir",
+            '-m',
+            'extensions.im_gateway.server',
+            'serve',
+            '--state-dir',
             str(self.paths.state_dir),
         ]
         if verbose:
-            serve_args.append("--verbose")
+            serve_args.append('--verbose')
         proc = subprocess.Popen(
             serve_args,
             stdout=log_fh,
@@ -323,22 +340,22 @@ class GatewayDaemon:
         while time.time() < deadline:
             new_pid = read_pid(self.paths)
             if new_pid is not None and is_pid_alive(new_pid):
-                print(f"Gateway daemon started · pid {new_pid}")
+                print(f'Gateway daemon started · pid {new_pid}')
                 return 0
             if proc.poll() is not None:
                 print(
-                    f"error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}",
+                    f'error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}',
                     file=sys.stderr,
                 )
                 return 1
             time.sleep(0.1)
-        print("error: gateway daemon did not become ready in 10s", file=sys.stderr)
+        print('error: gateway daemon did not become ready in 10s', file=sys.stderr)
         return 1
 
     def stop(self, *, timeout: float = 5.0) -> int:
         pid = read_pid(self.paths)
         if pid is None or not is_pid_alive(pid):
-            print("Gateway daemon: already stopped")
+            print('Gateway daemon: already stopped')
             cleanup_stale(self.paths)
             return 0
         try:
@@ -354,7 +371,7 @@ class GatewayDaemon:
         if is_pid_alive(pid):
             os.kill(pid, signal.SIGKILL)
         cleanup_stale(self.paths)
-        print("Gateway daemon stopped.")
+        print('Gateway daemon stopped.')
         return 0
 
     def restart(self, *, verbose: bool = False) -> int:
@@ -368,21 +385,21 @@ class GatewayDaemon:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="extensions.im_gateway.server")
-    sub = parser.add_subparsers(dest="cmd", required=True)
-    serve_p = sub.add_parser("serve", help="run the daemon (foreground)")
-    serve_p.add_argument("--state-dir", default=None)
+    parser = argparse.ArgumentParser(prog='extensions.im_gateway.server')
+    sub = parser.add_subparsers(dest='cmd', required=True)
+    serve_p = sub.add_parser('serve', help='run the daemon (foreground)')
+    serve_p.add_argument('--state-dir', default=None)
     serve_p.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="enable INFO-level IM logging (default: WARNING/quiet; "
-        "or set CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG)",
+        '-v',
+        '--verbose',
+        action='store_true',
+        help='enable DEBUG-level IM logging (default: WARNING; use --verbose or set '
+        'CLAWCODEX_GATEWAY_LOG_LEVEL=INFO|DEBUG)',
     )
     args = parser.parse_args(argv)
-    if args.cmd == "serve":
+    if args.cmd == 'serve':
         paths = DaemonPaths.for_state_dir(args.state_dir)
-        log_level = _resolve_log_level(args.verbose, os.environ.get("CLAWCODEX_GATEWAY_LOG_LEVEL"))
+        log_level = _resolve_log_level(args.verbose, os.environ.get('CLAWCODEX_GATEWAY_LOG_LEVEL'))
         try:
             return asyncio.run(serve(paths, log_level=log_level))
         except KeyboardInterrupt:
@@ -390,5 +407,5 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

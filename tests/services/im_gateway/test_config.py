@@ -15,7 +15,7 @@ def _cfg() -> GatewayConfig:
     return GatewayConfig(
         enabled=True,
         default_targets=['wechat-main'],
-        state_dir='~/.clawcodex/im-gateway',
+        state_dir='~/.clawcodex/gateway',
         reliability=ReliabilityConfig(),
         channels=[
             ChannelConfig(
@@ -202,3 +202,36 @@ def test_load_config_missing_file_returns_default(tmp_path) -> None:
     cfg = load_config(tmp_path / 'nope.yaml')
     assert cfg.enabled is True
     assert cfg.channels == []
+
+
+def test_migrate_legacy_state_dir_moves_legacy_and_is_idempotent(tmp_path, monkeypatch) -> None:
+    from clawcodex_ext.services.im_gateway import config as cfg_mod
+
+    legacy = tmp_path / 'im-gateway'
+    legacy.mkdir()
+    (legacy / 'channels.yaml').write_text('enabled: true\n', encoding='utf-8')
+    (legacy / 'gateway.pid').write_text('123\n', encoding='utf-8')
+    target = tmp_path / 'gateway'
+
+    monkeypatch.setattr(cfg_mod, 'LEGACY_STATE_DIR', str(legacy))
+
+    # First call: target absent, legacy present → move.
+    result = cfg_mod.migrate_legacy_state_dir(str(target))
+    assert result == target
+    assert (target / 'channels.yaml').exists()
+    assert (target / 'gateway.pid').read_text(encoding='utf-8') == '123\n'
+    assert not legacy.exists()
+
+    # Second call: target now exists → idempotent no-op.
+    assert cfg_mod.migrate_legacy_state_dir(str(target)) == target
+    assert (target / 'channels.yaml').exists()
+
+
+def test_migrate_legacy_state_dir_no_legacy_returns_target_uncreated(tmp_path, monkeypatch) -> None:
+    from clawcodex_ext.services.im_gateway import config as cfg_mod
+
+    monkeypatch.setattr(cfg_mod, 'LEGACY_STATE_DIR', str(tmp_path / 'absent-im-gateway'))
+    target = tmp_path / 'gateway'
+    result = cfg_mod.migrate_legacy_state_dir(str(target))
+    assert result == target
+    assert not target.exists()  # caller owns mkdir

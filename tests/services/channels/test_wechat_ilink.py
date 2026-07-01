@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -194,6 +195,30 @@ def test_auth_store_fallback_key_file_does_not_warn_for_local_cli(
     assert not [
         record for record in caplog.records if 'CLAWCODEX_IM_SECRET not set' in record.getMessage()
     ]
+
+
+def test_last_known_sender_falls_back_to_loaded_login_user_after_rescan(tmp_path) -> None:
+    adapter, store, _ = _make_adapter(tmp_path)
+
+    assert store.wechat_context_users('default') == []
+    assert adapter.last_known_sender() == 'bot_user_1'
+
+
+def test_load_credentials_clears_stale_last_sender_when_account_changes(tmp_path) -> None:
+    adapter, _, _ = _make_adapter(tmp_path)
+    adapter._last_from_user_id = 'old_user'
+    adapter._auth_store.save(
+        WeChatAuthRecord(
+            bot_token='new_token',
+            account_id='new_account',
+            base_url='https://ilinkai.weixin.qq.com',
+            user_id='new_user',
+        )
+    )
+
+    adapter.load_credentials()
+
+    assert adapter.last_known_sender() == 'new_user'
 
 
 def test_auth_store_wrong_key_returns_none(tmp_path, monkeypatch) -> None:
@@ -451,6 +476,170 @@ async def test_adapter_send_splits_long_text(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_adapter_send_throttles_consecutive_sendmessage_calls(tmp_path, monkeypatch) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    sleeps: list[float] = []
+    clock = {'now': 100.0}
+
+    def _monotonic() -> float:
+        return clock['now']
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+        clock['now'] += delay
+
+    monkeypatch.setattr(wechat_module.time, 'monotonic', _monotonic)
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _sleep)
+
+    await adapter.send(ChannelMessage(text='first'), target='u1')
+    await adapter.send(ChannelMessage(text='second'), target='u1')
+
+    assert len(transport.sent) == 2
+    assert sleeps == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_adapter_long_text_chunks_are_throttled_between_sendmessage_calls(
+    tmp_path, monkeypatch
+) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    sleeps: list[float] = []
+    clock = {'now': 200.0}
+
+    def _monotonic() -> float:
+        return clock['now']
+
+    async def _sleep(delay: float) -> None:
+        sleeps.append(delay)
+        clock['now'] += delay
+
+    monkeypatch.setattr(wechat_module.time, 'monotonic', _monotonic)
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _sleep)
+
+    await adapter.send(ChannelMessage(text='x' * 9000), target='u1')
+
+    assert len(transport.sent) == 3
+    # inter-chunk delay is 1.5s (hermes _send_chunk_delay_seconds). Each
+    # inter-chunk sleep (1.5s) exceeds the 1.0s min-interval, so no extra
+    # min-interval sleep fires between chunks → only the two inter-chunk sleeps.
+    assert len(sleeps) == 2
+    assert sleeps[0] == pytest.approx(1.5)  # inter-chunk delay after chunk1
+    assert sleeps[1] == pytest.approx(1.5)  # inter-chunk delay after chunk2
+
+
+@pytest.mark.asyncio
+async def test_adapter_send_local_window_waits_before_transport(tmp_path, monkeypatch) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    adapter._send_min_interval_seconds = 0
+    sleeps: list[float] = []
+    clock = {'now': 300.0}
+
+    def _monotonic():
+        return clock['now']
+
+    async def _sleep(delay):
+        sleeps.append(delay)
+        clock['now'] += delay
+
+    monkeypatch.setattr(wechat_module.time, 'monotonic', _monotonic)
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _sleep)
+
+    for idx in range(5):
+        result = await adapter.send(ChannelMessage(text=f'msg {idx}'), target='u1')
+        assert result.ok is True
+
+    result = await adapter.send(ChannelMessage(text='sixth'), target='u1')
+
+    assert result.ok is True
+    assert sleeps == [10.0]
+    assert len(transport.sent) == 6
+
+
+@pytest.mark.asyncio
+async def test_adapter_send_rate_limit_retries_then_succeeds(tmp_path, monkeypatch) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    adapter._send_min_interval_seconds = 0
+    transport.payload_override['/ilink/bot/sendmessage'] = {
+        'ret': -2,
+        'errcode': -2,
+        'errmsg': 'freq limit',
+    }
+
+    async def _noop_sleep(_delay):
+        pass
+
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _noop_sleep)
+
+    first = await adapter.send(ChannelMessage(text='first'), target='u1')
+    transport.payload_override.pop('/ilink/bot/sendmessage')
+    # Exhausting rate-limit retries opens the send-side circuit breaker for
+    # 30s; simulate it closing before the next send so the second message
+    # reaches the transport (and now succeeds with the override cleared).
+    adapter._reset_send_rate_limit_circuit()
+    second = await adapter.send(ChannelMessage(text='second'), target='u1')
+
+    assert first.ok is False
+    assert first.status is SendStatus.RATE_LIMITED
+    assert first.error_category is ErrorCategory.RATE_LIMIT
+    assert second.ok is True
+    # first: 5 retry attempts; second: 1 send
+    send_posts = [call for call in transport.post_calls if call['path'] == '/ilink/bot/sendmessage']
+    assert len(send_posts) == 6
+
+
+@pytest.mark.asyncio
+async def test_adapter_send_rate_limit_does_not_poison_next_send(tmp_path, monkeypatch) -> None:
+    adapter, _, transport = _make_adapter(tmp_path)
+    adapter._send_min_interval_seconds = 0
+    transport.payload_override['/ilink/bot/sendmessage'] = {
+        'ret': -2,
+        'errcode': -2,
+        'errmsg': 'freq limit',
+    }
+
+    async def _noop_sleep(_delay):
+        pass
+
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _noop_sleep)
+
+    first = await adapter.send(ChannelMessage(text='first'), target='u1')
+    transport.payload_override.pop('/ilink/bot/sendmessage')
+    # Circuit breaker opens after retries exhaust; clear it so the next send
+    # is not short-circuited (simulates the 30s circuit elapsing).
+    adapter._reset_send_rate_limit_circuit()
+    second = await adapter.send(ChannelMessage(text='second'), target='u1')
+
+    assert first.ok is False
+    assert first.status is SendStatus.RATE_LIMITED
+    assert first.error_category is ErrorCategory.RATE_LIMIT
+    assert second.ok is True
+    send_posts = [call for call in transport.post_calls if call['path'] == '/ilink/bot/sendmessage']
+    assert len(send_posts) == 6  # 5 rate-limit retries + 1 success
+
+
+@pytest.mark.asyncio
+async def test_adapter_poll_rate_limit_backoff_caps_at_300_seconds(tmp_path) -> None:
+    adapter, store, transport = _make_adapter(tmp_path)
+    transport.payload_override['/ilink/bot/getupdates'] = {
+        'ret': -2,
+        'errcode': -2,
+        'errmsg': 'freq limit',
+    }
+
+    retry_after_values: list[float] = []
+    for _ in range(7):
+        await adapter._poll_once()
+        cooldowns = [
+            e for e in store.audit_entries() if e['event_type'] == 'wechat_rate_limit_cooldown'
+        ]
+        retry_after_values.append(cooldowns[-1]['retry_after_seconds'])
+        adapter._poll_rate_limit_cooldown_until = None
+
+    assert retry_after_values == [2, 30, 30, 30, 30, 30, 30]
+    assert adapter._poll_rate_limit_cooldown_seconds == 30
+
+
+@pytest.mark.asyncio
 async def test_adapter_send_requires_target(tmp_path) -> None:
     adapter, _, _ = _make_adapter(tmp_path)
     result = await adapter.send(ChannelMessage(text='hi'))
@@ -459,11 +648,10 @@ async def test_adapter_send_requires_target(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_adapter_send_retries_tokenless_on_session_expired(tmp_path) -> None:
-    """When context_token is expired (errcode -14), the adapter strips it
-    and retries the send tokenless — iLink accepts tokenless sendmessage
-    calls as a degraded fallback past the 48-hour customer-service window.
-    Mirrors hermes-agent weixin.py:_send_text_chunk_locked."""
+async def test_adapter_send_session_expired_marks_session_expired_without_tokenless_retry(
+    tmp_path,
+) -> None:
+    """When iLink reports session expiry, mark as session_expired and return AUTH error."""
     transport = FakeIlinkTransport()
     _call_count = {'n': 0}
     _original_post = transport.post
@@ -489,14 +677,15 @@ async def test_adapter_send_retries_tokenless_on_session_expired(tmp_path) -> No
     store.set_context_token('default', 'u1', 'stale_token_abc')
 
     result = await adapter.send(ChannelMessage(text='hello'), target='u1')
+    second = await adapter.send(ChannelMessage(text='again'), target='u1')
 
-    # The tokenless retry should succeed
-    assert result.ok is True
-    # Two sendmessage calls: first with token, second without
-    assert len(sent_payloads) == 2
+    assert result.ok is False
+    assert result.error_category is ErrorCategory.AUTH
+    assert adapter._account_status == 'session_expired'
+    assert second.ok is False
+    assert second.error_category is ErrorCategory.AUTH
+    assert len(sent_payloads) == 1
     assert sent_payloads[0].get('context_token') == 'stale_token_abc'
-    assert 'context_token' not in sent_payloads[1]
-    # The expired token should be evicted from the store
     assert store.get_context_token('default', 'u1') is None
 
 
@@ -529,8 +718,12 @@ async def _noop() -> None:
     return None
 
 
+async def _noop_sleep(_delay: float) -> None:
+    return None
+
+
 @pytest.mark.asyncio
-async def test_inbound_unsupported_media_records_and_replies(tmp_path) -> None:
+async def test_inbound_unsupported_media_records_and_replies(tmp_path, monkeypatch) -> None:
     adapter, store, transport = _make_adapter(tmp_path, allowed_users=['u1'])
     transport.inbound_queue = [
         {
@@ -544,7 +737,15 @@ async def test_inbound_unsupported_media_records_and_replies(tmp_path) -> None:
     ]
     received: list = []
     adapter.set_inbound_handler(lambda m: received.append(m) or _noop())
+    # The unsupported-media reply is dispatched fire-and-forget so it does
+    # not block the poll loop. No-op sleep lets the spawned reply task
+    # complete within the event loop turn after _poll_once returns.
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _noop_sleep)
     await adapter._poll_once()
+    # The reply is dispatched fire-and-forget; drain spawned tasks before
+    # asserting on transport.sent.
+    for task in [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]:
+        await task
     assert received == []  # media not delivered to agent
     unsupported = [e for e in []]
     # unsupported_inbound recorded
@@ -711,18 +912,23 @@ async def test_circuit_opens_after_consecutive_failures(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_401_pauses_account_without_consuming_breaker(tmp_path) -> None:
+async def test_401_marks_session_expired_without_consuming_breaker(tmp_path) -> None:
+    """HTTP 401 during poll marks session expired (permanent) instead of rate-limit cooldown."""
     adapter, store, transport = _make_adapter(tmp_path, max_failures=3)
     transport.status_override['/ilink/bot/getupdates'] = 401
     await adapter._poll_once()
-    assert adapter._account_status == 'paused'
+    await adapter._poll_once()
+    assert adapter._account_status == 'session_expired'
     assert adapter._consecutive_failures == 0
     assert adapter._circuit_state is CircuitState.CLOSED
-    assert any(e['event_type'] == 'wechat_auth_paused' for e in store.audit_entries())
+    expired = [e for e in store.audit_entries() if e['event_type'] == 'wechat_session_expired']
+    assert expired and expired[0].get('reason') == 'http_401'
+    poll_posts = [call for call in transport.post_calls if call['path'] == '/ilink/bot/getupdates']
+    assert len(poll_posts) == 1
 
 
 @pytest.mark.asyncio
-async def test_getupdates_session_expired_body_pauses_account(tmp_path) -> None:
+async def test_getupdates_session_expired_body_marks_session_expired(tmp_path) -> None:
     """iLink signals session expiry as ret/errcode=-14 inside HTTP 200."""
     adapter, store, transport = _make_adapter(tmp_path, max_failures=3)
     transport.payload_override['/ilink/bot/getupdates'] = {
@@ -731,16 +937,61 @@ async def test_getupdates_session_expired_body_pauses_account(tmp_path) -> None:
         'errmsg': 'session expired',
     }
     await adapter._poll_once()
-    assert adapter._account_status == 'paused'
+    assert adapter._account_status == 'session_expired'
     assert adapter._consecutive_failures == 0
     assert adapter._circuit_state is CircuitState.CLOSED
     assert 'session expired' in (adapter._last_error or '')
-    paused = [e for e in store.audit_entries() if e['event_type'] == 'wechat_auth_paused']
-    assert paused and paused[0].get('reason') == 'session_expired'
+    expired = [e for e in store.audit_entries() if e['event_type'] == 'wechat_session_expired']
+    assert expired and expired[0].get('reason') == 'session_expired'
 
 
 @pytest.mark.asyncio
-async def test_getupdates_stale_session_ret2_unknown_error_pauses(tmp_path) -> None:
+async def test_session_expired_skips_polling_and_sending_until_rescan(tmp_path) -> None:
+    """Session-expired blocks subsequent polls and send returns AUTH error."""
+    adapter, _, transport = _make_adapter(tmp_path, max_failures=3)
+    transport.payload_override['/ilink/bot/getupdates'] = {
+        'ret': -14,
+        'errcode': -14,
+        'errmsg': 'session expired',
+    }
+
+    await adapter._poll_once()
+    transport.payload_override.pop('/ilink/bot/getupdates')
+    await adapter._poll_once()
+    send_result = await adapter.send(ChannelMessage(text='hello'), target='u1')
+
+    assert adapter._account_status == 'session_expired'
+    poll_posts = [call for call in transport.post_calls if call['path'] == '/ilink/bot/getupdates']
+    assert len(poll_posts) == 1
+    assert len(transport.send_calls) == 0
+    assert send_result.ok is False
+    assert send_result.error_category is ErrorCategory.AUTH
+    assert (
+        'session expired' in send_result.message.lower() or 're-scan' in send_result.message.lower()
+    )
+
+
+@pytest.mark.asyncio
+async def test_load_credentials_clears_session_expired_for_immediate_resume(tmp_path) -> None:
+    """A fresh credential load (initial start, or a QR re-scan) clears session-expired status."""
+    adapter, _, _ = _make_adapter(tmp_path)
+    adapter._mark_session_expired('session expired; re-scan required', reason='session_expired')
+    assert adapter._account_status == 'session_expired'
+    assert adapter._rate_limit_remaining() == 0.0
+
+    adapter.load_credentials()
+
+    assert adapter._account_status == 'logged_in'
+    assert adapter._poll_rate_limit_cooldown_until is None
+    assert adapter._rate_limit_remaining() == 0.0
+    assert (
+        adapter._poll_rate_limit_cooldown_seconds
+        == wechat_module.WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
+    )
+
+
+@pytest.mark.asyncio
+async def test_getupdates_stale_session_ret2_unknown_error_marks_session_expired(tmp_path) -> None:
     """ret=-2 + errmsg 'unknown error' is a stale-session signal (hermes)."""
     adapter, _, transport = _make_adapter(tmp_path, max_failures=3)
     transport.payload_override['/ilink/bot/getupdates'] = {
@@ -748,13 +999,13 @@ async def test_getupdates_stale_session_ret2_unknown_error_pauses(tmp_path) -> N
         'errmsg': 'unknown error',
     }
     await adapter._poll_once()
-    assert adapter._account_status == 'paused'
+    assert adapter._account_status == 'session_expired'
     assert adapter._consecutive_failures == 0
 
 
 @pytest.mark.asyncio
-async def test_getupdates_rate_limit_records_failure_not_pause(tmp_path) -> None:
-    """ret=-2 with a non-'unknown error' errmsg is a real rate limit → breaker."""
+async def test_getupdates_rate_limit_enters_cooldown_not_breaker(tmp_path) -> None:
+    """ret=-2 with a non-'unknown error' errmsg is a real rate limit cooldown."""
     adapter, _, transport = _make_adapter(tmp_path, max_failures=3)
     transport.payload_override['/ilink/bot/getupdates'] = {
         'ret': -2,
@@ -762,8 +1013,51 @@ async def test_getupdates_rate_limit_records_failure_not_pause(tmp_path) -> None
         'errmsg': 'freq limit',
     }
     await adapter._poll_once()
-    assert adapter._account_status != 'paused'
-    assert adapter._consecutive_failures == 1
+    assert adapter._account_status == 'logged_in'
+    assert adapter._consecutive_failures == 0
+    assert adapter._rate_limit_remaining() > 0
+
+
+@pytest.mark.asyncio
+async def test_send_rate_limit_does_not_block_inbound_polling(tmp_path, monkeypatch) -> None:
+    """Send-side rate-limit failures must not freeze getupdates and delay commands."""
+    adapter, _, transport = _make_adapter(tmp_path, allowed_users=['u1'])
+    adapter._send_min_interval_seconds = 0
+    transport.payload_override['/ilink/bot/sendmessage'] = {
+        'ret': -2,
+        'errcode': -2,
+        'errmsg': 'freq limit',
+    }
+
+    async def _noop_sleep(_delay):
+        pass
+
+    monkeypatch.setattr(wechat_module.asyncio, 'sleep', _noop_sleep)
+    rate_limited = await adapter.send(ChannelMessage(text='first'), target='u1')
+    transport.payload_override.pop('/ilink/bot/sendmessage')
+    transport.inbound_queue = [
+        {
+            'msg_id': 'm1',
+            'from_user_id': 'u1',
+            'to_user_id': 'bot',
+            'msg_type': 'TEXT',
+            'text': '/stop',
+        }
+    ]
+    received: list = []
+    adapter.set_inbound_handler(lambda m: received.append(m) or _noop())
+
+    await adapter._poll_once()
+
+    assert rate_limited.error_category is ErrorCategory.RATE_LIMIT
+    assert rate_limited.status is SendStatus.RATE_LIMITED
+    # Send-side rate limit opens the send circuit (30s) but must NOT freeze
+    # inbound polling: getupdates still ran and delivered the inbound message.
+    assert adapter._send_rate_limit_remaining() > 0
+    assert adapter._poll_rate_limit_remaining() == 0.0
+    assert len(transport.getupdates_calls) == 1
+    assert len(received) == 1
+    assert received[0].text == '/stop'
 
 
 @pytest.mark.asyncio
@@ -774,16 +1068,14 @@ async def test_getupdates_generic_platform_error_records_failure(tmp_path) -> No
         'errmsg': 'boom',
     }
     await adapter._poll_once()
-    assert adapter._account_status != 'paused'
+    assert adapter._account_status == 'logged_in'
     assert adapter._consecutive_failures == 1
 
 
 @pytest.mark.asyncio
 async def test_sendmessage_session_expired_raises_for_adapter_retry(tmp_path) -> None:
     """Session-expired errors are re-raised (not returned) so the adapter
-    can strip the context_token and retry tokenless — iLink accepts
-    tokenless sendmessage calls as a degraded fallback past the 48-hour
-    customer-service window. Mirrors hermes-agent weixin.py."""
+    can evict the stale context_token and enter cooldown without tokenless retry."""
     from clawcodex_ext.services.channels.wechat_ilink import _IlinkPlatformError
 
     transport = FakeIlinkTransport()
@@ -869,3 +1161,38 @@ async def test_outbound_loads_saved_context_token(tmp_path) -> None:
     store.set_context_token('default', 'u1', 'ctx_xyz')
     await adapter.send(ChannelMessage(text='reply'), target='u1')
     assert transport.sent[0]['context_token'] == 'ctx_xyz'
+
+
+# -- session-expired vs rate-limit separation ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_cooldown_does_not_mark_session_expired(tmp_path) -> None:
+    """Genuine rate limit (ret=-2, non-stale-session errmsg) enters cooldown
+    but keeps account_status as logged_in — unlike session expiry."""
+    adapter, store, transport = _make_adapter(tmp_path, max_failures=3)
+    transport.payload_override['/ilink/bot/getupdates'] = {
+        'ret': -2,
+        'errcode': -2,
+        'errmsg': 'freq limit',
+    }
+    await adapter._poll_once()
+    assert adapter._account_status == 'logged_in'
+    assert adapter._rate_limit_remaining() > 0
+    assert adapter._consecutive_failures == 0
+    assert adapter._circuit_state is CircuitState.CLOSED
+    cooldowns = [
+        e for e in store.audit_entries() if e['event_type'] == 'wechat_rate_limit_cooldown'
+    ]
+    assert cooldowns and cooldowns[0].get('reason') == 'rate_limit'
+
+
+@pytest.mark.asyncio
+async def test_session_expired_health_check_reports_unhealthy(tmp_path) -> None:
+    """health_check must report healthy=False when session is expired."""
+    adapter, _, transport = _make_adapter(tmp_path)
+    transport.status_override['/ilink/bot/getupdates'] = 401
+    await adapter._poll_once()
+    health = await adapter.health_check()
+    assert health.healthy is False
+    assert health.account_status == 'session_expired'

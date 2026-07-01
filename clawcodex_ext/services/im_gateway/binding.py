@@ -10,10 +10,13 @@ a second opt-in target overwrites the first and writes an audit record.
 from __future__ import annotations
 
 import time
+import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
 from .models import WECHAT_DIRECT_ALL_ORIGIN, OriginKey, SessionTarget
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -62,9 +65,21 @@ class BindingPolicy:
         # REPL binding and a specific-origin orchestrator binding replace each
         # other as well.
         if previous is not None and previous.target != target:
-            self._auditor("binding_override", entry, previous)
+            self._auditor('binding_override', entry, previous)
+            logger.info(
+                'binding override: origin=%s session=%s (was session=%s)',
+                key[:24],
+                entry.target.session_id[:16],
+                previous.target.session_id[:16],
+            )
         elif previous is None:
-            self._auditor("binding_created", entry, None)
+            self._auditor('binding_created', entry, None)
+            logger.info(
+                'binding created: origin=%s session=%s host_type=%s',
+                key[:24],
+                entry.target.session_id[:16],
+                entry.target.host_type,
+            )
         return entry
 
     def unbind(self, origin: OriginKey | str) -> BindingEntry | None:
@@ -83,15 +98,25 @@ class BindingPolicy:
     def mark_offline(self, origin: OriginKey | str, *, session_id: str | None = None) -> None:
         entry = self._bindings.get(str(origin))
         if entry is not None and _matches_session(entry, session_id):
-            entry.connection_state = "offline"
-            self._auditor("binding_offline", entry, None)
+            entry.connection_state = 'offline'
+            self._auditor('binding_offline', entry, None)
+            logger.info(
+                'binding offline: origin=%s session=%s',
+                str(origin)[:24],
+                entry.target.session_id[:16],
+            )
 
     def terminate(self, origin: OriginKey | str, *, session_id: str | None = None) -> None:
         entry = self._bindings.get(str(origin))
         if entry is not None and _matches_session(entry, session_id):
-            entry.connection_state = "terminated"
-            self._auditor("binding_terminated", entry, None)
+            entry.connection_state = 'terminated'
+            self._auditor('binding_terminated', entry, None)
             self._bindings.pop(str(origin), None)
+            logger.info(
+                'binding terminated: origin=%s session=%s',
+                str(origin)[:24],
+                entry.target.session_id[:16],
+            )
 
     def terminate_matching(self, origin: OriginKey | str) -> list[BindingEntry]:
         """Terminate all bindings in the same exclusive channel group."""
@@ -101,9 +126,14 @@ class BindingPolicy:
             if not _same_exclusive_binding_group(key, existing_key):
                 continue
             entry = self._bindings.pop(existing_key)
-            entry.connection_state = "terminated"
-            self._auditor("binding_terminated", entry, None)
+            entry.connection_state = 'terminated'
+            self._auditor('binding_terminated', entry, None)
             removed.append(entry)
+            logger.info(
+                'binding terminated (matching): origin=%s session=%s',
+                existing_key[:24],
+                entry.target.session_id[:16],
+            )
         return removed
 
     def all_bindings(self) -> list[BindingEntry]:

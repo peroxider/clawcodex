@@ -18,12 +18,15 @@ import json
 import os
 import threading
 import time
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .config import ReliabilityConfig
 from .models import SessionTarget
+
+logger = logging.getLogger(__name__)
 
 
 def _atomic_write_json(path: Path, data: Any) -> None:
@@ -112,6 +115,7 @@ class ReliabilityStore:
         with self._lock:
             self._purge_expired()
             if key in self._dedupe:
+                logger.debug('im_gateway dedupe hit: key=%s', key[:32])
                 return False
             self.record_processed(key, message_id=message_id)
             return True
@@ -145,6 +149,12 @@ class ReliabilityStore:
     def append_dead_letter(self, entry: dict[str, Any]) -> None:
         with self._lock:
             _append_ndjson(self._p('dead_letter.ndjson'), entry)
+        logger.warning(
+            'im_gateway dead-letter appended: channel=%s idem=%s category=%s',
+            entry.get('channel'),
+            str(entry.get('idempotency_key'))[:16],
+            entry.get('error_category'),
+        )
 
     def dead_letter_entries(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -170,6 +180,11 @@ class ReliabilityStore:
                 'updated_at': time.time(),
             }
             _atomic_write_json(self._p('im_session_map.json'), data)
+        logger.debug(
+            'im_gateway session map set: origin=%s session=%s',
+            origin[:24],
+            target.session_id[:24],
+        )
 
     # -- context tokens --------------------------------------------------
     def get_context_token(self, account_id: str, user_id: str) -> str | None:
