@@ -1118,12 +1118,15 @@ class ClawcodexREPL:
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
             cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
+            _in = self._stats_input_tokens
+            _out = self._stats_output_tokens
+            _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
             return (
                 f" {provider} · {model} · {cwd} · "
                 f"mode: {permission_mode_short_title(self._permission_mode)} · "
                 f"turns: {self._stats_turns} · "
-                f"tokens: {self._stats_input_tokens} in / "
-                f"{self._stats_output_tokens} out"
+                f"tokens: {_fmt(_in)} in / "
+                f"{_fmt(_out)} out"
                 f"{ctx_part}"
                 f"{advisor_tokens}"
                 f"{cost_part}"
