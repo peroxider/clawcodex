@@ -23,6 +23,7 @@ from src.tui.screens import (
     CostThresholdScreen,
     EffortPickerScreen,
     ExitFlowScreen,
+    ForecastPickerScreen,
     HistoryEntry,
     HistorySearchScreen,
     IdleReturnScreen,
@@ -30,6 +31,7 @@ from src.tui.screens import (
     ThemePickerScreen,
     fuzzy_score,
 )
+from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
 
 
 class _Host(Screen):
@@ -62,6 +64,62 @@ def _push(app: App, screen) -> asyncio.Future:
 
     app.push_screen(screen, callback=_callback)
     return future
+
+
+# ------------------------------------------------------------------
+# ForecastPicker
+# ------------------------------------------------------------------
+
+
+def _forecast_result() -> ForecastResult:
+    return ForecastResult(
+        generated=True,
+        fingerprint="fp",
+        suggestions=[
+            ForecastSuggestion(
+                id="s1",
+                title="Run focused tests",
+                prompt="Run the focused tests for intent forecast.",
+                reason="The implementation changed testable command paths.",
+                confidence=0.82,
+            ),
+            ForecastSuggestion(
+                id="s2",
+                title="Review wiring",
+                prompt="Review the forecast wiring.",
+                confidence=0.61,
+            ),
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_forecast_picker_accepts_selected_suggestion():
+    app = _DialogHost()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        picker = ForecastPickerScreen(_forecast_result())
+        result_future = _push(app, picker)
+        await pilot.pause()
+        assert picker._select is not None
+        assert picker._select.current.value == "1"
+        await pilot.press("down")
+        await pilot.press("enter")
+        result = await result_future
+        assert result == "2"
+
+
+@pytest.mark.asyncio
+async def test_forecast_picker_cancel_resolves_none():
+    app = _DialogHost()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        picker = ForecastPickerScreen(_forecast_result())
+        result_future = _push(app, picker)
+        await pilot.pause()
+        await pilot.press("escape")
+        result = await result_future
+        assert result is None
 
 
 # ------------------------------------------------------------------

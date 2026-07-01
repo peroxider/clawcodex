@@ -57,6 +57,7 @@ _KNOWN_HANDLED_COMMANDS: set[str] = {
     "/tools", "/stream",
     "/effort", "/history", "/cost", "/idle", "/theme",
     "/diff", "/mcp", "/tasks", "/rewind", "/resume", "/permission",
+    "/forecast",
     # Handled by dispatch_registry_command (NOT by dispatch_local_command)
     "/init", "/model", "/provider", "/recap",
     "/advisor", "/buddy", "/compact", "/context", "/cron-list",
@@ -270,6 +271,29 @@ def test_dispatch_permission(mock_session, tmp_path, tool_registry):
     )
     assert result.handled is True
     assert result.open_dialog == "permission"
+
+
+def test_dispatch_forecast_dialog(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/forecast", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is True
+    assert result.open_dialog == "forecast"
+
+
+def test_dispatch_forecast_run_dialog(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/forecast run", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is True
+    assert result.open_dialog == "forecast"
+
+
+def test_dispatch_forecast_status_falls_through(mock_session, tmp_path, tool_registry):
+    result = dispatch_local_command(
+        "/forecast status", session=mock_session, workspace_root=tmp_path, tool_registry=tool_registry
+    )
+    assert result.handled is False
 
 
 # ---------------------------------------------------------------------------

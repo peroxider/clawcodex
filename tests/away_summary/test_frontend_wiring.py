@@ -14,6 +14,7 @@ from src.types.messages import Message
 from clawcodex_ext.away_summary.config import AwaySummaryConfig
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.messages import create_away_summary_message
+from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
 
 
 class _Console:
@@ -58,6 +59,7 @@ class _Repl:
         self.command_registry = CommandRegistry()
         self.session = _Session(conv)
         self.provider = _Provider()
+        self.workspace_root = Path(".")
         self.console = _Console()
         self.runtime_context = _Runtime()
         self.tool_context = type("ToolContext", (), {"cwd": None, "workspace_root": Path(".")})()
@@ -113,6 +115,34 @@ def test_repl_extension_registers_recap(monkeypatch) -> None:
     assert repl.command_registry.has("recap")
     assert repl.updated is True
     assert getattr(repl, "_away_summary_controller", None) is not None
+
+
+def test_repl_extension_registers_forecast_controller() -> None:
+    from clawcodex_ext.frontend.repl_extensions import install_repl_extensions
+
+    repl = _Repl()
+    install_repl_extensions(repl, repl.runtime_context)
+
+    assert repl.command_registry.has("forecast")
+    controller = getattr(repl, "_intent_forecast_controller", None)
+    assert controller is not None
+
+    controller.display(
+        ForecastResult(
+            generated=True,
+            fingerprint="fp",
+            suggestions=[
+                ForecastSuggestion(
+                    id="s1",
+                    title="Continue implementation",
+                    prompt="Continue implementing the feature.",
+                    confidence=0.8,
+                )
+            ],
+        )
+    )
+    assert repl.local_command_output[-1][1] == "forecast"
+    assert "Continue implementation" in repl.local_command_output[-1][0]
 
 
 def test_repl_auto_recap_display_prints_immediately(monkeypatch) -> None:
