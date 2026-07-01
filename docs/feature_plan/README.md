@@ -49,6 +49,7 @@ docs/feature_plan/
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
 | F-122 | `/btw` 侧边询问 — 上下文零污染的并行问答 | 📋 | [f-122-btw-side-question.md](03-agent-core/f-122-btw-side-question.md) |
+| F-123 | Intent Forecast 空闲意图预测 | 📋 | [f-123-intent-forecast.md](03-agent-core/f-123-intent-forecast.md) |
 
 ### CLI 与配置系统
 
@@ -119,3 +120,4 @@ docs/feature_plan/
 | 2026-06-24 | 初始创建（从四源融合） | 四文档合并（MERGE_GUIDE Step 2） |
 | 2026-06-25 | 新增 F-119（System Prompt 段落拼装与自迭代基础设施） | 架构审计后规划段落级扩展点 + A/B 框架骨架 |
 | 2026-06-29 | 新增 `../decoupling/` 解耦方案目录（P3 整改全量文档化） | P3 整改 6 步累计 67+ 迁移 imports / 8 新 facade 完工；解耦方案从 F-Number 体系中独立为目录 |
+| 2026-07-01 | 新增 F-123 Intent Forecast 空闲意图预测规划 | 用户提出 REPL/TUI 2 分钟空闲后预测下一步、`/forecast` 与 CLI 同名、异步 session summary sidecar 的设计需求 |
