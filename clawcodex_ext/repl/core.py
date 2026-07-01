@@ -731,6 +731,10 @@ class ClawcodexREPL:
         self._stats_turns: int = 0
         self._stats_input_tokens: int = 0
         self._stats_output_tokens: int = 0
+        # Streaming output character counter for real-time token estimation
+        # in the status bar. Accumulated from text chunks during streaming;
+        # reset when actual usage data arrives from the API.
+        self._streaming_output_chars: int = 0
         self._direct_abort_controller: AbortController | None = None
         self._im_active_cancel: Callable[[], None] | None = None
         # IM-driven permission wait state. Populated only while
@@ -1104,12 +1108,24 @@ class ClawcodexREPL:
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
             cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
+            # Real-time output token estimate during streaming: when the
+            # engine is actively generating text, tack on a live estimate
+            # based on character count (~4 chars per token) so the user
+            # sees the output growing in near-real-time rather than only
+            # after each full API round-trip. Hidden when not streaming
+            # (zero chars) to keep the toolbar clean.
+            live_out = self._streaming_output_chars
+            if live_out > 0:
+                live_estimate = max(live_out // 4, 1)
+                out_display = f"{self._stats_output_tokens} + ~{live_estimate}"
+            else:
+                out_display = str(self._stats_output_tokens)
             return (
                 f" {provider} · {model} · {cwd} · "
                 f"mode: {permission_mode_short_title(self._permission_mode)} · "
                 f"turns: {self._stats_turns} · "
                 f"tokens: {self._stats_input_tokens} in / "
-                f"{self._stats_output_tokens} out"
+                f"{out_display} out"
                 f"{advisor_tokens}"
                 f"{cost_part}"
                 f"{goal_part}"
@@ -1805,6 +1821,7 @@ class ClawcodexREPL:
                             on_permission_cycle=self._apply_permission_mode_cycle,
                             completer=self.completer,
                             history=self._file_history,
+                            toolbar_text=self._bottom_toolbar,
                         ) as status:
                             status_ref.append(status)
                             self._active_live_status = status
@@ -2889,6 +2906,7 @@ class ClawcodexREPL:
           that replays the most recent block.
         """
         self._thinking_chunks.clear()
+        self._streaming_output_chars = 0
 
     @property
     def _p(self) -> "REPLPalette":
@@ -5120,6 +5138,7 @@ class ClawcodexREPL:
                     if not chunk:
                         return
                     _stop_status_once()
+                    self._streaming_output_chars += len(chunk)
                     self.console.print(chunk, end="", markup=False, highlight=False, soft_wrap=True)
 
                 self._direct_abort_controller = AbortController()
@@ -5167,6 +5186,7 @@ class ClawcodexREPL:
                             on_permission_cycle=self._apply_permission_mode_cycle,
                             completer=self.completer,
                             history=self._file_history,
+                            toolbar_text=self._bottom_toolbar,
                         ) as status:
                             _direct_status_ref.append(status)
                             self._active_live_status = status
@@ -5357,6 +5377,9 @@ class ClawcodexREPL:
                             out_toks = int(usage.get("output_tokens", 0) or 0)
                             self._stats_input_tokens += in_toks
                             self._stats_output_tokens += out_toks
+                            # Real usage arrived — reset the streaming
+                            # estimate so the toolbar shows exact counts.
+                            self._streaming_output_chars = 0
                             turn_tokens += in_toks + out_toks
                             if _engine_status_ref:
                                 _engine_status_ref[0].set_tokens(turn_tokens)
@@ -5375,6 +5398,10 @@ class ClawcodexREPL:
                                     # lands above the explanatory text.
                                     _flush_task_snapshot_if_any()
                                     last_text = block.text
+                                    # Real-time token estimate: count chars
+                                    # for the toolbar so the user sees live
+                                    # output token growth during streaming.
+                                    self._streaming_output_chars += len(block.text)
                                     _stop_status_once()
                                     stream_started = True
                                     self.console.print(Markdown(block.text))
@@ -5566,6 +5593,7 @@ class ClawcodexREPL:
                         on_permission_cycle=self._apply_permission_mode_cycle,
                         completer=self.completer,
                         history=self._file_history,
+                        toolbar_text=self._bottom_toolbar,
                     ) as status:
                         _engine_status_ref.append(status)
                         self._active_live_status = status

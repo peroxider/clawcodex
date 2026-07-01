@@ -123,6 +123,7 @@ class LiveStatus:
         completer=None,
         verbose: bool = False,
         history: Any = None,
+        toolbar_text: Callable[[], str] | None = None,
     ) -> None:
         if not _HAS_PROMPT_TOOLKIT:
             raise RuntimeError(
@@ -146,6 +147,10 @@ class LiveStatus:
         # mentions, slash commands) in a popup above the input row —
         # parity with the foreground ``PromptSession``.
         self._completer = completer
+        # Optional callable that returns the bottom toolbar text (e.g.
+        # ``repl._bottom_toolbar``) — rendered as a persistent status row
+        # below the input field during agent execution.
+        self._toolbar_text = toolbar_text
         self._frame_index = 0
         self._app: Application | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -492,25 +497,40 @@ class LiveStatus:
         # ``CompletionsMenu`` above the input row when the user types
         # ``@`` (or ``/``) — the menu floats over the spinner row
         # without changing the row layout.
-        body = HSplit(
-            [
-                Window(content=spinner_control, height=Dimension.exact(1)),
-                VSplit(
-                    [
-                        Window(
-                            content=prompt_marker_control,
-                            width=Dimension.exact(2),
-                            style="class:input-row",
-                        ),
-                        Window(
-                            content=input_control,
-                            height=Dimension.exact(1),
-                            style="class:input-row",
-                        ),
-                    ]
-                ),
-            ]
-        )
+        toolbar_children: list[Container] = [
+            Window(content=spinner_control, height=Dimension.exact(1)),
+            VSplit(
+                [
+                    Window(
+                        content=prompt_marker_control,
+                        width=Dimension.exact(2),
+                        style="class:input-row",
+                    ),
+                    Window(
+                        content=input_control,
+                        height=Dimension.exact(1),
+                        style="class:input-row",
+                    ),
+                ]
+            ),
+        ]
+        # Bottom status bar — mirrors the idle PromptSession's
+        # ``bottom_toolbar`` so the user sees provider/model/turns/tokens
+        # even while the agent is running.
+        if self._toolbar_text is not None:
+            toolbar_control = FormattedTextControl(
+                text=self._render_toolbar_text,
+                focusable=False,
+                show_cursor=False,
+            )
+            toolbar_children.append(
+                Window(
+                    content=toolbar_control,
+                    height=Dimension.exact(1),
+                    style="class:status-bar",
+                )
+            )
+        body = HSplit(toolbar_children)
         floats: list[Float] = []
         if self._completer is not None:
             floats.append(
@@ -540,6 +560,10 @@ class LiveStatus:
                 "spinner": "fg:ansicyan",
                 "status": "",
                 "hint": "fg:#888888",
+                # Bottom status bar — mirrors the idle PromptSession's
+                # ``bottom_toolbar``. Muted foreground so it stays
+                # visually subordinate to the spinner + input rows.
+                "status-bar": "fg:#888888",
             }
         )
 
@@ -642,6 +666,29 @@ class LiveStatus:
             parts.append((base_style, text[pos:]))
         return parts
 
+
+    def _render_toolbar_text(self) -> "FormattedText":
+        """Render the bottom status bar by calling the REPL's toolbar callback.
+
+        Falls back to an empty string when no callback is set or when an
+        exception occurs (the toolbar is never allowed to crash the spinner).
+        """
+        cb = self._toolbar_text
+        if cb is None:
+            return FormattedText([("class:status-bar", "")])
+        try:
+            text = cb()
+        except Exception:
+            return FormattedText([("class:status-bar", "")])
+        if not text:
+            return FormattedText([("class:status-bar", "")])
+        # Delegate to the same Rich-markup parser used by the spinner so
+        # any ``[dim]``/``[success]``/ etc. tags in the toolbar text are
+        # converted to prompt_toolkit style tuples rather than leaking
+        # verbatim. The ``"class:status-bar"`` base style keeps the
+        # muted fg colour as the fallback for un-tagged segments.
+        styled = self._parse_rich_markup(text, base_style="class:status-bar")
+        return FormattedText(styled)
 
     def _render_spinner_text(self) -> "FormattedText":
         with self._lock:
