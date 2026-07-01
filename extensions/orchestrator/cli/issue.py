@@ -992,29 +992,31 @@ def _run_list(registry_path: Path | None, args: argparse.Namespace) -> int:
             print(f"  (filtered by status: {status_filter})")
         return 0
 
-    # Print summary
+    # Status display mapping matching README Demo format
+    _STATUS_DISPLAY = {
+        "completed": "done",
+        "pending_review": "paused",
+        "running": "running",
+        "pending": "pending",
+        "synced": "synced",
+        "failed": "failed",
+        "abandoned": "abandoned",
+        "verification_failed": "vfailed",
+    }
+
+    print(f"{'ID':<20} {'STATUS':<10} {'BRANCH':<25} {'ATTEMPTS':<9} PR")
+    for r in records:
+        raw_status = _get_status_str(r.status)
+        display_status = _STATUS_DISPLAY.get(raw_status, raw_status)
+        branch = r.branch_name or "-"
+        attempts = str(r.attempt_count) if r.attempt_count else "-"
+        pr = r.pr_url or "-"
+        print(f"{r.issue_id:<20} {display_status:<10} {branch:<25} {attempts:<9} {pr}")
+
+    print()
     for r in records:
         s = _get_status_str(r.status)
         counts[s.upper()] = counts.get(s.upper(), 0) + 1
-
-    print(f"Issues ({len(records)} total)")
-    print(
-        f"  {'STATUS':<15} {'ISSUE ID':<20} {'TURN/TOOL':<9} {'LAST EVENT':<18} "
-        f"{'BRANCH':<25} {'WORKSPACE'}"
-    )
-    print(f"  {'-' * 15} {'-' * 20} {'-' * 9} {'-' * 18} {'-' * 25} {'-' * 20}")
-    for r in records:
-        s = _get_status_str(r.status)
-        branch = r.branch_name or "-"
-        turn_tool = f"{getattr(r, 'run_turn_count', 0)}/{getattr(r, 'run_tool_count', 0)}"
-        last_event = getattr(r, "run_last_event", None) or "-"
-        ws_path = r.workspace_path or "-"
-        # Shorten path for display
-        if ws_path != "-" and len(ws_path) > 18:
-            ws_path = "..." + ws_path[-15:]
-        print(f"  {s:<15} {r.issue_id:<20} {turn_tool:<9} {last_event:<18} {branch:<25} {ws_path}")
-
-    print()
     print(f"  PENDING  : {counts.get('PENDING', 0)}")
     print(f"  RUNNING  : {counts.get('RUNNING', 0)}")
     print(f"  SYNCED   : {counts.get('SYNCED', 0)}")
@@ -1902,8 +1904,10 @@ def _inject_hint(issue_id: str, hints_file: Path, hint: str) -> int:
             f.write(header)
             f.write(hint + "\n")
             f.write(separator)
-        print(f"Hint #{next_num} injected for issue {issue_id}")
-        print(f"  The agent will see this on its next tool call.")
+        print(
+            f"\u2713 hint injected for issue {issue_id}"
+            f" \u00b7 agent will pick it up on next tool call"
+        )
         return 0
     except Exception as exc:
         print(f"Failed to inject hint: {exc}", file=sys.stderr)

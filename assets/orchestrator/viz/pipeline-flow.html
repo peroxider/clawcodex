@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13-Stage Pipeline 时序图</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --accent-glow: rgba(0,212,170,0.15);
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* Pipeline controls */
+  .controls {
+    display: flex; gap: 12px; align-items: center;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  button {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 150ms ease-out;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary {
+    background: var(--accent); color: #0a0e14;
+    border-color: var(--accent);
+  }
+  button.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+  .progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-elevated);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--info));
+    width: 0%;
+    transition: width 300ms ease-out;
+    border-radius: 999px;
+  }
+  .step-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 80px;
+    text-align: right;
+  }
+
+  /* Lanes */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .lane-label {
+    background: var(--bg-elevated);
+    padding: 16px 12px;
+    border-right: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    display: flex; align-items: center;
+    min-height: 96px;
+  }
+  .lane-label .lane-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 8px;
+  }
+  .lane-label.tracker .lane-dot { background: var(--info); }
+  .lane-label.workspace .lane-dot { background: var(--warning); }
+  .lane-label.agent .lane-dot { background: var(--accent); }
+  .lane-label.git .lane-dot { background: var(--accent-dim); }
+
+  .lane-content {
+    position: relative;
+    padding: 16px 16px;
+    min-height: 96px;
+  }
+
+  /* Stage card */
+  .stage {
+    position: relative;
+    display: inline-block;
+    margin: 4px 4px 4px 0;
+    padding: 10px 14px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    opacity: 0.35;
+    transition: all 250ms ease-out;
+    cursor: default;
+  }
+  .stage.active {
+    opacity: 1;
+    border-color: var(--accent);
+    background: var(--accent-glow);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,212,170,0.25);
+  }
+  .stage.done {
+    opacity: 0.7;
+    border-color: var(--accent-dim);
+    color: var(--text-primary);
+  }
+  .stage.failed {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(239,68,68,0.1);
+    opacity: 1;
+  }
+  .stage-num {
+    display: inline-block;
+    width: 18px; height: 18px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border-radius: 4px;
+    text-align: center;
+    font-size: 10px;
+    line-height: 18px;
+    margin-right: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+  }
+  .stage.active .stage-num {
+    background: var(--accent); color: #0a0e14;
+  }
+  .stage-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 4px;
+  }
+  .stage-icon {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    opacity: 0.6;
+  }
+
+  /* Stage detail panel */
+  .detail {
+    margin-top: 20px;
+    padding: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    min-height: 120px;
+  }
+  .detail-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .detail-name {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .detail-desc {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .detail-tags {
+    margin-top: 10px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .detail-tag {
+    padding: 3px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+    .pipeline { grid-template-columns: 90px 1fr; }
+    .lane-label { font-size: 10px; padding: 12px 8px; }
+    .stage { font-size: 11px; padding: 8px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>13 阶段 Pipeline · 一次 issue → PR 的完整旅程</h1>
+  <p class="sub">按泳道分组 · 点击 Play 逐步推进 · 每个阶段都有可观测日志和失败兜底</p>
+</div>
+
+<div class="container">
+  <div class="controls">
+    <button class="primary" id="playBtn">▶ Play</button>
+    <button id="resetBtn">↺ Reset</button>
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+    <div class="step-counter" id="stepCounter">0 / 13</div>
+  </div>
+
+  <div class="pipeline">
+    <div class="lane-label tracker"><span class="lane-dot"></span>Tracker</div>
+    <div class="lane-content" data-lane="tracker"></div>
+
+    <div class="lane-label workspace"><span class="lane-dot"></span>Workspace</div>
+    <div class="lane-content" data-lane="workspace"></div>
+
+    <div class="lane-label agent"><span class="lane-dot"></span>Agent</div>
+    <div class="lane-content" data-lane="agent"></div>
+
+    <div class="lane-label git"><span class="lane-dot"></span>Git &amp; PR</div>
+    <div class="lane-content" data-lane="git"></div>
+  </div>
+
+  <div class="detail" id="detail">
+    <div class="detail-title">// 阶段详情</div>
+    <div class="detail-name">点击 ▶ Play 开始观察 13 阶段 pipeline</div>
+    <div class="detail-desc">从 issue poll 触发 → git sync 收尾，整个过程可暂停、可注入操作员意图。</div>
+  </div>
+</div>
+
+<script>
+  const stages = [
+    { num: 1, lane: 'tracker', name: 'Issue Polling', code: 'tracker.fetch_issues()',
+      desc: '轮询目标 tracker（Linear/GitHub/Gitee/GitCode/Local），按 active_states 过滤，提取 open issue 列表。',
+      tags: ['polling.interval_ms', 'tracker.active_states'] },
+    { num: 2, lane: 'workspace', name: 'Clone Workspace', code: 'workspace.clone()',
+      desc: 'git clone 目标仓库到 workspace.root，支持 isolated / shared / sequential 三种策略。',
+      tags: ['workspace.strategy', 'clone_depth=1'] },
+    { num: 3, lane: 'workspace', name: 'After-Create Hook', code: 'hooks.after_create',
+      desc: 'clone 完成后立即跑 shell（典型：包管理器安装依赖 — pip/npm/cargo/maven）。',
+      tags: ['hooks.after_create', 'timeout_ms=120000'] },
+    { num: 4, lane: 'workspace', name: 'Branch & Checkout', code: 'workspace.checkout_branch()',
+      desc: '基于 issue.branch_name 切出独立 worktree，注入环境变量 ISSUE_IDENTIFIER 等。',
+      tags: ['branch_prefix'] },
+    { num: 5, lane: 'workspace', name: 'Before-Run Hook', code: 'hooks.before_run',
+      desc: 'Agent 启动前最后一道预热（典型：测试发现 dry-run，提前暴露坏配置）。',
+      tags: ['hooks.before_run'] },
+    { num: 6, lane: 'agent', name: 'Agent Loop', code: 'agent_runner.run()',
+      desc: '30 轮 QueryRunner 循环，agent 读 issue + workspace，调工具写代码。',
+      tags: ['max_turns=30', 'permission_mode=bypassPermissions'] },
+    { num: 7, lane: 'agent', name: 'After-Run Hook', code: 'hooks.after_run',
+      desc: 'Agent 退出后跑（无论成败）：典型 lint + test 早期失败信号。',
+      tags: ['hooks.after_run'] },
+    { num: 8, lane: 'git', name: 'Pre-Commit Hook', code: 'hooks.pre_commit',
+      desc: 'git add -A 后、git commit 前；若 hook 改了 working tree，git_sync 自动 amend。',
+      tags: ['hooks.pre_commit', 'auto-amend'] },
+    { num: 9, lane: 'git', name: 'Verification Gate', code: '_run_pre_push_verification',
+      desc: '三道关卡：test_command → build_command → lint_command；任一失败抛 VerificationFailed 阻断 push。',
+      tags: ['agent.test_command', 'agent.build_command', 'agent.lint_command'] },
+    { num: 10, lane: 'git', name: 'Pre-Push Hook', code: 'hooks.pre_push',
+      desc: '验证通过后、push 前；若 hook 又改了 working tree，抛 HookFailedError。',
+      tags: ['hooks.pre_push', 'dirty-snapshot diff'] },
+    { num: 11, lane: 'git', name: 'Git Push', code: 'git push',
+      desc: '若冲突 → rebase → agent 修复 → loop；最多 retry_backoff_ms 指数退避。',
+      tags: ['max_retry_attempts=5'] },
+    { num: 12, lane: 'git', name: 'Ensure PR', code: 'tracker.ensure_pull_request()',
+      desc: '调用平台 API 创建/更新 PR，body 由 _build_pr_body 重新渲染（含 status snapshot）。',
+      tags: ['tracker adapter', 'PR body re-render'] },
+    { num: 13, lane: 'tracker', name: 'Post-Sync + Summary', code: 'hooks.post_sync → update_comment',
+      desc: 'post_sync hook 跑（如 push review branch）；最后 issue comment 报告报告路径与 verification 状态。',
+      tags: ['hooks.post_sync', 'report dual-write'] },
+  ];
+
+  const laneOrder = ['tracker', 'workspace', 'agent', 'git'];
+  const stagesByLane = {};
+  laneOrder.forEach(l => stagesByLane[l] = []);
+  stages.forEach(s => stagesByLane[s.lane].push(s));
+
+  // Render stage cards
+  laneOrder.forEach(lane => {
+    const container = document.querySelector(`[data-lane="${lane}"]`);
+    stagesByLane[lane].forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'stage';
+      el.dataset.num = s.num;
+      el.innerHTML = `
+        <span class="stage-num">${s.num}</span>${s.name}
+        <span class="stage-code">${s.code}</span>
+      `;
+      el.addEventListener('click', () => showDetail(s.num));
+      container.appendChild(el);
+    });
+  });
+
+  let currentStep = 0;
+  let timer = null;
+
+  function showDetail(num) {
+    const s = stages.find(x => x.num === num);
+    if (!s) return;
+    document.getElementById('detail').innerHTML = `
+      <div class="detail-title">// Stage ${String(s.num).padStart(2,'0')} · ${s.code}</div>
+      <div class="detail-name">${s.name}</div>
+      <div class="detail-desc">${s.desc}</div>
+      <div class="detail-tags">
+        ${s.tags.map(t => `<span class="detail-tag">${t}</span>`).join('')}
+      </div>
+    `;
+  }
+
+  function setStep(n) {
+    currentStep = n;
+    document.querySelectorAll('.stage').forEach(el => {
+      const num = parseInt(el.dataset.num);
+      el.classList.remove('active', 'done', 'failed');
+      if (num < n) el.classList.add('done');
+      else if (num === n) el.classList.add('active');
+    });
+    document.getElementById('progress').style.width = `${(n / 13) * 100}%`;
+    document.getElementById('stepCounter').textContent = `${n} / 13`;
+    if (n > 0) showDetail(Math.min(n, 13));
+  }
+
+  function play() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+      document.getElementById('playBtn').textContent = '▶ Play';
+      return;
+    }
+    document.getElementById('playBtn').textContent = '⏸ Pause';
+    if (currentStep >= 13) setStep(0);
+    timer = setInterval(() => {
+      if (currentStep >= 13) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById('playBtn').textContent = '▶ Play';
+        return;
+      }
+      setStep(currentStep + 1);
+    }, 900);
+  }
+
+  function reset() {
+    if (timer) { clearInterval(timer); timer = null; }
+    document.getElementById('playBtn').textContent = '▶ Play';
+    setStep(0);
+  }
+
+  document.getElementById('playBtn').addEventListener('click', play);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+
+  setStep(0);
+</script>
+</body>
+</html>

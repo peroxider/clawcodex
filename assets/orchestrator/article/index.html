@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestrator · 自主工程层发布说明</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --bg-code: #0f1420;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #a4abba;
+    --text-muted: #6b7280;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --accent-glow: rgba(0,212,170,0.12);
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+    --max-width: 920px;
+    --iframe-radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 16px;
+    line-height: 1.7;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(circle at 15% 5%, rgba(0,212,170,0.05), transparent 45%),
+      radial-gradient(circle at 85% 95%, rgba(59,130,246,0.04), transparent 45%);
+    background-attachment: fixed;
+  }
+
+  .container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+  h1 { font-size: 52px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.1; }
+  h2 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+  h3 { font-size: 20px; font-weight: 700; }
+  p { color: var(--text-secondary); margin-bottom: 1em; }
+  p:last-child { margin-bottom: 0; }
+  strong { color: var(--text-primary); font-weight: 600; }
+  em { color: var(--text-primary); font-style: italic; }
+  code {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 0.88em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--accent);
+  }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 150ms;
+  }
+  a:hover { border-bottom-color: var(--accent); }
+
+  .topnav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+    background: rgba(10, 14, 20, 0.7);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+  }
+  .topnav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .topnav-brand {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-primary);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .topnav-brand-mark {
+    width: 22px; height: 22px;
+    background: linear-gradient(135deg, var(--accent), var(--info));
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--bg);
+    font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .topnav-links { display: flex; gap: 18px; font-size: 13px; }
+  .topnav-links a {
+    color: var(--text-secondary);
+    border-bottom: none;
+  }
+  .topnav-links a:hover { color: var(--accent); }
+
+  .hero {
+    padding: 120px 0 80px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 80px;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(0,212,170,0.3);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hero-eyebrow::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .hero h1 {
+    margin-bottom: 28px;
+    background: linear-gradient(180deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero-subtitle {
+    font-size: 19px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 720px;
+    margin-bottom: 40px;
+  }
+  .hero-meta {
+    display: flex; gap: 32px; flex-wrap: wrap;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hero-meta strong { color: var(--text-primary); font-weight: 600; display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+
+  section { margin-bottom: 100px; }
+  .section-header { margin-bottom: 36px; }
+  .section-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-eyebrow::before {
+    content: ''; width: 24px; height: 1px; background: var(--accent);
+  }
+  .section-header h2 { margin-bottom: 16px; }
+  .section-lede {
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 720px;
+  }
+
+  .viz-wrap { margin: 40px 0; }
+  .viz-caption {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: var(--iframe-radius) var(--iframe-radius) 0 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .viz-caption .marker {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .viz-caption strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .viz-caption .hint {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  iframe.viz {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    border-radius: 0;
+    border-top: none;
+    border-bottom: none;
+  }
+  .viz-footer {
+    padding: 10px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--iframe-radius) var(--iframe-radius);
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex; justify-content: space-between;
+  }
+
+  .highlight-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 28px 0;
+  }
+  @media (max-width: 700px) { .highlight-row { grid-template-columns: 1fr; } }
+  .highlight-card {
+    padding: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: all 200ms;
+  }
+  .highlight-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .highlight-card .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .highlight-card h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .highlight-card p {
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .code-block {
+    margin: 32px 0;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .code-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .code-header .filename { color: var(--text-secondary); }
+  .code-header .lang { color: var(--accent); }
+  pre.workflow {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    padding: 20px;
+    overflow-x: auto;
+    margin: 0;
+  }
+  pre.workflow .key { color: var(--info); }
+  pre.workflow .val { color: var(--accent); }
+  pre.workflow .str { color: var(--warning); }
+  pre.workflow .comment { color: var(--text-muted); font-style: italic; }
+  pre.workflow .punct { color: var(--text-muted); }
+
+  .pull-quote {
+    margin: 36px 0;
+    padding: 24px 28px;
+    background: var(--bg-card);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--text-primary);
+  }
+  .pull-quote p { color: var(--text-primary); }
+  .pull-quote cite {
+    display: block;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: normal;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  ul.clean {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0;
+  }
+  ul.clean li {
+    position: relative;
+    padding-left: 24px;
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  ul.clean li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  ul.clean li strong { color: var(--text-primary); }
+
+  .closing {
+    margin-top: 120px;
+    padding: 60px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+  }
+  .closing h2 { margin-bottom: 20px; }
+  .closing p { max-width: 580px; margin: 0 auto 32px; font-size: 17px; }
+  .cta-row {
+    display: inline-flex; gap: 12px; flex-wrap: wrap;
+    justify-content: center;
+  }
+  .cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    transition: all 150ms;
+    text-decoration: none;
+  }
+  .cta:hover { border-color: var(--accent); color: var(--accent); }
+  .cta.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .cta.primary:hover {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+    color: var(--bg);
+  }
+
+  footer {
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  @media (max-width: 768px) {
+    body { font-size: 15px; }
+    h1 { font-size: 36px; }
+    h2 { font-size: 24px; }
+    .hero { padding: 60px 0 50px; margin-bottom: 50px; }
+    .hero-subtitle { font-size: 16px; }
+    .container { padding: 0 16px; }
+    section { margin-bottom: 60px; }
+    .topnav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ TOP NAV ============ -->
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="topnav-brand">
+      <span class="topnav-brand-mark">O</span>
+      Orchestrator · 自主工程层
+    </div>
+    <div class="topnav-links">
+      <a href="#what">概览</a>
+      <a href="#trackers">适配器</a>
+      <a href="#pipeline">13 阶段</a>
+      <a href="#verification">验证门控</a>
+      <a href="#followup">反馈闭环</a>
+      <a href="#intent">意图系统</a>
+      <a href="#perf">性能</a>
+      <a href="#example">实战</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="container">
+    <span class="hero-eyebrow">v2026.06 · 通用编排器</span>
+    <h1>把 issue 到 PR<br>变成一条全自主的流水线</h1>
+    <p class="hero-subtitle">
+      Orchestrator 是一个常驻守护进程：它从 issue 平台拉取任务，派出 LLM Agent 改代码，跑完三道验证关卡，把分支推上去、开 PR、回写状态——全程无需人类在场。它是一套通用框架，issue 平台和验证命令都由你配置。
+    </p>
+    <div class="hero-meta">
+      <div><strong>形态</strong>通用编排器 · 与 LLM 解耦</div>
+      <div><strong>配置</strong>声明式 workflow.md</div>
+      <div><strong>适配器</strong>5 个 issue 平台</div>
+      <div><strong>核心特性</strong>验证门控 · 反馈闭环 · 操作员意图</div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ SECTION 1: WHAT ============ -->
+<section id="what">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">01 · 概览</div>
+      <h2>三层结构，每层各司其职</h2>
+      <p class="section-lede">
+        Orchestrator 不绑定特定的 LLM 或 issue 平台。它只做一件事：把已有的 Agent / QueryRunner / Tool System 装进一个长循环，外加一份声明式 workflow.md 配置文件。整个系统分三层——tracker 适配器负责跟平台对话，orchestrator 核心负责状态机和 Git 同步，agent runner 负责让 LLM 写代码。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>三层架构图</strong>
+        <span>5 个 tracker 接入 → orchestrator 核心 13 个子组件 → agent runner 5 个组件</span>
+        <span class="hint">↕ 点击内部查看详情</span>
+      </div>
+      <iframe class="viz" src="../viz/arch-overview.html" height="820" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>extensions/orchestrator/{tracker,git_sync,workspace,issue_registry,…}</span>
+        <span>单实例 ProgressReporter · Progress Sink 协议扇出</span>
+      </div>
+    </div>
+
+    <div class="highlight-row">
+      <div class="highlight-card">
+        <div class="num">01</div>
+        <h3>声明式而非命令式</h3>
+        <p>所有行为由一份 <code>workflow.md</code> 描述：tracker、hooks、agent 限制、验证命令——都是 YAML，不必写代码。</p>
+      </div>
+      <div class="highlight-card">
+        <div class="num">02</div>
+        <h3>通用而非绑定</h3>
+        <p>可以接入任何支持 issue + PR 工作流的平台，可以驱动任何能调用工具的 Agent 循环。</p>
+      </div>
+      <div class="highlight-card">
+        <div class="num">03</div>
+        <h3>可观测而非黑箱</h3>
+        <p>每次 run 产出结构化日志、报告双写、issue 评论附状态快照——任何一步都可追溯。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 2: TRACKERS ============ -->
+<section id="trackers">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">02 · 适配器</div>
+      <h2>五个 Tracker，一套抽象</h2>
+      <p class="section-lede">
+        五个 issue 平台，能力边界各不相同。Orchestrator 不假设它们等价——同一个 <code>TrackerAdapter</code> 协议下，每个平台以自己的方式实现，不支持的能力就老老实实标注 <code>—</code>。下面这张矩阵就是诚实的能力清单。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>Tracker 能力矩阵</strong>
+        <span>覆盖 issue/comments/PR/评论扫描/Inline review/CI status/Push/Intent labels 9 个维度</span>
+        <span class="hint">GitHub/Gitee/GitCode = 9/9 完整</span>
+      </div>
+      <iframe class="viz" src="../viz/tracker-matrix.html" height="780" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>TrackerAdapter · ABC + 默认方法 · 旧实现无需 override</span>
+        <span>5 个实现 · 9 项能力维度</span>
+      </div>
+    </div>
+
+    <p style="margin-top: 32px;">
+      几个值得拎出来说的细节：
+    </p>
+    <ul class="clean">
+      <li><strong>Linear 没 PR API</strong>。所以它只占 2/9——它做 issue 跟踪，最后需要 GitHub/Gitee/GitCode 来开 PR。</li>
+      <li><strong>Local tracker 不发远端</strong>。这是设计行为，不是失败——issue 终态固定 <code>PENDING_REVIEW</code>，分支留在 workspace 等人工接管。</li>
+      <li><strong>三个 REST 平台覆盖 9/9</strong>。任何需要 PR 自动化的项目都能开箱即用。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SECTION 3: PIPELINE ============ -->
+<section id="pipeline">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">03 · 核心循环</div>
+      <h2>一次 issue 到 PR 的 13 阶段旅程</h2>
+      <p class="section-lede">
+        每一份 issue 都要走完这条 pipeline。按泳道分组，每个阶段都有可观测的日志和失败兜底——不是 magic，是显式的状态机。点击下面的 Play 按钮可以逐步观察。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>13 阶段 Pipeline 时序</strong>
+        <span>Tracker / Workspace / Agent / Git &amp; PR 四条泳道 · 13 个阶段 · 每步可点击看详情</span>
+        <span class="hint">▶ Play</span>
+      </div>
+      <iframe class="viz" src="../viz/pipeline-flow.html" height="780" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>git_sync.sync() 编排 · 验证门控在 stage 9 阻断 push · 意图系统在 stage 1 前置覆盖</span>
+        <span>13 stages · 4 swimlanes</span>
+      </div>
+    </div>
+
+    <div class="pull-quote">
+      <p>整个 pipeline 的关键拐点在 stage 9——验证门控。任何 test_command / build_command / lint_command 失败，commit 保留，push 阻断，issue 标记为 <code>verification_failed</code>。这一步把「能跑通」从 agent 的自觉变成了 orchestrator 的硬约束。</p>
+      <cite>— 验证门控是整个 pipeline 唯一会阻断 push 的阶段</cite>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 4: VERIFICATION GATE ============ -->
+<section id="verification">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">04 · 验证门控</div>
+      <h2>三道关卡，pre-push 之前全部要过</h2>
+      <p class="section-lede">
+        在 push 之前插入三道验证关卡：先 <code>test_command</code>，再 <code>build_command</code>，最后 <code>lint_command</code>。任一失败抛 <code>VerificationFailed</code>，阻断 push 但保留 commit，方便排查。报告同时双写到 workspace 的 <code>.reports/</code> 和用户全局报告目录。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>多语言验证门控 · 5 种生态切换</strong>
+        <span>Python · Node.js · Go · Rust · Java · 任选一种查看对应的 test/build/lint 命令</span>
+        <span class="hint">切换语言 · ▶ Run · ✕ Fail</span>
+      </div>
+      <iframe class="viz" src="../viz/verification-gate.html" height="680" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>验证失败抛 VerificationFailed · HookFailedError(hook_name) · orchestrator 捕获后标 verification_failed</span>
+        <span>3 commands · sequential · 600000ms timeout each</span>
+      </div>
+    </div>
+
+    <p style="margin-top: 32px;">
+      几个设计取舍：
+    </p>
+    <ul class="clean">
+      <li><strong>失败保留 commit</strong>。不 reset，不回退——失败的现场留给调试，commit 历史保持线性。</li>
+      <li><strong>空字符串 = 跳过</strong>。这不是判断逻辑，而是默认配置。空配置语义 = 「不验证」，而不是「验证必须通过」。</li>
+      <li><strong>语言无关</strong>。三道命令是任意 shell 字符串，不绑定任何特定工具链。Python / Node / Go / Rust / Java 都可，开箱即用。</li>
+      <li><strong>报告双写</strong>。workspace 内一份（随 commit 走），用户全局一份（持续累积）。无论成败都写。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SECTION 5: FOLLOW-UP LOOP ============ -->
+<section id="followup">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">05 · 反馈闭环</div>
+      <h2>PR 上的每一条评论，都能变成下一个 commit</h2>
+      <p class="section-lede">
+        这是独立于 issue polling 的另一条循环——它扫描已开 PR 的 review comments 和 CI 失败信号，调度一次 follow-up agent run。关键点：复用同一个分支，commit 前缀 <code>fix:</code> 而不是 <code>feat:</code>，PR body 重新渲染一次。最多 5 轮，耗尽就停止。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>反馈闭环动画</strong>
+        <span>7 个节点：PR with feedback → poll → schedule → agent fix → commit → reply → 闭环判断</span>
+        <span class="hint">▶ Run Follow-up Cycle</span>
+      </div>
+      <iframe class="viz" src="../viz/followup-loop.html" height="900" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>git_sync.sync(mode="followup") · commit 加 fix: 前缀 · PR body 重新渲染</span>
+        <span>max followup attempts per PR = 5 · ignore_authors 黑名单</span>
+      </div>
+    </div>
+
+    <div class="pull-quote">
+      <p>这条循环解决的真正问题是 <em>PR 的二阶生命周期</em>。一个 PR 开出来不算结束——它要被 review、要修 lint、要修测试、要响应反馈。把这些零散的「再跑一次」收纳成一条自动闭环，直到 PR 真正被合并或被放弃。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 6: INTENT SYSTEM ============ -->
+<section id="intent">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">06 · 操作员意图系统</div>
+      <h2>四个标签，覆盖人类想干预的所有理由</h2>
+      <p class="section-lede">
+        Operator 介入的方式不需要写脚本——给 issue 加个 label 就行。这里定义了四种 intent，按优先级 <code>blocked &gt; rebase &gt; followup &gt; retry &gt; none</code> 解析。点击下面的标签可以模拟不同的 operator 决策。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>Intent 决策树交互</strong>
+        <span>左：点击 issue 标签模拟 · 右：高亮匹配的优先级路径与最终解析结果</span>
+        <span class="hint">点击标签试试</span>
+      </div>
+      <iframe class="viz" src="../viz/intent-decision-tree.html" height="700" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>Intent 枚举 · DEFAULT_INTENT_LABELS 标签映射 · intent_from_label_set() 解析</span>
+        <span>P1 blocked · P2 rebase · P3 followup · P4 retry</span>
+      </div>
+    </div>
+
+    <p style="margin-top: 32px;">
+      为什么这个优先级序列值得专门设计？
+    </p>
+    <ul class="clean">
+      <li><strong>blocked 永远胜出</strong>。一旦标了 <code>agent:blocked</code>，issue 永久跳过——这是「停掉」语义，最强。</li>
+      <li><strong>rebase 比 retry/followup 更高</strong>。rebase 触及远端历史，比 followup 的「追加 commit」更激进，所以优先级更高。</li>
+      <li><strong>followup 比 retry 更保守</strong>。retry 关旧 PR + 新 PR；followup 保留 PR 证据 + 追加 commit。前者破坏可追溯性。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SECTION 7: PERFORMANCE ============ -->
+<section id="perf">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">07 · 性能基线</div>
+      <h2>性能也是产品的一部分</h2>
+      <p class="section-lede">
+        整个流水线有六个关键性能维度可以监控：tracker 轮询延迟、agent 冷启动、tool 调用吞吐、验证门控时长、端到端 issue 到 PR 时长、push 到 PR URL 耗时。所有指标都有默认阈值，CI runner 通常慢 2-3 倍，所以 CI 上的阈值会按倍数放宽。
+      </p>
+    </div>
+
+    <div class="viz-wrap">
+      <div class="viz-caption">
+        <span class="marker"></span>
+        <strong>Orchestrator 性能基线仪表盘</strong>
+        <span>6 项 KPI · 涵盖端到端吞吐、单 run 时长、各阶段延迟 · 阈值与 p95 实时展示</span>
+        <span class="hint">6 KPIs · 5 PASS · 1 WARN</span>
+      </div>
+      <iframe class="viz" src="../viz/perf-comparison.html" height="680" loading="lazy" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div class="viz-footer">
+        <span>perf benchmarks · ORCHESTRATOR_PERF_MULT 调整 CI 倍数</span>
+        <span>通过率 · 吞吐 · 端到端 · 单阶段</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECTION 8: E2E EXAMPLE ============ -->
+<section id="example">
+  <div class="container">
+    <div class="section-header">
+      <div class="section-eyebrow">08 · 实战</div>
+      <h2>一份完整可跑的 workflow.md（Python 示例）</h2>
+      <p class="section-lede">
+        把上面所有特性落到一份文件里——下面是一个 Python 项目的 workflow 实例。YAML frontmatter 是配置，markdown body 是 agent 看到的 prompt 模板，每条 {{…}} 占位符在每次 run 时渲染。验证命令可替换为任何语言生态的对应命令（见上一节的 5 种 preset）。
+      </p>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="filename">workflow.md</span>
+        <span class="lang">yaml + markdown · Python 示例</span>
+      </div>
+<pre class="workflow"><span class="comment">---</span>
+<span class="key">tracker:</span>
+  <span class="key">kind:</span> <span class="str">github</span>
+  <span class="key">owner:</span> <span class="str">myorg</span>
+  <span class="key">repo:</span> <span class="str">myrepo</span>
+  <span class="key">api_key:</span> <span class="str">$GITHUB_TOKEN</span>
+  <span class="key">active_states:</span> <span class="punct">[</span><span class="str">open</span><span class="punct">]</span>
+
+<span class="key">polling:</span>
+  <span class="key">interval_ms:</span> <span class="val">30000</span>
+
+<span class="key">workspace:</span>
+  <span class="key">strategy:</span> <span class="str">isolated</span>
+  <span class="key">base_branch:</span> <span class="str">main</span>
+  <span class="key">gitignore_patterns:</span>
+    - <span class="str">.reports</span>
+    - <span class="str">.venv</span>
+
+<span class="key">agent:</span>
+  <span class="key">max_concurrent_agents:</span> <span class="val">5</span>
+  <span class="key">max_turns:</span> <span class="val">30</span>
+  <span class="key">permission_mode:</span> <span class="str">dontAsk</span>  <span class="comment"># orchestrator 自动升级为 bypassPermissions</span>
+
+  <span class="comment"># 验证门控 · Python 生态示例（也可配 Node/Go/Rust/Java）</span>
+  <span class="key">test_command:</span> <span class="str">"python3 -m pytest tests/ -x -q"</span>
+  <span class="key">build_command:</span> <span class="str">"uv build"</span>
+  <span class="key">lint_command:</span> <span class="str">"uv run ruff check ."</span>
+
+  <span class="comment"># 429-aware 退避</span>
+  <span class="key">rate_limit_base_delay_ms:</span> <span class="val">30000</span>
+  <span class="key">rate_limit_max_backoff_ms:</span> <span class="val">600000</span>
+  <span class="key">rate_limit_max_retries:</span> <span class="val">5</span>
+
+<span class="key">hooks:</span>
+  <span class="key">after_create:</span> <span class="str">"uv sync --frozen"</span>
+  <span class="key">pre_commit:</span> <span class="str">"uv run black --check . && uv run black ."</span>
+  <span class="key">timeout_ms:</span> <span class="val">120000</span>
+
+<span class="key">followup:</span>           <span class="comment"># PR 评论反馈闭环</span>
+  <span class="key">enabled:</span> <span class="val">true</span>
+  <span class="key">mode:</span> <span class="str">auto</span>
+  <span class="key">poll_interval_ms:</span> <span class="val">60000</span>
+  <span class="key">max_attempts_per_pr:</span> <span class="val">5</span>
+
+<span class="key">observability:</span>
+  <span class="key">dashboard:</span> <span class="str">extensions/orchestrator/status_dashboard.py</span>
+<span class="comment">---</span>
+
+<span class="comment"># Orchestrator Agent Prompt</span>
+
+你正在处理 issue <span class="val">{{</span> issue.identifier <span class="val">}}</span> · <span class="val">{{</span> issue.title <span class="val">}}</span>
+
+## 任务背景
+<span class="val">{{</span> issue.body <span class="val">}}</span>
+
+## 工作环境
+- 工作目录: <span class="val">{{</span> workspace.path <span class="val">}}</span>
+- 基础分支: <span class="val">{{</span> workspace.base_branch <span class="val">}}</span>
+- Issue 分支: <span class="val">{{</span> workspace.branch_name <span class="val">}}</span>
+
+## 约束
+1. 只改与本 issue 直接相关的代码
+2. 跑 workflow.md 中配置的 `test_command` 验证（默认 Python 生态示例：pytest）
+3. 跑 workflow.md 中配置的 `lint_command` 确认无 lint 错误（默认 Python 示例：ruff）
+4. 提交信息遵循 conventional commits 规范
+
+完成后报告修改的文件清单与测试结果。</pre>
+    </div>
+
+    <p style="margin-top: 24px;">
+      把它放进 repo 根目录的 <code>workflow.md</code>，跑：
+    </p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="filename">terminal</span>
+        <span class="lang">bash</span>
+      </div>
+<pre class="workflow">$ orchestrator server start --workflow ./workflow.md</pre>
+    </div>
+
+    <p style="margin-top: 16px;">
+      守护进程启动后，按 <code>polling.interval_ms</code> 周期拉取 issue，看到匹配的 label 自动派出 agent，全程无需人类介入直到 PR 被开出来。
+    </p>
+  </div>
+</section>
+
+<!-- ============ CLOSING ============ -->
+<section class="closing" id="next">
+  <div class="container">
+    <h2>下一步</h2>
+    <p>
+      想看这些特性「动起来」的样子？下面是一个 16:9 的可演示版本——按页推进，每个特性配一段解说。
+    </p>
+    <div class="cta-row">
+      <a href="../demo.html" class="cta primary">
+        ▶ 打开演示视频
+        <span style="opacity: 0.7; font-size: 12px; font-family: 'JetBrains Mono', monospace;">demo.html</span>
+      </a>
+      <a href="https://gitcode.com/chadwweng/clawcodex" class="cta">
+        查看源代码
+      </a>
+      <a href="../viz/arch-overview.html" class="cta">
+        浏览所有可视化
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>extensions/orchestrator · Orchestrator · 2026-06-30 释出</p>
+  </div>
+</footer>
+
+</body>
+</html>

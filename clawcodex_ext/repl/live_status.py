@@ -83,7 +83,7 @@ _SPINNER_FRAMES: tuple[str, ...] = (
 _FRAME_INTERVAL = 0.08
 # Mirrors ``SHOW_TOKENS_AFTER_MS`` in
 # ``typescript/src/components/Spinner/SpinnerAnimationRow.tsx``.
-_SHOW_TIMER_AFTER_MS = 30_000
+_SHOW_TIMER_AFTER_MS = 0
 
 
 class LiveStatus:

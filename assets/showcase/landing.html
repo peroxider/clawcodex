@@ -1,30 +1,18 @@
 <!DOCTYPE html>
 <!--
   ═══════════════════════════════════════════════════════════════════════════
-  ClawCodex DevMind · 营销单页 v0
+  ClawCodex DevMind · 营销单页 v1
   ─────────────────────────────────────────────────────────────────────────
   Design system: Linear 风格（暖黑 + 蓝紫点缀 + JetBrains Mono + 极简留白）
   Author:        web-design-engineer skill (Direction Advisor → Linear)
-  Build stage:   v0（核心结构 + token + 关键模块占位 + 设计假设列表）
+  Build stage:   v1（删除截图/三层解耦 + nav CTA 改名 + 准备接入 orchestrator 详细介绍）
+
+  Hero 双卖点:   ① Orchestrator 自主 issue→PR 流水线 ② SOP 编译器
+  5 个次要卖点: 自动化工程闭环 · LiteLLM 100+ LLM 后端 · 分布式 Cron + IM 网关
+                · 运行时切换模型 · 13 态澄清队列
+  一键安装:     3 平台并列（macOS/Linux/WSL bash · PowerShell · 从源码）
+  Constraints:   无 F-N 编号 · 无产品截图 · 无三层解耦内容 · 全文中文
   ═══════════════════════════════════════════════════════════════════════════
-
-  ★ 设计假设（请在 v0 验收时反馈） ★
-  1. Hero 标题候选（请在 checkpoint 选一个 / 提供你的版本）：
-     [A] "把单个 agent 升级为一支可值守的工程团队"
-     [B] "你的 AI 工程师，7×24 自驱"
-     [C] "把工程流程编译成多 agent 团队"
-  2. Hero 双卖点（已锁定）：① Orchestrator 自主 issue→PR 流水线 ② SOP 编译器
-  3. 4 个次要卖点：自动化工程闭环（PR 评审自动修复 + 验证门禁）、LiteLLM 100+ 后端、分布式 Cron + IM Gateway、三层解耦架构
-  4. 一键安装命令：3 平台并列（macOS/Linux/WSL bash、PowerShell、Source build）
-  5. 真实产品截图：assets/clawcodex-screenshot-1.png（已用，swebench 验证图保留备用）
-  6. 架构图：内联 SVG 占位（[architecture diagram - 待替换为 Mermaid 或静态图]）
-  7. 全文已按要求去掉 F-N 特性编号（用户不知道编号）
-  8. 主体语言：中文（按 CLAUDE.md 强制要求）
-
-  ★ 已知占位 ★
-  - [icon] 卡片图标用线性 SVG 占位（6 个）
-  - [architecture diagram] 架构图区域为内联 SVG 简化版
-  - Hero 真实截图仅 1 张，待补 1 张 LiveView 仪表盘截图
 -->
 <html lang="zh-CN">
 <head>
@@ -36,20 +24,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #08090A;
-    --surface-1: #16171C;
-    --surface-2: #1E1F25;
-    --surface-3: #26272E;
-    --border: rgba(255, 255, 255, 0.06);
-    --border-strong: rgba(255, 255, 255, 0.12);
-    --ink: #F7F8F8;
-    --ink-2: #9CA3AF;
-    --ink-3: #6B7280;
-    --accent: #5E6AD2;
-    --accent-hover: #6E7AE0;
-    --accent-soft: rgba(94, 106, 210, 0.12);
+    /* aligned with orchestrator token system: 冷蓝黑 + 青绿 */
+    --bg: #0a0e14;
+    --surface-1: #131820;
+    --surface-2: #181e29;
+    --surface-3: #1c2230;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --ink: #e4e7ec;
+    --ink-2: #a4abba;
+    --ink-3: #6b7280;
+    --accent: #00d4aa;
+    --accent-hover: #00a886;
+    --accent-soft: rgba(0, 212, 170, 0.12);
     --success: #4CB782;
-    --warning: #F76E63;
+    --warning: #f59e0b;
 
     --font-display: 'Inter Tight', system-ui, sans-serif;
     --font-body: 'Inter', system-ui, sans-serif;
@@ -106,7 +95,7 @@
   }
   .brand-mark {
     width: 24px; height: 24px;
-    background: linear-gradient(135deg, #5E6AD2, #8E8EE0);
+    background: linear-gradient(135deg, #00d4aa, #00a886);
     border-radius: 6px;
     display: grid; place-items: center;
     color: white; font-weight: 700; font-size: 13px;
@@ -134,7 +123,7 @@
     content: ''; position: absolute;
     top: -30%; left: 50%; transform: translateX(-50%);
     width: 1200px; height: 800px;
-    background: radial-gradient(ellipse at center, rgba(94, 106, 210, 0.10) 0%, transparent 60%);
+    background: radial-gradient(ellipse at center, rgba(0, 212, 170, 0.10) 0%, transparent 60%);
     pointer-events: none;
     z-index: 0;
   }
@@ -144,7 +133,7 @@
     display: inline-flex; align-items: center; gap: 8px;
     padding: 5px 12px; border-radius: 999px;
     background: var(--accent-soft);
-    border: 1px solid rgba(94, 106, 210, 0.25);
+    border: 1px solid rgba(0, 212, 170, 0.25);
     color: var(--accent);
     font-size: 12.5px; font-weight: 500;
     margin-bottom: 28px;
@@ -280,7 +269,7 @@
 
   /* ====================== HERO METRICS ====================== */
   .hero-metrics {
-    display: grid; grid-template-columns: repeat(4, 1fr);
+    display: grid; grid-template-columns: repeat(3, 1fr);
     gap: 24px;
     margin-top: 64px;
     padding: 28px 0;
@@ -406,23 +395,6 @@
     font-size: 13.5px; line-height: 1.55;
   }
 
-  /* ====================== ARCHITECTURE ====================== */
-  .arch-block {
-    background: var(--surface-1);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 36px;
-    margin-top: 48px;
-  }
-  .arch-diagram {
-    width: 100%; height: auto;
-    margin: 16px 0;
-  }
-  .arch-caption {
-    font-size: 12.5px; color: var(--ink-3);
-    text-align: center; margin-top: 12px;
-  }
-
   /* ====================== FOOTER ====================== */
   footer {
     border-top: 1px solid var(--border);
@@ -475,9 +447,8 @@
       <a href="#orchestrator">Orchestrator</a>
       <a href="#sop">SOP 编译器</a>
       <a href="#install">安装</a>
-      <a href="#architecture">架构</a>
     </div>
-    <a href="https://gitcode.com/chadwweng/clawcodex" class="nav-cta">GitHub →</a>
+    <a href="https://gitcode.com/chadwweng/clawcodex" class="nav-cta">项目源码 →</a>
   </div>
 </nav>
 
@@ -517,18 +488,6 @@
       </div>
     </div>
 
-    <!-- Hero Screenshot -->
-    <div class="hero-shot">
-      <div class="hero-shot-bar">
-        <span class="hero-shot-dot"></span>
-        <span class="hero-shot-dot"></span>
-        <span class="hero-shot-dot"></span>
-        <span class="hero-shot-url">$ clawcodex-dev orchestrator issue tail --id AGENTSDK-15</span>
-      </div>
-      <img src="../clawcodex-screenshot-1.png" alt="clawcodex orchestrator issue tail" onerror="this.style.display='none'; this.nextElementSibling.style.display='grid';">
-      <div class="hero-shot-placeholder" style="display:none;">[产品截图 — assets/clawcodex-screenshot-1.png]</div>
-    </div>
-
     <!-- Hero Metrics -->
     <div class="hero-metrics">
       <div>
@@ -538,10 +497,6 @@
       <div>
         <div class="metric-val">100+</div>
         <div class="metric-label">LLM 后端（LiteLLM 路由）<br>Bedrock · Vertex · Azure · OpenAI · ...</div>
-      </div>
-      <div>
-        <div class="metric-val">3 层</div>
-        <div class="metric-label">解耦架构<br>upstream · capabilities · downstream</div>
       </div>
       <div>
         <div class="metric-val">3 行</div>
@@ -639,20 +594,7 @@
         <p>文件锁 + 抖动调度的 Cron 防重跑；统一 IM 网关接 WeChat / 飞书 / Slack / Discord，REPL 和 Orchestrator 都能挂上去。</p>
       </article>
 
-      <!-- 4. Decoupled Architecture -->
-      <article class="feature">
-        <div class="feature-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="3" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1.5"/>
-            <rect x="2" y="10" width="12" height="3" rx="0.5" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M8 6v4" stroke="currentColor" stroke-width="1.5"/>
-          </svg>
-        </div>
-        <h4>三层解耦架构</h4>
-        <p>upstream 源码快照 + capabilities 协议 + clawcodex_ext 下游补丁层。跟上游同步零摩擦，扩展不污染上游。</p>
-      </article>
-
-      <!-- 5. /provider /model runtime -->
+      <!-- 4. /provider /model runtime -->
       <article class="feature">
         <div class="feature-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -673,74 +615,6 @@
         <h4>13 态澄清队列</h4>
         <p>agent 卡住不会干等。3 通道（交互 / 文件 / @提及）求解，13 种状态机走完整，issue 不堵塞也不丢失。</p>
       </article>
-    </div>
-  </div>
-</section>
-
-<!-- =========================== ARCHITECTURE =========================== -->
-<section id="architecture" class="reveal">
-  <div class="container">
-    <div class="section-head">
-      <div class="section-eyebrow">架构总览</div>
-      <h2 class="section-title">三层解耦，扩展不污染上游</h2>
-      <p class="section-sub">src/ 是 upstream 的源码快照（不修改），extensions/capabilities/ 定义层间协议，clawcodex_ext/ + extensions/ 都是下游扩展。同步上游只动 src/，你写的扩展全在扩展层。</p>
-    </div>
-
-    <div class="arch-block">
-      <svg class="arch-diagram" viewBox="0 0 1080 430" xmlns="http://www.w3.org/2000/svg">
-        <!-- Layer 0: Upstream -->
-        <rect x="40" y="30" width="1000" height="70" rx="8" fill="#16171C" stroke="rgba(255,255,255,0.06)"/>
-        <text x="60" y="58" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">LAYER 0 · UPSTREAM</text>
-        <text x="60" y="82" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">src/  —  Claude Code Python 重构版</text>
-        <text x="380" y="82" fill="#6B7280" font-family="JetBrains Mono" font-size="11">query() · tool_system · providers · TUI · REPL · MCP · hooks · memory</text>
-
-        <!-- Layer 1: Capabilities -->
-        <rect x="40" y="120" width="1000" height="70" rx="8" fill="#1E1F25" stroke="rgba(94,106,210,0.3)"/>
-        <text x="60" y="148" fill="#5E6AD2" font-family="JetBrains Mono" font-size="11">LAYER 1 · CAPABILITIES（协议层）</text>
-        <text x="60" y="172" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">extensions/capabilities/  —  Protocol 接口定义（无实现）</text>
-        <text x="540" y="172" fill="#6B7280" font-family="JetBrains Mono" font-size="11">Tool · Tracker · Workspace · ProgressSink</text>
-
-        <!-- Layer 2A: Downstream patches -->
-        <rect x="40" y="210" width="490" height="70" rx="8" fill="#1E1F25" stroke="rgba(255,255,255,0.12)"/>
-        <text x="60" y="238" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">LAYER 2A · DOWNSTREAM PATCHES</text>
-        <text x="60" y="262" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">clawcodex_ext/  —  猴补丁 + 注册中心</text>
-
-        <!-- Layer 2B: Extensions -->
-        <rect x="550" y="210" width="490" height="70" rx="8" fill="#1E1F25" stroke="rgba(94,106,210,0.4)"/>
-        <text x="570" y="238" fill="#5E6AD2" font-family="JetBrains Mono" font-size="11">LAYER 2B · EXTENSIONS（独立子系统）</text>
-        <text x="570" y="262" fill="#F7F8F8" font-family="Inter" font-size="14" font-weight="500">extensions/  —  5 个独立子系统</text>
-
-        <!-- Product chips (under extensions/ layer) -->
-        <g font-family="JetBrains Mono" font-size="10.5">
-          <rect x="550" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
-          <text x="596" y="310" fill="#F7F8F8" text-anchor="middle">orchestrator</text>
-          <rect x="650" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
-          <text x="696" y="310" fill="#F7F8F8" text-anchor="middle">sop_converter</text>
-          <rect x="750" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
-          <text x="796" y="310" fill="#F7F8F8" text-anchor="middle">im_gateway</text>
-          <rect x="850" y="295" width="92" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
-          <text x="896" y="310" fill="#F7F8F8" text-anchor="middle">visualizer</text>
-          <rect x="950" y="295" width="90" height="22" rx="4" fill="#26272E" stroke="rgba(94,106,210,0.4)"/>
-          <text x="995" y="310" fill="#F7F8F8" text-anchor="middle">remote_api</text>
-        </g>
-
-        <!-- Arrows -->
-        <line x1="540" y1="190" x2="540" y2="210" stroke="rgba(94,106,210,0.4)" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="285" y1="280" x2="285" y2="350" stroke="rgba(255,255,255,0.2)" stroke-width="1.5" marker-end="url(#arrow)"/>
-        <line x1="795" y1="317" x2="795" y2="350" stroke="rgba(94,106,210,0.4)" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-        <!-- Consumers -->
-        <rect x="40" y="350" width="1000" height="50" rx="8" fill="#26272E" stroke="rgba(255,255,255,0.06)"/>
-        <text x="60" y="372" fill="#9CA3AF" font-family="JetBrains Mono" font-size="11">用户面</text>
-        <text x="60" y="390" fill="#F7F8F8" font-family="Inter" font-size="13">CLI（clawcodex-dev） · REPL · TUI · Headless · MCP · Bridge · Remote API</text>
-
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 z" fill="rgba(94,106,210,0.6)"/>
-          </marker>
-        </defs>
-      </svg>
-      <div class="arch-caption">extensions/ 下装的具体子系统：orchestrator · sop_converter · im_gateway · visualizer · remote_api</div>
     </div>
   </div>
 </section>

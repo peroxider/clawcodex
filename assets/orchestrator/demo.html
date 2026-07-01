@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestrator · 自主工程层演示</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --bg-overlay: rgba(10,14,20,0.85);
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #a4abba;
+    --text-muted: #6b7280;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --accent-glow: rgba(0,212,170,0.18);
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background: #000;
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ====== STAGE (固定 1920x1080，通过 transform: scale 适配 viewport) ====== */
+  .stage {
+    width: 1920px;
+    height: 1080px;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 5%, rgba(0,212,170,0.05), transparent 45%),
+      radial-gradient(circle at 85% 95%, rgba(59,130,246,0.04), transparent 45%);
+    position: relative;
+    transform-origin: center center;
+    overflow: hidden;
+    box-shadow: 0 0 80px rgba(0,212,170,0.08);
+  }
+
+  /* ====== Top progress bar ====== */
+  .progress-bar {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.04);
+    z-index: 100;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--info));
+    transition: width 400ms cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+
+  /* ====== Top header (chapter label + slide counter) ====== */
+  .top-header {
+    position: absolute;
+    top: 32px; left: 60px; right: 60px;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .chapter-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .chapter-label::before {
+    content: ''; width: 32px; height: 1px;
+    background: var(--accent);
+  }
+  .slide-counter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    letter-spacing: 0.8px;
+  }
+  .slide-counter strong {
+    color: var(--text-primary);
+    font-size: 16px;
+    margin-right: 4px;
+  }
+
+  /* ====== Slide container ====== */
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 110px 90px 90px;
+    display: none;
+    flex-direction: column;
+    animation: slideIn 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .slide.active { display: flex; }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ====== Slide content styles ====== */
+  .slide-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  .slide-eyebrow::before {
+    content: ''; width: 48px; height: 2px; background: var(--accent);
+  }
+
+  .slide-title {
+    font-size: 96px;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+    margin-bottom: 32px;
+    background: linear-gradient(180deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .slide-title.compact { font-size: 72px; }
+  .slide-title .accent {
+    -webkit-text-fill-color: var(--accent);
+  }
+
+  .slide-subtitle {
+    font-size: 28px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 1400px;
+    margin-bottom: 40px;
+  }
+
+  /* ====== Slide 01 - Hero ====== */
+  .hero-chips {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin-top: 56px;
+  }
+  .hero-chip {
+    padding: 14px 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: var(--text-secondary);
+  }
+  .hero-chip strong { color: var(--accent); margin-right: 8px; }
+
+  .hero-meta {
+    position: absolute;
+    bottom: 90px;
+    left: 90px;
+    display: flex; gap: 56px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .hero-meta strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  /* ====== Slide 02 - Pain Point ====== */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    gap: 0;
+    flex: 1;
+    margin-top: 40px;
+  }
+  .compare-col {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .compare-col.traditional {
+    border-color: rgba(239,68,68,0.3);
+  }
+  .compare-col.automated {
+    border-color: rgba(0,212,170,0.4);
+    background: linear-gradient(180deg, rgba(0,212,170,0.06), transparent 80%);
+  }
+  .compare-divider {
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    color: var(--text-muted);
+  }
+  .compare-divider::before {
+    content: 'VS';
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .col-title {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .col-title.traditional { color: var(--danger); }
+  .col-title.automated { color: var(--accent); }
+  .col-subtitle {
+    font-size: 16px;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .step-list {
+    list-style: none;
+    padding: 0;
+    flex: 1;
+  }
+  .step-list li {
+    display: flex; gap: 20px; align-items: start;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 20px;
+    color: var(--text-secondary);
+  }
+  .step-list li:last-child { border-bottom: none; }
+  .step-num {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .step-list.automated .step-num {
+    background: var(--accent-glow);
+    color: var(--accent);
+    border-color: rgba(0,212,170,0.3);
+  }
+  .step-list .step-body {
+    flex: 1;
+  }
+  .step-list .step-action { color: var(--text-primary); font-weight: 600; }
+  .step-list .step-detail { display: block; color: var(--text-muted); font-size: 14px; margin-top: 4px; }
+
+  /* ====== Embedded viz slides ====== */
+  .embed-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-top: 32px;
+  }
+  .embed-header {
+    padding: 18px 28px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .embed-header .marker {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+    margin-right: 12px;
+  }
+  .embed-iframe {
+    flex: 1;
+    border: none;
+    background: var(--bg-card);
+  }
+
+  /* ====== Slide 06 - Verification gate highlight ====== */
+  .stage9-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    flex: 1;
+    margin-top: 32px;
+  }
+  .pipeline-mini {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+  }
+  .pipeline-mini-title {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .mini-stages {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 24px;
+  }
+  .mini-stage {
+    padding: 8px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    position: relative;
+  }
+  .mini-stage.highlight {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+    transform: scale(1.1);
+    box-shadow: 0 0 16px var(--accent-glow);
+    z-index: 2;
+  }
+  .mini-stage .num {
+    color: var(--accent);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  .stage9-detail h3 {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .stage9-detail .sub {
+    font-size: 22px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+    line-height: 1.5;
+  }
+  .gate-list {
+    list-style: none;
+    padding: 0;
+  }
+  .gate-list li {
+    padding: 18px 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 18px;
+    font-size: 18px;
+  }
+  .gate-list .gn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .gate-list .gc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: var(--bg);
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+  }
+
+  /* ====== Slide 10 - Closing ====== */
+  .closing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    flex: 1;
+    margin-top: 32px;
+  }
+  .perf-embed {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .perf-embed-header {
+    padding: 18px 28px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .perf-embed iframe { flex: 1; border: none; }
+  .code-embed {
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .code-header-bar {
+    padding: 16px 24px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .code-header-bar .filename { color: var(--accent); }
+  pre.demo-yaml {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    padding: 24px;
+    flex: 1;
+    overflow: hidden;
+  }
+  pre.demo-yaml .key { color: var(--info); }
+  pre.demo-yaml .val { color: var(--accent); }
+  pre.demo-yaml .str { color: var(--warning); }
+  pre.demo-yaml .comment { color: var(--text-muted); }
+  pre.demo-yaml .punct { color: var(--text-muted); }
+  .run-command {
+    margin-top: 24px;
+    padding: 18px 24px;
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 14px;
+  }
+  .run-command::before {
+    content: '▶';
+    color: var(--accent);
+    font-size: 14px;
+  }
+
+  /* ====== Dot indicator (bottom right) ====== */
+  .dot-indicator {
+    position: absolute;
+    bottom: 36px; right: 90px;
+    display: flex; gap: 12px;
+    z-index: 60;
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--border-strong);
+    cursor: pointer;
+    transition: all 200ms;
+  }
+  .dot:hover { background: var(--text-secondary); transform: scale(1.2); }
+  .dot.active {
+    background: var(--accent);
+    width: 32px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  /* ====== Playback controls (bottom left, subtle) ====== */
+  .playback {
+    position: absolute;
+    bottom: 36px; left: 90px;
+    display: flex; gap: 14px; align-items: center;
+    z-index: 60;
+  }
+  .pb-btn {
+    width: 36px; height: 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 150ms;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+  }
+  .pb-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .pb-btn.play {
+    width: 44px; height: 44px;
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+  }
+  .pb-btn.play:hover {
+    background: var(--accent-dim);
+    color: var(--bg);
+  }
+  .pb-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 8px;
+  }
+
+  /* ====== Keyboard hint (bottom center, subtle) ====== */
+  .kbd-hint {
+    position: absolute;
+    bottom: 50px; left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.4;
+    display: flex; gap: 14px;
+    pointer-events: none;
+  }
+  .kbd {
+    padding: 2px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+  }
+
+  /* ====== Responsive scaling (preserve 16:9) ====== */
+  @media (max-aspect-ratio: 16/9) {
+    .stage { transform: scale(calc(100vw / 1920)); }
+  }
+  @media (min-aspect-ratio: 16/9) {
+    .stage { transform: scale(calc(100vh / 1080)); }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+
+  <!-- Progress bar -->
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- Top header -->
+  <div class="top-header">
+    <div class="chapter-label" id="chapterLabel">PART 1 · 引子</div>
+    <div class="slide-counter"><strong id="slideNum">01</strong> / 10</div>
+  </div>
+
+  <!-- ========== SLIDE 01 — HERO ========== -->
+  <section class="slide" data-label="01 · 标题" data-chapter="PART 1 · 引子">
+    <div class="slide-eyebrow">Orchestrator · 自主工程层 · 2026.06</div>
+    <h1 class="slide-title">把 issue 到 PR<br><span class="accent">交给一个守护进程</span></h1>
+    <p class="slide-subtitle">通用编排器 — issue 平台、验证命令、hook 脚本都由你配置；<br>五个适配器接入、十三阶段闭环、三种 operator intent 覆盖。</p>
+    <div class="hero-chips">
+      <div class="hero-chip"><strong>形态</strong>常驻守护进程</div>
+      <div class="hero-chip"><strong>接入</strong>5 个 issue 平台</div>
+      <div class="hero-chip"><strong>验证</strong>跨语言 · test/build/lint</div>
+      <div class="hero-chip"><strong>闭环</strong>13 阶段 pipeline</div>
+      <div class="hero-chip"><strong>可控</strong>3 种 operator intent</div>
+    </div>
+    <div class="hero-meta">
+      <div><strong>独立配置</strong>tracker / hooks / verify</div>
+      <div><strong>5 个适配器</strong>Linear / GitHub / Gitee / GitCode / Local</div>
+      <div><strong>1 份文件</strong>workflow.md 启动</div>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 02 — PAIN POINT ========== -->
+  <section class="slide" data-label="02 · 对比" data-chapter="PART 1 · 引子">
+    <div class="slide-eyebrow">为什么需要 Orchestrator</div>
+    <h2 class="slide-title compact">从手动接力<br>到自动流水线</h2>
+    <div class="compare">
+      <div class="compare-col traditional">
+        <div class="col-title traditional">传统流程</div>
+        <div class="col-subtitle">5 步手动接力 · 平均 3-5 天</div>
+        <ul class="step-list">
+          <li>
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-action">开发者 triage issue</div>
+              <div class="step-detail">每天人工看新 issue、分配优先级</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-action">写代码 + 跑本地测试</div>
+              <div class="step-detail">本地 lint + 测试，发现 bug 再回头修</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-action">提交 PR 等 review</div>
+              <div class="step-detail">reviewer 几小时后回来，可能要求改 3-5 轮</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-action">修 review 反馈</div>
+              <div class="step-detail">每个 PR 平均 3.2 轮 review 修改</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <div class="step-action">CI 失败后再修</div>
+              <div class="step-detail">CI lint / 测试失败 → 又一轮反馈循环</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+      <div class="compare-divider"></div>
+      <div class="compare-col automated">
+        <div class="col-title automated">Orchestrator</div>
+        <div class="col-subtitle">5 步全自主 · 平均 8-15 分钟</div>
+        <ul class="step-list automated">
+          <li>
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-action">守护进程轮询 issue</div>
+              <div class="step-detail">每 30s 一次，按 label / state 自动匹配</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-action">Agent 在 workspace 内改代码</div>
+              <div class="step-detail">30 轮 QueryRunner，工具权限预授权</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-action">三道验证关卡</div>
+              <div class="step-detail">test/build/lint，失败阻断 push</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-action">自动 push + 开 PR</div>
+              <div class="step-detail">commit 写好、PR body 渲染完整</div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">5</div>
+            <div class="step-body">
+              <div class="step-action">PR 评论 → 自动跟进</div>
+              <div class="step-detail">扫描 review / CI 反馈 → 自动开下一轮 agent</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 03 — ARCHITECTURE ========== -->
+  <section class="slide" data-label="03 · 架构" data-chapter="PART 2 · 架构与适配器">
+    <div class="slide-eyebrow">三层结构</div>
+    <h2 class="slide-title compact">Tracker · Orchestrator · Agent</h2>
+    <p class="slide-subtitle">5 个 tracker 适配器接入 → 13 个 orchestrator 核心组件协调 → 5 个 agent runner 子系统驱动 LLM 循环。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>extensions/orchestrator · 三层架构总览</span>
+        <span style="opacity:0.6;">interactive · hover 各组件看详情</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/arch-overview.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 04 — TRACKER MATRIX ========== -->
+  <section class="slide" data-label="04 · 适配器" data-chapter="PART 2 · 架构与适配器">
+    <div class="slide-eyebrow">同一个抽象，5 个实现</div>
+    <h2 class="slide-title compact">5 个 tracker 适配器</h2>
+    <p class="slide-subtitle">Linear / GitHub / Gitee / GitCode / Local — 同一套 TrackerAdapter 协议，能力差异源于平台 API 边界。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>tracker capability matrix · 9 个维度 · 5 个平台</span>
+        <span style="opacity:0.6;">GitHub / Gitee / GitCode = 9/9 完整</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/tracker-matrix.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 05 — PIPELINE ========== -->
+  <section class="slide" data-label="05 · Pipeline" data-chapter="PART 3 · 核心 pipeline">
+    <div class="slide-eyebrow">一次 issue → PR 的完整旅程</div>
+    <h2 class="slide-title compact">13 阶段 pipeline</h2>
+    <p class="slide-subtitle">Tracker / Workspace / Agent / Git 四条泳道 · 13 个阶段 · 每步都有可观测日志和失败兜底。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>pipeline-flow · 4 swimlanes · 13 stages · ▶ Play</span>
+        <span style="opacity:0.6;">点击 Play 观察推进</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/pipeline-flow.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 06 — VERIFICATION GATE HIGHLIGHT ========== -->
+  <section class="slide" data-label="06 · 验证拐点" data-chapter="PART 3 · 核心 pipeline">
+    <div class="slide-eyebrow">pipeline 中的关键拐点</div>
+    <h2 class="slide-title compact">验证门控 ·<br><span class="accent">阻断 push 的关卡</span></h2>
+    <p class="slide-subtitle">整个 pipeline 唯一会阻断 push 的阶段。三道关卡顺序执行，任一失败 → commit 保留 · push 阻断 · issue 标 verification_failed。</p>
+    <div class="stage9-grid">
+      <div class="pipeline-mini">
+        <div class="pipeline-mini-title">// pipeline 13 stages · 第 9 步 = 高亮</div>
+        <div class="mini-stages" id="miniPipeline"></div>
+        <div style="margin-top:24px; padding:18px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:8px; font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-secondary);">
+          <div style="color:var(--accent); font-weight:700; margin-bottom:8px;">// pre_push_verification()</div>
+          if any(test, build, lint) failed:<br>
+          &nbsp;&nbsp;raise <span style="color:var(--danger);">VerificationFailed</span><br>
+          &nbsp;&nbsp;<span style="color:var(--text-muted);"># commit 保留 · push 阻断</span><br>
+          &nbsp;&nbsp;registry.mark_verification_failed(issue_id)
+        </div>
+      </div>
+      <div class="stage9-detail">
+        <h3>三道关卡</h3>
+        <p class="sub">顺序执行 · 任一失败抛 VerificationFailed</p>
+        <ul class="gate-list">
+          <li>
+            <span class="gn">01</span>
+            <span style="flex:1;"><strong style="color:var(--text-primary);">test_command</strong></span>
+            <span class="gc">用户配置 · 任意命令</span>
+          </li>
+          <li>
+            <span class="gn">02</span>
+            <span style="flex:1;"><strong style="color:var(--text-primary);">build_command</strong></span>
+            <span class="gc">用户配置 · 任意命令</span>
+          </li>
+          <li>
+            <span class="gn">03</span>
+            <span style="flex:1;"><strong style="color:var(--text-primary);">lint_command</strong></span>
+            <span class="gc">用户配置 · 任意命令</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 07 — VERIFICATION ========== -->
+  <section class="slide" data-label="07 · 验证门控" data-chapter="PART 4 · 三大特性深入">
+    <div class="slide-eyebrow">验证 + 报告门控</div>
+    <h2 class="slide-title compact">把「能跑通」<br>变成硬约束</h2>
+    <p class="slide-subtitle">pre-push 之前，agent 写完代码不算完成 — 三道关卡全部通过才能进入 push 阶段。失败保留 commit，方便排查。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>verification gate · ▶ Run Verification · ✕ Simulate Fail</span>
+        <span style="opacity:0.6;">interactive · 点击运行三道关卡</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/verification-gate.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 08 — FOLLOWUP ========== -->
+  <section class="slide" data-label="08 · 反馈闭环" data-chapter="PART 4 · 三大特性深入">
+    <div class="slide-eyebrow">PR 评论 → 自动跟进</div>
+    <h2 class="slide-title compact">PR 开出来<br>不算结束</h2>
+    <p class="slide-subtitle">独立于 issue polling 的另一条循环 — 扫描 PR review comments + CI 失败信号 → 调度 follow-up agent run → 同分支追加 commit (fix: 前缀)。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>follow-up loop · ▶ Run Follow-up Cycle</span>
+        <span style="opacity:0.6;">7 节点闭环动画</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/followup-loop.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 09 — INTENT ========== -->
+  <section class="slide" data-label="09 · 操作员意图" data-chapter="PART 4 · 三大特性深入">
+    <div class="slide-eyebrow">Operator Intent</div>
+    <h2 class="slide-title compact">人类想干预？<br>加个 label 就行</h2>
+    <p class="slide-subtitle">agent:retry / agent:follow-up / agent:blocked / agent:rebase — 四种 operator intent，按优先级解析为不同 orchestrator 行为。</p>
+    <div class="embed-wrap">
+      <div class="embed-header">
+        <span><span class="marker"></span>intent decision tree · 点击标签试试</span>
+        <span style="opacity:0.6;">优先级: blocked &gt; rebase &gt; followup &gt; retry &gt; none</span>
+      </div>
+      <iframe class="embed-iframe" src="viz/intent-decision-tree.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+    </div>
+  </section>
+
+  <!-- ========== SLIDE 10 — CLOSING ========== -->
+  <section class="slide" data-label="10 · 性能 + 实战" data-chapter="PART 5 · 收尾">
+    <div class="slide-eyebrow">数字 + 代码</div>
+    <h2 class="slide-title compact">一份 workflow.md<br>把守护进程跑起来</h2>
+    <div class="closing-grid">
+      <div class="perf-embed">
+        <div class="perf-embed-header"><span class="marker" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); margin-right:10px; box-shadow:0 0 8px var(--accent-glow);"></span>性能基线 · 6 项关键 KPI</div>
+        <iframe src="viz/perf-comparison.html" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
+      </div>
+      <div class="code-embed">
+        <div class="code-header-bar">
+          <span class="filename">workflow.md</span>
+          <span>yaml · 完整可跑</span>
+        </div>
+<pre class="demo-yaml"><span class="comment">---</span>
+<span class="key">tracker:</span>
+  <span class="key">kind:</span> <span class="str">github</span>
+  <span class="key">api_key:</span> <span class="str">$GITHUB_TOKEN</span>
+  <span class="key">active_states:</span> <span class="punct">[</span><span class="str">open</span><span class="punct">]</span>
+
+<span class="key">agent:</span>                          <span class="comment"># Python 生态示例（也可配 Node/Go/Rust/Java）</span>
+  <span class="key">max_concurrent_agents:</span> <span class="val">5</span>
+  <span class="key">test_command:</span> <span class="str">"pytest -x -q"</span>
+  <span class="key">lint_command:</span> <span class="str">"ruff check ."</span>
+
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span> <span class="str">"black --check ."</span>
+
+<span class="key">review_feedback:</span>
+  <span class="key">enabled:</span> <span class="val">true</span>
+  <span class="key">max_followup_attempts_per_pr:</span> <span class="val">5</span>
+<span class="comment">---</span></pre>
+        <div class="run-command">orchestrator server start --workflow ./workflow.md</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Dot indicator -->
+  <div class="dot-indicator" id="dotIndicator"></div>
+
+  <!-- Playback controls -->
+  <div class="playback">
+    <button class="pb-btn play" id="playBtn" title="Space">▶</button>
+    <button class="pb-btn" id="prevBtn" title="←">‹</button>
+    <button class="pb-btn" id="nextBtn" title="→">›</button>
+    <span class="pb-time" id="pbTime">0:00</span>
+  </div>
+
+  <!-- Keyboard hint -->
+  <div class="kbd-hint">
+    <span><span class="kbd">←</span> <span class="kbd">→</span> 翻页</span>
+    <span><span class="kbd">Space</span> 暂停</span>
+    <span><span class="kbd">1</span>-<span class="kbd">9</span> 跳转</span>
+  </div>
+
+</div>
+
+<script>
+  // ============ Stage & slide state ============
+  const stage = document.getElementById('stage');
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotIndicator = document.getElementById('dotIndicator');
+  const progressFill = document.getElementById('progressFill');
+  const slideNumEl = document.getElementById('slideNum');
+  const chapterLabel = document.getElementById('chapterLabel');
+  const playBtn = document.getElementById('playBtn');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const pbTime = document.getElementById('pbTime');
+
+  // Build mini pipeline for slide 06
+  const miniPipeline = document.getElementById('miniPipeline');
+  if (miniPipeline) {
+    const stages = [
+      'Poll', 'Clone', 'After-Create', 'Branch', 'Before-Run',
+      'Agent', 'After-Run', 'Pre-Commit', 'Verify', 'Pre-Push',
+      'Push', 'PR', 'Post-Sync'
+    ];
+    stages.forEach((name, i) => {
+      const el = document.createElement('div');
+      el.className = 'mini-stage' + (i === 8 ? ' highlight' : '');
+      el.innerHTML = `<span class="num">${(i+1).toString().padStart(2,'0')}</span>${name}`;
+      miniPipeline.appendChild(el);
+    });
+  }
+
+  // Build dot indicator
+  slides.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot';
+    dot.dataset.idx = i;
+    dot.title = `Slide ${(i+1).toString().padStart(2,'0')}`;
+    dot.addEventListener('click', () => goTo(i));
+    dotIndicator.appendChild(dot);
+  });
+  const dots = Array.from(document.querySelectorAll('.dot'));
+
+  // ============ Auto-play ============
+  const AUTO_INTERVAL_MS = 8000;
+  const STORAGE_KEY = 'orch-demo-slide';
+  let currentIdx = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10) || 0;
+  let playing = false;
+  let timer = null;
+  let elapsedMs = 0;
+  let lastTick = Date.now();
+  let totalElapsed = 0;
+
+  function goTo(idx) {
+    if (idx < 0 || idx >= slides.length) return;
+    slides[currentIdx].classList.remove('active');
+    slides[idx].classList.add('active');
+    currentIdx = idx;
+    localStorage.setItem(STORAGE_KEY, String(idx));
+    updateUI();
+  }
+
+  function updateUI() {
+    dots.forEach((d, i) => d.classList.toggle('active', i === currentIdx));
+    progressFill.style.width = `${((currentIdx + 1) / slides.length) * 100}%`;
+    slideNumEl.textContent = String(currentIdx + 1).padStart(2, '0');
+    chapterLabel.textContent = slides[currentIdx].dataset.chapter || '';
+    const seconds = Math.floor(totalElapsed / 1000);
+    const mm = Math.floor(seconds / 60);
+    const ss = seconds % 60;
+    pbTime.textContent = `${mm}:${String(ss).padStart(2, '0')}`;
+  }
+
+  function tick() {
+    const now = Date.now();
+    const dt = now - lastTick;
+    lastTick = now;
+    if (playing) {
+      elapsedMs += dt;
+      totalElapsed += dt;
+      if (elapsedMs >= AUTO_INTERVAL_MS) {
+        elapsedMs = 0;
+        if (currentIdx < slides.length - 1) {
+          goTo(currentIdx + 1);
+        } else {
+          stop();
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function play() {
+    if (currentIdx >= slides.length - 1) {
+      goTo(0);
+      totalElapsed = 0;
+    }
+    playing = true;
+    elapsedMs = 0;
+    lastTick = Date.now();
+    playBtn.textContent = '⏸';
+    playBtn.classList.add('playing');
+  }
+  function stop() {
+    playing = false;
+    playBtn.textContent = '▶';
+    playBtn.classList.remove('playing');
+  }
+  function togglePlay() { playing ? stop() : play(); }
+  function next() {
+    if (currentIdx < slides.length - 1) {
+      goTo(currentIdx + 1);
+      elapsedMs = 0;
+    } else {
+      stop();
+    }
+  }
+  function prev() {
+    if (currentIdx > 0) {
+      goTo(currentIdx - 1);
+      elapsedMs = 0;
+    }
+  }
+
+  // Keyboard
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') { next(); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { prev(); e.preventDefault(); }
+    else if (e.key === ' ') { togglePlay(); e.preventDefault(); }
+    else if (/^[0-9]$/.test(e.key)) {
+      const idx = parseInt(e.key, 10) - 1;
+      if (idx === -1) goTo(slides.length - 1); // 0 = last
+      else if (idx >= 0 && idx < slides.length) goTo(idx);
+      elapsedMs = 0;
+    }
+  });
+
+  // Buttons
+  playBtn.addEventListener('click', togglePlay);
+  prevBtn.addEventListener('click', prev);
+  nextBtn.addEventListener('click', next);
+
+  // Click on stage (left half = prev, right half = next) — but not on controls
+  stage.addEventListener('click', (e) => {
+    if (e.target.closest('.pb-btn') || e.target.closest('.dot') || e.target.closest('.kbd-hint') || e.target.closest('iframe')) return;
+    const rect = stage.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x < rect.width / 3) prev();
+    else if (x > rect.width * 2 / 3) next();
+    else togglePlay();
+  });
+
+  // ============ Init ============
+  goTo(currentIdx);
+  updateUI();
+  requestAnimationFrame(tick);
+
+  // Auto-start playback on first load (after a short delay)
+  setTimeout(() => { if (!localStorage.getItem(STORAGE_KEY)) play(); }, 1200);
+</script>
+
+</body>
+</html>

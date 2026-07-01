@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>验证门控 · 多语言</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* Language tabs */
+  .lang-tabs {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .lang-tab {
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 150ms;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .lang-tab:hover { color: var(--text-primary); }
+  .lang-tab.active {
+    background: var(--accent-glow, rgba(0,212,170,0.12));
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .lang-tab .lang-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .lang-tab.active .lang-dot { background: var(--accent); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: var(--bg-elevated);
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .icon {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .panel-body { padding: 20px; }
+
+  pre.workflow {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    background: var(--bg);
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre.workflow .key { color: var(--info); }
+  pre.workflow .val { color: var(--accent); }
+  pre.workflow .comment { color: var(--text-muted); font-style: italic; }
+  pre.workflow .str { color: var(--warning); }
+
+  /* Gate cards */
+  .gates { display: flex; flex-direction: column; gap: 14px; }
+  .gate {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 16px;
+    transition: all 250ms ease-out;
+    position: relative;
+    overflow: hidden;
+  }
+  .gate::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: var(--neutral);
+    transition: background 250ms;
+  }
+  .gate.running::before { background: var(--info); animation: pulse 1s ease-in-out infinite; }
+  .gate.passed::before { background: var(--accent); }
+  .gate.failed::before { background: var(--danger); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .gate-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .gate-name {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .gate-num {
+    width: 24px; height: 24px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+  .gate-status {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .gate-status.idle { background: var(--bg-elevated); color: var(--text-muted); }
+  .gate-status.running { background: rgba(59,130,246,0.15); color: var(--info); }
+  .gate-status.passed { background: rgba(16,185,129,0.15); color: var(--accent); }
+  .gate-status.failed { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  .gate-cmd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .gate-meta {
+    display: flex; gap: 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .gate-output {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 300ms ease-out;
+  }
+  .gate.show-output .gate-output { max-height: 200px; }
+  .gate-output pre { white-space: pre-wrap; }
+
+  .controls {
+    display: flex; gap: 10px; margin-top: 16px;
+  }
+  button {
+    flex: 1;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 150ms;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary {
+    background: var(--accent);
+    color: #0a0e14;
+    border-color: var(--accent);
+  }
+  button.primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); }
+
+  .outcome {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    border: 1px solid;
+    background: var(--bg);
+  }
+  .outcome.success { color: var(--accent); border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.05); }
+  .outcome.fail { color: var(--danger); border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.05); }
+  .outcome strong { font-weight: 700; }
+  .outcome code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--bg-elevated);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+  }
+
+  /* Override for accent-glow when not defined */
+  :root { --accent-glow: rgba(0,212,170,0.12); }
+
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Pre-Push 验证门控 · 多语言支持</h1>
+  <p class="sub">三道关卡顺序执行 · 任一失败抛 <code style="font-family:'JetBrains Mono',monospace;">VerificationFailed</code> · 阻断 push 但保留 commit</p>
+</div>
+
+<div class="container">
+
+<!-- Language tabs -->
+<div class="lang-tabs" id="langTabs">
+  <button class="lang-tab active" data-lang="python"><span class="lang-dot"></span>Python</button>
+  <button class="lang-tab" data-lang="nodejs"><span class="lang-dot"></span>Node.js</button>
+  <button class="lang-tab" data-lang="go"><span class="lang-dot"></span>Go</button>
+  <button class="lang-tab" data-lang="rust"><span class="lang-dot"></span>Rust</button>
+  <button class="lang-tab" data-lang="java"><span class="lang-dot"></span>Java</button>
+</div>
+
+<div class="layout">
+  <!-- Left: workflow.md sample (language-aware) -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><span class="icon"></span>workflow.md · <span id="langLabel">Python</span> 配置示例</div>
+    </div>
+    <div class="panel-body">
+<pre class="workflow" id="workflowYaml"><span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"pytest -x -q"</span>
+  <span class="key">build_command:</span> <span class="str">"python -m build"</span>
+  <span class="key">lint_command:</span>  <span class="str">"ruff check ."</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>  <span class="comment"># 10 min / 命令</span>
+
+<span class="comment"># 验证失败抛异常，commit 保留，push 阻断</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"black --check ."</span>  <span class="comment"># 自动 amend</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span></pre>
+    </div>
+  </div>
+
+  <!-- Right: gate animation -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><span class="icon"></span>Pre-Push 验证执行</div>
+      <div id="overallStatus" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--text-muted);">IDLE</div>
+    </div>
+    <div class="panel-body">
+      <div class="gates">
+        <div class="gate" id="gate-test">
+          <div class="gate-header">
+            <div class="gate-name">
+              <span class="gate-num">1</span>
+              <span>test_command</span>
+            </div>
+            <span class="gate-status idle">IDLE</span>
+          </div>
+          <div class="gate-cmd" data-cmd-key="test">pytest -x -q</div>
+          <div class="gate-meta">
+            <span>timeout: 600000 ms</span>
+            <span>cwd: workspace</span>
+          </div>
+          <div class="gate-output"><pre></pre></div>
+        </div>
+
+        <div class="gate" id="gate-build">
+          <div class="gate-header">
+            <div class="gate-name">
+              <span class="gate-num">2</span>
+              <span>build_command</span>
+            </div>
+            <span class="gate-status idle">IDLE</span>
+          </div>
+          <div class="gate-cmd" data-cmd-key="build">python -m build</div>
+          <div class="gate-meta">
+            <span>timeout: 600000 ms</span>
+            <span>cwd: workspace</span>
+          </div>
+          <div class="gate-output"><pre></pre></div>
+        </div>
+
+        <div class="gate" id="gate-lint">
+          <div class="gate-header">
+            <div class="gate-name">
+              <span class="gate-num">3</span>
+              <span>lint_command</span>
+            </div>
+            <span class="gate-status idle">IDLE</span>
+          </div>
+          <div class="gate-cmd" data-cmd-key="lint">ruff check .</div>
+          <div class="gate-meta">
+            <span>timeout: 600000 ms</span>
+            <span>cwd: workspace</span>
+          </div>
+          <div class="gate-output"><pre></pre></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="primary" id="runBtn">▶ Run Verification</button>
+        <button id="failBtn">✕ Simulate Fail</button>
+      </div>
+
+      <div class="outcome success" id="outcome" style="display:none;">
+        <strong>✓ Verification Passed</strong> ·  commit 保留 ·  push 继续 ·  PR 创建/更新
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+  // Language presets
+  const presets = {
+    python: {
+      label: 'Python',
+      yaml: `<span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"pytest -x -q"</span>
+  <span class="key">build_command:</span> <span class="str">"python -m build"</span>
+  <span class="key">lint_command:</span>  <span class="str">"ruff check ."</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>  <span class="comment"># 10 min / 命令</span>
+
+<span class="comment"># 验证失败抛异常，commit 保留，push 阻断</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"black --check ."</span>  <span class="comment"># 自动 amend</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span>`,
+      cmds: {
+        test: 'pytest -x -q',
+        build: 'python -m build',
+        lint: 'ruff check .'
+      }
+    },
+    nodejs: {
+      label: 'Node.js',
+      yaml: `<span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"npm test -- --watchAll=false"</span>
+  <span class="key">build_command:</span> <span class="str">"npm run build"</span>
+  <span class="key">lint_command:</span>  <span class="str">"eslint . --ext .js,.ts,.tsx"</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>
+
+<span class="comment"># Node.js 项目常见 hook：TypeScript 类型检查</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"tsc --noEmit"</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span>`,
+      cmds: {
+        test: 'npm test -- --watchAll=false',
+        build: 'npm run build',
+        lint: 'eslint . --ext .js,.ts,.tsx'
+      }
+    },
+    go: {
+      label: 'Go',
+      yaml: `<span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"go test ./... -race -count=1"</span>
+  <span class="key">build_command:</span> <span class="str">"go build -o bin/ ./cmd/..."</span>
+  <span class="key">lint_command:</span>  <span class="str">"golangci-lint run --timeout=5m"</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>
+
+<span class="comment"># Go 项目：vet + gofmt 作为额外保险</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"gofmt -l . && go vet ./..."</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span>`,
+      cmds: {
+        test: 'go test ./... -race -count=1',
+        build: 'go build -o bin/ ./cmd/...',
+        lint: 'golangci-lint run --timeout=5m'
+      }
+    },
+    rust: {
+      label: 'Rust',
+      yaml: `<span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"cargo test --locked"</span>
+  <span class="key">build_command:</span> <span class="str">"cargo build --release"</span>
+  <span class="key">lint_command:</span>  <span class="str">"cargo clippy -- -D warnings"</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>
+
+<span class="comment"># Rust：fmt 检查作为 pre-commit</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"cargo fmt --check"</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span>`,
+      cmds: {
+        test: 'cargo test --locked',
+        build: 'cargo build --release',
+        lint: 'cargo clippy -- -D warnings'
+      }
+    },
+    java: {
+      label: 'Java / Maven',
+      yaml: `<span class="comment"># 三道验证关卡 · 顺序执行</span>
+<span class="key">verification:</span>
+  <span class="key">test_command:</span>  <span class="str">"mvn test -B"</span>
+  <span class="key">build_command:</span> <span class="str">"mvn package -DskipTests -B"</span>
+  <span class="key">lint_command:</span>  <span class="str">"mvn checkstyle:check -B"</span>
+  <span class="key">timeout_ms:</span>   <span class="val">600000</span>
+
+<span class="comment"># Java：spotless 作为可选 formatter</span>
+<span class="key">hooks:</span>
+  <span class="key">pre_commit:</span>   <span class="str">"mvn spotless:check"</span>
+  <span class="key">pre_push:</span>     <span class="str">""</span>
+  <span class="key">post_sync:</span>    <span class="str">""</span>`,
+      cmds: {
+        test: 'mvn test -B',
+        build: 'mvn package -DskipTests -B',
+        lint: 'mvn checkstyle:check -B'
+      }
+    }
+  };
+
+  const gates = ['gate-test', 'gate-build', 'gate-lint'];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let currentLang = 'python';
+
+  // Apply language preset
+  function applyLang(lang) {
+    currentLang = lang;
+    const preset = presets[lang];
+    document.getElementById('workflowYaml').innerHTML = preset.yaml;
+    document.getElementById('langLabel').textContent = preset.label;
+    document.querySelectorAll('[data-cmd-key]').forEach(el => {
+      const key = el.dataset.cmdKey;
+      el.textContent = preset.cmds[key];
+    });
+    // Update tabs
+    document.querySelectorAll('.lang-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.lang === lang);
+    });
+    reset();
+  }
+
+  // Tabs
+  document.querySelectorAll('.lang-tab').forEach(tab => {
+    tab.addEventListener('click', () => applyLang(tab.dataset.lang));
+  });
+
+  function setGateState(id, state) {
+    const gate = document.getElementById(id);
+    const status = gate.querySelector('.gate-status');
+    gate.classList.remove('running', 'passed', 'failed');
+    if (state !== 'idle') gate.classList.add(state);
+    status.className = 'gate-status ' + state;
+    status.textContent = state.toUpperCase();
+  }
+
+  function reset() {
+    gates.forEach(id => setGateState(id, 'idle'));
+    gates.forEach(id => {
+      document.getElementById(id).classList.remove('show-output');
+      document.getElementById(id).querySelector('.gate-output pre').textContent = '';
+    });
+    document.getElementById('outcome').style.display = 'none';
+    document.getElementById('overallStatus').textContent = 'IDLE';
+    document.getElementById('overallStatus').style.color = 'var(--text-muted)';
+  }
+
+  async function runSequence(failAt = -1) {
+    reset();
+    document.getElementById('overallStatus').textContent = 'RUNNING';
+    document.getElementById('overallStatus').style.color = 'var(--info)';
+    for (let i = 0; i < gates.length; i++) {
+      const id = gates[i];
+      setGateState(id, 'running');
+      await sleep(900);
+      if (i === failAt) {
+        setGateState(id, 'failed');
+        const out = document.getElementById(id).querySelector('.gate-output pre');
+        out.textContent = 'FAILED test_session.py::test_login - AssertionError\nAssertionError: expected 200, got 401';
+        document.getElementById(id).classList.add('show-output');
+        const o = document.getElementById('outcome');
+        o.style.display = 'block';
+        o.className = 'outcome fail';
+        o.innerHTML = '<strong>✕ VerificationFailed</strong> · 抛出 <code>VerificationFailed</code> · 后续关卡跳过 · <strong>commit 保留</strong> · push 阻断 · issue 标记 <code>verification_failed</code>';
+        document.getElementById('overallStatus').textContent = 'FAILED';
+        document.getElementById('overallStatus').style.color = 'var(--danger)';
+        return;
+      }
+      setGateState(id, 'passed');
+      const out = document.getElementById(id).querySelector('.gate-output pre');
+      out.textContent = 'exit_code=0\nduration=' + (800 + i * 200) + 'ms\noutput_lines=' + (12 + i * 8);
+      document.getElementById(id).classList.add('show-output');
+      await sleep(200);
+    }
+    const o = document.getElementById('outcome');
+    o.style.display = 'block';
+    o.className = 'outcome success';
+    o.innerHTML = '<strong>✓ Verification Passed</strong> ·  commit 保留 ·  push 继续 ·  PR 创建/更新';
+    document.getElementById('overallStatus').textContent = 'PASSED';
+    document.getElementById('overallStatus').style.color = 'var(--accent)';
+  }
+
+  document.getElementById('runBtn').addEventListener('click', () => runSequence(-1));
+  document.getElementById('failBtn').addEventListener('click', () => runSequence(0));
+
+  // Init with python
+  applyLang('python');
+</script>
+</body>
+</html>

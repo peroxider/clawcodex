@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestrator 性能基线</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(0,212,170,0.04), transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(59,130,246,0.04), transparent 40%);
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* Summary stats row */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 700px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 200ms;
+  }
+  .stat-card:hover { border-color: var(--accent); }
+  .stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .stat-value .unit {
+    font-size: 14px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .stat-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+    background: var(--accent);
+    transition: background 250ms;
+  }
+  .kpi-card.warning::before { background: var(--warning); }
+  .kpi-card.danger::before { background: var(--danger); }
+
+  .kpi-header {
+    display: flex; justify-content: space-between; align-items: start;
+    margin-bottom: 8px;
+  }
+  .kpi-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .kpi-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .kpi-target {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+  .kpi-target strong {
+    color: var(--accent);
+    font-size: 13px;
+  }
+
+  .kpi-bar-wrap {
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 10px;
+  }
+  .kpi-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+    border-radius: 999px;
+    transition: width 1000ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .kpi-bar.warning { background: linear-gradient(90deg, var(--warning), #fb923c); }
+  .kpi-bar.danger { background: linear-gradient(90deg, var(--danger), #f87171); }
+  .kpi-threshold {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--text-primary);
+    opacity: 0.4;
+  }
+
+  .kpi-meta {
+    display: flex; justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .kpi-current { color: var(--text-primary); font-weight: 700; }
+  .kpi-current.warning { color: var(--warning); }
+  .kpi-current.danger { color: var(--danger); }
+
+  .legend-bar {
+    display: flex; gap: 18px;
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+  .legend-bar > span { display: flex; align-items: center; gap: 6px; }
+  .legend-bar .swatch { width: 14px; height: 8px; border-radius: 2px; }
+
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Orchestrator · 性能基线</h1>
+  <p class="sub">端到端 issue → PR 流水线的关键延迟与吞吐指标 · 阈值可配置 · CI 上放宽倍数由 <code style="font-family:'JetBrains Mono',monospace;">ORCHESTRATOR_PERF_MULT</code> 控制</p>
+</div>
+
+<div class="container">
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-label">Throughput</div>
+    <div class="stat-value">12<span class="unit">issues/hr</span></div>
+    <div class="stat-meta">单 worker · 8 核 · 串行</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Mean Run Duration</div>
+    <div class="stat-value">9.2<span class="unit">min</span></div>
+    <div class="stat-meta">从 issue pickup 到 PR open</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">PR Open Rate</div>
+    <div class="stat-value">94<span class="unit">%</span></div>
+    <div class="stat-meta">一次跑通的 issue 比例</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Concurrent Workers</div>
+    <div class="stat-value">5<span class="unit">/ node</span></div>
+    <div class="stat-meta">default · 可配置 max_concurrent_agents</div>
+  </div>
+</div>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-header">
+      <div class="kpi-name">Tracker Poll Latency</div>
+      <span class="kpi-tag">sync</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>30s</strong> · 轮询间隔</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar" style="width: 30%;"></div>
+      <div class="kpi-threshold" style="left: 60%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 8s</span>
+      <span class="kpi-current">p95: 12s</span>
+    </div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-header">
+      <div class="kpi-name">Agent Loop Cold Start</div>
+      <span class="kpi-tag">boot</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>3s</strong> · 首次 QueryRunner</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar" style="width: 42%;"></div>
+      <div class="kpi-threshold" style="left: 70%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 1.1s</span>
+      <span class="kpi-current">p95: 1.8s</span>
+    </div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-header">
+      <div class="kpi-name">Tool Execution</div>
+      <span class="kpi-tag">latency</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>500ms</strong> · per call</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar" style="width: 36%;"></div>
+      <div class="kpi-threshold" style="left: 70%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 80ms</span>
+      <span class="kpi-current">p95: 220ms</span>
+    </div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-header">
+      <div class="kpi-name">Verification Gate</div>
+      <span class="kpi-tag">duration</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>10min</strong> · test+build+lint</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar" style="width: 58%;"></div>
+      <div class="kpi-threshold" style="left: 70%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 1m20s</span>
+      <span class="kpi-current">p95: 5m48s</span>
+    </div>
+  </div>
+
+  <div class="kpi-card warning">
+    <div class="kpi-header">
+      <div class="kpi-name">Issue → PR Wall Time</div>
+      <span class="kpi-tag">e2e</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>15min</strong> · end-to-end</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar warning" style="width: 64%;"></div>
+      <div class="kpi-threshold" style="left: 70%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 3m</span>
+      <span class="kpi-current warning">p95: 12m</span>
+    </div>
+  </div>
+
+  <div class="kpi-card">
+    <div class="kpi-header">
+      <div class="kpi-name">Push to PR Open</div>
+      <span class="kpi-tag">finalize</span>
+    </div>
+    <div class="kpi-target">target &lt; <strong>20s</strong> · push → PR URL</div>
+    <div class="kpi-bar-wrap">
+      <div class="kpi-bar" style="width: 32%;"></div>
+      <div class="kpi-threshold" style="left: 60%;" title="threshold"></div>
+    </div>
+    <div class="kpi-meta">
+      <span>min: 4s</span>
+      <span class="kpi-current">p95: 9s</span>
+    </div>
+  </div>
+</div>
+
+<div class="legend-bar">
+  <span><span class="swatch" style="background:linear-gradient(90deg, var(--accent), var(--accent-dim));"></span> Pass（&lt; threshold）</span>
+  <span><span class="swatch" style="background:linear-gradient(90deg, var(--warning), #fb923c);"></span> Warning（≥ 70% threshold）</span>
+  <span><span class="swatch" style="background:linear-gradient(90deg, var(--danger), #f87171);"></span> Fail</span>
+  <span><span class="swatch" style="background:var(--text-primary); opacity:0.4;"></span> Threshold 标记线</span>
+</div>
+
+</div>
+</body>
+</html>

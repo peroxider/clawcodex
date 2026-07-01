@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracker 适配器能力矩阵</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  .matrix-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  table.matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  table.matrix th, table.matrix td {
+    text-align: center;
+    padding: 14px 8px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+  table.matrix th:last-child, table.matrix td:last-child { border-right: none; }
+  table.matrix tr:last-child td { border-bottom: none; }
+  table.matrix thead th {
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  table.matrix thead th:first-child {
+    text-align: left;
+    padding-left: 20px;
+    color: var(--accent);
+  }
+  table.matrix tbody tr:hover { background: rgba(0,212,170,0.03); }
+  table.matrix .platform-name {
+    text-align: left;
+    padding-left: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  table.matrix .platform-name .protocol {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 2px;
+  }
+  table.matrix .platform-icon {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    margin-right: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    font-weight: 700;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+  table.matrix .platform-icon.linear { color: #5e6ad2; border-color: #5e6ad2; }
+  table.matrix .platform-icon.github { color: var(--text-primary); }
+  table.matrix .platform-icon.gitee { color: #c61d27; border-color: #c61d27; }
+  table.matrix .platform-icon.gitcode { color: #2468f2; border-color: #2468f2; }
+  table.matrix .platform-icon.local { color: var(--accent); border-color: var(--accent); }
+
+  .status-yes {
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .status-no {
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+  .status-partial {
+    color: var(--warning);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .status-na {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  /* Coverage summary cards */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .summary-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 200ms ease-out;
+  }
+  .summary-card:hover { border-color: var(--accent); }
+  .summary-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .summary-stat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1.1;
+    margin-top: 8px;
+  }
+  .summary-stat small {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .summary-bar {
+    height: 4px;
+    background: var(--bg-elevated);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .summary-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--info));
+    border-radius: 999px;
+    transition: width 600ms ease-out;
+  }
+
+  .note {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 8px;
+    color: var(--warning);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+    table.matrix { font-size: 11px; }
+    table.matrix th, table.matrix td { padding: 10px 4px; }
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    .matrix-wrap { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Tracker 适配器能力矩阵</h1>
+  <p class="sub">同一个 `TrackerAdapter` 抽象 · 5 个实现 · 能力差异源于平台 API 边界</p>
+</div>
+
+<div class="container">
+<div class="matrix-wrap">
+<table class="matrix">
+  <thead>
+    <tr>
+      <th>Tracker</th>
+      <th>Issue List</th>
+      <th>Comments</th>
+      <th>PR Create</th>
+      <th>PR Body<br>Markdown</th>
+      <th>PR 评论<br>扫描</th>
+      <th>Inline<br>Review</th>
+      <th>CI Status</th>
+      <th>Push</th>
+      <th>Intent<br>Labels</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="platform-name">
+        <span class="platform-icon linear">L</span>Linear
+        <span class="protocol">GraphQL</span>
+      </td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-partial">labels<br>API</span></td>
+    </tr>
+    <tr>
+      <td class="platform-name">
+        <span class="platform-icon github">G</span>GitHub
+        <span class="protocol">REST v3</span>
+      </td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+    </tr>
+    <tr>
+      <td class="platform-name">
+        <span class="platform-icon gitee">G</span>Gitee
+        <span class="protocol">REST v5</span>
+      </td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+    </tr>
+    <tr>
+      <td class="platform-name">
+        <span class="platform-icon gitcode">G</span>GitCode
+        <span class="protocol">REST v5</span>
+      </td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+    </tr>
+    <tr>
+      <td class="platform-name">
+        <span class="platform-icon local">L</span>Local
+        <span class="protocol">markdown + ndjson</span>
+      </td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-yes">✓</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-na">—</span></td>
+      <td><span class="status-partial">no_push<br>PENDING</span></td>
+      <td><span class="status-na">labels in<br>frontmatter</span></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="summary">
+  <div class="summary-card">
+    <div class="summary-name">Linear</div>
+    <div class="summary-stat">2<small>/ 9 cells</small></div>
+    <div class="summary-bar"><div class="summary-bar-fill" style="width: 22%;"></div></div>
+    <div style="color:var(--text-muted); font-size:11px; margin-top:6px;">Issue 跟踪为主 · 无 PR API</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-name">GitHub</div>
+    <div class="summary-stat">9<small>/ 9 cells</small></div>
+    <div class="summary-bar"><div class="summary-bar-fill" style="width: 100%;"></div></div>
+    <div style="color:var(--text-muted); font-size:11px; margin-top:6px;">完整能力 · reference 实现</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-name">Gitee</div>
+    <div class="summary-stat">9<small>/ 9 cells</small></div>
+    <div class="summary-bar"><div class="summary-bar-fill" style="width: 100%;"></div></div>
+    <div style="color:var(--text-muted); font-size:11px; margin-top:6px;">中文社区 · REST v5</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-name">GitCode</div>
+    <div class="summary-stat">9<small>/ 9 cells</small></div>
+    <div class="summary-bar"><div class="summary-bar-fill" style="width: 100%;"></div></div>
+    <div style="color:var(--text-muted); font-size:11px; margin-top:6px;">开源协作 · REST v5</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-name">Local</div>
+    <div class="summary-stat">3<small>/ 9 cells</small></div>
+    <div class="summary-bar"><div class="summary-bar-fill" style="width: 33%;"></div></div>
+    <div style="color:var(--text-muted); font-size:11px; margin-top:6px;">开发沙箱 · 不发远端</div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>能力差异说明：</strong> Linear 无 PR API（issue 跟踪为主），Local tracker 不发远端（<code style="font-family:'JetBrains Mono',monospace;">no_push=True</code>，issue 终态固定为 PENDING_REVIEW，属设计行为）。其余三个平台覆盖 9/9 完整能力。
+</div>
+</div>
+</body>
+</html>

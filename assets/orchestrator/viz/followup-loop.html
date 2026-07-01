@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR 评论反馈闭环</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  /* Loop diagram */
+  .loop-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .loop-svg {
+    width: 100%; height: auto; display: block;
+  }
+
+  /* Node */
+  .node-rect {
+    fill: var(--bg-elevated);
+    stroke: var(--border-strong);
+    stroke-width: 1.5;
+    rx: 10;
+    transition: all 200ms ease-out;
+  }
+  .node.active .node-rect {
+    fill: var(--accent-glow);
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  .node.complete .node-rect {
+    fill: rgba(16,185,129,0.08);
+    stroke: var(--accent-dim);
+  }
+  .node-title {
+    fill: var(--text-primary);
+    font-family: -apple-system, 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+  .node-sub {
+    fill: var(--text-secondary);
+    font-family: -apple-system, 'Inter', sans-serif;
+    font-size: 10px;
+    text-anchor: middle;
+  }
+  .node-icon {
+    fill: var(--accent);
+  }
+
+  /* Arrows */
+  .flow-arrow {
+    stroke: var(--border-strong);
+    stroke-width: 2;
+    fill: none;
+  }
+  .flow-arrow.active {
+    stroke: var(--accent);
+    stroke-width: 2.5;
+    stroke-dasharray: 8 4;
+    fill: none;
+    animation: flow 1.2s linear infinite;
+  }
+  @keyframes flow { to { stroke-dashoffset: -24; } }
+  .flow-label {
+    fill: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-anchor: middle;
+  }
+
+  /* PR preview panel */
+  .preview-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 24px;
+  }
+  @media (max-width: 900px) {
+    .preview-row { grid-template-columns: 1fr; }
+  }
+
+  .pr-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .pr-header {
+    background: var(--bg-elevated);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .pr-title { font-size: 13px; font-weight: 700; }
+  .pr-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .pr-badge.open { background: rgba(16,185,129,0.15); color: var(--accent); }
+  .pr-badge.feedback { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .pr-badge.fixed { background: rgba(59,130,246,0.15); color: var(--info); }
+
+  .pr-body { padding: 16px; font-size: 12px; }
+
+  .comment {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .comment .author {
+    font-weight: 700;
+    color: var(--info);
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .comment .author .badge-mini {
+    display: inline-block;
+    font-size: 9px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-left: 6px;
+    color: var(--text-muted);
+  }
+  .comment-body { color: var(--text-secondary); }
+
+  .commit-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .commit-sha {
+    background: var(--bg-elevated);
+    color: var(--accent);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+  }
+  .commit-msg { color: var(--text-secondary); flex: 1; }
+  .commit-prefix { color: var(--info); font-weight: 700; }
+
+  /* Controls */
+  .controls {
+    display: flex; gap: 10px; align-items: center;
+    margin-top: 24px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  button {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 150ms;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary {
+    background: var(--accent); color: #0a0e14;
+    border-color: var(--accent);
+  }
+  .round-info {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .round-info strong { color: var(--accent); font-size: 14px; }
+
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+    .loop-wrap { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>PR 评论 → Follow-up Agent Run → Fix Commit</h1>
+  <p class="sub">独立于 issue polling 循环 · 复用同分支 · commit 前缀 <code style="font-family:'JetBrains Mono',monospace;">fix:</code> · PR body 重渲染</p>
+</div>
+
+<div class="container">
+  <div class="loop-wrap">
+    <svg class="loop-svg" viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#00d4aa" />
+        </marker>
+        <marker id="arrowhead-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a4252" />
+        </marker>
+      </defs>
+
+      <!-- Node 1: PR with feedback -->
+      <g class="node" id="node1" data-step="1">
+        <rect x="60" y="60" width="200" height="100" class="node-rect" />
+        <text x="160" y="100" class="node-title">PR With Feedback</text>
+        <text x="160" y="120" class="node-sub">review_comments + CI</text>
+        <text x="160" y="138" class="node-sub">conversation + inline review</text>
+        <text x="160" y="80" class="node-icon" style="text-anchor: middle; font-size: 22px;">💬</text>
+      </g>
+
+      <!-- Node 2: Poll -->
+      <g class="node" id="node2" data-step="2">
+        <rect x="340" y="60" width="200" height="100" class="node-rect" />
+        <text x="440" y="100" class="node-title">ReviewFeedback Loop</text>
+        <text x="440" y="120" class="node-sub">tracker.fetch_pr_feedback()</text>
+        <text x="440" y="138" class="node-sub">ignore_authors · max_items=20</text>
+        <text x="440" y="80" class="node-icon" style="text-anchor: middle; font-size: 22px;">🔍</text>
+      </g>
+
+      <!-- Node 3: Schedule -->
+      <g class="node" id="node3" data-step="3">
+        <rect x="620" y="60" width="200" height="100" class="node-rect" />
+        <text x="720" y="100" class="node-title">Schedule Follow-up</text>
+        <text x="720" y="120" class="node-sub">mode=followup · reuse PR</text>
+        <text x="720" y="138" class="node-sub">checkout existing branch</text>
+        <text x="720" y="80" class="node-icon" style="text-anchor: middle; font-size: 22px;">📋</text>
+      </g>
+
+      <!-- Node 4: Agent -->
+      <g class="node" id="node4" data-step="4">
+        <rect x="900" y="60" width="200" height="100" class="node-rect" />
+        <text x="1000" y="100" class="node-title">Agent Fix Run</text>
+        <text x="1000" y="120" class="node-sub">read PR comments · edit code</text>
+        <text x="1000" y="138" class="node-sub">max_followup_attempts=5</text>
+        <text x="1000" y="80" class="node-icon" style="text-anchor: middle; font-size: 22px;">🛠</text>
+      </g>
+
+      <!-- Node 5: fix commit + PR update (bottom) -->
+      <g class="node" id="node5" data-step="5">
+        <rect x="900" y="240" width="200" height="100" class="node-rect" />
+        <text x="1000" y="280" class="node-title">fix: Commit + PR Update</text>
+        <text x="1000" y="300" class="node-sub">commit on same branch</text>
+        <text x="1000" y="318" class="node-sub">_build_pr_body re-render</text>
+        <text x="1000" y="260" class="node-icon" style="text-anchor: middle; font-size: 22px;">✓</text>
+      </g>
+
+      <!-- Node 6: Reply to comments -->
+      <g class="node" id="node6" data-step="6">
+        <rect x="620" y="240" width="200" height="100" class="node-rect" />
+        <text x="720" y="280" class="node-title">Reply to Comments</text>
+        <text x="720" y="300" class="node-sub">tracker.reply_to_pr_feedback()</text>
+        <text x="720" y="318" class="node-sub">reply_to_comments=true</text>
+        <text x="720" y="260" class="node-icon" style="text-anchor: middle; font-size: 22px;">💬</text>
+      </g>
+
+      <!-- Node 7: Loop or close -->
+      <g class="node" id="node7" data-step="7">
+        <rect x="340" y="240" width="200" height="100" class="node-rect" />
+        <text x="440" y="280" class="node-title">More Feedback?</text>
+        <text x="440" y="300" class="node-sub">iterate · cap=5 attempts</text>
+        <text x="440" y="318" class="node-sub">if resolved → mark done</text>
+        <text x="440" y="260" class="node-icon" style="text-anchor: middle; font-size: 22px;">♻</text>
+      </g>
+
+      <!-- Edges (forward) -->
+      <line x1="260" y1="110" x2="340" y2="110" class="flow-arrow" id="e1" />
+      <line x1="540" y1="110" x2="620" y2="110" class="flow-arrow" id="e2" />
+      <line x1="820" y1="110" x2="900" y2="110" class="flow-arrow" id="e3" />
+
+      <!-- Edge down to fix commit -->
+      <path d="M 1000 160 L 1000 240" class="flow-arrow" id="e4" />
+
+      <!-- Edge back to reply -->
+      <path d="M 900 290 L 820 290" class="flow-arrow" id="e5" />
+
+      <!-- Edge to decision -->
+      <path d="M 620 290 L 540 290" class="flow-arrow" id="e6" />
+
+      <!-- Loop back (if more feedback) -->
+      <path d="M 440 240 Q 440 200 80 200 Q 60 200 60 180 L 60 160" class="flow-arrow" id="e7" />
+      <text x="220" y="195" class="flow-label">if has unresolved → loop back</text>
+
+      <!-- Arrow labels -->
+      <text x="300" y="100" class="flow-label">has comments</text>
+      <text x="580" y="100" class="flow-label">plan fix</text>
+      <text x="860" y="100" class="flow-label">commit ready</text>
+      <text x="1010" y="200" class="flow-label">git push</text>
+      <text x="860" y="280" class="flow-label">reply</text>
+      <text x="580" y="280" class="flow-label">resolved?</text>
+    </svg>
+  </div>
+
+  <div class="preview-row">
+    <div class="pr-panel">
+      <div class="pr-header">
+        <div class="pr-title">PR #142 · feat: add intent resolver</div>
+        <span class="pr-badge open" id="prStateBadge">OPEN</span>
+      </div>
+      <div class="pr-body">
+        <div class="comment">
+          <div class="author">reviewer-bot <span class="badge-mini">CI · pylint</span></div>
+          <div class="comment-body">E1101: Instance of 'IntentResolver' has no 'rebase' member (fix: add REBASE to Intent enum)</div>
+        </div>
+        <div class="comment">
+          <div class="author">alice <span class="badge-mini">maintainer</span></div>
+          <div class="comment-body">Need to also handle the priority ordering when both retry and follow-up labels are present — please see the intent priority rules.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pr-panel">
+      <div class="pr-header">
+        <div class="pr-title">Branch: feature/issue-fix · commits</div>
+        <span class="pr-badge fixed" id="commitCountBadge">2 commits</span>
+      </div>
+      <div class="pr-body">
+        <div class="commit-row">
+          <span class="commit-sha">a3f2c19</span>
+          <span class="commit-msg"><span class="commit-prefix">feat:</span> add intent resolver</span>
+        </div>
+        <div class="commit-row">
+          <span class="commit-sha">7b91e4d</span>
+          <span class="commit-msg"><span class="commit-prefix">fix:</span> add REBASE intent + handle priority ordering</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="cycleBtn">▶ Run Follow-up Cycle</button>
+    <button id="resetBtn">↺ Reset</button>
+    <div class="round-info">Round <strong id="roundNum">0</strong> / 5 (cap)</div>
+  </div>
+</div>
+
+<script>
+  const steps = [
+    { id: 'node1', label: 'reviewer-bot: lint fail + alice: priority doc' },
+    { id: 'node2', label: 'fetch_pull_request_feedback() → 2 items' },
+    { id: 'node3', label: 'mode=followup · reuse PR #142' },
+    { id: 'node4', label: 'agent reads PR comments → edits tracker.py' },
+    { id: 'node5', label: 'git commit -m "fix: add REBASE intent..."' },
+    { id: 'node6', label: 'reply to comments: "Fixed in 7b91e4d"' },
+    { id: 'node7', label: 'no new feedback → mark done' },
+  ];
+
+  const edges = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'];
+  let timer = null;
+  let currentStep = 0;
+
+  function reset() {
+    if (timer) { clearInterval(timer); timer = null; }
+    currentStep = 0;
+    steps.forEach(s => {
+      document.getElementById(s.id).classList.remove('active', 'complete');
+    });
+    edges.forEach(e => document.getElementById(e).classList.remove('active'));
+    document.getElementById('roundNum').textContent = '0';
+    document.getElementById('cycleBtn').textContent = '▶ Run Follow-up Cycle';
+  }
+
+  async function cycle() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+      document.getElementById('cycleBtn').textContent = '▶ Run Follow-up Cycle';
+      return;
+    }
+    document.getElementById('cycleBtn').textContent = '⏸ Pause';
+    reset();
+    let round = 1;
+    document.getElementById('roundNum').textContent = round;
+
+    timer = setInterval(() => {
+      if (currentStep >= steps.length) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById('cycleBtn').textContent = '▶ Run Follow-up Cycle';
+        document.getElementById('prStateBadge').textContent = 'RESOLVED';
+        document.getElementById('prStateBadge').className = 'pr-badge fixed';
+        return;
+      }
+      // Activate current node
+      const s = steps[currentStep];
+      const node = document.getElementById(s.id);
+      node.classList.add('active');
+      // Activate edge into this node (except node1)
+      if (currentStep > 0 && currentStep <= 6) {
+        const edgeIdx = currentStep - 1;
+        if (edges[edgeIdx]) document.getElementById(edges[edgeIdx]).classList.add('active');
+      }
+      // Mark previous as complete after 700ms
+      setTimeout(() => {
+        if (currentStep > 0) {
+          const prev = document.getElementById(steps[currentStep - 1].id);
+          prev.classList.remove('active');
+          prev.classList.add('complete');
+        }
+      }, 600);
+      currentStep++;
+    }, 1100);
+  }
+
+  document.getElementById('cycleBtn').addEventListener('click', cycle);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+</script>
+</body>
+</html>

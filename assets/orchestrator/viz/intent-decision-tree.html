@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operator Intent 决策树</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --bg-elevated: #131820;
+    --bg-card: #181e29;
+    --border: #2a3142;
+    --border-strong: #3a4252;
+    --text-primary: #e4e7ec;
+    --text-secondary: #8a92a3;
+    --text-muted: #5a6173;
+    --accent: #00d4aa;
+    --accent-dim: #00a886;
+    --info: #3b82f6;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --neutral: #6b7280;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    min-height: 100vh;
+    padding: 32px 24px;
+  }
+  .header { max-width: 1280px; margin: 0 auto 24px; }
+  .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 8px; }
+  .header .sub { color: var(--text-secondary); font-size: 14px; }
+  .container { max-width: 1280px; margin: 0 auto; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 24px;
+  }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* Label selector panel */
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: var(--bg-elevated);
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent);
+  }
+  .panel-body { padding: 18px; }
+
+  /* Issue card mock */
+  .issue-card {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .issue-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .issue-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .issue-labels {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .label-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    transition: all 150ms;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+  }
+  .label-chip:hover { border-color: var(--accent); }
+  .label-chip.active {
+    background: var(--accent-glow);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .label-chip.active::before {
+    content: '✓';
+    margin-right: 2px;
+  }
+  .label-chip.retry { color: var(--info); border-color: rgba(59,130,246,0.3); }
+  .label-chip.followup { color: var(--accent); border-color: rgba(0,212,170,0.3); }
+  .label-chip.blocked { color: var(--danger); border-color: rgba(239,68,68,0.3); }
+  .label-chip.rebase { color: var(--warning); border-color: rgba(245,158,11,0.3); }
+
+  .issue-state {
+    display: flex; gap: 10px; align-items: center;
+    padding: 10px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .issue-state strong {
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  .action-hint {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* Decision tree SVG */
+  .tree-svg { width: 100%; height: auto; display: block; }
+
+  /* Tree nodes */
+  .tree-decision {
+    fill: var(--bg-elevated);
+    stroke: var(--border-strong);
+    stroke-width: 1.5;
+    rx: 8;
+  }
+  .tree-decision.priority-1 { stroke: var(--danger); fill: rgba(239,68,68,0.08); }
+  .tree-decision.priority-2 { stroke: var(--warning); fill: rgba(245,158,11,0.08); }
+  .tree-decision.priority-3 { stroke: var(--accent); fill: rgba(0,212,170,0.08); }
+  .tree-decision.priority-4 { stroke: var(--info); fill: rgba(59,130,246,0.08); }
+  .tree-decision.priority-5 { stroke: var(--neutral); fill: rgba(107,114,128,0.08); }
+  .tree-decision.matched { stroke-width: 3; filter: drop-shadow(0 0 8px currentColor); }
+  .tree-decision.rejected { opacity: 0.25; stroke-dasharray: 4 3; }
+
+  .tree-text {
+    fill: var(--text-primary);
+    font-family: -apple-system, 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-anchor: middle;
+  }
+  .tree-sub {
+    fill: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-anchor: middle;
+  }
+  .tree-priority {
+    fill: var(--text-muted);
+    font-family: -apple-system, 'Inter', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+  .tree-edge {
+    stroke: var(--border-strong);
+    stroke-width: 2;
+    fill: none;
+  }
+  .tree-edge.matched { stroke: var(--accent); stroke-width: 3; }
+  .tree-edge.rejected { stroke: var(--danger); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: 0.5; }
+
+  .tree-edge-label {
+    fill: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    text-anchor: middle;
+  }
+
+  /* Result panel */
+  .result {
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .result-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .label { color: var(--text-secondary); }
+  .result-row .value { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
+  .result-row .value.intent { color: var(--accent); font-weight: 700; }
+
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Operator Intent 决策树</h1>
+  <p class="sub">点击 issue 标签模拟 operator 行为 · 高亮匹配的优先级路径</p>
+</div>
+
+<div class="container">
+<div class="layout">
+  <!-- Left: label toggle -->
+  <div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="dot"></span>Issue Card · Intent 模拟</div>
+      </div>
+      <div class="panel-body">
+        <div class="issue-card">
+          <div class="issue-id">myorg/myrepo#4711 · state: open</div>
+          <div class="issue-title">Agent 提交的 PR 失败，希望重跑并保留历史评论</div>
+          <div class="issue-labels">
+            <span class="label-chip retry" data-label="retry">agent:retry</span>
+            <span class="label-chip followup" data-label="followup">agent:follow-up</span>
+            <span class="label-chip blocked" data-label="blocked">agent:blocked</span>
+            <span class="label-chip rebase" data-label="rebase">agent:rebase</span>
+          </div>
+          <div class="issue-state">
+            当前已选: <strong id="selectedList">none</strong>
+          </div>
+        </div>
+        <div class="action-hint">
+          <strong style="color:var(--text-primary);">优先级规则:</strong><br>
+          <span style="color:var(--danger);">1.</span> blocked 永远胜出（永久跳过）<br>
+          <span style="color:var(--warning);">2.</span> rebase 高于 retry/followup（直接重定基线）<br>
+          <span style="color:var(--accent);">3.</span> followup 比 retry 更保守（保留 PR 证据）<br>
+          <span style="color:var(--info);">4.</span> 否则 → NONE（按默认策略跑）
+        </div>
+      </div>
+    </div>
+
+    <div class="result">
+      <div class="result-row">
+        <span class="label">Resolved Intent</span>
+        <span class="value intent" id="resIntent">—</span>
+      </div>
+      <div class="result-row">
+        <span class="label">Priority</span>
+        <span class="value" id="resPriority">—</span>
+      </div>
+      <div class="result-row">
+        <span class="label">Action</span>
+        <span class="value" id="resAction">—</span>
+      </div>
+      <div class="result-row">
+        <span class="label">PR Handling</span>
+        <span class="value" id="resPR">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: decision tree -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title"><span class="dot"></span>intent_from_label_set() · 决策路径</div>
+    </div>
+    <div class="panel-body">
+      <svg class="tree-svg" viewBox="0 0 800 580" xmlns="http://www.w3.org/2000/svg">
+        <!-- Edges: priority chain (root → P1 check → P2 → P3 → P4 → P5) -->
+        <line x1="400" y1="65" x2="200" y2="105" class="tree-edge" id="edge-root-to-p1" />
+
+        <!-- P1: blocked YES → BLOCKED | NO → P2 -->
+        <line x1="320" y1="130" x2="480" y2="130" class="tree-edge" id="edge-p1-yes" />
+        <line x1="200" y1="155" x2="200" y2="195" class="tree-edge" id="edge-p1-no" />
+        <text x="400" y="122" class="tree-edge-label">YES → has agent:blocked</text>
+        <text x="212" y="178" class="tree-edge-label">NO</text>
+
+        <!-- P2: rebase YES → REBASE | NO → P3 -->
+        <line x1="320" y1="220" x2="480" y2="220" class="tree-edge" id="edge-p2-yes" />
+        <line x1="200" y1="245" x2="200" y2="285" class="tree-edge" id="edge-p2-no" />
+        <text x="400" y="212" class="tree-edge-label">YES → has agent:rebase</text>
+        <text x="212" y="268" class="tree-edge-label">NO</text>
+
+        <!-- P3: followup YES → FOLLOWUP | NO → P4 -->
+        <line x1="320" y1="310" x2="480" y2="310" class="tree-edge" id="edge-p3-yes" />
+        <line x1="200" y1="335" x2="200" y2="375" class="tree-edge" id="edge-p3-no" />
+        <text x="400" y="302" class="tree-edge-label">YES → has agent:follow-up</text>
+        <text x="212" y="358" class="tree-edge-label">NO</text>
+
+        <!-- P4: retry YES → RETRY | NO → P5 NONE (enters top-center of NONE) -->
+        <line x1="320" y1="400" x2="480" y2="400" class="tree-edge" id="edge-p4-yes" />
+        <path d="M 200 425 L 200 485 L 600 485" class="tree-edge" id="edge-p4-no" />
+        <text x="400" y="392" class="tree-edge-label">YES → has agent:retry</text>
+        <text x="212" y="448" class="tree-edge-label">NO → default</text>
+
+        <!-- Root -->
+        <rect x="280" y="15" width="240" height="50" class="tree-decision" id="root" />
+        <text x="400" y="36" class="tree-text">labels present?</text>
+        <text x="400" y="52" class="tree-sub">input: set of intent labels · P0 ENTRY</text>
+
+        <!-- P1 check: blocked (y=105-155) -->
+        <rect x="80" y="105" width="240" height="50" class="tree-decision priority-1" id="node-blocked" />
+        <text x="200" y="124" class="tree-text">has agent:blocked?</text>
+        <text x="200" y="142" class="tree-sub">P1 · ALWAYS WIN · 永久跳过</text>
+
+        <!-- P2 check: rebase (y=195-245) -->
+        <rect x="80" y="195" width="240" height="50" class="tree-decision priority-2" id="node-rebase" />
+        <text x="200" y="214" class="tree-text">has agent:rebase?</text>
+        <text x="200" y="232" class="tree-sub">P2 · rebase + push</text>
+
+        <!-- P3 check: followup (y=285-335) -->
+        <rect x="80" y="285" width="240" height="50" class="tree-decision priority-3" id="node-followup" />
+        <text x="200" y="304" class="tree-text">has agent:follow-up?</text>
+        <text x="200" y="322" class="tree-sub">P3 · CONSERVATIVE · 保留 PR</text>
+
+        <!-- P4 check: retry (y=375-425) -->
+        <rect x="80" y="375" width="240" height="50" class="tree-decision priority-4" id="node-retry" />
+        <text x="200" y="394" class="tree-text">has agent:retry?</text>
+        <text x="200" y="412" class="tree-sub">P4 · OVERRIDE · 重置 + 关 PR</text>
+
+        <!-- P1 result: BLOCKED (y=105-155) -->
+        <rect x="480" y="105" width="240" height="50" class="tree-decision priority-1" id="res-blocked" />
+        <text x="600" y="124" class="tree-text">Intent.BLOCKED</text>
+        <text x="600" y="142" class="tree-sub">mark blocked · skip forever</text>
+
+        <!-- P2 result: REBASE (y=195-245) -->
+        <rect x="480" y="195" width="240" height="50" class="tree-decision priority-2" id="res-rebase" />
+        <text x="600" y="214" class="tree-text">Intent.REBASE</text>
+        <text x="600" y="232" class="tree-sub">force-push · agent 仅在冲突时启动</text>
+
+        <!-- P3 result: FOLLOWUP (y=285-335) -->
+        <rect x="480" y="285" width="240" height="50" class="tree-decision priority-3" id="res-followup" />
+        <text x="600" y="304" class="tree-text">Intent.FOLLOWUP</text>
+        <text x="600" y="322" class="tree-sub">reuse PR · append fix: commit</text>
+
+        <!-- P4 result: RETRY (y=375-425) -->
+        <rect x="480" y="375" width="240" height="50" class="tree-decision priority-4" id="res-retry" />
+        <text x="600" y="394" class="tree-text">Intent.RETRY</text>
+        <text x="600" y="412" class="tree-sub">reset · close old PR · new run</text>
+
+        <!-- P5 result: NONE (default) (y=485-535) -->
+        <rect x="480" y="485" width="240" height="50" class="tree-decision priority-5" id="res-none" />
+        <text x="600" y="504" class="tree-text">Intent.NONE</text>
+        <text x="600" y="522" class="tree-sub">P5 · DEFAULT · 普通 pipeline 流程</text>
+      </svg>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+  const labels = document.querySelectorAll('.label-chip');
+  const resIntent = document.getElementById('resIntent');
+  const resPriority = document.getElementById('resPriority');
+  const resAction = document.getElementById('resAction');
+  const resPR = document.getElementById('resPR');
+  const selectedList = document.getElementById('selectedList');
+
+  const nodes = ['root', 'node-blocked', 'node-rebase', 'node-followup', 'node-retry',
+                 'res-blocked', 'res-rebase', 'res-followup', 'res-retry', 'res-none'];
+  const edges = ['edge-root-to-p1',
+                 'edge-p1-yes', 'edge-p1-no',
+                 'edge-p2-yes', 'edge-p2-no',
+                 'edge-p3-yes', 'edge-p3-no',
+                 'edge-p4-yes', 'edge-p4-no'];
+
+  function clearHighlights() {
+    nodes.forEach(n => {
+      const el = document.getElementById(n);
+      if (el) el.classList.remove('matched');
+    });
+    edges.forEach(e => {
+      const el = document.getElementById(e);
+      if (el) el.classList.remove('matched', 'rejected');
+    });
+  }
+
+  function resolve(activeSet) {
+    // priority order: blocked > rebase > followup > retry > none
+    let intent = 'NONE', priority = 'P4 · DEFAULT', action = 'default pipeline', prHandling = 'create new';
+
+    if (activeSet.has('blocked')) {
+      intent = 'BLOCKED'; priority = 'P1 · ALWAYS WIN';
+      action = 'mark blocked · skip forever';
+      prHandling = 'no PR action';
+    } else if (activeSet.has('rebase')) {
+      intent = 'REBASE'; priority = 'P2 · rebase';
+      action = 'rebase feature branch → force-push';
+      prHandling = 'update existing PR (same number)';
+    } else if (activeSet.has('followup')) {
+      intent = 'FOLLOWUP'; priority = 'P3 · CONSERVATIVE';
+      action = 'reuse existing PR · append fix: commit';
+      prHandling = 'keep PR · append comment';
+    } else if (activeSet.has('retry')) {
+      intent = 'RETRY'; priority = 'P4 · OVERRIDE';
+      action = 'reset local state · close old PR · rerun';
+      prHandling = 'close + new PR';
+    }
+
+    // Highlight path: chain root → checks → result
+    clearHighlights();
+    document.getElementById('root').classList.add('matched');
+    document.getElementById('edge-root-to-p1').classList.add('matched');
+
+    if (intent === 'BLOCKED') {
+      document.getElementById('node-blocked').classList.add('matched');
+      document.getElementById('res-blocked').classList.add('matched');
+      document.getElementById('edge-p1-yes').classList.add('matched');
+      // All lower priority checks are rejected
+      document.getElementById('node-rebase').classList.add('rejected');
+      document.getElementById('node-followup').classList.add('rejected');
+      document.getElementById('node-retry').classList.add('rejected');
+      document.getElementById('res-rebase').classList.add('rejected');
+      document.getElementById('res-followup').classList.add('rejected');
+      document.getElementById('res-retry').classList.add('rejected');
+      document.getElementById('res-none').classList.add('rejected');
+    } else if (intent === 'REBASE') {
+      document.getElementById('node-blocked').classList.add('matched');
+      document.getElementById('node-rebase').classList.add('matched');
+      document.getElementById('res-rebase').classList.add('matched');
+      document.getElementById('edge-p1-no').classList.add('matched');
+      document.getElementById('edge-p2-yes').classList.add('matched');
+      document.getElementById('node-followup').classList.add('rejected');
+      document.getElementById('node-retry').classList.add('rejected');
+      document.getElementById('res-followup').classList.add('rejected');
+      document.getElementById('res-retry').classList.add('rejected');
+      document.getElementById('res-none').classList.add('rejected');
+    } else if (intent === 'FOLLOWUP') {
+      document.getElementById('node-blocked').classList.add('matched');
+      document.getElementById('node-rebase').classList.add('matched');
+      document.getElementById('node-followup').classList.add('matched');
+      document.getElementById('res-followup').classList.add('matched');
+      document.getElementById('edge-p1-no').classList.add('matched');
+      document.getElementById('edge-p2-no').classList.add('matched');
+      document.getElementById('edge-p3-yes').classList.add('matched');
+      document.getElementById('node-retry').classList.add('rejected');
+      document.getElementById('res-retry').classList.add('rejected');
+      document.getElementById('res-none').classList.add('rejected');
+    } else if (intent === 'RETRY') {
+      document.getElementById('node-blocked').classList.add('matched');
+      document.getElementById('node-rebase').classList.add('matched');
+      document.getElementById('node-followup').classList.add('matched');
+      document.getElementById('node-retry').classList.add('matched');
+      document.getElementById('res-retry').classList.add('matched');
+      document.getElementById('edge-p1-no').classList.add('matched');
+      document.getElementById('edge-p2-no').classList.add('matched');
+      document.getElementById('edge-p3-no').classList.add('matched');
+      document.getElementById('edge-p4-yes').classList.add('matched');
+      document.getElementById('res-none').classList.add('rejected');
+    } else {
+      // NONE: all checks ran but none matched
+      document.getElementById('node-blocked').classList.add('matched');
+      document.getElementById('node-rebase').classList.add('matched');
+      document.getElementById('node-followup').classList.add('matched');
+      document.getElementById('node-retry').classList.add('matched');
+      document.getElementById('res-none').classList.add('matched');
+      document.getElementById('edge-p1-no').classList.add('matched');
+      document.getElementById('edge-p2-no').classList.add('matched');
+      document.getElementById('edge-p3-no').classList.add('matched');
+      document.getElementById('edge-p4-no').classList.add('matched');
+    }
+
+    resIntent.textContent = intent;
+    resPriority.textContent = priority;
+    resAction.textContent = action;
+    resPR.textContent = prHandling;
+  }
+
+  labels.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('active');
+      const active = new Set();
+      document.querySelectorAll('.label-chip.active').forEach(c => active.add(c.dataset.label));
+      const names = Array.from(active);
+      selectedList.textContent = names.length ? names.join(', ') : 'none';
+      resolve(active);
+    });
+  });
+
+  resolve(new Set());
+</script>
+</body>
+</html>

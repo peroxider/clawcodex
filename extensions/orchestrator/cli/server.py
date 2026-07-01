@@ -902,6 +902,26 @@ def _run_orchestrator(
     if _root.level > logging.DEBUG:
         _root.setLevel(logging.INFO)
 
+    # Build repo slug for the startup banner
+    _tracker_kind = getattr(config.tracker, 'kind', '?')
+    _owner = getattr(config.tracker, 'owner', None) or ''
+    _repo = getattr(config.tracker, 'repo', None) or ''
+    _repo_slug = f'{_owner}/{_repo}' if _owner and _repo else ''
+    _pid = os.getpid()
+    _agent = getattr(config, 'agent', None)
+
+    print(f'\u2713 orchestrator daemon started \u00b7 pid {_pid}', end='')
+    if _tracker_kind and _tracker_kind != '?':
+        print(f' \u00b7 tracker={_tracker_kind}', end='')
+        if _repo_slug:
+            print(f' \u00b7 repo={_repo_slug}', end='')
+    print()
+    if _agent is not None:
+        print(
+            f'\u2713 max_concurrent_agents={getattr(_agent, "max_concurrent_agents", "?")}'
+            f' \u00b7 permission_mode={getattr(_agent, "permission_mode", "?")}'
+        )
+
     from extensions.api.orchestration import OrchestrationSubsystem
 
     subsystem = OrchestrationSubsystem(config, workflow_yaml_path=workflow_yaml_path)
