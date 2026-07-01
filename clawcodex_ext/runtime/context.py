@@ -41,9 +41,9 @@ class RuntimeOptions:
     verbose: bool = False
     append_system_prompt: str = ''
     agent_dir_override: Path | None = None
-    im_gateway: bool = False
-    im_gateway_origin: str | None = None
-    im_gateway_sock: str | None = None
+    gateway: bool = False
+    gateway_origin: str | None = None
+    gateway_sock: str | None = None
     startup_agent: Any | None = None
     bundle_path: Path | None = None
 

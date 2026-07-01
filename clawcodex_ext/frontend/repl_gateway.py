@@ -114,6 +114,8 @@ class ReplGatewayClient:
             with __import__("contextlib").suppress(asyncio.CancelledError):
                 await self._heartbeat_task
             self._heartbeat_task = None
+        with __import__("contextlib").suppress(RuntimeError, ConnectionError, OSError):
+            await self._client.unregister(self._session_id)
         await self._client.close()
 
     async def start_heartbeat(self, interval: float = 30.0) -> None:

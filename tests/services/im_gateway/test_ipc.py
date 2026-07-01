@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -554,8 +555,10 @@ async def test_ipc_client_send_outbound_calls_gateway_send(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ipc_client_send_outbound_returns_nack_when_gateway_send_fails(tmp_path) -> None:
-    """A failed gateway.send result must be visible to the IPC client."""
+async def test_ipc_client_send_outbound_returns_nack_for_wechat_rate_limit(
+    tmp_path,
+) -> None:
+    """WeChat rate-limit sends are observable failures, not hidden ACK/enqueued."""
     from clawcodex_ext.services.channels.results import ChannelSendResult, ErrorCategory
 
     gw = _FakeGateway()
@@ -566,7 +569,7 @@ async def test_ipc_client_send_outbound_returns_nack_when_gateway_send_fails(tmp
             'wechat',
             message='rate limited',
             category=ErrorCategory.RATE_LIMIT,
-            attempts=5,
+            raw={'retry_after_seconds': 600},
         )
 
     gw.send = _rate_limited_send
@@ -630,3 +633,60 @@ async def test_ipc_client_send_returns_none_on_broken_pipe(tmp_path) -> None:
             assert response is None
     finally:
         await server.close()
+
+
+@pytest.mark.asyncio
+async def test_handle_outbound_logs_warning_when_send_exceeds_client_ack_timeout(
+    tmp_path, caplog, monkeypatch
+) -> None:
+    """A gateway.send slower than the client ACK timeout (5s) must log at
+    WARNING, not INFO, so gateway.log reconciles with the client's
+    "OUTBOUND timed out" line instead of silently showing success."""
+    from clawcodex_ext.services.im_gateway import ipc_server as ipc_server_mod
+    from clawcodex_ext.services.im_gateway.ipc_server import IPC_CLIENT_ACK_TIMEOUT_SECONDS
+
+    gw = _FakeGateway()
+
+    async def _slow_send(message):
+        gw.sent.append(message)
+        from clawcodex_ext.services.channels.results import ChannelSendResult
+
+        return ChannelSendResult.success(getattr(message, 'channel', 'wechat'))
+
+    gw.send = _slow_send
+    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    # Drive send_elapsed past the client ACK timeout via a fake monotonic clock:
+    # first call (send_started) returns 100.0, second (elapsed) returns
+    # 100.0 + timeout + 1. The actual gateway.send is instantaneous.
+    ticks = {'n': 0}
+
+    def _fake_monotonic() -> float:
+        ticks['n'] += 1
+        if ticks['n'] == 1:
+            return 100.0
+        return 100.0 + IPC_CLIENT_ACK_TIMEOUT_SECONDS + 1.0
+
+    monkeypatch.setattr(ipc_server_mod.time, 'monotonic', _fake_monotonic)
+    frame = GatewayFrame.outbound(origin='wechat:direct:acct:user_zhao', text='slow reply')
+    with caplog.at_level(logging.WARNING, logger='clawcodex_ext.services.im_gateway.ipc_server'):
+        await server._handle_outbound(frame)
+    assert len(gw.sent) == 1
+    assert any(
+        'OUTBOUND send slow' in rec.message and 'client ACK timeout' in rec.message
+        for rec in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_outbound_logs_info_when_send_within_client_ack_timeout(
+    tmp_path, caplog
+) -> None:
+    """A fast gateway.send logs at INFO (the normal path), not WARNING."""
+    gw = _FakeGateway()
+    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    frame = GatewayFrame.outbound(origin='wechat:direct:acct:user_zhao', text='fast reply')
+    with caplog.at_level(logging.INFO, logger='clawcodex_ext.services.im_gateway.ipc_server'):
+        await server._handle_outbound(frame)
+    assert len(gw.sent) == 1
+    assert any('OUTBOUND → send' in rec.message for rec in caplog.records)
+    assert not any('OUTBOUND send slow' in rec.message for rec in caplog.records)

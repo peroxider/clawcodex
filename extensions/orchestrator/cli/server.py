@@ -110,15 +110,15 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
 
     # --- server start ---
     start_parser = server_sub.add_parser(
-        "start",
-        help="Start the orchestrator daemon",
-        description="Launch the orchestrator with a workflow file. "
-        "Optionally enable the declarative workflow engine via --workflow-yaml "
-        "for multi-stage DAG execution with quality gates and decision branches.",
-        epilog="Examples:\n"
-        "  clawcodex orchestrator server start --workflow ./workflow.md\n"
-        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml\n"
-        "  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml --dashboard",
+        'start',
+        help='Start the orchestrator daemon',
+        description='Launch the orchestrator with a workflow file. '
+        'Optionally enable the declarative workflow engine via --workflow-yaml '
+        'for multi-stage DAG execution with quality gates and decision branches.',
+        epilog='Examples:\n'
+        '  clawcodex orchestrator server start --workflow ./workflow.md\n'
+        '  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml\n'
+        '  clawcodex orchestrator server start --workflow ./workflow.md --workflow-yaml ./workflow.yaml --dashboard',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     start_parser.add_argument(
@@ -147,12 +147,20 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         help='LiveView dashboard port',
     )
     start_parser.add_argument(
-        '--im-gateway',
+        '--gateway',
+        dest='gateway',
         action='store_true',
         help='Opt into all WeChat direct/private messages via the IM gateway',
     )
     start_parser.add_argument(
-        '--im-gateway-origin',
+        '--im-gateway',
+        dest='gateway',
+        action='store_true',
+        help=argparse.SUPPRESS,
+    )
+    start_parser.add_argument(
+        '--gateway-origin',
+        dest='gateway_origin',
         type=str,
         default=None,
         metavar='ORIGIN',
@@ -162,14 +170,31 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         ),
     )
     start_parser.add_argument(
-        '--im-gateway-sock',
+        '--im-gateway-origin',
+        dest='gateway_origin',
+        type=str,
+        default=None,
+        metavar='ORIGIN',
+        help=argparse.SUPPRESS,
+    )
+    start_parser.add_argument(
+        '--gateway-sock',
+        dest='gateway_sock',
         type=str,
         default=None,
         metavar='PATH',
         help=(
-            'Gateway daemon Unix socket for --im-gateway-origin '
-            '(default: ~/.clawcodex/im-gateway/gateway.sock)'
+            'Gateway daemon Unix socket for --gateway-origin '
+            '(default: ~/.clawcodex/gateway/gateway.sock)'
         ),
+    )
+    start_parser.add_argument(
+        '--im-gateway-sock',
+        dest='gateway_sock',
+        type=str,
+        default=None,
+        metavar='PATH',
+        help=argparse.SUPPRESS,
     )
 
     # --- server connect-gateway ---
@@ -197,28 +222,53 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         help='Path to WORKFLOW.md (helps resolve workspace when metadata is missing)',
     )
     connect_parser.add_argument(
-        '--im-gateway',
+        '--gateway',
+        dest='gateway',
         action='store_true',
         help='Use the default all-WeChat-private-message IM gateway binding',
     )
     connect_parser.add_argument(
-        '--im-gateway-origin',
+        '--im-gateway',
+        dest='gateway',
+        action='store_true',
+        help=argparse.SUPPRESS,
+    )
+    connect_parser.add_argument(
+        '--gateway-origin',
+        dest='gateway_origin',
         type=str,
         default=None,
         metavar='ORIGIN',
         help=(
-            'Origin to bind, e.g. wechat:direct:default:user_id. Falls back to CLAWCODEX_IM_ORIGIN.'
+            'Origin to bind, e.g. wechat:direct:default:user_id. Falls back to CLAWCODEX_GATEWAY_ORIGIN.'
         ),
     )
     connect_parser.add_argument(
-        '--im-gateway-sock',
+        '--im-gateway-origin',
+        dest='gateway_origin',
+        type=str,
+        default=None,
+        metavar='ORIGIN',
+        help=argparse.SUPPRESS,
+    )
+    connect_parser.add_argument(
+        '--gateway-sock',
+        dest='gateway_sock',
         type=str,
         default=None,
         metavar='PATH',
         help=(
-            'Gateway daemon Unix socket for --im-gateway-origin '
-            '(default: ~/.clawcodex/im-gateway/gateway.sock)'
+            'Gateway daemon Unix socket for --gateway-origin '
+            '(default: ~/.clawcodex/gateway/gateway.sock)'
         ),
+    )
+    connect_parser.add_argument(
+        '--im-gateway-sock',
+        dest='gateway_sock',
+        type=str,
+        default=None,
+        metavar='PATH',
+        help=argparse.SUPPRESS,
     )
 
 
@@ -572,13 +622,17 @@ def _run_connect_gateway(args: argparse.Namespace) -> int:
     GatewayIpcClient into an already-running process. Startup opt-in is the
     supported path; this command exists to make that boundary explicit.
     """
-    origin = getattr(args, 'im_gateway_origin', None) or os.environ.get('CLAWCODEX_IM_ORIGIN')
-    if not origin and getattr(args, 'im_gateway', False):
+    origin = (
+        getattr(args, 'gateway_origin', None)
+        or os.environ.get('CLAWCODEX_GATEWAY_ORIGIN')
+        or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    )
+    if not origin and getattr(args, 'gateway', False):
         from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
 
         origin = WECHAT_DIRECT_ALL_ORIGIN
     if not origin:
-        print('error: --im-gateway or --im-gateway-origin is required', file=sys.stderr)
+        print('error: --gateway or --gateway-origin is required', file=sys.stderr)
         return 2
 
     meta_path, meta = _find_metadata(args)
@@ -591,14 +645,18 @@ def _run_connect_gateway(args: argparse.Namespace) -> int:
         print('连接失败，orchestrator未启动', file=sys.stderr)
         return 1
 
-    sock = getattr(args, 'im_gateway_sock', None) or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+    sock = (
+        getattr(args, 'gateway_sock', None)
+        or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
+        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+    )
     if not sock:
-        sock = os.path.expanduser('~/.clawcodex/im-gateway/gateway.sock')
+        sock = os.path.expanduser('~/.clawcodex/gateway/gateway.sock')
     workspace = meta.get('workspace_root', 'unknown') if meta else 'unknown'
     print(
         '连接失败，当前版本不支持对已运行 orchestrator 动态注入 IM gateway；'
         '请重启时使用 `clawcodex-dev orchestrator server start '
-        '--im-gateway-origin <origin> [--im-gateway-sock <path>]`。',
+        '--gateway-origin <origin> [--gateway-sock <path>]`。',
         file=sys.stderr,
     )
     print(f'  Running daemon PID: {pid}', file=sys.stderr)
@@ -631,9 +689,9 @@ def _run_start(args: argparse.Namespace) -> int:
         dashboard=getattr(args, 'dashboard', False),
         port=getattr(args, 'port', None),
         workflow_yaml_path=getattr(args, 'workflow_yaml', None),
-        im_gateway=getattr(args, 'im_gateway', False),
-        im_gateway_origin=getattr(args, 'im_gateway_origin', None),
-        im_gateway_sock=getattr(args, 'im_gateway_sock', None),
+        gateway=getattr(args, 'gateway', False),
+        gateway_origin=getattr(args, 'gateway_origin', None),
+        gateway_sock=getattr(args, 'gateway_sock', None),
     )
 
 
@@ -642,7 +700,7 @@ def _run_start(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _mount_im_gateway_opt_in(
+def _mount_gateway_opt_in(
     subsystem,
     config,
     *,
@@ -652,7 +710,7 @@ def _mount_im_gateway_opt_in(
 ):
     """Connect the orchestrator daemon to the IM gateway (opt-in via env).
 
-    Enabled when ``enabled`` is true or ``CLAWCODEX_IM_ORIGIN`` is set.
+    Enabled when ``enabled`` is true or ``CLAWCODEX_GATEWAY_ORIGIN`` is set.
     Without a specific origin, this binds all direct/private WeChat messages
     for the single configured WeChat channel. Returns the
     :class:`OrchestratorGatewayClient` (for heartbeat scheduling) or None.
@@ -664,16 +722,24 @@ def _mount_im_gateway_opt_in(
     """
     import os
 
-    origin = origin or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    origin = (
+        origin
+        or os.environ.get('CLAWCODEX_GATEWAY_ORIGIN')
+        or os.environ.get('CLAWCODEX_IM_ORIGIN')
+    )
     if not origin and enabled:
         from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
 
         origin = WECHAT_DIRECT_ALL_ORIGIN
     if not origin:
         return None
-    sock = sock or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+    sock = (
+        sock
+        or os.environ.get('CLAWCODEX_GATEWAY_SOCK')
+        or os.environ.get('CLAWCODEX_IM_GATEWAY_SOCK')
+    )
     if not sock:
-        sock = os.path.expanduser('~/.clawcodex/im-gateway/gateway.sock')
+        sock = os.path.expanduser('~/.clawcodex/gateway/gateway.sock')
 
     from extensions.orchestrator.im_gateway_client import (
         OrchestratorGatewayClient,
@@ -847,9 +913,9 @@ def _run_orchestrator(
     dashboard: bool = False,
     port: int | None = None,
     workflow_yaml_path: str | None = None,
-    im_gateway: bool = False,
-    im_gateway_origin: str | None = None,
-    im_gateway_sock: str | None = None,
+    gateway: bool = False,
+    gateway_origin: str | None = None,
+    gateway_sock: str | None = None,
 ) -> int:
     """Launch the orchestrator with a workflow file.
 
@@ -988,12 +1054,12 @@ def _run_orchestrator(
     # opt-in target for that WeChat origin so inbound messages drive
     # orchestrator actions, and orchestrator events flow back to WeChat via
     # OUTBOUND IPC frames. No-op otherwise.
-    im_client_wrapper = _mount_im_gateway_opt_in(
+    im_client_wrapper = _mount_gateway_opt_in(
         subsystem,
         config,
-        enabled=im_gateway,
-        origin=im_gateway_origin,
-        sock=im_gateway_sock,
+        enabled=gateway,
+        origin=gateway_origin,
+        sock=gateway_sock,
     )
 
     async def _run() -> None:

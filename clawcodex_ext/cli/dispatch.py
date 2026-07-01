@@ -509,9 +509,9 @@ def run_cli(argv: list[str] | None = None) -> int:
         fork_session_id=getattr(args, 'fork_session', None),
         resume_session_at=_parse_resume_at(getattr(args, 'resume_session_at', None)),
         verbose=getattr(args, 'verbose', False),
-        im_gateway=getattr(args, 'im_gateway', False),
-        im_gateway_origin=getattr(args, 'im_gateway_origin', None),
-        im_gateway_sock=getattr(args, 'im_gateway_sock', None),
+        gateway=getattr(args, 'gateway', False),
+        gateway_origin=getattr(args, 'gateway_origin', None),
+        gateway_sock=getattr(args, 'gateway_sock', None),
         bundle_path=bundle_path,
     )
     try:

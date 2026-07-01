@@ -12,8 +12,9 @@ Capabilities declared on one adapter: ``outbound_text``,
 direct chat only; non-text inbound is classified ``unsupported_media``
 (metadata only, no download/decrypt). ``bot_token`` is Fernet-encrypted
 at rest. Anti-loop drops the bot's own messages. A consecutive-failure
-circuit breaker stops polling on sustained errors; 401/session-expiry
-pauses the account without consuming the breaker budget.
+circuit breaker stops polling on sustained errors; 401/session-expiry marks
+the account as session_expired (permanent until QR re-scan) and rate-limit
+responses enter a short cooldown without consuming the breaker budget.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ import secrets
 import threading
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -82,6 +84,23 @@ ILINK_QR_TIMEOUT_SECONDS = 480
 ILINK_QR_REQUEST_TIMEOUT_SECONDS = 35.0
 ILINK_QR_POLL_INTERVAL_SECONDS = 1.0
 TEXT_CHUNK_SIZE = 4000
+WECHAT_SEND_MIN_INTERVAL_SECONDS = 1.0
+WECHAT_SEND_WINDOW_SECONDS = 10.0
+WECHAT_SEND_WINDOW_MAX_MESSAGES = 5
+WECHAT_INBOUND_TO_OUTBOUND_DELAY_SECONDS = 1.0
+WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS = 2.0
+WECHAT_RATE_LIMIT_BACKOFF_SECONDS = 30.0
+WECHAT_RATE_LIMIT_MAX_RETRIES = 5
+# Per-chunk delay between split-message sends (hermes _send_chunk_delay_seconds).
+WECHAT_INTER_CHUNK_DELAY_SECONDS = 1.5
+# Send-side rate-limit circuit breaker (mirrors hermes WeixinAdapter): when
+# iLink returns -2, record an event; if the count in the rolling window meets
+# the threshold, open a short circuit that short-circuits outbound sends
+# (returns RATE_LIMIT instead of hitting the platform) until it closes. This
+# prevents the post-exhaustion NACK→retry→NACK tight loop seen in gateway.log.
+WECHAT_SEND_RATE_LIMIT_CIRCUIT_THRESHOLD = 1
+WECHAT_SEND_RATE_LIMIT_CIRCUIT_WINDOW_SECONDS = 30.0
+WECHAT_SEND_RATE_LIMIT_CIRCUIT_OPEN_SECONDS = 30.0
 DEFAULT_LONG_POLL_TIMEOUT_MS = 35000
 DEFAULT_MAX_CONSECUTIVE_FAILURES = 10
 POLL_BACKOFF_SECONDS = 30  # after 3 consecutive failures (per package monitor.ts)
@@ -503,11 +522,8 @@ class WeChatIlinkClient:
                 ILINK_CHANNEL_ID, message=str(exc), category=cat
             )
         except _IlinkPlatformError as exc:
-            # Session-expired errors are re-raised so the adapter can
-            # strip the context_token and retry tokenless — iLink accepts
-            # tokenless sendmessage calls as a degraded fallback, which
-            # keeps proactive push messages working past the 48-hour
-            # customer-service window. Mirrors hermes-agent weixin.py.
+            # Session-expired errors are re-raised so the adapter can evict
+            # stale context and enter cooldown without tokenless retry.
             if exc.is_session_expired:
                 raise
             # Rate-limit is retryable; anything else is a terminal platform error.
@@ -586,7 +602,7 @@ class _IlinkPlatformError(Exception):
     QR-flow's synthetic codes (e.g. ``"missing_qrcode"``). When raised from
     a parsed response, ``ret``/``errcode``/``errmsg`` carry the real iLink
     fields and the ``is_session_expired`` / ``is_rate_limited`` flags drive
-    retry vs. pause decisions.
+    retry vs. cooldown decisions.
     """
 
     def __init__(
@@ -707,11 +723,24 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         self._last_poll_at: float | None = None
         self._last_inbound_at: float | None = None
         self._last_outbound_at: float | None = None
+        self._send_lock = asyncio.Lock()
+        self._last_sendmessage_at: float | None = None
+        self._send_min_interval_seconds = WECHAT_SEND_MIN_INTERVAL_SECONDS
+        self._send_window_seconds = WECHAT_SEND_WINDOW_SECONDS
+        self._send_window_max_messages = WECHAT_SEND_WINDOW_MAX_MESSAGES
+        self._send_window_attempts: deque[float] = deque()
+        self._last_inbound_at: float | None = None
+        self._send_rate_limit_retries = 0
+        # Send-side circuit breaker (hermes _rate_limit_events / _rate_limit_circuit_until).
+        self._send_rate_limit_events: list[float] = []
+        self._send_rate_limit_circuit_until: float = 0.0
+        self._poll_rate_limit_cooldown_until: float | None = None
+        self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
         # Most recent real inbound sender (current lifetime). Used to
         # resolve wildcard OUTBOUND origins; falls back to persisted
         # context tokens via ``last_known_sender`` after a restart.
         self._last_from_user_id: str | None = None
-        self._account_status = 'unconfigured'  # unconfigured|logged_in|paused|circuit_open
+        self._account_status = 'unconfigured'  # unconfigured|logged_in|session_expired|circuit_open
         self._poll_task: asyncio.Task[None] | None = None
         self._on_inbound: InboundHandler | None = None
 
@@ -749,6 +778,9 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         return ValidationResult.fail(errors) if errors else ValidationResult.ok_result()
 
     async def health_check(self) -> ChannelHealth:
+        send_cooldown_remaining = self._send_rate_limit_remaining()
+        poll_cooldown_remaining = self._poll_rate_limit_remaining()
+        cooldown_remaining = max(send_cooldown_remaining, poll_cooldown_remaining)
         return ChannelHealth(
             healthy=self._circuit_state is CircuitState.CLOSED
             and self._account_status == 'logged_in',
@@ -760,6 +792,11 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             last_outbound_at=self._last_outbound_at,
             consecutive_failures=self._consecutive_failures,
             account_status=self._account_status,
+            extra={
+                'rate_limit_cooldown_remaining_seconds': cooldown_remaining,
+                'send_rate_limit_cooldown_remaining_seconds': send_cooldown_remaining,
+                'poll_rate_limit_cooldown_remaining_seconds': poll_cooldown_remaining,
+            },
         )
 
     # -- login_managed --------------------------------------------------
@@ -767,7 +804,10 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         record = self._auth_store.load()
         if record is None:
             self._account_status = 'unconfigured'
+            logger.info('wechat no credentials: channel=%s', self.channel_id)
             return None
+        if record.account_id != self._account_id or record.user_id != self._bot_user_id:
+            self._last_from_user_id = None
         self._bot_user_id = record.user_id
         self._account_id = record.account_id
         self._base_url = record.base_url or self._base_url
@@ -782,6 +822,16 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if self._store is not None:
             self._get_updates_buf = self._store.get_wechat_cursor(self._account_id)
         self._account_status = 'logged_in'
+        # A fresh credential load (initial start, send with no client, or a QR
+        # re-scan) means a new session; clear any active poll cooldown so the
+        # account can resume inbound polling immediately.
+        self._poll_rate_limit_cooldown_until = None
+        self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
+        logger.info(
+            'wechat credentials loaded: channel=%s account=%s',
+            self.channel_id,
+            _safe_id(self._account_id),
+        )
         return record
 
     async def qr_login(
@@ -899,6 +949,8 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
             users = self._store.wechat_context_users(self._account_id)
             if users:
                 return users[0]
+        if self._bot_user_id:
+            return self._bot_user_id
         return None
 
     async def start(self) -> None:
@@ -937,39 +989,175 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                 logger.exception('wechat poll loop error')
             await asyncio.sleep(0.1)
 
+    def _cooldown_remaining(self, attr: str) -> float:
+        cooldown_until = getattr(self, attr)
+        if cooldown_until is None:
+            return 0.0
+        remaining = cooldown_until - time.monotonic()
+        if remaining <= 0:
+            setattr(self, attr, None)
+            return 0.0
+        return remaining
+
+    def _send_rate_limit_remaining(self) -> float:
+        return max(0.0, self._send_rate_limit_circuit_until - time.monotonic())
+
+    def _poll_rate_limit_remaining(self) -> float:
+        return self._cooldown_remaining('_poll_rate_limit_cooldown_until')
+
+    def _rate_limit_remaining(self) -> float:
+        return max(self._send_rate_limit_remaining(), self._poll_rate_limit_remaining())
+
+    def _record_send_rate_limit_event(self) -> bool:
+        """Record a genuine send-side rate limit; return True if the breaker opened.
+
+        Mirrors hermes ``WeixinAdapter._record_rate_limit_event``: keep a
+        rolling window of recent -2 timestamps; when the window meets the
+        threshold, open the circuit for ``WECHAT_SEND_RATE_LIMIT_CIRCUIT_OPEN_SECONDS``
+        so subsequent sends short-circuit (return RATE_LIMIT) instead of
+        hammering the platform.
+        """
+        now = time.monotonic()
+        window_start = now - WECHAT_SEND_RATE_LIMIT_CIRCUIT_WINDOW_SECONDS
+        self._send_rate_limit_events = [
+            ts for ts in self._send_rate_limit_events if ts >= window_start
+        ]
+        self._send_rate_limit_events.append(now)
+        if len(self._send_rate_limit_events) >= WECHAT_SEND_RATE_LIMIT_CIRCUIT_THRESHOLD:
+            self._send_rate_limit_circuit_until = max(
+                self._send_rate_limit_circuit_until,
+                now + WECHAT_SEND_RATE_LIMIT_CIRCUIT_OPEN_SECONDS,
+            )
+            return True
+        return False
+
+    def _reset_send_rate_limit_circuit(self) -> None:
+        self._send_rate_limit_events.clear()
+        self._send_rate_limit_circuit_until = 0.0
+
+    def _rate_limit_result(self, message: str, retry_after: float) -> ChannelSendResult:
+        retry_after = max(0.0, retry_after)
+        return ChannelSendResult.rate_limited(
+            self.channel_id,
+            message=message,
+            raw={
+                'retry_after_seconds': retry_after,
+                'cooldown_until': time.time() + retry_after,
+            },
+        )
+
+    def _enter_rate_limit_cooldown(
+        self,
+        message: str,
+        *,
+        reason: str = 'rate_limit',
+        status: int | None = None,
+        scope: str = 'send',
+    ) -> ChannelSendResult:
+        retry_after = self._poll_rate_limit_cooldown_seconds
+        self._poll_rate_limit_cooldown_until = time.monotonic() + retry_after
+        # Hermes-style: 2s for first two, then 30s backoff with reset
+        self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_BACKOFF_SECONDS
+        self._last_error = message
+        logger.info(
+            'wechat rate-limit cooldown: channel=%s account=%s scope=%s retry_after=%.0fs',
+            self.channel_id,
+            _safe_id(self._account_id),
+            scope,
+            retry_after,
+        )
+        audit_payload = {
+            'channel': self.channel_id,
+            'account_id': self._account_id,
+            'reason': reason,
+            'scope': scope,
+            'retry_after_seconds': retry_after,
+        }
+        if status is not None:
+            audit_payload['status'] = status
+        self._store.audit('wechat_rate_limit_cooldown', **audit_payload)
+        return self._rate_limit_result(message, retry_after)
+
+    def _mark_session_expired(
+        self,
+        message: str,
+        *,
+        reason: str,
+        status: int | None = None,
+    ) -> None:
+        """Mark account as session-expired (permanent until QR re-scan).
+
+        Unlike rate-limit cooldown, this does NOT set a timer — the account
+        stays expired until ``load_credentials()`` or ``reset_circuit()``
+        is called. Polling and sending are blocked by the ``account_status``
+        check in ``_poll_once`` and ``send``.
+        """
+        self._account_status = 'session_expired'
+        self._last_error = message
+        logger.warning(
+            'wechat session expired: channel=%s account=%s reason=%s',
+            self.channel_id,
+            _safe_id(self._account_id),
+            reason,
+        )
+        audit_payload = {
+            'channel': self.channel_id,
+            'account_id': self._account_id,
+            'reason': reason,
+        }
+        if status is not None:
+            audit_payload['status'] = status
+        self._store.audit('wechat_session_expired', **audit_payload)
+
+    def _send_window_retry_after(self) -> float:
+        now = time.monotonic()
+        cutoff = now - self._send_window_seconds
+        while self._send_window_attempts and self._send_window_attempts[0] <= cutoff:
+            self._send_window_attempts.popleft()
+        if len(self._send_window_attempts) < self._send_window_max_messages:
+            return 0.0
+        return max(0.0, self._send_window_attempts[0] + self._send_window_seconds - now)
+
     async def _poll_once(self) -> None:
         if self._circuit_state is CircuitState.OPEN:
+            return
+        if self._account_status == 'session_expired':
+            return
+        if self._poll_rate_limit_remaining() > 0:
             return
         if self._client is None:
             return
         try:
             messages, new_buf = await self._client.getupdates(self._get_updates_buf)
         except _IlinkHttpError as exc:
-            logger.warning('wechat getupdates HTTP %s', exc.status)
+            logger.error('wechat getupdates HTTP %s', exc.status)
             await self._handle_poll_http_error(exc.status, exc.body)
             return
         except _IlinkPlatformError as exc:
-            logger.warning(
+            logger.error(
                 'wechat getupdates platform error ret=%s errcode=%s errmsg=%s session_expired=%s',
                 exc.ret,
                 exc.errcode,
                 exc.errmsg,
                 exc.is_session_expired,
             )
-            # iLink returns session-expiry as a body-level ret/errcode=-14
-            # inside an HTTP 200 (not as a 401). Pause without consuming the
-            # circuit-breaker budget, mirroring the 401 path.
             if exc.is_session_expired:
-                self._pause_account(
+                self._mark_session_expired(
                     f'session expired (ret={exc.ret} errcode={exc.errcode}); re-scan required',
-                    audit_event='wechat_auth_paused',
-                    audit_reason='session_expired',
+                    reason='session_expired',
+                )
+                return
+            if exc.errcode == ILINK_RATE_LIMIT_ERRCODE:
+                self._enter_rate_limit_cooldown(
+                    f'wechat rate limited (ret={exc.ret} errcode={exc.errcode}); cooldown before retry',
+                    reason='rate_limit',
+                    scope='poll',
                 )
                 return
             self._record_failure(str(exc))
             return
         except TransportError as exc:
-            logger.warning('wechat getupdates transport error: %s', exc)
+            logger.error('wechat getupdates transport error: %s', exc)
             self._record_failure(str(exc))
             return
         # success — only advance the cursor when the server returns a real
@@ -981,6 +1169,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                 self._store.set_wechat_cursor(self._account_id, new_buf)
         self._consecutive_failures = 0
         self._last_poll_at = time.time()
+        self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
         logger.debug(
             'wechat getupdates ok: %d message(s), cursor_advanced=%s',
             len(messages),
@@ -992,34 +1181,13 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
     async def _handle_poll_http_error(self, status: int, body: bytes) -> None:
         category = classify_http_status(status)
         if category is ErrorCategory.AUTH:
-            # session expired / 401 → pause account, do NOT consume breaker
-            self._pause_account(
+            self._mark_session_expired(
                 f'HTTP {status}: session expired; re-scan required',
-                audit_event='wechat_auth_paused',
-                audit_reason='http_401',
-                audit_status=status,
+                reason='http_401',
+                status=status,
             )
             return
         self._record_failure(f'HTTP {status}: {body[:120]!r}')
-
-    def _pause_account(
-        self,
-        message: str,
-        *,
-        audit_event: str,
-        audit_reason: str,
-        audit_status: int | None = None,
-    ) -> None:
-        """Pause the account (session expired) without consuming the breaker."""
-        self._account_status = 'paused'
-        self._last_error = message
-        self._store.audit(
-            audit_event,
-            channel=self.channel_id,
-            account_id=self._account_id,
-            reason=audit_reason,
-            **({'status': audit_status} if audit_status is not None else {}),
-        )
 
     def _record_failure(self, message: str) -> None:
         self._consecutive_failures += 1
@@ -1028,6 +1196,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if self._consecutive_failures >= self._max_consecutive_failures:
             self._circuit_state = CircuitState.OPEN
             self._account_status = 'circuit_open'
+            logger.warning(
+                'wechat circuit OPENED: channel=%s account=%s consecutive_failures=%d',
+                self.channel_id,
+                _safe_id(self._account_id),
+                self._consecutive_failures,
+            )
             self._store.audit(
                 'wechat_circuit_open',
                 channel=self.channel_id,
@@ -1037,10 +1211,20 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
 
     def reset_circuit(self) -> None:
         """Manual recovery via `clawcodex channels restart wechat`."""
+        logger.info(
+            'wechat circuit reset: channel=%s account=%s',
+            self.channel_id,
+            _safe_id(self._account_id),
+        )
         self._circuit_state = CircuitState.CLOSED
         self._consecutive_failures = 0
         self._last_error = None
-        if self._account_status == 'circuit_open':
+        self._poll_rate_limit_cooldown_until = None
+        self._poll_rate_limit_cooldown_seconds = WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
+        self._send_window_attempts.clear()
+        self._send_rate_limit_retries = 0
+        self._reset_send_rate_limit_circuit()
+        if self._account_status in {'circuit_open', 'session_expired'}:
             self._account_status = 'logged_in' if self._client is not None else 'unconfigured'
 
     async def _handle_inbound(self, msg: WeixinMessage) -> None:
@@ -1074,6 +1258,7 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         # Track the most recent real sender for wildcard OUTBOUND resolution.
         if msg.from_user_id:
             self._last_from_user_id = msg.from_user_id
+        self._last_inbound_at = time.monotonic()
         # persist context_token
         if msg.context_token:
             self._store.set_context_token(self._account_id, msg.from_user_id, msg.context_token)
@@ -1091,7 +1276,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                     'raw_type': msg.msg_type,
                 }
             )
-            await self._reply_unsupported(msg)
+            # Fire-and-forget: the unsupported-media reply goes through the
+            # outbound send path (which may rate-limit/back off for ~30s+).
+            # Awaiting it inline would block the poll loop and delay every
+            # subsequent inbound message. Mirrors hermes, which dispatches
+            # inbound via asyncio.create_task so send latency never gates poll.
+            asyncio.create_task(self._reply_unsupported(msg))
             return
         self._last_inbound_at = time.time()
         logger.info(
@@ -1123,6 +1313,104 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         )
 
     # -- outbound_text --------------------------------------------------
+
+    async def _sendmessage_throttled(
+        self,
+        *,
+        to_user_id: str,
+        text: str,
+        context_token: str | None,
+    ) -> ChannelSendResult:
+        if self._client is None:
+            return ChannelSendResult.nonretryable_error(
+                self.channel_id,
+                message='wechat_ilink adapter is not connected',
+                category=ErrorCategory.AUTH,
+            )
+
+        # Send-side circuit breaker (hermes _rate_limit_circuit_until): while
+        # open, short-circuit outbound sends instead of hitting the platform.
+        # This caps the post-exhaustion NACK→retry→NACK tight loop.
+        send_cooldown = self._send_rate_limit_remaining()
+        if send_cooldown > 0:
+            return self._rate_limit_result('wechat send circuit open; backing off', send_cooldown)
+
+        # Hermes-style rate-limit retry: 2s for 1st-2nd, 30s for 3+,
+        # max 5 retries, then return the failure. The backoff sleep happens
+        # OUTSIDE _send_lock so a rate-limited in-flight send does not block
+        # the poll loop, IPC heartbeats, or other coroutines for ~64s.
+        for attempt in range(WECHAT_RATE_LIMIT_MAX_RETRIES):
+            async with self._send_lock:
+                while True:
+                    window_retry_after = self._send_window_retry_after()
+                    if window_retry_after <= 0:
+                        break
+                    await asyncio.sleep(window_retry_after)
+                # Delay after a recent inbound to avoid instant auto-reply that
+                # triggers WeChat's anti-spam heuristics.
+                if self._last_inbound_at is not None:
+                    since_inbound = time.monotonic() - self._last_inbound_at
+                    inbound_delay = WECHAT_INBOUND_TO_OUTBOUND_DELAY_SECONDS - since_inbound
+                    if inbound_delay > 0:
+                        await asyncio.sleep(inbound_delay)
+                if self._last_sendmessage_at is not None:
+                    elapsed = time.monotonic() - self._last_sendmessage_at
+                    delay = self._send_min_interval_seconds - elapsed
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                result = await self._client.sendmessage(
+                    to_user_id=to_user_id,
+                    text=text,
+                    context_token=context_token,
+                )
+                now = time.monotonic()
+                self._last_sendmessage_at = now
+                self._send_window_attempts.append(now)
+                if result.ok or result.error_category is not ErrorCategory.RATE_LIMIT:
+                    if result.ok:
+                        self._send_rate_limit_retries = 0
+                        self._reset_send_rate_limit_circuit()
+                    return result
+                # Rate-limited — record event; hermes-style backoff retry.
+                self._last_error = result.message or 'wechat rate limited'
+                if self._store is not None:
+                    self._store.audit(
+                        'wechat_rate_limit_observed',
+                        channel=self.channel_id,
+                        account_id=self._account_id,
+                        scope='send',
+                        attempt=attempt + 1,
+                        message=self._last_error,
+                    )
+            # Backoff sleep OUTSIDE the lock so other coroutines are not
+            # blocked for the (up to 30s) retry delay.
+            if attempt + 1 >= WECHAT_RATE_LIMIT_MAX_RETRIES:
+                break
+            wait = (
+                WECHAT_RATE_LIMIT_RETRY_DELAY_SECONDS
+                if attempt < 2
+                else WECHAT_RATE_LIMIT_BACKOFF_SECONDS
+            )
+            logger.warning(
+                'wechat sendmessage rate limited (attempt %d/%d); retry in %.0fs',
+                attempt + 1,
+                WECHAT_RATE_LIMIT_MAX_RETRIES,
+                wait,
+            )
+            await asyncio.sleep(wait)
+        # Exhausted retries — open the send-side circuit so the next send
+        # short-circuits instead of immediately hitting the platform again.
+        if self._record_send_rate_limit_event():
+            logger.warning(
+                'wechat send circuit opened for %.0fs after %d rate-limited attempts',
+                WECHAT_SEND_RATE_LIMIT_CIRCUIT_OPEN_SECONDS,
+                WECHAT_RATE_LIMIT_MAX_RETRIES,
+            )
+        return self._rate_limit_result(
+            result.message or 'wechat rate limited',
+            self._send_rate_limit_remaining(),
+        )
+
     async def send(
         self,
         message: ChannelMessage,
@@ -1135,6 +1423,12 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         if self._client is None:
             return ChannelSendResult.nonretryable_error(
                 self.channel_id, message='wechat not logged in', category=ErrorCategory.AUTH
+            )
+        if self._account_status == 'session_expired':
+            return ChannelSendResult.nonretryable_error(
+                self.channel_id,
+                message='wechat session expired; re-scan required',
+                category=ErrorCategory.AUTH,
             )
         if target is None:
             return ChannelSendResult.nonretryable_error(
@@ -1151,22 +1445,28 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
         ]
         last: ChannelSendResult | None = None
         for chunk in chunks:
-            # Per-chunk retry: on session-expired (errcode -14), strip the
-            # context_token and retry once tokenless. iLink accepts
-            # tokenless sendmessage calls as a degraded fallback — this
-            # keeps proactive/cron push messages working even when the
-            # 48-hour customer-service window has expired and no recent
-            # user message has refreshed the session. Mirrors hermes-agent
-            # weixin.py:_send_text_chunk_locked.
-            retried_without_token = False
+            # Session-expired sends enter cooldown; no tokenless retry.
             while True:
                 try:
-                    result = await self._client.sendmessage(
-                        to_user_id=target, text=chunk, context_token=context_token
+                    result = await self._sendmessage_throttled(
+                        to_user_id=target,
+                        text=chunk,
+                        context_token=context_token,
                     )
                 except _IlinkHttpError as exc:
                     cat = classify_http_status(exc.status)
-                    if cat in self._retry_policy.retryable_categories:
+                    if cat is ErrorCategory.AUTH:
+                        self._mark_session_expired(
+                            f'HTTP {exc.status}: session expired; re-scan required',
+                            reason='http_401',
+                            status=exc.status,
+                        )
+                        last = ChannelSendResult.nonretryable_error(
+                            self.channel_id,
+                            message='wechat session expired; re-scan required',
+                            category=ErrorCategory.AUTH,
+                        )
+                    elif cat in self._retry_policy.retryable_categories:
                         last = ChannelSendResult.retryable_error(
                             self.channel_id, message=f'HTTP {exc.status}', category=cat
                         )
@@ -1176,29 +1476,29 @@ class WeChatIlinkChannelAdapter(ChannelAdapter):
                         )
                     break
                 except (_IlinkPlatformError, TransportError) as exc:
-                    # Session expired: strip token and retry tokenless once.
-                    if (
-                        isinstance(exc, _IlinkPlatformError)
-                        and exc.is_session_expired
-                        and context_token is not None
-                        and not retried_without_token
-                    ):
-                        retried_without_token = True
-                        context_token = None
+                    if isinstance(exc, _IlinkPlatformError) and exc.is_session_expired:
                         self._store.set_context_token(self._account_id, target, None)
-                        logger.warning(
-                            'wechat session expired for %s; retrying without context_token',
-                            _safe_id(target),
+                        self._mark_session_expired(
+                            'wechat session expired during sendmessage; re-scan required',
+                            reason='session_expired',
                         )
-                        continue
-                    last = ChannelSendResult.nonretryable_error(
-                        self.channel_id, message=str(exc), category=ErrorCategory.UNKNOWN
-                    )
+                        last = ChannelSendResult.nonretryable_error(
+                            self.channel_id,
+                            message='wechat session expired; re-scan required',
+                            category=ErrorCategory.AUTH,
+                        )
+                    else:
+                        last = ChannelSendResult.nonretryable_error(
+                            self.channel_id, message=str(exc), category=ErrorCategory.UNKNOWN
+                        )
                     break
                 last = result
                 break
             if last is not None and not last.ok:
                 break
+            # Inter-chunk delay to prevent rate-limit drops (hermes: 0.3s)
+            if len(chunks) > 1 and chunk is not chunks[-1]:
+                await asyncio.sleep(WECHAT_INTER_CHUNK_DELAY_SECONDS)
         self._last_outbound_at = time.time()
         return (
             self._adapter_result(last)

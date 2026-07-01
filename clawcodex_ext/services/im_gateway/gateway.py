@@ -23,6 +23,7 @@ from clawcodex_ext.services.channels.registry import (
     ChannelAdapterRegistry,
     build_default_registry,
 )
+from clawcodex_ext.services.channels.results import SendStatus
 
 from .binding import BindingEntry, BindingPolicy
 from .capability_gate import CapabilityGate
@@ -92,7 +93,13 @@ class MessageGateway:
             return adapter
         try:
             return self.registry.create(cfg)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                'gateway: failed to build adapter for channel %s (%s): %s',
+                cfg.name,
+                cfg.type.value,
+                exc,
+            )
             return None
 
     def _attach_inbound(self, adapter) -> None:
@@ -109,6 +116,9 @@ class MessageGateway:
             if adapter is not None:
                 self.registry.register(adapter)
                 self._attach_inbound(adapter)
+                logger.info('gateway loaded channel: %s (%s)', cfg.name, cfg.type.value)
+            else:
+                logger.warning('gateway failed to build adapter for channel: %s', cfg.name)
 
     async def _on_inbound(self, message) -> None:
         """Inbound hook called by channel adapters (WeChat poller)."""
@@ -117,21 +127,35 @@ class MessageGateway:
     # -- lifecycle -------------------------------------------------------
     async def start(self) -> None:
         if self._running:
+            logger.debug('gateway already running')
             return
         self._running = True
+        logger.info(
+            'gateway starting: %d inbound adapter(s), %d registered channel(s)',
+            len(self._inbound_adapters),
+            len(self.registry.names()),
+        )
         # Start only adapters that declare inbound_polling (P2 wires WeChat).
         for adapter in self._inbound_adapters:
             await adapter.start()
+        logger.info('gateway started')
 
     async def stop(self) -> None:
         if not self._running:
             return
+        logger.info('gateway stopping')
         for adapter in self._inbound_adapters:
             try:
                 await adapter.stop()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    'gateway: adapter stop failed for %s: %s',
+                    getattr(adapter, 'channel_id', '?'),
+                    exc,
+                )
+        self.outbound.clear_deferred()
         self._running = False
+        logger.info('gateway stopped')
 
     @property
     def running(self) -> bool:
@@ -169,6 +193,7 @@ class MessageGateway:
         """
         channel_cfg = self.config.get_channel(name)
         if channel_cfg is None:
+            logger.warning('gateway reload: channel %r not found in config', name)
             return False
         old = self.registry.get(name)
         if old is not None:
@@ -184,6 +209,7 @@ class MessageGateway:
         if self._running and hasattr(adapter, 'start'):
             _schedule_adapter_start(adapter)
         self.store.audit('channel_reload', channel=name)
+        logger.info('gateway channel reloaded: %s', name)
         return True
 
     # -- audit -----------------------------------------------------------
@@ -247,11 +273,22 @@ class MessageGateway:
                     category_value = getattr(error_category, 'value', '') or str(
                         error_category or ''
                     )
-                    logger.warning(
+                    logger.error(
                         'connection notify: send failed for %r category=%s message=%s',
                         text,
                         category_value,
                         getattr(result, 'message', '') or '',
+                    )
+                    continue
+                if result is not None and getattr(result, 'status', None) is SendStatus.ENQUEUED:
+                    raw = getattr(result, 'raw', None) or {}
+                    logger.info(
+                        'connection notify: enqueued %r channel=%s target=%s message=%s retry_after=%s',
+                        text,
+                        channel,
+                        (target or '')[:16] + '…' if len(target or '') > 16 else target,
+                        getattr(result, 'message', '') or '',
+                        raw.get('retry_after_seconds') or raw.get('retry_after') or '',
                     )
                     continue
                 logger.info(
@@ -261,7 +298,7 @@ class MessageGateway:
                     (target or '')[:16] + '…' if len(target or '') > 16 else target,
                 )
             except Exception:  # noqa: BLE001
-                logger.warning('connection notify: send failed for %r — best-effort', text)
+                logger.error('connection notify: send failed for %r — best-effort', text)
 
     # -- health ----------------------------------------------------------
     async def health(self) -> dict:
@@ -273,6 +310,11 @@ class MessageGateway:
             try:
                 health = await health_check()
             except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    'gateway: health check failed for %s: %s',
+                    getattr(adapter, 'channel_id', '?'),
+                    exc,
+                )
                 channel_health.append(
                     {
                         'channel_id': getattr(adapter, 'channel_id', ''),
@@ -289,6 +331,7 @@ class MessageGateway:
             'channel_health': channel_health,
             'inbound_adapters': len(self._inbound_adapters),
             'outbox_pending': len(self.store.outbox_pending()),
+            'deferred_outbound': self.outbound.deferred_outbound_count(),
             'dead_letter': len(self.store.dead_letter_entries()),
             'bindings': [
                 {

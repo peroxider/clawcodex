@@ -74,6 +74,7 @@ class InboundDispatcher:
         # 1. dedupe
         key = message.message_id or f'{message.origin}:{message.text}'
         if not self._store.check_and_record(key, message_id=message.message_id):
+            logger.debug('im_gateway: duplicate inbound skipped origin=%s', message.origin[:32])
             return AckReceipt(delivery_id, AckLayer.ACCEPTED, message='duplicate; skipped')
         # 2. classify — honor a caller-supplied semantic (e.g. from a
         # busy-aware handler re-dispatch), else classify fresh.
@@ -86,6 +87,10 @@ class InboundDispatcher:
                 delivery_id=delivery_id,
                 origin=message.origin,
                 message_id=message.message_id,
+            )
+            logger.info(
+                'im_gateway: target offline origin=%s; accepted but not delivered',
+                message.origin[:32],
             )
             return AckReceipt(
                 delivery_id,
@@ -107,7 +112,7 @@ class InboundDispatcher:
             try:
                 delivered = await self._push_handler(message)
             except Exception:  # noqa: BLE001
-                logger.exception('im_gateway: push_handler error origin=%s', message.origin)
+                logger.exception('im_gateway: push_handler error origin=%s', message.origin[:32])
                 delivered = False
             if delivered:
                 return AckReceipt(delivery_id, AckLayer.ENQUEUED, message='pushed to opt-in peer')

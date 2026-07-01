@@ -38,9 +38,8 @@ def load_builtin_subcommands() -> None:
     from clawcodex_ext.cli.sop_cmd import commands as _sop_commands  # noqa: F401
     from clawcodex_ext.cli import telemetry_cmd as _telemetry_cmd  # noqa: F401
 
-    # IM Message Gateway: `clawcodex-dev channels` (guided wizard) and
-    # `clawcodex-dev gateway server start|stop|status|restart` (daemon).
-    from clawcodex_ext.cli.channels_cmd import commands as _channels_commands  # noqa: F401
+    # IM Message Gateway: `clawcodex-dev gateway start|stop|status|restart` (daemon)
+    # and `clawcodex-dev gateway setup|status|restart|disconnect|login [<name>]` (channel config).
     from clawcodex_ext.cli.gateway_cmd import commands as _gateway_commands  # noqa: F401
 
     # F-88: ``clawcodex auth logout|status|zeroize``

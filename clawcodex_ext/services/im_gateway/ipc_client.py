@@ -55,6 +55,7 @@ class GatewayIpcClient:
     async def connect(self) -> None:
         self._reader, self._writer = await asyncio.open_unix_connection(str(self.socket_path))
         self._write_lock = asyncio.Lock()
+        logger.info('gateway ipc client connected: %s', self.socket_path)
         # Background read loop routes reply frames to pending requests and
         # server-pushed DELIVER frames to on_deliver.
         self._read_task = asyncio.create_task(self._read_loop())
@@ -76,6 +77,7 @@ class GatewayIpcClient:
             if not fut.done():
                 fut.set_result(None)  # type: ignore[arg-type]
         self._pending.clear()
+        logger.debug('gateway ipc client closed')
 
     async def _read_loop(self) -> None:
         if self._reader is None:
@@ -158,6 +160,7 @@ class GatewayIpcClient:
         except asyncio.TimeoutError:
             for k in keys:
                 self._pending.pop(k, None)
+            logger.debug('gateway ipc: reply timed out for keys=%s', keys)
             return None
 
     async def register(
@@ -208,10 +211,20 @@ class GatewayIpcClient:
             if attempt < max_attempts - 1:
                 await asyncio.sleep(delay)
                 delay = min(delay * 2 if delay else base_delay, max_delay)
+        logger.warning(
+            'gateway ipc: reconnect exhausted after %d attempts (session=%s)',
+            max_attempts,
+            session_id[:16],
+        )
         return None
 
     async def heartbeat(self) -> GatewayFrame | None:
         return await self._send(GatewayFrame.heartbeat(session_id=self.instance_id))
+
+    async def unregister(self, session_id: str | None = None) -> GatewayFrame | None:
+        return await self._send(
+            GatewayFrame(type=FrameType.UNREGISTER, session_id=session_id or self.instance_id)
+        )
 
     async def deliver(
         self,
