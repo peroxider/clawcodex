@@ -1080,6 +1080,20 @@ class ClawcodexREPL:
                         goal_part = f" · goal: {format_pill(_state)}"
             except Exception:
                 goal_part = ""
+            # Model context window — show max context length for the
+            # current model (e.g. "ctx: 200k"). Falls back silently
+            # when model name is unknown or lookup fails.
+            ctx_part = ""
+            try:
+                from clawcodex_ext.context_system.context_analyzer import (
+                    get_context_window_for_model,
+                )
+
+                ctx_win = get_context_window_for_model(model)
+                if ctx_win > 0:
+                    ctx_part = f" · ctx: {ctx_win // 1000}k"
+            except Exception:
+                ctx_part = ""
             # USD cost — directional estimate based on the upstream
             # model's published per-token price. Proxies (litellm,
             # openrouter, bedrock) may charge different rates; the
@@ -1110,6 +1124,7 @@ class ClawcodexREPL:
                 f"turns: {self._stats_turns} · "
                 f"tokens: {self._stats_input_tokens} in / "
                 f"{self._stats_output_tokens} out"
+                f"{ctx_part}"
                 f"{advisor_tokens}"
                 f"{cost_part}"
                 f"{goal_part}"
