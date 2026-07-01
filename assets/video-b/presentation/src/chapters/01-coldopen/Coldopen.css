@@ -1,0 +1,357 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * 01-coldopen · hook chapter
+ *   cd- prefix = chapter isolation (CHAPTER-CRAFT §6)
+ *
+ *   视觉语言:终端冷光 + 静谧 → 节奏突变
+ *   - step 0  巨字「你睡了」+ 角落时钟 22:47
+ *   - step 1  时钟跳到 08:12 + 一张 PR 卡片滑入(对号 ✓)
+ *   - step 2  品牌名 + 一句话定性,稳态落版
+ *
+ *   主导动作:
+ *   - step 0/1  typewriter on hero (mask reveal)
+ *   - step 1  clock number flip (老数字滚出,新数字滚入)
+ *   - step 1  PR card slide-in + checkmark 描边
+ *   - step 2  brand 全宽 1000ms 缓出,光晕稳定
+ *
+ *   反 AI 味:无渐变;无圆角彩边;无 emoji;
+ *   所有色彩/字号来自 --shell/--text/--accent。
+ * ───────────────────────────────────────────────────────────────────── */
+
+.cd-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ─── 通用:角落时钟 + 状态条 ─── */
+.cd-corner {
+  position: absolute;
+  top: var(--space-7);
+  left: var(--space-9);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--text-mute);
+  z-index: 5;
+}
+.cd-corner .ord {
+  font-family: var(--font-display-en);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  color: var(--text);
+}
+.cd-corner .sep { opacity: 0.35; }
+
+.cd-clock {
+  position: absolute;
+  top: var(--space-7);
+  right: var(--space-9);
+  font-family: var(--font-display-en);
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  z-index: 5;
+  /* phosphor glow */
+  text-shadow: 0 0 12px rgba(65, 255, 151, 0.55);
+}
+
+/* ─── step 0 ─── */
+.cd-step0 {
+  flex-direction: column;
+  gap: var(--space-5);
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1100px;
+}
+.cd-step0 .kicker-line {
+  display: inline-block;
+  width: 64px;
+  height: 1px;
+  background: var(--accent);
+  margin-right: var(--space-3);
+  vertical-align: middle;
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+.cd-step0 .kicker {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.cd-hero0 {
+  font-family: var(--font-display-cn);
+  font-weight: 700;
+  font-size: clamp(96px, 11vw, 200px);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  text-shadow:
+    0 0 24px rgba(65, 255, 151, 0.35),
+    0 0 1px rgba(65, 255, 151, 0.85);
+  margin: 0;
+}
+.cd-hero0 .accent { color: var(--accent); }
+.cd-hero0 .blink {
+  display: inline-block;
+  width: 0.5em;
+  height: 0.85em;
+  background: var(--accent);
+  vertical-align: -0.05em;
+  margin-left: 0.1em;
+  animation: cd-blink 1.1s steps(2) infinite;
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+@keyframes cd-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cd-sub0 {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+  margin-top: var(--space-4);
+}
+.cd-sub0 .arrow {
+  color: var(--accent);
+  margin-right: 6px;
+}
+
+/* ─── step 1 ─── */
+.cd-step1 {
+  flex-direction: row;
+  gap: var(--space-9);
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+.cd-step1-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  align-items: flex-start;
+}
+.cd-step1-right {
+  flex: 0 0 auto;
+  width: 560px;
+}
+
+.cd-hero1 {
+  font-family: var(--font-display-cn);
+  font-weight: 700;
+  font-size: clamp(72px, 7.5vw, 144px);
+  line-height: 1.0;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  text-shadow:
+    0 0 20px rgba(65, 255, 151, 0.3),
+    0 0 1px rgba(65, 255, 151, 0.8);
+  margin: 0;
+}
+.cd-hero1 .pulse {
+  color: var(--accent);
+  animation: cd-pulse 1.6s var(--ease-soft) infinite;
+}
+@keyframes cd-pulse {
+  0%, 100% { opacity: 1; text-shadow: 0 0 24px rgba(65, 255, 151, 0.65); }
+  50%      { opacity: 0.78; text-shadow: 0 0 12px rgba(65, 255, 151, 0.3); }
+}
+
+/* PR card */
+.cd-pr {
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow:
+    inset 0 0 0 1px rgba(65, 255, 151, 0.06),
+    0 0 30px rgba(65, 255, 151, 0.08);
+}
+.cd-pr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.cd-pr-head .merge-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.cd-pr-head .pr-label { color: var(--text); }
+.cd-pr-head .pr-num { color: var(--text-mute); }
+.cd-pr-title {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+.cd-pr-title .branch {
+  color: var(--accent);
+  margin-right: 6px;
+}
+.cd-pr-meta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-mute);
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+.cd-pr-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.cd-pr-check svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--accent);
+  fill: none;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+
+/* slide-in for PR card */
+.cd-pr-enter {
+  animation: cd-pr-slide 700ms var(--ease-expo) both;
+  animation-delay: 200ms;
+}
+@keyframes cd-pr-slide {
+  0%   { opacity: 0; transform: translateX(48px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* checkmark draw-on */
+.cd-pr-check svg path {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: cd-draw 480ms var(--ease-quart) 900ms forwards;
+}
+@keyframes cd-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* clock flip between steps */
+.cd-flip-out {
+  animation: cd-flip-out 320ms var(--ease-quart) forwards;
+}
+.cd-flip-in {
+  animation: cd-flip-in 380ms var(--ease-expo) 280ms both;
+}
+@keyframes cd-flip-out {
+  0%   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(-12px); filter: blur(2px); }
+}
+@keyframes cd-flip-in {
+  0%   { opacity: 0; transform: translateY(14px); filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+/* ─── step 2 ─── */
+.cd-step2 {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: center;
+}
+.cd-step2 .pre-brand {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+.cd-brand {
+  font-family: var(--font-display-en);
+  font-size: clamp(56px, 6vw, 104px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  text-shadow:
+    0 0 24px rgba(65, 255, 151, 0.35),
+    0 0 1px rgba(65, 255, 151, 0.8);
+  margin: 0;
+  line-height: 1;
+}
+.cd-brand .accent { color: var(--accent); }
+.cd-tag {
+  font-family: var(--font-display-cn);
+  font-weight: 700;
+  font-size: clamp(22px, 2vw, 32px);
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+  margin-top: var(--space-4);
+  max-width: 1100px;
+  line-height: 1.45;
+}
+.cd-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: var(--space-7);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.cd-meta .sq {
+  width: 6px;
+  height: 6px;
+  background: var(--text-faint);
+  display: inline-block;
+}
+
+/* hero enter animations */
+.cd-hero0, .cd-sub0 {
+  animation: cd-fade-up 700ms var(--ease-expo) both;
+}
+.cd-hero0 { animation-delay: 120ms; }
+.cd-sub0  { animation-delay: 460ms; }
+
+.cd-hero1 {
+  animation: cd-fade-up 600ms var(--ease-expo) both;
+}
+.cd-step1-left .kicker { animation: cd-fade-up 600ms var(--ease-expo) 80ms both; }
+
+@keyframes cd-fade-up {
+  0%   { opacity: 0; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.cd-brand, .cd-pre-brand, .cd-tag, .cd-meta {
+  animation: cd-fade-up 800ms var(--ease-expo) both;
+}
+.cd-pre-brand { animation-delay: 80ms; }
+.cd-brand    { animation-delay: 180ms; }
+.cd-tag      { animation-delay: 460ms; }
+.cd-meta     { animation-delay: 780ms; }
