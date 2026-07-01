@@ -155,7 +155,7 @@
   }
   .hero h1 em {
     font-style: normal;
-    background: linear-gradient(135deg, #5E6AD2, #8E8EE0 50%, #5E6AD2);
+    background: linear-gradient(135deg, #00d4aa, #00f0c0 50%, #00d4aa);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -324,8 +324,8 @@
     transition: border-color 200ms var(--ease), box-shadow 200ms var(--ease);
   }
   .pillar:hover {
-    border-color: rgba(94, 106, 210, 0.4);
-    box-shadow: 0 8px 32px -8px rgba(94, 106, 210, 0.15);
+    border-color: rgba(0, 212, 170, 0.4);
+    box-shadow: 0 8px 32px -8px rgba(0, 212, 170, 0.15);
   }
   .pillar::after {
     content: ''; position: absolute;
@@ -359,6 +359,23 @@
   .pillar-bullets li::before {
     content: '✓'; color: var(--success); flex-shrink: 0;
     font-weight: 600;
+  }
+  .pillar-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 24px;
+    padding: 8px 14px;
+    align-self: flex-start;
+    font-size: 13px; font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid rgba(0, 212, 170, 0.25);
+    border-radius: 6px;
+    transition: all 150ms var(--ease);
+  }
+  .pillar-link:hover {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
   }
 
   /* ====================== 6-CARD GRID (次要卖点) ====================== */
@@ -530,6 +547,7 @@
           <li>提交前测试门禁：pre-commit / pre-push 跑 pytest 不过不发 PR</li>
           <li>重跑标签机制：issue 加 <code class="mono">agent:retry</code> 标签自动重跑</li>
         </ul>
+        <a href="../orchestrator/article/index.html" class="pillar-link">查看 Orchestrator 详细介绍 →</a>
       </article>
 
       <!-- Pillar 2: SOP Compiler -->
