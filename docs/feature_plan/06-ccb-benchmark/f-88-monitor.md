@@ -3,7 +3,7 @@
 > 状态: 🟡 后台执行原语已落地(`clawcodex_ext/tool_system/tools/bash/background.py`,292 行;`clawcodex_ext/agent/background_runner.py`,449 行);`MonitorTool` + `/monitor` 命令 + TUI 面板待补
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-88-monitor.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.1](./gap-analysis-2026q2.md#f-88-monitor-后台监控--monitortool)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -484,7 +484,7 @@ def install_monitor_panel_binding() -> None:
 | 2026-Q1 | JSONL TailFollower(133 行,借鉴而非复用) | `clawcodex_ext/services/tail_follower.py` |
 | 2026-Q2 | REPL Ctrl+B 后台化(独立链路) | `clawcodex_ext/repl/background_escape.py` |
 | 2026-06-30 | 详设文档 + 子特性分解 | `f-88-monitor.md`(本文) |
-| 2026-06-30 | 缺口盘点纳入 [gap-analysis-2026q2.md §3.1](./gap-analysis-2026q2.md#f-88-monitor-后台监控--monitortool) | gap-analysis |
+| 2026-06-30 | 缺口盘点纳入 [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵) | gap-analysis |
 
 ### 2.2 下一步计划
 

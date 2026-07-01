@@ -2,8 +2,51 @@
 
 > 状态: 📋 规划中(目标模块 `clawcodex_ext/services/skill_search/` 待建)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-92-skill-search.md`
-> 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#f-92-experimental_skill_search-tf-idf)
+> 最后更新: 2026-07-01
+> 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-92: experimental_skill_search TF-IDF`,已分解到本文档 §0)
+
+## §0 缺口摘要
+
+> 本节为 gap-analysis-2026q2.md §3.3 F-92 派工条目的分解版本;详细设计与基线请阅读 §1。
+
+### 0.1 缺口描述
+
+当前 ClawCodex 没有 TF-IDF 检索层:
+
+- `skill_registry.list()` 仅是全量枚举;
+- `McpSkillDiscovery`(F-91)注入的 skill 没有排序权重;
+- `SkillListTool` 在 skill 数量过大时退化线性扫描;
+- `extensions/skills_ext/` 缺乏索引持久化、rank 评分、TTL 重建、并发刷新;
+
+### 0.2 对标
+
+- CCB `experimental_skill_search` TF-IDF + 字段加权(name/title/body/tags)+ 长度归一化;
+- CCB index 损坏自动重建 + Feature flag off 时零开销;
+- CCB 中英文分词混合(`re` camelCase 拆分 + 字符 bigram + 可选 jieba 升级)。
+
+### 0.3 解耦落地路径(全部 `clawcodex_ext/services/skill_search/`,不动 `src/`)
+
+- `document.py` + `tokenizer.py` — `_tokenize_mixed()` 入口 + 中英文混合;
+- `index.py` — TF-IDF inverted index + `index.json` 持久化 + mtime 校验;
+- `searcher.py:SkillSearcher` — `search(query, top_k)` + `refresh()` + `ensure_index()`;
+- `hook.py` — `skill_registry.register()` / `unregister()` 增量 hook,纳入 MCP 与本地 skill;
+- `clawcodex_ext/feature_gate/registry.py` 注册 `SKILL_SEARCH_TFIDF` 默认 off;
+- `clawcodex_ext/command_system/skill_search_commands.py` — `/skills search` debug 命令族;
+- `clawcodex_ext/tool_system/tools/skill_search.py` — `SkillSearchTool` 给 Agent。
+
+### 0.4 依赖
+
+- 现有 `skill_registry.register()` 入口;
+- F-91 MCP Skills 自动发现(F-91 注入的 skill 自动纳入索引);
+- F-68 Feature Gate(`SKILL_SEARCH_TFIDF=on`);
+- F-93 TeamMem(可复用 tokenizer);
+- `extensions/skills_ext/` 现有 skill 加载框架。
+
+### 0.5 估算工时
+
+1 周(单人)。
+
+---
 
 ## §1 设计规划
 
@@ -190,14 +233,55 @@ field_boost:
 | `SearchDisabledError` | Feature flag off | 返回空列表并允许 fallback 全量列表 |
 | `EmptyQueryError` | query 空 | 返回最近 / pinned skills |
 
-### 1.9 验收标准
+### 1.9 中英文分词策略
+
+为兼顾中英文 skill 文档,默认采用混合 tokenizer:
+
+| 语言 | 分词策略 | 实现 |
+|------|----------|------|
+| 英文 | 空白 + 标点 + camelCase 拆分 + 小写化 | `re.compile("[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z])")` |
+| 中文 | 字 bigram + 可选 jieba(extras) | `itertools.pairwise`;detect via Unicode range |
+| 混合 | 同一 query 中两种 token 拼接后统一进入 IDF | `_tokenize_mixed()` 统一入口 |
+
+当安装 `jieba`(`pip install clawcodex[chinese]`)时,自动切到词级分词;否则维持字符 bigram(token 数量 ×14,索引大小可控)。
+
+### 1.10 CLI / Tool 行为
+
+#### `SkillSearchTool`(供 Agent 调用)
+
+| action | 输入 | 输出 |
+|--------|------|------|
+| `search` | `query`, `top_k?`, `tags?`, `source?` | ranked skill 列表 + 分数 |
+| `pin` / `unpin` | `name` | 设置 pinned skills(高优先级)|
+| `inspect` | `name` | 索引中字段贡献度 + 命中 term |
+| `rebuild` | - | 强制重建索引 |
+
+#### 命令族(`/skills search`)
+
+```
+/skills search "browser automation" [--top-k 5]
+/skills list [--source mcp]
+/skills inspect <name>
+/skills rebuild
+/skills stats
+```
+
+CLI 默认对用户隐藏(纯内部命令),Agent 通过 Tool 接入。
+
+### 1.11 验收标准
 
 1. 100 个 skill 文档全量 build < 200ms;
 2. 1000 个 skill 查询 top8 < 50ms;
 3. 输入 `browser automation playwright` 排名中 `web_browser` skill 在 top3;
 4. MCP 自动发现 skill 与本地 skill 一并可搜索,且同名不冲突;
 5. index.json 损坏时自动重建,不影响启动;
-6. Feature flag off 时零后台任务,不写 index。
+6. Feature flag off 时零后台任务,不写 index;
+7. 中文混合 query(如 "网页 自动化")与英文 query 命中同一 skill,排名稳定;
+8. `pin` skills 在搜索结果中始终排在 unpinned 之上,但仍按 score 排序;
+9. `inspect <name>` 给出每个命中 term 的字段贡献度,方便调试;
+10. `rebuild` 命令幂等,可在 CI 上跑而不产生副作用;
+11. 单元测试覆盖 tokenizer、IDF、rank、index persistence、Tool actions、并发刷新;
+12. 集成测试:SkillListTool 搜索 + registry hook + MCP skill 命名空间均参与排序。
 
 ## §2 落地步骤
 
@@ -229,4 +313,4 @@ field_boost:
 
 ---
 
-**关联文档**: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#f-92-experimental_skill_search-tf-idf)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵)

@@ -3,7 +3,7 @@
 > 状态: 🟡 原语层已落地(`clawcodex_ext/services/pipe_ipc/`,553 行,6 模块);命令族 + LAN 扩展待补
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-85-pipe-ipc.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.1](./gap-analysis-2026q2.md#f-85-pipe-ipc-多实例协作uds--lan)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -599,7 +599,7 @@ def try_auto_setup_firewall() -> bool:
 | 2026-Q2 | PipeRegistry(线程安全 + JSON 持久化 + atomic rename) | `registry.py` |
 | 2026-Q2 | PipePermissionForwarder(异步权限转发) | `permissions.py` |
 | 2026-06-30 | 详设文档 + 子特性分解 | `f-85-pipe-ipc.md`(本文) |
-| 2026-06-30 | 缺口盘点纳入 [gap-analysis-2026q2.md §3.1](./gap-analysis-2026q2.md#f-85-pipe-ipc-多实例协作uds--lan) | gap-analysis |
+| 2026-06-30 | 缺口盘点纳入 [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵) | gap-analysis |
 
 ### 2.2 下一步计划
 

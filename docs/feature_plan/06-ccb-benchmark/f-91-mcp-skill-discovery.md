@@ -2,8 +2,54 @@
 
 > 状态: 📋 规划中(目标模块 `clawcodex_ext/services/mcp/skill_discovery.py` 待建;底层 MCP transport 已在 `clawcodex_ext/services/mcp/`)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-91-mcp-skill-discovery.md`
-> 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#f-91-mcp-skills-自动发现)
+> 最后更新: 2026-07-01
+> 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-91: MCP Skills 自动发现`,已分解到本文档 §0)
+
+## §0 缺口摘要
+
+> 本节为 gap-analysis-2026q2.md §3.3 F-91 派工条目的分解版本;详细设计与基线请阅读 §1。
+
+### 0.1 缺口描述
+
+`clawcodex_ext/services/mcp/` 已有完整 MCP transport 与连接管理(`client.py` / `connection_manager.py` / `transport.py` / `official_registry.py` 等 ~30 个模块),但**没有任何自动发现 → skill 注册**流程:
+
+- `tools/list` / `prompts/list` / `resources/list` 枚举**未实现**;
+- 增量更新通知订阅(`notifications/tools/list_changed`)**未处理**;
+- TTL fallback(默认 1h)**缺失**;
+- 命名空间隔离(`server.tool`)**缺失**;
+- `MCP_SKILL_DISCOVERY` Feature Flag **缺失**;
+- 与 `skill_registry` 注册中心**未联通**;
+- mock MCP server 测试 fixture **缺失**。
+
+### 0.2 对标
+
+- CCB MCP server 启动后自动枚举 `tools` / `prompts` / `resources`,封装为本地 skill 描述,`source=mcp:<server>` 标记可见;
+- CCB `notifications/tools/list_changed` 触发增量刷新 + 1h TTL fallback,允许 mtime-based stale;
+- CCB 多个 MCP server 同名 tool 不冲突,通过 `<server>.<tool>` 命名空间隔离。
+
+### 0.3 解耦落地路径(全部 `clawcodex_ext/services/mcp/discovery/`,不动 `src/`)
+
+- `skill_discovery.py:McpSkillDiscovery` — `discover_all()` / `refresh(server_id)` / `handle_notification()` 三大入口;
+- `skill_writer.py` — `inputSchema → JSON Schema 子集` 转写器;
+- `notifier.py` — `tools/list_changed` 通知订阅 + 自动 refresh;
+- `cache.py` — LRU + TTL(默认 3600s)+ stale fallback 重建;
+- `namespace.py` — `<server>.<tool>` 命名空间 + 冲突检测(`detect_collision`);
+- `registry_integration.py` — 挂到 `skill_registry.register()` + `source=mcp:*` 标签;
+- `clawcodex_ext/feature_gate/registry.py` 注册 `MCP_SKILL_DISCOVERY` 默认 off;
+- 单元测试:`tests/services/mcp/discovery/` + `mock_mcp_server.py` 模拟 server 暴露 tools。
+
+### 0.4 依赖
+
+- 现有 `clawcodex_ext/services/mcp/` 全部 transport 模块;
+- `clawcodex_ext/skills/` 现有 skill 加载框架;
+- F-68 Feature Gate(`MCP_SKILL_DISCOVERY=on`);
+- F-92 Skill Search(将来 MCP skill 一并进入 TF-IDF 索引)。
+
+### 0.5 估算工时
+
+1 周(单人)。
+
+---
 
 ## §1 设计规划
 
@@ -202,14 +248,57 @@ class McpSkillDiscovery:
 | 集成 | pytest + mock MCP server | `discover_all` → 注册断言 + `handle_notification` → 重扫 |
 | E2E | pytest + 真实 MCP server | 启动 `mcp-server-filesystem`,断言 `SkillListTool` 列出 `filesystem.*` skill |
 
-### 1.9 验收标准
+### 1.9 排序与索引策略
+
+针对 Agent / SkillListTool 经常会高频查询列出 skills 的场景,引入 LRU + 标签倒排索引,避免每次 cold scan:
+
+| 维度 | 实现 |
+|------|------|
+| 命中顺序 | 最近调用 → 优先级 source 顺序:`mcp:*` < `user:` < `project:` < `managed:` |
+| 索引键 | `(server_id, tool_name)` → `qualified_name`(复合索引);`tag` → `qualified_name`(倒排表) |
+| 失效 | 通知 `list_changed` 命中 server_id → 局部索引失效;TTL 兜底全局索引失效 |
+| 退路 | 索引损坏时 fallback 到全量 `discover_all()` 并写 audit |
+
+注意:索引不和 skill_registry 主存储强耦合,主存储永远以 `discover_all()` 为真值源。
+
+### 1.10 CLI / Tool 行为
+
+#### `McpSkillDiscoveryTool`(供 Agent / 管理员调用)
+
+| action | 输入 | 输出 |
+|--------|------|------|
+| `list` | `server_id?`, `tag?`, `source?` | 命中列表(带 cache 状态)|
+| `refresh` | `server_id?`(空表全部) | 被刷新的 servers + 新增/移除的 skills |
+| `inspect` | `qualified_name` | 输入 schema 详情 + 真实 server 上的 tool spec |
+| `enable` / `disable` | - | 切换 `MCP_SKILL_DISCOVERY` 并立即生效 |
+
+#### 命令族(`/mcp-skill`)
+
+```
+/mcp-skill list [--server A] [--tag io] [--source mcp]
+/mcp-skill refresh [server-id]
+/mcp-skill inspect <qualified-name>
+/mcp-skill enable
+/mcp-skill disable
+/mcp-skill health                              # 上次成功列表时间 / 当前 cache 状态
+```
+
+注意 CLI 默认隐藏,需 `--debug-mcp` 才显示,避免打扰普通用户;Agent 默认仍可调用 Tool API。
+
+### 1.11 验收标准
 
 1. MCP server 启动后 5s 内,`SkillListTool` 列出该 server 的所有 tools(`source=mcp:<server>`);
 2. 收到 `notifications/tools/list_changed` 后 1s 内增量更新 skill 列表;
 3. TTL 过期后下一次 `SkillGet` 触发后台 refresh + 返回 stale + future refresh 后返回新数据;
 4. 两个 MCP server 同名 tool 不冲突,分别用 `<server>.tool` 命名;
-5. `MCP_SKILL_DISCOVERY=off` 时不调用 `tools/list`,零开销;
-6. 单元测试覆盖率 ≥ 80%。
+5. `MCP_SKILL_DISCOVERY=off` 时不调用 `tools/list`,零开销,不写索引;
+6. 索引命中 `/mcp-skill list --tag io` 在 1000 条 skills 上 < 20ms;
+7. `McpSkillDiscoveryTool` 各项 action 都有审计记录(server / actor / time);
+8. `refresh --server A` 后对应索引局部失效,其他 server 索引保持不变;
+9. mock MCP server 不可达时 `discover_all()` 跳过该 server,不会阻塞其他 server 注册;
+10. 单元测试覆盖转写、命名空间、cache、notifier、tool actions、并发 refresh 场景;
+11. 集成测试:启动 mock MCP server → `SkillListTool` 列表 → 修改 mock → 通知触发 → 列表更新;
+12. 测试覆盖率 ≥ 80%(核心模块)。
 
 ## §2 落地步骤
 
@@ -250,4 +339,4 @@ class McpSkillDiscovery:
 
 ---
 
-**关联文档**: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#f-91-mcp-skills-自动发现)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵)

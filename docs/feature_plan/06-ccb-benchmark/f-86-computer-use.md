@@ -3,7 +3,7 @@
 > 状态: 🟡 原语层已落地(`clawcodex_ext/services/computer_use/`,ABC + Linux + Null + Dry-run + Factory);macOS / Windows 后端待补
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-86-computer-use.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -575,7 +575,7 @@ class ComputerUseTool(Tool):
 
 **关联文档**:
 
-- 缺口分析: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor)
+- 缺口分析: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 - README 索引: [README.md#f-86-computer-use-跨平台-executor](#f-86)
 - 现实现代码: `clawcodex_ext/services/computer_use/`(ABC + Linux + Null + DryRun + Factory)
 - 对标上游: CCB `src/utils/computerUse/`

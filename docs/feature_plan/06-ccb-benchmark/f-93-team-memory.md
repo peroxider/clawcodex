@@ -2,8 +2,68 @@
 
 > 状态: 📋 规划中(已有 `clawcodex_ext/memdir/team_mem_paths.py` 与 team prompt 基础;目标模块 `extensions/agents/team_memory.py` 待建)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-93-team-memory.md`
-> 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度)
+> 最后更新: 2026-07-01
+> 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-93: TeamMem 团队共享记忆`,已分解到本文档 §0)
+
+## §0 缺口摘要
+
+> 本节为 gap-analysis-2026q2.md §3.3 F-93 派工条目的分解版本;详细设计与基线请阅读 §1。
+
+### 0.1 缺口描述
+
+部分基础设施已具备,但**没有面向 team 的共享记忆服务层**:
+
+- 已有 `clawcodex_ext/memdir/team_mem_paths.py`(三层 path-traversal 防御:`_sanitize_path_key` → `os.path.abspath` containment → `_realpath_deepest_existing` symlink 解析);
+- 已有 `clawcodex_ext/memdir/team_mem_prompts.py`(combined memory prompt 形态);
+- 已有 `clawcodex_ext/services/swarm/team_file.py:TeamFile`(`.clawcodex/team.json` 读写 + `add_member` / `remove_member`);
+- 已有 `tool_system/tools/send_message.py`(mailbox / in-process / broadcast);
+
+完全缺失:
+
+- append-only JSONL store 与 atomic write;
+- tag / source / scope 过滤 + score 排序 retrieval;
+- scope 权限校验(`team` / `lead_only` / `agent_pair`);
+- 谁在何时写了什么的 audit;
+- TopK budget-aware prompt 注入;
+- TeamDelete / Compact 后的归档机制;
+- prompt 中 stale caveat 显式提示。
+
+### 0.2 对标
+
+- CCB `TeamMem` 持久化 + 可检索 + 可审计 + 按团队隔离;
+- CCB `scope=team / lead_only / agent_pair` 多层权限(lead_only 需 lead approval);
+- CCB `topK` budget-aware prompt 注入与"trust files over memory"stale caveat;
+- CCB source weight 排序(manual / task_result / review / send_message / system);
+- CCB TeamDelete 默认归档而非删除共享记忆。
+
+### 0.3 解耦落地路径(避免污染 `src/`,放 `extensions/agents/`)
+
+- `extensions/agents/team_memory.py`(独立子系统):
+  - `service.py:TeamMemoryService` — facade;
+  - `store.py:TeamMemoryStore` — append-only JSONL + atomic write + index 缓存;
+  - `index.py:TeamMemoryIndex` — 关键词 / 标签 / source / agent 过滤 + score;
+  - `policy.py:TeamMemoryPolicy` — permission + scope 校验;
+  - `audit.py:TeamMemoryAuditLog` — 谁在何时写了什么;
+- `extensions/agents/team_memory_integration.py` — TeamCreate / TeamDelete / SendMessage 摘要钩子;
+- `clawcodex_ext/tool_system/tools/team_memory.py` — `TeamMemoryTool`;
+- `clawcodex_ext/command_system/team_memory_commands.py` — `/team memory` debug 命令族;
+- `extensions/capabilities/team_memory_protocol.py` — `TeamMemoryService` Protocol 给三方扩展;
+- 完全复用 `team_mem_paths.py` 的三层防御,fail closed 路径。
+
+### 0.4 依赖
+
+- 现有 `clawcodex_ext/memdir/team_mem_paths.py` + `team_mem_prompts.py`;
+- 现有 `clawcodex_ext/services/swarm/team_file.py`;
+- 现有 `SendMessage` mailbox 路由;
+- F-92 Skill Search(可复用 tokenizer / TF-IDF index);
+- F-94 BG_SESSIONS(后台 agent 恢复时读取 TeamMem,避免丢失团队上下文);
+- F-100 Dreaming(可把长期 team 经验抽取为 compact summary)。
+
+### 0.5 估算工时
+
+2 周(单人)。
+
+---
 
 ## §1 设计规划
 
@@ -325,4 +385,4 @@ CLI 主要用于 debug 与人工维护,agent 默认使用 Tool API。
 
 ---
 
-**关联文档**: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度), [F-92 Skill Search](./f-92-skill-search.md)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-92 Skill Search](./f-92-skill-search.md)

@@ -2,8 +2,66 @@
 
 > 状态: 📋 规划中(已有 `clawcodex_ext/agent/background_runner.py` / `RuntimeTaskRegistry` / `resume_agent` 原语;目标模块 `clawcodex_ext/tasks/bg_session.py` 待建)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-94-bg-sessions.md`
-> 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度)
+> 最后更新: 2026-07-01
+> 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-94: BG_SESSIONS 后台会话统一管理`,已分解到本文档 §0)
+
+## §0 缺口摘要
+
+> 本节为 gap-analysis-2026q2.md §3.3 F-94 派工条目的分解版本;详细设计与基线请阅读 §1。
+
+### 0.1 缺口描述
+
+充分的基础设施已具备,但**零散后台能力未整合**:
+
+- 已有 `clawcodex_ext/agent/background_runner.py:launch_background_runner`(fork / subprocess / Windows `PYTHONUTF8=1` fallback)+ `.background-runner.json` marker 写入 `~/.clawcodex/sessions/<id>/` + `_run_agent_headless()` 子进程循环 + PID 存活检查;
+- 已有 `clawcodex_ext/agent/background_state.py:background_signal` 单例;
+- 已有 `clawcodex_ext/tasks_core.py:TaskType`(local_bash / local_agent / remote_agent / in_process_teammate / local_workflow / monitor_mcp / dream)与 `TaskStatus`(pending / running / completed / failed / killed);
+- 已有 `clawcodex_ext/task_registry.py:RuntimeTaskRegistry`(RLock + sync-only `update()` mutator 约束);
+- 已有 `ResumeAgent` / `TaskOutput` / `TaskStop` 给 BG session 输出/停止语义;
+
+完全缺失:
+
+- 全局 `~/.clawcodex/bg_sessions/index.json` 索引(per-session `.background-runner.json` 是单 session marker,不是全局 index);
+- 按 workspace / team / user 列出后台会话;
+- foreground ↔ background 统一状态机;
+- 多信号 orphan 检测(PID + marker + transcript mtime + lock);
+- 跨进程 discover;
+- 面向 Agent 的 `BgSessionTool` 与面向用户的 `/bg` 命令族;
+- TUI footer 显示当前 workspace 的 running BG sessions 数。
+
+### 0.2 对标
+
+- CCB `BG_SESSIONS` 全局 index + 多信号 orphan 检测;
+- CCB `/bg list|inspect|attach|stop|cleanup` 完整命令族;
+- CCB session 自动转 background / 跨进程 discover / 状态合并 / UI footer;
+- CCB 拒绝跨 workspace 默认 attach,需 `--all` 显式开启;
+- CCB `bg_sessions=off` 时全局 index 不写,仅保留 per-session marker 行为。
+
+### 0.3 解耦落地路径(`clawcodex_ext/tasks/bg_session.py` 目标,不动现有 `background_runner`)
+
+- `models.py` — `BgSession` / `BgSessionEvent` / `BgSessionConfig`;
+- `registry.py:BgSessionRegistry` — 扫描 `~/.clawcodex/sessions/*` + 重建 index;
+- `manager.py:BgSessionManager` — list / inspect / attach / resume / stop / cleanup / background_current_session;
+- `health.py:bg_session_health` — PID+marker+transcript mtime 多信号 orphan 检测;
+- `bg_session_events.py` — event log + notification helpers;
+- `clawcodex_ext/tool_system/tools/bg_session.py` — `BgSessionTool` 给 Agent;
+- `clawcodex_ext/command_system/bg_commands.py` — `/bg` 命令族;
+- `clawcodex_ext/tui/bg_sessions_panel.py` — TUI footer 显示后台 session 数;
+- 与 `launch_background_runner()` 协调,marker 写完顺手 upsert 到 index。
+
+### 0.4 依赖
+
+- 现有 `background_runner.py` / `background_state.py` / `tasks_core.py` / `task_registry.py` / `ResumeAgent`;
+- F-99 DIRECT_CONNECT(共享 session_id 命名空间,通过 `source=bg_session` 区分);
+- F-98 SSH_REMOTE(远端 BG session marker 通过 sftp 拉取);
+- F-82 Remote Control(可选 dashboard 集成);
+- F-93 TeamMem(后台 agent 恢复时读取 TeamMem,避免丢失团队上下文)。
+
+### 0.5 估算工时
+
+1 周(单人)。
+
+---
 
 ## §1 设计规划
 
@@ -295,7 +353,8 @@ UI 规则:
 6. `/bg stop <id>` 先 graceful stop,失败时需要用户显式 force;
 7. 跨 workspace attach 默认拒绝;
 8. 100 个历史 session scan < 100ms;
-9. 单元测试覆盖 registry scan、状态机、orphan cleanup、权限拒绝、stop 行为。
+9. 单元测试覆盖 registry scan、状态机、orphan cleanup、权限拒绝、stop 行为;
+10. index.json 损坏时通过 `~/.clawcodex/sessions/*` 重建 + audit 记录恢复过程。
 
 ## §2 落地步骤
 
@@ -334,4 +393,4 @@ UI 规则:
 
 ---
 
-**关联文档**: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度), [F-93 TeamMem](./f-93-team-memory.md)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-93 TeamMem](./f-93-team-memory.md)

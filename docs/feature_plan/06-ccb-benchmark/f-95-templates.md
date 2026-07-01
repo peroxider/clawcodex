@@ -2,8 +2,67 @@
 
 > 状态: 🔄 进行中(已有 `clawcodex_ext/services/templates/` registry/discovery/resolver/built-in 基础;需补齐产品化闭环)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-95-templates.md`
-> 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度)
+> 最后更新: 2026-07-01
+> 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-95: TEMPLATES 模板系统`,已分解到本文档 §0)
+
+## §0 缺口摘要
+
+> 本节为 gap-analysis-2026q2.md §3.3 F-95 派工条目的分解版本;详细设计与基线请阅读 §1。
+
+### 0.1 缺口描述
+
+基础已经完整,但**主要缺口是产品化层**:
+
+- 已有 `clawcodex_ext/services/templates/models.py:Template`(id / title / description / fields / metadata / source dataclass);
+- 已有 `registry.py:TemplateRegistry`(RLock + register / get / list / discover + `.yml/.yaml/.json` 多文件);
+- 已有 `discovery.py`(user / project / managed 路径解析);
+- 已有 `bootstrap.py`(built-in → user → project → managed 多源合并,last-wins);
+- 已有 `resolver.py:TemplateResolver.resolve()`(list-replace / dict-recursive / scalars override-wins 深度合并);
+- 已有 `built_in.py` 五个内置 agent 模板(general-purpose / explore / plan / fix / review);
+- 已有 `extensions/orchestrator/templates/` 中 workflow / issue-card markdown 模板;
+
+完全缺失:
+
+- 跨 `TemplateKind`(agent / skill / workflow / prompt / issue / generic);
+- 变量 schema:`TemplateVariable` / required / pattern / choices / secret / default;
+- 无代码执行的安全渲染器(`{{ name }}` 占位符替换,禁 Jinja eval);
+- 从模板生成 skill / workflow / agent 文件的落地 API(`TemplateGenerator`);
+- catalogue 搜索 / 标签 / 预览 / 版本与兼容性校验;
+- `/template` CLI / TUI 命令族;
+- 与 F-92 Skill Search 索引协同。
+
+### 0.2 对标
+
+- CCB `TEMPLATES` 统一 catalogue,跨 agent / skill / workflow / orchestrator 类型;
+- CCB 严格变量替换(无 Jinja eval 代码执行)+ `secret=True` 变量脱敏;
+- CCB path containment(生成路径必须限制在 workspace 或允许 config dir);
+- CCB overwrite 显式(写文件默认不覆盖,`--overwrite` 才覆盖);
+- CCB 失败模式:`TemplateNotFoundError` 返回相似模板建议 / `TemplateRenderError` 列出缺失变量等。
+
+### 0.3 解耦落地路径(全部增量在 `clawcodex_ext/services/templates/`,不动现有 registry)
+
+- `models.py` 扩展 `TemplateKind` / `TemplateVariable` / `TemplateManifest` / `RenderedTemplate`;
+- `renderer.py:TemplateRenderer` — 安全替换渲染器(`{{ name }}` + 上限 size)+ secret redaction;
+- `generator.py:TemplateGenerator` — 写 agent / skill / workflow / prompt 文件 + path containment;
+- `catalogue.py:TemplateCatalogue` — list / search / describe / preview;
+- `compatibility.py` — `min_clawcodex_version` / `schema_version` 校验;
+- `extensions/orchestrator/templates/*.template.md` — 现有 markdown 模板统一纳入 bootstrap;
+- `clawcodex_ext/command_system/template_commands.py` — `/template list|show|search|preview|render|create|install|validate`;
+- `clawcodex_ext/tui/template_picker.py` — 交互式 picker(可后续)。
+
+### 0.4 依赖
+
+- 现有 `TemplateRegistry` / `TemplateResolver` / `bootstrap` / `built_in` 不动,只做增量;
+- F-92 Skill Search(模板生成的 skill 自动纳入 TF-IDF 索引);
+- F-91 MCP Skills(可从 MCP descriptor 生成模板);
+- F-93 TeamMem(team 可共享推荐模板或 project template 约定);
+- F-110 Workflow Engine(workflow 模板可直接生成 declarative workflow 配置)。
+
+### 0.5 估算工时
+
+1 周(单人)。
+
+---
 
 ## §1 设计规划
 
@@ -348,4 +407,4 @@ TUI 可以在后续提供 picker:
 
 ---
 
-**关联文档**: [gap-analysis-2026q2.md §3.3](./gap-analysis-2026q2.md#33-p1p2-调度), [F-92 Skill Search](./f-92-skill-search.md), [F-91 MCP Skills](./f-91-mcp-skill-discovery.md)
+**关联文档**: [README.md 缺口矩阵](./README.md#a-全特性对照矩阵), [F-92 Skill Search](./f-92-skill-search.md), [F-91 MCP Skills](./f-91-mcp-skill-discovery.md)

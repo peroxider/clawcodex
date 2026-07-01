@@ -3,7 +3,7 @@
 > 状态: 📋 规划中
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-84-daemon.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.1](./gap-analysis-2026q2.md#f-84-daemon-后台守护)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -608,7 +608,7 @@ def install_daemon_gate() -> None:
 | 日期 | 里程碑 | 涉及文件 |
 |------|--------|----------|
 | 2026-06-30 | 初始创建(P0 缺口派工,详设) | `f-84-daemon.md`(本文) |
-| 2026-06-30 | 缺口盘点纳入 [gap-analysis-2026q2.md](./gap-analysis-2026q2.md) | gap-analysis §3.1 |
+| 2026-06-30 | 缺口盘点纳入 [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵) | gap-analysis §3.1 |
 
 ### 2.2 下一步计划
 

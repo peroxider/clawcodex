@@ -3,7 +3,7 @@
 > 状态: 🟡 本地 cron 调度已成熟(`clawcodex_ext/cron_system/` 11 模块);远程 REST 同步 + `/triggers` 命令 + SSH/RCS 执行器待补
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-83-triggers.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -735,7 +735,7 @@ class RemoteTriggerTool(Tool):
 
 **关联文档**:
 
-- 缺口分析: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote)
+- 缺口分析: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 - README 索引: [README.md#f-83-远程-triggersagent_triggers_remote](#f-83)
 - 现实现代码: `clawcodex_ext/cron_system/`(11 模块) + `extensions/remote_api/`(F-82 RCS) + `clawcodex_ext/tool_system/tools/cron.py`(已注册的 4 个 cron 工具)
 - 对标上游: CCB `src/commands/triggers.tsx` + AGENT_TRIGGERS_REMOTE 协议

@@ -3,7 +3,7 @@
 > 状态: 🟡 原语层已落地(`clawcodex_ext/services/ultraplan/` 6 模块 + 5 测试文件,约 1.5K 行);LLM 驱动 + 斜杠命令 + CCR 远程会话 + 关键字检测 + 彩虹高亮待补
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-87-ultraplan.md`
 > 最后更新: 2026-06-30
-> 缺口来源: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现)
+> 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
 
@@ -687,7 +687,7 @@ def hook_before_submit(text: str, *, context: ToolContext) -> str:
 
 **关联文档**:
 
-- 缺口分析: [gap-analysis-2026q2.md §3.2](./gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现)
+- 缺口分析: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 - README 索引: [README.md#f-87-ultraplan-llm-驱动--cli-完整实现](#f-87)
 - 现实现代码: `clawcodex_ext/services/ultraplan/`(models/store/executor/verifier/adjuster + 5 测试文件)
 - 对标上游: CCB `src/commands/ultraplan.tsx` + `src/utils/ultraplan/ccrSession.ts`
