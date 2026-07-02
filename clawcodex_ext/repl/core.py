@@ -3319,6 +3319,53 @@ class ClawcodexREPL:
         except Exception:
             pass  # Best-effort, don't fail resume
 
+    def _warn_if_background_runner_active(self, session_id: str) -> None:
+        """Detect a still-running background agent for ``session_id`` and warn the user.
+
+        When the user hits Ctrl+B a forked child continues the agent loop
+        headlessly, writing to the JSONL transcript as it goes. If the
+        user runs ``clawcodex --resume <sid>`` while that child is still
+        active, the transcript only contains what the child has written
+        *so far* — later turns land after this resume finishes loading.
+
+        This method reads ``.background-runner.json`` (via
+        :func:`get_background_runner_status`, which also corrects stale
+        ``running`` markers whose PID has died) and, when the child is
+        genuinely still alive, prints a clear notice telling the user:
+
+        * the background agent (pid N) is still running,
+        * the history shown now is partial,
+        * they should re-run ``--resume <sid>`` after it finishes to see
+          the complete output.
+
+        Best-effort and silent on any failure — this must never block
+        resume. Mirrors the defensive style of
+        :meth:`_sync_conversation_from_transcript`.
+        """
+        try:
+            from src.agent.background_runner import get_background_runner_status
+
+            info = get_background_runner_status(session_id)
+        except Exception:
+            return
+
+        if not info or info.get("status") != "running":
+            return
+
+        pid = info.get("pid")
+        pid_str = f" (pid {pid})" if pid is not None else ""
+        self.console.print(
+            f"\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]"
+        )
+        self.console.print(
+            "[dim]The history shown below is partial — it only reflects what the "
+            "background agent has produced so far.[/dim]"
+        )
+        self.console.print(
+            f"[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n"
+            f"  [info]clawcodex --resume {session_id}[/info]"
+        )
+
     def _replay_resume_history(self) -> None:
         """Replay full conversation history on resume, rendering identically to live chat.
 
@@ -5769,9 +5816,13 @@ class ClawcodexREPL:
         if pid is not None:
             self.console.print(f'\n[success]⏎ Agent sent to background (pid {pid}).[/success]')
             self.console.print(
-                f'[dim]Resume with: clawcodex --resume {self.session.session_id}[/dim]'
+                f'[dim]The background agent (pid {pid}) will keep running after this '
+                f'REPL exits. To see its full output once it finishes, run:[/dim]'
             )
-            self.console.print('[dim]Exiting clawcodex...[/dim]')
+            self.console.print(
+                f'  [info]clawcodex --resume {self.session.session_id}[/info]'
+            )
+            self.console.print('[dim]Exiting parent REPL (background agent continues)...[/dim]')
             raise SystemExit(0)
         else:
             # Windows graceful degradation — no os.fork(), subprocess

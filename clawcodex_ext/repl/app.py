@@ -169,6 +169,13 @@ class ClawCodexExtREPL(ClawcodexREPL):
                 self._engine_messages = list(self.session.conversation.messages or [])
                 # S-R4-M: load and display session metadata
                 self._load_session_metadata(resume_session_id)
+                # F-bg-resume: detect a still-running background agent for
+                # this session. If the user resumes while the forked child
+                # is still active, the JSONL transcript only contains what
+                # the child has written *so far* — the rest will land after
+                # the child finishes. Warn the user and tell them how to
+                # see the complete output once the background run completes.
+                self._warn_if_background_runner_active(resume_session_id)
             else:
                 self.console.print(
                     f"[warning]Session not found: {resume_session_id}. "
