@@ -145,6 +145,35 @@ def test_repl_extension_registers_forecast_controller() -> None:
     assert "Continue implementation" in repl.local_command_output[-1][0]
 
 
+def test_repl_extension_starts_forecast_idle_timer(monkeypatch) -> None:
+    from clawcodex_ext.frontend import repl_extensions
+
+    mounted: list[object] = []
+
+    class FakeForecastController:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        def on_mount(self) -> None:
+            mounted.append(self)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        repl_extensions,
+        "IntentForecastController",
+        FakeForecastController,
+    )
+
+    repl = _Repl()
+    repl_extensions.install_repl_extensions(repl, repl.runtime_context)
+
+    assert mounted
+    assert getattr(repl, "_intent_forecast_controller", None) is mounted[0]
+    assert repl.command_registry.has("forecast")
+
+
 def test_repl_auto_recap_display_prints_immediately(monkeypatch) -> None:
     monkeypatch.setattr(
         "clawcodex_ext.away_summary.registration.load_away_summary_config",

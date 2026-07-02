@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from clawcodex_ext.away_summary.controller import AwaySummaryController
 from clawcodex_ext.away_summary.registration import register_away_summary_commands
 from clawcodex_ext.cli.runtime_commands import register_runtime_commands
+from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
 from clawcodex_ext.intent_forecast.messages import format_forecast_for_display
 from clawcodex_ext.intent_forecast.registration import register_intent_forecast_commands
@@ -482,8 +483,13 @@ def _install_intent_forecast_controller(repl: 'ClawcodexREPL') -> None:
         workspace_root=Path(workspace_root),
         display=_display,
         submit=_submit,
+        config_loader=lambda: load_intent_forecast_config(cwd=Path(workspace_root)),
         conversation_getter=lambda: getattr(getattr(repl, 'session', None), 'conversation', None),
     )
+    try:
+        repl._intent_forecast_controller.on_mount()
+    except Exception:
+        pass
     if getattr(repl, 'command_context', None) is not None:
         repl.command_context.intent_forecast_controller = repl._intent_forecast_controller
 
