@@ -201,6 +201,7 @@ class IntentForecastContextBuilder:
             "git_status": _run_git(self.workspace_root, ["status", "--short"])[:4000],
             "git_diff_stat": _run_git(self.workspace_root, ["diff", "--stat"])[:4000],
             "project_files": _project_files(self.workspace_root),
+            "permission_mode": _permission_mode(self.workspace_root),
         }
 
 
@@ -222,6 +223,18 @@ def _run_git(cwd: Path, args: list[str]) -> str:
 def _project_files(cwd: Path) -> list[str]:
     names = ("README.md", "pyproject.toml", "package.json", "CLAUDE.md", "AGENTS.md")
     return [name for name in names if (cwd / name).exists()]
+
+
+def _permission_mode(cwd: Path) -> str:
+    try:
+        from src.settings.settings import load_settings
+
+        settings = load_settings(cwd=cwd)
+        structured = getattr(getattr(settings, "permissions", None), "default_mode", None)
+        legacy = getattr(settings, "permission_mode", "") or ""
+        return str(structured or legacy or "default")
+    except Exception:
+        return "unknown"
 
 
 def _flatten_content(content: Any) -> str:

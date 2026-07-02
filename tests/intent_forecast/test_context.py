@@ -28,6 +28,7 @@ def test_context_reads_memory_workspace_and_current_messages(tmp_path) -> None:
     assert context.current_messages[-1]["content"] == "continue forecast"
     assert context.response_language == "English"
     assert context.memory_files[0]["path"] == "CLAUDE.md"
+    assert "permission_mode" in context.workspace
     assert "README.md" not in context.workspace["project_files"]
 
 

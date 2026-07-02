@@ -40,7 +40,9 @@ def test_prompt_carries_response_language(tmp_path) -> None:
     messages = build_forecast_messages(context, max_input_tokens=4000)
 
     assert '"response_language": "Chinese"' in messages[0]["content"]
-    assert "Use the context field `response_language`" in messages[0]["content"]
+    assert "MUST use the context field `response_language`" in messages[0]["content"]
+    assert "Do not suggest changing permission mode" in messages[0]["content"]
+    assert "Treat `dontAsk` as permissive" in messages[0]["content"]
 
 
 def test_fallback_uses_chinese_when_context_language_is_chinese(tmp_path) -> None:

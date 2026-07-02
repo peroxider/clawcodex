@@ -15,10 +15,12 @@ Return strict JSON only, shaped as:
 Rules:
 - Suggest at most 3 concrete next actions.
 - The prompt must be ready to submit to the coding agent.
-- Use the context field `response_language` for every suggestion title, prompt, and reason.
+- MUST use the context field `response_language` for every suggestion title, prompt, and reason.
 - Do not start work yourself.
 - If `response_language` is Chinese, write natural Simplified Chinese.
 - If `response_language` is English, write natural English.
+- Do not suggest changing permission mode unless current context explicitly shows a tool/test was blocked by permissions.
+- Treat `dontAsk` as permissive/logging mode, not as evidence that tools are blocked.
 - Use confidence between 0 and 1.
 - Avoid repeating suggestions that feedback says were dismissed."""
 
