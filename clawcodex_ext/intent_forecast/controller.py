@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig, load_intent_forecast_config
-from clawcodex_ext.intent_forecast.learning import record_feedback
+from clawcodex_ext.intent_forecast.learning import (
+    build_feedback_features,
+    looks_like_correction,
+    looks_like_followup,
+    record_feedback,
+)
 from clawcodex_ext.intent_forecast.messages import ForecastResult
 from clawcodex_ext.intent_forecast.persistence import save_forecast_result
 from clawcodex_ext.intent_forecast.service import IntentForecastService
@@ -55,6 +60,7 @@ class IntentForecastController:
         self._generation_id = 0
         self._last_result: ForecastResult | None = None
         self._shown_fingerprints: set[str] = set()
+        self._pending_acceptance: dict[str, Any] | None = None
 
     @property
     def last_result(self) -> ForecastResult | None:
@@ -75,6 +81,7 @@ class IntentForecastController:
 
     def on_prompt_draft_changed(self, text: str) -> None:
         if text:
+            self._maybe_record_user_acceptance_outcome(text)
             self.on_user_interaction("draft")
         else:
             with self._lock:
@@ -87,6 +94,7 @@ class IntentForecastController:
             self._cancel_locked()
 
     def on_run_finish(self) -> None:
+        self._record_acceptance_outcome("accepted_completed")
         with self._lock:
             self._busy = False
             self._arm_locked()
@@ -102,12 +110,19 @@ class IntentForecastController:
             return False
         cfg = self.config_loader()
         if cfg.feedback_enabled:
+            features = build_feedback_features(suggestion=suggestion, trigger="accept")
             record_feedback(
-                "accepted",
+                "accepted_started",
                 suggestion=suggestion,
                 cwd=self.workspace_root,
                 fingerprint=result.fingerprint,
+                features=features,
             )
+            self._pending_acceptance = {
+                "suggestion": suggestion,
+                "fingerprint": result.fingerprint,
+                "features": features,
+            }
         if self.submit is not None:
             self.submit(suggestion.prompt)
         self._last_result = None
@@ -126,6 +141,7 @@ class IntentForecastController:
         self.on_user_interaction("dismiss")
 
     def close(self) -> None:
+        self._record_acceptance_outcome("accepted_aborted")
         with self._lock:
             self._generation_id += 1
             self._cancel_locked()
@@ -195,6 +211,29 @@ class IntentForecastController:
             return self.conversation_getter()
         session = self.session_getter()
         return getattr(session, "conversation", None)
+
+    def _maybe_record_user_acceptance_outcome(self, text: str) -> None:
+        if self._pending_acceptance is None:
+            return
+        if looks_like_correction(text):
+            self._record_acceptance_outcome("accepted_corrected")
+        elif looks_like_followup(text):
+            self._record_acceptance_outcome("accepted_followup")
+
+    def _record_acceptance_outcome(self, event: str) -> None:
+        pending = self._pending_acceptance
+        if pending is None:
+            return
+        cfg = self.config_loader()
+        if cfg.feedback_enabled:
+            record_feedback(
+                event,
+                suggestion=pending.get("suggestion"),
+                cwd=self.workspace_root,
+                fingerprint=str(pending.get("fingerprint") or ""),
+                features=pending.get("features") if isinstance(pending.get("features"), dict) else {},
+            )
+        self._pending_acceptance = None
 
     def _cancel_locked(self) -> None:
         if self._timer is not None:

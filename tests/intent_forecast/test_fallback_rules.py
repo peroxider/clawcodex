@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from clawcodex_ext.intent_forecast.context import ForecastContext
+from clawcodex_ext.intent_forecast.fallback import fallback_suggestions
+
+
+def test_fallback_returns_no_suggestion_without_signal(tmp_path) -> None:
+    context = ForecastContext(cwd=str(tmp_path), response_language="English")
+
+    assert fallback_suggestions(context, min_confidence=0.45) == []
+
+
+def test_fallback_prioritizes_failure_over_generic_workspace(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        workspace={"git_status": " M file.py"},
+        task_state={"blocked_reason": "FAILED tests/test_x.py"},
+        intent_stage="debug",
+        response_language="English",
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions[0].title == "Fix the recent failure"
+
+
+def test_fallback_uses_workspace_focus_debug_field(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        workspace={
+            "git_status": " M clawcodex_ext/intent_forecast/service.py",
+            "focuses": [{"id": "intent_forecast", "confidence": 1.0}],
+        },
+        response_language="English",
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions[0].title == "Verify Intent Forecast fixes"

@@ -77,7 +77,7 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
                 return LocalCommandResult(type="text", value=f"No forecast suggestion matches {selection!r}.")
             cfg = load_intent_forecast_config(cwd=cwd)
             if cfg.feedback_enabled:
-                record_feedback("accepted", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
+                record_feedback("accepted_started", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
             if hasattr(controller, "_last_result"):
                 try:
                     controller._last_result = None
@@ -95,7 +95,7 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
             return LocalCommandResult(type="text", value=f"No forecast suggestion matches {selection!r}.")
         cfg = load_intent_forecast_config(cwd=cwd)
         if cfg.feedback_enabled:
-            record_feedback("accepted", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
+            record_feedback("accepted_started", suggestion=suggestion, cwd=cwd, fingerprint=result.fingerprint)
         return LocalCommandResult(type="prompt", value=suggestion.prompt)
     if action != "run":
         return LocalCommandResult(type="text", value="Usage: /forecast [run|status|accept <n>|dismiss|on|off]")

@@ -74,6 +74,13 @@ def run_forecast_command(args: list[str]) -> int:
         if suggestion is None:
             print(f"No forecast suggestion matches {ns.target!r}.", file=sys.stderr)
             return 1
+        if cfg.feedback_enabled:
+            record_feedback(
+                "accepted_started",
+                suggestion=suggestion,
+                cwd=cwd,
+                fingerprint=result.fingerprint,
+            )
         if ns.json:
             print(json.dumps({"prompt": suggestion.prompt, "suggestion_id": suggestion.id}, ensure_ascii=False, indent=2))
         else:

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
+from clawcodex_ext.intent_forecast.focus import compute_workspace_focuses
 from clawcodex_ext.intent_forecast.learning import read_recent_feedback
 from clawcodex_ext.intent_forecast.session_retrieval import rank_session_rows
 from clawcodex_ext.intent_forecast.task_state import build_task_state, classify_intent_stage
@@ -66,6 +67,10 @@ class IntentForecastContextBuilder:
         current = self._current_messages()
         memory = self._memory_files()
         workspace = self._workspace_signals()
+        workspace["focuses"] = compute_workspace_focuses(
+            changed_files=[str(path) for path in workspace.get("changed_files") or []],
+            recent_messages=current,
+        )
         sessions = self._sessions(current_messages=current, workspace=workspace)
         task_state = build_task_state(current_messages=current, sessions=sessions, workspace=workspace)
         intent_stage = classify_intent_stage(

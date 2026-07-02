@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from clawcodex_ext.intent_forecast.cli import run_forecast_command
+from clawcodex_ext.intent_forecast.learning import read_recent_feedback
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
 from clawcodex_ext.intent_forecast.persistence import (
     forecast_history_path,
@@ -41,6 +42,7 @@ def test_cli_accept_saved_result(monkeypatch, tmp_path, capsys) -> None:
     assert rc == 0
     assert "do saved" in capsys.readouterr().out
     assert forecast_history_path().exists()
+    assert read_recent_feedback()[-1]["event"] == "accepted_started"
 
 
 def test_cli_run_appends_forecast_history(monkeypatch, tmp_path, capsys) -> None:

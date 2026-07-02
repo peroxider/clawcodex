@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from clawcodex_ext.intent_forecast.command import _forecast_call
+from clawcodex_ext.intent_forecast.learning import read_recent_feedback
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
 from clawcodex_ext.intent_forecast.persistence import read_forecast_history
 from src.agent.conversation import Conversation
@@ -31,12 +32,20 @@ class FakeController:
 
 
 def test_forecast_accept_uses_controller_last_result(tmp_path: Path) -> None:
+    import clawcodex_ext.intent_forecast.learning as learning
+
+    original = learning.feedback_path
+    learning.feedback_path = lambda base_dir=None: tmp_path / "intent_forecast" / "feedback.jsonl"
     ctx = SimpleNamespace(cwd=tmp_path, intent_forecast_controller=FakeController())
 
-    result = _forecast_call("accept 1", ctx)
+    try:
+        result = _forecast_call("accept 1", ctx)
+    finally:
+        learning.feedback_path = original
 
     assert result.type == "prompt"
     assert result.value == "do one"
+    assert read_recent_feedback(base_dir=tmp_path)[-1]["event"] == "accepted_started"
 
 
 def test_forecast_dismiss_uses_controller(tmp_path: Path) -> None:
