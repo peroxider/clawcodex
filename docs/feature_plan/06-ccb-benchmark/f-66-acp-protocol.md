@@ -1,6 +1,6 @@
 # F-66: ACP 协议支持
 
-> 状态: 📋 规划中(P66-A 框架设计,新增 P66-E/P66-F Trae 支持)
+> 状态: 🚧 部分实现(P66-A 协议契约 / P66-E MCP 反向桥 / P66-F CLI 适配器已落地;P66-B/C/D 待实现)
 > 章节: docs/feature_plan/06-ccb-benchmark/f-66-acp-protocol.md
 > 最后更新: 2026-07-02
 
@@ -20,12 +20,12 @@ ACP（Agent Client Protocol）是 Anthropic 与 Zed/Cursor 等 IDE 合作推出�
 
 | 编号 | 子特性 | 说明 | 状态 | 预计工作量 |
 |:----:|--------|------|:----:|:----------:|
-| P66-A | ACP SDK 基础协议实现 | 实现 ACP 协议核心：session/skill/tool 通信 | 📋 | 3-5天 |
-| P66-B | Zed IDE 集成接入 | 通过 ACP 协议桥接到 Zed AI 插件 | 📋 | 2-3天 |
-| P66-C | Cursor IDE 集成接入 | 通过 ACP 协议桥接到 Cursor | 📋 | 2-3天 |
-| P66-D | 会话恢复与 Skills 桥接 | ACP session resume + skill 桥接 | 📋 | 2-3天 |
-| P66-E | Trae IDE 集成(MCP 反向) | Trae IDE 通过 MCP 主动调用 clawcodex 编排器/SOP/Skills | 🆕 P0 | 1-2天 |
-| P66-F | Trae Agent CLI 包装(ACP 适配) | 把 `trae-cli run` 包装为伪 ACP server,统一协议层 | 🆕 P1 | 2-3天 |
+| P66-A | ACP SDK 基础协议实现 | 实现 ACP 协议核心：session/skill/tool 通信 | ✅ 协议契约已落地 | 3-5天 |
+| P66-B | Zed IDE 集成接入 | 通过 ACP 协议桥接到 Zed AI 插件 | 📋 规划中 | 2-3天 |
+| P66-C | Cursor IDE 集成接入 | 通过 ACP 协议桥接到 Cursor | 📋 规划中 | 2-3天 |
+| P66-D | 会话恢复与 Skills 桥接 | ACP session resume + skill 桥接 | 📋 规划中 | 2-3天 |
+| P66-E | Trae IDE 集成(MCP 反向) | Trae IDE 通过 MCP 主动调用 clawcodex 编排器/SOP/Skills | ✅ 已落地 | 1-2天 |
+| P66-F | Trae Agent CLI 包装(ACP 适配) | 把 `trae-cli run` 包装为伪 ACP server,统一协议层 | ✅ 已落地 | 2-3天 |
 
 ### 1.4 核心数据模型
 
@@ -527,14 +527,81 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 
 | 子特性 | 状态 | 备注 |
 |--------|------|------|
-| P66-A ACP SDK 基础协议实现 | 📋 规划中 | 框架设计,需待 P66-F 实现经验收敛 |
-| P66-B Zed IDE 集成 | 📋 规划中 | 依赖 P66-A |
-| P66-C Cursor IDE 集成 | 📋 规划中 | 依赖 P66-A |
-| P66-D 会话恢复 + Skills 桥接 | 📋 规划中 | 依赖 P66-A |
-| P66-E Trae IDE 集成(MCP 反向) | 🆕 P0,本周启动 | 详见 §1.9 |
-| P66-F Trae Agent CLI 包装(ACP 适配) | 🆕 P1,本周启动 | 详见 §1.10 |
+| P66-A ACP SDK 基础协议实现 | ✅ 协议契约落地 | `extensions/capabilities/acp_protocol.py` — 数据模型 + Transport/Server Protocol |
+| P66-B Zed IDE 集成 | 📋 规划中 | 依赖 P66-A transport 主循环 |
+| P66-C Cursor IDE 集成 | 📋 规划中 | 依赖 P66-A transport 主循环 |
+| P66-D 会话恢复 + Skills 桥接 | 📋 规划中 | P66-E 已暴露 skill_invoke 入口,完整桥接待 P66-A 主循环 |
+| P66-E Trae IDE 集成(MCP 反向) | ✅ 已落地 | `extensions/trae/mcp_bridge.py` — 4 工具,fire-and-forget,mcp 可选降级 |
+| P66-F Trae Agent CLI 包装(ACP 适配) | ✅ 已落地 | `extensions/trae/acp_cli_adapter.py` — create/resume/process/end 生命周期 |
 
-**当前阶段**:等待 P66-E 落地(预计 1-2 天),以此作为 P66-F 设计的真实反馈。
+**当前阶段**:M1/M2 已完成(P66-E + P66-F + P66-A 契约层),单元测试 54 passed / 2 skipped。下一阶段 M3 收敛 P66-A transport-driven 主循环,然后 M4 接入 Zed/Cursor/Skills 桥接。
+
+## §3 实施记录
+
+### 3.1 P66-A 协议契约层(已落地)
+
+**落点**: `extensions/capabilities/acp_protocol.py` — Layer 2 纯契约模块,无运行时依赖,镜像 `tool_protocol.py` 风格。
+
+**实现内容**:
+- `ACPMessageType` / `ACPMessageRole` — `str` 子类枚举,值对齐 JSON-RPC method 命名空间
+- `ACPMessage` — dataclass,`to_dict()` / `from_dict()` 往返;`from_dict` 对未知 type/role 降级为 ERROR/USER 而非抛错(协议前向兼容)
+- `ACPSession` — 会话状态,`append()` 记录消息历史
+- `ACPToolSpec` — 工具规格(供 `tools/list` 响应)
+- `ACPTransport` / `ACPServer` — `@runtime_checkable Protocol`,只声明签名
+
+**与设计文档差异**:
+- `datetime.utcnow()` 改为 `datetime.now(timezone.utc)`(避免 deprecated 警告)
+- `ACPServer.process_message` 返回 `AsyncIterator[ACPMessage]`(流式),而非同步迭代器
+- `ACPServer.create_session` 返回 `ACPSession` 而非裸 sid(对齐 Protocol 语义,sid 仍可通过 `session.id` 取得)
+
+### 3.2 P66-E MCP 反向桥(已落地)
+
+**落点**: `extensions/trae/mcp_bridge.py` — Layer 2,`mcp` 可选依赖降级。
+
+**实现内容**:
+- `TraeMcpBridge` — 4 工具:`clawcodex_orchestrator_run_issue` / `clawcodex_sop_compile` / `clawcodex_skill_invoke` / `clawcodex_stability_gate`
+- `build_tool_specs()` — 工具规格独立函数,单测可不实例化 bridge 即断言 schema
+- `BridgeConfig.from_env()` — 从 `CLAWCODEX_WORKSPACE` / `CLAWCODEX_REPORTS_DIR` 构造
+- `call_tool(name, arguments)` — 异步分发,4 分支各自捕获异常返回 error 文案(boundary,不让 MCP server 崩)
+- `run_stdio()` — MCP server 入口,`python -m extensions.trae.mcp_bridge`
+
+**关键设计决定**:
+1. **`mcp` 可选依赖** — 未安装时 `TraeMcpBridge` 仍可实例化、列出工具、调用分发逻辑(单测友好);仅 `run_stdio()` 在调用时才要求安装,`_main()` 返回 exit code 2 提示安装方式
+2. **fire-and-forget orchestrator** — `enqueue_issue` 返回 run_id 立即返回,长任务不阻塞 MCP 响应(§1.9.6 风险缓解)。默认实现生成 run_id 写 `.reports/<run_id>.ndjson`,供 Trae 端轮询;生产部署通过 `orchestrator_enqueue=` 注入投递到 daemon 的薄层
+3. **适配真实接口而非规划稿** — 文档描述的 `Orchestrator.enqueue_issue` / `SOPCompiler.compile` 在现有代码中不存在。SOP 编译改调真实 `convert_sop_to_agent`;skill 调用走 `SkillRegistryExt` 解析 prompt;stability gate 通过 subprocess 跑 pytest
+4. **依赖注入** — `orchestrator_enqueue` / `sop_compiler` / `skill_invoker` / `stability_runner` 均可注入,单测用 mock,生产用懒加载真实模块
+
+### 3.3 P66-F trae-cli 伪 ACP 适配器(已落地)
+
+**落点**: `extensions/trae/acp_cli_adapter.py` — Layer 2,通过 `extensions/capabilities/acp_protocol` Protocol 接入。
+
+**实现内容**:
+- `TraeCliConfig` — trae-cli 启动配置(可从 `trae_config.yaml` 反序列化)
+- `TraeCliACPAdapter` — 实现 `ACPServer` Protocol 的 create/resume/process/end 生命周期
+- `process_message` — 启动 `trae-cli run` + tail trajectory JSONL,投影为 ACP MESSAGE_STREAM / TOOL_CALL 消息流
+- `_trajectory_to_acp` — trajectory 事件 → ACP 消息映射,字段缺失降级为通用消息(§1.10.7 风险缓解)
+- `_build_run_cmd` — 命令行构造集中一处,接口变化时只改这里
+
+**关键设计决定**:
+1. **mock subprocess** — `process_factory` 可注入,单测用 `_FakeProc` 不依赖真 trae-cli 安装
+2. **进程清理保证** — `end_session` 先 `terminate()` 等 5s,超时升级 `kill()`,trajectory 文件清理失败不阻断(§1.10.6 验收)
+3. **坏行容错** — trajectory JSONL 解析失败的行降级跳过,不抛 `JSONDecodeError`(§1.10.7 字段变更风险缓解)
+4. **不实现 transport 主循环** — `handle_session` 是 stub,P66-F 仅做 backend;transport-driven 主循环由后续 P66-A 框架层提供
+
+### 3.4 验证结果
+
+| 验证项 | 结果 |
+|--------|------|
+| `ruff check` extensions/trae/ + extensions/capabilities/acp_protocol.py + tests/trae/ | All checks passed |
+| `pytest tests/trae/ -q` | 54 passed, 2 skipped(mcp 已装环境跳过"未安装降级"路径) |
+| 稳定性门禁 Stage 1(核心导入)+ Stage 5(扩展模块) | 120 passed |
+| `python -m extensions.trae.mcp_bridge` 入口 | mcp 已装时干净阻塞等 stdin(MCP server 设计预期);未装时 exit 2 提示安装 |
+
+### 3.5 待办(后续里程碑)
+
+- **M3** — P66-A transport-driven 主循环收敛(stdio/WebSocket transport 实现 + `handle_session` 主循环),借助 P66-F 的 backend 实现经验
+- **M4** — P66-B/C/D 依次接入 Zed / Cursor / 完整 Skills 桥接(本次落地的 `ACPTransport`/`ACPServer` Protocol 已预留接口)
+- **E2E** — §1.9.5 / §1.10.6 验收标准中的本地 Trae CN E2E + 真 `trae-cli` trajectory 验证待人工执行
 
 ## §4 变更记录
 
@@ -544,3 +611,4 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 | 2026-06-24 | 补全详细设计(数据模型+接口+传输实现) | 对齐 FEATURE_PLAN.legacy.md |
 | 2026-07-02 | 新增 P66-E / P66-F 两个子特性(支持字节 Trae 产品矩阵) | Trae IDE 仅支持 MCP 而非 ACP,需双轨路线;Trae Agent 暂未实现 ACP(见 trae-agent #344)。设计为 MCP 反向 + CLI 包装两条独立路径,均落地 `extensions/trae/` 完全解耦 |
 | 2026-07-02 | 补充 §1.9 P66-E / §1.10 P66-F / §1.11 优先级与里程碑 | 明确 P0→P1→P2→P3 实施顺序、M1-M4 里程碑、回滚策略 |
+| 2026-07-02 | 落地 P66-A 协议契约 + P66-E MCP 反向桥 + P66-F CLI 适配器;新增 §3 实施记录 | M1/M2 完成。`extensions/capabilities/acp_protocol.py`(数据模型+Protocol)、`extensions/trae/mcp_bridge.py`(4 工具,mcp 可选降级,fire-and-forget)、`extensions/trae/acp_cli_adapter.py`(mock subprocess,trajectory 容错)。适配真实接口而非规划稿(orchestrator_enqueue 注入 / convert_sop_to_agent / SkillRegistryExt / subprocess pytest)。单测 54 passed+2 skipped,Stage 1/5 门禁 120 passed |

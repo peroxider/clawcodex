@@ -568,3 +568,57 @@ def set_selection_mode(mode: str) -> None:
 def get_selection_mode() -> str:
     """Read the persisted selection mode. Defaults to ``"arrow"`` (supports both ↑↓ arrow keys and 1-9 digit keys)."""
     return load_config().get('selection_mode') or 'arrow'
+
+
+# ── F-64 Voice Mode persistence ──────────────────────────────────────────────
+# These follow the ``set_effort`` pattern (nested ``"settings"`` section,
+# not a top-level key, since the values are read via ``get_settings()``).
+# Both clear the settings read-cache so the next ``get_settings()`` reflects
+# the change mid-session.
+
+def set_voice_provider(value: Optional[str]) -> None:
+    """Persist the STT backend choice (``"anthropic"`` | ``"doubao"`` | None).
+
+    Mirrors TS ``updateSettingsForSource('userSettings', {voiceProvider})``
+    (``commands/voice/voice.ts``). ``None``/``""`` clears the field (= unset,
+    read-side falls back to ``"anthropic"``). Invalid values are coerced to
+    ``""`` rather than raising — the read-side default is the safety net.
+
+    F-64 P64-A: gates which STT provider ``connect_voice_stream`` selects
+    at recording time. See ``clawcodex_ext.services.voice.voice_mode_enabled``.
+    """
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip().lower()
+    if normalized not in ('anthropic', 'doubao'):
+        normalized = ''  # invalid / empty → unset, read-side defaults to anthropic
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['voice_provider'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_voice_enabled(enabled: bool) -> None:
+    """Persist the voice-mode master switch (``settings.voice_enabled``).
+
+    Mirrors TS ``settings.voiceEnabled``. ``/voice`` toggles this; when false
+    the push-to-talk hotkey is inert regardless of provider configuration.
+    Decoupled from :func:`set_voice_provider` so ``/voice doubao`` can flip
+    both atomically while ``/voice anthropic`` only touches the provider.
+    """
+    from src.settings.settings import invalidate_settings_cache
+
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['voice_enabled'] = bool(enabled)
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()

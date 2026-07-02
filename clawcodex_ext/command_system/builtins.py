@@ -33,6 +33,7 @@ from clawcodex_ext.command_system.effort_command import EFFORT_COMMAND
 from clawcodex_ext.command_system.theme_command import THEME_COMMAND
 from clawcodex_ext.command_system.export_command import EXPORT_COMMAND
 from clawcodex_ext.command_system.output_style_command import OUTPUT_STYLE_COMMAND
+from clawcodex_ext.command_system.voice_command import VOICE_COMMAND
 from clawcodex_ext.command_system.statusline import STATUSLINE_COMMAND
 from clawcodex_ext.command_system.security_review import SECURITY_REVIEW_COMMAND
 from clawcodex_ext.goal.command import GOAL_COMMAND
@@ -1565,6 +1566,8 @@ def get_builtin_commands() -> list[Command]:
         RENAME_COMMAND,
         LOGO_COMMAND,
         MCP_COMMAND,
+        # F-64 Voice Mode — /voice toggle + STT backend selection.
+        VOICE_COMMAND,
     ]
     from src.command_system.buddy_command import is_buddy_command_enabled, BUDDY_COMMAND
 

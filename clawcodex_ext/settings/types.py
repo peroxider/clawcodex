@@ -293,6 +293,21 @@ class SettingsSchema:
     # framework's default (focus_next / completion-menu cycling).
     accept_suggestion_tab_alias: bool = True
 
+    # ── F-64 Voice Mode ───────────────────────────────────────────────
+    # Mirrors TS ``settings.voiceProvider`` (``utils/settings/types.ts``).
+    # ``""`` (default) = unset; persisted values: ``"anthropic"`` | ``"doubao"``.
+    # The active STT backend is selected by :func:`clawcodex_ext.services.voice.
+    # voice_mode_enabled.get_voice_provider`; the empty string is treated as
+    # "anthropic" at read time so a fresh install that hasn't run ``/voice``
+    # still has a defined default.
+    voice_provider: str = ""
+    # Master on/off switch written by ``/voice`` (no-arg toggle). Mirrors TS
+    # ``settings.voiceEnabled`` (default false). Distinct from ``voice_provider``
+    # — provider records the *chosen backend*, this records whether the user
+    # has opted into voice input at all. Decoupled so ``/voice doubao`` can
+    # flip both atomically while ``/voice anthropic`` only touches the provider.
+    voice_enabled: bool = False
+
     # Extra raw fields for forward compatibility
     extra: dict[str, Any] = field(default_factory=dict)
 
