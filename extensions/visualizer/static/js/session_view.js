@@ -125,7 +125,22 @@
             error.status = response.status;
             throw error;
         }
-        state.data = await response.json();
+        const incoming = await response.json();
+        // Live-reload guard: a session's timeline only ever GROWS while the
+        // page is open (the ws tail triggers refetches). A payload with an
+        // EMPTY timeline arriving over a non-empty rendered state is a
+        // server-side glitch (transient parse/IO hiccup), not a real state
+        // change — rendering it wipes the whole view back to "空 Session".
+        // Keep the last good data and let the next reload converge.
+        const incomingBars = (incoming.timeline || []).length;
+        const currentBars = ((state.data || {}).timeline || []).length;
+        if (incomingBars === 0 && currentBars > 0) {
+            console.warn(
+                'viz: ignoring empty session payload over non-empty state '
+                + `(had ${currentBars} bars) — live-reload glitch`);
+            return;
+        }
+        state.data = incoming;
         if (!preserveSelection || !state.data.timeline.some((event) => event.id === state.selectedId)) {
             closeDrawer();
         }

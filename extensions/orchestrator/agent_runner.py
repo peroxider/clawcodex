@@ -127,6 +127,14 @@ _READ_ONLY_TOOL_NAMES = frozenset(
     }
 )
 
+# Mega-turn early-stop tuning (see the run loop). Check cadence is cheap
+# (one `git status` per interval); the idle threshold must be long enough
+# that a coordinator between worker waves (~1-3 min gaps observed) is not
+# cut off, and short enough to save most of the wasted wall-clock before
+# the run timeout.
+_MEGATURN_CHECK_EVERY_S = 60.0
+_MEGATURN_IDLE_STOP_S = 300.0
+
 _ORCHESTRATOR_INTERNAL_PATH_PREFIXES = (
     '.orchestrator_control/',
     '.run_control/',
@@ -847,6 +855,24 @@ class AgentRunner:
                 delay_env,
             )
 
+        # Coordinator mode: flip the env gate the headless entrypoint and
+        # the Agent tool read (``is_coordinator_mode``). When enabled the
+        # main session gets the restricted coordinator tool set (Agent /
+        # SendMessage / TaskStop + lightweight reads) and is expected to
+        # spawn workers via the Agent tool. This flip was lost in the
+        # !52 squash-merge — restored from dfa79a7c.
+        if getattr(self.agent_config, "coordinator_mode", False):
+            os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
+            logger.info(
+                "Coordinator mode ENABLED for issue %s — agent will get "
+                "coordinator tool set and may spawn workers via Agent tool.",
+                issue.id,
+            )
+        else:
+            # Explicitly clear so a previous-run leftover doesn't leak
+            # into a normal-mode run when configs differ between issues.
+            os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
+
         # Thread-local MDC: inject context so every subsequent log
         # record from this thread carries issue_id / run_id automatically.
         from .logging_setup import set_log_context
@@ -1149,6 +1175,23 @@ class AgentRunner:
                 pending_tool_results = 0
                 # Set once turn_tool_count reaches max_tools_per_turn.
                 cap_reached = False
+                # Mega-turn early-stop state. The "work appears done" check
+                # in ``_should_continue`` only runs at TURN boundaries — a
+                # coordinator session that delegates everything inside one
+                # long turn never reaches it and idles until the run
+                # timeout (observed live 2026-07-02: edits landed at 17:00,
+                # timeout at 17:11). Mid-turn we cannot treat "workspace
+                # has changes" as done (worker 3 of 5 leaves changes while
+                # work continues), so the trigger is stricter: user-visible
+                # changes exist AND the workspace has been UNCHANGED for
+                # ``_MEGATURN_IDLE_STOP_S``. Checked at most once per
+                # ``_MEGATURN_CHECK_EVERY_S`` on tool results.
+                megaturn_next_check_at = (
+                    time.monotonic() + _MEGATURN_CHECK_EVERY_S
+                )
+                megaturn_ws_signature: str | None = None
+                megaturn_ws_changed_at = time.monotonic()
+                megaturn_stop = False
 
                 try:
                     stream_iter = runner.stream()
@@ -1417,6 +1460,87 @@ class AgentRunner:
                                 # Synthesize a SessionComplete-equivalent break
                                 # so the outer loop re-issues the turn prompt.
                                 break
+
+                            # Mega-turn early stop: throttled workspace-idle
+                            # probe. Triggers only when user-visible changes
+                            # exist AND the workspace has been unchanged for
+                            # ``_MEGATURN_IDLE_STOP_S`` — the work landed and
+                            # the model is churning (re-verifying, retrying
+                            # blocked tools) without producing anything new.
+                            if time.monotonic() >= megaturn_next_check_at:
+                                megaturn_next_check_at = (
+                                    time.monotonic() + _MEGATURN_CHECK_EVERY_S
+                                )
+                                try:
+                                    ws_path = getattr(session.workspace, "path", None)
+                                    if ws_path is not None:
+                                        entries = await asyncio.to_thread(
+                                            get_file_status, str(ws_path)
+                                        )
+                                        user_entries = [
+                                            entry
+                                            for entry in entries
+                                            if not _is_orchestrator_internal_path(
+                                                getattr(entry, "path", str(entry))
+                                            )
+                                        ]
+                                        signature = "|".join(
+                                            sorted(
+                                                str(getattr(entry, "path", entry))
+                                                for entry in user_entries
+                                            )
+                                        )
+                                        if signature != megaturn_ws_signature:
+                                            megaturn_ws_signature = signature
+                                            megaturn_ws_changed_at = time.monotonic()
+                                        elif user_entries and (
+                                            time.monotonic() - megaturn_ws_changed_at
+                                            >= _MEGATURN_IDLE_STOP_S
+                                        ):
+                                            megaturn_stop = True
+                                except Exception:
+                                    pass  # Fail-open: probe must never kill the run
+                            if megaturn_stop and pending_tool_results <= 0:
+                                logger.info(
+                                    "Issue %s mega-turn early stop: workspace has "
+                                    "user changes and has been idle for %.0fs — "
+                                    "ending session instead of waiting for the "
+                                    "run timeout",
+                                    issue.id,
+                                    _MEGATURN_IDLE_STOP_S,
+                                )
+                                session.has_made_progress = True
+                                session.status = "completed"
+                                session.session_end_reason = "megaturn_workspace_idle"
+                                session.session_end_summary = (
+                                    "Workspace changes landed and stayed unchanged "
+                                    f"for {int(_MEGATURN_IDLE_STOP_S)}s inside a "
+                                    "single turn; session ended early."
+                                )
+                                append_debug_event(
+                                    session.debug_log_path,
+                                    "agent_runner.megaturn_early_stop",
+                                    issue_id=issue.id,
+                                    run_id=session.run_id,
+                                    turn=turn_number,
+                                    tool_count=tool_count,
+                                    idle_stop_s=_MEGATURN_IDLE_STOP_S,
+                                )
+                                self._flush_turn_transcript(session)
+                                # Explicitly close the stream so
+                                # QueryRunner.stream()'s finally-abort trips
+                                # the headless session NOW (not at GC).
+                                try:
+                                    await stream_iter.aclose()
+                                except Exception:
+                                    pass
+                                self._dispatch_sink(
+                                    sink,
+                                    "on_session_complete",
+                                    SessionComplete(reason="megaturn_workspace_idle"),
+                                    session,
+                                )
+                                return
 
                         elif isinstance(event, SessionComplete):
                             # 429-aware backoff: detect rate limit BEFORE the
@@ -2307,6 +2431,77 @@ class AgentRunner:
             # (normal, early return, exception).  Best-effort; errors
             # are logged inside _save_json_snapshot().
             session._save_json_snapshot()
+            # Visualizer bridge: the F-45 tool-event audit log lives in
+            # ``{workspace}/.reports/{run_id}.events.ndjson`` but the
+            # Multi-Session Visualizer looks for
+            # ``~/.clawcodex/sessions/{run_id}/events.ndjson``. Mirror it on
+            # every exit path (incl. timeout) so orchestrator runs render a
+            # timeline instead of an empty session. Best-effort.
+            self._export_events_for_viz(session)
+
+    def _export_events_for_viz(self, session: AgentSession) -> None:
+        """Mirror run artifacts the visualizer needs into the session dir.
+
+        Two identity gaps keep orchestrator runs invisible in the viz:
+
+        * The F-45 tool-event audit log lives in the workspace
+          ``.reports/`` dir but ``SessionMetadataParser`` only scans
+          ``~/.clawcodex/sessions/<run_id>/events.ndjson``.
+        * Worker (sub-agent) transcripts nest under the HEADLESS session's
+          internal uuid (``sessions/<uuid>/subagents/agent-*.jsonl``) —
+          the nested resolver keys on the process-global session id, not
+          the orchestrator ``run_id`` — so ``MultiAgentParser`` finds no
+          sub-agent lanes for the run.
+
+        Mirror both on every exit path (incl. timeout). Failures are
+        logged and swallowed — the mirror must never affect run outcome.
+        """
+        try:
+            run_id = session.run_id
+            workspace = getattr(session, "workspace", None)
+            workspace_path = getattr(workspace, "path", None)
+            if not run_id or not workspace_path:
+                return
+            import shutil
+
+            dst_dir = Path.home() / ".clawcodex" / "sessions" / str(run_id)
+            dst_dir.mkdir(parents=True, exist_ok=True)
+
+            src = Path(workspace_path) / ".reports" / f"{run_id}.events.ndjson"
+            if src.is_file():
+                shutil.copyfile(src, dst_dir / "events.ndjson")
+
+            # Worker transcript mirror. The headless run installed its
+            # session id in the process-global bootstrap state; with the
+            # per-issue concurrency the daemon uses this is the session
+            # the workers nested under. Concurrent multi-issue daemons
+            # may cross-attribute workers here — acceptable for a
+            # best-effort viz bridge (files are additive and readers
+            # match lanes by agent id).
+            headless_sid = ""
+            try:
+                from src.bootstrap.state import get_session_id
+
+                headless_sid = str(get_session_id() or "")
+            except Exception:
+                headless_sid = ""
+            if headless_sid and headless_sid != str(run_id):
+                sub_src = (
+                    Path.home()
+                    / ".clawcodex"
+                    / "sessions"
+                    / headless_sid
+                    / "subagents"
+                )
+                if sub_src.is_dir():
+                    sub_dst = dst_dir / "subagents"
+                    sub_dst.mkdir(parents=True, exist_ok=True)
+                    for worker_file in sub_src.glob("agent-*.jsonl"):
+                        shutil.copyfile(worker_file, sub_dst / worker_file.name)
+        except Exception:
+            logger.exception(
+                "viz events mirror failed run_id=%s", getattr(session, "run_id", None)
+            )
 
     def _build_run_id(self, session: AgentSession) -> str:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')

@@ -55,6 +55,23 @@ class HeadlessSessionOptions:
     # (project, conventions, decoupling principles) so the per-turn user
     # message can be just the issue content / continuation.
     append_system_prompt: str | None = None
+    # External abort controller forwarded to the headless session so the
+    # caller (QueryRunner) can cooperatively cancel a session running on
+    # an executor thread it cannot otherwise kill.
+    abort_controller: Any | None = None
+
+
+def make_abort_controller() -> Any:
+    """Create an AbortController without importing upstream at module load.
+
+    ``QueryRunner`` uses this to obtain a controller it can trip on
+    wall-clock timeout / generator teardown; the same instance is
+    forwarded into the headless session via
+    ``HeadlessSessionOptions.abort_controller``.
+    """
+    from src.utils.abort_controller import AbortController
+
+    return AbortController()
 
 
 def run_headless_session(
@@ -103,6 +120,7 @@ def run_headless_session(
         on_event=options.on_event,
         env=options.env,
         append_system_prompt=options.append_system_prompt or "",
+        abort_controller=options.abort_controller,
     )
     return run_headless(options_legacy)
 

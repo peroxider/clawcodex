@@ -155,7 +155,11 @@ class QueryRunner:
         # Import the headless session runner — this stays off the upstream
         # import path at module-load time; the concrete implementation is
         # loaded lazily inside run_headless_session.
-        from ..capabilities.headless_runner import HeadlessSessionOptions, run_headless_session
+        from ..capabilities.headless_runner import (
+            HeadlessSessionOptions,
+            make_abort_controller,
+            run_headless_session,
+        )
 
         debug_log_path = self.config.debug_log_path
         append_debug_event(
@@ -204,6 +208,14 @@ class QueryRunner:
                 pass
 
         stdout = io.StringIO()
+        # Cooperative-cancellation handle. We cannot kill an executor
+        # thread, but the headless session unwinds at its next
+        # cancellation point (LLM call / tool boundary) once this trips.
+        # Fired on BOTH exits below: the wall-clock budget break and
+        # generator teardown (outer ``asyncio.wait_for`` timeout or
+        # ``issue stop`` task.cancel()). Without it a timed-out run kept
+        # spawning workers for minutes — observed live on 2026-07-02.
+        abort_controller = make_abort_controller()
         session_opts = HeadlessSessionOptions(
             prompt=self.config.prompt,
             workspace_root=Path(self.config.workspace),
@@ -216,6 +228,7 @@ class QueryRunner:
             on_event=on_event,
             env=self.config.env or {},
             append_system_prompt=self.config.append_system_prompt,
+            abort_controller=abort_controller,
         )
 
         loop = asyncio.get_running_loop()
@@ -267,49 +280,71 @@ class QueryRunner:
         timeout_s = self.config.timeout_s
         loop_started_at = time.monotonic()
         timed_out = False
-        while True:
-            try:
-                ev: Any = event_queue.get(timeout=0.05)
-                event = convert_tool_event(ev)
-                if event is not None:
-                    yield event
-            except queue.Empty:
-                if future.done():
-                    while True:
-                        try:
-                            ev = event_queue.get_nowait()
-                        except queue.Empty:
-                            break
-                        event = convert_tool_event(ev)
-                        if event is not None:
-                            yield event
-                    break
-                now = time.monotonic()
-                # F-108 P108-B: budget enforcement inside the polling
-                # loop. Conventional GNU ``timeout`` exit code (124)
-                # distinguishes "wall-clock budget exhausted" from
-                # other non-zero exits.
-                if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
-                    timed_out = True
-                    break
-                if now >= next_heartbeat_at:
+        try:
+            while True:
+                try:
+                    ev: Any = event_queue.get(timeout=0.05)
+                    event = convert_tool_event(ev)
+                    if event is not None:
+                        yield event
+                except queue.Empty:
+                    if future.done():
+                        while True:
+                            try:
+                                ev = event_queue.get_nowait()
+                            except queue.Empty:
+                                break
+                            event = convert_tool_event(ev)
+                            if event is not None:
+                                yield event
+                        break
+                    now = time.monotonic()
+                    # F-108 P108-B: budget enforcement inside the polling
+                    # loop. Conventional GNU ``timeout`` exit code (124)
+                    # distinguishes "wall-clock budget exhausted" from
+                    # other non-zero exits.
+                    if timeout_s > 0 and (now - loop_started_at) >= timeout_s:
+                        timed_out = True
+                        break
+                    if now >= next_heartbeat_at:
+                        append_debug_event(
+                            debug_log_path,
+                            "query_runner.heartbeat",
+                            run_id=self.config.run_id,
+                            future_done=future.done(),
+                            seconds_since_last_event=round(now - last_event_at, 3),
+                            stdout_len=len(stdout.getvalue()),
+                            tool_events=tool_event_count,
+                        )
+                        next_heartbeat_at = now + 30.0
+                    await asyncio.sleep(0.01)
+        finally:
+            # Zombie-run fix: if the consumer goes away while the headless
+            # future is still running — wall-clock budget break above, the
+            # orchestrator's outer ``asyncio.wait_for`` timeout, or an
+            # ``issue stop`` task.cancel() (both surface here as generator
+            # teardown) — trip the abort controller so the session unwinds
+            # at its next cancellation point instead of running (and
+            # spawning workers / burning tokens) unsupervised for minutes.
+            if not future.done():
+                try:
+                    abort_controller.abort("query_runner teardown (timeout/cancel)")
                     append_debug_event(
                         debug_log_path,
-                        "query_runner.heartbeat",
+                        "query_runner.abort_signalled",
                         run_id=self.config.run_id,
-                        future_done=future.done(),
-                        seconds_since_last_event=round(now - last_event_at, 3),
-                        stdout_len=len(stdout.getvalue()),
-                        tool_events=tool_event_count,
+                        seconds_since_start=round(
+                            time.monotonic() - loop_started_at, 3
+                        ),
                     )
-                    next_heartbeat_at = now + 30.0
-                await asyncio.sleep(0.01)
+                except Exception:
+                    pass
 
         if timed_out:
-            # F-108 P108-B: headless future is still running on the
-            # executor — we cannot kill it from Python — but the
-            # caller sees a definitive ``SessionComplete`` and the
-            # debug log carries enough context for postmortem.
+            # The abort controller (finally above) asks the still-running
+            # headless future to unwind cooperatively; the caller sees a
+            # definitive ``SessionComplete`` right away and the debug log
+            # carries enough context for postmortem.
             append_debug_event(
                 debug_log_path,
                 "query_runner.timeout",

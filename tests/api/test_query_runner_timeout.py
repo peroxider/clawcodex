@@ -6,9 +6,9 @@ the caller forever (see F-108 §十八 risk #5). On timeout we surface a
 ``SessionComplete(reason="exit_code=124")`` (the conventional GNU
 timeout exit code) and emit a debug event for downstream forensics.
 
-Test strategy: monkey-patch the module-level ``_QUERY_TIMEOUT_S``
-constant to a tiny value. The implementation reads it inside the
-method so a module-attribute patch is sufficient.
+Test strategy: pass a tiny ``timeout_s`` via ``QueryConfig`` — the
+module-level ``_QUERY_TIMEOUT_S`` constant was removed when the budget
+was plumbed through the config (42368b64).
 """
 
 from __future__ import annotations
@@ -42,13 +42,9 @@ _TIMEOUT_EXIT_CODE = 124
 
 
 @pytest.mark.asyncio
-async def test_stream_yields_timeout_when_headless_future_never_completes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_stream_yields_timeout_when_headless_future_never_completes() -> None:
     """Risk #5: a headless run that hangs forever must surface as a
     timed-out ``SessionComplete`` rather than blocking the caller."""
-
-    monkeypatch.setattr("extensions.api.query._QUERY_TIMEOUT_S", 0.1)
 
     with TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -67,6 +63,7 @@ async def test_stream_yields_timeout_when_headless_future_never_completes(
                 workspace=tmp_path,
                 run_id="run-timeout",
                 debug_log_path=debug_log,
+                timeout_s=0.1,
             )
         )
 
@@ -94,18 +91,14 @@ async def test_stream_yields_timeout_when_headless_future_never_completes(
 
 
 @pytest.mark.asyncio
-async def test_stream_does_not_block_caller_on_legacy_zero_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_stream_does_not_block_caller_on_legacy_zero_timeout() -> None:
     """``timeout=0`` is the documented escape hatch: it falls back to
     the legacy unbounded ``await future`` (F-108 §十八 design decision #5).
 
-    We verify this by patching the constant to ``0`` and asserting the
-    branch returns immediately after the future completes (the
-    polling-loop exit, not the wait_for branch).
+    We verify this by passing ``timeout_s=0`` and asserting the branch
+    returns immediately after the future completes (the polling-loop
+    exit, not the wait_for branch).
     """
-
-    monkeypatch.setattr("extensions.api.query._QUERY_TIMEOUT_S", 0)
 
     with TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -118,6 +111,7 @@ async def test_stream_does_not_block_caller_on_legacy_zero_timeout(
             QueryConfig(
                 prompt="hello",
                 workspace=tmp_path,
+                timeout_s=0,
             )
         )
 
@@ -178,14 +172,10 @@ async def test_stream_completes_normally_when_future_finishes_in_budget() -> Non
 
 
 @pytest.mark.asyncio
-async def test_stream_records_remaining_event_count_on_timeout(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_stream_records_remaining_event_count_on_timeout() -> None:
     """The debug event payload should include enough context for an
     operator to understand what the headless session had been doing
     before the timeout fired (F-108 §十八 verification #4)."""
-
-    monkeypatch.setattr("extensions.api.query._QUERY_TIMEOUT_S", 0.1)
 
     with TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -213,6 +203,7 @@ async def test_stream_records_remaining_event_count_on_timeout(
                 workspace=tmp_path,
                 run_id="run-context",
                 debug_log_path=debug_log,
+                timeout_s=0.1,
             )
         )
 
