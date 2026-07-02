@@ -1,9 +1,33 @@
 # F-94: BG_SESSIONS 后台会话
 
-> 状态: 📋 规划中(已有 `clawcodex_ext/agent/background_runner.py` / `RuntimeTaskRegistry` / `resume_agent` 原语;目标模块 `clawcodex_ext/tasks/bg_session.py` 待建)
+> 状态: 🚧 实现中(P94-A~F+H 已落地;P94-G Team/SendMessage 集成待 F-93 协同;完成事件主动推送待后续)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-94-bg-sessions.md`
-> 最后更新: 2026-07-01
+> 最后更新: 2026-07-02
 > 缺口来源: gap-analysis-2026q2.md §3.3(`#### F-94: BG_SESSIONS 后台会话统一管理`,已分解到本文档 §0)
+
+## 落地清单(2026-07-02)
+
+| 子特性 | 文件 | 状态 |
+|:----:|------|:----:|
+| P94-A 数据模型 | `clawcodex_ext/tasks/bg_session.py` | ✅ |
+| P94-B 全局 registry | `clawcodex_ext/tasks/bg_session_registry.py` | ✅ |
+| P94-C 生命周期控制 | `clawcodex_ext/tasks/bg_session_manager.py` | ✅ |
+| P94-D 多信号 orphan 检测 | `clawcodex_ext/tasks/bg_session_health.py` | ✅ |
+| P94-E1 BgSessionTool | `clawcodex_ext/tool_system/tools/bg_session.py` | ✅ |
+| P94-E2 /bg 命令族 | `clawcodex_ext/command_system/bg_commands.py` | ✅ |
+| P94-F UI 显示适配器 | `clawcodex_ext/repl/bg_sessions_panel.py` | ✅ |
+| P94-B/C launch 协调 | `clawcodex_ext/tasks/bg_session_hook.py` + `clawcodex_ext/__init__.py` 猴补丁 | ✅ |
+| P94-G Team/SendMessage 集成 | — | ⏳ 待 F-93 |
+| P94-H 单元测试 | `tests/clawcodex_ext/tasks/test_bg_session.py`(35 用例) | ✅ |
+
+接入点:
+- `extensions/tool_system_ext/registration.py` — BgSessionTool 注册到 EXTENSION_TOOLS
+- `clawcodex_ext/command_system/builtins.py:register_builtin_commands` — /bg 命令注册
+- `clawcodex_ext/__init__.py:ensure_eager_extensions_installed` — launch_background_runner 包装钩子
+
+验收标准 §1.11 全部 10 项由 `tests/clawcodex_ext/tasks/test_bg_session.py` 覆盖。
+
+---
 
 ## §0 缺口摘要
 

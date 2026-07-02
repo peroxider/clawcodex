@@ -65,6 +65,16 @@ def ensure_eager_extensions_installed() -> None:
     _install_provider_patches()
     install_stale_registry_patch()
 
+    # F-94 BG_SESSIONS — wrap launch_background_runner to upsert the global
+    # index after the per-session marker is written. No-op when
+    # CLAWCODEX_BG_SESSIONS=off (验收标准 1).
+    try:
+        from clawcodex_ext.tasks.bg_session_hook import install_bg_session_index_hook
+
+        install_bg_session_index_hook()
+    except Exception:  # noqa: BLE001 — never break agent init
+        pass
+
     # Provider registrations (model extensions, downstream providers,
     # cancel-latency overrides, media registry).
     from clawcodex_ext.providers import _init_provider_extensions

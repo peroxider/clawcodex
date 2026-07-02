@@ -13,6 +13,7 @@ from clawcodex_ext.tool_system.tools.task_directives import TaskDirectivesTool
 from clawcodex_ext.tool_system.tools.task_inspect import TaskInspectTool
 from clawcodex_ext.goal.tool import GoalTool
 from clawcodex_ext.tool_system.tools.create_agent_tool import make_create_agent_tool
+from clawcodex_ext.tool_system.tools.bg_session import BgSessionTool
 
 EXTENSION_TOOLS: list[Tool] = [
     ProgressReportTool,
@@ -20,6 +21,10 @@ EXTENSION_TOOLS: list[Tool] = [
     TaskInspectTool,
     make_create_agent_tool(),
     GoalTool,
+    # F-94 BG_SESSIONS — Agent-facing background session query/control.
+    # Tool self-gates on CLAWCODEX_BG_SESSIONS (returns {disabled: true}
+    # when off), so unconditional registration is safe.
+    BgSessionTool,
 ]
 
 # F-62 Chrome browser automation — seven ``chrome_*`` tools

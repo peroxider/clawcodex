@@ -1612,6 +1612,15 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         register_intent_forecast_commands(reg)
     except Exception:
         pass
+    # F-94 BG_SESSIONS — /bg command family. Self-gates on
+    # CLAWCODEX_BG_SESSIONS (returns disabled message when off), so
+    # unconditional registration is safe.
+    try:
+        from clawcodex_ext.command_system.bg_commands import register_bg_commands
+
+        register_bg_commands(reg)
+    except Exception:
+        pass
 
 
 async def execute_command_async(
