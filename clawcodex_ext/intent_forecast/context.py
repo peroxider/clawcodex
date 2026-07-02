@@ -25,6 +25,7 @@ class ForecastContext:
     memory_files: list[dict[str, str]] = field(default_factory=list)
     workspace: dict[str, Any] = field(default_factory=dict)
     feedback: list[dict[str, Any]] = field(default_factory=list)
+    response_language: str = "English"
     fingerprint: str = ""
 
     def to_prompt_dict(self) -> dict[str, Any]:
@@ -35,6 +36,7 @@ class ForecastContext:
             "memory_files": self.memory_files,
             "workspace": self.workspace,
             "feedback": self.feedback,
+            "response_language": self.response_language,
         }
 
 
@@ -60,6 +62,7 @@ class IntentForecastContextBuilder:
         memory = self._memory_files()
         workspace = self._workspace_signals()
         feedback = read_recent_feedback(limit=30, base_dir=self.feedback_base_dir)
+        response_language = infer_response_language(current, sessions)
         raw = json.dumps(
             {
                 "cwd": str(self.workspace_root),
@@ -67,6 +70,7 @@ class IntentForecastContextBuilder:
                 "sessions": sessions,
                 "memory": memory,
                 "workspace": workspace,
+                "response_language": response_language,
             },
             sort_keys=True,
             default=str,
@@ -78,6 +82,7 @@ class IntentForecastContextBuilder:
             memory_files=memory,
             workspace=workspace,
             feedback=feedback,
+            response_language=response_language,
             fingerprint=hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16],
         )
 
@@ -237,3 +242,37 @@ def _flatten_content(content: Any) -> str:
     if text is not None:
         return str(text)
     return str(content)
+
+
+def infer_response_language(
+    current_messages: list[dict[str, str]],
+    sessions: list[dict[str, Any]] | None = None,
+) -> str:
+    """Infer whether forecast suggestions should be Chinese or English."""
+
+    samples: list[str] = []
+    for msg in reversed(current_messages):
+        if msg.get("role") == "user":
+            samples.append(str(msg.get("content") or ""))
+        if len(samples) >= 6:
+            break
+    if not samples:
+        for session in sessions or []:
+            last = str(session.get("last_user_input") or "")
+            if last:
+                samples.append(last)
+            tail = session.get("transcript_tail")
+            if isinstance(tail, list):
+                for item in reversed(tail):
+                    if isinstance(item, dict) and item.get("role") == "user":
+                        samples.append(str(item.get("content") or ""))
+                        break
+            if len(samples) >= 6:
+                break
+
+    text = "\n".join(samples)
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    latin = sum(1 for ch in text if ("a" <= ch.lower() <= "z"))
+    if cjk >= 3 and cjk >= latin * 0.25:
+        return "Chinese"
+    return "English"

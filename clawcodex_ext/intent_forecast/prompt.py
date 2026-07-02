@@ -15,8 +15,10 @@ Return strict JSON only, shaped as:
 Rules:
 - Suggest at most 3 concrete next actions.
 - The prompt must be ready to submit to the coding agent.
+- Use the context field `response_language` for every suggestion title, prompt, and reason.
 - Do not start work yourself.
-- Prefer the dominant language of recent user messages.
+- If `response_language` is Chinese, write natural Simplified Chinese.
+- If `response_language` is English, write natural English.
 - Use confidence between 0 and 1.
 - Avoid repeating suggestions that feedback says were dismissed."""
 

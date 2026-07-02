@@ -115,6 +115,7 @@ def parse_forecast_response(raw: str, *, min_confidence: float) -> list[Forecast
 
 def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> list[ForecastSuggestion]:
     candidates: list[ForecastSuggestion] = []
+    zh = context.response_language.lower().startswith("chinese")
     recent_user = ""
     for msg in reversed(context.current_messages):
         if msg.get("role") == "user":
@@ -124,9 +125,17 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
         candidates.append(
             ForecastSuggestion(
                 id=f"forecast-{uuid.uuid4().hex[:10]}",
-                title="Continue the recent task",
-                prompt=f"Continue from the latest user request and current workspace state:\n\n{recent_user}",
-                reason="The most recent user message is the strongest local signal.",
+                title="继续最近的任务" if zh else "Continue the recent task",
+                prompt=(
+                    f"请基于最新用户请求和当前工作区状态继续推进：\n\n{recent_user}"
+                    if zh
+                    else f"Continue from the latest user request and current workspace state:\n\n{recent_user}"
+                ),
+                reason=(
+                    "最近的用户消息是当前最强的本地信号。"
+                    if zh
+                    else "The most recent user message is the strongest local signal."
+                ),
                 confidence=max(min_confidence, 0.55),
                 source_refs=["conversation:recent-user"],
             )
@@ -136,9 +145,13 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
         candidates.append(
             ForecastSuggestion(
                 id=f"forecast-{uuid.uuid4().hex[:10]}",
-                title="Review current workspace changes",
-                prompt="Review the current git changes, identify unfinished work, and propose the next implementation step.",
-                reason="The workspace has uncommitted changes.",
+                title="检查当前工作区变更" if zh else "Review current workspace changes",
+                prompt=(
+                    "请检查当前 git 变更，识别未完成的工作，并提出下一步实现计划。"
+                    if zh
+                    else "Review the current git changes, identify unfinished work, and propose the next implementation step."
+                ),
+                reason="工作区存在未提交变更。" if zh else "The workspace has uncommitted changes.",
                 confidence=max(min_confidence, 0.5),
                 source_refs=["git:status"],
             )
@@ -153,8 +166,16 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
                     ForecastSuggestion(
                         id=f"forecast-{uuid.uuid4().hex[:10]}",
                         title=title,
-                        prompt=f"Continue this next action from the recent session: {title}",
-                        reason="A recent session summary listed this as a next action.",
+                        prompt=(
+                            f"请继续推进最近会话中的下一步行动：{title}"
+                            if zh
+                            else f"Continue this next action from the recent session: {title}"
+                        ),
+                        reason=(
+                            "最近会话摘要将它列为下一步行动。"
+                            if zh
+                            else "A recent session summary listed this as a next action."
+                        ),
                         confidence=max(min_confidence, 0.48),
                         source_refs=[f"session:{session.get('session_id', '')}"],
                     )

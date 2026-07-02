@@ -6,7 +6,10 @@ from src.agent.conversation import Conversation
 from src.types.messages import Message
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
-from clawcodex_ext.intent_forecast.context import IntentForecastContextBuilder
+from clawcodex_ext.intent_forecast.context import (
+    IntentForecastContextBuilder,
+    infer_response_language,
+)
 
 
 def test_context_reads_memory_workspace_and_current_messages(tmp_path) -> None:
@@ -23,6 +26,7 @@ def test_context_reads_memory_workspace_and_current_messages(tmp_path) -> None:
     ).build()
 
     assert context.current_messages[-1]["content"] == "continue forecast"
+    assert context.response_language == "English"
     assert context.memory_files[0]["path"] == "CLAUDE.md"
     assert "README.md" not in context.workspace["project_files"]
 
@@ -55,3 +59,32 @@ def test_context_falls_back_to_transcript_tail_and_enqueues_summary(tmp_path, mo
 
     assert context.sessions[0]["transcript_tail"][0]["content"] == "tail task"
     assert enqueued == ["s1"]
+
+
+def test_context_infers_chinese_from_recent_user_messages(tmp_path) -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="please inspect this repo"),
+        Message(role="assistant", content="ok"),
+        Message(role="user", content="继续补齐上述交互和后台侧车能力"),
+    ]
+
+    context = IntentForecastContextBuilder(
+        conversation=conv,
+        workspace_root=tmp_path,
+        config=IntentForecastConfig(),
+        sessions_dir=tmp_path / "sessions",
+        feedback_base_dir=tmp_path,
+    ).build()
+
+    assert context.response_language == "Chinese"
+
+
+def test_infer_language_falls_back_to_session_tail() -> None:
+    assert (
+        infer_response_language(
+            [],
+            [{"transcript_tail": [{"role": "user", "content": "继续完成测试覆盖"}]}],
+        )
+        == "Chinese"
+    )
