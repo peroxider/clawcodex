@@ -1,6 +1,6 @@
 # F-70: Plugin 插件系统基础框架
 
-> 状态: ✅ 已完成（生命周期管理 + 沙箱隔离，PR #35 已合入 dev-decoupling-refactor-0573f4c）
+> 状态: 🔄 进行中（P70-A/C/D 已完成；P70-B 插件发现目录扫描、P70-E 清单格式待补全）
 > 章节: docs/feature_plan/06-ccb-benchmark/f-70-plugin.md
 > 最后更新: 2026-06-28
 
