@@ -5793,6 +5793,11 @@ class ClawcodexREPL:
         or spawn (Windows) a child that continues the agent loop headlessly,
         then prints a resume hint so the user can re-attach later with
         ``--resume <session_id>``.
+
+        The ``_print_resume_hint`` call claims the process-wide latch in
+        ``clawcodex_ext.utils.resume_hint``, suppressing the duplicate
+        ``Resume this session with: ...`` line that the atexit cleanup
+        would otherwise emit on top of the inline hint here.
         """
         from src.agent.background_runner import launch_background_runner
 
@@ -5815,14 +5820,8 @@ class ClawcodexREPL:
 
         if pid is not None:
             self.console.print(f'\n[success]⏎ Agent sent to background (pid {pid}).[/success]')
-            self.console.print(
-                f'[dim]The background agent (pid {pid}) will keep running after this '
-                f'REPL exits. To see its full output once it finishes, run:[/dim]'
-            )
-            self.console.print(
-                f'  [info]clawcodex --resume {self.session.session_id}[/info]'
-            )
-            self.console.print('[dim]Exiting parent REPL (background agent continues)...[/dim]')
+            self.console.print('[dim]Exiting...[/dim]')
+            self._print_resume_hint()
             raise SystemExit(0)
         else:
             # Windows graceful degradation — no os.fork(), subprocess
