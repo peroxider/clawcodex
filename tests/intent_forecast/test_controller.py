@@ -6,6 +6,7 @@ from src.types.messages import Message
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
 from clawcodex_ext.intent_forecast.learning import read_recent_feedback
+from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
 from clawcodex_ext.intent_forecast.persistence import read_forecast_history
 
 
@@ -40,11 +41,32 @@ def _conversation() -> Conversation:
     return conv
 
 
+def _empty_conversation() -> Conversation:
+    conv = Conversation()
+    conv.messages = []
+    return conv
+
+
+class FakeForecastService:
+    def __init__(self, **kwargs) -> None:
+        pass
+
+    def generate(self, *, trigger: str):
+        return ForecastResult(
+            generated=True,
+            fingerprint="fp",
+            suggestions=[
+                ForecastSuggestion(id="s1", title="Initial suggestion", prompt="do initial", confidence=0.8)
+            ],
+        )
+
+
 def test_controller_arms_on_mount_and_fires(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("clawcodex_ext.intent_forecast.controller.IntentForecastService", FakeForecastService)
     timers = FakeTimerFactory()
     displayed = []
-    conv = _conversation()
+    conv = _empty_conversation()
     controller = IntentForecastController(
         provider_getter=lambda: None,
         model_getter=lambda: None,
@@ -62,8 +84,7 @@ def test_controller_arms_on_mount_and_fires(monkeypatch, tmp_path) -> None:
     timers.timers[0].fire()
     assert displayed
     assert displayed[0].generated is True
-    assert len(conv.messages) == 1
-    assert conv.messages[0].content == "implement forecast"
+    assert len(conv.messages) == 0
     rows = read_forecast_history(cwd=tmp_path)
     assert len(rows) == 1
     assert rows[0]["trigger"] == "auto"
@@ -79,7 +100,7 @@ def test_user_interaction_cancels_timer(tmp_path) -> None:
         workspace_root=tmp_path,
         display=displayed.append,
         config_loader=lambda: IntentForecastConfig(idle_seconds=1),
-        conversation_getter=_conversation,
+        conversation_getter=_empty_conversation,
         timer_factory=timers,
     )
 
@@ -87,6 +108,63 @@ def test_user_interaction_cancels_timer(tmp_path) -> None:
     controller.on_user_interaction("typing")
     timers.timers[0].fire()
     assert displayed == []
+
+
+def test_existing_user_message_prevents_auto_timer(tmp_path) -> None:
+    timers = FakeTimerFactory()
+    controller = IntentForecastController(
+        provider_getter=lambda: None,
+        model_getter=lambda: None,
+        session_getter=lambda: None,
+        workspace_root=tmp_path,
+        display=lambda result: None,
+        config_loader=lambda: IntentForecastConfig(idle_seconds=1),
+        conversation_getter=_conversation,
+        timer_factory=timers,
+    )
+
+    controller.on_mount()
+
+    assert timers.timers == []
+
+
+def test_non_empty_prompt_draft_prevents_rearm_after_run_finish(tmp_path) -> None:
+    timers = FakeTimerFactory()
+    controller = IntentForecastController(
+        provider_getter=lambda: None,
+        model_getter=lambda: None,
+        session_getter=lambda: None,
+        workspace_root=tmp_path,
+        display=lambda result: None,
+        config_loader=lambda: IntentForecastConfig(idle_seconds=1),
+        conversation_getter=_conversation,
+        timer_factory=timers,
+    )
+
+    controller.on_prompt_draft_changed("pending draft")
+    controller.on_run_start()
+    controller.on_run_finish()
+
+    assert timers.timers == []
+
+
+def test_valid_run_input_prevents_rearm_after_run_finish(tmp_path) -> None:
+    timers = FakeTimerFactory()
+    controller = IntentForecastController(
+        provider_getter=lambda: None,
+        model_getter=lambda: None,
+        session_getter=lambda: None,
+        workspace_root=tmp_path,
+        display=lambda result: None,
+        config_loader=lambda: IntentForecastConfig(idle_seconds=1),
+        conversation_getter=_empty_conversation,
+        timer_factory=timers,
+    )
+
+    controller.on_run_start()
+    controller.on_run_finish()
+
+    assert timers.timers == []
 
 
 def test_stale_generation_is_discarded(tmp_path) -> None:
@@ -108,7 +186,7 @@ def test_stale_generation_is_discarded(tmp_path) -> None:
         workspace_root=tmp_path,
         display=displayed.append,
         config_loader=lambda: IntentForecastConfig(idle_seconds=1, feedback_enabled=False),
-        conversation_getter=_conversation,
+        conversation_getter=_empty_conversation,
         timer_factory=timers,
     )
     controller.on_mount()
@@ -126,11 +204,16 @@ def test_accept_submits_last_result(tmp_path) -> None:
         display=lambda result: None,
         submit=submitted.append,
         config_loader=lambda: IntentForecastConfig(feedback_enabled=False),
-        conversation_getter=_conversation,
+        conversation_getter=_empty_conversation,
         timer_factory=FakeTimerFactory(),
     )
-    controller.on_mount()
-    controller._timer.fire()  # type: ignore[union-attr]
+    controller.remember(
+        ForecastResult(
+            generated=True,
+            fingerprint="fp",
+            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+        )
+    )
 
     assert controller.accept(1) is True
     assert submitted
@@ -149,11 +232,16 @@ def test_accept_records_started_and_completed(monkeypatch, tmp_path) -> None:
         display=lambda result: None,
         submit=lambda prompt: None,
         config_loader=lambda: IntentForecastConfig(feedback_enabled=True),
-        conversation_getter=_conversation,
+        conversation_getter=_empty_conversation,
         timer_factory=FakeTimerFactory(),
     )
-    controller.on_mount()
-    controller._timer.fire()  # type: ignore[union-attr]
+    controller.remember(
+        ForecastResult(
+            generated=True,
+            fingerprint="fp",
+            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+        )
+    )
 
     assert controller.accept(1) is True
     controller.on_run_finish()
@@ -176,11 +264,16 @@ def test_accept_records_correction(monkeypatch, tmp_path) -> None:
         display=lambda result: None,
         submit=lambda prompt: None,
         config_loader=lambda: IntentForecastConfig(feedback_enabled=True),
-        conversation_getter=_conversation,
+        conversation_getter=_empty_conversation,
         timer_factory=FakeTimerFactory(),
     )
-    controller.on_mount()
-    controller._timer.fire()  # type: ignore[union-attr]
+    controller.remember(
+        ForecastResult(
+            generated=True,
+            fingerprint="fp",
+            suggestions=[ForecastSuggestion(id="s1", title="A", prompt="do accepted", confidence=0.8)],
+        )
+    )
 
     assert controller.accept(1) is True
     controller.on_prompt_draft_changed("不是这个方向，改成先写文档")

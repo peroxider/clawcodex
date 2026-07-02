@@ -61,6 +61,8 @@ class IntentForecastController:
         self._last_result: ForecastResult | None = None
         self._shown_fingerprints: set[str] = set()
         self._pending_acceptance: dict[str, Any] | None = None
+        self._prompt_draft_text = ""
+        self._valid_input_seen = False
 
     @property
     def last_result(self) -> ForecastResult | None:
@@ -74,13 +76,16 @@ class IntentForecastController:
             self._arm_locked()
 
     def on_user_interaction(self, reason: str = "user") -> None:
-        del reason
+        if reason not in {"dismiss", "cancel"}:
+            self._valid_input_seen = True
         with self._lock:
             self._generation_id += 1
             self._cancel_locked()
 
     def on_prompt_draft_changed(self, text: str) -> None:
+        self._prompt_draft_text = text
         if text:
+            self._valid_input_seen = True
             self._maybe_record_user_acceptance_outcome(text)
             self.on_user_interaction("draft")
         else:
@@ -89,6 +94,7 @@ class IntentForecastController:
 
     def on_run_start(self) -> None:
         with self._lock:
+            self._valid_input_seen = True
             self._busy = True
             self._generation_id += 1
             self._cancel_locked()
@@ -148,7 +154,15 @@ class IntentForecastController:
 
     def _arm_locked(self) -> None:
         cfg = self.config_loader()
-        if not self.interactive or not cfg.enabled or not cfg.auto_display or self._busy:
+        if (
+            not self.interactive
+            or not cfg.enabled
+            or not cfg.auto_display
+            or self._busy
+            or self._prompt_draft_text.strip()
+            or self._valid_input_seen
+            or self._conversation_has_user_input()
+        ):
             return
         self._cancel_locked()
         self._timer = self.timer_factory.call_later(cfg.idle_seconds, self._on_idle_timer)
@@ -158,7 +172,14 @@ class IntentForecastController:
             if self._busy or self._running:
                 return
             cfg = self.config_loader()
-            if not self.interactive or not cfg.enabled or not cfg.auto_display:
+            if (
+                not self.interactive
+                or not cfg.enabled
+                or not cfg.auto_display
+                or self._prompt_draft_text.strip()
+                or self._valid_input_seen
+                or self._conversation_has_user_input()
+            ):
                 return
             self._running = True
             self._timer = None
@@ -212,6 +233,17 @@ class IntentForecastController:
         session = self.session_getter()
         return getattr(session, "conversation", None)
 
+    def _conversation_has_user_input(self) -> bool:
+        conversation = self._conversation()
+        messages = list(getattr(conversation, "messages", []) or [])
+        for msg in messages:
+            if str(getattr(msg, "role", "") or "") != "user":
+                continue
+            content = getattr(msg, "content", "")
+            if _content_has_text(content):
+                return True
+        return False
+
     def _maybe_record_user_acceptance_outcome(self, text: str) -> None:
         if self._pending_acceptance is None:
             return
@@ -242,3 +274,18 @@ class IntentForecastController:
             except Exception:
                 pass
         self._timer = None
+
+
+def _content_has_text(content: Any) -> bool:
+    if content is None:
+        return False
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):
+        return any(_content_has_text(item) for item in content)
+    if isinstance(content, dict):
+        return _content_has_text(content.get("text") or content.get("content") or "")
+    text = getattr(content, "text", None)
+    if text is not None:
+        return bool(str(text).strip())
+    return bool(str(content).strip())
