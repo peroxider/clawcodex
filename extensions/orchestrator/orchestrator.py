@@ -36,6 +36,7 @@ from .modes.pipeline import PipelineModeRunner
 from .modes.single import SingleModeRunner
 from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
+from .rules_learner import RuleEngine, RuleStore
 from .status_dashboard import SessionStatus, StatusDashboard
 from clawcodex_ext.tool_system.context import ToolContext
 from clawcodex_ext.utils.git import get_default_branch, get_file_status, get_repo_root
@@ -157,7 +158,9 @@ class Orchestrator:
         # command can cancel a specific running issue by task.cancel().
         self._issue_tasks: dict[str, asyncio.Task] = {}
         # Store workflow path for metadata
-        self._workflow_path: str | None = getattr(workflow, '_source_path', None)
+        self._workflow_path: str | None = getattr(workflow, 'source_path', None) or getattr(
+            workflow, '_source_path', None
+        )
         # Workspace root for control command polling
         workspace_root = Path(workspace.config.root)
         self._workspace_root = workspace_root
@@ -836,7 +839,7 @@ class Orchestrator:
                         self._issue_payload(issue, url=issue.url),
                     )
                 elif issue.author_login:
-                    record = self._registry.get(issue.id or "")
+                    record = self._registry.get(issue.id or '')
                     if record is not None and not record.author_login:
                         record.author_login = issue.author_login
                         self._registry._save()
@@ -2080,7 +2083,7 @@ class Orchestrator:
         await self._prepare_intent_reset(issue)
 
         workspace_strategy = self.workflow.workspace.strategy
-        branch_name = getattr(issue, "branch_name", None)
+        branch_name = getattr(issue, 'branch_name', None)
         if not branch_name:
             branch_name = self.git_sync._default_branch_name(issue)
             issue.branch_name = branch_name
@@ -2389,13 +2392,15 @@ class Orchestrator:
                 session.base_branch or get_default_branch(str(session.workspace.path)),
             )
             logger.info(
-                "Workflow workspace on branch: %s (issue=%s)",
-                work_branch, session.issue.identifier,
+                'Workflow workspace on branch: %s (issue=%s)',
+                work_branch,
+                session.issue.identifier,
             )
         except Exception as exc:
             logger.warning(
-                "Failed to ensure work branch for workflow issue %s: %s",
-                session.issue.id, exc,
+                'Failed to ensure work branch for workflow issue %s: %s',
+                session.issue.id,
+                exc,
             )
 
         # F-116: 将编排器的 ProgressSink 注入工作流引擎，
@@ -2419,13 +2424,11 @@ class Orchestrator:
         for stage_id, stage_result in result.stage_results.items():
             if stage_result.outputs:
                 session.workflow_stage_outputs[stage_id] = {
-                    "phase": getattr(
-                        workflow_orch.schema.get_stage(stage_id), "phase", ""
+                    'phase': getattr(workflow_orch.schema.get_stage(stage_id), 'phase', ''),
+                    'name': getattr(
+                        workflow_orch.schema.get_stage(stage_id), 'name', f'Stage {stage_id}'
                     ),
-                    "name": getattr(
-                        workflow_orch.schema.get_stage(stage_id), "name", f"Stage {stage_id}"
-                    ),
-                    "output": stage_result.outputs[0] if stage_result.outputs else "",
+                    'output': stage_result.outputs[0] if stage_result.outputs else '',
                 }
 
         if result.success:
@@ -2527,8 +2530,10 @@ class Orchestrator:
                         # Safety net: verify workspace has actual changes before git_sync.
                         # If agent reported "completed" but workspace is clean (no uncommitted
                         # changes, no HEAD change), mark as failed to avoid empty PRs.
-                        if session.status == "completed" and session.session_end_reason not in (
-                            "noop_completed", "already_completed", "task_complete",
+                        if session.status == 'completed' and session.session_end_reason not in (
+                            'noop_completed',
+                            'already_completed',
+                            'task_complete',
                         ):
                             _has_changes = False
                             try:
@@ -2537,23 +2542,30 @@ class Orchestrator:
                                     _file_status = get_file_status(_repo_root)
                                     _has_changes = bool(_file_status)
                                     if not _has_changes:
-                                        _start_sha = getattr(session, "start_commit_sha", None)
+                                        _start_sha = getattr(session, 'start_commit_sha', None)
                                         if _start_sha:
                                             from src.utils.git import _run_git as _git
-                                            _head_out, _, _rc = _git(["rev-parse", "HEAD"], _repo_root)
-                                            _has_changes = bool(_rc == 0 and _head_out.strip() and _head_out.strip() != _start_sha)
+
+                                            _head_out, _, _rc = _git(
+                                                ['rev-parse', 'HEAD'], _repo_root
+                                            )
+                                            _has_changes = bool(
+                                                _rc == 0
+                                                and _head_out.strip()
+                                                and _head_out.strip() != _start_sha
+                                            )
                             except Exception:
                                 _has_changes = True  # fail-open
                             if not _has_changes:
                                 logger.warning(
-                                    "Session completed but workspace has no changes "
-                                    "issue_id=%s — marking as failed",
+                                    'Session completed but workspace has no changes '
+                                    'issue_id=%s — marking as failed',
                                     session.issue.id,
                                 )
-                                session.status = "failed"
-                                session.session_end_reason = "no_changes_produced"
+                                session.status = 'failed'
+                                session.session_end_reason = 'no_changes_produced'
                                 session.session_end_summary = (
-                                    "Agent reported completed but workspace has no file changes"
+                                    'Agent reported completed but workspace has no file changes'
                                 )
                         # F-39 Sub-C: a followup run passes mode="followup"
                         # to git_sync so it reuses the existing branch + PR
@@ -2571,28 +2583,24 @@ class Orchestrator:
                         # 必须走 mark_failed_with_reason，让 issue 进入 FAILED。
                         if (
                             sync_result is not None
-                            and sync_result.session_end_reason == "empty_branch_no_commits"
+                            and sync_result.session_end_reason == 'empty_branch_no_commits'
                         ):
                             logger.warning(
-                                "Issue %s ended with no reviewable commit "
-                                "(session_end_reason=%s) — marking FAILED "
-                                "without creating a PR",
+                                'Issue %s ended with no reviewable commit '
+                                '(session_end_reason=%s) — marking FAILED '
+                                'without creating a PR',
                                 session.issue.id,
                                 sync_result.session_end_reason,
                             )
                             self._registry.mark_failed_with_reason(
-                                session.issue.id or "",
-                                "empty_branch_no_commits: agent did not produce "
-                                "any file modifications; no PR created.",
+                                session.issue.id or '',
+                                'empty_branch_no_commits: agent did not produce '
+                                'any file modifications; no PR created.',
                             )
-                            await self._sync_tracker_issue_state(
-                                session.issue.id or "", "failed"
-                            )
-                            self.status_dashboard.on_session_complete(
-                                session.issue.id or ""
-                            )
-                            self._state.completed.add(session.issue.id or "")
-                            self._state.failed.add(session.issue.id or "")
+                            await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
+                            self.status_dashboard.on_session_complete(session.issue.id or '')
+                            self._state.completed.add(session.issue.id or '')
+                            self._state.failed.add(session.issue.id or '')
                             return
                         if sync_result is not None:
                             self._registry.update_report(
@@ -2617,6 +2625,21 @@ class Orchestrator:
                                 )
                                 await self._reply_to_processed_feedback(session)
                                 await self._post_feedback_summary(session, sync_result)
+                                # F-121: extract rules from agent reply after follow-up
+                                if getattr(self.workflow.rules, 'enabled', False):
+                                    rules_path = RuleEngine.get_rules_path(
+                                        self.workflow, self._workflow_path
+                                    )
+                                    if rules_path:
+                                        rc = self.workflow.rules
+                                        await RuleEngine().apply(
+                                            session.output_text,
+                                            rules_path,
+                                            similarity_threshold=rc.similarity_threshold,
+                                            enhancement_threshold=rc.enhancement_threshold,
+                                            max_rules=rc.max_rules,
+                                            min_confidence=rc.min_confidence,
+                                        )
                             elif session.run_kind == 'agent_followup':
                                 # F-39 Sub-C: a follow-up keeps the
                                 # existing pr_number / pr_url / status;
@@ -2973,9 +2996,7 @@ class Orchestrator:
                         or getattr(session, 'verification_output', None)
                         or 'Agent run timed out',
                     )
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     await self._schedule_retry(session)
                 elif session.status == 'max_turns_exceeded':
                     self.status_dashboard.on_session_failed(
@@ -2989,9 +3010,7 @@ class Orchestrator:
                         'max turns exceeded',
                     )
                     self._registry.mark_failed(session.issue.id or '')
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     await self._schedule_retry(
                         session,
                         delay_base_ms=self.workflow.agent.max_turns_retry_delay_ms,
@@ -3024,9 +3043,7 @@ class Orchestrator:
                         'rate limit circuit open',
                     )
                     self._registry.mark_failed(session.issue.id or '')
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     await self._schedule_retry(
                         session,
                         delay_base_ms=backoff_s,
@@ -3059,9 +3076,7 @@ class Orchestrator:
                         getattr(session, 'session_end_summary', '') or str(session.status),
                     )
                     self._registry.mark_failed(session.issue.id or '')
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     # No retry — same agent will likely repeat the
                     # same loop on retry without human intervention.
                     # The cron tick will mark the issue abandoned on
@@ -3083,9 +3098,7 @@ class Orchestrator:
                         'cancelled by operator',
                     )
                     self._registry.mark_failed(session.issue.id or '')
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     # Do NOT schedule retry — operator explicitly cancelled.
                 else:
                     self.status_dashboard.on_session_failed(
@@ -3110,9 +3123,7 @@ class Orchestrator:
                         ),
                     )
                     self._registry.mark_failed(session.issue.id or '')
-                    await self._sync_tracker_issue_state(
-                        session.issue.id or '', 'failed'
-                    )
+                    await self._sync_tracker_issue_state(session.issue.id or '', 'failed')
                     # Schedule retry
                     await self._schedule_retry(session)
 

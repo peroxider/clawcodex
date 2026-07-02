@@ -30,18 +30,18 @@ logger = logging.getLogger(__name__)
 def _resolve_env_value(value: str | None) -> str | None:
     if value is None:
         return None
-    if value.startswith("$"):
+    if value.startswith('$'):
         env_name = value[1:]
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", env_name):
+        if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', env_name):
             env_value = os.environ.get(env_name)
-            if env_value is None or env_value == "":
+            if env_value is None or env_value == '':
                 return None
             return env_value
     return value
 
 
 def _normalize_secret_value(value: str | None) -> str | None:
-    if value is None or value == "":
+    if value is None or value == '':
         return None
     return value
 
@@ -50,7 +50,7 @@ def _expand_path(value: str | None, fallback: str) -> str:
     if not value:
         return fallback
     resolved = _resolve_env_value(value)
-    if resolved is None or resolved == "":
+    if resolved is None or resolved == '':
         return fallback
     return os.path.expanduser(resolved)
 
@@ -62,7 +62,7 @@ def _normalize_keys(value: Any, *, _inside_env: bool = False) -> Any:
             key = str(k) if _inside_env else str(k).lower()
             # Env var names are case-sensitive; preserve them under any
             # ``env`` key while continuing to normalize all other keys.
-            next_inside_env = _inside_env or (not _inside_env and key == "env")
+            next_inside_env = _inside_env or (not _inside_env and key == 'env')
             result[key] = _normalize_keys(v, _inside_env=next_inside_env)
         return result
     if isinstance(value, list):
@@ -106,13 +106,13 @@ def _normalize_string_list(value: Any, default: list[str]) -> list[str]:
 
 
 def _normalize_workspace_strategy(value: Any) -> str:
-    strategy = str(value or "isolated").strip().lower()
-    if strategy not in {"isolated", "shared", "sequential"}:
-        raise ValueError("workspace.strategy must be one of: isolated, shared, sequential")
+    strategy = str(value or 'isolated').strip().lower()
+    if strategy not in {'isolated', 'shared', 'sequential'}:
+        raise ValueError('workspace.strategy must be one of: isolated, shared, sequential')
     return strategy
 
 
-def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
+def _parse_modes_config(raw: dict[str, Any]) -> 'ModesConfig':
     """Build a ``ModesConfig`` from the parsed ``modes`` YAML section.
 
     Tolerant of:
@@ -120,96 +120,78 @@ def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
     * unknown router kinds → coerced to ``"none"``
     * malformed ``min_confidence`` → coerced to default ``0.5``
     """
-    router_raw = raw.get("router") or {}
-    pipeline_raw = raw.get("pipeline") or {}
-    debate_raw = raw.get("debate") or {}
+    router_raw = raw.get('router') or {}
+    pipeline_raw = raw.get('pipeline') or {}
+    debate_raw = raw.get('debate') or {}
 
-    router_kind = str(router_raw.get("kind", "none")).strip().lower()
-    if router_kind not in {"none", "heuristic", "llm"}:
+    router_kind = str(router_raw.get('kind', 'none')).strip().lower()
+    if router_kind not in {'none', 'heuristic', 'llm'}:
         logger.warning(
             "modes.router.kind=%r is unknown — falling back to 'none'",
             router_kind,
         )
-        router_kind = "none"
+        router_kind = 'none'
 
     try:
-        min_conf = float(router_raw.get("min_confidence", 0.5))
+        min_conf = float(router_raw.get('min_confidence', 0.5))
     except (TypeError, ValueError):
         min_conf = 0.5
     min_conf = max(0.0, min(1.0, min_conf))
 
     try:
-        router_timeout = float(router_raw.get("timeout_seconds", 15.0))
+        router_timeout = float(router_raw.get('timeout_seconds', 15.0))
     except (TypeError, ValueError):
         router_timeout = 15.0
     router_timeout = max(1.0, router_timeout)
 
-    pipeline_handoff = str(pipeline_raw.get("handoff", "prompt")).strip().lower()
-    if pipeline_handoff not in {"prompt", "mailbox"}:
+    pipeline_handoff = str(pipeline_raw.get('handoff', 'prompt')).strip().lower()
+    if pipeline_handoff not in {'prompt', 'mailbox'}:
         logger.warning(
             "modes.pipeline.handoff=%r is unknown — falling back to 'prompt'",
             pipeline_handoff,
         )
-        pipeline_handoff = "prompt"
+        pipeline_handoff = 'prompt'
 
     return ModesConfig(
-        enabled=_normalize_string_list(raw.get("enabled"), default=["single"]),
-        default=str(raw.get("default", "single")).strip().lower() or "single",
+        enabled=_normalize_string_list(raw.get('enabled'), default=['single']),
+        default=str(raw.get('default', 'single')).strip().lower() or 'single',
         router_kind=router_kind,
         router_model=(
-            str(router_raw.get("model", "deepseek-v4-flash")).strip()
-            or "deepseek-v4-flash"
+            str(router_raw.get('model', 'deepseek-v4-flash')).strip() or 'deepseek-v4-flash'
         ),
         router_endpoint=(
-            str(
-                router_raw.get(
-                    "endpoint", "https://api.deepseek.com/chat/completions"
-                )
-            ).strip()
-            or "https://api.deepseek.com/chat/completions"
+            str(router_raw.get('endpoint', 'https://api.deepseek.com/chat/completions')).strip()
+            or 'https://api.deepseek.com/chat/completions'
         ),
         router_api_key_env=(
-            str(router_raw.get("api_key_env", "DEEPSEEK_API_KEY")).strip()
-            or "DEEPSEEK_API_KEY"
+            str(router_raw.get('api_key_env', 'DEEPSEEK_API_KEY')).strip() or 'DEEPSEEK_API_KEY'
         ),
         router_timeout_seconds=router_timeout,
         router_min_confidence=min_conf,
         pipeline_stages=_normalize_string_list(
-            pipeline_raw.get("stages"),
-            default=["analyzer", "implementer", "tester"],
+            pipeline_raw.get('stages'),
+            default=['analyzer', 'implementer', 'tester'],
         ),
         pipeline_max_retries_per_stage=max(
-            0, int(pipeline_raw.get("max_retries_per_stage", 1) or 0)
+            0, int(pipeline_raw.get('max_retries_per_stage', 1) or 0)
         ),
-        pipeline_stage_models=_normalize_model_map(
-            pipeline_raw.get("stage_models")
-        ),
+        pipeline_stage_models=_normalize_model_map(pipeline_raw.get('stage_models')),
         pipeline_stage_max_turns=_normalize_int_map(
-            pipeline_raw.get("stage_max_turns"), min_value=1
+            pipeline_raw.get('stage_max_turns'), min_value=1
         ),
-        pipeline_stage_specs=_normalize_stage_specs(
-            pipeline_raw.get("stage_specs")
-        ),
+        pipeline_stage_specs=_normalize_stage_specs(pipeline_raw.get('stage_specs')),
         pipeline_handoff=pipeline_handoff,
         debate_proposers=_normalize_string_list(
-            debate_raw.get("proposers"),
-            default=["proposer_a", "proposer_b"],
+            debate_raw.get('proposers'),
+            default=['proposer_a', 'proposer_b'],
         ),
         debate_judge_model=(
-            str(debate_raw["judge_model"]).strip()
-            if debate_raw.get("judge_model")
-            else None
+            str(debate_raw['judge_model']).strip() if debate_raw.get('judge_model') else None
         ),
-        debate_proposer_models=_normalize_model_map(
-            debate_raw.get("proposer_models")
-        ),
-        debate_isolation=_normalize_debate_isolation(
-            debate_raw.get("isolation", "reset")
-        ),
-        debate_parallel=bool(debate_raw.get("parallel", False)),
-        debate_judge_mode=_normalize_debate_judge_mode(
-            debate_raw.get("judge_mode", "pick")
-        ),
+        debate_proposer_models=_normalize_model_map(debate_raw.get('proposer_models')),
+        debate_isolation=_normalize_debate_isolation(debate_raw.get('isolation', 'reset')),
+        debate_parallel=bool(debate_raw.get('parallel', False)),
+        debate_judge_mode=_normalize_debate_judge_mode(debate_raw.get('judge_mode', 'pick')),
     )
 
 
@@ -251,39 +233,39 @@ def _normalize_stage_specs(value: Any) -> dict[str, dict[str, Any]]:
     """
     if not isinstance(value, dict):
         return {}
-    allowed_kinds = {"agent", "debate", "coordinator"}
+    allowed_kinds = {'agent', 'debate', 'coordinator'}
     out: dict[str, dict[str, Any]] = {}
     for stage_name, spec in value.items():
         if not isinstance(spec, dict):
             logger.warning(
-                "modes.pipeline.stage_specs[%r] is not a dict — ignored",
+                'modes.pipeline.stage_specs[%r] is not a dict — ignored',
                 stage_name,
             )
             continue
-        kind = str(spec.get("kind", "agent")).strip().lower()
+        kind = str(spec.get('kind', 'agent')).strip().lower()
         if kind not in allowed_kinds:
             logger.warning(
-                "modes.pipeline.stage_specs[%r].kind=%r not in %s — ignored",
+                'modes.pipeline.stage_specs[%r].kind=%r not in %s — ignored',
                 stage_name,
                 kind,
                 sorted(allowed_kinds),
             )
             continue
-        config = spec.get("config") or {}
+        config = spec.get('config') or {}
         if not isinstance(config, dict):
             config = {}
-        out[str(stage_name).strip()] = {"kind": kind, "config": dict(config)}
+        out[str(stage_name).strip()] = {'kind': kind, 'config': dict(config)}
     return out
 
 
 def _normalize_debate_judge_mode(value: Any) -> str:
-    candidate = str(value or "pick").strip().lower()
-    if candidate not in {"pick", "synthesize"}:
+    candidate = str(value or 'pick').strip().lower()
+    if candidate not in {'pick', 'synthesize'}:
         logger.warning(
             "modes.debate.judge_mode=%r is unknown — falling back to 'pick'",
             candidate,
         )
-        return "pick"
+        return 'pick'
     return candidate
 
 
@@ -300,20 +282,20 @@ def _normalize_model_map(value: Any) -> dict[str, str]:
     out: dict[str, str] = {}
     for k, v in value.items():
         key = str(k).strip()
-        val = str(v).strip() if v is not None else ""
+        val = str(v).strip() if v is not None else ''
         if key and val:
             out[key] = val
     return out
 
 
 def _normalize_debate_isolation(value: Any) -> str:
-    candidate = str(value or "reset").strip().lower()
-    if candidate not in {"reset", "worktree", "none"}:
+    candidate = str(value or 'reset').strip().lower()
+    if candidate not in {'reset', 'worktree', 'none'}:
         logger.warning(
             "modes.debate.isolation=%r is unknown — falling back to 'reset'",
             candidate,
         )
-        return "reset"
+        return 'reset'
     return candidate
 
 
@@ -333,22 +315,22 @@ def _resolve_orchestrator_permission_mode(
     Explicit non-default values are preserved so users can opt back into a
     more restrictive mode if needed.
     """
-    raw = str(raw_value).strip() if raw_value else "dontAsk"
+    raw = str(raw_value).strip() if raw_value else 'dontAsk'
     canonical_modes = {
-        "acceptedits": "acceptEdits",
-        "bypasspermissions": "bypassPermissions",
-        "default": "default",
-        "dontask": "dontAsk",
-        "plan": "plan",
+        'acceptedits': 'acceptEdits',
+        'bypasspermissions': 'bypassPermissions',
+        'default': 'default',
+        'dontask': 'dontAsk',
+        'plan': 'plan',
     }
     normalized = canonical_modes.get(raw.lower(), raw)
-    if is_orchestrator and normalized == "dontAsk":
-        return "bypassPermissions"
+    if is_orchestrator and normalized == 'dontAsk':
+        return 'bypassPermissions'
     return normalized
 
 
 def _default_tmp_workspace() -> str:
-    return os.path.join(os.environ.get("TMPDIR", "/tmp"), "symphony_workspaces")
+    return os.path.join(os.environ.get('TMPDIR', '/tmp'), 'symphony_workspaces')
 
 
 # ---------------------------------------------------------------------------
@@ -358,8 +340,8 @@ def _default_tmp_workspace() -> str:
 
 @dataclass
 class TrackerConfig:
-    kind: str = "linear"
-    endpoint: str = "https://api.linear.app/graphql"
+    kind: str = 'linear'
+    endpoint: str = 'https://api.linear.app/graphql'
     api_key: str | None = None
     project_slug: str | None = None
     owner: str | None = None
@@ -368,14 +350,14 @@ class TrackerConfig:
     assignee: str | None = None
     branch_prefix: str | None = None
     issues_path: str | None = None
-    active_states: list[str] = field(default_factory=lambda: ["Todo", "In Progress"])
+    active_states: list[str] = field(default_factory=lambda: ['Todo', 'In Progress'])
     terminal_states: list[str] = field(
         default_factory=lambda: [
-            "Closed",
-            "Cancelled",
-            "Canceled",
-            "Duplicate",
-            "Done",
+            'Closed',
+            'Cancelled',
+            'Canceled',
+            'Duplicate',
+            'Done',
         ]
     )
     # Issues carrying any of these labels (case-insensitive) are
@@ -407,7 +389,7 @@ class WorkspaceConfig:
     git_username: str | None = None
     git_token: str | None = None
     gitignore_patterns: list[str] = field(default_factory=list)
-    strategy: str = "isolated"
+    strategy: str = 'isolated'
     base_branch: str | None = None
     integration_branch: str | None = None
     require_clean_start: bool = True
@@ -428,18 +410,18 @@ class WorkspaceConfig:
     # ``.venv/pyvenv.cfg``). When detection is disabled or fails,
     # the resolver falls back to ``agent.python_executable`` and
     # finally to "no constraint" (the agent uses PATH ``python3``).
-    python_executable: str = ""
+    python_executable: str = ''
     python_auto_detect: bool = True
     # Ordered list of relative paths to probe for python interpreter
     # hints. The first match wins. Default probes cover pyenv, venv,
     # uv/poetry virtualenvs, pipenv, and conda env files.
     python_detect_files: list[str] = field(
         default_factory=lambda: [
-            ".python-version",
-            "pyvenv.cfg",
-            ".venv/pyvenv.cfg",
-            "Pipfile",
-            "environment.yml",
+            '.python-version',
+            'pyvenv.cfg',
+            '.venv/pyvenv.cfg',
+            'Pipfile',
+            'environment.yml',
         ]
     )
 
@@ -466,11 +448,11 @@ class AgentConfig:
     max_turns_retry_delay_ms: int = 30_000
     max_concurrent_agents_by_state: dict[str, int] = field(default_factory=dict)
     # NEW: ClawCodex-specific fields
-    provider: str = "anthropic"
-    permission_mode: str = "dontAsk"
-    test_command: str = ""
-    build_command: str = ""
-    lint_command: str = ""
+    provider: str = 'anthropic'
+    permission_mode: str = 'dontAsk'
+    test_command: str = ''
+    build_command: str = ''
+    lint_command: str = ''
     verification: VerificationConfig = field(default_factory=VerificationConfig)
     # F-39 Sub-F: rate limit on operator-driven retries. When an
     # issue's `IssueRecord.retry_count` reaches this value, the
@@ -585,7 +567,7 @@ class AgentConfig:
     # hunting for the right interpreter. Replace the
     # previously-hardcoded `/root/Conda/bin/python3` in
     # ``PromptBuilder.build_continuation_prompt``.
-    python_executable: str = ""
+    python_executable: str = ''
     # Environment variables injected into every Bash subprocess
     # spawned by the agent and every verification/hook subprocess
     # spawned by the orchestrator. Values override inherited daemon
@@ -595,17 +577,17 @@ class AgentConfig:
 
 @dataclass
 class SandboxConfig:
-    command: str = ""
+    command: str = ''
     approval_policy: str | dict[str, Any] = field(
         default_factory=lambda: {
-            "reject": {
-                "sandbox_approval": True,
-                "rules": True,
-                "mcp_elicitations": True,
+            'reject': {
+                'sandbox_approval': True,
+                'rules': True,
+                'mcp_elicitations': True,
             }
         }
     )
-    thread_sandbox: str = "workspace-write"
+    thread_sandbox: str = 'workspace-write'
     turn_sandbox_policy: dict[str, Any] | None = None
     turn_timeout_ms: int = 3_600_000
     read_timeout_ms: int = 5_000
@@ -627,7 +609,7 @@ class HooksConfig:
 @dataclass
 class ReviewFeedbackConfig:
     enabled: bool = False
-    mode: str = "manual"
+    mode: str = 'manual'
     poll_interval_ms: int = 60_000
     max_feedback_items_per_run: int = 20
     include_ci_failures: bool = True
@@ -649,7 +631,7 @@ class ObservabilityConfig:
 @dataclass
 class ServerConfig:
     port: int | None = None
-    host: str = "127.0.0.1"
+    host: str = '127.0.0.1'
 
 
 @dataclass
@@ -680,16 +662,16 @@ class ModesConfig:
     workflow.md without crashing.
     """
 
-    enabled: list[str] = field(default_factory=lambda: ["single"])
-    default: str = "single"
-    router_kind: str = "none"            # "none" | "heuristic" | "llm"
-    router_model: str = "deepseek-v4-flash"  # only consulted when router_kind=="llm"
-    router_endpoint: str = "https://api.deepseek.com/chat/completions"
-    router_api_key_env: str = "DEEPSEEK_API_KEY"
+    enabled: list[str] = field(default_factory=lambda: ['single'])
+    default: str = 'single'
+    router_kind: str = 'none'  # "none" | "heuristic" | "llm"
+    router_model: str = 'deepseek-v4-flash'  # only consulted when router_kind=="llm"
+    router_endpoint: str = 'https://api.deepseek.com/chat/completions'
+    router_api_key_env: str = 'DEEPSEEK_API_KEY'
     router_timeout_seconds: float = 15.0
     router_min_confidence: float = 0.5
     pipeline_stages: list[str] = field(
-        default_factory=lambda: ["analyzer", "implementer", "tester"]
+        default_factory=lambda: ['analyzer', 'implementer', 'tester']
     )
     # Stage retry: how many times PipelineModeRunner will re-attempt a
     # stage that exited with a terminal-failure status before aborting
@@ -730,10 +712,8 @@ class ModesConfig:
     #   "mailbox" — each stage SendMessage(to=<next stage>); next stage Reads
     #               its mailbox first. Uses the existing team.json /
     #               SendMessage infra from the Coordinator mode work.
-    pipeline_handoff: str = "prompt"
-    debate_proposers: list[str] = field(
-        default_factory=lambda: ["proposer_a", "proposer_b"]
-    )
+    pipeline_handoff: str = 'prompt'
+    debate_proposers: list[str] = field(default_factory=lambda: ['proposer_a', 'proposer_b'])
     # Optional stronger model for the judge stage. None = use the
     # workflow's default agent.model (same as proposers). Set to e.g.
     # "deepseek-v4" to upgrade just the judging step.
@@ -744,7 +724,7 @@ class ModesConfig:
     #                  hybrid solution, citing which proposer contributed
     #                  each piece. Better fit when both proposals have
     #                  genuine merits and you don't have to pick one.
-    debate_judge_mode: str = "pick"
+    debate_judge_mode: str = 'pick'
     # Per-proposer model overrides — only honored in sequential mode.
     # In parallel mode (see debate_parallel) all proposers share the
     # workflow default model to avoid concurrent env mutations.
@@ -753,7 +733,7 @@ class ModesConfig:
     #   "reset"    — git reset --hard + git clean (default; cheap, single dir)
     #   "worktree" — git worktree add per proposer (real physical isolation)
     #   "none"     — no isolation (proposer A's edits leak to proposer B)
-    debate_isolation: str = "reset"
+    debate_isolation: str = 'reset'
     # Parallel proposers (asyncio.gather). Requires isolation=worktree
     # so each parallel branch has its own physical workspace. When False
     # (default), proposers run sequentially.
@@ -763,6 +743,18 @@ class ModesConfig:
 # ---------------------------------------------------------------------------
 # Top-level WorkflowConfig
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class RulesConfig:
+    """F-121: configuration for learned rule extraction from PR review feedback."""
+
+    enabled: bool = False
+    path: str = ''
+    max_rules: int = 20
+    similarity_threshold: float = 0.85
+    enhancement_threshold: float = 0.70
+    min_confidence: str = 'low'
 
 
 @dataclass
@@ -788,7 +780,7 @@ class PrConflictScanConfig:
     max_prs_per_scan: int = 25
     use_force_push: bool = False  # corresponds to CLI --force
     bot_login: str | None = None
-    scan_states: tuple[str, ...] = ("open",)
+    scan_states: tuple[str, ...] = ('open',)
 
 
 @dataclass
@@ -801,167 +793,169 @@ class WorkflowConfig:
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
+    rules: RulesConfig = field(default_factory=RulesConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    rules: RulesConfig = field(default_factory=RulesConfig)
     modes: ModesConfig = field(default_factory=ModesConfig)
-    pr_conflict_scan: "PrConflictScanConfig" = field(
-        default_factory=lambda: PrConflictScanConfig()
-    )
+    pr_conflict_scan: 'PrConflictScanConfig' = field(default_factory=lambda: PrConflictScanConfig())
+    source_path: str = ''
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "WorkflowConfig":
+    def from_dict(cls, raw: dict[str, Any]) -> 'WorkflowConfig':
         """Build from a raw dict (already parsed YAML front matter)."""
         raw = _normalize_keys(_drop_nil_values(raw))
 
-        tracker_raw = raw.get("tracker", {})
-        polling_raw = raw.get("polling", {})
-        workspace_raw = raw.get("workspace", {})
-        worker_raw = raw.get("worker", {})
-        agent_raw = raw.get("agent", {})
-        codex_raw = raw.get("sandbox", {})
-        hooks_raw = raw.get("hooks", {})
-        review_feedback_raw = raw.get("review_feedback", {})
-        observability_raw = raw.get("observability", {})
-        server_raw = raw.get("server", {})
-        modes_raw = raw.get("modes", {}) or {}
-        pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
+        tracker_raw = raw.get('tracker', {})
+        polling_raw = raw.get('polling', {})
+        workspace_raw = raw.get('workspace', {})
+        worker_raw = raw.get('worker', {})
+        agent_raw = raw.get('agent', {})
+        codex_raw = raw.get('sandbox') or raw.get('codex') or {}
+        hooks_raw = raw.get('hooks', {})
+        review_feedback_raw = raw.get('review_feedback', {})
+        rules_raw = raw.get('rules', {})
+        modes_raw = raw.get('modes', {}) or {}
+        observability_raw = raw.get('observability', {})
+        server_raw = raw.get('server', {})
+        pr_conflict_scan_raw = raw.get('pr_conflict_scan', {})
 
-        tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
+        tracker_kind = normalize_tracker_kind(tracker_raw.get('kind', 'linear'))
         tracker_info = tracker_kind_info(tracker_kind)
         tracker_active_states = _normalize_string_list(
-            tracker_raw.get("active_states"),
+            tracker_raw.get('active_states'),
             default_active_states_for_kind(tracker_kind),
         )
         tracker_terminal_states = _normalize_string_list(
-            tracker_raw.get("terminal_states"),
+            tracker_raw.get('terminal_states'),
             default_terminal_states_for_kind(tracker_kind),
         )
         tracker_skip_labels = _normalize_string_list(
-            tracker_raw.get("skip_labels"),
+            tracker_raw.get('skip_labels'),
             [],
         )
         tracker_require_any_labels = _normalize_string_list(
-            tracker_raw.get("require_any_labels"),
+            tracker_raw.get('require_any_labels'),
             [],
         )
 
         tracker = TrackerConfig(
             kind=tracker_kind,
-            endpoint=_resolve_env_value(tracker_raw.get("endpoint"))
+            endpoint=_resolve_env_value(tracker_raw.get('endpoint'))
             or tracker_info.default_endpoint,
-            api_key=_normalize_secret_value(_resolve_env_value(tracker_raw.get("api_key")))
+            api_key=_normalize_secret_value(_resolve_env_value(tracker_raw.get('api_key')))
             or _resolve_first_env(tracker_info.api_key_env_vars),
-            project_slug=tracker_raw.get("project_slug"),
-            owner=_resolve_env_value(tracker_raw.get("owner"))
+            project_slug=tracker_raw.get('project_slug'),
+            owner=_resolve_env_value(tracker_raw.get('owner'))
             or _resolve_first_env(tracker_info.owner_env_vars),
-            repo=_resolve_env_value(tracker_raw.get("repo"))
+            repo=_resolve_env_value(tracker_raw.get('repo'))
             or _resolve_first_env(tracker_info.repo_env_vars),
-            clone_url=_resolve_env_value(tracker_raw.get("clone_url")),
-            assignee=_resolve_env_value(tracker_raw.get("assignee"))
+            clone_url=_resolve_env_value(tracker_raw.get('clone_url')),
+            assignee=_resolve_env_value(tracker_raw.get('assignee'))
             or _resolve_first_env(tracker_info.assignee_env_vars),
-            branch_prefix=_resolve_env_value(tracker_raw.get("branch_prefix")),
-            issues_path=_normalize_secret_value(_expand_path(tracker_raw.get("issues_path"), "")),
+            branch_prefix=_resolve_env_value(tracker_raw.get('branch_prefix')),
+            issues_path=_normalize_secret_value(_expand_path(tracker_raw.get('issues_path'), '')),
             active_states=tracker_active_states,
             terminal_states=tracker_terminal_states,
             skip_labels=tracker_skip_labels,
             require_any_labels=tracker_require_any_labels,
         )
 
-        workspace_root = _expand_path(workspace_raw.get("root"), _default_tmp_workspace())
-        workspace_strategy = _normalize_workspace_strategy(workspace_raw.get("strategy"))
+        workspace_root = _expand_path(workspace_raw.get('root'), _default_tmp_workspace())
+        workspace_strategy = _normalize_workspace_strategy(workspace_raw.get('strategy'))
         workspace = WorkspaceConfig(
             root=workspace_root,
-            hooks=workspace_raw.get("hooks", {}),
-            repo_clone_url=_resolve_env_value(workspace_raw.get("repo_clone_url")),
-            clone_depth=workspace_raw.get("clone_depth", 1),
-            checkout_issue_branch=workspace_raw.get("checkout_issue_branch", True),
-            git_username=_resolve_env_value(workspace_raw.get("git_username")),
-            git_token=_normalize_secret_value(_resolve_env_value(workspace_raw.get("git_token"))),
+            hooks=workspace_raw.get('hooks', {}),
+            repo_clone_url=_resolve_env_value(workspace_raw.get('repo_clone_url')),
+            clone_depth=workspace_raw.get('clone_depth', 1),
+            checkout_issue_branch=workspace_raw.get('checkout_issue_branch', True),
+            git_username=_resolve_env_value(workspace_raw.get('git_username')),
+            git_token=_normalize_secret_value(_resolve_env_value(workspace_raw.get('git_token'))),
             gitignore_patterns=workspace_raw.get(
-                "gitignore_patterns",
+                'gitignore_patterns',
                 [
-                    ".orchestrator_control",
-                    ".operator_hints.md",
-                    ".reports",
-                    "*.pyc",
-                    "__pycache__",
-                    "*.egg-info",
-                    ".pytest_cache",
-                    ".mypy_cache",
-                    ".ruff_cache",
-                    "*.log",
+                    '.orchestrator_control',
+                    '.operator_hints.md',
+                    '.reports',
+                    '*.pyc',
+                    '__pycache__',
+                    '*.egg-info',
+                    '.pytest_cache',
+                    '.mypy_cache',
+                    '.ruff_cache',
+                    '*.log',
                 ],
             ),
             strategy=workspace_strategy,
-            base_branch=_resolve_env_value(workspace_raw.get("base_branch")),
-            integration_branch=_resolve_env_value(workspace_raw.get("integration_branch")),
-            require_clean_start=bool(workspace_raw.get("require_clean_start", True)),
+            base_branch=_resolve_env_value(workspace_raw.get('base_branch')),
+            integration_branch=_resolve_env_value(workspace_raw.get('integration_branch')),
+            require_clean_start=bool(workspace_raw.get('require_clean_start', True)),
             require_clean_between_issues=bool(
-                workspace_raw.get("require_clean_between_issues", True)
+                workspace_raw.get('require_clean_between_issues', True)
             ),
-            preserve_on_terminal=bool(workspace_raw.get("preserve_on_terminal", True)),
-            preserve_on_failure=bool(workspace_raw.get("preserve_on_failure", True)),
-            preserve_on_abandoned=bool(workspace_raw.get("preserve_on_abandoned", True)),
-            preserve_on_timeout=bool(workspace_raw.get("preserve_on_timeout", True)),
-            sequential_lock=bool(workspace_raw.get("sequential_lock", True)),
+            preserve_on_terminal=bool(workspace_raw.get('preserve_on_terminal', True)),
+            preserve_on_failure=bool(workspace_raw.get('preserve_on_failure', True)),
+            preserve_on_abandoned=bool(workspace_raw.get('preserve_on_abandoned', True)),
+            preserve_on_timeout=bool(workspace_raw.get('preserve_on_timeout', True)),
+            sequential_lock=bool(workspace_raw.get('sequential_lock', True)),
         )
 
-        verification_raw = agent_raw.get("verification", {})
+        verification_raw = agent_raw.get('verification', {})
         # Multi-model stage overrides: parse agent.stages YAML dict.
-        stages_raw = agent_raw.get("stages", {}) or {}
+        stages_raw = agent_raw.get('stages', {}) or {}
         stage_overrides: dict[str, dict[str, Any]] = {}
         for stage_name, stage_cfg in stages_raw.items():
             if not isinstance(stage_cfg, dict):
                 continue
             override: dict[str, Any] = {}
-            provider = _resolve_env_value(stage_cfg.get("provider"))
-            model = _resolve_env_value(stage_cfg.get("model"))
+            provider = _resolve_env_value(stage_cfg.get('provider'))
+            model = _resolve_env_value(stage_cfg.get('model'))
             if provider:
-                override["provider"] = provider
+                override['provider'] = provider
             if model:
-                override["model"] = model
+                override['model'] = model
             if override:
                 stage_overrides[stage_name] = override
         agent = AgentConfig(
-            max_concurrent_agents=agent_raw.get("max_concurrent_agents", 10),
-            max_turns=agent_raw.get("max_turns", 600),
-            max_retry_backoff_ms=agent_raw.get("max_retry_backoff_ms", 300_000),
-            max_retry_attempts=agent_raw.get("max_retry_attempts", 5),
-            max_turns_retry_delay_ms=agent_raw.get("max_turns_retry_delay_ms", 30_000),
+            max_concurrent_agents=agent_raw.get('max_concurrent_agents', 10),
+            max_turns=agent_raw.get('max_turns', 600),
+            max_retry_backoff_ms=agent_raw.get('max_retry_backoff_ms', 300_000),
+            max_retry_attempts=agent_raw.get('max_retry_attempts', 5),
+            max_turns_retry_delay_ms=agent_raw.get('max_turns_retry_delay_ms', 30_000),
             max_concurrent_agents_by_state=_normalize_state_limits(
-                agent_raw.get("max_concurrent_agents_by_state")
+                agent_raw.get('max_concurrent_agents_by_state')
             ),
-            provider=agent_raw.get("provider", "anthropic"),
+            provider=agent_raw.get('provider', 'anthropic'),
             permission_mode=_resolve_orchestrator_permission_mode(
-                agent_raw.get("permission_mode"),
+                agent_raw.get('permission_mode'),
                 is_orchestrator=bool(tracker_raw),
             ),
-            test_command=_resolve_env_value(agent_raw.get("test_command")) or "",
-            build_command=_resolve_env_value(agent_raw.get("build_command")) or "",
-            lint_command=_resolve_env_value(agent_raw.get("lint_command")) or "",
-            verification=VerificationConfig(timeout_ms=verification_raw.get("timeout_ms", 600_000)),
+            test_command=_resolve_env_value(agent_raw.get('test_command')) or '',
+            build_command=_resolve_env_value(agent_raw.get('build_command')) or '',
+            lint_command=_resolve_env_value(agent_raw.get('lint_command')) or '',
+            verification=VerificationConfig(timeout_ms=verification_raw.get('timeout_ms', 600_000)),
             # F-39 Sub-F
-            max_retries_per_issue=agent_raw.get("max_retries_per_issue", 3),
-            allow_anyone_to_retry=bool(agent_raw.get("allow_anyone_to_retry", False)),
+            max_retries_per_issue=agent_raw.get('max_retries_per_issue', 3),
+            allow_anyone_to_retry=bool(agent_raw.get('allow_anyone_to_retry', False)),
             # 429-aware in-turn backoff (see AgentConfig docstring above)
-            rate_limit_base_delay_ms=agent_raw.get("rate_limit_base_delay_ms", 30_000),
-            rate_limit_max_backoff_ms=agent_raw.get("rate_limit_max_backoff_ms", 600_000),
+            rate_limit_base_delay_ms=agent_raw.get('rate_limit_base_delay_ms', 30_000),
+            rate_limit_max_backoff_ms=agent_raw.get('rate_limit_max_backoff_ms', 600_000),
             rate_limit_exponential_factor=float(
-                agent_raw.get("rate_limit_exponential_factor", 2.0)
+                agent_raw.get('rate_limit_exponential_factor', 2.0)
             ),
-            rate_limit_max_retries=agent_raw.get("rate_limit_max_retries", 40),
-            delay_between_requests_ms=agent_raw.get("delay_between_requests_ms", 2000),
-            run_timeout_ms=agent_raw.get("run_timeout_ms", 1_800_000),
+            rate_limit_max_retries=agent_raw.get('rate_limit_max_retries', 40),
+            delay_between_requests_ms=agent_raw.get('delay_between_requests_ms', 2000),
+            run_timeout_ms=agent_raw.get('run_timeout_ms', 1_800_000),
             # File-path whitelist gate (see AgentConfig docstring).
             allowed_changed_files=_normalize_string_list(
-                agent_raw.get("allowed_changed_files"), default=[]
+                agent_raw.get('allowed_changed_files'), default=[]
             ),
             # F-44: review gate — when True, sync ends at PENDING_REVIEW
             # instead of COMPLETED, requiring human approve CLI command.
-            review_required=bool(agent_raw.get("review_required", False)),
-            auto_approve=bool(agent_raw.get("auto_approve", False)),
+            review_required=bool(agent_raw.get('review_required', False)),
+            auto_approve=bool(agent_raw.get('auto_approve', False)),
             # MVP multi-agent: coordinator mode toggle (from workflow.md)
-            coordinator_mode=bool(agent_raw.get("coordinator_mode", False)),
+            coordinator_mode=bool(agent_raw.get('coordinator_mode', False)),
             # F-40: named workflow phases drive honest progress
             # percentages in ToolContextProgressSink. ``phases`` is
             # parsed as a list (the YAML ``- a`` / ``- b`` syntax)
@@ -970,114 +964,122 @@ class WorkflowConfig:
             # without crashing the loader. ``fallback_to_phase_step``
             # defaults to ``False`` so new workflows see ``None``
             # instead of misleading 25/50/75/100.
-            phases=_normalize_string_list(agent_raw.get("phases"), default=[]),
-            fallback_to_phase_step=bool(agent_raw.get("fallback_to_phase_step", False)),
+            phases=_normalize_string_list(agent_raw.get('phases'), default=[]),
+            fallback_to_phase_step=bool(agent_raw.get('fallback_to_phase_step', False)),
             # F-40 root-cause fix: stagnation / loop guard knobs.
             # These were defined in AgentConfig (schema.py) and set in
             # workflow.md, but ``from_dict`` never forwarded them to the
             # dataclass constructor, so the schema defaults (3/5/3) were
             # always used regardless of the YAML config.
-            max_no_op_turns=int(agent_raw.get("max_no_op_turns", 3)),
-            loop_detection_window=int(agent_raw.get("loop_detection_window", 5)),
-            loop_detection_threshold=int(agent_raw.get("loop_detection_threshold", 3)),
+            max_no_op_turns=int(agent_raw.get('max_no_op_turns', 3)),
+            loop_detection_window=int(agent_raw.get('loop_detection_window', 5)),
+            loop_detection_threshold=int(agent_raw.get('loop_detection_threshold', 3)),
             # Per-turn tool cap: schema default was 50 but ``from_dict`` did not
             # forward the YAML value, so workflow.md edits were ignored.
-            max_tools_per_turn=int(agent_raw.get("max_tools_per_turn", 50)),
+            max_tools_per_turn=int(agent_raw.get('max_tools_per_turn', 50)),
             # F-40 root-cause fix: model name override.
-            model=_resolve_env_value(agent_raw.get("model")) or None,
+            model=_resolve_env_value(agent_raw.get('model')) or None,
             # Multi-model stage overrides (parsed above).
             stage_overrides=stage_overrides,
             # Per-run env vars merged into Bash/hook subprocess env.
-            env={str(k): str(v) for k, v in (agent_raw.get("env") or {}).items() if v is not None},
+            env={str(k): str(v) for k, v in (agent_raw.get('env') or {}).items() if v is not None},
         )
-        if workspace.strategy == "sequential":
+        if workspace.strategy == 'sequential':
             if agent.max_concurrent_agents != 1:
                 raise ValueError(
-                    "workspace.strategy=sequential requires agent.max_concurrent_agents=1"
+                    'workspace.strategy=sequential requires agent.max_concurrent_agents=1'
                 )
             over_limit_states = [
                 state for state, limit in agent.max_concurrent_agents_by_state.items() if limit > 1
             ]
             if over_limit_states:
                 raise ValueError(
-                    "workspace.strategy=sequential requires all "
-                    "agent.max_concurrent_agents_by_state values to be <= 1"
+                    'workspace.strategy=sequential requires all '
+                    'agent.max_concurrent_agents_by_state values to be <= 1'
                 )
 
         sandbox = SandboxConfig(
-            command=codex_raw.get("command", ""),
-            approval_policy=codex_raw.get("approval_policy", SandboxConfig().approval_policy),
-            thread_sandbox=codex_raw.get("thread_sandbox", "workspace-write"),
-            turn_sandbox_policy=codex_raw.get("turn_sandbox_policy"),
-            turn_timeout_ms=codex_raw.get("turn_timeout_ms", 3_600_000),
-            read_timeout_ms=codex_raw.get("read_timeout_ms", 5_000),
-            stall_timeout_ms=codex_raw.get("stall_timeout_ms", 300_000),
+            command=codex_raw.get('command', ''),
+            approval_policy=codex_raw.get('approval_policy', SandboxConfig().approval_policy),
+            thread_sandbox=codex_raw.get('thread_sandbox', 'workspace-write'),
+            turn_sandbox_policy=codex_raw.get('turn_sandbox_policy'),
+            turn_timeout_ms=codex_raw.get('turn_timeout_ms', 3_600_000),
+            read_timeout_ms=codex_raw.get('read_timeout_ms', 5_000),
+            stall_timeout_ms=codex_raw.get('stall_timeout_ms', 300_000),
         )
 
         hooks = HooksConfig(
-            after_create=_resolve_env_value(hooks_raw.get("after_create")),
-            before_run=_resolve_env_value(hooks_raw.get("before_run")),
-            after_run=_resolve_env_value(hooks_raw.get("after_run")),
-            before_remove=_resolve_env_value(hooks_raw.get("before_remove")),
-            pre_commit=_resolve_env_value(hooks_raw.get("pre_commit")),
-            pre_push=_resolve_env_value(hooks_raw.get("pre_push")),
-            post_sync=_resolve_env_value(hooks_raw.get("post_sync")),
-            timeout_ms=hooks_raw.get("timeout_ms", 60_000),
+            after_create=_resolve_env_value(hooks_raw.get('after_create')),
+            before_run=_resolve_env_value(hooks_raw.get('before_run')),
+            after_run=_resolve_env_value(hooks_raw.get('after_run')),
+            before_remove=_resolve_env_value(hooks_raw.get('before_remove')),
+            pre_commit=_resolve_env_value(hooks_raw.get('pre_commit')),
+            pre_push=_resolve_env_value(hooks_raw.get('pre_push')),
+            post_sync=_resolve_env_value(hooks_raw.get('post_sync')),
+            timeout_ms=hooks_raw.get('timeout_ms', 60_000),
         )
 
         return cls(
             tracker=tracker,
-            polling=PollingConfig(interval_ms=polling_raw.get("interval_ms", 30_000)),
+            polling=PollingConfig(interval_ms=polling_raw.get('interval_ms', 30_000)),
             workspace=workspace,
             worker=WorkerConfig(
-                ssh_hosts=worker_raw.get("ssh_hosts", []),
-                max_concurrent_agents_per_host=worker_raw.get("max_concurrent_agents_per_host"),
+                ssh_hosts=worker_raw.get('ssh_hosts', []),
+                max_concurrent_agents_per_host=worker_raw.get('max_concurrent_agents_per_host'),
             ),
             agent=agent,
             sandbox=sandbox,
             hooks=hooks,
+            rules=RulesConfig(
+                enabled=bool(rules_raw.get('enabled', False)),
+                path=str(rules_raw.get('path', '')).strip(),
+                max_rules=int(rules_raw.get('max_rules', 20)),
+                similarity_threshold=float(rules_raw.get('similarity_threshold', 0.85)),
+                enhancement_threshold=float(rules_raw.get('enhancement_threshold', 0.70)),
+                min_confidence=str(rules_raw.get('min_confidence', 'low')).strip().lower(),
+            ),
             review_feedback=ReviewFeedbackConfig(
-                enabled=bool(review_feedback_raw.get("enabled", False)),
-                mode=str(review_feedback_raw.get("mode", "manual")).strip().lower() or "manual",
-                poll_interval_ms=review_feedback_raw.get("poll_interval_ms", 60_000),
+                enabled=bool(review_feedback_raw.get('enabled', False)),
+                mode=str(review_feedback_raw.get('mode', 'manual')).strip().lower() or 'manual',
+                poll_interval_ms=review_feedback_raw.get('poll_interval_ms', 60_000),
                 max_feedback_items_per_run=review_feedback_raw.get(
-                    "max_feedback_items_per_run", 20
+                    'max_feedback_items_per_run', 20
                 ),
-                include_ci_failures=bool(review_feedback_raw.get("include_ci_failures", True)),
-                reply_to_comments=bool(review_feedback_raw.get("reply_to_comments", True)),
+                include_ci_failures=bool(review_feedback_raw.get('include_ci_failures', True)),
+                reply_to_comments=bool(review_feedback_raw.get('reply_to_comments', True)),
                 ignore_authors=_normalize_string_list(
-                    review_feedback_raw.get("ignore_authors"), []
+                    review_feedback_raw.get('ignore_authors'), []
                 ),
-                bot_login=_resolve_env_value(review_feedback_raw.get("bot_login")),
-                max_log_chars_per_check=review_feedback_raw.get("max_log_chars_per_check", 12_000),
+                bot_login=_resolve_env_value(review_feedback_raw.get('bot_login')),
+                max_log_chars_per_check=review_feedback_raw.get('max_log_chars_per_check', 12_000),
                 max_followup_attempts_per_pr=review_feedback_raw.get(
-                    "max_followup_attempts_per_pr", 5
+                    'max_followup_attempts_per_pr', 5
                 ),
                 pending_feedback_timeout_seconds=review_feedback_raw.get(
-                    "pending_feedback_timeout_seconds", 600
+                    'pending_feedback_timeout_seconds', 600
                 ),
             ),
             observability=ObservabilityConfig(
-                dashboard_enabled=observability_raw.get("dashboard_enabled", True),
-                refresh_ms=observability_raw.get("refresh_ms", 1_000),
-                render_interval_ms=observability_raw.get("render_interval_ms", 16),
+                dashboard_enabled=observability_raw.get('dashboard_enabled', True),
+                refresh_ms=observability_raw.get('refresh_ms', 1_000),
+                render_interval_ms=observability_raw.get('render_interval_ms', 16),
             ),
             server=ServerConfig(
-                port=server_raw.get("port"),
-                host=server_raw.get("host", "127.0.0.1"),
+                port=server_raw.get('port'),
+                host=server_raw.get('host', '127.0.0.1'),
             ),
             modes=_parse_modes_config(modes_raw),
             pr_conflict_scan=PrConflictScanConfig(
-                enabled=bool(pr_conflict_scan_raw.get("enabled", False)),
-                poll_interval_ms=pr_conflict_scan_raw.get("poll_interval_ms", 300_000),
+                enabled=bool(pr_conflict_scan_raw.get('enabled', False)),
+                poll_interval_ms=pr_conflict_scan_raw.get('poll_interval_ms', 300_000),
                 max_rebase_attempts_per_issue=pr_conflict_scan_raw.get(
-                    "max_rebase_attempts_per_issue", 3
+                    'max_rebase_attempts_per_issue', 3
                 ),
-                max_prs_per_scan=pr_conflict_scan_raw.get("max_prs_per_scan", 25),
-                use_force_push=bool(pr_conflict_scan_raw.get("use_force_push", False)),
-                bot_login=_resolve_env_value(pr_conflict_scan_raw.get("bot_login")),
+                max_prs_per_scan=pr_conflict_scan_raw.get('max_prs_per_scan', 25),
+                use_force_push=bool(pr_conflict_scan_raw.get('use_force_push', False)),
+                bot_login=_resolve_env_value(pr_conflict_scan_raw.get('bot_login')),
                 scan_states=tuple(
-                    _normalize_string_list(pr_conflict_scan_raw.get("scan_states"), ["open"])
+                    _normalize_string_list(pr_conflict_scan_raw.get('scan_states'), ['open'])
                 ),
             ),
         )
@@ -1087,12 +1089,12 @@ class WorkflowConfig:
             return self.sandbox.turn_sandbox_policy
         root = workspace_path or self.workspace.root
         return {
-            "type": "workspaceWrite",
-            "writableRoots": [root],
-            "readOnlyAccess": {"type": "fullAccess"},
-            "networkAccess": False,
-            "excludeTmpdirEnvVar": False,
-            "excludeSlashTmp": False,
+            'type': 'workspaceWrite',
+            'writableRoots': [root],
+            'readOnlyAccess': {'type': 'fullAccess'},
+            'networkAccess': False,
+            'excludeTmpdirEnvVar': False,
+            'excludeSlashTmp': False,
         }
 
 

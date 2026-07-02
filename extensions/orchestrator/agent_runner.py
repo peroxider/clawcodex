@@ -58,7 +58,7 @@ def _set_pdeathsig() -> None:
         import ctypes
         import signal as _signal
 
-        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc = ctypes.CDLL('libc.so.6', use_errno=True)
         PR_SET_PDEATHSIG = 1
         libc.prctl(PR_SET_PDEATHSIG, _signal.SIGTERM)
     except Exception:
@@ -96,14 +96,14 @@ _MAX_READ_ONLY_TURNS = 4
 # require deep output analysis that is better done elsewhere.
 _MODIFYING_TOOL_NAMES = frozenset(
     {
-        "Write",
-        "Edit",
-        "FileWrite",
-        "FileWriteTool",
-        "FileEdit",
-        "FileEditTool",
-        "WriteTool",
-        "EditTool",
+        'Write',
+        'Edit',
+        'FileWrite',
+        'FileWriteTool',
+        'FileEdit',
+        'FileEditTool',
+        'WriteTool',
+        'EditTool',
     }
 )
 
@@ -116,33 +116,33 @@ _MODIFYING_TOOL_NAMES = frozenset(
 # breaks after ``max_read_only_turns`` such turns.
 _READ_ONLY_TOOL_NAMES = frozenset(
     {
-        "Read",
-        "Bash",
-        "Grep",
-        "Glob",
-        "WebFetch",
-        "WebSearch",
-        "TodoWrite",
-        "TaskStop",
+        'Read',
+        'Bash',
+        'Grep',
+        'Glob',
+        'WebFetch',
+        'WebSearch',
+        'TodoWrite',
+        'TaskStop',
     }
 )
 
 _ORCHESTRATOR_INTERNAL_PATH_PREFIXES = (
-    ".orchestrator_control/",
-    ".run_control/",
-    ".reports/",
-    ".event_logs/",
+    '.orchestrator_control/',
+    '.run_control/',
+    '.reports/',
+    '.event_logs/',
 )
 _ORCHESTRATOR_INTERNAL_PATHS = frozenset(
-    prefix.rstrip("/") for prefix in _ORCHESTRATOR_INTERNAL_PATH_PREFIXES
+    prefix.rstrip('/') for prefix in _ORCHESTRATOR_INTERNAL_PATH_PREFIXES
 )
 
 
 def _is_orchestrator_internal_path(path: str | None) -> bool:
     if not path:
         return False
-    normalized = path.replace("\\", "/")
-    while normalized.startswith("./"):
+    normalized = path.replace('\\', '/')
+    while normalized.startswith('./'):
         normalized = normalized[2:]
     return normalized in _ORCHESTRATOR_INTERNAL_PATHS or normalized.startswith(
         _ORCHESTRATOR_INTERNAL_PATH_PREFIXES,
@@ -152,8 +152,8 @@ def _is_orchestrator_internal_path(path: str | None) -> bool:
 def _has_user_visible_status_changes(status_entries: list[Any]) -> bool:
     for entry in status_entries:
         paths = (
-            getattr(entry, "path", None),
-            getattr(entry, "original_path", None),
+            getattr(entry, 'path', None),
+            getattr(entry, 'original_path', None),
         )
         if any(path and not _is_orchestrator_internal_path(path) for path in paths):
             return True
@@ -167,15 +167,15 @@ class AgentSession:
     issue: Issue
     workspace: Workspace
     turn_count: int = 0
-    status: str = "running"  # running, completed, failed
-    output_text: str = ""
+    status: str = 'running'  # running, completed, failed
+    output_text: str = ''
     # Lifecycle control
     paused: bool = False
     paused_at: float | None = None
-    pause_reason: str = ""
-    pause_resume_event: "asyncio.Event | None" = None
+    pause_reason: str = ''
+    pause_resume_event: 'asyncio.Event | None' = None
     # Event stream for CLI tail command
-    event_queue: "asyncio.Queue | None" = None
+    event_queue: 'asyncio.Queue | None' = None
     prompt_override: str | None = None
     # F-49 Phase 1: Unix domain socket for live operator control. None if
     # the socket failed to start (or was disabled by configuration). When
@@ -188,7 +188,7 @@ class AgentSession:
     # Phase 2 ``attach`` CLI can discover it via the registry without
     # scanning the workspace tree.
     control_socket_path: str | None = None
-    run_kind: str = "issue"
+    run_kind: str = 'issue'
     run_id: str | None = None
     summary_comment_id: str | None = None
     tool_count: int = 0
@@ -199,7 +199,7 @@ class AgentSession:
     # Initialised by ``AgentRunner.run()`` from
     # ``agent_config.perf_should_continue_skip_turns``. When ``None`` the
     # runner falls back to the pre-F-105 behaviour of always polling.
-    state_cache: "IssueStateCache | None" = None
+    state_cache: 'IssueStateCache | None' = None
     # F-120: list of files git left in conflict state. Populated by
     # ``Orchestrator._prepare_rebase_session`` from
     # ``IssueRecord.conflict_files`` when ``run_kind == "agent_rebase"``.
@@ -219,7 +219,7 @@ class AgentSession:
     # Accumulated assistant text in the current turn (concatenation of all
     # TextDelta events up to the first tool call OR up to SessionComplete
     # if no tool calls were emitted). Reset by _flush_turn_transcript().
-    _transcript_asst_text: str = ""
+    _transcript_asst_text: str = ''
     # Ordered list of ToolUseBlocks for the current turn, preserved in
     # event arrival order so the final AssistantMessage interleaves text
     # and tool_use blocks exactly as the LLM emitted them. Reset by
@@ -261,7 +261,7 @@ class AgentSession:
     # can pass them to ``IssueRegistry.update_report`` instead of
     # silently inheriting ``status="completed"``.
     session_end_reason: str | None = None
-    session_end_summary: str = ""
+    session_end_summary: str = ''
     # F-?? retry context: list of run_ids from previous failed attempts.
     # Populated by orchestrator._launch_issue from the registry; consumed
     # by PromptBuilder.render() to inject a hint into the agent's prompt
@@ -271,8 +271,8 @@ class AgentSession:
     # ``IssueRecord.conflict_files`` so the rebase-resolution prompt
     # can hand them to the agent. ``None`` for non-rebase sessions.
     conflict_files: tuple[str, ...] | None = None
-    _snapshot_provider: str = ""
-    _snapshot_model: str = ""
+    _snapshot_provider: str = ''
+    _snapshot_model: str = ''
 
     def _save_json_snapshot(self) -> None:
         """F-49 Phase 0.4.5: write a ``src.agent.Session``-compatible
@@ -298,7 +298,7 @@ class AgentSession:
             from clawcodex_ext.services.session_storage import SessionStorage
             from clawcodex_ext.types.messages import message_from_dict
 
-            storage: SessionStorage | None = getattr(self, "_transcript_storage", None)
+            storage: SessionStorage | None = getattr(self, '_transcript_storage', None)
             messages = []
             if storage is not None:
                 try:
@@ -330,20 +330,20 @@ class AgentSession:
                 )
 
                 cost_block = {
-                    "total_cost_usd": get_total_cost_usd(),
-                    "total_api_duration": get_total_api_duration(),
-                    "total_api_duration_without_retries": get_total_api_duration_without_retries(),
-                    "total_tool_duration": get_total_tool_duration(),
-                    "total_lines_added": get_total_lines_added(),
-                    "total_lines_removed": get_total_lines_removed(),
-                    "last_duration": _time.time() - get_start_time(),
-                    "model_usage": {
+                    'total_cost_usd': get_total_cost_usd(),
+                    'total_api_duration': get_total_api_duration(),
+                    'total_api_duration_without_retries': get_total_api_duration_without_retries(),
+                    'total_tool_duration': get_total_tool_duration(),
+                    'total_lines_added': get_total_lines_added(),
+                    'total_lines_removed': get_total_lines_removed(),
+                    'last_duration': _time.time() - get_start_time(),
+                    'model_usage': {
                         model: {
-                            "input_tokens": u.input_tokens,
-                            "output_tokens": u.output_tokens,
-                            "cache_creation_input_tokens": u.cache_creation_input_tokens,
-                            "cache_read_input_tokens": u.cache_read_input_tokens,
-                            "cost_usd": u.cost_usd,
+                            'input_tokens': u.input_tokens,
+                            'output_tokens': u.output_tokens,
+                            'cache_creation_input_tokens': u.cache_creation_input_tokens,
+                            'cache_read_input_tokens': u.cache_read_input_tokens,
+                            'cost_usd': u.cost_usd,
                         }
                         for model, u in get_model_usage().items()
                     },
@@ -360,22 +360,22 @@ class AgentSession:
             # already initialised.
             conv = Conversation(messages=messages)
             snapshot_data = {
-                "session_id": self.run_id,
-                "provider": self._snapshot_provider or "",
-                "model": self._snapshot_model or "",
-                "conversation": conv.to_dict(),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "cost": cost_block,
+                'session_id': self.run_id,
+                'provider': self._snapshot_provider or '',
+                'model': self._snapshot_model or '',
+                'conversation': conv.to_dict(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+                'cost': cost_block,
             }
-            session_dir = Path.home() / ".clawcodex" / "sessions" / str(self.run_id)
+            session_dir = Path.home() / '.clawcodex' / 'sessions' / str(self.run_id)
             session_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_path = session_dir / "session.json"
-            with open(snapshot_path, "w", encoding="utf-8") as f:
+            snapshot_path = session_dir / 'session.json'
+            with open(snapshot_path, 'w', encoding='utf-8') as f:
                 _json.dump(snapshot_data, f, indent=2)
         except Exception:
             logger.exception(
-                "F-49 Phase 0.4.5: failed to write .json snapshot run_id=%s",
+                'F-49 Phase 0.4.5: failed to write .json snapshot run_id=%s',
                 self.run_id,
             )
 
@@ -387,10 +387,10 @@ class RetryItem:
     issue_id: str
     attempt: int
     delay_seconds: float
-    identifier: str = ""
-    error: str = ""
+    identifier: str = ''
+    error: str = ''
     worker_host: str | None = None
-    workspace_path: str = ""
+    workspace_path: str = ''
     scheduled_at: float = field(default_factory=time.time)
 
 
@@ -413,9 +413,9 @@ class AgentRunner:
         # ``workflow_config.workspace`` in orchestration.py.
         self.workspace_cfg: WorkspaceConfig = workspace_cfg or WorkspaceConfig()
         self.max_turns = agent_config.max_turns
-        self.max_tools_per_turn = getattr(agent_config, "max_tools_per_turn", 50) or 50
+        self.max_tools_per_turn = getattr(agent_config, 'max_tools_per_turn', 50) or 50
         self._approval_policy: ApprovalPolicy = get_approval_policy(
-            getattr(sandbox_config, "approval_policy", "never") or "never"
+            getattr(sandbox_config, 'approval_policy', 'never') or 'never'
         )
         # Injectable sleep hook for 429 backoff. Tests monkey-patch
         # this with a recording coroutine; production paths use the
@@ -460,19 +460,19 @@ class AgentRunner:
         )
 
         if isinstance(event, TextDelta):
-            return {"content": str(getattr(event, "content", ""))}
+            return {'content': str(getattr(event, 'content', ''))}
         if isinstance(event, ToolCallEvent):
             return {
-                "tool_name": str(getattr(event, "tool_name", "")),
-                "tool_use_id": getattr(event, "tool_use_id", None),
-                "params": dict(getattr(event, "params", {}) or {}),
-                "approved": getattr(event, "_approved", None),
+                'tool_name': str(getattr(event, 'tool_name', '')),
+                'tool_use_id': getattr(event, 'tool_use_id', None),
+                'params': dict(getattr(event, 'params', {}) or {}),
+                'approved': getattr(event, '_approved', None),
             }
         if isinstance(event, ToolResultEvent):
             return {
-                "tool_name": str(getattr(event, "tool_name", "")),
-                "tool_use_id": getattr(event, "tool_use_id", None),
-                "result": dict(getattr(event, "result", {}) or {}),
+                'tool_name': str(getattr(event, 'tool_name', '')),
+                'tool_use_id': getattr(event, 'tool_use_id', None),
+                'result': dict(getattr(event, 'result', {}) or {}),
             }
         return {}
 
@@ -492,22 +492,22 @@ class AgentRunner:
         block the agent run.
         """
         try:
-            run_id = session_context.get("run_id") or "unknown"
-            workspace_path = session_context.get("workspace_path")
+            run_id = session_context.get('run_id') or 'unknown'
+            workspace_path = session_context.get('workspace_path')
             if workspace_path:
-                base_dir = Path(workspace_path) / ".reports"
+                base_dir = Path(workspace_path) / '.reports'
             else:
                 # Fallback: use the user-level path (non-orchestrator
                 # or test contexts where workspace_path is not set).
-                base_dir = Path.home() / ".clawcodex" / "tool-events"
-            log_path = base_dir / f"{run_id}.events.ndjson"
+                base_dir = Path.home() / '.clawcodex' / 'tool-events'
+            log_path = base_dir / f'{run_id}.events.ndjson'
             try:
                 base_dir.mkdir(parents=True, exist_ok=True)
             except Exception:
                 # mkdir may fail in a sandboxed HOME; skip the rest
                 # gracefully so the agent loop is never affected.
                 logger.exception(
-                    "tool-event log mkdir failed run_id=%s path=%s",
+                    'tool-event log mkdir failed run_id=%s path=%s',
                     run_id,
                     base_dir,
                 )
@@ -517,7 +517,7 @@ class AgentRunner:
             # threshold, single backup). v2.14 will add 7-day cleanup.
             try:
                 if log_path.exists() and log_path.stat().st_size >= _TOOL_EVENT_LOG_ROTATE_BYTES:
-                    rotated = log_path.with_name(log_path.name + ".1")
+                    rotated = log_path.with_name(log_path.name + '.1')
                     try:
                         rotated.unlink(missing_ok=True)
                     except Exception:
@@ -527,23 +527,23 @@ class AgentRunner:
                 # Rotation is best-effort — log and continue writing to
                 # the live file. A single oversized file is still better
                 # than a failed write.
-                logger.exception("tool-event log rotate failed path=%s", log_path)
+                logger.exception('tool-event log rotate failed path=%s', log_path)
 
             row = ToolEventLog(
                 tool=event.tool_name,
                 params=event.params,
                 approved=event._approved,
                 deny_reason=event._deny_reason,
-                permission_mode=session_context.get("permission_mode", "unknown"),
-                turn=session_context.get("turn", 0),
+                permission_mode=session_context.get('permission_mode', 'unknown'),
+                turn=session_context.get('turn', 0),
                 session_run_id=run_id,
             )
             try:
-                with open(log_path, "a", encoding="utf-8") as f:
-                    f.write(row.to_json() + "\n")
+                with open(log_path, 'a', encoding='utf-8') as f:
+                    f.write(row.to_json() + '\n')
             except Exception:
                 logger.exception(
-                    "tool-event log append failed run_id=%s path=%s",
+                    'tool-event log append failed run_id=%s path=%s',
                     run_id,
                     log_path,
                 )
@@ -551,7 +551,7 @@ class AgentRunner:
             # Defensive outer guard: never let audit logging break the
             # agent run. The audit log is observable infrastructure, not
             # a correctness gate.
-            logger.exception("tool-event log unexpected failure")
+            logger.exception('tool-event log unexpected failure')
 
     def _flush_turn_transcript(self, session: AgentSession) -> None:
         """F-49 Phase 0.1: emit one AssistantMessage + (optionally) one UserMessage per turn.
@@ -605,7 +605,7 @@ class AgentRunner:
                     result_blocks.append(
                         ToolResultBlock(
                             tool_use_id=use_id,
-                            content="[Tool result missing — internal error]",
+                            content='[Tool result missing — internal error]',
                             is_error=True,
                         )
                     )
@@ -614,12 +614,12 @@ class AgentRunner:
             storage.write_message(
                 create_user_message(
                     content=result_blocks,
-                    origin="tool_result",
+                    origin='tool_result',
                 ),
             )
 
         # --- Reset per-turn buffers.
-        session._transcript_asst_text = ""
+        session._transcript_asst_text = ''
         session._transcript_tool_uses = []
         session._transcript_pending_results = {}
         session._transcript_result_order = []
@@ -655,9 +655,9 @@ class AgentRunner:
         # but is actually a retryable 429.  Check these FIRST so they
         # don't get caught by the broader "token plan" / "quota" match.
         temporary_rate_limit_indicators = (
-            "请稍后重试",  # "please retry later"
-            "当前请求量较高",  # "current request volume is high"
-            "稍后重试",  # "retry later" (shorter variant)
+            '请稍后重试',  # "please retry later"
+            '当前请求量较高',  # "current request volume is high"
+            '稍后重试',  # "retry later" (shorter variant)
         )
         if any(ind in turn_output for ind in temporary_rate_limit_indicators):
             # This is a temporary rate limit, not quota — fall through
@@ -665,18 +665,18 @@ class AgentRunner:
             pass
         else:
             quota_indicators = (
-                "exceeded your current quota",
-                "limit: 0",
-                "token plan",  # MiniMax "Token Plan 主要面向个人开发者"
-                "quota",
+                'exceeded your current quota',
+                'limit: 0',
+                'token plan',  # MiniMax "Token Plan 主要面向个人开发者"
+                'quota',
             )
             if any(ind in low for ind in quota_indicators):
                 return False
         return (
-            "error code: 429" in low
-            or "rate_limit_error" in low
+            'error code: 429' in low
+            or 'rate_limit_error' in low
             or '"type": "rate_limit_error"' in low
-            or "rate limit" in low
+            or 'rate limit' in low
         )
 
     def _dispatch_sink(
@@ -684,7 +684,7 @@ class AgentRunner:
         sink: Any,
         method: str,
         event: Any,
-        session: "AgentSession",
+        session: 'AgentSession',
     ) -> None:
         """Call ``sink.<method>(event, session)`` with logging on failure.
 
@@ -700,7 +700,7 @@ class AgentRunner:
             getattr(sink, method)(event, session)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "progress_sink.%s dispatch failed: %s",
+                'progress_sink.%s dispatch failed: %s',
                 method,
                 exc,
             )
@@ -743,9 +743,9 @@ class AgentRunner:
         max_retries = self.agent_config.rate_limit_max_retries
 
         if session.consecutive_429_count > max_retries:
-            session.status = "rate_limit_circuit_open"
+            session.status = 'rate_limit_circuit_open'
             logger.error(
-                "Rate limit circuit breaker open issue_id=%s consecutive=%d max=%d",
+                'Rate limit circuit breaker open issue_id=%s consecutive=%d max=%d',
                 issue.id,
                 session.consecutive_429_count,
                 max_retries,
@@ -755,9 +755,9 @@ class AgentRunner:
         delay_s = self._compute_rate_limit_backoff(session)
         session.total_429_backoff_seconds += delay_s
         notice = (
-            f"\n[rate-limit] 429 detected "
-            f"(attempt {session.consecutive_429_count}/{max_retries}); "
-            f"sleeping {delay_s:.0f}s before retry\n"
+            f'\n[rate-limit] 429 detected '
+            f'(attempt {session.consecutive_429_count}/{max_retries}); '
+            f'sleeping {delay_s:.0f}s before retry\n'
         )
         session.output_text += notice
 
@@ -773,7 +773,7 @@ class AgentRunner:
                 pass
 
         logger.warning(
-            "Rate limit backoff issue_id=%s attempt=%d delay=%.1fs",
+            'Rate limit backoff issue_id=%s attempt=%d delay=%.1fs',
             issue.id,
             session.consecutive_429_count,
             delay_s,
@@ -786,7 +786,7 @@ class AgentRunner:
         session.rate_limit_pending_turn = turn_number
 
         await self._sleep(delay_s)
-        return "running"
+        return 'running'
 
     async def run(
         self,
@@ -813,8 +813,8 @@ class AgentRunner:
         # exit-callback can write the .json snapshot even when the
         # session has been partially cleaned up or the run aborted via
         # exception / early return.
-        session._snapshot_provider = self.agent_config.provider or ""
-        session._snapshot_model = self.agent_config.model or ""
+        session._snapshot_provider = self.agent_config.provider or ''
+        session._snapshot_model = self.agent_config.model or ''
         # F-105: initialise the per-session tracker poll cache. Built
         # once at run() start so the rest of the loop shares a single
         # instance; concurrent sessions still get their own. Setting
@@ -827,7 +827,7 @@ class AgentRunner:
                     int(
                         getattr(
                             self.agent_config,
-                            "perf_should_continue_skip_turns",
+                            'perf_should_continue_skip_turns',
                             3,
                         )
                     ),
@@ -840,10 +840,10 @@ class AgentRunner:
         # _call_model_sync in src/query/query.py reads this to enforce a
         # minimum interval between successive provider API calls.
         delay_env = str(self.agent_config.delay_between_requests_ms)
-        os.environ["CLAWCODEX_PROVIDER_REQUEST_DELAY_MS"] = delay_env
-        if delay_env != "0":
+        os.environ['CLAWCODEX_PROVIDER_REQUEST_DELAY_MS'] = delay_env
+        if delay_env != '0':
             logger.info(
-                "Provider request delay set to %s ms",
+                'Provider request delay set to %s ms',
                 delay_env,
             )
 
@@ -853,26 +853,26 @@ class AgentRunner:
 
         set_log_context(
             issue_id=str(issue.id),
-            run_id=str(session.run_id or ""),
+            run_id=str(session.run_id or ''),
             issue_identifier=str(issue.identifier),
         )
         logger.info(
-            "Starting agent run issue_id=%s identifier=%s workspace=%s",
+            'Starting agent run issue_id=%s identifier=%s workspace=%s',
             issue.id,
             issue.identifier,
             workspace.path,
         )
 
         session_context = {
-            "issue_id": issue.id,
-            "issue_identifier": issue.identifier,
-            "workspace_path": str(workspace.path),
-            "workflow": workflow,
+            'issue_id': issue.id,
+            'issue_identifier': issue.identifier,
+            'workspace_path': str(workspace.path),
+            'workflow': workflow,
             # F-45: run_id + permission_mode are consumed by
             # _append_tool_event_log to write per-tool rows to
             # {workspace}/.reports/{run_id}.events.ndjson.
-            "run_id": session.run_id,
-            "permission_mode": self.agent_config.permission_mode,
+            'run_id': session.run_id,
+            'permission_mode': self.agent_config.permission_mode,
         }
         # F-45: stash the NDJSON path co-located with the RunReport
         # under ``{workspace}/.reports/<run_id>.events.ndjson`` so that
@@ -880,20 +880,18 @@ class AgentRunner:
         # (Sub-C).  Resolved here (not in the property) so the path is
         # concrete before the first event is appended.
         session.tool_events_path = str(
-            workspace.path
-            / ".reports"
-            / f"{session.run_id or 'unknown'}.events.ndjson"
+            workspace.path / '.reports' / f'{session.run_id or "unknown"}.events.ndjson'
         )
         session.debug_log_path = str(
             workspace.path
-            / ".orchestrator_control"
-            / "runs"
-            / (session.run_id or "unknown")
-            / "debug.ndjson"
+            / '.orchestrator_control'
+            / 'runs'
+            / (session.run_id or 'unknown')
+            / 'debug.ndjson'
         )
         append_debug_event(
             session.debug_log_path,
-            "agent_runner.start",
+            'agent_runner.start',
             issue_id=issue.id,
             issue_identifier=issue.identifier,
             run_id=session.run_id,
@@ -951,9 +949,9 @@ class AgentRunner:
         # session is terminated with reason "read_only_loop".
         read_only_streak = 0
         tool_signature_history: list[str] = []
-        max_no_op_turns = max(1, int(getattr(self.agent_config, "max_no_op_turns", 3) or 3))
-        loop_window = max(2, int(getattr(self.agent_config, "loop_detection_window", 5) or 5))
-        loop_threshold = max(2, int(getattr(self.agent_config, "loop_detection_threshold", 3) or 3))
+        max_no_op_turns = max(1, int(getattr(self.agent_config, 'max_no_op_turns', 3) or 3))
+        loop_window = max(2, int(getattr(self.agent_config, 'loop_detection_window', 5) or 5))
+        loop_threshold = max(2, int(getattr(self.agent_config, 'loop_detection_threshold', 3) or 3))
 
         def update_diagnostics() -> None:
             session.tool_count = tool_count
@@ -962,7 +960,7 @@ class AgentRunner:
                     diagnostics_callback(session)
                 except Exception:
                     logger.exception(
-                        "run diagnostics callback failed issue_id=%s",
+                        'run diagnostics callback failed issue_id=%s',
                         issue.id,
                     )
 
@@ -973,9 +971,11 @@ class AgentRunner:
                 if turn_number == 0:
                     if session.prompt_override:
                         prompt = session.prompt_override
+                        system_prompt_append = ''
+                        user_prompt = prompt
                     else:
                         # Build clarification context if issue is in clarification flow
-                        clarification_context = ""
+                        clarification_context = ''
                         pending_question = None
                         options = None
 
@@ -983,9 +983,9 @@ class AgentRunner:
                             # Check if this issue has a pending clarification
                             resolved = clarification_resolver.get_answer(issue.id)
                             if resolved and resolved.status.value in (
-                                "pending",
-                                "awaiting_local",
-                                "awaiting_author",
+                                'pending',
+                                'awaiting_local',
+                                'awaiting_author',
                             ):
                                 # Get the pending item from queue to retrieve question + options
                                 pending_item = clarification_resolver._queue.get(issue.id)
@@ -1006,12 +1006,12 @@ class AgentRunner:
                             options=options,
                             session=session,
                             python_executable=resolve_python_executable(
-                                workspace_path=getattr(workspace, "path", None),
+                                workspace_path=getattr(workspace, 'path', None),
                                 agent_cfg=self.agent_config,
                                 workspace_cfg=self.workspace_cfg,
-                                issue_executable=getattr(issue, "python_executable", "") or "",
+                                issue_executable=getattr(issue, 'python_executable', '') or '',
                             ),
-                            previous_run_ids=getattr(session, "previous_run_ids", None),
+                            previous_run_ids=getattr(session, 'previous_run_ids', None),
                         )
                     # F-?? prompt split: keep the constant workflow background
                     # in the system prompt across every turn; only the
@@ -1023,17 +1023,17 @@ class AgentRunner:
                     prompt = PromptBuilder.build_continuation_prompt(
                         turn_number=turn_number,
                         max_turns=self.max_turns,
-                        issue_context=getattr(session, "_issue_context", None),
+                        issue_context=getattr(session, '_issue_context', None),
                         session=session,
                         python_executable=resolve_python_executable(
-                            workspace_path=getattr(workspace, "path", None),
+                            workspace_path=getattr(workspace, 'path', None),
                             agent_cfg=self.agent_config,
                             workspace_cfg=self.workspace_cfg,
-                            issue_executable=getattr(issue, "python_executable", "") or "",
+                            issue_executable=getattr(issue, 'python_executable', '') or '',
                         ),
                     )
                     logger.info(
-                        "Continuation turn %d/%s for issue_id=%s",
+                        'Continuation turn %d/%s for issue_id=%s',
                         turn_number,
                         self.max_turns,
                         issue.id,
@@ -1049,15 +1049,15 @@ class AgentRunner:
                                 session_id=session.run_id,
                             )
                             session._transcript_storage.init_metadata(
-                                model=self.agent_config.model or "",
+                                model=self.agent_config.model or '',
                                 cwd=str(session.workspace.path),
                                 title=(
-                                    f"orchestrator-{session.issue.identifier or session.issue.id}"
+                                    f'orchestrator-{session.issue.identifier or session.issue.id}'
                                 ),
                             )
                         except Exception:
                             logger.exception(
-                                "Failed to init transcript storage run_id=%s",
+                                'Failed to init transcript storage run_id=%s',
                                 session.run_id,
                             )
                     # F-49 Phase 1: start the Unix control socket. Defensive:
@@ -1075,16 +1075,16 @@ class AgentRunner:
                                 _CsPath(
                                     session.workspace.path,
                                 )
-                                / ".run_control"
+                                / '.run_control'
                             )
-                            sock_path = sock_dir / f"{session.run_id}.sock"
+                            sock_path = sock_dir / f'{session.run_id}.sock'
                             cs = ControlSocket(sock_path)
                             await cs.start()
                             session.control_socket = cs
                             session.control_socket_path = str(sock_path)
                         except Exception:
                             logger.exception(
-                                "Failed to start control_socket run_id=%s",
+                                'Failed to start control_socket run_id=%s',
                                 session.run_id,
                             )
                             session.control_socket = None
@@ -1096,18 +1096,18 @@ class AgentRunner:
                             session._transcript_storage.write_message(
                                 create_user_message(
                                     content=[TextBlock(text=prompt)],
-                                    origin="human",
+                                    origin='human',
                                 )
                             )
                         except Exception:
                             logger.exception(
-                                "Failed to write transcript prompt run_id=%s",
+                                'Failed to write transcript prompt run_id=%s',
                                 session.run_id,
                             )
 
                 append_debug_event(
                     session.debug_log_path,
-                    "agent_runner.turn_start",
+                    'agent_runner.turn_start',
                     issue_id=issue.id,
                     run_id=session.run_id,
                     turn=turn_number,
@@ -1123,7 +1123,7 @@ class AgentRunner:
                     permission_mode=self.agent_config.permission_mode,
                     run_id=session.run_id,
                     debug_log_path=session.debug_log_path,
-                    env=getattr(self.agent_config, "env", None) or {},
+                    env=getattr(self.agent_config, 'env', None) or {},
                     timeout_s=self.agent_config.run_timeout_ms / 1000.0,
                     # F-?? prompt split: keep the constant workflow background
                     # in the system prompt across every turn (turn 0 sets it
@@ -1131,14 +1131,12 @@ class AgentRunner:
                     # This mirrors CCB's "rich system + short user" structure
                     # and stops the daemon from re-sending 5KB of background
                     # in every user message.
-                    append_system_prompt=getattr(
-                        session, "_system_prompt_append", None
-                    ),
+                    append_system_prompt=getattr(session, '_system_prompt_append', None),
                 )
                 runner = QueryRunner(query_config)
 
                 turn_has_tool_calls = False
-                turn_output = ""
+                turn_output = ''
                 turn_has_modifying_tool = False
                 # F-?? root-cause fix: per-turn tool-name accumulator feeding
                 # the loop-detection signature history.
@@ -1162,13 +1160,13 @@ class AgentRunner:
                         event_type = type(event).__name__
                         session.last_agent_event_at = time.time()
                         session.last_agent_event = event_type
-                        event_tool_name = getattr(event, "tool_name", None)
+                        event_tool_name = getattr(event, 'tool_name', None)
                         if event_tool_name:
                             session.last_tool_name = event_tool_name
-                        event_reason = getattr(event, "reason", None)
+                        event_reason = getattr(event, 'reason', None)
                         append_debug_event(
                             session.debug_log_path,
-                            "agent_runner.event",
+                            'agent_runner.event',
                             issue_id=issue.id,
                             run_id=session.run_id,
                             type=event_type,
@@ -1203,8 +1201,8 @@ class AgentRunner:
                                 try:
                                     await session.control_socket.send_event(
                                         {
-                                            "type": event.__class__.__name__,
-                                            "data": self._event_to_broadcast_dict(
+                                            'type': event.__class__.__name__,
+                                            'data': self._event_to_broadcast_dict(
                                                 event,
                                             ),
                                         }
@@ -1241,8 +1239,8 @@ class AgentRunner:
                             if turn_tool_count >= self.max_tools_per_turn:
                                 cap_reached = True
                                 logger.info(
-                                    "Turn %s reached max_tools_per_turn=%s for issue %s; "
-                                    "will force turn boundary after pending results",
+                                    'Turn %s reached max_tools_per_turn=%s for issue %s; '
+                                    'will force turn boundary after pending results',
                                     turn_number,
                                     self.max_tools_per_turn,
                                     issue.id,
@@ -1265,7 +1263,7 @@ class AgentRunner:
                             event = self._handle_tool_call(event, session_context)
                             # Tag session_context with the current turn so the
                             # NDJSON row carries the right `turn` value.
-                            session_context["turn"] = turn_number
+                            session_context['turn'] = turn_number
                             self._append_tool_event_log(event, session_context)
 
                             if status_dashboard is not None:
@@ -1289,8 +1287,8 @@ class AgentRunner:
                                 try:
                                     await session.control_socket.send_event(
                                         {
-                                            "type": event.__class__.__name__,
-                                            "data": self._event_to_broadcast_dict(
+                                            'type': event.__class__.__name__,
+                                            'data': self._event_to_broadcast_dict(
                                                 event,
                                             ),
                                         }
@@ -1317,17 +1315,17 @@ class AgentRunner:
                                         )
                                 except Exception:
                                     logger.exception(
-                                        "Failed to buffer transcript tool_use run_id=%s",
+                                        'Failed to buffer transcript tool_use run_id=%s',
                                         session.run_id,
                                     )
 
                         elif isinstance(event, ToolResultEvent):
                             pending_tool_results -= 1
                             logger.debug(
-                                "Tool result issue_id=%s tool=%s is_error=%s",
+                                'Tool result issue_id=%s tool=%s is_error=%s',
                                 issue.id,
                                 event.tool_name,
-                                event.result.get("is_error", False),
+                                event.result.get('is_error', False),
                             )
                             if status_dashboard is not None:
                                 try:
@@ -1350,8 +1348,8 @@ class AgentRunner:
                                 try:
                                     await session.control_socket.send_event(
                                         {
-                                            "type": event.__class__.__name__,
-                                            "data": self._event_to_broadcast_dict(
+                                            'type': event.__class__.__name__,
+                                            'data': self._event_to_broadcast_dict(
                                                 event,
                                             ),
                                         }
@@ -1370,8 +1368,8 @@ class AgentRunner:
                                 try:
                                     from clawcodex_ext.types.content_blocks import ToolResultBlock
 
-                                    result_output = event.result.get("output", "")
-                                    is_error = event.result.get("is_error", False)
+                                    result_output = event.result.get('output', '')
+                                    is_error = event.result.get('is_error', False)
                                     session._transcript_pending_results[event.tool_use_id] = (
                                         ToolResultBlock(
                                             tool_use_id=event.tool_use_id,
@@ -1393,7 +1391,7 @@ class AgentRunner:
                                         self._flush_turn_transcript(session)
                                 except Exception:
                                     logger.exception(
-                                        "Failed to buffer transcript tool_result run_id=%s",
+                                        'Failed to buffer transcript tool_result run_id=%s',
                                         session.run_id,
                                     )
                             update_diagnostics()
@@ -1410,8 +1408,8 @@ class AgentRunner:
                             # keeping the transcript/event stream consistent.
                             if cap_reached and pending_tool_results <= 0:
                                 logger.info(
-                                    "Turn %s forced turn boundary after "
-                                    "max_tools_per_turn=%s for issue %s",
+                                    'Turn %s forced turn boundary after '
+                                    'max_tools_per_turn=%s for issue %s',
                                     turn_number,
                                     self.max_tools_per_turn,
                                     issue.id,
@@ -1431,7 +1429,7 @@ class AgentRunner:
                                     turn_number,
                                     status_dashboard,
                                 )
-                                if new_status == "rate_limit_circuit_open":
+                                if new_status == 'rate_limit_circuit_open':
                                     return
                                 # F-49 Phase 0.1: reset per-turn transcript
                                 # buffers so the re-issued turn starts clean.
@@ -1441,7 +1439,7 @@ class AgentRunner:
                                 self._flush_turn_transcript(session)
                                 # Reset the per-turn accumulators so the
                                 # re-issued turn starts with a clean slate.
-                                turn_output = ""
+                                turn_output = ''
                                 turn_has_tool_calls = False
                                 # Do NOT increment turn_number; the same
                                 # turn's prompt will be re-rendered below
@@ -1466,32 +1464,32 @@ class AgentRunner:
                                             cmd = _q.get_nowait()
                                         except asyncio.QueueEmpty:
                                             break
-                                        if cmd.cmd == "pause":
+                                        if cmd.cmd == 'pause':
                                             session.paused = True
-                                            session.pause_reason = "operator_interrupt"
+                                            session.pause_reason = 'operator_interrupt'
                                             if session.pause_resume_event is not None:
                                                 session.pause_resume_event.clear()
-                                        elif cmd.cmd == "resume":
+                                        elif cmd.cmd == 'resume':
                                             if cmd.payload:
                                                 session.prompt_override = cmd.payload
                                             session.paused = False
                                             if session.pause_resume_event is not None:
                                                 session.pause_resume_event.set()
-                                        elif cmd.cmd == "stop":
-                                            session.session_end_reason = "operator_stop"
+                                        elif cmd.cmd == 'stop':
+                                            session.session_end_reason = 'operator_stop'
                                             session.session_end_summary = (
-                                                "operator sent stop via control socket"
+                                                'operator sent stop via control socket'
                                             )
-                                        elif cmd.cmd == "takeover":
-                                            session.session_end_reason = "operator_takeover"
+                                        elif cmd.cmd == 'takeover':
+                                            session.session_end_reason = 'operator_takeover'
                                             session.session_end_summary = (
-                                                "operator requested takeover via control socket"
+                                                'operator requested takeover via control socket'
                                             )
                                         # inject / detach: parsed, no agent
                                         # action yet (TODO Phase 2/3).
                                 except Exception:
                                     logger.exception(
-                                        "control_socket.poll_commands failed",
+                                        'control_socket.poll_commands failed',
                                     )
                             turn_number += 1
                             session.turn_count = turn_number
@@ -1505,7 +1503,7 @@ class AgentRunner:
                                     session._transcript_storage.flush()
                                 except Exception:
                                     logger.exception(
-                                        "Failed to flush transcript run_id=%s",
+                                        'Failed to flush transcript run_id=%s',
                                         session.run_id,
                                     )
                             # F-49 Phase 1: stop the control socket so the
@@ -1517,13 +1515,13 @@ class AgentRunner:
                                     await session.control_socket.stop()
                                 except Exception:
                                     logger.exception(
-                                        "Failed to stop control_socket run_id=%s",
+                                        'Failed to stop control_socket run_id=%s',
                                         session.run_id,
                                     )
                                 session.control_socket = None
                             append_debug_event(
                                 session.debug_log_path,
-                                "agent_runner.turn_complete",
+                                'agent_runner.turn_complete',
                                 issue_id=issue.id,
                                 run_id=session.run_id,
                                 turn=turn_number,
@@ -1544,16 +1542,16 @@ class AgentRunner:
                                 # AgentRunner; the F-38 stub tests were
                                 # already updated to record on these
                                 # callbacks.
-                                self._dispatch_sink(sink, "on_phase_complete", phase_event, session)
+                                self._dispatch_sink(sink, 'on_phase_complete', phase_event, session)
                                 self._dispatch_sink(
                                     sink,
-                                    "on_turn_complete",
+                                    'on_turn_complete',
                                     TurnComplete(turn=turn_number),
                                     session,
                                 )
 
                             update_diagnostics()
-                            if event.reason == "success":
+                            if event.reason == 'success':
                                 # A successful turn resets the 429 backoff
                                 # counter — a 429 followed by a clean run is
                                 # a sign the rate window has passed.
@@ -1572,8 +1570,9 @@ class AgentRunner:
                                         )
                                     except Exception as tracker_exc:
                                         logger.warning(
-                                            "Tracker poll failed for issue %s, assuming still active: %s",
-                                            issue.id, tracker_exc,
+                                            'Tracker poll failed for issue %s, assuming still active: %s',
+                                            issue.id,
+                                            tracker_exc,
                                         )
                                         is_active, refreshed_issue = True, issue
                                     if is_active and turn_number < self.max_turns:
@@ -1585,8 +1584,8 @@ class AgentRunner:
                                         # indicator that the agent was no
                                         # longer making progress).
                                         logger.info(
-                                            "Issue %s still active, continuing turn %d/%d "
-                                            "(noop_streak=%d/%d)",
+                                            'Issue %s still active, continuing turn %d/%d '
+                                            '(noop_streak=%d/%d)',
                                             issue.id,
                                             turn_number,
                                             self.max_turns,
@@ -1634,77 +1633,77 @@ class AgentRunner:
                                             # stagnation.  Mark it as such so
                                             # the orchestrator can retry.
                                             if (
-                                                not getattr(session, "has_made_progress", False)
+                                                not getattr(session, 'has_made_progress', False)
                                                 and tool_count == 0
                                             ):
                                                 # F-54 root-cause fix: before
                                                 # declaring ``llm_gave_up``,
                                                 # verify via test_command.
                                                 if getattr(
-                                                    self.agent_config, "test_command", None
+                                                    self.agent_config, 'test_command', None
                                                 ) and await self._run_verification(session):
-                                                    session.status = "completed"
-                                                    session.session_end_reason = "already_completed"
+                                                    session.status = 'completed'
+                                                    session.session_end_reason = 'already_completed'
                                                     session.session_end_summary = (
-                                                        "work already implemented "
-                                                        "(verification passed)"
+                                                        'work already implemented '
+                                                        '(verification passed)'
                                                     )
                                                     logger.info(
-                                                        "Issue %s: work already done "
-                                                        "(verification passed) — "
-                                                        "marking completed",
+                                                        'Issue %s: work already done '
+                                                        '(verification passed) — '
+                                                        'marking completed',
                                                         issue.id,
                                                     )
                                                 elif getattr(
-                                                    self.agent_config, "test_command", None
+                                                    self.agent_config, 'test_command', None
                                                 ):
-                                                    session.session_end_reason = "llm_gave_up"
+                                                    session.session_end_reason = 'llm_gave_up'
                                                     session.session_end_summary = (
-                                                        f"LLM returned SessionComplete(success) "
-                                                        f"after 0 tool calls with no code changes"
+                                                        f'LLM returned SessionComplete(success) '
+                                                        f'after 0 tool calls with no code changes'
                                                     )
                                                     logger.warning(
-                                                        "LLM gave up immediately issue_id=%s "
-                                                        "turns=%s tools=%s — "
-                                                        "SessionComplete with 0 tools",
+                                                        'LLM gave up immediately issue_id=%s '
+                                                        'turns=%s tools=%s — '
+                                                        'SessionComplete with 0 tools',
                                                         issue.id,
                                                         turn_number,
                                                         tool_count,
                                                     )
                                                 else:
-                                                    session.session_end_reason = "stagnation"
+                                                    session.session_end_reason = 'stagnation'
                                                     session.session_end_summary = (
-                                                        f"{no_work_streak} consecutive "
-                                                        "turns with no tool calls and "
-                                                        "empty output"
+                                                        f'{no_work_streak} consecutive '
+                                                        'turns with no tool calls and '
+                                                        'empty output'
                                                     )
                                             else:
-                                                session.session_end_reason = "stagnation"
+                                                session.session_end_reason = 'stagnation'
                                                 session.session_end_summary = (
-                                                    f"{no_work_streak} consecutive "
-                                                    "turns with no tool calls and "
-                                                    "empty output"
+                                                    f'{no_work_streak} consecutive '
+                                                    'turns with no tool calls and '
+                                                    'empty output'
                                                 )
                                             logger.warning(
-                                                "Stagnation detected issue_id=%s — "
-                                                "%d consecutive no-op turns, "
-                                                "breaking outer loop",
+                                                'Stagnation detected issue_id=%s — '
+                                                '%d consecutive no-op turns, '
+                                                'breaking outer loop',
                                                 issue.id,
                                                 no_work_streak,
                                             )
                                             append_debug_event(
                                                 session.debug_log_path,
-                                                "agent_runner.stagnation_detected",
+                                                'agent_runner.stagnation_detected',
                                                 issue_id=issue.id,
                                                 run_id=session.run_id,
                                                 turn=turn_number,
                                                 no_work_streak=no_work_streak,
                                             )
-                                            session.status = "stagnation"
+                                            session.status = 'stagnation'
                                             self._dispatch_sink(
                                                 sink,
-                                                "on_session_complete",
-                                                SessionComplete(reason="stagnation"),
+                                                'on_session_complete',
+                                                SessionComplete(reason='stagnation'),
                                                 session,
                                             )
                                             return
@@ -1732,32 +1731,32 @@ class AgentRunner:
                                             read_only_streak = 0
 
                                         if read_only_streak >= _MAX_READ_ONLY_TURNS:
-                                            session.session_end_reason = "read_only_loop"
+                                            session.session_end_reason = 'read_only_loop'
                                             session.session_end_summary = (
-                                                f"{read_only_streak} consecutive "
-                                                "turns with only read-only tool calls "
-                                                "and no code changes"
+                                                f'{read_only_streak} consecutive '
+                                                'turns with only read-only tool calls '
+                                                'and no code changes'
                                             )
                                             logger.warning(
-                                                "Read-only tool loop detected issue_id=%s — "
-                                                "%d consecutive read-only turns, "
-                                                "breaking outer loop",
+                                                'Read-only tool loop detected issue_id=%s — '
+                                                '%d consecutive read-only turns, '
+                                                'breaking outer loop',
                                                 issue.id,
                                                 read_only_streak,
                                             )
                                             append_debug_event(
                                                 session.debug_log_path,
-                                                "agent_runner.read_only_loop_detected",
+                                                'agent_runner.read_only_loop_detected',
                                                 issue_id=issue.id,
                                                 run_id=session.run_id,
                                                 turn=turn_number,
                                                 read_only_streak=read_only_streak,
                                             )
-                                            session.status = "read_only_loop"
+                                            session.status = 'read_only_loop'
                                             self._dispatch_sink(
                                                 sink,
-                                                "on_session_complete",
-                                                SessionComplete(reason="read_only_loop"),
+                                                'on_session_complete',
+                                                SessionComplete(reason='read_only_loop'),
                                                 session,
                                             )
                                             return
@@ -1768,9 +1767,9 @@ class AgentRunner:
                                         # signature repeats >= threshold
                                         # times within the recent window.
                                         if turn_tool_names:
-                                            signature = "|".join(sorted(turn_tool_names))
+                                            signature = '|'.join(sorted(turn_tool_names))
                                         else:
-                                            signature = "<empty>"
+                                            signature = '<empty>'
                                         tool_signature_history.append(signature)
                                         if len(tool_signature_history) > loop_window:
                                             tool_signature_history = tool_signature_history[
@@ -1780,24 +1779,24 @@ class AgentRunner:
                                             tool_signature_history.count(signature)
                                             >= loop_threshold
                                         ):
-                                            session.session_end_reason = "loop_detected"
+                                            session.session_end_reason = 'loop_detected'
                                             session.session_end_summary = (
-                                                f"signature {signature!r} "
-                                                f"repeated "
-                                                f"{tool_signature_history.count(signature)} "
-                                                f"times in last {loop_window} turns"
+                                                f'signature {signature!r} '
+                                                f'repeated '
+                                                f'{tool_signature_history.count(signature)} '
+                                                f'times in last {loop_window} turns'
                                             )
                                             logger.warning(
-                                                "Loop detected issue_id=%s — "
-                                                "signature %r repeated %d times, "
-                                                "breaking outer loop",
+                                                'Loop detected issue_id=%s — '
+                                                'signature %r repeated %d times, '
+                                                'breaking outer loop',
                                                 issue.id,
                                                 signature,
                                                 tool_signature_history.count(signature),
                                             )
                                             append_debug_event(
                                                 session.debug_log_path,
-                                                "agent_runner.loop_detected",
+                                                'agent_runner.loop_detected',
                                                 issue_id=issue.id,
                                                 run_id=session.run_id,
                                                 turn=turn_number,
@@ -1806,11 +1805,11 @@ class AgentRunner:
                                                     tool_signature_history.count(signature)
                                                 ),
                                             )
-                                            session.status = "loop_detected"
+                                            session.status = 'loop_detected'
                                             self._dispatch_sink(
                                                 sink,
-                                                "on_session_complete",
-                                                SessionComplete(reason="loop_detected"),
+                                                'on_session_complete',
+                                                SessionComplete(reason='loop_detected'),
                                                 session,
                                             )
                                             return
@@ -1828,17 +1827,17 @@ class AgentRunner:
                                             consecutive_clean_turns += 1
                                             if consecutive_clean_turns >= _NOOP_DETECTION_MAX_TURNS:
                                                 logger.warning(
-                                                    "No-op detection triggered issue_id=%s — "
-                                                    "agent performed %d consecutive turns with "
-                                                    "zero file changes, force-completing",
+                                                    'No-op detection triggered issue_id=%s — '
+                                                    'agent performed %d consecutive turns with '
+                                                    'zero file changes, force-completing',
                                                     issue.id,
                                                     consecutive_clean_turns,
                                                 )
-                                                session.status = "completed"
-                                                session.session_end_reason = "noop_completed"
+                                                session.status = 'completed'
+                                                session.session_end_reason = 'noop_completed'
                                                 session.session_end_summary = (
-                                                    f"{consecutive_clean_turns} "
-                                                    "consecutive clean turns"
+                                                    f'{consecutive_clean_turns} '
+                                                    'consecutive clean turns'
                                                 )
                                                 # F-40: surface the
                                                 # no-op completion to the
@@ -1849,79 +1848,94 @@ class AgentRunner:
                                                 # event.
                                                 self._dispatch_sink(
                                                     sink,
-                                                    "on_session_complete",
-                                                    SessionComplete(reason="noop_completed"),
+                                                    'on_session_complete',
+                                                    SessionComplete(reason='noop_completed'),
                                                     session,
                                                 )
                                                 return
                                         continue  # Go to next turn
                                     session.issue = refreshed_issue or session.issue
-                                elif tracker is None and turn_number < self.max_turns and session.status == "running":
+                                elif (
+                                    tracker is None
+                                    and turn_number < self.max_turns
+                                    and session.status == 'running'
+                                ):
                                     if not turn_has_tool_calls and not turn_output.strip():
                                         no_work_streak += 1
                                     else:
                                         no_work_streak = 0
 
-                                    if getattr(session, "has_made_progress", False):
+                                    if getattr(session, 'has_made_progress', False):
                                         logger.info(
-                                            "Workflow stage completed: agent signaled done "
-                                            "with code changes issue_id=%s turn=%d/%d tools=%s",
-                                            issue.id, turn_number, self.max_turns, tool_count,
+                                            'Workflow stage completed: agent signaled done '
+                                            'with code changes issue_id=%s turn=%d/%d tools=%s',
+                                            issue.id,
+                                            turn_number,
+                                            self.max_turns,
+                                            tool_count,
                                         )
-                                        session.status = "completed"
+                                        session.status = 'completed'
                                         if session.session_end_reason is None:
-                                            session.session_end_reason = "task_complete"
+                                            session.session_end_reason = 'task_complete'
                                             session.session_end_summary = (
-                                                f"workflow stage completed after "
-                                                f"{turn_number} turns, {tool_count} tools"
+                                                f'workflow stage completed after '
+                                                f'{turn_number} turns, {tool_count} tools'
                                             )
                                     elif tool_count > 0:
                                         # Agent did work (read/analyze) and signaled done.
                                         # Normal for analysis stages that don't write code.
                                         logger.info(
-                                            "Workflow stage completed: agent signaled done "
-                                            "after analysis issue_id=%s turn=%d/%d tools=%s",
-                                            issue.id, turn_number, self.max_turns, tool_count,
+                                            'Workflow stage completed: agent signaled done '
+                                            'after analysis issue_id=%s turn=%d/%d tools=%s',
+                                            issue.id,
+                                            turn_number,
+                                            self.max_turns,
+                                            tool_count,
                                         )
-                                        session.status = "completed"
+                                        session.status = 'completed'
                                         if session.session_end_reason is None:
-                                            session.session_end_reason = "task_complete"
+                                            session.session_end_reason = 'task_complete'
                                             session.session_end_summary = (
-                                                f"workflow stage completed (analysis) after "
-                                                f"{turn_number} turns, {tool_count} tools"
+                                                f'workflow stage completed (analysis) after '
+                                                f'{turn_number} turns, {tool_count} tools'
                                             )
                                     elif no_work_streak >= max_no_op_turns:
                                         if tool_count == 0:
                                             # Agent never got to work (rate-limited or stuck).
                                             # This is a failure, not a completion.
                                             logger.warning(
-                                                "Agent produced 0 tool calls after %d turns "
-                                                "(likely rate-limited), marking failed "
-                                                "issue_id=%s",
-                                                no_work_streak, issue.id,
+                                                'Agent produced 0 tool calls after %d turns '
+                                                '(likely rate-limited), marking failed '
+                                                'issue_id=%s',
+                                                no_work_streak,
+                                                issue.id,
                                             )
-                                            session.status = "failed"
-                                            session.session_end_reason = "rate_limited"
+                                            session.status = 'failed'
+                                            session.session_end_reason = 'rate_limited'
                                             session.session_end_summary = (
-                                                f"agent never started: {no_work_streak} "
-                                                f"consecutive empty turns, 0 tools"
+                                                f'agent never started: {no_work_streak} '
+                                                f'consecutive empty turns, 0 tools'
                                             )
                                         else:
                                             logger.warning(
-                                                "No-work streak reached (%d/%d) without tracker, "
-                                                "force-completing issue_id=%s",
-                                                no_work_streak, max_no_op_turns, issue.id,
+                                                'No-work streak reached (%d/%d) without tracker, '
+                                                'force-completing issue_id=%s',
+                                                no_work_streak,
+                                                max_no_op_turns,
+                                                issue.id,
                                             )
-                                            session.status = "completed"
-                                            session.session_end_reason = "noop_completed"
+                                            session.status = 'completed'
+                                            session.session_end_reason = 'noop_completed'
                                             session.session_end_summary = (
-                                                f"{no_work_streak} consecutive no-work turns"
+                                                f'{no_work_streak} consecutive no-work turns'
                                             )
                                     else:
                                         logger.info(
-                                            "Continuing without tracker (workflow stage) "
-                                            "issue_id=%s turn=%d/%d",
-                                            issue.id, turn_number, self.max_turns,
+                                            'Continuing without tracker (workflow stage) '
+                                            'issue_id=%s turn=%d/%d',
+                                            issue.id,
+                                            turn_number,
+                                            self.max_turns,
                                         )
                                         continue
 
@@ -1935,34 +1949,38 @@ class AgentRunner:
                                 # ``session_end_reason`` is
                                 # ``budget_exhausted`` — the F-09 budget
                                 # test depends on this distinction.
-                                if turn_number >= self.max_turns and session.status == "running" and (tracker is not None or sink is not None):
+                                if (
+                                    turn_number >= self.max_turns
+                                    and session.status == 'running'
+                                    and (tracker is not None or sink is not None)
+                                ):
                                     if (
                                         session.total_429_backoff_seconds > 0
                                         and not turn_has_tool_calls
                                         and not turn_output.strip()
                                     ):
-                                        session.status = "completed"
-                                        session.session_end_reason = "task_complete"
+                                        session.status = 'completed'
+                                        session.session_end_reason = 'task_complete'
                                         session.session_end_summary = (
-                                            "rate-limit retry completed cleanly"
+                                            'rate-limit retry completed cleanly'
                                         )
                                     else:
-                                        session.status = "max_turns_exceeded"
-                                        session.session_end_reason = "budget_exhausted"
+                                        session.status = 'max_turns_exceeded'
+                                        session.session_end_reason = 'budget_exhausted'
                                         session.session_end_summary = (
-                                            f"reached max_turns="
-                                            f"{self.max_turns} after "
-                                            f"{turn_number} turns"
+                                            f'reached max_turns='
+                                            f'{self.max_turns} after '
+                                            f'{turn_number} turns'
                                         )
                                         logger.info(
-                                            "Agent run reached max_turns "
-                                            "issue_id=%s turns=%s/%s tools=%s",
+                                            'Agent run reached max_turns '
+                                            'issue_id=%s turns=%s/%s tools=%s',
                                             issue.id,
                                             turn_number,
                                             self.max_turns,
                                             tool_count,
                                         )
-                                elif session.status == "running":
+                                elif session.status == 'running':
                                     # F-54 root-cause fix: distinguish real
                                     # completions from "LLM gave up without
                                     # doing work".  When the session ends
@@ -1974,52 +1992,65 @@ class AgentRunner:
                                     # Guard: only enter if status is still "running"
                                     # to avoid overriding "failed"/"completed" set
                                     # by the tracker-is-None or no-work-streak paths.
-                                    if getattr(session, "has_made_progress", False):
+                                    if getattr(session, 'has_made_progress', False):
                                         # Verify actual workspace changes before marking completed.
                                         # has_made_progress=True only means Write/Edit was called,
                                         # not that files actually changed (e.g. Write same content,
                                         # Edit no-op, or changes were reverted).
                                         _ws_dirty = False
-                                        _ws = getattr(session, "workspace", None)
+                                        _ws = getattr(session, 'workspace', None)
                                         if _ws is not None:
-                                            _ws_path = getattr(_ws, "path", None)
+                                            _ws_path = getattr(_ws, 'path', None)
                                             if _ws_path is not None:
                                                 try:
                                                     import subprocess as _subprocess
+
                                                     _proc = _subprocess.run(
-                                                        ["git", "status", "--porcelain"],
+                                                        ['git', 'status', '--porcelain'],
                                                         cwd=str(_ws_path),
-                                                        capture_output=True, text=True, timeout=10,
+                                                        capture_output=True,
+                                                        text=True,
+                                                        timeout=10,
                                                     )
                                                     _ws_dirty = bool(_proc.stdout.strip())
                                                     if not _ws_dirty:
-                                                        _start_sha = getattr(session, "start_commit_sha", None)
+                                                        _start_sha = getattr(
+                                                            session, 'start_commit_sha', None
+                                                        )
                                                         if _start_sha:
                                                             _head_proc = _subprocess.run(
-                                                                ["git", "rev-parse", "HEAD"],
+                                                                ['git', 'rev-parse', 'HEAD'],
                                                                 cwd=str(_ws_path),
-                                                                capture_output=True, text=True, timeout=10,
+                                                                capture_output=True,
+                                                                text=True,
+                                                                timeout=10,
                                                             )
                                                             _head = _head_proc.stdout.strip()
-                                                            _ws_dirty = bool(_head and _head != _start_sha)
+                                                            _ws_dirty = bool(
+                                                                _head and _head != _start_sha
+                                                            )
                                                 except Exception:
                                                     _ws_dirty = True  # fail-open
                                         if _ws_dirty:
-                                            session.status = "completed"
+                                            session.status = 'completed'
                                             if session.session_end_reason is None:
-                                                session.session_end_reason = "task_complete"
-                                                session.session_end_summary = "issue no longer active"
+                                                session.session_end_reason = 'task_complete'
+                                                session.session_end_summary = (
+                                                    'issue no longer active'
+                                                )
                                         else:
-                                            session.status = "failed"
-                                            session.session_end_reason = "no_changes_produced"
+                                            session.status = 'failed'
+                                            session.session_end_reason = 'no_changes_produced'
                                             session.session_end_summary = (
-                                                f"Agent called Write/Edit ({tool_count} tools) "
-                                                f"but workspace has no file changes"
+                                                f'Agent called Write/Edit ({tool_count} tools) '
+                                                f'but workspace has no file changes'
                                             )
                                             logger.warning(
-                                                "Agent reported progress but produced no file changes "
-                                                "issue_id=%s turns=%s tools=%s",
-                                                issue.id, turn_number, tool_count,
+                                                'Agent reported progress but produced no file changes '
+                                                'issue_id=%s turns=%s tools=%s',
+                                                issue.id,
+                                                turn_number,
+                                                tool_count,
                                             )
                                     else:
                                         # F-54 root-cause fix: before
@@ -2030,53 +2061,53 @@ class AgentRunner:
                                         # If verification passes, treat
                                         # this as a clean completion.
                                         if await self._run_verification(session):
-                                            session.status = "completed"
-                                            session.session_end_reason = "already_completed"
+                                            session.status = 'completed'
+                                            session.session_end_reason = 'already_completed'
                                             session.session_end_summary = (
-                                                "work already implemented (verification passed)"
+                                                'work already implemented (verification passed)'
                                             )
                                             logger.info(
-                                                "Issue %s: work already done "
-                                                "(verification passed) — "
-                                                "marking completed",
+                                                'Issue %s: work already done '
+                                                '(verification passed) — '
+                                                'marking completed',
                                                 issue.id,
                                             )
                                         else:
-                                            session.status = "failed"
-                                            session.session_end_reason = "llm_gave_up"
+                                            session.status = 'failed'
+                                            session.session_end_reason = 'llm_gave_up'
                                             session.session_end_summary = (
-                                                f"LLM returned SessionComplete(success) "
-                                                f"after {tool_count} read-only tool calls "
-                                                f"with no code changes"
+                                                f'LLM returned SessionComplete(success) '
+                                                f'after {tool_count} read-only tool calls '
+                                                f'with no code changes'
                                             )
                                             logger.warning(
-                                                "LLM gave up without writing code "
-                                                "issue_id=%s turns=%s tools=%s "
-                                                "has_made_progress=False",
+                                                'LLM gave up without writing code '
+                                                'issue_id=%s turns=%s tools=%s '
+                                                'has_made_progress=False',
                                                 issue.id,
                                                 turn_number,
                                                 tool_count,
                                             )
                                     logger.info(
-                                        "Agent run completed issue_id=%s turns=%s/%s tools=%s",
+                                        'Agent run completed issue_id=%s turns=%s/%s tools=%s',
                                         issue.id,
                                         turn_number,
                                         self.max_turns,
                                         tool_count,
                                     )
                             else:
-                                session.status = "failed"
+                                session.status = 'failed'
                                 if session.session_end_reason is None:
                                     # F-40: capture a per-reason end reason
                                     # so downstream sinks can distinguish
                                     # ``exit_code=N`` style failures from
                                     # clean termination paths.
-                                    session.session_end_reason = f"exit_code={event.reason}"
+                                    session.session_end_reason = f'exit_code={event.reason}'
                                     session.session_end_summary = (
-                                        f"QueryRunner ended with reason={event.reason}"
+                                        f'QueryRunner ended with reason={event.reason}'
                                     )
                                 logger.warning(
-                                    "Agent run failed issue_id=%s reason=%s",
+                                    'Agent run failed issue_id=%s reason=%s',
                                     issue.id,
                                     event.reason,
                                 )
@@ -2090,7 +2121,7 @@ class AgentRunner:
                             if sink is not None:
                                 self._dispatch_sink(
                                     sink,
-                                    "on_session_complete",
+                                    'on_session_complete',
                                     SessionComplete(
                                         reason=session.session_end_reason or event.reason
                                     ),
@@ -2104,7 +2135,7 @@ class AgentRunner:
                                     session._transcript_storage.flush()
                                 except Exception:
                                     logger.exception(
-                                        "Failed to final-flush transcript run_id=%s",
+                                        'Failed to final-flush transcript run_id=%s',
                                         session.run_id,
                                     )
                             # F-49 Phase 1: stop the control socket on the
@@ -2114,7 +2145,7 @@ class AgentRunner:
                                     await session.control_socket.stop()
                                 except Exception:
                                     logger.exception(
-                                        "Failed to stop control_socket run_id=%s",
+                                        'Failed to stop control_socket run_id=%s',
                                         session.run_id,
                                     )
                                 session.control_socket = None
@@ -2127,18 +2158,18 @@ class AgentRunner:
                     if is_rate_limit_error(exc):
                         # Synthesize a minimal turn_output so the standard
                         # detection helper recognizes the case.
-                        synthetic_output = turn_output or (f"Error code: 429 - {exc!s}")
+                        synthetic_output = turn_output or (f'Error code: 429 - {exc!s}')
                         new_status = await self._handle_rate_limit(
                             session,
                             synthetic_output,
                             turn_number,
                             status_dashboard,
                         )
-                        if new_status == "rate_limit_circuit_open":
+                        if new_status == 'rate_limit_circuit_open':
                             return
                         # F-49 Phase 0.1: reset per-turn transcript buffers.
                         self._flush_turn_transcript(session)
-                        turn_output = ""
+                        turn_output = ''
                         turn_has_tool_calls = False
                         continue
                     # Not a 429 — re-raise to preserve existing behavior.
@@ -2161,7 +2192,7 @@ class AgentRunner:
                             session._transcript_storage.flush()
                         except Exception:
                             logger.exception(
-                                "Failed to flush transcript after cap break run_id=%s",
+                                'Failed to flush transcript after cap break run_id=%s',
                                 session.run_id,
                             )
                     if session.control_socket is not None:
@@ -2169,17 +2200,17 @@ class AgentRunner:
                             await session.control_socket.stop()
                         except Exception:
                             logger.exception(
-                                "Failed to stop control_socket after cap break run_id=%s",
+                                'Failed to stop control_socket after cap break run_id=%s',
                                 session.run_id,
                             )
                         session.control_socket = None
                     append_debug_event(
                         session.debug_log_path,
-                        "agent_runner.turn_complete",
+                        'agent_runner.turn_complete',
                         issue_id=issue.id,
                         run_id=session.run_id,
                         turn=turn_number,
-                        reason="max_tools_per_turn",
+                        reason='max_tools_per_turn',
                         tool_count=tool_count,
                         output_len=len(session.output_text),
                     )
@@ -2193,13 +2224,13 @@ class AgentRunner:
                     session.turn_count = turn_number
 
             # Reached max_turns
-            session.status = "max_turns_exceeded"
-            session.session_end_reason = "budget_exhausted"
+            session.status = 'max_turns_exceeded'
+            session.session_end_reason = 'budget_exhausted'
             session.session_end_summary = (
-                f"reached max_turns={self.max_turns} after {turn_number} turns"
+                f'reached max_turns={self.max_turns} after {turn_number} turns'
             )
             logger.info(
-                "Agent run reached max_turns issue_id=%s turns=%s/%s tools=%s",
+                'Agent run reached max_turns issue_id=%s turns=%s/%s tools=%s',
                 issue.id,
                 turn_number,
                 self.max_turns,
@@ -2218,17 +2249,17 @@ class AgentRunner:
                 # downstream consumers always see a terminal event. The
                 # ``on_session_complete`` call uses the runner's
                 # ``session_end_reason`` (set above) as the wire reason.
-                self._dispatch_sink(sink, "on_phase_complete", phase_event, session)
+                self._dispatch_sink(sink, 'on_phase_complete', phase_event, session)
                 self._dispatch_sink(
                     sink,
-                    "on_turn_complete",
+                    'on_turn_complete',
                     TurnComplete(turn=turn_number),
                     session,
                 )
                 self._dispatch_sink(
                     sink,
-                    "on_session_complete",
-                    SessionComplete(reason=session.session_end_reason or "budget_exhausted"),
+                    'on_session_complete',
+                    SessionComplete(reason=session.session_end_reason or 'budget_exhausted'),
                     session,
                 )
 
@@ -2242,7 +2273,7 @@ class AgentRunner:
                     session._transcript_storage.flush()
                 except Exception:
                     logger.exception(
-                        "Failed to final-flush transcript run_id=%s",
+                        'Failed to final-flush transcript run_id=%s',
                         session.run_id,
                     )
             # F-49 Phase 1: stop the control socket on max_turns exit.
@@ -2251,13 +2282,13 @@ class AgentRunner:
                     await session.control_socket.stop()
                 except Exception:
                     logger.exception(
-                        "Failed to stop control_socket run_id=%s",
+                        'Failed to stop control_socket run_id=%s',
                         session.run_id,
                     )
                 session.control_socket = None
             append_debug_event(
                 session.debug_log_path,
-                "agent_runner.max_turns_exceeded",
+                'agent_runner.max_turns_exceeded',
                 issue_id=issue.id,
                 run_id=session.run_id,
                 turn_count=session.turn_count,
@@ -2278,30 +2309,30 @@ class AgentRunner:
             session._save_json_snapshot()
 
     def _build_run_id(self, session: AgentSession) -> str:
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        attempt = getattr(session, "attempt", 1)
-        if session.run_kind == "review_followup":
-            issue_attempt = getattr(session, "issue_attempt", attempt)
-            followup_attempt = getattr(session, "followup_attempt", 1)
-            return f"run-{issue_attempt}-followup-{followup_attempt}-{timestamp}"
-        return f"run-{attempt:02d}-{timestamp}"
+        timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        attempt = getattr(session, 'attempt', 1)
+        if session.run_kind == 'review_followup':
+            issue_attempt = getattr(session, 'issue_attempt', attempt)
+            followup_attempt = getattr(session, 'followup_attempt', 1)
+            return f'run-{issue_attempt}-followup-{followup_attempt}-{timestamp}'
+        return f'run-{attempt:02d}-{timestamp}'
 
     async def _post_summary_placeholder(
         self,
         session: AgentSession,
         comment_tracker: Any,
     ) -> None:
-        body = "## ClawCodex Run Summary\n\n⏳ Run in progress."
+        body = '## ClawCodex Run Summary\n\n⏳ Run in progress.'
         try:
             created = await comment_tracker.create_comment(session.issue.id, body)
         except Exception as exc:
             logger.warning(
-                "Failed to post summary placeholder issue_id=%s: %s",
+                'Failed to post summary placeholder issue_id=%s: %s',
                 session.issue.id,
                 exc,
             )
             return
-        if created is not None and getattr(created, "id", None):
+        if created is not None and getattr(created, 'id', None):
             session.summary_comment_id = created.id
 
     async def _should_continue(
@@ -2332,10 +2363,10 @@ class AgentRunner:
         # conditions mirror the spec: never skip on the first turn, never
         # skip when the most recent snapshot reported inactive, and never
         # skip while a user-interrupt flag is set on the session.
-        cache = getattr(session, "state_cache", None) if session is not None else None
+        cache = getattr(session, 'state_cache', None) if session is not None else None
         if cache is not None:
-            turn = int(getattr(session, "turn_count", 0) or 0)
-            user_interrupted = bool(getattr(session, "user_interrupted", False))
+            turn = int(getattr(session, 'turn_count', 0) or 0)
+            user_interrupted = bool(getattr(session, 'user_interrupted', False))
             recent_inactive = cache.has_recent_inactive(issue.id, turn - 1)
             if (
                 turn > 0
@@ -2344,7 +2375,7 @@ class AgentRunner:
                 and cache.should_skip_poll(issue.id, turn)
             ):
                 logger.debug(
-                    "F-105 skip tracker poll issue=%s turn=%d cache=%s",
+                    'F-105 skip tracker poll issue=%s turn=%d cache=%s',
                     issue.id,
                     turn,
                     cache.stats(),
@@ -2356,7 +2387,7 @@ class AgentRunner:
         if refreshed_issue is None:
             return False, issue
 
-        active_states = [s.strip().lower() for s in (getattr(tracker, "active_states", None) or [])]
+        active_states = [s.strip().lower() for s in (getattr(tracker, 'active_states', None) or [])]
         is_active = (
             refreshed_issue.state is not None
             and refreshed_issue.state.strip().lower() in active_states
@@ -2370,8 +2401,8 @@ class AgentRunner:
             cache.record(
                 issue_id=issue.id,
                 is_active=is_active,
-                state=getattr(refreshed_issue, "state", None),
-                observed_at_turn=int(getattr(session, "turn_count", 0) or 0),
+                state=getattr(refreshed_issue, 'state', None),
+                observed_at_turn=int(getattr(session, 'turn_count', 0) or 0),
             )
 
         if not is_active:
@@ -2387,13 +2418,10 @@ class AgentRunner:
         #
         # Without this check, the agent enters an infinite loop:
         # LLM says "done" → tracker says "open" → another turn → repeat.
-        if (
-            session is not None
-            and getattr(session, "turn_count", 0) > 0
-        ):
-            ws = getattr(session, "workspace", None)
+        if session is not None and getattr(session, 'turn_count', 0) > 0:
+            ws = getattr(session, 'workspace', None)
             if ws is not None:
-                ws_path = getattr(ws, "path", None)
+                ws_path = getattr(ws, 'path', None)
                 if ws_path is not None:
                     try:
                         _env = self._build_subprocess_env()
@@ -2406,11 +2434,11 @@ class AgentRunner:
                             status_entries,
                         )
                         head_changed = False
-                        start_commit_sha = getattr(session, "start_commit_sha", None)
+                        start_commit_sha = getattr(session, 'start_commit_sha', None)
                         if start_commit_sha:
                             head_proc = await asyncio.to_thread(
                                 self._git_capture,
-                                ["git", "rev-parse", "HEAD"],
+                                ['git', 'rev-parse', 'HEAD'],
                                 str(ws_path),
                                 _env,
                             )
@@ -2420,15 +2448,15 @@ class AgentRunner:
                         if (
                             head_changed
                             or has_user_uncommitted
-                            or session.status in ("completed", "task_complete")
+                            or session.status in ('completed', 'task_complete')
                         ):
                             if head_changed or has_user_uncommitted:
                                 session.has_made_progress = True
                             logger.info(
-                                "Issue %s work appears done in workspace "
-                                "(turn_count=%d, head_changed=%s, "
-                                "has_uncommitted=%s, has_user_uncommitted=%s) — "
-                                "stopping continuation loop",
+                                'Issue %s work appears done in workspace '
+                                '(turn_count=%d, head_changed=%s, '
+                                'has_uncommitted=%s, has_user_uncommitted=%s) — '
+                                'stopping continuation loop',
                                 issue.id,
                                 session.turn_count,
                                 head_changed,
@@ -2445,15 +2473,15 @@ class AgentRunner:
         # AND the session has consumed multiple turns with only
         # read-only tools, stop the continuation loop so the session
         # terminates and the ``llm_gave_up`` check fires.
-        tool_count = getattr(session, "tool_count", 0)
+        tool_count = getattr(session, 'tool_count', 0)
         if (
-            not getattr(session, "has_made_progress", False)
-            and getattr(session, "turn_count", 0) >= 2
+            not getattr(session, 'has_made_progress', False)
+            and getattr(session, 'turn_count', 0) >= 2
             and tool_count > 0
         ):
-            ws = getattr(session, "workspace", None)
+            ws = getattr(session, 'workspace', None)
             if ws is not None:
-                ws_path = getattr(ws, "path", None)
+                ws_path = getattr(ws, 'path', None)
                 if ws_path is not None:
                     try:
                         # Check if recent commits have actual file
@@ -2463,7 +2491,7 @@ class AgentRunner:
                         # agent is faking progress.
                         proc = await asyncio.to_thread(
                             self._git_capture,
-                            ["git", "diff", "--stat", "HEAD~3..HEAD"],
+                            ['git', 'diff', '--stat', 'HEAD~3..HEAD'],
                             str(ws_path),
                             self._build_subprocess_env(),
                         )
@@ -2472,13 +2500,13 @@ class AgentRunner:
                         diff_empty = not proc.stdout.strip()
                         if diff_empty:
                             logger.info(
-                                "Issue %s: all recent commits are empty "
-                                "(%d turns, %d tools, has_made_progress=%s) — "
-                                "stopping fake-progress loop",
+                                'Issue %s: all recent commits are empty '
+                                '(%d turns, %d tools, has_made_progress=%s) — '
+                                'stopping fake-progress loop',
                                 issue.id,
-                                getattr(session, "turn_count", 0),
+                                getattr(session, 'turn_count', 0),
                                 tool_count,
-                                getattr(session, "has_made_progress", False),
+                                getattr(session, 'has_made_progress', False),
                             )
                             return False, refreshed_issue
                     except Exception:
@@ -2492,13 +2520,13 @@ class AgentRunner:
         Returns None when no custom env is configured so callers inherit
         the parent's environment unchanged (avoids unnecessary copies).
         """
-        custom_env = getattr(self.agent_config, "env", None)
+        custom_env = getattr(self.agent_config, 'env', None)
         if not custom_env:
             return None
         base = os.environ.copy()
         for key, value in custom_env.items():
-            if key == "PATH" and value:
-                base["PATH"] = value.replace("$PATH", base.get("PATH", ""))
+            if key == 'PATH' and value:
+                base['PATH'] = value.replace('$PATH', base.get('PATH', ''))
             else:
                 base[key] = value
         return base
@@ -2508,7 +2536,7 @@ class AgentRunner:
         args: list[str],
         cwd: str,
         env: dict[str, str] | None,
-    ) -> "subprocess.CompletedProcess[str]":
+    ) -> 'subprocess.CompletedProcess[str]':
         """Run a git command capturing output (synchronous, off event loop).
 
         Invoked via ``asyncio.to_thread`` from async callers so the
@@ -2538,18 +2566,18 @@ class AgentRunner:
         """
         import asyncio
 
-        test_cmd = getattr(self.agent_config, "test_command", None)
+        test_cmd = getattr(self.agent_config, 'test_command', None)
         if not test_cmd:
             return True  # No test command = skip verification
 
-        ws = getattr(session, "workspace", None)
-        ws_path = getattr(ws, "path", None) if ws else None
+        ws = getattr(session, 'workspace', None)
+        ws_path = getattr(ws, 'path', None) if ws else None
         if not ws_path:
             return False
 
         timeout_ms = getattr(
-            getattr(self.agent_config, "verification", None),
-            "timeout_ms",
+            getattr(self.agent_config, 'verification', None),
+            'timeout_ms',
             600_000,
         )
         try:
@@ -2568,25 +2596,25 @@ class AgentRunner:
             )
             if proc.returncode == 0:
                 logger.info(
-                    "Verification passed for issue_id=%s — work is already implemented",
+                    'Verification passed for issue_id=%s — work is already implemented',
                     session.issue.id,
                 )
                 return True
             logger.info(
-                "Verification failed for issue_id=%s (exit=%d) — work not yet done",
+                'Verification failed for issue_id=%s (exit=%d) — work not yet done',
                 session.issue.id,
                 proc.returncode,
             )
             return False
         except asyncio.TimeoutError:
             logger.warning(
-                "Verification timed out for issue_id=%s",
+                'Verification timed out for issue_id=%s',
                 session.issue.id,
             )
             return False
         except Exception as exc:
             logger.warning(
-                "Verification error for issue_id=%s: %s",
+                'Verification error for issue_id=%s: %s',
                 session.issue.id,
                 exc,
             )
