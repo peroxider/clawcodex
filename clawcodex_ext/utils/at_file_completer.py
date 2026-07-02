@@ -219,6 +219,10 @@ class AtFileCompleter(Completer):
         query = match.group(1)
         replace_len = len(match.group(0))
 
+        # ``@agent-<type>`` mentions are completed by AgentMentionCompleter.
+        if query.lower().startswith("agent-"):
+            return
+
         # Path-like tokens (``@/...``, ``@~/...``, ``@./...``,
         # ``@../...``) bypass the project-files index and walk the
         # filesystem directly so the user can reference any path on

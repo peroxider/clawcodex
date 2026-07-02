@@ -46,7 +46,33 @@ class OrchestrationSubsystem:
         from ..orchestrator.orchestrator import Orchestrator
 
         self.workflow = workflow_config
-        self._workflow_yaml_path = workflow_yaml_path
+        resolved_yaml = workflow_yaml_path
+        if not resolved_yaml:
+            try:
+                from extensions.sop_converter.bundle_workflow import discover_workflow_yaml
+
+                discovered = discover_workflow_yaml(Path(workflow_config.workspace.root))
+                if discovered is not None:
+                    resolved_yaml = str(discovered)
+                    logger.info("Auto-discovered workflow.yaml: %s", resolved_yaml)
+            except ImportError:
+                pass
+
+        self._workflow_yaml_path = resolved_yaml
+        self._bundle_dir: Path | None = None
+        if resolved_yaml:
+            bundle_dir = Path(resolved_yaml).resolve().parent
+            self._bundle_dir = bundle_dir
+            try:
+                from extensions.sop_converter.bundle_agents import register_bundle_agents
+                from extensions.sop_converter.bundle_skills import register_bundle_skills
+
+                agents = register_bundle_agents(bundle_dir)
+                if agents:
+                    logger.info("Loaded %d stage agents from bundle %s", len(agents), bundle_dir.name)
+                register_bundle_skills(bundle_dir, Path(workflow_config.workspace.root))
+            except ImportError as exc:
+                logger.debug("Bundle workflow bootstrap skipped: %s", exc)
         self.workspace_manager = WorkspaceManager(
             WorkspaceConfig(
                 root=Path(workflow_config.workspace.root),

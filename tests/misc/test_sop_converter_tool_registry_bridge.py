@@ -32,10 +32,13 @@ from extensions.sop_converter.source_parser import (
 )
 from extensions.sop_converter.tool_registry_bridge import (
     _enrich_bridge_params,
+    _generate_cli_handler_stub,
     _generate_method_stub,
     _generate_wrapper_script,
+    _is_cli_handler_op,
     _merge_init_and_method_params,
     _param_signature_parts,
+    _parse_cli_dispatch_map,
     _resolve_module_path,
     _script_name_for_class,
     _script_name_for_functions,
@@ -395,6 +398,8 @@ class TestGenerateWrapperScript(unittest.TestCase):
                 source_dir=str(source_dir),
             )
         content = script_path.read_text()
+        self.assertNotIn("openjiuwen", content)
+        self.assertNotIn("_suppress_sdk_logging", content)
         # No _get_instance helper for standalone functions.
         self.assertNotIn("_get_instance", content)
         # Direct module attribute call.
@@ -504,6 +509,105 @@ class TestGenerateWrapperScript(unittest.TestCase):
                 self.assertIn("a,", line)
                 self.assertIn("b=None", line)
                 break
+
+    def test_wrapper_emits_imports_for_sdk_default_symbols(self) -> None:
+        source = textwrap.dedent(
+            """\
+            from demo_pkg.enums import WidgetMode, WidgetStatus
+
+            class Handler:
+                def __init__(
+                    self,
+                    name: str,
+                    teammate_mode=WidgetMode.BUILD_MODE,
+                ) -> None:
+                    self.name = name
+                    self.teammate_mode = teammate_mode
+
+                def run(self, status=WidgetStatus.IDLE):
+                    \"\"\"Run handler.\"\"\"
+                    return status
+            """
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("")
+            (pkg / "enums.py").write_text(
+                textwrap.dedent(
+                    """\
+                    from enum import Enum
+
+                    class WidgetMode(str, Enum):
+                        BUILD_MODE = "build"
+
+                    class WidgetStatus(str, Enum):
+                        IDLE = "idle"
+                    """
+                )
+            )
+            (pkg / "handler.py").write_text(source)
+
+            init_params = [
+                _make_param("name", "str", required=True),
+                _make_param("teammate_mode", "WidgetMode", required=False, default="WidgetMode.BUILD_MODE"),
+            ]
+            op = SourceOperation(
+                name="run",
+                description="Run handler.",
+                class_name="Handler",
+                file_stem="handler",
+                parameters=[
+                    _make_param("status", "WidgetStatus", required=False, default="WidgetStatus.IDLE"),
+                ],
+            )
+            script_path = _generate_wrapper_script(
+                [op],
+                class_name="Handler",
+                module_name="demo_pkg.handler",
+                file_stem="handler",
+                source_dir=str(tmp),
+                init_params=init_params,
+            )
+
+            content = script_path.read_text()
+            self.assertIn("from demo_pkg.enums import WidgetMode, WidgetStatus", content)
+
+            compile(content, str(script_path), "exec")
+
+    def test_team_backend_wrapper_imports_member_mode(self) -> None:
+        jiouwen_root = Path("D:/projects/JiuwenAgent")
+        team_py = jiouwen_root / "openjiuwen" / "agent_teams" / "tools" / "team.py"
+        if not team_py.is_file():
+            self.skipTest("JiuwenAgent source tree not available")
+
+        from extensions.sop_converter.source_parser import SourceCodeParser
+
+        parser = SourceCodeParser(str(jiouwen_root / "openjiuwen"))
+        components = parser.parse()
+        team_comp = next(
+            (c for c in components if any(op.class_name == "TeamBackend" for op in c.operations)),
+            None,
+        )
+        self.assertIsNotNone(team_comp)
+        init_params = team_comp.class_init_params["TeamBackend"]
+        ops = [op for op in team_comp.operations if op.class_name == "TeamBackend"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            script_path = _generate_wrapper_script(
+                ops,
+                class_name="TeamBackend",
+                module_name="agent_teams.tools.team",
+                file_stem="team",
+                source_dir=str(jiouwen_root / "openjiuwen"),
+                init_params=init_params,
+                scripts_dir=Path(tmpdir),
+            )
+            content = script_path.read_text()
+            self.assertIn("MemberMode", content)
+            self.assertIn("from openjiuwen.agent_teams.schema.status import", content)
+            compile(content, str(script_path), "exec")
 
 
 # ---------------------------------------------------------------------------
@@ -1047,6 +1151,179 @@ class SharedMemoryManager:
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue(Path("/tmp/p0-fix-team-memory").is_dir())
+
+
+# ---------------------------------------------------------------------------
+# CLI handler subprocess bridge (F-52)
+# ---------------------------------------------------------------------------
+
+
+_SAMPLE_CLI = textwrap.dedent(
+    '''\
+    """Sample CLI module."""
+    import argparse
+
+
+    def build_parser() -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(prog="sample")
+        sub = parser.add_subparsers(dest="command")
+        proj = sub.add_parser("project", help="Multi-project management")
+        proj.add_argument(
+            "project_action",
+            choices=["list", "create"],
+            help="Project action",
+        )
+        return parser
+
+
+    def cmd_project(args: argparse.Namespace) -> int:
+        """C1: Multi-project management commands."""
+        if args.project_action == "list":
+            print("no projects")
+            return 0
+        print(f"created:{getattr(args, 'name', '')}")
+        return 0
+
+
+    def main(argv=None) -> int:
+        parser = build_parser()
+        args = parser.parse_args(argv)
+        command = args.command
+        if command == "project":
+            return cmd_project(args)
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+    '''
+)
+
+
+class TestCliHandlerBridge(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmpdir.name)
+        pkg = self.tmp / "samplepkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        self.cli_path = pkg / "cli.py"
+        self.cli_path.write_text(_SAMPLE_CLI, encoding="utf-8")
+
+    def tearDown(self) -> None:
+        self._tmpdir.cleanup()
+
+    def test_parse_cli_dispatch_map(self) -> None:
+        dispatch = _parse_cli_dispatch_map(self.cli_path)
+        self.assertEqual(dispatch.get("cmd_project"), "project")
+
+    def test_is_cli_handler_op(self) -> None:
+        dispatch = {"cmd_project": "project"}
+        op = _make_op(
+            "cmd_project",
+            parameters=[_make_param("args", "argparse.Namespace")],
+            file_stem="cli",
+        )
+        self.assertTrue(_is_cli_handler_op(op, dispatch))
+        self.assertFalse(_is_cli_handler_op(_make_op("build_parser"), dispatch))
+        self.assertFalse(
+            _is_cli_handler_op(
+                _make_op("cmd_project", class_name="Helper"),
+                dispatch,
+            )
+        )
+
+    def test_generate_cli_handler_stub_uses_subprocess(self) -> None:
+        op = _make_op("cmd_project", description="Manage projects.")
+        stub = _generate_cli_handler_stub(op, subcommand="project")
+        self.assertIn("subprocess.run", stub)
+        self.assertIn("'project'", stub)
+        self.assertNotIn("importlib.import_module", stub)
+
+    def test_wrapper_cli_handler_runs_subprocess(self) -> None:
+        import ast
+        import subprocess
+        import sys
+
+        op = _make_op(
+            "cmd_project",
+            description="C1: Multi-project management commands.",
+            parameters=[_make_param("args", "argparse.Namespace")],
+            file_stem="cli",
+        )
+        script_path = _generate_wrapper_script(
+            [op],
+            class_name=None,
+            module_name="samplepkg.cli",
+            file_stem="cli",
+            source_dir=str(self.tmp),
+            cli_dispatch_map={"cmd_project": "project"},
+        )
+        content = script_path.read_text(encoding="utf-8")
+        ast.parse(content)
+        self.assertIn("CLI_PREFIX:", content)
+        self.assertIn("subprocess.run", content)
+        self.assertNotIn("module.cmd_project", content)
+
+        args = json.dumps({"args": "list"})
+        result = subprocess.run(
+            [sys.executable, str(script_path), "cmd_project", args],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["returncode"], 0)
+        self.assertIn("no projects", payload["stdout"])
+
+    def test_operation_to_spec_cli_subcommand_schema(self) -> None:
+        op = _make_op(
+            "cmd_project",
+            parameters=[_make_param("args", "argparse.Namespace")],
+            file_stem="cli",
+        )
+        spec = operation_to_spec(
+            op,
+            source_dir=str(self.tmp),
+            script_path="/tmp/fake.py",
+            comp_name="samplepkg.cli",
+            cli_subcommand="project",
+        )
+        self.assertEqual(spec.input_schema["properties"]["args"]["type"], "string")
+        self.assertIn("project", spec.input_schema["properties"]["args"]["description"])
+
+
+class TestPipelineExecuteStageSchema(unittest.TestCase):
+    def test_execute_stage_schema_uses_object_and_optional_runtime_fields(self) -> None:
+        op = _make_op(
+            "execute_stage",
+            parameters=[
+                _make_param("stage", "Stage"),
+                _make_param("run_dir", "Path"),
+                _make_param("run_id", "str"),
+                _make_param("config", "RCConfig"),
+                _make_param("adapters", "AdapterBundle"),
+                _make_param(
+                    "auto_approve_gates",
+                    "bool",
+                    required=False,
+                    default="False",
+                ),
+            ],
+            file_stem="executor",
+        )
+        spec = operation_to_spec(
+            op,
+            source_dir="/tmp/sdk",
+            script_path="/tmp/fake.py",
+            comp_name="researchclaw.pipeline",
+        )
+        props = spec.input_schema["properties"]
+        self.assertEqual(props["config"]["type"], "object")
+        self.assertEqual(props["adapters"]["type"], "object")
+        self.assertEqual(props["auto_approve_gates"]["default"], False)
+        self.assertEqual(spec.input_schema["required"], ["stage", "run_dir"])
 
 
 if __name__ == "__main__":

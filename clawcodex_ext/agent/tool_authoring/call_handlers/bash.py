@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import threading
 from typing import Any
+
+_DEFAULT_TIMEOUT_SEC = 300.0
 
 
 class BashCallError(Exception):
@@ -14,7 +17,26 @@ class BashCallError(Exception):
     pass
 
 
-def execute_bash(command_template: str, params: dict[str, Any]) -> str:
+def resolve_agent_tool_bash_timeout_sec() -> float:
+    """Return subprocess timeout for agent-tool bash handlers.
+
+    ``AGENT_TOOL_BASH_TIMEOUT_SEC`` overrides the default (300s).
+    """
+    raw = os.environ.get("AGENT_TOOL_BASH_TIMEOUT_SEC", "").strip()
+    if raw:
+        try:
+            return max(1.0, float(raw))
+        except ValueError:
+            pass
+    return _DEFAULT_TIMEOUT_SEC
+
+
+def execute_bash(
+    command_template: str,
+    params: dict[str, Any],
+    *,
+    timeout_sec: float | None = None,
+) -> str:
     """Execute a bash command from a validated template.
 
     Args:
@@ -34,6 +56,9 @@ def execute_bash(command_template: str, params: dict[str, Any]) -> str:
     except Exception as exc:
         raise BashCallError(f"Failed to format command template: {exc}") from exc
 
+    if timeout_sec is None:
+        timeout_sec = resolve_agent_tool_bash_timeout_sec()
+
     try:
         result = subprocess.run(
             command,
@@ -42,10 +67,12 @@ def execute_bash(command_template: str, params: dict[str, Any]) -> str:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=30,
+            timeout=timeout_sec,
         )
     except subprocess.TimeoutExpired as exc:
-        raise BashCallError(f"Command timed out after 30s: {command[:80]}") from exc
+        raise BashCallError(
+            f"Command timed out after {int(timeout_sec)}s: {command[:80]}"
+        ) from exc
     except OSError as exc:
         raise BashCallError(f"Failed to execute: {exc}") from exc
 

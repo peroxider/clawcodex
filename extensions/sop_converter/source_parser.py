@@ -122,6 +122,10 @@ class SourceCodeParser:
             "tests",
             "example",
             "examples",
+            # clawcodex's own output/config dir — never treat generated
+            # bundle artifacts (agent-tools/scripts wrappers, etc.) as
+            # source to be re-parsed.
+            ".clawcodex",
         }
     )
 

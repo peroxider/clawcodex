@@ -21,13 +21,23 @@ class BundleManifest:
     bundle_id: str
     sdk_source_dir: Path
     version: int = _MANIFEST_VERSION
+    workflow_yaml: str | None = None
+    bridge_script: str | None = None
+    workflow_mode: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "version": self.version,
             "bundle_id": self.bundle_id,
             "sdk_source_dir": str(self.sdk_source_dir.resolve()),
         }
+        if self.workflow_yaml:
+            payload["workflow_yaml"] = self.workflow_yaml
+        if self.bridge_script:
+            payload["bridge_script"] = self.bridge_script
+        if self.workflow_mode:
+            payload["workflow_mode"] = self.workflow_mode
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> BundleManifest | None:
@@ -47,7 +57,23 @@ class BundleManifest:
         version = data.get("version", _MANIFEST_VERSION)
         if not isinstance(version, int):
             version = _MANIFEST_VERSION
-        return cls(bundle_id=bundle_id, sdk_source_dir=sdk_path, version=version)
+        workflow_yaml = data.get("workflow_yaml")
+        if workflow_yaml is not None and not isinstance(workflow_yaml, str):
+            workflow_yaml = None
+        bridge_script = data.get("bridge_script")
+        if bridge_script is not None and not isinstance(bridge_script, str):
+            bridge_script = None
+        workflow_mode = data.get("workflow_mode")
+        if workflow_mode is not None and not isinstance(workflow_mode, str):
+            workflow_mode = None
+        return cls(
+            bundle_id=bundle_id,
+            sdk_source_dir=sdk_path,
+            version=version,
+            workflow_yaml=workflow_yaml,
+            bridge_script=bridge_script,
+            workflow_mode=workflow_mode,
+        )
 
 
 def manifest_path_for_bundle(bundle_path: Path) -> Path:
@@ -59,6 +85,9 @@ def write_bundle_manifest(
     *,
     sdk_source_dir: Path | str,
     bundle_id: str | None = None,
+    workflow_yaml: str | None = None,
+    bridge_script: str | None = None,
+    workflow_mode: str | None = None,
 ) -> Path:
     """Write ``bundle.json`` under *bundle_dir* (created if missing)."""
     bundle_dir = bundle_dir.resolve()
@@ -67,6 +96,9 @@ def write_bundle_manifest(
     manifest = BundleManifest(
         bundle_id=bundle_id or bundle_dir.name,
         sdk_source_dir=resolved_sdk,
+        workflow_yaml=workflow_yaml,
+        bridge_script=bridge_script,
+        workflow_mode=workflow_mode,
     )
     path = manifest_path_for_bundle(bundle_dir)
     path.write_text(json.dumps(manifest.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

@@ -63,7 +63,7 @@ docs/feature_plan/
 
 | F-Number | 名称 | 状态 | 章节路径 |
 |----------|------|:----:|---------|
-| F-50 | SOP 转换器源码固化 (子特性 A-G) | 📋(部分) | [f-50-sop-converter.md](04-architecture-sdk/f-50-sop-converter.md) |
+| F-50 | SOP 转换器源码固化 (子特性 A-G) | 🟡 | [f-50-sop-converter.md](04-architecture-sdk/f-50-sop-converter.md) |
 | F-52 | Python SDK 方法注册为 Tool | 📋 | [f-52-sdk-to-tool.md](04-architecture-sdk/f-52-sdk-to-tool.md) |
 
 ### Cron 系统

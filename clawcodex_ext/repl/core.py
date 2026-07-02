@@ -2565,9 +2565,7 @@ class ClawcodexREPL:
         """
         try:
             from clawcodex_ext.agent.agent_definitions import get_built_in_agents
-            from clawcodex_ext.agent.load_agents_dir import (
-                get_agent_definitions_with_overrides,
-            )
+            from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
         except Exception:
             return []
 
@@ -2582,22 +2580,12 @@ class ClawcodexREPL:
                 return list(active)
 
         try:
-            cwd = str(self.tool_context.cwd or self.tool_context.workspace_root)
-            agents = list(get_agent_definitions_with_overrides(cwd))
-
-            # If a runtime-context agent_dir_override exists, also load
-            # agents from that directory (e.g. ``--agent <dir>``).
-            rc = getattr(self, 'runtime_context', None)
-            if rc is not None:
-                ad_override = getattr(rc.options, 'agent_dir_override', None)
-                if ad_override is not None:
-                    override_cwd = str(ad_override)
-                    extra = list(get_agent_definitions_with_overrides(override_cwd))
-                    for agent in extra:
-                        if agent.agent_type not in {a.agent_type for a in agents}:
-                            agents.append(agent)
-
-            return agents
+            cwd = self.tool_context.cwd or self.tool_context.workspace_root
+            return get_agents_for_mentions(
+                cwd,
+                tool_context=self.tool_context,
+                runtime_context=getattr(self, "runtime_context", None),
+            )
         except Exception:
             return list(get_built_in_agents())
 
@@ -5107,7 +5095,6 @@ class ClawcodexREPL:
         # ``typescript/src/utils/attachments.ts#processAtMentionedFiles``.
         from src.command_system.input_processing import (
             build_image_content_blocks,
-            expand_agent_mentions,
             expand_at_mentions,
             format_at_mention_attachments,
         )
@@ -5116,13 +5103,61 @@ class ClawcodexREPL:
         cwd_for_mentions = str(self.tool_context.cwd or self.tool_context.workspace_root)
         _, at_attachments = expand_at_mentions(user_input, cwd=cwd_for_mentions)
 
+        available_agents = self._available_agents()
+        from src.command_system.input_processing import (
+            expand_agent_mentions,
+            find_unknown_agent_mentions,
+            format_unknown_agent_mention_error,
+        )
+
+        unknown_agents = find_unknown_agent_mentions(user_input, available_agents)
+        if unknown_agents:
+            self.console.print(
+                f"[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]"
+            )
+            return True
+
         # Port of ``processAgentMentions`` from
         # ``typescript/src/utils/attachments.ts``: if the user types
         # ``@agent-explore`` (or the autocomplete form ``@"explore (agent)"``),
         # attach a system-reminder telling the model to delegate to that
         # agent via the Agent tool. Mentions of unknown agents are ignored so
         # we don't polute context with misleading reminders.
-        agent_attachments = expand_agent_mentions(user_input, self._available_agents())
+        # ponytail: skip direct @agent- shortcut when SOP bundle is active;
+        # in bundle mode the overview agent must handle delegation with full
+        # conversation context so stage agents get history, not one-shot prompts.
+        _sop_bundle_active = False
+        try:
+            from extensions.sop_converter.bundle_context import get_active_bundle
+
+            _sop_bundle_active = get_active_bundle() is not None
+        except ImportError:
+            pass
+
+        agent_attachments = expand_agent_mentions(user_input, available_agents)
+
+        if agent_attachments:
+            for att in agent_attachments:
+                if _sop_bundle_active:
+                    self.console.print(
+                        f"[dim]  ⎿  @{att['agent_type']} → delegating via overview agent[/dim]"
+                    )
+                else:
+                    self.console.print(f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]")
+
+        if agent_attachments and not at_attachments and not _sop_bundle_active:
+            from clawcodex_ext.repl.mentioned_agent import (
+                run_mentioned_agent_direct,
+                should_run_mentioned_agent_directly,
+            )
+
+            if should_run_mentioned_agent_directly(agent_attachments, at_attachments):
+                if run_mentioned_agent_direct(
+                    self,
+                    agent_type=agent_attachments[0]["agent_type"],
+                    user_input=user_input,
+                ):
+                    return True
 
         all_attachments = list(at_attachments) + list(agent_attachments)
         if all_attachments:
@@ -5146,8 +5181,6 @@ class ClawcodexREPL:
                     self.console.print(
                         f'[dim]  ⎿  Listed {label} {att["display_path"]}{"/" if kind == "directory" else ""}[/dim]'
                     )
-            for att in agent_attachments:
-                self.console.print(f'[dim]  ⎿  Invoking agent @{att["agent_type"]}[/dim]')
 
         # Companion intro — build and prepend companion intro attachment
         # if a companion has been hatched and not yet announced.

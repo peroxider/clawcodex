@@ -44,6 +44,13 @@ from .source_parser import SourceCodeParser, SourceComponent, SourceOperation, P
 from .agent_md_writer import AgentMarkdownWriter, AgentComponentInfo, WorkflowStage
 from .default_agent import resolve_default_agent, resolve_agent_by_type
 from .tool_registry_bridge import register_component_tools
+from .composite_tools import register_composite_tools, emit_composite_workflow_yaml
+from .workflow_mode import (
+    WorkflowDiscriminator,
+    DiscriminationResult,
+    discriminate_and_extract,
+    extract_workflow,
+)
 
 __all__ = [
     "SdkParser",
@@ -72,4 +79,10 @@ __all__ = [
     "resolve_default_agent",
     "resolve_agent_by_type",
     "register_component_tools",
+    "register_composite_tools",
+    "emit_composite_workflow_yaml",
+    "WorkflowDiscriminator",
+    "DiscriminationResult",
+    "discriminate_and_extract",
+    "extract_workflow",
 ]

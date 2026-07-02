@@ -262,5 +262,48 @@ class TestBundleToolAllowlistFallback(unittest.TestCase):
             self.assertIsNone(registry.get("tool-b"))
 
 
+class TestSdkSourceWorkingDirectory(unittest.TestCase):
+    def test_apply_sdk_source_adds_to_allowed_roots(self):
+        from clawcodex_ext.tool_system.context import ToolContext
+        from extensions.sop_converter.bundle_context import (
+            apply_sdk_source_working_directory,
+        )
+
+        with tempfile.TemporaryDirectory() as sdk_dir:
+            sdk_path = Path(sdk_dir)
+            bundle = build_bundle_context(
+                bundle_path=Path("/tmp/bundle"),
+                skill_names=[],
+                skill_dirs=[],
+                tool_names=[],
+                sdk_source_dir=sdk_path,
+            )
+            ctx = ToolContext(workspace_root=Path("/tmp/workspace"))
+            added = apply_sdk_source_working_directory(ctx, bundle)
+            self.assertEqual(added, sdk_path.resolve())
+            self.assertIn(sdk_path.resolve(), ctx.additional_working_directories)
+            self.assertIn(sdk_path.resolve(), ctx.allowed_roots())
+
+    def test_apply_sdk_source_is_idempotent(self):
+        from clawcodex_ext.tool_system.context import ToolContext
+        from extensions.sop_converter.bundle_context import (
+            apply_sdk_source_working_directory,
+        )
+
+        with tempfile.TemporaryDirectory() as sdk_dir:
+            sdk_path = Path(sdk_dir)
+            bundle = build_bundle_context(
+                bundle_path=Path("/tmp/bundle"),
+                skill_names=[],
+                skill_dirs=[],
+                tool_names=[],
+                sdk_source_dir=sdk_path,
+            )
+            ctx = ToolContext(workspace_root=Path("/tmp/workspace"))
+            apply_sdk_source_working_directory(ctx, bundle)
+            apply_sdk_source_working_directory(ctx, bundle)
+            self.assertEqual(len(ctx.additional_working_directories), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
