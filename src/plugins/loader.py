@@ -12,8 +12,13 @@ from .validator import validate_manifest
 
 logger = logging.getLogger(__name__)
 
-# Supported manifest filenames (order matters: first match wins)
-MANIFEST_FILES = ('plugin.yaml', 'plugin.yml', 'plugin.json')
+# Supported manifest filenames (order matters: first match wins).
+# pyproject.toml is supported as an extension format: the plugin manifest
+# is read from the ``[tool.clawcodex.plugin]`` table (P70-E).
+MANIFEST_FILES = ('plugin.yaml', 'plugin.yml', 'plugin.json', 'pyproject.toml')
+
+# TOML table path inside pyproject.toml that holds the plugin manifest.
+PYPROJECT_PLUGIN_TABLE = ('tool', 'clawcodex', 'plugin')
 
 TRUST_LEVELS = ('bundled', 'managed', 'user', 'project', 'mcp')
 
@@ -151,8 +156,47 @@ def _register_lifecycle_callbacks(name: str) -> None:
 # ── Manifest loading helpers ──────────────────────────────────────────
 
 
+def _read_pyproject_manifest(path: Path) -> dict[str, Any]:
+    """Read a plugin manifest from a ``pyproject.toml`` file.
+
+    The manifest is extracted from the ``[tool.clawcodex.plugin]`` table.
+    Only that table is returned — other pyproject.toml contents (build
+    system, project metadata, dependency declarations) are ignored so the
+    plugin validator sees the same shape it gets from plugin.yaml/json.
+
+    Raises :class:`PluginError` if the file is unreadable, the table is
+    missing, or the table is not a mapping.
+    """
+    import tomllib  # Python 3.11+ stdlib
+
+    text = path.read_text(encoding='utf-8')
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise PluginError(path.parent.name, f'Invalid TOML: {exc}') from exc
+
+    table: Any = data
+    for key in PYPROJECT_PLUGIN_TABLE:
+        if not isinstance(table, dict) or key not in table:
+            raise PluginError(
+                path.parent.name,
+                f'pyproject.toml missing [{ ".".join(PYPROJECT_PLUGIN_TABLE) }] table',
+            )
+        table = table[key]
+
+    if not isinstance(table, dict):
+        raise PluginError(
+            path.parent.name,
+            f'[{ ".".join(PYPROJECT_PLUGIN_TABLE) }] must be a table/mapping',
+        )
+    return table
+
+
 def _read_manifest(path: Path) -> dict[str, Any]:
-    """Read and parse a manifest file (JSON or YAML)."""
+    """Read and parse a manifest file (JSON, YAML, or pyproject.toml)."""
+    if path.name == 'pyproject.toml':
+        return _read_pyproject_manifest(path)
+
     text = path.read_text(encoding='utf-8')
     if path.suffix in ('.yaml', '.yml'):
         try:
@@ -250,10 +294,12 @@ def load_plugin_from_directory(
     )
 
     agents_paths: list[str] = []
-    single = raw.get('agentsPath')
+    # Accept both camelCase (plugin.yaml/json convention) and snake_case
+    # (pyproject.toml/TOML convention) keys for parity across formats.
+    single = raw.get('agentsPath') or raw.get('agents_path')
     if isinstance(single, str) and single.strip():
         agents_paths.append(single.strip())
-    multi = raw.get('agentsPaths')
+    multi = raw.get('agentsPaths') or raw.get('agents_paths')
     if isinstance(multi, list):
         for item in multi:
             if isinstance(item, str) and item.strip():
