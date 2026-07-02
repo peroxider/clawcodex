@@ -127,6 +127,38 @@ _READ_ONLY_TOOL_NAMES = frozenset(
     }
 )
 
+_ORCHESTRATOR_INTERNAL_PATH_PREFIXES = (
+    ".orchestrator_control/",
+    ".run_control/",
+    ".reports/",
+    ".event_logs/",
+)
+_ORCHESTRATOR_INTERNAL_PATHS = frozenset(
+    prefix.rstrip("/") for prefix in _ORCHESTRATOR_INTERNAL_PATH_PREFIXES
+)
+
+
+def _is_orchestrator_internal_path(path: str | None) -> bool:
+    if not path:
+        return False
+    normalized = path.replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    return normalized in _ORCHESTRATOR_INTERNAL_PATHS or normalized.startswith(
+        _ORCHESTRATOR_INTERNAL_PATH_PREFIXES,
+    )
+
+
+def _has_user_visible_status_changes(status_entries: list[Any]) -> bool:
+    for entry in status_entries:
+        paths = (
+            getattr(entry, "path", None),
+            getattr(entry, "original_path", None),
+        )
+        if any(path and not _is_orchestrator_internal_path(path) for path in paths):
+            return True
+    return False
+
 
 @dataclass
 class AgentSession:
@@ -817,7 +849,7 @@ class AgentRunner:
 
         # Thread-local MDC: inject context so every subsequent log
         # record from this thread carries issue_id / run_id automatically.
-        from ..logging_setup import set_log_context
+        from .logging_setup import set_log_context
 
         set_log_context(
             issue_id=str(issue.id),
@@ -2237,7 +2269,7 @@ class AgentRunner:
         finally:
             # Clear MDC context so stale issue_id/run_id don't leak
             # into subsequent runs on the same thread.
-            from ..logging_setup import clear_log_context
+            from .logging_setup import clear_log_context
 
             clear_log_context()
             # F-49 Phase 0.4.5: write .json snapshot on every exit path
@@ -2346,17 +2378,18 @@ class AgentRunner:
             return False, refreshed_issue
 
         # F-54 root-cause fix: if the tracker still says active but
-        # the agent has made progress (Write/Edit called) AND the LLM
-        # signaled SessionComplete(success), trust the agent's completion
-        # signal and stop the continuation loop. The workspace changes
-        # will be committed by git_sync after the session ends.
+        # the workspace already has real user-visible changes, trust the
+        # agent's completion signal and stop the continuation loop. The
+        # workspace changes will be committed by git_sync after the session
+        # ends. This cannot rely only on ``session.has_made_progress``:
+        # in coordinator mode the main session emits Agent/TaskStop while
+        # the worker performs the Edit/Write call in the same workspace.
         #
         # Without this check, the agent enters an infinite loop:
         # LLM says "done" → tracker says "open" → another turn → repeat.
         if (
             session is not None
             and getattr(session, "turn_count", 0) > 0
-            and getattr(session, "has_made_progress", False)
         ):
             ws = getattr(session, "workspace", None)
             if ws is not None:
@@ -2364,15 +2397,14 @@ class AgentRunner:
                 if ws_path is not None:
                     try:
                         _env = self._build_subprocess_env()
-                        proc = await asyncio.to_thread(
-                            self._git_capture,
-                            ["git", "status", "--porcelain"],
+                        status_entries = await asyncio.to_thread(
+                            get_file_status,
                             str(ws_path),
-                            _env,
                         )
-                        if proc.returncode != 0:
-                            return True, refreshed_issue
-                        has_uncommitted = bool(proc.stdout.strip())
+                        has_uncommitted = bool(status_entries)
+                        has_user_uncommitted = _has_user_visible_status_changes(
+                            status_entries,
+                        )
                         head_changed = False
                         start_commit_sha = getattr(session, "start_commit_sha", None)
                         if start_commit_sha:
@@ -2385,34 +2417,23 @@ class AgentRunner:
                             current_head = head_proc.stdout.strip()
                             head_changed = bool(current_head and current_head != start_commit_sha)
 
-                        # Check uncommitted changes (agent wrote files,
-                        # git_sync will commit after session ends)
-                        has_uncommitted = False
-                        status_proc = subprocess.run(
-                            ["git", "status", "--porcelain"],
-                            cwd=str(ws_path),
-                            capture_output=True,
-                            text=True,
-                            timeout=10,
-                            env=_env,
-                        )
-                        if status_proc.returncode == 0:
-                            has_uncommitted = bool(status_proc.stdout.strip())
-
                         if (
                             head_changed
-                            or has_uncommitted
+                            or has_user_uncommitted
                             or session.status in ("completed", "task_complete")
                         ):
+                            if head_changed or has_user_uncommitted:
+                                session.has_made_progress = True
                             logger.info(
                                 "Issue %s work appears done in workspace "
                                 "(turn_count=%d, head_changed=%s, "
-                                "has_uncommitted=%s) — "
+                                "has_uncommitted=%s, has_user_uncommitted=%s) — "
                                 "stopping continuation loop",
                                 issue.id,
                                 session.turn_count,
                                 head_changed,
                                 has_uncommitted,
+                                has_user_uncommitted,
                             )
                             return False, refreshed_issue
                     except Exception:

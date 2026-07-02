@@ -145,6 +145,62 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(should_continue)
 
+    async def test_should_continue_stops_when_worker_left_user_diff(self) -> None:
+        with TemporaryDirectory() as tmp:
+            workspace_path = Path(tmp) / "ws"
+            workspace_path.mkdir()
+            subprocess.run(["git", "init"], cwd=workspace_path, check=True, capture_output=True)
+            subprocess.run(
+                ["git", "config", "user.email", "test@example.com"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "Test User"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            (workspace_path / "README.md").write_text("base\n", encoding="utf-8")
+            subprocess.run(
+                ["git", "add", "README.md"], cwd=workspace_path, check=True, capture_output=True
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "initial"],
+                cwd=workspace_path,
+                check=True,
+                capture_output=True,
+            )
+            control_dir = workspace_path / ".orchestrator_control"
+            control_dir.mkdir()
+            (control_dir / "debug.ndjson").write_text("{}\n", encoding="utf-8")
+            (workspace_path / "README.md").write_text("worker update\n", encoding="utf-8")
+            issue = Issue(id="78", identifier="ISSUE-78", title="Worker diff", state="open")
+            session = AgentSession(
+                issue=issue,
+                workspace=Workspace(
+                    path=workspace_path,
+                    issue_identifier="ISSUE-78",
+                    issue_id="78",
+                ),
+            )
+            session.turn_count = 1
+            session.has_made_progress = False
+            runner = AgentRunner(
+                AgentConfig(max_turns=3, coordinator_mode=True),
+                SandboxConfig(),
+            )
+
+            should_continue, _ = await runner._should_continue(
+                issue,
+                _ActiveTrackerStub(["open"]),
+                session,
+            )
+
+        self.assertFalse(should_continue)
+        self.assertTrue(session.has_made_progress)
+
     async def test_run_posts_summary_placeholder_and_writes_phase_event_log(self) -> None:
         with TemporaryDirectory() as tmp:
             sessions_root = Path(tmp) / "sessions"

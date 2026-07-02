@@ -305,6 +305,51 @@ def run_headless(options: HeadlessOptions) -> int:
         deny = {name.lower() for name in options.disallowed_tools}
         _filter_registry(tool_registry, keep=lambda n: n.lower() not in deny)
 
+    # ★ MVP multi-agent: apply coordinator-mode tool filter in headless flow.
+    # The REPL already does this in core.py:4712, but the headless / orchestrator
+    # path historically did not, so CLAUDE_CODE_COORDINATOR_MODE was inert when
+    # the agent was launched by orchestrator. This block fixes that by reusing
+    # the same filter_coordinator_tools() helper the REPL uses, restricting the
+    # tool registry to {Agent, SendMessage, TaskStop, Read, WebSearch, WebFetch}
+    # so the LLM has no choice but to delegate via Agent/SendMessage tools.
+    #
+    # Note: ToolRegistry has no ``unregister`` method (the _filter_registry
+    # helper above silently no-ops on this — that's a pre-existing bug we
+    # work around here by mutating the registry's internal storage in place).
+    try:
+        from clawcodex_ext.coordinator.mode import (
+            is_coordinator_mode,
+            filter_coordinator_tools,
+        )
+
+        if is_coordinator_mode():
+            coordinator_tools = filter_coordinator_tools(tool_registry.list_tools())
+            allowed_names = {t.name for t in coordinator_tools}
+            # Direct in-place mutation of registry storage. The ToolRegistry
+            # exposes ``_tools`` (list) and ``_by_name`` (dict including
+            # aliases); rebuild both restricted to coordinator-allowed tools.
+            kept_tools = [t for t in tool_registry._tools if t.name in allowed_names]
+            kept_by_name: dict = {}
+            for t in kept_tools:
+                kept_by_name[t.name.lower()] = t
+                for alias in getattr(t, "aliases", ()):
+                    kept_by_name[alias.lower()] = t
+            tool_registry._tools = kept_tools
+            tool_registry._by_name = kept_by_name
+            import logging as _logging
+            _logging.getLogger(__name__).info(
+                "Coordinator mode: tool registry filtered to %d tools: %s",
+                len(kept_tools),
+                sorted(allowed_names),
+            )
+    except Exception as _exc:
+        # Never block the headless run on coordinator-mode setup failure.
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "Coordinator-mode tool filter setup failed (continuing without): %s",
+            _exc,
+        )
+
     # (workspace_root already resolved above, before the prefetch kick.)
 
     # Compute the effective permission context. ``skip_permissions=True`` is
@@ -349,6 +394,34 @@ def run_headless(options: HeadlessOptions) -> int:
         bundle_context=getattr(options, "bundle_context", None),
     )
     tool_context.options.is_non_interactive_session = True
+
+    # ★ MVP peer-to-peer SendMessage: auto-wire team context for multi-agent
+    # demos. When the workspace has a pre-existing `.clawcodex/team.json` and
+    # the environment specifies `CLAUDE_CODE_AGENT_NAME`, populate the
+    # tool_context.team dict so the SendMessage tool can route mailbox writes
+    # using the right sender name. This lets a peer-to-peer multi-agent demo
+    # work without requiring the agent to call TeamCreate first (which is
+    # excluded from the coordinator-mode tool filter anyway).
+    try:
+        _team_file = workspace_root / ".clawcodex" / "team.json"
+        _agent_name = os.environ.get("CLAUDE_CODE_AGENT_NAME")
+        if _team_file.exists() and _agent_name:
+            import json as _json
+            _team_data = _json.loads(_team_file.read_text(encoding="utf-8"))
+            _team_data["sender_name"] = _agent_name
+            tool_context.team = _team_data
+            import logging as _log
+            _log.getLogger(__name__).info(
+                "MVP peer multi-agent: tool_context.team set "
+                "(team=%s, sender_name=%s)",
+                _team_data.get("team_name"),
+                _agent_name,
+            )
+    except Exception as _exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "Failed to auto-wire team context (non-fatal): %s", _exc,
+        )
     if options.skip_permissions or effective_mode == "bypassPermissions":
         tool_context.allow_docs = True
         tool_context.permission_handler = None
@@ -934,21 +1007,49 @@ def _install_sigint_handler(
 
 
 def _filter_registry(registry, *, keep) -> None:
-    """In-place best-effort filter of a ToolRegistry."""
+    """In-place best-effort filter of a ToolRegistry.
 
+    Historic bug: this function called ``registry.unregister(name)`` but
+    the canonical ``ToolRegistry`` exposes no such method — the ``try /
+    except: continue`` silently swallowed the AttributeError and the
+    filter became a no-op. That made ``--allowed-tools`` /
+    ``--disallowed-tools`` CLI parameters look effective in the help
+    text but never actually restrict the tool set.
+
+    Real fix: mutate the registry's internal storage (``_tools`` list
+    + ``_by_name`` dict) directly when no public unregister exists.
+    """
     try:
         entries = list(registry.list_tools())
     except Exception:
         return
-    for tool in entries:
-        name = getattr(tool, "name", "")
-        if not keep(name):
-            try:
-                registry.unregister(name)
-            except Exception:
-                # Registry may not support unregistration; fall back to
-                # marking the tool disallowed through ToolContext.
-                continue
+    # First pass: try public ``unregister`` if the registry implements it
+    # (forward-compat for future ToolRegistry subclasses that add the API).
+    if hasattr(registry, "unregister") and callable(getattr(registry, "unregister")):
+        for tool in entries:
+            name = getattr(tool, "name", "")
+            if not keep(name):
+                try:
+                    registry.unregister(name)
+                except Exception:
+                    pass
+        return
+    # Fallback: ToolRegistry has no ``unregister``; mutate internal
+    # storage. Touch only ``_tools`` and ``_by_name`` (both are
+    # implementation details but stable in current ToolRegistry).
+    kept_tools = [t for t in entries if keep(getattr(t, "name", ""))]
+    kept_by_name: dict = {}
+    for t in kept_tools:
+        kept_by_name[t.name.lower()] = t
+        for alias in getattr(t, "aliases", ()):
+            kept_by_name[alias.lower()] = t
+    try:
+        registry._tools = kept_tools
+        registry._by_name = kept_by_name
+    except Exception:
+        # Read-only / opaque registry — give up silently to preserve
+        # the original "best-effort" contract.
+        pass
 
 
 def _auto_deny_permission_handler(stderr: IO[str]):
