@@ -16,13 +16,62 @@ import tempfile
 import time
 import uuid
 from collections import OrderedDict
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from src.types.messages import Message, message_to_dict, message_from_dict
 
 logger = logging.getLogger(__name__)
+
+
+# F-125 C13: cross-process file lock for JSONL append writes.
+# ``fcntl.flock`` is available on POSIX (Linux/macOS/WSL). On Windows
+# the import fails and we degrade to unlocked writes — the same
+# behaviour as before this change. The lock is held for the duration
+# of a single append batch so concurrent processes serialise their
+# writes rather than interleaving lines.
+try:
+    import fcntl as _fcntl  # type: ignore[import-not-found]
+    _HAS_FCNTL = True
+except ImportError:
+    _fcntl = None
+    _HAS_FCNTL = False
+
+
+@contextmanager
+def _locked_append(file_path: Path) -> Iterator[Any]:
+    """Context manager that acquires an exclusive ``flock`` on *file_path*.
+
+    Opens the file in append mode, acquires ``LOCK_EX`` (blocking —
+    waits for other holders to release), and yields the file object.
+    On POSIX the lock is released automatically when the file object
+    is closed by the ``with`` block. On Windows (no ``fcntl``) the
+    file is opened without a lock — callers get the same append
+    semantics but without cross-process serialisation.
+    """
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(file_path, "a", encoding="utf-8")
+    try:
+        if _HAS_FCNTL and _fcntl is not None:
+            try:
+                _fcntl.flock(fh.fileno(), _fcntl.LOCK_EX)
+            except OSError:
+                # Locking can fail on some filesystems (e.g. network
+                # mounts). Degrade to unlocked append rather than
+                # failing the write.
+                pass
+        yield fh
+    finally:
+        try:
+            if _HAS_FCNTL and _fcntl is not None:
+                try:
+                    _fcntl.flock(fh.fileno(), _fcntl.LOCK_UN)
+                except OSError:
+                    pass
+        finally:
+            fh.close()
 
 # Default directories
 SESSIONS_DIR = Path.home() / ".clawcodex" / "sessions"
@@ -371,7 +420,13 @@ class SessionStorage:
             self._write_buffer.clear()
             return
         self._session_dir.mkdir(parents=True, exist_ok=True)
-        with open(self._transcript_path, "a", encoding="utf-8") as f:
+        # F-125 C13: hold an exclusive flock for the append batch so
+        # two processes resuming the same session don't interleave
+        # their JSONL lines. The lock is per-call (acquired+released
+        # inside _locked_append); long-held locks would block the
+        # agent loop, so we keep the critical section to the file
+        # write only.
+        with _locked_append(self._transcript_path) as f:
             for entry in to_write:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         count = len(to_write)

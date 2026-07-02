@@ -63,6 +63,14 @@ class RuntimeContext:
     session: Any | None
     workspace_root: Path
     options: RuntimeOptions
+    # F-125 C14: ``resume_session_with_tail`` returns a TailFollower that
+    # headless never iterates. Without an explicit release the follower
+    # holds a reference to the session transcript path and keeps the
+    # ``_offset`` / asyncio event state alive for the lifetime of the
+    # RuntimeContext. Frontends that DO iterate (AgentBridge) set this
+    # to None after consuming; headless calls :meth:`close_tail_follower`
+    # in its finally block.
+    tail_follower: Any | None = None
 
     @classmethod
     def build(cls, options: RuntimeOptions) -> RuntimeContext:
@@ -148,10 +156,11 @@ class RuntimeContext:
 
         # Resume session if requested
         session = None
+        tail_follower = None
         if options.resume_session_id:
             from clawcodex_ext.agent.session_ext import resume_session_with_tail
 
-            session, _tail_follower = resume_session_with_tail(
+            session, tail_follower = resume_session_with_tail(
                 options.resume_session_id,
             )
 
@@ -187,9 +196,46 @@ class RuntimeContext:
             session=session,
             workspace_root=workspace_root,
             options=options,
+            tail_follower=tail_follower,
         )
         attach_cron_runtime(runtime)
         return runtime
+
+    def close_tail_follower(self) -> None:
+        """F-125 C14: release the TailFollower obtained during resume.
+
+        ``resume_session_with_tail`` returns a follower that headless
+        never iterates — without an explicit release the follower keeps
+        a reference to the transcript path and asyncio event state for
+        the lifetime of the RuntimeContext. Best-effort: ``stop()`` is
+        async so we run it on a fresh event loop; any failure is
+        swallowed.
+        """
+        follower = self.tail_follower
+        if follower is None:
+            return
+        self.tail_follower = None
+        try:
+            stop = getattr(follower, 'stop', None)
+            if stop is None:
+                return
+            import asyncio
+
+            # Use a fresh event loop for the stop() coroutine. Avoids
+            # the DeprecationWarning from ``get_event_loop()`` when no
+            # loop is bound to the current thread.
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(stop())
+            finally:
+                loop.close()
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).debug(
+                'F-125 C14: tail follower release failed (non-fatal)',
+                exc_info=True,
+            )
 
     def swap_provider(self, provider_name: str, model: str | None = None) -> None:
         from clawcodex_ext.cli.model_cmd.registry import ModelRegistry

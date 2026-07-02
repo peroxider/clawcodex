@@ -121,7 +121,14 @@ class Session:
                 "provider": self.provider,
                 "model": self.model,
             }
-            with open(transcript_path, "a", encoding="utf-8") as f:
+            # F-125 C13: serialise snapshot appends across processes
+            # via flock so two concurrent ``--resume <sid>`` runs
+            # don't interleave their snapshot lines with message
+            # flushes from SessionStorage. ``_locked_append`` is a
+            # no-op on Windows (no fcntl).
+            from clawcodex_ext.services.session_storage import _locked_append
+
+            with _locked_append(transcript_path) as f:
                 f.write(
                     json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
                 )

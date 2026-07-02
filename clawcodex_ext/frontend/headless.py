@@ -47,4 +47,15 @@ class HeadlessFrontend(FrontendPlugin):
             resume_session_at=getattr(ctx.options, "resume_session_at", None),
             external_session=getattr(ctx, "session", None),
         )
-        return run_headless(options)
+        # F-125 C14: release the TailFollower that ``RuntimeContext.build``
+        # obtained from ``resume_session_with_tail``. Headless never
+        # iterates it — without an explicit release the follower keeps a
+        # reference to the transcript path and asyncio event state for
+        # the lifetime of the RuntimeContext. Best-effort; failures are
+        # swallowed by ``close_tail_follower`` itself.
+        try:
+            return run_headless(options)
+        finally:
+            close = getattr(ctx, "close_tail_follower", None)
+            if callable(close):
+                close()
