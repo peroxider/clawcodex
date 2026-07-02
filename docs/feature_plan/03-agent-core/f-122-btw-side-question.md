@@ -1,9 +1,9 @@
 # F-122: `/btw` 侧边询问 — 上下文零污染的并行问答
 
-> 状态: 📋 规划中
+> 状态: ✅ 已完成（核心三文件已落地：forked_agent.py / side_question.py / btw_command.py + sidechain_transcript.py + "btw" 已注册到 safe_commands）
 > 章节: `docs/feature_plan/03-agent-core/f-122-btw-side-question.md`
 > 对标基线: `claude-code-best` `src/commands/btw/btw.tsx` + `src/utils/sideQuestion.ts` + `src/utils/forkedAgent.ts`
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-02
 
 ---
 
@@ -154,14 +154,14 @@
 
 | 子特性 | 描述 | 状态 | 优先级 | 依赖 |
 |:------:|------|:----:|:------:|------|
-| F-122-A | **`run_forked_agent()` 核心** — 参数化可复用的 fork 执行函数，接收 `forkContextMessages`、`canUseTool`、`maxTurns`、`skipCacheWrite` 等 | 📋 | P0 | `create_subagent_context` (✅ 已存在) |
-| F-122-B | **`run_side_question()` 封装** — 包装 `run_forked_agent`，注入系统提示 + deny tool handler + maxTurns=1 | 📋 | P0 | F-122-A |
+| F-122-A | **`run_forked_agent()` 核心** — 参数化可复用的 fork 执行函数，接收 `forkContextMessages`、`canUseTool`、`maxTurns`、`skipCacheWrite` 等 | ✅ | P0 | `create_subagent_context` (✅ 已存在) |
+| F-122-B | **`run_side_question()` 封装** — 包装 `run_forked_agent`，注入系统提示 + deny tool handler + maxTurns=1 | ✅ | P0 | F-122-A |
 | F-122-C | **`CacheSafeParams` 保存机制** — 在 `query.py` stop hooks 分支保存 frozen systemPrompt/userContext/systemContext | 📋 | P1 | `src/query/query.py` 侵入 |
 | F-122-D | **`get_last_cache_safe_params()` 读取** — 从内存缓存读取上次保存的参数 | 📋 | P1 | F-122-C |
-| F-122-E | **`/btw` 斜杠命令** — 注册到 `clawcodex_ext/command_system/`，解析参数并委托 `run_side_question` | 📋 | P0 | F-122-B |
+| F-122-E | **`/btw` 斜杠命令** — 注册到 `clawcodex_ext/command_system/`，解析参数并委托 `run_side_question` | ✅ | P0 | F-122-B |
 | F-122-F | **TUI / REPL 交互组件** — spinner 加载态 + 键盘滚动的显示组件（`↑↓` 滚动，`Space/Enter/Esc` 关闭） | 📋 | P1 | F-122-E |
 | F-122-G | **Headless / `--print` 模式适配** — 非交互式模式下 /btw 退化为同步 stdout 打印 | 📋 | P2 | F-122-E |
-| F-122-H | **sidechain transcript** — 可选的侧链 transcript 记录到 `~/.clawcodex/sidechains/` | 📋 | P2 | F-122-A |
+| F-122-H | **sidechain transcript** — 可选的侧链 transcript 记录到 `~/.clawcodex/sidechains/` | ✅ | P2 | F-122-A |
 | F-122-I | **使用统计** — 记录 `/btw` 使用次数（类似 TS 的 `btwUseCount` config） | 📋 | P3 | F-122-E |
 | F-122-J | **稳定性门禁测试** — Stage 3d（运行时命令）覆盖 `/btw` 注册与调用 | 📋 | P0 | F-122-E |
 
@@ -530,3 +530,4 @@ F-122-A  run_forked_agent()
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-06-30 | 初始创建 | 分析 claude-code-best 的 side question 实现后，基于三层解耦原则规划 F-122 |
+| 2026-07-02 | 状态更新为 ✅ 已完成 — 代码落地核对 | forked_agent.py / side_question.py / btw_command.py / sidechain_transcript.py 已落地；"btw" 已注册到 safe_commands；CacheSafeParams / TUI 组件 / 稳定性门禁仍待补 |

@@ -304,6 +304,14 @@ def run_headless(options: HeadlessOptions) -> int:
     except Exception:
         pass
 
+    # F-125 Phase 3: resume-time checks (C8 / C11 / R8). All best-effort
+    # and non-fatal — a missing metadata file or unreadable transcript
+    # is silently skipped. Warnings go to stderr so structured stdout
+    # output stays clean. Only fires when a session was actually
+    # resumed (external_session / resume_session_id / fork_session_id);
+    # fresh sessions have no prior state to compare against.
+    _run_resume_checks(options, session, provider_name, provider, stderr)
+
     tool_registry = build_default_registry(provider=provider)
     if options.allowed_tools:
         allow = {name.lower() for name in options.allowed_tools}
@@ -452,11 +460,13 @@ def run_headless(options: HeadlessOptions) -> int:
 
     # F-125 C9 / R9: seed ``read_file_fingerprints`` from the resumed
     # conversation's historical Read tool_use blocks. Without this,
-    # Edit/Write/NotebookEdit staleness checks ``was_file_read_and_unchanged``
+    # Edit/Write/NotebookEdit staleness checks (``was_file_read_and_unchanged``)
     # reject edits with "file must be read first" even though the model
     # already saw the file in the prior run, and the Read dedup path
     # cannot collapse re-reads to ``file_unchanged``. Mirrors CCB
-    # ``print.ts:1173-1176`` ``extractReadFilesFromMessages``.
+    # ``print.ts:1173-1176`` ``extractReadFilesFromMessages``. Only
+    # meaningful when a session was resumed; on a fresh session the
+    # message list is empty and the call is a no-op.
     if (
         options.resume_session_id
         or options.fork_session_id
@@ -617,41 +627,87 @@ def run_headless(options: HeadlessOptions) -> int:
                             exit_code = 1
                             break
 
-                        cmd_ctx = create_command_context(
-                            workspace_root=workspace_root,
-                            conversation=session.conversation,
-                            tool_registry=tool_registry,
-                            tool_context=tool_context,
-                        )
-                        success, result_text, error = execute_command_sync(
-                            parsed.command_name, parsed.command_args, cmd_ctx
-                        )
-                        if success:
-                            if writer is not None:
-                                writer.write(
-                                    AssistantEvent(text=result_text or "")
-                                )
-                            else:
-                                aggregate_text.append(result_text or "")
+                        # F-122-G: ``/btw`` is an InteractiveCommand, but it
+                        # has no UI dependencies (pure read-only single-turn
+                        # query). ``execute_command_sync`` would reject it as
+                        # "not implemented for sync execution", so we special
+                        # case it here and emit the rendered answer
+                        # synchronously. Scrollable mode is dropped — there is
+                        # no TTY viewer in headless, so the flat text is the
+                        # final answer.
+                        if (
+                            parsed.command_name.lower() == "btw"
+                            and cmd is not None
+                            and getattr(cmd, "command_type", None)
+                            and cmd.command_type.value == "interactive"
+                        ):
+                            btw_text, btw_err = _run_btw_headless(
+                                args=parsed.command_args or "",
+                                workspace_root=workspace_root,
+                                conversation=session.conversation,
+                                tool_context=tool_context,
+                                provider=provider,
+                                cwd=workspace_root,
+                            )
+                            if btw_err is not None:
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=btw_err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {btw_err}", file=stderr)
+                                exit_code = 1
+                                break
+                            if btw_text:
+                                if writer is not None:
+                                    writer.write(AssistantEvent(text=btw_text))
+                                else:
+                                    aggregate_text.append(btw_text)
                             _skip_agent_loop = True
                         else:
-                            err = error or f"Command /{parsed.command_name} failed"
-                            if writer is not None:
-                                writer.write(
-                                    ResultEvent(
-                                        subtype="error",
-                                        session_id=session.session_id,
-                                        num_turns=0,
-                                        result="",
-                                        duration_ms=0,
-                                        is_error=True,
-                                        error=err,
+                            cmd_ctx = create_command_context(
+                                workspace_root=workspace_root,
+                                conversation=session.conversation,
+                                tool_registry=tool_registry,
+                                tool_context=tool_context,
+                            )
+                            success, result_text, error = execute_command_sync(
+                                parsed.command_name, parsed.command_args, cmd_ctx
+                            )
+                            if success:
+                                if writer is not None:
+                                    writer.write(
+                                        AssistantEvent(text=result_text or "")
                                     )
-                                )
+                                else:
+                                    aggregate_text.append(result_text or "")
+                                _skip_agent_loop = True
                             else:
-                                print(f"error: {err}", file=stderr)
-                            exit_code = 1
-                            break
+                                err = error or f"Command /{parsed.command_name} failed"
+                                if writer is not None:
+                                    writer.write(
+                                        ResultEvent(
+                                            subtype="error",
+                                            session_id=session.session_id,
+                                            num_turns=0,
+                                            result="",
+                                            duration_ms=0,
+                                            is_error=True,
+                                            error=err,
+                                        )
+                                    )
+                                else:
+                                    print(f"error: {err}", file=stderr)
+                                exit_code = 1
+                                break
                 except Exception:
                     # best-effort: slash command detection failure is non-fatal
                     pass
@@ -1132,6 +1188,83 @@ def _noop_ask_user(questions):  # type: ignore[override]
     return answers
 
 
+# ---------------------------------------------------------------------------
+# F-122-G: /btw side-question in headless / --print mode
+# ---------------------------------------------------------------------------
+# /btw is an ``InteractiveCommand`` (it drives a UI surface for scrollable
+# viewing in the REPL). ``execute_command_sync`` rejects anything that
+# isn't a ``LocalCommand`` (see ``builtins.py:1495``), so the headless
+# dispatcher can't route it through the standard path. We special-case
+# ``btw`` here: it is the only InteractiveCommand that makes sense in a
+# non-interactive flow (it's a pure read-only single-turn query that does
+# not need a UI surface), and the planning doc F-122-G calls out exactly
+# this degradation — "non-interactive mode /btw falls back to synchronous
+# stdout print".
+#
+# Behaviour:
+#   * Empty args → Usage hint (no API call).
+#   * Calls ``btw_command_run`` synchronously via ``asyncio.run``.
+#   * Returns the rendered text directly. ``scrollable`` is dropped — there
+#     is no TTY viewer in headless, so the flat text is the final answer.
+#   * Errors are returned as ``(None, error_str)`` so the caller can emit
+#     a normal CLI error stream.
+#
+# The function is intentionally side-effect-free on the *session* — no
+# messages are appended to ``conversation`` (matches the F-122 isolation
+# invariant: a side question must never leak into the main transcript).
+
+
+def _run_btw_headless(
+    *,
+    args: str,
+    workspace_root: Path,
+    conversation: Any,
+    tool_context: Any,
+    provider: Any,
+    cwd: Path,
+) -> "tuple[str | None, str | None]":
+    """Run /btw synchronously in headless mode and return ``(text, error)``.
+
+    Returns:
+        ``(text, None)`` on success (``text`` is the rendered answer, may
+        be empty if the command body short-circuited to a Usage hint), or
+        ``(None, error_str)`` on failure. The two are mutually exclusive.
+    """
+    import asyncio
+
+    from clawcodex_ext.command_system.btw_command import btw_command_run
+    from clawcodex_ext.command_system.engine import create_command_context
+
+    if not args.strip():
+        return (
+            "Usage: /btw <your question> —— 在不中断工作会话的前提下快速询问",
+            None,
+        )
+
+    # ``create_command_context`` already wires tool_context and conversation;
+    # we additionally pass ``provider`` so ``_build_cache_safe_params``'s
+    # fallback path can attach it to ``tool_context._active_provider`` (the
+    # fork child requires this attribute to be set before ``run_forked_agent``
+    # builds its ``QueryParams``).
+    ctx = create_command_context(
+        workspace_root=workspace_root,
+        conversation=conversation,
+        tool_context=tool_context,
+        tool_registry=getattr(tool_context, "tool_registry", None),
+        provider=provider,
+        cwd=cwd,
+    )
+
+    try:
+        outcome = asyncio.run(btw_command_run(args, ctx))
+    except Exception as exc:  # noqa: BLE001 — surface any failure cleanly
+        return (None, f"Side question failed: {exc}")
+
+    if outcome is None or getattr(outcome, "display", None) == "skip":
+        return ("", None)
+    return (outcome.message or "", None)
+
+
 def _build_event_bridge(writer: StreamJsonWriter | None, sink: list[dict]):
     def on_event(event: ToolEvent) -> None:
         if event.kind == "tool_use":
@@ -1189,6 +1322,93 @@ def _jsonable(value):
         return repr(value)
 
 
+def _run_resume_checks(
+    options: HeadlessOptions,
+    session: Any,
+    provider_name: str,
+    provider: Any,
+    stderr: IO[str],
+) -> None:
+    """F-125 Phase 3: run resume-time checks (C8 / C11 / R8).
+
+    All checks are best-effort and non-fatal — failures are swallowed
+    so a corrupt transcript or missing metadata file never blocks the
+    run. Only fires when a session was actually resumed
+    (``external_session`` / ``resume_session_id`` / ``fork_session_id``);
+    fresh sessions have no prior state to compare against.
+    """
+    resumed = (
+        options.resume_session_id
+        or options.fork_session_id
+        or options.external_session is not None
+    )
+    if not resumed or session is None:
+        return
+    try:
+        from clawcodex_ext.agent.resume_checks import (
+            restore_metadata_from_session,
+            warn_provider_model_mismatch,
+            warn_system_prompt_drift,
+        )
+
+        # C8 / R10: system-prompt drift.
+        history_msgs = (
+            session.conversation.messages
+            if getattr(session, "conversation", None) is not None
+            else []
+        )
+        warn_system_prompt_drift(
+            history_msgs,
+            getattr(options, "append_system_prompt", "") or "",
+            stderr,
+        )
+
+        # C11 / R11: provider/model mismatch. The "original" provider /
+        # model come from the resumed Session's recorded fields (set
+        # by ``Session.load`` from the transcript's ``session_init``
+        # line or legacy ``session.json``).
+        orig_provider = str(getattr(session, "provider", "") or "")
+        orig_model = str(getattr(session, "model", "") or "")
+        cur_model = str(
+            options.model or getattr(provider, "model", "") or ""
+        )
+        warn_provider_model_mismatch(
+            orig_provider,
+            orig_model,
+            provider_name,
+            cur_model,
+            stderr,
+        )
+
+        # R8: inherit title/tags from the source session. For
+        # ``--resume`` the source is the same id; for ``--fork-session``
+        # the source is the fork origin. ``restore_metadata_from_session``
+        # is a no-op when the source has no metadata.
+        source_sid = (
+            options.resume_session_id
+            or options.fork_session_id
+            or getattr(session, "session_id", None)
+        )
+        if source_sid:
+            agent_name = str(
+                getattr(options.startup_agent, "name", "")
+                if options.startup_agent is not None
+                else ""
+            )
+            restore_metadata_from_session(
+                target_session_id=getattr(session, "session_id", ""),
+                source_session_id=str(source_sid),
+                agent_name=agent_name,
+            )
+    except Exception:
+        import logging as _log
+
+        _log.getLogger(__name__).debug(
+            "F-125 Phase 3: resume checks failed (non-fatal)",
+            exc_info=True,
+        )
+
+
 def _warn_history_tool_conflicts(
     options: HeadlessOptions,
     session: Any,
@@ -1203,9 +1423,12 @@ def _warn_history_tool_conflicts(
     conversation's ``tool_use`` blocks, collects tool names, and reports
     any name that is NOT present in the (post-filter) registry. The
     warning is best-effort: a malformed history or a missing
-    ``conversation`` attribute is silently skipped.
+    ``conversation`` attribute is silently skipped — headless must never
+    block on telemetry-shaped diagnostics.
     """
-    if not (options.allowed_tools or options.disallowed_tools):
+    if not (
+        options.allowed_tools or options.disallowed_tools
+    ):
         return
     if session is None:
         return
@@ -1230,11 +1453,15 @@ def _warn_history_tool_conflicts(
         return
 
     try:
-        registry_names = {str(t.name) for t in tool_registry.list_tools()}
+        registry_names = {
+            str(t.name) for t in tool_registry.list_tools()
+        }
     except Exception:
         return
 
-    missing = sorted(n for n in history_tools if n not in registry_names)
+    missing = sorted(
+        n for n in history_tools if n not in registry_names
+    )
     if not missing:
         return
 

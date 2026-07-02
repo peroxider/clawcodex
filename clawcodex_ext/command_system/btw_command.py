@@ -13,6 +13,7 @@ from typing import Any
 
 from clawcodex_ext.agent.side_question import run_side_question
 from clawcodex_ext.agent.forked_agent import CacheSafeParams, get_last_cache_safe_params
+from clawcodex_ext.command_system.btw_stats import increment_btw_use_count
 from clawcodex_ext.command_system.types import (
     CommandContext,
     InteractiveCommand,
@@ -22,6 +23,33 @@ from clawcodex_ext.command_system.types import (
 __all__ = ["BTW_COMMAND", "btw_command_run", "BtwCommand"]
 
 logger = logging.getLogger(__name__)
+
+
+# F-122-F: when the answer body (excluding the 💡 prefix) exceeds this many
+# lines we mark the InteractiveOutcome as scrollable so the REPL enters its
+# keyboard-scrolled view. Below the threshold, a flat print is friendlier —
+# the spinner-then-scrollable-modal would feel heavy for one-line replies.
+_SCROLLABLE_LINE_THRESHOLD = 8
+
+
+def _should_render_scrollable(message: str) -> bool:
+    """Decide whether the answer should be rendered in scrollable mode.
+
+    Conservative heuristic on the rendered body (prefix and trailing blanks
+    excluded): if it spills past the threshold line count, mark scrollable.
+    The REPL still re-checks against the live terminal height, so this is
+    just the *suggestion* — a tiny terminal degrades to flat print.
+    """
+    if not message:
+        return False
+    # Strip the 💡 prefix and surrounding blanks so the threshold reflects
+    # body length, not the decoration.
+    body = message.lstrip()
+    if body.startswith("💡"):
+        body = body[1:].lstrip()
+    body = body.rstrip()
+    line_count = body.count("\n") + 1 if body else 0
+    return line_count > _SCROLLABLE_LINE_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +64,10 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
         context: Command execution context.
 
     Returns:
-        InteractiveOutcome with the answer text or usage help.
+        InteractiveOutcome with the answer text or usage help. Long
+        answers (more than :data:`_SCROLLABLE_LINE_THRESHOLD` lines) carry
+        ``scrollable=True`` so the REPL enters a keyboard-scrolled view
+        instead of dumping a wall of text (F-122-F).
     """
     question = args.strip()
     if not question:
@@ -44,6 +75,13 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
             message="Usage: /btw <your question> —— 在不中断工作会话的前提下快速询问",
             display="user",
         )
+
+    # F-122-I: record this /btw invocation in the persistent use-count
+    # before any further work. Counting happens at the command layer so
+    # every UI path (REPL/TUI/headless) flows through the same gate; the
+    # counter increments regardless of whether the side question itself
+    # succeeds — a failed fork is still a real user attempt to use /btw.
+    increment_btw_use_count(question=question)
 
     # Build cache-safe params (cached or fallback)
     params = await _build_cache_safe_params(context)
@@ -64,9 +102,11 @@ async def btw_command_run(args: str, context: CommandContext) -> InteractiveOutc
         )
 
     if result.response:
+        message = f"💡 {result.response}"
         return InteractiveOutcome(
-            message=f"💡 {result.response}",
+            message=message,
             display="user",
+            scrollable=_should_render_scrollable(message),
         )
     return InteractiveOutcome(
         message="⚠️ 侧边询问未能获取回答。请在主会话中直接提问。",

@@ -1864,10 +1864,21 @@ class ClawcodexREPL:
 
         if result.result_type == 'text':
             if result.text:
-                self._print_local_command_text(
-                    result.text,
-                    command=result.command_name,
-                )
+                # F-122-F: long /btw answers carry scrollable=True. Route
+                # them through the keyboard-scrolled viewer so the user
+                # can navigate instead of seeing a wall of text scroll
+                # past. Falls back to a flat print when prompt_toolkit is
+                # unavailable or the body fits without paging.
+                if getattr(result, 'scrollable', False):
+                    self._print_scrollable_text(
+                        result.text,
+                        command=result.command_name,
+                    )
+                else:
+                    self._print_local_command_text(
+                        result.text,
+                        command=result.command_name,
+                    )
                 self.console.print()
             return True
 
@@ -1900,6 +1911,182 @@ class ClawcodexREPL:
             self.console.print(Markdown(text))
             return
         self.console.print('\n' + text)
+
+    # ------------------------------------------------------------------
+    # F-122-F: scrollable answer viewer for /btw side questions
+    # ------------------------------------------------------------------
+    # /btw answers can be long (multi-paragraph explanations). Dumping them
+    # in a single block makes them scroll past unreadable. When the engine
+    # marks a result as scrollable, render it inside a prompt_toolkit
+    # Application with a viewport window the user can navigate with
+    # ↑↓ / PgUp / PgDn / Home / End and dismiss with Space / Enter / Esc /
+    # q / Ctrl-C. Falls back to a flat print when prompt_toolkit is not
+    # available or the body already fits in the terminal height.
+
+    _SCROLL_VIEWER_RESERVED_LINES = 4  # header (2) + footer hint (2)
+    _SCROLL_VIEWER_MIN_WINDOW = 5  # never paginate fewer than this many lines
+
+    def _print_scrollable_text(self, text: str, *, command: str = '') -> None:
+        """Render *text* in a keyboard-scrollable viewer (F-122-F).
+
+        The viewer opens only if the body exceeds one terminal page; if the
+        whole answer fits, we degrade to a flat print (no extra keystroke
+        needed to dismiss). When prompt_toolkit is unavailable we also
+        degrade to a flat print.
+        """
+        if not text:
+            return
+
+        # Strip the leading newline that _handle_command_result's caller
+        # would have inserted; the viewer renders its own header.
+        body = text.lstrip('\n')
+
+        # Estimate line count cheaply so we can decide whether to paginate
+        # at all. If the body fits on the terminal, skip the viewer.
+        lines = body.splitlines() or ['']
+        try:
+            import shutil
+
+            term_height = shutil.get_terminal_size((100, 24)).lines
+        except Exception:
+            term_height = 24
+        window = max(
+            self._SCROLL_VIEWER_MIN_WINDOW,
+            term_height - self._SCROLL_VIEWER_RESERVED_LINES,
+        )
+        if len(lines) <= window:
+            # Body fits on one screen — no viewer needed.
+            self.console.print('\n' + body)
+            return
+
+        if not _HAS_PROMPT_TOOLKIT:
+            # Best-effort fallback: print everything, mark a hint line.
+            self.console.print('\n' + body)
+            self.console.print(
+                '[dim](prompt_toolkit unavailable — answer not paginated)[/dim]'
+            )
+            return
+
+        self._run_scroll_viewer(body, lines=lines, window=window, command=command)
+
+    def _run_scroll_viewer(
+        self,
+        body: str,
+        *,
+        lines: list[str],
+        window: int,
+        command: str,
+    ) -> None:
+        """Open the prompt_toolkit Application that paginates *lines*."""
+        from prompt_toolkit.application import Application
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit.layout.containers import Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.styles import Style
+
+        total = len(lines)
+        # Mutable scroll offset captured by closures.
+        offset = [0]
+
+        def clamp_offset() -> None:
+            offset[0] = max(0, min(offset[0], max(0, total - window)))
+
+        def get_fragments():
+            clamp_offset()
+            start = offset[0]
+            end = min(start + window, total)
+            fragments: list[tuple[str, str]] = []
+            # Header — no leading 💡: the body already carries the
+            # answer's decoration prefix; the header is purely a
+            # navigational banner (command + cursor).
+            label = command or 'answer'
+            fragments.append(
+                ('class:scroll-header', f'\n  /{label}  '),
+            )
+            fragments.append(
+                ('class:scroll-meta', f'(lines {start + 1}-{end} of {total})\n\n'),
+            )
+            # Visible window
+            for i in range(start, end):
+                fragments.append(('', lines[i] + '\n'))
+            # Pad short pages so the footer stays at a stable position.
+            shown = end - start
+            for _ in range(window - shown):
+                fragments.append(('', '~\n'))
+            # Footer hint
+            fragments.append(
+                ('class:scroll-footer', '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close'),
+            )
+            return fragments
+
+        kb = KeyBindings()
+
+        def _close(event) -> None:
+            event.app.exit(result=None)
+
+        def _line_up(event) -> None:
+            offset[0] -= 1
+            event.app.invalidate()
+
+        def _line_down(event) -> None:
+            offset[0] += 1
+            event.app.invalidate()
+
+        def _page_up(event) -> None:
+            offset[0] -= window
+            event.app.invalidate()
+
+        def _page_down(event) -> None:
+            offset[0] += window
+            event.app.invalidate()
+
+        def _home(event) -> None:
+            offset[0] = 0
+            event.app.invalidate()
+
+        def _end(event) -> None:
+            offset[0] = total
+            event.app.invalidate()
+
+        kb.add('up')(_line_up)
+        kb.add('down')(_line_down)
+        kb.add('pageup')(_page_up)
+        kb.add('pagedown')(_page_down)
+        kb.add('home')(_home)
+        kb.add('end')(_end)
+        kb.add('space')(_close)
+        kb.add('enter')(_close)
+        kb.add('escape')(_close)
+        kb.add('q')(_close)
+        kb.add('Q')(_close)
+        kb.add('c-c')(_close)
+
+        pt_style = Style.from_dict(
+            {
+                'scroll-header': 'bold fg:cyan',
+                'scroll-meta': 'fg:gray',
+                'scroll-footer': 'fg:gray italic',
+            }
+        )
+
+        app = Application(
+            layout=Layout(Window(FormattedTextControl(get_fragments))),
+            key_bindings=kb,
+            style=pt_style,
+            full_screen=False,
+            mouse_support=False,
+        )
+
+        live = self._active_live_status
+        try:
+            if live is not None:
+                with live.paused():
+                    app.run()
+            else:
+                app.run()
+        except (EOFError, KeyboardInterrupt):
+            return
 
     @staticmethod
     def _is_recap_text(text: str) -> bool:

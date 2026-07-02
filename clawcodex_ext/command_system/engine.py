@@ -40,6 +40,10 @@ class CommandResult:
     display: str = "system"  # "skip" | "system" | "user"
     meta_messages: list[str] = field(default_factory=list)
     error: Optional[str] = None
+    # F-122-F: propagated from InteractiveOutcome.scrollable — surfaces that
+    # recognise scrollable rendering (currently: REPL) branch off their
+    # normal text path; others ignore the flag and print ``text`` as usual.
+    scrollable: bool = False
 
     @classmethod
     def success_text(cls, command_name: str, text: str) -> "CommandResult":
@@ -288,6 +292,10 @@ class CommandEngine:
             should_query=outcome.should_query,
             display=outcome.display,
             meta_messages=list(outcome.meta_messages),
+            # F-122-F: thread the scrollable hint onto the result so
+            # surface adapters (REPL _handle_command_result) can branch
+            # into a keyboard-scrolled view instead of a flat print.
+            scrollable=outcome.scrollable,
         )
 
     def add_command_hook(
