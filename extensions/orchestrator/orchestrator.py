@@ -119,6 +119,34 @@ class Orchestrator:
         self._workflow_yaml_path = workflow_yaml_path
         self._workflow_orchestrator = None
 
+        # F-96-A completion: the StateJournalWriter existed but was never
+        # instantiated anywhere, so the visualizer's orchestrator dashboard
+        # (reads ``~/.clawcodex/reports/run_*/state_journal.ndjson``) always
+        # showed "no runs". One journal per daemon lifetime; writes are
+        # fire-and-forget and must never affect orchestration.
+        self._viz_journal = None
+        try:
+            from datetime import datetime, timezone
+
+            from .state_journal import StateJournalWriter
+
+            journal_run_id = "run_" + datetime.now(timezone.utc).strftime(
+                "%Y%m%d_%H%M%S"
+            )
+            self._viz_journal = StateJournalWriter(
+                Path.home() / ".clawcodex" / "reports" / journal_run_id,
+                journal_run_id,
+            )
+            self._viz_journal.write_event(
+                {
+                    "type": "orchestrator_start",
+                    "workflow": workflow_yaml_path or "",
+                }
+            )
+        except Exception:
+            logger.exception("state journal init failed — dashboard disabled")
+            self._viz_journal = None
+
         # F-110: 初始化声明式工作流引擎
         if workflow_yaml_path:
             from .workflow_orchestrator import WorkflowOrchestrator
@@ -2286,6 +2314,21 @@ class Orchestrator:
             mode_decision.source,
             mode_decision.reason,
         )
+        if self._viz_journal is not None:
+            self._viz_journal.write_event(
+                {
+                    "type": "issue_status",
+                    "issue_id": str(issue.id or ""),
+                    "status": "running",
+                }
+            )
+            self._viz_journal.write_event(
+                {
+                    "type": "phase",
+                    "issue_id": str(issue.id or ""),
+                    "phase": f"mode:{mode_decision.mode}",
+                }
+            )
         # F-39 Sub-C: if the registry intent is FOLLOWUP, wire the
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.
@@ -2937,6 +2980,59 @@ class Orchestrator:
 
                 if session.issue.id in self._state.running:
                     del self._state.running[session.issue.id]
+
+                # Dashboard journal: one terminal event per run with the
+                # final status plus the session/PR references the issue
+                # accumulated. Best-effort — never raises.
+                if self._viz_journal is not None:
+                    try:
+                        _iid = str(session.issue.id or "")
+                        _rec = self._registry.get(_iid)
+                        if getattr(session, "run_id", None):
+                            self._viz_journal.write_event(
+                                {
+                                    "type": "session_ref",
+                                    "issue_id": _iid,
+                                    "session_id": str(session.run_id),
+                                    "session_path": str(
+                                        Path.home()
+                                        / ".clawcodex"
+                                        / "sessions"
+                                        / str(session.run_id)
+                                    ),
+                                }
+                            )
+                        if _rec is not None and _rec.pr_url:
+                            self._viz_journal.write_event(
+                                {
+                                    "type": "pr_status",
+                                    "issue_id": _iid,
+                                    "pr_url": _rec.pr_url,
+                                    "pr_number": _rec.pr_number,
+                                }
+                            )
+                        _status = str(session.status or "")
+                        if _status == "completed":
+                            self._viz_journal.write_event(
+                                {
+                                    "type": "complete",
+                                    "issue_id": _iid,
+                                    "overall_status": "completed",
+                                }
+                            )
+                        elif _status:
+                            self._viz_journal.write_event(
+                                {
+                                    "type": "error",
+                                    "issue_id": _iid,
+                                    "error": getattr(
+                                        session, "session_end_summary", ""
+                                    )
+                                    or _status,
+                                }
+                            )
+                    except Exception:
+                        logger.debug("viz journal final event failed", exc_info=True)
 
                 # F-44 review gate: if the issue is already in pending_review
                 # (set by the early return above), skip the final status

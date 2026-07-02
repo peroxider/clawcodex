@@ -125,6 +125,13 @@ class HeadlessOptions:
     # Called alongside the internal NDJSON writer when set.
     on_event: Callable[[Any], None] | None = None
 
+    # External abort controller. When provided, cooperative cancellation is
+    # driven by the CALLER (e.g. QueryRunner's wall-clock budget) in
+    # addition to SIGINT. Without it a timed-out orchestrator run keeps
+    # executing on its executor thread — spawning workers and burning
+    # tokens — because nothing outside can reach the internal controller.
+    abort_controller: Any | None = None
+
     # F-125: resume / fork support. Three pieces:
     # * ``resume_session_id`` — load history from this session and
     #   reuse its session_id (the next ``--resume <sid>`` invocation
@@ -380,7 +387,10 @@ def run_headless(options: HeadlessOptions) -> int:
     # Without this wiring, Ctrl-C only fires ``KeyboardInterrupt`` at
     # the next safe boundary — which can be several minutes for a
     # subprocess.wait() or an in-flight subagent.
-    abort_controller = AbortController()
+    # An externally-supplied controller (options.abort_controller) takes
+    # precedence so callers like QueryRunner can abort a runaway session
+    # from OUTSIDE the executor thread (timeout / stop command).
+    abort_controller = options.abort_controller or AbortController()
     # C1: load persisted permission rules (settings files) at startup so
     # "always allow" rules saved in interactive sessions auto-allow here
     # too. Setup warnings intentionally unsurfaced until phase C6.

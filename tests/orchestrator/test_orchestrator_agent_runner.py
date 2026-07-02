@@ -304,6 +304,58 @@ class TestAgentRunnerF38(unittest.IsolatedAsyncioTestCase):
         self.assertRegex(run_id, r"^run-3-followup-2-\d{8}T\d{6}Z$")
 
 
+class TestAgentRunnerCoordinatorEnvFlip(unittest.IsolatedAsyncioTestCase):
+    """agent_config.coordinator_mode must flip CLAUDE_CODE_COORDINATOR_MODE.
+
+    The headless entrypoint and the Agent tool both gate on the env var
+    (``is_coordinator_mode``) — without the flip the coordinator session
+    keeps the full tool set and never builds the worker registry. The flip
+    was lost in the !52 squash-merge; restored from dfa79a7c.
+    """
+
+    async def _run_once(self, coordinator_mode: bool) -> None:
+        import os
+
+        with TemporaryDirectory() as tmp:
+            sessions_root = Path(tmp) / "sessions"
+            with patch(
+                "clawcodex_ext.services.session_storage.SESSIONS_DIR",
+                sessions_root,
+            ):
+                session = AgentSession(
+                    issue=Issue(id="90", identifier="ISSUE-90", title="Env flip"),
+                    workspace=Workspace(
+                        path=Path(tmp) / "ws",
+                        issue_identifier="ISSUE-90",
+                        issue_id="90",
+                    ),
+                )
+                runner = AgentRunner(
+                    AgentConfig(max_turns=1, coordinator_mode=coordinator_mode),
+                    SandboxConfig(),
+                )
+                with patch(
+                    "extensions.orchestrator.agent_runner.QueryRunner",
+                    _QueryRunnerStub,
+                ):
+                    await runner.run(session, WorkflowConfig.from_dict({}))
+
+    async def test_coordinator_mode_true_sets_env(self) -> None:
+        import os
+
+        os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
+        await self._run_once(coordinator_mode=True)
+        self.assertEqual(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"), "1")
+        os.environ.pop("CLAUDE_CODE_COORDINATOR_MODE", None)
+
+    async def test_coordinator_mode_false_clears_leftover_env(self) -> None:
+        import os
+
+        os.environ["CLAUDE_CODE_COORDINATOR_MODE"] = "1"
+        await self._run_once(coordinator_mode=False)
+        self.assertIsNone(os.environ.get("CLAUDE_CODE_COORDINATOR_MODE"))
+
+
 class TestAgentRunnerMaxTurns(unittest.IsolatedAsyncioTestCase):
     async def test_run_max_turns_sets_max_turns_exceeded_status(self) -> None:
         """When the QueryRunner stream never yields SessionComplete, the

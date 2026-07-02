@@ -411,8 +411,14 @@ def make_agent_tool(
             if agent_def is None:
                 raise ToolInputError("No agent definitions available")
 
-        # Resolve available tools
-        available_tools = registry.list_tools()
+        # Resolve available tools. ``registry`` is a closure variable from
+        # ``make_agent_tool`` — NEVER assign to that name inside this
+        # function (an assignment anywhere in the body makes it local for
+        # the WHOLE function and this read raises UnboundLocalError before
+        # any conditional runs). The coordinator branch below therefore
+        # rebinds ``effective_registry`` instead.
+        effective_registry = registry
+        available_tools = effective_registry.list_tools()
 
         # MVP multi-agent fix: when the parent is in coordinator mode, the
         # parent's tool registry has been filtered to the coordinator's
@@ -440,10 +446,9 @@ def make_agent_tool(
                     except Exception:
                         # Skip duplicates / unregisterable tools gracefully.
                         pass
-                # Hand the sub-agent the fresh registry. The parent's
-                # original ``registry`` reference passed in via run_params
-                # gets overridden below.
-                registry = sub_registry
+                # Hand the sub-agent the fresh registry; the parent keeps
+                # its own restricted ``registry`` untouched.
+                effective_registry = sub_registry
                 import logging as _log
                 _log.getLogger(__name__).info(
                     "MVP: sub-agent receives FRESH worker registry (%d tools)",
@@ -548,7 +553,7 @@ def make_agent_tool(
             agent_definition=agent_def,
             prompt=fork_prompt,
             available_tools=available_tools,
-            tool_registry=registry,
+            tool_registry=effective_registry,
             provider=provider,
             model=model,
             agent_id=agent_id,
