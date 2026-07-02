@@ -134,7 +134,7 @@ plugins = entry_points(group="clawcodex.plugins")
 - **生命周期钩子**：`on_load` / `on_unload` / `on_enable` / `on_disable` 全部实现并经单元测试覆盖
 - **沙箱隔离**：`PluginSandbox.execute_in_sandbox()` 支持网络限制、操作类别白名单、subprocess 隔离；权限检查顺序修正后错误信息更精准（"Network access is disabled" 优先于 "Permission denied"）
 - **PluginManager**：统一 CLI 命令绑定 + 生命周期协调（`src/plugins/manager.py` 450 行）
-- **PluginLoader**：importlib + entry_points + 目录扫描扫描四通道发现 + 生命周期事件回调（`src/plugins/loader.py` 582 行）
+- **PluginLoader**：importlib + entry_points + 目录扫描四通道发现 + 生命周期事件回调（`src/plugins/loader.py` 582 行）
 - **清单格式**（P70-E）：支持 `plugin.yaml` / `plugin.yml` / `plugin.json` / `pyproject.toml` 四种清单文件；`pyproject.toml` 从 `[tool.clawcodex.plugin]` 表提取，兼容 camelCase 和 snake_case 字段命名；Python ≥3.11 使用标准库 `tomllib` 解析
 
 ### 2.3 下一步计划
@@ -158,4 +158,3 @@ P70-A/B/C/D/E 全部落地，F-70 子特性分解表无剩余项。后续可选�
 | 2026-07-02 | 落地 P70-E pyproject.toml 清单格式扩展 | `src/plugins/loader.py` +59 行（`_read_pyproject_manifest` / `MANIFEST_FILES` 加入 `pyproject.toml` / snake_case 兼容） |
 | 2026-07-02 | 新增 P70-E pyproject.toml 清单格式单元测试（14 用例） | `tests/plugin/test_plugin_pyproject_manifest.py` (200 行) |
 | 2026-07-02 | 更新文档全部章节同步代码实际状态 | 修复 §1.6 架构/§1.7 发现路径/§1.8 依赖/§2.2 关键能力/§2.1 已完成数据 13 文件 2,744 行 |
-
