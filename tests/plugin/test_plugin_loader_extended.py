@@ -143,7 +143,9 @@ class TestYamlManifestSupport:
 
 class TestManifestFilePriority:
     def test_manifest_files_list(self):
-        assert MANIFEST_FILES == ('plugin.yaml', 'plugin.yml', 'plugin.json')
+        assert MANIFEST_FILES == (
+            'plugin.yaml', 'plugin.yml', 'plugin.json', 'pyproject.toml',
+        )
 
     def test_json_only(self, tmp_path):
         plugin_dir = tmp_path / 'json-only'
