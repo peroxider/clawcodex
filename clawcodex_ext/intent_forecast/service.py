@@ -34,7 +34,6 @@ class IntentForecastService:
         self.context = context
 
     def generate(self, *, trigger: str, force: bool = False) -> ForecastResult:
-        del trigger
         if not force and not self.config.enabled:
             return ForecastResult(generated=False, suggestions=[], reason="Intent Forecast is disabled.")
         context = self.context or IntentForecastContextBuilder(
@@ -61,6 +60,12 @@ class IntentForecastService:
         if not suggestions:
             suggestions = fallback_suggestions(context, min_confidence=self.config.min_confidence)
 
+        suggestions = no_suggestion_gate(
+            suggestions,
+            context=context,
+            trigger=trigger,
+            min_confidence=self.config.min_confidence,
+        )
         if not suggestions:
             return ForecastResult(
                 generated=False,
@@ -118,11 +123,101 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
     candidates: list[ForecastSuggestion] = []
     zh = context.response_language.lower().startswith("chinese")
     primary_focus = _primary_workspace_focus(context)
+    task_state = context.task_state or {}
+    intent_stage = str(context.intent_stage or "explore")
+    blocked_reason = str(task_state.get("blocked_reason") or "")
+    pending_tests = [str(item) for item in task_state.get("pending_tests") or [] if str(item)]
+    open_questions = [str(item) for item in task_state.get("open_questions") or [] if str(item)]
     recent_user = ""
     for msg in reversed(context.current_messages):
         if msg.get("role") == "user":
             recent_user = str(msg.get("content") or "").strip()
             break
+    if open_questions:
+        question = open_questions[0]
+        candidates.append(
+            ForecastSuggestion(
+                id=f"forecast-{uuid.uuid4().hex[:10]}",
+                title="先回答待确认问题" if zh else "Resolve the open question",
+                prompt=(
+                    f"请先围绕这个待确认问题继续：{question}"
+                    if zh
+                    else f"Continue by resolving this open question first: {question}"
+                ),
+                reason=(
+                    "最近 assistant 刚提出澄清问题，继续实现前应先补齐决策信息。"
+                    if zh
+                    else "The latest assistant turn asked for clarification, so the next step should resolve that decision before implementation."
+                ),
+                confidence=max(min_confidence, 0.72),
+                source_refs=["task_state:open_questions"],
+            )
+        )
+        return candidates[:3]
+    if blocked_reason:
+        candidates.append(
+            ForecastSuggestion(
+                id=f"forecast-{uuid.uuid4().hex[:10]}",
+                title="修复最近失败" if zh else "Fix the recent failure",
+                prompt=(
+                    f"请优先定位并修复最近的失败：{blocked_reason}"
+                    if zh
+                    else f"Prioritize diagnosing and fixing the recent failure: {blocked_reason}"
+                ),
+                reason=("任务状态显示最近存在阻塞或测试失败。" if zh else "Task state shows a recent blocker or test failure."),
+                confidence=max(min_confidence, 0.76),
+                source_refs=["task_state:blocked_reason"],
+            )
+        )
+        return candidates[:3]
+    if pending_tests and intent_stage in {"test", "debug", "implement"}:
+        tests_text = ", ".join(pending_tests[:3])
+        candidates.append(
+            ForecastSuggestion(
+                id=f"forecast-{uuid.uuid4().hex[:10]}",
+                title="运行相关测试" if zh else "Run focused tests",
+                prompt=(f"请运行相关测试并根据结果继续处理：{tests_text}" if zh else f"Run the focused tests and continue from the results: {tests_text}"),
+                reason=(
+                    "当前变更已经映射到可验证的测试范围。"
+                    if zh
+                    else "The current changes map to a focused verification set."
+                ),
+                confidence=max(min_confidence, 0.7),
+                source_refs=["task_state:pending_tests"],
+            )
+        )
+        if intent_stage == "test":
+            return candidates[:3]
+    if intent_stage == "document":
+        candidates.append(
+            ForecastSuggestion(
+                id=f"forecast-{uuid.uuid4().hex[:10]}",
+                title="继续完善文档" if zh else "Continue documentation work",
+                prompt=(
+                    "请基于当前变更继续完善相关文档，并检查文档内容是否与已实现行为一致。"
+                    if zh
+                    else "Continue updating the relevant documentation from the current changes and check that it matches the implemented behavior."
+                ),
+                reason=("最近用户请求或变更指向文档阶段。" if zh else "The recent user request or changed files point to documentation work."),
+                confidence=max(min_confidence, 0.66),
+                source_refs=["intent_stage:document"],
+            )
+        )
+    if intent_stage == "commit":
+        candidates.append(
+            ForecastSuggestion(
+                id=f"forecast-{uuid.uuid4().hex[:10]}",
+                title="整理当前变更" if zh else "Prepare the current changes",
+                prompt=(
+                    "请查看当前 diff，整理变更摘要和剩余风险，并确认是否适合提交。"
+                    if zh
+                    else "Review the current diff, summarize the changes and remaining risks, and confirm whether it is ready to commit."
+                ),
+                reason=("当前意图阶段更接近提交前整理。" if zh else "The current intent stage is closest to pre-commit preparation."),
+                confidence=max(min_confidence, 0.65),
+                source_refs=["intent_stage:commit"],
+            )
+        )
     if primary_focus and primary_focus["id"] == "intent_forecast":
         candidates.append(
             ForecastSuggestion(
@@ -241,6 +336,34 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
                 )
                 break
     return candidates[:3]
+
+
+def no_suggestion_gate(
+    suggestions: list[ForecastSuggestion],
+    *,
+    context: ForecastContext,
+    trigger: str,
+    min_confidence: float,
+) -> list[ForecastSuggestion]:
+    """Suppress weak automatic suggestions when local evidence is thin."""
+
+    if not suggestions:
+        return []
+    manual = trigger in {"slash", "cli", "manual", "test"}
+    task_state = context.task_state or {}
+    if str(context.intent_stage or "") == "pause" and not manual:
+        return []
+    threshold = min_confidence if manual else min(0.95, max(min_confidence, min_confidence + 0.08))
+    strong_signal = bool(
+        context.current_messages
+        or context.workspace.get("git_status")
+        or task_state.get("blocked_reason")
+        or task_state.get("pending_tests")
+        or any(float(session.get("relevance_score") or 0) >= 0.5 for session in context.sessions[:3])
+    )
+    if not strong_signal and not manual:
+        return []
+    return [suggestion for suggestion in suggestions if suggestion.confidence >= threshold]
 
 
 def filter_suggestions_for_context(
@@ -423,7 +546,6 @@ def _focus_definitions() -> dict[str, dict[str, Any]]:
                 "intent_forecast",
                 "intent-forecast",
                 "intent forecast",
-                "forecast",
                 "tests/intent_forecast",
                 "\u610f\u56fe\u9884\u6d4b",
             ),
@@ -438,7 +560,7 @@ def _focus_definitions() -> dict[str, dict[str, Any]]:
         },
         "tui": {
             "label": "TUI",
-            "aliases": ("tui/", "tui\\", "textual", "repl screen", "prompt_input"),
+            "aliases": ("tui/", "tui\\", "tui", "textual", "repl screen", "prompt_input"),
         },
         "repl": {
             "label": "REPL",

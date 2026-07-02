@@ -27,8 +27,13 @@ def test_context_reads_memory_workspace_and_current_messages(tmp_path) -> None:
 
     assert context.current_messages[-1]["content"] == "continue forecast"
     assert context.response_language == "English"
+    assert context.intent_stage in {"explore", "implement"}
+    assert "active_goal" in context.task_state
     assert context.memory_files[0]["path"] == "CLAUDE.md"
     assert "permission_mode" in context.workspace
+    assert "changed_files" in context.workspace
+    assert "git_branch" in context.workspace
+    assert "git_diff_names" in context.workspace
     assert "README.md" not in context.workspace["project_files"]
 
 
@@ -67,7 +72,10 @@ def test_context_infers_chinese_from_recent_user_messages(tmp_path) -> None:
     conv.messages = [
         Message(role="user", content="please inspect this repo"),
         Message(role="assistant", content="ok"),
-        Message(role="user", content="继续补齐上述交互和后台侧车能力"),
+        Message(
+            role="user",
+            content="\u7ee7\u7eed\u8865\u9f50\u4e0a\u8ff0\u4ea4\u4e92\u548c\u540e\u53f0\u4fa7\u8f66\u80fd\u529b",
+        ),
     ]
 
     context = IntentForecastContextBuilder(
@@ -85,7 +93,41 @@ def test_infer_language_falls_back_to_session_tail() -> None:
     assert (
         infer_response_language(
             [],
-            [{"transcript_tail": [{"role": "user", "content": "继续完成测试覆盖"}]}],
+            [{"transcript_tail": [{"role": "user", "content": "\u7ee7\u7eed\u5b8c\u6210\u6d4b\u8bd5\u8986\u76d6"}]}],
         )
         == "Chinese"
     )
+
+
+def test_infer_language_reads_session_summary_candidates() -> None:
+    assert (
+        infer_response_language(
+            [],
+            [
+                {
+                    "title": "Mostly English title",
+                    "summary": {
+                        "next_action_candidates": [
+                            "\u7ee7\u7eed\u5b8c\u6210\u610f\u56fe\u9884\u6d4b\u7684\u4ea4\u4e92\u4fee\u590d"
+                        ]
+                    },
+                }
+            ],
+        )
+        == "Chinese"
+    )
+
+
+def test_context_respects_configured_response_language(tmp_path) -> None:
+    conv = Conversation()
+    conv.messages = [Message(role="user", content="finish tests")]
+
+    context = IntentForecastContextBuilder(
+        conversation=conv,
+        workspace_root=tmp_path,
+        config=IntentForecastConfig(response_language="Chinese"),
+        sessions_dir=tmp_path / "sessions",
+        feedback_base_dir=tmp_path,
+    ).build()
+
+    assert context.response_language == "Chinese"

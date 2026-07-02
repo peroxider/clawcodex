@@ -19,10 +19,16 @@ Rules:
 - Do not start work yourself.
 - If `response_language` is Chinese, write natural Simplified Chinese.
 - If `response_language` is English, write natural English.
+- Prefer current workspace signals and changed_files over older session summaries.
+- If changed_files point at a specific feature/module, suggestions must stay on that feature/module unless the current user messages say otherwise.
 - Do not suggest changing permission mode unless current context explicitly shows a tool/test was blocked by permissions.
 - Treat `dontAsk` as permissive/logging mode, not as evidence that tools are blocked.
 - Use confidence between 0 and 1.
-- Avoid repeating suggestions that feedback says were dismissed."""
+- Avoid repeating suggestions that feedback says were dismissed.
+- First decide from `task_state` and `intent_stage`; only then use historical sessions.
+- If `task_state.blocked_reason` is present, prioritize fixing that failure.
+- If `task_state.open_questions` is non-empty, do not suggest autonomous implementation; suggest answering or resolving the question.
+- If `intent_stage` is `test` or `debug`, keep suggestions focused on verification or failure repair."""
 
 
 def build_forecast_messages(

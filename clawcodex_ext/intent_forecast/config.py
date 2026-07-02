@@ -19,6 +19,7 @@ class IntentForecastConfig:
     auto_display: bool = True
     feedback_enabled: bool = True
     summary_lazy_generate: bool = True
+    response_language: str = "auto"
 
     @classmethod
     def from_mapping(cls, raw: Any) -> "IntentForecastConfig":
@@ -37,6 +38,7 @@ class IntentForecastConfig:
             auto_display=_bool_value(data.get("auto_display"), True),
             feedback_enabled=_bool_value(data.get("feedback_enabled"), True),
             summary_lazy_generate=_bool_value(data.get("summary_lazy_generate"), True),
+            response_language=_language_value(data.get("response_language"), "auto"),
         )
 
 
@@ -79,3 +81,12 @@ def _float_value(value: Any, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _language_value(value: Any, default: str) -> str:
+    text = str(value or default).strip().lower()
+    if text in {"zh", "zh-cn", "chinese", "中文", "simplified chinese"}:
+        return "Chinese"
+    if text in {"en", "en-us", "english"}:
+        return "English"
+    return "auto"

@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from clawcodex_ext.intent_forecast.task_state import build_task_state, classify_intent_stage
+
+
+def test_task_state_extracts_blocker_and_pending_tests() -> None:
+    state = build_task_state(
+        current_messages=[
+            {"role": "user", "content": "继续实现 intent forecast"},
+            {"role": "assistant", "content": "pytest failed: tests/intent_forecast/test_service.py"},
+        ],
+        sessions=[],
+        workspace={
+            "changed_files": ["clawcodex_ext/intent_forecast/service.py"],
+            "changed_test_mapping": ["tests/intent_forecast"],
+            "last_test_failures": ["tests/intent_forecast/test_service.py failed"],
+        },
+    )
+
+    assert state["active_goal"] == "继续实现 intent forecast"
+    assert state["blocked_reason"] == "tests/intent_forecast/test_service.py failed"
+    assert state["pending_tests"] == ["tests/intent_forecast"]
+    assert state["next_unfinished_step"].startswith("Fix the recent failure")
+
+
+def test_intent_stage_prefers_recent_user_document_request_over_dirty_worktree() -> None:
+    state = {"pending_tests": ["tests/intent_forecast"], "blocked_reason": ""}
+
+    stage = classify_intent_stage(
+        current_messages=[{"role": "user", "content": "基于 feature plan 继续补全文档说明"}],
+        task_state=state,
+        workspace={"git_status": " M clawcodex_ext/intent_forecast/service.py"},
+    )
+
+    assert stage == "document"
+
+
+def test_intent_stage_enters_debug_when_recent_failure_exists() -> None:
+    stage = classify_intent_stage(
+        current_messages=[{"role": "assistant", "content": "AssertionError: expected A"}],
+        task_state={"blocked_reason": "AssertionError: expected A"},
+        workspace={},
+    )
+
+    assert stage == "debug"

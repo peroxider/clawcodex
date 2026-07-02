@@ -11,6 +11,8 @@ from typing import Any
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
 from clawcodex_ext.intent_forecast.learning import read_recent_feedback
+from clawcodex_ext.intent_forecast.session_retrieval import rank_session_rows
+from clawcodex_ext.intent_forecast.task_state import build_task_state, classify_intent_stage
 from clawcodex_ext.session_intelligence.queue import enqueue_summary_job
 
 
@@ -24,6 +26,8 @@ class ForecastContext:
     sessions: list[dict[str, Any]] = field(default_factory=list)
     memory_files: list[dict[str, str]] = field(default_factory=list)
     workspace: dict[str, Any] = field(default_factory=dict)
+    task_state: dict[str, Any] = field(default_factory=dict)
+    intent_stage: str = "explore"
     feedback: list[dict[str, Any]] = field(default_factory=list)
     response_language: str = "English"
     fingerprint: str = ""
@@ -32,6 +36,8 @@ class ForecastContext:
         return {
             "cwd": self.cwd,
             "current_messages": self.current_messages,
+            "task_state": self.task_state,
+            "intent_stage": self.intent_stage,
             "sessions": self.sessions,
             "memory_files": self.memory_files,
             "workspace": self.workspace,
@@ -58,11 +64,21 @@ class IntentForecastContextBuilder:
 
     def build(self) -> ForecastContext:
         current = self._current_messages()
-        sessions = self._sessions()
         memory = self._memory_files()
         workspace = self._workspace_signals()
+        sessions = self._sessions(current_messages=current, workspace=workspace)
+        task_state = build_task_state(current_messages=current, sessions=sessions, workspace=workspace)
+        intent_stage = classify_intent_stage(
+            current_messages=current,
+            task_state=task_state,
+            workspace=workspace,
+        )
         feedback = read_recent_feedback(limit=30, base_dir=self.feedback_base_dir)
-        response_language = infer_response_language(current, sessions)
+        response_language = (
+            self.config.response_language
+            if self.config.response_language in {"Chinese", "English"}
+            else infer_response_language(current, sessions)
+        )
         raw = json.dumps(
             {
                 "cwd": str(self.workspace_root),
@@ -70,6 +86,8 @@ class IntentForecastContextBuilder:
                 "sessions": sessions,
                 "memory": memory,
                 "workspace": workspace,
+                "task_state": task_state,
+                "intent_stage": intent_stage,
                 "response_language": response_language,
             },
             sort_keys=True,
@@ -81,6 +99,8 @@ class IntentForecastContextBuilder:
             sessions=sessions,
             memory_files=memory,
             workspace=workspace,
+            task_state=task_state,
+            intent_stage=intent_stage,
             feedback=feedback,
             response_language=response_language,
             fingerprint=hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16],
@@ -98,11 +118,19 @@ class IntentForecastContextBuilder:
                 out.append({"role": role, "content": text[:1200]})
         return out
 
-    def _sessions(self) -> list[dict[str, Any]]:
+    def _sessions(
+        self,
+        *,
+        current_messages: list[dict[str, str]],
+        workspace: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         try:
             from src.services.session_storage import SessionStorage
 
-            metas = SessionStorage.list_sessions(self.sessions_dir, limit=self.config.max_sessions)
+            metas = SessionStorage.list_sessions(
+                self.sessions_dir,
+                limit=max(self.config.max_sessions * 3, self.config.max_sessions),
+            )
         except Exception:
             return []
         rows: list[dict[str, Any]] = []
@@ -113,6 +141,7 @@ class IntentForecastContextBuilder:
                 "model": getattr(meta, "model", ""),
                 "last_user_input": getattr(meta, "last_user_input", ""),
                 "last_updated": getattr(meta, "last_updated", 0),
+                "cwd": getattr(meta, "cwd", ""),
                 "tags": list(getattr(meta, "tags", []) or []),
             }
             summary = self._load_session_summary(str(row["session_id"]))
@@ -128,7 +157,14 @@ class IntentForecastContextBuilder:
                     except Exception:
                         pass
             rows.append(row)
-        return rows
+        recent_text = "\n".join(str(msg.get("content") or "") for msg in current_messages[-6:])
+        return rank_session_rows(
+            rows,
+            cwd=self.workspace_root,
+            changed_files=[str(path) for path in workspace.get("changed_files") or []],
+            recent_text=recent_text,
+            limit=self.config.max_sessions,
+        )
 
     def _load_session_summary(self, session_id: str) -> dict[str, Any] | None:
         if not session_id:
@@ -140,7 +176,17 @@ class IntentForecastContextBuilder:
             path = Path(base) / session_id / "summary.json"
             data = json.loads(path.read_text(encoding="utf-8"))
             if isinstance(data, dict) and int(data.get("schema_version", 0)) >= 1:
-                return {k: data.get(k) for k in ("title", "goals", "open_threads", "next_action_candidates")}
+                return {
+                    k: data.get(k)
+                    for k in (
+                        "title",
+                        "goals",
+                        "open_threads",
+                        "next_action_candidates",
+                        "files_touched",
+                        "commands_seen",
+                    )
+                }
         except Exception:
             return None
         return None
@@ -197,9 +243,24 @@ class IntentForecastContextBuilder:
         return rows
 
     def _workspace_signals(self) -> dict[str, Any]:
+        git_status = _run_git(self.workspace_root, ["status", "--short"])[:4000]
+        diff_names = _git_lines(_run_git(self.workspace_root, ["diff", "--name-only"]))
+        changed_files = _changed_files_from_status(git_status)
+        if not changed_files:
+            changed_files = diff_names
+        last_command = _last_command_sidecar(self.workspace_root)
         return {
-            "git_status": _run_git(self.workspace_root, ["status", "--short"])[:4000],
+            "git_status": git_status,
+            "git_branch": _run_git(self.workspace_root, ["branch", "--show-current"])[:200],
             "git_diff_stat": _run_git(self.workspace_root, ["diff", "--stat"])[:4000],
+            "git_diff_names": diff_names[:100],
+            "changed_files": changed_files,
+            "untracked_files": _untracked_files_from_status(git_status),
+            "changed_test_mapping": _changed_test_mapping(changed_files),
+            "diff_hunks_summary": _diff_hunks_summary(self.workspace_root, diff_names),
+            "last_command": last_command.get("command", ""),
+            "last_command_exit": last_command.get("exit_code", None),
+            "last_test_failures": _last_test_failures(last_command),
             "project_files": _project_files(self.workspace_root),
             "permission_mode": _permission_mode(self.workspace_root),
         }
@@ -223,6 +284,95 @@ def _run_git(cwd: Path, args: list[str]) -> str:
 def _project_files(cwd: Path) -> list[str]:
     names = ("README.md", "pyproject.toml", "package.json", "CLAUDE.md", "AGENTS.md")
     return [name for name in names if (cwd / name).exists()]
+
+
+def _changed_files_from_status(status: str) -> list[str]:
+    files: list[str] = []
+    for line in status.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        path = text[2:].strip() if len(text) > 2 else text
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip()
+        if path:
+            files.append(path.replace("\\", "/"))
+    return files[:50]
+
+
+def _git_lines(raw: str) -> list[str]:
+    return [line.strip().replace("\\", "/") for line in raw.splitlines() if line.strip()]
+
+
+def _untracked_files_from_status(status: str) -> list[str]:
+    files: list[str] = []
+    for line in status.splitlines():
+        if line.startswith("?? "):
+            files.append(line[3:].strip().replace("\\", "/"))
+    return files[:50]
+
+
+def _changed_test_mapping(changed_files: list[str]) -> list[str]:
+    hints: list[str] = []
+    for path in changed_files:
+        normalized = path.replace("\\", "/")
+        lower = normalized.lower()
+        if lower.startswith("tests/") or "/tests/" in f"/{lower}" or "test_" in lower:
+            hints.append(normalized)
+        elif lower.startswith("clawcodex_ext/intent_forecast/"):
+            hints.append("tests/intent_forecast")
+        elif lower.startswith("clawcodex_ext/tui/"):
+            hints.append("tests/tui")
+        elif lower.startswith("extensions/orchestrator/"):
+            hints.append("tests/orchestrator")
+    out: list[str] = []
+    for hint in hints:
+        if hint not in out:
+            out.append(hint)
+    return out[:12]
+
+
+def _diff_hunks_summary(cwd: Path, diff_names: list[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for name in diff_names[:8]:
+        stat = _run_git(cwd, ["diff", "--shortstat", "--", name])
+        if stat:
+            rows.append({"path": name, "summary": stat[:240]})
+    return rows
+
+
+def _last_command_sidecar(cwd: Path) -> dict[str, Any]:
+    paths = [
+        cwd / ".clawcodex" / "last_command.json",
+        Path.home() / ".clawcodex" / "last_command.json",
+    ]
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def _last_test_failures(last_command: dict[str, Any]) -> list[str]:
+    command = str(last_command.get("command") or "")
+    try:
+        exit_code = int(last_command.get("exit_code"))
+    except (TypeError, ValueError):
+        return []
+    if exit_code == 0 or ("pytest" not in command.lower() and "test" not in command.lower()):
+        return []
+    output = str(last_command.get("output") or last_command.get("stderr") or last_command.get("stdout") or "")
+    failures: list[str] = []
+    for line in output.splitlines():
+        lower = line.lower()
+        if "failed" in lower or "error" in lower or "assertion" in lower:
+            failures.append(line.strip()[:240])
+        if len(failures) >= 6:
+            break
+    return failures or [f"{command} failed with exit code {exit_code}"]
 
 
 def _permission_mode(cwd: Path) -> str:
@@ -271,9 +421,15 @@ def infer_response_language(
             break
     if not samples:
         for session in sessions or []:
+            title = str(session.get("title") or "")
+            if title:
+                samples.append(title)
             last = str(session.get("last_user_input") or "")
             if last:
                 samples.append(last)
+            summary = session.get("summary")
+            if isinstance(summary, dict):
+                samples.extend(_summary_language_samples(summary))
             tail = session.get("transcript_tail")
             if isinstance(tail, list):
                 for item in reversed(tail):
@@ -289,3 +445,14 @@ def infer_response_language(
     if cjk >= 3 and cjk >= latin * 0.25:
         return "Chinese"
     return "English"
+
+
+def _summary_language_samples(summary: dict[str, Any]) -> list[str]:
+    samples: list[str] = []
+    for key in ("title", "goals", "open_threads", "next_action_candidates"):
+        value = summary.get(key)
+        if isinstance(value, str):
+            samples.append(value)
+        elif isinstance(value, list):
+            samples.extend(str(item) for item in value[:6])
+    return samples

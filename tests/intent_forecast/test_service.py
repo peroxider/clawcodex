@@ -230,3 +230,58 @@ def test_fallback_prioritizes_intent_forecast_workspace_focus(tmp_path) -> None:
         "Run Intent Forecast regression tests",
         "Inspect latest Forecast history",
     ]
+
+
+def test_fallback_prioritizes_recent_failure(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        task_state={"blocked_reason": "tests/intent_forecast/test_service.py failed"},
+        intent_stage="debug",
+        response_language="English",
+    )
+
+    result = IntentForecastService(
+        conversation=None,
+        provider=None,
+        model=None,
+        workspace_root=tmp_path,
+        context=context,
+    ).generate(trigger="test", force=True)
+
+    assert result.suggestions[0].title == "Fix the recent failure"
+    assert "tests/intent_forecast/test_service.py failed" in result.suggestions[0].prompt
+
+
+def test_fallback_uses_document_stage_before_dirty_worktree(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        workspace={"git_status": " M clawcodex_ext/intent_forecast/service.py"},
+        task_state={},
+        intent_stage="document",
+        response_language="English",
+    )
+
+    result = IntentForecastService(
+        conversation=None,
+        provider=None,
+        model=None,
+        workspace_root=tmp_path,
+        context=context,
+    ).generate(trigger="test", force=True)
+
+    assert result.suggestions[0].title == "Continue documentation work"
+
+
+def test_auto_forecast_suppresses_weak_empty_context(tmp_path) -> None:
+    context = ForecastContext(cwd=str(tmp_path), response_language="English", fingerprint="empty")
+
+    result = IntentForecastService(
+        conversation=None,
+        provider=None,
+        model=None,
+        workspace_root=tmp_path,
+        context=context,
+    ).generate(trigger="auto", force=True)
+
+    assert result.generated is False
+    assert result.reason == "No confident next-step suggestions are available."
