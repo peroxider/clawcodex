@@ -19,6 +19,7 @@ from extensions.trae.mcp_bridge import (
     TraeMcpBridge,
     build_tool_specs,
     mcp_available,
+    _win_to_wsl,
 )
 
 
@@ -71,6 +72,56 @@ def test_bridge_config_from_env_defaults_empty() -> None:
     cfg = BridgeConfig.from_env({})
     assert cfg.workspace == ""
     assert cfg.reports_dir == ""
+
+
+# ---------------------------------------------------------------------------
+# Windows → WSL 路径转换（Trae CN 是 Windows 进程，传入 ${workspaceFolder}
+# 是 C:\xxx 形式；bridge 在 WSL 跑需 /mnt/c/xxx）
+# ---------------------------------------------------------------------------
+
+
+def test_win_to_wsl_basic_drive() -> None:
+    assert _win_to_wsl("C:\\WorkSpace\\clawcodex") == "/mnt/c/WorkSpace/clawcodex"
+    assert _win_to_wsl("D:\\proj") == "/mnt/d/proj"
+
+
+def test_win_to_wsl_forward_slash() -> None:
+    assert _win_to_wsl("C:/WorkSpace/clawcodex") == "/mnt/c/WorkSpace/clawcodex"
+
+
+def test_win_to_wsl_posix_passthrough() -> None:
+    assert _win_to_wsl("/mnt/c/WorkSpace/clawcodex") == "/mnt/c/WorkSpace/clawcodex"
+    assert _win_to_wsl("/tmp/ws") == "/tmp/ws"
+
+
+def test_win_to_wsl_unc_passthrough() -> None:
+    assert _win_to_wsl("\\\\wsl$\\Ubuntu-24.04\\home") == "\\\\wsl$\\Ubuntu-24.04\\home"
+
+
+def test_win_to_wsl_empty_and_quoted() -> None:
+    assert _win_to_wsl("") == ""
+    assert _win_to_wsl('"C:\\WorkSpace"') == "/mnt/c/WorkSpace"
+    assert _win_to_wsl("'C:\\WorkSpace'") == "/mnt/c/WorkSpace"
+
+
+def test_bridge_config_from_env_converts_windows_paths() -> None:
+    """Trae CN 经 wsl.exe 启动时，env 里 Windows 路径需自动转 WSL 路径。"""
+    cfg = BridgeConfig.from_env({
+        "CLAWCODEX_WORKSPACE": "C:\\WorkSpace\\clawcodex",
+        "CLAWCODEX_REPORTS_DIR": "C:\\WorkSpace\\clawcodex\\.reports\\",
+    })
+    assert cfg.workspace == "/mnt/c/WorkSpace/clawcodex"
+    assert cfg.reports_dir == "/mnt/c/WorkSpace/clawcodex/.reports/"
+    assert cfg.stability_gate_cwd == "/mnt/c/WorkSpace/clawcodex"
+
+
+def test_bridge_config_from_env_disabled_conversion() -> None:
+    """CLAWCODEX_AUTO_WIN_TO_WSL=0 时禁用转换（纯 Linux 部署场景）。"""
+    cfg = BridgeConfig.from_env({
+        "CLAWCODEX_WORKSPACE": "C:\\foo",
+        "CLAWCODEX_AUTO_WIN_TO_WSL": "0",
+    })
+    assert cfg.workspace == "C:\\foo"
 
 
 # ---------------------------------------------------------------------------

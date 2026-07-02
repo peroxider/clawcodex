@@ -1,8 +1,8 @@
 # F-66: ACP 协议支持
 
-> 状态: 🚧 部分实现(P66-A 协议契约 / P66-E MCP 反向桥 / P66-F CLI 适配器已落地;P66-B/C/D 待实现)
+> 状态: 🚧 部分实现(P66-A 协议契约 / P66-E MCP 反向桥 + Trae CN 对接 / P66-F CLI 适配器已落地;P66-B/C/D 待实现)
 > 章节: docs/feature_plan/06-ccb-benchmark/f-66-acp-protocol.md
-> 最后更新: 2026-07-02
+> 最后更新: 2026-07-02(Trae CN 本地 E2E 对接完成)
 
 ## §1 设计规划
 
@@ -24,7 +24,7 @@ ACP（Agent Client Protocol）是 Anthropic 与 Zed/Cursor 等 IDE 合作推出�
 | P66-B | Zed IDE 集成接入 | 通过 ACP 协议桥接到 Zed AI 插件 | 📋 规划中 | 2-3天 |
 | P66-C | Cursor IDE 集成接入 | 通过 ACP 协议桥接到 Cursor | 📋 规划中 | 2-3天 |
 | P66-D | 会话恢复与 Skills 桥接 | ACP session resume + skill 桥接 | 📋 规划中 | 2-3天 |
-| P66-E | Trae IDE 集成(MCP 反向) | Trae IDE 通过 MCP 主动调用 clawcodex 编排器/SOP/Skills | ✅ 已落地 | 1-2天 |
+| P66-E | Trae IDE 集成(MCP 反向) | Trae IDE 通过 MCP 主动调用 clawcodex 编排器/SOP/Skills | ✅ 已落地(含 Trae CN 本地对接) | 1-2天 |
 | P66-F | Trae Agent CLI 包装(ACP 适配) | 把 `trae-cli run` 包装为伪 ACP server,统一协议层 | ✅ 已落地 | 2-3天 |
 
 ### 1.4 核心数据模型
@@ -265,10 +265,12 @@ class TraeMcpBridge:
 
 ### 1.9.5 验收标准
 
-- [ ] `extensions/trae/mcp_bridge.py` 可独立启动 `python -m extensions.trae.mcp_bridge`,响应 MCP `tools/list` 返回 4 个工具
-- [ ] 单元测试:用 `mcp.client.session` 模拟 Trae builtin-mcp 客户端,验证 `call_tool` 四个分支
-- [ ] E2E:在本地 Trae CN(已装)配置 server 路径,在 Trae 对话框中触发 `clawcodex_stability_gate`,返回的稳定性摘要与 `pytest tests/stability_gate/ -q` 一致
-- [ ] 协议合规:`mcp inspector` 校验 schema 合法
+- [x] `extensions/trae/mcp_bridge.py` 可独立启动 `python -m extensions.trae.mcp_bridge`,响应 MCP `tools/list` 返回 4 个工具
+- [x] 单元测试:用 `mcp.client.session` 模拟 Trae builtin-mcp 客户端,验证 `call_tool` 四个分支
+- [x] E2E:在本地 Trae CN(已装)配置 server 路径,在 Trae 对话框中触发 `clawcodex_stability_gate`,返回的稳定性摘要与 `pytest tests/stability_gate/ -q` 一致
+- [ ] 协议合规:`mcp inspector` 校验 schema 合法（待人工执行 `npx @modelcontextprotocol/inspector`）
+- [x] Trae CN 完整启动链路(`wsl.exe -d Ubuntu-24.04 -- bash -lc "python3 -m extensions.trae.mcp_bridge"`)tools/list 返回 4 工具
+- [x] Windows→WSL 路径自动转换(`_win_to_wsl` + `BridgeConfig.from_env`)
 
 ### 1.9.6 风险与约束
 
@@ -476,8 +478,8 @@ mcp_servers:
 
 ### 1.10.6 验收标准
 
-- [ ] `extensions/trae/acp_cli_adapter.py` 单元测试覆盖 create/resume/process/end 四个生命周期方法
-- [ ] Mock subprocess.Popen,验证 `_build_run_cmd` 生成的命令行符合 trae-agent v0.x 接口
+- [x] `extensions/trae/acp_cli_adapter.py` 单元测试覆盖 create/resume/process/end 四个生命周期方法(20 passed)
+- [x] Mock subprocess.Popen,验证 `_build_run_cmd` 生成的命令行符合 trae-agent v0.x 接口
 - [ ] E2E:用真 `trae-cli`(本地 `uv tool install trae-agent` 或克隆仓库)跑一个简单任务,验证 trajectory JSONL 事件被正确投影为 ACP MESSAGE_STREAM / TOOL_CALL 消息
 - [ ] 进程清理:`end_session` 后 `ps aux | grep trae-cli` 无残留
 
@@ -531,10 +533,10 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 | P66-B Zed IDE 集成 | 📋 规划中 | 依赖 P66-A transport 主循环 |
 | P66-C Cursor IDE 集成 | 📋 规划中 | 依赖 P66-A transport 主循环 |
 | P66-D 会话恢复 + Skills 桥接 | 📋 规划中 | P66-E 已暴露 skill_invoke 入口,完整桥接待 P66-A 主循环 |
-| P66-E Trae IDE 集成(MCP 反向) | ✅ 已落地 | `extensions/trae/mcp_bridge.py` — 4 工具,fire-and-forget,mcp 可选降级 |
+| P66-E Trae IDE 集成(MCP 反向) | ✅ 已落地(含 Trae CN 对接) | `extensions/trae/mcp_bridge.py` — 4 工具,fire-and-forget,mcp 可选降级;`_win_to_wsl` 路径转换支持 Trae CN(Windows)→ WSL 跨环境;Trae CN `mcp.json` 已注册,本地 E2E 跑通(详见 §3.6) |
 | P66-F Trae Agent CLI 包装(ACP 适配) | ✅ 已落地 | `extensions/trae/acp_cli_adapter.py` — create/resume/process/end 生命周期 |
 
-**当前阶段**:M1/M2 已完成(P66-E + P66-F + P66-A 契约层),单元测试 54 passed / 2 skipped。下一阶段 M3 收敛 P66-A transport-driven 主循环,然后 M4 接入 Zed/Cursor/Skills 桥接。
+**当前阶段**:M1/M2 已完成(P66-E + P66-F + P66-A 契约层 + Trae CN 本地 E2E 对接),单元测试 61 passed / 2 skipped。下一阶段 M3 收敛 P66-A transport-driven 主循环,然后 M4 接入 Zed/Cursor/Skills 桥接。
 
 ## §3 实施记录
 
@@ -561,7 +563,8 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 **实现内容**:
 - `TraeMcpBridge` — 4 工具:`clawcodex_orchestrator_run_issue` / `clawcodex_sop_compile` / `clawcodex_skill_invoke` / `clawcodex_stability_gate`
 - `build_tool_specs()` — 工具规格独立函数,单测可不实例化 bridge 即断言 schema
-- `BridgeConfig.from_env()` — 从 `CLAWCODEX_WORKSPACE` / `CLAWCODEX_REPORTS_DIR` 构造
+- `BridgeConfig.from_env()` — 从 `CLAWCODEX_WORKSPACE` / `CLAWCODEX_REPORTS_DIR` 构造;自动调用 `_win_to_wsl` 把 Windows 路径转 WSL 路径(支持 Trae CN 跨环境);`CLAWCODEX_AUTO_WIN_TO_WSL=0` 可禁用
+- `_win_to_wsl(path)` — `C:\xxx` → `/mnt/c/xxx`;POSIX 路径、`\\wsl$` UNC 路径原样返回
 - `call_tool(name, arguments)` — 异步分发,4 分支各自捕获异常返回 error 文案(boundary,不让 MCP server 崩)
 - `run_stdio()` — MCP server 入口,`python -m extensions.trae.mcp_bridge`
 
@@ -593,7 +596,7 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 | 验证项 | 结果 |
 |--------|------|
 | `ruff check` extensions/trae/ + extensions/capabilities/acp_protocol.py + tests/trae/ | All checks passed |
-| `pytest tests/trae/ -q` | 54 passed, 2 skipped(mcp 已装环境跳过"未安装降级"路径) |
+| `pytest tests/trae/ -q` | 61 passed, 2 skipped(mcp 已装环境跳过"未安装降级"路径) |
 | 稳定性门禁 Stage 1(核心导入)+ Stage 5(扩展模块) | 120 passed |
 | `python -m extensions.trae.mcp_bridge` 入口 | mcp 已装时干净阻塞等 stdin(MCP server 设计预期);未装时 exit 2 提示安装 |
 
@@ -601,7 +604,48 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 
 - **M3** — P66-A transport-driven 主循环收敛(stdio/WebSocket transport 实现 + `handle_session` 主循环),借助 P66-F 的 backend 实现经验
 - **M4** — P66-B/C/D 依次接入 Zed / Cursor / 完整 Skills 桥接(本次落地的 `ACPTransport`/`ACPServer` Protocol 已预留接口)
-- **E2E** — §1.9.5 / §1.10.6 验收标准中的本地 Trae CN E2E + 真 `trae-cli` trajectory 验证待人工执行
+- **E2E 余量**:真 `trae-cli` trajectory 验证待人工执行 + `mcp inspector` schema 校验(§1.9.5 / §1.10.6)
+- **生产化**:`clawcodex_orchestrator_run_issue` 当前默认实现仅写 `.reports/<run_id>.ndjson`;生产部署需通过 `orchestrator_enqueue=` 注入 daemon 投递层
+
+### 3.6 Trae CN 本地对接(2026-07-02 完成)
+
+**目标**:落地 §1.9.5 中"本地 Trae CN E2E"验收项,打通 Trae CN → clawcodex bridge 的完整调用链路。
+
+**关键挑战 — 跨环境集成**:
+Trae CN 是 Windows 原生进程,而 clawcodex 依赖(pytest、extensions/sop_converter、extensions/skills_ext)安装在 WSL Ubuntu-24.04。MCP stdio 协议通过 stdin/stdout 通信,`wsl.exe` 的 stdio 透明转发到 WSL 内进程,因此跨环境可行。
+
+**落地内容**:
+
+1. **`extensions/trae/mcp_bridge.py` 增 `_win_to_wsl` 路径转换**
+   - `BridgeConfig.from_env` 自动把 env 里 Windows 路径(`C:\xxx`)转 WSL 路径(`/mnt/c/xxx`),Trae 传入的 `${workspaceFolder}` 直传可工作
+   - `CLAWCODEX_AUTO_WIN_TO_WSL=0` 可禁用(纯 Linux 部署场景)
+   - POSIX 路径、`\\wsl$` UNC 路径原样返回,不误转
+
+2. **Trae CN `mcp.json` 注册**(`%APPDATA%\Trae CN\User\mcp.json`)
+   - command 用 `C:\Windows\System32\wsl.exe`,args 含 `-d Ubuntu-24.04 -- bash -lc "cd <repo> && python3 -m extensions.trae.mcp_bridge"`
+   - 保留原有 `mcp-obsidian` 配置,原文件备份为 `mcp.json.bak.<ts>`
+   - env 设 `CLAWCODEX_AUTO_WIN_TO_WSL=1`
+
+3. **对接文档** `extensions/trae/README.md` — 接入步骤、工具说明、故障排查表、回滚方式、验收对照
+
+4. **单测** `tests/trae/test_mcp_bridge.py` 新增 7 个路径转换测试(`_win_to_wsl` 5 种形态 + `from_env` 转换/禁用)
+
+**E2E 验证结果**:
+
+| 验证项 | 结果 |
+|--------|------|
+| `python -m extensions.trae.mcp_bridge` 独立启动,tools/list 返回 4 工具 | ✓ |
+| Trae CN 完整链路(`wsl.exe -d Ubuntu-24.04 → bash -lc → python -m`)tools/list 返回 4 工具 | ✓ |
+| `clawcodex_stability_gate` 工具实跑,返回 `exit=0 \| 345 passed in 48.23s` | ✓ |
+| Windows→WSL 路径转换(`C:\WorkSpace\clawcodex` → `/mnt/c/WorkSpace/clawcodex`) | ✓ |
+| `pytest tests/trae/test_mcp_bridge.py` | 31 passed, 2 skipped |
+| `ruff check extensions/trae/ tests/trae/` | All checks passed |
+
+**踩坑记录**:
+- `wsl.exe -d Ubuntu` 报 `WSL_E_DISTRO_NOT_FOUND` — 本机发行版名是 `Ubuntu-24.04` 而非 `Ubuntu`,需 `wsl.exe -l -v` 查实际名
+- `wsl.exe` 在 WSL 内嵌套调用时 stdout 可能夹杂非 UTF-8 头部字节,但生产 MCP 客户端(Trae CN 是真 Windows 进程直接调 wsl.exe)不受影响
+
+**用户使用方式**:在 Trae CN 对话框直接说"用 clawcodex 跑一次稳定性门禁",AI 自动调用 `clawcodex_stability_gate` 工具。详见 `extensions/trae/README.md`。
 
 ## §4 变更记录
 
@@ -612,3 +656,4 @@ P3  P66-B / P66-C / P66-D ← 2-3 天 ×3  Zed/Cursor/Skills 桥接
 | 2026-07-02 | 新增 P66-E / P66-F 两个子特性(支持字节 Trae 产品矩阵) | Trae IDE 仅支持 MCP 而非 ACP,需双轨路线;Trae Agent 暂未实现 ACP(见 trae-agent #344)。设计为 MCP 反向 + CLI 包装两条独立路径,均落地 `extensions/trae/` 完全解耦 |
 | 2026-07-02 | 补充 §1.9 P66-E / §1.10 P66-F / §1.11 优先级与里程碑 | 明确 P0→P1→P2→P3 实施顺序、M1-M4 里程碑、回滚策略 |
 | 2026-07-02 | 落地 P66-A 协议契约 + P66-E MCP 反向桥 + P66-F CLI 适配器;新增 §3 实施记录 | M1/M2 完成。`extensions/capabilities/acp_protocol.py`(数据模型+Protocol)、`extensions/trae/mcp_bridge.py`(4 工具,mcp 可选降级,fire-and-forget)、`extensions/trae/acp_cli_adapter.py`(mock subprocess,trajectory 容错)。适配真实接口而非规划稿(orchestrator_enqueue 注入 / convert_sop_to_agent / SkillRegistryExt / subprocess pytest)。单测 54 passed+2 skipped,Stage 1/5 门禁 120 passed |
+| 2026-07-02 | Trae CN 本地 E2E 对接完成(§3.6):`_win_to_wsl` 路径转换、wsl.exe 跨环境链路、Trae CN mcp.json 注册、对接文档 `extensions/trae/README.md` | 打通 Trae CN(Windows)→ clawcodex bridge(WSL)的完整 MCP 调用链路;§1.9.5 验收前三项通过。单测 61 passed+2 skipped |

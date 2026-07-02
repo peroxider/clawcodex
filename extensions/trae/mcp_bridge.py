@@ -13,7 +13,25 @@ Trae IDE 短期内不会实现 ACP（见 trae-agent #344），但已原生支持
 仍可实例化，工具规格与分发逻辑可独立单元测试；仅 :meth:`run_stdio` 在
 调用时才要求 ``mcp`` 已安装。
 
-Trae IDE 侧接入 (设置 → AI → MCP Servers → 添加)::
+Trae IDE 侧接入 (Trae CN 通过 wsl.exe 调用，Trae AI 可通过 byted-solo.builtin-mcp 直连):
+
+    配置示例 (``%APPDATA%\\Trae CN\\User\\mcp.json``)::
+
+    {
+      "mcpServers": {
+        "clawcodex": {
+          "command": "C:\\\\Windows\\\\System32\\\\wsl.exe",
+          "args": [
+            "-d", "Ubuntu-24.04", "--",
+            "bash", "-lc",
+            "cd /path/to/clawcodex && python3 -m extensions.trae.mcp_bridge"
+          ],
+          "env": {"CLAWCODEX_AUTO_WIN_TO_WSL": "1"}
+        }
+      }
+    }
+
+    纯 Linux 部署 (无 Windows 路径转换需求)::
 
     {
       "name": "clawcodex",
@@ -49,6 +67,7 @@ __all__ = [
     "MCP_UNAVAILABLE",
     "mcp_available",
     "build_tool_specs",
+    "_win_to_wsl",
 ]
 
 # 模块级常量 — 单测可不安装 mcp 即可断言降级路径
@@ -85,15 +104,46 @@ class BridgeConfig:
     stability_gate_timeout_s: float = 120.0
     # fire-and-forget 进度轮询间隔（文档 §1.9.6 风险缓解）
     progress_poll_interval_s: float = 0.5
+    # 是否把 Windows 风格路径自动转 WSL 风格（Trae CN 是 Windows 进程，
+    # 传入的 ${workspaceFolder} 是 C:\xxx 形式；bridge 在 WSL 跑需 /mnt/c/xxx）
+    auto_win_to_wsl: bool = True
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "BridgeConfig":
         env = env if env is not None else dict(os.environ)
+        workspace = env.get("CLAWCODEX_WORKSPACE", "")
+        reports_dir = env.get("CLAWCODEX_REPORTS_DIR", "")
+        # Trae CN 经 wsl.exe 启动时，env 里的 Windows 路径需转 WSL 路径
+        if env.get("CLAWCODEX_AUTO_WIN_TO_WSL", "1") not in ("0", "false", "False"):
+            workspace = _win_to_wsl(workspace) if workspace else workspace
+            reports_dir = _win_to_wsl(reports_dir) if reports_dir else reports_dir
         return cls(
-            workspace=env.get("CLAWCODEX_WORKSPACE", ""),
-            reports_dir=env.get("CLAWCODEX_REPORTS_DIR", ""),
-            stability_gate_cwd=env.get("CLAWCODEX_WORKSPACE", ""),
+            workspace=workspace,
+            reports_dir=reports_dir,
+            stability_gate_cwd=workspace,
         )
+
+
+def _win_to_wsl(path: str) -> str:
+    """Convert a Windows path ``C:\\foo\\bar`` to WSL ``/mnt/c/foo/bar``.
+
+    非 Windows 路径（已 / 开头、空串、UNC 之外的形态）原样返回。
+    反斜杠统一转正斜杠。-drive 形如 ``D:\\proj`` → ``/mnt/d/proj``。
+    """
+    if not path:
+        return path
+    p = path.strip().strip('"').strip("'")
+    # 已经是 WSL/POSIX 路径
+    if p.startswith("/") or p.startswith("\\\\wsl"):
+        return p
+    # 形如 C:\xxx 或 C:/xxx
+    if len(p) >= 2 and p[1] == ":" and p[0].isalpha():
+        drive = p[0].lower()
+        rest = p[2:].replace("\\", "/")
+        if rest.startswith("/"):
+            rest = rest[1:]
+        return f"/mnt/{drive}/{rest}"
+    return p
 
 
 # ---------------------------------------------------------------------------
