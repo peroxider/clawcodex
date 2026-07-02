@@ -15,6 +15,7 @@ from .brief import BriefTool
 from .config import ConfigTool
 from .cron import CronCreateTool, CronDeleteTool, CronListTool
 from .edit import EditTool
+from .execute import ExecuteTool
 from .glob import GlobTool
 from .grep import GrepTool
 from .lsp import LSPTool
@@ -24,6 +25,7 @@ from .mcp_resources import ListMcpResourcesTool, ReadMcpResourceTool
 from .misc import ClipboardReadTool, ClipboardWriteTool, StatusTool
 from .plan_mode import EnterPlanModeTool, ExitPlanModeTool
 from .read import ReadTool
+from .remote_trigger import RemoteTriggerTool
 from .send_message import SendMessageTool
 from .send_user_message import SendUserMessageTool
 from .skill import SkillTool
@@ -41,6 +43,7 @@ from .tasks_v2 import (
 from .team import TeamCreateTool, TeamDeleteTool
 from .todo_write import TodoWriteTool
 from .tool_search import make_tool_search_tool
+from .web_browser import WebBrowserTool
 from .web_fetch import WebFetchTool
 from .web_search import WebSearchTool
 from .worktree import EnterWorktreeTool, ExitWorktreeTool
@@ -60,6 +63,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     EditTool,
     EnterPlanModeTool,
     EnterWorktreeTool,
+    ExecuteTool,
     ExitPlanModeTool,
     ExitWorktreeTool,
     GlobTool,
@@ -70,6 +74,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     NotebookEditTool,
     ReadMcpResourceTool,
     ReadTool,
+    RemoteTriggerTool,
     SendMessageTool,
     SendUserMessageTool,
     SkillTool,
@@ -86,6 +91,7 @@ ALL_STATIC_TOOLS: list[Tool] = [
     TeamCreateTool,
     TeamDeleteTool,
     TodoWriteTool,
+    WebBrowserTool,
     WebFetchTool,
     WebSearchTool,
     WriteTool,
@@ -106,6 +112,7 @@ __all__ = [
     "EditTool",
     "EnterPlanModeTool",
     "EnterWorktreeTool",
+    "ExecuteTool",
     "ExitPlanModeTool",
     "ExitWorktreeTool",
     "GlobTool",
@@ -116,6 +123,7 @@ __all__ = [
     "NotebookEditTool",
     "ReadMcpResourceTool",
     "ReadTool",
+    "RemoteTriggerTool",
     "SendMessageTool",
     "SendUserMessageTool",
     "SkillTool",
@@ -132,6 +140,7 @@ __all__ = [
     "TeamCreateTool",
     "TeamDeleteTool",
     "TodoWriteTool",
+    "WebBrowserTool",
     "WebFetchTool",
     "WebSearchTool",
     "WriteTool",
