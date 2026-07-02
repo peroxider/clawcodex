@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from clawcodex_ext.intent_forecast.command import _forecast_call
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
+from src.agent.conversation import Conversation
+from src.types.messages import Message
 
 
 class FakeController:
@@ -44,3 +46,21 @@ def test_forecast_dismiss_uses_controller(tmp_path: Path) -> None:
 
     assert result.value == "Forecast dismissed."
     assert controller.dismissed is True
+
+
+def test_forecast_run_does_not_append_to_conversation(tmp_path: Path) -> None:
+    conversation = Conversation()
+    conversation.messages = [Message(role="user", content="continue the task")]
+    ctx = SimpleNamespace(
+        cwd=tmp_path,
+        workspace_root=tmp_path,
+        conversation=conversation,
+        provider=None,
+    )
+
+    result = _forecast_call("run", ctx)
+
+    assert result.type == "text"
+    assert "Forecast" in result.value
+    assert len(conversation.messages) == 1
+    assert conversation.messages[0].content == "continue the task"

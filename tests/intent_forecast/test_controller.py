@@ -41,6 +41,7 @@ def _conversation() -> Conversation:
 def test_controller_arms_on_mount_and_fires(tmp_path) -> None:
     timers = FakeTimerFactory()
     displayed = []
+    conv = _conversation()
     controller = IntentForecastController(
         provider_getter=lambda: None,
         model_getter=lambda: None,
@@ -48,7 +49,7 @@ def test_controller_arms_on_mount_and_fires(tmp_path) -> None:
         workspace_root=tmp_path,
         display=displayed.append,
         config_loader=lambda: IntentForecastConfig(idle_seconds=7),
-        conversation_getter=_conversation,
+        conversation_getter=lambda: conv,
         timer_factory=timers,
     )
 
@@ -58,6 +59,8 @@ def test_controller_arms_on_mount_and_fires(tmp_path) -> None:
     timers.timers[0].fire()
     assert displayed
     assert displayed[0].generated is True
+    assert len(conv.messages) == 1
+    assert conv.messages[0].content == "implement forecast"
 
 
 def test_user_interaction_cancels_timer(tmp_path) -> None:

@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
-
-from clawcodex_ext.types.messages import SystemMessage
 
 
 @dataclass(frozen=True)
@@ -42,29 +39,6 @@ def format_forecast_for_display(result: ForecastResult) -> str:
     lines.append("")
     lines.append("Use /forecast accept <number> to submit a suggestion, or /forecast dismiss.")
     return "\n".join(lines).strip()
-
-
-def create_forecast_message(result: ForecastResult, *, trigger: str, model: str | None = None) -> SystemMessage:
-    text = (
-        "[INTENT FORECAST]\n"
-        f"trigger={trigger} fingerprint={result.fingerprint} model={model or ''}\n\n"
-        f"{format_forecast_for_display(result)}"
-    )
-    msg = SystemMessage(
-        content=text,
-        timestamp=datetime.now().isoformat(),
-        subtype="intent_forecast",
-        level="info",
-        isMeta=False,
-    )
-    msg._intent_forecast_meta = {
-        "trigger": trigger,
-        "fingerprint": result.fingerprint,
-        "suggestions": [s.__dict__ for s in result.suggestions],
-        "model": model,
-        "created_at": msg.timestamp,
-    }
-    return msg
 
 
 def parse_selection(raw: str, suggestions: list[ForecastSuggestion]) -> ForecastSuggestion | None:
