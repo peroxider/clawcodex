@@ -308,6 +308,12 @@ class SettingsSchema:
     # flip both atomically while ``/voice anthropic`` only touches the provider.
     voice_enabled: bool = False
 
+    # ── F-64 P64-E TTS (Text-to-Speech) ────────────────────────────────
+    tts_provider: str = ""
+    tts_enabled: bool = False
+    tts_voice: str = ""
+    tts_silent_text_output: bool = False
+
     # Extra raw fields for forward compatibility
     extra: dict[str, Any] = field(default_factory=dict)
 

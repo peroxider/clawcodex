@@ -52,11 +52,66 @@ MINIMAX_T2A_ENDPOINTS: dict[str, str] = {
     "uw": "https://api-uw.minimax.io/v1/t2a_v2",
 }
 
-# Default model/voice for TTS — MiniMax speech-2.8-turbo (low-latency) /
-# ``male-qn-qingse`` (a generic Chinese-friendly voice). Override via
-# TTSConfig.model / TTSConfig.voice.
+# Default model/voice for TTS — MiniMax speech-2.8-turbo (low-latency).
+# Voice IDs follow MiniMax official system voice naming:
+# - Chinese (Mandarin)_Warm_Girl: neutral warm female (default)
+# - English_expressive_narrator: English expressive narrator
+# Full list at https://platform.minimax.io/docs/faq/system-voice-id
+# Override via TTSConfig.model / TTSConfig.voice.
 _MINIMAX_TTS_DEFAULT_MODEL = "speech-2.8-turbo"
-_MINIMAX_TTS_DEFAULT_VOICE = "male-qn-qingse"
+_MINIMAX_TTS_DEFAULT_VOICE = "Chinese (Mandarin)_Warm_Girl"
+
+# Supported models (per official MiniMax API docs 2026-07):
+# speech-2.8-hd, speech-2.8-turbo (current gen, recommended)
+# speech-2.6-hd, speech-2.6-turbo (legacy, lower latency)
+# speech-02-hd, speech-02-turbo, speech-01-hd, speech-01-turbo (legacy)
+MINIMAX_SUPPORTED_MODELS: tuple[str, ...] = (
+    "speech-2.8-hd", "speech-2.8-turbo",
+    "speech-2.6-hd", "speech-2.6-turbo",
+    "speech-02-hd", "speech-02-turbo",
+    "speech-01-hd", "speech-01-turbo",
+)
+
+# MiniMax official system voice IDs (selected subset for common use cases).
+# Full 332+ voice list at https://platform.minimax.io/docs/faq/system-voice-id
+MINIMAX_SYSTEM_VOICES: dict[str, tuple[str, ...]] = {
+    "Chinese (Mandarin)": (
+        "Chinese (Mandarin)_Warm_Girl",
+        "Chinese (Mandarin)_Gentleman",
+        "Chinese (Mandarin)_News_Anchor",
+        "Chinese (Mandarin)_Sweet_Lady",
+        "Chinese (Mandarin)_Crisp_Girl",
+        "Chinese (Mandarin)_Reliable_Executive",
+        "Chinese (Mandarin)_Male_Announcer",
+        "Chinese (Mandarin)_Cute_Spirit",
+    ),
+    "English": (
+        "English_expressive_narrator",
+        "English_radiant_girl",
+        "English_magnetic_voiced_man",
+        "English_captivating_female1",
+        "English_Graceful_Lady",
+        "English_CalmWoman",
+        "English_Persuasive_Man",
+        "English_FriendlyPerson",
+    ),
+    "Japanese": (
+        "Japanese_IntellectualSenior",
+        "Japanese_GentleButler",
+        "Japanese_KindLady",
+        "Japanese_CalmLady",
+    ),
+    "Korean": (
+        "Korean_CharmingSister",
+        "Korean_GentleWoman",
+        "Korean_ReliableYouth",
+    ),
+    "Cantonese": (
+        "Cantonese_ProfessionalHost (F)",
+        "Cantonese_GentleLady",
+        "Cantonese_CuteGirl",
+    ),
+}
 
 
 class MiniMaxTTSCredentialsError(RuntimeError):

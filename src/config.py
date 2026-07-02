@@ -622,3 +622,54 @@ def set_voice_enabled(enabled: bool) -> None:
     cfg['settings'] = section
     mgr.save_global(cfg)
     invalidate_settings_cache()
+
+
+# ── F-64 P64-E: TTS setters ────────────────────────────────────────────────
+
+def set_tts_provider(value: Optional[str]) -> None:
+    """Persist the TTS backend choice (``"openai"`` | ``"minimax"`` | ``"gemini"`` | None)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip().lower()
+    if normalized not in ('openai', 'minimax', 'gemini'):
+        normalized = ''
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['tts_provider'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_tts_enabled(enabled: bool) -> None:
+    """Persist the TTS master switch (``settings.tts_enabled``)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['tts_enabled'] = bool(enabled)
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
+
+
+def set_tts_voice(value: Optional[str]) -> None:
+    """Persist the TTS voice id (``settings.tts_voice``)."""
+    from src.settings.settings import invalidate_settings_cache
+
+    normalized = (value or '').strip()
+    mgr = _get_default_manager()
+    cfg = mgr.load_global()
+    section = cfg.get('settings')
+    if not isinstance(section, dict):
+        section = {}
+    section['tts_voice'] = normalized
+    cfg['settings'] = section
+    mgr.save_global(cfg)
+    invalidate_settings_cache()
