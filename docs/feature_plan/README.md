@@ -78,9 +78,8 @@ docs/feature_plan/
 |----------|------|:----:|---------|
 | F-64 | Voice Mode 语音输入 | 🔄 | [f-64-voice-mode.md](06-ccb-benchmark/f-64-voice-mode.md) |
 | F-66 | ACP 协议支持 | 📋 | [f-66-acp-protocol.md](06-ccb-benchmark/f-66-acp-protocol.md) |
-| F-68 | Feature Gate 开关系统 | ✅ | [f-68-feature-gate.md](06-ccb-benchmark/f-68-feature-gate.md) |
 | F-69 | Budget/Poor Mode | 🔄 | [f-69-budget-mode.md](06-ccb-benchmark/f-69-budget-mode.md) |
-| F-70 | Plugin 系统基础框架 | ✅ | [f-70-plugin.md](06-ccb-benchmark/f-70-plugin.md) |
+| F-70 | Plugin 系统基础框架 | 🔄 | [f-70-plugin.md](06-ccb-benchmark/f-70-plugin.md) |
 | F-71 | 内置工具补齐 | 🔄 | [f-71-tool-gap.md](06-ccb-benchmark/f-71-tool-gap.md) |
 | F-72 | Multi-API 原生适配器 | 📋 | [f-72-multi-api.md](06-ccb-benchmark/f-72-multi-api.md) |
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |

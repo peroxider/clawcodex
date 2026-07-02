@@ -47,7 +47,6 @@ docs/feature_plan/
 │   ├── f-22-cron-execution.md       ← 大特性，含 F-22-A~T 子节
 ├── 06-ccb-benchmark/                ← CCB 对标（F-66/68/69/70/71/72/74/81/82）
 │   ├── f-66-acp-protocol.md
-│   ├── f-68-feature-gate.md
 │   ├── f-69-budget-mode.md
 │   ├── f-70-plugin.md
 │   ├── f-71-tool-gap.md

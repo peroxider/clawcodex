@@ -15,9 +15,8 @@
 |------|------|:----:|
 | [f-64-voice-mode.md](./f-64-voice-mode.md) | F-64 Voice Mode 语音输入 | 🔄 |
 | [f-66-acp-protocol.md](./f-66-acp-protocol.md) | F-66 ACP 协议支持 | 📋 |
-| [f-68-feature-gate.md](./f-68-feature-gate.md) | F-68 Feature Gate 开关系统 | ✅ |
 | [f-69-budget-mode.md](./f-69-budget-mode.md) | F-69 Budget / Poor Mode 资源节俭 | 🔄 |
-| [f-70-plugin.md](./f-70-plugin.md) | F-70 Plugin 插件系统基础框架 | ✅ |
+| [f-70-plugin.md](./f-70-plugin.md) | F-70 Plugin 插件系统基础框架 | 🔄 |
 | [f-71-tool-gap.md](./f-71-tool-gap.md) | F-71 内置工具补齐（SnipTool 等 12/15） | 🔄 |
 | [f-72-multi-api.md](./f-72-multi-api.md) | F-72 Multi-API 原生适配器 | 📋 |
 | [f-73-cicd.md](./f-73-cicd.md) | F-73 CI/CD 流水线 | 🔄 |
@@ -65,7 +64,7 @@
 | 4 | Voice Mode 语音模式 | 🟡 仅检测/STT 抽象;缺 ASR 运行时集成 | P0 | [F-64](./f-64-voice-mode.md) |
 | 5 | Chrome 浏览器控制 | ✅ `clawcodex_ext/services/chrome/`（三后端） | 已完成 | F-62 |
 | 6 | Computer Use 屏幕操控 | 🟠 仅 `linux.py` / `null.py`;macOS+Windows 后端缺 | P1 | [F-86](./f-86-computer-use.md) |
-| 7 | Feature Flags / GrowthBook | ✅ F-68（114 测试） | 已完成 | [F-68](./f-68-feature-gate.md) |
+| 7 | Feature Flags / GrowthBook | ✅ F-68（114 测试，clawcodex_ext/feature_gate/） | 已完成 | — |
 | 8 | /ultraplan 高级规划 | 🟡 数据模型+executor;缺 LLM 生成 + CLI | P1 | [F-87](./f-87-ultraplan.md) |
 | 9 | Daemon 后台守护 | ❌ `src/entrypoints/daemon.py` 占位 stub | P0 | [F-84](./f-84-daemon.md) |
 | 10 | Pipe IPC 多实例协作 | 🟡 仅 UDS 传输+registry;无命令族 | P0 | [F-85](./f-85-pipe-ipc.md) |

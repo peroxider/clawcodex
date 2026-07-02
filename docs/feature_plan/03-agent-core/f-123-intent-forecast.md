@@ -541,8 +541,316 @@ class IntentForecastService:
 
 ---
 
-## §8 变更记录
+## §8 意图预测准确率增强规划
+
+本节是在基础 Intent Forecast 能力之上的增强规划，目标是让系统不只是“根据上下文猜一句 prompt”，而是能理解当前任务状态、用户偏好、真实执行进展和历史反馈，从而预测更贴近用户下一步需求的动作。增强项按推荐落地优先级排列。
+
+### 8.1 任务状态模型
+
+**目标**: 将上下文从原始片段升级为结构化任务状态，减少仅靠最近消息和历史摘要推断带来的漂移。
+
+**新增状态字段**:
+
+| 字段 | 含义 | 主要来源 |
+|------|------|------|
+| `active_goal` | 当前最可能正在推进的目标 | 最近用户消息、session summary、goal controller、工作区 diff |
+| `last_completed_step` | agent 或用户最近已经完成的步骤 | 最近 assistant 消息、tool result、测试输出 |
+| `next_unfinished_step` | 当前目标下尚未完成的下一步 | session summary、diff、失败命令、TODO |
+| `blocked_reason` | 当前是否被错误、权限、缺少信息、测试失败阻塞 | tool result、terminal/test output、permission event |
+| `pending_tests` | 修改后尚未运行或失败的测试集合 | changed_files、pytest output、测试文件映射 |
+| `open_questions` | 仍需向用户确认的问题 | 最近 ask-user、assistant 提问、未回答问题 |
+| `recent_decisions` | 用户最近明确表达的偏好或决策 | user turns、memory files、feedback |
+
+**实现入口**:
+
+- 在 `IntentForecastContextBuilder.build()` 中新增 `task_state` 字段。
+- 新增 `clawcodex_ext/intent_forecast/task_state.py`，负责从 conversation、workspace、session summary、tool result 中提取状态。
+- `ForecastContext.to_prompt_dict()` 将 `task_state` 放在 `current_messages` 之后，提示词中明确要求优先依据 `task_state`。
+
+**验收标准**:
+
+1. 当最近一轮已完成实现但未运行测试时，forecast 优先建议运行相关测试。
+2. 当最近一轮测试失败时，forecast 优先建议修复失败点，而不是继续新增功能。
+3. 当 assistant 刚提出澄清问题且用户未回答时，forecast 不建议擅自继续实现。
+
+### 8.2 用户当前意图阶段分类
+
+**目标**: 在生成候选建议前先判断用户处于哪种工作阶段，避免历史会话或工作区信号把预测带偏。
+
+**意图阶段枚举**:
+
+| 阶段 | 典型下一步 |
+|------|------|
+| `explore` | 继续阅读代码、总结架构、定位入口 |
+| `plan` | 细化方案、拆分任务、确认风险 |
+| `implement` | 修改代码、补功能、接线 |
+| `test` | 运行 focused tests、修复失败测试 |
+| `debug` | 根据错误栈定位原因、验证假设 |
+| `review` | 做代码审查、找风险、补测试 |
+| `document` | 更新文档、写使用说明、补计划 |
+| `commit` | 查看 diff、整理提交、生成 PR 信息 |
+| `pause` | 不主动建议动作或仅提供低打扰恢复入口 |
+
+**实现入口**:
+
+- 新增 `intent_stage` 到 `ForecastContext`。
+- 在 provider prompt 前增加轻量规则分类；必要时允许 LLM 同时返回 `stage` 与 suggestions。
+- `fallback_suggestions()` 根据 `intent_stage` 选择不同策略库，而不是只按最近用户消息和 dirty worktree 兜底。
+
+**验收标准**:
+
+1. 用户明确要求“查看/分析/评估”时，不预测成“直接实现”。
+2. 工作区有代码变更但最近用户要求“写文档”时，优先文档建议。
+3. 测试失败后进入 `debug` 或 `test` 阶段，建议围绕失败点。
+
+### 8.3 反馈学习特征化
+
+**目标**: 将 feedback 从标题级加权升级为特征级学习，使系统学到用户在不同场景下更愿意采纳哪类建议。
+
+**新增反馈特征**:
+
+| 特征 | 示例 |
+|------|------|
+| `stage` | `implement`、`test`、`review` |
+| `focus_ids` | `intent_forecast`、`tui`、`tests` |
+| `changed_file_globs` | `clawcodex_ext/intent_forecast/*.py` |
+| `suggestion_kind` | `run_tests`、`fix_failure`、`continue_impl`、`write_docs` |
+| `has_dirty_worktree` | `true`/`false` |
+| `had_recent_failure` | `true`/`false` |
+| `language` | `Chinese`、`English` |
+| `trigger` | `auto`、`slash`、`cli` |
+
+**实现入口**:
+
+- `record_feedback()` 写入 `features` 时由 service/controller 填充。
+- `feedback_weight()` 增加基于特征相似度的权重，而不是只匹配 title。
+- 对同一 fingerprint 的 dismiss 继续短期降权，对跨 fingerprint 的 accepted 做弱正向迁移。
+
+**验收标准**:
+
+1. 用户多次采纳“修改测试后运行 focused tests”后，相似场景中测试建议排序提升。
+2. 用户多次忽略“泛泛 review 当前 changes”后，相似泛化建议排序下降。
+3. 不同 cwd 的反馈默认不互相强影响，只在同类项目特征高度相似时弱迁移。
+
+### 8.4 采纳后的结果闭环
+
+**目标**: 单纯 `accepted` 不等于预测正确。需要追踪采纳后的执行结果，判断建议是否真正帮用户达成目标。
+
+**新增事件**:
+
+| 事件 | 含义 |
+|------|------|
+| `accepted_started` | 用户采纳建议并提交给 agent |
+| `accepted_completed` | 采纳后的 agent turn 正常完成，且未被用户立即纠正 |
+| `accepted_aborted` | 采纳后用户取消或中断 |
+| `accepted_corrected` | 用户采纳后马上表达“不是这个/方向不对/改成...” |
+| `accepted_followup` | 采纳后用户继续沿该方向追问或要求扩展 |
+
+**实现入口**:
+
+- `IntentForecastController.accept()` 记录 `accepted_started`。
+- 在 run finish、cancel、用户下一条输入处，根据时间窗口和文本信号补写结果事件。
+- 反馈权重优先使用完成类事件，弱化只点击但没有完成的事件。
+
+**验收标准**:
+
+1. 被采纳但马上取消的建议不会长期加权。
+2. 被采纳并顺利完成的建议获得更高正向权重。
+3. 用户采纳后立刻纠正方向时，同类建议后续降权。
+
+### 8.5 历史 session 相关性召回
+
+**目标**: 历史会话不应只按最近 N 个进入上下文，而应先按当前任务相关性排序，避免近期但无关的 session 污染预测。
+
+**相关性信号**:
+
+| 信号 | 权重建议 |
+|------|:------:|
+| `cwd` 完全一致 | 高 |
+| `files_touched` 与 `changed_files` 重叠 | 高 |
+| session title/summary 与 recent user text 相似 | 中高 |
+| `next_action_candidates` 与当前 focus 匹配 | 中高 |
+| 最近更新时间 | 中 |
+| tags/model 等弱上下文 | 低 |
+
+**实现入口**:
+
+- 新增 `session_retrieval.py`，封装 session 打分和裁剪。
+- `IntentForecastContextBuilder._sessions()` 先读取轻量 metadata/index，再只对 top K 读取 summary/tail。
+- `summary.json` schema 中优先使用 `files_touched`、`commands_seen`、`next_action_candidates`。
+
+**验收标准**:
+
+1. 当前修改 `intent_forecast` 文件时，历史 orchestrator 会话不会排在相关 intent forecast 会话前。
+2. 相同 cwd 但主题完全不同的 session 不应进入 top 3。
+3. 没有 summary 时仍可使用 metadata + transcript tail fallback。
+
+### 8.6 Workspace 信号增强
+
+**目标**: 让 forecast 更准确理解当前代码状态，而不是只知道“有文件变更”。
+
+**新增信号**:
+
+| 信号 | 用途 |
+|------|------|
+| `git_branch` | 判断是否处于 feature/fix/release 分支 |
+| `git_diff_names` | 比 diff stat 更稳定地获得文件列表 |
+| `diff_hunks_summary` | 提取每个文件改动主题，控制长度 |
+| `last_command` / `last_command_exit` | 判断用户刚运行过什么、是否失败 |
+| `last_test_failures` | 预测修复失败测试或重跑测试 |
+| `changed_test_mapping` | 源文件变更对应测试文件 |
+| `untracked_files` | 新增文件是否还未接线或测试 |
+
+**实现入口**:
+
+- `_workspace_signals()` 扩展为可组合 collector，避免单函数膨胀。
+- 终端/工具执行层可写入最近命令 sidecar，forecast 只读轻量摘要。
+- 对 diff 内容只保留短摘要，不把大 diff 直接塞进 prompt。
+
+**验收标准**:
+
+1. 最近 pytest 失败时，forecast 建议包含失败测试名或失败文件。
+2. 新增模块但未新增测试时，forecast 能建议补测试或接线验证。
+3. 已经刚运行过同一测试且通过时，不重复建议立即运行同一测试。
+
+### 8.7 通用 fallback 策略库
+
+**目标**: 将当前偏硬编码的 fallback 扩展为面向多种项目状态的策略库，提升 provider 不可用或低置信度时的质量。
+
+**策略示例**:
+
+| 条件 | 建议类型 |
+|------|------|
+| dirty worktree + source files changed | review current changes / identify unfinished work |
+| tests changed or source maps to tests | run focused tests |
+| recent test failure | fix failing test |
+| docs changed | preview/check docs consistency |
+| command/CLI files changed | run command wiring tests |
+| frontend files changed | run frontend wiring or browser smoke test |
+| no strong signal | return no confident suggestion |
+
+**实现入口**:
+
+- 新增 `fallback.py`，将规则拆成独立 `FallbackRule`。
+- 每条规则返回 `ForecastSuggestion`、confidence、source_refs 和 `suggestion_kind`。
+- 规则按 `task_state`、`intent_stage`、`workspace_focus` 共同排序。
+
+**验收标准**:
+
+1. fallback 不再只对单一功能有特殊优待。
+2. provider 关闭时仍能给出与当前文件和阶段一致的建议。
+3. 没有足够信号时返回 `generated=false`，避免无意义打扰。
+
+### 8.8 Alias 与 workspace focus 误判治理
+
+**目标**: 降低宽泛关键词导致的误判，例如普通 `forecast` 文本被误认为 Intent Forecast 功能。
+
+**增强方式**:
+
+- 将 alias 分为 `strong_path_aliases`、`module_aliases`、`weak_text_aliases`。
+- 弱文本 alias 必须与路径、最近用户消息或 summary evidence 共同出现才计入焦点。
+- 对多 focus 场景输出置信度和证据，供调试和测试断言。
+- 对“通用词”如 `summary`、`forecast`、`commands` 设置更低权重。
+
+**实现入口**:
+
+- 重构 `_focus_definitions()` 与 `_workspace_focuses()`。
+- `ForecastContext.workspace` 增加 `focuses` 调试字段，便于 CLI/status 检查。
+- 测试覆盖宽泛词误判、跨模块变更、多焦点并存。
+
+**验收标准**:
+
+1. 仅 README 中出现 `forecast` 不会强判为 `intent_forecast`。
+2. 路径 `clawcodex_ext/intent_forecast/service.py` 仍强判为 `intent_forecast`。
+3. 同时修改 TUI 和 intent_forecast 时，两者都能进入 focus，但无关 orchestrator 建议被过滤。
+
+### 8.9 允许“不建议行动”
+
+**目标**: 提升用户信任度。没有足够证据时宁可不展示，也不要为了展示而生成泛泛建议。
+
+**触发 no-suggestion 的条件**:
+
+- 当前没有最近用户目标、没有 dirty worktree、没有相关 session next action。
+- 最近用户表达暂停、等待、稍后再说。
+- assistant 刚完成任务且没有未运行测试、未提交变更或失败信号。
+- 所有候选建议 confidence 都低于动态阈值。
+
+**实现入口**:
+
+- `IntentForecastService.generate()` 在 fallback 前后加入 no-suggestion gate。
+- `min_confidence` 支持动态调整，例如自动触发比手动 `/forecast run` 更严格。
+- CLI/status 显示 no-suggestion reason，自动触发时静默。
+
+**验收标准**:
+
+1. 空仓库或无上下文时自动 forecast 不打扰用户。
+2. 手动 `/forecast run` 可以显示“暂无可靠建议”的原因。
+3. no-suggestion 事件写入 history 以便后续评估触发质量。
+
+### 8.10 离线评估集与质量指标
+
+**目标**: 为 prompt、规则和学习策略建立可回归的质量评估，避免凭感觉优化。
+
+**评估数据构造**:
+
+- 从真实 session 中截取某个时刻的 context snapshot。
+- 将用户下一条真实输入或后续 agent turn 目标作为标签。
+- 对敏感内容做本地脱敏或仅保留结构化特征。
+- 保留正例、负例、无建议例、多语言例和跨模块例。
+
+**核心指标**:
+
+| 指标 | 含义 |
+|------|------|
+| `top1_match` | 第一条建议是否匹配真实下一步 |
+| `top3_match` | 三条建议中是否包含真实下一步 |
+| `off_topic_rate` | 建议是否跑到无关模块/历史任务 |
+| `interrupt_risk` | 是否在应静默时展示建议 |
+| `language_accuracy` | 建议语言是否符合用户上下文 |
+| `actionability` | prompt 是否可直接提交给 agent |
+
+**实现入口**:
+
+- 新增 `eval/intent_forecast/`，包含 dataset schema、runner 和报告生成。
+- 支持 provider mock 与真实 provider 两种模式。
+- 每次调整 prompt、focus、fallback、learning 时运行小型回归集。
+
+**验收标准**:
+
+1. 至少包含 30 个本地样例，覆盖实现、测试、文档、review、无建议场景。
+2. 报告输出每类场景的 top1/top3/off-topic/no-suggestion 指标。
+3. CI 或本地命令能快速运行无 provider 的规则回归。
+
+### 8.11 增强实施顺序
+
+| Phase | 内容 | 覆盖增强项 | 建议优先级 |
+|:----:|------|------|:------:|
+| Phase 8 | 任务状态模型 + intent stage | 8.1、8.2 | P0 |
+| Phase 9 | session 相关性召回 + workspace 信号增强 | 8.5、8.6 | P0 |
+| Phase 10 | feedback 特征化 + 采纳后闭环 | 8.3、8.4 | P1 |
+| Phase 11 | 通用 fallback + no-suggestion gate | 8.7、8.9 | P1 |
+| Phase 12 | alias 误判治理 + focus 调试字段 | 8.8 | P1 |
+| Phase 13 | 离线评估集与质量报告 | 8.10 | P1 |
+
+### 8.12 新增测试计划
+
+| 测试文件 | 覆盖 |
+|------|------|
+| `tests/intent_forecast/test_task_state.py` | active_goal、last_completed_step、blocked_reason、pending_tests 提取 |
+| `tests/intent_forecast/test_intent_stage.py` | explore/implement/test/debug/review/document/commit 阶段分类 |
+| `tests/intent_forecast/test_session_retrieval.py` | cwd、changed_files、summary 相似度排序 |
+| `tests/intent_forecast/test_workspace_signals.py` | branch、last command、test failures、diff names 收集 |
+| `tests/intent_forecast/test_feedback_features.py` | 特征化 feedback 写入与相似度加权 |
+| `tests/intent_forecast/test_acceptance_outcomes.py` | accepted_completed、accepted_aborted、accepted_corrected 事件 |
+| `tests/intent_forecast/test_fallback_rules.py` | 通用 fallback 策略与 no-suggestion gate |
+| `tests/intent_forecast/test_focus_aliases.py` | strong/module/weak alias 权重与误判防护 |
+| `eval/intent_forecast/test_eval_runner.py` | 离线样例指标计算 |
+
+---
+
+## §9 变更记录
 
 | 日期 | 变更 | 原因 |
 |------|------|------|
 | 2026-07-01 | 初始规划；确定 `/forecast` 与 `clawcodex forecast` 同名；默认 idle 触发时间为 2 分钟；明确用户输入即废弃预测；明确 `summary.json` 异步生成，不阻塞退出 | 用户提出 Intent Forecast 功能需求 |
+| 2026-07-02 | 增补 Intent Forecast 准确率增强规划：任务状态模型、意图阶段分类、反馈特征化、采纳后闭环、相关 session 召回、workspace 信号、fallback 策略、focus 误判治理、no-suggestion gate 和离线评估集 | 提升下一步意图预测准确率，使建议更贴近用户真实目标和执行步骤 |
