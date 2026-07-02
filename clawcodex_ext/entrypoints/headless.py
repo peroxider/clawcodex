@@ -305,6 +305,15 @@ def run_headless(options: HeadlessOptions) -> int:
         deny = {name.lower() for name in options.disallowed_tools}
         _filter_registry(tool_registry, keep=lambda n: n.lower() not in deny)
 
+    # F-125 C5: warn when ``--allowed-tools`` / ``--disallowed-tools``
+    # silently strips a tool that the resumed conversation's history
+    # already references. Without this warning the LLM sees a
+    # ``tool_use`` block in context but the registry has no matching
+    # tool — leading to hallucinated tool calls, retry loops, or opaque
+    # "unknown tool" errors. Only fires when a session was actually
+    # resumed (external_session / resume_session_id / fork_session_id).
+    _warn_history_tool_conflicts(options, session, tool_registry, stderr)
+
     # ★ MVP multi-agent: apply coordinator-mode tool filter in headless flow.
     # The REPL already does this in core.py:4712, but the headless / orchestrator
     # path historically did not, so CLAUDE_CODE_COORDINATOR_MODE was inert when
@@ -430,6 +439,40 @@ def run_headless(options: HeadlessOptions) -> int:
         tool_context.permission_handler = _auto_deny_permission_handler(stderr)
     # AskUserQuestion has no terminal to read from in headless mode.
     tool_context.ask_user = _noop_ask_user
+
+    # F-125 C9 / R9: seed ``read_file_fingerprints`` from the resumed
+    # conversation's historical Read tool_use blocks. Without this,
+    # Edit/Write/NotebookEdit staleness checks ``was_file_read_and_unchanged``
+    # reject edits with "file must be read first" even though the model
+    # already saw the file in the prior run, and the Read dedup path
+    # cannot collapse re-reads to ``file_unchanged``. Mirrors CCB
+    # ``print.ts:1173-1176`` ``extractReadFilesFromMessages``.
+    if (
+        options.resume_session_id
+        or options.fork_session_id
+        or options.external_session is not None
+    ) and session is not None:
+        try:
+            from clawcodex_ext.agent.read_file_seed import (
+                seed_read_file_state_from_history,
+            )
+
+            history_msgs = (
+                session.conversation.messages
+                if session.conversation is not None
+                else []
+            )
+            seed_read_file_state_from_history(
+                history_msgs,
+                tool_context,
+                workspace_root=workspace_root,
+            )
+        except Exception:
+            import logging as _log
+            _log.getLogger(__name__).debug(
+                "F-125: read-file-state seeding failed (non-fatal)",
+                exc_info=True,
+            )
 
     # Build the input iterator.
     if options.input_format == "stream-json":
@@ -1134,3 +1177,80 @@ def _jsonable(value):
         return str(value)
     except Exception:
         return repr(value)
+
+
+def _warn_history_tool_conflicts(
+    options: HeadlessOptions,
+    session: Any,
+    tool_registry: Any,
+    stderr: IO[str],
+) -> None:
+    """F-125 C5: warn when ``--allowed-tools`` strips a tool the resumed
+    history already references.
+
+    Only fires when a session was actually resumed (``external_session``
+    / ``resume_session_id`` / ``fork_session_id``). Walks the resumed
+    conversation's ``tool_use`` blocks, collects tool names, and reports
+    any name that is NOT present in the (post-filter) registry. The
+    warning is best-effort: a malformed history or a missing
+    ``conversation`` attribute is silently skipped.
+    """
+    if not (options.allowed_tools or options.disallowed_tools):
+        return
+    if session is None:
+        return
+    conversation = getattr(session, "conversation", None)
+    if conversation is None:
+        return
+    messages = getattr(conversation, "messages", None)
+    if not messages:
+        return
+
+    history_tools: set[str] = set()
+    for message in messages:
+        content = getattr(message, "content", None)
+        if isinstance(content, str) or not isinstance(content, (list, tuple)):
+            continue
+        for block in content:
+            name = _block_tool_use_name(block)
+            if name:
+                history_tools.add(name)
+
+    if not history_tools:
+        return
+
+    try:
+        registry_names = {str(t.name) for t in tool_registry.list_tools()}
+    except Exception:
+        return
+
+    missing = sorted(n for n in history_tools if n not in registry_names)
+    if not missing:
+        return
+
+    try:
+        print(
+            "warning: --allowed-tools/--disallowed-tools removed tool(s) "
+            f"referenced in resumed history: {', '.join(missing)}. "
+            "The model may see tool_use blocks it cannot re-invoke; "
+            "consider re-running without the filter or re-reading the "
+            "affected files.",
+            file=stderr,
+        )
+    except Exception:
+        pass
+
+
+def _block_tool_use_name(block: Any) -> str | None:
+    """Return the ``tool_use`` block's tool name, or ``None`` if not a
+    tool_use block / shape is unrecognised."""
+    if isinstance(block, dict):
+        if str(block.get("type", "")).lower() != "tool_use":
+            return None
+        name = block.get("name")
+        return str(name) if name else None
+    type_attr = getattr(block, "type", None)
+    if type_attr is None or str(type_attr).lower() != "tool_use":
+        return None
+    name = getattr(block, "name", None)
+    return str(name) if name else None
