@@ -57,6 +57,15 @@ def test_at_after_whitespace_triggers(tmp_path):
     assert any(disp == "alpha.py" for _, _, disp in out)
 
 
+def test_at_agent_prefix_deferred_to_agent_completer(tmp_path):
+    """``@agent-`` tokens are for AgentMentionCompleter, not file paths."""
+    (tmp_path / "agent-foo.py").write_text("")
+    c = AtFileCompleter(cwd=tmp_path)
+
+    assert _completions(c, "@agent-") == []
+    assert _completions(c, "@agent-AutoResearch") == []
+
+
 def test_empty_query_lists_top_candidates(tmp_path):
     """Typing just ``@`` (no query) opens the popup with the top
     of the cached set — matches TS ``showOnEmpty``."""

@@ -75,8 +75,7 @@ class WorkflowOrchestrator:
             config=engine_config,
         )
 
-        # 构建 StageRunner (DD-5: 使用 AgentRunner)
-        self._agent_runner = agent_runner
+        bundle_dir = self._yaml_path.parent.resolve()
         self._stage_runner = StageRunner(
             agent_runner=agent_runner,
             workflow_config=workflow_config,
@@ -87,6 +86,7 @@ class WorkflowOrchestrator:
             status_dashboard=status_dashboard,
             clarification_resolver=clarification_resolver,
         )
+        self._stage_runner.set_bundle_path(bundle_dir)
         self._engine.set_stage_runner(self._stage_runner)
 
         # 进度上报

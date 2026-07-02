@@ -614,6 +614,7 @@ def _apply_sop_startup(
     """Inject SOP routing, optional bundle isolation, and proxy tool allowlist."""
     from extensions.sop_converter.bundle_context import (
         activate_bundle_isolation,
+        apply_sdk_source_working_directory,
         build_bundle_context,
     )
     from extensions.sop_converter.bundle_discovery import overview_has_sop_skills
@@ -631,10 +632,22 @@ def _apply_sop_startup(
         load_result = register_bundle_skills(bundle_path, workspace)
         registered = load_result.skill_names
         if registered:
+            from extensions.sop_converter.workflow_project import (
+                read_workflow_first_stage_skill_name,
+            )
+
+            stage1_skill = read_workflow_first_stage_skill_name(bundle_path)
+            marker_text = ""
+            if stage1_skill and stage1_skill in registered:
+                marker_text = f"; stage-1 {stage1_skill} ✓"
+            sample = ", ".join(registered[:4])
+            if len(registered) > 4:
+                sample += ", …"
             print(
-                f'📦 Loaded {len(registered)} SOP skills from bundle',
+                f'📦 Loaded {len(registered)} SOP skills from bundle{marker_text}',
                 file=sys.stderr,
             )
+            print(f'   skills: {sample}', file=sys.stderr)
             try:
                 from src.skills.loader import get_all_skills
 
@@ -651,6 +664,7 @@ def _apply_sop_startup(
         activate_bundle_isolation(ctx.tool_registry, bundle_ctx)
         ctx.options.bundle_path = bundle_path
         ctx.tool_context.bundle_context = bundle_ctx
+        apply_sdk_source_working_directory(ctx.tool_context, bundle_ctx)
 
     if is_sop:
         startup_def = build_bundle_overview_agent_definition(
@@ -667,7 +681,11 @@ def _apply_sop_startup(
     sdk_source_dir = bundle_ctx.sdk_source_dir if bundle_ctx is not None else None
     if body:
         if is_sop:
-            body = append_sop_overview_routing(body, sdk_source_dir=sdk_source_dir)
+            body = append_sop_overview_routing(
+                body,
+                sdk_source_dir=sdk_source_dir,
+                bundle_path=bundle_path,
+            )
         existing = getattr(ctx.options, 'append_system_prompt', '')
         ctx.options.append_system_prompt = f'{existing}\n\n{body}' if existing else body
     elif is_sop and sdk_source_dir is not None:

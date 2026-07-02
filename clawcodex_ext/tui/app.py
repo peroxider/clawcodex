@@ -1549,21 +1549,16 @@ class ClawCodexTUI(App):
                 return list(active)
 
         try:
-            cwd = str(self.workspace_root)
-            agents = list(get_built_in_agents())
-            override_cwd = getattr(
-                getattr(self.tool_context, "options", None),
-                "agent_dir_override",
-                None,
+            from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
+
+            return get_agents_for_mentions(
+                self.workspace_root,
+                tool_context=self.tool_context,
+                runtime_context=getattr(self, "runtime_context", None),
             )
-            if override_cwd is not None:
-                extra_agents = list(get_agent_definitions_with_overrides(str(override_cwd)))
-                known = {a.agent_type for a in agents}
-                for agent in extra_agents:
-                    if agent.agent_type not in known:
-                        agents.append(agent)
-            return agents
         except Exception:
+            from clawcodex_ext.agent.agent_definitions import get_built_in_agents
+
             return list(get_built_in_agents())
 
     def _post_to_screen(self, message: Any) -> None:

@@ -342,8 +342,9 @@ async def run_agent(params: RunAgentParams) -> AsyncGenerator[Message, None]:
         overrides,
     )
 
-    if not subagent_context.options.tools:
-        subagent_context.options.tools = list(agent_tools)
+    # Always scope subagent tools to the resolved agent definition — do not
+    # inherit the parent overview's full tool pool (SOP bundle isolation).
+    subagent_context.options.tools = list(agent_tools)
 
     # Build initial messages.
     # When ``params.prompt`` is empty (e.g. fork path, where the directive is

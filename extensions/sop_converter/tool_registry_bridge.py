@@ -28,8 +28,10 @@ Usage::
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +46,7 @@ from clawcodex_ext.agent.tool_authoring.validators import validate_spec
 
 from .search_tags import generate_search_tags
 from .source_parser import SourceComponent, SourceOperation, ParamSpec
+from .type_schema import param_to_json_schema_property
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,18 @@ _TYPE_MAP: dict[str, str] = {
     "dict": "object",
     "None": "null",
     "NoneType": "null",
+    "Path": "string",
+    "RCConfig": "object",
+    "AdapterBundle": "object",
+    "Stage": "string",
+    "StageResult": "object",
+}
+
+# Python identifiers from ast.unparse() that should become JSON literals.
+_LITERAL_DEFAULT_MAP: dict[str, Any] = {
+    "True": True,
+    "False": False,
+    "None": None,
 }
 
 
@@ -143,8 +158,58 @@ def _type_hint_to_json_type(type_hint: str | None) -> str:
     ):
         return "object"
 
+    # SDK / pathlib types (bare name or generic alias root)
+    root = cleaned.split("[", 1)[0]
+    if root in _TYPE_MAP:
+        return _TYPE_MAP[root]
+
     # Direct lookup
     return _TYPE_MAP.get(cleaned, "string")
+
+
+def _normalize_schema_default(default: Any, *, json_type: str) -> Any:
+    """Coerce ast-unparsed Python literal defaults into JSON Schema values."""
+    if isinstance(default, str) and default in _LITERAL_DEFAULT_MAP:
+        return _LITERAL_DEFAULT_MAP[default]
+    if json_type == "boolean" and isinstance(default, str):
+        lowered = default.lower()
+        if lowered in ("true", "false"):
+            return lowered == "true"
+    return default
+
+
+def _adjust_pipeline_execute_stage_schema(
+    op: SourceOperation,
+    properties: dict[str, Any],
+    required: list[str],
+) -> None:
+    """Relax pipeline executor tool schema for agent JSON tool calls."""
+    if op.name != "execute_stage":
+        return
+
+    for key in ("config", "adapters", "run_id"):
+        if key in properties:
+            properties[key]["description"] = (
+                properties[key].get("description")
+                or (
+                    "Optional; loads from run_dir/config.yaml when omitted"
+                    if key == "config"
+                    else (
+                        "Optional; defaults to empty AdapterBundle"
+                        if key == "adapters"
+                        else "Optional; defaults to run_dir directory name"
+                    )
+                )
+            )
+            if key in required:
+                required.remove(key)
+
+    if "stage" in properties:
+        properties["stage"]["description"] = (
+            'Pipeline stage enum name, e.g. "TOPIC_INIT" or "topic-init"'
+        )
+    if "run_dir" in properties:
+        properties["run_dir"]["description"] = "Absolute path to the pipeline run directory"
 
 
 # ---------------------------------------------------------------------------
@@ -201,8 +266,8 @@ def _resolve_module_path(
 
     Example::
 
-        source_dir   = "/mnt/d/projects/JiuwenAgent/openjiuwen"
-        component.file_path = "openjiuwen/core/foundation"
+        source_dir   = "/mnt/d/projects/AutoResearchClaw"
+        component.file_path = "researchclaw/literature"
         file_stem    = "llm"
         → "core.foundation.llm"
 
@@ -364,6 +429,283 @@ def _generate_get_instance_helper(init_params: list[ParamSpec] | None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Wrapper script SDK symbol imports
+# ---------------------------------------------------------------------------
+
+_BUILTIN_DEFAULT_NAMES = frozenset({"True", "False", "None"})
+
+
+def _is_type_checking_guard(node: ast.If) -> bool:
+    test = node.test
+    if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
+        return True
+    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+
+
+def _resolve_relative_import(module_name: str, level: int, module: str | None) -> str:
+    parts = module_name.split(".")
+    if level > len(parts):
+        base: list[str] = []
+    else:
+        base = parts[: len(parts) - level]
+    if module:
+        return ".".join([*base, *module.split(".")])
+    return ".".join(base)
+
+
+def _parse_import_map(source_file: Path, module_name: str) -> dict[str, str]:
+    """Map local symbol names to importable modules from a source file."""
+    if not source_file.is_file():
+        return {}
+
+    try:
+        tree = ast.parse(source_file.read_text(encoding="utf-8"), filename=str(source_file))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return {}
+
+    mapping: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.If) and _is_type_checking_guard(node):
+            continue
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local = alias.asname or alias.name.split(".")[0]
+                mapping[local] = alias.name
+        elif isinstance(node, ast.ImportFrom):
+            resolved_module = (
+                _resolve_relative_import(module_name, node.level, node.module)
+                if node.level
+                else (node.module or "")
+            )
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                local = alias.asname or alias.name
+                mapping[local] = resolved_module
+    return mapping
+
+
+def _identifiers_in_default(default: str) -> set[str]:
+    """Extract root names referenced by a default-value expression."""
+    cleaned = default.strip()
+    if not cleaned or cleaned in _BUILTIN_DEFAULT_NAMES:
+        return set()
+
+    try:
+        tree = ast.parse(cleaned, mode="eval")
+    except SyntaxError:
+        return set(re.findall(r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)(?=\.[A-Za-z_])", cleaned))
+
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            if node.id not in _BUILTIN_DEFAULT_NAMES:
+                names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            root: ast.AST = node
+            while isinstance(root, ast.Attribute):
+                root = root.value
+            if isinstance(root, ast.Name) and root.id not in _BUILTIN_DEFAULT_NAMES:
+                names.add(root.id)
+    return names
+
+
+def _collect_runtime_symbols(
+    ops: list[SourceOperation],
+    init_params: list[ParamSpec] | None,
+) -> set[str]:
+    """Collect symbols that must exist at wrapper import time (default values)."""
+    symbols: set[str] = set()
+
+    def _scan_params(params: list[ParamSpec]) -> None:
+        for param in params:
+            if param.default is not None:
+                symbols.update(_identifiers_in_default(str(param.default)))
+
+    if init_params:
+        _scan_params(_skip_variadic_params(init_params))
+
+    for op in ops:
+        _scan_params(op.parameters)
+
+    return symbols
+
+
+def _resolve_source_file(source_dir: str, module_name: str) -> Path:
+    return Path(source_dir) / Path(*module_name.split(".")).with_suffix(".py")
+
+
+def _format_wrapper_imports(
+    symbols: set[str],
+    import_map: dict[str, str],
+    module_name: str,
+) -> str:
+    """Render grouped ``from ... import ...`` lines for wrapper scripts."""
+    if not symbols:
+        return ""
+
+    by_module: dict[str, list[str]] = {}
+    for symbol in sorted(symbols):
+        resolved_module = import_map.get(symbol) or module_name
+        by_module.setdefault(resolved_module, []).append(symbol)
+
+    lines: list[str] = []
+    for resolved_module in sorted(by_module):
+        names = ", ".join(sorted(by_module[resolved_module]))
+        lines.append(f"from {resolved_module} import {names}")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# CLI handler detection (F-52 subprocess bridge — mirrors F-50-F CLI mode)
+# ---------------------------------------------------------------------------
+
+_CLI_EXCLUDED_HANDLER_NAMES = frozenset(
+    {
+        "main",
+        "build_parser",
+    }
+)
+
+
+def _is_namespace_args_param(param: ParamSpec) -> bool:
+    if param.name != "args":
+        return False
+    if not param.type_hint:
+        return False
+    return "Namespace" in param.type_hint
+
+
+def _is_cli_handler_op(op: SourceOperation, dispatch_map: dict[str, str]) -> bool:
+    """True when *op* should run via CLI subprocess instead of importlib."""
+    if op.class_name is not None:
+        return False
+    if op.name in _CLI_EXCLUDED_HANDLER_NAMES:
+        return False
+    if op.name not in dispatch_map:
+        return False
+    if op.name.startswith("cmd_"):
+        return True
+    return any(_is_namespace_args_param(p) for p in op.parameters)
+
+
+def _extract_command_literal(test: ast.AST) -> str | None:
+    """Extract subcommand from ``command == "foo"`` in ``main()`` dispatch."""
+    if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+        return None
+    if not isinstance(test.ops[0], (ast.Eq, ast.Is)):
+        return None
+    left, right = test.left, test.comparators[0]
+    if isinstance(left, ast.Name) and left.id == "command":
+        if isinstance(right, ast.Constant) and isinstance(right.value, str):
+            return right.value
+    return None
+
+
+def _extract_cmd_handler_from_body(body: list[ast.stmt]) -> str | None:
+    for stmt in body:
+        if not isinstance(stmt, ast.Return) or stmt.value is None:
+            continue
+        value = stmt.value
+        if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+            name = value.func.id
+            if name.startswith("cmd_"):
+                return name
+    return None
+
+
+def _walk_command_dispatch(node: ast.stmt, dispatch: dict[str, str]) -> None:
+    if not isinstance(node, ast.If):
+        return
+    subcommand = _extract_command_literal(node.test)
+    handler = _extract_cmd_handler_from_body(node.body)
+    if subcommand and handler:
+        dispatch[handler] = subcommand
+    if not node.orelse:
+        return
+    if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+        _walk_command_dispatch(node.orelse[0], dispatch)
+        return
+    for child in node.orelse:
+        _walk_command_dispatch(child, dispatch)
+
+
+def _parse_cli_dispatch_map(source_file: Path) -> dict[str, str]:
+    """Map ``cmd_*`` handler names to CLI subcommand strings from ``main()``."""
+    if not source_file.is_file():
+        return {}
+    try:
+        tree = ast.parse(source_file.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as exc:
+        logger.debug("Cannot parse CLI dispatch from %s: %s", source_file, exc)
+        return {}
+
+    dispatch: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "main":
+            for stmt in node.body:
+                _walk_command_dispatch(stmt, dispatch)
+    return dispatch
+
+
+def _resolve_cli_argv_prefix(
+    source_dir: str,
+    source_file: Path,
+    *,
+    cli_prefix_override: str | None = None,
+) -> list[str]:
+    """CLI argv prefix for subprocess dispatch (reuses F-50 cli_discovery)."""
+    import sys
+
+    from extensions.sop_converter.workflow_mode.bridge.cli_discovery import (
+        discover_cli_prefix,
+        split_cli_prefix,
+    )
+
+    project_name = Path(source_dir).name
+    discovered = discover_cli_prefix(
+        Path(source_dir),
+        project_name,
+        override=cli_prefix_override,
+    )
+    if discovered:
+        prefix = split_cli_prefix(discovered)
+        if prefix:
+            return prefix
+
+    return [sys.executable, str(source_file.resolve())]
+
+
+def _generate_cli_handler_stub(op: SourceOperation, *, subcommand: str) -> str:
+    """Generate a subprocess-based stub for a CLI ``cmd_*`` handler."""
+    docstring = op.description.replace('"', '\\"') if op.description else op.name
+    return (
+        f"def {op.name}(args: str) -> dict:\n"
+        f'    """{docstring}"""\n'
+        "    import shlex\n"
+        "    import subprocess\n"
+        "    tail = shlex.split(args) if args else []\n"
+        f"    argv = [*CLI_PREFIX, {subcommand!r}, *tail]\n"
+        "    proc = subprocess.run(\n"
+        "        argv,\n"
+        "        capture_output=True,\n"
+        "        text=True,\n"
+        "        cwd=_SOURCE_DIR,\n"
+        "    )\n"
+        "    result = {\n"
+        '        "returncode": proc.returncode,\n'
+        '        "stdout": proc.stdout,\n'
+        '        "stderr": proc.stderr,\n'
+        "    }\n"
+        "    if proc.returncode != 0:\n"
+        "        err = proc.stderr.strip() or proc.stdout.strip()\n"
+        "        if err:\n"
+        '            result["error"] = err\n'
+        "    return result"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Wrapper script generation
 # ---------------------------------------------------------------------------
 
@@ -377,31 +719,12 @@ import sys
 import json
 import importlib
 import asyncio
-
+{extra_imports}
 _SOURCE_DIR = r"{source_dir}"
 sys.path.insert(0, _SOURCE_DIR)
+{cli_prefix}
 
 _instances = {{}}
-
-
-def _suppress_sdk_logging() -> None:
-    """Reduce noisy SDK init logs before importing openjiuwen modules."""
-    import logging
-
-    logging.basicConfig(level=logging.WARNING, force=True)
-    try:
-        from openjiuwen.core.common.logging.log_config import configure_log_config
-
-        configure_log_config({{
-            "backend": "default",
-            "level": "WARNING",
-            "output": [],
-            "interface_output": [],
-            "performance_output": [],
-            "log_path": os.devnull,
-        }})
-    except Exception:
-        pass
 
 
 def _run_async_iter(make_gen):
@@ -431,7 +754,6 @@ if __name__ == "__main__":
     if fn is None:
         print(f"Unknown method: {{method_name}}", file=sys.stderr)
         sys.exit(1)
-    _suppress_sdk_logging()
     try:
         result = fn(**args)
         print(json.dumps(result, default=str, ensure_ascii=False))
@@ -439,6 +761,47 @@ if __name__ == "__main__":
         print(json.dumps({{"error": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
 '''
+
+
+def _generate_pipeline_execute_stage_stub(op: SourceOperation) -> str:
+    """Wrapper stub that coerces JSON tool args into pipeline runtime objects."""
+    docstring = op.description.replace('"', '\\"') if op.description else op.name
+    return (
+        f"def {op.name}(stage, run_dir, run_id=None, config=None, adapters=None, "
+        f"auto_approve_gates=False){f' -> {op.return_type}' if op.return_type else ''}:\n"
+        f'    """{docstring}"""\n'
+        '    from pathlib import Path\n'
+        '    module = importlib.import_module("researchclaw.pipeline.executor")\n'
+        '    from researchclaw.config import load_config, RCConfig\n'
+        '    from researchclaw.adapters import AdapterBundle\n'
+        '    from researchclaw.pipeline.stages import Stage\n'
+        '    run_path = Path(run_dir)\n'
+        '    if not run_id:\n'
+        '        run_id = run_path.name\n'
+        '    if config is None:\n'
+        '        config = load_config(run_path / "config.yaml", project_root=run_path)\n'
+        '    elif isinstance(config, str):\n'
+        '        config = load_config(Path(config), project_root=run_path)\n'
+        '    elif isinstance(config, dict):\n'
+        '        config = RCConfig.from_dict(config)\n'
+        '    if adapters is None:\n'
+        '        adapters = AdapterBundle()\n'
+        '    elif isinstance(adapters, dict):\n'
+        '        adapters = AdapterBundle()\n'
+        '    if isinstance(stage, str):\n'
+        '        stage_key = stage.upper().replace("-", "_")\n'
+        '        stage = Stage[stage_key]\n'
+        '    if not isinstance(run_dir, Path):\n'
+        '        run_dir = Path(run_dir)\n'
+        '    return module.execute_stage(\n'
+        '        stage=stage,\n'
+        '        run_dir=run_dir,\n'
+        '        run_id=run_id,\n'
+        '        config=config,\n'
+        '        adapters=adapters,\n'
+        '        auto_approve_gates=bool(auto_approve_gates),\n'
+        '    )'
+    )
 
 
 def _generate_method_stub(
@@ -459,7 +822,7 @@ def _generate_method_stub(
     effective_params = (
         _merge_init_and_method_params(init_params or [], op.parameters)
         if is_class_method
-        else op.parameters
+        else _sort_params_for_python_signature(op.parameters)
     )
     param_parts = _param_signature_parts(effective_params)
     params_str = ", ".join(param_parts)
@@ -526,6 +889,8 @@ def _generate_wrapper_script(
     source_dir: str,
     scripts_dir: Path | None = None,
     init_params: list[ParamSpec] | None = None,
+    cli_dispatch_map: dict[str, str] | None = None,
+    cli_prefix_override: str | None = None,
 ) -> Path:
     """Generate a wrapper script for a group of related operations.
 
@@ -554,6 +919,25 @@ def _generate_wrapper_script(
     script_path = (scripts_dir or SCRIPTS_DIR) / script_name
     script_path.parent.mkdir(parents=True, exist_ok=True)
 
+    source_file = _resolve_source_file(source_dir, module_name)
+    if cli_dispatch_map is not None:
+        dispatch_map = cli_dispatch_map
+    elif file_stem == "cli":
+        dispatch_map = _parse_cli_dispatch_map(source_file)
+    else:
+        dispatch_map = {}
+    use_cli_subprocess = class_name is None and any(
+        _is_cli_handler_op(op, dispatch_map) for op in ops
+    )
+    cli_prefix_line = ""
+    if use_cli_subprocess:
+        prefix = _resolve_cli_argv_prefix(
+            source_dir,
+            source_file,
+            cli_prefix_override=cli_prefix_override,
+        )
+        cli_prefix_line = f"CLI_PREFIX: list[str] = {prefix!r}"
+
     # Build body: helper(s) + method stubs
     body_parts: list[str] = []
 
@@ -563,18 +947,32 @@ def _generate_wrapper_script(
     # Sort operations by name for deterministic output
     for op in sorted(ops, key=lambda o: o.name):
         body_parts.append("")
-        body_parts.append(
-            _generate_method_stub(
-                op,
-                is_class_method=class_name is not None,
-                module_name=module_name,
-                init_params=init_params if class_name is not None else None,
+        subcommand = dispatch_map.get(op.name)
+        if subcommand and _is_cli_handler_op(op, dispatch_map):
+            body_parts.append(_generate_cli_handler_stub(op, subcommand=subcommand))
+        elif op.name == "execute_stage" and class_name is None and file_stem == "executor":
+            body_parts.append(_generate_pipeline_execute_stage_stub(op))
+        else:
+            body_parts.append(
+                _generate_method_stub(
+                    op,
+                    is_class_method=class_name is not None,
+                    module_name=module_name,
+                    init_params=init_params if class_name is not None else None,
+                )
             )
-        )
+
+    runtime_symbols = _collect_runtime_symbols(ops, init_params)
+    import_map = _parse_import_map(source_file, module_name)
+    extra_imports = _format_wrapper_imports(runtime_symbols, import_map, module_name)
+    if extra_imports:
+        extra_imports = f"\n{extra_imports}\n"
 
     content = _WRAPPER_SCRIPT_TEMPLATE.format(
         header_label=header_label,
         source_dir=source_dir,
+        cli_prefix=cli_prefix_line,
+        extra_imports=extra_imports,
         body="\n".join(body_parts),
         script_name=script_name,
     )
@@ -616,6 +1014,7 @@ def operation_to_spec(
     comp_name: str = "",
     bundle_id: str | None = None,
     init_params: list[ParamSpec] | None = None,
+    cli_subcommand: str | None = None,
 ) -> AgentToolSpec:
     """Convert a single SourceOperation into an AgentToolSpec.
 
@@ -652,31 +1051,50 @@ def operation_to_spec(
     tool_name = _to_kebab_case(raw_name)
 
     # Build JSON Schema properties (merge class ``__init__`` params for class methods).
-    schema_params = (
-        _merge_init_and_method_params(init_params or [], op.parameters)
-        if op.class_name
-        else op.parameters
-    )
-    properties: dict[str, dict[str, Any]] = {}
-    required: list[str] = []
-
-    for param in schema_params:
-        # Skip *args and **kwargs
-        if param.name.startswith("*"):
-            continue
-
-        prop: dict[str, Any] = {
-            "type": _type_hint_to_json_type(param.type_hint),
+    if cli_subcommand:
+        properties = {
+            "args": {
+                "type": "string",
+                "description": (
+                    f"CLI arguments after the '{cli_subcommand}' subcommand "
+                    f"(flags and positional args, excluding '{cli_subcommand}' itself)."
+                ),
+            }
         }
-        if param.description:
-            prop["description"] = param.description
-        if param.default is not None:
-            prop["default"] = param.default
+        required = ["args"]
+    else:
+        schema_params = (
+            _merge_init_and_method_params(init_params or [], op.parameters)
+            if op.class_name
+            else op.parameters
+        )
+        properties = {}
+        required = []
 
-        properties[param.name] = prop
+        for param in schema_params:
+            # Skip *args and **kwargs
+            if param.name.startswith("*"):
+                continue
 
-        if param.required and param.default is None:
-            required.append(param.name)
+            json_type = _type_hint_to_json_type(param.type_hint)
+            prop = param_to_json_schema_property(
+                type_hint=param.type_hint,
+                description=param.description,
+                source_dir=source_dir,
+                fallback_json_type=json_type,
+            )
+            if param.default is not None:
+                prop["default"] = _normalize_schema_default(
+                    param.default,
+                    json_type=prop.get("type", json_type),
+                )
+
+            properties[param.name] = prop
+
+            if param.required and param.default is None:
+                required.append(param.name)
+
+        _adjust_pipeline_execute_stage_schema(op, properties, required)
 
     input_schema: dict[str, Any] = {
         "type": "object",
@@ -765,6 +1183,7 @@ def register_component_tools(
     overwrite: bool = True,
     bundle_dir: str | Path | None = None,
     bundle_id: str | None = None,
+    cli_prefix_override: str | None = None,
 ) -> dict[str, str]:
     """Bulk-register all operations from a list of SourceComponents as Tools.
 
@@ -806,6 +1225,8 @@ def register_component_tools(
 
     # Maps (class_name, module_path) → init params for wrapper generation
     group_init_params: dict[tuple[str | None, str], list[ParamSpec]] = {}
+    # Per-module ``cmd_*`` → CLI subcommand (from ``main()`` dispatch table)
+    cli_dispatch_by_module: dict[str, dict[str, str]] = {}
 
     for comp in components:
         for op in comp.operations:
@@ -815,6 +1236,11 @@ def register_component_tools(
             op_module_map[id(op)] = module_path
             if op.class_name and op.class_name in comp.class_init_params:
                 group_init_params.setdefault(key, comp.class_init_params[op.class_name])
+            if op.class_name is None and (op.file_stem or "") == "cli":
+                cli_dispatch_by_module.setdefault(
+                    module_path,
+                    _parse_cli_dispatch_map(_resolve_source_file(source_dir_abs, module_path)),
+                )
 
     # ── Phase 2: generate wrapper scripts ──
 
@@ -833,6 +1259,8 @@ def register_component_tools(
             source_dir=source_dir_abs,
             scripts_dir=scripts_dir,
             init_params=group_init_params.get((class_name, module_path)),
+            cli_dispatch_map=cli_dispatch_by_module.get(module_path),
+            cli_prefix_override=cli_prefix_override,
         )
         script_paths[(class_name, module_path)] = str(script_path.resolve())
 
@@ -852,6 +1280,12 @@ def register_component_tools(
                 if op.class_name
                 else None
             )
+            dispatch_map = cli_dispatch_by_module.get(module_path, {})
+            cli_subcommand = (
+                dispatch_map.get(op.name)
+                if _is_cli_handler_op(op, dispatch_map)
+                else None
+            )
             spec = operation_to_spec(
                 op,
                 source_dir=source_dir_abs,
@@ -859,6 +1293,7 @@ def register_component_tools(
                 comp_name=comp.name,
                 bundle_id=effective_bundle_id,
                 init_params=init_params,
+                cli_subcommand=cli_subcommand,
             )
 
             # Validate the spec

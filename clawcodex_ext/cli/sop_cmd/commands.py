@@ -7,7 +7,7 @@ Usage::
         [--strategy <strategy>] [--skills <skills_dir>]
         [--max-groups <N>] [--mapping-rules <file>]
         [--llm-provider <provider>] [--llm-model <model>]
-        [--preview] [--all] [--register-tools]
+        [--preview] [--all] [--no-register-tools]
 
     clawcodex-dev sop convert docker_build,k8s_apply \\
         --out ./.clawcodex --requirements "CI/CD pipeline" --name cicd-agent
@@ -23,15 +23,15 @@ Options:
     --skills <skills_dir>   Output path for generated skill files.
     --all                   Include all public methods (disable external
                             interface filtering).  Default: extern-only.
-    --register-tools        Register each operation as an executable Tool
-                            (bash call_type + wrapper script) and persist
-                            specs to ~/.clawcodex/agent-tools/.  Off by
-                            default for backward compatibility.
+    --no-register-tools     Skip SDK method Tool registration (on by default for
+                            source-directory converts).
 """
 
 from __future__ import annotations
 
+import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -39,6 +39,33 @@ from clawcodex_ext.cli.subcommand_registry import register
 
 if TYPE_CHECKING:
     from extensions.sop_converter.skill_grouper import MappingRule
+
+
+@dataclass
+class ConvertOptions:
+    sdk_spec: str
+    output_dir: str = ""
+    requirements: str = ""
+    agent_name: str = ""
+    strategy: str = ""
+    skills_dir: str = ""
+    max_groups: int = 0
+    mapping_rules_file: str = ""
+    llm_provider: str = ""
+    llm_model: str = ""
+    preview: bool = False
+    all_methods: bool = False
+    register_tools: bool = True
+    mode: str = "auto"
+    extractor: str | None = None
+    emit_workflow_yaml: bool = False
+    emit_stage_agents: bool = False
+    emit_bridge: bool = False
+    bridge_mode: str = "python"
+    bridge_cli: str = ""
+    strict_workflow_yaml: bool = False
+    json_output: bool = False
+    validate_only: bool = False
 
 
 @register("sop")
@@ -65,56 +92,45 @@ def run_pos_command(args: list[str]) -> int:
     return run_sop_command(args)
 
 
-def _parse_convert_args(
-    args: list[str],
-) -> tuple[str, str, str, str, str, str, int, str, str, str, bool, bool, bool]:
-    """Parse ``sop convert`` arguments.
-
-    Returns (sdk_spec, output_dir, requirements, agent_name, strategy, skills_dir, max_groups, mapping_rules_file, llm_provider, llm_model, preview, all_methods, register_tools).
-    """
+def _parse_convert_args(args: list[str]) -> ConvertOptions:
+    """Parse ``sop convert`` arguments."""
     if not args:
         print("error: missing <sdk_spec> argument", file=sys.stderr)
         print(
-            "usage: clawcodex sop convert <sdk_spec> [--out <dir>] [--requirements <req>] [--name <name>] [--strategy <strategy>] [--skills <skills_dir>] [--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] [--llm-model <model>] [--preview] [--all]",
+            "usage: clawcodex sop convert <sdk_spec> [--out <dir>] [--requirements <req>] "
+            "[--name <name>] [--strategy <strategy>] [--skills <skills_dir>] "
+            "[--max-groups <N>] [--mapping-rules <file>] [--llm-provider <provider>] "
+            "[--llm-model <model>] [--preview] [--all] [--mode auto|sdk|hybrid|fwa] "
+            "[--extractor <name>] [--emit-workflow-yaml] [--emit-stage-agents] "
+            "[--emit-bridge] [--bridge-mode python|cli] [--bridge-cli <cmd>] [--strict-workflow-yaml] "
+            "[--json] [--validate]",
             file=sys.stderr,
         )
         raise SystemExit(2)
 
-    sdk_spec = args[0]
-    output_dir = ""
-    requirements = ""
-    agent_name = ""
-    strategy = ""
-    skills_dir = ""
-    max_groups = 0
-    mapping_rules_file = ""
-    llm_provider = ""
-    llm_model = ""
-    preview = False
-    all_methods = False
-    register_tools = False
+    opts = ConvertOptions(sdk_spec=args[0])
 
     i = 1
     while i < len(args):
         token = args[i]
         if token == "--out" and i + 1 < len(args):
-            output_dir = args[i + 1]
+            opts.output_dir = args[i + 1]
             i += 2
         elif token == "--requirements" and i + 1 < len(args):
-            requirements = args[i + 1]
+            opts.requirements = args[i + 1]
             i += 2
         elif token == "--name" and i + 1 < len(args):
-            agent_name = args[i + 1]
+            opts.agent_name = args[i + 1]
             i += 2
         elif token == "--strategy" and i + 1 < len(args):
-            strategy = args[i + 1]
+            opts.strategy = args[i + 1]
             i += 2
         elif token == "--skills" and i + 1 < len(args):
-            skills_dir = args[i + 1]
+            opts.skills_dir = args[i + 1]
             i += 2
         elif token == "--max-groups" and i + 1 < len(args):
             try:
-                max_groups = int(args[i + 1])
+                opts.max_groups = int(args[i + 1])
             except ValueError:
                 print(
                     f"error: --max-groups requires an integer, got: {args[i + 1]}", file=sys.stderr
@@ -122,92 +138,81 @@ def _parse_convert_args(
                 raise SystemExit(2)
             i += 2
         elif token == "--mapping-rules" and i + 1 < len(args):
-            mapping_rules_file = args[i + 1]
+            opts.mapping_rules_file = args[i + 1]
             i += 2
         elif token == "--llm-provider" and i + 1 < len(args):
-            llm_provider = args[i + 1]
+            opts.llm_provider = args[i + 1]
             i += 2
         elif token == "--llm-model" and i + 1 < len(args):
-            llm_model = args[i + 1]
+            opts.llm_model = args[i + 1]
             i += 2
+        elif token == "--mode" and i + 1 < len(args):
+            opts.mode = args[i + 1]
+            i += 2
+        elif token == "--extractor" and i + 1 < len(args):
+            opts.extractor = args[i + 1]
+            i += 2
+        elif token == "--emit-workflow-yaml":
+            opts.emit_workflow_yaml = True
+            i += 1
+        elif token == "--emit-stage-agents":
+            opts.emit_stage_agents = True
+            i += 1
+        elif token == "--emit-bridge":
+            opts.emit_bridge = True
+            i += 1
+        elif token == "--bridge-mode" and i + 1 < len(args):
+            opts.bridge_mode = args[i + 1]
+            i += 2
+        elif token == "--bridge-cli" and i + 1 < len(args):
+            opts.bridge_cli = args[i + 1]
+            i += 2
+        elif token == "--strict-workflow-yaml":
+            opts.strict_workflow_yaml = True
+            i += 1
+        elif token == "--json":
+            opts.json_output = True
+            i += 1
+        elif token == "--validate":
+            opts.validate_only = True
+            i += 1
         elif token == "--preview":
-            preview = True
+            opts.preview = True
             i += 1
         elif token == "--all":
-            all_methods = True
+            opts.all_methods = True
+            i += 1
+        elif token == "--no-register-tools":
+            opts.register_tools = False
             i += 1
         elif token == "--register-tools":
-            register_tools = True
+            opts.register_tools = True
             i += 1
         else:
             print(f"error: unknown argument: {token}", file=sys.stderr)
             raise SystemExit(2)
 
-    return (
-        sdk_spec,
-        output_dir,
-        requirements,
-        agent_name,
-        strategy,
-        skills_dir,
-        max_groups,
-        mapping_rules_file,
-        llm_provider,
-        llm_model,
-        preview,
-        all_methods,
-        register_tools,
-    )
+    return opts
 
 
 def _handle_convert(args: list[str]) -> int:
     """Handle ``sop convert`` — convert an SOP spec into an Agent."""
     try:
-        (
-            sdk_spec,
-            output_dir,
-            requirements,
-            agent_name,
-            strategy,
-            skills_dir,
-            max_groups,
-            mapping_rules_file,
-            llm_provider,
-            llm_model,
-            preview,
-            all_methods,
-            register_tools,
-        ) = _parse_convert_args(args)
+        opts = _parse_convert_args(args)
     except SystemExit:
         return 2
 
-    sdk_path = Path(sdk_spec)
+    sdk_path = Path(opts.sdk_spec)
 
-    # Auto-detection: if sdk_spec is an existing directory, use SourceCodeParser
     if sdk_path.is_dir():
-        return _handle_convert_from_source(
-            sdk_path,
-            output_dir,
-            requirements,
-            agent_name,
-            strategy,
-            skills_dir,
-            max_groups,
-            mapping_rules_file,
-            llm_provider,
-            llm_model,
-            preview,
-            all_methods,
-            register_tools,
-        )
+        return _handle_convert_from_source(opts)
 
-    # Legacy path: sdk_spec is a comma-separated spec string
     from extensions.sop_converter.convert_sop_skill import convert_sop_to_agent
 
     result = convert_sop_to_agent(
-        sdk_spec=sdk_spec,
-        requirements=requirements,
-        agent_name=agent_name,
+        sdk_spec=opts.sdk_spec,
+        requirements=opts.requirements,
+        agent_name=opts.agent_name,
     )
 
     if result["status"] == "error":
@@ -229,42 +234,23 @@ def _handle_convert(args: list[str]) -> int:
             print(f"   Warning: {w}", file=sys.stderr)
 
     # If --out is specified, write the output files to the target directory
-    if output_dir:
-        _write_output_files(output_dir, result, sdk_spec, requirements, agent_name)
+    if opts.output_dir:
+        _write_output_files(opts.output_dir, result, opts.sdk_spec, opts.requirements, opts.agent_name)
 
     return 0
 
 
-def _handle_convert_from_source(
-    sdk_path: Path,
-    output_dir: str,
-    requirements: str,
-    agent_name: str | None,
-    strategy: str,
-    skills_dir: str,
-    max_groups: int = 0,
-    mapping_rules_file: str = "",
-    llm_provider_name: str = "",
-    llm_model: str = "",
-    preview: bool = False,
-    all_methods: bool = False,
-    register_tools: bool = False,
-) -> int:
-    """Convert a source code directory into Agents via SourceCodeParser + grouping strategy.
-
-    Generates one agent per grouped Skill (not per raw SourceComponent),
-    plus an overview agent.  The --strategy flag controls how components
-    are merged: COMPONENT_GROUP (default, 1:1), KEYWORD_MATCH, IO_RELATION,
-    or LLM_SEMANTIC.
-
-    --mapping-rules accepts a YAML/JSON file with custom MappingRule definitions
-    for KEYWORD_MATCH strategy.
-    --llm-provider and --llm-model control which LLM backend is used for
-    LLM_SEMANTIC strategy.  When omitted, the default provider from
-    ~/.clawcodex/config.json is used.
-    --all includes all public methods; by default only documented external
-    interfaces (docstring-required) are kept.
-    """
+def _handle_convert_from_source(opts: ConvertOptions) -> int:
+    """Convert a source code directory into Agents via SourceCodeParser + grouping strategy."""
+    sdk_path = Path(opts.sdk_spec)
+    from extensions.sop_converter.workflow_mode.pipeline import discriminate_and_extract
+    from extensions.sop_converter.workflow_mode.extractors.preview import (
+        format_discrimination_summary,
+        format_workflow_preview,
+    )
+    from extensions.sop_converter.workflow_mode.mapping import (
+        build_workflow_stages,
+    )
     from extensions.sop_converter.source_parser import SourceCodeParser
     from extensions.sop_converter.skill_grouper import (
         GroupStrategy,
@@ -279,14 +265,44 @@ def _handle_convert_from_source(
         WorkflowStage,
     )
 
-    parser = SourceCodeParser(str(sdk_path), extern_only=not all_methods)
+    force_mode = opts.mode if opts.mode != "auto" else None
+    disc, workflow_graph = discriminate_and_extract(
+        sdk_path,
+        force_mode=force_mode,
+        extractor=opts.extractor,
+    )
+
+    if not opts.json_output:
+        print(format_discrimination_summary(disc))
+        if workflow_graph:
+            print(
+                f"   Workflow graph: {len(workflow_graph.stages)} stages, "
+                f"{len(workflow_graph.transitions)} transitions, "
+                f"quality={workflow_graph.extraction_quality}"
+            )
+        elif disc.mode in ("fwa", "hybrid"):
+            print("   Warning: workflow mode selected but graph extraction returned empty", file=sys.stderr)
+
+    if opts.json_output:
+        payload = disc.to_dict()
+        if workflow_graph:
+            payload["workflow"] = {
+                "stages": len(workflow_graph.stages),
+                "transitions": len(workflow_graph.transitions),
+                "quality": workflow_graph.extraction_quality,
+            }
+        print(json.dumps(payload, indent=2))
+        if opts.validate_only:
+            return 0
+
+    parser = SourceCodeParser(str(sdk_path), extern_only=not opts.all_methods)
     components = parser.parse()
 
     if not components:
         print("error: No source components found in directory", file=sys.stderr)
         return 2
 
-    parsed_strategy = strategy.lower() if strategy else ""
+    parsed_strategy = opts.strategy.lower() if opts.strategy else ""
     if parsed_strategy == "keyword":
         group_strategy = GroupStrategy.KEYWORD_MATCH
     elif parsed_strategy == "io":
@@ -297,12 +313,12 @@ def _handle_convert_from_source(
         group_strategy = GroupStrategy.COMPONENT_GROUP
 
     custom_rules: list[MappingRule] | None = None
-    if mapping_rules_file and group_strategy == GroupStrategy.KEYWORD_MATCH:
-        custom_rules = _load_mapping_rules(mapping_rules_file)
+    if opts.mapping_rules_file and group_strategy == GroupStrategy.KEYWORD_MATCH:
+        custom_rules = _load_mapping_rules(opts.mapping_rules_file)
 
     llm_provider_obj = None
     if group_strategy == GroupStrategy.LLM_SEMANTIC:
-        llm_provider_obj = _create_llm_provider(llm_provider_name, llm_model)
+        llm_provider_obj = _create_llm_provider(opts.llm_provider, opts.llm_model)
         if llm_provider_obj is None:
             print(
                 "warning: LLM_SEMANTIC requires a configured LLM provider; falling back to keyword match strategy",
@@ -313,19 +329,47 @@ def _handle_convert_from_source(
     group_result = group_source_components(
         components,
         strategy=group_strategy,
-        max_io_groups=max_groups if max_groups > 0 else None,
+        max_io_groups=opts.max_groups if opts.max_groups > 0 else None,
         mapping_rules=custom_rules,
-        requirements=requirements,
+        requirements=opts.requirements,
         llm_provider=llm_provider_obj,
     )
     grouped_skills: list[SkillSpec] = group_result.skills
 
-    # ── Tool registration ──
-    # Convert each SourceOperation into an executable Tool (bash call_type +
-    # wrapper script), persist specs to ~/.clawcodex/agent-tools/, and
-    # rewrite skill.allowed_tools with kebab-case names so agent markdown
-    # can find them in the ToolRegistry at runtime.
-    if register_tools and not preview:
+    skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
+
+    agent_map = None
+    bridge_script_path: Path | None = None
+    if workflow_graph:
+        from extensions.sop_converter.workflow_mode.capability import StageCapabilityMapper
+        from extensions.sop_converter.workflow_mode.capability.arc_mapper import (
+            ensure_arc_stage_skills,
+        )
+        from extensions.sop_converter.workflow_mode.extractors.adapters.arc import (
+            resolve_arc_pipeline_dir,
+        )
+
+        if resolve_arc_pipeline_dir(sdk_path) is not None:
+            grouped_skills = ensure_arc_stage_skills(
+                workflow_graph, components, grouped_skills, sdk_path,
+            )
+            skill_agent_map = {s.name: f"{s.name}-agent" for s in grouped_skills}
+
+        agent_map = StageCapabilityMapper().map(workflow_graph, components, grouped_skills)
+
+    workflow_stages: list[WorkflowStage] = []
+    if workflow_graph and agent_map:
+        from extensions.sop_converter.workflow_mode.generator import AgentDefinitionGenerator
+
+        gen = AgentDefinitionGenerator()
+        workflow_stages = gen.enrich_workflow_stages(
+            workflow_graph, agent_map, skill_agent_map=skill_agent_map,
+        )
+    elif workflow_graph:
+        workflow_stages = build_workflow_stages(workflow_graph, skill_agent_map=skill_agent_map)
+
+
+    if opts.register_tools and not opts.preview and not opts.validate_only:
         try:
             from extensions.sop_converter.tool_registry_bridge import (
                 register_component_tools,
@@ -336,8 +380,8 @@ def _handle_convert_from_source(
                 components,
                 str(sdk_path),
                 persist=True,
-                bundle_dir=Path(output_dir) if output_dir else None,
-                bundle_id=Path(output_dir).name if output_dir else None,
+                bundle_dir=Path(opts.output_dir) if opts.output_dir else None,
+                bundle_id=Path(opts.output_dir).name if opts.output_dir else None,
             )
             # Rewrite tool names in skills to match what was actually
             # registered in the ToolRegistry.  The name_map returned by
@@ -349,7 +393,50 @@ def _handle_convert_from_source(
                     registered.get(t, _to_kebab_case(t)) for t in skill.allowed_tools
                 ]
             if registered:
-                print(f"   Registered tools: {len(registered)}")
+                print(f"   Registered tools: {len(set(registered.values()))}")
+            try:
+                from extensions.sop_converter.composite_tools import (
+                    emit_composite_workflow_yaml,
+                    register_composite_tools,
+                )
+                from extensions.sop_converter.composite_tools.builtin import (
+                    builtin_composite_tools,
+                )
+
+                composite_registered = register_composite_tools(
+                    persist=True,
+                    bundle_dir=Path(opts.output_dir) if opts.output_dir else None,
+                    sdk_source_dir=str(sdk_path),
+                )
+                if composite_registered:
+                    print(f"   Registered composite tools: {len(composite_registered)}")
+                for skill in grouped_skills:
+                    if skill.name in ("agent_teams-skill", "agent_teams"):
+                        for tool_name in composite_registered:
+                            if tool_name not in skill.allowed_tools:
+                                skill.allowed_tools.insert(0, tool_name)
+                if opts.output_dir:
+                    out_composite = Path(opts.output_dir)
+                    for spec in builtin_composite_tools():
+                        wf = emit_composite_workflow_yaml(
+                            spec,
+                            out_composite,
+                            project_name=project_name,
+                        )
+                        if wf:
+                            print(f"   Composite workflow: {wf.name}")
+            except Exception as exc:
+                print(
+                    f"   Warning: composite tool registration failed: {exc}",
+                    file=sys.stderr,
+                )
+            # Sync StageAgentMap profiles with rewritten tool names so
+            # stage agents reference the actual registered spec names.
+            if agent_map:
+                skill_tool_map = {s.name: s.allowed_tools for s in grouped_skills}
+                for profile in agent_map.by_stage_id.values():
+                    if profile.mapped_skill and profile.mapped_skill in skill_tool_map:
+                        profile.recommended_tools = list(skill_tool_map[profile.mapped_skill])
         except ImportError as exc:
             print(
                 f"   Warning: tool registration skipped (missing module: {exc})",
@@ -376,8 +463,12 @@ def _handle_convert_from_source(
     overview_count = 1 if len(overview_info) > 1 else 0
     total_agents = len(grouped_skills) + overview_count
 
-    if preview:
-        # ── Preview mode: print clean summary, skip all file writes ──
+    if opts.preview:
+        if workflow_graph:
+            print("[Preview] Workflow extraction:")
+            print(format_workflow_preview(workflow_graph, disc))
+        else:
+            print(f"[Preview] Workflow mode: {disc.mode} (score={disc.total_score:.2f}), no graph extracted")
         strategy_labels = {
             "IO_RELATION": "IO_RELATION",
             "KEYWORD_MATCH": "KEYWORD_MATCH",
@@ -386,19 +477,21 @@ def _handle_convert_from_source(
         }
         label = strategy_labels.get(group_strategy.name, group_strategy.name)
         print(f"[Preview] Strategy: {label}")
-        if not all_methods:
-            print(f"   Filter: external interfaces only (default)")
+        if not opts.all_methods:
+            print("   Filter: external interfaces only (default)")
         else:
-            print(f"   Filter: --all (all public methods)")
+            print("   Filter: --all (all public methods)")
         print(f"   Source Components: {len(components)}")
         print(f"   Grouped Skills: {len(grouped_skills)}")
         print(
             f"   Agent file count: {total_agents} ({len(grouped_skills)} + {overview_count} overview)"
         )
+        if workflow_stages:
+            print(f"   Workflow stages: {len(workflow_stages)}")
         if len(components) != len(grouped_skills):
             reduction = 100 - int(len(grouped_skills) / len(components) * 100)
             print(f"   Agent 缩减率: {reduction}% ({len(components)} → {total_agents})")
-        print(f"   Skills:")
+        print("   Skills:")
         for skill in grouped_skills:
             sample_tools = skill.allowed_tools[:3]
             sample_str = ", ".join(sample_tools)
@@ -410,11 +503,131 @@ def _handle_convert_from_source(
                 print(f"   Warning: unmatched tool: {w}", file=sys.stderr)
         return 0
 
+    if opts.validate_only:
+        return 0
+
+    project_name = opts.agent_name or sdk_path.name
+    overview_agent_name = opts.agent_name or "clawcodex-overview"
+    # Hybrid/FWA mode: auto-emit workflow YAML, stage agents, bridge
+    if disc.mode in ("fwa", "hybrid"):
+        if not opts.emit_workflow_yaml:
+            opts.emit_workflow_yaml = True
+        if not opts.emit_bridge:
+            opts.emit_bridge = True
+    emit_stage_agents = opts.emit_stage_agents or (disc.mode in ("fwa", "hybrid"))
+    out_path = Path(opts.output_dir) if opts.output_dir else None
+    from extensions.sop_converter.bundle_workflow import workflow_artifacts_enabled
+
+    emit_workflow_bundle = (
+        workflow_graph is not None
+        and agent_map is not None
+        and out_path is not None
+        and workflow_artifacts_enabled(
+            has_mapped_stages=agent_map.has_mapped_stages,
+            workflow_mode=disc.mode,
+        )
+    )
+    if workflow_graph and agent_map and out_path and not emit_workflow_bundle:
+        print(
+            "   Warning: workflow artifacts skipped (no mapped stages; "
+            "use fwa/hybrid mode or fix F-50-C mapping)",
+            file=sys.stderr,
+        )
+    elif workflow_graph and agent_map and not agent_map.has_mapped_stages and emit_workflow_bundle:
+        print(
+            "   Warning: emitting workflow scaffold with unmapped stages "
+            "(mapping_confidence=0; stage agents use fallback names)",
+            file=sys.stderr,
+        )
+
+    if workflow_graph and agent_map and out_path and emit_workflow_bundle and opts.emit_bridge:
+        from extensions.sop_converter.workflow_mode.bridge import BridgeGenerator
+
+        bridge_script_path = BridgeGenerator().generate(
+            workflow_graph,
+            agent_map,
+            sdk_path,
+            out_path,
+            mode=opts.bridge_mode,
+            project_name=project_name,
+            cli_entry=opts.bridge_cli or None,
+        )
+        if opts.register_tools and bridge_script_path is not None:
+            from extensions.sop_converter.workflow_mode.bridge.mcp_adapter import (
+                bridge_tool_name,
+                register_bridge_tool,
+            )
+
+            try:
+                register_bridge_tool(
+                    bridge_tool_name(project_name),
+                    bridge_script_path,
+                    persist=True,
+                    bundle_dir=out_path,
+                )
+            except Exception as exc:
+                print(
+                    f"   Warning: bridge tool registration failed: {exc}",
+                    file=sys.stderr,
+                )
+
+    # Finalize stage agent names before workflow.yaml / overview reference them.
+    if (
+        workflow_graph
+        and agent_map
+        and emit_workflow_bundle
+        and emit_stage_agents
+    ):
+        from extensions.sop_converter.workflow_mode.generator import (
+            AgentDefinitionGenerator,
+            stage_agent_existing_names,
+        )
+        from extensions.sop_converter.workflow_mode.mapping import (
+            sync_overview_component_agents,
+            sync_workflow_stages_agents,
+        )
+
+        gen = AgentDefinitionGenerator()
+        existing_stage_names = stage_agent_existing_names(
+            grouped_skills,
+            workflow_graph,
+            overview_agent_name=overview_agent_name if len(overview_info) > 1 else None,
+        )
+        gen.finalize_stage_agent_names(
+            workflow_graph,
+            agent_map,
+            project_name=project_name,
+            existing_agent_names=existing_stage_names,
+        )
+        workflow_stages = sync_workflow_stages_agents(
+            workflow_stages, workflow_graph, agent_map,
+        )
+        overview_info = sync_overview_component_agents(
+            overview_info, workflow_graph, agent_map,
+        )
+
+    if workflow_graph and agent_map and out_path and emit_workflow_bundle and opts.emit_workflow_yaml:
+        from extensions.sop_converter.workflow_mode.schema import emit_engine_workflow_yaml
+
+        yaml_path = emit_engine_workflow_yaml(
+            workflow_graph,
+            agent_map,
+            out_path,
+            workflow_name=project_name,
+            strict=opts.strict_workflow_yaml,
+        )
+        print(f"   Workflow YAML: {yaml_path}")
+
     # ── Normal mode: write files + print summary ──
     writer = AgentMarkdownWriter()
-    if output_dir:
-        out_path = Path(output_dir)
-        for skill in grouped_skills:
+    if opts.output_dir:
+        from extensions.sop_converter.workflow_mode.generator import (
+            AgentDefinitionGenerator,
+            coarse_agent_skills,
+        )
+
+        out_path = Path(opts.output_dir)
+        for skill in coarse_agent_skills(grouped_skills, workflow_graph):
             skill_name = f"{skill.name}-skill"
             agent_def = {
                 "name": f"{skill.name}-agent",
@@ -427,23 +640,57 @@ def _handle_convert_from_source(
         # Overview agent — always generated when there are 2+ agents
         if len(overview_info) > 1:
             writer.write_overview_agent(
-                name=agent_name or "clawcodex-overview",
-                description=f"Overview agent for {agent_name or 'project'}",
+                name=opts.agent_name or "clawcodex-overview",
+                description=f"Overview agent for {opts.agent_name or 'project'}",
                 component_agents=overview_info,
-                workflow_stages=[],
+                workflow_stages=workflow_stages,
                 output_dir=out_path,
             )
 
-    # Write skills if --skills was specified
-    if skills_dir:
+        # F-50-E: write hybrid/wrapper/native stage agents last so coarse write_agent cannot overwrite them
+        if workflow_graph and agent_map and emit_workflow_bundle and emit_stage_agents:
+            from extensions.sop_converter.workflow_mode.generator import stage_agent_existing_names
+
+            existing = stage_agent_existing_names(
+                grouped_skills,
+                workflow_graph,
+                overview_agent_name=overview_agent_name if len(overview_info) > 1 else None,
+            )
+            bridge_rel = None
+            if bridge_script_path and out_path:
+                try:
+                    bridge_rel = str(bridge_script_path.relative_to(out_path))
+                except ValueError:
+                    bridge_rel = str(bridge_script_path)
+            AgentDefinitionGenerator().generate_stage_agents(
+                workflow_graph,
+                agent_map,
+                out_path,
+                project_name=project_name,
+                bridge_script=bridge_rel,
+                existing_agent_names=existing,
+                write_skills=True,
+            )
+
+    if opts.skills_dir:
         from extensions.sop_converter.task_guide import format_flat_skill_markdown
 
-        skills_path = Path(skills_dir)
+        skills_path = Path(opts.skills_dir)
         skills_path.mkdir(parents=True, exist_ok=True)
+        stage_contracts: dict[str, object] = {}
+        if workflow_graph:
+            for stage in workflow_graph.stages:
+                c = workflow_graph.contracts.get(stage.id)
+                if c is not None:
+                    stage_contracts[stage.name] = c
         for skill in grouped_skills:
             skill_file = skills_path / f"{skill.name}-skill.md"
             skill_file.write_text(
-                format_flat_skill_markdown(skill, components=components),
+                format_flat_skill_markdown(
+                    skill,
+                    components=components,
+                    contract=stage_contracts.get(skill.name),
+                ),
                 encoding="utf-8",
             )
             print(f"   Skill file: {skill_file}")
@@ -452,7 +699,9 @@ def _handle_convert_from_source(
     print(f"✅ Converted source directory to Agents: {sdk_path}")
     print(f"   Source components: {len(components)}")
     print(f"   Grouped skills (agents): {len(grouped_skills)}")
-    print(f"   Strategy: {group_strategy.name}")
+    print(f"   Workflow mode: {disc.mode} (score={disc.total_score:.2f})")
+    if workflow_stages:
+        print(f"   Workflow stages in overview: {len(workflow_stages)}")
     if len(components) != len(grouped_skills):
         reduction = 100 - int(len(grouped_skills) / len(components) * 100)
         print(
@@ -466,13 +715,26 @@ def _handle_convert_from_source(
         for w in group_result.unmatched_tools:
             print(f"   Warning: unmatched tool: {w}", file=sys.stderr)
 
-    if output_dir:
+    print(f"   Strategy: {group_strategy.name}")
+
+    if opts.output_dir:
         from extensions.sop_converter.bundle_manifest import write_bundle_manifest
 
+        bundle_dir = Path(opts.output_dir)
+        bridge_rel: str | None = None
+        if bridge_script_path is not None:
+            try:
+                bridge_rel = str(bridge_script_path.relative_to(bundle_dir))
+            except ValueError:
+                bridge_rel = str(bridge_script_path)
+        workflow_rel = "workflow.yaml" if (bundle_dir / "workflow.yaml").is_file() else None
         manifest_path = write_bundle_manifest(
-            Path(output_dir),
+            bundle_dir,
             sdk_source_dir=sdk_path,
-            bundle_id=Path(output_dir).name,
+            bundle_id=bundle_dir.name,
+            workflow_yaml=workflow_rel,
+            bridge_script=bridge_rel,
+            workflow_mode=disc.mode if workflow_graph else None,
         )
         print(f"   Bundle manifest: {manifest_path}")
 

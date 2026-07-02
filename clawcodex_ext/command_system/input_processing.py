@@ -696,12 +696,14 @@ def format_at_mention_attachments(attachments: list[dict[str, Any]]) -> str:
             # Mirrors ``typescript/src/utils/messages.ts`` ``agent_mention``
             # case: the reminder nudges the model to delegate to the named
             # agent via the Agent tool rather than replying inline.
+            agent_type = att["agent_type"]
             blocks.append(
                 f"<system-reminder>\n"
-                f"The user has expressed a desire to invoke the agent "
-                f'"{att["agent_type"]}". Please invoke the agent '
-                f"appropriately using the Agent tool, passing in the required "
-                f"context to it.\n"
+                f'The user invoked "@agent-{agent_type}". You MUST delegate using '
+                f'the Agent tool with subagent_type="{agent_type}" exactly '
+                f"(not general-purpose, not Explore). Do NOT answer the task "
+                f"yourself, do NOT Glob/Read skill files on behalf of the stage "
+                f"agent, and do NOT substitute a different subagent_type.\n"
                 f"</system-reminder>"
             )
     return "\n\n".join(blocks)
@@ -738,6 +740,94 @@ def build_image_content_blocks(
     return blocks
 
 
+def strip_agent_mentions(text: str) -> str:
+    """Remove ``@agent-<type>`` / quoted agent mentions from *text*."""
+    if not text:
+        return text
+    cleaned = _AGENT_MENTION_UNQUOTED_RE.sub(" ", text)
+    cleaned = _AGENT_MENTION_QUOTED_RE.sub(" ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def iter_agent_mention_types(text: str) -> list[str]:
+    """Return every ``@agent-<type>`` token in *text* (known or unknown)."""
+    if not text:
+        return []
+
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def _add(agent_type: str) -> None:
+        if agent_type and agent_type not in seen:
+            seen.add(agent_type)
+            ordered.append(agent_type)
+
+    for match in _AGENT_MENTION_UNQUOTED_RE.finditer(text):
+        raw = match.group(1)
+        agent_type = raw[len("agent-") :] if raw.startswith("agent-") else raw
+        _add(agent_type)
+
+    for match in _AGENT_MENTION_QUOTED_RE.finditer(text):
+        _add(match.group(1))
+
+    return ordered
+
+
+def _known_agent_types(agents: list[Any] | None) -> set[str]:
+    known: set[str] = set()
+    if not agents:
+        return known
+    for agent in agents:
+        agent_type = getattr(agent, "agent_type", None) or (
+            agent.get("agent_type") if isinstance(agent, dict) else None
+        )
+        if isinstance(agent_type, str) and agent_type:
+            known.add(agent_type)
+    return known
+
+
+def find_unknown_agent_mentions(
+    text: str,
+    agents: list[Any] | None,
+) -> list[str]:
+    """``@agent-<type>`` tokens that do not resolve to a registered agent."""
+    known = _known_agent_types(agents)
+    if not known:
+        return iter_agent_mention_types(text)
+    return [t for t in iter_agent_mention_types(text) if t not in known]
+
+
+def format_unknown_agent_mention_error(
+    unknown_types: list[str],
+    agents: list[Any] | None,
+    *,
+    max_suggestions: int = 3,
+) -> str:
+    """User-facing error for unresolved ``@agent-`` mentions."""
+    import difflib
+
+    known = sorted(_known_agent_types(agents))
+    lines = [f"Unknown agent: {unknown_types[0]}"]
+    if len(unknown_types) > 1:
+        lines[0] = "Unknown agents: " + ", ".join(unknown_types)
+
+    if known:
+        suggestions: list[str] = []
+        for unknown in unknown_types:
+            for match in difflib.get_close_matches(
+                unknown, known, n=max_suggestions, cutoff=0.5
+            ):
+                if match not in suggestions:
+                    suggestions.append(match)
+        if suggestions:
+            lines.append("Did you mean: " + ", ".join(suggestions[:max_suggestions]))
+        lines.append(f"Use @agent-<type> (loaded {len(known)} agents).")
+    else:
+        lines.append("No agents loaded — start with --agent <bundle-dir>?")
+
+    return "\n".join(lines)
+
+
 def expand_agent_mentions(
     text: str,
     agents: list[Any] | None,
@@ -753,14 +843,7 @@ def expand_agent_mentions(
     if not text or not agents:
         return []
 
-    known_types: set[str] = set()
-    for agent in agents:
-        agent_type = getattr(agent, "agent_type", None) or (
-            agent.get("agent_type") if isinstance(agent, dict) else None
-        )
-        if isinstance(agent_type, str) and agent_type:
-            known_types.add(agent_type)
-
+    known_types = _known_agent_types(agents)
     if not known_types:
         return []
 

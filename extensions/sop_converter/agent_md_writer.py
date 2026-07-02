@@ -202,6 +202,8 @@ when_to_use: {{ description }}
 
 当任务需要多个子 Agent 协作时，按工作流阶段顺序依次调用。
 每个阶段的输出自动作为下一阶段的输入。
+
+**用户最短指令（Overview）**：`在 run_dir=<绝对路径> 从 Stage N 做到 Stage M` — 详见运行时注入的「流水线 Stage 编排」一节。
 """
 
 _WORKFLOW_TEMPLATE_SRC = """\
@@ -504,7 +506,7 @@ class AgentMarkdownWriter:
             component_agents=component_agents,
             workflow_stages=workflow_stages,
         )
-        content = append_sop_overview_routing(content)
+        content = append_sop_overview_routing(content, bundle_path=output_dir)
 
         file_path.write_text(content.strip() + "\n", encoding="utf-8")
         logger.info("Wrote overview agent: %s", file_path)

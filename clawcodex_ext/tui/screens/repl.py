@@ -277,19 +277,26 @@ class REPLScreen(Screen):
             return
         # F-89: expand @agent-name mentions in TUI.
         try:
-            from clawcodex_ext.agent.load_agents_dir import (
-                get_agent_definitions_with_overrides,
-            )
-            from clawcodex_ext.agent.agent_definitions import get_built_in_agents
+            from clawcodex_ext.agent.load_agents_dir import get_agents_for_mentions
             from src.command_system.input_processing import (
                 expand_agent_mentions,
+                find_unknown_agent_mentions,
                 format_at_mention_attachments,
+                format_unknown_agent_mention_error,
             )
 
-            cwd = str(getattr(app, "workspace_root", None) or ".")
-            agents = list(get_agent_definitions_with_overrides(cwd)) or list(
-                get_built_in_agents()
+            agents = get_agents_for_mentions(
+                getattr(app, "workspace_root", None) or ".",
+                tool_context=getattr(app, "tool_context", None),
+                runtime_context=getattr(app, "runtime_context", None),
             )
+            unknown = find_unknown_agent_mentions(text, agents)
+            if unknown:
+                self.transcript.append_system(
+                    format_unknown_agent_mention_error(unknown, agents),
+                    style="error",
+                )
+                return
             agent_attachments = expand_agent_mentions(text, agents)
             if agent_attachments:
                 extra = format_at_mention_attachments(agent_attachments)

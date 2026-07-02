@@ -95,6 +95,10 @@ class StageRunner:
         self._status_dashboard = status_dashboard
         self._clarification_resolver = clarification_resolver
         self._progress_reporter = progress_reporter
+        self._bundle_path: Path | None = None
+
+    def set_bundle_path(self, bundle_path: Path | str | None) -> None:
+        self._bundle_path = Path(bundle_path).resolve() if bundle_path else None
 
     # ── 公开接口 ──────────────────────────────────────────────────
 
@@ -358,9 +362,16 @@ class StageRunner:
         if base_prompt:
             parts.append(base_prompt)
 
-        # 2. 当前阶段指令
+        # 2. Current stage instruction
         parts.append(f"\n## Current Stage: {stage_node.name}")
         parts.append(f"Phase: {stage_node.phase}")
+        stage_agent = (stage_node.agent_config or {}).get("agent")
+        if stage_agent:
+            parts.append(
+                f"\n## Assigned Stage Agent\n"
+                f"Execute this stage as sub-agent `@{stage_agent}` via the Agent tool. "
+                f"That agent owns the stage skill, tools, and bridge dispatch for this step."
+            )
         parts.append(stage_node.prompt or f"Execute stage: {stage_node.name}")
 
         # Git 约束：允许在 issue 分支上 commit，禁止 push 和分支操作

@@ -123,6 +123,15 @@ SOP_OVERVIEW_ROUTING = f"""\
 | 获取 team memory 路径 | ``@openjiuwen_merged-agent`` | ``Skill`` → ``ToolSearch`` → 对应工具（参数 ``team_name``） |
 | 创建 team-memory 目录 | ``@memory-agent`` | ``Skill`` → ``ToolSearch`` → 对应工具（参数 ``team_memory_dir`` = 上一步路径） |
 
+### 跨域编排示例（启动团队会话 — macro 优先）
+
+| 步骤 | 委派 | 子代理内流程 |
+|------|------|----------------|
+| **推荐（1 次调用）** | ``@agent_teams-agent`` | ``Skill`` → ``ToolSearch(query="启动团队会话")`` → ``start-team-session``（参数 ``config_path`` + ``initial_query``） |
+| 备选（分步） | 先 ``@agent_teams-agent`` 再 ``@core_engine-agent`` | ``load-spec-yaml`` → ``create-agent-team-session`` → ``run-agent-team`` |
+
+Macro 工具 ``start-team-session`` 与 bundle 内 ``workflow-start_team_session.yaml`` 描述同一编排；overview **优先** macro，避免拆成 3 个跨域委派。
+
 ### 交互式终端任务
 
 | 阶段 | 行为 |
@@ -155,11 +164,123 @@ def format_sdk_source_dir_block(sdk_source_dir: str | Path | None) -> str:
 - 需要 Grep/Read SDK 源码时：优先使用上述绝对路径；若无此块，须先 Read wrapper 脚本中的 ``_SOURCE_DIR``"""
 
 
-def agent_type_to_skill_name(agent_type: str) -> str:
-    """Map ``harness_merged-agent`` → ``harness_merged-skill``."""
-    if agent_type.endswith("-agent"):
-        return agent_type[: -len("-agent")] + "-skill"
-    return f"{agent_type}-skill"
+def agent_type_to_skill_name(agent_type: str, *, project_prefix: str | None = None) -> str:
+    """Map agent type to flat skill name.
+
+    ``harness_merged-agent`` → ``harness_merged-skill``
+    ``AutoResearchClaw-topic-init-agent`` → ``topic-init-skill`` (when prefix given)
+    """
+    if not agent_type.endswith("-agent"):
+        return f"{agent_type}-skill"
+    base = agent_type[: -len("-agent")]
+    if project_prefix and base.startswith(f"{project_prefix}-"):
+        base = base[len(project_prefix) + 1 :]
+    return f"{base}-skill"
+
+
+def pick_pipeline_execute_tool(tools: list[str]) -> str | None:
+    """Return the pipeline execute-stage tool from a stage agent tool list, if any."""
+    for tool in tools:
+        lowered = tool.lower()
+        if "execute" in lowered and "stage" in lowered and "pipeline" in lowered:
+            return tool
+    for tool in tools:
+        lowered = tool.lower()
+        if lowered.endswith("-execute-stage") or lowered.endswith("execute-stage"):
+            return tool
+    return None
+
+
+def infer_stage_label_from_skill(skill_name: str) -> str:
+    """``topic-init-skill`` → ``TOPIC_INIT``."""
+    base = skill_name[: -len("-skill")] if skill_name.endswith("-skill") else skill_name
+    return base.replace("-", "_").upper()
+
+
+def stage_agent_sop_body(
+    *,
+    agent_type: str,
+    skill_name: str,
+    stage_label: str,
+    pipeline_tool: str | None = None,
+    bridge_tool: str | None = None,
+    sdk_source_dir: str | Path | None = None,
+    stage_id: int | None = None,
+    output_files: list[str] | None = None,
+    contract_dod: str | None = None,
+) -> str:
+    """Condensed SOP body prepended to F-50-E stage agents (keeps output contracts below)."""
+    sdk_block = format_sdk_source_dir_block(sdk_source_dir)
+    sdk_section = f"\n\n{sdk_block}" if sdk_block else ""
+    pipeline_line = (
+        f"- Pipeline 主工具：`{pipeline_tool}` — `stage`=`{stage_label}`，`run_dir`=<绝对路径>；"
+        "`config`/`adapters`/`run_id` 可省略（从 run_dir/config.yaml 加载）"
+        if pipeline_tool
+        else (
+            f"- Pipeline 主工具：Skill 任务指南中的 execute-stage 工具（ToolSearch 返回），"
+            f"`stage`=`{stage_label}`，`run_dir`=<绝对路径>"
+        )
+    )
+    bridge_line = (
+        f"\n- Bridge（仅 Hybrid/Wrapper 且 Skill 任务指南明确指向时）：`{bridge_tool}`，"
+        "`stage_id`（int）+ `project_dir`/`run_dir` — **不可**作为 pipeline 超时/失败的替代"
+        if bridge_tool
+        else ""
+    )
+    stage_dir_hint = (
+        f"`run_dir/stage-{stage_id:02d}/`"
+        if stage_id is not None
+        else "`run_dir/stage-XX/`（本阶段编号见 workflow 或下方阶段目标）"
+    )
+    outputs_block = ""
+    if output_files:
+        lines = "\n".join(f"  - `{f}`" for f in output_files)
+        dod_line = f"\n- **DoD:** {contract_dod}" if contract_dod else ""
+        outputs_block = f"""
+## 执行后必须验证
+
+- Read {stage_dir_hint}`decision.json`（`status`=done 且 `decision`=proceed 为通过）
+- 确认以下产出存在且非空：{dod_line}
+{lines}
+- 汇总：主路径是否成功、耗时（若有 stage_health.json）、产出路径
+"""
+    return f"""\
+## 默认用户指令（无需长篇 prompt）
+
+用户只需 `@` 本 agent 并提供 **`run_dir`（或 `project_dir`）** 请求执行本阶段即可；**不要**要求用户写出 Skill 名、ToolSearch 查询、工具名或 fallback 禁令——由本段 SOP 自动执行。
+
+**最短有效示例：**
+```
+@agent-{agent_type} 在 run_dir=<绝对路径> 执行本阶段
+```
+
+若用户已给出 `run_dir` 与阶段意图，**立即**按下方流程执行，勿反复确认。
+
+## SOP 工作流（阻塞 — 必须按顺序）
+
+1. **第一步（必须，仅一次）**：`Skill(skill="{skill_name}")`
+2. **第二步**：`ToolSearch(query="execute pipeline stage {stage_label}")` 或 Skill 任务指南中的搜索建议
+3. **第三步**：调用 pipeline 主工具
+{pipeline_line}{bridge_line}
+4. **第四步**：验证输出契约与 gate 结果（见下方「输出契约」及「执行后必须验证」）
+5. **主路径失败**：报告工具名 + error，**停止** — 禁止因超时/一次失败就改调 Bridge、Bash 脚本或其他 SDK 工具
+
+## 长耗时说明
+
+Pipeline 主工具可能运行 **1–10+ 分钟**（外部 API、批处理、LLM）。等待主工具完成；**禁止**因超时就切换 Bridge 或未在 Skill 中列出的工具。
+
+{SOP_TOOLSEARCH_GUIDANCE}
+
+{SOP_TOOL_FAILURE_RECOVERY}
+
+## 禁止（阻塞）
+
+- 禁止委派 coarse/domain agent 代劳本 stage
+- 禁止跳过 Skill → ToolSearch → pipeline 主工具，直接 Grep/Glob SDK 源码
+- 禁止 pipeline 主路径失败后静默 fallback；须向用户明确报告
+{outputs_block}
+## Agent: {agent_type}
+{sdk_section}"""
 
 
 def domain_agent_sop_body(
@@ -207,11 +328,95 @@ def domain_agent_sop_body(
 """
 
 
-def append_sop_overview_routing(body: str, *, sdk_source_dir: str | Path | None = None) -> str:
+def format_overview_stage_pipeline_block(bundle_path: Path | None) -> str:
+    """Generic overview prompt for chaining FWA stage agents via workflow.yaml."""
+    if bundle_path is None:
+        return ""
+    from extensions.sop_converter.workflow_project import read_workflow_stage_pipeline
+
+    rows = read_workflow_stage_pipeline(bundle_path)
+    if not rows:
+        return ""
+
+    table_lines = [
+        "| # | Stage | Agent | 产出 | 备注 |",
+        "|---|-------|-------|------|------|",
+    ]
+    for row in rows:
+        stage_id = row.get("id")
+        name = str(row.get("name") or "")
+        kind = str(row.get("kind") or "agent")
+        agent = row.get("agent")
+        outputs = row.get("output_files") or []
+        output_text = ", ".join(f"`{f}`" for f in outputs) if outputs else "—"
+        if kind == "gate":
+            gate_mode = row.get("gate_mode") or "manual"
+            note = f"GATE ({gate_mode})"
+            agent_text = "—"
+        elif kind == "decision":
+            note = "DECISION"
+            agent_text = "—"
+        else:
+            note = "—"
+            agent_text = f"`{agent}`" if agent else "—"
+        id_cell = str(stage_id) if stage_id is not None else "—"
+        table_lines.append(
+            f"| {id_cell} | {name} | {agent_text} | {output_text} | {note} |"
+        )
+
+    table = "\n".join(table_lines)
+    return f"""\
+## 流水线 Stage 编排（Overview 默认行为）
+
+用户只需提供 **`run_dir`**（绝对路径）并说明 **从哪一 stage 开始 / 跑到哪一 stage**，Overview **按 workflow 顺序委派 stage agent**，**禁止**替子 agent 执行 Skill / ToolSearch / pipeline 工具。
+
+### 用户最短有效示例
+
+```
+在 run_dir=/path/to/run 从 Stage 4 做到 Stage 6
+```
+
+```
+继续 run_dir=/path/to/run 的流水线（从上次 proceed 的下一阶段开始）
+```
+
+```
+在 run_dir=/path/to/run 执行到 LITERATURE_SCREEN 为止
+```
+
+### Overview 委派规则（阻塞）
+
+1. **只路由**：``Agent(subagent_type="<stage-agent>", prompt="...")`` — 禁止 overview 自己调用 pipeline / 域 SDK
+2. **传给 stage agent 的 prompt 保持简短**（子 agent 自带完整 SOP）：
+   ```
+   在 run_dir=<绝对路径> 执行本阶段
+   ```
+3. **顺序执行**：每阶段完成后 Read ``run_dir/stage-NN/decision.json``；仅当 ``decision=proceed`` 才委派下一阶段
+4. **失败即停**：子 agent 失败时汇总 error，**禁止**改用 coarse agent / bridge / general-purpose 代跑
+5. **GATE / DECISION**：见下表「备注」列；gate 未通过时停止并报告，不要跳过
+6. **长耗时**：部分 stage（外部 API、实验）可能 **1–10+ 分钟**；等待子 agent 完成，勿因慢而换 agent
+
+### Workflow 阶段表（本 bundle）
+
+{table}
+"""
+
+
+def append_sop_overview_routing(
+    body: str,
+    *,
+    sdk_source_dir: str | Path | None = None,
+    bundle_path: str | Path | None = None,
+) -> str:
     body = (body or "").strip()
     parts: list[str] = []
     if body:
         parts.append(body)
+    pipeline_block = format_overview_stage_pipeline_block(
+        Path(bundle_path) if bundle_path is not None else None
+    )
+    if pipeline_block and pipeline_block.strip() not in body:
+        parts.append(pipeline_block.strip())
     routing = SOP_OVERVIEW_ROUTING.strip()
     if routing not in body:
         parts.append(routing)

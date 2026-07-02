@@ -147,5 +147,69 @@ class SharedMemoryManager:
             self.assertTrue((tmp / "team-memory").is_dir())
 
 
+    def test_module_fn_required_kwonly_after_optional_parses(self) -> None:
+        """Regression: a module-level function whose source uses ``*`` to mark
+        a required keyword-only arg (e.g. ``timeout_seconds``) after optional
+        args must generate a syntactically valid wrapper stub.
+
+        Previously the non-class-method branch passed ``op.parameters`` raw
+        (no required-before-optional reordering), producing
+        ``def f(a=None, b, c=None)`` which raises
+        ``SyntaxError: non-default argument follows default argument``.
+        """
+        SourceOperation = self.SourceOperation
+        from extensions.sop_converter.source_parser import SourceCodeParser
+
+        src = '''\nasync def request(session, method, url, *, headers=None,\n    json_body=None, timeout_seconds, max_bytes=None):\n    """Perform an HTTP request."""\n    return None\n'''
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            pkg = tmp / "demo_pkg"
+            pkg.mkdir()
+            (pkg / "__init__.py").write_text("")
+            (pkg / "_http.py").write_text(src)
+            parser = SourceCodeParser(tmp, extern_only=False)
+            components = parser.parse()
+            op = next(o for o in components[0].operations if o.name == "request")
+            stub = self.trb._generate_method_stub(
+                op,
+                is_class_method=False,
+                module_name="demo_pkg._http",
+            )
+            ast.parse(stub)  # must not raise
+            # required kwonly arg stays required in the signature (no ``=...``)
+            def_line = stub.splitlines()[0]
+            self.assertIn("timeout_seconds", def_line)
+            self.assertNotIn("timeout_seconds=", def_line)
+
+    def test_source_parser_skips_clawcodex_output_dir(self) -> None:
+        """Regression: ``.clawcodex/`` inside a source tree (prior convert
+        output) must not be re-parsed as source — otherwise VALID generated
+        wrappers pollute the component list (and broken ones add noise).
+
+        Uses a *valid* wrapper so the assertion fails when ``.clawcodex`` is
+        not excluded (a valid file produces a real SourceComponent, unlike a
+        SyntaxError file which is skipped regardless)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "real.py").write_text('def api(x: int) -> str:\n    """Doc."""\n    return str(x)\n')
+            bundle = tmp / ".clawcodex" / "proj" / "agent-tools" / "scripts"
+            bundle.mkdir(parents=True)
+            # A valid generated wrapper (mimics real _http_fn_*.py output).
+            (bundle / "generated_wrapper.py").write_text(
+                'def call_tool(name: str) -> str:\n    """Generated wrapper."""\n    return name\n'
+            )
+            from extensions.sop_converter.source_parser import SourceCodeParser
+
+            parser = SourceCodeParser(tmp, extern_only=False)
+            components = parser.parse()
+            names = {c.name for c in components}
+            self.assertIn(tmp.name, names)
+            # No component derived from the generated wrapper under .clawcodex
+            self.assertFalse(
+                any("clawcodex" in n or "generated_wrapper" in n for n in names),
+                f"generated wrapper leaked into components: {names}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

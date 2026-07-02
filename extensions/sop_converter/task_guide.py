@@ -152,6 +152,11 @@ def _required_param_names(comp: SourceComponent, op: SourceOperation) -> list[st
 
 def _format_required_params_note(comp: SourceComponent, op: SourceOperation) -> str:
     names = _required_param_names(comp, op)
+    if op.name == "execute_stage":
+        return (
+            "必填 ``stage``、``run_dir``；``config``/``adapters``/``run_id`` 可省略"
+            "（从 run_dir/config.yaml 加载）。"
+        )
     if not names:
         return ""
     quoted = "、".join(f"``{name}``" for name in names[:4])
@@ -257,6 +262,27 @@ def _resolve_operation(
     return None
 
 
+def _composite_task_guide_rows(skill: SkillSpec) -> list[tuple[str, str, str, str]]:
+    """Composite macro tools promoted at the top of agent_teams task guides."""
+    try:
+        from .composite_tools.registry import composite_task_guide_rows
+    except ImportError:
+        return []
+
+    skill_key = skill.name.removesuffix("-skill")
+    if skill_key != "agent_teams":
+        if "start-team-session" not in skill.allowed_tools:
+            return []
+
+    rows: list[tuple[str, str, str, str]] = []
+    for entry in composite_task_guide_rows():
+        tool = entry["tool"]
+        if skill_key != "agent_teams" and tool not in skill.allowed_tools:
+            continue
+        rows.append((entry["intent"], tool, entry["search"], entry["note"]))
+    return rows
+
+
 def generate_task_guide_markdown(
     skill: SkillSpec,
     components: list[SourceComponent],
@@ -285,7 +311,9 @@ def generate_task_guide_markdown(
     ranked.sort(key=lambda item: item[0], reverse=True)
 
     selected = _select_task_guide_entries(ranked, max_entries=max_entries)
-    if not selected:
+
+    composite_rows = _composite_task_guide_rows(skill)
+    if not selected and not composite_rows:
         return ""
 
     skill_name = _skill_invoke_name(skill.name)
@@ -303,6 +331,9 @@ def generate_task_guide_markdown(
         "| 用户意图（示例） | 工具 | 搜索建议 | 说明 |",
         "|----------------|------|----------|------|",
     ]
+
+    for intent, tool_ref, search, summary in composite_rows:
+        lines.append(f"| {intent} | `{tool_ref}` | {search} | {summary} |")
 
     for tool_ref, comp, op in selected:
         intents = "；".join(_intent_examples_from_doc(op.description, op.name))
@@ -343,9 +374,26 @@ def format_flat_skill_markdown(
     *,
     components: list[SourceComponent] | None = None,
     skill_suffix: str = "-skill",
+    contract: object | None = None,
+    bridge_tool: str | None = None,
 ) -> str:
     """Format a flat ``*-skill.md`` file (frontmatter + body + optional tool list)."""
+    from extensions.sop_converter.workflow_mode.generator.artifact_semantics import (
+        format_io_contract_markdown,
+    )
+
     skill_name = f"{skill.name}{skill_suffix}"
+    allowed_tools = list(skill.allowed_tools)
+    if bridge_tool and bridge_tool not in allowed_tools:
+        allowed_tools.append(bridge_tool)
+    elif contract is not None:
+        bridge_candidate = "autoresearchclaw-execute-stage"
+        if (
+            "researchclaw-pipeline-execute-stage" in allowed_tools
+            and bridge_candidate not in allowed_tools
+        ):
+            allowed_tools.append(bridge_candidate)
+
     lines = [
         "---",
         f"name: {skill_name}",
@@ -353,7 +401,7 @@ def format_flat_skill_markdown(
         "user-invocable: true",
         "allowed-tools:",
     ]
-    for tool in skill.allowed_tools:
+    for tool in allowed_tools:
         lines.append(f"  - {tool}")
     lines.append("---")
     lines.append("")
@@ -362,12 +410,23 @@ def format_flat_skill_markdown(
     lines.append(skill.description)
     lines.append("")
 
+    if contract is not None:
+        io_section = format_io_contract_markdown(contract)
+        if io_section:
+            lines.append(io_section)
+            lines.append("")
+
     if components:
-        guide = generate_task_guide_markdown(skill, components)
+        guide_skill = SkillSpec(
+            name=skill.name,
+            description=skill.description,
+            allowed_tools=allowed_tools,
+        )
+        guide = generate_task_guide_markdown(guide_skill, components)
         if guide:
             lines.append(guide)
 
     lines.append("## Included Tools")
-    for tool in skill.allowed_tools:
+    for tool in allowed_tools:
         lines.append(f"- `{tool}`")
     return "\n".join(lines) + "\n"

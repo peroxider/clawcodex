@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Iterable
+from typing import Any, Iterable
 
 from clawcodex_ext.agent.agent_definitions import AgentDefinition, get_built_in_agents
 from clawcodex_ext.agent.parse_agent_markdown import parse_agent_from_markdown
@@ -196,3 +196,65 @@ def get_agent_definitions_with_overrides(cwd: str) -> list[AgentDefinition]:
     except Exception:
         logger.exception("agent discovery failed; falling back to built-ins")
         return list(get_built_in_agents())
+
+
+def resolve_agent_dir_override(
+    tool_context: Any | None = None,
+    runtime_context: Any | None = None,
+) -> Path | None:
+    """Return the bundle / ``--agent <dir>`` root that owns ``.claude/agents``."""
+    from pathlib import Path
+
+    candidates: list[Any] = []
+    if runtime_context is not None:
+        opts = getattr(runtime_context, "options", None)
+        if opts is not None:
+            candidates.append(getattr(opts, "agent_dir_override", None))
+            candidates.append(getattr(opts, "bundle_path", None))
+    if tool_context is not None:
+        candidates.append(getattr(tool_context, "_agent_dir_override", None))
+        tc_opts = getattr(tool_context, "options", None)
+        if tc_opts is not None:
+            candidates.append(getattr(tc_opts, "agent_dir_override", None))
+            candidates.append(getattr(tc_opts, "bundle_path", None))
+
+    for raw in candidates:
+        if raw is None:
+            continue
+        path = Path(str(raw)).expanduser()
+        try:
+            resolved = path.resolve()
+        except OSError:
+            continue
+        agents_dir = resolved / ".claude" / "agents"
+        if agents_dir.is_dir():
+            return resolved
+    return None
+
+
+def get_agents_for_mentions(
+    workspace_root: str | Path,
+    *,
+    tool_context: Any | None = None,
+    runtime_context: Any | None = None,
+) -> list[AgentDefinition]:
+    """Agents visible for ``@agent-<type>`` mentions and REPL/TUI completion.
+
+    Merges workspace discovery with bundle agents from ``--agent <dir>``
+    (stored on ``runtime_context.options``, ``tool_context._agent_dir_override``,
+    or ``bundle_path``).
+    """
+    from pathlib import Path
+
+    workspace_root = Path(workspace_root)
+    agents = list(get_agent_definitions_with_overrides(str(workspace_root)))
+    override = resolve_agent_dir_override(tool_context, runtime_context)
+    if override is None:
+        return agents
+
+    known = {a.agent_type for a in agents}
+    for agent in get_agent_definitions_with_overrides(str(override)):
+        if agent.agent_type not in known:
+            agents.append(agent)
+            known.add(agent.agent_type)
+    return agents

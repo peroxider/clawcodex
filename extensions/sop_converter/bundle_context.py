@@ -73,6 +73,40 @@ def build_bundle_context(
     )
 
 
+def _same_resolved_path(a: Path, b: Path) -> bool:
+    try:
+        return a.expanduser().resolve() == b.expanduser().resolve()
+    except OSError:
+        return False
+
+
+def apply_sdk_source_working_directory(tool_context: Any, bundle: BundleContext) -> Path | None:
+    """Add ``bundle.sdk_source_dir`` to tool working-directory allowlist.
+
+    Enables Bash ``cd`` and Read/Glob/Grep under the SDK tree recorded in
+    ``bundle.json``, matching ``sop_exploration_guard`` expectations.
+    """
+    sdk = bundle.sdk_source_dir
+    if sdk is None:
+        return None
+    try:
+        resolved = sdk.expanduser().resolve()
+    except OSError:
+        logger.warning("bundle sdk_source_dir cannot be resolved: %s", sdk)
+        return None
+    if not resolved.is_dir():
+        logger.debug("bundle sdk_source_dir is not a directory: %s", resolved)
+        return None
+
+    existing: tuple[Path, ...] = getattr(tool_context, "additional_working_directories", ()) or ()
+    if any(_same_resolved_path(root, resolved) for root in existing):
+        return resolved
+
+    tool_context.additional_working_directories = (*existing, resolved)
+    logger.info("Added SDK source to working directories: %s", resolved)
+    return resolved
+
+
 def collect_tool_names_from_skills(skills: list[Any]) -> list[str]:
     names: dict[str, bool] = {}
     for skill in skills:
