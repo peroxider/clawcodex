@@ -299,7 +299,7 @@ class PromptBuilder:
         CCB's interactive session. The user part becomes the per-turn
         user message.
 
-        Falls back to (full, "") when the marker is missing so callers
+        Falls back to ("", full) when the marker is missing so callers
         that pass an old / un-migrated workflow.md still work — the full
         prompt lands in user and the system append is empty.
         """
@@ -318,7 +318,7 @@ class PromptBuilder:
         if marker in full:
             system_part, user_part = full.split(marker, 1)
             return system_part.strip(), user_part.strip()
-        return full, ""
+        return "", full
 
     @staticmethod
     def render_rebase(

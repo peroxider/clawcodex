@@ -145,14 +145,36 @@ class TestRenderParts(unittest.TestCase):
             PromptBuilder,
             get_workflow_store,
         )
-        from pathlib import Path
 
-        # Load the project's workflow.md so the marker is present in the
-        # active template; otherwise the fallback _DEFAULT_PROMPT (which
-        # has no marker) would short-circuit render_parts to (full, "").
-        repo_root = Path(__file__).resolve().parents[2]
+        # Load a minimal marker-bearing workflow so the split path is
+        # exercised without depending on a repo-root workflow.md file.
+        self.tmp = tempfile.TemporaryDirectory()
+        workflow_path = Path(self.tmp.name) / "WORKFLOW.md"
+        workflow_path.write_text(
+            "\n".join(
+                [
+                    "---",
+                    "agent:",
+                    "  max_turns: 2",
+                    "---",
+                    "Decoupling principles",
+                    "",
+                    "Your task:",
+                    "",
+                    PromptBuilder.USER_MESSAGE_MARKER,
+                    "",
+                    "Issue: {{ issue.identifier }} - {{ issue.title }}",
+                    "{% if issue.description %}",
+                    "Description:",
+                    "{{ issue.description }}",
+                    "{% endif %}",
+                    "Labels: {{ issue.labels | join(', ') }}",
+                ]
+            ),
+            encoding="utf-8",
+        )
         store = get_workflow_store()
-        store.load(str(repo_root / "workflow.md"))
+        store.load(str(workflow_path))
         self._prompt_builder = PromptBuilder
 
     def tearDown(self) -> None:
@@ -160,6 +182,7 @@ class TestRenderParts(unittest.TestCase):
 
         # Reset the singleton so other tests aren't pinned to workflow.md
         get_workflow_store().reset()
+        self.tmp.cleanup()
 
     def test_marker_present_splits_into_two_nonempty_parts(self) -> None:
         issue = _FakeIssue(
@@ -213,8 +236,9 @@ class TestRenderParts(unittest.TestCase):
 
     def test_fallback_when_marker_missing(self) -> None:
         """If workflow.md lacks the marker, render_parts returns the
-        full prompt as system and an empty user string. This is the
-        backward-compat path for projects that haven't migrated yet."""
+        full prompt as the user string with an empty system append. This
+        is the backward-compat path for projects that haven't migrated
+        yet and prevents headless runs from receiving an empty prompt."""
         from unittest.mock import patch
 
         issue = _FakeIssue(
@@ -227,8 +251,8 @@ class TestRenderParts(unittest.TestCase):
         sentinel = "MARKERLESS_PROMPT_42"
         with patch.object(self._prompt_builder, "render", return_value=sentinel):
             system, user = self._prompt_builder.render_parts(issue)
-        self.assertEqual(system, sentinel)
-        self.assertEqual(user, "")
+        self.assertEqual(system, "")
+        self.assertEqual(user, sentinel)
 
 
 class TestBuildContinuationPromptPythonExecutable(unittest.TestCase):

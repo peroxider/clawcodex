@@ -5,6 +5,7 @@ Port of Symphony's Config.Schema (Ecto) to plain Python dataclasses.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -17,6 +18,8 @@ from ..tracker import (
     normalize_tracker_kind,
     tracker_kind_info,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +110,211 @@ def _normalize_workspace_strategy(value: Any) -> str:
     if strategy not in {"isolated", "shared", "sequential"}:
         raise ValueError("workspace.strategy must be one of: isolated, shared, sequential")
     return strategy
+
+
+def _parse_modes_config(raw: dict[str, Any]) -> "ModesConfig":
+    """Build a ``ModesConfig`` from the parsed ``modes`` YAML section.
+
+    Tolerant of:
+    * missing section (``raw == {}``) → all defaults
+    * unknown router kinds → coerced to ``"none"``
+    * malformed ``min_confidence`` → coerced to default ``0.5``
+    """
+    router_raw = raw.get("router") or {}
+    pipeline_raw = raw.get("pipeline") or {}
+    debate_raw = raw.get("debate") or {}
+
+    router_kind = str(router_raw.get("kind", "none")).strip().lower()
+    if router_kind not in {"none", "heuristic", "llm"}:
+        logger.warning(
+            "modes.router.kind=%r is unknown — falling back to 'none'",
+            router_kind,
+        )
+        router_kind = "none"
+
+    try:
+        min_conf = float(router_raw.get("min_confidence", 0.5))
+    except (TypeError, ValueError):
+        min_conf = 0.5
+    min_conf = max(0.0, min(1.0, min_conf))
+
+    try:
+        router_timeout = float(router_raw.get("timeout_seconds", 15.0))
+    except (TypeError, ValueError):
+        router_timeout = 15.0
+    router_timeout = max(1.0, router_timeout)
+
+    pipeline_handoff = str(pipeline_raw.get("handoff", "prompt")).strip().lower()
+    if pipeline_handoff not in {"prompt", "mailbox"}:
+        logger.warning(
+            "modes.pipeline.handoff=%r is unknown — falling back to 'prompt'",
+            pipeline_handoff,
+        )
+        pipeline_handoff = "prompt"
+
+    return ModesConfig(
+        enabled=_normalize_string_list(raw.get("enabled"), default=["single"]),
+        default=str(raw.get("default", "single")).strip().lower() or "single",
+        router_kind=router_kind,
+        router_model=(
+            str(router_raw.get("model", "deepseek-v4-flash")).strip()
+            or "deepseek-v4-flash"
+        ),
+        router_endpoint=(
+            str(
+                router_raw.get(
+                    "endpoint", "https://api.deepseek.com/chat/completions"
+                )
+            ).strip()
+            or "https://api.deepseek.com/chat/completions"
+        ),
+        router_api_key_env=(
+            str(router_raw.get("api_key_env", "DEEPSEEK_API_KEY")).strip()
+            or "DEEPSEEK_API_KEY"
+        ),
+        router_timeout_seconds=router_timeout,
+        router_min_confidence=min_conf,
+        pipeline_stages=_normalize_string_list(
+            pipeline_raw.get("stages"),
+            default=["analyzer", "implementer", "tester"],
+        ),
+        pipeline_max_retries_per_stage=max(
+            0, int(pipeline_raw.get("max_retries_per_stage", 1) or 0)
+        ),
+        pipeline_stage_models=_normalize_model_map(
+            pipeline_raw.get("stage_models")
+        ),
+        pipeline_stage_max_turns=_normalize_int_map(
+            pipeline_raw.get("stage_max_turns"), min_value=1
+        ),
+        pipeline_stage_specs=_normalize_stage_specs(
+            pipeline_raw.get("stage_specs")
+        ),
+        pipeline_handoff=pipeline_handoff,
+        debate_proposers=_normalize_string_list(
+            debate_raw.get("proposers"),
+            default=["proposer_a", "proposer_b"],
+        ),
+        debate_judge_model=(
+            str(debate_raw["judge_model"]).strip()
+            if debate_raw.get("judge_model")
+            else None
+        ),
+        debate_proposer_models=_normalize_model_map(
+            debate_raw.get("proposer_models")
+        ),
+        debate_isolation=_normalize_debate_isolation(
+            debate_raw.get("isolation", "reset")
+        ),
+        debate_parallel=bool(debate_raw.get("parallel", False)),
+        debate_judge_mode=_normalize_debate_judge_mode(
+            debate_raw.get("judge_mode", "pick")
+        ),
+    )
+
+
+def _normalize_int_map(value: Any, *, min_value: int = 0) -> dict[str, int]:
+    """Same shape as ``_normalize_model_map`` but for int values.
+
+    Silently drops entries whose value can't be coerced to int or is
+    below ``min_value``. Useful for per-stage numeric overrides like
+    ``max_turns`` where a 0 or negative value is nonsense.
+    """
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, int] = {}
+    for k, v in value.items():
+        key = str(k).strip()
+        if not key:
+            continue
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            continue
+        if iv < min_value:
+            continue
+        out[key] = iv
+    return out
+
+
+def _normalize_stage_specs(value: Any) -> dict[str, dict[str, Any]]:
+    """Normalize Pipeline stage_specs YAML into a clean dict.
+
+    Silently drops:
+    * non-dict entries
+    * entries without a ``kind`` key
+    * entries whose kind isn't in the allowed set
+
+    (Silent drop rather than raise because config-loader shouldn't
+    crash the daemon on operator typos; PipelineModeRunner will still
+    log an unknown-key warning if the referenced stage doesn't exist.)
+    """
+    if not isinstance(value, dict):
+        return {}
+    allowed_kinds = {"agent", "debate", "coordinator"}
+    out: dict[str, dict[str, Any]] = {}
+    for stage_name, spec in value.items():
+        if not isinstance(spec, dict):
+            logger.warning(
+                "modes.pipeline.stage_specs[%r] is not a dict — ignored",
+                stage_name,
+            )
+            continue
+        kind = str(spec.get("kind", "agent")).strip().lower()
+        if kind not in allowed_kinds:
+            logger.warning(
+                "modes.pipeline.stage_specs[%r].kind=%r not in %s — ignored",
+                stage_name,
+                kind,
+                sorted(allowed_kinds),
+            )
+            continue
+        config = spec.get("config") or {}
+        if not isinstance(config, dict):
+            config = {}
+        out[str(stage_name).strip()] = {"kind": kind, "config": dict(config)}
+    return out
+
+
+def _normalize_debate_judge_mode(value: Any) -> str:
+    candidate = str(value or "pick").strip().lower()
+    if candidate not in {"pick", "synthesize"}:
+        logger.warning(
+            "modes.debate.judge_mode=%r is unknown — falling back to 'pick'",
+            candidate,
+        )
+        return "pick"
+    return candidate
+
+
+def _normalize_model_map(value: Any) -> dict[str, str]:
+    """Normalize a YAML map of role-name → model-id into a clean dict.
+
+    Tolerant of:
+    * None / missing key → empty dict
+    * non-string keys/values → coerced via str() + stripped
+    * empty-string values → dropped (signals "use default")
+    """
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in value.items():
+        key = str(k).strip()
+        val = str(v).strip() if v is not None else ""
+        if key and val:
+            out[key] = val
+    return out
+
+
+def _normalize_debate_isolation(value: Any) -> str:
+    candidate = str(value or "reset").strip().lower()
+    if candidate not in {"reset", "worktree", "none"}:
+        logger.warning(
+            "modes.debate.isolation=%r is unknown — falling back to 'reset'",
+            candidate,
+        )
+        return "reset"
+    return candidate
 
 
 def _resolve_orchestrator_permission_mode(
@@ -320,6 +528,17 @@ class AgentConfig:
     # Works with all tracker kinds (local, GitHub, Gitee, GitCode, Linear).
     review_required: bool = False
     auto_approve: bool = False
+    # Multi-agent collaboration mode (MVP). When True, the agent
+    # launched for each issue runs in "coordinator mode" — it gets the
+    # restricted coordinator tool set (Agent / SendMessage / TaskStop +
+    # lightweight Read / WebSearch / WebFetch) and is expected to
+    # spawn worker sub-agents via the Agent tool, coordinating their
+    # work via SendMessage (mailbox JSONL). All multi-agent
+    # infrastructure already exists in clawcodex_ext/coordinator/ and
+    # clawcodex_ext/tool_system/tools/{agent,send_message}.py; this
+    # flag merely flips the env var (CLAUDE_CODE_COORDINATOR_MODE)
+    # that activates them before AgentRunner.run().
+    coordinator_mode: bool = False
     # F-?? root-cause fix: stagnation / loop guards. After
     # ``max_no_op_turns`` consecutive turns where the LLM made zero
     # tool calls and produced empty output, the runner emits
@@ -433,6 +652,114 @@ class ServerConfig:
     host: str = "127.0.0.1"
 
 
+@dataclass
+class ModesConfig:
+    """Multi-agent collaboration-mode configuration.
+
+    Wired by ``orchestrator.Orchestrator`` to instantiate ``ModeSelector``
+    plus a ``Router`` backend and register the requested ``ModeRunner``
+    implementations. Reading this section in workflow.md is opt-in:
+    omitting the section yields ``ModesConfig()`` defaults, which mean
+    "Phase-1 behavior — only ``single`` mode is registered and routing
+    is disabled".
+
+    YAML shape::
+
+        modes:
+          enabled: [single, pipeline]       # which modes to register
+          default: single                   # fallback when router fails
+          router:
+            kind: heuristic                 # heuristic | llm | none
+            model: <router-model>           # only used when kind=llm
+            min_confidence: 0.5             # router picks below this fall back
+          pipeline:
+            stages: [analyzer, implementer, tester]
+
+    Unknown keys are ignored — the loader tolerates new keys added in
+    later phases so an older daemon can still read a forward-versioned
+    workflow.md without crashing.
+    """
+
+    enabled: list[str] = field(default_factory=lambda: ["single"])
+    default: str = "single"
+    router_kind: str = "none"            # "none" | "heuristic" | "llm"
+    router_model: str = "deepseek-v4-flash"  # only consulted when router_kind=="llm"
+    router_endpoint: str = "https://api.deepseek.com/chat/completions"
+    router_api_key_env: str = "DEEPSEEK_API_KEY"
+    router_timeout_seconds: float = 15.0
+    router_min_confidence: float = 0.5
+    pipeline_stages: list[str] = field(
+        default_factory=lambda: ["analyzer", "implementer", "tester"]
+    )
+    # Stage retry: how many times PipelineModeRunner will re-attempt a
+    # stage that exited with a terminal-failure status before aborting
+    # the whole pipeline. 0 = no retries (legacy behavior).
+    pipeline_max_retries_per_stage: int = 1
+    # Per-stage model overrides — heterogeneous LLM agents within one
+    # pipeline. Each stage name maps to a model id; absent = workflow
+    # default. Sequential execution → no concurrent env-var races, so
+    # we just try/finally swap workflow.agent.model per stage.
+    # Makes Pipeline a *real* multi-agent system (different "agents"
+    # via different LLM brains, not just role labels).
+    pipeline_stage_models: dict[str, str] = field(default_factory=dict)
+    # Per-stage max_turns override — workflow.agent.max_turns is a
+    # single value applied everywhere; realistic Pipelines need
+    # different budgets per stage (analyzer reads a lot, implementer
+    # edits fast, tester runs commands). Absent stage = workflow default.
+    pipeline_stage_max_turns: dict[str, int] = field(default_factory=dict)
+    # Nested mode dispatch — a Pipeline stage can itself run under a
+    # different ModeRunner instead of a plain AgentRunner. Absent /
+    # empty = agent (legacy). Only "agent", "debate", "coordinator"
+    # are allowed; nested pipeline is rejected to avoid the infinite
+    # recursion trap.
+    #
+    # YAML shape:
+    #   modes:
+    #     pipeline:
+    #       stages: [analyzer, implementer, tester]
+    #       stage_specs:
+    #         implementer:
+    #           kind: debate
+    #           config:
+    #             proposers: [conservative, bold]
+    #             judge_mode: synthesize
+    #             isolation: worktree
+    pipeline_stage_specs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Handoff strategy between Pipeline stages:
+    #   "prompt"  — inject prior output as text in next stage's prompt (legacy)
+    #   "mailbox" — each stage SendMessage(to=<next stage>); next stage Reads
+    #               its mailbox first. Uses the existing team.json /
+    #               SendMessage infra from the Coordinator mode work.
+    pipeline_handoff: str = "prompt"
+    debate_proposers: list[str] = field(
+        default_factory=lambda: ["proposer_a", "proposer_b"]
+    )
+    # Optional stronger model for the judge stage. None = use the
+    # workflow's default agent.model (same as proposers). Set to e.g.
+    # "deepseek-v4" to upgrade just the judging step.
+    debate_judge_model: str | None = None
+    # Judge behavior:
+    #   "pick"       — pick 1 winning proposer verbatim (default; legacy)
+    #   "synthesize" — combine best ideas from ALL proposers into a
+    #                  hybrid solution, citing which proposer contributed
+    #                  each piece. Better fit when both proposals have
+    #                  genuine merits and you don't have to pick one.
+    debate_judge_mode: str = "pick"
+    # Per-proposer model overrides — only honored in sequential mode.
+    # In parallel mode (see debate_parallel) all proposers share the
+    # workflow default model to avoid concurrent env mutations.
+    debate_proposer_models: dict[str, str] = field(default_factory=dict)
+    # Workspace isolation strategy between proposers (and before judge):
+    #   "reset"    — git reset --hard + git clean (default; cheap, single dir)
+    #   "worktree" — git worktree add per proposer (real physical isolation)
+    #   "none"     — no isolation (proposer A's edits leak to proposer B)
+    debate_isolation: str = "reset"
+    # Parallel proposers (asyncio.gather). Requires isolation=worktree
+    # so each parallel branch has its own physical workspace. When False
+    # (default), proposers run sequentially.
+    debate_parallel: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Top-level WorkflowConfig
 # ---------------------------------------------------------------------------
@@ -476,6 +803,7 @@ class WorkflowConfig:
     review_feedback: ReviewFeedbackConfig = field(default_factory=ReviewFeedbackConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
+    modes: ModesConfig = field(default_factory=ModesConfig)
     pr_conflict_scan: "PrConflictScanConfig" = field(
         default_factory=lambda: PrConflictScanConfig()
     )
@@ -495,6 +823,7 @@ class WorkflowConfig:
         review_feedback_raw = raw.get("review_feedback", {})
         observability_raw = raw.get("observability", {})
         server_raw = raw.get("server", {})
+        modes_raw = raw.get("modes", {}) or {}
         pr_conflict_scan_raw = raw.get("pr_conflict_scan", {})
 
         tracker_kind = normalize_tracker_kind(tracker_raw.get("kind", "linear"))
@@ -631,6 +960,8 @@ class WorkflowConfig:
             # instead of COMPLETED, requiring human approve CLI command.
             review_required=bool(agent_raw.get("review_required", False)),
             auto_approve=bool(agent_raw.get("auto_approve", False)),
+            # MVP multi-agent: coordinator mode toggle (from workflow.md)
+            coordinator_mode=bool(agent_raw.get("coordinator_mode", False)),
             # F-40: named workflow phases drive honest progress
             # percentages in ToolContextProgressSink. ``phases`` is
             # parsed as a list (the YAML ``- a`` / ``- b`` syntax)
@@ -735,6 +1066,7 @@ class WorkflowConfig:
                 port=server_raw.get("port"),
                 host=server_raw.get("host", "127.0.0.1"),
             ),
+            modes=_parse_modes_config(modes_raw),
             pr_conflict_scan=PrConflictScanConfig(
                 enabled=bool(pr_conflict_scan_raw.get("enabled", False)),
                 poll_interval_ms=pr_conflict_scan_raw.get("poll_interval_ms", 300_000),

@@ -26,6 +26,14 @@ from .git_sync import (
 )
 from .issue import Issue
 from .issue_registry import IssueRegistry, IssueStatus
+from .mode_router import HeuristicRouter, LLMRouter, Router
+from .mode_selector import ModeSelector
+from . import modes as _modes
+from .modes.base import DEFAULT_MODE, ModeDecision
+from .modes.coordinator import CoordinatorModeRunner
+from .modes.debate import DebateModeRunner
+from .modes.pipeline import PipelineModeRunner
+from .modes.single import SingleModeRunner
 from .prompt_builder import PromptBuilder
 from .review_feedback import ReviewFeedbackService, ReviewFollowup
 from .status_dashboard import SessionStatus, StatusDashboard
@@ -62,6 +70,7 @@ class OrchestratorState:
     poll_check_in_progress: bool = False
     running: dict[str, AgentSession] = field(default_factory=dict)
     completed: set[str] = field(default_factory=set)
+    failed: set[str] = field(default_factory=set)
     pending_review: set[str] = field(default_factory=set)  # awaiting human review
     claimed: set[str] = field(default_factory=set)
     retry_queue: list[RetryItem] = field(default_factory=list)
@@ -99,6 +108,13 @@ class Orchestrator:
         self.workspace = workspace
         self.agent_runner = agent_runner
         self.stage_runners = stage_runners or {}
+        # F-?? collaboration modes — Phase 2 wires the registry +
+        # ``ModeSelector`` + ``Router`` based on the ``modes:`` YAML
+        # section. ``ModesConfig`` defaults (no router, only "single"
+        # enabled) preserve byte-identical behavior for workflows that
+        # don't opt in.
+        self._register_collaboration_modes(workflow, agent_runner)
+        self._mode_selector = self._build_mode_selector(workflow)
         self._workflow_yaml_path = workflow_yaml_path
         self._workflow_orchestrator = None
 
@@ -375,6 +391,191 @@ class Orchestrator:
                     payload.setdefault('commit', commit)
         payload.update({k: v for k, v in extra.items() if v is not None})
         return payload
+
+    def _register_collaboration_modes(
+        self, workflow: WorkflowConfig, agent_runner: AgentRunner
+    ) -> None:
+        """Register the ``ModeRunner`` instances that match ``modes.enabled``.
+
+        ``single`` is always registered (it's the safe fallback). Other
+        modes are registered only when listed in ``workflow.modes.enabled``
+        so an operator can disable a mode without removing its code.
+        """
+        # Always register "single" — it's both the default fallback and
+        # the run mode for legacy / followup / review_followup paths.
+        _modes.register("single", SingleModeRunner(agent_runner))
+
+        enabled = {m.strip().lower() for m in workflow.modes.enabled if m}
+        if "pipeline" in enabled:
+            stages = tuple(workflow.modes.pipeline_stages)
+            max_retries = int(
+                getattr(workflow.modes, "pipeline_max_retries_per_stage", 1)
+            )
+            stage_models = dict(
+                getattr(workflow.modes, "pipeline_stage_models", None) or {}
+            )
+            stage_max_turns = dict(
+                getattr(workflow.modes, "pipeline_stage_max_turns", None) or {}
+            )
+            stage_specs = dict(
+                getattr(workflow.modes, "pipeline_stage_specs", None) or {}
+            )
+            handoff = str(getattr(workflow.modes, "pipeline_handoff", "prompt"))
+            try:
+                _modes.register(
+                    "pipeline",
+                    PipelineModeRunner(
+                        agent_runner,
+                        stages=stages,
+                        max_retries_per_stage=max_retries,
+                        stage_models=stage_models,
+                        stage_max_turns=stage_max_turns,
+                        stage_specs=stage_specs,
+                        handoff=handoff,
+                    ),
+                )
+            except ValueError as exc:
+                # Bad stage_specs (e.g. kind=pipeline nested). Fall back
+                # to a spec-less pipeline so the daemon keeps running.
+                logger.warning(
+                    "Pipeline registration failed (%s) — registering "
+                    "without stage_specs",
+                    exc,
+                )
+                _modes.register(
+                    "pipeline",
+                    PipelineModeRunner(
+                        agent_runner,
+                        stages=stages,
+                        max_retries_per_stage=max_retries,
+                        stage_models=stage_models,
+                        stage_max_turns=stage_max_turns,
+                        stage_specs={},
+                        handoff=handoff,
+                    ),
+                )
+                stage_specs = {}
+            logger.info(
+                "Collaboration mode registered: pipeline (stages=%s, "
+                "max_retries_per_stage=%d, stage_models=%s, "
+                "stage_max_turns=%s, stage_specs=%s, handoff=%s)",
+                stages,
+                max_retries,
+                stage_models or "(none)",
+                stage_max_turns or "(none)",
+                stage_specs or "(none)",
+                handoff,
+            )
+        if "coordinator" in enabled:
+            _modes.register(
+                "coordinator", CoordinatorModeRunner(agent_runner)
+            )
+            logger.info("Collaboration mode registered: coordinator")
+        if "debate" in enabled:
+            proposers = tuple(
+                getattr(workflow.modes, "debate_proposers", None)
+                or ("proposer_a", "proposer_b")
+            )
+            judge_model = getattr(workflow.modes, "debate_judge_model", None)
+            isolation = getattr(workflow.modes, "debate_isolation", "reset")
+            proposer_models = dict(
+                getattr(workflow.modes, "debate_proposer_models", None) or {}
+            )
+            parallel = bool(
+                getattr(workflow.modes, "debate_parallel", False)
+            )
+            judge_mode = str(
+                getattr(workflow.modes, "debate_judge_mode", "pick")
+            )
+            try:
+                _modes.register(
+                    "debate",
+                    DebateModeRunner(
+                        agent_runner,
+                        proposers=proposers,
+                        judge_model=judge_model,
+                        isolation=isolation,
+                        proposer_models=proposer_models,
+                        parallel=parallel,
+                        judge_mode=judge_mode,
+                    ),
+                )
+            except ValueError as exc:
+                # Most likely: parallel=True without isolation=worktree,
+                # or an invalid judge_mode. Fall back to safe defaults so
+                # the daemon keeps running.
+                logger.warning(
+                    "Debate registration failed (%s) — registering with "
+                    "parallel=False, isolation='%s', judge_mode='pick'",
+                    exc,
+                    isolation,
+                )
+                _modes.register(
+                    "debate",
+                    DebateModeRunner(
+                        agent_runner,
+                        proposers=proposers,
+                        judge_model=judge_model,
+                        isolation=isolation,
+                        proposer_models=proposer_models,
+                        parallel=False,
+                        judge_mode="pick",
+                    ),
+                )
+                parallel = False
+                judge_mode = "pick"
+            logger.info(
+                "Collaboration mode registered: debate (proposers=%s, "
+                "judge_model=%s, isolation=%s, parallel=%s, "
+                "proposer_models=%s, judge_mode=%s)",
+                proposers,
+                judge_model or "(default)",
+                isolation,
+                parallel,
+                proposer_models or "(none)",
+                judge_mode,
+            )
+
+    def _build_mode_selector(self, workflow: WorkflowConfig) -> ModeSelector:
+        """Construct ``ModeSelector`` with the configured router backend."""
+        router: Router | None
+        kind = workflow.modes.router_kind
+        if kind == "heuristic":
+            router = HeuristicRouter()
+            logger.info("ModeSelector: router=HeuristicRouter")
+        elif kind == "llm":
+            router = LLMRouter(
+                model=workflow.modes.router_model,
+                endpoint=workflow.modes.router_endpoint,
+                api_key_env_var=workflow.modes.router_api_key_env,
+                timeout_seconds=workflow.modes.router_timeout_seconds,
+            )
+            logger.info(
+                "ModeSelector: router=LLMRouter(model=%s, endpoint=%s, "
+                "api_key_env=%s, timeout=%.1fs)",
+                workflow.modes.router_model,
+                workflow.modes.router_endpoint,
+                workflow.modes.router_api_key_env,
+                workflow.modes.router_timeout_seconds,
+            )
+        else:
+            router = None
+            logger.info("ModeSelector: no router configured (kind=%s)", kind)
+
+        default_mode = workflow.modes.default
+        try:
+            return ModeSelector(
+                default_mode=default_mode,
+                router=router,
+                min_confidence=workflow.modes.router_min_confidence,
+            )
+        except ValueError as exc:
+            # workflow.md misconfiguration — fall back to safe defaults
+            # instead of crashing the daemon at startup.
+            logger.warning(
+                "ModeSelector construction failed (%s); using defaults", exc
+            )
+            return ModeSelector()
 
     def _validate_workspace_strategy(self) -> None:
         if self.workflow.workspace.strategy != 'sequential':
@@ -829,7 +1030,7 @@ class Orchestrator:
                 self._state.claimed.add(issue.id)
                 # Thread-local MDC for the orchestrator launch path —
                 # the agent_runner will refill with run_id once available.
-                from ..logging_setup import set_log_context
+                from .logging_setup import set_log_context
 
                 set_log_context(
                     issue_id=str(issue.id or ""),
@@ -2049,6 +2250,39 @@ class Orchestrator:
         session.sequence_index = sequence_index
         session.integration_branch = integration_branch
         session.base_branch = base_branch
+        # F-?? collaboration mode selection. Phase 1 ships only the
+        # ``single`` mode; ModeSelector returns "single" unless the issue
+        # carries a ``mode:<name>`` label that maps to a registered
+        # runner. The decision is recorded on the session for the
+        # dispatcher in ``_run_issue`` and on the registry record for
+        # audit (`issue list --mode`, dashboard column).
+        try:
+            mode_decision = self._mode_selector.choose(issue)
+        except Exception:
+            logger.exception(
+                "Issue %s ModeSelector.choose raised; defaulting to single",
+                issue.id,
+            )
+            mode_decision = ModeDecision(
+                mode=DEFAULT_MODE,
+                reason="ModeSelector.choose raised; see logs",
+                source="fallback",
+            )
+        session.collaboration_mode = mode_decision.mode
+        session.mode_decision = mode_decision
+        record = self._registry.get(issue.id or "")
+        if record is not None:
+            record.collaboration_mode = mode_decision.mode
+            record.mode_decision_reason = mode_decision.reason
+            record.touch()
+            self._registry._save()
+        logger.info(
+            "Issue %s collaboration_mode=%s (source=%s, reason=%s)",
+            issue.id,
+            mode_decision.mode,
+            mode_decision.source,
+            mode_decision.reason,
+        )
         # F-39 Sub-C: if the registry intent is FOLLOWUP, wire the
         # session so the agent + git_sync know to reuse the existing
         # branch / PR rather than create a new run.
@@ -2237,9 +2471,37 @@ class Orchestrator:
                     if self._workflow_orchestrator is not None:
                         await self._run_issue_with_workflow(session, progress_sink)
                     else:
-                        # Per-stage runner lookup by session run_kind.
-                        # Falls back to main runner when no override is configured.
-                        runner = self.stage_runners.get(session.run_kind, self.agent_runner)
+                        # F-?? collaboration-mode dispatch. For the
+                        # default ``single`` mode (the only one
+                        # registered in Phase 1) we keep the legacy
+                        # ``stage_runners[run_kind] or agent_runner``
+                        # lookup so 270+ existing tests pass byte-
+                        # identically. For non-single modes registered
+                        # in later phases, we dispatch to the
+                        # ``ModeRunner`` from the registry instead, and
+                        # only fall back to the legacy lookup if the
+                        # requested mode isn't registered (e.g. a
+                        # workflow.md loaded against an older daemon).
+                        collab_mode = (
+                            getattr(session, "collaboration_mode", None) or DEFAULT_MODE
+                        )
+                        runner: Any = None
+                        if collab_mode != "single" and session.run_kind == "issue":
+                            try:
+                                runner = _modes.get(collab_mode)
+                            except KeyError:
+                                logger.warning(
+                                    "Issue %s requested mode=%s but it is not "
+                                    "registered; falling back to single",
+                                    session.issue.id,
+                                    collab_mode,
+                                )
+                        if runner is None:
+                            # Per-stage runner lookup by session run_kind.
+                            # Falls back to main runner when no override is configured.
+                            runner = self.stage_runners.get(
+                                session.run_kind, self.agent_runner
+                            )
                         run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
                         session.timeout_deadline_at = time.time() + run_timeout_seconds
                         await asyncio.wait_for(

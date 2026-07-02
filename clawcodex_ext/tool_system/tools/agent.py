@@ -414,6 +414,48 @@ def make_agent_tool(
         # Resolve available tools
         available_tools = registry.list_tools()
 
+        # MVP multi-agent fix: when the parent is in coordinator mode, the
+        # parent's tool registry has been filtered to the coordinator's
+        # restricted set. Sub-agents (workers) need the FULL tool set minus
+        # INTERNAL_WORKER_TOOLS (TeamCreate/SendMessage/etc.). Build a
+        # SEPARATE registry for the sub-agent so the parent's registry is
+        # NOT corrupted after the sub-agent returns.
+        try:
+            from clawcodex_ext.coordinator.mode import (
+                is_coordinator_mode,
+                filter_worker_tools,
+            )
+            if is_coordinator_mode():
+                from src.tool_system.defaults import build_default_registry
+                from src.tool_system.registry import ToolRegistry
+                full_registry = build_default_registry(provider=provider)
+                worker_tools = filter_worker_tools(full_registry.list_tools())
+                available_tools = worker_tools
+                # Build a FRESH ToolRegistry for the sub-agent — do NOT
+                # mutate the parent's registry.
+                sub_registry = ToolRegistry()
+                for t in worker_tools:
+                    try:
+                        sub_registry.register(t)
+                    except Exception:
+                        # Skip duplicates / unregisterable tools gracefully.
+                        pass
+                # Hand the sub-agent the fresh registry. The parent's
+                # original ``registry`` reference passed in via run_params
+                # gets overridden below.
+                registry = sub_registry
+                import logging as _log
+                _log.getLogger(__name__).info(
+                    "MVP: sub-agent receives FRESH worker registry (%d tools)",
+                    len(worker_tools),
+                )
+        except Exception as _exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "MVP worker tool restore failed (continuing with parent set): %s",
+                _exc,
+            )
+
         # Chapter-10 / WI-1.5: prefixed task id (``a<8 base36 chars>``)
         # mirroring TS Task.ts:79-105. Replaces the legacy 32-char
         # ``uuid4().hex`` so SendMessage / TaskStop dispatch keys are

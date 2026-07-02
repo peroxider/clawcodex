@@ -129,6 +129,15 @@ class IssueRecord:
     # Absent from registry.json files written before this field — _load()
     # handles back-compat via the known_fields filter.
     previous_run_ids: list[str] = field(default_factory=list)
+    # Collaboration mode chosen for this run. One of the keys in
+    # ``orchestrator.modes`` registry — "single" by default so existing
+    # records load with byte-identical behavior. Set by
+    # ``orchestrator._launch_issue`` after ``ModeSelector.choose``.
+    collaboration_mode: str = "single"
+    # Why that mode was picked — for operator audit. ``ModeDecision.reason``
+    # is copied verbatim. Absent from records written before mode support;
+    # ``_load`` filters via known_fields so old files still load cleanly.
+    mode_decision_reason: str | None = None
     # F-120: PR conflict persistence. Fields default to safe no-op
     # values so registry.json files written before F-120 load cleanly
     # via the known_fields back-compat filter.
