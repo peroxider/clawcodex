@@ -6,17 +6,19 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 from clawcodex_ext.cli.subcommand_registry import register
 from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
 from clawcodex_ext.intent_forecast.learning import record_feedback, read_recent_feedback
 from clawcodex_ext.intent_forecast.messages import (
-    ForecastResult,
-    ForecastSuggestion,
     format_forecast_for_display,
     parse_selection,
     result_to_dict,
+)
+from clawcodex_ext.intent_forecast.persistence import (
+    load_latest_forecast,
+    read_forecast_history,
+    save_forecast_result,
 )
 from clawcodex_ext.intent_forecast.service import IntentForecastService
 from clawcodex_ext.session_intelligence.queue import enqueue_summary_job
@@ -51,6 +53,7 @@ def run_forecast_command(args: list[str]) -> int:
             "auto_display": cfg.auto_display,
             "idle_seconds": cfg.idle_seconds,
             "feedback_events": len(read_recent_feedback(limit=100)),
+            "forecast_records": len(read_forecast_history(limit=100, cwd=cwd)),
         }
         _print(payload, ns.json)
         return 0
@@ -63,7 +66,7 @@ def run_forecast_command(args: list[str]) -> int:
         _print({"events": counts, "recent": rows[-10:]}, ns.json)
         return 0
     if ns.command == "accept":
-        result = _load_last_cli_result()
+        result = load_latest_forecast(cwd=cwd)
         if result is None:
             print("No saved forecast suggestion is available to accept.", file=sys.stderr)
             return 1
@@ -75,10 +78,8 @@ def run_forecast_command(args: list[str]) -> int:
             print(json.dumps({"prompt": suggestion.prompt, "suggestion_id": suggestion.id}, ensure_ascii=False, indent=2))
         else:
             print(suggestion.prompt)
-        _last_cli_result_path().unlink(missing_ok=True)
         return 0
     if ns.command == "dismiss":
-        _last_cli_result_path().unlink(missing_ok=True)
         print("Forecast dismissed.")
         return 0
     if ns.command == "summarize":
@@ -113,8 +114,7 @@ def run_forecast_command(args: list[str]) -> int:
         print(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2))
     else:
         print(format_forecast_for_display(result))
-    if result.generated:
-        _save_last_cli_result(result)
+    save_forecast_result(result, trigger="cli", cwd=cwd)
     if cfg.feedback_enabled and not result.generated:
         record_feedback("empty", cwd=cwd, fingerprint=result.fingerprint)
     return 0
@@ -126,46 +126,3 @@ def _print(payload: dict, as_json: bool) -> None:
     else:
         for key, value in payload.items():
             print(f"{key}: {value}")
-
-
-def _last_cli_result_path() -> Path:
-    return Path.home() / ".clawcodex" / "intent_forecast" / "last_forecast.json"
-
-
-def _save_last_cli_result(result: ForecastResult) -> None:
-    path = _last_cli_result_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _load_last_cli_result() -> ForecastResult | None:
-    path = _last_cli_result_path()
-    try:
-        data: Any = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
-    raw_suggestions = data.get("suggestions")
-    if not isinstance(raw_suggestions, list):
-        return None
-    suggestions: list[ForecastSuggestion] = []
-    for item in raw_suggestions:
-        if not isinstance(item, dict):
-            continue
-        suggestions.append(
-            ForecastSuggestion(
-                id=str(item.get("id") or ""),
-                title=str(item.get("title") or ""),
-                prompt=str(item.get("prompt") or ""),
-                reason=str(item.get("reason") or ""),
-                confidence=float(item.get("confidence") or 0.0),
-                source_refs=[str(ref) for ref in item.get("source_refs") or []],
-            )
-        )
-    return ForecastResult(
-        generated=bool(data.get("generated", bool(suggestions))),
-        suggestions=suggestions,
-        reason=str(data.get("reason") or ""),
-        fingerprint=str(data.get("fingerprint") or ""),
-    )

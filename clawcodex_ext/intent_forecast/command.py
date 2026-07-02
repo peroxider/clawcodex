@@ -8,6 +8,7 @@ from typing import Any
 from clawcodex_ext.intent_forecast.config import load_intent_forecast_config
 from clawcodex_ext.intent_forecast.learning import record_feedback
 from clawcodex_ext.intent_forecast.messages import format_forecast_for_display, parse_selection
+from clawcodex_ext.intent_forecast.persistence import load_latest_forecast, save_forecast_result
 from clawcodex_ext.intent_forecast.settings_io import update_intent_forecast_settings
 from clawcodex_ext.intent_forecast.service import IntentForecastService
 from src.command_system.types import LocalCommand, LocalCommandResult
@@ -37,6 +38,8 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
     if action == "status":
         cfg = load_intent_forecast_config(cwd=cwd)
         last = _LAST_RESULTS.get(key)
+        if last is None:
+            last = load_latest_forecast(cwd=cwd)
         return LocalCommandResult(
             type="text",
             value=(
@@ -58,6 +61,8 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
             controller.dismiss()
             return LocalCommandResult(type="text", value="Forecast dismissed.")
         result = _LAST_RESULTS.pop(key, None)
+        if result is None:
+            result = load_latest_forecast(cwd=cwd)
         cfg = load_intent_forecast_config(cwd=cwd)
         if cfg.feedback_enabled:
             record_feedback("dismissed", cwd=cwd, fingerprint=getattr(result, "fingerprint", ""))
@@ -80,6 +85,8 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
                     pass
             return LocalCommandResult(type="prompt", value=suggestion.prompt)
         result = _LAST_RESULTS.get(key)
+        if result is None:
+            result = load_latest_forecast(cwd=cwd)
         if result is None:
             return LocalCommandResult(type="text", value="No forecast suggestion is available to accept.")
         selection = parts[1] if len(parts) > 1 else "1"
@@ -107,6 +114,15 @@ def _forecast_call(args: str, context: Any) -> LocalCommandResult:
         return LocalCommandResult(type="text", value=f"Forecast failed: {exc}")
     if result.generated:
         _LAST_RESULTS[key] = result
+    try:
+        save_forecast_result(
+            result,
+            trigger="slash",
+            cwd=cwd,
+            model=model,
+        )
+    except Exception:
+        pass
     return LocalCommandResult(type="text", value=format_forecast_for_display(result))
 
 

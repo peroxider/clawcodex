@@ -5,6 +5,7 @@ from src.types.messages import Message
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
 from clawcodex_ext.intent_forecast.controller import IntentForecastController
+from clawcodex_ext.intent_forecast.persistence import read_forecast_history
 
 
 class FakeTimer:
@@ -38,7 +39,8 @@ def _conversation() -> Conversation:
     return conv
 
 
-def test_controller_arms_on_mount_and_fires(tmp_path) -> None:
+def test_controller_arms_on_mount_and_fires(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     timers = FakeTimerFactory()
     displayed = []
     conv = _conversation()
@@ -61,6 +63,9 @@ def test_controller_arms_on_mount_and_fires(tmp_path) -> None:
     assert displayed[0].generated is True
     assert len(conv.messages) == 1
     assert conv.messages[0].content == "implement forecast"
+    rows = read_forecast_history(cwd=tmp_path)
+    assert len(rows) == 1
+    assert rows[0]["trigger"] == "auto"
 
 
 def test_user_interaction_cancels_timer(tmp_path) -> None:

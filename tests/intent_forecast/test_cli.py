@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from clawcodex_ext.intent_forecast.cli import (
-    _last_cli_result_path,
-    _save_last_cli_result,
-)
 from clawcodex_ext.intent_forecast.cli import run_forecast_command
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
+from clawcodex_ext.intent_forecast.persistence import (
+    forecast_history_path,
+    read_forecast_history,
+    save_forecast_result,
+)
 
 
 def test_cli_status_json(capsys) -> None:
@@ -23,17 +24,33 @@ def test_cli_process_pending(capsys) -> None:
 
 def test_cli_accept_saved_result(monkeypatch, tmp_path, capsys) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-    _save_last_cli_result(
+    save_forecast_result(
         ForecastResult(
             generated=True,
             suggestions=[
                 ForecastSuggestion(id="s1", title="A", prompt="do saved", confidence=0.8)
             ],
-        )
+        ),
+        trigger="cli",
+        cwd=tmp_path,
     )
+    monkeypatch.chdir(tmp_path)
 
     rc = run_forecast_command(["accept", "s1"])
 
     assert rc == 0
     assert "do saved" in capsys.readouterr().out
-    assert not _last_cli_result_path().exists()
+    assert forecast_history_path().exists()
+
+
+def test_cli_run_appends_forecast_history(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    assert run_forecast_command(["run"]) == 0
+    assert run_forecast_command(["run"]) == 0
+
+    capsys.readouterr()
+    rows = read_forecast_history(cwd=tmp_path)
+    assert len(rows) == 2
+    assert {row["trigger"] for row in rows} == {"cli"}

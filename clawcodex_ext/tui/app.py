@@ -45,6 +45,7 @@ from clawcodex_ext.intent_forecast.messages import (
     ForecastResult,
     format_forecast_for_display,
 )
+from clawcodex_ext.intent_forecast.persistence import save_forecast_result
 from clawcodex_ext.intent_forecast.service import IntentForecastService
 from clawcodex_ext.permissions.runtime import RuntimePermissionController
 
@@ -925,6 +926,15 @@ class ClawCodexTUI(App):
             except Exception as exc:
                 transcript.append_system(f"Forecast failed: {exc}", style="error")
                 return
+            try:
+                save_forecast_result(
+                    result,
+                    trigger="slash",
+                    cwd=self.workspace_root,
+                    model=self.model,
+                )
+            except Exception:
+                pass
         if result is None or not result.generated or not result.suggestions:
             transcript.append_system(
                 result.reason if result is not None else "Forecast has no suggestions right now.",

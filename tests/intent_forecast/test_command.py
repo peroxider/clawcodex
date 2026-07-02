@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from clawcodex_ext.intent_forecast.command import _forecast_call
 from clawcodex_ext.intent_forecast.messages import ForecastResult, ForecastSuggestion
+from clawcodex_ext.intent_forecast.persistence import read_forecast_history
 from src.agent.conversation import Conversation
 from src.types.messages import Message
 
@@ -64,3 +65,22 @@ def test_forecast_run_does_not_append_to_conversation(tmp_path: Path) -> None:
     assert "Forecast" in result.value
     assert len(conversation.messages) == 1
     assert conversation.messages[0].content == "continue the task"
+
+
+def test_forecast_run_appends_unified_history(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    conversation = Conversation()
+    conversation.messages = [Message(role="user", content="continue the task")]
+    ctx = SimpleNamespace(
+        cwd=tmp_path,
+        workspace_root=tmp_path,
+        conversation=conversation,
+        provider=None,
+    )
+
+    _forecast_call("run", ctx)
+    _forecast_call("run", ctx)
+
+    rows = read_forecast_history(cwd=tmp_path)
+    assert len(rows) == 2
+    assert {row["trigger"] for row in rows} == {"slash"}

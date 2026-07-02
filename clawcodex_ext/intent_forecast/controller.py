@@ -11,6 +11,7 @@ from typing import Any, Callable, Protocol
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig, load_intent_forecast_config
 from clawcodex_ext.intent_forecast.learning import record_feedback
 from clawcodex_ext.intent_forecast.messages import ForecastResult
+from clawcodex_ext.intent_forecast.persistence import save_forecast_result
 from clawcodex_ext.intent_forecast.service import IntentForecastService
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,16 @@ class IntentForecastController:
             result = service.generate(trigger="auto")
             with self._lock:
                 stale = generation_id != self._generation_id
+            try:
+                save_forecast_result(
+                    result,
+                    trigger="auto",
+                    cwd=self.workspace_root,
+                    model=self.model_getter(),
+                    stale=stale,
+                )
+            except Exception:
+                logger.exception("Intent Forecast history save failed: trigger=auto")
             if stale:
                 if cfg.feedback_enabled:
                     record_feedback(
