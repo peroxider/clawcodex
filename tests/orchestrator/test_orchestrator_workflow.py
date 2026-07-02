@@ -41,14 +41,14 @@ from extensions.orchestrator.workflow_store import (
 class TestWorkflowParse(unittest.TestCase):
     def test_empty_content(self) -> None:
         # Empty content → empty front matter, empty prompt.
-        config, prompt = WorkflowLoader.parse("")
+        config, prompt = WorkflowLoader.parse('')
         # Default WorkflowConfig fields.
         self.assertIsNotNone(config)
-        self.assertEqual(prompt, "")
+        self.assertEqual(prompt, '')
 
     def test_no_front_matter(self) -> None:
         # Content without `---` markers → whole thing is the prompt.
-        content = "Just a prompt.\nWith two lines."
+        content = 'Just a prompt.\nWith two lines.'
         config, prompt = WorkflowLoader.parse(content)
         self.assertEqual(prompt, content)
         # No front matter to set anything from — config keeps defaults.
@@ -67,11 +67,11 @@ class TestWorkflowParse(unittest.TestCase):
             """
         )
         config, prompt = WorkflowLoader.parse(content)
-        self.assertEqual(prompt, "This is the prompt body.")
+        self.assertEqual(prompt, 'This is the prompt body.')
         # The front-matter mapping was loaded into the nested config.
-        self.assertEqual(config.tracker.kind, "github")
-        self.assertEqual(config.tracker.owner, "octo")
-        self.assertEqual(config.tracker.repo, "hello")
+        self.assertEqual(config.tracker.kind, 'github')
+        self.assertEqual(config.tracker.owner, 'octo')
+        self.assertEqual(config.tracker.repo, 'hello')
 
     def test_multiline_prompt_body(self) -> None:
         content = textwrap.dedent(
@@ -85,9 +85,9 @@ class TestWorkflowParse(unittest.TestCase):
             """
         )
         _, prompt = WorkflowLoader.parse(content)
-        self.assertIn("Line 1.", prompt)
-        self.assertIn("Line 2.", prompt)
-        self.assertIn("Line 3.", prompt)
+        self.assertIn('Line 1.', prompt)
+        self.assertIn('Line 2.', prompt)
+        self.assertIn('Line 3.', prompt)
 
     def test_empty_front_matter(self) -> None:
         content = textwrap.dedent(
@@ -98,7 +98,7 @@ class TestWorkflowParse(unittest.TestCase):
             """
         )
         config, prompt = WorkflowLoader.parse(content)
-        self.assertEqual(prompt, "Just a prompt.")
+        self.assertEqual(prompt, 'Just a prompt.')
         # Config has its defaults.
         self.assertIsNotNone(config)
 
@@ -114,7 +114,7 @@ class TestWorkflowParse(unittest.TestCase):
         )
         with self.assertRaises(WorkflowParseError) as ctx:
             WorkflowLoader.parse(content)
-        self.assertIn("YAML", str(ctx.exception))
+        self.assertIn('YAML', str(ctx.exception))
 
     def test_non_dict_front_matter_raises(self) -> None:
         # A top-level list is not a mapping.
@@ -129,7 +129,7 @@ class TestWorkflowParse(unittest.TestCase):
         )
         with self.assertRaises(WorkflowParseError) as ctx:
             WorkflowLoader.parse(content)
-        self.assertIn("mapping", str(ctx.exception))
+        self.assertIn('mapping', str(ctx.exception))
 
     def test_missing_closing_marker_yaml_parsed_as_mapping(self) -> None:
         # Only an opening `---` with no closing `---` → the rest goes
@@ -144,34 +144,32 @@ class TestWorkflowParse(unittest.TestCase):
         )
         config, prompt = WorkflowLoader.parse(content)
         # The whole content is parsed as front matter; the prompt is empty.
-        self.assertEqual(prompt, "")
+        self.assertEqual(prompt, '')
         # And the front matter is loaded into config.
-        self.assertEqual(config.tracker.kind, "github")
+        self.assertEqual(config.tracker.kind, 'github')
 
 
 class TestSplitFrontMatter(unittest.TestCase):
     def test_empty(self) -> None:
-        front, prompt = _split_front_matter("")
+        front, prompt = _split_front_matter('')
         self.assertEqual(front, [])
         self.assertEqual(prompt, [])
 
     def test_no_opening_marker(self) -> None:
-        front, prompt = _split_front_matter("hello\nworld")
+        front, prompt = _split_front_matter('hello\nworld')
         self.assertEqual(front, [])
-        self.assertEqual(prompt, ["hello", "world"])
+        self.assertEqual(prompt, ['hello', 'world'])
 
     def test_complete_block(self) -> None:
-        front, prompt = _split_front_matter(
-            "---\nkey: value\n---\nbody"
-        )
-        self.assertEqual(front, ["key: value"])
-        self.assertEqual(prompt, ["body"])
+        front, prompt = _split_front_matter('---\nkey: value\n---\nbody')
+        self.assertEqual(front, ['key: value'])
+        self.assertEqual(prompt, ['body'])
 
     def test_only_opening_marker(self) -> None:
         # No closing `---` → all subsequent lines stay in the front
         # buffer; prompt stays empty.
-        front, prompt = _split_front_matter("---\nkey: value\nstill yaml")
-        self.assertEqual(front, ["key: value", "still yaml"])
+        front, prompt = _split_front_matter('---\nkey: value\nstill yaml')
+        self.assertEqual(front, ['key: value', 'still yaml'])
         self.assertEqual(prompt, [])
 
 
@@ -184,12 +182,12 @@ class TestWorkflowLoad(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.path = Path(self.tmp.name) / "WORKFLOW.md"
+        self.path = Path(self.tmp.name) / 'WORKFLOW.md'
 
     def test_load_missing_file_raises(self) -> None:
         with self.assertRaises(WorkflowParseError) as ctx:
             WorkflowLoader.load(self.path)
-        self.assertIn("not found", str(ctx.exception))
+        self.assertIn('not found', str(ctx.exception))
 
     def test_load_attaches_source_path(self) -> None:
         self.path.write_text(
@@ -201,10 +199,11 @@ class TestWorkflowLoad(unittest.TestCase):
                 prompt
                 """
             ),
-            encoding="utf-8",
+            encoding='utf-8',
         )
         config, _ = WorkflowLoader.load(self.path)
         self.assertEqual(config._source_path, str(self.path))
+        self.assertEqual(config.source_path, str(self.path))
 
     def test_load_uses_path_object(self) -> None:
         self.path.write_text(
@@ -216,10 +215,11 @@ class TestWorkflowLoad(unittest.TestCase):
                 prompt
                 """
             ),
-            encoding="utf-8",
+            encoding='utf-8',
         )
         config, _ = WorkflowLoader.load(str(self.path))  # str input
         self.assertEqual(config._source_path, str(self.path))
+        self.assertEqual(config.source_path, str(self.path))
 
     def test_load_returns_prompt(self) -> None:
         self.path.write_text(
@@ -231,10 +231,10 @@ class TestWorkflowLoad(unittest.TestCase):
                 This is the actual prompt.
                 """
             ),
-            encoding="utf-8",
+            encoding='utf-8',
         )
         _, prompt = WorkflowLoader.load(self.path)
-        self.assertEqual(prompt, "This is the actual prompt.")
+        self.assertEqual(prompt, 'This is the actual prompt.')
 
     def test_load_agent_env(self) -> None:
         self.path.write_text(
@@ -249,11 +249,11 @@ class TestWorkflowLoad(unittest.TestCase):
                 prompt
                 """
             ),
-            encoding="utf-8",
+            encoding='utf-8',
         )
         config, _ = WorkflowLoader.load(self.path)
-        self.assertEqual(config.agent.env["PATH"], "/custom/bin:$PATH")
-        self.assertEqual(config.agent.env["MY_VAR"], "value")
+        self.assertEqual(config.agent.env['PATH'], '/custom/bin:$PATH')
+        self.assertEqual(config.agent.env['MY_VAR'], 'value')
 
     def test_load_agent_env_defaults_to_empty(self) -> None:
         self.path.write_text(
@@ -266,7 +266,7 @@ class TestWorkflowLoad(unittest.TestCase):
                 prompt
                 """
             ),
-            encoding="utf-8",
+            encoding='utf-8',
         )
         config, _ = WorkflowLoader.load(self.path)
         self.assertEqual(config.agent.env, {})
@@ -281,16 +281,14 @@ class TestDefaultPath(unittest.TestCase):
     def test_default_path_is_cwd_workflow_md(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             # Make sure SYMPHONY_WORKFLOW_PATH is not set.
-            os.environ.pop("SYMPHONY_WORKFLOW_PATH", None)
+            os.environ.pop('SYMPHONY_WORKFLOW_PATH', None)
             path = WorkflowLoader.default_path()
-            self.assertEqual(path, Path.cwd() / "WORKFLOW.md")
+            self.assertEqual(path, Path.cwd() / 'WORKFLOW.md')
 
     def test_default_path_respects_env(self) -> None:
-        with patch.dict(
-            os.environ, {"SYMPHONY_WORKFLOW_PATH": "/some/custom/WORKFLOW.md"}
-        ):
+        with patch.dict(os.environ, {'SYMPHONY_WORKFLOW_PATH': '/some/custom/WORKFLOW.md'}):
             path = WorkflowLoader.default_path()
-            self.assertEqual(path, Path("/some/custom/WORKFLOW.md"))
+            self.assertEqual(path, Path('/some/custom/WORKFLOW.md'))
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +322,7 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
 
     def test_load_populates_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "WORKFLOW.md"
+            path = Path(tmp) / 'WORKFLOW.md'
             path.write_text(
                 textwrap.dedent(
                     """\
@@ -337,21 +335,21 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
                     Hello
                     """
                 ),
-                encoding="utf-8",
+                encoding='utf-8',
             )
             store = WorkflowStore()
             store.load(str(path))
             self.assertEqual(store.workflow_path, str(path))
             self.assertIsNotNone(store.config)
-            self.assertEqual(store.prompt_template, "Hello")
+            self.assertEqual(store.prompt_template, 'Hello')
             # current() returns the tuple.
             config, prompt = store.current()
-            self.assertEqual(prompt, "Hello")
-            self.assertEqual(config.tracker.kind, "github")
+            self.assertEqual(prompt, 'Hello')
+            self.assertEqual(config.tracker.kind, 'github')
 
     def test_force_reload_uses_stored_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "WORKFLOW.md"
+            path = Path(tmp) / 'WORKFLOW.md'
             path.write_text(
                 textwrap.dedent(
                     """\
@@ -362,7 +360,7 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
                     v1 prompt
                     """
                 ),
-                encoding="utf-8",
+                encoding='utf-8',
             )
             store = WorkflowStore()
             store.load(str(path))
@@ -377,12 +375,12 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
                     v2 prompt
                     """
                 ),
-                encoding="utf-8",
+                encoding='utf-8',
             )
             # force_reload should pick up the new content.
             store.force_reload()
-            self.assertEqual(store.prompt_template, "v2 prompt")
-            self.assertEqual(store.config.tracker.kind, "linear")
+            self.assertEqual(store.prompt_template, 'v2 prompt')
+            self.assertEqual(store.config.tracker.kind, 'linear')
 
     def test_force_reload_without_path_is_noop(self) -> None:
         # No load has happened → no path to reload.
@@ -392,7 +390,7 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
 
     def test_reset_clears_class_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "WORKFLOW.md"
+            path = Path(tmp) / 'WORKFLOW.md'
             path.write_text(
                 textwrap.dedent(
                     """\
@@ -403,7 +401,7 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
                     y
                     """
                 ),
-                encoding="utf-8",
+                encoding='utf-8',
             )
             store = WorkflowStore()
             store.load(str(path))
@@ -427,5 +425,5 @@ class TestWorkflowStoreSingleton(unittest.TestCase):
         self.assertIsNot(first, second)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
