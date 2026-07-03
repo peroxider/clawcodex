@@ -1624,6 +1624,22 @@ def register_builtin_commands(registry: CommandRegistry | None = None) -> None:
         register_bg_commands(reg)
     except Exception:
         pass
+    # F-97 LODESTONE — /link command family. Self-gates on
+    # ``LODESTONE=off`` (renderer falls back to plain text), so the
+    # command stays harmless when the feature is disabled.
+    try:
+        from clawcodex_ext.command_system.lodestone_commands import register_lodestone_commands
+
+        register_lodestone_commands(reg)
+    except Exception:
+        pass
+    # F-95 TEMPLATES — productized template catalogue/render/create surface.
+    try:
+        from clawcodex_ext.command_system.template_commands import register_template_commands
+
+        register_template_commands(reg)
+    except Exception:
+        pass
 
 
 async def execute_command_async(

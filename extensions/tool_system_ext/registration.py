@@ -14,6 +14,7 @@ from clawcodex_ext.tool_system.tools.task_inspect import TaskInspectTool
 from clawcodex_ext.goal.tool import GoalTool
 from clawcodex_ext.tool_system.tools.create_agent_tool import make_create_agent_tool
 from clawcodex_ext.tool_system.tools.bg_session import BgSessionTool
+from clawcodex_ext.tool_system.tools.lodestone import LodestoneTool
 
 EXTENSION_TOOLS: list[Tool] = [
     ProgressReportTool,
@@ -25,6 +26,10 @@ EXTENSION_TOOLS: list[Tool] = [
     # Tool self-gates on CLAWCODEX_BG_SESSIONS (returns {disabled: true}
     # when off), so unconditional registration is safe.
     BgSessionTool,
+    # F-97 LODESTONE — Deep-link anchor parser + resolver.
+    # Self-gates on ``LODESTONE=off`` (renderer falls back to plain
+    # text), so unconditional registration is safe.
+    LodestoneTool,
 ]
 
 # F-62 Chrome browser automation — seven ``chrome_*`` tools
