@@ -147,6 +147,25 @@ _DEFAULT_FLAGS: list[FeatureFlag] = [
         default=False,
         description="Enable remote CLI control via TCP/WebSocket (F-82)",
     ),
+    # --- Daemon subsystem (F-84) ---
+    # Both flags default to False; turning them on enables the
+    # ``clawcodex-dev daemon`` CLI surface (P84-H double gate).
+    FeatureFlag(
+        name="DAEMON",
+        default=False,
+        description=(
+            "Enable the long-running daemon supervisor that owns "
+            "remoteControl / cron / orchestrator workers (F-84)"
+        ),
+    ),
+    FeatureFlag(
+        name="BRIDGE_MODE",
+        default=False,
+        description=(
+            "Enable the multi-session bridge worker kind inside the "
+            "daemon supervisor (F-84 P84-G, F-82 dependency)"
+        ),
+    ),
     # --- CI/CD ---
     FeatureFlag(
         name="CICD_MODE",

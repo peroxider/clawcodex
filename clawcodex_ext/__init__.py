@@ -75,6 +75,16 @@ def ensure_eager_extensions_installed() -> None:
     except Exception:  # noqa: BLE001 — never break agent init
         pass
 
+    # F-84 P84-H — register ``daemon`` subcommand behind the
+    # DAEMON + BRIDGE_MODE double feature gate. No-op when either
+    # flag is disabled.
+    try:
+        from clawcodex_ext.daemon import install_daemon_gate
+
+        install_daemon_gate()
+    except Exception:  # noqa: BLE001 — never break agent init
+        pass
+
     # Provider registrations (model extensions, downstream providers,
     # cancel-latency overrides, media registry).
     from clawcodex_ext.providers import _init_provider_extensions

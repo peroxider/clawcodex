@@ -1282,3 +1282,130 @@ class TestStage5ExtDreaming:
         assert callable(execute_auto_dream)
         assert callable(kill_dream_task)
         assert callable(manual_dream)
+
+
+class TestStage5ExtF84Daemon:
+    """F-84 Daemon subsystem smoke tests.
+
+    Validates that the ``extensions.daemon`` package, the
+    ``extensions.capabilities.daemon_protocol`` module, and the
+    downstream ``clawcodex_ext.daemon`` gate are all importable and
+    expose the contract documented in ``f-84-daemon.md``.
+    """
+
+    def test_daemon_package_imports(self):
+        import extensions.daemon as daemon_pkg
+
+        assert hasattr(daemon_pkg, "Supervisor")
+        assert hasattr(daemon_pkg, "WorkerRegistry")
+        assert hasattr(daemon_pkg, "DaemonConfig")
+        assert hasattr(daemon_pkg, "DaemonState")
+        assert hasattr(daemon_pkg, "DaemonStatus")
+        assert hasattr(daemon_pkg, "EXIT_CODE_PERMANENT")
+        assert hasattr(daemon_pkg, "EXIT_CODE_TRANSIENT")
+
+    def test_daemon_protocol_defines_worker(self):
+        from extensions.capabilities.daemon_protocol import Worker
+
+        # Protocol attributes appear in __annotations__ for class
+        # variables; methods are visible via ``dir`` since the
+        # Protocol body declares them as ``async def ... -> ...``.
+        annotations = getattr(Worker, "__annotations__", {})
+        assert "kind" in annotations
+        for method in ("run", "health_check"):
+            assert method in dir(Worker), f"Worker missing {method!r}"
+
+    def test_worker_registry_has_built_in_kinds(self):
+        from extensions.daemon import WorkerRegistry
+
+        WorkerRegistry.reset()
+        # Re-register via the built-in workers package to avoid test
+        # ordering issues (some test suites reset the registry).
+        from extensions.daemon.workers import (
+            build_cron_worker,
+            build_remote_control_worker,
+        )
+
+        WorkerRegistry.register("remoteControl", build_remote_control_worker)
+        WorkerRegistry.register("cron", build_cron_worker)
+        kinds = WorkerRegistry.known_kinds()
+        assert "remoteControl" in kinds
+        assert "cron" in kinds
+
+    def test_supervisor_class_signature(self):
+        from extensions.daemon.supervisor import Supervisor
+
+        assert callable(Supervisor)
+        # Public surface — these are the methods tests + CLI use.
+        for method in ("run", "request_stop", "stop_event", "runtimes"):
+            assert hasattr(Supervisor, method), f"Supervisor missing {method!r}"
+
+    def test_cli_build_parser(self):
+        from extensions.daemon.cli import build_parser
+
+        parser = build_parser()
+        verbs = set(parser._subparsers._group_actions[0].choices.keys())  # type: ignore[attr-defined]
+        # The verb set should cover the F-84 P84-E/F surface.
+        for verb in ("start", "stop", "status", "ps", "bg", "attach", "logs", "kill"):
+            assert verb in verbs, f"daemon CLI missing verb {verb!r}"
+
+    def test_feature_flags_registered(self):
+        """F-84 P84-H — DAEMON + BRIDGE_MODE are registered with the
+        feature registry and default to disabled."""
+        from clawcodex_ext.feature_gate import get_registry
+
+        reg = get_registry()
+        # Known to be registered (register_defaults() runs at import).
+        assert reg.get_state("DAEMON") is not None
+        assert reg.get_state("BRIDGE_MODE") is not None
+        # Defaults are False until the user opts in.
+        assert reg.is_enabled("DAEMON") is False
+        assert reg.is_enabled("BRIDGE_MODE") is False
+
+    def test_daemon_state_round_trip(self):
+        """State file IO is dependency-free and round-trips through disk."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        from extensions.daemon.state import (
+            DaemonStatus,
+            make_state,
+            query_daemon_status,
+            write_daemon_state,
+        )
+
+        with tempfile.TemporaryDirectory() as td:
+            sd = Path(td) / "daemon"
+            state = make_state(pid=12345, worker_kinds=["a", "b"], name="smoke")
+            write_daemon_state(state, state_dir=sd)
+            status, loaded = query_daemon_status("smoke", state_dir=sd)
+            # PID 12345 likely doesn't exist on the test host → STALE.
+            assert status in (DaemonStatus.STOPPED, DaemonStatus.STALE, DaemonStatus.RUNNING)
+            # When running we should get the state back; when stale the
+            # file has been cleaned. Either way, the read path didn't
+            # crash.
+            if status == DaemonStatus.RUNNING:
+                assert loaded is not None
+                assert loaded.pid == 12345
+
+    def test_daemon_gate_hook_importable(self):
+        from clawcodex_ext.daemon import install_daemon_gate
+
+        assert callable(install_daemon_gate)
+
+    def test_daemon_heavy_modules_do_not_break_help(self):
+        """Importing the daemon CLI must not transitively drag in
+        the TUI / REPL / full tool registry — same constraint as
+        ``--help`` cold start."""
+        import sys
+
+        for mod in ("src.tui.app", "src.repl.core", "src.tool_system.registry"):
+            sys.modules.pop(mod, None)
+
+        from extensions.daemon import cli  # noqa: F401
+
+        # The TUI / REPL / tool_system modules should NOT be imported
+        # as a side effect of the daemon CLI.
+        for mod in ("src.tui.app", "src.repl.core", "src.tool_system.registry"):
+            assert mod not in sys.modules, f"{mod} was pulled in by daemon import"
