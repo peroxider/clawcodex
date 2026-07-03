@@ -76,6 +76,7 @@ class Progress:
 
 
 ClockFn = Callable[[], str]
+TransitionHook = Callable[[str, StepTransition], None]
 
 
 def _utc_now_iso() -> str:
@@ -98,6 +99,7 @@ class PlanExecutor:
         plan: Plan,
         *,
         clock: ClockFn | None = None,
+        transition_hooks: list[TransitionHook] | None = None,
     ) -> None:
         if not isinstance(plan, Plan):
             raise TypeError("PlanExecutor requires a Plan instance")
@@ -105,6 +107,7 @@ class PlanExecutor:
         self._lock = threading.RLock()
         self._clock: ClockFn = clock or _utc_now_iso
         self._transitions: list[StepTransition] = []
+        self._transition_hooks: list[TransitionHook] = list(transition_hooks or [])
 
     # ------------------------------------------------------------------
     # Read-only accessors
@@ -118,6 +121,12 @@ class PlanExecutor:
     def transitions(self) -> list[StepTransition]:
         with self._lock:
             return list(self._transitions)
+
+    def add_transition_hook(self, hook: TransitionHook) -> None:
+        if not callable(hook):
+            raise TypeError("transition hook must be callable")
+        with self._lock:
+            self._transition_hooks.append(hook)
 
     def get_step(self, step_id: str) -> tuple[SubPlan, Step]:
         result = self._plan.find_step(step_id)
@@ -210,18 +219,19 @@ class PlanExecutor:
                 step.result = result if result is not None else step.result
             if note is not None:
                 step.notes = note
-            self._transitions.append(
-                StepTransition(
-                    step_id=step.id,
-                    sub_plan_id=sub_plan.id,
-                    old_status=old,
-                    new_status=new_status,
-                    timestamp=now,
-                    note=note,
-                )
+            transition = StepTransition(
+                step_id=step.id,
+                sub_plan_id=sub_plan.id,
+                old_status=old,
+                new_status=new_status,
+                timestamp=now,
+                note=note,
             )
+            self._transitions.append(transition)
             self._refresh_plan_status()
             self._plan.updated_at = now
+            for hook in list(self._transition_hooks):
+                hook(self._plan.id, transition)
             return step
 
     def mark_in_progress(self, step_id: str) -> Step:

@@ -1,12 +1,11 @@
-"""Ultraplan service primitives (F-83 first iteration).
+"""Ultraplan service primitives and F-87 user-facing planning helpers.
 
 This package ships a hierarchical plan model (Plan → SubPlan → Step)
 with strict dataclass validation, an atomic JSON store, a step state
 machine executor, an adjuster for mid-execution changes, and a
-sandboxed acceptance-criteria verifier. LLM-driven prompt generation
-(P83-A) and the ``/ultraplan`` CLI command (P83-B) are explicitly
-deferred to later iterations; this layer provides the safe service
-foundation both can build on.
+sandboxed acceptance-criteria verifier. F-87 adds LLM plan generation,
+templates, keyword detection, CCR client plumbing, audit logging, and
+the controller used by the ``/ultraplan`` command.
 """
 
 from __future__ import annotations
@@ -18,15 +17,30 @@ from .exceptions import (
     IllegalStepTransitionError,
     PlanCorruptError,
     PlanNotFoundError,
+    PlannerFailedError,
+    ProviderUnavailableError,
+    CCRTimeoutError,
+    CCRUnavailableError,
     StepHasDependentsError,
     StepNotFoundError,
     SubPlanNotFoundError,
+    TemplateNotFoundError,
     UltraplanError,
     UnknownCheckKindError,
     UnsafeCheckExpressionError,
     VerificationCheckFailedError,
 )
 from .executor import PlanExecutor, Progress, StepTransition
+from .feature_gates import (
+    ULTRAPLAN_LLM_PLANNER,
+    ULTRAPLAN_RAINBOW,
+    ULTRAPLAN_REMOTE,
+    is_ccr_endpoint_allowed,
+    is_ultraplan_llm_enabled,
+    is_ultraplan_rainbow_enabled,
+    is_ultraplan_remote_enabled,
+)
+from .llm_planner import LLMPlanner, PlannerContext, PlannerResult
 from .models import (
     AcceptanceCriteria,
     CheckKind,
@@ -38,6 +52,7 @@ from .models import (
     SubPlan,
 )
 from .store import PlanStore
+from .templates import BUILTIN_TEMPLATES, PlanTemplate, TemplateLibrary
 from .verifier import (
     AcceptanceVerifier,
     CheckResult,
@@ -50,6 +65,8 @@ __all__ = [
     "AcceptanceVerifier",
     "CheckKind",
     "CheckResult",
+    "CCRTimeoutError",
+    "CCRUnavailableError",
     "DuplicateStepIdError",
     "DuplicateSubPlanIdError",
     "IllegalStepTransitionError",
@@ -60,6 +77,10 @@ __all__ = [
     "PlanNotFoundError",
     "PlanStatus",
     "PlanStore",
+    "PlannerContext",
+    "PlannerFailedError",
+    "PlannerResult",
+    "ProviderUnavailableError",
     "Progress",
     "Step",
     "StepHasDependentsError",
@@ -69,8 +90,20 @@ __all__ = [
     "StepTransition",
     "SubPlan",
     "SubPlanNotFoundError",
+    "BUILTIN_TEMPLATES",
+    "LLMPlanner",
+    "PlanTemplate",
+    "TemplateLibrary",
+    "TemplateNotFoundError",
+    "ULTRAPLAN_LLM_PLANNER",
+    "ULTRAPLAN_RAINBOW",
+    "ULTRAPLAN_REMOTE",
     "UltraplanError",
     "UnknownCheckKindError",
     "UnsafeCheckExpressionError",
     "VerificationCheckFailedError",
+    "is_ccr_endpoint_allowed",
+    "is_ultraplan_llm_enabled",
+    "is_ultraplan_rainbow_enabled",
+    "is_ultraplan_remote_enabled",
 ]

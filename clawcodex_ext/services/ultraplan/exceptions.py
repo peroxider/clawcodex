@@ -55,3 +55,23 @@ class UnknownCheckKindError(UltraplanError):
 
 class UnsafeCheckExpressionError(UltraplanError):
     """Raised when a ``PYTHON_PREDICATE`` expression fails the safety filter."""
+
+
+class PlannerFailedError(UltraplanError):
+    """Raised when an LLM response cannot be turned into a valid plan."""
+
+
+class ProviderUnavailableError(UltraplanError):
+    """Raised when the current LLM provider cannot be used for planning."""
+
+
+class TemplateNotFoundError(UltraplanError):
+    """Raised when a named ultraplan template cannot be found."""
+
+
+class CCRUnavailableError(UltraplanError):
+    """Raised when CCR remote execution is requested but unavailable."""
+
+
+class CCRTimeoutError(UltraplanError):
+    """Raised when a CCR remote stream times out."""

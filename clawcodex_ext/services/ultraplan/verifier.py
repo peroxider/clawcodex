@@ -27,6 +27,7 @@ executor or a CLI layer can decide when to run it.
 from __future__ import annotations
 
 import ast
+import os
 import shlex
 import subprocess
 import threading
@@ -161,7 +162,7 @@ def _check_shell_command(target: str, args: dict[str, Any]) -> CheckResult:
     if timeout <= 0 or timeout > 600:
         return CheckResult(False, details=f"unsafe timeout: {timeout!r}")
     try:
-        argv = shlex.split(target)
+        argv = shlex.split(target, posix=os.name != "nt")
     except ValueError as exc:
         return CheckResult(False, details=f"command parse error: {exc}")
     if not argv:
