@@ -39,23 +39,75 @@ class ToolEventsParser:
         self._categorizer = OperationCategorizer()
 
     def parse_file(self, path: Path | str) -> list[TimelineBar]:
-        """Parse an entire events.ndjson file."""
+        """Parse an entire events.ndjson file.
+
+        Two-pass: ``agent_result`` rows (written when an Agent spawn
+        RETURNS, carrying the child's ``agent_id``) are collected first
+        and joined onto their call rows via ``tool_use_id`` — the spawn
+        bars then carry an exact ``agent_id`` and the tree layout can
+        attribute connectors precisely instead of guessing by time.
+        An orphan ``agent_result`` whose call row was lost is
+        synthesized into a spawn bar so a single dropped write no
+        longer shifts every later pairing by one.
+        """
         path = Path(path)
         if not path.exists():
             return []
-        bars: list[TimelineBar] = []
+        entries: list[dict[str, Any]] = []
         with open(path, "r", encoding="utf-8") as f:
-            for line_num, line in enumerate(f, 1):
+            for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    entry = json.loads(line)
+                    entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-                bar = self._entry_to_bar(entry)
-                if bar is not None:
-                    bars.append(bar)
+
+        # Pass 1: index agent_result rows by tool_use_id.
+        agent_id_by_use: dict[str, str] = {}
+        for entry in entries:
+            if (
+                entry.get("kind") == "agent_result"
+                and entry.get("tool_use_id")
+                and entry.get("agent_id")
+            ):
+                agent_id_by_use[str(entry["tool_use_id"])] = str(entry["agent_id"])
+
+        # Pass 2: build bars from call rows; join agent ids; track which
+        # result rows found their call row.
+        bars: list[TimelineBar] = []
+        joined_use_ids: set[str] = set()
+        for entry in entries:
+            if entry.get("kind") == "agent_result":
+                continue
+            bar = self._entry_to_bar(entry)
+            if bar is None:
+                continue
+            use_id = entry.get("tool_use_id")
+            if (
+                entry.get("tool") == "Agent"
+                and use_id
+                and str(use_id) in agent_id_by_use
+            ):
+                bar.detail["agent_id"] = agent_id_by_use[str(use_id)]
+                joined_use_ids.add(str(use_id))
+            bars.append(bar)
+
+        # Pass 3: synthesize spawn bars for orphan agent_result rows.
+        for entry in entries:
+            if entry.get("kind") != "agent_result":
+                continue
+            use_id = str(entry.get("tool_use_id") or "")
+            if use_id and use_id in joined_use_ids:
+                continue
+            bar = self._entry_to_bar(entry)
+            if bar is None:
+                continue
+            if entry.get("agent_id"):
+                bar.detail["agent_id"] = str(entry["agent_id"])
+            bar.detail["is_agent_invocation"] = True
+            bars.append(bar)
         return bars
 
     def _entry_to_bar(self, entry: dict[str, Any]) -> TimelineBar | None:
@@ -90,5 +142,16 @@ class ToolEventsParser:
                 "params": entry.get("params", {}),
             },
         )
+        # Agent spawns: mark the bar so the agent-tree layout and
+        # ``_apply_spawn_metadata`` recognize it without relying on the
+        # label/category fallback, and hoist the task description out of
+        # ``params`` so sub-agent lanes get a human-readable name instead
+        # of the opaque agent id.
+        if tool == "Agent":
+            bar.detail["is_agent_invocation"] = True
+            params = entry.get("params") or {}
+            description = params.get("description")
+            if isinstance(description, str) and description:
+                bar.detail["description"] = description
         bar.category = self._categorizer.categorize(bar)
         return bar

@@ -545,6 +545,10 @@ class AgentRunner:
                 permission_mode=session_context.get('permission_mode', 'unknown'),
                 turn=session_context.get('turn', 0),
                 session_run_id=run_id,
+                # Links this call row to its result row so the visualizer
+                # can attach the spawned child's agent_id (written by the
+                # supplemental agent_result row) to the right spawn.
+                tool_use_id=getattr(event, 'tool_use_id', None),
             )
             try:
                 with open(log_path, 'a', encoding='utf-8') as f:
@@ -560,6 +564,52 @@ class AgentRunner:
             # agent run. The audit log is observable infrastructure, not
             # a correctness gate.
             logger.exception('tool-event log unexpected failure')
+
+    def _append_agent_spawn_result_log(
+        self,
+        event: 'ToolResultEvent',
+        session_context: dict[str, Any],
+    ) -> None:
+        """Write a supplemental ``agent_result`` row for an Agent spawn.
+
+        The spawned child's ``agent_id`` is only known when the Agent tool
+        RETURNS — the call row cannot carry it. This row closes the gap:
+        the visualizer joins call↔result rows on ``tool_use_id`` and gets
+        an exact spawn→sub-agent attribution. Redundant with the
+        ``agent_spawns.ndjson`` record written by the Agent tool itself —
+        either channel alone is enough to reconstruct the spawn.
+        Best-effort — never raises.
+        """
+        try:
+            result = getattr(event, 'result', None) or {}
+            output = result.get('output')
+            agent_id = output.get('agent_id') if isinstance(output, dict) else None
+            if not agent_id:
+                return
+            run_id = session_context.get('run_id') or 'unknown'
+            workspace_path = session_context.get('workspace_path')
+            if workspace_path:
+                base_dir = Path(workspace_path) / '.reports'
+            else:
+                base_dir = Path.home() / '.clawcodex' / 'tool-events'
+            base_dir.mkdir(parents=True, exist_ok=True)
+            log_path = base_dir / f'{run_id}.events.ndjson'
+            row = ToolEventLog(
+                tool='Agent',
+                params={'description': output.get('description') or ''},
+                approved=not result.get('is_error', False),
+                deny_reason=None,
+                permission_mode=session_context.get('permission_mode', 'unknown'),
+                turn=session_context.get('turn', 0),
+                session_run_id=run_id,
+                tool_use_id=getattr(event, 'tool_use_id', None),
+                kind='agent_result',
+                agent_id=str(agent_id),
+            )
+            with open(log_path, 'a', encoding='utf-8') as f:
+                f.write(row.to_json() + '\n')
+        except Exception:
+            logger.exception('agent spawn result log failed')
 
     def _flush_turn_transcript(self, session: AgentSession) -> None:
         """F-49 Phase 0.1: emit one AssistantMessage + (optionally) one UserMessage per turn.
@@ -1370,6 +1420,14 @@ class AgentRunner:
                                 event.tool_name,
                                 event.result.get('is_error', False),
                             )
+                            # Spawn attribution: an Agent result may carry
+                            # the spawned child's agent_id — persist it as
+                            # a supplemental F-45 row (joined to the call
+                            # row via tool_use_id by the visualizer).
+                            if event.tool_name == 'Agent':
+                                self._append_agent_spawn_result_log(
+                                    event, session_context
+                                )
                             if status_dashboard is not None:
                                 try:
                                     status_dashboard.on_event(event, session)
@@ -2470,6 +2528,14 @@ class AgentRunner:
             src = Path(workspace_path) / ".reports" / f"{run_id}.events.ndjson"
             if src.is_file():
                 shutil.copyfile(src, dst_dir / "events.ndjson")
+
+            # Spawn-attribution records written by the Agent tool at each
+            # spawn moment ({ts, agent_id, description}) — the visualizer
+            # joins these onto Agent spawn bars for exact bar↔lane
+            # attribution.
+            spawns_src = Path(workspace_path) / ".reports" / "agent_spawns.ndjson"
+            if spawns_src.is_file():
+                shutil.copyfile(spawns_src, dst_dir / "agent_spawns.ndjson")
 
             # Worker transcript mirror. The headless run installed its
             # session id in the process-global bootstrap state; with the

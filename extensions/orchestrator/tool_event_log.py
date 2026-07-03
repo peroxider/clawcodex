@@ -44,9 +44,22 @@ class ToolEventLog:
     turn: int
     session_run_id: str
     ts: float = field(default_factory=time.time)
+    # Spawn-attribution fields (all optional; omitted from the row when
+    # unset so existing consumers see byte-identical rows):
+    # * ``tool_use_id`` — provider call id, links a tool's call row to
+    #   its result row.
+    # * ``kind`` — "call" (default, implicit) or "agent_result": a
+    #   supplemental row written when an Agent tool RETURNS, carrying
+    #   the spawned child's id (unknown at call time). Redundant with
+    #   the call row on purpose — if either row is lost the visualizer
+    #   can still reconstruct the spawn.
+    # * ``agent_id`` — the spawned sub-agent's id (agent_result rows).
+    tool_use_id: str | None = None
+    kind: str = "call"
+    agent_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        row: dict[str, Any] = {
             "ts": self.ts,
             "tool": self.tool,
             "params": self.params,
@@ -56,6 +69,13 @@ class ToolEventLog:
             "turn": self.turn,
             "session_run_id": self.session_run_id,
         }
+        if self.tool_use_id:
+            row["tool_use_id"] = self.tool_use_id
+        if self.kind != "call":
+            row["kind"] = self.kind
+        if self.agent_id:
+            row["agent_id"] = self.agent_id
+        return row
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)

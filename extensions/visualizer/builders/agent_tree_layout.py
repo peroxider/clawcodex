@@ -93,9 +93,15 @@ class AgentTreeLayout:
         # Anchor relative-time x to the session's start_time when present.
         # Important: ``or`` falls through on 0 (falsy), which would silently
         # shift every spawn_x. Use an explicit None check.
+        # Orchestrator sessions write their metadata at FINALIZE, so
+        # ``session.start_time`` can postdate every timeline event — the
+        # ``max(0, ...)`` clamp then collapses all spawn anchors to x=0
+        # (every connector fans from the left edge). Anchor to whichever
+        # is earlier: declared start or the first real event.
         base_time = session.start_time
-        if base_time is None:
-            base_time = session.timeline[0].start_time
+        first_bar_time = session.timeline[0].start_time
+        if base_time is None or (first_bar_time and first_bar_time < base_time):
+            base_time = first_bar_time
 
         def _rel(t: float) -> float:
             return max(0.0, t - base_time)
@@ -266,7 +272,36 @@ class AgentTreeLayout:
             for n in candidates:
                 if n.name == desc:
                     return n
-        # 3) fall back to first un-consumed candidate
+        # 3) time-proximity fallback. F-45 spawn rows don't record the
+        #    child agent id, but a worker's transcript starts moments
+        #    AFTER the Agent call that spawned it — pick the candidate
+        #    whose transcript ``start_ts`` is the earliest one at/after
+        #    the spawn time (serial coordinators pair exactly; parallel
+        #    spawns pair to the nearest plausible child). The previous
+        #    ``candidates[0]`` fallback paired chronological spawns with
+        #    GLOB-ORDERED transcripts — connectors attached to the wrong
+        #    lanes whenever more than one worker existed.
+        spawn_time = ev.get("start_time")
+        if isinstance(spawn_time, (int, float)):
+            timed = [
+                (n, (n.metadata or {}).get("start_ts"))
+                for n in candidates
+            ]
+            after = [
+                (ts - spawn_time, n)
+                for n, ts in timed
+                if isinstance(ts, (int, float)) and ts and ts >= spawn_time
+            ]
+            if after:
+                return min(after, key=lambda item: item[0])[1]
+            near = [
+                (abs(ts - spawn_time), n)
+                for n, ts in timed
+                if isinstance(ts, (int, float)) and ts
+            ]
+            if near:
+                return min(near, key=lambda item: item[0])[1]
+        # 4) last resort: first un-consumed candidate
         return candidates[0]
 
     @staticmethod
