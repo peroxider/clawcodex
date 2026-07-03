@@ -37,6 +37,7 @@ docs/feature_plan/
 | F-116 | 工作流可观测性集成 | 📋 | [f-116-workflow-observability.md](02-orchestrator/f-116-workflow-observability.md) |
 | F-118 | 动态任务分解引擎 | 🔭 | [f-118-dynamic-decomposition.md](02-orchestrator/f-118-dynamic-decomposition.md) |
 | F-121 | PR 代码检视意见规则回灌 | 📋 | [f-121-rules-feedback.md](02-orchestrator/f-121-rules-feedback.md) |
+| F-124 | Issue 澄清器 — 描述不清晰自动检测与澄清闭环 | 📋 | [f-124-issue-clarifier.md](02-orchestrator/f-124-issue-clarifier.md) |
 
 ### Agent 核心能力
 
@@ -48,7 +49,6 @@ docs/feature_plan/
 | F-107 | PowerShell 支持增强 | 📋 | [f-107-powershell.md](03-agent-core/f-107-powershell.md) |
 | F-108 | Freeze Detection & Auto-Recovery | 📋 | [f-108-freeze-detection.md](03-agent-core/f-108-freeze-detection.md) |
 | F-119 | System Prompt 段落拼装与自迭代基础设施 | 📋 | [f-119-prompt-assembly.md](03-agent-core/f-119-prompt-assembly.md) |
-| F-122 | `/btw` 侧边询问 — 上下文零污染的并行问答 | 📋 | [f-122-btw-side-question.md](03-agent-core/f-122-btw-side-question.md) |
 | F-123 | Intent Forecast 空闲意图预测 | 📋 | [f-123-intent-forecast.md](03-agent-core/f-123-intent-forecast.md) |
 
 ### CLI 与配置系统
@@ -79,12 +79,9 @@ docs/feature_plan/
 | F-64 | Voice Mode 语音输入 | 🔄 | [f-64-voice-mode.md](06-ccb-benchmark/f-64-voice-mode.md) |
 | F-66 | ACP 协议支持 | 📋 | [f-66-acp-protocol.md](06-ccb-benchmark/f-66-acp-protocol.md) |
 | F-69 | Budget/Poor Mode | 🔄 | [f-69-budget-mode.md](06-ccb-benchmark/f-69-budget-mode.md) |
-| F-70 | Plugin 系统基础框架 | 🔄 | [f-70-plugin.md](06-ccb-benchmark/f-70-plugin.md) |
-| F-71 | 内置工具补齐 | 🔄 | [f-71-tool-gap.md](06-ccb-benchmark/f-71-tool-gap.md) |
 | F-72 | Multi-API 原生适配器 | 📋 | [f-72-multi-api.md](06-ccb-benchmark/f-72-multi-api.md) |
 | F-73 | CI/CD 流水线 | 🔄 | [f-73-cicd.md](06-ccb-benchmark/f-73-cicd.md) |
 | F-74 | Sandbox 沙箱远程执行 | 📋 | [f-74-sandbox.md](06-ccb-benchmark/f-74-sandbox.md) |
-| F-81 | Native 原生模块系统 | 🔭 | [f-81-native-modules.md](06-ccb-benchmark/f-81-native-modules.md) |
 | F-82 | Remote Control 远程控制 | 🔄 | [f-82-remote-control.md](06-ccb-benchmark/f-82-remote-control.md) |
 | F-83 | 远程 Triggers（AGENT_TRIGGERS_REMOTE） | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-83-远程-triggersagent_triggers_remote) |
 | F-84 | Daemon 后台守护 | 📋 | [f-84-daemon.md](06-ccb-benchmark/f-84-daemon.md) |
@@ -120,3 +117,4 @@ docs/feature_plan/
 | 2026-06-25 | 新增 F-119（System Prompt 段落拼装与自迭代基础设施） | 架构审计后规划段落级扩展点 + A/B 框架骨架 |
 | 2026-06-29 | 新增 `../decoupling/` 解耦方案目录（P3 整改全量文档化） | P3 整改 6 步累计 67+ 迁移 imports / 8 新 facade 完工；解耦方案从 F-Number 体系中独立为目录 |
 | 2026-07-01 | 新增 F-123 Intent Forecast 空闲意图预测规划 | 用户提出 REPL/TUI 2 分钟空闲后预测下一步、`/forecast` 与 CLI 同名、异步 session summary sidecar 的设计需求 |
+| 2026-07-03 | 删除 F-70/F-71/F-81/F-122 已完成特性规划文档 | 代码确认特性已全部落地，移除已完成的规范文档 |
