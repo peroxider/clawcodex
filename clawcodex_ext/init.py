@@ -203,6 +203,20 @@ def init() -> None:
                 description="Run tool executions in an isolated sandbox",
             ),
             FeatureFlag(
+                name="KAIROS",
+                default=False,
+                deps=[],
+                mutex_with=[],
+                description="Enable Kairos tick scheduling primitives",
+            ),
+            FeatureFlag(
+                name="PROACTIVE",
+                default=False,
+                deps=[],
+                mutex_with=[],
+                description="Enable proactive tick-driven autonomous mode",
+            ),
+            FeatureFlag(
                 name="goals",
                 default=True,
                 deps=[],
