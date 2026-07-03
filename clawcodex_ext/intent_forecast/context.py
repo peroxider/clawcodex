@@ -24,6 +24,7 @@ MEMORY_FILENAMES = ("CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", "CLUDE.md")
 class ForecastContext:
     cwd: str
     current_messages: list[dict[str, str]] = field(default_factory=list)
+    user_intent: dict[str, Any] = field(default_factory=dict)
     sessions: list[dict[str, Any]] = field(default_factory=list)
     memory_files: list[dict[str, str]] = field(default_factory=list)
     workspace: dict[str, Any] = field(default_factory=dict)
@@ -31,12 +32,14 @@ class ForecastContext:
     intent_stage: str = "explore"
     feedback: list[dict[str, Any]] = field(default_factory=list)
     response_language: str = "English"
+    intent_strategy: str = "user"
     fingerprint: str = ""
 
     def to_prompt_dict(self) -> dict[str, Any]:
         return {
             "cwd": self.cwd,
             "current_messages": self.current_messages,
+            "user_intent": self.user_intent,
             "task_state": self.task_state,
             "intent_stage": self.intent_stage,
             "sessions": self.sessions,
@@ -44,6 +47,7 @@ class ForecastContext:
             "workspace": self.workspace,
             "feedback": self.feedback,
             "response_language": self.response_language,
+            "intent_strategy": self.intent_strategy,
         }
 
 
@@ -65,18 +69,25 @@ class IntentForecastContextBuilder:
 
     def build(self) -> ForecastContext:
         current = self._current_messages()
+        user_intent = build_user_intent(current)
         memory = self._memory_files()
         workspace = self._workspace_signals()
         workspace["focuses"] = compute_workspace_focuses(
             changed_files=[str(path) for path in workspace.get("changed_files") or []],
-            recent_messages=current,
+            recent_messages=[msg for msg in current if msg.get("role") == "user"],
         )
         sessions = self._sessions(current_messages=current, workspace=workspace)
-        task_state = build_task_state(current_messages=current, sessions=sessions, workspace=workspace)
+        task_state = build_task_state(
+            current_messages=current,
+            sessions=sessions,
+            workspace=workspace,
+            user_intent=user_intent,
+        )
         intent_stage = classify_intent_stage(
             current_messages=current,
             task_state=task_state,
             workspace=workspace,
+            user_intent=user_intent,
         )
         feedback = read_recent_feedback(limit=30, base_dir=self.feedback_base_dir)
         response_language = (
@@ -88,12 +99,14 @@ class IntentForecastContextBuilder:
             {
                 "cwd": str(self.workspace_root),
                 "current": current,
+                "user_intent": user_intent,
                 "sessions": sessions,
                 "memory": memory,
                 "workspace": workspace,
                 "task_state": task_state,
                 "intent_stage": intent_stage,
                 "response_language": response_language,
+                "intent_strategy": self.config.intent_strategy,
             },
             sort_keys=True,
             default=str,
@@ -101,6 +114,7 @@ class IntentForecastContextBuilder:
         return ForecastContext(
             cwd=str(self.workspace_root),
             current_messages=current,
+            user_intent=user_intent,
             sessions=sessions,
             memory_files=memory,
             workspace=workspace,
@@ -108,6 +122,7 @@ class IntentForecastContextBuilder:
             intent_stage=intent_stage,
             feedback=feedback,
             response_language=response_language,
+            intent_strategy=self.config.intent_strategy,
             fingerprint=hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16],
         )
 
@@ -120,7 +135,8 @@ class IntentForecastContextBuilder:
                 continue
             text = _flatten_content(getattr(msg, "content", "")).strip()
             if text:
-                out.append({"role": role, "content": text[:1200]})
+                limit = 1600 if role == "user" else 360
+                out.append({"role": role, "content": text[:limit]})
         return out
 
     def _sessions(
@@ -162,13 +178,16 @@ class IntentForecastContextBuilder:
                     except Exception:
                         pass
             rows.append(row)
-        recent_text = "\n".join(str(msg.get("content") or "") for msg in current_messages[-6:])
+        recent_text = "\n".join(
+            str(msg.get("content") or "") for msg in current_messages[-8:] if msg.get("role") == "user"
+        )
         return rank_session_rows(
             rows,
             cwd=self.workspace_root,
             changed_files=[str(path) for path in workspace.get("changed_files") or []],
             recent_text=recent_text,
             limit=self.config.max_sessions,
+            strategy=self.config.intent_strategy,
         )
 
     def _load_session_summary(self, session_id: str) -> dict[str, Any] | None:
@@ -450,6 +469,49 @@ def infer_response_language(
     if cjk >= 3 and cjk >= latin * 0.25:
         return "Chinese"
     return "English"
+
+
+def build_user_intent(current_messages: list[dict[str, str]]) -> dict[str, Any]:
+    """Extract user-owned intent signals from the active conversation."""
+
+    user_turns = [
+        str(msg.get("content") or "").strip()
+        for msg in current_messages
+        if msg.get("role") == "user" and str(msg.get("content") or "").strip()
+    ]
+    initial = user_turns[0] if user_turns else ""
+    latest = user_turns[-1] if user_turns else ""
+    previous = user_turns[-6:-1] if len(user_turns) > 1 else []
+    return {
+        "initial_user_input": initial[:1600],
+        "latest_user_input": latest[:1600],
+        "previous_user_inputs": [item[:800] for item in previous],
+        "user_turn_count": len(user_turns),
+        "explicit_preferences": _explicit_user_preferences(user_turns),
+    }
+
+
+def _explicit_user_preferences(user_turns: list[str]) -> list[str]:
+    markers = (
+        "prefer",
+        "don't",
+        "do not",
+        "use ",
+        "keep",
+        "应该",
+        "不要",
+        "别",
+        "优先",
+        "使用",
+        "保持",
+        "改成",
+    )
+    prefs: list[str] = []
+    for turn in user_turns[-8:]:
+        lowered = turn.lower()
+        if any(marker in lowered for marker in markers):
+            prefs.append(turn[:240])
+    return prefs[-5:]
 
 
 def _summary_language_samples(summary: dict[str, Any]) -> list[str]:

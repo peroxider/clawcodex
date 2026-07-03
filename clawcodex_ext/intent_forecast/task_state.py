@@ -24,16 +24,19 @@ def build_task_state(
     current_messages: list[dict[str, str]],
     sessions: list[dict[str, Any]],
     workspace: dict[str, Any],
+    user_intent: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a small structured view of the active task."""
 
-    recent_user = _latest_role_text(current_messages, "user")
+    user_intent = user_intent or {}
+    recent_user = str(user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user"))
+    initial_user = str(user_intent.get("initial_user_input") or "")
     recent_assistant = _latest_role_text(current_messages, "assistant")
     recent_text = "\n".join(msg.get("content", "") for msg in current_messages[-8:])
     last_failure = _last_failure(recent_text, workspace)
     pending_tests = _pending_tests(workspace)
     open_questions = _open_questions(current_messages)
-    active_goal = _active_goal(recent_user, sessions, workspace)
+    active_goal = _active_goal(recent_user or initial_user, sessions, workspace)
     last_completed_step = _last_completed_step(recent_assistant, recent_text)
     next_unfinished_step = _next_unfinished_step(
         active_goal=active_goal,
@@ -59,28 +62,32 @@ def classify_intent_stage(
     current_messages: list[dict[str, str]],
     task_state: dict[str, Any],
     workspace: dict[str, Any],
+    user_intent: dict[str, Any] | None = None,
 ) -> str:
     """Classify the user's current work stage with lightweight rules."""
 
-    recent_user = _latest_role_text(current_messages, "user").lower()
+    user_intent = user_intent or {}
+    recent_user = str(user_intent.get("latest_user_input") or _latest_role_text(current_messages, "user")).lower()
+    initial_user = str(user_intent.get("initial_user_input") or "").lower()
+    user_text = "\n".join(item for item in (initial_user, recent_user) if item)
     recent_all = "\n".join(msg.get("content", "") for msg in current_messages[-6:]).lower()
-    if _contains_any(recent_user, ("pause", "later", "hold", "stop", "先暂停", "等下", "稍后", "暂停")):
+    if _contains_any(user_text, ("pause", "later", "hold", "stop", "先暂停", "等下", "稍后", "暂停")):
         return "pause"
-    if _contains_any(recent_user, ("commit", "pr", "diff", "提交", "拉取请求", "变更摘要")):
+    if _contains_any(user_text, ("commit", "pr", "diff", "提交", "拉取请求", "变更摘要")):
         return "commit"
-    if _contains_any(recent_user, ("doc", "readme", "文档", "说明", "计划", "feature_plan")):
+    if _contains_any(user_text, ("doc", "readme", "文档", "说明", "计划", "feature_plan")):
         return "document"
-    if _contains_any(recent_user, ("review", "审查", "检查风险", "代码审查")):
+    if _contains_any(user_text, ("review", "审查", "检查风险", "代码审查")):
         return "review"
     if task_state.get("blocked_reason") or _contains_any(recent_all, ("traceback", "failed", "error", "失败", "报错")):
         return "debug"
-    if task_state.get("pending_tests") or _contains_any(recent_user, ("test", "pytest", "测试", "验证")):
+    if task_state.get("pending_tests") or _contains_any(user_text, ("test", "pytest", "测试", "验证")):
         return "test"
-    if _contains_any(recent_user, ("implement", "build", "fix", "add", "补全", "实现", "修复", "接入")):
+    if _contains_any(user_text, ("implement", "build", "fix", "add", "补全", "实现", "修复", "接入")):
         return "implement"
-    if _contains_any(recent_user, ("plan", "design", "方案", "规划", "拆分")):
+    if _contains_any(user_text, ("plan", "design", "方案", "规划", "拆分")):
         return "plan"
-    if _contains_any(recent_user, ("inspect", "analyze", "read", "查看", "分析", "梳理")):
+    if _contains_any(user_text, ("inspect", "analyze", "read", "查看", "分析", "梳理")):
         return "explore"
     if workspace.get("git_status"):
         return "implement"

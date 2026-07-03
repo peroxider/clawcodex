@@ -37,3 +37,51 @@ def test_fallback_uses_workspace_focus_debug_field(tmp_path) -> None:
     suggestions = fallback_suggestions(context, min_confidence=0.45)
 
     assert suggestions[0].title == "Verify Intent Forecast fixes"
+
+
+def test_fallback_user_strategy_prefers_recent_user_over_workspace(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        current_messages=[{"role": "user", "content": "write docs"}],
+        workspace={"git_status": " M file.py"},
+        response_language="English",
+        intent_strategy="user",
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions[0].title == "Continue the recent task"
+
+
+def test_fallback_workspace_strategy_prefers_workspace_over_recent_user(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        current_messages=[{"role": "user", "content": "write docs"}],
+        workspace={"git_status": " M file.py"},
+        response_language="English",
+        intent_strategy="workspace",
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions[0].title == "Review current workspace changes"
+
+
+def test_fallback_history_strategy_prefers_session_next_action(tmp_path) -> None:
+    context = ForecastContext(
+        cwd=str(tmp_path),
+        current_messages=[{"role": "user", "content": "write docs"}],
+        workspace={"git_status": " M file.py"},
+        sessions=[
+            {
+                "session_id": "s1",
+                "summary": {"next_action_candidates": ["Continue historical task"]},
+            }
+        ],
+        response_language="English",
+        intent_strategy="history",
+    )
+
+    suggestions = fallback_suggestions(context, min_confidence=0.45)
+
+    assert suggestions[0].title == "Continue historical task"

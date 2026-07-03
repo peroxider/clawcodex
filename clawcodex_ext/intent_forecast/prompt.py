@@ -25,7 +25,13 @@ Rules:
 - Treat `dontAsk` as permissive/logging mode, not as evidence that tools are blocked.
 - Use confidence between 0 and 1.
 - Avoid repeating suggestions that feedback says were dismissed.
-- First decide from `task_state` and `intent_stage`; only then use historical sessions.
+- Treat `user_intent.initial_user_input`, `user_intent.latest_user_input`, and `user_intent.previous_user_inputs` as the primary evidence of intent.
+- Assistant/system messages are secondary evidence only: use them to infer completed work, failures, blockers, or unanswered questions, not to invent a new user goal.
+- If assistant output is verbose but user input is vague or only a greeting, avoid over-interpreting the assistant output.
+- Obey exactly one `intent_strategy`: `user`, `workspace`, or `history`.
+- If `intent_strategy` is `user`, first decide from `user_intent`, then `task_state` and `intent_stage`; use workspace/history only as supporting evidence.
+- If `intent_strategy` is `workspace`, first decide from changed files, workspace focus, tests, and git state; use user input/history only as supporting evidence.
+- If `intent_strategy` is `history`, first decide from relevant session summaries and feedback; use current user/workspace only to filter stale or off-topic history.
 - If `task_state.blocked_reason` is present, prioritize fixing that failure.
 - If `task_state.open_questions` is non-empty, do not suggest autonomous implementation; suggest answering or resolving the question.
 - If `intent_stage` is `test` or `debug`, keep suggestions focused on verification or failure repair."""

@@ -45,7 +45,10 @@ def test_prompt_carries_response_language(tmp_path) -> None:
     messages = build_forecast_messages(context, max_input_tokens=4000)
 
     assert '"response_language": "Chinese"' in messages[0]["content"]
+    assert '"user_intent"' in messages[0]["content"]
     assert "MUST use the context field `response_language`" in messages[0]["content"]
+    assert "Treat `user_intent.initial_user_input`" in messages[0]["content"]
+    assert "Obey exactly one `intent_strategy`" in messages[0]["content"]
     assert "Do not suggest changing permission mode" in messages[0]["content"]
     assert "Treat `dontAsk` as permissive" in messages[0]["content"]
 

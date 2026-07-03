@@ -20,6 +20,7 @@ class IntentForecastConfig:
     feedback_enabled: bool = True
     summary_lazy_generate: bool = True
     response_language: str = "auto"
+    intent_strategy: str = "user"
 
     @classmethod
     def from_mapping(cls, raw: Any) -> "IntentForecastConfig":
@@ -39,6 +40,7 @@ class IntentForecastConfig:
             feedback_enabled=_bool_value(data.get("feedback_enabled"), True),
             summary_lazy_generate=_bool_value(data.get("summary_lazy_generate"), True),
             response_language=_language_value(data.get("response_language"), "auto"),
+            intent_strategy=_strategy_value(data.get("intent_strategy") or data.get("strategy"), "user"),
         )
 
 
@@ -90,3 +92,22 @@ def _language_value(value: Any, default: str) -> str:
     if text in {"en", "en-us", "english"}:
         return "English"
     return "auto"
+
+
+def _strategy_value(value: Any, default: str) -> str:
+    text = str(value or default).strip().lower().replace("-", "_")
+    aliases = {
+        "user": "user",
+        "user_first": "user",
+        "user_priority": "user",
+        "workspace": "workspace",
+        "workspace_first": "workspace",
+        "workspace_priority": "workspace",
+        "project": "workspace",
+        "project_first": "workspace",
+        "history": "history",
+        "history_first": "history",
+        "history_priority": "history",
+        "session": "history",
+    }
+    return aliases.get(text, default)

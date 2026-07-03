@@ -25,7 +25,7 @@ def fallback_suggestions(context: ForecastContext, *, min_confidence: float) -> 
         suggestion = rule.apply(context, min_confidence)
         if suggestion is not None:
             suggestions.append(suggestion)
-    suggestions.sort(key=lambda item: item.confidence, reverse=True)
+    suggestions.sort(key=lambda item: _strategy_score(item, context), reverse=True)
     return suggestions[:3]
 
 
@@ -231,3 +231,29 @@ def _suggestion(
 
 def _zh(context: ForecastContext) -> bool:
     return context.response_language.lower().startswith("chinese")
+
+
+def _strategy_score(suggestion: ForecastSuggestion, context: ForecastContext) -> float:
+    strategy = getattr(context, "intent_strategy", "user") or "user"
+    refs = " ".join(suggestion.refs()).lower()
+    score = suggestion.confidence
+    if strategy == "workspace":
+        if any(marker in refs for marker in ("git:", "focus:", "tests:", "intent_stage:")):
+            score += 0.18
+        if "conversation:" in refs:
+            score -= 0.08
+        if "session:" in refs:
+            score -= 0.04
+    elif strategy == "history":
+        if any(marker in refs for marker in ("session:", "history:")):
+            score += 0.2
+        if "conversation:" in refs:
+            score -= 0.06
+        if "git:" in refs:
+            score -= 0.04
+    else:
+        if "conversation:" in refs or "task_state:" in refs:
+            score += 0.18
+        if "session:" in refs:
+            score -= 0.08
+    return score

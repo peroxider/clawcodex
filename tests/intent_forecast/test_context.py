@@ -7,6 +7,7 @@ from src.types.messages import Message
 
 from clawcodex_ext.intent_forecast.config import IntentForecastConfig
 from clawcodex_ext.intent_forecast.context import (
+    build_user_intent,
     IntentForecastContextBuilder,
     infer_response_language,
 )
@@ -26,6 +27,9 @@ def test_context_reads_memory_workspace_and_current_messages(tmp_path) -> None:
     ).build()
 
     assert context.current_messages[-1]["content"] == "continue forecast"
+    assert context.user_intent["initial_user_input"] == "continue forecast"
+    assert context.user_intent["latest_user_input"] == "continue forecast"
+    assert context.intent_strategy == "user"
     assert context.response_language == "English"
     assert context.intent_stage in {"explore", "implement"}
     assert "active_goal" in context.task_state
@@ -131,3 +135,55 @@ def test_context_respects_configured_response_language(tmp_path) -> None:
     ).build()
 
     assert context.response_language == "Chinese"
+
+
+def test_context_truncates_assistant_more_than_user_and_preserves_user_intent(tmp_path) -> None:
+    conv = Conversation()
+    conv.messages = [
+        Message(role="user", content="请先写文档，不要实现代码"),
+        Message(role="assistant", content="A" * 2000),
+    ]
+
+    context = IntentForecastContextBuilder(
+        conversation=conv,
+        workspace_root=tmp_path,
+        config=IntentForecastConfig(),
+        sessions_dir=tmp_path / "sessions",
+        feedback_base_dir=tmp_path,
+    ).build()
+
+    assistant = [msg for msg in context.current_messages if msg["role"] == "assistant"][0]
+    assert len(assistant["content"]) == 360
+    assert context.user_intent["latest_user_input"] == "请先写文档，不要实现代码"
+    assert context.intent_stage == "document"
+
+
+def test_build_user_intent_tracks_initial_latest_and_preferences() -> None:
+    intent = build_user_intent(
+        [
+            {"role": "user", "content": "先分析架构"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "不要实现，改成写文档"},
+        ]
+    )
+
+    assert intent["initial_user_input"] == "先分析架构"
+    assert intent["latest_user_input"] == "不要实现，改成写文档"
+    assert intent["previous_user_inputs"] == ["先分析架构"]
+    assert intent["explicit_preferences"] == ["不要实现，改成写文档"]
+
+
+def test_context_carries_configured_intent_strategy(tmp_path) -> None:
+    conv = Conversation()
+    conv.messages = [Message(role="user", content="finish tests")]
+
+    context = IntentForecastContextBuilder(
+        conversation=conv,
+        workspace_root=tmp_path,
+        config=IntentForecastConfig(intent_strategy="workspace"),
+        sessions_dir=tmp_path / "sessions",
+        feedback_base_dir=tmp_path,
+    ).build()
+
+    assert context.intent_strategy == "workspace"
+    assert context.to_prompt_dict()["intent_strategy"] == "workspace"

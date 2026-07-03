@@ -32,3 +32,39 @@ def test_session_retrieval_prefers_changed_file_overlap_over_recency() -> None:
 
     assert [row["session_id"] for row in ranked] == ["forecast", "orchestrator"]
     assert ranked[0]["relevance_score"] > ranked[1]["relevance_score"]
+
+
+def test_session_retrieval_user_strategy_prefers_recent_text() -> None:
+    rows = [
+        {"session_id": "workspace", "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]}},
+        {"session_id": "user", "title": "Write docs from user request"},
+    ]
+
+    ranked = rank_session_rows(
+        rows,
+        cwd="repo",
+        changed_files=["clawcodex_ext/intent_forecast/service.py"],
+        recent_text="write docs from user request",
+        limit=2,
+        strategy="user",
+    )
+
+    assert ranked[0]["session_id"] == "user"
+
+
+def test_session_retrieval_workspace_strategy_prefers_changed_files() -> None:
+    rows = [
+        {"session_id": "workspace", "summary": {"files_touched": ["clawcodex_ext/intent_forecast/service.py"]}},
+        {"session_id": "user", "title": "Write docs from user request"},
+    ]
+
+    ranked = rank_session_rows(
+        rows,
+        cwd="repo",
+        changed_files=["clawcodex_ext/intent_forecast/service.py"],
+        recent_text="write docs from user request",
+        limit=2,
+        strategy="workspace",
+    )
+
+    assert ranked[0]["session_id"] == "workspace"

@@ -43,3 +43,26 @@ def test_intent_stage_enters_debug_when_recent_failure_exists() -> None:
     )
 
     assert stage == "debug"
+
+
+def test_task_state_prefers_user_intent_over_verbose_assistant_output() -> None:
+    messages = [
+        {"role": "user", "content": "只写文档"},
+        {"role": "assistant", "content": "I inspected code and could implement many files."},
+    ]
+    user_intent = {"initial_user_input": "只写文档", "latest_user_input": "只写文档"}
+    state = build_task_state(
+        current_messages=messages,
+        sessions=[],
+        workspace={"git_status": " M file.py"},
+        user_intent=user_intent,
+    )
+    stage = classify_intent_stage(
+        current_messages=messages,
+        task_state=state,
+        workspace={"git_status": " M file.py"},
+        user_intent=user_intent,
+    )
+
+    assert state["active_goal"] == "只写文档"
+    assert stage == "document"
