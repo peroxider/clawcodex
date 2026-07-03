@@ -29,8 +29,9 @@ from clawcodex_ext.services.channels.results import (
 )
 from clawcodex_ext.services.im_gateway.binding import BindingEntry, BindingPolicy
 from clawcodex_ext.services.im_gateway.config import GatewayConfig
-from clawcodex_ext.services.im_gateway.gateway import MessageGateway
+from clawcodex_ext.services.im_gateway.gateway import MessageGateway, _collect_broadcast_targets
 from clawcodex_ext.services.im_gateway.models import OutboundMessage, SessionTarget
+from clawcodex_ext.services.im_gateway.store import ReliabilityStore
 
 
 class _FakeWeChatAdapter(ChannelAdapter):
@@ -359,3 +360,146 @@ async def test_notify_terminate_matching_sends_for_each(tmp_path) -> None:
 
     texts = [msg.text for msg, _ in adapter.sends]
     assert 'clawcodex-REPL已断开' in texts
+
+
+class _FakeFeishuAdapter(ChannelAdapter):
+    """Minimal Feishu adapter for notification broadcast tests."""
+
+    def __init__(self, name: str = 'feishu', last_sender: str | None = 'ou_feishu_user') -> None:
+        self._name = name
+        self._config = ChannelConfig(
+            type=ChannelType.FEISHU,
+            webhook_url='',
+            name=name,
+            enabled=True,
+            extra={'connection_mode': 'websocket'},
+        )
+        self._caps = ChannelCapabilitySet.of(
+            ChannelCapability.OUTBOUND_TEXT,
+            ChannelCapability.INBOUND_POLLING,
+            ChannelCapability.CONTEXT_REPLY,
+            descriptors={
+                ChannelCapability.OUTBOUND_TEXT: CapabilityDescriptor(
+                    ChannelCapability.OUTBOUND_TEXT, supports_markdown=True
+                )
+            },
+        )
+        self.sends: list[tuple[ChannelMessage, str | None]] = []
+        self._last_sender: str | None = last_sender
+
+    @property
+    def channel_id(self) -> str:
+        return self._name
+
+    @property
+    def config(self) -> ChannelConfig:
+        return self._config
+
+    @property
+    def capabilities(self) -> ChannelCapabilitySet:
+        return self._caps
+
+    def validate_config(self) -> ValidationResult:
+        return ValidationResult.ok_result()
+
+    async def health_check(self) -> ChannelHealth:
+        return ChannelHealth(healthy=True, channel_id=self._name)
+
+    async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
+        self.sends.append((message, target))
+        return ChannelSendResult.success(self._name, provider_receipt='r')
+
+    def last_known_sender(self) -> str | None:
+        return self._last_sender
+
+    def set_inbound_handler(self, handler) -> None:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+
+def _gateway_with_feishu(
+    tmp_path, *, sender: str | None = 'ou_feishu_user'
+) -> tuple[MessageGateway, _FakeFeishuAdapter]:
+    """Build a real gateway with only a fake Feishu adapter (no WeChat)."""
+    adapter = _FakeFeishuAdapter('feishu')
+    adapter._last_sender = sender
+    reg = ChannelAdapterRegistry()
+    reg.register(adapter)
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    gw = MessageGateway(cfg, registry=reg)
+    return gw, adapter
+
+
+@pytest.mark.asyncio
+async def test_notify_broadcasts_to_feishu_when_no_wechat(tmp_path) -> None:
+    """Bug 1: REPL connect notification must reach Feishu when no WeChat adapter.
+
+    Previously the wildcard origin ``wechat:direct:*:*`` hard-coded WeChat-only
+    resolution: without a WeChat adapter, ``resolve_origin`` returned
+    ``(None, None)`` and the notification was silently skipped — even when a
+    Feishu channel was connected and ready. The notification should broadcast
+    to all connected outbound channels, not just WeChat.
+    """
+    gw, adapter = _gateway_with_feishu(tmp_path)
+
+    gw.binding.bind(
+        'wechat:direct:*:*',
+        SessionTarget(session_id='repl-1', host_type='repl'),
+    )
+    await asyncio.sleep(0.05)
+
+    texts = [msg.text for msg, _ in adapter.sends]
+    assert 'clawcodex-REPL已连接' in texts
+
+
+def test_collect_broadcast_targets_uses_persisted_feishu_sender_after_restart(tmp_path) -> None:
+    store = ReliabilityStore(tmp_path)
+    store.set_feishu_last_sender('feishu', 'oc_chat')
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    cfg.replace_channel(
+        ChannelConfig(
+            type=ChannelType.FEISHU,
+            webhook_url='',
+            name='feishu',
+            enabled=True,
+            extra={
+                'connection_mode': 'websocket',
+                'app_id': 'cli_app',
+                'app_secret': 'secret',
+            },
+        )
+    )
+
+    gw = MessageGateway(cfg, store=store)
+
+    assert _collect_broadcast_targets(gw.registry) == [('feishu', 'oc_chat')]
+
+
+@pytest.mark.asyncio
+async def test_notify_broadcasts_to_all_connected_channels(tmp_path) -> None:
+    """Bug 1: REPL connect notification broadcasts to WeChat AND Feishu."""
+    wechat = _FakeWeChatAdapter('wechat')
+    wechat._last_sender = 'user_wx'
+    feishu = _FakeFeishuAdapter('feishu')
+    feishu._last_sender = 'ou_feishu_user'
+    reg = ChannelAdapterRegistry()
+    reg.register(wechat)
+    reg.register(feishu)
+    cfg = GatewayConfig(state_dir=str(tmp_path))
+    gw = MessageGateway(cfg, registry=reg)
+
+    gw.binding.bind(
+        'wechat:direct:*:*',
+        SessionTarget(session_id='repl-1', host_type='repl'),
+    )
+    await asyncio.sleep(0.05)
+
+    wechat_texts = [msg.text for msg, _ in wechat.sends]
+    feishu_texts = [msg.text for msg, _ in feishu.sends]
+    assert 'clawcodex-REPL已连接' in wechat_texts
+    assert 'clawcodex-REPL已连接' in feishu_texts

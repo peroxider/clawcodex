@@ -51,6 +51,9 @@ class GatewayFrame:
     event_type: str | None = None
     deadline_ms: int | None = None
     payload: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+    semantic_tags: list[str] = field(default_factory=list)
+    context_token: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -71,6 +74,9 @@ class GatewayFrame:
             'event_type',
             'deadline_ms',
             'payload',
+            'metadata',
+            'semantic_tags',
+            'context_token',
         ):
             v = getattr(self, k)
             if v not in (None, [], {}):
@@ -114,6 +120,9 @@ class GatewayFrame:
             event_type=data.get('event_type'),
             deadline_ms=data.get('deadline_ms'),
             payload=data.get('payload'),
+            metadata=data.get('metadata') if isinstance(data.get('metadata'), dict) else None,
+            semantic_tags=list(data.get('semantic_tags') or []),
+            context_token=data.get('context_token'),
         )
 
     # -- convenience constructors ---------------------------------------
@@ -148,6 +157,7 @@ class GatewayFrame:
         text: str,
         semantic: str | None = None,
         deadline_ms: int | None = None,
+        context_token: str | None = None,
     ) -> GatewayFrame:
         return cls(
             type=FrameType.DELIVER,
@@ -157,6 +167,7 @@ class GatewayFrame:
             text=text,
             semantic=semantic,
             deadline_ms=deadline_ms,
+            context_token=context_token,
         )
 
     @classmethod
@@ -183,14 +194,29 @@ class GatewayFrame:
         return cls(type=FrameType.EVENT, event_type=event_type, payload=payload)
 
     @classmethod
-    def outbound(cls, *, origin: str, text: str) -> GatewayFrame:
+    def outbound(
+        cls,
+        *,
+        origin: str,
+        text: str,
+        context_token: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        semantic_tags: list[str] | None = None,
+    ) -> GatewayFrame:
         """Client→server frame carrying a reply to send back to an IM origin.
 
         Mirrors ``deliver`` (server→client inbound) in the outbound direction:
         the opt-in host (REPL/orchestrator) produced a reply and asks the
         gateway to send it to the WeChat user behind ``origin``.
         """
-        return cls(type=FrameType.OUTBOUND, origin=origin, text=text)
+        return cls(
+            type=FrameType.OUTBOUND,
+            origin=origin,
+            text=text,
+            context_token=context_token,
+            metadata=dict(metadata) if metadata is not None else None,
+            semantic_tags=list(semantic_tags or []),
+        )
 
 
 class GatewayIpcError(Exception):

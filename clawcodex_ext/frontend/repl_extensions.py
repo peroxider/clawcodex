@@ -58,6 +58,40 @@ def _zh_option_desc(desc: str) -> str:
     return desc
 
 
+async def _send_client_outbound(
+    client,
+    *,
+    origin: str,
+    text: str,
+    context_token: str | None = None,
+    metadata: dict | None = None,
+    semantic_tags: list[str] | None = None,
+):
+    kwargs = {
+        'origin': origin,
+        'text': text,
+        'context_token': context_token,
+        'metadata': metadata,
+        'semantic_tags': semantic_tags,
+    }
+    kwargs = {key: value for key, value in kwargs.items() if value is not None}
+    fallback_order = ('context_token', 'metadata', 'semantic_tags')
+    while True:
+        try:
+            return await client.send_outbound(**kwargs)
+        except TypeError as exc:
+            message = str(exc)
+            remove_key = next(
+                (key for key in fallback_order if key in kwargs and key in message),
+                None,
+            )
+            if remove_key is None:
+                remove_key = next((key for key in fallback_order if key in kwargs), None)
+            if remove_key is None:
+                raise
+            kwargs.pop(remove_key, None)
+
+
 class _ImReplyController:
     """Sends the REPL's final assistant reply back to the IM origin.
 
@@ -98,10 +132,16 @@ class _ImReplyController:
         # ReplGatewayClient records each inbound IM origin; pop_reply_origin
         # returns None for keyboard-initiated turns so we don't spam the
         # WeChat user with every assistant reply typed at the REPL prompt.
-        pop_origin = getattr(self._client, 'pop_reply_origin', None)
-        if not callable(pop_origin):
-            return
-        im_origin = pop_origin()
+        pop_context = getattr(self._client, 'pop_reply_context', None)
+        if callable(pop_context):
+            im_origin, context_token = pop_context()
+        else:
+            context_fn = getattr(self._client, 'peek_reply_context_token', None)
+            context_token = context_fn() if callable(context_fn) else None
+            pop_origin = getattr(self._client, 'pop_reply_origin', None)
+            if not callable(pop_origin):
+                return
+            im_origin = pop_origin()
         if not im_origin:
             return  # keyboard-driven turn — no IM reply to send
         loop = getattr(self._repl, '_cron_loop', None)
@@ -113,7 +153,13 @@ class _ImReplyController:
             # not running (the normal state after chat() returns). The
             # coroutine executes on the next run_until_complete call.
             asyncio.run_coroutine_threadsafe(
-                client.send_outbound(origin=im_origin, text=text), loop
+                _send_client_outbound(
+                    client,
+                    origin=im_origin,
+                    text=text,
+                    context_token=context_token,
+                ),
+                loop,
             )
             _log.info('repl IM reply sent: origin=%s len=%d', im_origin[:24], len(text))
         except Exception:  # noqa: BLE001
@@ -139,10 +185,30 @@ class _ImReplyController:
         im_origin = peek_origin()
         if not im_origin:
             return False
+        context_fn = getattr(self._client, 'peek_reply_context_token', None)
+        context_token = context_fn() if callable(context_fn) else None
         text = self._format_permission_prompt(
             message, options, suggestion=suggestion, interactive=interactive
         )
-        return self._send_outbound_text(im_origin, text)
+        metadata = None
+        semantic_tags = None
+        if interactive:
+            metadata = {
+                'intent': 'permission_approval',
+                'permission': {
+                    'message': str(message).strip().replace('Claude', 'ClawCodex'),
+                    'suggestion': suggestion,
+                    'options': [
+                        {'value': key, 'label': _zh_option_desc(desc)} for key, desc in options
+                    ],
+                    'expires_in_seconds': 600,
+                },
+            }
+            semantic_tags = ['approval']
+        send_kwargs = {'metadata': metadata, 'semantic_tags': semantic_tags}
+        if context_token is not None:
+            send_kwargs['context_token'] = context_token
+        return self._send_outbound_text(im_origin, text, **send_kwargs)
 
     @staticmethod
     def _format_permission_prompt(
@@ -172,7 +238,15 @@ class _ImReplyController:
             lines.extend(['', '请在 REPL 中选择对应的选项以继续。'])
         return '\n'.join(lines)
 
-    def _send_outbound_text(self, im_origin: str, text: str) -> bool:
+    def _send_outbound_text(
+        self,
+        im_origin: str,
+        text: str,
+        *,
+        context_token: str | None = None,
+        metadata: dict | None = None,
+        semantic_tags: list[str] | None = None,
+    ) -> bool:
         import asyncio
 
         loop = getattr(self._repl, '_cron_loop', None)
@@ -187,7 +261,15 @@ class _ImReplyController:
             if running is loop:
                 # Inside _cron_loop and it is turning — schedule cooperatively.
                 asyncio.run_coroutine_threadsafe(
-                    client.send_outbound(origin=im_origin, text=text), loop
+                    _send_client_outbound(
+                        client,
+                        origin=im_origin,
+                        text=text,
+                        context_token=context_token,
+                        metadata=metadata,
+                        semantic_tags=semantic_tags,
+                    ),
+                    loop,
                 )
                 return True
             # Not inside _cron_loop: the caller is sync code that is about to
@@ -196,12 +278,26 @@ class _ImReplyController:
             # ``_cron_loop`` which won't drain until ``chat()`` returns — far
             # too late (the user would already have approved in the REPL).
             # Send from a one-shot thread so the message leaves immediately.
-            return self._send_outbound_text_from_thread(im_origin, text)
+            return self._send_outbound_text_from_thread(
+                im_origin,
+                text,
+                context_token=context_token,
+                metadata=metadata,
+                semantic_tags=semantic_tags,
+            )
         except Exception:  # noqa: BLE001
             _log.warning('repl IM outbound send failed', exc_info=True)
             return False
 
-    def _send_outbound_text_from_thread(self, im_origin: str, text: str) -> bool:
+    def _send_outbound_text_from_thread(
+        self,
+        im_origin: str,
+        text: str,
+        *,
+        context_token: str | None = None,
+        metadata: dict | None = None,
+        semantic_tags: list[str] | None = None,
+    ) -> bool:
         """Send while the REPL event loop is about to block on terminal input."""
         socket_path = getattr(self._client, '_socket_path', None)
         if not socket_path:
@@ -216,7 +312,14 @@ class _ImReplyController:
                 client = GatewayIpcClient(str(socket_path), instance_id='repl-im-permission')
                 await client.connect()
                 try:
-                    await client.send_outbound(origin=im_origin, text=text)
+                    await _send_client_outbound(
+                        client,
+                        origin=im_origin,
+                        text=text,
+                        context_token=context_token,
+                        metadata=metadata,
+                        semantic_tags=semantic_tags,
+                    )
                 finally:
                     await client.close()
 
@@ -298,12 +401,11 @@ def install_repl_extensions(repl: 'ClawcodexREPL', ctx) -> None:
 
 
 def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
-    """Opt-in: connect the REPL to the IM gateway so WeChat messages drive it.
+    """Opt-in: connect the REPL to the IM gateway so IM messages drive it.
 
     Enabled when ``--gateway`` is passed or when a specific origin is
     provided via ``--gateway-origin`` / ``CLAWCODEX_GATEWAY_ORIGIN``. Without a
-    specific origin, the REPL binds all direct/private WeChat messages for the
-    single configured WeChat channel.
+    specific origin, the REPL binds all supported direct/private IM messages.
 
     Connection is deferred: ``install_repl_extensions`` runs before
     ``repl.run()`` creates the persistent asyncio loop, so we stash an init
@@ -324,9 +426,9 @@ def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
     )
     enabled = bool(getattr(options, 'gateway', False))
     if not origin and enabled:
-        from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
+        from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
 
-        origin = WECHAT_DIRECT_ALL_ORIGIN
+        origin = IM_DIRECT_ALL_ORIGIN
     if not origin:
         return  # opt-in not requested
     if not sock:
@@ -350,7 +452,7 @@ def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
     repl._gateway_client = client
 
     # IM reply controller: after each assistant turn, send the final reply
-    # text back to the WeChat origin via the OUTBOUND IPC frame.
+    # text back to the IM origin via the OUTBOUND IPC frame.
     repl._im_reply_controller = _ImReplyController(repl, client, origin)
     _log.info('repl IM gateway opt-in staged: origin=%s sock=%s', origin[:32], sock)
 
@@ -362,6 +464,13 @@ def _install_gateway_client(repl: 'ClawcodexREPL', ctx=None) -> None:
             await client.connect()
             client._heartbeat_task = asyncio.create_task(client._heartbeat_loop(30.0))
             _log.info('repl IM gateway opt-in connected: origin=%s sock=%s', origin[:32], sock)
+        except FileNotFoundError:
+            _log.error(
+                'IM gateway daemon is not running. Start it first:\n'
+                '    clawcodex-dev gateway start\n'
+                'Then relaunch with --gateway.'
+            )
+            return
         except Exception:  # noqa: BLE001
             _log.warning('repl IM gateway opt-in connect failed', exc_info=True)
 

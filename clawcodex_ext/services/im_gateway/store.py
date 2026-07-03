@@ -214,6 +214,20 @@ class ReliabilityStore:
         prefix = f'{account_id}:'
         return [k[len(prefix) :] for k in data if isinstance(k, str) and k.startswith(prefix)]
 
+    def get_feishu_last_sender(self, channel_id: str) -> str | None:
+        data = _read_json(self._p('feishu_last_senders.json'), {})
+        sender = data.get(channel_id)
+        return str(sender) if sender else None
+
+    def set_feishu_last_sender(self, channel_id: str, sender: str | None) -> None:
+        with self._lock:
+            data = _read_json(self._p('feishu_last_senders.json'), {})
+            if sender:
+                data[channel_id] = sender
+            else:
+                data.pop(channel_id, None)
+            _atomic_write_json(self._p('feishu_last_senders.json'), data)
+
     def get_wechat_cursor(self, account_id: str) -> str:
         """Return the saved iLink ``get_updates_buf`` cursor, or ``""``.
 

@@ -17,6 +17,7 @@ from extensions.orchestrator.events import (
     OrchestratorEventEmitter,
     format_event,
 )
+from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
 
 
 def _session(issue_id='AGENTSDK-15', reason='success', pr=None):
@@ -536,7 +537,7 @@ def test_orchestrator_connect_gateway_does_not_fake_hot_attach(monkeypatch, caps
 
 
 def test_mount_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
-    """Startup opt-in can bind all WeChat private messages without origin details."""
+    """Startup opt-in can bind all supported private IM messages without origin details."""
     from extensions.orchestrator.cli import server as server_mod
 
     created: dict[str, object] = {}
@@ -584,7 +585,7 @@ def test_mount_gateway_switch_uses_all_private_origin(monkeypatch) -> None:
     )
 
     assert wrapper is not None
-    assert created['origin'] == 'wechat:direct:*:*'
+    assert created['origin'] == IM_DIRECT_ALL_ORIGIN
 
 
 def test_mount_gateway_uses_reconnect_register(monkeypatch) -> None:
@@ -646,7 +647,7 @@ def test_mount_gateway_uses_reconnect_register(monkeypatch) -> None:
     asyncio.run(_drive_heartbeat_once())
 
     assert calls
-    assert calls[0][1] == 'wechat:direct:*:*'
+    assert calls[0][1] == IM_DIRECT_ALL_ORIGIN
 
 
 def test_mount_gateway_retries_initial_register_failure(monkeypatch) -> None:
@@ -709,7 +710,7 @@ def test_mount_gateway_retries_initial_register_failure(monkeypatch) -> None:
     with __import__('contextlib').suppress(asyncio.CancelledError):
         asyncio.run(wrapper._heartbeat_loop())
 
-    assert calls == ['wechat:direct:*:*', 'wechat:direct:*:*']
+    assert calls == [IM_DIRECT_ALL_ORIGIN, IM_DIRECT_ALL_ORIGIN]
 
 
 def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) -> None:
@@ -775,7 +776,7 @@ def test_mount_gateway_reconnects_when_heartbeat_is_not_accepted(monkeypatch) ->
     with __import__('contextlib').suppress(asyncio.CancelledError):
         asyncio.run(wrapper._heartbeat_loop())
 
-    assert reconnect_calls == ['wechat:direct:*:*', 'wechat:direct:*:*']
+    assert reconnect_calls == [IM_DIRECT_ALL_ORIGIN, IM_DIRECT_ALL_ORIGIN]
 
 
 def test_mount_gateway_flushes_pending_outbound_after_register(monkeypatch) -> None:

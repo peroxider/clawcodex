@@ -59,6 +59,7 @@ from .transport import (
     ChannelTransport,
     TransportError,
     TransportResponse,
+    decode_json_body,
     default_headers,
     encode_json_body,
 )
@@ -174,7 +175,7 @@ class WeChatIlinkAuthStore:
         with self._lock:
             self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp = self._path.with_suffix(self._path.suffix + '.tmp')
-            tmp.write_text(_json_dumps(payload), encoding='utf-8')
+            tmp.write_bytes(encode_json_body(payload))
             os.replace(tmp, self._path)
             os.chmod(self._path, 0o600)
 
@@ -182,7 +183,7 @@ class WeChatIlinkAuthStore:
         with self._lock:
             if not self._path.exists():
                 return None
-            data = _json_loads(self._path.read_text(encoding='utf-8'))
+            data = decode_json_body(self._path.read_text(encoding='utf-8'), default={})
         enc = data.get('bot_token_enc')
         if not enc:
             return None
@@ -306,13 +307,13 @@ class WeChatPairingStore:
             'allowed': sorted(self._allowed),
         }
         tmp = self._path.with_suffix(self._path.suffix + '.tmp')
-        tmp.write_text(_json_dumps(payload), encoding='utf-8')
+        tmp.write_bytes(encode_json_body(payload))
         os.replace(tmp, self._path)
         os.chmod(self._path, 0o600)
 
     def _load(self) -> None:
         assert self._path is not None
-        data = _json_loads(self._path.read_text(encoding='utf-8'))
+        data = decode_json_body(self._path.read_text(encoding='utf-8'), default={})
         self._codes.clear()
         for c in data.get('codes', []):
             self._codes[c['code']] = PairingCode(
@@ -564,16 +565,11 @@ class WeChatIlinkClient:
 
 
 def _parse_ilink_response(resp: TransportResponse) -> dict[str, Any]:
-    import json
-
     if resp.status >= 400:
         raise _IlinkHttpError(resp.status, resp.body)
     if not resp.body:
         return {}
-    try:
-        data = json.loads(resp.body.decode('utf-8'))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise TransportError(f'ilink returned non-JSON: {exc}') from exc
+    data = decode_json_body(resp.body, default={}, raise_on_error=True)
     if isinstance(data, dict) and _is_ilink_payload_error(data):
         # iLink signals errors via ret/errcode inside an HTTP 200 body.
         ret = data.get('ret')
@@ -1551,21 +1547,6 @@ def _media_size(raw: dict[str, Any]) -> int | None:
         if isinstance(value, str) and value.isdigit():
             return int(value)
     return None
-
-
-def _json_dumps(obj: Any) -> str:
-    import json
-
-    return json.dumps(obj, ensure_ascii=False)
-
-
-def _json_loads(s: str) -> dict[str, Any]:
-    import json
-
-    try:
-        return json.loads(s)
-    except json.JSONDecodeError:
-        return {}
 
 
 __all__ = [

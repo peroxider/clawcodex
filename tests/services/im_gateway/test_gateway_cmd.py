@@ -127,6 +127,118 @@ def test_gateway_channels_status_errors(capsys) -> None:
     assert 'unknown gateway subcommand' in err
 
 
+def test_serve_writes_pid_before_gateway_start(tmp_path, monkeypatch) -> None:
+    """PID file must be written BEFORE channel adapters start.
+
+    A hanging / crashing adapter start used to block ``await gateway.start()``
+    so ``write_pid`` was never reached — the daemon became invisible to
+    ``stop()``/``restart()`` and left an orphan holding the flock. Asserting
+    the PID exists even when ``gateway.start`` raises proves the ordering.
+    """
+    import asyncio
+
+    from extensions.im_gateway import server as srv
+
+    paths = DaemonPaths.for_state_dir(tmp_path)
+    seen_pid_at_start: list[int | None] = []
+
+    class _CrashingGateway:
+        def __init__(self, *a, **kw) -> None:
+            pass
+
+        async def start(self) -> None:
+            # If write_pid ran before us, the PID file already exists.
+            seen_pid_at_start.append(read_pid(paths))
+            raise RuntimeError('adapter start crashed')
+
+        async def stop(self) -> None:
+            pass
+
+    monkeypatch.setattr(srv, 'MessageGateway', _CrashingGateway)
+    # load_config needs a config file; write a minimal one.
+    paths.state_dir.mkdir(parents=True, exist_ok=True)
+    (paths.state_dir / 'channels.yaml').write_text(
+        'enabled: true\nchannels: []\n', encoding='utf-8'
+    )
+
+    # gateway.start raises → serve propagates the RuntimeError.
+    with pytest.raises(RuntimeError, match='adapter start crashed'):
+        asyncio.run(srv.serve(paths, log_level=40))  # CRITICAL = quiet
+
+    # The PID file was already written when gateway.start ran (proving
+    # write_pid precedes adapter start), then cleaned up on the failure path.
+    assert seen_pid_at_start == [__import__('os').getpid()]
+    assert seen_pid_at_start[0] is not None
+    assert not paths.pid_file.exists()
+
+
+def test_gateway_start_reports_retrying_channel_as_degraded_success(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    from extensions.im_gateway import server as srv
+
+    paths = DaemonPaths.for_state_dir(tmp_path)
+    paths.log_file.write_text('', encoding='utf-8')
+
+    class _FakeProc:
+        returncode = None
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(srv.subprocess, 'Popen', lambda *a, **kw: _FakeProc())
+    read_pid_values = iter([None, 12345])
+    monkeypatch.setattr(srv, 'read_pid', lambda _paths: next(read_pid_values, 12345))
+    monkeypatch.setattr(srv, 'is_pid_alive', lambda pid: pid == 12345)
+    monkeypatch.setattr(
+        srv,
+        'read_health',
+        lambda _paths: {
+            'started_at': time.time(),
+            'channels': ['feishu'],
+            'channel_status': {'feishu': 'websocket:retrying'},
+        },
+    )
+    monkeypatch.setattr(srv, 'startup_health_wait_seconds', lambda _paths: 0.1)
+
+    rc = GatewayDaemon(paths).start()
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert 'Gateway daemon started' in captured.out
+    assert 'channel feishu: websocket:retrying' in captured.err
+    assert 'retrying in background' in captured.err
+    assert 'NOT connected' not in captured.err
+    assert 'messages may be dropped' not in captured.err
+
+
+def test_startup_health_wait_seconds_uses_feishu_startup_timeout(tmp_path) -> None:
+    from extensions.im_gateway import server as srv
+
+    paths = DaemonPaths.for_state_dir(tmp_path)
+    (paths.state_dir / 'channels.yaml').write_text(
+        '\n'.join(
+            [
+                'enabled: true',
+                'channels:',
+                '  - type: feishu',
+                '    webhook_url: ""',
+                '    name: feishu',
+                '    enabled: true',
+                '    extra:',
+                '      connection_mode: websocket',
+                '      app_id: cli_app',
+                '      app_secret: secret',
+                '      websocket:',
+                '        startup_connect_timeout_seconds: 7.5',
+            ]
+        ),
+        encoding='utf-8',
+    )
+
+    assert srv.startup_health_wait_seconds(paths) == pytest.approx(37.5)
+
+
 def test_gateway_start_with_name_errors(capsys) -> None:
     """`gateway start <name>` is invalid — start takes no channel name."""
     rc = run_gateway_command(['start', 'wechat'])

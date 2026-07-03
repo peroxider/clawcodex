@@ -19,24 +19,26 @@ from clawcodex_ext.services.channels.results import CircuitState
 class MessageSemantics(str, Enum):
     """The six v1 message semantics plus the unsupported-media non-semantic."""
 
-    NEW_PROMPT = "newPrompt"
-    COMMAND = "command"
-    FOLLOW_UP = "followUp"
-    APPROVAL = "approval"
-    INTERRUPT = "interrupt"
-    CONTEXT_ONLY = "contextOnly"
-    UNSUPPORTED_MEDIA = "unsupportedMedia"
+    NEW_PROMPT = 'newPrompt'
+    COMMAND = 'command'
+    FOLLOW_UP = 'followUp'
+    APPROVAL = 'approval'
+    INTERRUPT = 'interrupt'
+    CONTEXT_ONLY = 'contextOnly'
+    UNSUPPORTED_MEDIA = 'unsupportedMedia'
 
 
 class AckLayer(str, Enum):
     """Layered acknowledgement for inbound delivery."""
 
-    ACCEPTED = "accepted"  # gateway received the inbound
-    ENQUEUED = "enqueued"  # target host enqueued it
-    PROCESSED = "processed"  # target runtime confirmed processing
+    ACCEPTED = 'accepted'  # gateway received the inbound
+    ENQUEUED = 'enqueued'  # target host enqueued it
+    PROCESSED = 'processed'  # target runtime confirmed processing
 
 
-WECHAT_DIRECT_ALL_ORIGIN = "wechat:direct:*:*"
+WECHAT_DIRECT_ALL_ORIGIN = 'wechat:direct:*:*'
+FEISHU_DM_ALL_ORIGIN = 'feishu:dm:*:*'
+IM_DIRECT_ALL_ORIGIN = 'im:direct:*:*'
 
 
 @dataclass(frozen=True)
@@ -47,12 +49,22 @@ class OriginKey:
 
     @classmethod
     def wechat(cls, account_id: str, from_user_id: str) -> OriginKey:
-        return cls(f"wechat:direct:{account_id}:{from_user_id}")
+        return cls(f'wechat:direct:{account_id}:{from_user_id}')
 
     @classmethod
     def wechat_all_direct(cls) -> OriginKey:
         """All private/direct WeChat senders for the single configured WeChat channel."""
         return cls(WECHAT_DIRECT_ALL_ORIGIN)
+
+    @classmethod
+    def feishu_all_dm(cls) -> OriginKey:
+        """All private/direct Feishu DM senders for the single configured Feishu channel."""
+        return cls(FEISHU_DM_ALL_ORIGIN)
+
+    @classmethod
+    def im_all_direct(cls) -> OriginKey:
+        """All supported private/direct IM senders."""
+        return cls(IM_DIRECT_ALL_ORIGIN)
 
     def __str__(self) -> str:
         return self.value
@@ -63,7 +75,7 @@ class SessionTarget:
     """Where an origin's inbound is routed."""
 
     session_id: str
-    host_type: str = "default"  # default | repl | orchestrator
+    host_type: str = 'default'  # default | repl | orchestrator
 
 
 @dataclass
@@ -83,16 +95,16 @@ class InboundMessage:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "origin": self.origin,
-            "text": self.text,
-            "message_id": self.message_id,
-            "channel": self.channel,
-            "context_token": self.context_token,
-            "from_user_id": self.from_user_id,
-            "received_at": self.received_at,
-            "semantic": self.semantic.value if self.semantic else None,
-            "semantic_tags": list(self.semantic_tags),
-            "raw": dict(self.raw) if self.raw else None,
+            'origin': self.origin,
+            'text': self.text,
+            'message_id': self.message_id,
+            'channel': self.channel,
+            'context_token': self.context_token,
+            'from_user_id': self.from_user_id,
+            'received_at': self.received_at,
+            'semantic': self.semantic.value if self.semantic else None,
+            'semantic_tags': list(self.semantic_tags),
+            'raw': dict(self.raw) if self.raw else None,
         }
 
 
@@ -104,7 +116,7 @@ class OutboundMessage:
     channel: str
     target: str | None = None
     context_token: str | None = None
-    level: str = "info"
+    level: str = 'info'
     title: str | None = None
     markdown: bool = True
     idempotency_key: str | None = None
@@ -113,16 +125,16 @@ class OutboundMessage:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "text": self.text,
-            "channel": self.channel,
-            "target": self.target,
-            "context_token": self.context_token,
-            "level": self.level,
-            "title": self.title,
-            "markdown": self.markdown,
-            "idempotency_key": self.idempotency_key,
-            "semantic_tags": list(self.semantic_tags),
-            "metadata": dict(self.metadata) if self.metadata else None,
+            'text': self.text,
+            'channel': self.channel,
+            'target': self.target,
+            'context_token': self.context_token,
+            'level': self.level,
+            'title': self.title,
+            'markdown': self.markdown,
+            'idempotency_key': self.idempotency_key,
+            'semantic_tags': list(self.semantic_tags),
+            'metadata': dict(self.metadata) if self.metadata else None,
         }
 
 
@@ -132,24 +144,26 @@ class AckReceipt:
 
     delivery_id: str
     layer: AckLayer
-    message: str = ""
+    message: str = ''
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "delivery_id": self.delivery_id,
-            "layer": self.layer.value,
-            "message": self.message,
+            'delivery_id': self.delivery_id,
+            'layer': self.layer.value,
+            'message': self.message,
         }
 
 
 __all__ = [
-    "AckLayer",
-    "AckReceipt",
-    "CircuitState",
-    "InboundMessage",
-    "MessageSemantics",
-    "OriginKey",
-    "OutboundMessage",
-    "SessionTarget",
-    "WECHAT_DIRECT_ALL_ORIGIN",
+    'AckLayer',
+    'AckReceipt',
+    'CircuitState',
+    'FEISHU_DM_ALL_ORIGIN',
+    'IM_DIRECT_ALL_ORIGIN',
+    'InboundMessage',
+    'MessageSemantics',
+    'OriginKey',
+    'OutboundMessage',
+    'SessionTarget',
+    'WECHAT_DIRECT_ALL_ORIGIN',
 ]

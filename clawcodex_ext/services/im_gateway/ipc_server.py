@@ -18,12 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .ipc_protocol import GatewayFrame, FrameType
-from .origin_utils import (
-    configured_wechat_channel as _configured_wechat_channel,
-    is_concrete_wechat_direct_origin as _is_concrete_wechat_direct_origin,
-    resolve_origin as _resolve_origin,
-    wechat_adapter as _wechat_adapter,
-)
+from .origin_utils import resolve_origin as _resolve_origin
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +112,7 @@ class GatewayIpcServer:
         delivery_id: str,
         text: str,
         semantic: str | None = None,
+        context_token: str | None = None,
     ) -> bool:
         """Push an inbound message to the opt-in peer bound to ``origin``.
 
@@ -142,6 +138,7 @@ class GatewayIpcServer:
             origin=origin,
             text=text,
             semantic=semantic,
+            context_token=context_token,
         )
         await self._send(info['writer'], frame)
         logger.info(
@@ -324,6 +321,7 @@ class GatewayIpcServer:
             text=text,
             message_id=frame.delivery_id or '',
             channel='',
+            context_token=frame.context_token,
             semantic=semantic,
         )
         try:
@@ -366,7 +364,15 @@ class GatewayIpcServer:
 
             send_started = time.monotonic()
             result = await self.gateway.send(
-                OutboundMessage(text=text, channel=channel, target=target, markdown=False)
+                OutboundMessage(
+                    text=text,
+                    channel=channel,
+                    target=target,
+                    context_token=frame.context_token,
+                    markdown=False,
+                    metadata=frame.metadata,
+                    semantic_tags=list(frame.semantic_tags or []),
+                )
             )
             send_elapsed = time.monotonic() - send_started
         except Exception as exc:  # noqa: BLE001
@@ -505,8 +511,12 @@ def _binding_snapshot(gateway) -> list[dict[str, Any]]:
 
 def _exclusive_origin_group(origin: str) -> str:
     parts = origin.split(':')
+    if origin == 'im:direct:*:*':
+        return 'im:direct'
     if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
-        return 'wechat:direct'
+        return 'im:direct'
+    if len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
+        return 'im:direct'
     return origin
 
 

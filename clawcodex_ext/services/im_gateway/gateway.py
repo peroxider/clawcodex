@@ -55,12 +55,14 @@ class MessageGateway:
         self.inbound = InboundDispatcher(self.store, self.router)
         self._inbound_adapters: list = []
         self._running = False
+        self._stop_lock = asyncio.Lock()
         self._load_channels()
 
     def _build_adapter(self, cfg) -> ChannelAdapter | None:
         """Build one adapter from a ChannelConfig (gateway-owned deps for WeChat)."""
         from pathlib import Path
 
+        from clawcodex_ext.services.channels.feishu_app import FeishuAppChannelAdapter
         from clawcodex_ext.services.channels.models import ChannelType
         from clawcodex_ext.services.channels.transport import UrllibChannelTransport
         from clawcodex_ext.services.channels.wechat_ilink import (
@@ -91,6 +93,11 @@ class MessageGateway:
             )
             adapter.load_credentials()
             return adapter
+        if cfg.type is ChannelType.FEISHU:
+            extra = cfg.extra or {}
+            mode = str(extra.get('connection_mode') or '').strip().lower()
+            if mode == 'websocket':
+                return FeishuAppChannelAdapter(cfg, sender_store=self.store)
         try:
             return self.registry.create(cfg)
         except Exception as exc:  # noqa: BLE001
@@ -141,25 +148,62 @@ class MessageGateway:
         logger.info('gateway started')
 
     async def stop(self) -> None:
-        if not self._running:
-            return
-        logger.info('gateway stopping')
-        for adapter in self._inbound_adapters:
-            try:
-                await adapter.stop()
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    'gateway: adapter stop failed for %s: %s',
-                    getattr(adapter, 'channel_id', '?'),
-                    exc,
-                )
-        self.outbound.clear_deferred()
-        self._running = False
-        logger.info('gateway stopped')
+        async with self._stop_lock:
+            if not self._running:
+                return
+            self._running = False
+            logger.info('gateway stopping')
+            for adapter in self._inbound_adapters:
+                try:
+                    await adapter.stop()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        'gateway: adapter stop failed for %s: %s',
+                        getattr(adapter, 'channel_id', '?'),
+                        exc,
+                    )
+            self.outbound.clear_deferred()
+            logger.info('gateway stopped')
 
     @property
     def running(self) -> bool:
         return self._running
+
+    async def wait_channels_ready(self, timeout: float = 15.0) -> dict[str, str]:
+        """Wait for inbound adapters to report a connected/healthy state.
+
+        Polls each inbound adapter's ``health_check()`` until its
+        ``account_status`` indicates the channel is live (or degraded-but-up),
+        or ``timeout`` seconds elapse. Returns a ``{channel_id: status}`` map.
+        Adapters that start non-blocking (e.g. Feishu WS connect loop) flip to
+        ``connected`` asynchronously; this gives ``serve()`` a bounded window to
+        confirm connectivity before declaring startup done, so a stuck connect
+        surfaces as a degraded status rather than a silent invisible daemon.
+        """
+        import asyncio
+
+        deadline = asyncio.get_running_loop().time() + timeout
+        result: dict[str, str] = {}
+        while True:
+            result = {}
+            all_ready = True
+            for adapter in self._inbound_adapters:
+                cid = getattr(adapter, 'channel_id', '?')
+                try:
+                    health = await adapter.health_check()
+                    status = str(getattr(health, 'account_status', '') or '')
+                except Exception as exc:  # noqa: BLE001
+                    status = f'health_error:{exc!s}'
+                result[cid] = status
+                # "connected"/"logged_in" = ready; anything else (reconnecting,
+                # credentials_missing, etc.) keeps waiting.
+                if not any(
+                    marker in status for marker in ('connected', 'logged_in', 'websocket:connected')
+                ):
+                    all_ready = False
+            if all_ready or asyncio.get_running_loop().time() >= deadline:
+                return result
+            await asyncio.sleep(0.5)
 
     # -- inbound ---------------------------------------------------------
     def register_inbound(self, adapter) -> None:
@@ -235,19 +279,23 @@ class MessageGateway:
     async def _notify_connection_change(
         self, action: str, entry: BindingEntry, previous: BindingEntry | None
     ) -> None:
-        """Send a best-effort connection notification to the bound IM channel.
+        """Send a best-effort connection notification to all connected IM channels.
 
-        When REPL or orchestrator connects/disconnects, the user is notified
-        via the outbound dispatcher (e.g. ``"REPL已连接"`` / ``"orchestrator已断开"``).
-        All failures are logged and swallowed — notifications must never block
-        binding transitions or crash the gateway.
+        When REPL or orchestrator connects/disconnects, every operator who has
+        messaged the gateway is notified via the outbound dispatcher (e.g.
+        ``"REPL已连接"`` / ``"orchestrator已断开"``). The notification is
+        broadcast to every outbound channel that knows a recent sender — so
+        operators on WeChat, Feishu, or any other connected channel all hear
+        the connection event. All failures are logged and swallowed —
+        notifications must never block binding transitions or crash the gateway.
         """
-        from .origin_utils import resolve_origin
-
-        channel, target = resolve_origin(entry.origin, self)
-        if channel is None or target is None:
+        # Broadcast to every outbound channel with a known recent sender.
+        # This supersedes the origin-only routing (which hard-coded WeChat and
+        # silently skipped when the WeChat adapter had no last_known_sender).
+        targets = _collect_broadcast_targets(self.registry)
+        if not targets:
             logger.debug(
-                'connection notify: cannot resolve origin %s — skipping',
+                'connection notify: no broadcast targets for origin %s — skipping',
                 (entry.origin or '')[:32],
             )
             return
@@ -263,42 +311,55 @@ class MessageGateway:
         elif action in ('binding_offline', 'binding_terminated'):
             messages.append(f'{host_label}已断开')
 
-        for text in messages:
-            try:
-                result = await self.outbound.send(
-                    OutboundMessage(text=text, channel=channel, target=target, markdown=False)
-                )
-                if result is not None and getattr(result, 'ok', True) is False:
-                    error_category = getattr(result, 'error_category', '')
-                    category_value = getattr(error_category, 'value', '') or str(
-                        error_category or ''
+        for out_channel, out_target in targets:
+            for text in messages:
+                try:
+                    result = await self.outbound.send(
+                        OutboundMessage(
+                            text=text, channel=out_channel, target=out_target, markdown=False
+                        )
                     )
-                    logger.error(
-                        'connection notify: send failed for %r category=%s message=%s',
-                        text,
-                        category_value,
-                        getattr(result, 'message', '') or '',
-                    )
-                    continue
-                if result is not None and getattr(result, 'status', None) is SendStatus.ENQUEUED:
-                    raw = getattr(result, 'raw', None) or {}
+                    if result is not None and getattr(result, 'ok', True) is False:
+                        error_category = getattr(result, 'error_category', '')
+                        category_value = getattr(error_category, 'value', '') or str(
+                            error_category or ''
+                        )
+                        logger.error(
+                            'connection notify: send failed for %r channel=%s category=%s message=%s',
+                            text,
+                            out_channel,
+                            category_value,
+                            getattr(result, 'message', '') or '',
+                        )
+                        continue
+                    if (
+                        result is not None
+                        and getattr(result, 'status', None) is SendStatus.ENQUEUED
+                    ):
+                        raw = getattr(result, 'raw', None) or {}
+                        logger.info(
+                            'connection notify: enqueued %r channel=%s target=%s message=%s retry_after=%s',
+                            text,
+                            out_channel,
+                            (out_target or '')[:16] + '…'
+                            if len(out_target or '') > 16
+                            else out_target,
+                            getattr(result, 'message', '') or '',
+                            raw.get('retry_after_seconds') or raw.get('retry_after') or '',
+                        )
+                        continue
                     logger.info(
-                        'connection notify: enqueued %r channel=%s target=%s message=%s retry_after=%s',
+                        'connection notify: sent %r channel=%s target=%s',
                         text,
-                        channel,
-                        (target or '')[:16] + '…' if len(target or '') > 16 else target,
-                        getattr(result, 'message', '') or '',
-                        raw.get('retry_after_seconds') or raw.get('retry_after') or '',
+                        out_channel,
+                        (out_target or '')[:16] + '…' if len(out_target or '') > 16 else out_target,
                     )
-                    continue
-                logger.info(
-                    'connection notify: sent %r channel=%s target=%s',
-                    text,
-                    channel,
-                    (target or '')[:16] + '…' if len(target or '') > 16 else target,
-                )
-            except Exception:  # noqa: BLE001
-                logger.error('connection notify: send failed for %r — best-effort', text)
+                except Exception:  # noqa: BLE001
+                    logger.error(
+                        'connection notify: send failed for %r channel=%s — best-effort',
+                        text,
+                        out_channel,
+                    )
 
     # -- health ----------------------------------------------------------
     async def health(self) -> dict:
@@ -405,3 +466,29 @@ _HOST_LABELS = {
 def _host_label(host_type: str) -> str:
     """Map a binding host_type to a user-facing label for notifications."""
     return _HOST_LABELS.get(host_type, host_type)
+
+
+def _collect_broadcast_targets(registry: ChannelAdapterRegistry) -> list[tuple[str, str]]:
+    """Collect (channel_id, target) pairs for every outbound channel with a known sender.
+
+    Used as the fallback when an origin (e.g. ``wechat:direct:*:*``) cannot be
+    resolved to a concrete target. Each adapter that declares OUTBOUND_TEXT and
+    exposes a non-None ``last_known_sender()`` contributes one target, so the
+    connection notification reaches operators on every channel that has seen
+    inbound traffic this gateway lifetime.
+    """
+    targets: list[tuple[str, str]] = []
+    for adapter in registry.all_adapters():
+        caps = getattr(adapter, 'capabilities', None)
+        if caps is None or not caps.has(ChannelCapability.OUTBOUND_TEXT):
+            continue
+        last_known = getattr(adapter, 'last_known_sender', None)
+        if not callable(last_known):
+            continue
+        sender = last_known()
+        if not sender:
+            continue
+        channel_id = getattr(adapter, 'channel_id', None)
+        if channel_id:
+            targets.append((channel_id, sender))
+    return targets

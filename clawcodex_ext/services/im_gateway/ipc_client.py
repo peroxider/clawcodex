@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from .ipc_protocol import GatewayFrame, FrameType
 
@@ -39,7 +39,7 @@ class GatewayIpcClient:
         self,
         socket_path: str | Path,
         *,
-        instance_id: str = "client",
+        instance_id: str = 'client',
         on_deliver: OnDeliverFn | None = None,
     ) -> None:
         self.socket_path = Path(socket_path)
@@ -63,12 +63,12 @@ class GatewayIpcClient:
     async def close(self) -> None:
         if self._read_task is not None:
             self._read_task.cancel()
-            with __import__("contextlib").suppress(asyncio.CancelledError):
+            with __import__('contextlib').suppress(asyncio.CancelledError):
                 await self._read_task
             self._read_task = None
         if self._writer is not None:
             self._writer.close()
-            with __import__("contextlib").suppress(ConnectionError, RuntimeError):
+            with __import__('contextlib').suppress(ConnectionError, RuntimeError):
                 await self._writer.wait_closed()
             self._writer = None
             self._reader = None
@@ -92,7 +92,7 @@ class GatewayIpcClient:
             try:
                 frame = GatewayFrame.decode(raw)
             except ValueError:
-                logger.debug("gateway ipc: dropping undecodable frame")
+                logger.debug('gateway ipc: dropping undecodable frame')
                 continue
             self._dispatch_incoming(frame)
 
@@ -117,7 +117,7 @@ class GatewayIpcClient:
                 if result is not None:
                     asyncio.ensure_future(result)
             except Exception:  # noqa: BLE001
-                logger.exception("gateway ipc: on_deliver callback failed")
+                logger.exception('gateway ipc: on_deliver callback failed')
 
     async def _send(self, frame: GatewayFrame) -> GatewayFrame | None:
         """Write a frame and await its reply (routed by the read loop).
@@ -134,7 +134,7 @@ class GatewayIpcClient:
         either may be stopped independently.
         """
         if self._writer is None:
-            raise RuntimeError("not connected")
+            raise RuntimeError('not connected')
         keys = [k for k in (frame.message_id, frame.delivery_id) if k]
         fut: asyncio.Future[GatewayFrame] = asyncio.get_running_loop().create_future()
         for k in keys:
@@ -151,7 +151,7 @@ class GatewayIpcClient:
             # so the caller can reconnect — never propagate transport errors.
             for k in keys:
                 self._pending.pop(k, None)
-            logger.debug("gateway ipc: send failed (connection lost): %s", exc)
+            logger.debug('gateway ipc: send failed (connection lost): %s', exc)
             return None
         if not keys:
             return None  # fire-and-forget frame (no reply expected)
@@ -199,11 +199,11 @@ class GatewayIpcClient:
                     origin=origin,
                     capabilities=capabilities,
                 )
-                if response is not None and response.ack_layer == "accepted":
+                if response is not None and response.ack_layer == 'accepted':
                     return response
             except Exception:  # noqa: BLE001
                 logger.debug(
-                    "gateway ipc: reconnect attempt %d/%d failed",
+                    'gateway ipc: reconnect attempt %d/%d failed',
                     attempt + 1,
                     max_attempts,
                     exc_info=True,
@@ -234,6 +234,7 @@ class GatewayIpcClient:
         origin: str,
         text: str,
         semantic: str | None = None,
+        context_token: str | None = None,
     ) -> GatewayFrame | None:
         if delivery_id in self._seen_delivery_ids:
             return None  # idempotent: don't redeliver
@@ -244,9 +245,10 @@ class GatewayIpcClient:
                 origin=origin,
                 text=text,
                 semantic=semantic,
+                context_token=context_token,
             )
         )
-        if response is not None and response.ack_layer in {"accepted", "enqueued", "processed"}:
+        if response is not None and response.ack_layer in {'accepted', 'enqueued', 'processed'}:
             self._seen_delivery_ids.add(delivery_id)
         return response
 
@@ -257,40 +259,54 @@ class GatewayIpcClient:
             GatewayFrame.ack(delivery_id=delivery_id, layer=layer, message=message)
         )
 
-    async def send_outbound(self, *, origin: str, text: str) -> GatewayFrame | None:
+    async def send_outbound(
+        self,
+        *,
+        origin: str,
+        text: str,
+        context_token: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        semantic_tags: list[str] | None = None,
+    ) -> GatewayFrame | None:
         """Send a reply back to the gateway for delivery to the IM origin.
 
         The server replies with ACK/NACK, so callers get an observable result
         while still treating delivery as best-effort at the IM channel layer.
         """
         if self._writer is None:
-            raise RuntimeError("not connected")
-        frame = GatewayFrame.outbound(origin=origin, text=text)
+            raise RuntimeError('not connected')
+        frame = GatewayFrame.outbound(
+            origin=origin,
+            text=text,
+            context_token=context_token,
+            metadata=metadata,
+            semantic_tags=semantic_tags,
+        )
         response = await self._send(frame)
         if response is None:
-            logger.warning("gateway ipc: OUTBOUND timed out origin=%s", origin[:24])
+            logger.warning('gateway ipc: OUTBOUND timed out origin=%s', origin[:24])
         elif response.type is FrameType.NACK:
             logger.warning(
-                "gateway ipc: OUTBOUND rejected origin=%s reason=%s",
+                'gateway ipc: OUTBOUND rejected origin=%s reason=%s',
                 origin[:24],
-                response.reason or "",
+                response.reason or '',
             )
         else:
-            logger.debug("gateway ipc: sent OUTBOUND origin=%s len=%d", origin[:24], len(text))
+            logger.debug('gateway ipc: sent OUTBOUND origin=%s len=%d', origin[:24], len(text))
         return response
 
     async def reload_channel(self, name: str) -> GatewayFrame | None:
         return await self._send(
-            GatewayFrame.event(event_type="control.reload", payload={"channel": name})
+            GatewayFrame.event(event_type='control.reload', payload={'channel': name})
         )
 
     async def unbind_origin(self, origin: str) -> GatewayFrame | None:
         return await self._send(
-            GatewayFrame.event(event_type="control.unbind", payload={"origin": origin})
+            GatewayFrame.event(event_type='control.unbind', payload={'origin': origin})
         )
 
     async def status(self) -> dict | None:
-        resp = await self._send(GatewayFrame.event(event_type="control.status"))
+        resp = await self._send(GatewayFrame.event(event_type='control.status'))
         if resp is not None and resp.payload is not None:
             return resp.payload
         return None

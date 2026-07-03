@@ -20,9 +20,11 @@ from clawcodex_ext.services.channels.results import (
 from clawcodex_ext.services.im_gateway.config import GatewayConfig
 from clawcodex_ext.services.im_gateway.gateway import MessageGateway
 from clawcodex_ext.services.im_gateway.models import (
+    IM_DIRECT_ALL_ORIGIN,
     InboundMessage,
     MessageSemantics,
     OutboundMessage,
+    SessionTarget,
 )
 
 
@@ -64,6 +66,62 @@ def _gateway(tmp_path, *, adapter: _FakeAdapter | None = None) -> MessageGateway
         reg.register(adapter)
     cfg = GatewayConfig(state_dir=str(tmp_path))
     return MessageGateway(cfg, registry=reg)
+
+
+class _FakeInboundAdapter(_FakeAdapter):
+    """Inbound adapter whose account_status flips to connected after N polls."""
+
+    def __init__(self, name: str = 'fake-in', *, connect_after: int = 0) -> None:
+        super().__init__(name)
+        self._caps = ChannelCapabilitySet.of(
+            ChannelCapability.OUTBOUND_TEXT,
+            ChannelCapability.INBOUND_POLLING,
+        )
+        self._polls = 0
+        self._connect_after = connect_after
+
+    def set_inbound_handler(self, handler) -> None:
+        pass
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def health_check(self) -> ChannelHealth:
+        self._polls += 1
+        status = (
+            'websocket:connected' if self._polls > self._connect_after else 'websocket:reconnecting'
+        )
+        return ChannelHealth(
+            healthy=self._polls > self._connect_after,
+            channel_id=self._name,
+            account_status=status,
+        )
+
+
+@pytest.mark.asyncio
+async def test_gateway_wait_channels_ready_returns_when_connected(tmp_path) -> None:
+    adapter = _FakeInboundAdapter('feishu', connect_after=2)
+    gw = _gateway(tmp_path, adapter=adapter)
+    # Simulate gateway having attached it as inbound.
+    gw._inbound_adapters.append(adapter)
+
+    result = await gw.wait_channels_ready(timeout=5.0)
+
+    assert result == {'feishu': 'websocket:connected'}
+
+
+@pytest.mark.asyncio
+async def test_gateway_wait_channels_ready_times_out_degraded(tmp_path) -> None:
+    adapter = _FakeInboundAdapter('feishu', connect_after=1000)  # never connects
+    gw = _gateway(tmp_path, adapter=adapter)
+    gw._inbound_adapters.append(adapter)
+
+    result = await gw.wait_channels_ready(timeout=1.5)
+
+    assert result['feishu'] == 'websocket:reconnecting'
 
 
 @pytest.mark.asyncio
@@ -134,6 +192,37 @@ async def test_gateway_inbound_pushes_to_opt_in_bound_origin(tmp_path) -> None:
     assert len(pushed) == 1  # pushed to the opt-in peer
     assert pushed[0].text == 'hi'
     assert handler_calls == []  # default handler NOT called (opt-in overrides)
+
+
+@pytest.mark.asyncio
+async def test_gateway_inbound_pushes_feishu_to_generic_opt_in_binding(tmp_path) -> None:
+    """A channel-neutral opt-in binding must catch Feishu DM origins."""
+    gw = _gateway(tmp_path)
+    pushed: list[InboundMessage] = []
+
+    async def _push(msg):
+        pushed.append(msg)
+        return True
+
+    gw.set_push_handler(_push)
+    gw.binding.bind(
+        IM_DIRECT_ALL_ORIGIN,
+        SessionTarget(session_id='repl_main', host_type='repl'),
+    )
+
+    msg = InboundMessage(
+        origin='feishu:dm:cli_app:ou_user',
+        text='hi',
+        message_id='m-feishu',
+        channel='feishu',
+        context_token='oc_chat',
+    )
+    ack = await gw.receive(msg)
+
+    assert ack.message == 'pushed to opt-in peer'
+    assert len(pushed) == 1
+    assert pushed[0].origin == 'feishu:dm:cli_app:ou_user'
+    assert pushed[0].context_token == 'oc_chat'
 
 
 @pytest.mark.asyncio
@@ -228,6 +317,29 @@ async def test_gateway_health(tmp_path) -> None:
     assert health['running'] is False
     assert 'wechat-main' in health['channels']
     assert health['outbox_pending'] == 0
+
+
+@pytest.mark.asyncio
+async def test_gateway_stop_logs_stopped_once_when_called_concurrently(tmp_path, caplog) -> None:
+    class _SlowStopAdapter(_FakeInboundAdapter):
+        async def stop(self) -> None:
+            await __import__('asyncio').sleep(0.05)
+
+    adapter = _SlowStopAdapter('feishu')
+    gw = _gateway(tmp_path, adapter=adapter)
+    gw._inbound_adapters.append(adapter)
+    await gw.start()
+
+    caplog.set_level('INFO', logger='clawcodex_ext.services.im_gateway.gateway')
+    await __import__('asyncio').gather(gw.stop(), gw.stop())
+
+    stopped = [
+        record
+        for record in caplog.records
+        if record.name == 'clawcodex_ext.services.im_gateway.gateway'
+        and record.getMessage() == 'gateway stopped'
+    ]
+    assert len(stopped) == 1
 
 
 def test_gateway_loads_wechat_channel_from_config(tmp_path) -> None:

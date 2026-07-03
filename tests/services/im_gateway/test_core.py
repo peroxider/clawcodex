@@ -26,6 +26,7 @@ from clawcodex_ext.services.im_gateway.capability_gate import CapabilityGate
 from clawcodex_ext.services.im_gateway.config import ReliabilityConfig
 from clawcodex_ext.services.im_gateway.models import (
     AckLayer,
+    IM_DIRECT_ALL_ORIGIN,
     InboundMessage,
     MessageSemantics,
     OriginKey,
@@ -199,6 +200,17 @@ def test_router_wechat_direct_wildcard_binding_matches_any_private_sender(tmp_pa
     assert router.route('wechat:direct:acct_a:user_1').session_id == 'repl_all_private'
     assert router.route('wechat:direct:acct_b:user_2').session_id == 'repl_all_private'
     assert router.is_opt_in('wechat:direct:acct_a:user_1')
+
+
+def test_router_generic_direct_wildcard_binding_matches_wechat_and_feishu(tmp_path) -> None:
+    store = ReliabilityStore(tmp_path)
+    bp = BindingPolicy()
+    bp.bind(IM_DIRECT_ALL_ORIGIN, SessionTarget('repl_all_im', 'repl'))
+    router = SessionRouter(bp, store)
+
+    assert router.route('wechat:direct:acct_a:user_1').session_id == 'repl_all_im'
+    assert router.route('feishu:dm:cli_app:ou_user').session_id == 'repl_all_im'
+    assert router.is_opt_in('feishu:dm:cli_app:ou_user')
 
 
 def test_router_wechat_direct_wildcard_offline_applies_to_matching_private_sender(
