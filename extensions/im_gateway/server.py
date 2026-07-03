@@ -35,6 +35,8 @@ from clawcodex_ext.services.im_gateway.config import (
     load_config,
     migrate_legacy_state_dir,
 )
+from clawcodex_ext.services.channels.feishu_settings import FeishuAppSettings
+from clawcodex_ext.services.channels.models import ChannelType
 from clawcodex_ext.services.im_gateway.gateway import MessageGateway
 
 logger = logging.getLogger(__name__)
@@ -138,6 +140,7 @@ def write_health(paths: DaemonPaths, **fields) -> None:
         'pid': os.getpid(),
         'started_at': fields.get('started_at', time.time()),
         'channels': fields.get('channels', []),
+        'channel_status': fields.get('channel_status', {}),
         'state_dir': str(paths.state_dir),
         'socket': str(paths.sock_file),
     }
@@ -151,6 +154,36 @@ def read_health(paths: DaemonPaths) -> dict | None:
         return json.loads(paths.health_file.read_text(encoding='utf-8'))
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def startup_health_wait_seconds(paths: DaemonPaths) -> float:
+    """CLI wait budget for daemon health after spawning the child process."""
+    try:
+        config = load_config(paths.state_dir / 'channels.yaml')
+    except Exception:  # noqa: BLE001
+        return 45.0
+    timeout = 0.0
+    for channel in config.channels:
+        if not channel.enabled or channel.type is not ChannelType.FEISHU:
+            continue
+        extra = channel.extra or {}
+        mode = str(extra.get('connection_mode') or 'websocket').lower()
+        if mode != 'websocket':
+            continue
+        settings = FeishuAppSettings.from_config(channel)
+        timeout = max(timeout, settings.startup_connect_timeout_seconds)
+    if timeout <= 0.0:
+        return 45.0
+    return timeout + 30.0
+
+
+def _channel_status_ready(status: object) -> bool:
+    text = str(status)
+    return any(marker in text for marker in ('connected', 'logged_in'))
+
+
+def _channel_status_retrying(status: object) -> bool:
+    return str(status) == 'websocket:retrying'
 
 
 # -- daemon process ------------------------------------------------------
@@ -181,6 +214,22 @@ def _resolve_log_level(verbose: bool, env: str | None) -> int:
     return logging.WARNING
 
 
+def _warm_feishu_sdk() -> None:
+    """Trigger the slow ``import lark_oapi.channel`` in a worker thread.
+
+    ``lark_oapi.channel`` pulls in the generated event dispatcher (every API
+    processor), a multi-second import on a cold cache. Running it here (before
+    the adapter constructs its ``FeishuChannel``) overlaps it with daemon
+    startup so the WS connect isn't serialized behind the import. No-op if the
+    SDK isn't installed.
+    """
+    try:
+        import lark_oapi.channel  # noqa: F401 — import side effect is the point
+    except Exception:  # noqa: BLE001
+        # Pre-warm is best-effort; the connect loop will surface real errors.
+        pass
+
+
 async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     """Run the gateway daemon (called from the spawned subprocess)."""
     # Configure logging FIRST with a RotatingFileHandler (10 MiB per file,
@@ -205,6 +254,13 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     # at WARNING so urllib/asyncio don't flood the log.
     logging.getLogger('clawcodex_ext.services.channels').setLevel(log_level)
     logging.getLogger('clawcodex_ext.services.im_gateway').setLevel(log_level)
+    # The lark_oapi SDK forces its own logger to INFO in Client.__init__,
+    # which floods the log with WS connect/ping INFO lines even when the user
+    # didn't pass --verbose. Pin it to the resolved level so non-verbose runs
+    # stay quiet (WARNING+), and --verbose still gets SDK DEBUG detail.
+    logging.getLogger('Lark').setLevel(log_level)
+    logging.getLogger('lark_oapi').setLevel(log_level)
+    logging.getLogger('websockets').setLevel(log_level)
 
     fd = acquire_lock(paths)
     if fd is None:
@@ -212,43 +268,101 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         return 1
     cleanup_stale(paths)
 
-    config = load_config(paths.state_dir / 'channels.yaml')
-    # Force the gateway's reliability store to live under the daemon's
-    # state_dir (the YAML default points at ~/.clawcodex/gateway).
-    config.state_dir = str(paths.state_dir)
-    gateway = MessageGateway(config)
-    await gateway.start()
-    # Register the unbound-origin handler so authorized messages get explicit
-    # REPL/orchestrator connection guidance instead of being silently dropped.
-    from clawcodex_ext.services.im_gateway.stub_agent import make_stub_handler
+    # Pre-warm the Feishu SDK import in a background thread. ``import
+    # lark_oapi.api.*`` is a ~75s synchronous import of a large auto-generated
+    # package; doing it lazily inside the adapter's connect loop delays WS
+    # connect by the same amount. Kicking it off here (before gateway.start)
+    # overlaps the import with the rest of daemon startup so the channel comes
+    # up as soon as the import + WS handshake finish.
+    import threading
 
-    gateway.set_handler(make_stub_handler(gateway.outbound))
-    logger.info('gateway inbound handler registered: unbound guidance handler')
+    from clawcodex_ext.services.channels.feishu_sdk import feishu_dependencies_available
 
-    # Open the GatewayIpcProtocol UDS listener (register/heartbeat/deliver/ack
-    # + control reload/status). P2/P3 frames are handled by GatewayIpcServer.
-    from clawcodex_ext.services.im_gateway.ipc_server import GatewayIpcServer
+    if feishu_dependencies_available():
+        threading.Thread(target=_warm_feishu_sdk, daemon=True, name='feishu-sdk-warm').start()
 
-    server = GatewayIpcServer(paths.sock_file, gateway)
-    await server.start()
-
-    # Wire the opt-in push path: when an origin is bound to a REPL/orchestrator
-    # peer, the dispatcher pushes inbound messages over IPC instead of the
-    # stub handler. The push callback delegates to the IPC server.
-    async def _push_to_opt_in(message) -> bool:
-        return await server.push_deliver(
-            origin=message.origin,
-            delivery_id=message.message_id,
-            text=message.text,
-            semantic=message.semantic.value if message.semantic else None,
-        )
-
-    gateway.set_push_handler(_push_to_opt_in)
-    logger.info('gateway opt-in push handler registered')
-
+    # Write the PID file BEFORE starting channel adapters. A slow / hanging /
+    # crashing adapter start (e.g. the Feishu WS connect loop) used to block
+    # `await gateway.start()` below, so write_pid was never reached and the
+    # daemon became invisible to `stop()`/`restart()` — leaving an orphaned
+    # process holding the flock. Recording the PID up front guarantees the
+    # daemon is always stoppable even when an adapter start misbehaves.
     started_at = time.time()
     write_pid(paths, os.getpid())
-    write_health(paths, started_at=started_at, channels=gateway.registry.names())
+
+    try:
+        config = load_config(paths.state_dir / 'channels.yaml')
+        # Force the gateway's reliability store to live under the daemon's
+        # state_dir (the YAML default points at ~/.clawcodex/gateway).
+        config.state_dir = str(paths.state_dir)
+        gateway = MessageGateway(config)
+        await gateway.start()
+        # Adapter.start() performs the blocking initial connection attempt.
+        # Once MessageGateway.start() returns, collect a single status snapshot:
+        # connected channels are ready, retrying channels are degraded but have
+        # already been queued for background reconnect.
+        channel_status = await gateway.wait_channels_ready(timeout=0.0)
+        for cid, status in channel_status.items():
+            if _channel_status_ready(status):
+                logger.info('gateway channel ready: %s -> %s', cid, status)
+            elif _channel_status_retrying(status):
+                logger.warning(
+                    'gateway channel degraded after initial connect failure: %s -> %s '
+                    '(retrying in background; see log)',
+                    cid,
+                    status,
+                )
+            else:
+                logger.warning(
+                    'gateway channel NOT ready after startup window: %s -> %s '
+                    '(degraded; see log; messages may be dropped until it connects)',
+                    cid,
+                    status,
+                )
+        # Register the unbound-origin handler so authorized messages get explicit
+        # REPL/orchestrator connection guidance instead of being silently dropped.
+        from clawcodex_ext.services.im_gateway.stub_agent import make_stub_handler
+
+        gateway.set_handler(make_stub_handler(gateway.outbound))
+        logger.info('gateway inbound handler registered: unbound guidance handler')
+
+        # Open the GatewayIpcProtocol UDS listener (register/heartbeat/deliver/ack
+        # + control reload/status). P2/P3 frames are handled by GatewayIpcServer.
+        from clawcodex_ext.services.im_gateway.ipc_server import GatewayIpcServer
+
+        server = GatewayIpcServer(paths.sock_file, gateway)
+        await server.start()
+
+        # Wire the opt-in push path: when an origin is bound to a REPL/orchestrator
+        # peer, the dispatcher pushes inbound messages over IPC instead of the
+        # stub handler. The push callback delegates to the IPC server.
+        async def _push_to_opt_in(message) -> bool:
+            return await server.push_deliver(
+                origin=message.origin,
+                delivery_id=message.message_id,
+                text=message.text,
+                semantic=message.semantic.value if message.semantic else None,
+                context_token=message.context_token,
+            )
+
+        gateway.set_push_handler(_push_to_opt_in)
+        logger.info('gateway opt-in push handler registered')
+
+        write_health(
+            paths,
+            started_at=started_at,
+            channels=gateway.registry.names(),
+            channel_status=channel_status,
+        )
+    except BaseException:
+        # Adapter/IPC startup failed. Remove the PID we wrote up front so the
+        # next `start`/`restart` doesn't see a stale PID pointing at a dead
+        # process, then release the lock and re-raise so the parent reports the
+        # early exit.
+        with contextlib.suppress(FileNotFoundError):
+            paths.pid_file.unlink()
+        os.close(fd)
+        raise
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
@@ -336,12 +450,17 @@ class GatewayDaemon:
             start_new_session=True,
         )
         # Wait for the daemon to write its PID file (best-effort, bounded).
-        deadline = time.time() + 10.0
-        while time.time() < deadline:
+        # Then wait for the health file, which is written only after
+        # ``serve()`` has waited for inbound adapters to connect — so a
+        # "started" daemon has actually confirmed channel connectivity (or
+        # timed out and recorded a degraded status). Total budget must exceed
+        # the serve() channel-ready window (15s) plus startup overhead.
+        pid_deadline = time.time() + 10.0
+        new_pid: int | None = None
+        while time.time() < pid_deadline:
             new_pid = read_pid(self.paths)
             if new_pid is not None and is_pid_alive(new_pid):
-                print(f'Gateway daemon started · pid {new_pid}')
-                return 0
+                break
             if proc.poll() is not None:
                 print(
                     f'error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}',
@@ -349,8 +468,52 @@ class GatewayDaemon:
                 )
                 return 1
             time.sleep(0.1)
-        print('error: gateway daemon did not become ready in 10s', file=sys.stderr)
-        return 1
+        else:
+            print('error: gateway daemon did not write PID in 10s', file=sys.stderr)
+            return 1
+
+        # Wait for the health file so we can report per-channel connectivity.
+        # Feishu performs a blocking initial websocket connection attempt inside
+        # adapter.start(), so this follows the configured startup timeout plus
+        # process/bootstrap overhead.
+        health_deadline = time.time() + startup_health_wait_seconds(self.paths)
+        health = None
+        while time.time() < health_deadline:
+            if proc.poll() is not None:
+                print(
+                    f'error: gateway daemon exited early (code {proc.returncode}); see {self.paths.log_file}',
+                    file=sys.stderr,
+                )
+                return 1
+            health = read_health(self.paths)
+            if health is not None:
+                break
+            time.sleep(0.3)
+
+        print(f'Gateway daemon started · pid {new_pid}')
+        channel_status = (health or {}).get('channel_status') or {}
+        if channel_status:
+            for cid, status in channel_status.items():
+                if _channel_status_ready(status):
+                    print(f'  channel {cid}: {status}')
+                elif _channel_status_retrying(status):
+                    print(
+                        f'  channel {cid}: {status} — initial connect failed; '
+                        f'retrying in background; see {self.paths.log_file}',
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f'  channel {cid}: NOT connected ({status}) — see '
+                        f'{self.paths.log_file}; messages may be dropped',
+                        file=sys.stderr,
+                    )
+        elif health is None:
+            print(
+                f'  warning: daemon still starting (no health yet); see {self.paths.log_file}',
+                file=sys.stderr,
+            )
+        return 0
 
     def stop(self, *, timeout: float = 5.0) -> int:
         pid = read_pid(self.paths)

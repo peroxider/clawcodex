@@ -119,10 +119,9 @@ class OrchestratorGatewayClient:
     async def send_outbound(self, text: str) -> None:
         """Send a reply / event back to the IM origin via the OUTBOUND frame.
 
-        The origin is the opt-in origin (``wechat:direct:*:*`` wildcard for
+        The origin is the opt-in origin (``im:direct:*:*`` by default for
         orchestrator); the gateway resolves the wildcard to a concrete
-        sender at OUTBOUND time (the WeChat adapter's most-recent sender,
-        else its persisted context tokens). The event is only queued when
+        sender at OUTBOUND time. The event is only queued when
         the send cannot complete right now — the IPC socket is not yet
         open (the orchestrator emits ``orchestrator.started`` before the
         heartbeat loop has connected) or the gateway NACKs the send (for

@@ -14,7 +14,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .models import WECHAT_DIRECT_ALL_ORIGIN, OriginKey, SessionTarget
+from .models import (
+    FEISHU_DM_ALL_ORIGIN,
+    IM_DIRECT_ALL_ORIGIN,
+    WECHAT_DIRECT_ALL_ORIGIN,
+    OriginKey,
+    SessionTarget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +30,15 @@ class BindingEntry:
     origin: str
     target: SessionTarget
     registered_at: float = field(default_factory=time.time)
-    connection_state: str = "active"  # active | offline | terminated
+    connection_state: str = 'active'  # active | offline | terminated
 
     def to_dict(self) -> dict:
         return {
-            "origin": self.origin,
-            "session_id": self.target.session_id,
-            "host_type": self.target.host_type,
-            "registered_at": self.registered_at,
-            "connection_state": self.connection_state,
+            'origin': self.origin,
+            'session_id': self.target.session_id,
+            'host_type': self.target.host_type,
+            'registered_at': self.registered_at,
+            'connection_state': self.connection_state,
         }
 
 
@@ -88,7 +94,7 @@ class BindingPolicy:
     def get(self, origin: OriginKey | str) -> BindingEntry | None:
         for candidate in _binding_candidates(str(origin)):
             entry = self._bindings.get(candidate)
-            if entry is not None and entry.connection_state != "terminated":
+            if entry is not None and entry.connection_state != 'terminated':
                 return entry
         return None
 
@@ -143,18 +149,30 @@ class BindingPolicy:
 def _binding_candidates(origin: str) -> list[str]:
     """Return exact-to-broad binding keys for an inbound origin."""
     candidates = [origin]
-    parts = origin.split(":")
-    if len(parts) >= 4 and parts[0] == "wechat" and parts[1] == "direct":
-        account = parts[2] or "*"
-        candidates.append(f"wechat:direct:{account}:*")
+    parts = origin.split(':')
+    if origin == IM_DIRECT_ALL_ORIGIN:
+        return candidates
+    if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
+        account = parts[2] or '*'
+        candidates.append(f'wechat:direct:{account}:*')
         candidates.append(WECHAT_DIRECT_ALL_ORIGIN)
+        candidates.append(IM_DIRECT_ALL_ORIGIN)
+    elif len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
+        app_id = parts[2] or '*'
+        candidates.append(f'feishu:dm:{app_id}:*')
+        candidates.append(FEISHU_DM_ALL_ORIGIN)
+        candidates.append(IM_DIRECT_ALL_ORIGIN)
     return candidates
 
 
 def _exclusive_binding_group(origin: str) -> str:
-    parts = origin.split(":")
-    if len(parts) >= 4 and parts[0] == "wechat" and parts[1] == "direct":
-        return "wechat:direct"
+    parts = origin.split(':')
+    if origin == IM_DIRECT_ALL_ORIGIN:
+        return 'im:direct'
+    if len(parts) >= 4 and parts[0] == 'wechat' and parts[1] == 'direct':
+        return 'im:direct'
+    if len(parts) >= 4 and parts[0] == 'feishu' and parts[1] == 'dm':
+        return 'im:direct'
     return origin
 
 
@@ -166,4 +184,4 @@ def _matches_session(entry: BindingEntry, session_id: str | None) -> bool:
     return session_id is None or entry.target.session_id == session_id
 
 
-__all__ = ["BindingAuditor", "BindingEntry", "BindingPolicy"]
+__all__ = ['BindingAuditor', 'BindingEntry', 'BindingPolicy']

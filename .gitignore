@@ -223,3 +223,4 @@ telemetry.toml
 /.orchestrator_workspace/
 /.orchestrator_control/
 /patches/upstream/0573f4c/backup/
+/.worktrees/

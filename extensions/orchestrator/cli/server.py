@@ -150,7 +150,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         '--gateway',
         dest='gateway',
         action='store_true',
-        help='Opt into all WeChat direct/private messages via the IM gateway',
+        help='Opt into all supported direct/private messages via the IM gateway',
     )
     start_parser.add_argument(
         '--im-gateway',
@@ -225,7 +225,7 @@ def add_server_parser(subparsers: argparse._SubParsersAction) -> None:
         '--gateway',
         dest='gateway',
         action='store_true',
-        help='Use the default all-WeChat-private-message IM gateway binding',
+        help='Use the default all-private-message IM gateway binding',
     )
     connect_parser.add_argument(
         '--im-gateway',
@@ -628,9 +628,9 @@ def _run_connect_gateway(args: argparse.Namespace) -> int:
         or os.environ.get('CLAWCODEX_IM_ORIGIN')
     )
     if not origin and getattr(args, 'gateway', False):
-        from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
+        from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
 
-        origin = WECHAT_DIRECT_ALL_ORIGIN
+        origin = IM_DIRECT_ALL_ORIGIN
     if not origin:
         print('error: --gateway or --gateway-origin is required', file=sys.stderr)
         return 2
@@ -711,13 +711,13 @@ def _mount_gateway_opt_in(
     """Connect the orchestrator daemon to the IM gateway (opt-in via env).
 
     Enabled when ``enabled`` is true or ``CLAWCODEX_GATEWAY_ORIGIN`` is set.
-    Without a specific origin, this binds all direct/private WeChat messages
-    for the single configured WeChat channel. Returns the
+    Without a specific origin, this binds all supported direct/private IM messages.
+    Returns the
     :class:`OrchestratorGatewayClient` (for heartbeat scheduling) or None.
 
-    Inbound WeChat messages for the origin are pushed over IPC and dispatched
+    Inbound IM messages for the origin are pushed over IPC and dispatched
     to existing orchestrator entry points; orchestrator events flow back to
-    WeChat via OUTBOUND frames (``build_ipc_deliver``). No behavior change
+    IM via OUTBOUND frames (``build_ipc_deliver``). No behavior change
     when the env var is unset.
     """
     import os
@@ -728,9 +728,9 @@ def _mount_gateway_opt_in(
         or os.environ.get('CLAWCODEX_IM_ORIGIN')
     )
     if not origin and enabled:
-        from clawcodex_ext.services.im_gateway.models import WECHAT_DIRECT_ALL_ORIGIN
+        from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN
 
-        origin = WECHAT_DIRECT_ALL_ORIGIN
+        origin = IM_DIRECT_ALL_ORIGIN
     if not origin:
         return None
     sock = (

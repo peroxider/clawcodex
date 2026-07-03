@@ -7,7 +7,11 @@ from types import SimpleNamespace
 
 from clawcodex_ext.frontend.repl_gateway import QueueFull, ReplGatewayClient
 from clawcodex_ext.messaging.semantics import CommandRouter, ControlBridge
-from clawcodex_ext.services.im_gateway.models import InboundMessage, MessageSemantics
+from clawcodex_ext.services.im_gateway.models import (
+    IM_DIRECT_ALL_ORIGIN,
+    InboundMessage,
+    MessageSemantics,
+)
 from extensions.orchestrator.im_gateway_client import (
     OrchestratorGatewayClient,
     OrchestratorHandlers,
@@ -80,9 +84,11 @@ async def test_repl_on_pushed_deliver_enqueues_into_repl(monkeypatch) -> None:
         session_id='repl_main',
         origin='wechat:direct:default:u',
         text='hello from wechat',
+        context_token='ctx_abc',
     )
     await client._on_pushed_deliver(frame)
     assert enqueued == ['hello from wechat']
+    assert client.peek_reply_context_token() == 'ctx_abc'
 
 
 def test_im_reply_controller_sends_when_loop_is_not_running() -> None:
@@ -237,6 +243,58 @@ def test_repl_all_private_binding_replies_to_actual_inbound_origin(monkeypatch) 
         repl._cron_loop.close()
 
     assert sent == [('wechat:direct:acct:user_sender', 'reply to sender')]
+
+
+def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> None:
+    import asyncio
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+    from clawcodex_ext.services.im_gateway.ipc_protocol import GatewayFrame
+
+    sent: list[tuple[str, str, str | None]] = []
+
+    async def _fake_ack(*, delivery_id, layer, message=None):
+        return None
+
+    class _FakeInner:
+        async def send_outbound(self, *, origin, text, context_token=None):
+            sent.append((origin, text, context_token))
+
+    class _FakeRepl:
+        def __init__(self):
+            self._text = 'reply to feishu'
+            self._cron_loop = asyncio.new_event_loop()
+
+        def _get_last_assistant_text(self):
+            return self._text
+
+    client, _ = _make_repl_client(capacity=5)
+    client._origin = 'feishu:dm:*:*'
+    client._client = _FakeInner()
+    monkeypatch.setattr(client._client, 'ack', _fake_ack, raising=False)
+
+    frame = GatewayFrame.deliver(
+        delivery_id='d_feishu',
+        session_id='repl_main',
+        origin='feishu:dm:cli_app:ou_user',
+        text='hello',
+        context_token='oc_chat',
+    )
+    asyncio.run(client._on_pushed_deliver(frame))
+
+    repl = _FakeRepl()
+    controller = _ImReplyController(repl, client, 'feishu:dm:*:*')
+    try:
+        repl._cron_loop.call_soon(controller.on_assistant_turn_complete)
+        import time
+
+        deadline = time.time() + 1.0
+        while not sent and time.time() < deadline:
+            repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
+    finally:
+        repl._cron_loop.close()
+
+    assert sent == [('feishu:dm:cli_app:ou_user', 'reply to feishu', 'oc_chat')]
 
 
 def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(monkeypatch) -> None:
@@ -408,6 +466,57 @@ def test_im_permission_prompt_sent_immediately_via_thread_path(monkeypatch) -> N
     assert sent, 'permission OUTBOUND must be sent immediately via the thread path'
     assert sent[0][0] == 'wechat:direct:a:u1'
     assert '需要权限' in sent[0][1]
+
+
+def test_im_permission_prompt_sends_structured_metadata() -> None:
+    """Interactive permission prompts carry generic metadata for rich channels."""
+    import collections
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+
+    sent: list[dict] = []
+
+    class _FakeClient:
+        def __init__(self):
+            self._reply_origins = collections.deque(['wechat:direct:a:u1'])
+
+        def peek_reply_origin(self) -> str | None:
+            return self._reply_origins[0] if self._reply_origins else None
+
+    class _FakeRepl:
+        _cron_loop = None
+
+    controller = _ImReplyController(_FakeRepl(), _FakeClient(), 'wechat:direct:*:*')
+
+    def _capture(im_origin, text, *, metadata=None, semantic_tags=None):
+        sent.append(
+            {
+                'origin': im_origin,
+                'text': text,
+                'metadata': metadata,
+                'semantic_tags': semantic_tags,
+            }
+        )
+        return True
+
+    controller._send_outbound_text = _capture
+
+    assert controller.send_permission_prompt(
+        message='Claude wants to use Bash. Allow?',
+        options=[('y', 'Yes, allow this action'), ('n', 'No, deny this action')],
+        suggestion='Review command',
+        interactive=True,
+    )
+
+    assert sent[0]['origin'] == 'wechat:direct:a:u1'
+    assert sent[0]['metadata']['intent'] == 'permission_approval'
+    assert sent[0]['metadata']['permission']['message'].startswith('ClawCodex wants')
+    assert sent[0]['metadata']['permission']['suggestion'] == 'Review command'
+    assert [option['value'] for option in sent[0]['metadata']['permission']['options']] == [
+        'y',
+        'n',
+    ]
+    assert sent[0]['semantic_tags'] == ['approval']
 
 
 def test_permission_prompt_renders_chinese_and_rebrands_claude() -> None:
@@ -589,7 +698,7 @@ def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> No
 
 
 def test_repl_gateway_switch_registers_all_private_messages(monkeypatch) -> None:
-    """--gateway binds REPL to all WeChat direct private messages by default."""
+    """--gateway binds REPL to all supported private IM messages by default."""
     from clawcodex_ext.frontend import repl_extensions
 
     monkeypatch.delenv('CLAWCODEX_GATEWAY_ORIGIN', raising=False)
@@ -623,8 +732,106 @@ def test_repl_gateway_switch_registers_all_private_messages(monkeypatch) -> None
     )
     repl_extensions._install_gateway_client(repl, ctx)
 
-    assert repl._gateway_client.kwargs['origin'] == 'wechat:direct:*:*'
+    assert repl._gateway_client.kwargs['origin'] == IM_DIRECT_ALL_ORIGIN
     assert callable(repl._gateway_client.kwargs['control_handler'])
+
+
+def test_repl_gateway_im_init_no_auto_start_on_missing_socket(monkeypatch) -> None:
+    """First connect FileNotFoundError → logs error and returns (no auto-start)."""
+    import asyncio
+
+    from clawcodex_ext.frontend import repl_extensions
+
+    class _FakeInner:
+        async def register(self, **kwargs):
+            return None
+
+    class _FakeClient:
+        def __init__(self, socket_path, **kwargs):
+            self.socket_path = socket_path
+            self.kwargs = kwargs
+            self._client = _FakeInner()
+            self.connect_calls = 0
+            self.heartbeat_intervals = []
+
+        async def connect(self):
+            self.connect_calls += 1
+            raise FileNotFoundError(2, 'No such file or directory')
+
+        async def _heartbeat_loop(self, interval):
+            self.heartbeat_intervals.append(interval)
+
+    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+
+    class _FakeRepl:
+        _queued_prompts = []
+
+        def _enqueue_prompt(self, text):
+            return None
+
+        def _wake_prompt_for_im(self):
+            return None
+
+    repl = _FakeRepl()
+    ctx = SimpleNamespace(
+        options=SimpleNamespace(
+            gateway_origin='wechat:direct:default:user1',
+            gateway_sock='/tmp/clawcodex-gateway.sock',
+        )
+    )
+    repl_extensions._install_gateway_client(repl, ctx)
+    asyncio.run(repl._gateway_init(None))
+
+    client = repl._gateway_client
+    # No auto-start: connect fails once, then bails — no retry.
+    assert client.connect_calls == 1
+    assert client.heartbeat_intervals == []
+
+
+def test_repl_gateway_im_init_no_retry_when_daemon_start_fails(monkeypatch) -> None:
+    """Socket missing → log error and bail immediately without retry."""
+    import asyncio
+
+    from clawcodex_ext.frontend import repl_extensions
+
+    class _FakeInner:
+        async def register(self, **kwargs):
+            return None
+
+    class _FakeClient:
+        def __init__(self, socket_path, **kwargs):
+            self.socket_path = socket_path
+            self.kwargs = kwargs
+            self._client = _FakeInner()
+            self.connect_calls = 0
+
+        async def connect(self):
+            self.connect_calls += 1
+            raise FileNotFoundError(2, 'No such file or directory')
+
+    monkeypatch.setattr('clawcodex_ext.frontend.repl_gateway.ReplGatewayClient', _FakeClient)
+
+    class _FakeRepl:
+        _queued_prompts = []
+
+        def _enqueue_prompt(self, text):
+            return None
+
+        def _wake_prompt_for_im(self):
+            return None
+
+    repl = _FakeRepl()
+    ctx = SimpleNamespace(
+        options=SimpleNamespace(
+            gateway_origin='wechat:direct:default:user1',
+            gateway_sock='/tmp/clawcodex-gateway.sock',
+        )
+    )
+    repl_extensions._install_gateway_client(repl, ctx)
+    asyncio.run(repl._gateway_init(None))
+
+    # Only the initial connect attempt; no auto-start, no retry.
+    assert repl._gateway_client.connect_calls == 1
 
 
 def test_repl_gateway_control_handler_stops_active_run(monkeypatch) -> None:

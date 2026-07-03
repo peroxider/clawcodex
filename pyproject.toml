@@ -97,6 +97,8 @@ dev = [
     "pre-commit>=4.0.0",
     "mypy>=1.13.0",
     "import-linter>=2.0",
+    "lark-oapi==1.7.0",
+    "qrcode==7.4.2",
 ]
 # F-62 Chrome browser automation. ``playwright`` drives a real
 # headless Chromium; ``pillow`` composites screenshot frames into
@@ -108,6 +110,10 @@ dev = [
 chrome = [
     "playwright>=1.40",
     "Pillow>=10.0",
+]
+feishu = [
+    "lark-oapi==1.7.0",
+    "qrcode==7.4.2",
 ]
 # ``all`` is the catch-all extra consumed by ``install.sh`` (one-click
 # installer). NOTE: an earlier draft used a self-reference
@@ -125,6 +131,8 @@ all = [
     "pre-commit>=4.0.0",
     "mypy>=1.13.0",
     "import-linter>=2.0",
+    "lark-oapi==1.7.0",
+    "qrcode==7.4.2",
 ]
 
 [project.scripts]

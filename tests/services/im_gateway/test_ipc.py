@@ -12,6 +12,8 @@ from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
 from clawcodex_ext.services.im_gateway.ipc_protocol import FrameType, GatewayFrame
 from clawcodex_ext.services.im_gateway.ipc_server import GatewayIpcServer
 from clawcodex_ext.services.im_gateway.models import (
+    FEISHU_DM_ALL_ORIGIN,
+    IM_DIRECT_ALL_ORIGIN,
     WECHAT_DIRECT_ALL_ORIGIN,
     AckLayer,
     AckReceipt,
@@ -230,6 +232,60 @@ async def test_ipc_resolve_wildcard_origin_uses_adapter_context_token(tmp_path) 
     channel, target = _resolve_origin(WECHAT_DIRECT_ALL_ORIGIN, _Gateway())
     assert channel == 'wechat'
     assert target == 'user@im.wechat'
+
+
+@pytest.mark.asyncio
+async def test_ipc_resolve_feishu_wildcard_origin_uses_adapter_last_sender(tmp_path) -> None:
+    from clawcodex_ext.services.channels.models import ChannelType
+    from clawcodex_ext.services.im_gateway.ipc_server import _resolve_origin
+
+    class _Cfg:
+        type = ChannelType.FEISHU
+
+    class _Adapter:
+        _config = _Cfg()
+        channel_id = 'feishu'
+
+        def last_known_sender(self):
+            return 'oc_chat'
+
+    class _Registry:
+        def all_adapters(self):
+            return [_Adapter()]
+
+    class _Gateway:
+        registry = _Registry()
+
+    channel, target = _resolve_origin(FEISHU_DM_ALL_ORIGIN, _Gateway())
+    assert channel == 'feishu'
+    assert target == 'oc_chat'
+
+
+@pytest.mark.asyncio
+async def test_ipc_resolve_generic_origin_prefers_known_im_adapter_sender(tmp_path) -> None:
+    from clawcodex_ext.services.channels.models import ChannelType
+    from clawcodex_ext.services.im_gateway.ipc_server import _resolve_origin
+
+    class _Cfg:
+        type = ChannelType.FEISHU
+
+    class _Adapter:
+        _config = _Cfg()
+        channel_id = 'feishu'
+
+        def last_known_sender(self):
+            return 'oc_chat'
+
+    class _Registry:
+        def all_adapters(self):
+            return [_Adapter()]
+
+    class _Gateway:
+        registry = _Registry()
+
+    channel, target = _resolve_origin(IM_DIRECT_ALL_ORIGIN, _Gateway())
+    assert channel == 'feishu'
+    assert target == 'oc_chat'
 
 
 @pytest.mark.asyncio
@@ -512,12 +568,14 @@ async def test_ipc_server_pushes_deliver_to_registered_client(tmp_path) -> None:
                 delivery_id='d1',
                 text='hello from wechat',
                 semantic='newPrompt',
+                context_token='ctx_abc',
             )
             await asyncio.sleep(0.1)  # let the read loop dispatch
         assert len(delivered) == 1
         assert delivered[0].type.value == 'deliver'
         assert delivered[0].text == 'hello from wechat'
         assert delivered[0].origin == 'wechat:direct:acct:user_zhao'
+        assert delivered[0].context_token == 'ctx_abc'
     finally:
         await server.close()
 
@@ -550,6 +608,50 @@ async def test_ipc_client_send_outbound_calls_gateway_send(tmp_path) -> None:
         assert len(gw.sent) == 1
         assert gw.sent[0].text == 'reply from agent'
         assert gw.sent[0].channel == 'wechat'
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_ipc_client_send_outbound_accepts_metadata(tmp_path) -> None:
+    gw = _FakeGateway()
+    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    await server.start()
+    try:
+        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
+            await client.register(session_id='repl_main', origin='wechat:direct:acct:user_zhao')
+            await client.send_outbound(
+                origin='wechat:direct:acct:user_zhao',
+                text='permission prompt',
+                metadata={'intent': 'permission_approval'},
+                semantic_tags=['approval'],
+            )
+        await asyncio.sleep(0.05)
+        assert len(gw.sent) == 1
+        assert gw.sent[0].metadata == {'intent': 'permission_approval'}
+        assert gw.sent[0].semantic_tags == ['approval']
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_ipc_client_send_outbound_preserves_context_token(tmp_path) -> None:
+    gw = _FakeGateway()
+    server = GatewayIpcServer(tmp_path / 'gw.sock', gw)
+    await server.start()
+    try:
+        async with GatewayIpcClient(tmp_path / 'gw.sock', instance_id='repl_main') as client:
+            await client.register(session_id='repl_main', origin='feishu:dm:cli_app:ou_user')
+            await client.send_outbound(
+                origin='feishu:dm:cli_app:ou_user',
+                text='reply from agent',
+                context_token='oc_chat',
+            )
+        await asyncio.sleep(0.05)
+        assert len(gw.sent) == 1
+        assert gw.sent[0].channel == 'feishu'
+        assert gw.sent[0].target == 'ou_user'
+        assert gw.sent[0].context_token == 'oc_chat'
     finally:
         await server.close()
 

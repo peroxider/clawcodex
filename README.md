@@ -300,21 +300,34 @@ clawcodex-dev orchestrator dashboard [--port 8080]
 
 ### IM Message Gateway
 
-A unified IM entry point that funnels WeChat (personal / Weixin iLink) bidirectional messaging and existing Feishu/Slack/Discord push through one capability-gated gateway.
+A unified IM entry point that funnels WeChat (personal / Weixin iLink) and Feishu
+App WebSocket bidirectional messaging, plus legacy Feishu/Slack/Discord push,
+through one capability-gated gateway.
 
-- Runs as a standalone daemon (`extensions/im_gateway/`); REPL/orchestrator opt in over POSIX UDS.
-- **v1 is POSIX/WSL/Git Bash only** (Unix domain socket).
+- Currently supports **Feishu** and **WeChat** connection channels. Feishu is
+  recommended; WeChat is not recommended for now because it limits proactive
+  outbound messages.
+- Runs as a **standalone daemon** (`extensions/im_gateway/`); REPL/orchestrator
+  opt in over POSIX UDS.
+- **Runtime is POSIX/WSL/Git Bash only** (Unix domain socket).
 
 **Quick start:**
 
 ```bash
 clawcodex-dev gateway start|stop|status|restart # IM gateway lifecycle control
 clawcodex-dev gateway setup # IM gateway quick setup
+
+# Feishu setup (recommended)
+uv sync --locked --extra feishu # install Feishu App SDK + terminal QR deps; included by --extra dev
+clawcodex-dev gateway restart # restart the daemon after first Feishu setup
+clawcodex-dev gateway status feishu # show Feishu connection mode, health, and approval-card support
+
+# WeChat setup (currently not recommended; proactive outbound messages are limited)
 clawcodex-dev gateway restart wechat # restart WeChat IM channel
 clawcodex-dev gateway status wechat # show WeChat login health and REPL/orchestrator connection status
 ```
 
-With the gateway daemon running and WeChat logged in, you can opt a REPL or orchestrator session into the single WeChat channel. Any direct/private message sent to the bot can drive the agent, and replies flow back to the actual sender.
+With the gateway daemon running and a bidirectional app channel logged in, you can opt a REPL or orchestrator session into that IM channel. WeChat direct/private messages or Feishu p2p messages can drive the agent, and replies flow back to the actual sender. Feishu setup uses QR scan-to-create registration when available and falls back to manual app credentials if the scan is denied, expires, or cannot complete. After first-time Feishu setup, restart the whole gateway daemon so the Feishu SDK loads in a fresh process.
 
 **Connect to the gateway:**
 
@@ -325,7 +338,7 @@ clawcodex-dev --resume <session-id> --gateway
 clawcodex-dev orchestrator server start --workflow path/to/workflow.md --gateway
 ```
 
-`--gateway` binds all WeChat direct/private senders for the single configured `wechat` channel. Only one runtime can own the WeChat channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
+`--gateway` binds all direct/private senders for the active bidirectional IM app channel. Only one runtime can own the channel at a time: starting a REPL binding disconnects an orchestrator binding, and starting an orchestrator binding disconnects a REPL binding. V1 supports only one active bidirectional app channel (`wechat` or Feishu WebSocket); `gateway setup` disables the other inbound app channel when enabling Feishu WebSocket. Legacy Feishu/Slack/Discord webhooks remain outbound-only. `CLAWCODEX_GATEWAY_SOCK` can override the daemon socket; specific-origin binding remains available only for targeted debugging or future multi-origin automation.
 
 The gateway supports sending control commands to REPL/orchestrator, such as `/stop` to stop the current task.
 
