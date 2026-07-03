@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any
+
+from clawcodex_ext.query.outbox_types import ProactivePromptEvent
+from clawcodex_ext.services.proactive import TICK_TAG, get_default_controller
 
 from ..build_tool import Tool, build_tool
 from ..context import ToolContext
@@ -15,6 +19,32 @@ def _sleep_call(tool_input: dict[str, Any], context: ToolContext) -> ToolResult:
         raise ToolInputError("seconds must be a number")
     if seconds < 0 or seconds > 30:
         raise ToolInputError("seconds must be between 0 and 30")
+    ctrl = get_default_controller()
+    if ctrl.is_active():
+        until_ms = time.time() * 1000 + float(seconds) * 1000
+        ctrl.enter_sleep(until_ms)
+
+        def _wake() -> None:
+            ctrl.wake_from_sleep()
+            outbox = getattr(context, "outbox", None)
+            if hasattr(outbox, "append"):
+                outbox.append(
+                    ProactivePromptEvent(
+                        prompt=f"<{TICK_TAG}>{time.strftime('%H:%M:%S')}</{TICK_TAG}>",
+                        source="sleep",
+                    )
+                )
+
+        timer = threading.Timer(float(seconds), _wake)
+        timer.daemon = True
+        timer.start()
+        return ToolResult(
+            name="Sleep",
+            output={
+                "sleeping_until_ms": until_ms,
+                "proactive": True,
+            },
+        )
     time.sleep(float(seconds))
     return ToolResult(name="Sleep", output={"slept_seconds": float(seconds)})
 

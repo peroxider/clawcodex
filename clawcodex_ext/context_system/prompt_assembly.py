@@ -462,6 +462,9 @@ def build_full_system_prompt(
             except Exception:
                 # Memory subsystem failures must never block prompt building.
                 pass
+        proactive_section = _build_proactive_section()
+        if proactive_section:
+            base += "\n\n" + proactive_section.content
         if append_system_prompt:
             base += "\n\n" + append_system_prompt
         return base
@@ -541,6 +544,11 @@ def build_full_system_prompt(
     style_section = _build_output_style_section(output_style, use_cache)
     if style_section:
         sections.append(style_section)
+
+    # 65. Proactive mode guidance
+    proactive_section = _build_proactive_section()
+    if proactive_section:
+        sections.append(proactive_section)
 
     # 70. Plan mode
     if plan_mode:
@@ -662,6 +670,9 @@ def build_full_system_prompt_blocks(
                         base += "\n\n" + memory_prompt
             except Exception:
                 pass
+        proactive_section = _build_proactive_section()
+        if proactive_section:
+            base += "\n\n" + proactive_section.content
         if append_system_prompt:
             base += "\n\n" + append_system_prompt
         return [{"type": "text", "text": base}]
@@ -713,6 +724,9 @@ def build_full_system_prompt_blocks(
     style_section = _build_output_style_section(output_style, use_cache)
     if style_section:
         sections.append(style_section)
+    proactive_section = _build_proactive_section()
+    if proactive_section:
+        sections.append(proactive_section)
     if plan_mode:
         plan_section = _build_plan_mode_section(use_cache)
         if plan_section:
@@ -1297,6 +1311,23 @@ def _build_output_style_section(
         content=f"# Output Style\n{prompt}",
         cache_scope=CacheScope.SESSION,
         order=60,
+    )
+
+
+def _build_proactive_section() -> SystemPromptSection | None:
+    try:
+        from clawcodex_ext.services.proactive.prompts import get_proactive_section
+
+        content = get_proactive_section()
+    except Exception:
+        return None
+    if not content:
+        return None
+    return SystemPromptSection(
+        id="proactive",
+        content=content,
+        cache_scope=CacheScope.REQUEST,
+        order=65,
     )
 
 
