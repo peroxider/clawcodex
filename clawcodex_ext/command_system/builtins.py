@@ -1552,6 +1552,7 @@ def get_builtin_commands() -> list[Command]:
         OUTPUT_STYLE_COMMAND,
         STATUSLINE_COMMAND,
         SECURITY_REVIEW_COMMAND,
+        PROACTIVE_COMMAND,
         GOAL_COMMAND,
         RESUME_COMMAND,
         BTW_COMMAND,

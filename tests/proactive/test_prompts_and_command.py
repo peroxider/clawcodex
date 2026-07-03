@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from clawcodex_ext.command_system.builtins import execute_command_sync
 from clawcodex_ext.command_system.engine import create_command_context
 from clawcodex_ext.command_system.proactive_command import _EMITTERS_BY_CONTEXT_ID
 from clawcodex_ext.feature_gate import FeatureFlag, get_registry
-from clawcodex_ext.goal.registry import get_goal_registry, reset_goal_registry_for_tests
-from clawcodex_ext.goal.types import GoalState, GoalStatus
+from clawcodex_ext.goal.model import ThreadGoalStatus
+from clawcodex_ext.goal.store import GoalStore
 from clawcodex_ext.services.proactive import (
     get_default_controller,
     get_proactive_section,
@@ -17,13 +18,18 @@ from clawcodex_ext.tool_system.context import ToolContext
 
 
 def test_proactive_section_is_goal_aware(tmp_path: Path) -> None:
-    reset_goal_registry_for_tests()
+    # Point CLAWCODEX_HOME at tmp_path so _active_goal_block's GoalStore()
+    # shares the same SQLite database as the test setup.
+    os.environ["CLAWCODEX_HOME"] = str(tmp_path)
+    store = GoalStore()
+    store.insert_thread_goal(
+        thread_id="sess",
+        objective="Ship F-89",
+        status=ThreadGoalStatus.ACTIVE,
+        token_budget=None,
+    )
     ctrl = reset_default_controller_for_tests()
     ctrl.activate("test")
-    get_goal_registry().set(
-        "sess",
-        GoalState(objective="Ship F-89", status=GoalStatus.ACTIVE),
-    )
 
     section = get_proactive_section("medium", session_id="sess")
 

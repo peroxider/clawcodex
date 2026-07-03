@@ -274,7 +274,7 @@ class StatusLine(Static):
                 proactive_text = f" 路 {proactive_status}"
         except Exception:
             proactive_text = ""
-        return Text(f"{left}    {middle}    {cwd}    {right}{goal_pill_text}{proactive_text}")
+        return Text(f"{left}    {middle}    {cwd}    {right}{proactive_text}")
 
     def _display_cwd(self) -> str:
         try:

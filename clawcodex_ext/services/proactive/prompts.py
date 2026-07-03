@@ -61,16 +61,13 @@ def get_proactive_section(
 
 def _active_goal_block(session_id: str | None) -> str | None:
     try:
-        from clawcodex_ext.goal.registry import get_goal_registry
+        from clawcodex_ext.goal.store import GoalStore
+        from clawcodex_ext.goal.model import ThreadGoalStatus
 
-        registry = get_goal_registry()
-        goal = None
-        if session_id:
-            goal = registry.get(session_id)
-        if goal is None:
-            for _, candidate in registry.iter_states():
-                goal = candidate
-                break
+        store = GoalStore()
+        if session_id is None:
+            return None
+        goal = store.get_thread_goal(session_id)
         if goal is None:
             return None
         status = getattr(goal.status, "value", str(goal.status))
