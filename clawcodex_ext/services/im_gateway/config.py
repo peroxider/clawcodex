@@ -77,6 +77,20 @@ class ReliabilityConfig:
     markdown_fallback: bool = True
     long_message_threshold_chunks: int = 4
     deferred_outbox_limit: int = 500
+    # Persistence retention for bounded append-style files.
+    retention_enabled: bool = True
+    retention_cron_interval_seconds: int = 24 * 3600
+    retention_processed_inbound_ttl_seconds: int = 7 * 86400
+    retention_processed_inbound_max_entries: int = 10000
+    retention_outbox_ttl_seconds: int = 30 * 86400
+    retention_outbox_max_entries: int = 50000
+    retention_unsupported_inbound_ttl_seconds: int = 7 * 86400
+    retention_unsupported_inbound_max_entries: int = 10000
+    # Append-time rotation for audit/dead-letter logs.
+    dead_letter_max_bytes: int = 10 * 1024 * 1024  # 10 MiB
+    dead_letter_backup_count: int = 3
+    audit_max_bytes: int = 10 * 1024 * 1024  # 10 MiB
+    audit_backup_count: int = 3
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,6 +103,18 @@ class ReliabilityConfig:
             'markdown_fallback': self.markdown_fallback,
             'long_message_threshold_chunks': self.long_message_threshold_chunks,
             'deferred_outbox_limit': self.deferred_outbox_limit,
+            'retention_enabled': self.retention_enabled,
+            'retention_cron_interval_seconds': self.retention_cron_interval_seconds,
+            'retention_processed_inbound_ttl_seconds': self.retention_processed_inbound_ttl_seconds,
+            'retention_processed_inbound_max_entries': self.retention_processed_inbound_max_entries,
+            'retention_outbox_ttl_seconds': self.retention_outbox_ttl_seconds,
+            'retention_outbox_max_entries': self.retention_outbox_max_entries,
+            'retention_unsupported_inbound_ttl_seconds': self.retention_unsupported_inbound_ttl_seconds,
+            'retention_unsupported_inbound_max_entries': self.retention_unsupported_inbound_max_entries,
+            'dead_letter_max_bytes': self.dead_letter_max_bytes,
+            'dead_letter_backup_count': self.dead_letter_backup_count,
+            'audit_max_bytes': self.audit_max_bytes,
+            'audit_backup_count': self.audit_backup_count,
         }
 
     @classmethod
@@ -109,6 +135,18 @@ class ReliabilityConfig:
                 'markdown_fallback',
                 'long_message_threshold_chunks',
                 'deferred_outbox_limit',
+                'retention_enabled',
+                'retention_cron_interval_seconds',
+                'retention_processed_inbound_ttl_seconds',
+                'retention_processed_inbound_max_entries',
+                'retention_outbox_ttl_seconds',
+                'retention_outbox_max_entries',
+                'retention_unsupported_inbound_ttl_seconds',
+                'retention_unsupported_inbound_max_entries',
+                'dead_letter_max_bytes',
+                'dead_letter_backup_count',
+                'audit_max_bytes',
+                'audit_backup_count',
             }
         }
         return cls(**known)

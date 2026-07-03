@@ -19,13 +19,20 @@ to be descriptor-driven from ``ChannelCapabilityDescriptor``.
 
 from __future__ import annotations
 
+import contextlib
+import json
+import logging
+import os
 import sys
+from pathlib import Path
 from typing import Any, Callable
 
+from clawcodex_ext.cli._interactive import InteractiveInput
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 from clawcodex_ext.services.im_gateway.config import load_config, save_config
 
 InputFn = Callable[[str], str]
+logger = logging.getLogger(__name__)
 
 _USAGE = (
     'usage: clawcodex-dev gateway {setup|status|disconnect|restart|login} [name]\n\n'
@@ -85,10 +92,107 @@ def update_channel(path: str | None, channel: ChannelConfig) -> bool:
 
 def remove_channel(path: str | None, name: str) -> bool:
     cfg = load_config(path)
-    if not cfg.remove_channel(name):
+    return _remove_channel_config_and_state(cfg, path, name)
+
+
+def _remove_channel_config_and_state(cfg, path: str | None, name: str) -> bool:
+    channel = _resolve_channel_for_removal(cfg, name)
+    if channel is None:
+        return False
+    if not cfg.remove_channel(channel.name):
         return False
     save_config(cfg, path)
+    _cleanup_removed_channel_state(path, channel)
     return True
+
+
+def _resolve_channel_for_removal(cfg, name: str) -> ChannelConfig | None:
+    channel = cfg.get_channel(name)
+    if channel is not None:
+        return channel
+    if name == 'wechat-main':
+        return cfg.get_channel('wechat')
+    with contextlib.suppress(ValueError):
+        return cfg.get_channel_by_type(ChannelType(name))
+    return None
+
+
+def _cleanup_removed_channel_state(path: str | None, channel: ChannelConfig) -> None:
+    state_dir = _state_dir_for_config_path(path)
+    if channel.type is ChannelType.WECHAT:
+        _cleanup_wechat_state(state_dir, channel.name)
+    elif channel.type is ChannelType.FEISHU:
+        _cleanup_feishu_state(state_dir, channel.name)
+
+
+def _state_dir_for_config_path(path: str | None) -> Path:
+    if path is not None:
+        return Path(path).expanduser().parent
+    from extensions.im_gateway.server import DaemonPaths
+
+    return DaemonPaths.for_state_dir(None).state_dir
+
+
+def _cleanup_wechat_state(state_dir: Path, channel_name: str) -> None:
+    wechat_dir = state_dir / 'wechat'
+    names = {channel_name}
+    if channel_name == 'wechat':
+        names.add('wechat-main')
+    elif channel_name == 'wechat-main':
+        names.add('wechat')
+
+    for name in names:
+        auth_path = wechat_dir / f'{name}_auth.json'
+        pairing_path = wechat_dir / f'{name}_pairing.json'
+        for candidate in (
+            auth_path,
+            auth_path.with_suffix('.key'),
+            auth_path.with_suffix('.key.tmp'),
+            auth_path.with_suffix(auth_path.suffix + '.tmp'),
+            pairing_path,
+            pairing_path.with_suffix(pairing_path.suffix + '.lock'),
+            pairing_path.with_suffix(pairing_path.suffix + '.lock.tmp'),
+            pairing_path.with_suffix(pairing_path.suffix + '.tmp'),
+        ):
+            _unlink_if_exists(candidate)
+    _unlink_if_exists(state_dir / 'wechat_context_tokens.json')
+    _unlink_if_exists(state_dir / 'wechat_accounts.json')
+    with contextlib.suppress(OSError):
+        wechat_dir.rmdir()
+
+
+def _cleanup_feishu_state(state_dir: Path, channel_name: str) -> None:
+    path = state_dir / 'feishu_last_senders.json'
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning('failed to read feishu sender state during removal: %s', exc)
+        return
+    if not isinstance(data, dict) or channel_name not in data:
+        return
+    data.pop(channel_name, None)
+    if data:
+        _atomic_write_json(path, data)
+    else:
+        _unlink_if_exists(path)
+
+
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + '.tmp')
+    tmp.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+    os.replace(tmp, path)
+
+
+def _unlink_if_exists(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        logger.warning('failed to remove gateway state file %s: %s', path, exc)
 
 
 def _coerce(value: str, default: Any) -> Any:
@@ -337,17 +441,11 @@ def _format_feishu_status(channel: ChannelConfig, runtime_status: dict[str, Any]
     mode = str(extra.get('connection_mode') or ('webhook' if channel.webhook_url else 'websocket'))
     health = _find_runtime_channel_health(runtime_status, channel.name)
     health_status = 'disabled'
-    approval_cards = 'unsupported'
     if channel.enabled:
         if health:
             health_status = str(
                 health.get('account_status')
                 or ('healthy' if health.get('healthy') else health.get('last_error') or 'unhealthy')
-            )
-            health_extra = health.get('extra') if isinstance(health.get('extra'), dict) else {}
-            approval_cards = str(
-                health_extra.get('approval_cards')
-                or ('unsupported' if mode == 'webhook' else 'unknown')
             )
         elif runtime_status.get('gateway_error'):
             health_status = f'unknown (gateway error: {runtime_status["gateway_error"]})'
@@ -355,13 +453,9 @@ def _format_feishu_status(channel: ChannelConfig, runtime_status: dict[str, Any]
             health_status = 'gateway_down'
         else:
             health_status = 'unknown'
-            approval_cards = 'unsupported' if mode == 'webhook' else 'unknown'
-    if mode == 'webhook':
-        approval_cards = 'unsupported'
     return [
         f'  mode: {mode}',
         f'  health: {health_status}',
-        f'  approval_cards: {approval_cards}',
         f'  {_format_im_conversation(runtime_status, channel_type="feishu")}',
     ]
 
@@ -565,8 +659,11 @@ def _feishu_scan_login(input_fn: InputFn) -> dict[str, str]:
     return payload
 
 
-def _feishu_manual_login(channel: ChannelConfig, input_fn: InputFn) -> ChannelConfig:
-    """Manual edit of login fields; masks app_secret, keeps existing values."""
+def _feishu_manual_login(channel: ChannelConfig, ui: InteractiveInput) -> ChannelConfig | None:
+    """Manual edit of login fields; masks app_secret, keeps existing values.
+
+    Returns ``None`` when the user ESCs out mid-way (channel未修改)。
+    """
     extra = dict(channel.extra or {})
     current_app_id = str(extra.get('app_id') or '')
     current_domain = str(extra.get('domain') or 'feishu')
@@ -575,28 +672,36 @@ def _feishu_manual_login(channel: ChannelConfig, input_fn: InputFn) -> ChannelCo
     encrypt_key_state = '已配置' if extra.get('encrypt_key') else '未配置'
     verification_token_state = '已配置' if extra.get('verification_token') else '未配置'
 
-    print(f'  app_id [{current_app_id}]（回车保留）')
-    app_id = input_fn('新 app_id: ').strip()
+    app_id = ui.prompt(f'新 app_id [{current_app_id}] (回车保留，ESC 中断): ')
+    if app_id is None:
+        return None
+    app_secret = ui.prompt(f'新 app_secret [{secret_state}] (回车保留，输入新值覆盖，ESC 中断): ')
+    if app_secret is None:
+        return None
     if app_id:
         extra['app_id'] = app_id
-    print(f'  app_secret [{secret_state}]（回车保留，输入新值覆盖）')
-    app_secret = input_fn('新 app_secret: ').strip()
     if app_secret:
         extra['app_secret'] = app_secret
-    print(f'  encrypt_key [{encrypt_key_state}]（可选，回车保留，输入新值覆盖）')
-    encrypt_key = input_fn('新 encrypt_key: ').strip()
+    encrypt_key = ui.prompt(f'新 encrypt_key [{encrypt_key_state}] (可选，ESC 中断): ')
+    if encrypt_key is None:
+        return None
     if encrypt_key:
         extra['encrypt_key'] = encrypt_key
-    print(f'  verification_token [{verification_token_state}]（可选，回车保留，输入新值覆盖）')
-    verification_token = input_fn('新 verification_token: ').strip()
+    verification_token = ui.prompt(
+        f'新 verification_token [{verification_token_state}] (可选，ESC 中断): '
+    )
+    if verification_token is None:
+        return None
     if verification_token:
         extra['verification_token'] = verification_token
-    print(f'  domain [{current_domain}]（回车保留）')
-    domain = input_fn('新 domain (feishu/lark): ').strip().lower()
+    domain = ui.prompt(f'新 domain [{current_domain}] (feishu/lark，ESC 中断): ')
+    if domain is None:
+        return None
     if domain:
-        extra['domain'] = domain
-    print(f'  bot_open_id [{current_bot}]（回车保留）')
-    bot_open_id = input_fn('新 bot_open_id (可选): ').strip()
+        extra['domain'] = domain.lower()
+    bot_open_id = ui.prompt(f'新 bot_open_id [{current_bot}] (可选，ESC 中断): ')
+    if bot_open_id is None:
+        return None
     if bot_open_id:
         extra['bot_open_id'] = bot_open_id
     return ChannelConfig(
@@ -644,19 +749,24 @@ def _disable_other_inbound_app_channels(cfg, *, active_name: str) -> list[str]:
     return disabled
 
 
-def _wizard_add_feishu(cfg, path, input_fn: InputFn) -> None:
+def _wizard_add_feishu(cfg, path, ui: InteractiveInput) -> None:
     """First-time Feishu channel creation: dep check → connection mode → scan login."""
     if not _feishu_dep_check():
         return
     name = _DEFAULT_CHANNEL_NAMES['feishu']
-    print('\n连接方式：')
-    print('  1) websocket（推荐）')
-    print('  2) webhook（兼容旧链路）')
-    mode_choice = input_fn('选择 [1]: ').strip() or '1'
-
-    if mode_choice == '2':
-        webhook_url = input_fn('legacy webhook URL: ').strip()
-        secret = input_fn('legacy webhook secret (可选): ').strip()
+    mode_idx = ui.select(
+        [('websocket（推荐）', ''), ('webhook（兼容旧链路）', '')],
+        title='连接方式',
+    )
+    if mode_idx is None:
+        return
+    if mode_idx == 1:
+        webhook_url = ui.prompt('legacy webhook URL: ')
+        if webhook_url is None:
+            return
+        secret = ui.prompt('legacy webhook secret (可选): ')
+        if secret is None:
+            secret = ''
         inputs: dict[str, str] = {
             'connection_mode': 'webhook',
             'webhook_url': webhook_url,
@@ -664,7 +774,7 @@ def _wizard_add_feishu(cfg, path, input_fn: InputFn) -> None:
             'enabled': 'true',
         }
     else:
-        inputs = _feishu_scan_login(input_fn)
+        inputs = _feishu_scan_login(ui.input_fn)
         inputs['enabled'] = 'true'
 
     channel = build_channel_from_inputs('feishu', name, inputs)
@@ -675,26 +785,31 @@ def _wizard_add_feishu(cfg, path, input_fn: InputFn) -> None:
     print(f'已保存渠道 {name!r}。请执行 `clawcodex-dev gateway restart` 重启 Gateway 后生效。')
 
 
-def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
+def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, ui: InteractiveInput) -> None:
     """Edit menu for an existing Feishu channel."""
     while True:
-        print(f'\n编辑 {channel.name} [feishu]')
-        print('  1) 登录')
-        print('  2) 启用 / 停用')
-        print('  3) 移除该渠道')
-        print('  0) 返回')
-        choice = input_fn('选择: ').strip()
-        if choice == '0':
+        login_label = '重置' if _feishu_is_logged_in(channel) else '登录'
+        idx = ui.select(
+            [
+                (login_label, ''),
+                (f'启用/停用 (当前: {"enabled" if channel.enabled else "disabled"})', ''),
+                ('移除该渠道', ''),
+            ],
+            title=f'编辑 {channel.name} [feishu]',
+        )
+        if idx is None:
             return
-        if choice == '1':
-            print('  1) 扫码登录')
-            print('  2) 手动填写')
-            print('  0) 返回')
-            sub = input_fn('选择: ').strip()
-            if sub == '1':
+        if idx == 0:
+            sub = ui.select(
+                [('扫码登录', ''), ('手动填写', '')],
+                title=f'{login_label} 方式',
+            )
+            if sub is None:
+                continue
+            if sub == 0:
                 if not _feishu_dep_check():
                     continue
-                login_inputs = _feishu_scan_login(input_fn)
+                login_inputs = _feishu_scan_login(ui.input_fn)
                 scanned_channel = build_channel_from_inputs(
                     'feishu',
                     channel.name,
@@ -721,12 +836,15 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, input_fn: InputFn) ->
                     _disable_other_inbound_app_channels(cfg, active_name=channel.name)
                 save_config(cfg, path)
                 print('登录配置已更新。')
-            elif sub == '2':
-                channel = _feishu_manual_login(channel, input_fn)
+            elif sub == 1:
+                updated = _feishu_manual_login(channel, ui)
+                if updated is None:  # ESC 中断：保留原 channel，回 feishu 编辑菜单
+                    continue
+                channel = updated
                 cfg.replace_channel(channel)
                 save_config(cfg, path)
                 print('登录配置已保存。')
-        elif choice == '2':
+        elif idx == 1:
             channel = ChannelConfig(
                 type=channel.type,
                 webhook_url=channel.webhook_url,
@@ -739,15 +857,14 @@ def _wizard_edit_feishu(cfg, path, channel: ChannelConfig, input_fn: InputFn) ->
                 _disable_other_inbound_app_channels(cfg, active_name=channel.name)
             save_config(cfg, path)
             print(f'{channel.name} → {"enabled" if channel.enabled else "disabled"}')
-        elif choice == '3':
-            confirm = input_fn(f'确认移除 {channel.name}? (y/N): ').strip().lower()
-            if confirm in ('y', 'yes'):
-                cfg.remove_channel(channel.name)
-                save_config(cfg, path)
+        elif idx == 2:
+            confirm = ui.confirm(f'确认移除 {channel.name}?')
+            if confirm is None:
+                continue
+            if confirm:
+                _remove_channel_config_and_state(cfg, path, channel.name)
                 print(f'已移除 {channel.name}')
                 return
-        else:
-            print('无效选择')
 
 
 # -- WeChat-specific ops (P2) ------------------------------------------
@@ -792,6 +909,16 @@ def wechat_login_status(name: str, *, state_dir: str | None = None) -> str:
     if record is None:
         return 'unconfigured (not logged in; run 扫码登录)'
     return f'logged_in (account_id={record.account_id}, user_id={record.user_id})'
+
+
+def _feishu_is_logged_in(channel: ChannelConfig) -> bool:
+    """Feishu 视为已登录当 app_id + app_secret 齐全（兼容纯手动配置，bot_open_id 可缺）。"""
+    extra = dict(channel.extra or {})
+    return bool(extra.get('app_id') and extra.get('app_secret'))
+
+
+def _wechat_is_logged_in(name: str, *, state_dir: str | None = None) -> bool:
+    return 'logged_in' in wechat_login_status(name, state_dir=state_dir)
 
 
 def _print_terminal_qr(scan_data: str) -> None:
@@ -931,68 +1058,65 @@ def wechat_login(name: str, *, state_dir: str | None = None) -> int:
 # -- wizard -------------------------------------------------------------
 
 
-def run_wizard(path: str | None = None, *, input_fn: InputFn = input) -> int:
+def run_wizard(path: str | None = None, *, input_fn: InputFn | None = None) -> int:
+    """箭头键菜单驱动的 setup 向导。
+
+    频道选择菜单列出 feishu / wechat 为主选项（带 [已登录]/[未登录] 标注），
+    已配置的 slack/discord 作为"存量"项追加可编辑/移除。选择 feishu/wechat 时
+    按登录态路由到新增或编辑流程。频道选择层 ESC 退出 setup；所有子菜单 ESC 返回上一步。
+    """
+    ui = InteractiveInput(input_fn)
     cfg = load_config(path)
     while True:
-        print('\nClawCodex 消息渠道配置')
-        print('已配置渠道：')
-        channels = list(cfg.channels)
-        for idx, c in enumerate(channels, 1):
-            dot = '●' if c.enabled else '○'
-            print(
-                f'  {idx}) {c.name}   [{c.type.value}]   {dot} {"enabled" if c.enabled else "disabled"}'
+        options: list[tuple[str, str]] = []
+        feishu_ch = cfg.get_channel_by_type('feishu')
+        feishu_desc = '已登录' if (feishu_ch and _feishu_is_logged_in(feishu_ch)) else '未登录'
+        options.append(('feishu', f'[{feishu_desc}]'))
+        wechat_ch = cfg.get_channel_by_type('wechat')
+        wechat_desc = (
+            '已登录'
+            if (
+                wechat_ch
+                and _wechat_is_logged_in(
+                    wechat_ch.name, state_dir=_resolve_status_state_dir(path, None)
+                )
             )
-        print('  +) 新增渠道')
-        choice = input_fn('选择要编辑的渠道 / 新增 (输入序号或 +，留空退出): ').strip()
-        if choice == '':
-            break
-        if choice == '+':
-            _wizard_add(cfg, path, input_fn)
-            continue
-        try:
-            idx = int(choice) - 1
-        except ValueError:
-            print('无效输入')
-            continue
-        if 0 <= idx < len(channels):
-            _wizard_edit(cfg, path, channels[idx], input_fn)
-        else:
-            print('序号超出范围')
+            else '未登录'
+        )
+        options.append(('wechat', f'[{wechat_desc}]'))
+        legacy = [c for c in cfg.channels if c.type.value in ('slack', 'discord')]
+        for c in legacy:
+            dot = '●' if c.enabled else '○'
+            options.append((f'{c.name} [{c.type.value}] [存量] {dot}', ''))
+        idx = ui.select(
+            options,
+            title='ClawCodex 消息渠道配置（↑↓ 选择 · Enter 确认 · ESC 退出）',
+        )
+        if idx is None:
+            return 0
+        if idx == 0:  # feishu
+            if feishu_ch and _feishu_is_logged_in(feishu_ch):
+                _wizard_edit_feishu(cfg, path, feishu_ch, ui)
+            else:
+                _wizard_add_feishu(cfg, path, ui)
+            cfg = load_config(path)
+        elif idx == 1:  # wechat
+            if wechat_ch and _wechat_is_logged_in(
+                wechat_ch.name, state_dir=_resolve_status_state_dir(path, None)
+            ):
+                _wizard_edit_wechat(cfg, path, wechat_ch, ui)
+            else:
+                _wizard_add_wechat(cfg, path, ui)
+            cfg = load_config(path)
+        else:  # legacy slack/discord
+            legacy_idx = idx - 2
+            if 0 <= legacy_idx < len(legacy):
+                _wizard_edit(cfg, path, legacy[legacy_idx], ui)
+                cfg = load_config(path)
     return 0
 
 
-def _wizard_add(cfg, path, input_fn: InputFn) -> None:
-    print('可用渠道类型: ' + ', '.join(sorted(_FIELD_MAP.keys())))
-    ctype = input_fn('渠道类型: ').strip().lower()
-    if ctype not in _FIELD_MAP:
-        print(f'未知类型 {ctype!r}')
-        return
-    existing = cfg.get_channel_by_type(ctype)
-    if existing is not None:
-        print(f'{ctype} 渠道已配置为 {existing.name!r}；同一类型只保留一个配置。')
-        _wizard_edit(cfg, path, existing, input_fn)
-        return
-    if ctype == 'feishu':
-        _wizard_add_feishu(cfg, path, input_fn)
-        return
-    if ctype == 'wechat':
-        _wizard_add_wechat(cfg, path, input_fn)
-        return
-    default_name = _DEFAULT_CHANNEL_NAMES.get(ctype, f'{ctype}-main')
-    name = input_fn(f'渠道名称 [{default_name}]: ').strip() or default_name
-    if not name:
-        print('名称不能为空')
-        return
-    inputs: dict[str, str] = {}
-    for field_name, label, default in _FIELD_MAP[ctype]:
-        inputs[field_name] = input_fn(f'{label} [{default}]: ').strip()
-    channel = build_channel_from_inputs(ctype, name, inputs)
-    cfg.replace_channel(channel)
-    save_config(cfg, path)
-    print(f'已保存渠道 {name!r}。执行 `clawcodex-dev gateway restart {name}` 生效。')
-
-
-def _wizard_add_wechat(cfg, path, input_fn: InputFn) -> None:
+def _wizard_add_wechat(cfg, path, ui: InteractiveInput) -> None:
     channel = build_default_channel('wechat')
     cfg.replace_channel(channel)
     save_config(cfg, path)
@@ -1000,28 +1124,30 @@ def _wizard_add_wechat(cfg, path, input_fn: InputFn) -> None:
     print('接下来进行微信扫码登录；扫码完成后可继续配置授权/启停等选项。')
     wechat_login(channel.name)
     refreshed = cfg.get_channel(channel.name) or channel
-    _wizard_edit(cfg, path, refreshed, input_fn)
+    _wizard_edit(cfg, path, refreshed, ui)
 
 
-def _wizard_edit(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
+def _wizard_edit(cfg, path, channel: ChannelConfig, ui: InteractiveInput) -> None:
     if channel.type.value == 'feishu':
-        _wizard_edit_feishu(cfg, path, channel, input_fn)
+        _wizard_edit_feishu(cfg, path, channel, ui)
         return
     if channel.type.value == 'wechat':
-        _wizard_edit_wechat(cfg, path, channel, input_fn)
+        _wizard_edit_wechat(cfg, path, channel, ui)
         return
     while True:
-        print(f'\n编辑 {channel.name} [{channel.type.value}]')
-        print('  1) 编辑字段')
-        print('  2) 启用 / 停用')
-        print('  3) 移除该渠道')
-        print('  0) 返回')
-        choice = input_fn('选择: ').strip()
-        if choice == '0':
+        idx = ui.select(
+            [
+                ('编辑字段', ''),
+                (f'启用/停用 (当前: {"enabled" if channel.enabled else "disabled"})', ''),
+                ('移除该渠道', ''),
+            ],
+            title=f'编辑 {channel.name} [{channel.type.value}]',
+        )
+        if idx is None:
             return
-        if choice == '1':
-            _edit_fields(cfg, path, channel, input_fn)
-        elif choice == '2':
+        if idx == 0:
+            _edit_fields(cfg, path, channel, ui)
+        elif idx == 1:
             channel = ChannelConfig(
                 type=channel.type,
                 webhook_url=channel.webhook_url,
@@ -1032,38 +1158,44 @@ def _wizard_edit(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
             cfg.replace_channel(channel)
             save_config(cfg, path)
             print(f'{channel.name} → {"enabled" if channel.enabled else "disabled"}')
-        elif choice == '3':
-            confirm = input_fn(f'确认移除 {channel.name}? (y/N): ').strip().lower()
-            if confirm in ('y', 'yes'):
-                cfg.remove_channel(channel.name)
-                save_config(cfg, path)
+        elif idx == 2:
+            confirm = ui.confirm(f'确认移除 {channel.name}?')
+            if confirm is None:
+                continue
+            if confirm:
+                _remove_channel_config_and_state(cfg, path, channel.name)
                 print(f'已移除 {channel.name}')
                 return
-        else:
-            print('无效选择')
 
 
-def _wizard_edit_wechat(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
+def _wizard_edit_wechat(cfg, path, channel: ChannelConfig, ui: InteractiveInput) -> None:
     while True:
-        print(f'\n编辑 {channel.name} [wechat]')
-        print('  1) 扫码登录')
-        print('  2) 查看登录态 / conversation 连接')
-        print('  3) 移除 REPL/orchestrator 连接')
-        print('  4) 启用 / 停用')
-        print('  5) 移除该渠道')
-        print('  0) 返回')
-        choice = input_fn('选择: ').strip()
-        if choice == '0':
+        login_label = (
+            '重置'
+            if _wechat_is_logged_in(channel.name, state_dir=_resolve_status_state_dir(path, None))
+            else '扫码登录'
+        )
+        idx = ui.select(
+            [
+                (login_label, ''),
+                ('查看登录态 / conversation 连接', ''),
+                ('移除 REPL/orchestrator 连接', ''),
+                (f'启用/停用 (当前: {"enabled" if channel.enabled else "disabled"})', ''),
+                ('移除该渠道', ''),
+            ],
+            title=f'编辑 {channel.name} [wechat]',
+        )
+        if idx is None:
             return
-        if choice == '1':
+        if idx == 0:
             wechat_login(channel.name)
-        elif choice == '2':
+        elif idx == 1:
             print(format_status(path, channel.name))
-        elif choice == '3':
+        elif idx == 2:
             _disconnect_gateway_connection(
                 channel.name, state_dir=_resolve_status_state_dir(path, None)
             )
-        elif choice == '4':
+        elif idx == 3:
             channel = ChannelConfig(
                 type=channel.type,
                 webhook_url=channel.webhook_url,
@@ -1074,18 +1206,17 @@ def _wizard_edit_wechat(cfg, path, channel: ChannelConfig, input_fn: InputFn) ->
             cfg.replace_channel(channel)
             save_config(cfg, path)
             print(f'{channel.name} → {"enabled" if channel.enabled else "disabled"}')
-        elif choice == '5':
-            confirm = input_fn(f'确认移除 {channel.name}? (y/N): ').strip().lower()
-            if confirm in ('y', 'yes'):
-                cfg.remove_channel(channel.name)
-                save_config(cfg, path)
+        elif idx == 4:
+            confirm = ui.confirm(f'确认移除 {channel.name}?')
+            if confirm is None:
+                continue
+            if confirm:
+                _remove_channel_config_and_state(cfg, path, channel.name)
                 print(f'已移除 {channel.name}')
                 return
-        else:
-            print('无效选择')
 
 
-def _edit_fields(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
+def _edit_fields(cfg, path, channel: ChannelConfig, ui: InteractiveInput) -> None:
     fields = _FIELD_MAP.get(channel.type.value, [])
     extra = dict(channel.extra or {})
     webhook_url = channel.webhook_url
@@ -1100,7 +1231,9 @@ def _edit_fields(cfg, path, channel: ChannelConfig, input_fn: InputFn) -> None:
                 else ('true' if field_name == 'enabled' and enabled else 'false')
             )
         )
-        raw = input_fn(f'{label} [{current}] (回车保留): ').strip()
+        raw = ui.prompt(f'{label} [{current}] (回车保留，ESC 中断): ')
+        if raw is None:
+            return  # ESC: 中断，已改字段不保存
         if raw == '':
             continue
         if field_name == 'webhook_url':

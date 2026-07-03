@@ -165,6 +165,56 @@ class _ImReplyController:
         except Exception:  # noqa: BLE001
             _log.warning('repl IM reply send failed', exc_info=True)
 
+    def send_command_feedback(
+        self,
+        command: str,
+        *,
+        success: bool = True,
+        message: str | None = None,
+    ) -> bool:
+        """Send a visible completion notice for an IM-driven local command."""
+        pop_context = getattr(self._client, 'pop_reply_context', None)
+        if callable(pop_context):
+            im_origin, context_token = pop_context()
+        else:
+            context_fn = getattr(self._client, 'peek_reply_context_token', None)
+            context_token = context_fn() if callable(context_fn) else None
+            pop_origin = getattr(self._client, 'pop_reply_origin', None)
+            if not callable(pop_origin):
+                return False
+            im_origin = pop_origin()
+        if not im_origin:
+            return False
+
+        normalized = self._normalize_command_name(command)
+        text = message or self._format_command_feedback(normalized, success=success)
+        return self._send_outbound_text(
+            im_origin,
+            text,
+            context_token=context_token,
+            metadata={
+                'intent': 'command_feedback',
+                'command': normalized,
+                'success': success,
+            },
+            semantic_tags=['command_feedback'],
+        )
+
+    @staticmethod
+    def _normalize_command_name(command: str) -> str:
+        raw = str(command or '').strip()
+        if not raw:
+            return '/'
+        name = raw.split(maxsplit=1)[0]
+        if not name.startswith('/'):
+            name = f'/{name}'
+        return name
+
+    @staticmethod
+    def _format_command_feedback(command: str, *, success: bool = True) -> str:
+        status = '已执行' if success else '执行失败'
+        return f'命令{status}：{command}'
+
     def send_permission_prompt(
         self,
         *,

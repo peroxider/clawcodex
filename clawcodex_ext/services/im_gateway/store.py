@@ -7,8 +7,8 @@ are written via tmp + atomic ``os.replace``; NDJSON logs are
 append-only. v1 keeps this single-process/single-account; the backend
 interface is reserved so SQLite/Postgres can slot in later (P6+).
 
-P1 ships functional basics (dedupe, outbox, dead-letter, session map,
-context tokens, audit). P4 adds compaction/rotation, the retry loop,
+P1 ships functional basics (dedupe, outbox, dead-letter, context
+tokens, audit). P4 adds compaction/rotation, the retry loop,
 storm aggregation, and cross-process audit/redaction hardening.
 """
 
@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import ReliabilityConfig
-from .models import SessionTarget
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +62,37 @@ def _read_ndjson(path: Path) -> list[dict[str, Any]]:
         except json.JSONDecodeError:
             continue
     return out
+
+
+def _rewrite_ndjson(path: Path, entries: list[dict[str, Any]]) -> None:
+    """原子重写 NDJSON:写 tmp + os.replace。调用方需持锁。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + '.tmp')
+    with tmp.open('w', encoding='utf-8') as fh:
+        for e in entries:
+            fh.write(json.dumps(e, ensure_ascii=False) + '\n')
+    os.replace(tmp, path)
+
+
+def _rotate_ndjson(path: Path, max_bytes: int, backup_count: int) -> None:
+    """日志式轮转:若 path 大小超 max_bytes,则滚动备份。
+
+    仿 logging.handlers.RotatingFileHandler:
+    - 删除最旧备份 path.{backup_count}
+    - 从 {backup_count-1} 到 1 依次重命名为下一个编号
+    - 当前文件重命名为 path.1
+    """
+    if not path.exists() or path.stat().st_size < max_bytes:
+        return
+    oldest = path.with_suffix(path.suffix + f'.{backup_count}')
+    if oldest.exists():
+        oldest.unlink()
+    for i in range(backup_count - 1, 0, -1):
+        src = path.with_suffix(path.suffix + f'.{i}')
+        dst = path.with_suffix(path.suffix + f'.{i + 1}')
+        if src.exists():
+            src.rename(dst)
+    path.rename(path.with_suffix(path.suffix + '.1'))
 
 
 class ReliabilityStore:
@@ -148,7 +178,13 @@ class ReliabilityStore:
     # -- dead letter -----------------------------------------------------
     def append_dead_letter(self, entry: dict[str, Any]) -> None:
         with self._lock:
-            _append_ndjson(self._p('dead_letter.ndjson'), entry)
+            path = self._p('dead_letter.ndjson')
+            _rotate_ndjson(
+                path,
+                self._reliability.dead_letter_max_bytes,
+                self._reliability.dead_letter_backup_count,
+            )
+            _append_ndjson(path, entry)
         logger.warning(
             'im_gateway dead-letter appended: channel=%s idem=%s category=%s',
             entry.get('channel'),
@@ -159,32 +195,6 @@ class ReliabilityStore:
     def dead_letter_entries(self) -> list[dict[str, Any]]:
         with self._lock:
             return _read_ndjson(self._p('dead_letter.ndjson'))
-
-    # -- session map -----------------------------------------------------
-    def get_session(self, origin: str) -> SessionTarget | None:
-        data = _read_json(self._p('im_session_map.json'), {})
-        entry = data.get(origin)
-        if not entry:
-            return None
-        return SessionTarget(
-            session_id=entry.get('session_id', ''),
-            host_type=entry.get('host_type', 'default'),
-        )
-
-    def set_session(self, origin: str, target: SessionTarget) -> None:
-        with self._lock:
-            data = _read_json(self._p('im_session_map.json'), {})
-            data[origin] = {
-                'session_id': target.session_id,
-                'host_type': target.host_type,
-                'updated_at': time.time(),
-            }
-            _atomic_write_json(self._p('im_session_map.json'), data)
-        logger.debug(
-            'im_gateway session map set: origin=%s session=%s',
-            origin[:24],
-            target.session_id[:24],
-        )
 
     # -- context tokens --------------------------------------------------
     def get_context_token(self, account_id: str, user_id: str) -> str | None:
@@ -269,11 +279,91 @@ class ReliabilityStore:
             **redact(fields),
         }
         with self._lock:
-            _append_ndjson(self._p('audit.ndjson'), entry)
+            path = self._p('audit.ndjson')
+            _rotate_ndjson(
+                path,
+                self._reliability.audit_max_bytes,
+                self._reliability.audit_backup_count,
+            )
+            _append_ndjson(path, entry)
 
     def audit_entries(self) -> list[dict[str, Any]]:
         with self._lock:
             return _read_ndjson(self._p('audit.ndjson'))
+
+    # -- cron retention --------------------------------------------------
+    def purge_processed_inbound(self, ttl_seconds: int, max_entries: int) -> int:
+        """删过期 + 截断到 max_entries(保留最新)。返回清理条数。"""
+        return self._purge_ndjson_ttl_cap(
+            'processed_inbound.ndjson', ttl_seconds, max_entries, ts_fields=('seen_at',)
+        )
+
+    def purge_outbox(self, ttl_seconds: int, max_entries: int) -> int:
+        return self._purge_ndjson_ttl_cap(
+            'outbox.ndjson', ttl_seconds, max_entries, ts_fields=('at', 'timestamp')
+        )
+
+    def purge_unsupported_inbound(self, ttl_seconds: int, max_entries: int) -> int:
+        return self._purge_ndjson_ttl_cap(
+            'unsupported_inbound.ndjson',
+            ttl_seconds,
+            max_entries,
+            ts_fields=('received_at', 'at', 'timestamp'),
+        )
+
+    def purge_all(self, reliability: ReliabilityConfig) -> dict[str, int]:
+        """Return cron cleanup counts for bounded append-style files only."""
+        return {
+            'processed_inbound.ndjson': self.purge_processed_inbound(
+                reliability.retention_processed_inbound_ttl_seconds,
+                reliability.retention_processed_inbound_max_entries,
+            ),
+            'outbox.ndjson': self.purge_outbox(
+                reliability.retention_outbox_ttl_seconds,
+                reliability.retention_outbox_max_entries,
+            ),
+            'unsupported_inbound.ndjson': self.purge_unsupported_inbound(
+                reliability.retention_unsupported_inbound_ttl_seconds,
+                reliability.retention_unsupported_inbound_max_entries,
+            ),
+        }
+
+    # -- internal helpers ------------------------------------------------
+    def _purge_ndjson_ttl_cap(
+        self, name: str, ttl_seconds: int, max_entries: int, ts_fields: tuple[str, ...]
+    ) -> int:
+        cutoff = time.time() - ttl_seconds
+        with self._lock:
+            path = self._p(name)
+            entries = _read_ndjson(path)
+            if not entries:
+                return 0
+            indexed = list(enumerate(entries))
+            survivors = [
+                (index, entry)
+                for index, entry in indexed
+                if (ts := self._entry_timestamp(entry, ts_fields)) is None or ts >= cutoff
+            ]
+            if len(survivors) > max_entries:
+                survivors = sorted(
+                    survivors,
+                    key=lambda item: self._entry_timestamp(item[1], ts_fields) or item[0],
+                    reverse=True,
+                )[:max_entries]
+                survivors.sort(key=lambda item: item[0])
+            kept = [entry for _, entry in survivors]
+            removed = len(entries) - len(kept)
+            if removed:
+                _rewrite_ndjson(path, kept)
+            return removed
+
+    @staticmethod
+    def _entry_timestamp(entry: dict[str, Any], fields: tuple[str, ...]) -> float | None:
+        for field in fields:
+            value = entry.get(field)
+            if isinstance(value, (int, float)):
+                return float(value)
+        return None
 
 
 __all__ = ['ReliabilityStore']

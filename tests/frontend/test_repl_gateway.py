@@ -297,6 +297,57 @@ def test_repl_feishu_reply_preserves_context_token_for_chat_id(monkeypatch) -> N
     assert sent == [('feishu:dm:cli_app:ou_user', 'reply to feishu', 'oc_chat')]
 
 
+def test_im_reply_controller_sends_command_feedback_with_context() -> None:
+    import asyncio
+    import time
+
+    from clawcodex_ext.frontend.repl_extensions import _ImReplyController
+
+    sent: list[dict] = []
+
+    class _FakeInner:
+        async def send_outbound(self, **kwargs):
+            sent.append(kwargs)
+
+    class _FakeClient:
+        def __init__(self):
+            self._client = _FakeInner()
+            self._reply_context = [('feishu:dm:cli_app:ou_user', 'oc_chat')]
+
+        def pop_reply_context(self) -> tuple[str | None, str | None]:
+            return self._reply_context.pop(0) if self._reply_context else (None, None)
+
+    class _FakeRepl:
+        def __init__(self):
+            self._cron_loop = asyncio.new_event_loop()
+
+    repl = _FakeRepl()
+    client = _FakeClient()
+    controller = _ImReplyController(repl, client, 'feishu:dm:*:*')
+    try:
+        repl._cron_loop.call_soon(controller.send_command_feedback, '/clear')
+        deadline = time.time() + 1.0
+        while not sent and time.time() < deadline:
+            repl._cron_loop.run_until_complete(asyncio.sleep(0.02))
+    finally:
+        repl._cron_loop.close()
+
+    assert sent == [
+        {
+            'origin': 'feishu:dm:cli_app:ou_user',
+            'text': '命令已执行：/clear',
+            'context_token': 'oc_chat',
+            'metadata': {
+                'intent': 'command_feedback',
+                'command': '/clear',
+                'success': True,
+            },
+            'semantic_tags': ['command_feedback'],
+        }
+    ]
+    assert client._reply_context == []
+
+
 def test_im_reply_controller_sends_permission_prompt_without_consuming_origin(monkeypatch) -> None:
     """Permission menus shown during an IM turn must also be visible in WeChat.
 
@@ -634,6 +685,32 @@ async def test_repl_deliver_permission_reply_intercepted_before_enqueue(monkeypa
     # non-choice → falls through to enqueue
     await client.deliver(delivery_id='d_msg', text='hello', origin='wechat:direct:a:u')
     assert enqueued == ['hello']
+
+
+@pytest.mark.asyncio
+async def test_gateway_ipc_ack_is_fire_and_forget(monkeypatch) -> None:
+    from clawcodex_ext.services.im_gateway.ipc_client import GatewayIpcClient
+    from clawcodex_ext.services.im_gateway.ipc_protocol import FrameType
+
+    client = GatewayIpcClient('/tmp/gw.sock')
+    written = []
+
+    async def _send(_frame):
+        raise AssertionError('ACK replies to server-pushed DELIVER must not wait for another ACK')
+
+    async def _write_frame_no_reply(frame):
+        written.append(frame)
+
+    monkeypatch.setattr(client, '_send', _send)
+    monkeypatch.setattr(client, '_write_frame_no_reply', _write_frame_no_reply, raising=False)
+
+    response = await client.ack(delivery_id='d_perm', layer='processed', message='permission reply')
+
+    assert response is None
+    assert len(written) == 1
+    assert written[0].type is FrameType.ACK
+    assert written[0].delivery_id == 'd_perm'
+    assert written[0].ack_layer == 'processed'
 
 
 def test_repl_gateway_uses_runtime_options_and_registers_once(monkeypatch) -> None:

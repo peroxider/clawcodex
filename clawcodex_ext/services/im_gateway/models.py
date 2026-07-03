@@ -145,12 +145,14 @@ class AckReceipt:
     delivery_id: str
     layer: AckLayer
     message: str = ''
+    notify_user: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
             'delivery_id': self.delivery_id,
             'layer': self.layer.value,
             'message': self.message,
+            'notify_user': self.notify_user,
         }
 
 

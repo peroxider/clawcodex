@@ -163,6 +163,20 @@ class GatewayIpcClient:
             logger.debug('gateway ipc: reply timed out for keys=%s', keys)
             return None
 
+    async def _write_frame_no_reply(self, frame: GatewayFrame) -> None:
+        """Write a frame that is itself a reply and should not get another reply."""
+        if self._writer is None:
+            raise RuntimeError('not connected')
+        if self._write_lock is None:
+            self._write_lock = asyncio.Lock()
+        try:
+            async with self._write_lock:
+                self._writer.write(frame.encode())
+                await self._writer.drain()
+        except (ConnectionError, BrokenPipeError) as exc:
+            logger.debug('gateway ipc: send failed (connection lost): %s', exc)
+            return None
+
     async def register(
         self, *, session_id: str, origin: str, capabilities: list[str] | None = None
     ) -> GatewayFrame | None:
@@ -255,9 +269,10 @@ class GatewayIpcClient:
     async def ack(
         self, *, delivery_id: str, layer: str, message: str | None = None
     ) -> GatewayFrame | None:
-        return await self._send(
+        await self._write_frame_no_reply(
             GatewayFrame.ack(delivery_id=delivery_id, layer=layer, message=message)
         )
+        return None
 
     async def send_outbound(
         self,

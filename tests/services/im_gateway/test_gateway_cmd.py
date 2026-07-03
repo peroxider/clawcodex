@@ -212,7 +212,7 @@ def test_gateway_start_reports_retrying_channel_as_degraded_success(
     assert 'messages may be dropped' not in captured.err
 
 
-def test_startup_health_wait_seconds_uses_feishu_startup_timeout(tmp_path) -> None:
+def test_startup_health_wait_seconds_includes_feishu_sdk_import_buffer(tmp_path) -> None:
     from extensions.im_gateway import server as srv
 
     paths = DaemonPaths.for_state_dir(tmp_path)
@@ -236,7 +236,7 @@ def test_startup_health_wait_seconds_uses_feishu_startup_timeout(tmp_path) -> No
         encoding='utf-8',
     )
 
-    assert srv.startup_health_wait_seconds(paths) == pytest.approx(37.5)
+    assert srv.startup_health_wait_seconds(paths) == pytest.approx(157.5)
 
 
 def test_gateway_start_with_name_errors(capsys) -> None:

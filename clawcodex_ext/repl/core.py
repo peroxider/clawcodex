@@ -4129,9 +4129,28 @@ class ClawcodexREPL:
                 self.console.print('\n[primary]Goodbye![/primary]')
                 break
 
+    def _send_im_command_feedback(self, command: str) -> None:
+        raw = str(command or '').strip()
+        if not raw.startswith('/') or raw == '/':
+            return
+        im_reply = getattr(self, '_im_reply_controller', None)
+        send_feedback = getattr(im_reply, 'send_command_feedback', None)
+        if not callable(send_feedback):
+            return
+        try:
+            send_feedback(raw)
+        except Exception:  # noqa: BLE001
+            logger.debug('IM command feedback failed', exc_info=True)
+
     def handle_command(self, command: str):
-        _load_heavy_runtime()
         """Handle slash commands."""
+        _load_heavy_runtime()
+        try:
+            return self._handle_command(command)
+        finally:
+            self._send_im_command_feedback(command)
+
+    def _handle_command(self, command: str):
         raw = command.strip()
         if raw == '/':
             self._show_slash_palette()

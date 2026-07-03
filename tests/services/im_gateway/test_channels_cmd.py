@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from clawcodex_ext.cli.channels_cmd import commands as ch
 from clawcodex_ext.services.channels.models import ChannelConfig, ChannelType
 from clawcodex_ext.services.im_gateway.models import IM_DIRECT_ALL_ORIGIN, WECHAT_DIRECT_ALL_ORIGIN
@@ -16,6 +18,11 @@ def _slack(name: str = 'slack-ops', enabled: bool = False) -> ChannelConfig:
     )
 
 
+def _write_json(path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding='utf-8')
+
+
 def test_list_channels_empty(tmp_path) -> None:
     p = tmp_path / 'channels.yaml'
     assert ch.list_channels(str(p)) == []
@@ -28,6 +35,79 @@ def test_add_list_remove_channel(tmp_path) -> None:
     assert listed == [{'name': 's1', 'type': 'slack', 'enabled': True}]
     assert ch.remove_channel(str(p), 's1') is True
     assert ch.list_channels(str(p)) == []
+
+
+def test_remove_wechat_channel_deletes_owned_state(tmp_path) -> None:
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), ch.build_default_channel('wechat'))
+    wechat_dir = tmp_path / 'wechat'
+    wechat_dir.mkdir()
+    owned_files = [
+        wechat_dir / 'wechat_auth.json',
+        wechat_dir / 'wechat_auth.key',
+        wechat_dir / 'wechat_auth.json.tmp',
+        wechat_dir / 'wechat_pairing.json',
+        wechat_dir / 'wechat_pairing.json.lock',
+        wechat_dir / 'wechat_pairing.json.tmp',
+        wechat_dir / 'wechat-main_auth.json',
+        wechat_dir / 'wechat-main_auth.key',
+        wechat_dir / 'wechat-main_auth.json.tmp',
+        wechat_dir / 'wechat-main_pairing.json',
+        wechat_dir / 'wechat-main_pairing.json.lock',
+        wechat_dir / 'wechat-main_pairing.json.tmp',
+        tmp_path / 'wechat_context_tokens.json',
+        tmp_path / 'wechat_accounts.json',
+    ]
+    for path in owned_files:
+        path.write_text('owned', encoding='utf-8')
+    preserved_files = [
+        tmp_path / 'outbox.ndjson',
+        tmp_path / 'processed_inbound.ndjson',
+        tmp_path / 'dead_letter.ndjson',
+        tmp_path / 'audit.ndjson',
+    ]
+    for path in preserved_files:
+        path.write_text('preserve', encoding='utf-8')
+
+    assert ch.remove_channel(str(p), 'wechat') is True
+
+    assert ch.list_channels(str(p)) == []
+    assert all(not path.exists() for path in owned_files)
+    assert all(path.exists() for path in preserved_files)
+    assert p.exists()
+
+
+def test_remove_feishu_channel_prunes_last_sender_key(tmp_path) -> None:
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), ch.build_channel_from_inputs('feishu', 'feishu', {}))
+    _write_json(tmp_path / 'feishu_last_senders.json', {'feishu': 'ou_old', 'other': 'ou_keep'})
+
+    assert ch.remove_channel(str(p), 'feishu') is True
+
+    assert json.loads((tmp_path / 'feishu_last_senders.json').read_text(encoding='utf-8')) == {
+        'other': 'ou_keep'
+    }
+
+
+def test_remove_feishu_channel_deletes_empty_last_sender_file(tmp_path) -> None:
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), ch.build_channel_from_inputs('feishu', 'feishu', {}))
+    _write_json(tmp_path / 'feishu_last_senders.json', {'feishu': 'ou_old'})
+
+    assert ch.remove_channel(str(p), 'feishu') is True
+
+    assert not (tmp_path / 'feishu_last_senders.json').exists()
+
+
+def test_remove_generic_channel_preserves_gateway_state(tmp_path) -> None:
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _slack('s1', enabled=True))
+    preserved = tmp_path / 'outbox.ndjson'
+    preserved.write_text('preserve', encoding='utf-8')
+
+    assert ch.remove_channel(str(p), 's1') is True
+
+    assert preserved.exists()
 
 
 def test_add_channel_replaces_existing_channel_of_same_type(tmp_path) -> None:
@@ -336,34 +416,33 @@ def test_build_channel_from_inputs_feishu_webhook_compat() -> None:
     assert channel.extra == {'connection_mode': 'webhook', 'secret': 'sign_secret'}
 
 
-def test_wizard_add_then_edit_then_remove(tmp_path) -> None:
+def test_wizard_add_then_edit_then_remove(tmp_path, monkeypatch) -> None:
     p = tmp_path / 'channels.yaml'
-    # scripted inputs: add a slack channel, then return
+    monkeypatch.setattr(ch, 'wechat_login', lambda name, state_dir=None: 0)
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'logged_in')
+    # 新流程：wechat 是第 2 项；未登录 → _wizard_add_wechat（扫码 + 编辑菜单）
     inputs = iter(
         [
-            '+',  # choose new
-            'slack',  # type
-            'slack-ops',  # name
-            'https://hooks.example.com/services/T/B/abcdef0123456789',  # webhook_url
-            'true',  # enabled
-            '',  # exit
+            '2',  # select wechat (not logged in → add flow: scan + edit menu)
+            '',  # ESC wechat edit menu → back to channel select
+            '',  # ESC exit wizard
         ]
     )
     rc = ch.run_wizard(str(p), input_fn=lambda _prompt: next(inputs))
     assert rc == 0
     listed = ch.list_channels(str(p))
-    assert listed == [{'name': 'slack-ops', 'type': 'slack', 'enabled': True}]
+    assert listed == [{'name': 'wechat', 'type': 'wechat', 'enabled': True}]
 
-    # edit: disable then remove
+    # edit: disable then remove（wechat 已登录 → 编辑菜单；选项 4=启停，5=移除）
     inputs2 = iter(
         [
-            '1',  # select channel 1
-            '2',  # enable/disable toggle
-            '0',  # back
-            '1',  # select channel 1
-            '3',  # remove
+            '2',  # select wechat (logged in → edit menu)
+            '4',  # toggle enable/disable
+            '',  # ESC wechat edit → back to channel select
+            '2',  # select wechat again
+            '5',  # remove channel
             'y',  # confirm
-            '',  # exit
+            '',  # ESC exit wizard
         ]
     )
     ch.run_wizard(str(p), input_fn=lambda _prompt: next(inputs2))
@@ -381,12 +460,12 @@ def test_wechat_wizard_creates_default_config_and_runs_scan_before_options(
         return 0
 
     monkeypatch.setattr(ch, 'wechat_login', _fake_login)
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'unconfigured')
     inputs = iter(
         [
-            '+',  # choose new
-            'wechat',  # type only; no manual name/base_url/account_id prompts
-            '0',  # leave the post-scan options menu
-            '',  # exit wizard
+            '2',  # select wechat (not logged in → add flow: scan + edit menu)
+            '',  # ESC post-scan edit menu → back to channel select
+            '',  # ESC exit wizard
         ]
     )
     prompts: list[str] = []
@@ -406,6 +485,29 @@ def test_wechat_wizard_creates_default_config_and_runs_scan_before_options(
     assert '编辑字段' not in text
 
 
+def test_wizard_remove_wechat_channel_deletes_owned_state(tmp_path, monkeypatch) -> None:
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), ch.build_default_channel('wechat'))
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'logged_in')
+    (tmp_path / 'wechat_context_tokens.json').write_text('{"acct:user": "ctx"}', encoding='utf-8')
+    (tmp_path / 'wechat').mkdir()
+    (tmp_path / 'wechat' / 'wechat_auth.json').write_text('owned', encoding='utf-8')
+    inputs = iter(
+        [
+            '2',  # select wechat (logged in → edit menu)
+            '5',  # remove channel
+            'y',  # confirm
+            '',  # ESC exit wizard
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _prompt: next(inputs)) == 0
+
+    assert ch.list_channels(str(p)) == []
+    assert not (tmp_path / 'wechat_context_tokens.json').exists()
+    assert not (tmp_path / 'wechat' / 'wechat_auth.json').exists()
+
+
 def test_existing_wechat_wizard_options_do_not_prompt_for_internal_fields(
     tmp_path, monkeypatch, capsys
 ) -> None:
@@ -414,10 +516,10 @@ def test_existing_wechat_wizard_options_do_not_prompt_for_internal_fields(
     monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'logged_in')
     inputs = iter(
         [
-            '1',  # select existing wechat
+            '2',  # select existing wechat (logged in → edit menu)
             '2',  # status
-            '0',  # back
-            '',  # exit
+            '',  # ESC wechat edit → back to channel select
+            '',  # ESC exit wizard
         ]
     )
     prompts: list[str] = []
@@ -655,7 +757,7 @@ def _feishu_ws_channel(name: str = 'feishu') -> ChannelConfig:
 def test_wizard_add_feishu_interrupts_when_lark_oapi_missing(tmp_path, monkeypatch, capsys) -> None:
     p = tmp_path / 'channels.yaml'
     monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: False)
-    inputs = iter(['+', 'feishu', ''])  # add feishu, then exit
+    inputs = iter(['1', ''])  # select feishu (not logged in → add → dep_check fails), then exit
 
     assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
 
@@ -682,7 +784,7 @@ def test_wizard_add_feishu_websocket_defaults_to_scan_and_skips_webhook_fields(
             'bot_name': 'ClawCodex',
         },
     )
-    inputs = iter(['+', 'feishu', '', ''])  # add feishu, default websocket, exit
+    inputs = iter(['1', '1', ''])  # select feishu (add), websocket mode (idx 0), ESC exit
     prompts: list[str] = []
 
     def _input(prompt: str) -> str:
@@ -717,12 +819,11 @@ def test_wizard_add_feishu_webhook_mode_prompts_webhook_url(tmp_path, monkeypatc
     monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
     inputs = iter(
         [
-            '+',  # add
-            'feishu',  # type
-            '2',  # webhook mode
+            '1',  # select feishu (not logged in → add)
+            '2',  # webhook mode (idx 1)
             'https://open.feishu.cn/open-apis/bot/v2/hook/abcdef',  # webhook_url
             'sign_secret',  # secret
-            '',  # exit wizard
+            '',  # ESC exit wizard
         ]
     )
 
@@ -742,10 +843,10 @@ def test_wizard_edit_feishu_toggle_enabled(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
     inputs = iter(
         [
-            '1',  # select feishu
-            '2',  # toggle
-            '0',  # back
-            '',  # exit wizard
+            '1',  # select feishu (logged in → edit menu)
+            '2',  # toggle enable/disable (idx 1)
+            '',  # ESC feishu edit → back to channel select
+            '',  # ESC exit wizard
         ]
     )
 
@@ -771,7 +872,7 @@ def test_wizard_add_feishu_websocket_enforces_v1_single_active_inbound(
             'domain': 'feishu',
         },
     )
-    inputs = iter(['+', 'feishu', '', ''])
+    inputs = iter(['1', '1', ''])  # select feishu (add), websocket mode (idx 0), ESC exit
 
     assert ch.run_wizard(str(p), input_fn=lambda _prompt: next(inputs)) == 0
 
@@ -811,7 +912,7 @@ def test_format_status_feishu_reports_runtime_health_and_approval_support(
 
     assert 'mode: websocket' in out
     assert 'health: websocket:connected' in out
-    assert 'approval_cards: supported' in out
+    assert 'approval_cards' not in out
 
 
 def test_feishu_scan_login_uses_real_qr_registration_without_manual_prompts(
@@ -869,19 +970,20 @@ def test_wizard_edit_feishu_login_manual_masks_secret_and_keeps_values(
     p = tmp_path / 'channels.yaml'
     ch.add_channel(str(p), _feishu_ws_channel())
     monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    # 新流程：ui.prompt 在 input_fn 路径下空行=ESC=中断；为"保留"字段需显式重输原值。
     inputs = iter(
         [
-            '1',  # select feishu
-            '1',  # login
-            '2',  # manual
-            '',  # keep app_id
-            'new_secret',  # new app_secret
-            '',  # keep encrypt_key
-            '',  # keep verification_token
-            '',  # keep domain
-            '',  # keep bot_open_id
-            '0',  # back
-            '',  # exit wizard
+            '1',  # select feishu (logged in → edit menu)
+            '1',  # reset (idx 0)
+            '2',  # manual (idx 1)
+            'cli_app',  # app_id: re-enter existing to "keep"
+            'new_secret',  # app_secret: new value
+            'enc_key',  # encrypt_key
+            'ver_tok',  # verification_token
+            'feishu',  # domain: re-enter existing to "keep"
+            'ou_bot',  # bot_open_id: re-enter existing to "keep"
+            '',  # ESC feishu edit → back to channel select
+            '',  # ESC exit wizard
         ]
     )
     prompts: list[str] = []
@@ -898,6 +1000,8 @@ def test_wizard_edit_feishu_login_manual_masks_secret_and_keeps_values(
     assert channel.extra['app_id'] == 'cli_app'
     assert channel.extra['app_secret'] == 'new_secret'
     assert channel.extra['domain'] == 'feishu'
+    assert channel.extra['encrypt_key'] == 'enc_key'
+    assert channel.extra['verification_token'] == 'ver_tok'
 
     text = capsys.readouterr().out + '\n'.join(prompts)
     assert '已配置' in text
@@ -923,11 +1027,11 @@ def test_wizard_edit_feishu_scan_login_updates_bot_identity(tmp_path, monkeypatc
     )
     inputs = iter(
         [
-            '1',  # select feishu
-            '1',  # login
-            '1',  # scan
-            '0',  # back
-            '',  # exit wizard
+            '1',  # select feishu (logged in → edit menu)
+            '1',  # reset (idx 0)
+            '1',  # scan (idx 0)
+            '',  # ESC feishu edit → back to channel select
+            '',  # ESC exit wizard
         ]
     )
 
@@ -941,3 +1045,267 @@ def test_wizard_edit_feishu_scan_login_updates_bot_identity(tmp_path, monkeypatc
     assert channel.extra['domain'] == 'lark'
     assert channel.extra['bot_open_id'] == 'ou_new_bot'
     assert channel.extra['bot_name'] == 'NewBot'
+
+
+# -- new arrow-key wizard flow (plan: gateway-setup-arrow-key-menu) ---------
+
+
+def test_run_wizard_esc_at_channel_select_exits(tmp_path) -> None:
+    """频道选择层 ESC（空行）直接退出 setup。"""
+    p = tmp_path / 'channels.yaml'
+    inputs = iter([''])  # ESC at channel select
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+
+def test_run_wizard_feishu_not_logged_in_runs_add_flow(tmp_path, monkeypatch) -> None:
+    """无 feishu 渠道 → 选 feishu → 走新增流程（_wizard_add_feishu）。"""
+    p = tmp_path / 'channels.yaml'
+    monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    monkeypatch.setattr(
+        ch,
+        '_feishu_scan_login',
+        lambda input_fn: {
+            'connection_mode': 'websocket',
+            'app_id': 'cli_app',
+            'app_secret': 'secret',
+            'domain': 'feishu',
+            'bot_open_id': 'ou_bot',
+            'bot_name': 'ClawCodex',
+        },
+    )
+    inputs = iter(
+        [
+            '1',  # select feishu (not configured -> add flow)
+            '1',  # websocket mode (default)
+            '',  # ESC to exit setup after add
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    listed = ch.list_channels(str(p))
+    assert listed == [{'name': 'feishu', 'type': 'feishu', 'enabled': True}]
+
+
+def test_run_wizard_wechat_not_logged_in_runs_add_flow(tmp_path, monkeypatch) -> None:
+    """无 wechat 渠道 → 选 wechat → 走新增流程（扫码）。"""
+    p = tmp_path / 'channels.yaml'
+    login_calls: list[str] = []
+
+    def _fake_login(name: str, *, state_dir: str | None = None) -> int:
+        login_calls.append(name)
+        return 0
+
+    monkeypatch.setattr(ch, 'wechat_login', _fake_login)
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'unconfigured')
+    inputs = iter(
+        [
+            '2',  # select wechat (not configured -> add flow)
+            '',  # ESC to exit edit menu after scan
+            '',  # ESC to exit setup
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    assert login_calls == ['wechat']
+    assert ch.list_channels(str(p)) == [{'name': 'wechat', 'type': 'wechat', 'enabled': True}]
+
+
+def test_run_wizard_feishu_logged_in_goes_to_edit_menu(tmp_path, monkeypatch, capsys) -> None:
+    """feishu 已登录 → 选 feishu → 进入编辑菜单（含"重置"而非"登录"）。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _feishu_ws_channel())  # 已配置且 app_id/app_secret 齐全
+    monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    inputs = iter(
+        [
+            '1',  # select feishu (logged in -> edit menu)
+            '',  # ESC back to channel select
+            '',  # ESC exit setup
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    text = capsys.readouterr().out
+    # 新菜单用"重置"而非"登录"
+    assert '重置' in text
+    # 负向断言只针对 feishu 编辑菜单片段（到下一次回频道选择标题之前），
+    # 避免被频道选择层的 wechat [未登录] 或 ESC 后再次渲染的菜单误伤
+    feishu_edit_section = ''
+    if '编辑 feishu [feishu]' in text:
+        after = text.split('编辑 feishu [feishu]', 1)[-1]
+        # 截到回频道选择标题之前
+        feishu_edit_section = after.split('ClawCodex 消息渠道配置', 1)[0]
+    assert '登录' not in feishu_edit_section
+
+
+def test_run_wizard_wechat_logged_in_goes_to_edit_menu(tmp_path, monkeypatch, capsys) -> None:
+    """wechat 已登录 → 选 wechat → 进入编辑菜单（含"重置"）。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), ch.build_default_channel('wechat'))
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'logged_in')
+    inputs = iter(
+        [
+            '2',  # select wechat (logged in -> edit menu)
+            '',  # ESC back to channel select
+            '',  # ESC exit setup
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    text = capsys.readouterr().out
+    assert '重置' in text
+
+
+def test_run_wizard_esc_at_feishu_edit_returns_to_channel_select(tmp_path, monkeypatch) -> None:
+    """feishu 编辑菜单 ESC → 回频道选择；再 ESC → 退出 setup。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _feishu_ws_channel())
+    monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    inputs = iter(
+        [
+            '1',  # select feishu -> edit menu
+            '',  # ESC at feishu edit -> back to channel select
+            '',  # ESC at channel select -> exit
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+
+def test_feishu_edit_remove_then_reenter_runs_add_flow(tmp_path, monkeypatch) -> None:
+    """feishu 已登录 → 编辑菜单选"移除" → 回频道选择 → 再选 feishu → 走新增流程。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _feishu_ws_channel())
+    monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    add_calls: list[int] = []
+    orig_add = ch._wizard_add_feishu
+
+    def _spy_add(cfg, path, ui):
+        add_calls.append(1)
+        return orig_add(cfg, path, ui)
+
+    monkeypatch.setattr(ch, '_wizard_add_feishu', _spy_add)
+    monkeypatch.setattr(
+        ch,
+        '_feishu_scan_login',
+        lambda input_fn: {
+            'connection_mode': 'websocket',
+            'app_id': 'new_app',
+            'app_secret': 'new_secret',
+            'domain': 'feishu',
+            'bot_open_id': 'ou_new',
+            'bot_name': 'NewBot',
+        },
+    )
+    inputs = iter(
+        [
+            '1',  # select feishu (logged in -> edit menu)
+            '3',  # remove channel
+            'y',  # confirm remove
+            '1',  # select feishu again (now removed -> add flow)
+            '1',  # websocket mode
+            '',  # ESC exit setup
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    assert add_calls == [1]  # 走了一次新增流程
+    listed = ch.list_channels(str(p))
+    assert listed == [{'name': 'feishu', 'type': 'feishu', 'enabled': True}]
+
+
+def test_existing_slack_channel_remains_editable_but_not_addable(tmp_path, monkeypatch) -> None:
+    """预置 slack 渠道 → 菜单含 slack 存量项 → 可编辑/移除，无"新增 slack"选项。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _slack('slack-ops', enabled=True))
+    inputs = iter(
+        [
+            '3',  # select slack (存量项，第3项)
+            '3',  # remove
+            'y',  # confirm
+            '',  # ESC exit setup
+        ]
+    )
+    prompts: list[str] = []
+
+    def _input(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(inputs)
+
+    assert ch.run_wizard(str(p), input_fn=_input) == 0
+
+    assert ch.list_channels(str(p)) == []
+    # 菜单提示中不应出现"新增 slack"
+    text = '\n'.join(prompts)
+    assert '新增' not in text or 'slack' not in text.lower().split('新增')[-1]
+
+
+def test_feishu_manual_login_esc_aborts_without_saving(tmp_path, monkeypatch) -> None:
+    """feishu 重置→手动填写中途 ESC → 返回主菜单，渠道未修改。"""
+    p = tmp_path / 'channels.yaml'
+    original = _feishu_ws_channel()
+    ch.add_channel(str(p), original)
+    monkeypatch.setattr(ch, '_feishu_dependencies_available', lambda: True)
+    inputs = iter(
+        [
+            '1',  # select feishu -> edit menu
+            '1',  # reset
+            '2',  # manual
+            '',  # app_id: ESC -> abort manual
+            '',  # ESC feishu edit -> back to channel select
+            '',  # ESC exit setup
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    from clawcodex_ext.services.im_gateway.config import load_config
+
+    channel = load_config(str(p)).get_channel('feishu')
+    # 渠道未变
+    assert channel.extra['app_id'] == 'cli_app'
+    assert channel.extra['app_secret'] == 'orig_plaintext_secret_xyz'
+
+
+def test_edit_fields_esc_aborts_without_saving(tmp_path, monkeypatch) -> None:
+    """slack 字段填写中途 ESC → 渠道未变。"""
+    p = tmp_path / 'channels.yaml'
+    ch.add_channel(str(p), _slack('slack-ops', enabled=True))
+    inputs = iter(
+        [
+            '3',  # select slack
+            '1',  # edit fields
+            '',  # webhook_url: ESC -> abort
+            '',  # ESC slack edit -> back to channel select
+            '',  # ESC exit
+        ]
+    )
+
+    assert ch.run_wizard(str(p), input_fn=lambda _p: next(inputs)) == 0
+
+    from clawcodex_ext.services.im_gateway.config import load_config
+
+    channel = load_config(str(p)).get_channel('slack-ops')
+    assert channel.webhook_url == 'https://hooks.example.com/services/T/B/abcdef0123456789'
+
+
+def test_feishu_is_logged_in_detects_configured_credentials() -> None:
+    """_feishu_is_logged_in: app_id+app_secret 齐全 → True。"""
+    channel = _feishu_ws_channel()
+    assert ch._feishu_is_logged_in(channel) is True
+
+    bare = ch.build_channel_from_inputs('feishu', 'feishu', {'connection_mode': 'websocket'})
+    assert ch._feishu_is_logged_in(bare) is False
+
+
+def test_wechat_is_logged_in_reflects_login_status(monkeypatch) -> None:
+    """_wechat_is_logged_in: 复用 wechat_login_status。"""
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'logged_in (x)')
+    assert ch._wechat_is_logged_in('wechat') is True
+
+    monkeypatch.setattr(ch, 'wechat_login_status', lambda name, state_dir=None: 'unconfigured')
+    assert ch._wechat_is_logged_in('wechat') is False
