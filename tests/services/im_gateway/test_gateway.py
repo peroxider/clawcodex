@@ -40,6 +40,7 @@ class _FakeAdapter(ChannelAdapter):
             },
         )
         self.sends: list[ChannelMessage] = []
+        self.send_calls: list[dict] = []
 
     @property
     def channel_id(self) -> str:
@@ -57,6 +58,9 @@ class _FakeAdapter(ChannelAdapter):
 
     async def send(self, message, *, target=None, context_token=None) -> ChannelSendResult:
         self.sends.append(message)
+        self.send_calls.append(
+            {'message': message, 'target': target, 'context_token': context_token}
+        )
         return ChannelSendResult.success(self._name, provider_receipt='r')
 
 
@@ -223,6 +227,41 @@ async def test_gateway_inbound_pushes_feishu_to_generic_opt_in_binding(tmp_path)
     assert len(pushed) == 1
     assert pushed[0].origin == 'feishu:dm:cli_app:ou_user'
     assert pushed[0].context_token == 'oc_chat'
+
+
+@pytest.mark.asyncio
+async def test_gateway_notifies_feishu_sender_when_repl_command_is_blocked(tmp_path) -> None:
+    adapter = _FakeAdapter('feishu')
+    gw = _gateway(tmp_path, adapter=adapter)
+    pushed: list[InboundMessage] = []
+
+    async def _push(msg):
+        pushed.append(msg)
+        return True
+
+    gw.set_push_handler(_push)
+    gw.binding.bind(
+        IM_DIRECT_ALL_ORIGIN,
+        SessionTarget(session_id='repl_main', host_type='repl'),
+    )
+    msg = InboundMessage(
+        origin='feishu:dm:cli_app:ou_user',
+        text='/exit',
+        message_id='m-feishu-blocked',
+        channel='feishu',
+        context_token='oc_chat',
+        from_user_id='ou_user',
+    )
+
+    ack = await gw._on_inbound(msg)
+
+    assert pushed == []
+    assert getattr(ack, 'notify_user', False) is True
+    assert len(adapter.send_calls) == 1
+    call = adapter.send_calls[0]
+    assert call['target'] == 'ou_user'
+    assert call['context_token'] == 'oc_chat'
+    assert '/exit' in call['message'].text
 
 
 @pytest.mark.asyncio

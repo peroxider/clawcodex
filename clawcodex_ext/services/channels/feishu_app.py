@@ -279,8 +279,8 @@ class FeishuAppChannelAdapter(ChannelAdapter):
         if inbound is None:
             return
         self._remember_sender(inbound.context_token or inbound.from_user_id)
-        await self._emit_inbound(inbound)
         await self._resolve_card(payload, inbound)
+        await self._emit_inbound(inbound)
 
     async def _resolve_card(self, payload: Any, inbound: Any) -> None:
         channel = self._channel

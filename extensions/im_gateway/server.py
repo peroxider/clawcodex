@@ -38,8 +38,12 @@ from clawcodex_ext.services.im_gateway.config import (
 from clawcodex_ext.services.channels.feishu_settings import FeishuAppSettings
 from clawcodex_ext.services.channels.models import ChannelType
 from clawcodex_ext.services.im_gateway.gateway import MessageGateway
+from clawcodex_ext.services.im_gateway.retention import run_retention_sweep
 
 logger = logging.getLogger(__name__)
+# lark_oapi.channel imports a very large generated dispatcher. On WSL cold
+# starts this can take around two minutes before the websocket timeout begins.
+FEISHU_SDK_STARTUP_BUFFER_SECONDS = 150.0
 
 # ``DEFAULT_STATE_DIR`` is re-exported from
 # :mod:`clawcodex_ext.services.im_gateway.config` (imported above) so the
@@ -174,7 +178,7 @@ def startup_health_wait_seconds(paths: DaemonPaths) -> float:
         timeout = max(timeout, settings.startup_connect_timeout_seconds)
     if timeout <= 0.0:
         return 45.0
-    return timeout + 30.0
+    return timeout + FEISHU_SDK_STARTUP_BUFFER_SECONDS
 
 
 def _channel_status_ready(status: object) -> bool:
@@ -364,11 +368,24 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
         os.close(fd)
         raise
 
+    # 启动持久化文件清理定时循环(默认每 24 小时)
+    retention_task = asyncio.create_task(
+        _retention_loop(
+            str(paths.state_dir),
+            config.reliability.retention_cron_interval_seconds,
+            config.reliability,
+        )
+    )
+    logger.info(
+        'gateway retention loop started: interval=%ss',
+        config.reliability.retention_cron_interval_seconds,
+    )
+
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
 
     def _schedule_shutdown(sig_name: str) -> None:
-        asyncio.create_task(_shutdown(server, gateway, paths, stop_event, sig_name))
+        asyncio.create_task(_shutdown(server, gateway, paths, stop_event, sig_name, retention_task))
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         sig_name = signal.Signals(sig).name
@@ -380,9 +397,30 @@ async def serve(paths: DaemonPaths, *, log_level: int = logging.WARNING) -> int:
     return 0
 
 
+async def _retention_loop(state_dir: str, interval: int, reliability) -> None:
+    """按 interval 周期执行 cron 清理。失败不退出,继续下一轮。"""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            run_retention_sweep(state_dir, reliability)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            logger.exception('im_gateway retention loop iteration failed')
+
+
 async def _shutdown(
-    server, gateway, paths: DaemonPaths, stop_event: asyncio.Event, sig_name: str
+    server,
+    gateway,
+    paths: DaemonPaths,
+    stop_event: asyncio.Event,
+    sig_name: str,
+    retention_task: asyncio.Task | None = None,
 ) -> None:
+    if retention_task is not None and not retention_task.done():
+        retention_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await retention_task
     await server.close()
     await gateway.stop()
     with contextlib.suppress(FileNotFoundError):
@@ -473,9 +511,9 @@ class GatewayDaemon:
             return 1
 
         # Wait for the health file so we can report per-channel connectivity.
-        # Feishu performs a blocking initial websocket connection attempt inside
-        # adapter.start(), so this follows the configured startup timeout plus
-        # process/bootstrap overhead.
+        # Feishu performs a blocking SDK import + initial websocket connection
+        # inside adapter.start(), so this follows the configured startup timeout
+        # plus the measured cold-import/bootstrap buffer.
         health_deadline = time.time() + startup_health_wait_seconds(self.paths)
         health = None
         while time.time() < health_deadline:

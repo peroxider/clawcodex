@@ -124,13 +124,8 @@ def test_store_outbox_and_dead_letter(tmp_path) -> None:
     assert s.outbox_pending() == []
 
 
-def test_store_session_map_and_context_tokens(tmp_path) -> None:
+def test_store_context_tokens(tmp_path) -> None:
     s = ReliabilityStore(tmp_path)
-    assert s.get_session('o1') is None
-    s.set_session('o1', SessionTarget(session_id='im:default:o1', host_type='default'))
-    got = s.get_session('o1')
-    assert got is not None
-    assert got.session_id == 'im:default:o1'
     s.set_context_token('acct', 'user1', 'tok_abc')
     assert s.get_context_token('acct', 'user1') == 'tok_abc'
     s.set_context_token('acct', 'user1', None)
@@ -179,6 +174,20 @@ def test_router_default_when_no_binding(tmp_path) -> None:
     target = router.route(o)
     assert target.host_type == 'default'
     assert 'im:default:' in target.session_id
+
+
+def test_router_ignores_legacy_session_map(tmp_path) -> None:
+    (tmp_path / 'im_session_map.json').write_text(
+        '{"wechat:direct:default:user_gz": {"session_id": "stale", "host_type": "repl"}}',
+        encoding='utf-8',
+    )
+    store = ReliabilityStore(tmp_path)
+    router = SessionRouter(BindingPolicy(), store)
+
+    target = router.route(OriginKey.wechat('default', 'user_gz'))
+
+    assert target.host_type == 'default'
+    assert target.session_id == 'im:default:wechat:direct:default:user_gz'
 
 
 def test_router_opt_in_overrides_default(tmp_path) -> None:

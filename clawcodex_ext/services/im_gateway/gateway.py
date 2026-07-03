@@ -29,7 +29,7 @@ from .binding import BindingEntry, BindingPolicy
 from .capability_gate import CapabilityGate
 from .config import GatewayConfig, load_config
 from .dispatcher import InboundDispatcher, InboundHandler
-from .models import InboundMessage, OutboundMessage
+from .models import AckReceipt, InboundMessage, OutboundMessage
 from .outbound import OutboundDispatcher
 from .router import SessionRouter
 from .store import ReliabilityStore
@@ -68,14 +68,12 @@ class MessageGateway:
         from clawcodex_ext.services.channels.wechat_ilink import (
             WeChatIlinkAuthStore,
             WeChatIlinkChannelAdapter,
-            WeChatPairingStore,
         )
 
         if cfg.type is ChannelType.WECHAT:
             extra = cfg.extra or {}
             state_dir = Path(self.config.state_dir).expanduser()
             auth_path = _wechat_state_file(state_dir, cfg.name, 'auth')
-            pairing_path = _wechat_state_file(state_dir, cfg.name, 'pairing')
             adapter = WeChatIlinkChannelAdapter(
                 cfg,
                 auth_store=WeChatIlinkAuthStore(
@@ -83,7 +81,6 @@ class MessageGateway:
                     secret_env=self.config.reliability.secret_encryption_env,
                 ),
                 store=self.store,
-                pairing=WeChatPairingStore(pairing_path),
                 transport=UrllibChannelTransport(),
                 allowed_users=extra.get('allowed_users'),
                 account_id=extra.get('account_id', 'default'),
@@ -127,9 +124,48 @@ class MessageGateway:
             else:
                 logger.warning('gateway failed to build adapter for channel: %s', cfg.name)
 
-    async def _on_inbound(self, message) -> None:
+    async def _on_inbound(self, message) -> AckReceipt:
         """Inbound hook called by channel adapters (WeChat poller)."""
-        await self.inbound.process(message)
+        ack = await self.inbound.process(message)
+        await self._notify_sender_for_ack(message, ack)
+        return ack
+
+    async def _notify_sender_for_ack(self, message: InboundMessage, ack: AckReceipt) -> None:
+        if not ack.notify_user or not ack.message:
+            return
+        channel = message.channel
+        target = message.from_user_id or message.context_token
+        if not channel or not target:
+            logger.warning(
+                'gateway ack notify skipped: channel=%r target=%r origin=%s',
+                channel,
+                target,
+                message.origin[:32],
+            )
+            return
+        try:
+            result = await self.outbound.send(
+                OutboundMessage(
+                    text=ack.message,
+                    channel=channel,
+                    target=target,
+                    context_token=message.context_token,
+                    markdown=False,
+                    idempotency_key=f'inbound-ack:{ack.delivery_id}',
+                    semantic_tags=['gateway_notice'],
+                    metadata={'source': 'inbound_ack', 'ack_layer': ack.layer.value},
+                )
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception('gateway ack notify failed origin=%s', message.origin[:32])
+            return
+        if result is not None and getattr(result, 'ok', True) is False:
+            logger.warning(
+                'gateway ack notify send rejected channel=%s origin=%s message=%s',
+                channel,
+                message.origin[:32],
+                getattr(result, 'message', '') or '',
+            )
 
     # -- lifecycle -------------------------------------------------------
     async def start(self) -> None:
