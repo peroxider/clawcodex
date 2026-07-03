@@ -263,7 +263,18 @@ class StatusLine(Static):
             except Exception:
                 pass
         right = " · ".join(right_bits)
-        return Text(f"{left}    {middle}    {cwd}    {right}")
+        proactive_text = ""
+        try:
+            from clawcodex_ext.repl.proactive_integration import (
+                format_proactive_status,
+            )
+
+            proactive_status = format_proactive_status()
+            if proactive_status:
+                proactive_text = f" 路 {proactive_status}"
+        except Exception:
+            proactive_text = ""
+        return Text(f"{left}    {middle}    {cwd}    {right}{goal_pill_text}{proactive_text}")
 
     def _display_cwd(self) -> str:
         try:

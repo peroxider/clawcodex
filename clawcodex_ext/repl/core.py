@@ -329,77 +329,6 @@ claim_cron_run = None  # type: ignore[assignment,misc]
 finalize_cron_run = None  # type: ignore[assignment,misc]
 
 
-def _lazy_runtime_placeholder(func: Callable[..., Any]) -> Callable[..., Any]:
-    setattr(func, '_clawcodex_lazy_runtime_placeholder', True)
-    return func
-
-
-def _is_lazy_runtime_placeholder(name: str) -> bool:
-    return bool(
-        getattr(
-            globals().get(name),
-            '_clawcodex_lazy_runtime_placeholder',
-            False,
-        )
-    )
-
-
-@_lazy_runtime_placeholder
-def get_provider_config(provider: str) -> dict[str, Any]:
-    from src.config import get_provider_config as _get_provider_config
-
-    return _get_provider_config(provider)
-
-
-@_lazy_runtime_placeholder
-def get_provider_class(provider_name: str) -> Any:
-    from src.providers import get_provider_class as _get_provider_class
-
-    return _get_provider_class(provider_name)
-
-
-@_lazy_runtime_placeholder
-def build_provider_from_config(provider_name: str, model: str | None = None) -> Any:
-    from src.providers.runtime import build_provider_from_config as _build_provider
-
-    return _build_provider(provider_name, model)
-
-
-class _LazySession:
-    _clawcodex_lazy_runtime_placeholder = True
-
-    @staticmethod
-    def create(*args: Any, **kwargs: Any) -> Any:
-        from src.agent import Session as _Session
-
-        return _Session.create(*args, **kwargs)
-
-    @staticmethod
-    def resume(*args: Any, **kwargs: Any) -> Any:
-        patched_load = getattr(_LazySession, 'load', None)
-        if type(patched_load).__module__ == 'unittest.mock':
-            return patched_load(*args, **kwargs)
-        from src.agent import Session as _Session
-
-        return _Session.resume(*args, **kwargs)
-
-    @staticmethod
-    def load(*args: Any, **kwargs: Any) -> Any:
-        from src.agent import Session as _Session
-
-        return _Session.load(*args, **kwargs)
-
-
-Session = _LazySession
-
-
-def _session_id_from_session(session: Any) -> str | None:
-    session_id = getattr(session, 'session_id', None)
-    if isinstance(session_id, str) and session_id.strip():
-        return session_id
-    return None
-
-
 def _load_cron_runtime() -> None:
     """Import cron helpers without pulling the full REPL runtime stack."""
     global _cron_runtime_loaded, _HAS_CRON, attach_cron_runtime
@@ -1149,6 +1078,17 @@ class ClawcodexREPL:
             # Model context window — show max context length for the
             # current model (e.g. "ctx: 200k"). Falls back silently
             # when model name is unknown or lookup fails.
+            proactive_part = ''
+            try:
+                from clawcodex_ext.repl.proactive_integration import (
+                    format_proactive_status,
+                )
+
+                proactive_status = format_proactive_status()
+                if proactive_status:
+                    proactive_part = f' 路 {proactive_status}'
+            except Exception:
+                proactive_part = ''
             ctx_part = ''
             try:
                 from clawcodex_ext.context_system.context_analyzer import (
@@ -1183,20 +1123,21 @@ class ClawcodexREPL:
             )
             # Space-separated label (matches TUI's "cost N" pattern;
             # avoids the REPL/TUI label-style split critic flagged).
-            cost_part = f' · cost {format_cost_usd(total_cost)}' if total_cost > 0 else ''
+            cost_part = f" · cost {format_cost_usd(total_cost)}" if total_cost > 0 else ""
             _in = self._stats_input_tokens
             _out = self._stats_output_tokens
-            _fmt = lambda n: f'{n / 1000:.1f}k' if n >= 1000 else str(n)
+            _fmt = lambda n: f"{n / 1000:.1f}k" if n >= 1000 else str(n)
             return (
-                f' {provider} · {model} · {cwd} · '
-                f'mode: {permission_mode_short_title(self._permission_mode)} · '
-                f'turns: {self._stats_turns} · '
-                f'tokens: {_fmt(_in)} in / '
-                f'{_fmt(_out)} out'
-                f'{ctx_part}'
-                f'{advisor_tokens}'
-                f'{cost_part}'
-                f' '
+                f" {provider} · {model} · {cwd} · "
+                f"mode: {permission_mode_short_title(self._permission_mode)} · "
+                f"turns: {self._stats_turns} · "
+                f"tokens: {_fmt(_in)} in / "
+                f"{_fmt(_out)} out"
+                f"{ctx_part}"
+                f"{advisor_tokens}"
+                f"{cost_part}"
+                f"{goal_part}"
+                f" "
             )
         except Exception:
             # Never let the toolbar break the input prompt. Runs on every
@@ -1434,7 +1375,7 @@ class ClawcodexREPL:
                 pass
 
         answers: dict[str, str] = {}
-        use_arrow = get_selection_mode() == 'arrow' and sys.stdin.isatty()
+        use_arrow = get_selection_mode() == 'arrow'
         for q in questions:
             if isinstance(q, str):
                 q = {'question': q}
@@ -1623,7 +1564,7 @@ class ClawcodexREPL:
                     except Exception:
                         pass
 
-                if get_selection_mode() == 'arrow' and sys.stdin.isatty():
+                if get_selection_mode() == 'arrow':
                     opt_pairs: list[tuple[str, str]] = []
                     for key, desc in options:
                         opt_pairs.append((f'[{key}] {desc}', ''))
@@ -1945,8 +1886,6 @@ class ClawcodexREPL:
                         command=result.command_name,
                     )
                 self.console.print()
-            if result.should_query:
-                self._continue_goal_if_idle()
             return True
 
         elif result.result_type == 'prompt':
@@ -1969,128 +1908,6 @@ class ClawcodexREPL:
             return True
 
         return False
-
-    def _continue_goal_if_idle(self) -> bool:
-        """Start an active goal continuation after a local slash command."""
-
-        _load_heavy_runtime()
-        try:
-            from clawcodex_ext.goal.runtime import goal_runtime_for_context
-
-            goal_runtime = goal_runtime_for_context(self.tool_context)
-        except Exception:
-            return False
-        if goal_runtime is None:
-            return False
-
-        continuation = goal_runtime.continue_if_idle()
-        if continuation is None or not goal_runtime.claim_continuation(continuation):
-            return False
-
-        messages = list(continuation.messages)
-        if not messages:
-            return False
-
-        from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
-        from clawcodex_ext.tool_system import get_team_aware_tool_list
-
-        tools = get_team_aware_tool_list(
-            self.tool_registry,
-            self.tool_context.team,
-            context=self.tool_context,
-        )
-        startup_agent = getattr(self.tool_context, 'startup_agent', None)
-        if startup_agent is None:
-            runtime_context = getattr(self, 'runtime_context', None)
-            if runtime_context is not None:
-                startup_agent = getattr(runtime_context.options, 'startup_agent', None)
-        tools = filter_tools_for_startup_agent(tools, startup_agent)
-
-        style_name = getattr(self.tool_context, 'output_style_name', None)
-        style_dir = getattr(self.tool_context, 'output_style_dir', None)
-        append_prompt = resolve_output_style(style_name, style_dir).prompt
-        extra = getattr(self, '_append_system_prompt', '')
-        if extra:
-            append_prompt = f'{append_prompt}\n\n{extra}'
-
-        prior_messages = [
-            *list(getattr(self, '_engine_messages', [])),
-            *messages[:-1],
-        ]
-        engine_config = QueryEngineConfig(
-            cwd=self.tool_context.workspace_root,
-            provider=self.provider,
-            tool_registry=self.tool_registry,
-            tools=tools,
-            tool_context=self.tool_context,
-            append_system_prompt=append_prompt,
-            max_turns=getattr(self, '_max_turns', None),
-            initial_messages=prior_messages,
-        )
-        engine = QueryEngine(engine_config)
-
-        response_text = ''
-        streamed_text = False
-
-        def _on_text_chunk(chunk: str) -> None:
-            nonlocal streamed_text
-            if not chunk:
-                return
-            streamed_text = True
-            self.console.print(chunk, end='', markup=False, highlight=False, soft_wrap=True)
-
-        async def _run_query() -> str:
-            last_text = ''
-            async for msg in engine.submit_message(
-                messages[-1],
-                on_text_chunk=_on_text_chunk if self.stream else None,
-            ):
-                if isinstance(msg, StreamEvent):
-                    continue
-                if isinstance(msg, AssistantMessage):
-                    self.session.conversation.add_assistant_message(msg.content)
-                    content = msg.content
-                    if isinstance(content, str):
-                        last_text = content
-                    elif isinstance(content, list):
-                        parts: list[str] = []
-                        for block in content:
-                            if isinstance(block, TextBlock) and block.text:
-                                parts.append(block.text)
-                        if parts:
-                            last_text = '\n\n'.join(parts)
-            return last_text
-
-        try:
-            self.console.print('\n[bold]Assistant[/bold]')
-            loop = self._get_chat_loop()
-            if loop.is_running():
-                import concurrent.futures
-
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    response_text = pool.submit(lambda: asyncio.run(_run_query())).result()
-            else:
-                response_text = loop.run_until_complete(_run_query())
-        except RuntimeError:
-            response_text = asyncio.run(_run_query())
-        except Exception as exc:
-            self.console.print(f'\n[error]Error: {escape(str(exc))}[/error]')
-            return False
-        finally:
-            try:
-                engine.reset_abort_controller()
-            except Exception:
-                pass
-
-        self._engine_messages = engine.get_messages()
-        if response_text and not streamed_text:
-            self.console.print(Markdown(response_text))
-        self.console.print()
-        try:
-            self.session.save_transcript()
-        except Exception:
-            pass
-        return True
 
     def _print_local_command_text(self, text: str, *, command: str = '') -> None:
         """Print local command output, rendering only /recap as Markdown."""
@@ -2151,7 +1968,9 @@ class ClawcodexREPL:
         if not _HAS_PROMPT_TOOLKIT:
             # Best-effort fallback: print everything, mark a hint line.
             self.console.print('\n' + body)
-            self.console.print('[dim](prompt_toolkit unavailable — answer not paginated)[/dim]')
+            self.console.print(
+                '[dim](prompt_toolkit unavailable — answer not paginated)[/dim]'
+            )
             return
 
         self._run_scroll_viewer(body, lines=lines, window=window, command=command)
@@ -2203,10 +2022,7 @@ class ClawcodexREPL:
                 fragments.append(('', '~\n'))
             # Footer hint
             fragments.append(
-                (
-                    'class:scroll-footer',
-                    '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close',
-                ),
+                ('class:scroll-footer', '\n  ↑↓ scroll · PgUp/PgDn page · Home/End jump · Space/Enter/Esc/q close'),
             )
             return fragments
 
@@ -2961,7 +2777,7 @@ class ClawcodexREPL:
             return get_agents_for_mentions(
                 cwd,
                 tool_context=self.tool_context,
-                runtime_context=getattr(self, 'runtime_context', None),
+                runtime_context=getattr(self, "runtime_context", None),
             )
         except Exception:
             return list(get_built_in_agents())
@@ -3031,12 +2847,7 @@ class ClawcodexREPL:
         loop = getattr(self, '_cron_loop', None)
         if loop is not None:
             return loop
-        try:
-            return asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop
+        return asyncio.get_event_loop()
 
     def _interrupt_active_chat_from_im(self) -> bool:
         """Cancel the currently running REPL turn from an IM control command."""
@@ -3126,16 +2937,13 @@ class ClawcodexREPL:
         buffer_changed_handler = None
         default_buffer = None
         try:
-            controller = getattr(self, '_intent_forecast_controller', None)
-            default_buffer = getattr(
-                getattr(self.prompt_session, 'app', None), 'default_buffer', None
-            )
+            controller = getattr(self, "_intent_forecast_controller", None)
+            default_buffer = getattr(getattr(self.prompt_session, "app", None), "default_buffer", None)
             if controller is not None and default_buffer is not None:
-
                 def _on_text_changed(_sender) -> None:
                     try:
                         controller.on_prompt_draft_changed(
-                            str(getattr(default_buffer, 'text', '') or '')
+                            str(getattr(default_buffer, "text", "") or "")
                         )
                     except Exception:
                         pass
@@ -3722,21 +3530,21 @@ class ClawcodexREPL:
         except Exception:
             return
 
-        if not info or info.get('status') != 'running':
+        if not info or info.get("status") != "running":
             return
 
-        pid = info.get('pid')
-        pid_str = f' (pid {pid})' if pid is not None else ''
+        pid = info.get("pid")
+        pid_str = f" (pid {pid})" if pid is not None else ""
         self.console.print(
-            f'\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]'
+            f"\n[warning]⏎ Background agent{pid_str} is still running for this session.[/warning]"
         )
         self.console.print(
-            '[dim]The history shown below is partial — it only reflects what the '
-            'background agent has produced so far.[/dim]'
+            "[dim]The history shown below is partial — it only reflects what the "
+            "background agent has produced so far.[/dim]"
         )
         self.console.print(
-            f'[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n'
-            f'  [info]clawcodex --resume {session_id}[/info]'
+            f"[dim]To see the complete output once it finishes, exit and re-run:[/dim]\n"
+            f"  [info]clawcodex --resume {session_id}[/info]"
         )
 
     def _replay_resume_history(self) -> None:
@@ -4077,7 +3885,7 @@ class ClawcodexREPL:
         if is_coordinator_mode():
             self.console.print(
                 '[bold][warning]  ⚡ Coordinator Mode ACTIVE[/warning][/bold]  '
-                '[dim]— delegation + lightweight read/goal tools[/dim]'
+                '[dim]— Agent / SendMessage / TaskStop only[/dim]'
             )
             self.console.print()
 
@@ -4103,20 +3911,6 @@ class ClawcodexREPL:
         resumed = getattr(self, '_resume_session_id', None)
         if resumed and self.session.conversation.messages:
             self._replay_resume_history()
-
-        try:
-            from clawcodex_ext.debug.agent_debug import emit_agent_debug_marker
-
-            emit_agent_debug_marker(
-                'repl.ready',
-                {
-                    'session_id': getattr(self.session, 'session_id', None),
-                    'stream': bool(self.stream),
-                    'surface': 'repl',
-                },
-            )
-        except Exception:
-            pass
 
         # Phase B-2 wake: spin up a long-lived asyncio loop on the
         # main thread so the in-loop cron watcher can call app.exit()
@@ -4221,16 +4015,16 @@ class ClawcodexREPL:
                     continue
 
                 if user_input.startswith('/'):
-                    controller = getattr(self, '_intent_forecast_controller', None)
+                    controller = getattr(self, "_intent_forecast_controller", None)
                     if controller is not None:
-                        controller.on_user_interaction('slash')
+                        controller.on_user_interaction("slash")
                     self.handle_command(user_input)
                     continue
 
                 if user_input.startswith('!'):
-                    controller = getattr(self, '_intent_forecast_controller', None)
+                    controller = getattr(self, "_intent_forecast_controller", None)
                     if controller is not None:
-                        controller.on_user_interaction('bash')
+                        controller.on_user_interaction("bash")
                     # Bash mode: direct execution, no agent turn.
                     # Feeds the bash input + output into the conversation
                     # (so the model sees what happened on its next turn).
@@ -5375,7 +5169,6 @@ class ClawcodexREPL:
         if abort_signal.aborted:
             return None
 
-        self._last_direct_response_usage = None
         try:
             api_messages, call_kwargs = self._build_direct_stream_payload()
             try:
@@ -5389,8 +5182,6 @@ class ClawcodexREPL:
                 content = response.content if response else None
                 full_response = content if isinstance(content, str) and content else None
                 if full_response is not None:
-                    usage = getattr(response, 'usage', None) if response is not None else None
-                    self._last_direct_response_usage = usage if isinstance(usage, dict) else None
                     self.session.conversation.add_assistant_message(full_response)
                     return full_response
             except NotImplementedError:
@@ -5423,34 +5214,6 @@ class ClawcodexREPL:
         if full_response:
             self.session.conversation.add_assistant_message(full_response)
         return full_response
-
-    def _account_direct_goal_turn(self, usage: dict[str, Any] | None) -> None:
-        try:
-            from clawcodex_ext.goal.runtime import goal_runtime_for_context
-
-            goal_runtime = goal_runtime_for_context(self.tool_context)
-        except Exception:
-            return
-        if goal_runtime is None:
-            return
-        try:
-            turn_id = goal_runtime.on_turn_start(
-                plan_mode=bool(getattr(self.tool_context, 'plan_mode', False))
-            )
-        except Exception:
-            return
-        try:
-            goal_runtime.on_token_usage(turn_id, usage or {})
-        except Exception as exc:
-            try:
-                goal_runtime.on_turn_error(turn_id, exc)
-            except Exception:
-                pass
-            return
-        try:
-            goal_runtime.on_turn_stop(turn_id)
-        except Exception:
-            pass
 
     def _get_last_assistant_text(self) -> str | None:
         for message in reversed(self.session.conversation.messages):
@@ -5543,7 +5306,7 @@ class ClawcodexREPL:
         unknown_agents = find_unknown_agent_mentions(user_input, available_agents)
         if unknown_agents:
             self.console.print(
-                f'[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]'
+                f"[error]{format_unknown_agent_mention_error(unknown_agents, available_agents)}[/error]"
             )
             return True
 
@@ -5570,10 +5333,10 @@ class ClawcodexREPL:
             for att in agent_attachments:
                 if _sop_bundle_active:
                     self.console.print(
-                        f'[dim]  ⎿  @{att["agent_type"]} → delegating via overview agent[/dim]'
+                        f"[dim]  ⎿  @{att['agent_type']} → delegating via overview agent[/dim]"
                     )
                 else:
-                    self.console.print(f'[dim]  ⎿  Invoking agent @{att["agent_type"]}[/dim]')
+                    self.console.print(f"[dim]  ⎿  Invoking agent @{att['agent_type']}[/dim]")
 
         if agent_attachments and not at_attachments and not _sop_bundle_active:
             from clawcodex_ext.repl.mentioned_agent import (
@@ -5584,7 +5347,7 @@ class ClawcodexREPL:
             if should_run_mentioned_agent_directly(agent_attachments, at_attachments):
                 if run_mentioned_agent_direct(
                     self,
-                    agent_type=agent_attachments[0]['agent_type'],
+                    agent_type=agent_attachments[0]["agent_type"],
                     user_input=user_input,
                 ):
                     return True
@@ -5747,9 +5510,6 @@ class ClawcodexREPL:
                 if pending:
                     self._enqueue_prompt(pending)
                 if direct_response is not None:
-                    self._account_direct_goal_turn(
-                        getattr(self, '_last_direct_response_usage', None)
-                    )
                     self.console.print('\n')
                     # Per-turn save: persist JSONL transcript only (lightweight).
                     try:
@@ -5776,11 +5536,7 @@ class ClawcodexREPL:
             from clawcodex_ext.tool_system import get_team_aware_tool_list
             from clawcodex_ext.agent.agent_tool_utils import filter_tools_for_startup_agent
 
-            tools = get_team_aware_tool_list(
-                self.tool_registry,
-                self.tool_context.team,
-                context=self.tool_context,
-            )
+            tools = get_team_aware_tool_list(self.tool_registry, self.tool_context.team)
             startup_agent = getattr(self.tool_context, 'startup_agent', None)
             if startup_agent is None:
                 rc = getattr(self, 'runtime_context', None)
@@ -6410,6 +6166,7 @@ class ClawcodexREPL:
         Args:
             session_id: Session ID to load
         """
+        from src.agent import Session
         from src.bootstrap.state import get_total_cost_usd
 
         loaded_session = Session.resume(session_id)

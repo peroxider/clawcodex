@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+import time
+
+from clawcodex_ext.services.proactive import AutomationState, get_default_controller
+
+
+def format_proactive_status(state: AutomationState | None = None) -> str:
+    state = state or get_default_controller().state
+    if state.phase == "inactive":
+        return ""
+    label = {
+        "active": "proactive:active",
+        "paused": "proactive:paused",
+        "sleeping": "proactive:sleeping",
+        "blocked": "proactive:blocked",
+    }.get(state.phase, f"proactive:{state.phase}")
+    if state.phase == "active" and state.next_tick_at is not None:
+        remaining = max(0, int((state.next_tick_at - time.time() * 1000) / 1000))
+        return f"{label} {remaining}s"
+    if state.phase == "sleeping" and state.last_sleep_until is not None:
+        remaining = max(0, int((state.last_sleep_until - time.time() * 1000) / 1000))
+        return f"{label} {remaining}s"
+    if state.phase == "blocked" and state.blocked_until is not None:
+        remaining = max(0, int((state.blocked_until - time.time() * 1000) / 1000))
+        return f"{label} {remaining}s"
+    return label
+
+
+__all__ = ["format_proactive_status"]
