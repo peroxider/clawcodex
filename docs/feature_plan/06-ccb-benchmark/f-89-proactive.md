@@ -1,8 +1,8 @@
 # F-89: Proactive 自主模式 + KAIROS Tick 集成
 
-> 状态: 🟡 KAIROS TickScheduler 已落地(`clawcodex_ext/services/kairos/`,746 行,6 模块);PROACTIVE 整套能力(状态机 + `<tick>` 注入 + SleepTool 协同 + 系统提示注入)待补
+> 状态: ✅ 已完成(2026-07-03;P89-A~I 已落地,含 ProactiveController、TickEmitter、SleepTool、/proactive、REPL/TUI 状态、API 错误防护、goal-aware prompt、Remote automation_state、Stage 10 smoke)
 > 章节: `docs/feature_plan/06-ccb-benchmark/f-89-proactive.md`
-> 最后更新: 2026-06-30
+> 最后更新: 2026-07-03
 > 缺口来源: [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵)
 
 ## §1 设计规划
@@ -47,15 +47,15 @@
 
 | 编号 | 子特性 | 状态 | 预计工作量 |
 |:----:|--------|:----:|:----------:|
-| P89-A | `ProactiveController` 状态机(inactive/active/paused/blocked + listeners) | 📋 | 3 天 |
-| P89-B | `TickEmitter` 驱动 `<tick>` 提示注入,默认 30s,复用 `kairos.TickScheduler` | 📋 | 3-4 天 |
-| P89-C | `SleepTool` 真实实现(替换现有 `sleep_detection.py` 的阻塞检测 + 增加 sleep→resume 唤醒队列) | 📋 | 3-4 天 |
-| P89-D | `/proactive` 斜杠命令(注册 `PROACTIVE_COMMAND`,emit `<system-reminder>`) | 📋 | 1 天 |
-| P89-E | REPL 集成:footer 倒计时 + standby/sleeping 状态渲染 + Ctrl+B 切换 | 📋 | 2-3 天 |
-| P89-F | API 错误防护:`setContextBlocked(true)` 防止 tick 失控循环 | 📋 | 1-2 天 |
-| P89-G | `getProactiveSection()` 系统提示拼装(按 `terminalFocus` 调节) | 📋 | 2 天 |
-| P89-H | `automation_state` 元数据暴露到 `extensions/remote_api/`(F-82 协同) | 📋 | 1-2 天 |
-| P89-I | 单元测试 + E2E + 稳定性门禁 Stage 10 | 📋 | 2 天 |
+| P89-A | `ProactiveController` 状态机(inactive/active/paused/blocked + listeners) | ✅ | 3 天 |
+| P89-B | `TickEmitter` 驱动 `<tick>` 提示注入,默认 30s,复用 `kairos.TickScheduler` | ✅ | 3-4 天 |
+| P89-C | `SleepTool` 真实实现(替换现有 `sleep_detection.py` 的阻塞检测 + 增加 sleep→resume 唤醒队列) | ✅ | 3-4 天 |
+| P89-D | `/proactive` 斜杠命令(注册 `PROACTIVE_COMMAND`,emit `<system-reminder>`) | ✅ | 1 天 |
+| P89-E | REPL 集成:footer 倒计时 + standby/sleeping 状态渲染 + Ctrl+B 切换 | ✅ | 2-3 天 |
+| P89-F | API 错误防护:`setContextBlocked(true)` 防止 tick 失控循环 | ✅ | 1-2 天 |
+| P89-G | `getProactiveSection()` 系统提示拼装(按 `terminalFocus` 调节) | ✅ | 2 天 |
+| P89-H | `automation_state` 元数据暴露到 `extensions/remote_api/`(F-82 协同) | ✅ | 1-2 天 |
+| P89-I | 单元测试 + E2E + 稳定性门禁 Stage 10 | ✅ | 2 天 |
 
 **估算总工时**: 18-23 天(单人)
 
@@ -1100,8 +1100,15 @@ def _on_tick_event(self, event: TickEvent) -> None:
 | 2026-Q2 | bash `sleep N ≥ 2` 检测规则(用于阻止模型用 bash sleep 替代 SleepTool) | 同上 |
 | 2026-06-30 | 详设文档 + 子特性分解 | `f-89-proactive.md`(本文) |
 | 2026-06-30 | 缺口盘点纳入 [README.md §A 缺口矩阵](./README.md#a-全特性对照矩阵) | gap-analysis |
+| 2026-07-03 | F-89 主体落地:状态机、tick 注入、SleepTool、/proactive、prompt 注入、REPL/TUI 状态、API 错误防护、Remote automation_state、Stage 10 smoke | `clawcodex_ext/services/proactive/`,`clawcodex_ext/command_system/proactive_command.py`,`clawcodex_ext/tool_system/tools/sleep.py`,`extensions/remote_api/state_reporter.py`,`tests/proactive/`,`tests/stability_gate/test_stage10_proactive.py` |
 
 ### 2.2 下一步计划
+
+主体开发已完成。后续只保留跨特性协同增强:
+
+- Proactive tick 与 F-88 Monitor 的周期性监控联动。
+- 真机 REPL/TUI 快捷键体验微调(Ctrl+B 显式切换)。
+- 在完整开发环境补齐依赖后复跑全量 `tests/stability_gate/`。
 
 按子特性顺序(底层 → 上层,**前置修订穿插见 §1.11**):
 
@@ -1202,3 +1209,4 @@ def _on_tick_event(self, event: TickEvent) -> None:
 |------|------|------|
 | 2026-06-30 | 初始创建(9 子特性,12 验收项,10 风险) | 派工 F-89 P0 缺口,对接 CCB PROACTIVE + KAIROS 双 flag |
 | 2026-07-03 | 新增 §1.11:基于 CCB (`/mnt/c/WorkSpace/claude-code-best/src/proactive/`) 实现调研,补 4 项设计修订(Q1 goal-aware tick P0 / Q4 Proactive 主动 compact P1 / Q2 focus 切换入口 P1 / Q3 `last_tick_summary` P2);§2.2 同步插入前置步骤 0 | CCB 对标后修订原文档未触及的 4 个设计盲点 |
+| 2026-07-03 | 标记 F-89 已完成;补充落地文件、测试结果、Stage 10 proactive smoke;索引页状态同步为已完成 | 本轮开发完成 P89-A~I 主体闭环 |

@@ -89,7 +89,7 @@ docs/feature_plan/
 | F-86 | Computer Use 跨平台 Executor | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-86-computer-use-跨平台-executor) |
 | F-87 | /ultraplan LLM 驱动 + CLI 完整实现 | 📋 | [gap-analysis-2026q2.md §3.2](06-ccb-benchmark/gap-analysis-2026q2.md#f-87-ultraplan-llm-驱动--cli-完整实现) |
 | F-88 | Monitor 后台监控 + MonitorTool | 📋 | [f-88-monitor.md](06-ccb-benchmark/f-88-monitor.md) |
-| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | 📋 | [gap-analysis-2026q2.md §3.1](06-ccb-benchmark/gap-analysis-2026q2.md#f-89-proactive-自主模式--kairos-tick-集成) |
+| F-89 | Proactive 自主模式 + KAIROS Tick 集成 | ✅ | [06-ccb-benchmark/f-89-proactive.md](06-ccb-benchmark/f-89-proactive.md) |
 | F-91 | MCP Skills 自动发现 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
 | F-92 | experimental_skill_search TF-IDF | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |
 | F-93 | TeamMem 共享记忆 | 📋 | [gap-analysis-2026q2.md §3.3](06-ccb-benchmark/gap-analysis-2026q2.md) |

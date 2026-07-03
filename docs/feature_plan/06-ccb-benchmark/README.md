@@ -29,7 +29,7 @@
 | [f-86-computer-use.md](./f-86-computer-use.md) | F-86 Computer Use 三平台 | 📋 |
 | [f-87-ultraplan.md](./f-87-ultraplan.md) | F-87 Ultraplan 工作流计划层 | 📋 |
 | [f-88-monitor.md](./f-88-monitor.md) | F-88 Monitor 后台监控 + MonitorTool | 📋 |
-| [f-89-proactive.md](./f-89-proactive.md) | F-89 Proactive 自主模式 + KAIROS Tick 集成 | 📋 |
+| [f-89-proactive.md](./f-89-proactive.md) | F-89 Proactive 自主模式 + KAIROS Tick 集成 | ✅ |
 | [f-91-mcp-skill-discovery.md](./f-91-mcp-skill-discovery.md) | F-91 MCP Skills 自动发现 | 📋 |
 | [f-92-skill-search.md](./f-92-skill-search.md) | F-92 Skill Search TF-IDF 检索 | 📋 |
 | [f-93-team-memory.md](./f-93-team-memory.md) | F-93 TeamMem 团队共享记忆 | 📋 |
@@ -72,7 +72,7 @@
 | 12 | Monitor 后台监控 | ❌ 无 `MonitorTool` | P0 | [F-88](./f-88-monitor.md) |
 | 13 | Workflow 工作流脚本 | 🟠 `.claude/workflows/*.py` + `/workflows` 面板 | 已完成 | F-110 协同 |
 | 14 | Coordinator 多Worker协调 | ✅ `src/coordinator/` + ext | 已完成 | — |
-| 15 | Proactive 自主模式 | ❌ 无 PROACTIVE/KAIROS Tick 调度器 | P0 | [F-89](./f-89-proactive.md) |
+| 15 | Proactive 自主模式 | ✅ PROACTIVE/KAIROS Tick 调度 + SleepTool + Remote automation_state | 已完成 | [F-89](./f-89-proactive.md) |
 | 16 | History / Snip 历史管理 | ✅ F-71 P71-O `snip.py` | 已完成 | [F-71](./f-71-tool-gap.md) |
 | 17 | Fork 子Agent | ✅ `fork_subagent.py` | 已完成 | — |
 | 18 | 其他恢复的工具 | 🟠 F-71 12/15;WebBrowser/Execute/RemoteTrigger 待补 | P1 | [F-71](./f-71-tool-gap.md) |
@@ -93,8 +93,8 @@
 | `DIRECT_CONNECT`（直连模式） | 🟡 `src/server/` 已部分 | P2 | [F-99](./f-99-direct-connect.md) |
 | `AGENT_TRIGGERS_REMOTE`（远程 trigger） | ❌ | P1 | [F-83](./f-83-triggers.md) 协同 |
 | `TOKEN_BUDGET`（Token 预算） | ✅ F-69 | 已完成 | [F-69](./f-69-budget-mode.md) |
-| `KAIROS`（Tick 调度） | 🟡 `kairos/scheduler.py` | 增强 | [F-89](./f-89-proactive.md) |
-| `PROACTIVE`（主动模式） | ❌ | P0 | [F-89](./f-89-proactive.md) |
+| `KAIROS`（Tick 调度） | ✅ `kairos/scheduler.py` + proactive emitter | 已完成 | [F-89](./f-89-proactive.md) |
+| `PROACTIVE`（主动模式） | ✅ `/proactive` + tick prompt + SleepTool + automation_state | 已完成 | [F-89](./f-89-proactive.md) |
 | `MONITOR_TOOL`（后台监控） | ❌ | P0 | [F-88](./f-88-monitor.md) |
 | `UDS_INBOX` / `LAN_PIPES`（Pipe IPC） | 🟡/❌ | P0 | [F-85](./f-85-pipe-ipc.md) |
 | `DAEMON`（后台守护） | ❌ | P0 | [F-84](./f-84-daemon.md) |
@@ -113,7 +113,7 @@
 | P0 | [F-85](./f-85-pipe-ipc.md) | Pipe IPC 命令族(UDS) | 2 周 | 2 周 |
 | P0 | [F-88](./f-88-monitor.md) | Monitor Tool | 1.5 周 | 3.5 周 |
 | P0 | [F-84](./f-84-daemon.md) | Daemon Supervisor | 3 周 | 6.5 周 |
-| P0 | [F-89](./f-89-proactive.md) | Proactive 模式 | 3 周 | 9.5 周 |
+| 已完成 | [F-89](./f-89-proactive.md) | Proactive 模式 | 2026-07-03 完成 | 6.5 周 |
 | P0 | [F-85](./f-85-pipe-ipc.md) | LAN Pipes（F-85.2） | 2 周 | 11.5 周 |
 
 > 注: F-85 先做 UDS 命令族,再做 LAN 扩展(F-85.2)。
