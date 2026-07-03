@@ -796,7 +796,6 @@ class WorkflowConfig:
     rules: RulesConfig = field(default_factory=RulesConfig)
     observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
-    rules: RulesConfig = field(default_factory=RulesConfig)
     modes: ModesConfig = field(default_factory=ModesConfig)
     pr_conflict_scan: 'PrConflictScanConfig' = field(default_factory=lambda: PrConflictScanConfig())
     source_path: str = ''

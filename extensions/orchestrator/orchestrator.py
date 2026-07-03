@@ -130,21 +130,19 @@ class Orchestrator:
 
             from .state_journal import StateJournalWriter
 
-            journal_run_id = "run_" + datetime.now(timezone.utc).strftime(
-                "%Y%m%d_%H%M%S"
-            )
+            journal_run_id = 'run_' + datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
             self._viz_journal = StateJournalWriter(
-                Path.home() / ".clawcodex" / "reports" / journal_run_id,
+                Path.home() / '.clawcodex' / 'reports' / journal_run_id,
                 journal_run_id,
             )
             self._viz_journal.write_event(
                 {
-                    "type": "orchestrator_start",
-                    "workflow": workflow_yaml_path or "",
+                    'type': 'orchestrator_start',
+                    'workflow': workflow_yaml_path or '',
                 }
             )
         except Exception:
-            logger.exception("state journal init failed — dashboard disabled")
+            logger.exception('state journal init failed — dashboard disabled')
             self._viz_journal = None
 
         # F-110: 初始化声明式工作流引擎
@@ -434,27 +432,19 @@ class Orchestrator:
         """
         # Always register "single" — it's both the default fallback and
         # the run mode for legacy / followup / review_followup paths.
-        _modes.register("single", SingleModeRunner(agent_runner))
+        _modes.register('single', SingleModeRunner(agent_runner))
 
         enabled = {m.strip().lower() for m in workflow.modes.enabled if m}
-        if "pipeline" in enabled:
+        if 'pipeline' in enabled:
             stages = tuple(workflow.modes.pipeline_stages)
-            max_retries = int(
-                getattr(workflow.modes, "pipeline_max_retries_per_stage", 1)
-            )
-            stage_models = dict(
-                getattr(workflow.modes, "pipeline_stage_models", None) or {}
-            )
-            stage_max_turns = dict(
-                getattr(workflow.modes, "pipeline_stage_max_turns", None) or {}
-            )
-            stage_specs = dict(
-                getattr(workflow.modes, "pipeline_stage_specs", None) or {}
-            )
-            handoff = str(getattr(workflow.modes, "pipeline_handoff", "prompt"))
+            max_retries = int(getattr(workflow.modes, 'pipeline_max_retries_per_stage', 1))
+            stage_models = dict(getattr(workflow.modes, 'pipeline_stage_models', None) or {})
+            stage_max_turns = dict(getattr(workflow.modes, 'pipeline_stage_max_turns', None) or {})
+            stage_specs = dict(getattr(workflow.modes, 'pipeline_stage_specs', None) or {})
+            handoff = str(getattr(workflow.modes, 'pipeline_handoff', 'prompt'))
             try:
                 _modes.register(
-                    "pipeline",
+                    'pipeline',
                     PipelineModeRunner(
                         agent_runner,
                         stages=stages,
@@ -469,12 +459,11 @@ class Orchestrator:
                 # Bad stage_specs (e.g. kind=pipeline nested). Fall back
                 # to a spec-less pipeline so the daemon keeps running.
                 logger.warning(
-                    "Pipeline registration failed (%s) — registering "
-                    "without stage_specs",
+                    'Pipeline registration failed (%s) — registering without stage_specs',
                     exc,
                 )
                 _modes.register(
-                    "pipeline",
+                    'pipeline',
                     PipelineModeRunner(
                         agent_runner,
                         stages=stages,
@@ -487,40 +476,31 @@ class Orchestrator:
                 )
                 stage_specs = {}
             logger.info(
-                "Collaboration mode registered: pipeline (stages=%s, "
-                "max_retries_per_stage=%d, stage_models=%s, "
-                "stage_max_turns=%s, stage_specs=%s, handoff=%s)",
+                'Collaboration mode registered: pipeline (stages=%s, '
+                'max_retries_per_stage=%d, stage_models=%s, '
+                'stage_max_turns=%s, stage_specs=%s, handoff=%s)',
                 stages,
                 max_retries,
-                stage_models or "(none)",
-                stage_max_turns or "(none)",
-                stage_specs or "(none)",
+                stage_models or '(none)',
+                stage_max_turns or '(none)',
+                stage_specs or '(none)',
                 handoff,
             )
-        if "coordinator" in enabled:
-            _modes.register(
-                "coordinator", CoordinatorModeRunner(agent_runner)
-            )
-            logger.info("Collaboration mode registered: coordinator")
-        if "debate" in enabled:
+        if 'coordinator' in enabled:
+            _modes.register('coordinator', CoordinatorModeRunner(agent_runner))
+            logger.info('Collaboration mode registered: coordinator')
+        if 'debate' in enabled:
             proposers = tuple(
-                getattr(workflow.modes, "debate_proposers", None)
-                or ("proposer_a", "proposer_b")
+                getattr(workflow.modes, 'debate_proposers', None) or ('proposer_a', 'proposer_b')
             )
-            judge_model = getattr(workflow.modes, "debate_judge_model", None)
-            isolation = getattr(workflow.modes, "debate_isolation", "reset")
-            proposer_models = dict(
-                getattr(workflow.modes, "debate_proposer_models", None) or {}
-            )
-            parallel = bool(
-                getattr(workflow.modes, "debate_parallel", False)
-            )
-            judge_mode = str(
-                getattr(workflow.modes, "debate_judge_mode", "pick")
-            )
+            judge_model = getattr(workflow.modes, 'debate_judge_model', None)
+            isolation = getattr(workflow.modes, 'debate_isolation', 'reset')
+            proposer_models = dict(getattr(workflow.modes, 'debate_proposer_models', None) or {})
+            parallel = bool(getattr(workflow.modes, 'debate_parallel', False))
+            judge_mode = str(getattr(workflow.modes, 'debate_judge_mode', 'pick'))
             try:
                 _modes.register(
-                    "debate",
+                    'debate',
                     DebateModeRunner(
                         agent_runner,
                         proposers=proposers,
@@ -536,13 +516,13 @@ class Orchestrator:
                 # or an invalid judge_mode. Fall back to safe defaults so
                 # the daemon keeps running.
                 logger.warning(
-                    "Debate registration failed (%s) — registering with "
+                    'Debate registration failed (%s) — registering with '
                     "parallel=False, isolation='%s', judge_mode='pick'",
                     exc,
                     isolation,
                 )
                 _modes.register(
-                    "debate",
+                    'debate',
                     DebateModeRunner(
                         agent_runner,
                         proposers=proposers,
@@ -550,20 +530,20 @@ class Orchestrator:
                         isolation=isolation,
                         proposer_models=proposer_models,
                         parallel=False,
-                        judge_mode="pick",
+                        judge_mode='pick',
                     ),
                 )
                 parallel = False
-                judge_mode = "pick"
+                judge_mode = 'pick'
             logger.info(
-                "Collaboration mode registered: debate (proposers=%s, "
-                "judge_model=%s, isolation=%s, parallel=%s, "
-                "proposer_models=%s, judge_mode=%s)",
+                'Collaboration mode registered: debate (proposers=%s, '
+                'judge_model=%s, isolation=%s, parallel=%s, '
+                'proposer_models=%s, judge_mode=%s)',
                 proposers,
-                judge_model or "(default)",
+                judge_model or '(default)',
                 isolation,
                 parallel,
-                proposer_models or "(none)",
+                proposer_models or '(none)',
                 judge_mode,
             )
 
@@ -571,10 +551,10 @@ class Orchestrator:
         """Construct ``ModeSelector`` with the configured router backend."""
         router: Router | None
         kind = workflow.modes.router_kind
-        if kind == "heuristic":
+        if kind == 'heuristic':
             router = HeuristicRouter()
-            logger.info("ModeSelector: router=HeuristicRouter")
-        elif kind == "llm":
+            logger.info('ModeSelector: router=HeuristicRouter')
+        elif kind == 'llm':
             router = LLMRouter(
                 model=workflow.modes.router_model,
                 endpoint=workflow.modes.router_endpoint,
@@ -582,8 +562,8 @@ class Orchestrator:
                 timeout_seconds=workflow.modes.router_timeout_seconds,
             )
             logger.info(
-                "ModeSelector: router=LLMRouter(model=%s, endpoint=%s, "
-                "api_key_env=%s, timeout=%.1fs)",
+                'ModeSelector: router=LLMRouter(model=%s, endpoint=%s, '
+                'api_key_env=%s, timeout=%.1fs)',
                 workflow.modes.router_model,
                 workflow.modes.router_endpoint,
                 workflow.modes.router_api_key_env,
@@ -591,7 +571,7 @@ class Orchestrator:
             )
         else:
             router = None
-            logger.info("ModeSelector: no router configured (kind=%s)", kind)
+            logger.info('ModeSelector: no router configured (kind=%s)', kind)
 
         default_mode = workflow.modes.default
         try:
@@ -603,9 +583,7 @@ class Orchestrator:
         except ValueError as exc:
             # workflow.md misconfiguration — fall back to safe defaults
             # instead of crashing the daemon at startup.
-            logger.warning(
-                "ModeSelector construction failed (%s); using defaults", exc
-            )
+            logger.warning('ModeSelector construction failed (%s); using defaults', exc)
             return ModeSelector()
 
     def _validate_workspace_strategy(self) -> None:
@@ -1064,8 +1042,8 @@ class Orchestrator:
                 from .logging_setup import set_log_context
 
                 set_log_context(
-                    issue_id=str(issue.id or ""),
-                    issue_identifier=str(getattr(issue, "identifier", "")),
+                    issue_id=str(issue.id or ''),
+                    issue_identifier=str(getattr(issue, 'identifier', '')),
                 )
                 await self._launch_issue(issue)
                 if issue.id in self._state.running:
@@ -2291,24 +2269,24 @@ class Orchestrator:
             mode_decision = self._mode_selector.choose(issue)
         except Exception:
             logger.exception(
-                "Issue %s ModeSelector.choose raised; defaulting to single",
+                'Issue %s ModeSelector.choose raised; defaulting to single',
                 issue.id,
             )
             mode_decision = ModeDecision(
                 mode=DEFAULT_MODE,
-                reason="ModeSelector.choose raised; see logs",
-                source="fallback",
+                reason='ModeSelector.choose raised; see logs',
+                source='fallback',
             )
         session.collaboration_mode = mode_decision.mode
         session.mode_decision = mode_decision
-        record = self._registry.get(issue.id or "")
+        record = self._registry.get(issue.id or '')
         if record is not None:
             record.collaboration_mode = mode_decision.mode
             record.mode_decision_reason = mode_decision.reason
             record.touch()
             self._registry._save()
         logger.info(
-            "Issue %s collaboration_mode=%s (source=%s, reason=%s)",
+            'Issue %s collaboration_mode=%s (source=%s, reason=%s)',
             issue.id,
             mode_decision.mode,
             mode_decision.source,
@@ -2317,16 +2295,16 @@ class Orchestrator:
         if self._viz_journal is not None:
             self._viz_journal.write_event(
                 {
-                    "type": "issue_status",
-                    "issue_id": str(issue.id or ""),
-                    "status": "running",
+                    'type': 'issue_status',
+                    'issue_id': str(issue.id or ''),
+                    'status': 'running',
                 }
             )
             self._viz_journal.write_event(
                 {
-                    "type": "phase",
-                    "issue_id": str(issue.id or ""),
-                    "phase": f"mode:{mode_decision.mode}",
+                    'type': 'phase',
+                    'issue_id': str(issue.id or ''),
+                    'phase': f'mode:{mode_decision.mode}',
                 }
             )
         # F-39 Sub-C: if the registry intent is FOLLOWUP, wire the
@@ -2528,26 +2506,22 @@ class Orchestrator:
                         # only fall back to the legacy lookup if the
                         # requested mode isn't registered (e.g. a
                         # workflow.md loaded against an older daemon).
-                        collab_mode = (
-                            getattr(session, "collaboration_mode", None) or DEFAULT_MODE
-                        )
+                        collab_mode = getattr(session, 'collaboration_mode', None) or DEFAULT_MODE
                         runner: Any = None
-                        if collab_mode != "single" and session.run_kind == "issue":
+                        if collab_mode != 'single' and session.run_kind == 'issue':
                             try:
                                 runner = _modes.get(collab_mode)
                             except KeyError:
                                 logger.warning(
-                                    "Issue %s requested mode=%s but it is not "
-                                    "registered; falling back to single",
+                                    'Issue %s requested mode=%s but it is not '
+                                    'registered; falling back to single',
                                     session.issue.id,
                                     collab_mode,
                                 )
                         if runner is None:
                             # Per-stage runner lookup by session run_kind.
                             # Falls back to main runner when no override is configured.
-                            runner = self.stage_runners.get(
-                                session.run_kind, self.agent_runner
-                            )
+                            runner = self.stage_runners.get(session.run_kind, self.agent_runner)
                         run_timeout_seconds = self.workflow.agent.run_timeout_ms / 1000.0
                         session.timeout_deadline_at = time.time() + run_timeout_seconds
                         await asyncio.wait_for(
@@ -2668,21 +2642,7 @@ class Orchestrator:
                                 )
                                 await self._reply_to_processed_feedback(session)
                                 await self._post_feedback_summary(session, sync_result)
-                                # F-121: extract rules from agent reply after follow-up
-                                if getattr(self.workflow.rules, 'enabled', False):
-                                    rules_path = RuleEngine.get_rules_path(
-                                        self.workflow, self._workflow_path
-                                    )
-                                    if rules_path:
-                                        rc = self.workflow.rules
-                                        await RuleEngine().apply(
-                                            session.output_text,
-                                            rules_path,
-                                            similarity_threshold=rc.similarity_threshold,
-                                            enhancement_threshold=rc.enhancement_threshold,
-                                            max_rules=rc.max_rules,
-                                            min_confidence=rc.min_confidence,
-                                        )
+                                await self._apply_review_rules(session)
                             elif session.run_kind == 'agent_followup':
                                 # F-39 Sub-C: a follow-up keeps the
                                 # existing pr_number / pr_url / status;
@@ -2986,18 +2946,18 @@ class Orchestrator:
                 # accumulated. Best-effort — never raises.
                 if self._viz_journal is not None:
                     try:
-                        _iid = str(session.issue.id or "")
+                        _iid = str(session.issue.id or '')
                         _rec = self._registry.get(_iid)
-                        if getattr(session, "run_id", None):
+                        if getattr(session, 'run_id', None):
                             self._viz_journal.write_event(
                                 {
-                                    "type": "session_ref",
-                                    "issue_id": _iid,
-                                    "session_id": str(session.run_id),
-                                    "session_path": str(
+                                    'type': 'session_ref',
+                                    'issue_id': _iid,
+                                    'session_id': str(session.run_id),
+                                    'session_path': str(
                                         Path.home()
-                                        / ".clawcodex"
-                                        / "sessions"
+                                        / '.clawcodex'
+                                        / 'sessions'
                                         / str(session.run_id)
                                     ),
                                 }
@@ -3005,34 +2965,31 @@ class Orchestrator:
                         if _rec is not None and _rec.pr_url:
                             self._viz_journal.write_event(
                                 {
-                                    "type": "pr_status",
-                                    "issue_id": _iid,
-                                    "pr_url": _rec.pr_url,
-                                    "pr_number": _rec.pr_number,
+                                    'type': 'pr_status',
+                                    'issue_id': _iid,
+                                    'pr_url': _rec.pr_url,
+                                    'pr_number': _rec.pr_number,
                                 }
                             )
-                        _status = str(session.status or "")
-                        if _status == "completed":
+                        _status = str(session.status or '')
+                        if _status == 'completed':
                             self._viz_journal.write_event(
                                 {
-                                    "type": "complete",
-                                    "issue_id": _iid,
-                                    "overall_status": "completed",
+                                    'type': 'complete',
+                                    'issue_id': _iid,
+                                    'overall_status': 'completed',
                                 }
                             )
                         elif _status:
                             self._viz_journal.write_event(
                                 {
-                                    "type": "error",
-                                    "issue_id": _iid,
-                                    "error": getattr(
-                                        session, "session_end_summary", ""
-                                    )
-                                    or _status,
+                                    'type': 'error',
+                                    'issue_id': _iid,
+                                    'error': getattr(session, 'session_end_summary', '') or _status,
                                 }
                             )
                     except Exception:
-                        logger.debug("viz journal final event failed", exc_info=True)
+                        logger.debug('viz journal final event failed', exc_info=True)
 
                 # F-44 review gate: if the issue is already in pending_review
                 # (set by the early return above), skip the final status
@@ -3267,6 +3224,33 @@ class Orchestrator:
         except Exception as exc:
             logger.warning(
                 'Failed to update summary comment issue_id=%s: %s', session.issue.id, exc
+            )
+
+    async def _apply_review_rules(self, session: AgentSession) -> None:
+        """F-121: 从 review follow-up agent 回复中提取规则并持久化。
+
+        规则提取为参考性质，失败不应阻塞 session 正常流程；
+        任何异常（OSError / YAMLError / ValueError 等）仅 log warning 不重抛。
+        """
+        if not getattr(self.workflow.rules, 'enabled', False):
+            return
+        try:
+            rules_path = RuleEngine.get_rules_path(self.workflow, self._workflow_path)
+            if rules_path:
+                rc = self.workflow.rules
+                await RuleEngine().apply(
+                    session.output_text,
+                    rules_path,
+                    similarity_threshold=rc.similarity_threshold,
+                    enhancement_threshold=rc.enhancement_threshold,
+                    max_rules=rc.max_rules,
+                    min_confidence=rc.min_confidence,
+                )
+        except Exception as exc:
+            logger.warning(
+                'F-121 rule extraction failed for issue %s: %s',
+                session.issue.id,
+                exc,
             )
 
     async def _reply_to_processed_feedback(self, session: AgentSession) -> None:
